@@ -63,7 +63,10 @@ Shell platformShell({
   required ShellDriver? Function({String? project}) driver,
   String? dataDir,
   RootfsStore? rootfsStore,
-  String? rootfsId,
+
+  /// Asked per command rather than captured: which Linux the settings page
+  /// has picked. Null where the platform has no picker at all.
+  String? Function()? rootfsId,
 }) {
   if (Platform.isIOS) {
     // iOS has no host shell and no proot — the driver callback (which picks
@@ -71,19 +74,31 @@ Shell platformShell({
     // drives the emulator through FFI; it resolves the rootfs the way
     // platformDriver does, but without producing a ShellDriver, since there
     // is nothing to exec. See ios/CLAUDE.md.
-    final rootfs = rootfsById(rootfsId);
-    final dir = rootfs != null && rootfsStore != null
-        ? rootfsStore.directoryOfSync(rootfs.id)
-        : null;
-    final installed = rootfs != null && dir != null;
+    //
+    // The rootfs is resolved per command through these two closures, the way
+    // the driver callback is: a Linux installed from the settings page
+    // reaches the next command, and one deleted stops being where commands
+    // run without the app having to be restarted.
     return IshShell(
-      rootfsDir: dir ?? "",
+      rootfsDir: () {
+        final rootfs = rootfsById(rootfsId?.call());
+        final dir = rootfs != null && rootfsStore != null
+            ? rootfsStore.directoryOfSync(rootfs.id)
+            : null;
+        return dir ?? "";
+      },
       dataDir: dataDir ?? "",
       environment: environment,
-      platformDescription: installed
-          ? rootfs.describe("ios")
-          : "iOS, with no Linux installed. Install one from the Terminal "
-              "settings to run commands.",
+      platformDescription: () {
+        final rootfs = rootfsById(rootfsId?.call());
+        final dir = rootfs != null && rootfsStore != null
+            ? rootfsStore.directoryOfSync(rootfs.id)
+            : null;
+        return rootfs != null && dir != null
+            ? rootfs.describe("ios")
+            : "iOS, with no Linux installed. Install one from the Terminal "
+                "settings to run commands.";
+      },
     );
   }
   return LocalShell(environment: environment, driver: driver);
@@ -183,8 +198,12 @@ String? _projectRootfsDir(AppConfig config, String project, String rootfsId) {
 }
 
 /// Which architecture this install is for, which decides the rootfs a download
-/// fetches. Null off Android and iOS — iOS has no Android ABI, but it has its
-/// own rootfs key ("ios") since iSH emulates x86 and not the device's arm64.
+/// fetches. Null on the desktops, which have no catalog to pick from. iOS
+/// answers "ios" — its own key, since iSH emulates x86 and not the device's
+/// arm64 — so the Terminal page offers its i386 Alpine; the build-fault banner
+/// the Android ABI drives is gated on Android in the page that draws it.
+/// Android answers with its ABI: an APK built without its bundled tools is the
+/// one absence here that is a build fault, and that banner names the commands.
 Future<String?> platformAbi() =>
     Platform.isIOS ? Future.value("ios") : BundledTools.abi();
 
@@ -227,7 +246,7 @@ ByteRepairStore platformByteRepairStore(
       project: project,
       workspace: workspace,
       installDir:
-          Platform.isAndroid ? guestEsbmcInstallDir : platformByteRepairBinDir(cacheDir)!,
+          Platform.isAndroid ? guestEsbmcInstallDir : platformByteRepairBinDir(cacheDir),
       // A guest's apk is a local package manager; the host fetches a 240 MB
       // ESBMC release zip over the network.
       installTimeout: Platform.isAndroid

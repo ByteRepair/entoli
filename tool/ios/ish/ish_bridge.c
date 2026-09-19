@@ -12,16 +12,28 @@
 // so a cd or an export in one emulated command sticks for the next — the same
 // contract the host shell keeps.
 //
-// This is the bridge's specification. It compiles once linked against the iSH
-// XCFramework (built by tool/ios/ish/build.sh on macOS); the iSH types and
-// entry points it names are the ones the vendored core exposes. The Dart side
-// (lib/data/local/ish_ffi.dart) drives it through dart:ffi.
+// The stdio plumbing is iSH's own adhoc-fd trick: a real host pipe wrapped
+// into a guest fd the way sys_pipe wraps one (fs/pipe.c's pipe_f_create) and
+// the way the CLI wires its own stdio (kernel/init.c's open_fd_from_actual_fd).
+// The guest reads fd 0 and writes fd 1; the bridge reads and writes the host
+// ends with plain read(2) and write(2).
 
 #include "ish_bridge.h"
 
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+#include <unistd.h>
+#include <errno.h>
+#include <fcntl.h>
+#include <limits.h>
+#include <sys/stat.h>
+
+#include "tools/fakefs.h"
+#include "kernel/calls.h"
+#include "kernel/errno.h"
+#include "fs/path.h"
+#include "fs/real.h"
 
 // ---- internal state ----
 
@@ -49,32 +61,141 @@ static bool parse_marker(const char *line, const char *token,
     return true;
 }
 
+// The output of a run, allocated for the caller: Dart frees it.
+static char *dup_range(const char *buf, size_t len) {
+    char *copy = malloc(len + 1);
+    if (!copy) return NULL;
+    memcpy(copy, buf, len);
+    copy[len] = '\0';
+    return copy;
+}
+
+// A host fd as a guest fd on the current task: the same three lines
+// open_fd_from_actual_fd (kernel/init.c) runs, over the realfs fd ops — the
+// guest reads and writes it through the host file it names. The fd lands in
+// the table's first free slot; on a fresh init child the three calls below
+// fill slots 0, 1 and 2.
+static fd_t guest_fd_from_host(int real_fd) {
+    struct fd *fd = adhoc_fd_create(&realfs_fdops);
+    if (fd == NULL) return (fd_t) -1;
+    fd->real_fd = real_fd;
+    fd->dir = NULL;
+    return f_install(fd, 0);
+}
+
 // ---- lifecycle ----
 
 void ish_boot(const char *rootfs_dir) {
     if (ish_booted) return;
-    // iSH's first-process setup. xX_main_Xx does this internally before it
-    // execs the guest; we stop before the exec and return, so a session can
-    // start its own shell. The subset: the process table, the signal frame,
-    // and the root filesystem mount.
-    become_first_process();
-    do_mount(&fakefs, rootfs_dir, "/", "", 0);
+    // The subset of xX_main_Xx + the app's own boot (AppDelegate -boot) that
+    // a guest needs before a shell can run, minus the exec: the fakefs root
+    // at "/", the first process for the device-node work to hang off, the
+    // static device nodes, and /proc + /dev/pts. A failed mount leaves
+    // ish_booted false, so the next init retries rather than running a
+    // guest with no root.
+    //
+    // The fakefs is mounted from the rootfs's `data` subdirectory, the way
+    // the app's own boot mounts `<root>/data`: fakefs_mount asserts the
+    // source ends in "data" and derives the sibling meta.db from it. What
+    // callers hand this bridge is the rootfs directory itself.
+    char data_dir[PATH_MAX];
+    snprintf(data_dir, sizeof(data_dir), "%s/data", rootfs_dir);
+    if (mount_root(&fakefs, data_dir) < 0) {
+        return;
+    }
+    if (become_first_process() < 0) {
+        return;
+    }
+    create_some_device_nodes();
+    do_mount(&procfs, "proc", "/proc", "", 0);
+    do_mount(&devptsfs, "devpts", "/dev/pts", "", 0);
     ish_booted = true;
+}
+
+// Bind a host directory at a guest path, the way proot's `-b host:guest`
+// does on Android. The point has to exist in the guest tree before the mount
+// lands on it, so each component is made the way init.c makes /dev/pts; a
+// component that is already there is fine (EEXIST), and a mount that did not
+// land is not fatal — the shell still runs, from a workspace it cannot see.
+static void bind_host_dir(const char *host_dir, const char *point) {
+    char made[PATH_MAX];
+    snprintf(made, sizeof(made), "%s", point);
+    // mkdir -p, in the guest, one component at a time: do_mount wants the
+    // point to exist. These land in the fakefs, and the mount then shadows
+    // them — the fakefs copies stay empty forever.
+    for (char *p = made + 1; *p; p++) {
+        if (*p != '/') continue;
+        *p = '\0';
+        generic_mkdirat(AT_PWD, made, 0777);
+        *p = '/';
+    }
+    generic_mkdirat(AT_PWD, made, 0777);
+    if (do_mount(&realfs, host_dir, made, "", 0) < 0) {
+        printk("ish: could not bind %s at %s\n", host_dir, made);
+        return;
+    }
+}
+
+// Bind the app's data directory into the guest at its own absolute host
+// path — the fallback spelling, so a host-shaped path still resolves even
+// though the model is told the masked one. One bind per process: every
+// session binds the same paths, and a second do_mount at the same point
+// would shadow the first with another fd over the same directory.
+static void bind_data_dir(const char *data_dir) {
+    static bool bound = false;
+    if (bound) return;
+    bind_host_dir(data_dir, data_dir);
+    bound = true;
+}
+
+// Bind the project workspace at /root — the clean guest path proot gives it
+// on Android, and the one the model is told. One bind per process, like the
+// data-dir one.
+static void bind_workspace(const char *workspace) {
+    static bool bound = false;
+    if (bound) return;
+    bind_host_dir(workspace, "/root");
+    bound = true;
 }
 
 ish_session *ish_session_init(
     const char *rootfs_dir,
     const char *data_dir,
     const char *home,
+    const char *cwd,
     const char *dispatcher,
     const char *token,
     const char **env,
     int32_t env_count,
     const char **error)
 {
+    // [home] is bound at /root by bind_workspace below, and [cwd] is where
+    // the shell starts in the guest's own words. The data-dir bind stays as
+    // the fallback spelling. See "The workspace inside the guest" in
+    // ios/CLAUDE.md.
     if (!ish_booted) {
         ish_boot(rootfs_dir);
+        if (!ish_booted) {
+            *error = "the rootfs could not be mounted; is it installed?";
+            return NULL;
+        }
     }
+    if (data_dir[0] != '\0') {
+        bind_data_dir(data_dir);
+    }
+    if (home[0] != '\0' && cwd[0] != '\0') {
+        bind_workspace(home);
+    }
+
+    // A child of the kernel's init task: its own mm, fds, and signal state,
+    // with `current` switched to it for the calls below. This is
+    // TerminalViewController's -startSession without the tty — the
+    // dispatcher runs non-interactively over pipes instead.
+    if (become_new_init_child() < 0) {
+        *error = "failed to create the guest task";
+        return NULL;
+    }
+    struct task *task = current;
 
     ish_session *s = calloc(1, sizeof(*s));
     if (!s) {
@@ -83,59 +204,87 @@ ish_session *ish_session_init(
     }
     strncpy(s->token, token, sizeof(s->token) - 1);
 
-    // Bind the app's data directory into the guest at the same path. realfs is
-    // the host POSIX filesystem type iSH registers; the app's own data dir is
-    // fully accessible to the app's process via POSIX (the same access the
-    // fakefs database itself uses), so this needs no picker and no
-    // NSFileCoordinator. See "The workspace inside the guest" in ios/CLAUDE.md.
-    if (do_mount(&realfs, data_dir, data_dir, "", 0) < 0) {
-        *error = "failed to bind the data directory into the guest";
-        free(s);
-        return NULL;
-    }
-
-    // Create two guest pipes: one for the shell's stdin (we write, it reads)
-    // and one for its stdout (it writes, we read).
-    fd_t stdin_pipe[2], stdout_pipe[2];
-    // iSH's pipe syscall creates a pair of guest fds. The exact iSH entry
-    // point is sys_pipe or do_pipe; named here as the documented surface.
-    if (do_pipe(stdin_pipe) < 0 || do_pipe(stdout_pipe) < 0) {
-        *error = "failed to create the guest pipes";
+    // Two real host pipes; the guest gets the other ends as fds 0, 1 and 2.
+    int stdin_pipe[2], stdout_pipe[2];
+    if (pipe(stdin_pipe) < 0 || pipe(stdout_pipe) < 0) {
+        *error = "failed to create the session pipes";
+        close(stdin_pipe[0]);
+        close(stdin_pipe[1]);
+        close(stdout_pipe[0]);
+        close(stdout_pipe[1]);
         free(s);
         return NULL;
     }
     s->stdin_write = stdin_pipe[1];
     s->stdout_read = stdout_pipe[0];
-
-    // Start the persistent guest /bin/sh under the dispatcher. The argv is
-    // [/bin/sh, -c, <dispatcher>], the same shape LocalShell builds. The
-    // dispatcher script comes from domain/shell.dart's dispatcherScript(token),
-    // passed in here so the wire protocol has one source of truth.
-    char *argv[] = {"/bin/sh", "-c", (char *)dispatcher, NULL};
-
-    // Build the guest environment: the app's variables over the guest's own.
-    char **envp = calloc(env_count + 1, sizeof(char *));
-    for (int32_t i = 0; i < env_count; i++) {
-        envp[i] = (char *)env[i];
-    }
-
-    // Fork a guest task and exec /bin/sh in it. iSH's clone/exec path.
-    // The new task's fds are set: 0 = stdin pipe read, 1 = stdout pipe write,
-    // 2 = dup of 1.
-    s->task = task_create();
-    if (!s->task) {
-        *error = "failed to create the guest task";
-        free(envp);
+    // A fresh init child's table is empty, so the three installs land on
+    // fds 0, 1 and 2 in this order.
+    fd_t in = guest_fd_from_host(stdin_pipe[0]);
+    fd_t out = guest_fd_from_host(stdout_pipe[1]);
+    fd_t errfd = guest_fd_from_host(stdout_pipe[1]);
+    if (in != 0 || out != 1 || errfd != 2) {
+        *error = "failed to wire the guest stdio";
+        close(stdin_pipe[0]);
+        close(stdin_pipe[1]);
+        close(stdout_pipe[0]);
+        close(stdout_pipe[1]);
         free(s);
         return NULL;
     }
-    // Wire the fds and exec. The exact iSH calls are do_dup2 and do_execve.
-    do_dup2(s->task, stdin_pipe[0], 0);
-    do_dup2(s->task, stdout_pipe[1], 1);
-    do_dup2(s->task, stdout_pipe[1], 2);
-    do_execve(s->task, "/bin/sh", argv, envp);
 
-    free(envp);
+    // The working directory the guest shell starts in is the chat's own, in
+    // the guest's words: /root plus the chat workspace's suffix past the
+    // project workspace. Dart computes it; the /root bind above is what
+    // makes it resolve.
+    struct fd *pwd = generic_open(cwd, O_RDONLY_, 0);
+    if (IS_ERR(pwd)) {
+        *error = "the working directory could not be opened in the guest";
+        close(stdin_pipe[0]);
+        close(stdin_pipe[1]);
+        close(stdout_pipe[0]);
+        close(stdout_pipe[1]);
+        free(s);
+        return NULL;
+    }
+    fs_chdir(task->fs, pwd);
+
+    // Start the persistent guest /bin/sh under the dispatcher. argv and envp
+    // are flat NUL-joined strings — do_execve's shape (kernel/exec.c), the
+    // same one xX_main_Xx builds. argv[0] is the program name itself:
+    // /bin/sh is busybox, which picks its applet off argv[0], and an argv
+    // that starts at "-c" reads as an applet named "-c" ("c: applet not
+    // found").
+    char argv[4096];
+    size_t pos = 0;
+    const char *parts[] = {"/bin/sh", "-c", dispatcher};
+    for (size_t i = 0; i < 3 && pos < sizeof(argv) - 1; i++) {
+        size_t len = strlen(parts[i]) + 1;
+        if (pos + len > sizeof(argv)) break;
+        memcpy(&argv[pos], parts[i], len);
+        pos += len;
+    }
+    argv[pos] = '\0';
+    char envp[8192];
+    pos = 0;
+    for (int32_t i = 0; i < env_count; i++) {
+        size_t len = strlen(env[i]) + 1;
+        if (pos + len > sizeof(envp) - 1) break;
+        memcpy(&envp[pos], env[i], len);
+        pos += len;
+    }
+    envp[pos] = '\0';
+    if (do_execve("/bin/sh", 3, argv, envp) < 0) {
+        *error = "failed to exec /bin/sh in the guest; the rootfs has none";
+        close(stdin_pipe[0]);
+        close(stdin_pipe[1]);
+        close(stdout_pipe[0]);
+        close(stdout_pipe[1]);
+        free(s);
+        return NULL;
+    }
+    // task_start sets the task's pthread going; do_execve only dressed it.
+    task_start(task);
+
     *error = NULL;
     return s;
 }
@@ -146,25 +295,36 @@ void ish_session_run(
     int32_t timeout_ms,
     ish_result *out)
 {
+    (void) timeout_ms;  // the read blocks on the guest; escalation is Dart's
+                        // destroy — see the isolate's contract in
+                        // ish_shell.dart.
     // Write the base64 line to the guest's stdin, followed by a newline. The
     // dispatcher reads one line at a time, so the newline is what makes the
     // read return.
     size_t len = strlen(script_b64);
-    do_write(session->task, session->stdin_write, script_b64, len);
-    do_write(session->task, session->stdin_write, "\n", 1);
+    ssize_t unused = write(session->stdin_write, script_b64, len);
+    (void) unused;
+    unused = write(session->stdin_write, "\n", 1);
+    (void) unused;
 
-    // Read from the guest's stdout until the marker lands. The output before
-    // the marker is the command's; the marker line carries rc and cwd.
+    // Read from the guest's stdout until this command's own marker lands.
+    // The token in the prefix is what says it is ours: the marker of a
+    // previous command left unread in the pipe — a capped or interrupted run
+    // leaves one — carries the same session token, and reading it back would
+    // report the previous command's exit code for this one. A stale marker is
+    // dropped with the line it ends on; the output before it is kept.
     char buf[65536];
     size_t total = 0;
     bool done = false;
+    bool stale = false;
     int32_t rc = -1;
-    const char *cwd = NULL;
+    char *cwd = NULL;
     while (!done && total < sizeof(buf) - 1) {
-        ssize_t n = do_read(session->task, session->stdout_read,
-                            buf + total, sizeof(buf) - 1 - total);
-        if (n <= 0) break;
-        total += n;
+        ssize_t n = read(session->stdout_read, buf + total,
+                         sizeof(buf) - 1 - total);
+        if (n < 0 && (errno == EINTR || errno == EAGAIN)) continue;
+        if (n <= 0) break;  // EOF: the guest shell is gone.
+        total += (size_t) n;
         buf[total] = '\0';
         int32_t parsed_rc;
         const char *parsed_cwd;
@@ -172,55 +332,106 @@ void ish_session_run(
             rc = parsed_rc;
             size_t cwd_len = strstr(parsed_cwd, "@@") - parsed_cwd;
             cwd = malloc(cwd_len + 1);
-            memcpy((void *)cwd, parsed_cwd, cwd_len);
-            ((char *)cwd)[cwd_len] = '\0';
+            if (cwd) {
+                memcpy(cwd, parsed_cwd, cwd_len);
+                cwd[cwd_len] = '\0';
+            }
             done = true;
+        } else if (strstr(buf, "\n@@E") != NULL) {
+            // A marker line that is not ours: drop everything before the end
+            // of it, so the search does not find the same stale text again.
+            char *after = strstr(buf, "\n@@E");
+            const char *nl = strchr(after + 1, '\n');
+            size_t consumed = nl ? (size_t)(nl - buf + 1) : total;
+            memmove(buf, buf + consumed, total - consumed);
+            total -= consumed;
+            buf[total] = '\0';
+            stale = true;
         }
     }
 
-    size_t out_len = done ? (size_t)(strstr(buf, "\n@@E") - buf) : total;
-    char *output = malloc(out_len + 1);
-    memcpy(output, buf, out_len);
-    output[out_len] = '\0';
+    // The command's output is everything before the first marker line, ours
+    // or a stale one's — the marker itself is not this command's words.
+    const char *cut = strstr(buf, "\n@@E");
+    size_t out_len = done || stale || cut
+        ? (size_t)(cut - buf)
+        : total;
+    if (!done) rc = -1;
+    char *output = dup_range(buf, out_len);
 
     *out = (ish_result){
         .return_code = rc,
         .output = output,
         .cwd = cwd,
-        .exception = done ? NULL : "The command did not complete.",
+        .exception = done ? NULL : strdup("The command did not complete."),
     };
 }
 
 void ish_session_interrupt(ish_session *session) {
-    // Deliver a SIGINT to the guest. iSH's signal delivery is do_kill /
-    // sys_kill, targeting the guest task. The dispatcher's trap turns it into
-    // a 130 while the shell survives — the same contract LocalShell keeps.
-    do_kill(session->task, session->task->pid, SIGINT_);
+    // Deliver a SIGINT to the guest. The dispatcher's trap turns it into a
+    // 130 while the shell survives — the same contract LocalShell keeps.
+    // Null after the shell died: interrupting a dead session is a no-op, the
+    // way kill() on a dead process is.
+    if (!session || !session->task) return;
+    send_signal(session->task, SIGINT_, SIGINFO_NIL);
 }
 
 void ish_session_destroy(ish_session *session) {
     if (!session) return;
     if (session->task) {
-        do_kill(session->task, session->task->pid, SIGKILL_);
+        send_signal(session->task, SIGKILL_, SIGINFO_NIL);
     }
+    close(session->stdin_write);
+    close(session->stdout_read);
     free(session);
 }
 
 // Convert a tarball into iSH's fakefs layout, in-process. iSH's own
-// tools/fakefsify does this against libarchive; this wraps it so the iOS
-// rootfs unpack does not need a child process (the exec ban). See
-// "The rootfs" in ios/CLAUDE.md.
+// tools/fakefsify does this against libarchive; this wraps the same
+// fakefs_import it calls, so the iOS rootfs unpack does not need a child
+// process (the exec ban). See "The rootfs" in ios/CLAUDE.md.
+//
+// fakefs_import begins with mkdir(into), which fails with EEXIST where the
+// directory is already there — and the Dart store always has it there, having
+// created it to receive the download, which it writes *into* the directory it
+// will name as the target. iSH's CLI avoids all of this by rmdir'ing its
+// target first. So: move the archive out of the target (the store's layout
+// has nothing else in it), rmdir what is left, and import from the archive's
+// new place. A target holding something other than the archive — the dir is
+// not empty after the move — is a real error, left for the caller to see
+// rather than something to overwrite.
 int32_t ish_fakefsify(const char *archive, const char *into) {
-    // fakefsify's entry point is the one iSH's meson build produces as the
-    // `fakefsify` tool: it opens the archive through libarchive, creates the
-    // fakefs directory (a `data` file + `meta.db` SQLite database), and writes
-    // each entry's metadata into the db. The function signature and the
-    // libarchive entry point it uses are the ones the vendored core exposes.
-    //
-    // The exact call is to fakefsify's main with argv rewritten — or, cleaner,
-    // a direct call to the internal function it wraps. Named here as the
-    // documented surface; the build links the fakefsify sources (tools/ in the
-    // vendored tree) into the XCFramework alongside the core.
-    extern int fakefsify_main(const char *archive, const char *into);
-    return (int32_t)fakefsify_main(archive, into);
+    struct fakefsify_error err = {0};
+    // The archive moves beside the target, not inside it — it is the target's
+    // own directory that has to be emptied to be rmdir'd.
+    char aside[PATH_MAX];
+    snprintf(aside, sizeof(aside), "%s.importing", into);
+    char original[PATH_MAX];
+    snprintf(original, sizeof(original), "%s", archive);
+    int moved = 0;
+    if (rename(archive, aside) == 0) {
+        moved = 1;
+        archive = aside;
+    }
+    if (rmdir(into) < 0 && errno != ENOENT) {
+        if (moved) {
+            // put it back where the caller left it, so a retry sees the
+            // layout it wrote
+            rename(aside, original);
+        }
+        return -(errno > 0 ? errno : EIO);
+    }
+    bool ok = fakefs_import(archive, into, &err, (struct progress) {});
+    if (moved) {
+        // Either way the tarball goes back where the caller left it: on
+        // failure so a retry does not re-download, on success because the
+        // store deletes the archive itself and counts on finding it there.
+        rename(aside, original);
+    }
+    if (ok) {
+        return 0;
+    }
+    return err.type == ERR_SQLITE ? -1
+         : err.type == ERR_POSIX  ? -(err.code > 0 ? err.code : EIO)
+                                  : -EIO;
 }

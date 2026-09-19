@@ -21,19 +21,30 @@ class TerminalSection extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final canRun = ref.watch(shellProvider.select((s) => s.canRunCommands));
-    if (!canRun) {
+    final abi = ref.watch(deviceAbiProvider);
+    final available = ref.watch(prootAvailableProvider);
+    // A Linux can run where this build carries proot (Android) or where the
+    // in-process emulator does (iOS, whose ABI is the "ios" key its catalog
+    // is keyed on). The web answers null with no proot: nothing could ever
+    // run there. iOS with no Linux installed reads as "nothing to run" in
+    // [canRunCommands], but the catalog below is the way one gets installed,
+    // so the section stays for it.
+    final canHostALinux = available || abi == "ios";
+    if (!canRun && !canHostALinux) {
       return SectionHeader(
         "Where commands run",
         description: "This platform has no terminal, so the agent has no "
             "commands to run.",
       );
     }
-    final available = ref.watch(prootAvailableProvider);
     final installed = ref.watch(installedRootfsProvider);
     final selected = ref.watch(appSettingsProvider.select((s) => s.rootfsId));
-    // Android answers with an ABI and nothing else does, so an ABI with no
-    // proot beside it is this device's build shipping without it.
-    final unpackagedAbi = available ? null : ref.watch(deviceAbiProvider);
+    // Android is the only platform whose ABI with no proot beside it is this
+    // device's build shipping without it — a fault of the APK. iOS carries no
+    // proot by design; its shell is the in-process emulator, and its catalog
+    // rides on the "ios" ABI the device answers with.
+    final unpackagedAbi =
+        available || abi == null || abi == "ios" ? null : abi;
     final description = "What driver to use when running commands. Determines "
         "the environment commands will run in."
         "${available
@@ -63,11 +74,13 @@ class TerminalSection extends ConsumerWidget {
           label: "Commands run on",
           // Null is an answer here rather than an absence, so it is an entry
           // rather than a hint: the host is where commands ran before any of
-          // this and where they go back to.
+          // this and where they go back to. An installed rootfs is offered
+          // wherever a Linux can run at all — proot on Android, the emulator
+          // on iOS.
           none: "Host",
           options: {
             for (final rootfs in rootfsCatalog)
-              if (available && installed.contains(rootfs.id))
+              if ((available || abi == "ios") && installed.contains(rootfs.id))
                 rootfs.id: rootfs.name,
           },
           value: selected,
@@ -78,15 +91,18 @@ class TerminalSection extends ConsumerWidget {
   }
 }
 
-/// The catalog, or nothing at all where no build of proot reached this device.
-/// Draws its own divider for the reason the voice catalog does: a line with
+/// The catalog, or nothing at all where this device could not run a Linux
+/// even with one installed — no proot and no in-process emulator. Draws its
+/// own divider for the reason the voice catalog does: a line with
 /// nothing under it is a rule across the bottom of the page.
 class RootfsCatalogSection extends ConsumerWidget {
   const RootfsCatalogSection({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    if (!ref.watch(prootAvailableProvider)) return const SizedBox.shrink();
+    final canHostALinux = ref.watch(prootAvailableProvider) ||
+        ref.watch(deviceAbiProvider) == "ios";
+    if (!canHostALinux) return const SizedBox.shrink();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [

@@ -89,10 +89,12 @@ BuiltinBackend createBackend(
         loginPath: loginPath,
       ),
       // iOS resolves its own shell (IshShell, not LocalShell) from these —
-      // the driver callback above is exec-based and iOS denies a child process.
+      // the driver callback above is exec-based and iOS denies a child
+      // process. The id rides in as a thunk there too, so an install or a
+      // deletion on the Terminal page reaches the next command.
       dataDir: config.dataDir,
       rootfsStore: rootfs,
-      rootfsId: settings().rootfsId,
+      rootfsId: () => settings().rootfsId,
     ),
     webSearch: platformWebSearch(),
     store: store,

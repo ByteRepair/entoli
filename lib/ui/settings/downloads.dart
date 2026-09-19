@@ -2,6 +2,7 @@ import "dart:async";
 
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
+import "../../core/log.dart";
 import "../../domain/background_work.dart";
 import "../../domain/download.dart";
 import "../../providers.dart";
@@ -86,7 +87,10 @@ abstract class Downloads<T> extends Notifier<DownloadState> {
       item: item,
       sub: download.progress.listen(
         (progress) => _publish(active: {...state.active, id: progress}),
-        onError: (Object e) => _finish(id, failure: "$e"),
+        onError: (Object e) {
+          logFailure(plural, "download of $id failed", e);
+          _finish(id, failure: "$e");
+        },
         onDone: () {
           _finish(id);
           unawaited(rescan());

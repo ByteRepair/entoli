@@ -1,6 +1,7 @@
 import "dart:ffi";
 import "dart:io" show Platform;
 
+// Utf8 moved out of dart:ffi; package:ffi's is the one Dart 3.13 keeps.
 import "package:ffi/ffi.dart";
 
 import "../../domain/shell.dart";
@@ -16,8 +17,10 @@ import "../../domain/shell.dart";
 // The opaque pointer Dart holds for a session.
 typedef IshSessionPtr = Pointer<Void>;
 
-// The result struct the bridge writes into. Matches ish_bridge.h's ish_result.
-@Packed(4)
+// The result struct the bridge writes into. Matches ish_bridge.h's ish_result,
+// which is naturally aligned (int, then three pointers) — the C side has no
+// #pragma pack, so neither does this. Packing it would move every pointer
+// field and read garbage into the strings.
 final class IshResult extends Struct {
   @Int32()
   external int returnCode;
@@ -44,6 +47,7 @@ typedef IshInitC = Pointer<Void> Function(
     Pointer<Utf8> rootfsDir,
     Pointer<Utf8> dataDir,
     Pointer<Utf8> home,
+    Pointer<Utf8> cwd,
     Pointer<Utf8> dispatcher,
     Pointer<Utf8> token,
     Pointer<Pointer<Utf8>> env,
@@ -53,6 +57,7 @@ typedef IshInitDart = IshSessionPtr Function(
     Pointer<Utf8> rootfsDir,
     Pointer<Utf8> dataDir,
     Pointer<Utf8> home,
+    Pointer<Utf8> cwd,
     Pointer<Utf8> dispatcher,
     Pointer<Utf8> token,
     Pointer<Pointer<Utf8>> env,

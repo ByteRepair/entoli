@@ -1,1 +1,8 @@
+// The iSH emulator, force-loaded into the binary. Dart looks the FFI symbols
+// up at runtime (DynamicLibrary.process), so nothing references them at link
+// time and the linker would drop the member without -force_load. One slice
+// per SDK, chosen per-SDK: a slice built for the other platform is rejected
+// outright rather than ignored, so both cannot ride one flag.
+OTHER_LDFLAGS[sdk=iphoneos*] = $(inherited) -lz -lbz2 -lxml2 -lsqlite3 -liconv -Wl,-force_load,"$(SRCROOT)/../tool/ios/ish/dist/IshCore.xcframework/ios-arm64/libishcore_device.a"
+OTHER_LDFLAGS[sdk=iphonesimulator*] = $(inherited) -lz -lbz2 -lxml2 -lsqlite3 -liconv -Wl,-force_load,"$(SRCROOT)/../tool/ios/ish/dist/IshCore.xcframework/ios-arm64-simulator/libishcore_sim-arm64.a"
 #include "Generated.xcconfig"

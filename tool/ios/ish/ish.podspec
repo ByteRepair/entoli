@@ -11,8 +11,9 @@ Pod::Spec.new do |s|
   # rather than source compilation, because the asbestos gadgets are
   # hand-written assembly and the build needs Xcode — the same reason the
   # Android build ships .so files laid out by tool/android/build.sh.
+  # arm64 only: the gadgets are arm64 assembly, so there is no x86_64 slice.
   s.vendored_frameworks = 'dist/IshCore.xcframework'
-  s.libraries        = 'sqlite3', 'archive'
+  s.libraries        = 'sqlite3'
   s.frameworks       = 'Foundation'
   s.pod_target_xcconfig = { 'EXCLUDED_ARCHS[sdk=iphonesimulator*]' => '' }
 end

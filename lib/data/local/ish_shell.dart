@@ -7,6 +7,7 @@ import "package:ffi/ffi.dart";
 import "package:flutter/foundation.dart" show ValueListenable, ValueNotifier;
 import "package:uuid/uuid.dart";
 
+import "../../domain/file_tools.dart";
 import "../../domain/shell.dart";
 import "ish_ffi.dart";
 
@@ -30,28 +31,58 @@ import "ish_ffi.dart";
 /// parses its child process's output.
 class IshShell extends Shell {
   IshShell({
-    required this.rootfsDir,
+    required String Function() rootfsDir,
     required this.dataDir,
     required this.environment,
-    required this.platformDescription,
-  });
+    required String Function() platformDescription,
+  })  : _rootfsDir = rootfsDir,
+        _describe = platformDescription;
 
-  final String rootfsDir;
+  /// Where the guest's rootfs is mounted from, asked per command: a Linux
+  /// installed from the settings page reaches the next command, and one
+  /// deleted stops being where commands run without the app having to be
+  /// restarted. Empty where none is installed.
+  final String Function() _rootfsDir;
+
   final String dataDir;
 
   final Map<String, String> Function() environment;
 
+  final String Function() _describe;
+
+  String get rootfsDir => _rootfsDir();
+
+  /// Whether the thing commands would run in is there. Empty is how "no
+  /// Linux installed" reads here, and false is what keeps the agent from
+  /// offering the tool a device cannot answer — the browser's rule.
+  bool get rootfsInstalled => _rootfsDir().isNotEmpty;
+
   @override
-  final String platformDescription;
+  String get platformDescription => _describe();
 
   final Map<String, _IshSession> _sessions = {};
   final Map<String, ValueNotifier<String?>> _cwds = {};
 
   @override
-  bool get canRunCommands => true;
+  bool get canRunCommands => rootfsInstalled;
 
   @override
   bool get projectHome => true;
+
+  /// Where the project workspace appears inside the guest: `/root`, the same
+  /// clean path proot binds it at on Android, so the model is told `~` and
+  /// the paths it reads back are short rather than the app container's own.
+  /// Null where no Linux is installed — there is no guest to mask anything
+  /// in, and the file tools then resolve host paths directly.
+  @override
+  String? get guestRoot => rootfsInstalled ? "/root" : null;
+
+  /// What `HOME` is for a command here: the guest path where the project
+  /// workspace is bound, so `~` in a command expands to it and the prompt,
+  /// the file tools and [_compose] all say the same place. The workspace is
+  /// reachable at `$guestRoot` + its suffix past the project workspace.
+  @override
+  String? homeFor(String home) => guestRoot ?? home;
 
   @override
   ShellRun start(String command,
@@ -59,24 +90,44 @@ class IshShell extends Shell {
       required String home,
       required Duration timeout,
       Map<String, String>? environment,
-      bool sharedHome = true,
       bool oneShot = false,
       bool restart = false,
-      String? project}) {
+      String? project,
+      CommandSandbox? sandbox}) {
     // `project` exists so a shell can resolve a per-project driver; the
     // emulator is its own environment and has no driver to pick.
+    //
+    // There is no confinement to offer inside the guest — its rootfs is the
+    // boundary, the way a proot guest's is — so a sandboxed command fails
+    // closed rather than running unconfined, the way a host shell without
+    // Landlock does.
+    if (sandbox != null) {
+      return _IshUnavailableRun(
+          "No sandbox is available in the guest to run this command confined, "
+          "so it was not run.");
+    }
+    if (!rootfsInstalled) {
+      return _IshUnavailableRun(
+          "No Linux is installed on this device to run commands in. Install "
+          "one from the Terminal settings.");
+    }
+    // The guest's view of the chat workspace: the project workspace is bound
+    // at [guestRoot], so the chat's own is that plus its suffix past the
+    // project workspace — the same words the prompt tells the model.
+    final guestCwd = guestWorkspacePath(guestRoot!, home, cwd);
     if (oneShot) {
       return _IshOneShotRun(
         rootfsDir: rootfsDir,
         dataDir: dataDir,
         home: home,
+        guestCwd: guestCwd,
         script: command,
         timeout: timeout,
-        environment: _compose(home: home, extra: environment),
+        environment: _compose(extra: environment),
       );
     }
     return _sessions
-        .putIfAbsent(cwd, () => _IshSession(this, cwd, home))
+        .putIfAbsent(cwd, () => _IshSession(this, cwd, guestCwd, home))
         .start(command, timeout, environment: environment, restart: restart);
   }
 
@@ -91,31 +142,44 @@ class IshShell extends Shell {
   }
 
   Map<String, String> _compose({
-    required String home,
     Map<String, String>? extra,
   }) =>
       {
+        // The guest's own PATH: a non-login ash falls back to its
+        // compiled-in default, which does not name /usr/local/bin — where a
+        // setup's installs land — and a `command not found` one command at a
+        // time is how that would be noticed.
+        "PATH": "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
         ...defaultShellEnvironment,
-        "HOME": home,
+        "HOME": guestRoot ?? "/",
         ...environment(),
         ...?extra,
       };
 }
 
 class _IshSession {
-  _IshSession(this._shell, this._cwdPath, this._home);
+  _IshSession(this._shell, this._cwdPath, this._guestCwd, this._workspaceHome);
 
   final IshShell _shell;
   final String _cwdPath;
-  final String _home;
+
+  /// The chat workspace in the guest's own words — what the session's shell
+  /// starts in, and what its marker's `cwd=` comes back as.
+  final String _guestCwd;
+
+  /// The host project workspace, which the bridge binds into the guest at
+  /// [IshShell.guestRoot].
+  final String _workspaceHome;
 
   int? _sessionId;
   Future<void> _queue = Future.value();
   _IshRun? _current;
+  final List<_IshRun> _runs = [];
 
   ShellRun start(String command, Duration timeout,
       {Map<String, String>? environment, bool restart = false}) {
     final run = _IshRun(timeout, this);
+    _runs.add(run);
     _queue = _queue.then((_) => _execute(run, command, timeout,
         environment: environment, restart: restart));
     return run;
@@ -129,14 +193,21 @@ class _IshSession {
     bool restart = false,
   }) async {
     if (restart || _sessionId == null) {
+      // A restart is asked of a session that may still be running: destroy
+      // the old guest before making a new one, or the emulator keeps the
+      // orphan for the rest of the process.
+      final old = _sessionId;
+      _sessionId = null;
+      if (old != null) _IshIsolate.instance.destroy(old);
       try {
         _sessionId = await _IshIsolate.instance.init(
           rootfsDir: _shell.rootfsDir,
           dataDir: _shell.dataDir,
-          home: _home,
-          env: _shell._compose(home: _home, extra: environment),
+          home: _workspaceHome,
+          cwd: _guestCwd,
+          env: _shell._compose(extra: environment),
         );
-        _shell._cwds[_cwdPath]?.value = _cwdPath;
+        _shell._cwds[_cwdPath]?.value = _guestCwd;
       } catch (e) {
         run.state.complete(ShellResult.failed(
             "An error occurred while starting the iSH shell: $e"));
@@ -157,12 +228,17 @@ class _IshSession {
       _current = null;
       run.state.timeoutTimer?.cancel();
       if (!run.state.byTimeout) run.state.escalateTimer?.cancel();
-      _shell._cwds[_cwdPath]?.value = result.cwd ?? _cwdPath;
+      _shell._cwds[_cwdPath]?.value = result.cwd ?? _guestCwd;
       run.state.complete(result);
     } catch (e) {
       _current = null;
       run.state.timeoutTimer?.cancel();
+      final id = _sessionId;
       _sessionId = null;
+      // The run's own handle is gone with the failure; destroy it so the
+      // guest does not outlive the command that lost it, and the next
+      // command starts a session cold.
+      if (id != null) _IshIsolate.instance.destroy(id);
       run.state.complete(ShellResult.failed(
           "An error occurred while executing the command: $e"));
     }
@@ -184,21 +260,30 @@ class _IshSession {
     _sessionId = null;
   }
 
-  Future<void> close() async {
-    final run = _current;
-    _current = null;
-    if (run != null && !run.state.done.isCompleted) {
-      run.state.timeoutTimer?.cancel();
-      run.state.escalateTimer?.cancel();
-      run.state.complete(ShellResult(
-        returnCode: -1,
-        output: "",
-        exceptionInfo: "The iSH shell was restarted while the command was running.",
-      ));
-    }
+  Future<void> close() {
+    // Every run this session still holds is answered, not just the current
+    // one: a queued run whose result nobody would complete is a turn that
+    // never ends. The queued `_execute` bodies read `_sessionId` after this,
+    // so nulling it first is what sends each of them to the failed-complete
+    // path rather than into a fresh session nothing will ever close.
     final id = _sessionId;
     _sessionId = null;
+    _current = null;
     if (id != null) _IshIsolate.instance.destroy(id);
+    for (final run in _runs) {
+      if (!run.state.done.isCompleted) {
+        run.state.timeoutTimer?.cancel();
+        run.state.escalateTimer?.cancel();
+        run.state.complete(ShellResult(
+          returnCode: -1,
+          output: "",
+          exceptionInfo:
+              "The iSH shell was restarted while the command was running.",
+        ));
+      }
+    }
+    _runs.clear();
+    return Future.value();
   }
 }
 
@@ -216,6 +301,25 @@ class _IshRunState {
   Timer? escalateTimer;
 }
 
+/// The run a command carries when there is nothing to run it with — no
+/// sandbox in the guest for a confined command, or no Linux installed for
+/// anything. Completes failed instead of leaving the caller's
+/// `await run.result` waiting on a run that never started.
+class _IshUnavailableRun implements ShellRun {
+  _IshUnavailableRun(this.message);
+
+  final String message;
+
+  @override
+  Future<ShellResult> get result async => ShellResult.failed(message);
+
+  @override
+  ValueListenable<String?>? get output => null;
+
+  @override
+  Future<void> kill() async {}
+}
+
 class _IshRun implements ShellRun {
   _IshRun(this.timeout, this._session) : state = _IshRunState(timeout);
   final Duration timeout;
@@ -223,6 +327,8 @@ class _IshRun implements ShellRun {
   final _IshRunState state;
   @override
   Future<ShellResult> get result => state.done.future;
+  @override
+  ValueListenable<String?>? get output => null;
   @override
   Future<void> kill() async => _session._interrupt(this, byTimeout: false);
 }
@@ -232,6 +338,7 @@ class _IshOneShotRun implements ShellRun {
     required this.rootfsDir,
     required this.dataDir,
     required this.home,
+    required this.guestCwd,
     required this.script,
     required this.timeout,
     required this.environment,
@@ -241,7 +348,12 @@ class _IshOneShotRun implements ShellRun {
 
   final String rootfsDir;
   final String dataDir;
+
+  /// The host project workspace, which the bridge binds at the guest root.
   final String home;
+
+  /// Where the one-shot shell starts, in the guest's own words.
+  final String guestCwd;
   final String script;
   final Duration timeout;
   final Map<String, String> environment;
@@ -249,6 +361,9 @@ class _IshOneShotRun implements ShellRun {
   @override
   late final Future<ShellResult> result;
   int? _sessionId;
+
+  @override
+  ValueListenable<String?>? get output => null;
 
   @override
   Future<void> kill() async {
@@ -261,12 +376,20 @@ class _IshOneShotRun implements ShellRun {
       return const ShellResult.failed(
           "The iSH shell is not available on this platform.");
     }
-    _sessionId = await _IshIsolate.instance.init(
-      rootfsDir: rootfsDir,
-      dataDir: dataDir,
-      home: home,
-      env: environment,
-    );
+    int sessionId;
+    try {
+      sessionId = await _IshIsolate.instance.init(
+        rootfsDir: rootfsDir,
+        dataDir: dataDir,
+        home: home,
+        cwd: guestCwd,
+        env: environment,
+      );
+    } catch (e) {
+      return ShellResult.failed(
+          "An error occurred while starting the iSH shell: $e");
+    }
+    _sessionId = sessionId;
     final scriptB64 = base64.encode(utf8.encode(script));
     final timer = Timer(timeout, () => _IshIsolate.instance.interrupt(_sessionId!));
     try {
@@ -319,14 +442,25 @@ class _IshIsolate {
     if (_sendPort != null) return;
     final replies = ReceivePort();
     await Isolate.spawn(_entry, replies.sendPort);
-    _sendPort = await replies.first as SendPort;
-    replies.listen(_handle);
+    // One listener for the port's whole life: a ReceivePort is a
+    // single-subscription stream, so reading the entry's hello with `.first`
+    // and then attaching the real listener would throw at the second one.
+    final ready = Completer<SendPort>();
+    replies.listen((msg) {
+      if (msg is SendPort && !ready.isCompleted) {
+        ready.complete(msg);
+        return;
+      }
+      _handle(msg);
+    });
+    _sendPort = await ready.future;
   }
 
   Future<int> init({
     required String rootfsDir,
     required String dataDir,
     required String home,
+    required String cwd,
     required Map<String, String> env,
   }) async {
     if (!ishLinked) return -1;
@@ -338,7 +472,7 @@ class _IshIsolate {
     _pending[replyId] = reply;
     final sessionId = _nextReplyId++;
     _sendPort!.send([
-      _kInit, replyId, sessionId, rootfsDir, dataDir, home,
+      _kInit, replyId, sessionId, rootfsDir, dataDir, home, cwd,
       dispatcher, token,
       env.entries.map((e) => "${e.key}=${e.value}").toList(),
     ]);
@@ -360,7 +494,7 @@ class _IshIsolate {
     final reply = Completer<dynamic>();
     _pending[replyId] = reply;
     _sendPort!.send([_kRun, replyId, sessionId, scriptB64, timeout.inMilliseconds]);
-    return reply.future as ShellResult;
+    return await reply.future as ShellResult;
   }
 
   void interrupt(int sessionId) {
@@ -401,26 +535,37 @@ class _IshIsolate {
           final rootfsDir = msg[3] as String;
           final dataDir = msg[4] as String;
           final home = msg[5] as String;
-          final dispatcher = msg[6] as String;
-          final token = msg[7] as String;
-          final env = msg[8] as List;
+          final cwd = msg[6] as String;
+          final dispatcher = msg[7] as String;
+          final token = msg[8] as String;
+          final env = msg[9] as List;
           final initFn = ishInitFn;
           if (initFn == null) {
             main.send([_kReply, replyId, "iSH is not linked", null]);
             return;
           }
-          // The env array as C strings.
+          // The env array as C strings. Every string handed to the bridge is
+          // ours to free after the call — the bridge copies what it keeps.
           final envPtrs = calloc<Pointer<Utf8>>(env.length);
+          final argPtrs = [
+            rootfsDir.toNativeUtf8(),
+            dataDir.toNativeUtf8(),
+            home.toNativeUtf8(),
+            cwd.toNativeUtf8(),
+            dispatcher.toNativeUtf8(),
+            token.toNativeUtf8(),
+          ];
           for (var i = 0; i < env.length; i++) {
             envPtrs[i] = (env[i] as String).toNativeUtf8();
           }
           final errPtr = calloc<Pointer<Utf8>>();
           final handle = initFn(
-            rootfsDir.toNativeUtf8(),
-            dataDir.toNativeUtf8(),
-            home.toNativeUtf8(),
-            dispatcher.toNativeUtf8(),
-            token.toNativeUtf8(),
+            argPtrs[0],
+            argPtrs[1],
+            argPtrs[2],
+            argPtrs[3],
+            argPtrs[4],
+            argPtrs[5],
             envPtrs,
             env.length,
             errPtr,
@@ -433,6 +578,9 @@ class _IshIsolate {
           }
           calloc.free(envPtrs);
           calloc.free(errPtr);
+          for (final p in argPtrs) {
+            calloc.free(p);
+          }
           if (error == null && handle.address != 0) {
             sessions[sessionId] = handle;
           }

@@ -33,7 +33,7 @@ Shell platformShell({
   required ShellDriver? Function() driver,
   String? dataDir,
   RootfsStore? rootfsStore,
-  String? rootfsId,
+  String? Function()? rootfsId,
 }) =>
     const UnavailableShell();
 

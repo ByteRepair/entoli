@@ -387,9 +387,11 @@ is `logDetail`, which is debug-only.
   a literal `~`.
 - iSH (iOS's emulator): `tool/ios/ish/build.sh`. The iSH source is a git
   submodule (shallow) at `tool/ios/ish/src/`; the build inits it and its
-  `deps/` submodules, then compiles the core + the FFI bridge into an
-  XCFramework. Needs macOS and Xcode. Not run by the app build; without it an
-  iOS build has no shell to run commands in. `git submodule update --init
+  `deps/` submodules, then compiles the core (libarchive included), the FFI
+  bridge, and the i386 vdso into an XCFramework. Needs macOS, Xcode, and
+  LLVM's clang/lld (brew install llvm) for the vdso. Not run by the app
+  build; without it an iOS build has no shell to run commands in. `git
+  submodule update --init
   --recursive` fetches the source — a clone without it has an empty `src/`.
 - The Linux model server: `tool/linux/build-llama.sh`, native (no toolbox —
   host cmake, ninja and glslc), sharing the pin in `tool/android/versions.sh`.
