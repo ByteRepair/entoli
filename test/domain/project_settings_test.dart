@@ -54,6 +54,9 @@ void main() {
     expect(copy.omada, true);
     expect(copy.omadaOrdering, OmadaOrdering.parallel);
     expect(copy.description, "What are we building?");
+    expect(copy.permissions, settings.permissions);
+    expect(copy.writableDirs, settings.writableDirs);
+    expect(copy.sandboxReprompt, settings.sandboxReprompt);
   });
 
   test("omada off writes nothing and an absent key loads as off", () async {

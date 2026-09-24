@@ -213,12 +213,15 @@ Iterable<LlmMessage> _assistant(Message message) sync* {
         case FilePart():
         case ArtifactPart():
         case SkillInstallPart():
+        case ApprovalPart():
         case ErrorPart():
           // Results are read off `results` by the call they answer. An error is
           // what the turn reported to the user; the model never saw it, so
           // putting it back would be inventing an exchange. An artifact is
           // view-only output; the model sees the call that produced it, not the
-          // page.
+          // page. A permission banner is the gate's question, not the model's —
+          // the model saw the command it triggered and the result it produced,
+          // and nothing of the banner between them.
           break;
       }
     }
@@ -278,6 +281,7 @@ String? _responseIdOf(MessagePart part) => switch (part) {
       FilePart() ||
       ArtifactPart() ||
       SkillInstallPart() ||
+      ApprovalPart() ||
       ErrorPart() =>
         null,
     };

@@ -12,6 +12,7 @@ import "../domain/chat_meta.dart";
 import "../domain/chat_store.dart";
 import "../domain/chat_title.dart";
 import "../domain/models.dart";
+import "../domain/permission.dart";
 import "../domain/project.dart";
 import "../domain/project_settings.dart";
 import "../domain/prompt_library.dart";
@@ -320,6 +321,10 @@ class ChatRepository {
     // mechanism drops it from the tool list and the prompt together.
     final omada = projectSettings.omada;
     if (omada) disabled.add(AgentCapability.task);
+    // The default project's rules and writable roots are the app tier: they
+    // apply to every project before its own, invisibly.
+    final defaultProjectSettings =
+        project == null ? projectSettings : await projectSettingsOf(null);
     return TurnSettings(
       model: meta.model ?? settings.defaultModelId,
       provider: meta.model != null ? meta.provider : settings.defaultProviderId,
@@ -337,6 +342,31 @@ class ChatRepository {
       includesUserInstructions: builtIn?.includesUserInstructions ?? false,
       // The project's own command variables, beside the app-level ones.
       environment: projectSettings.environment ?? const {},
+      // Chat rules first, then the project's, then the default project's:
+      // a later rule wins only by strength (deny over ask over allow), and
+      // the tiers break the tie.
+      permissions: [
+        ...meta.permissions,
+        ...projectSettings.permissions,
+        ...defaultProjectSettings.permissions,
+      ],
+      // The project's writable roots, the chat's own grants, and what the
+      // rules themselves grant — a re-prompt's always answers land in the
+      // two lists, and a rule that allows writing somewhere carries the
+      // sandbox grant with it.
+      writableDirs: [
+        ...meta.writableDirs,
+        ...projectSettings.writableDirs,
+        ...defaultProjectSettings.writableDirs,
+        for (final rule in [
+          ...meta.permissions,
+          ...projectSettings.permissions,
+          ...defaultProjectSettings.permissions,
+        ])
+          ...rule.writes,
+      ],
+      sandboxReprompt:
+          projectSettings.sandboxReprompt ?? defaultProjectSettings.sandboxReprompt,
       turnMaxSteps:
           projectSettings.turnMaxSteps ?? settings.turnMaxSteps,
       // The project's wording answers over the app's, like the step limit.
@@ -522,8 +552,103 @@ class ChatRepository {
   Future<ChatState> unpinChat(String chatId, ChatState state) =>
       saveState(state.copyWith(pinned: false));
 
-  Future<void> respondApproval(String chatId, String approvalId, ApprovalResponse r) =>
-      _backend.respondApproval(chatId, approvalId, r);
+  /// Answer an approval banner. An "always" answer derives the standing rule
+  /// from the approval — the command's leading words, the file's directory, or
+  /// the fetch's host — writes it to the tier the answer names, and forwards
+  /// the answer whole: the waiting turn derives the same rule for itself, so
+  /// the rest of it is covered before the persisted file is read again. The
+  /// project is the chat's own, read from the store — a UI snapshot may be
+  /// from before a move.
+  Future<void> respondApproval(
+    String chatId,
+    String approvalId,
+    ApprovalResponse r, {
+    ToolApproval? approval,
+  }) async {
+    final deniedDirs = approval?.deniedDirs ?? const [];
+    if (r == ApprovalResponse.alwaysAllowChat ||
+        r == ApprovalResponse.alwaysAllowProject) {
+      if (deniedDirs.isNotEmpty) {
+        // A re-prompt's "always" is the paths: they become the tier's
+        // writable directories, and every later confined command — this
+        // chat's or the project's — writes there without a banner. The
+        // command's own prose is not recorded: it varies every turn and
+        // would claim to allow what it cannot name.
+        if (r == ApprovalResponse.alwaysAllowChat) {
+          await _saveChatDirs(chatId, deniedDirs);
+        } else {
+          await _saveProjectDirs(await projectOf(chatId), deniedDirs);
+        }
+      } else {
+        final rule = ruleFromApproval(approval);
+        if (rule != null) {
+          if (r == ApprovalResponse.alwaysAllowChat) {
+            await _saveChatRule(chatId, rule);
+          } else {
+            await _saveProjectRule(await projectOf(chatId), rule);
+          }
+        }
+      }
+    }
+    await _backend.respondApproval(chatId, approvalId, r);
+  }
+
+  /// Writes [rule] onto the chat's `meta.json`, read fresh — the turn that is
+  /// running may have written the TTL or the anchor since the UI read it.
+  /// An equivalent rule already there is not appended again: two banners
+  /// whose calls share a head derive the same rule, and pressing Always
+  /// twice should not stack copies.
+  Future<void> _saveChatRule(String chatId, PermissionRule rule) async {
+    final meta = await _store.loadMeta(chatId);
+    if (meta.permissions.any(_sameRule(rule))) return;
+    await _store.saveMeta(chatId, meta..permissions = [...meta.permissions, rule]);
+    _changes.add(MetaChanged(chatId, meta));
+  }
+
+  /// Writes [rule] onto the project's `project.json`, read fresh; null is the
+  /// default project's file. Same dedup as [_saveChatRule].
+  Future<void> _saveProjectRule(String? project, PermissionRule rule) async {
+    final settings = ProjectSettings.load(_config, project: project);
+    if (settings.permissions.any(_sameRule(rule))) return;
+    settings.permissions = [...settings.permissions, rule];
+    await settings.save(_config, project: project);
+  }
+
+  /// What makes two rules the same for the dedup: everything persisted.
+  static bool Function(PermissionRule) _sameRule(PermissionRule rule) =>
+      (existing) =>
+          existing.tool == rule.tool &&
+          existing.pattern == rule.pattern &&
+          existing.decision == rule.decision &&
+          _sameStrings(existing.writes, rule.writes);
+
+  static bool _sameStrings(List<String> a, List<String> b) =>
+      a.length == b.length &&
+      [for (final x in a) b.contains(x)].every((v) => v);
+
+  /// Writes [dirs] onto the chat's `meta.json`, deduped — two banners over
+  /// the same denial name the same directory.
+  Future<void> _saveChatDirs(String chatId, List<String> dirs) async {
+    final meta = await _store.loadMeta(chatId);    final fresh = [for (final d in dirs) if (!meta.writableDirs.contains(d)) d];
+    if (fresh.isEmpty) return;
+    final next = meta..writableDirs = [...meta.writableDirs, ...fresh];
+    // ignore: avoid_print
+    print("DBG encode: ${next.encode()}");
+    await _store.saveMeta(chatId, next);
+    _changes.add(MetaChanged(chatId, meta));
+  }
+
+  /// Writes [dirs] onto the project's `project.json`, deduped; null is the
+  /// default project's file.
+  Future<void> _saveProjectDirs(String? project, List<String> dirs) async {
+    final settings = ProjectSettings.load(_config, project: project);
+    final fresh = [
+      for (final d in dirs) if (!settings.writableDirs.contains(d)) d,
+    ];
+    if (fresh.isEmpty) return;
+    settings.writableDirs = [...settings.writableDirs, ...fresh];
+    await settings.save(_config, project: project);
+  }
 
   Future<void> respondQuestions(String chatId, String requestId, List<String?> answers) =>
       _backend.respondQuestions(chatId, requestId, answers);

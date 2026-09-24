@@ -4,6 +4,7 @@ import "package:flutter_test/flutter_test.dart";
 import "package:agent_chat/domain/app_settings.dart";
 import "package:agent_chat/domain/llm_provider.dart";
 import "package:agent_chat/domain/permission.dart";
+import "package:agent_chat/domain/project_settings.dart";
 import "package:agent_chat/providers.dart";
 import "package:agent_chat/ui/settings/settings_page.dart";
 
@@ -265,4 +266,47 @@ void main() {
       expect(saved().map((p) => p.id), ["openai"]);
     });
   });
+  group("the default project's permissions", () {
+    testWidgets("the rules list renders the tier's rules", (tester) async {
+      final settings = ProjectSettings()
+        ..permissions = [
+          const PermissionRule(
+              tool: "bash", pattern: "git *", decision: PermissionDecision.deny),
+          const PermissionRule(
+              tool: "read",
+              pattern: "/home/x/doc",
+              decision: PermissionDecision.allow),
+        ];
+      await io(tester, () => settings.save(app.config, project: null));
+      app.container.invalidate(projectSettingsProvider(null));
+      await pumpSettings(tester, app, SettingsCategory.general);
+      await scrollTo(tester, find.text("Permissions"));
+
+      expect(find.textContaining("DENY bash git *"), findsOneWidget);
+      expect(find.textContaining("ALLOW read /home/x/doc"), findsOneWidget);
+    });
+
+    testWidgets("the sandbox re-prompt switch reads and writes the tier",
+        (tester) async {
+      await pumpSettings(tester, app, SettingsCategory.general);
+      await scrollTo(tester, find.text("Permissions"));
+
+      final row = find.text("Offer to rerun sandbox-denied commands");
+      expect(row, findsOneWidget);
+      expect(
+          tester.widget<SwitchListTile>(find.ancestor(
+              of: row, matching: find.byType(SwitchListTile))).value,
+          isTrue,
+          reason: "the default project's answer is null, which inherits on");
+
+      await tester.tap(row);
+      await io(tester, () async {});
+      await settleIo(tester);
+      expect(
+          ProjectSettings.load(app.config, project: null).sandboxReprompt,
+          isFalse,
+          reason: "the switch writes the default project's own answer");
+    });
+  });
+
 }

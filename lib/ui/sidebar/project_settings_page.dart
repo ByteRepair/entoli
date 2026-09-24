@@ -12,7 +12,9 @@ import "../../providers.dart";
 import "../memory/memory_page.dart";
 import "../profile/profile_page.dart";
 import "../settings/agents_settings.dart";
+import "../settings/permissions_section.dart";
 import "../settings/skills_settings.dart";
+import "../settings/writable_dirs_section.dart";
 import "../fonts.dart";
 import "../widgets/destructive_button.dart";
 import "../widgets/dialogs.dart";
@@ -162,6 +164,8 @@ class ProjectSettingsPage extends ConsumerWidget {
           const Divider(),
           _EnvironmentRow(project: project),
           if (builtIn == null) ...[
+            const Divider(),
+            _PermissionsRow(project: project),
             const Divider(),
             DestructiveButton(
               icon: Icons.delete,
@@ -534,6 +538,111 @@ class _PromptsRow extends ConsumerWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// The project's own permission rules, a page like the environment's — the
+/// same section widget both serve, over this tier's save.
+class _PermissionsRow extends ConsumerWidget {
+  const _PermissionsRow({required this.project});
+
+  final String project;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final settings = ref.watch(projectSettingsProvider(project));
+    final count = settings.permissions.length;
+    return ListTile(
+      leading: const Icon(Icons.shield_outlined),
+      title: const Text("Permissions"),
+      subtitle: Text(count == 0
+          ? "Default (inherited)"
+          : "$count rule${count == 1 ? "" : "s"}"),
+      trailing: const Icon(Icons.chevron_right),
+      onTap: () => Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => _ProjectPermissionsPage(project: project),
+        ),
+      ),
+    );
+  }
+}
+
+class _ProjectPermissionsPage extends ConsumerWidget {
+  const _ProjectPermissionsPage({required this.project});
+
+  final String project;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final settings = ref.watch(projectSettingsProvider(project));
+    final theme = Theme.of(context);
+    return Scaffold(
+      appBar: AppBar(title: const Text("Permissions")),
+      body: ListView(children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+          child: Text(
+            "The app's own permissions (Settings > General > Agent) apply "
+            "before these, in every project, without being listed here.",
+            style: theme.textTheme.bodySmall
+                ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+          ),
+        ),
+        const SizedBox(height: 4),
+        PermissionsSection(
+          rules: settings.permissions,
+          description: "Standing rules for this project's chats. Writes "
+              "outside the workspaces that a rule grants are also where the "
+              "sandbox's write grant widens.",
+          onSaved: (rules) => ref
+              .read(projectSettingsProvider(project).notifier)
+              .setProjectPermissions(rules),
+        ),
+        const Divider(),
+        WritableDirsSection(
+          dirs: settings.writableDirs,
+          description: "Directories the project's sandboxed commands may "
+              "write to, beside the workspace.",
+          onSaved: (dirs) => ref
+              .read(projectSettingsProvider(project).notifier)
+              .setWritableDirs(dirs),
+        ),
+        const Divider(),
+        _SandboxRepromptRow(project: project),
+      ]),
+    );
+  }
+}
+
+/// Whether a sandbox-denied write is offered back here, over the app
+/// default. Null inherits; the row says what the effective answer is and a
+/// switch puts this project's own in place — the same
+/// inherit-then-override shape the TTL row keeps.
+class _SandboxRepromptRow extends ConsumerWidget {
+  const _SandboxRepromptRow({required this.project});
+
+  final String project;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final override = ref.watch(
+        projectSettingsProvider(project).select((s) => s.sandboxReprompt));
+    final inherited = ref.watch(
+        projectSettingsProvider(null).select((s) => s.sandboxReprompt ?? true));
+    return SwitchListTile(
+      title: const Text("Offer to rerun sandbox-denied commands"),
+      subtitle: Text(override == null
+          ? "Default (${inherited ? "on" : "off"}). A switch here overrides "
+              "the app's default for this project's chats."
+          : override
+              ? "On for this project's chats."
+              : "Off for this project's chats."),
+      value: override ?? inherited,
+      onChanged: (value) => ref
+          .read(projectSettingsProvider(project).notifier)
+          .setProjectSandboxReprompt(value),
     );
   }
 }

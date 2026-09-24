@@ -24,6 +24,7 @@ import "../widgets/app_mark.dart";
 import "../widgets/dialogs.dart";
 import "../widgets/editable_row.dart";
 import "../widgets/environment_section.dart";
+import "permissions_section.dart";
 import "../widgets/formatting.dart";
 import "../widgets/nav_drawer.dart";
 import "../widgets/provider_dialog.dart";
@@ -686,6 +687,48 @@ class _AgentSection extends ConsumerWidget {
         ),
         const _RetryTurnsField(),
         const _MaxStepsField(),
+        Divider(),
+        const _DefaultPermissionsSection(),
+      ],
+    );
+  }
+}
+
+/// The default project's permissions, which is what General holds: the tier
+/// every other project inherits before its own. The project settings page
+/// edits the same file for its own project; built-ins read it and add
+/// nothing.
+class _DefaultPermissionsSection extends ConsumerWidget {
+  const _DefaultPermissionsSection();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final settings = ref.watch(projectSettingsProvider(null));
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        PermissionsSection(
+          rules: settings.permissions,
+          description: "Standing rules, consulted before the classifier and "
+              "the banner. A deny outranks an ask, which outranks an allow; a "
+              "command with segments a rule does not cover still waits.",
+          onSaved: (rules) => ref
+              .read(projectSettingsProvider(null).notifier)
+              .setProjectPermissions(rules),
+        ),
+        SwitchListTile(
+          title: const Text("Offer to rerun sandbox-denied commands"),
+          subtitle: Text((settings.sandboxReprompt ?? true)
+              ? "When the sandbox denies a write, one banner offers to rerun "
+                  "it unconfined, or to widen the grant to the denied "
+                  "directory. A project can override this."
+              : "Off: a denial is reported to the model and the turn moves "
+                  "on. A project can override this."),
+          value: settings.sandboxReprompt ?? true,
+          onChanged: (value) => ref
+              .read(projectSettingsProvider(null).notifier)
+              .setProjectSandboxReprompt(value),
+        ),
       ],
     );
   }

@@ -106,4 +106,117 @@ void main() {
     expect(tester.getRect(panel).height, lessThanOrEqualTo(ApprovalBanner.mostHeight));
   });
 
+  group("the two always answers", () {
+    // Pumped directly: the callbacks are what these tests pin. The held-turn
+    // page clips the banner's action row behind the composer's hit area at
+    // the default viewport — the same row the Allow/Deny taps reach — so the
+    // direct pump asks the banner alone.
+    testWidgets("always in chat answers with the approval attached",
+        (tester) async {
+      ToolApproval? seen;
+      var answer = ApprovalResponse.deny;
+      await app.pump(
+          tester,
+          ApprovalBanner(
+            approval: bash,
+            onAllow: () {},
+            onDeny: () {},
+            onAlwaysAllowChat: () {
+              seen = bash;
+              answer = ApprovalResponse.alwaysAllowChat;
+            },
+            onAlwaysAllowProject: () {},
+          ));
+      await tester.tap(find.text("Always in chat"));
+      await tester.pump();
+
+      expect(answer, ApprovalResponse.alwaysAllowChat);
+      expect(seen?.id, "call-1",
+          reason: "the derivation reads the rule off the approval");
+    });
+
+    testWidgets("always in project answers with the approval attached",
+        (tester) async {
+      ToolApproval? seen;
+      var answer = ApprovalResponse.deny;
+      await app.pump(
+          tester,
+          ApprovalBanner(
+            approval: bash,
+            onAllow: () {},
+            onDeny: () {},
+            onAlwaysAllowChat: () {},
+            onAlwaysAllowProject: () {
+              seen = bash;
+              answer = ApprovalResponse.alwaysAllowProject;
+            },
+          ));
+      await tester.tap(find.text("Always in project"));
+      await tester.pump();
+
+      expect(answer, ApprovalResponse.alwaysAllowProject);
+      expect(seen?.argumentsText, bash.argumentsText);
+    });
+
+    testWidgets("a re-prompt banner names the sandbox dirs it agrees to",
+        (tester) async {
+      ToolApproval? seen;
+      const reprompt = ToolApproval(
+        id: "call-9-reprompt",
+        toolName: "bash",
+        argumentsText: "writing /home/yiannis/Projects/x",
+        deniedDirs: ["/home/yiannis/Projects/x"],
+      );
+      await app.pump(
+          tester,
+          ApprovalBanner(
+            approval: reprompt,
+            onAllow: () {},
+            onDeny: () {},
+            onAlwaysAllowChat: () {},
+            onAlwaysAllowProject: () => seen = reprompt,
+          ));
+
+      expect(find.text("Allow bash?"), findsOneWidget);
+      expect(find.text("writing /home/yiannis/Projects/x"), findsOneWidget);
+      await tester.tap(find.text("Always in project"));
+      await tester.pump();
+      expect(seen?.deniedDirs, ["/home/yiannis/Projects/x"],
+          reason: "the dirs are what an always answer grants");
+    });
+  });
+
+  group("where the rule would be written", () {
+    testWidgets("both always buttons are offered on a local chat",
+        (tester) async {
+      tester.view.physicalSize = const Size(1400, 1200);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      await asking(tester, bash);
+
+      expect(find.text("Always in chat"), findsOneWidget);
+      expect(find.text("Always in project"), findsOneWidget);
+    });
+
+    testWidgets("a mirrored chat hides them", (tester) async {
+      tester.view.physicalSize = const Size(1400, 1200);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      // The banner is answered from the other device: the rule is the home
+      // device's to write, so this end offers only Allow and Deny.
+      await app.pump(
+          tester,
+          ApprovalBanner(
+            approval: bash,
+            onAllow: () {},
+            onDeny: () {},
+          ));
+
+      expect(find.text("Always in chat"), findsNothing);
+      expect(find.text("Always in project"), findsNothing);
+      expect(find.text("Allow"), findsOneWidget);
+      expect(find.text("Deny"), findsOneWidget);
+    });
+  });
+
 }

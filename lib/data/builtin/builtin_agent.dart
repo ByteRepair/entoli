@@ -362,6 +362,9 @@ class BuiltinAgent {
     this.memoryStore,
     this.memoryChat,
     this.sandboxHelper,
+    this.permissions = const [],
+    this.writableDirs = const [],
+    this.sandboxReprompt = true,
   });
 
   /// The sandbox helper a test hands in, where the shell is a fake with no
@@ -370,6 +373,39 @@ class BuiltinAgent {
   /// it is nullable and the real answer wins when both exist.
   @visibleForTesting
   final SandboxHelper? sandboxHelper;
+
+  /// The turn's standing rules, merged chat over project over app by the
+  /// repository. Consulted in [_runGated] before the classifier and the
+  /// banner; grown at runtime by an "Allow in Chat" or "Allow in Project"
+  /// banner answer, through [grantRuntimeRule].
+  List<PermissionRule> permissions;
+
+  /// What this turn's sandboxed commands may additionally write to, beside
+  /// the workspace — the rules' writes plus the project's writableDirs. Read
+  /// by [sandboxFor] per command, so a mid-turn grant reaches the next run.
+  final List<String> writableDirs;
+
+  /// Whether a sandbox-denied write is offered back as an approval. Off
+  /// reports the denial and moves on.
+  final bool sandboxReprompt;
+
+  /// Rules granted mid-turn by a banner answer. They sit in front of the
+  /// standing list — the user answered while watching this exact call — and
+  /// die with the turn, the standing copies being persisted by the backend.
+  final List<PermissionRule> _runtimeRules = [];
+
+  /// Adds a rule at the front of the evaluation, from a banner answer this
+  /// turn is still running under.
+  void grantRuntimeRule(PermissionRule rule) => _runtimeRules.insert(0, rule);
+
+  /// Directories a re-prompt banner agreed to, live for the rest of the
+  /// turn — [sandboxFor] composes them into every command's grant, so an
+  /// "Allow in Chat" on a denial covers the next command without a banner.
+  /// The durable copies are the repository's to persist.
+  final Set<String> _runtimeDirs = {};
+
+  /// Grants [dirs] for the rest of this turn.
+  void grantRuntimeDirs(Iterable<String> dirs) => _runtimeDirs.addAll(dirs);
 
   /// The confinement a command runs under, from the shell's driver. Read per
   /// turn rather than held: the driver is resolved per command in the shell,
@@ -384,6 +420,7 @@ class BuiltinAgent {
       workspace: workspace,
       tmp: tmp,
       home: shell.machineHome,
+      extraWrites: [...writableDirs, ..._runtimeDirs],
     );
   }
 
@@ -934,9 +971,14 @@ class BuiltinAgent {
       ));
 
       yield* _runGated(call, call.argumentsJson, "bash",
-          () => _execute(call, command),
-          argumentsText: command);
-      final result = _commandResult!;
+          () => _execute(call, command), argumentsText: command);
+      var result = _commandResult!;
+      // The sandbox's answer rides between the result and its report: a
+      // denied write is offered back once, the rerun's outcome replacing
+      // the denial as what the model and the conversation read. The re-prompt
+      // streams its own banner through, the turn recording it like the first.
+      yield* sandboxRepromptIfNeeded(call, command, result);
+      result = _commandResult!;
 
       yield ToolResultEvent(_ran(call, result));
     }
@@ -1761,9 +1803,16 @@ class BuiltinAgent {
     yield ToolResultEvent(ToolResult(callId: call.id, returnCode: -1, output: "", exceptionInfo: problem));
   }
 
-  /// Run [run] gated by [approveMode]: ask the user, classify then maybe ask,
-  /// or run directly. Emits the approval banner and circuit-breaker info as
-  /// needed, and sets [_commandResult] to the outcome.
+  /// Run [run] gated by the rules, then [approveMode]. Rules are the standing
+  /// decision, so they are consulted first in every mode: an allow runs, a
+  /// deny refuses without running or asking, an ask escalates — and no match
+  /// falls through to what the mode answers. A banner answer granted mid-turn
+  /// sits in front of the standing list.
+  ///
+  /// The rule's reach stops where the parse's does: a command with findings —
+  /// one the static layer cannot model — is escalated to the banner even
+  /// under an allow rule, never silently run. In `never` mode there is nobody
+  /// to ask, so the findings refuse the command the way the veto always has.
   /// [argumentsText] is what the banner shows: what this call does, worded
   /// here where it is already in hand rather than parsed back out of the JSON
   /// by whoever draws it.
@@ -1774,6 +1823,52 @@ class BuiltinAgent {
     Future<ShellResult> Function() run, {
     String? argumentsText,
   }) async* {
+    // A bash command is judged segment by segment: an allow that covers the
+    // head but not the tail escalates the whole, so a compound command's
+    // uncovered piece never rides a rule through. The parse is the one the
+    // veto runs too — computed once here and handed down.
+    final analysis = toolName == "bash"
+        ? ShellCommandAnalysis.parse(argumentsText ?? "",
+            isWindows: platformIsWindows)
+        : null;
+    final verdict = rulesDecide(
+      [..._runtimeRules, ...permissions],
+      toolName,
+      command: argumentsText,
+      path: toolName == readToolName ||
+              toolName == writeToolName ||
+              toolName == editToolName
+          ? argumentsText
+          : null,
+      url: toolName == webfetchToolName ? argumentsText : null,
+      segments: analysis?.modelableSegments,
+    );
+    switch (verdict) {
+      case PermissionDecision.deny:
+        _commandResult = const ShellResult.failed(
+            "Denied by a permission rule you set. Do not retry this command; "
+            "tell the user what you were trying to do and let them decide.");
+        return;
+      case PermissionDecision.allow:
+        // An allow rule is a standing decision, but only for commands the
+        // parse can vouch for: a compound command whose later segments the
+        // rule does not cover runs with them unanswered. Findings here are a
+        // banner, in every mode but never — where nobody is watching.
+        final note = analysis?.escalationNote;
+        if (note != null) {
+          if (approveMode == ApproveMode.never) {
+            _commandResult = ShellResult.failed(note);
+            return;
+          }
+          yield* _askAndExecute(call, arguments, toolName, run, argumentsText);
+          return;
+        }
+        _commandResult = await run();
+        return;
+      case PermissionDecision.ask:
+      case null:
+        break;
+    }
     switch (approveMode) {
       case ApproveMode.ask:
         yield* _askAndExecute(call, arguments, toolName, run, argumentsText);
@@ -1836,7 +1931,25 @@ class BuiltinAgent {
       argumentsText: argumentsText,
     );
     yield ApprovalRequestEvent(approval);
-    final allowed = await approve(approval) == ApprovalResponse.allow;
+    final answer = await approve(approval);
+    // An "always" answer is the standing rule arriving: it applies to the
+    // rest of this turn at once, ahead of the persisted copy the next turn
+    // reads. The approval is in hand, so the derivation costs nothing here.
+    // A re-prompt's approval carries what it agreed to: the denied dirs.
+    if (approval.deniedDirs.isNotEmpty &&
+        (answer == ApprovalResponse.alwaysAllowChat ||
+            answer == ApprovalResponse.alwaysAllowProject)) {
+      // The paths, not the prose: grant them for the turn; the repository
+      // persists them to the tier the answer named.
+      grantRuntimeDirs(approval.deniedDirs);
+    } else if (answer == ApprovalResponse.alwaysAllowChat ||
+        answer == ApprovalResponse.alwaysAllowProject) {
+      final rule = ruleFromApproval(approval);
+      if (rule != null) grantRuntimeRule(rule);
+    }
+    final allowed = answer == ApprovalResponse.allow ||
+        answer == ApprovalResponse.alwaysAllowChat ||
+        answer == ApprovalResponse.alwaysAllowProject;
     _humanDecided = true;
     _commandResult = allowed
         ? await run()
@@ -1890,7 +2003,8 @@ class BuiltinAgent {
   /// person approved is the machine overriding its keeper.
   bool _humanDecided = false;
 
-  Future<ShellResult> _execute(LlmToolCall call, String command) async {
+  Future<ShellResult> _execute(LlmToolCall call, String command,
+      {bool unconfined = false}) async {
     if (_cancelled) {
       return const ShellResult.failed("The turn was stopped before this command ran.");
     }
@@ -1920,7 +2034,7 @@ class BuiltinAgent {
     // banner, not the mode, is what carries that — auto mode reaches the
     // banner through the classifier's ask — so the gate reads the flag the
     // run itself sets.
-    final sandbox = sandboxFor();
+    final sandbox = unconfined ? null : sandboxFor();
     if (sandbox != null && !_humanDecided) {
       final analysis =
           ShellCommandAnalysis.parse(command, isWindows: platformIsWindows);
@@ -1945,6 +2059,75 @@ class BuiltinAgent {
     } finally {
       _running = null;
     }
+  }
+
+  /// After a command the confinement denied: one offer to rerun it, unconfined
+  /// or with the denied directory joining the grant, rather than leaving the
+  /// denial for the model to discover. Off under [sandboxReprompt] false, on a
+  /// run a human already decided, in `never` mode — nobody is there to ask —
+  /// and past the one per call this turn allows.
+  ///
+  /// Streaming, because the banner is where the answer comes from; the caller
+  /// yields this between the first result and its report, and reads
+  /// [_commandResult] after — set by the rerun, still the denial where none
+  /// was asked for.
+  Stream<AgentEvent> sandboxRepromptIfNeeded(
+    LlmToolCall call,
+    String command,
+    ShellResult result,
+  ) async* {
+    if (result.violations.isEmpty ||
+        !sandboxReprompt ||
+        _humanDecided ||
+        approveMode == ApproveMode.never) {
+      return;
+    }
+    // The rerun rides the ordinary gated path — a denial the user denies here
+    // is the answer, not a loop. _askAndExecute sets _humanDecided, so this
+    // rerun's own result carries no second re-prompt, and its outcome is in
+    // _commandResult when the events are done: the caller reads it there.
+    // A write denial is rerun unconfined — the human read the command and
+    // answered — and a read denial rerun confined, there being nothing a
+    // grant could widen: a read refusal is the file's own perms.
+    final writeDenied = result.violations.any((v) => v.startsWith("writing "));
+    final deniedDirs = [
+      for (final violation in result.violations)
+        if (violation.startsWith("writing "))
+          violation.substring("writing ".length),
+    ];
+    // The re-prompt's approval carries what it is agreeing to: the denied
+    // directories. An "always" answer becomes a directory grant — runtime
+    // for the turn here, persisted by the repository — never a command-prose
+    // rule, which would match nothing next turn while claiming to.
+    //
+    // Its id is the call's own plus a suffix, deliberately not the call id:
+    // the ask banner and this banner are two questions about one call, and
+    // the approval plumbing keys by id — one completer, one view-state entry,
+    // one removal. Sharing the id made the second banner inherit the first's
+    // answer and vanish the moment the first was answered, which read as the
+    // whole chain executing on a prompt that was never given.
+    final approval = ToolApproval(
+      id: "${call.id}-reprompt",
+      toolName: "bash",
+      argumentsJson: call.argumentsJson,
+      argumentsText: result.violations.join("; "),
+      deniedDirs: deniedDirs,
+    );
+    yield ApprovalRequestEvent(approval);
+    final answer = await approve(approval);
+    if (answer == ApprovalResponse.alwaysAllowChat ||
+        answer == ApprovalResponse.alwaysAllowProject) {
+      grantRuntimeDirs(deniedDirs);
+    }
+    final allowed = answer == ApprovalResponse.allow ||
+        answer == ApprovalResponse.alwaysAllowChat ||
+        answer == ApprovalResponse.alwaysAllowProject;
+    _humanDecided = true;
+    _commandResult = allowed
+        ? await _execute(call, command, unconfined: writeDenied)
+        : const ShellResult.failed("The user denied this command. Ask them what "
+            "to do instead, or try something else.");
+    _humanDecided = false;
   }
 
   /// Reports [run]'s output as it prints, each change no more than

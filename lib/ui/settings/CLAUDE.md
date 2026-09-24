@@ -65,7 +65,8 @@ the system has a palette of its own a Material 3 Expressive switch takes the
 place of the colours, and what any of it reaches is "What the settings page can
 change about it" — the **Agent** — command approval mode and the classifier
 model, which travel together because auto mode is unusable without one — the
-environment, and deleting every chat. **Terminal** is where commands run —
+standing permission rules the agent consults before any of it, the environment,
+and deleting every chat. **Terminal** is where commands run —
 Android itself, or a Linux downloaded from the catalog under it; a category of
 its own for the reason Voice is one, and drawn on every platform, where it says
 that installing one is Android's. **On-device** is the model that answers

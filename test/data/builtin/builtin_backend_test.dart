@@ -100,6 +100,8 @@ void main() {
     String? bundledInstructions,
     bool includesUserInstructions = false,
     bool omada = false,
+    ApproveMode approveMode = ApproveMode.never,
+    List<PermissionRule> permissions = const [],
   }) =>
       backend
           .sendPrompt(
@@ -111,7 +113,8 @@ void main() {
                   model: model,
                   provider: provider,
                   project: project,
-                  approveMode: ApproveMode.never,
+                  approveMode: approveMode,
+                  permissions: permissions,
                   memory: memory,
                   sharedWorkspace: sharedWorkspace,
                   disabled: disabled,
@@ -1672,6 +1675,31 @@ void main() {
       final remaining = await store.entries();
       expect(remaining.where((e) => e.id == pinnedEntry.id).single.pinned, isTrue);
       expect(tidyQuestion(), isNot(contains(pinnedEntry.id)));
+    });
+  });
+
+  group("the turn's rules reach the agent", () {
+    test("a deny rule refuses the command before the mode", () async {
+      final backend = backendOver([
+        [bashCall("rm -rf /tmp/entoli-probe")],
+        [saidOnly("done")],
+      ], respond: (command) => ok("ran"));
+      final events = await send(
+        backend,
+        "run rm -rf /tmp/entoli-probe",
+        approveMode: ApproveMode.ask,
+        permissions: const [
+          PermissionRule(
+              tool: "bash", pattern: "rm *", decision: PermissionDecision.deny),
+        ],
+      );
+      expect(shell.ran, isEmpty,
+          reason: "a deny rule refuses without running");
+      final text = events
+          .whereType<ToolResultEvent>()
+          .map((r) => [r.result.output, r.result.exceptionInfo ?? ""].join(" "))
+          .join();
+      expect(text, contains("permission rule"));
     });
   });
 }

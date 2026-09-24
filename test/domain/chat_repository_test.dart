@@ -13,7 +13,9 @@ import "package:agent_chat/domain/chat_repository.dart";
 import "package:agent_chat/domain/builtin_project.dart" show AgentCapability;
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/domain/profile.dart";
+import "package:agent_chat/domain/permission.dart";
 import "package:agent_chat/domain/prompt_library.dart";
+import "package:agent_chat/domain/project_settings.dart";
 import "package:agent_chat/domain/temp_chat_ttl.dart";
 
 import "../fakes.dart";
@@ -563,6 +565,189 @@ void main() {
       await pumpEventQueue();
 
       expect(seen.whereType<Deleted>().single.chatId, chat.state.id);
+    });
+  });
+
+    group("a rule written from a banner answer", () {
+    test("\"Allow in Chat\" writes the derived rule on the chat's meta.json",
+        () async {
+      final repo = repoWith(AppSettings());
+      final chat = await savedChat(repo);
+      await repo.respondApproval(
+        chat.state.id,
+        "approval-1",
+        ApprovalResponse.alwaysAllowChat,
+        approval: ToolApproval(
+            id: "approval-1",
+            toolName: "bash",
+            argumentsText: "git checkout -b foo"),
+      );
+      final meta = await repo.loadMeta(chat.state.id);
+      expect(meta.permissions, hasLength(1));
+      expect(meta.permissions.single.tool, "bash");
+      expect(meta.permissions.single.pattern, "git checkout *");
+      expect(meta.permissions.single.decision, PermissionDecision.allow);
+      // The answer travels whole: the waiting turn derives the same rule
+      // from the approval it holds, so the rest of the turn is covered too.
+      expect(
+          backend.approvals.single.response, ApprovalResponse.alwaysAllowChat);
+    });
+
+    test("\"Allow in Project\" writes the rule on the project's project.json",
+        () async {
+      final repo = repoWith(AppSettings());
+      final chat = await savedChat(repo);
+      await repo.respondApproval(
+        chat.state.id,
+        "approval-2",
+        ApprovalResponse.alwaysAllowProject,
+        approval: ToolApproval(
+            id: "approval-2",
+            toolName: "webfetch",
+            argumentsText: "https://docs.example.com/guide"),
+      );
+      final settings = ProjectSettings.load(
+          config,
+          project: chat.state.project);
+      expect(settings.permissions, hasLength(1));
+      expect(settings.permissions.single.tool, "webfetch");
+      expect(settings.permissions.single.pattern, "example.com");
+      final chatMeta =
+          await repo.loadMeta(chat.state.id);
+      expect(chatMeta.permissions, isEmpty);
+    });
+
+    test("pressing Always twice on the same head does not stack the rule",
+        () async {
+      final repo = repoWith(AppSettings());
+      final chat = await savedChat(repo);
+      ToolApproval banner(String id) => ToolApproval(
+          id: id,
+          toolName: "bash",
+          argumentsText: "cd repo && git log");
+      await repo.respondApproval(chat.state.id, "a-1",
+          ApprovalResponse.alwaysAllowChat, approval: banner("a-1"));
+      await repo.respondApproval(chat.state.id, "a-2",
+          ApprovalResponse.alwaysAllowChat, approval: banner("a-2"));
+      final meta = await repo.loadMeta(chat.state.id);
+      expect(meta.permissions, hasLength(1));
+    });
+
+    test("a re-prompt's Always in Chat grants the dirs, not a command rule",
+        () async {
+      final repo = repoWith(AppSettings());
+      final chat = await savedChat(repo);
+      await repo.respondApproval(
+        chat.state.id,
+        "d-1",
+        ApprovalResponse.alwaysAllowChat,
+        approval: ToolApproval(
+            id: "d-1",
+            toolName: "bash",
+            argumentsText: "writing /home/yiannis/Projects/x",
+            deniedDirs: const ["/home/yiannis/Projects/x"]),
+      );
+      final meta = await repo.loadMeta(chat.state.id);
+      expect(meta.writableDirs, ["/home/yiannis/Projects/x"]);
+      // No command rule: the prose varies every turn and would claim to
+      // allow what it cannot name.
+      expect(meta.permissions, isEmpty);
+      expect(backend.approvals.single.response, ApprovalResponse.alwaysAllowChat);
+    });
+
+    test("a re-prompt's Always in Project grants the project's dirs", () async {
+      final repo = repoWith(AppSettings());
+      final chat = await savedChat(repo);
+      await repo.respondApproval(
+        chat.state.id,
+        "d-2",
+        ApprovalResponse.alwaysAllowProject,
+        approval: ToolApproval(
+            id: "d-2",
+            toolName: "bash",
+            argumentsText: "writing /home/yiannis/Projects/y",
+            deniedDirs: const ["/home/yiannis/Projects/y"]),
+      );
+      final settings = ProjectSettings.load(
+          config,
+          project: chat.state.project);
+      expect(settings.writableDirs, ["/home/yiannis/Projects/y"]);
+      final meta = await repo.loadMeta(chat.state.id);
+      expect(meta.writableDirs, isEmpty);
+    });
+
+    test("the same dir twice is not stacked", () async {
+      final repo = repoWith(AppSettings());
+      final chat = await savedChat(repo);
+      Future<void> answer(String id) => repo.respondApproval(
+            chat.state.id,
+            id,
+            ApprovalResponse.alwaysAllowChat,
+            approval: ToolApproval(
+                id: id,
+                toolName: "bash",
+                deniedDirs: const ["/home/yiannis/Projects/x"]),
+          );
+      await answer("d-3");
+      await answer("d-4");
+      final meta = await repo.loadMeta(chat.state.id);
+      expect(meta.writableDirs, hasLength(1));
+    });
+
+    test("a plain allow writes nothing anywhere", () async {
+      final repo = repoWith(AppSettings());
+      final chat = await savedChat(repo);
+      await repo.respondApproval(chat.state.id, "approval-3",
+          ApprovalResponse.allow,
+          approval: ToolApproval(
+              id: "approval-3",
+              toolName: "bash",
+              argumentsText: "python3 run.py"));
+      final chatMeta =
+          await repo.loadMeta(chat.state.id);
+      expect(chatMeta.permissions, isEmpty);
+    });
+
+    test("the rule the next turn reads covers the bare command", () async {
+      // The live run's failure, pinned at the layer it happened: Always on a
+      // command with no arguments derives `git status *`, and the next turn's
+      // settings must carry a rule that matches the bare `git status` — the
+      // pattern's trailing space is not a required one.
+      final repo = repoWith(AppSettings());
+      final chat = await savedChat(repo);
+      await repo.respondApproval(
+        chat.state.id,
+        "a-4",
+        ApprovalResponse.alwaysAllowChat,
+        approval: ToolApproval(
+            id: "a-4",
+            toolName: "bash",
+            argumentsText: "git status"),
+      );
+      await repo.sendPrompt(chat.state.id, userMessage("again")).toList();
+
+      final rules = backend.prompts.last.settings.permissions;
+      expect(rules.map((r) => r.pattern), contains("git status *"));
+    });
+
+    test("a re-prompt's denied FILE path lands in writableDirs", () async {
+      final repo = repoWith(AppSettings());
+      final chat = await savedChat(repo);
+      await repo.respondApproval(
+        chat.state.id,
+        "d-5",
+        ApprovalResponse.alwaysAllowProject,
+        approval: ToolApproval(
+            id: "d-5",
+            toolName: "bash",
+            argumentsText: "writing /etc/hosts",
+            deniedDirs: const ["/etc/hosts"]),
+      );
+      // A denial report names the exact path the write touched, often a
+      // file: the grant records it as it is, and the helper grants file
+      // rights on it.
+      final settings = ProjectSettings.load(config, project: chat.state.project);
+      expect(settings.writableDirs, ["/etc/hosts"]);
     });
   });
 }

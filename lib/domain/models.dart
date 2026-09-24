@@ -262,6 +262,22 @@ sealed class MessagePart with _$MessagePart {
     required String title,
   }) = SkillInstallPart;
 
+  /// A permission the turn asked for and the answer it got. Not a
+  /// [ToolCallPart]: nothing ran because a model chose it, and a model
+  /// reading the conversation back would find itself having asked for what
+  /// its own gate asked. What the user is shown of a past turn's gating is
+  /// the banner and its answer — this is that, recorded. The toolName and
+  /// [ToolApproval.argumentsText] word the banner; [answer] is the response
+  /// as pressed. The turn-scoped view state carries the live banner; this
+  /// part is what a reload draws instead.
+  const factory MessagePart.approval({
+    required String approvalId,
+    required String toolName,
+    String? argumentsText,
+    @Default([]) List<String> deniedDirs,
+    required String answer,
+  }) = ApprovalPart;
+
   factory MessagePart.fromJson(Map<String, dynamic> json) => _$MessagePartFromJson(json);
 }
 
@@ -322,17 +338,30 @@ abstract class ToolApproval with _$ToolApproval {
     required String toolName,
     String? argumentsJson,
 
-    /// What the call actually does — the command for a `bash`, the URL for a
-    /// `webfetch`. The same field [ToolCall] carries and for the same reason:
-    /// the site that builds the call has it in hand, and a reader digging it
-    /// back out of the JSON is guessing at which key this tool used.
     String? argumentsText,
+
+    /// The directories a re-prompt banner is agreeing to — what the sandbox
+    /// refused while the command ran. Empty for an ordinary banner, where an
+    /// "always" answer derives a command rule instead.
+    @Default([]) List<String> deniedDirs,
   }) = _ToolApproval;
 
   factory ToolApproval.fromJson(Map<String, dynamic> json) => _$ToolApprovalFromJson(json);
 }
 
-enum ApprovalResponse { allow, deny }
+enum ApprovalResponse {
+  allow,
+
+  deny,
+
+  /// Allow, and write the rule on the chat's `meta.json` so the same call
+  /// runs unasked for the rest of this chat. Read back by the backend as
+  /// [allow], the persisted rule being the durable half.
+  alwaysAllowChat,
+
+  /// Allow, and write the rule on the project's `project.json`.
+  alwaysAllowProject,
+}
 
 /// A model the user can pick in settings.
 @freezed
