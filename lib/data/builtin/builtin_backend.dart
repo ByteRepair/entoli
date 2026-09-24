@@ -240,6 +240,8 @@ class BuiltinBackend implements AgentBackend {
         log: subAgentLog,
         caps: caps,
         sharedWorkspace: settings.sharedWorkspace,
+        permissions: settings.permissions,
+        writableDirs: settings.writableDirs,
         project: project,
         tone: settings.tone,
         citations: settings.citations,
@@ -357,6 +359,9 @@ class BuiltinBackend implements AgentBackend {
         memoryChat: settings.memory.agentTool ? chatId : null,
         caps: caps,
         sharedWorkspace: settings.sharedWorkspace,
+        permissions: settings.permissions,
+        writableDirs: settings.writableDirs,
+        sandboxReprompt: settings.sandboxReprompt ?? true,
         project: project,
         saveArtifact: (path, entryFile, {artifactId}) async {
           final resolved = resolvePath(path);
@@ -973,6 +978,8 @@ class BuiltinBackend implements AgentBackend {
     // Completed in place rather than removed: the agent may not have got round
     // to awaiting it yet, and it has to find this answer rather than a fresh
     // completer nobody will ever complete. `_clearApprovals` does the removing.
+    // The "always" answers reach the agent whole: it derives the standing rule
+    // from the approval it holds and grants it for the rest of the turn.
     final completer = _pending[approvalId];
     if (completer != null && !completer.isCompleted) completer.complete(response);
   }

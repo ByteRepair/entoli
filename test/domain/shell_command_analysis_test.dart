@@ -147,6 +147,19 @@ void main() {
     expect(note, contains("HOME"));
     expect(note, isNot(contains("asked")),
         reason: "nothing asked anyone; the wording says what happened");
-    expect(note, contains("was not run"));
+    expect(note, contains("Not run"));
+  });
+
+  test("the note names the segments where the parse saw them", () {
+    final note =
+        parse("cd /x && HOME=/tmp/evil git push").escalationNote!;
+    expect(note, contains("cd /x"));
+    expect(note, contains("separate bash calls"));
+  });
+
+  test("a tokenizer failure names nothing but the reason", () {
+    final note = parse(r'echo "unclosed').escalationNote!;
+    expect(note, isNot(contains("- cd")), reason: "nothing reliable to name");
+    expect(note, contains("split"));
   });
 }

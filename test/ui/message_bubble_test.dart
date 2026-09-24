@@ -8,6 +8,8 @@ import "package:flutter_markdown_plus/flutter_markdown_plus.dart";
 
 import "package:agent_chat/domain/ask.dart";
 import "package:agent_chat/domain/models.dart";
+import "package:agent_chat/ui/chat/widgets/activity_label.dart"
+    show ActivityGroup;
 import "package:agent_chat/ui/chat/widgets/message_bubble.dart";
 
 import "../fakes.dart";
@@ -1451,4 +1453,120 @@ void main() {
       expect(enabled(tester, buttonTipped("Regenerate")), isTrue);
     });
   });
+  group("recorded permissions", () {
+    MessagePart part(String answer) => MessagePart.approval(
+          approvalId: "a-1",
+          toolName: "bash",
+          argumentsText: "git status",
+          answer: answer,
+        );
+
+    testWidgets("an allowed banner reads allowed", (tester) async {
+      await pump(tester, _message(MessageRole.assistant, [part("allow")]));
+
+      expect(find.textContaining("Permission: bash — allowed"), findsOneWidget);
+    });
+
+    testWidgets("the scoped answers read as what they granted", (tester) async {
+      await pump(tester, _message(MessageRole.assistant, [
+        part("alwaysAllowChat"),
+        MessagePart.approval(
+            approvalId: "a-2",
+            toolName: "bash",
+            answer: "alwaysAllowProject"),
+      ]));
+
+      expect(
+          find.textContaining("allowed, always in this chat"), findsOneWidget);
+      expect(find.textContaining("allowed, always in this project"),
+          findsOneWidget);
+    });
+
+    testWidgets("a denied banner reads denied in the error colour",
+        (tester) async {
+      await pump(tester, _message(MessageRole.assistant, [part("deny")]));
+
+      // The wording is the contract; the icon carries the alarm visually.
+      expect(find.textContaining("Permission: bash — denied"), findsOneWidget);
+      expect(find.byIcon(Icons.gpp_maybe_outlined), findsOneWidget);
+    });
+
+    testWidgets("a banner the turn left outstanding reads never answered",
+        (tester) async {
+      await pump(tester, _message(MessageRole.assistant, [part("asked")]));
+
+      expect(find.textContaining("never answered"), findsOneWidget);
+    });
+
+    testWidgets("the drawer names the granted dirs", (tester) async {
+      await pump(tester, _message(MessageRole.assistant, [
+        MessagePart.approval(
+            approvalId: "a-3",
+            toolName: "bash",
+            argumentsText: "writing /home/x",
+            deniedDirs: const ["/home/x"],
+            answer: "alwaysAllowProject"),
+      ]));
+
+      await tester.tap(find.textContaining("Permission: bash"));
+      await tester.pumpAndSettle();
+
+      expect(find.text("Sandbox dirs granted"), findsOneWidget);
+      expect(find.text("/home/x"), findsOneWidget);
+      expect(find.text("Answer"), findsOneWidget);
+    });
+
+    testWidgets("a recorded permission breaks an activity run", (tester) async {
+      await pump(tester, _message(MessageRole.assistant, [
+        const TextPart(text: "checking"),
+        part("allow"),
+        part("allow"),
+      ]));
+
+      // A recorded permission is the user's own decision: it breaks the run
+      // of labels rather than collapsing behind a toggle.
+      expect(find.byType(ActivityGroup), findsNothing);
+      expect(find.textContaining("Permission: bash"), findsNWidgets(2));
+    });
+  });
+
+  group("sandbox violations on a tool label", () {
+    testWidgets("a clean return with violations reads failed in the error colour",
+        (tester) async {
+      await pump(tester, _message(MessageRole.assistant, [
+        MessagePart.toolCall(
+            toolCall: const ToolCall(
+                id: "c-1", name: "bash", argumentsText: "python3 build.py")),
+        MessagePart.toolResult(result: const ToolResult(
+            callId: "c-1",
+            returnCode: 0,
+            output: "mkdir: cannot create directory '/etc/x': Permission denied",
+            violations: ["writing /etc/x"])),
+      ]));
+
+      // The wording is the contract; the icon carries the alarm visually.
+      expect(find.textContaining("Used tool: bash"), findsOneWidget);
+      expect(find.byIcon(Icons.error_outline), findsOneWidget);
+    });
+
+    testWidgets("the drawer lists what the sandbox denied", (tester) async {
+      await pump(tester, _message(MessageRole.assistant, [
+        MessagePart.toolCall(
+            toolCall: const ToolCall(
+                id: "c-1", name: "bash", argumentsText: "python3 build.py")),
+        MessagePart.toolResult(result: const ToolResult(
+            callId: "c-1",
+            returnCode: 1,
+            output: "mkdir: Permission denied",
+            violations: ["writing /etc/x"])),
+      ]));
+
+      await tester.tap(find.textContaining("Used tool: bash"));
+      await tester.pumpAndSettle();
+
+      expect(find.text("Sandbox"), findsOneWidget);
+      expect(find.text("writing /etc/x"), findsOneWidget);
+    });
+  });
+
 }

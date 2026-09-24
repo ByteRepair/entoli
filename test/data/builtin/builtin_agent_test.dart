@@ -1382,7 +1382,7 @@ void main() {
       final text = results
           .map((r) => [r.result.output, r.result.exceptionInfo ?? ""].join(" "))
           .join();
-      expect(text.toLowerCase(), contains("not classified automatically"));
+      expect(text.toLowerCase(), contains("cannot be checked as one piece"));
       expect(shell.ran, isEmpty,
           reason: "an unmodelable command never reaches the shell");
     });
@@ -1459,7 +1459,7 @@ void main() {
           .whereType<ToolResultEvent>()
           .map((r) => [r.result.output, r.result.exceptionInfo ?? ""].join(" "))
           .join();
-      expect(text.toLowerCase(), contains("not classified automatically"));
+      expect(text.toLowerCase(), contains("cannot be checked as one piece"));
       expect(shell.ran, isEmpty);
     });
   });
@@ -1737,4 +1737,10 @@ class _StubSandboxHelper implements SandboxHelper {
   @override
   Future<List<String>?> prefixFor(CommandSandbox sandbox) async =>
       ["/bin/entoli-landlock", "exec", "--workspace", sandbox.workspace, "--"];
+
+  @override
+  String? reportPathFor(CommandSandbox sandbox) => null;
+
+  @override
+  String? get reportShimPath => null;
 }

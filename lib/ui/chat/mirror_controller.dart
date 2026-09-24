@@ -94,8 +94,17 @@ class MirrorChatController extends Notifier<ChatViewState>
   Future<void> abort() => _hub.abortRemote(chatId);
 
   @override
-  Future<void> respondApproval(String approvalId, ApprovalResponse r) => _hub
-      .respondRemoteApproval(chatId, approvalId, r == ApprovalResponse.allow);
+  bool get rulesWritable => false;
+
+  @override
+  Future<void> respondApproval(String approvalId, ApprovalResponse r,
+          {ToolApproval? approval}) =>
+      _hub
+      .respondRemoteApproval(
+          chatId, approvalId,
+          r == ApprovalResponse.allow ||
+              r == ApprovalResponse.alwaysAllowChat ||
+              r == ApprovalResponse.alwaysAllowProject);
 
   @override
   Future<void> answerQuestions(String requestId, List<String?> answers) =>

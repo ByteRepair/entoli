@@ -12,8 +12,9 @@ import "package:agent_chat/domain/chat_meta.dart";
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/domain/chat_log.dart";
 import "package:agent_chat/domain/temp_chat_ttl.dart";
+import "package:agent_chat/domain/permission.dart";
 import "package:agent_chat/domain/project_settings.dart"
-    show OmadaOrdering;
+    show OmadaOrdering, ProjectSettings;
 import "package:agent_chat/providers.dart"
     show projectSettingsProvider, promptLibraryProvider;
 import "package:agent_chat/ui/chat/chat_controller.dart";
@@ -1860,7 +1861,92 @@ void main() {
       expect(app.backend.prompts.single.settings.omadaMember, isNull);
     });
   });
+group("a banner answer through the controller", () {
+    // The controller invalidates the project tiers after an answer, so the
+    // settings pages reflect what the prompt granted without a restart — the
+    // stale UI the live tests tripped over. The answer also reaches the
+    // turn's settings, which is what the backend drives the agent with.
+    test("always in project lands the rule where the settings read", () async {
+      const approval = ToolApproval(
+        id: "call-1",
+        toolName: "bash",
+        argumentsText: "git status",
+        argumentsJson: '{"command": "git status"}',
+      );
+      app.backend.scriptedEvents = [ApprovalRequestEvent(approval)];
+      app.backend.hold = Completer<void>();
+      final (id, controller) = await startTurn("run git status");
+      // The banner event is yielded as the stream parks on the hold; give the
+      // controller's loop a real beat to have processed it.
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      final banner = app.container.read(chatControllerProvider(id)).approvals
+          .values
+          .expand((a) => a)
+          .first;
+      expect(banner.toolName, "bash");
+
+      await controller.respondApproval(
+          banner.id, ApprovalResponse.alwaysAllowProject,
+          approval: banner);
+      if (app.backend.hold?.isCompleted == false) {
+        app.backend.hold?.complete();
+      }
+      await waitIdle(id);
+
+      // The tier the answer named, read from disk the way a restart would.
+      final settings = ProjectSettings.load(app.config, project: null);
+      expect(settings.permissions.map((r) => r.pattern),
+          contains("git status *"));
+      // The provider was invalidated: the container's read is the fresh one.
+      expect(
+          app.container.read(projectSettingsProvider(null)).permissions.map(
+              (r) => r.pattern),
+          contains("git status *"));
+    });
+
+    test("the three tiers compose into the turn's settings", () async {
+      final (id, controller) = await startTurn("go");
+      await waitIdle(id);
+
+      await controller.respondApproval("none", ApprovalResponse.deny);
+      // Seed the tiers after the turn so the next send resolves fresh.
+      await app.repo.saveMeta(id, ChatMeta(permissions: [
+        const PermissionRule(
+            tool: "bash",
+            pattern: "chat rule *",
+            decision: PermissionDecision.allow),
+      ]));
+      final project = ProjectSettings()
+        ..permissions = [
+          const PermissionRule(
+              tool: "bash",
+              pattern: "project rule *",
+              decision: PermissionDecision.deny),
+        ];
+      await project.save(app.config, project: null);
+      app.container.invalidate(projectSettingsProvider(null));
+
+      // waitIdle completed the first turn; the second send resolves the tiers.
+      final controller2 = app.container.read(chatControllerProvider(id).notifier);
+      await controller2.send("again");
+      await waitIdle(id);
+
+      final resolved = app.backend.prompts.last.settings.permissions
+          .map((r) => r.pattern)
+          .toList();
+      expect(resolved, containsAll(["chat rule *", "project rule *"]));
+      // Order is the evaluation order: chat first.
+      expect(resolved.indexOf("chat rule *"),
+          lessThan(resolved.indexOf("project rule *")));
+    });
+  });
+
 }
+
+/// Settings with chat naming turned on. A getter, not a constant: settings are
+/// mutable and each test writes its own copy.
+AppSettings get _withTitleModel =>
+    AppSettings(titleProviderId: "anthropic", titleModelId: "claude-haiku-3");
 
 /// A project with Omada on, its library the test one — the harness seeds the
 /// test library for every project, so the chat's project is all a test needs.
@@ -1870,8 +1956,3 @@ Future<void> _inTeam(TestApp app) async {
       .read(projectSettingsProvider("team").notifier)
       .setOmada(true);
 }
-
-/// Settings with chat naming turned on. A getter, not a constant: settings are
-/// mutable and each test writes its own copy.
-AppSettings get _withTitleModel =>
-    AppSettings(titleProviderId: "anthropic", titleModelId: "claude-haiku-3");

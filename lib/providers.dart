@@ -1162,6 +1162,29 @@ class ProjectSettingsNotifier extends Notifier<ProjectSettings> {
     await next.save(_config, project: project);
   }
 
+  /// The project's standing permission rules, saved whole.
+  Future<void> setProjectPermissions(List<PermissionRule> value) async {
+    final next = state.copy()..permissions = value;
+    state = next;
+    await next.save(_config, project: project);
+  }
+
+  /// The machine directories this project's commands may write to, beside
+  /// the workspace the sandbox grants.
+  Future<void> setWritableDirs(List<String> value) async {
+    final next = state.copy()..writableDirs = value;
+    state = next;
+    await next.save(_config, project: project);
+  }
+
+  /// Whether a sandbox-denied write is offered back as an approval. Null
+  /// inherits the app default.
+  Future<void> setProjectSandboxReprompt(bool? value) async {
+    final next = state.copy()..sandboxReprompt = value;
+    state = next;
+    await next.save(_config, project: project);
+  }
+
   /// What the new-chat screen asks over this project's badge. Null is the
   /// app default; empty is the screen asking nothing.
   Future<void> setDescription(String? value) async {
