@@ -538,7 +538,7 @@ class _MessageBubbleState extends State<MessageBubble> {
           // own decision, and a run of them collapses behind a toggle the
           // reader will never expand.
           flushRun();
-          rows.add(_label(ApprovalLabel(part: part)));
+          rows.add(_label(ApprovalLabel(part: part, result: results[part.approvalId])));
         case ShellRunPart():
           // Not a label: a command the user ran is the answer to their message
           // rather than something the turn did on its way to one.

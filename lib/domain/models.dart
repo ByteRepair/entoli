@@ -5,6 +5,62 @@ import "package:freezed_annotation/freezed_annotation.dart";
 part "models.freezed.dart";
 part "models.g.dart";
 
+/// What a permission decision was: run without asking, hold for the user,
+/// or refuse outright. The gate's verdict — what a rule records, what the
+/// classifier returns, what a banner answer amounts to.
+enum PermissionDecision {
+  /// Run it without asking.
+  allow,
+
+  /// Escalate to the user — emit the approval banner and wait.
+  ask,
+
+  /// Refuse it outright, without running or asking.
+  deny,
+}
+
+/// What decided a call's fate before it ran. Recorded on the call's
+/// [ToolResult] as `decidedBy`, so the label and its drawer say not just
+/// "allowed" but what allowed it. Null on a result from before the field
+/// existed — the UI then says nothing.
+enum PermissionSource {
+  /// A standing rule matched, at the [PermissionTier] recorded beside it.
+  rule,
+
+  /// The classifier model decided, in auto mode.
+  classifier,
+
+  /// A human answered the banner.
+  human,
+
+  /// The approve mode ran it itself — `never`, including a sub-agent's.
+  mode,
+
+  /// A sandbox-denied command, rerun after the human answered.
+  rerun,
+}
+
+/// Which tier carried the decision. A compound command's segments can be
+/// covered by several, so the record is the list of the ones that spoke.
+enum PermissionTier {
+  /// A banner answer, this one call only.
+  once,
+
+  /// A rule on the chat's `meta.json`, or an answer persisted there.
+  chat,
+
+  /// A rule on the chat's own project's `project.json`.
+  project,
+
+  /// A rule on the default project's — what General > Permissions edits,
+  /// which every project inherits. Worded "the app's rules" in the UI.
+  defaultProject,
+
+  /// A rule granted for the rest of the running turn, by an "always"
+  /// banner answer.
+  runtime,
+}
+
 @freezed
 abstract class ChatState with _$ChatState {
   const factory ChatState({
@@ -306,6 +362,17 @@ abstract class ToolResult with _$ToolResult {
     String? exceptionInfo,
     String? cwd,
     @Default([]) List<String> violations,
+    /// What decided this call's fate before it ran, and the tiers that
+    /// spoke — a compound covered from two tiers carries both. Null on a
+    /// result from before the field existed, and null where nothing stood
+    /// in front of the call: the mode's default posture of asking is not a
+    /// decision to record, the banner it raises being its own record.
+    PermissionSource? decidedBy,
+    @Default([]) List<PermissionTier> decidedTier,
+    /// What the decider said — the verdict, recorded rather than inferred
+    /// from the exit code, which says whether the command ran but not why
+    /// it was held.
+    PermissionDecision? decided,
   }) = _ToolResult;
 
   factory ToolResult.fromJson(Map<String, dynamic> json) => _$ToolResultFromJson(json);
