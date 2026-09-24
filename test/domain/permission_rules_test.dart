@@ -42,28 +42,28 @@ void main() {
 
     test("a matching allow runs", () {
       expect(
-          rulesDecide([allowGit], "bash", command: "git status --short"),
+          rulesDecideTraced([allowGit], "bash", command: "git status --short")
+              ?.decision,
           PermissionDecision.allow);
     });
 
     test("deny outranks allow, whatever the order", () {
-      expect(rulesDecide([allowGit, denyGit], "bash", command: "git status"),
-          PermissionDecision.deny);
-      expect(rulesDecide([denyGit, allowGit], "bash", command: "git status"),
-          PermissionDecision.deny);
+      expect(rulesDecideTraced([allowGit, denyGit], "bash", command: "git status")
+          ?.decision, PermissionDecision.deny);
+      expect(rulesDecideTraced([denyGit, allowGit], "bash", command: "git status")
+          ?.decision, PermissionDecision.deny);
     });
 
     test("an uncovered command asks", () {
-      expect(rulesDecide([allowGit], "bash", command: "git push"),
-          null);
-      expect(rulesDecide([], "bash", command: "anything"), null);
+      expect(rulesDecideTraced([allowGit], "bash", command: "git push"), null);
+      expect(rulesDecideTraced([], "bash", command: "anything"), null);
     });
 
     test("a deny on one segment refuses a compound with uncovered others",
         () {
       // deny anywhere is a no for the whole: letting the rest ask would
       // offer the user a banner to re-litigate a no they already wrote.
-      final verdict = rulesDecide(
+      final verdict = rulesDecideTraced(
         [
           PermissionRule(
               tool: "bash",
@@ -79,20 +79,21 @@ void main() {
           "ls -ld /tmp/probe",
         ],
       );
-      expect(verdict, PermissionDecision.deny);
+      expect(verdict?.decision, PermissionDecision.deny);
     });
 
     test("a rule for another tool is skipped", () {
-      expect(rulesDecide([allowWriteTmp], "bash", command: "cat /tmp/x"),
+      expect(rulesDecideTraced([allowWriteTmp], "bash", command: "cat /tmp/x"),
           null);
     });
 
     test("a path rule matches the subtree of its directory", () {
       expect(
-          rulesDecide([allowWriteTmp], "write", path: "/tmp/scratch/out.txt"),
+          rulesDecideTraced([allowWriteTmp], "write", path: "/tmp/scratch/out.txt")
+              ?.decision,
           PermissionDecision.allow);
       expect(
-          rulesDecide([allowWriteTmp], "write", path: "/tmp/other/out.txt"),
+          rulesDecideTraced([allowWriteTmp], "write", path: "/tmp/other/out.txt"),
           null);
     });
 
@@ -100,12 +101,12 @@ void main() {
       final rule = PermissionRule(
           tool: "webfetch", pattern: "example.com", decision: PermissionDecision.allow);
       expect(
-          rulesDecide([rule], "webfetch",
-              url: "https://www.example.com/page?q=1"),
+          rulesDecideTraced([rule], "webfetch",
+                  url: "https://www.example.com/page?q=1")
+              ?.decision,
           PermissionDecision.allow);
       expect(
-          rulesDecide([rule], "webfetch",
-              url: "https://notexample.com/page"),
+          rulesDecideTraced([rule], "webfetch", url: "https://notexample.com/page"),
           null);
     });
   });
@@ -312,7 +313,7 @@ void main() {
 
   group("rule tiers", () {
     test("chat rules come before project before app", () {
-      final verdict = rulesDecide(
+      final verdict = rulesDecideTraced(
         [
           // app
           PermissionRule(
@@ -326,7 +327,7 @@ void main() {
       );
       // deny outranks allow regardless of tier; a chat allow only beats an
       // app-level ask or nothing.
-      expect(verdict, PermissionDecision.deny);
+      expect(verdict?.decision, PermissionDecision.deny);
     });
   });
 }

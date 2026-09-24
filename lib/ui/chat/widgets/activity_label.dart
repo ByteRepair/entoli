@@ -110,19 +110,20 @@ List<ActivitySection> _runSections(ToolCall call, ToolResult? result) => [
       (label: "Arguments", body: call.argumentsText ?? call.argumentsJson, isError: false),
       (label: "Output", body: result?.output, isError: false),
       (label: "Error", body: result?.exceptionInfo, isError: true),
-      if (result?.permissionOutcome != null)
-        (
-          label: "Outcome",
-          body: result!.permissionOutcome,
-          isError: false,
-        ),
+      (label: "Outcome", body: result?.permissionOutcome, isError: false),
     ];
 
 /// What a recorded decision reads as, on a label's text and in its drawer's
 /// Outcome section. The wording is the shared contract of the two — one
 /// helper so they cannot disagree. Null where the result carries none: a
 /// log from before the field existed, or a call nothing stood in front of.
-String? outcomeText(PermissionSource? by, List<PermissionTier> tiers) {
+String? outcomeText(
+    PermissionSource? by, List<PermissionTier> tiers, PermissionDecision? decided) {
+  final allowed = switch (decided) {
+    PermissionDecision.deny => "denied",
+    null => null,
+    _ => "allowed",
+  };
   final where = switch (tiers) {
     [] => "",
     [PermissionTier.once] => " by you",
@@ -132,12 +133,15 @@ String? outcomeText(PermissionSource? by, List<PermissionTier> tiers) {
     [PermissionTier.runtime] => " by a rule granted this turn",
     _ => " by the rules of ${tiers.map(_tierName).join(" and ")}",
   };
-  return switch ((by, tiers)) {
-    (PermissionSource.rule, _) => "${tiers.isEmpty ? "" : "allowed"}$where",
-    (PermissionSource.classifier, _) => "by the classifier",
-    (PermissionSource.human, _) => "allowed$where",
-    (PermissionSource.mode, _) => "allowed by the approve mode",
-    (PermissionSource.rerun, _) => "rerun unconfined after you approved",
+  return switch (by) {
+    PermissionSource.rule => tiers.isEmpty
+        ? null
+        : "${allowed ?? "allowed"}$where",
+    PermissionSource.classifier =>
+      decided == null ? "by the classifier" : "${allowed ?? "allowed"} by the classifier",
+    PermissionSource.human => "${allowed ?? "allowed"}$where",
+    PermissionSource.mode => "${allowed ?? "allowed"} by the approve mode",
+    PermissionSource.rerun => "rerun unconfined after you approved",
     _ => null,
   };
 }
@@ -154,16 +158,12 @@ extension on ToolResult {
   /// clause and the drawer's Outcome section. Null where nothing was
   /// recorded, which is the old-log case and the ungated call's.
   String? get permissionOutcome {
-    final wording = outcomeText(decidedBy, decidedTier);
+    final wording = outcomeText(decidedBy, decidedTier, decided);
     if (wording == null) return null;
-    if (decidedBy == PermissionSource.rule && returnCode != 0) {
-      // A rule-deny's result is a refusal, not a run: the wording names
-      // what refused it rather than what allowed it.
-      final where = wording.startsWith("allowed")
-          ? wording.substring("allowed".length)
-          : wording;
-      return "denied$where";
-    }
+    // An old log records who decided but not what — the exit code is the
+    // only witness there, and it is right except for the banner answers,
+    // which the approval part records on its own.
+    if (decided == null && returnCode != 0) return null;
     return wording;
   }
 }
@@ -401,10 +401,15 @@ class ApprovalLabel extends StatelessWidget {
     };
     // The outcome names what stood behind the call's fate, the answer what
     // was pressed: on an "always" answer the two say the same thing, so the
-    // clause is left off there.
+    // clause is left off there — and on a re-prompt's, whose result records
+    // the rerun the answer went on to, the first banner would wear the
+    // rerun's outcome.
     final outcome = result?.permissionOutcome;
     final clause = switch (part.answer) {
       "alwaysAllowChat" || "alwaysAllowProject" || "asked" => null,
+      // A re-prompt's result records the rerun the answer went on to; the
+      // first banner must not wear that rerun's outcome.
+      _ when part.deniedDirs.isNotEmpty => null,
       _ => outcome,
     };
     return _Label(

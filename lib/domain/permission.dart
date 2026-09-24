@@ -1,8 +1,9 @@
-import "models.dart" show PermissionTier, ToolApproval;
+import "models.dart"
+    show PermissionDecision, PermissionTier, ToolApproval;
 import "shell.dart" show pathInside;
 import "shell_command_analysis.dart" show ShellCommandAnalysis;
 
-export "models.dart" show PermissionSource, PermissionTier;
+export "models.dart" show PermissionDecision, PermissionSource, PermissionTier;
 
 /// How a chat handles a command before it runs.
 enum ApproveMode {
@@ -47,18 +48,6 @@ ApproveMode? approveModeFromJson(Map<String, dynamic> json) {
     false => ApproveMode.never,
     null => null,
   };
-}
-
-/// What the classifier decided about a tool call.
-enum PermissionDecision {
-  /// Run it without asking.
-  allow,
-
-  /// Escalate to the user — emit the approval banner and wait.
-  ask,
-
-  /// Refuse it outright, without running or asking.
-  deny,
 }
 
 /// Classifies a tool call as safe, uncertain, or dangerous. The one
@@ -156,6 +145,17 @@ class PermissionRule {
         if (writes.isNotEmpty) "writes": writes,
       };
 
+  /// This rule with [origin] stamped — the one field a rule gains after it
+  /// is read, the tier the turn's composition found it in. Not persisted;
+  /// a rule moved between files is stamped anew.
+  PermissionRule copyWith({PermissionTier? origin}) => PermissionRule(
+        tool: tool,
+        pattern: pattern,
+        decision: decision,
+        writes: writes,
+        origin: origin ?? this.origin,
+      );
+
   @override
   String toString() => "$decision $tool $pattern";
 }
@@ -222,24 +222,13 @@ RegExp _plainGlob(String glob) => RegExp(
 /// one must find an allow: a compound command whose tail no rule covers is
 /// not allowed by its head. [command] is the whole string, the fallback
 /// where no parse is offered.
-PermissionDecision? rulesDecide(
-  List<PermissionRule> rules,
-  String toolName, {
-  String? command,
-  List<String>? segments,
-  String? path,
-  String? url,
-}) =>
-    rulesDecideTraced(rules, toolName,
-            command: command, segments: segments, path: path, url: url)
-        ?.decision;
-
-/// The verdict and where it came from: the same walk [rulesDecide] takes,
-/// with the tiers that spoke beside it. A deny carries the tier that denied;
-/// an allow carries the tiers of every rule that covered a segment — a
-/// compound covered from two tiers says both — and a covered subject that
-/// matched more than one tier carries each of them, the wording naming the
-/// set. Null where no rule matches, as above.
+///
+/// The verdict and where it came from, together: a deny carries the tier
+/// that denied; an allow carries the tiers of every rule that covered a
+/// segment — a compound covered from two tiers says both — and a covered
+/// subject that matched more than one tier carries each of them, the
+/// wording naming the set. Null where no rule matches, which the caller
+/// escalates.
 RuleVerdict? rulesDecideTraced(
   List<PermissionRule> rules,
   String toolName, {
@@ -255,8 +244,8 @@ RuleVerdict? rulesDecideTraced(
       final segmentVerdict = _strongestTraced(rules, "bash", segment);
       final d = segmentVerdict?.decision;
       if (d == PermissionDecision.deny) {
-        return RuleVerdict(
-            PermissionDecision.deny, segmentVerdict!.tiers.toList());
+        return (decision: PermissionDecision.deny,
+            tiers: segmentVerdict!.tiers.toList());
       }
       if (d == null) {
         verdict = PermissionDecision.ask;
@@ -267,7 +256,7 @@ RuleVerdict? rulesDecideTraced(
     }
     return verdict == PermissionDecision.ask
         ? null
-        : RuleVerdict(verdict!, tiers.toList());
+        : (decision: verdict!, tiers: tiers.toList());
   }
   final subject = switch (toolName) {
     "bash" => command,
@@ -296,18 +285,12 @@ RuleVerdict? _strongestTraced(
     }
     if (rule.decision == verdict && rule.origin != null) tiers.add(rule.origin!);
   }
-  return verdict == null ? null : RuleVerdict(verdict, tiers.toList());
+  return verdict == null ? null : (decision: verdict, tiers: tiers.toList());
 }
 
 /// The outcome of [rulesDecideTraced]: the decision and the tiers that
 /// spoke for it.
-class RuleVerdict {
-  const RuleVerdict(this.decision, this.tiers);
-
-  final PermissionDecision decision;
-
-  final List<PermissionTier> tiers;
-}
+typedef RuleVerdict = ({PermissionDecision decision, List<PermissionTier> tiers});
 
 PermissionDecision? _stronger(PermissionDecision? a, PermissionDecision b) =>
     a == null || b.index > a.index ? b : a;

@@ -346,27 +346,13 @@ class ChatRepository {
       // a later rule wins only by strength (deny over ask over allow), and
       // the tiers break the tie. Each rule is stamped with the tier it was
       // read from — what the outcome recorded on a call's result names —
-      // and `copyWith` keeps the stamp through the merge.
+      // and copyWith keeps the stamp through the merge.
       permissions: [
-        ...meta.permissions
-            .map((r) => PermissionRule(
-                tool: r.tool,
-                pattern: r.pattern,
-                decision: r.decision,
-                writes: r.writes,
-                origin: PermissionTier.chat)),
-        ...projectSettings.permissions.map((r) => PermissionRule(
-            tool: r.tool,
-            pattern: r.pattern,
-            decision: r.decision,
-            writes: r.writes,
-            origin: PermissionTier.project)),
-        ...defaultProjectSettings.permissions.map((r) => PermissionRule(
-            tool: r.tool,
-            pattern: r.pattern,
-            decision: r.decision,
-            writes: r.writes,
-            origin: PermissionTier.defaultProject)),
+        ...meta.permissions.map((r) => r.copyWith(origin: PermissionTier.chat)),
+        ...projectSettings.permissions
+            .map((r) => r.copyWith(origin: PermissionTier.project)),
+        ...defaultProjectSettings.permissions
+            .map((r) => r.copyWith(origin: PermissionTier.defaultProject)),
       ],
       // The project's writable roots, the chat's own grants, and what the
       // rules themselves grant — a re-prompt's always answers land in the

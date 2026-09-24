@@ -5,6 +5,20 @@ import "package:freezed_annotation/freezed_annotation.dart";
 part "models.freezed.dart";
 part "models.g.dart";
 
+/// What a permission decision was: run without asking, hold for the user,
+/// or refuse outright. The gate's verdict — what a rule records, what the
+/// classifier returns, what a banner answer amounts to.
+enum PermissionDecision {
+  /// Run it without asking.
+  allow,
+
+  /// Escalate to the user — emit the approval banner and wait.
+  ask,
+
+  /// Refuse it outright, without running or asking.
+  deny,
+}
+
 /// What decided a call's fate before it ran. Recorded on the call's
 /// [ToolResult] as `decidedBy`, so the label and its drawer say not just
 /// "allowed" but what allowed it. Null on a result from before the field
@@ -355,6 +369,10 @@ abstract class ToolResult with _$ToolResult {
     /// decision to record, the banner it raises being its own record.
     PermissionSource? decidedBy,
     @Default([]) List<PermissionTier> decidedTier,
+    /// What the decider said — the verdict, recorded rather than inferred
+    /// from the exit code, which says whether the command ran but not why
+    /// it was held.
+    PermissionDecision? decided,
   }) = _ToolResult;
 
   factory ToolResult.fromJson(Map<String, dynamic> json) => _$ToolResultFromJson(json);

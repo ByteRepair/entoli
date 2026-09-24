@@ -1540,7 +1540,8 @@ void main() {
             returnCode: 0,
             output: "",
             decidedBy: PermissionSource.rule,
-            decidedTier: [PermissionTier.chat])),
+            decidedTier: [PermissionTier.chat],
+            decided: PermissionDecision.allow)),
         part("allow"),
       ]));
 
@@ -1560,7 +1561,8 @@ void main() {
             returnCode: 0,
             output: "",
             decidedBy: PermissionSource.human,
-            decidedTier: [PermissionTier.once])),
+            decidedTier: [PermissionTier.once],
+            decided: PermissionDecision.allow)),
         part("alwaysAllowChat"),
       ]));
 
@@ -1580,7 +1582,8 @@ void main() {
             output: "",
             exceptionInfo: "Denied by a permission rule you set.",
             decidedBy: PermissionSource.rule,
-            decidedTier: [PermissionTier.project])),
+            decidedTier: [PermissionTier.project],
+            decided: PermissionDecision.deny)),
       ]));
 
       expect(find.textContaining("denied by the project's rules"),
@@ -1597,14 +1600,15 @@ void main() {
             returnCode: 0,
             output: "clean",
             decidedBy: PermissionSource.classifier,
-            decidedTier: [])),
+            decidedTier: [],
+            decided: PermissionDecision.allow)),
       ]));
 
       await tester.tap(find.textContaining("Used tool: bash"));
       await tester.pumpAndSettle();
 
       expect(find.text("Outcome"), findsOneWidget);
-      expect(find.text("by the classifier"), findsOneWidget);
+      expect(find.text("allowed by the classifier"), findsOneWidget);
     });
 
     testWidgets("a result from before the field existed says nothing",
