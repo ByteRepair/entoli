@@ -707,5 +707,47 @@ void main() {
           await repo.loadMeta(chat.state.id);
       expect(chatMeta.permissions, isEmpty);
     });
+
+    test("the rule the next turn reads covers the bare command", () async {
+      // The live run's failure, pinned at the layer it happened: Always on a
+      // command with no arguments derives `git status *`, and the next turn's
+      // settings must carry a rule that matches the bare `git status` — the
+      // pattern's trailing space is not a required one.
+      final repo = repoWith(AppSettings());
+      final chat = await savedChat(repo);
+      await repo.respondApproval(
+        chat.state.id,
+        "a-4",
+        ApprovalResponse.alwaysAllowChat,
+        approval: ToolApproval(
+            id: "a-4",
+            toolName: "bash",
+            argumentsText: "git status"),
+      );
+      await repo.sendPrompt(chat.state.id, userMessage("again")).toList();
+
+      final rules = backend.prompts.last.settings.permissions;
+      expect(rules.map((r) => r.pattern), contains("git status *"));
+    });
+
+    test("a re-prompt's denied FILE path lands in writableDirs", () async {
+      final repo = repoWith(AppSettings());
+      final chat = await savedChat(repo);
+      await repo.respondApproval(
+        chat.state.id,
+        "d-5",
+        ApprovalResponse.alwaysAllowProject,
+        approval: ToolApproval(
+            id: "d-5",
+            toolName: "bash",
+            argumentsText: "writing /etc/hosts",
+            deniedDirs: const ["/etc/hosts"]),
+      );
+      // A denial report names the exact path the write touched, often a
+      // file: the grant records it as it is, and the helper grants file
+      // rights on it.
+      final settings = ProjectSettings.load(config, project: chat.state.project);
+      expect(settings.writableDirs, ["/etc/hosts"]);
+    });
   });
 }

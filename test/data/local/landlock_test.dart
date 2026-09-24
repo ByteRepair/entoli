@@ -196,6 +196,38 @@ void main() {
         workspace: p.join(cache.path, "ws"), tmp: tmp.path));
     expect(prefix, isNot(contains("--write")));
   });
+
+  test("an extra write root that is a file grants the file's rights",
+      () async {
+    if (!landlockUsable) return;
+    final home = Directory(p.join(cache.path, "home2"))..createSync();
+    // A denial report names the exact path the write touched — often a
+    // file, not a directory. The kernel refuses directory rights on a
+    // non-directory fd: every such grant used to fail with rc=91 and the
+    // ruleset never came up, so the file gets the file rights alone.
+    final file = File(p.join(home.path, "g.txt"))..writeAsStringSync("orig\n");
+    final s = CommandSandbox(
+        workspace: p.join(cache.path, "ws"),
+        tmp: tmp.path,
+        home: home.path,
+        extraWrites: [file.path]);
+    final prefix = await helper.prefixFor(s);
+    expect(prefix, contains("--write"));
+    // The file itself is writable, in place.
+    final rewrote = await run0("echo new > ${file.path}",
+        sandboxOverride: s);
+    expect(rewrote.code, 0, reason: "the granted file is writable");
+    expect(rewrote.out, isEmpty);
+    expect(file.readAsStringSync(), "new\n");
+    // Nothing else beside it: no sibling file, no new file in its directory.
+    final sibling = await run0("touch ${home.path}/sibling.txt",
+        sandboxOverride: s);
+    expect(sibling.code, isNot(0),
+        reason: "a file grant does not widen to its directory");
+    final fresh = await run0("touch ${file.path}.bak", sandboxOverride: s);
+    expect(fresh.code, isNot(0),
+        reason: "the file rights do not include creating one beside it");
+  });
 }
 
 /// Whether the helper is there on this machine. Set by `setUpAll`'s first

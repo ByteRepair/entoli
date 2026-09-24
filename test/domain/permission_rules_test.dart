@@ -13,6 +13,11 @@ void main() {
     test("* spans the arguments but stops at an operator", () {
       expect(globMatch("git checkout *", "git checkout -b foo"), isTrue);
       expect(globMatch("git checkout *", "git checkout && evil"), isFalse);
+      // The bare command the rule was derived from, arguments and all:
+      // the pattern's trailing space is not a required one.
+      expect(globMatch("git checkout *", "git checkout"), isTrue);
+      expect(globMatch("git status *", "git status"), isTrue);
+      expect(globMatch("git status *", "git statusfoo"), isFalse);
     });
 
     test("** spans anything including operators", () {

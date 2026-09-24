@@ -32,6 +32,7 @@ void main() {
     SandboxHelper? sandboxHelper,
     bool sandboxReprompt = true,
     ShellResult Function(String)? respond,
+    PermissionClassifier? classifier,
   }) {
     final tempDir = Directory.systemTemp.createTempSync("agent-gate-test");
     final project = p.join(tempDir.path, "project-ws");
@@ -57,6 +58,7 @@ void main() {
       permissions: permissions,
       writableDirs: writableDirs,
       sandboxReprompt: sandboxReprompt,
+      classifier: classifier,
     );
   }
 
@@ -205,6 +207,120 @@ void main() {
       // ran on the runtime grant alone.
       expect(shell.ran, ["cmd-b"]);
     });
+
+    test("a bare command an Always answer covered is not asked again",
+        () async {
+      // The shape the live run tripped over: the rule an Always answer writes
+      // is `git status *`, and the next call is the bare `git status` — no
+      // arguments, nothing after the pattern's space. The banner must not
+      // return for what the user already said always to.
+      final client = FakeLlmClient([
+        [bashCall("git status")],
+        [bashCall("git status")],
+        [bashCall("git status -sb")], [finish],
+      ]);
+      final events = await agentOver(
+        client,
+        approveMode: ApproveMode.ask,
+        approvals: [ApprovalResponse.alwaysAllowChat],
+      ).run(userMessage("go")).toList();
+      final requests = events.whereType<ApprovalRequestEvent>().toList();
+      expect(requests, hasLength(1),
+          reason: "the Always answer covers the bare command and its args");
+      expect(shell.ran, ["git status", "git status", "git status -sb"]);
+    });
+
+    test("a plain allow is one-shot: the next call asks again", () async {
+      final client = FakeLlmClient([
+        [bashCall("git status")],
+        [bashCall("git status")], [finish],
+      ]);
+      await agentOver(
+        client,
+        approveMode: ApproveMode.ask,
+        approvals: [ApprovalResponse.allow, ApprovalResponse.deny],
+      ).run(userMessage("go")).toList();
+      // The first ran on the user's one answer; the second waited for the
+      // banner again and was denied there.
+      expect(shell.ran, ["git status"]);
+    });
+
+    test("a deny on any segment of a compound refuses the whole", () async {
+      final client = FakeLlmClient([
+        [bashCall("git status && rm -rf build")], [finish],
+      ]);
+      final events = await agentOver(
+        client,
+        approveMode: ApproveMode.ask,
+        approvals: [ApprovalResponse.allow],
+        permissions: [
+          const PermissionRule(
+              tool: "bash",
+              pattern: "git status *",
+              decision: PermissionDecision.allow),
+          const PermissionRule(
+              tool: "bash", pattern: "rm *", decision: PermissionDecision.deny),
+        ],
+      ).run(userMessage("go")).toList();
+      final text = events
+          .whereType<ToolResultEvent>()
+          .map((r) => [r.result.output, r.result.exceptionInfo ?? ""].join(" "))
+          .join();
+      expect(text, contains("permission rule"));
+      expect(shell.ran, isEmpty);
+      // No banner: the user's deny is not re-litigated by asking.
+      expect(events.whereType<ApprovalRequestEvent>(), isEmpty);
+    });
+  });
+
+  group("auto mode", () {
+    test("a read the classifier allows runs without a banner", () async {
+      // The live shape this pins: chat with no rules, app mode auto, the
+      // classifier rates `git status` a read — the command runs silently,
+      // which is the classifier's answer and not a missed gate.
+      final client = FakeLlmClient([
+        [bashCall("git status")], [finish],
+      ]);
+      final events = await agentOver(
+        client,
+        approveMode: ApproveMode.auto,
+        classifier: _StubClassifier(PermissionDecision.allow),
+      ).run(userMessage("go")).toList();
+      expect(shell.ran, ["git status"]);
+      expect(events.whereType<ApprovalRequestEvent>(), isEmpty);
+    });
+
+    test("a write past the workspace the classifier asks escalates",
+        () async {
+      final client = FakeLlmClient([
+        [bashCall("cp notes.txt /etc/notes-backup")], [finish],
+      ]);
+      await agentOver(
+        client,
+        approveMode: ApproveMode.auto,
+        approvals: [ApprovalResponse.deny],
+        classifier: _StubClassifier(PermissionDecision.ask),
+      ).run(userMessage("go")).toList();
+      // The classifier's ask reached the banner; the test denied it there.
+      expect(shell.ran, isEmpty);
+    });
+
+    test("a rule decides ahead of the classifier", () async {
+      final client = FakeLlmClient([
+        [bashCall("rm -rf build")], [finish],
+      ]);
+      await agentOver(
+        client,
+        approveMode: ApproveMode.auto,
+        classifier: _StubClassifier(PermissionDecision.allow),
+        permissions: [
+          const PermissionRule(
+              tool: "bash", pattern: "rm *", decision: PermissionDecision.deny),
+        ],
+      ).run(userMessage("go")).toList();
+      // The user's deny outranks whatever the classifier would have said.
+      expect(shell.ran, isEmpty);
+    });
   });
 
   group("the sandbox re-prompt", () {
@@ -268,6 +384,59 @@ void main() {
       // cannot loop the banner again.
       expect(shell.ran, hasLength(1));
     });
+
+    test("the re-prompt's Always widens the grant for the next command",
+        () async {
+      final client = FakeLlmClient([
+        [bashCall("python3 build.py")],
+        [bashCall("python3 check.py")], [finish],
+      ]);
+      final events = await agentOver(
+        client,
+        approveMode: ApproveMode.ask,
+        approvals: [ApprovalResponse.allow, ApprovalResponse.alwaysAllowChat],
+        respond: (command) => command == "python3 build.py"
+            ? const ShellResult(
+                returnCode: 1,
+                output:
+                    "PermissionError: [Errno 13] Permission denied: '/etc/hosts'",
+                violations: ["writing /etc/hosts"])
+            : ok("clean"),
+      ).run(userMessage("go")).toList();
+      // The rerun after the Always answer is unconfined — a write denial is
+      // what the human just read and answered. The grant shows on the NEXT
+      // command, which runs confined with the denied path beside the
+      // workspace: what a persisted grant would arrive as next turn.
+      expect(shell.ran,
+          ["python3 build.py", "python3 build.py", "python3 check.py"]);
+      final sandboxes = shell.sandboxes.whereType<CommandSandbox>().toList();
+      expect(sandboxes, hasLength(2));
+      expect(sandboxes.first.extraWrites, isNot(contains("/etc/hosts")));
+      expect(sandboxes.last.extraWrites, contains("/etc/hosts"));
+      // The banner named what it was agreeing to, and the answer carried it.
+      // Three banners in all: the ask for build.py, its re-prompt, and the
+      // ask for check.py, which runs before any persisted grant is read —
+      // the re-prompt's own carries the denied dirs.
+      final approvals = events.whereType<ApprovalRequestEvent>().toList();
+      expect(approvals, hasLength(3));
+      expect(approvals[1].approval.deniedDirs, ["/etc/hosts"]);
+    });
+
+    test("the turn's writableDirs reach the sandbox, files included",
+        () async {
+      final client = FakeLlmClient([
+        [bashCall("python3 build.py")], [finish],
+      ]);
+      await agentOver(
+        client,
+        approveMode: ApproveMode.never,
+        writableDirs: ["/etc/hosts", "/var/log/entoli"],
+      ).run(userMessage("go")).toList();
+      // The persisted tier's grant — directories and the file paths a denial
+      // report names alike — is what the command's confinement carries.
+      expect(shell.sandboxes.single!.extraWrites,
+          ["/etc/hosts", "/var/log/entoli"]);
+    });
   });
 
   group("the verbose veto note", () {
@@ -302,4 +471,16 @@ class _StubHelper implements SandboxHelper {
 
   @override
   String? get reportShimPath => null;
+}
+
+/// A classifier that has already made up its mind.
+class _StubClassifier implements PermissionClassifier {
+  const _StubClassifier(this.decision);
+
+  final PermissionDecision decision;
+
+  @override
+  Future<PermissionDecision> classify(String toolName, String argumentsJson,
+          {required String workspace}) async =>
+      decision;
 }

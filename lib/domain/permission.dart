@@ -173,13 +173,32 @@ List<Map<String, dynamic>> permissionRulesToJson(List<PermissionRule> rules) =>
 final _globCache = <String, RegExp>{};
 
 bool globMatch(String glob, String text) {
-  final pattern = _globCache.putIfAbsent(
-      glob,
-      () => RegExp(
-          "^${RegExp.escape(glob).replaceAllMapped(RegExp(r"\\\*\\\*|\\\*"), (m) => m[0]!.length == 4 ? ".*" : "[^;|&]*")}\$",
-          caseSensitive: false));
+  final pattern = _globCache.putIfAbsent(glob, () => _compileGlob(glob));
   return pattern.hasMatch(text.trim());
 }
+
+/// Compiles one glob. A glob ending in ` *` — the shape every derived rule
+/// carries — covers the bare prefix too, not only the spaced arguments: the
+/// command `git status` with none is the same command the rule was written
+/// for, and asking again for it is the ask the rule was meant to end.
+RegExp _compileGlob(String glob) {
+  final spaced = RegExp(r"^(.*\S)\s\*$").firstMatch(glob.trim());
+  if (spaced == null) {
+    return _plainGlob(glob.trim());
+  }
+  final head = spaced.group(1)!;
+  return RegExp(
+      "^${_plainGlobBody(head)}(?:\\s[^;|&]*)?\$",
+      caseSensitive: false);
+}
+
+String _plainGlobBody(String glob) =>
+    RegExp.escape(glob).replaceAllMapped(RegExp(r"\\\*\\\*|\\\*"),
+        (m) => m[0]!.length == 4 ? ".*" : "[^;|&]*");
+
+RegExp _plainGlob(String glob) => RegExp(
+    "^${_plainGlobBody(glob)}\$",
+    caseSensitive: false);
 
 /// What the rules say about one tool call, deny first — a deny is the user's
 /// explicit no, an ask their "always show me", an allow the standing yes.
