@@ -1528,6 +1528,113 @@ void main() {
       expect(find.byType(ActivityGroup), findsNothing);
       expect(find.textContaining("Permission: bash"), findsNWidgets(2));
     });
+
+    testWidgets("the outcome rides on the label beside the answer",
+        (tester) async {
+      await pump(tester, _message(MessageRole.assistant, [
+        MessagePart.toolCall(
+            toolCall: const ToolCall(
+                id: "call-1", name: "bash", argumentsText: "git status")),
+        MessagePart.toolResult(result: const ToolResult(
+            callId: "call-1",
+            returnCode: 0,
+            output: "",
+            decidedBy: PermissionSource.rule,
+            decidedTier: [PermissionTier.chat])),
+        part("allow"),
+      ]));
+
+      expect(find.textContaining("allowed by this chat's rules"),
+          findsOneWidget);
+    });
+
+    testWidgets("an always answer does not repeat the tier", (tester) async {
+      // "allowed, always in this chat" already says the scope; the outcome
+      // would say it a second time.
+      await pump(tester, _message(MessageRole.assistant, [
+        MessagePart.toolCall(
+            toolCall: const ToolCall(
+                id: "call-1", name: "bash", argumentsText: "git status")),
+        MessagePart.toolResult(result: const ToolResult(
+            callId: "call-1",
+            returnCode: 0,
+            output: "",
+            decidedBy: PermissionSource.human,
+            decidedTier: [PermissionTier.once])),
+        part("alwaysAllowChat"),
+      ]));
+
+      expect(find.textContaining("Permission: bash — allowed, always in this chat"),
+          findsOneWidget);
+      expect(find.textContaining("by the rules of"), findsNothing);
+    });
+
+    testWidgets("a rule-deny reads what refused it", (tester) async {
+      await pump(tester, _message(MessageRole.assistant, [
+        MessagePart.toolCall(
+            toolCall: const ToolCall(
+                id: "call-1", name: "bash", argumentsText: "rm -rf build")),
+        MessagePart.toolResult(result: const ToolResult(
+            callId: "call-1",
+            returnCode: -1,
+            output: "",
+            exceptionInfo: "Denied by a permission rule you set.",
+            decidedBy: PermissionSource.rule,
+            decidedTier: [PermissionTier.project])),
+      ]));
+
+      expect(find.textContaining("denied by the project's rules"),
+          findsOneWidget);
+    });
+
+    testWidgets("the drawer carries the Outcome section", (tester) async {
+      await pump(tester, _message(MessageRole.assistant, [
+        MessagePart.toolCall(
+            toolCall: const ToolCall(
+                id: "call-1", name: "bash", argumentsText: "git status")),
+        MessagePart.toolResult(result: const ToolResult(
+            callId: "call-1",
+            returnCode: 0,
+            output: "clean",
+            decidedBy: PermissionSource.classifier,
+            decidedTier: [])),
+      ]));
+
+      await tester.tap(find.textContaining("Used tool: bash"));
+      await tester.pumpAndSettle();
+
+      expect(find.text("Outcome"), findsOneWidget);
+      expect(find.text("by the classifier"), findsOneWidget);
+    });
+
+    testWidgets("a result from before the field existed says nothing",
+        (tester) async {
+      await pump(tester, _message(MessageRole.assistant, [
+        MessagePart.toolCall(
+            toolCall: const ToolCall(
+                id: "call-1", name: "bash", argumentsText: "git status")),
+        MessagePart.toolResult(result: const ToolResult(
+            callId: "call-1", returnCode: 0, output: "old log")),
+      ]));
+
+      expect(find.textContaining("Used tool: bash — "), findsNothing);
+      expect(find.text("Outcome"), findsNothing);
+    });
+
+    testWidgets("an ungated call says nothing", (tester) async {
+      // A read inside the workspace ran with nothing standing in front of it:
+      // the mode's default posture is not a decision to record.
+      await pump(tester, _message(MessageRole.assistant, [
+        MessagePart.toolCall(
+            toolCall: const ToolCall(
+                id: "call-1", name: "read", argumentsText: "notes.txt")),
+        MessagePart.toolResult(result: const ToolResult(
+            callId: "call-1", returnCode: 0, output: "hi")),
+      ]));
+
+      expect(find.textContaining("Used tool: read"), findsOneWidget);
+      expect(find.text("Outcome"), findsNothing);
+    });
   });
 
   group("sandbox violations on a tool label", () {

@@ -21,6 +21,11 @@ void main() {
 
   final finish = saidOnly("done");
 
+  /// The [which]'th tool result a turn reported, zero-based — the record the
+  /// outcome rides on.
+  ToolResult results(List<AgentEvent> events, {int which = 0}) =>
+      events.whereType<ToolResultEvent>().toList()[which].result;
+
   /// The agent under test, carrying [rules]. The rest mirrors `agentOver` in
   /// builtin_agent_test.dart, trimmed to what the rule gate needs.
   BuiltinAgent agentOver(
@@ -270,6 +275,126 @@ void main() {
       expect(shell.ran, isEmpty);
       // No banner: the user's deny is not re-litigated by asking.
       expect(events.whereType<ApprovalRequestEvent>(), isEmpty);
+    });
+  });
+
+  group("the recorded outcome", () {
+    final allowGit = const PermissionRule(
+        tool: "bash",
+        pattern: "git status *",
+        decision: PermissionDecision.allow,
+        origin: PermissionTier.chat);
+    final denyRm = const PermissionRule(
+        tool: "bash",
+        pattern: "rm *",
+        decision: PermissionDecision.deny,
+        origin: PermissionTier.project);
+
+    test("a rule-allow records the rule and its tier", () async {
+      final client = FakeLlmClient([
+        [bashCall("git status")], [finish],
+      ]);
+      final events = await agentOver(
+        client,
+        approveMode: ApproveMode.ask,
+        permissions: [allowGit],
+      ).run(userMessage("go")).toList();
+      final result = results(events);
+      expect(result.decidedBy, PermissionSource.rule);
+      expect(result.decidedTier, [PermissionTier.chat]);
+    });
+
+    test("a rule-deny records the refusing tier", () async {
+      final client = FakeLlmClient([
+        [bashCall("rm -rf build")], [finish],
+      ]);
+      final events = await agentOver(
+        client,
+        approveMode: ApproveMode.never,
+        permissions: [denyRm],
+      ).run(userMessage("go")).toList();
+      final result = results(events);
+      expect(result.decidedBy, PermissionSource.rule);
+      expect(result.decidedTier, [PermissionTier.project]);
+    });
+
+    test("a compound covered by two tiers records both", () async {
+      final client = FakeLlmClient([
+        [bashCall("git status && git log --oneline")], [finish],
+      ]);
+      final events = await agentOver(
+        client,
+        approveMode: ApproveMode.never,
+        permissions: [
+          allowGit,
+          const PermissionRule(
+              tool: "bash",
+              pattern: "git log *",
+              decision: PermissionDecision.allow,
+              origin: PermissionTier.project),
+        ],
+      ).run(userMessage("go")).toList();
+      final result = results(events);
+      expect(result.decidedBy, PermissionSource.rule);
+      expect(result.decidedTier, [PermissionTier.chat, PermissionTier.project]);
+    });
+
+    test("a banner answer records you, once", () async {
+      final client = FakeLlmClient([
+        [bashCall("git status")], [finish],
+      ]);
+      final events = await agentOver(
+        client,
+        approveMode: ApproveMode.ask,
+        approvals: [ApprovalResponse.allow],
+      ).run(userMessage("go")).toList();
+      final result = results(events);
+      expect(result.decidedBy, PermissionSource.human);
+      expect(result.decidedTier, [PermissionTier.once]);
+    });
+
+    test("never mode records the mode", () async {
+      final client = FakeLlmClient([
+        [bashCall("git status")], [finish],
+      ]);
+      final events = await agentOver(client, approveMode: ApproveMode.never)
+          .run(userMessage("go"))
+          .toList();
+      final result = results(events);
+      expect(result.decidedBy, PermissionSource.mode);
+      expect(result.decidedTier, isEmpty);
+    });
+
+    test("the classifier records itself", () async {
+      final client = FakeLlmClient([
+        [bashCall("git status")], [finish],
+      ]);
+      final events = await agentOver(
+        client,
+        approveMode: ApproveMode.auto,
+        classifier: _StubClassifier(PermissionDecision.allow),
+      ).run(userMessage("go")).toList();
+      final result = results(events);
+      expect(result.decidedBy, PermissionSource.classifier);
+      expect(result.decidedTier, isEmpty);
+    });
+
+    test("a rerun after the re-prompt records the rerun", () async {
+      final client = FakeLlmClient([
+        [bashCall("python3 build.py")], [finish],
+      ]);
+      final events = await agentOver(
+        client,
+        approveMode: ApproveMode.ask,
+        approvals: [ApprovalResponse.allow, ApprovalResponse.alwaysAllowChat],
+        respond: (_) => const ShellResult(
+            returnCode: 1,
+            output: "PermissionError: [Errno 13] Permission denied: '/etc/hosts'",
+            violations: ["writing /etc/hosts"]),
+      ).run(userMessage("go")).toList();
+      final result = results(events);
+      expect(result.decidedBy, PermissionSource.rerun);
+      expect(result.decidedTier, isEmpty);
     });
   });
 

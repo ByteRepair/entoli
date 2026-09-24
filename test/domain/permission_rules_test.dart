@@ -189,6 +189,116 @@ void main() {
       expect(back[1].writes, ["/tmp/x"]);
     });
 
+    test("the origin is not persisted", () {
+      final rules = [
+        const PermissionRule(
+            tool: "bash",
+            pattern: "git *",
+            decision: PermissionDecision.deny,
+            origin: PermissionTier.project),
+      ];
+      final back = permissionRulesFromJson(permissionRulesToJson(rules));
+      // The tier is a fact of the file a rule was read from, not the rule.
+      expect(back.single.origin, isNull);
+    });
+  });
+
+  group("rulesDecideTraced", () {
+    test("an allow carries the winning rule's tier", () {
+      final verdict = rulesDecideTraced(
+        [const PermissionRule(
+            tool: "bash",
+            pattern: "git *",
+            decision: PermissionDecision.allow,
+            origin: PermissionTier.chat)],
+        "bash",
+        command: "git status",
+      );
+      expect(verdict!.decision, PermissionDecision.allow);
+      expect(verdict.tiers, [PermissionTier.chat]);
+    });
+
+    test("a deny carries the denying tier", () {
+      final verdict = rulesDecideTraced([
+        const PermissionRule(
+            tool: "bash",
+            pattern: "git status *",
+            decision: PermissionDecision.allow,
+            origin: PermissionTier.chat),
+        const PermissionRule(
+            tool: "bash",
+            pattern: "git *",
+            decision: PermissionDecision.deny,
+            origin: PermissionTier.defaultProject),
+      ], "bash", command: "git push");
+      expect(verdict!.decision, PermissionDecision.deny);
+      expect(verdict.tiers, [PermissionTier.defaultProject]);
+    });
+
+    test("a compound covered by two tiers carries both", () {
+      final verdict = rulesDecideTraced(
+        [
+          const PermissionRule(
+              tool: "bash",
+              pattern: "git status *",
+              decision: PermissionDecision.allow,
+              origin: PermissionTier.chat),
+          const PermissionRule(
+              tool: "bash",
+              pattern: "git log *",
+              decision: PermissionDecision.allow,
+              origin: PermissionTier.project),
+        ],
+        "bash",
+        segments: ["git status", "git log --oneline"],
+      );
+      expect(verdict!.decision, PermissionDecision.allow);
+      expect(verdict.tiers, [PermissionTier.chat, PermissionTier.project]);
+    });
+
+    test("a stronger rule clears the weaker tier", () {
+      final verdict = rulesDecideTraced([
+        const PermissionRule(
+            tool: "bash",
+            pattern: "git *",
+            decision: PermissionDecision.allow,
+            origin: PermissionTier.chat),
+        const PermissionRule(
+            tool: "bash",
+            pattern: "git push *",
+            decision: PermissionDecision.deny,
+            origin: PermissionTier.project),
+      ], "bash", command: "git push origin");
+      expect(verdict!.decision, PermissionDecision.deny);
+      expect(verdict.tiers, [PermissionTier.project]);
+    });
+
+    test("a rule with no origin matches but carries no tier", () {
+      final verdict = rulesDecideTraced(
+        [const PermissionRule(
+            tool: "bash",
+            pattern: "git *",
+            decision: PermissionDecision.allow)],
+        "bash",
+        command: "git status",
+      );
+      expect(verdict!.decision, PermissionDecision.allow);
+      expect(verdict.tiers, isEmpty);
+    });
+
+    test("no match is null", () {
+      expect(
+          rulesDecideTraced(
+              [const PermissionRule(
+                  tool: "bash",
+                  pattern: "git *",
+                  decision: PermissionDecision.allow,
+                  origin: PermissionTier.chat)],
+              "bash",
+              command: "curl example.com"),
+          isNull);
+    });
+
     test("a malformed entry is skipped rather than failing the file", () {
       final back = permissionRulesFromJson([
         {"tool": "bash", "pattern": "ls *", "decision": "allow"},

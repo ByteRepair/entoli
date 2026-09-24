@@ -64,9 +64,14 @@ class ToolLabel extends StatelessWidget {
     final name = call?.name;
     final showSpinner = running && result == null;
     final verb = result == null ? "Using tool" : "Used tool";
+    final outcome = result?.permissionOutcome;
     return _Label(
       icon: _failed ? Icons.error_outline : Icons.terminal,
-      text: name == null ? verb : "$verb: $name",
+      text: name == null
+          ? verb
+          : outcome == null
+              ? "$verb: $name"
+              : "$verb: $name — $outcome",
       isError: _failed,
       // A running tool gets a spinner instead of a static icon, so the turn
       // shows it is busy even after the model has said something. The spinner
@@ -105,7 +110,63 @@ List<ActivitySection> _runSections(ToolCall call, ToolResult? result) => [
       (label: "Arguments", body: call.argumentsText ?? call.argumentsJson, isError: false),
       (label: "Output", body: result?.output, isError: false),
       (label: "Error", body: result?.exceptionInfo, isError: true),
+      if (result?.permissionOutcome != null)
+        (
+          label: "Outcome",
+          body: result!.permissionOutcome,
+          isError: false,
+        ),
     ];
+
+/// What a recorded decision reads as, on a label's text and in its drawer's
+/// Outcome section. The wording is the shared contract of the two — one
+/// helper so they cannot disagree. Null where the result carries none: a
+/// log from before the field existed, or a call nothing stood in front of.
+String? outcomeText(PermissionSource? by, List<PermissionTier> tiers) {
+  final where = switch (tiers) {
+    [] => "",
+    [PermissionTier.once] => " by you",
+    [PermissionTier.chat] => " by this chat's rules",
+    [PermissionTier.project] => " by the project's rules",
+    [PermissionTier.defaultProject] => " by the app's rules",
+    [PermissionTier.runtime] => " by a rule granted this turn",
+    _ => " by the rules of ${tiers.map(_tierName).join(" and ")}",
+  };
+  return switch ((by, tiers)) {
+    (PermissionSource.rule, _) => "${tiers.isEmpty ? "" : "allowed"}$where",
+    (PermissionSource.classifier, _) => "by the classifier",
+    (PermissionSource.human, _) => "allowed$where",
+    (PermissionSource.mode, _) => "allowed by the approve mode",
+    (PermissionSource.rerun, _) => "rerun unconfined after you approved",
+    _ => null,
+  };
+}
+
+String _tierName(PermissionTier tier) => switch (tier) {
+      PermissionTier.chat => "this chat",
+      PermissionTier.project => "the project",
+      PermissionTier.defaultProject => "the app",
+      _ => tier.name,
+    };
+
+extension on ToolResult {
+  /// The outcome wording for this run's recorded decision — the label's
+  /// clause and the drawer's Outcome section. Null where nothing was
+  /// recorded, which is the old-log case and the ungated call's.
+  String? get permissionOutcome {
+    final wording = outcomeText(decidedBy, decidedTier);
+    if (wording == null) return null;
+    if (decidedBy == PermissionSource.rule && returnCode != 0) {
+      // A rule-deny's result is a refusal, not a run: the wording names
+      // what refused it rather than what allowed it.
+      final where = wording.startsWith("allowed")
+          ? wording.substring("allowed".length)
+          : wording;
+      return "denied$where";
+    }
+    return wording;
+  }
+}
 
 /// A file write or edit drawn as red/green diff lines rather than a label,
 /// where the change is small enough to read at a glance. The before/after
@@ -315,9 +376,15 @@ class _AskLabelState extends State<AskLabel> {
 /// superseded answer reads in place — "asked" without an answer is a turn
 /// that ended with the banner up, which the deny-on-end recorded instead.
 class ApprovalLabel extends StatelessWidget {
-  const ApprovalLabel({super.key, required this.part});
+  const ApprovalLabel({super.key, required this.part, this.result});
 
   final ApprovalPart part;
+
+  /// The result the call it asked about produced, carrying the outcome —
+  /// what decided the call — whose wording rides on the label and in the
+  /// drawer. Null where the call never produced one: a deny, an answer that
+  /// raced the turn out.
+  final ToolResult? result;
 
   @override
   Widget build(BuildContext context) {
@@ -332,9 +399,19 @@ class ApprovalLabel extends StatelessWidget {
       "deny" => "denied",
       _ => part.answer,
     };
+    // The outcome names what stood behind the call's fate, the answer what
+    // was pressed: on an "always" answer the two say the same thing, so the
+    // clause is left off there.
+    final outcome = result?.permissionOutcome;
+    final clause = switch (part.answer) {
+      "alwaysAllowChat" || "alwaysAllowProject" || "asked" => null,
+      _ => outcome,
+    };
     return _Label(
       icon: denied ? Icons.gpp_maybe_outlined : Icons.gpp_good_outlined,
-      text: "Permission: ${part.toolName} — $answer",
+      text: clause == null
+          ? "Permission: ${part.toolName} — $answer"
+          : "Permission: ${part.toolName} — $answer ($clause)",
       isError: denied,
       onTap: () => showActivitySheet(
         context,
@@ -353,6 +430,8 @@ class ApprovalLabel extends StatelessWidget {
               isError: false,
             ),
           (label: "Answer", body: answer, isError: false),
+          if (outcome != null)
+            (label: "Outcome", body: outcome, isError: false),
         ],
       ),
     );

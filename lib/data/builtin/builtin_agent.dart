@@ -395,8 +395,22 @@ class BuiltinAgent {
   final List<PermissionRule> _runtimeRules = [];
 
   /// Adds a rule at the front of the evaluation, from a banner answer this
-  /// turn is still running under.
-  void grantRuntimeRule(PermissionRule rule) => _runtimeRules.insert(0, rule);
+  /// turn is still running under, stamped as this turn's own.
+  void grantRuntimeRule(PermissionRule rule) => _runtimeRules.insert(
+          0,
+          PermissionRule(
+              tool: rule.tool,
+              pattern: rule.pattern,
+              decision: rule.decision,
+              writes: rule.writes,
+              origin: PermissionTier.runtime));
+
+  /// What decided the call whose result is being composed, and the tiers
+  /// that spoke — set by every decision site in [_runGated] and read by
+  /// [_ran] onto the result it reports. Null where the mode's default
+  /// posture put the call behind the banner: the banner's own part is the
+  /// record then, and the answer that follows stamps it anew.
+  ({PermissionSource source, List<PermissionTier> tiers})? _decision;
 
   /// Directories a re-prompt banner agreed to, live for the rest of the
   /// turn — [sandboxFor] composes them into every command's grant, so an
@@ -1100,14 +1114,20 @@ class BuiltinAgent {
   /// What the sandbox denied rides on it too, where one ran and denied
   /// something — the wording is `observation`'s, so the model reads it beside
   /// the output it belongs to.
-  ToolResult _ran(LlmToolCall call, ShellResult result) => ToolResult(
-        callId: call.id,
-        returnCode: result.returnCode,
-        output: result.output,
-        exceptionInfo: result.exceptionInfo,
-        cwd: result.cwd,
-        violations: result.violations,
-      );
+  ToolResult _ran(LlmToolCall call, ShellResult result) {
+    final decision = _decision;
+    _decision = null;
+    return ToolResult(
+      callId: call.id,
+      returnCode: result.returnCode,
+      output: result.output,
+      exceptionInfo: result.exceptionInfo,
+      cwd: result.cwd,
+      violations: result.violations,
+      decidedBy: decision?.source,
+      decidedTier: decision?.tiers ?? const [],
+    );
+  }
 
   /// The model asking the user something. The call and its answers are a pair
   /// like any other, so a finished chat still shows what was asked and picked.
@@ -1831,7 +1851,7 @@ class BuiltinAgent {
         ? ShellCommandAnalysis.parse(argumentsText ?? "",
             isWindows: platformIsWindows)
         : null;
-    final verdict = rulesDecide(
+    final verdict = rulesDecideTraced(
       [..._runtimeRules, ...permissions],
       toolName,
       command: argumentsText,
@@ -1843,8 +1863,9 @@ class BuiltinAgent {
       url: toolName == webfetchToolName ? argumentsText : null,
       segments: analysis?.modelableSegments,
     );
-    switch (verdict) {
+    switch (verdict?.decision) {
       case PermissionDecision.deny:
+        _decision = (source: PermissionSource.rule, tiers: verdict!.tiers);
         _commandResult = const ShellResult.failed(
             "Denied by a permission rule you set. Do not retry this command; "
             "tell the user what you were trying to do and let them decide.");
@@ -1863,6 +1884,7 @@ class BuiltinAgent {
           yield* _askAndExecute(call, arguments, toolName, run, argumentsText);
           return;
         }
+        _decision = (source: PermissionSource.rule, tiers: verdict!.tiers);
         _commandResult = await run();
         return;
       case PermissionDecision.ask:
@@ -1875,6 +1897,7 @@ class BuiltinAgent {
       case ApproveMode.auto:
         yield* _autoClassifyAndExecute(call, arguments, toolName, run, argumentsText);
       case ApproveMode.never:
+        _decision = (source: PermissionSource.mode, tiers: const []);
         _commandResult = await run();
     }
   }
@@ -1950,6 +1973,18 @@ class BuiltinAgent {
     final allowed = answer == ApprovalResponse.allow ||
         answer == ApprovalResponse.alwaysAllowChat ||
         answer == ApprovalResponse.alwaysAllowProject;
+    _decision = allowed
+        ? (
+            source: PermissionSource.human,
+            tiers: [
+              switch (answer) {
+                ApprovalResponse.alwaysAllowChat => PermissionTier.chat,
+                ApprovalResponse.alwaysAllowProject => PermissionTier.project,
+                _ => PermissionTier.once,
+              },
+            ],
+          )
+        : (source: PermissionSource.human, tiers: [PermissionTier.once]);
     _humanDecided = true;
     _commandResult = allowed
         ? await run()
@@ -1978,9 +2013,11 @@ class BuiltinAgent {
     switch (decision) {
       case PermissionDecision.allow:
         _consecutiveAsks = 0;
+        _decision = (source: PermissionSource.classifier, tiers: const []);
         _commandResult = await run();
       case PermissionDecision.deny:
         _consecutiveAsks = 0;
+        _decision = (source: PermissionSource.classifier, tiers: const []);
         _commandResult = const ShellResult.failed(
             "Denied by auto mode as dangerous. Do not retry this command; "
             "tell the user what you were trying to do and let them decide.");
@@ -2122,6 +2159,9 @@ class BuiltinAgent {
     final allowed = answer == ApprovalResponse.allow ||
         answer == ApprovalResponse.alwaysAllowChat ||
         answer == ApprovalResponse.alwaysAllowProject;
+    _decision = allowed
+        ? (source: PermissionSource.rerun, tiers: const [])
+        : (source: PermissionSource.human, tiers: [PermissionTier.once]);
     _humanDecided = true;
     _commandResult = allowed
         ? await _execute(call, command, unconfined: writeDenied)

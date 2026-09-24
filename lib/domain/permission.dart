@@ -1,6 +1,8 @@
-import "models.dart" show ToolApproval;
+import "models.dart" show PermissionTier, ToolApproval;
 import "shell.dart" show pathInside;
 import "shell_command_analysis.dart" show ShellCommandAnalysis;
+
+export "models.dart" show PermissionSource, PermissionTier;
 
 /// How a chat handles a command before it runs.
 enum ApproveMode {
@@ -96,6 +98,7 @@ class PermissionRule {
     required this.pattern,
     required this.decision,
     this.writes = const [],
+    this.origin,
   });
 
   /// The tool the rule names: `bash`, `read`, `write`, `edit` or `webfetch`.
@@ -121,6 +124,14 @@ class PermissionRule {
   /// it. This is what makes "allow, and write there" a single answer rather
   /// than an allow the kernel then refuses.
   final List<String> writes;
+
+  /// Which tier carried this rule, stamped by the repository when it
+  /// composes a turn's settings and by the agent for a runtime grant. Not
+  /// persisted — the tier is a fact of the file a rule was read from, not
+  /// of the rule itself — so a rule moved between files is stamped anew
+  /// rather than lying about where it came from. Null on a rule written by
+  /// hand or read back alone.
+  final PermissionTier? origin;
 
   factory PermissionRule.fromJson(Map<String, dynamic> json) => PermissionRule(
         tool: json["tool"] as String? ?? "*",
@@ -218,28 +229,45 @@ PermissionDecision? rulesDecide(
   List<String>? segments,
   String? path,
   String? url,
+}) =>
+    rulesDecideTraced(rules, toolName,
+            command: command, segments: segments, path: path, url: url)
+        ?.decision;
+
+/// The verdict and where it came from: the same walk [rulesDecide] takes,
+/// with the tiers that spoke beside it. A deny carries the tier that denied;
+/// an allow carries the tiers of every rule that covered a segment — a
+/// compound covered from two tiers says both — and a covered subject that
+/// matched more than one tier carries each of them, the wording naming the
+/// set. Null where no rule matches, as above.
+RuleVerdict? rulesDecideTraced(
+  List<PermissionRule> rules,
+  String toolName, {
+  String? command,
+  List<String>? segments,
+  String? path,
+  String? url,
 }) {
-  // The subject is the call's, not the rule's: read once, above the loop.
   if (toolName == "bash" && segments != null && segments.isNotEmpty) {
-    // Per segment, but deny anywhere refuses the whole: an uncovered segment
-    // escalates, an allow needs every segment covered, and a deny the user
-    // named on one segment is a no for the command — letting it ask would
-    // offer the user a banner to re-litigate a no they already wrote.
     PermissionDecision? verdict;
+    final tiers = <PermissionTier>{};
     for (final segment in segments) {
-      final segmentVerdict = _strongest(rules, "bash", segment);
-      if (segmentVerdict == PermissionDecision.deny) {
-        return PermissionDecision.deny;
+      final segmentVerdict = _strongestTraced(rules, "bash", segment);
+      final d = segmentVerdict?.decision;
+      if (d == PermissionDecision.deny) {
+        return RuleVerdict(
+            PermissionDecision.deny, segmentVerdict!.tiers.toList());
       }
-      if (segmentVerdict == null) {
-        // An uncovered segment is the floor: an allow that does not reach
-        // every segment is an ask, whatever the covered ones earned.
+      if (d == null) {
         verdict = PermissionDecision.ask;
         continue;
       }
-      verdict = _stronger(verdict, segmentVerdict);
+      verdict = _stronger(verdict, d);
+      tiers.addAll(segmentVerdict!.tiers);
     }
-    return verdict;
+    return verdict == PermissionDecision.ask
+        ? null
+        : RuleVerdict(verdict!, tiers.toList());
   }
   final subject = switch (toolName) {
     "bash" => command,
@@ -247,20 +275,38 @@ PermissionDecision? rulesDecide(
     _ => path,
   };
   if (subject == null) return null;
-  return _strongest(rules, toolName, subject);
+  return _strongestTraced(rules, toolName, subject);
 }
 
-/// The strongest verdict [rules] makes of one subject, or null where none
-/// matches. `PermissionDecision`'s declaration order is the strength order.
-PermissionDecision? _strongest(
+/// The verdict [rules] makes of one subject, with the tiers of the rules
+/// that made it — the strongest decision wins; every rule at that strength
+/// adds its origin, so a subject covered by two tiers says both.
+RuleVerdict? _strongestTraced(
     List<PermissionRule> rules, String toolName, String subject) {
   PermissionDecision? verdict;
+  final tiers = <PermissionTier>{};
   for (final rule in rules) {
     if (rule.tool != "*" && rule.tool != toolName) continue;
     if (!_ruleMatches(rule, toolName, subject)) continue;
-    verdict = _stronger(verdict, rule.decision);
+    if (_stronger(verdict, rule.decision) != verdict) {
+      // A strictly stronger decision clears the weaker tiers: they did not
+      // decide this.
+      tiers.clear();
+      verdict = rule.decision;
+    }
+    if (rule.decision == verdict && rule.origin != null) tiers.add(rule.origin!);
   }
-  return verdict;
+  return verdict == null ? null : RuleVerdict(verdict, tiers.toList());
+}
+
+/// The outcome of [rulesDecideTraced]: the decision and the tiers that
+/// spoke for it.
+class RuleVerdict {
+  const RuleVerdict(this.decision, this.tiers);
+
+  final PermissionDecision decision;
+
+  final List<PermissionTier> tiers;
 }
 
 PermissionDecision? _stronger(PermissionDecision? a, PermissionDecision b) =>

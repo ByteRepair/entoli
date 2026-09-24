@@ -1,4 +1,5 @@
 import "dart:async";
+import "dart:convert";
 import "dart:io";
 
 import "package:flutter_test/flutter_test.dart";
@@ -706,6 +707,38 @@ void main() {
       final chatMeta =
           await repo.loadMeta(chat.state.id);
       expect(chatMeta.permissions, isEmpty);
+    });
+
+    test("the composed rules carry the tier they were read from", () async {
+      final repo = repoWith(AppSettings());
+      final chat = await savedChat(repo);
+      await repo.saveMeta(chat.state.id, ChatMeta(permissions: [
+        const PermissionRule(
+            tool: "bash",
+            pattern: "chat rule *",
+            decision: PermissionDecision.allow),
+      ]));
+      // The default project's rules, saved through the documents copy the
+      // repository reads — a repo test's config hydrates nothing, so writing
+      // the file alone would not be seen.
+      await config.documents.write(
+          config.projectSettingsFile(project: null), jsonEncode({
+        "permissions": [
+          {"tool": "bash", "pattern": "project rule *", "decision": "deny"},
+        ],
+      }));
+
+      await repo.sendPrompt(chat.state.id, userMessage("go")).toList();
+
+      final byPattern = {
+        for (final r in backend.prompts.last.settings.permissions) r.pattern: r,
+      };
+      expect(byPattern["chat rule *"]!.origin, PermissionTier.chat);
+      // The chat is in the default project, so its project settings and the
+      // default project's are one file — the same read stamped twice, and
+      // the app's stamp standing (the file is the default project's).
+      expect(
+          byPattern["project rule *"]!.origin, PermissionTier.defaultProject);
     });
 
     test("the rule the next turn reads covers the bare command", () async {
