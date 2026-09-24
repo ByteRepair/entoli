@@ -187,6 +187,9 @@ Future<String?> platformCaptureLoginPath() async => null;
 /// tools' `safeRelativePath` already prevents reaching skill dirs.
 Future<void> platformChmodReadOnly(List<String> paths) async {}
 
+/// No-op: a browser has no `chmod`, so there is no lock to release either.
+Future<void> platformChmodWritable(List<String> paths) async {}
+
 /// No-op on the web: there is nothing to toggle. The action runs directly.
 Future<T> platformWithWritableDir<T>(
         String path, Future<T> Function() action) async =>

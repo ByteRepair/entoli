@@ -9,6 +9,7 @@ import "../../domain/permission.dart";
 import "../../domain/prompt_library.dart";
 import "../../domain/shell.dart";
 import "../../domain/sub_agent_log.dart";
+import "../../domain/tone.dart";
 import "../../domain/turn_recorder.dart";
 import "../../domain/web_search.dart";
 import "builtin_agent.dart";
@@ -42,6 +43,8 @@ class SubAgentRunner {
     this.caps = AgentCapabilities.full,
     this.sharedWorkspace = true,
     this.project,
+    this.tone = Tone.none,
+    this.citations = false,
     this.permissions = const [],
     this.writableDirs = const [],
   });
@@ -82,6 +85,14 @@ class SubAgentRunner {
   /// The project this sub-agent's turn is in, inherited from the parent so the
   /// shell driver resolves the same rootfs instance.
   final String? project;
+
+  /// How the parent's replies are worded, inherited so a worker's part reads
+  /// as the same voice the chat is set to.
+  final Tone tone;
+
+  /// Whether the parent's turn numbers the web pages it used, inherited the
+  /// same way.
+  final bool citations;
 
   /// Shared with the parent agent and every sibling sub-agent, so the fan-out
   /// bounds in-flight requests and coordinates 429 backoff as one. Null where
@@ -162,6 +173,8 @@ class SubAgentRunner {
       caps: caps.unattended,
       sharedWorkspace: sharedWorkspace,
       project: project,
+      tone: tone,
+      citations: citations,
       permissions: permissions,
       writableDirs: writableDirs,
       webSearch: webSearch,

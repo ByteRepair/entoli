@@ -10,10 +10,12 @@ import "../../domain/ask.dart";
 import "../../domain/file_tools.dart";
 import "../../domain/models.dart";
 import "../../domain/permission.dart";
+import "../../domain/plan.dart";
 import "../../domain/profile.dart";
 import "../../domain/prompt_library.dart";
 import "../../domain/shell.dart";
 import "../../domain/shell_command_analysis.dart";
+import "../../domain/tone.dart";
 import "../../domain/tool_arg.dart";
 import "../../domain/turn_recorder.dart";
 import "../../domain/web_search.dart";
@@ -32,6 +34,7 @@ import "templates.dart";
 import "memory/instructions.dart";
 import "memory/store.dart";
 import "memory_tools.dart";
+import "plan_tools.dart";
 import "websearch_tool.dart";
 
 /// What the spinner says while the model reads the prompt.
@@ -56,6 +59,7 @@ String? runningTool(String name) => switch (name) {
       webfetchToolName => "Fetching a page",
       taskToolName => "Working on a sub-task",
       artifactToolName => "Publishing the artifact",
+      presentPlanToolName => "Presenting the plan",
       _ => null,
     };
 
@@ -253,6 +257,8 @@ class BuiltinSession {
 LlmMessage agentSystemMessage({
   required String platform,
   Profile? profile,
+  Tone tone = Tone.none,
+  bool citations = false,
   required AgentCapabilities caps,
   List<PromptDocument> skills = const [],
   bool oneShot = false,
@@ -262,6 +268,8 @@ LlmMessage agentSystemMessage({
       text: systemPrompt(
         platform: platform,
         profile: profile,
+        tone: tone,
+        citations: citations,
         caps: caps,
         skills: skills,
         oneShot: oneShot,
@@ -293,6 +301,12 @@ List<LlmTool> agentTools({
       if (caps.webSearch) ...[websearchTool, webfetchTool],
       if (skills.any((s) => s.modelInvocable)) skillTool,
       if (caps.artifact) artifactTool,
+      if (!oneShot) ...[planAddTool, planNextTool, planDoneTool],
+      // Presenting parks the turn on the panel's answer, so it rides `ask`
+      // (a headless turn's takes fold out of caps) and the artifact's
+      // publish path; a sub-agent's missing `saveArtifact` withholds the
+      // rest, the way it withholds `artifact`.
+      if (caps.presentPlan) presentPlanTool,
       if (caps.createSkill) createSkillTool,
       if (offerMemory)
         ...[
@@ -334,6 +348,8 @@ class BuiltinAgent {
     this.skills = const [],
     this.webSearch,
     this.profile,
+    this.tone = Tone.none,
+    this.citations = false,
     this.saveArtifact,
     this.packageSkill,
     this.onShellOutput,
@@ -563,6 +579,15 @@ class BuiltinAgent {
   /// system prompt.
   final Profile? profile;
 
+  /// How the turn words its replies, resolved with the profile. Rewritten
+  /// every turn with the rest of the system prompt; a sub-agent gets the
+  /// parent's, so a worker words its part the way the chat is set to.
+  final Tone tone;
+
+  /// Whether the turn numbers the web pages it drew on and lists them at the
+  /// end of the reply.
+  final bool citations;
+
   /// Publishes an artifact from a workspace path to the chat's `artifacts/`
   /// dir and returns the id. Null where the agent is a sub-agent: sub-agents run
   /// headless with no viewer surface, so the tool is dropped for them the way
@@ -787,6 +812,8 @@ class BuiltinAgent {
       agentSystemMessage(
         platform: shell.platformDescription,
         profile: profile,
+        tone: tone,
+        citations: citations,
         caps: caps,
         skills: skills,
         oneShot: oneShot,
@@ -894,6 +921,26 @@ class BuiltinAgent {
 
       if (call.name == artifactToolName && saveArtifact != null) {
         yield* _artifact(call);
+        continue;
+      }
+
+      if (call.name == planAddToolName && !oneShot) {
+        yield* _planAdd(call);
+        continue;
+      }
+
+      if (call.name == planNextToolName && !oneShot) {
+        yield* _planNext(call);
+        continue;
+      }
+
+      if (call.name == planDoneToolName && !oneShot) {
+        yield* _planDone(call);
+        continue;
+      }
+
+      if (call.name == presentPlanToolName && _offered.presentPlan) {
+        yield* _presentPlan(call);
         continue;
       }
 
@@ -1559,6 +1606,192 @@ class BuiltinAgent {
           returnCode: 0,
           output: "Skill '$name' packaged. "
               "The user can review and install it from the card below.",
+        ));
+  }
+
+  /// The plan file: where the model works, so the model can read it and edit
+  /// it around the tools. Resolved like a file-tool path but written through
+  /// `fs` directly — the tools own the plan's lines, and an `edit` against
+  /// them would be two writers on one file.
+  String get _planPath => fs.path.join(workspace, planFileName);
+
+  Future<String?> _readPlan() async {
+    final file = fs.file(_planPath);
+    if (!await file.exists()) return null;
+    return file.readAsString();
+  }
+
+  /// What a plan tool says when there is nothing to work from, or null where
+  /// the file is there with tasks in it.
+  String? _planMissing(String? plan) {
+    if (plan == null) {
+      return "There is no $planFileName in the workspace yet. Record the "
+          "first task with $planAddToolName.";
+    }
+    return planTasksFrom(plan).isEmpty
+        ? "$planFileName holds no tasks. Add them with $planAddToolName."
+        : null;
+  }
+
+  /// Record a task. The call is reported with the task as its text, so the
+  /// chat's label reads the plan growing.
+  Stream<AgentEvent> _planAdd(LlmToolCall call) async* {
+    final task = stringArg(call.argumentsJson, "task");
+    if (task == null) {
+      yield* _reject(call,
+          'The $planAddToolName tool takes {"task": "..."}; that argument '
+          "was missing.");
+      return;
+    }
+    final section = stringArg(call.argumentsJson, "section");
+    yield ToolCallEvent(ToolCall(
+      id: call.id,
+      name: call.name,
+      argumentsJson: call.argumentsJson,
+      argumentsText: task,
+    ));
+    Future<ShellResult> run() async {
+      final updated = planAddTask(await _readPlan(), task, section: section);
+      await fs.file(_planPath).writeAsString(updated);
+      return ShellResult(returnCode: 0, output: planAddResult(task, planProgress(updated)));
+    }
+    yield* _runFileTool(call, _planPath, planAddToolName, run);
+  }
+
+  /// Take the next task. Nothing to take is the answer, not a failure: the
+  /// plan being finished is exactly the moment the model calls present_plan.
+  Stream<AgentEvent> _planNext(LlmToolCall call) async* {
+    yield ToolCallEvent(ToolCall(
+      id: call.id,
+      name: call.name,
+      argumentsJson: call.argumentsJson,
+    ));
+    final plan = await _readPlan();
+    final missing = _planMissing(plan);
+    final next = planNext(plan);
+    if (next == null) {
+      yield ToolResultEvent(ToolResult(
+            callId: call.id,
+            returnCode: 0,
+            output: missing ?? "All tasks done.",
+          ));
+      return;
+    }
+    // The index came from the text just read, so the mark cannot miss.
+    final marked = planMark(plan, next.index, PlanTaskStatus.inProgress)!;
+    await fs.file(_planPath).writeAsString(marked);
+    yield ToolResultEvent(ToolResult(
+          callId: call.id,
+          returnCode: 0,
+          output: planNextResult(next, planProgress(marked)),
+        ));
+  }
+
+  /// Finish a task: by number or by enough of its text to identify it.
+  Stream<AgentEvent> _planDone(LlmToolCall call) async* {
+    final task = stringArg(call.argumentsJson, "task");
+    if (task == null) {
+      yield* _reject(call,
+          'The $planDoneToolName tool takes {"task": "..."} — the number '
+          "$planNextToolName reported, or the start of the task's text; that "
+          "argument was missing.");
+      return;
+    }
+    yield ToolCallEvent(ToolCall(
+      id: call.id,
+      name: call.name,
+      argumentsJson: call.argumentsJson,
+      argumentsText: task,
+    ));
+    final plan = await _readPlan();
+    final missing = _planMissing(plan);
+    if (missing != null) {
+      yield ToolResultEvent(_ran(call, ShellResult.failed(missing)));
+      return;
+    }
+    final found = planFind(plan, task);
+    if (found == null) {
+      final candidates = planCandidates(plan, task)
+          .map((t) => "${t.index}. ${t.text}")
+          .toList();
+      yield ToolResultEvent(_ran(
+          call,
+          ShellResult.failed(candidates.isEmpty
+              ? "No task matches \"$task\". Call $planNextToolName to take "
+                  "the next one, or read $planFileName."
+              : "\"$task\" matches more than one task: ${candidates.join("; ")}. "
+                  "Name it by number, or by more of its text.")));
+      return;
+    }
+    // The index came from the text just read, so the mark cannot miss.
+    final marked = planMark(plan, found.index, PlanTaskStatus.done)!;
+    await fs.file(_planPath).writeAsString(marked);
+    yield ToolResultEvent(ToolResult(
+          callId: call.id,
+          returnCode: 0,
+          output: planDoneResult(found, planProgress(marked)),
+        ));
+  }
+
+  /// The plan, put to the user: the plan's page published through the same
+  /// path the `artifact` tool takes, its card in the chat, and the Go /
+  /// changes question the panel asks — all one call, so the model cannot
+  /// show the plan without asking about it, or ask without showing it.
+  Stream<AgentEvent> _presentPlan(LlmToolCall call) async* {
+    final args = presentPlanArgsFrom(call.argumentsJson);
+    if (args == null) {
+      yield* _reject(call,
+          'The $presentPlanToolName tool takes no required arguments; "title" '
+          'and "artifact_id" are optional strings.');
+      return;
+    }
+    yield ToolCallEvent(ToolCall(
+      id: call.id,
+      name: call.name,
+      argumentsJson: call.argumentsJson,
+      argumentsText: args.title ?? planFileName,
+    ));
+    final plan = await _readPlan();
+    final missing = _planMissing(plan);
+    if (missing != null) {
+      yield ToolResultEvent(_ran(call, ShellResult.failed(missing)));
+      return;
+    }
+    final html = planHtml(plan!, title: args.title);
+    final htmlPath = fs.path.join(workspace, planHtmlPath);
+    final entryFile = fs.path.basename(planHtmlPath);
+    await fs.directory(fs.path.dirname(htmlPath)).create(recursive: true);
+    await fs.file(htmlPath).writeAsString(html);
+    // Straight-line, so the publish's failure is the tool's answer rather
+    // than the turn dying — the same answer `_guarded` would build, said
+    // here because the plan's publish carries no approval gate around it.
+    String? id;
+    try {
+      id = await saveArtifact!(planHtmlPath, entryFile,
+          artifactId: args.artifactId);
+    } catch (e) {
+      yield ToolResultEvent(
+          ToolResult(callId: call.id, returnCode: -1, output: "", exceptionInfo: "$e"));
+      return;
+    }
+    yield ArtifactEvent(artifactId: id, entryFile: entryFile, title: args.title ?? "Plan");
+    // Emitted before it is awaited, for the same reason an approval is: the
+    // panel is where the verdict comes from. The verdict is then the tool's
+    // result, so the model reads it as the outcome of presenting rather than
+    // as the user's prose. The questions ride as the request's document —
+    // what another device reads the call's arguments back out of — since the
+    // call's own arguments name a title, not a question.
+    final request = AskRequest(
+      id: call.id,
+      questions: [planApprovalQuestion(args.title)],
+      argumentsJson: planApprovalQuestionsJson(args.title),
+    );
+    yield QuestionRequestEvent(request);
+    final answers = await answer(request);
+    yield ToolResultEvent(ToolResult(
+          callId: call.id,
+          returnCode: 0,
+          output: planVerdict(answers.firstOrNull),
         ));
   }
 

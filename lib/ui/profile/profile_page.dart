@@ -4,6 +4,7 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 import "../../core/config.dart";
 import "../../domain/documents.dart" show RenameWriter;
 import "../../domain/profile.dart";
+import "../../domain/tone.dart";
 import "../../providers.dart";
 import "../widgets/resettable_field.dart";
 
@@ -41,8 +42,15 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
       _write ??= RenameWriter.fs(config.fs);
 
   DateTime? _dobValue;
+  Tone? _tone;
+  bool? _citations;
   bool _loaded = false;
   bool _saving = false;
+
+  /// The app's resolved answers, read once for the project page's `Default`
+  /// entries to name.
+  Tone _appTone = Tone.none;
+  bool _appCitations = false;
 
   @override
   void initState() {
@@ -60,7 +68,8 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
       // A file that will not read is shown as empty; saving overwrites it.
     }
     if (widget.project == null) {
-      final profile = ref.read(appSettingsProvider).profile;
+      final settings = ref.read(appSettingsProvider);
+      final profile = settings.profile;
       if (profile != null) {
         _name.text = profile.name ?? "";
         _dob.text = profile.dateOfBirth ?? "";
@@ -68,6 +77,14 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
         _profession.text = profile.profession ?? "";
         _dobValue = _parseDate(profile.dateOfBirth);
       }
+      _tone = settings.tone;
+      _citations = settings.citations;
+    } else {
+      final project = ref.read(projectSettingsProvider(widget.project));
+      _appTone = ref.read(appSettingsProvider).tone;
+      _appCitations = ref.read(appSettingsProvider).citations;
+      _tone = project.tone;
+      _citations = project.citations;
     }
     if (mounted) setState(() => _loaded = true);
   }
@@ -92,9 +109,19 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
     await _writeInstructions(config, _instructionsPath(config), _instructions.text);
     if (widget.project == null) {
       final profile = _profile();
+      // One write of settings.json: three separate setters would be three
+      // re-encodes and renames of the one file, the first two superseded.
+      await ref.read(appSettingsProvider.notifier).setReplyStyle(
+            profile: profile.isEmpty ? null : profile,
+            tone: _tone ?? Tone.none,
+            citations: _citations ?? false,
+          );
+    } else {
+      // One write of project.json. Null stays null, so a field left on
+      // Default inherits again rather than pinning what it inherited.
       await ref
-          .read(appSettingsProvider.notifier)
-          .setProfile(profile.isEmpty ? null : profile);
+          .read(projectSettingsProvider(widget.project).notifier)
+          .setReplyStyle(tone: _tone, citations: _citations);
     }
     if (mounted) setState(() => _saving = false);
     if (mounted) Navigator.of(context).pop();
@@ -121,7 +148,11 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
     _dob.clear();
     _religion.clear();
     _profession.clear();
-    setState(() => _dobValue = null);
+    setState(() {
+      _dobValue = null;
+      _tone = widget.project == null ? Tone.none : null;
+      _citations = widget.project == null ? false : null;
+    });
   }
 
   Future<void> _pickDate() async {
@@ -152,6 +183,45 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
   @override
   Widget build(BuildContext context) {
     final global = widget.project == null;
+    // The reply-style rows: values at app level, overrides at a project's.
+    // The dropdown's own Default entry and reset button are the inherit
+    // affordance a project level needs, and nothing carries one here.
+    final toneRow = global
+        ? LabelledField(
+            label: "Tone",
+            child: DropdownButtonFormField<Tone>(
+              initialValue: _tone ?? Tone.none,
+              items: [
+                for (final tone in Tone.values)
+                  DropdownMenuItem(value: tone, child: Text(tone.label)),
+              ],
+              onChanged: (value) =>
+                  setState(() => _tone = value ?? Tone.none),
+            ),
+          )
+        : InheritableDropdown<Tone>(
+            label: "Tone",
+            value: _tone,
+            inherited: _appTone.label,
+            options: {for (final tone in Tone.values.skip(1)) tone: tone.label},
+            onChanged: (value) => setState(() => _tone = value),
+          );
+    final citationsRow = global
+        ? SwitchListTile(
+            title: const Text("Numbered references"),
+            subtitle: const Text(
+                "Number the web pages a reply used and list them at the end"),
+            value: _citations ?? false,
+            onChanged: (value) => setState(() => _citations = value),
+          )
+        : InheritableSwitch(
+            title: "Numbered references",
+            subtitle:
+                "Number the web pages a reply used and list them at the end",
+            value: _citations,
+            inherited: _appCitations,
+            onChanged: (value) => setState(() => _citations = value),
+          );
     return Scaffold(
       appBar: AppBar(
         title: Text(global ? "Profile" : "Project instructions"),
@@ -215,6 +285,21 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                     label: "Profession",
                     child: TextField(controller: _profession),
                   ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
+                  child: Text(
+                    global
+                        ? "How replies are worded, in every turn. A project "
+                            "can give its own answers below."
+                        : "How this project's replies are worded, in place of "
+                            "the app's answer.",
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
+                  ),
+                ),
+                toneRow,
+                citationsRow,
                 Padding(
                   padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
                   child: Text(

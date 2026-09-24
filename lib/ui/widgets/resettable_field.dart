@@ -88,6 +88,47 @@ class LabelledField extends StatelessWidget {
       );
 }
 
+/// The switch-shaped sibling of [InheritableDropdown]: an on/off override
+/// whose null means "inherit what the next level up decides", paired with the
+/// button that puts it back there. The subtitle and the trailing button name
+/// what null resolves to, the way the dropdown's `Default` entry does.
+class InheritableSwitch extends StatelessWidget {
+  const InheritableSwitch({
+    super.key,
+    required this.title,
+    required this.value,
+    required this.inherited,
+    required this.onChanged,
+    this.subtitle,
+  });
+
+  final String title;
+  final String? subtitle;
+
+  /// The setting currently held; null names [inherited] and the reset
+  /// restores it.
+  final bool? value;
+  final bool inherited;
+  final ValueChanged<bool?> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return LabelledField(
+      label: "$title${value == null ? " — Default (${inherited ? "on" : "off"})" : ""}",
+      child: ResettableField(
+        onReset: () => onChanged(null),
+        child: SwitchListTile(
+          contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+          title: Text(title),
+          subtitle: subtitle == null ? null : Text(subtitle!),
+          value: value ?? inherited,
+          onChanged: onChanged,
+        ),
+      ),
+    );
+  }
+}
+
 /// A labelled dropdown whose first entry stores null and means "inherit",
 /// paired with the button that puts it back there. [inherited] names what null
 /// currently resolves to, so `Default` is never a mystery.

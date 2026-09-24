@@ -141,7 +141,10 @@ LocalPrefill? createLocalPrefill(
       // What a default top-level turn is offered: the device's facts, no
       // project's takes, nothing headless. A turn a built-in project narrows
       // misses the warmed prefix rather than the cache serving a list no turn
-      // sends.
+      // sends. The tone and citations answers are the app's for the same
+      // reason: a project that pins its own in `project.json` sends a body
+      // that differs here, and misses the prefix too — the app-level answer
+      // is the one every chat shares.
       final caps = AgentCapabilities.forTurn(
         commands: shell.canRunCommands,
         webSearch: backend.webSearch.available,
@@ -153,6 +156,8 @@ LocalPrefill? createLocalPrefill(
            agentSystemMessage(
              platform: shell.platformDescription,
              profile: now.profile,
+             tone: now.tone,
+             citations: now.citations,
              caps: caps,
              // The same skills a turn's prompt lists, off the same library the
              // backend holds — a warm-up built without them caches a prefix no
@@ -375,6 +380,10 @@ Future<String?> captureLoginPath() => platformCaptureLoginPath();
 /// unintentionally write to them. No-op on the web (no bash). See
 /// `platformChmodReadOnly`.
 Future<void> chmodReadOnly(List<String> paths) => platformChmodReadOnly(paths);
+
+/// Releases [platformChmodReadOnly]'s lock so the app's own writes can run —
+/// the install of the bundled skills is one. Re-lock afterwards.
+Future<void> chmodWritable(List<String> paths) => platformChmodWritable(paths);
 
 /// Toggles a directory writable for [action], then restores it read-only. The
 /// install and delete paths use this — they are the app's writes, not the

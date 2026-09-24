@@ -3,6 +3,7 @@ import "dart:convert";
 import "../core/config.dart";
 import "permission.dart";
 import "temp_chat_ttl.dart";
+import "tone.dart";
 
 /// How the agents of a project's rounds run. The project's Omada section
 /// names the default for its chats; a chat's own override, where Phase 2
@@ -49,6 +50,8 @@ class ProjectSettings {
       this.omadaOrdering,
       this.omadaMaxGenerations,
       this.turnMaxSteps,
+      this.tone,
+      this.citations,
       this.permissions = const [],
       this.writableDirs = const [],
       this.sandboxReprompt,
@@ -88,6 +91,14 @@ class ProjectSettings {
   /// and one number over them all would say nothing about any member's turn.
   int? turnMaxSteps;
 
+  /// How this project's turns are worded. Null means inherit the app
+  /// default.
+  Tone? tone;
+
+  /// Whether this project's turns number the web pages they drew on. Null
+  /// means inherit the app default.
+  bool? citations;
+
   /// The text the new-chat screen asks over this project's badge, in place
   /// of the app-wide question. Empty is a deliberate answer — the screen
   /// then asks nothing — and null is the app default.
@@ -125,6 +136,8 @@ class ProjectSettings {
             json["omadaOrdering"] as String?),
         omadaMaxGenerations: json["omadaMaxGenerations"] as int?,
         turnMaxSteps: json["turnMaxSteps"] as int?,
+        tone: Tone.fromNameNullable(json["tone"] as String?),
+        citations: json["citations"] as bool?,
         permissions: permissionRulesFromJson(json["permissions"] as List<dynamic>?),
         writableDirs: [
           for (final w in (json["writableDirs"] as List<dynamic>? ?? const []))
@@ -147,6 +160,8 @@ class ProjectSettings {
       if (omadaOrdering != null) "omadaOrdering": omadaOrdering!.name,
       if (omadaMaxGenerations != null) "omadaMaxGenerations": omadaMaxGenerations,
       if (turnMaxSteps != null) "turnMaxSteps": turnMaxSteps,
+      if (tone != null) "tone": tone!.name,
+      if (citations != null) "citations": citations,
       if (permissions.isNotEmpty)
         "permissions": permissionRulesToJson(permissions),
       if (writableDirs.isNotEmpty) "writableDirs": writableDirs,
@@ -165,6 +180,8 @@ class ProjectSettings {
         omadaOrdering: omadaOrdering,
         omadaMaxGenerations: omadaMaxGenerations,
         turnMaxSteps: turnMaxSteps,
+        tone: tone,
+        citations: citations,
         permissions: permissions,
         writableDirs: writableDirs,
         sandboxReprompt: sandboxReprompt,
