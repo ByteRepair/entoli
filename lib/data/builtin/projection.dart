@@ -1,5 +1,7 @@
 import "dart:typed_data";
 
+import "package:collection/collection.dart";
+
 import "../../domain/ask.dart";
 import "../../domain/models.dart";
 import "../../domain/prompt_library.dart";
@@ -58,21 +60,30 @@ Future<List<LlmMessage>> projectionOf(
   String? viewer,
   List<ConversationCompaction> compactions = const [],
 }) async {
-  // Every resource at once rather than a message at a time: on the web each
-  // read is its own IndexedDB transaction, and a long conversation's would
-  // otherwise be one round trip after another.
-  final files = await Future.wait(messages.map((m) =>
-      m.role == MessageRole.user ? _attachments(m, load) : _noFiles));
   // The newest marker whose boundary the projection was handed, and where it
   // sits. Anything before it is summarized; anything after it is verbatim.
   // LastIndexWhere rather than indexWhere: an earlier marker is a shadow the
   // newest one replaced, and the log can hold any number of those.
-  final boundary = compactions.lastIndexWhere(
-      (c) => messages.any((m) => m.id == c.upToMessageId));
-  final marker = boundary < 0 ? null : compactions[boundary];
+  //
+  // Decided before the bytes are read, which is the point: the attachments of
+  // the summarized span are the expensive half of what the summary replaces,
+  // and the compacted tail is loaded whole. The ids decide the boundary, so
+  // this is one pass over ids before any load, not a scan per marker.
+  final live = {
+    for (final m in messages) m.id: m,
+  };
+  final marker = compactions.lastWhereOrNull((c) => live[c.upToMessageId] != null);
   final from = marker == null
       ? 0
       : messages.indexWhere((m) => m.id == marker.upToMessageId) + 1;
+  // Every resource at once rather than a message at a time: on the web each
+  // read is its own IndexedDB transaction, and a long conversation's would
+  // otherwise be one round trip after another. Only the verbatim half's bytes
+  // are read — the summarized span's are what the summary replaced.
+  final files = await Future.wait(messages.asMap().entries.map((e) =>
+      e.value.role == MessageRole.user && e.key >= from
+          ? _attachments(e.value, load)
+          : _noFiles));
   final projected = <LlmMessage>[];
   if (marker != null) {
     projected.add(LlmMessage(role: LlmRole.user, text: summarizedTurnText(marker.summary)));
@@ -87,9 +98,7 @@ Future<List<LlmMessage>> projectionOf(
         if (text.isNotEmpty) {
           projected.add(LlmMessage(
             role: LlmRole.user,
-            text: userTurnText(text,
-                at: message.createdAt,
-                first: first && index == from && message.role == MessageRole.user),
+            text: userTurnText(text, at: message.createdAt, first: first && index == from),
             attachments: files[index],
           ));
         }

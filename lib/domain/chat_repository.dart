@@ -248,7 +248,7 @@ class ChatRepository {
     final model = settings.titleModelId;
     if (provider == null || text.trim().isEmpty) return null;
     if (shellBypassCommand(text) != null) return null;
-    if (wiredSkillFromText(text, _libraryFor(null)) != null) return null;
+    if (wiredSkillFromText(text) != null) return null;
     final answer = await _backend.ask(titlePrompt(text), model: model, provider: provider);
     return answer == null ? null : cleanTitle(answer);
   }

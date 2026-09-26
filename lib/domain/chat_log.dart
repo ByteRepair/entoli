@@ -180,7 +180,7 @@ Replayed replayTree(Iterable<ChatRecord> records) {
   final parent = <String, String?>{};
   final children = <String?, List<String>>{};
   final shown = <String?, String>{};
-  final compactions = <ConversationCompaction>{};
+  final compactions = <String, ConversationCompaction>{};
 
   /// The child of [of] the thread runs through: the one last selected, or
   /// failing that the newest, since a thread just written is the one to read.
@@ -282,38 +282,28 @@ Replayed replayTree(Iterable<ChatRecord> records) {
       case CompactionRecord(:final upToMessageId, :final summary):
         // Applied where the boundary is still live; dropped as a record the
         // moment the rewind takes it away, like any other marker of what was
-        // there. Held in arrival order in the set and ordered on the thread
-        // below, since the records arrive in log order and a boundary can sit
-        // anywhere on the thread.
+        // there. Keyed by the boundary, so a marker written twice for the
+        // same message is the last one — the way a superseded part is.
         if (nodes.containsKey(upToMessageId)) {
-          compactions
-            ..removeWhere((c) => c.upToMessageId == upToMessageId)
-            ..add(ConversationCompaction(
-                upToMessageId: upToMessageId, summary: summary));
+          compactions[upToMessageId] = ConversationCompaction(
+              upToMessageId: upToMessageId, summary: summary);
         }
     }
   }
 
   final messages = <Message>[];
   final branches = <String, List<String>>{};
-  final onThread = thread().toSet();
+  // Thread order, not log order: a marker's place on the screen is where its
+  // boundary is, and this loop is already walking the thread. A boundary
+  // rewound away is gone from [compactions] with the message it named, so
+  // what is left here is live.
   final liveCompactions = <ConversationCompaction>[];
   for (final id in thread()) {
     messages.add(nodes[id]!);
     final kids = children[parent[id]]!;
     if (kids.length > 1) branches[id] = List.unmodifiable(kids);
-  }
-  // Thread order, not log order: a marker below a rewind was applied to the
-  // thread as it stood then, and its place on the screen is where its boundary
-  // is. A marker left by a delete of a message its boundary does not name is
-  // the one case that never reaches here — `removeWhere` on the record already
-  // dropped it — so the set holds markers of live messages only.
-  final compactionByBoundary = {
-    for (final c in compactions) c.upToMessageId: c,
-  };
-  for (final id in onThread) {
-    final c = compactionByBoundary[id];
-    if (c != null) liveCompactions.add(c);
+    final marker = compactions[id];
+    if (marker != null) liveCompactions.add(marker);
   }
 
   return Replayed(

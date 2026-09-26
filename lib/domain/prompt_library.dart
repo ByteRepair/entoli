@@ -133,7 +133,9 @@ class PromptLibrary {
 /// the whole of the message and there is at most one, which is what anchoring
 /// both ends says. Matches what `activeCompletionToken` offers in the
 /// composer's menu — anything it can offer has to dispatch here.
-final _skillReference = RegExp(r"^/([^\s/]+)(?:\s+([\s\S]*))?$");
+final RegExp skillReference = RegExp(r"^/([^\s/]+)(?:\s+([\s\S]*))?$");
+
+final _skillReference = skillReference;
 
 /// `@name` addresses an agent, but only where the handle starts, so an email
 /// address (`me@general`) and a path (`a@b.c`) are not mentions. Markdown

@@ -711,39 +711,41 @@ class BuiltinBackend implements AgentBackend {
     final target = _resolveModel(settings.model, settings.provider);
     if (target == null) return null;
     if (history.isEmpty) return null;
-    final conversation = await projectionOf(history,
-        load: _resourcesOf(chatId), compactions: compactions);
-    if (conversation.isEmpty) return null;
     // The ask has to fit the window with room for the summary it produces;
     // a budget that would fill the whole window is how the last attempt got
     // here in the first place.
     final window = settings.provider == null
         ? null
-        : contextWindowOf(
-            registry.endpointFor(settings.provider!)?.config, settings.model);
+        : contextWindowOf(registry.endpointFor(settings.provider!)?.config);
     final budget = window == null ? null : window ~/ 2;
     // The retry ladder: a span too big to summarize is not a failure to give
     // up on but a span to summarize less of. Each attempt drops the oldest
     // half of what it was asked to read, so a conversation that will not fit
     // whole still leaves a summary of its newest half — and a marker that
     // covers only what was read.
-    var span = history;
+    //
+    // The loader is memoised across the attempts, which is the point of the
+    // ladder: the surviving half's attachments were just read, and a span
+    // that will not fit is the expected case for the chats this runs on —
+    // one read per resource, not one per attempt.
+    final read = <String, Future<Uint8List?>>{};
+    Future<Uint8List?> loader(String resource) =>
+        read.putIfAbsent(resource, () => _resourcesOf(chatId)(resource));
+    List<Message> span = history;
+    List<Message> halve() => span.sublist((span.length / 2).ceil());
     for (var attempt = 0; attempt < 3; attempt++) {
-      final projected = attempt == 0
-          ? conversation
-          : await projectionOf(span,
-              load: _resourcesOf(chatId), compactions: compactions);
-      if (attempt > 0 && projected.isEmpty) return null;
+      final projected = await projectionOf(span,
+          load: loader, compactions: compactions);
+      if (projected.isEmpty) return null;
       final cut = CompactPrompt.build(
         conversation: projected,
         instructions: instructions,
         priorSummary: priorSummaryOf(compactions),
       );
-      final cost = estimateTokens(cut);
       // Where the ask itself would not fit, dropping the oldest half is the
       // only answer; where it would, the span stands.
-      if (budget != null && cost > budget) {
-        span = span.sublist((span.length / 2).ceil());
+      if (budget != null && estimateTokens(cut) > budget) {
+        span = halve();
         continue;
       }
       try {
@@ -762,8 +764,7 @@ class BuiltinBackend implements AgentBackend {
       }
       // A reply that said nothing, or an error: halve and try once more, the
       // same ladder the too-big ask takes.
-      span = span.sublist((span.length / 2).ceil());
-      if (span.isEmpty) return null;
+      span = halve();
     }
     return null;
   }
@@ -1199,8 +1200,10 @@ class _RunningTurns extends ValueNotifier<Set<String>> {
 
   /// Whether [chatId] holds a turn in flight — the guard a background call
   /// checks before it runs, since the session it would summarize is being
-  /// rewritten underneath it while one does.
-  bool any(String chatId) => chats.contains(chatId);
+  /// rewritten underneath it while one does. Keys rather than the set: the
+  /// answer is one `startsWith`, no materialized copy of the chats.
+  bool any(String chatId) =>
+      _stops.keys.any((k) => k.startsWith("$chatId\u0000"));
 
   /// Kills every stop [chatId] holds, in the order they were registered.
   Future<void> stopAll(String chatId) async {

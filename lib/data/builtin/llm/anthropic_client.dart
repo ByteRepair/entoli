@@ -94,6 +94,17 @@ class AnthropicClient implements LlmClient {
     String? stopReason;
     int? inputTokens, cacheRead, cacheWrite, outputTokens;
 
+    // The usage fields accumulate across the frames that carry them: a frame
+    // naming a field keeps what an earlier one said about the rest.
+    void readUsage(Map<String, dynamic>? usage) {
+      if (usage == null) return;
+      inputTokens = (usage["input_tokens"] as num?)?.toInt() ?? inputTokens;
+      cacheRead = (usage["cache_read_input_tokens"] as num?)?.toInt() ?? cacheRead;
+      cacheWrite =
+          (usage["cache_creation_input_tokens"] as num?)?.toInt() ?? cacheWrite;
+      outputTokens = (usage["output_tokens"] as num?)?.toInt() ?? outputTokens;
+    }
+
     await for (final payload in decodeSse(response.stream)) {
       final Map<String, dynamic> event;
       try {
@@ -150,25 +161,14 @@ class AnthropicClient implements LlmClient {
         case "message_start":
           // The usage object arrives here and again — larger — on
           // message_delta; both are read, the latter winning.
-          final message = event["message"] as Map<String, dynamic>? ?? const {};
-          final usage = message["usage"] as Map<String, dynamic>? ?? const {};
-          inputTokens = (usage["input_tokens"] as num?)?.toInt() ?? inputTokens;
-          cacheRead = (usage["cache_read_input_tokens"] as num?)?.toInt() ?? cacheRead;
-          cacheWrite =
-              (usage["cache_creation_input_tokens"] as num?)?.toInt() ?? cacheWrite;
-          outputTokens = (usage["output_tokens"] as num?)?.toInt() ?? outputTokens;
+          readUsage(((event["message"] as Map<String, dynamic>?)
+                  ?["usage"]) as Map<String, dynamic>? ??
+              const {});
 
         case "message_delta":
           final delta = event["delta"] as Map<String, dynamic>? ?? const {};
           stopReason = delta["stop_reason"] as String? ?? stopReason;
-          final usage = event["usage"] as Map<String, dynamic>?;
-          if (usage != null) {
-            inputTokens = (usage["input_tokens"] as num?)?.toInt() ?? inputTokens;
-            cacheRead = (usage["cache_read_input_tokens"] as num?)?.toInt() ?? cacheRead;
-            cacheWrite =
-                (usage["cache_creation_input_tokens"] as num?)?.toInt() ?? cacheWrite;
-            outputTokens = (usage["output_tokens"] as num?)?.toInt() ?? outputTokens;
-          }
+          readUsage(event["usage"] as Map<String, dynamic>?);
       }
     }
 

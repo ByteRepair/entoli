@@ -212,7 +212,7 @@ class _MessageBubbleState extends State<MessageBubble> {
   /// command; a callback bubble is a request the app carried out, so it reads
   /// as one of the things the user said, just not something a model answered.
   late final bool _wired = widget.message.role == MessageRole.user &&
-      wiredSkillFromText(widget.message.plainText, null) != null;
+      wiredSkillFromText(widget.message.plainText) != null;
 
   @override
   Widget build(BuildContext context) {

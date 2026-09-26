@@ -2,6 +2,8 @@ import "../../domain/llm_provider.dart";
 import "../../domain/models.dart";
 import "llm/llm_client.dart";
 
+final _summaryTags = RegExp(r"<summary>\s*([\s\S]*?)\s*</summary>");
+
 /// The conversation summarizer's prompt, and the one place that words it — the
 /// same one-file rule `chat_log.dart` keeps for the log's format.
 ///
@@ -26,10 +28,10 @@ import "llm/llm_client.dart";
 class CompactPrompt {
   CompactPrompt._();
 
-  static const system =
-      "You are a helpful AI assistant tasked with summarizing conversations.";
-
   /// Assembles the whole request: the projected conversation, then the ask.
+  /// No system message: `LlmClient.stream` has no system parameter — the
+  /// OpenAI shape folds one into `messages` (`mergeLeadingSystem`), and the
+  /// summarizer's ask rides the one user message.
   static List<LlmMessage> build({
     required List<LlmMessage> conversation,
     String? instructions,
@@ -82,7 +84,7 @@ $priorSummary
   /// format, so what arrives without them is taken whole — the model was told
   /// to produce nothing else. Null where it said nothing at all.
   static String? summaryFrom(String reply) {
-    final match = RegExp(r"<summary>\s*([\s\S]*?)\s*</summary>").firstMatch(reply);
+    final match = _summaryTags.firstMatch(reply);
     final text = (match?.group(1) ?? reply).trim();
     return text.isEmpty ? null : text;
   }
@@ -95,17 +97,19 @@ String? priorSummaryOf(List<ConversationCompaction> compactions) =>
 
 /// The context window the compaction's own ask must fit in: the provider's
 /// configured one, or the default guess. Named so the threshold check and the
-/// summarizer's own budget ask the same question.
-int? contextWindowOf(LlmProviderConfig? config, String? modelId) {
+/// summarizer's own budget ask the same question — the one resolver of the
+/// answer.
+int? contextWindowOf(LlmProviderConfig? config) {
   if (config == null) return null;
-  if (config.contextWindow != null) return config.contextWindow;
-  return defaultContextWindow;
+  return config.contextWindow ?? defaultContextWindow;
 }
 
 /// A rough count, by length: four characters to the token is the estimate
 /// every system without a reported count falls back on, and it over-asks —
 /// which for a compaction means compacting a little early rather than
-/// failing at the provider.
+/// failing at the provider. Text attachments count their bytes rather than
+/// decoding them: the length is all this wants, and the bytes are already
+/// in memory.
 int estimateTokens(List<LlmMessage> messages) {
   var chars = 0;
   for (final message in messages) {
@@ -117,7 +121,7 @@ int estimateTokens(List<LlmMessage> messages) {
         // length, which would read an eight-megabyte photo as two million.
         chars += 4000;
       } else {
-        chars += attachment.asText.length;
+        chars += attachment.bytes.length;
       }
     }
     for (final call in message.toolCalls) {

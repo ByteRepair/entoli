@@ -8,6 +8,8 @@ import "package:agent_chat/data/builtin/templates.dart" show passWord;
 import "package:agent_chat/domain/agent_backend.dart";
 import "package:agent_chat/domain/app_settings.dart";
 import "package:agent_chat/domain/ask.dart";
+import "package:agent_chat/domain/llm_provider.dart"
+    show LlmApi, LlmProviderConfig;
 import "package:agent_chat/domain/chat_meta.dart";
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/domain/chat_log.dart";
@@ -1948,8 +1950,16 @@ group("a banner answer through the controller", () {
   group("compact", () {
     /// A chat with the bundled-shaped wired skill in its library, so `/compact`
     /// resolves. The test library has none, so the write-and-reload is what a
-    /// real app's bundled preset is.
+    /// real app's bundled preset is. A provider is seeded before the app, so
+    /// the window the threshold reads against resolves to the default.
     Future<(String, ChatController)> chatWithCompactSkill() async {
+      await app.seedSettings(AppSettings(
+          defaultProviderId: "anthropic",
+          defaultModelId: "claude",
+          llmProviders: [
+            LlmProviderConfig(
+                id: "anthropic", api: LlmApi.openai, baseUrl: "https://x/v1"),
+          ]));
       await writeSkill(app, "compact",
           metadata: {"invocation": "callback"});
       await app.container.read(promptLibraryProvider(null).notifier).reload();
@@ -2048,7 +2058,7 @@ group("a banner answer through the controller", () {
     test("a turn that pushed the context past the share compacts on its own",
         () async {
       final (id, controller) = await chatWithCompactSkill();
-      // Well under any share of the default window.
+      // Well under any share.
       app.backend.usageHolder[id] = 60000;
       await controller.send("grow a little");
       await waitIdle(id);
@@ -2070,7 +2080,7 @@ group("a banner answer through the controller", () {
     test("does not run twice without a turn between, or when off", () async {
       final (id, controller) = await chatWithCompactSkill();
       // Off: nothing compacts however deep the context.
-      app.container
+      await app.container
           .read(appSettingsProvider.notifier)
           .setAutoCompact(false);
       app.backend.usageHolder[id] = 999999;
@@ -2083,9 +2093,8 @@ group("a banner answer through the controller", () {
       await controller.send("two");
       await waitIdle(id);
       expect(app.backend.compactionCalls, hasLength(1));
-      // The flag: a second turn at the same usage compacts again only once
-      // a settled turn below the threshold has reset it — so two over the
-      // threshold in a row run one.
+      // The log is the guard: the marker covers the last message, so a second
+      // turn at the same usage runs none.
       await controller.send("three");
       await waitIdle(id);
       expect(app.backend.compactionCalls, hasLength(1));

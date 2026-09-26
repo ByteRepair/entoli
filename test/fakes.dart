@@ -561,10 +561,9 @@ class FakeBackend implements AgentBackend {
   }
 
   /// What `compact` answers. Null is a summarizer that said nothing; set a
-  /// record for a scripted summary, whose `upToMessageId` is normally the
-  /// history's last message.
+  /// record for a scripted summary, whose `upToMessageId` is the history's
+  /// last message.
   String? scriptedSummary;
-  String? scriptedBoundary;
 
   final List<({String? instructions, int historyLength})> compactionCalls = [];
 
@@ -577,10 +576,7 @@ class FakeBackend implements AgentBackend {
     compactionCalls
         .add((instructions: instructions, historyLength: history.length));
     if (scriptedSummary == null) return null;
-    return (
-      upToMessageId: scriptedBoundary ?? history.lastOrNull?.id ?? "",
-      summary: scriptedSummary!
-    );
+    return (upToMessageId: history.lastOrNull?.id ?? "", summary: scriptedSummary!);
   }
 
   @override

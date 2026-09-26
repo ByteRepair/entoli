@@ -113,11 +113,7 @@ class _ComposerState extends ConsumerState<Composer> {
     // business re-running because Send went live.
     _canSend.value = _worthSending;
     final shell = shellBypassCommand(widget.controller.text) != null;
-    final wired = wiredSkillFromText(
-            widget.controller.text,
-            ref.read(promptLibraryProvider(
-                widget.project))) !=
-        null;
+    final wired = wiredSkillFromText(widget.controller.text) != null;
     if (shell == _shell && wired == _wired) return;
     setState(() {
       _shell = shell;
