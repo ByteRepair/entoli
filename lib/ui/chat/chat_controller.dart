@@ -9,6 +9,10 @@ import "../../domain/agent_backend.dart";
 import "../../domain/ask.dart";
 import "../../domain/chat_log.dart";
 import "../../domain/chat_repository.dart";
+<<<<<<< HEAD
+=======
+import "../../domain/app_settings.dart";
+>>>>>>> 787a28f (Compact cleanup: one name-only dispatch, one apply tail, one window resolver)
 import "../../domain/reminder_alarms.dart";
 import "../../domain/turn_recorder.dart";
 import "../../domain/models.dart";
@@ -18,6 +22,7 @@ import "../../domain/project_settings.dart" show OmadaOrdering;
 import "../../domain/shell.dart" show shellBypassCommand;
 import "../../domain/wired_skill.dart";
 import "../../data/builtin/templates.dart" show passWord;
+import "../../data/builtin/compact_prompt.dart" show contextWindowOf;
 import "../../providers.dart";
 
 /// Per-chat state container exposed to the UI.
@@ -424,7 +429,12 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
   /// and ends the turn the way any event stream would have. Shaped like the
   /// loop's end so `isRunning`, Stop and the settle rules hold over it.
   Future<void> _runCompactTurn(
+<<<<<<< HEAD
       _RunningTurn turn, String arguments) async {
+=======
+      _RunningTurn turn, Message prompt, String arguments) async {
+    turn.retryable = false;
+>>>>>>> 787a28f (Compact cleanup: one name-only dispatch, one apply tail, one window resolver)
     // The wait says what it is: a summarizer over a long conversation is a
     // read of minutes, and a spinner that cannot be told apart from a hang is
     // the row that says nothing.
@@ -441,6 +451,7 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
     }
   }
 
+<<<<<<< HEAD
   /// The tail every compaction shares: ask the summarizer, then land the
   /// marker through the repository — whose `_rethread` walk is the one copy
   /// of append/reload/rebuild, reached through this controller's own
@@ -456,6 +467,17 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
   /// unconditionally.
   Future<void> _applyCompaction(
       {required String? instructions, bool recheck = false}) async {
+=======
+  /// The tail every compaction shares: append the marker, reload the chat,
+  /// rebuild the session over what the marker now says. The one copy of the
+  /// walk — `ChatRepository._rethread` is the same shape one level down — so
+  /// a second version of it is a second version to disagree.
+  ///
+  /// Returns whether a marker landed; null came out of the summarizer, and
+  /// the caller carries on (a log line said why, there being no turn to fail
+  /// where there is no turn at all).
+  Future<bool> _applyCompaction({required String? instructions}) async {
+>>>>>>> 787a28f (Compact cleanup: one name-only dispatch, one apply tail, one window resolver)
     final chat = state.chat;
     final result = chat == null
         ? null
@@ -463,6 +485,7 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
             history: chat.messages,
             compactions: chat.compactions,
             instructions: instructions);
+<<<<<<< HEAD
     if (!ref.mounted || result == null || (recheck && state.isRunning)) return;
     // The wrapper's own guard is the reentrancy flag, and it sets the chat on
     // the way through — so nothing to hand back here.
@@ -470,6 +493,20 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
       return repo.appendCompaction(chatId,
           upToMessageId: result.upToMessageId, summary: result.summary);
     });
+=======
+    if (!ref.mounted || result == null) return false;
+    final repo = ref.read(chatRepositoryProvider);
+    await repo.append(chatId, [
+      ChatRecord.compaction(
+          upToMessageId: result.upToMessageId, summary: result.summary)
+    ]);
+    final fresh = await repo.openChat(chatId);
+    if (!ref.mounted) return false;
+    state = state.copyWith(chat: fresh);
+    await repo.resetSession(chatId,
+        history: fresh.messages, compactions: fresh.compactions);
+    return true;
+>>>>>>> 787a28f (Compact cleanup: one name-only dispatch, one apply tail, one window resolver)
   }
 
   /// Open the turn [userMsg] starts, whether it is being composed now or was
@@ -586,7 +623,11 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
     if (wired != null) {
       switch (wired.skill) {
         case WiredSkill.compact:
+<<<<<<< HEAD
           unawaited(_runCompactTurn(turn, wired.arguments));
+=======
+          unawaited(_runCompactTurn(turn, prompt, wired.arguments));
+>>>>>>> 787a28f (Compact cleanup: one name-only dispatch, one apply tail, one window resolver)
       }
       return;
     }
@@ -1030,9 +1071,18 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
     // hand: one app number, live, so an edit between turns is seen at once.
     final used = ref.read(agentBackendProvider).usageFor(chatId);
     if (used == null) return;
+<<<<<<< HEAD
     if (used < settings.autoCompactPercent * settings.totalContext ~/ 100) {
       return;
     }
+=======
+    // Below the threshold is the common case, answered before any I/O: the
+    // meta read only happens on chats whose provider reported a usage at
+    // all.
+    final budget = await _contextWindow(settings);
+    if (budget == null) return;
+    if (used < settings.autoCompactPercent * budget ~/ 100) return;
+>>>>>>> 787a28f (Compact cleanup: one name-only dispatch, one apply tail, one window resolver)
     // Not twice without a turn below the threshold between: the log is the
     // record — a marker covering the last thing said is the same fact, which
     // a reload reads the same way and a failed attempt leaves unset (it wrote
@@ -1043,12 +1093,33 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
       return;
     }
     try {
+<<<<<<< HEAD
       await _applyCompaction(instructions: null, recheck: true);
+=======
+      await _applyCompaction(instructions: null);
+>>>>>>> 787a28f (Compact cleanup: one name-only dispatch, one apply tail, one window resolver)
     } catch (e) {
       logFailure("compact", "auto-compact failed", e);
     }
   }
 
+<<<<<<< HEAD
+=======
+  /// The window the threshold reads against. The chat's meta names the pair
+  /// the turn ran under, the provider's configured window answers for it, and
+  /// [contextWindowOf] is the one resolver both this check and the
+  /// summarizer's own budget ask, so the two cannot disagree about the
+  /// answer. Null where no provider is configured at all — nothing is
+  /// reaching a model, so nothing is filling a window.
+  Future<int?> _contextWindow(AppSettings settings) async {
+    final meta = await ref.read(chatRepositoryProvider).loadMeta(chatId);
+    final providerId = meta.provider ?? settings.defaultProviderId;
+    if (providerId == null) return null;
+    return contextWindowOf(settings.llmProviders
+        .firstWhereOrNull((p) => p.id == providerId));
+  }
+
+>>>>>>> 787a28f (Compact cleanup: one name-only dispatch, one apply tail, one window resolver)
   /// A turn has ended: the room may hand off. The schedule may still hold
   /// what the settle will not run now — an item the cap stops, or a member's
   /// second item behind one still running — and this turn's reply hands off
