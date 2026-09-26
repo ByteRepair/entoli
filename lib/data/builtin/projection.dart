@@ -41,19 +41,46 @@ import "templates.dart";
 /// [load] answers with a resource's bytes. Asynchronous for that alone, which
 /// is what it costs to hand a model the image it was sent rather than the name
 /// of it.
+///
+/// [compactions] are the markers on the thread [messages] walks — the last one
+/// is what the model reads instead of everything before its boundary, the
+/// earlier ones being shadows an earlier compaction left. A marker whose
+/// boundary is not among [messages] is ignored, which is what makes a fragment
+/// (a `history` that stops short of it) project the span it was handed whole.
+/// The boundary message itself is summarized too, so the first message after a
+/// marker is the first thing the model reads verbatim — and `first` applies
+/// to the message the summary stands in for, so the task dress lands on the
+/// turn that opened the work.
 Future<List<LlmMessage>> projectionOf(
   List<Message> messages, {
   bool first = true,
   required ResourceLoader load,
   String? viewer,
+  List<ConversationCompaction> compactions = const [],
 }) async {
   // Every resource at once rather than a message at a time: on the web each
   // read is its own IndexedDB transaction, and a long conversation's would
   // otherwise be one round trip after another.
   final files = await Future.wait(messages.map((m) =>
       m.role == MessageRole.user ? _attachments(m, load) : _noFiles));
+  // The newest marker whose boundary the projection was handed, and where it
+  // sits. Anything before it is summarized; anything after it is verbatim.
+  // LastIndexWhere rather than indexWhere: an earlier marker is a shadow the
+  // newest one replaced, and the log can hold any number of those.
+  final boundary = compactions.lastIndexWhere(
+      (c) => messages.any((m) => m.id == c.upToMessageId));
+  final marker = boundary < 0 ? null : compactions[boundary];
+  final from = marker == null
+      ? 0
+      : messages.indexWhere((m) => m.id == marker.upToMessageId) + 1;
   final projected = <LlmMessage>[];
+  if (marker != null) {
+    projected.add(LlmMessage(role: LlmRole.user, text: summarizedTurnText(marker.summary)));
+  }
   for (final (index, message) in messages.indexed) {
+    // Before the marker: summarized, and the attachments with it — the bytes
+    // are the expensive half of what the summary replaces.
+    if (index < from) continue;
     switch (message.role) {
       case MessageRole.user:
         final text = _userText(message);
@@ -61,7 +88,8 @@ Future<List<LlmMessage>> projectionOf(
           projected.add(LlmMessage(
             role: LlmRole.user,
             text: userTurnText(text,
-                at: message.createdAt, first: first && projected.isEmpty),
+                at: message.createdAt,
+                first: first && index == from && message.role == MessageRole.user),
             attachments: files[index],
           ));
         }

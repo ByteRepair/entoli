@@ -16,9 +16,13 @@ import "package:agent_chat/domain/permission.dart";
 import "package:agent_chat/domain/project_settings.dart"
     show OmadaOrdering, ProjectSettings;
 import "package:agent_chat/providers.dart"
-    show projectSettingsProvider, promptLibraryProvider;
+    show
+        appSettingsProvider,
+        projectSettingsProvider,
+        promptLibraryProvider;
 import "package:agent_chat/ui/chat/chat_controller.dart";
-import "package:agent_chat/ui/chat/chat_page.dart" show entriesOf, SectionEntry;
+import "package:agent_chat/ui/chat/chat_page.dart"
+    show CompactionEntry, entriesOf, MessageEntry, SectionEntry;
 
 import "../fakes.dart";
 import "../harness.dart";
@@ -1938,6 +1942,172 @@ group("a banner answer through the controller", () {
       // Order is the evaluation order: chat first.
       expect(resolved.indexOf("chat rule *"),
           lessThan(resolved.indexOf("project rule *")));
+    });
+  });
+
+  group("compact", () {
+    /// A chat with the bundled-shaped wired skill in its library, so `/compact`
+    /// resolves. The test library has none, so the write-and-reload is what a
+    /// real app's bundled preset is.
+    Future<(String, ChatController)> chatWithCompactSkill() async {
+      await writeSkill(app, "compact",
+          metadata: {"invocation": "callback"});
+      await app.container.read(promptLibraryProvider(null).notifier).reload();
+      final chat = await app.repo.createChat();
+      final controller =
+          app.container.read(chatControllerProvider(chat.state.id).notifier);
+      await controller.send("hello");
+      await waitIdle(chat.state.id);
+      return (chat.state.id, controller);
+    }
+
+    test("dispatches to the callback, not to a model", () async {
+      final (id, controller) = await chatWithCompactSkill();
+      app.backend.scriptedSummary = "The user said hello.";
+      await controller.send("/compact keep the greeting");
+      await waitIdle(id);
+
+      // The prompt never reached the backend's turn stream: no model was
+      // asked, and the compact callback was asked instead, with the argument.
+      // The one prompt in the table is the "hello" the chat was set up with.
+      expect(app.backend.prompts, hasLength(1));
+      expect(app.backend.prompts.single.prompt.plainText, "hello");
+      expect(app.backend.compactionCalls.single.instructions,
+          "keep the greeting");
+      // The marker is on the log and the chat the page reads.
+      final chat = await app.repo.openChat(id);
+      expect(chat.compactions.single.summary, "The user said hello.");
+      expect(chat.compactions.single.upToMessageId,
+          messagesOf(id).last.id);
+    });
+
+    test("rebuilds the session with the marker applied", () async {
+      final (id, controller) = await chatWithCompactSkill();
+      app.backend.scriptedSummary = "The user said hello.";
+      await controller.send("/compact");
+      await waitIdle(id);
+
+      // The reset the marker lands with carries the conversation the marker
+      // says — the same list a reload would build.
+      expect(app.backend.resets, hasLength(1));
+    });
+
+    test("a failed summarizer leaves the conversation untouched", () async {
+      final (id, controller) = await chatWithCompactSkill();
+      // scriptedSummary null: nothing answered.
+      await controller.send("/compact");
+      await waitIdle(id);
+
+      expect(app.backend.compactionCalls, hasLength(1));
+      expect(await app.repo.openChat(id), chatOf(id));
+    });
+
+    test("is refused while a turn runs, and never queued", () async {
+      final (id, controller) = await chatWithCompactSkill();
+      app.backend.scriptedSummary = "The user said hello.";
+      app.backend.hold = Completer<void>();
+      await controller.send("hold the room");
+      await waitFor(
+          () => app.container.read(chatControllerProvider(id)).isRunning,
+          what: "the turn");
+      await controller.send("/compact");
+
+      expect(app.backend.compactionCalls, isEmpty);
+      // Not queued either: nothing arrives once the room settles.
+      app.backend.hold!.complete();
+      await waitIdle(id);
+      expect(app.backend.compactionCalls, isEmpty);
+    });
+
+    test("names nothing, and is never offered to be carried on", () async {
+      final (id, controller) = await chatWithCompactSkill();
+      app.backend.scriptedSummary = "The user said hello.";
+      await controller.send("/compact");
+      await waitIdle(id);
+
+      // A callback turn is not a thing said: the title namer is not asked.
+      expect(app.backend.questions, isEmpty);
+      // And the turn closed done, so there is no ResumeBar to answer.
+      final chat = await app.repo.openChat(id);
+      expect(chat.unfinished, isFalse);
+    });
+
+    test("an unknown wired name degrades to an ordinary message", () async {
+      await writeSkill(app, "notbuilt",
+          metadata: {"invocation": "callback"});
+      await app.container.read(promptLibraryProvider(null).notifier).reload();
+      final (id, _) = await chatWithOneTurn("/notbuilt do things");
+
+      // No callback under that name: the text went to the model as it was.
+      expect(app.backend.prompts.single.prompt.plainText,
+          "/notbuilt do things");
+      expect(app.backend.compactionCalls, isEmpty);
+      expect(messagesOf(id).last.parts.whereType<ToolResultPart>(), isEmpty);
+    });
+
+    test("a turn that pushed the context past the share compacts on its own",
+        () async {
+      final (id, controller) = await chatWithCompactSkill();
+      // Well under any share of the default window.
+      app.backend.usageHolder[id] = 60000;
+      await controller.send("grow a little");
+      await waitIdle(id);
+      expect(app.backend.compactionCalls, isEmpty);
+
+      // Past it now: the next settled turn compacts, with no instructions.
+      await app.container
+          .read(appSettingsProvider.notifier)
+          .setAutoCompactPercent(60);
+      app.backend.usageHolder[id] = 120000;
+      app.backend.scriptedSummary = "Everything so far.";
+      await controller.send("grow a lot");
+      await waitIdle(id);
+      expect(app.backend.compactionCalls, hasLength(1));
+      final chat = await app.repo.openChat(id);
+      expect(chat.compactions.single.summary, "Everything so far.");
+    });
+
+    test("does not run twice without a turn between, or when off", () async {
+      final (id, controller) = await chatWithCompactSkill();
+      // Off: nothing compacts however deep the context.
+      app.container
+          .read(appSettingsProvider.notifier)
+          .setAutoCompact(false);
+      app.backend.usageHolder[id] = 999999;
+      app.backend.scriptedSummary = "Everything so far.";
+      await controller.send("one");
+      await waitIdle(id);
+      expect(app.backend.compactionCalls, isEmpty);
+
+      await app.container.read(appSettingsProvider.notifier).setAutoCompact(true);
+      await controller.send("two");
+      await waitIdle(id);
+      expect(app.backend.compactionCalls, hasLength(1));
+      // The flag: a second turn at the same usage compacts again only once
+      // a settled turn below the threshold has reset it — so two over the
+      // threshold in a row run one.
+      await controller.send("three");
+      await waitIdle(id);
+      expect(app.backend.compactionCalls, hasLength(1));
+    });
+
+    test("the marker is a divider in the conversation, after its boundary",
+        () async {
+      final (id, controller) = await chatWithCompactSkill();
+      app.backend.scriptedSummary = "The user said hello.";
+      await controller.send("/compact");
+      await waitIdle(id);
+
+      final entries = entriesOf(await app.repo.openChat(id));
+      final dividers =
+          entries.whereType<CompactionEntry>().map((c) => c.summary).toList();
+      expect(dividers, ["The user said hello."]);
+      // After the boundary message, not before it: the line says where the
+      // summary took over, and the message it covers is above it.
+      final lastMessageIndex =
+          entries.lastIndexWhere((e) => e is MessageEntry);
+      expect(entries.indexWhere((e) => e is CompactionEntry),
+          greaterThan(lastMessageIndex));
     });
   });
 

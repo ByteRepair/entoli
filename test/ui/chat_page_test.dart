@@ -13,9 +13,9 @@ import "package:agent_chat/domain/permission.dart";
 import "package:agent_chat/domain/project.dart";
 import "package:agent_chat/domain/prompt_library.dart";
 import "package:agent_chat/providers.dart";
+import "package:agent_chat/ui/chat/widgets/omada_separator.dart";
 import "package:agent_chat/ui/chat/chat_controller.dart";
 import "package:agent_chat/ui/chat/chat_page.dart";
-import "package:agent_chat/ui/chat/widgets/omada_separator.dart";
 import "package:agent_chat/ui/chat/widgets/composer.dart";
 import "package:agent_chat/ui/chat/widgets/message_bubble.dart";
 import "package:agent_chat/ui/chat/widgets/needs_setup_bar.dart";
@@ -838,7 +838,7 @@ void main() {
       expect(find.text("Omada is turned on"), findsOneWidget);
       expect(find.text("Omada is turned off"), findsOneWidget);
       // Two separators between three messages-and-replies.
-      expect(find.byType(OmadaSeparator), findsNWidgets(2));
+      expect(find.byType(ConversationSeparator), findsNWidgets(2));
     });
 
     testWidgets("a user message under a separator keeps its alignment",

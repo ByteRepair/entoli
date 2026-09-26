@@ -4,6 +4,7 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../../domain/models.dart";
 import "../../../domain/shell.dart";
+import "../../../domain/wired_skill.dart";
 import "../../../providers.dart";
 import "../../fonts.dart";
 import "../../widgets/attachment_chip.dart";
@@ -73,6 +74,12 @@ class _ComposerState extends ConsumerState<Composer> {
   /// and nothing else in the composer would say so before Send is pressed.
   bool _shell = false;
 
+  /// This message runs a callback rather than asking for anything said: a
+  /// `/skill` flagged `invocation: callback` is one, and the composer says so
+  /// the same way it says so for a command — from the keystroke that decides
+  /// it, not from the turn that follows.
+  bool _wired = false;
+
   /// Whether Send would do anything. Kept here so only the button redraws when
   /// the answer flips, which is about twice a message.
   final ValueNotifier<bool> _canSend = ValueNotifier(false);
@@ -106,8 +113,16 @@ class _ComposerState extends ConsumerState<Composer> {
     // business re-running because Send went live.
     _canSend.value = _worthSending;
     final shell = shellBypassCommand(widget.controller.text) != null;
-    if (shell == _shell) return;
-    setState(() => _shell = shell);
+    final wired = wiredSkillFromText(
+            widget.controller.text,
+            ref.read(promptLibraryProvider(
+                widget.project))) !=
+        null;
+    if (shell == _shell && wired == _wired) return;
+    setState(() {
+      _shell = shell;
+      _wired = wired;
+    });
   }
 
   Future<void> _attach(AttachmentKind kind) async {
@@ -152,7 +167,11 @@ class _ComposerState extends ConsumerState<Composer> {
           // The command in the face a command is read in, so what is about to
           // run looks like what it is while it is still being typed.
           style: _shell ? codeBlockStyle(theme) : null,
-          decoration: _shell ? _shellField(theme) : _messageField,
+          decoration: _shell
+              ? _shellField(theme)
+              : _wired
+                  ? _wiredField(theme)
+                  : _messageField,
           shortcuts: const {
             SingleActivator(LogicalKeyboardKey.enter, control: true): _SendIntent(),
             SingleActivator(LogicalKeyboardKey.enter, meta: true): _SendIntent(),
@@ -234,12 +253,20 @@ class _ComposerState extends ConsumerState<Composer> {
                             icon: const Icon(Icons.stop),
                             tooltip: "Stop",
                           )
-                        : IconButton.filled(
-                            onPressed: canSend ? _submit : null,
-                            icon:
-                                Icon(_shell ? Icons.play_arrow : Icons.send),
-                            tooltip: _shell ? "Run" : "Send",
-                          ),
+                         : IconButton.filled(
+                             onPressed: canSend ? _submit : null,
+                             icon: Icon(
+                                 _shell
+                                     ? Icons.play_arrow
+                                     : _wired
+                                         ? Icons.auto_awesome
+                                         : Icons.send),
+                             tooltip: _shell
+                                 ? "Run"
+                                 : _wired
+                                     ? "Compact"
+                                     : "Send",
+                           ),
                   ),
                 ],
               ),
@@ -273,6 +300,15 @@ class _ComposerState extends ConsumerState<Composer> {
       focusedBorder: outline(2),
     );
   }
+
+  /// The field dressed for a callback: a hint and an icon, nothing more. A
+  /// callback is not sent to a model and runs nothing on the machine — the
+  /// command's dressing would say more than is true.
+  InputDecoration _wiredField(ThemeData theme) => _messageField.copyWith(
+        hintText: "Compact the conversation",
+        prefixIcon: Icon(Icons.auto_awesome,
+            size: 18, color: theme.colorScheme.primary),
+      );
 
   /// Where a `!` command is about to run: the shell's own directory, live,
   /// since a `cd` in an earlier one moved it. The completion menu's dressing,

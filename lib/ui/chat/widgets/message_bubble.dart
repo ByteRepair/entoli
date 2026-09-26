@@ -8,6 +8,7 @@ import "../../../domain/ask.dart";
 import "../../../domain/formatted_text.dart";
 import "../../../domain/models.dart";
 import "../../../domain/shell.dart";
+import "../../../domain/wired_skill.dart";
 import "../../widgets/action_icon.dart";
 import "../../widgets/attachment_chip.dart";
 import "../../widgets/dialogs.dart";
@@ -206,6 +207,13 @@ class _MessageBubbleState extends State<MessageBubble> {
       ? shellBypassCommand(widget.message.plainText)
       : null;
 
+  /// Whether this prompt runs a callback rather than asking for anything said
+  /// — a `/skill` flagged `invocation: callback`. A command bubble is a
+  /// command; a callback bubble is a request the app carried out, so it reads
+  /// as one of the things the user said, just not something a model answered.
+  late final bool _wired = widget.message.role == MessageRole.user &&
+      wiredSkillFromText(widget.message.plainText, null) != null;
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -221,7 +229,7 @@ class _MessageBubbleState extends State<MessageBubble> {
       // the colour the things they said are in.
       MessageRole.user => (
           "You",
-          _command == null
+          _command == null && !_wired
               ? theme.colorScheme.primaryContainer
               : theme.colorScheme.surfaceContainerHighest
         ),

@@ -494,4 +494,74 @@ void main() {
     expect((back as MessageRecord).omadaOn, isTrue);
     expect(replay(records).map((m) => m.omadaOn), [null, true]);
   });
+
+  test("a compaction record rides the round trip and lands on the thread", () {
+    final records = [
+      message("m1"),
+      part("m1", 0, "hello"),
+      message("m2", MessageRole.assistant),
+      part("m2", 0, "hi"),
+      const ChatRecord.compaction(
+          upToMessageId: "m2", summary: "The user said hello."),
+      message("m3"),
+      part("m3", 0, "more"),
+    ];
+    final round = records
+        .map((r) => ChatRecord.fromJson(
+            jsonDecode(jsonEncode(r.toJson())) as Map<String, dynamic>))
+        .toList();
+    expect(round.lastWhere((r) => r is CompactionRecord), records[4]);
+
+    final chat = chatFrom(state(), records);
+    expect(chat.compactions, hasLength(1));
+    expect(chat.compactions.single.upToMessageId, "m2");
+    expect(chat.compactions.single.summary, "The user said hello.");
+  });
+
+  test("a rewind past a compaction boundary un-applies it", () {
+    final records = [
+      message("m1"),
+      message("m2", MessageRole.assistant),
+      const ChatRecord.compaction(upToMessageId: "m2", summary: "so far"),
+      message("m3"),
+      ChatRecord.rewind(messageId: "m2"),
+    ];
+
+    // The boundary message is gone, so the marker has nothing to cover and
+    // the projection of what is left is the whole conversation again.
+    expect(chatFrom(state(), records).compactions, isEmpty);
+    expect(replay(records), hasLength(1));
+  });
+
+  test("an earlier compaction stays as a shadow beside a newer one", () {
+    final records = [
+      message("m1"),
+      message("m2", MessageRole.assistant),
+      const ChatRecord.compaction(upToMessageId: "m2", summary: "first"),
+      message("m3"),
+      message("m4", MessageRole.assistant),
+      const ChatRecord.compaction(upToMessageId: "m4", summary: "second"),
+      message("m5"),
+    ];
+
+    final chat = chatFrom(state(), records);
+    expect(chat.compactions.map((c) => c.summary), ["first", "second"]);
+  });
+
+  test("a compaction boundary off the thread being read is not counted", () {
+    final records = [
+      message("m1"),
+      message("m2", MessageRole.assistant),
+      branch("m3", of: "m2", role: MessageRole.assistant),
+      part("m3", 0, "other thread"),
+      const ChatRecord.compaction(upToMessageId: "m2", summary: "so far"),
+    ];
+
+    // The thread the log leaves being read runs through m3, the newest — so
+    // m2 is a message beside the path, and the marker covering it is not one
+    // the thread's projection applies. The user reading m3's thread gets a
+    // whole conversation; stepping back to m2's puts the divider back.
+    final chat = chatFrom(state(), records);
+    expect(chat.compactions, isEmpty);
+  });
 }

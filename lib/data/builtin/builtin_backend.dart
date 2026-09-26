@@ -22,6 +22,7 @@ import "../../domain/web_search.dart";
 import "../local/file_sub_agent_log.dart";
 import "../prompts/skill_package.dart";
 import "builtin_agent.dart";
+import "compact_prompt.dart";
 import "memory/instructions.dart";
 import "memory/store.dart";
 import "llm/gated_client.dart";
@@ -99,6 +100,13 @@ class BuiltinBackend implements AgentBackend {
   ValueListenable<Set<String>> get runningTurns => _running;
 
   final Map<String, BuiltinSession> _sessions = {};
+
+  /// The newest usage each chat's model reported — the fact the auto-compact
+  /// threshold reads, and what a backend that forgets on dispose must not
+  /// keep. Not a session: it is the newest request's fact, not the
+  /// conversation's, and the controller reads it the way the controller reads
+  /// everything else of the backend — through the callback that reported it.
+  final Map<String, LlmUsage> _usage = {};
   final _RunningTurns _running = _RunningTurns();
   final Map<String, StreamController<AgentEvent>> _controllers = {};
   final Map<String, List<ToolApproval>> _approvals = {};
@@ -131,17 +139,21 @@ class BuiltinBackend implements AgentBackend {
     String chatId,
     Message prompt, {
     List<Message> history = const [],
+    List<ConversationCompaction> compactions = const [],
     TurnSettings settings = const TurnSettings(),
   }) =>
-      _start(chatId, prompt, history: history, settings: settings);
+      _start(chatId, prompt,
+          history: history, compactions: compactions, settings: settings);
 
   @override
   Stream<AgentEvent> resumeTurn(
     String chatId, {
     List<Message> history = const [],
+    List<ConversationCompaction> compactions = const [],
     TurnSettings settings = const TurnSettings(),
   }) =>
-      _start(chatId, null, history: history, settings: settings);
+      _start(chatId, null,
+          history: history, compactions: compactions, settings: settings);
 
   /// The stream is returned rather than yielded, so the caller is listening
   /// before the turn starts: closing a controller nobody listens to never
@@ -150,12 +162,13 @@ class BuiltinBackend implements AgentBackend {
     String chatId,
     Message? prompt, {
     List<Message> history = const [],
+    List<ConversationCompaction> compactions = const [],
     required TurnSettings settings,
   }) {
     final controller = StreamController<AgentEvent>();
     _controllers[chatId] = controller;
     unawaited(_runTurn(chatId, prompt, controller,
-        history: history, settings: settings));
+        history: history, compactions: compactions, settings: settings));
     return controller.stream;
   }
 
@@ -168,6 +181,7 @@ class BuiltinBackend implements AgentBackend {
     Message? prompt,
     StreamController<AgentEvent> controller, {
     List<Message> history = const [],
+    List<ConversationCompaction> compactions = const [],
     required TurnSettings settings,
   }) async {
     final project = settings.project;
@@ -316,8 +330,10 @@ class BuiltinBackend implements AgentBackend {
       if (prompt == null) {
         history = await _reviveSubAgents(history, subAgentRunner, subAgentLog, controller);
       }
-      final session =
-          await _sessionOf(chatId, history, rebuild: prompt == null, viewer: settings.omadaMember);
+      final session = await _sessionOf(chatId, history,
+          rebuild: prompt == null,
+          viewer: settings.omadaMember,
+          compactions: compactions);
       final agent = BuiltinAgent(
         session: session,
         loadResource: _resourcesOf(chatId),
@@ -386,6 +402,7 @@ class BuiltinBackend implements AgentBackend {
         },
         onShellOutput: (callId, text) =>
             controller.add(ShellOutputEvent(callId: callId, text: text)),
+        onUsage: (usage) => _usage[chatId] = usage,
       );
       // The real kill replaces the placeholder.
       _running.replace(stopKey, agent.cancel);
@@ -551,13 +568,22 @@ class BuiltinBackend implements AgentBackend {
   /// time they are called. The main agent's session keeps the warm path it
   /// has always had; there is one main agent per chat, so nothing can have
   /// written into its view since.
+  ///
+  /// [compactions] ride with [history] the way it rides with the prompt: the
+  /// projection reads only the markers whose boundary the history holds, so a
+  /// fragment projects the span it names and the summary lands where the log
+  /// put it.
   Future<BuiltinSession> _sessionOf(String chatId, List<Message> history,
-      {bool rebuild = false, String? viewer}) async {
+      {bool rebuild = false,
+      String? viewer,
+      List<ConversationCompaction> compactions = const []}) async {
     final key = viewer == null ? chatId : "$chatId\u0000$viewer";
     final session = _sessions.putIfAbsent(key, BuiltinSession.new);
     if (rebuild || viewer != null || session.isFresh) {
       session.replaceWith(await projectionOf(history,
-          load: _resourcesOf(chatId), viewer: viewer));
+          load: _resourcesOf(chatId),
+          viewer: viewer,
+          compactions: compactions));
     }
     return session;
   }
@@ -662,6 +688,84 @@ class BuiltinBackend implements AgentBackend {
     } catch (_) {
       return null;
     }
+  }
+
+  /// The summarizer: the conversation as any turn would read it, one ask, one
+  /// reply. Unlike [ask] this runs on the chat's own model — the summary is
+  /// only as good as the context it had, and the light default was not the one
+  /// that saw the work. The window is minutes rather than [ask]'s sixty
+  /// seconds: a long conversation is a long read.
+  ///
+  /// [summaryFrom] cuts the tags, so what this hands back is the text the
+  /// marker carries. Null with a log line, like every background failure —
+  /// there is no turn to report it on.
+  @override
+  Future<({String upToMessageId, String summary})?> compact(
+    String chatId, {
+    required List<Message> history,
+    required List<ConversationCompaction> compactions,
+    required TurnSettings settings,
+    required String? instructions,
+  }) async {
+    if (_running.any(chatId)) return null;
+    final target = _resolveModel(settings.model, settings.provider);
+    if (target == null) return null;
+    if (history.isEmpty) return null;
+    final conversation = await projectionOf(history,
+        load: _resourcesOf(chatId), compactions: compactions);
+    if (conversation.isEmpty) return null;
+    // The ask has to fit the window with room for the summary it produces;
+    // a budget that would fill the whole window is how the last attempt got
+    // here in the first place.
+    final window = settings.provider == null
+        ? null
+        : contextWindowOf(
+            registry.endpointFor(settings.provider!)?.config, settings.model);
+    final budget = window == null ? null : window ~/ 2;
+    // The retry ladder: a span too big to summarize is not a failure to give
+    // up on but a span to summarize less of. Each attempt drops the oldest
+    // half of what it was asked to read, so a conversation that will not fit
+    // whole still leaves a summary of its newest half — and a marker that
+    // covers only what was read.
+    var span = history;
+    for (var attempt = 0; attempt < 3; attempt++) {
+      final projected = attempt == 0
+          ? conversation
+          : await projectionOf(span,
+              load: _resourcesOf(chatId), compactions: compactions);
+      if (attempt > 0 && projected.isEmpty) return null;
+      final cut = CompactPrompt.build(
+        conversation: projected,
+        instructions: instructions,
+        priorSummary: priorSummaryOf(compactions),
+      );
+      final cost = estimateTokens(cut);
+      // Where the ask itself would not fit, dropping the oldest half is the
+      // only answer; where it would, the span stands.
+      if (budget != null && cost > budget) {
+        span = span.sublist((span.length / 2).ceil());
+        continue;
+      }
+      try {
+        final chunks = await target.client
+            .stream(cut, model: target.modelId)
+            .timeout(const Duration(minutes: 3))
+            .toList();
+        final reply = chunks.whereType<LlmCompletion>().lastOrNull?.message.text;
+        final summary = reply == null ? null : CompactPrompt.summaryFrom(reply);
+        if (summary != null) {
+          return (upToMessageId: span.last.id, summary: summary);
+        }
+        logFailure("compact", "empty summary for $chatId");
+      } catch (e) {
+        logFailure("compact", "summarizer failed for $chatId", e);
+      }
+      // A reply that said nothing, or an error: halve and try once more, the
+      // same ladder the too-big ask takes.
+      span = span.sublist((span.length / 2).ceil());
+      if (span.isEmpty) return null;
+    }
+    return null;
   }
 
   /// What a turn that ended cleanly leaves behind: a background model reads
@@ -1006,11 +1110,14 @@ class BuiltinBackend implements AgentBackend {
   }
 
   @override
-  Future<void> resetSession(String chatId, {List<Message> history = const []}) async {
+  Future<void> resetSession(String chatId,
+      {List<Message> history = const [],
+      List<ConversationCompaction> compactions = const []}) async {
     await _running.stopAll(chatId);
     _sessions
         .putIfAbsent(chatId, BuiltinSession.new)
-        .replaceWith(await projectionOf(history, load: _resourcesOf(chatId)));
+        .replaceWith(await projectionOf(history,
+            load: _resourcesOf(chatId), compactions: compactions));
   }
 
   @override
@@ -1020,10 +1127,14 @@ class BuiltinBackend implements AgentBackend {
     shell.closeSession(config.workspaceDir(chatId, project: project));
     await abort(chatId);
     _sessions.remove(chatId);
+    _usage.remove(chatId);
     // Member sessions are keyed chat-prefixed, and a chat is gone with its
     // members' projections of it.
     _sessions.removeWhere((key, _) => key.startsWith("$chatId\u0000"));
   }
+
+  @override
+  int? usageFor(String chatId) => _usage[chatId]?.contextTokens;
 
   @override
   void closeChatShell(String chatId, {required String? project}) =>
@@ -1085,6 +1196,11 @@ class _RunningTurns extends ValueNotifier<Set<String>> {
   /// The chats with a turn in flight — what [runningTurns] publishes.
   Set<String> get chats =>
       {for (final key in _stops.keys) key.substring(0, key.indexOf("\u0000"))};
+
+  /// Whether [chatId] holds a turn in flight — the guard a background call
+  /// checks before it runs, since the session it would summarize is being
+  /// rewritten underneath it while one does.
+  bool any(String chatId) => chats.contains(chatId);
 
   /// Kills every stop [chatId] holds, in the order they were registered.
   Future<void> stopAll(String chatId) async {

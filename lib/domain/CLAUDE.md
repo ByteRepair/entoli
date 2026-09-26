@@ -10,7 +10,7 @@ written, so the only thing a kill can now cost is whatever had not been appended
 yet. That is what makes an interrupted turn something to offer to continue
 rather than something to apologise for.
 
-Six records. `message` opens one — before it holds anything, which is what the
+Seven records. `message` opens one — before it holds anything, which is what the
 empty assistant message at the head of a turn is — and its `siblingOf` names
 what it is an alternative to, or nothing at all, which puts it on the end of the
 thread being read; `replacesSibling` takes that one away rather than joining it,
@@ -19,7 +19,9 @@ when it was written — see "Commands and agents". `part` is one part of it, at 
 index. `append` is more text
 on the end of the part at an index. `turnEnd` closes the turn and says why:
 `done`, `aborted`, or `error`. `select` says which of a message's alternatives
-to read. `rewind` forgets a message and everything below it.
+to read. `rewind` forgets a message and everything below it. `compaction` says
+the conversation up to a message is summarized for the model, and still there
+for the user to read — see "Compaction" below.
 
 Nothing is mutable, so a part that changed is **superseded**: the same index
 written again wins, and `replay` applies records in order, so the last one
@@ -373,6 +375,65 @@ would take an image away from a model halfway through being asked about it. What
 it does mean is that an image-heavy chat is re-encoded on every step of every
 turn, and that compaction is what bounds it, exactly as with the text.
 
+### Compaction
+
+`conv.jsonl` gains a seventh record for the one thing both reference systems
+could not share with this format: the summary is a line in the log, not a state
+beside it. `compaction` names a message (`upToMessageId`) and carries the
+`summary` that stands in for everything up to and including it when the
+conversation reaches a model; the user keeps reading every message, the divider
+after the boundary saying where the summary took over. Written rather than
+performed for the same reason `rewind` is — a whole-log write is the one thing
+the format exists to avoid — and because a summary that lived only in the
+session would be lost on restart, where the next turn would re-inflate the
+whole log the projection rebuilt from.
+
+**The marker is applied by the projection and nowhere else.** `projectionOf`
+takes the markers beside `history` (never inside it — a marker is not a message,
+and folding one in would put words in the conversation nobody said), applies
+the newest whose boundary the history holds, and skips everything up to and
+including the boundary. Everything after it is verbatim, thinking and
+attachments included — so an image below the boundary is still an image.
+Earlier markers are shadows: each summarizes everything still live before it,
+and the newest is the one the model reads.
+
+**Re-compaction merges, anchored.** The summarizer is given the previous
+marker's summary as `<prior-summary>` with merge rules — carry forward
+objectives and constraints, conversation wins conflicts, Active moves to
+Completed — so compacting again never loses what the last one kept. The prompt
+is `lib/data/builtin/compact_prompt.dart`, the one file that words it: Claude
+CLI's anti-injection clause (only real user-role turns count as user messages)
+and opencode's never-mention-the-compaction rule both ride in it, and there is
+no `<analysis>` step — the analysis is stripped before anything is stored and
+costs output tokens on the context that is already over budget.
+
+**The retry ladder**, not a failure: a span too big to summarize is halved and
+re-asked, three attempts, each attempt's marker covering only what it read.
+`upToMessageId` is the honest boundary of what was actually summarized, which
+is why the field is on the record rather than implied.
+
+### Callbacks, and the wired skill
+
+A `/skill` flagged `metadata: invocation: callback` runs code instead of
+expanding its body as a prompt template — the same one `/` namespace the
+opencode-era offered commands under, where frontmatter decided what a send
+meant, restored under the built-in backend with the key the spec's `metadata:`
+map carries. What the callback does is the closed set in
+`lib/domain/wired_skill.dart` (`WiredSkill`), and the bundled `compact` skill
+is the one that ships. The body of a wired skill is the user's documentation,
+never sent to a model — `promptDocuments` refuses to expand one, so the
+conversation never gains prose pretending the model read it.
+
+**The check is the `shellBypassCommand` pattern**: one function read by every
+place that must not route a callback message to a model. The dispatch is in
+`ChatController.send` before the room's guards (refusing, not queueing, while
+a turn runs — a callback mid-turn is the session the turn is rewriting), and
+the same read covers the title namer, the resume offer (`endsUnfinished`), the
+composer's dress-up, and the Omada author stamp. A name in the enum dispatches
+whether or not the library still holds the skill — the reader of a turn being
+resent cannot ask what the frontmatter said when it ran — which is also the
+one cost: a user's own skill shadowing a wired name is not offered as prose.
+
 ### Carrying on an interrupted turn
 
 The design is deliberately dumb. Nothing resumes on its own, nothing is told to
@@ -596,7 +657,7 @@ with. Its frontmatter is held to the [Agent Skills spec](https://agentskills.io)
 `description` of at most 1024 characters, and only the spec's keys
 (name, description, license, compatibility, metadata, allowed-tools) at the
 top level. Entoli's own keys (`argument-hint`, `user-invocable`,
-`disable-model-invocation`) live under the spec's `metadata:` map, which is
+`disable-model-invocation`, `invocation`) live under the spec's `metadata:` map, which is
 its extension point for per-client settings — see "The conversation log" in
 this file's parent for what the flags do. `skillProblems`, in
 `lib/data/prompts/skill_validate.dart`, is the one validator, and it runs

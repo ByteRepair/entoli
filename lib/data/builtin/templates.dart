@@ -261,6 +261,17 @@ String peerTurnText(String text, {required String by, required DateTime at}) =>
         "user):\n\n$text",
         at);
 
+/// What a compaction summary reads as: a user-role message carrying the
+/// summary in place of the messages it stands for. Nobody said it — it says
+/// how to read what is below it, which makes it the same kind of thing as the
+/// system prompt — but it has to be a message of the conversation to sit
+/// between the summarized span and the verbatim one, so it is worded here like
+/// a user turn and stamped with no moment: there was none it was said at.
+String summarizedTurnText(String summary) =>
+    "The earlier part of this conversation has been summarized to keep the "
+    "context small. It follows; everything after it is the conversation "
+    "itself, unchanged.\n\n<summary>\n$summary\n</summary>";
+
 /// The member's prompt, from the library as it stands now: the file is the
 /// member. Null where the name is no longer in the library — the controller
 /// has already routed such a turn to the main agent, so this is unreachable

@@ -531,6 +531,7 @@ class FakeBackend implements AgentBackend {
   @override
   Stream<AgentEvent> sendPrompt(String chatId, Message prompt,
       {List<Message> history = const [],
+      List<ConversationCompaction> compactions = const [],
       TurnSettings settings = const TurnSettings()}) async* {
     prompts.add((prompt: prompt, history: history, settings: settings));
     yield* Stream.fromIterable(_next());
@@ -543,6 +544,7 @@ class FakeBackend implements AgentBackend {
   @override
   Stream<AgentEvent> resumeTurn(String chatId,
       {List<Message> history = const [],
+      List<ConversationCompaction> compactions = const [],
       TurnSettings settings = const TurnSettings()}) async* {
     resumes.add((history: history, settings: settings));
     yield* Stream.fromIterable(_next());
@@ -552,9 +554,40 @@ class FakeBackend implements AgentBackend {
   final List<List<Message>> resets = [];
 
   @override
-  Future<void> resetSession(String chatId, {List<Message> history = const []}) async {
+  Future<void> resetSession(String chatId,
+      {List<Message> history = const [],
+      List<ConversationCompaction> compactions = const []}) async {
     resets.add(history);
   }
+
+  /// What `compact` answers. Null is a summarizer that said nothing; set a
+  /// record for a scripted summary, whose `upToMessageId` is normally the
+  /// history's last message.
+  String? scriptedSummary;
+  String? scriptedBoundary;
+
+  final List<({String? instructions, int historyLength})> compactionCalls = [];
+
+  @override
+  Future<({String upToMessageId, String summary})?> compact(String chatId,
+      {required List<Message> history,
+      required List<ConversationCompaction> compactions,
+      required TurnSettings settings,
+      required String? instructions}) async {
+    compactionCalls
+        .add((instructions: instructions, historyLength: history.length));
+    if (scriptedSummary == null) return null;
+    return (
+      upToMessageId: scriptedBoundary ?? history.lastOrNull?.id ?? "",
+      summary: scriptedSummary!
+    );
+  }
+
+  @override
+  int? usageFor(String chatId) => usageHolder[chatId];
+
+  /// What `usageFor` answers, keyed by chat id, in context tokens.
+  final Map<String, int> usageHolder = {};
 
 
   var didShutdown = false;

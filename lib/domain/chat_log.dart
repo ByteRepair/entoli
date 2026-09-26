@@ -4,6 +4,7 @@ import "package:freezed_annotation/freezed_annotation.dart";
 
 import "models.dart";
 import "shell.dart";
+import "wired_skill.dart";
 
 part "chat_log.freezed.dart";
 part "chat_log.g.dart";
@@ -125,13 +126,34 @@ sealed class ChatRecord with _$ChatRecord {
   /// rewriting it, which is the one thing this format is for not doing.
   const factory ChatRecord.rewind({required String messageId}) = RewindRecord;
 
+  /// A compaction: everything up to and including [upToMessageId] is
+  /// summarized by [summary] for the model, and still on the log for the user
+  /// to read. The record names the boundary rather than carrying the messages,
+  /// so a rewind past it simply un-applies it — the projection of what is left
+  /// is the whole conversation again.
+  ///
+  /// More than one of these can sit on a log. Each summarizes everything
+  /// before it that is still live, and the projection reads only the last one
+  /// whose boundary is on the thread — an earlier one is a shadow, kept so a
+  /// reload shows the dividers the user saw. Written rather than performed for
+  /// the same reason [RewindRecord] is: a summary is a line the log holds, not
+  /// a state the log is left in.
+  const factory ChatRecord.compaction({
+    required String upToMessageId,
+    required String summary,
+  }) = CompactionRecord;
+
   factory ChatRecord.fromJson(Map<String, dynamic> json) => _$ChatRecordFromJson(json);
 }
 
 /// What a log describes: the one thread through it that is on screen, and the
 /// alternatives the messages on that thread sit among.
 class Replayed {
-  const Replayed({required this.messages, required this.branches});
+  const Replayed({
+    required this.messages,
+    required this.branches,
+    this.compactions = const [],
+  });
 
   /// The thread being read, oldest message first.
   final List<Message> messages;
@@ -140,6 +162,11 @@ class Replayed {
   /// alternative to it — oldest first, and including the one on the thread. A
   /// message that has none is absent rather than present on its own.
   final Map<String, List<String>> branches;
+
+  /// The compaction markers on the thread being read, oldest first, each
+  /// naming a message still on it. One whose boundary was rewound away is not
+  /// here: a marker the projection could not apply is not one to draw.
+  final List<ConversationCompaction> compactions;
 }
 
 /// Fold a log into the conversation it describes, and the thread of it to show.
@@ -153,6 +180,7 @@ Replayed replayTree(Iterable<ChatRecord> records) {
   final parent = <String, String?>{};
   final children = <String?, List<String>>{};
   final shown = <String?, String>{};
+  final compactions = <ConversationCompaction>{};
 
   /// The child of [of] the thread runs through: the one last selected, or
   /// failing that the newest, since a thread just written is the one to read.
@@ -250,18 +278,46 @@ Replayed replayTree(Iterable<ChatRecord> records) {
 
       case RewindRecord(:final messageId):
         if (nodes.containsKey(messageId)) forget(messageId);
+
+      case CompactionRecord(:final upToMessageId, :final summary):
+        // Applied where the boundary is still live; dropped as a record the
+        // moment the rewind takes it away, like any other marker of what was
+        // there. Held in arrival order in the set and ordered on the thread
+        // below, since the records arrive in log order and a boundary can sit
+        // anywhere on the thread.
+        if (nodes.containsKey(upToMessageId)) {
+          compactions
+            ..removeWhere((c) => c.upToMessageId == upToMessageId)
+            ..add(ConversationCompaction(
+                upToMessageId: upToMessageId, summary: summary));
+        }
     }
   }
 
   final messages = <Message>[];
   final branches = <String, List<String>>{};
+  final onThread = thread().toSet();
+  final liveCompactions = <ConversationCompaction>[];
   for (final id in thread()) {
     messages.add(nodes[id]!);
     final kids = children[parent[id]]!;
     if (kids.length > 1) branches[id] = List.unmodifiable(kids);
   }
+  // Thread order, not log order: a marker below a rewind was applied to the
+  // thread as it stood then, and its place on the screen is where its boundary
+  // is. A marker left by a delete of a message its boundary does not name is
+  // the one case that never reaches here — `removeWhere` on the record already
+  // dropped it — so the set holds markers of live messages only.
+  final compactionByBoundary = {
+    for (final c in compactions) c.upToMessageId: c,
+  };
+  for (final id in onThread) {
+    final c = compactionByBoundary[id];
+    if (c != null) liveCompactions.add(c);
+  }
 
-  return Replayed(messages: messages, branches: branches);
+  return Replayed(
+      messages: messages, branches: branches, compactions: liveCompactions);
 }
 
 /// The thread a log describes. [replayTree] for the branches beside it.
@@ -277,6 +333,7 @@ Chat chatFrom(ChatState state, List<ChatRecord> records) {
     messages: replayed.messages,
     branches: replayed.branches,
     unfinished: endsUnfinished(replayed.messages, records),
+    compactions: replayed.compactions,
   );
 }
 
@@ -293,13 +350,23 @@ Chat chatFrom(ChatState state, List<ChatRecord> records) {
 /// append: the only way to carry one on would be to run it a second time, which
 /// is not continuing it. Without this, Continue on a killed `!ls` would resolve
 /// a model and hand it the conversation — the one thing the syntax exists to
-/// avoid.
+/// avoid. A `/skill` flagged `invocation: callback` is the same shape: a
+/// callback turn appends nothing either.
 bool endsUnfinished(List<Message> messages, List<ChatRecord> records) {
   final last = messages.lastOrNull;
   if (last == null || last.role != MessageRole.assistant) return false;
   // A sub-agent's transcript is the reply alone, so there is not always one.
   final prompt = messages.length < 2 ? null : messages[messages.length - 2];
   if (prompt != null && shellBypassCommand(prompt.plainText) != null) return false;
+  // A wired-callback turn (`/compact`) appends nothing either. Matched by
+  // name alone rather than against the library: this runs on a reload, where
+  // what the skill's frontmatter says today is not what it said when the turn
+  // was sent, and a name in the enum is the closed set the dispatch reads.
+  // The one cost is a user's own template skill shadowing a wired name — its
+  // interrupted turn is then not offered, where it would have been resumable;
+  // a name in the enum is the app's own, and shadowing one is not a state
+  // worth a stamp on every message for.
+  if (prompt != null && isWiredSkillName(prompt.plainText)) return false;
   TurnEnd? ended;
   for (final record in records) {
     if (record is TurnEndRecord && record.messageId == last.id) ended = record.reason;

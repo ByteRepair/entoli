@@ -527,6 +527,26 @@ command that printed nothing says so on the exit row, rather than leaving a
 strip that reads as an answer cut off. What is behind all this is "Running a
 command yourself".
 
+### A compact turn, and its divider
+
+`/compact` is a callback, not a prompt: the composer dresses for it (an
+`auto_awesome` icon and a "Compact the conversation" hint — lighter than the
+shell's dressing, since nothing runs on the machine and no model is asked), the
+send dispatches it before the room's guards, and while a turn runs it is
+**refused, not queued** — a callback mid-turn is the session the turn is
+rewriting underneath it. The turn itself goes through the room's machinery:
+prompt logged as said, empty reply, the status row saying "Compacting the
+conversation" where a model's spinner would be, `turnEnd done`. Its product is
+the marker, not a reply.
+
+**The marker is a `ConversationSeparator`** — the same full-width divider the
+Omada mode flips are, generalized to take a caption and an optional tap —
+emitted by `entriesOf` just after the boundary message it covers, captioned
+"Compact Conversation". The tap opens the summary in the same sheet a tool
+run's drawer is, the one thing a boundary has to show. Auto-compact leaves the
+same trace with no turn around it: unawaited after a settled turn, the divider
+its only evidence, the way the memory extraction's note is.
+
 ## A chat whose home device is elsewhere
 
 `MirrorChatController` is the counterpart of `ChatController` for a chat being

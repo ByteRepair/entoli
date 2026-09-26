@@ -9,6 +9,7 @@ import "../../domain/agent_backend.dart";
 import "../../domain/ask.dart";
 import "../../domain/chat_log.dart";
 import "../../domain/chat_repository.dart";
+import "../../domain/llm_provider.dart" show defaultContextWindow;
 import "../../domain/reminder_alarms.dart";
 import "../../domain/turn_recorder.dart";
 import "../../domain/models.dart";
@@ -16,6 +17,7 @@ import "../../domain/prompt_library.dart"
     show authorFrom, authorKeys, nameOf, singleAgentMention, mentionsIn;
 import "../../domain/project_settings.dart" show OmadaOrdering;
 import "../../domain/shell.dart" show shellBypassCommand;
+import "../../domain/wired_skill.dart";
 import "../../data/builtin/templates.dart" show passWord;
 import "../../providers.dart";
 
@@ -298,11 +300,32 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
   /// before anything else, since from here on a prompt is its parts. Said
   /// while a turn runs, it is appended to the log as it stands and dispatched
   /// when the room settles — the log is the queue.
+  ///
+  /// A `/skill` flagged `invocation: callback` never reaches here as a prompt:
+  /// it is checked before the room's guards, the way the `!` shell bypass is,
+  /// and refused while a turn runs rather than queued — a callback mid-turn
+  /// is the session the turn is rewriting underneath it. Where it is checked
+  /// after that, the turn it runs goes through the room's machinery like any
+  /// other, so the spinner, Stop and the composer's rules hold.
   @override
   Future<void> send(String text, {List<Attachment> attachments = const []}) async {
     await _ready;
     if (state.chat == null) return;
     final repo = ref.read(chatRepositoryProvider);
+    final wired = wiredSkillFromText(
+        text, ref.read(promptLibraryProvider(state.chat!.state.project)));
+    if (wired != null) {
+      if (state.isRunning) {
+        state = state.copyWith(
+            status: "Wait for the turn to finish before compacting");
+        return;
+      }
+      switch (wired.skill) {
+        case WiredSkill.compact:
+          await _promptCompacting(wired.arguments);
+      }
+      return;
+    }
     final files = await repo.saveAttachments(chatId, attachments);
     if (state.isRunning) {
       await _sayLater(text, files);
@@ -378,6 +401,77 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
     _schedule(chat, mentioned(chat, userMsg), userPrompt: userMsg);
     await _dispatch();
   }
+
+  /// The `/compact` callback's own turn: the ask goes on the log like anything
+  /// said, and the turn is one status row while the summarizer runs — no
+  /// model loop, no tools. What it produces is the [CompactionRecord], not a
+  /// reply: the divider in the conversation is its whole trace, so the turn
+  /// ends with an empty reply and nothing else is ever written into it.
+  ///
+  /// [arguments] are the user's focus for the summary, what `withArguments`
+  /// would have substituted into a skill's body.
+  Future<void> _promptCompacting(String arguments) async {
+    final chat = state.chat;
+    if (chat == null || state.isRunning) return;
+    final instructions = arguments.trim().isEmpty ? null : arguments.trim();
+    final userMsg = ref
+        .read(chatRepositoryProvider)
+        .composeUserPrompt(
+            "/compact${instructions == null ? "" : " $instructions"}",
+            project: chat.state.project);
+    await _say(userMsg);
+  }
+
+  /// The compact turn's body, driven from [openTurn] by the wired check on
+  /// the prompt. The turn is already open — the entry seated, the prompt and
+  /// its empty reply logged — so this runs the summarizer, writes the marker,
+  /// and ends the turn the way any event stream would have. Shaped like the
+  /// loop's end so `isRunning`, Stop and the settle rules hold over it.
+  Future<void> _runCompactTurn(_RunningTurn turn, Message prompt) async {
+    turn.retryable = false;
+    // The wait says what it is: a summarizer over a long conversation is a
+    // read of minutes, and a spinner that cannot be told apart from a hang is
+    // the row that says nothing.
+    state = state.copyWith(status: "Compacting the conversation");
+    try {
+      final chat = state.chat;
+      final result = chat == null
+          ? null
+          : await ref.read(chatRepositoryProvider).compact(chatId,
+              history: chat.messages,
+              compactions: chat.compactions,
+              instructions: _compactInstructions(prompt));
+      if (!ref.mounted) return;
+      final now = state.chat;
+      if (result != null && now != null) {
+        final repo = ref.read(chatRepositoryProvider);
+        await repo.append(chatId, [
+          ChatRecord.compaction(
+              upToMessageId: result.upToMessageId, summary: result.summary)
+        ]);
+        final fresh = await repo.openChat(chatId);
+        // The session now holds a conversation the marker says: rebuild it
+        // here, so the next prompt goes out summarized without waiting for a
+        // reload to do it.
+        if (ref.mounted) {
+          state = state.copyWith(chat: fresh);
+          await repo.resetSession(chatId,
+              history: fresh.messages, compactions: fresh.compactions);
+        }
+      }
+    } catch (e) {
+      logFailure("compact", "compact turn failed", e);
+    } finally {
+      if (ref.mounted && _turns[turn.replyId] == turn) {
+        await _finishTurn(turn);
+      }
+    }
+  }
+
+  /// What a `/compact <instructions>` prompt told the summarizer to focus on:
+  /// the arguments after the name, by the same read the dispatch made.
+  String? _compactInstructions(Message prompt) =>
+      wiredSkillFromText(prompt.plainText, null)?.arguments;
 
   /// Open the turn [userMsg] starts, whether it is being composed now or was
   /// said while the room ran and is already on the log. Where it is not on the
@@ -481,8 +575,19 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
     // aborted whatever was running, so this turn never starts; there is
     // nothing to abort here and nothing to write beside the move.
     if (!ref.mounted) return;
+    // A callback's turn is run here rather than sent to the backend: the
+    // compact machinery is the controller's to drive, and the turn ends with
+    // the marker it writes rather than an event stream. The turn is already
+    // open, the entry seated and logged above, so this is the body where the
+    // backend's own would have been.
+    if (prompt.role == MessageRole.user &&
+        wiredSkillFromText(prompt.plainText, null) != null) {
+      unawaited(_runCompactTurn(turn, prompt));
+      return;
+    }
     _listen(turn, repo.sendPrompt(chatId, prompt,
         history: history,
+        compactions: chat.compactions,
         replaces: replacing != null,
         omadaMember: omadaMember ?? _memberAnswering(chat, prompt)));
   }
@@ -517,13 +622,15 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
   /// Who a turn opened on [prompt] names as its author, where the project
   /// runs Omada: the one member the prompt addresses. A command is not
   /// addressed to anyone, whatever its text names — `!grep @researcher` runs
-  /// a command, it does not ask researcher to speak. Omada off never stamps:
-  /// the reply is the main agent's, and a label on it would claim a member
-  /// authored what is the house's voice. See "The contract between direct
-  /// and Omada chats" in `lib/ui/chat/CLAUDE.md`.
+  /// a command, it does not ask researcher to speak — and a callback is not
+  /// addressed at all: `/compact @researcher` compacts, it does not hand the
+  /// floor over. Omada off never stamps: the reply is the main agent's, and a
+  /// label on it would claim a member authored what is the house's voice.
+  /// See "The contract between direct and Omada chats" in `lib/ui/chat/CLAUDE.md`.
   String? authorFor(Chat chat, Message prompt) =>
       !ref.read(omadaOnProvider(chat.state.project)) ||
-              shellBypassCommand(prompt.plainText) != null
+              shellBypassCommand(prompt.plainText) != null ||
+              wiredSkillFromText(prompt.plainText, null) != null
           ? null
           : authorFrom(prompt.documents);
 
@@ -885,11 +992,85 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
     // like a handoff's does. Handoffs read the room only once the schedule
     // holds nothing — the user's own words dispatch ahead of the agents'.
     _drainSaid();
+    // The context this turn left behind is the one thing that grows without
+    // being said. Checked here, where the turn is over and the session is
+    // settled, rather than mid-turn — the summarizer cannot run over a
+    // session the loop is still rewriting. The number is the backend's own
+    // reading of what its last request weighed.
+    if (reason == TurnEnd.done) _maybeAutoCompact();
     // The settle runs whatever the schedule may run now: what it left — a
     // second item for a member whose first is still queued, the cap's —
     // dispatches at the settles it causes. This reply hands off with them,
     // parked for the settle that ends the wave, rather than now.
     await _settle(turn, reason);
+  }
+
+  /// Whether the last turn's context has already been compacted away. One
+  /// flag, not a history: compacting twice without an intervening turn would
+  /// summarize the summary's own span for nothing.
+  bool _compactedLastTurn = false;
+
+  /// Compacts when the session has grown past the configured share of the
+  /// model's window. Runs unawaited — the room has settled, and the next
+  /// turn does not wait on it — and refuses while anything else is running,
+  /// which the compact callback also guards.
+  ///
+  /// Skipped where nothing has reported a usage: a provider that says
+  /// nothing and a chat with no turn yet are both "unknown", and compacting
+  /// on a guess is not this feature's business — the estimate lives in the
+  /// summarizer's own budget, where a too-big ask is halved, not here.
+  Future<void> _maybeAutoCompact() async {
+    if (!ref.mounted) return;
+    final settings = ref.read(appSettingsProvider);
+    if (!settings.autoCompact) return;
+    final used = ref.read(agentBackendProvider).usageFor(chatId);
+    if (used == null) return;
+    final budget = await _contextWindow();
+    if (budget == null) return;
+    if (used < settings.autoCompactPercent * budget ~/ 100) {
+      _compactedLastTurn = false;
+      return;
+    }
+    if (_compactedLastTurn) return;
+    _compactedLastTurn = true;
+    try {
+      final chat = state.chat;
+      if (chat == null || state.isRunning) return;
+      final result = await ref.read(chatRepositoryProvider).compact(chatId,
+          history: chat.messages,
+          compactions: chat.compactions,
+          instructions: null);
+      if (!ref.mounted) return;
+      final now = state.chat;
+      if (result == null || now == null) return;
+      final repo = ref.read(chatRepositoryProvider);
+      await repo.append(chatId, [
+        ChatRecord.compaction(
+            upToMessageId: result.upToMessageId, summary: result.summary)
+      ]);
+      final fresh = await repo.openChat(chatId);
+      if (!ref.mounted) return;
+      state = state.copyWith(chat: fresh);
+      await repo.resetSession(chatId,
+          history: fresh.messages, compactions: fresh.compactions);
+    } catch (e) {
+      logFailure("compact", "auto-compact failed", e);
+    }
+  }
+
+  /// The window the threshold reads against, resolved the way the turn's own
+  /// model is: the chat's meta names the pair, the provider's configured
+  /// window answers for it, and where nothing is named the app default's is
+  /// the one that answers. Null where no provider is configured at all —
+  /// nothing is reaching a model, so nothing is filling a window.
+  Future<int?> _contextWindow() async {
+    final repo = ref.read(chatRepositoryProvider);
+    final meta = await repo.loadMeta(chatId);
+    final settings = ref.read(appSettingsProvider);
+    final providerId = meta.provider ?? settings.defaultProviderId;
+    final provider = settings.llmProviders
+        .firstWhereOrNull((p) => p.id == providerId);
+    return provider?.contextWindow ?? defaultContextWindow;
   }
 
   /// A turn has ended: the room may hand off. The schedule may still hold
@@ -984,13 +1165,15 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
   /// reply through its text. Names the library does not know are prose,
   /// not an address, a command is addressed to no one it names —
   /// `!grep @researcher` runs a command, it does not ask researcher to
-  /// speak — and a direct chat addresses no one at all: Omada off is the
-  /// room as it always was, the house answering whatever is said. The
+  /// speak — and a callback is addressed to no one either: `/compact` is the
+  /// house's own turn. A direct chat addresses no one at all: Omada off is
+  /// the room as it always was, the house answering whatever is said. The
   /// sigil is off what comes back: a schedule is keyed by the library's
   /// name for the member.
   List<String> mentioned(Chat chat, Message message) {
     if (!ref.read(omadaOnProvider(chat.state.project)) ||
-        shellBypassCommand(message.plainText) != null) {
+        shellBypassCommand(message.plainText) != null ||
+        wiredSkillFromText(message.plainText, null) != null) {
       return const [];
     }
     return message.role == MessageRole.user
