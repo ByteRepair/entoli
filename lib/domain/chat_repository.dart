@@ -306,11 +306,12 @@ class ChatRepository {
   }
 
   /// Summarize the conversation through the backend, resolved under the same
-  /// settings a turn in this chat would run. The boundary is what the caller
-  /// asked for — the last thing said — and the answer is the pair a
-  /// [CompactionRecord] is made of. Null when nothing answered; the controller
-  /// reads a log line, there being no turn to fail.
-  Future<({String upToMessageId, String summary})?> compact(
+  /// settings a turn in this chat would run. The boundary is the one the
+  /// summarizer actually read to — the caller's last message, or newer after
+  /// a ladder halve — and the answer is the pair a [CompactionRecord] is made
+  /// of. Null when nothing answered; the controller reads a log line, there
+  /// being no turn to fail.
+  Future<ConversationCompaction?> compact(
       String chatId,
       {required List<Message> history,
       required List<ConversationCompaction> compactions,
@@ -322,16 +323,16 @@ class ChatRepository {
         instructions: instructions);
   }
 
-  /// Rebuild the backend's session for [chatId] from [history], markers
-  /// applied — what a compaction does to the live session, the same way a
-  /// thread change does. Routed rather than called straight on the backend so
-  /// the repository is the one place a session is told what the conversation
-  /// is, and a second caller cannot forget the settings a rebuild resolves
-  /// under (it resolves none: the session is what the log says).
-  Future<void> resetSession(String chatId,
-      {required List<Message> history,
-      required List<ConversationCompaction> compactions}) =>
-      _backend.resetSession(chatId, history: history, compactions: compactions);
+  /// Append the record a compaction leaves, and load back what the log now
+  /// says — [CompactionRecord] through [_rethread], the same walk a thread
+  /// change takes, session rebuild included. One caller cannot forget the
+  /// reset: the repository is the one place a session is told what the
+  /// conversation is.
+  Future<Chat> appendCompaction(String chatId,
+      {required String upToMessageId, required String summary}) {
+    return _rethreadAt(
+        chatId, ChatRecord.compaction(upToMessageId: upToMessageId, summary: summary));
+  }
 
   /// The chat's own choice wins, else the app default, else whatever the
   /// backend picks. Never mix halves: a chat's model under the app default's
@@ -355,22 +356,11 @@ class ChatRepository {
       disabled..add(AgentCapability.ask)..add(AgentCapability.task);
     }
     final projectSettings = await projectSettingsOf(project);
-    // Whether Omada runs, resolved once by [omadaFor]: a built-in's answer is
-    // its spec, a user project's its toggle, and the default project's is
-    // false. In an Omada-on project, members are brought in by mentioning
-    // them — their turn follows — so the `task` relay has no job left. The
-    // capability mechanism drops it from the tool list and the prompt
-    // together.
-    final omada = omadaFor(project, projectOmada: projectSettings.omada);
+    // In an Omada-on project, members are brought in by mentioning them —
+    // their turn follows — so the `task` relay has no job left. The capability
+    // mechanism drops it from the tool list and the prompt together.
+    final omada = projectSettings.omada;
     if (omada) disabled.add(AgentCapability.task);
-    // The instructions the turn runs under — the room contract where Omada is
-    // on and the project ships no note of its own — resolved by
-    // [BuiltinProject.turnInstructions] for a built-in and
-    // [BuiltinProject.turnInstructionsForUserProject] for a user project,
-    // with the user's own files read after the note where the answer says so.
-    final instructions = builtIn != null
-        ? builtIn.turnInstructions(omada: omada)
-        : BuiltinProject.turnInstructionsForUserProject(omada: omada);
     // The default project's rules and writable roots are the app tier: they
     // apply to every project before its own, invisibly.
     final defaultProjectSettings =
@@ -388,8 +378,8 @@ class ChatRepository {
           : await _resolveMemory(settings, project),
       sharedWorkspace: builtIn?.sharedWorkspace ?? true,
       disabled: disabled,
-      bundledInstructions: instructions.note,
-      includesUserInstructions: instructions.includesUser,
+      bundledInstructions: builtIn?.bundledInstructions,
+      includesUserInstructions: builtIn?.includesUserInstructions ?? false,
       // The project's own command variables, beside the app-level ones.
       environment: projectSettings.environment ?? const {},
       // Chat rules first, then the project's, then the default project's:
@@ -430,6 +420,7 @@ class ChatRepository {
       // The answering member is the caller's fact, not the chat's — it is
       // about the message the turn runs, not the settings it runs under.
       omadaMember: omadaMember,
+      omada: omada,
     );
   }
 
@@ -539,13 +530,19 @@ class ChatRepository {
   /// what the log now says. Reading it again rather than working it out here:
   /// which messages a branch leaves live is `replayTree`'s to answer, and a
   /// second version of that walk is a second version to disagree.
-  Future<Chat> _rethread(Chat chat, ChatRecord record) async {
-    await append(chat.state.id, [record]);
-    final now = await openChat(chat.state.id);
+  Future<Chat> _rethread(Chat chat, ChatRecord record) =>
+      _rethreadAt(chat.state.id, record);
+
+  /// [_rethread] by chat id, for a caller holding no [Chat] — a compaction's
+  /// marker, which the summarizer answered while the room was already
+  /// settled.
+  Future<Chat> _rethreadAt(String chatId, ChatRecord record) async {
+    await append(chatId, [record]);
+    final now = await openChat(chatId);
     // A session is the conversation the model has seen, and which conversation
     // that is has just changed — markers included, since a rewind past one
     // un-applies it.
-    await _backend.resetSession(chat.state.id,
+    await _backend.resetSession(chatId,
         history: now.messages, compactions: now.compactions);
     return now;
   }
