@@ -97,7 +97,10 @@ a folder that does not conform is skipped at load and said on the view page) —
 and `<dataDir>/projects/<project>/agents/*.md` are that project's agents. The
 default project's skills and agents are the base set every other project
 inherits; another project's own replace a same-named default entry for that
-project alone. The bundled skills and agents live in the binary:
+project alone. An Omada-on project has My Team's rung between the two: its
+agents are the default set, My Team's on top, its own above those — the
+chain `default` < `my-team` < the project, and only for agents, since My
+Team ships no skills. The bundled skills and agents live in the binary:
 `tool/gen_bundled_skills.dart` writes them, build-time, from
 `assets/prompts/projects/<project>/` — the locally written skills and agents —
 and from `build/skills-upstream/` into
@@ -258,7 +261,8 @@ nothing means the default. `isProjectName` refuses `default` for the same
 reason: a second way to name it would be a second entry for it in every list.
 
 A **built-in project** is a directory the app ships rather than the user makes,
-declared in `builtin_project.dart` (`builtinProjects`, today `anonymous` and `byte-repair`).
+declared in `builtin_project.dart` (`builtinProjects`, today `anonymous`,
+`my-team` and `byte-repair`).
 It is a project in every respect that matters to the store — same layout, same
 movement, a chat can be in one — but its name is refused by `isProjectName`, so
 it cannot be created, renamed or deleted, and `everyProject` is where it is
