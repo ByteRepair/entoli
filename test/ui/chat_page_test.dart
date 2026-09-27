@@ -1174,6 +1174,15 @@ void main() {
   });
 
   group("what the user just sent", () {
+    /// The prompt the regenerate act needs, read off the state the turn left.
+    String _lastMessageId(WidgetTester tester, String chatId) {
+      final chat = app.container
+          .read(chatControllerProvider(chatId))
+          .chat;
+      final prompt = chat!.messages.lastWhere((m) => m.role == MessageRole.user);
+      return prompt.id;
+    }
+
     testWidgets("flying from the composer, and landing once",
         (tester) async {
       final chat = await io(tester, () => app.seedChat(title: "flown"));
@@ -1230,6 +1239,26 @@ void main() {
       await tester.pump();
 
       expect(find.text("first"), findsOneWidget);
+    });
+
+    // A regenerate re-opens the turn on a prompt already in the conversation;
+    // flying an hour-old bubble from the composer would be the wrong story.
+    testWidgets("a regenerated prompt is not flown again", (tester) async {
+      app.backend.hold = Completer<void>();
+      addTearDown(() => app.backend.hold?.complete());
+      final chat = await io(tester, () => app.seedChat(title: "flown"));
+      await open(tester, chat.state.id);
+
+      await sendMessage(tester, "regenerate me");
+      await settleIo(tester);
+
+      app.container
+          .read(chatControllerProvider(chat.state.id).notifier)
+          .regenerate(_lastMessageId(tester, chat.state.id));
+      await tester.pump();
+      await tester.pump();
+
+      expect(find.text("regenerate me"), findsOneWidget);
     });
   });
 

@@ -40,8 +40,8 @@ class ChatViewState {
   final bool isRunning;
 
   /// The user message that was just sent, by id — the one the page flies up
-  /// from the composer. Transient like [retry]: the page's business, gone on
-  /// the next state write, and never persisted.
+  /// from the composer. Transient like [retry]: the page's business, riding
+  /// the state until it is cleared, and never persisted.
   final String? justSent;
 
   /// What the turn is waiting to be allowed, keyed by the reply that asked
@@ -561,16 +561,16 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
         .copyWith(state: chat.state.copyWith(updatedAt: DateTime.now()));
 
     final isFirst = chat.messages.isEmpty;
+    // Only the prompt going on the log now flies: a regenerate re-opens the
+    // turn with a prompt already there, and an old message is not being sent.
+    final sending = opening.first.id == prompt.id;
     state = state.copyWith(
         chat: updated,
         isRunning: true,
         clearRetry: true,
         clearStatus: true,
-        // Only the prompt the user said flies: the reply beside it is the
-        // turn's, and a handoff's prompt is an assistant message — one that
-        // clears rather than carries whatever was flying.
-        justSent: prompt.role == MessageRole.user ? prompt.id : null,
-        clearJustSent: prompt.role != MessageRole.user);
+        justSent: sending ? prompt.id : null,
+        clearJustSent: !sending);
     // The prompt and the empty reply go down before the turn starts, so a chat
     // killed before the model says anything still shows what was asked. What
     // comes back carries the TTL anchor the save resolved, and is kept.
