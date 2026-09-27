@@ -5,11 +5,38 @@ import "package:fs_shim/fs.dart";
 import "../../core/config.dart";
 import "../../core/log.dart";
 import "../../domain/bundled_prompt_file.dart";
+import "../../domain/builtin_project.dart" show omadaBaseProject, omadaFor;
 import "../../domain/models.dart";
 import "../../domain/project.dart" show defaultProjectDir;
+import "../../domain/project_settings.dart";
 import "../../domain/prompt_library.dart";
 import "bundled_skill_data.dart";
 import "skill_validate.dart";
+
+/// The tiers in walk order: the default set first, then My Team's where the
+/// project runs Omada, then the project's own. The library's "later replaces
+/// earlier" rule is what makes the order the precedence — a project's own
+/// entry answers over a My Team one, a My Team one over a default one. The
+/// Omada answer is the one rule [omadaFor] resolves; the rung rides it, so
+/// every source walks the same shape, skills included — My Team ships none,
+/// and the absence of tagged files is the whole of that.
+List<String> _promptTiers(
+        {required String? project, required AppConfig? config}) =>
+    _tiersFor(
+      project,
+      omada: omadaFor(
+        project,
+        projectOmada: config == null
+            ? false
+            : ProjectSettings.load(config, project: project).omada,
+      ),
+    );
+
+List<String> _tiersFor(String? project, {required bool omada}) => [
+      defaultProjectDir,
+      if (omada && omadaBaseProject != project) omadaBaseProject,
+      if (project != null && project != defaultProjectDir) project,
+    ];
 
 /// The presets, embedded in code at build time by `tool/gen_bundled_skills.dart`.
 /// The app is the source of truth for bundled skills and agents: the library
@@ -24,7 +51,9 @@ import "skill_validate.dart";
 /// (or `"default"`) is the default project alone. See "Skills and agents" in
 /// `lib/domain/CLAUDE.md`.
 class BundledPrompts implements PromptSource {
-  const BundledPrompts({this.config, this.project});
+  // Not const: the tiers resolve off the config at first use, and no caller
+  // constructs one in a constant expression.
+  BundledPrompts({this.config, this.project});
 
   /// Whose filesystem the bundled skills' base directories are written to.
   /// Null loads no skills: a test exercising the agent half alone.
@@ -33,6 +62,12 @@ class BundledPrompts implements PromptSource {
   /// The project whose overrides are layered on top of the default set. Null
   /// is the default project, the way it is everywhere else a project is named.
   final String? project;
+
+  /// The tiers this source serves, resolved once per source — the sources are
+  /// built once per library build, so one resolution per source is one per
+  /// build. False where there is no config to ask: `BundledPrompts`'s test
+  /// shape, which loads no skills either.
+  late final List<String> _tiers = _promptTiers(project: project, config: config);
 
   @override
   Future<List<PromptDocument>> load(CompletionKind kind) async {
@@ -47,18 +82,10 @@ class BundledPrompts implements PromptSource {
   }
 
   List<PromptDocument> _loadBundledAgents() {
-    final project = this.project ?? defaultProjectDir;
     final documents = <PromptDocument>[];
-    // Default's first: the base set. A project's entries follow, so a
-    // same-named override replaces the default one for that project.
-    for (final file in bundledAgentFiles) {
-      if (file.project != defaultProjectDir) continue;
-      documents.add(
-          PromptDocument.parse(CompletionKind.agent, file.name, file.content));
-    }
-    if (project != defaultProjectDir) {
+    for (final tag in _tiers) {
       for (final file in bundledAgentFiles) {
-        if (file.project != project) continue;
+        if (file.project != tag) continue;
         documents.add(
             PromptDocument.parse(CompletionKind.agent, file.name, file.content));
       }
@@ -76,7 +103,6 @@ class BundledPrompts implements PromptSource {
   /// the default project's `skills-bundled/` for a default entry, or the
   /// project's own for an override. The self-heal writes each to its own dir.
   List<PromptDocument> _loadBundledSkills(AppConfig config) {
-    final project = this.project ?? defaultProjectDir;
     final documents = <PromptDocument>[];
     void emitFor(String tag) {
       final bySkill = <String, List<BundledPromptFile>>{};
@@ -112,8 +138,9 @@ class BundledPrompts implements PromptSource {
       }
     }
 
-    emitFor(defaultProjectDir);
-    if (project != defaultProjectDir) emitFor(project);
+    for (final tag in _tiers) {
+      emitFor(tag);
+    }
     return documents;
   }
 }
@@ -125,7 +152,8 @@ class BundledPrompts implements PromptSource {
 /// filesystem, so a browser has the directories too — the prompts a user
 /// writes there are theirs on every platform.
 class DirectoryPrompts implements PromptSource {
-  const DirectoryPrompts(this.config, {this.project});
+  // Not const, for the same reason [BundledPrompts] is not.
+  DirectoryPrompts(this.config, {this.project});
 
   final AppConfig config;
 
@@ -133,18 +161,15 @@ class DirectoryPrompts implements PromptSource {
   /// is the default project, the way it is everywhere else a project is named.
   final String? project;
 
+  /// The tiers this source serves, resolved once per source — see
+  /// [BundledPrompts._tiers].
+  late final List<String> _tiers = _promptTiers(project: project, config: config);
+
   @override
   Future<List<PromptDocument>> load(CompletionKind kind) async {
     final documents = <PromptDocument>[];
-    // Default's first, then the project's overrides. A project entry with the
-    // same name as a default one replaces it for that project — the library's
-    // "later replaces earlier" rule, the same one that lets a user's file
-    // override a bundled preset.
-    final defaultProject = await _loadKind(kind, defaultProjectDir);
-    documents.addAll(defaultProject);
-    final p = project;
-    if (p != null && p != defaultProjectDir) {
-      documents.addAll(await _loadKind(kind, p));
+    for (final tier in _tiers) {
+      documents.addAll(await _loadKind(kind, tier));
     }
     return documents;
   }

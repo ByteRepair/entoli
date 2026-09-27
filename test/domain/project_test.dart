@@ -80,11 +80,13 @@ void main() {
 
   group("the built-in projects", () {
     // The built-in projects, in the order the menus offer them: the anonymous
-    // one first, then Byte Repair. Each is a directory under projects/ like
-    // any other, but named by the app rather than the user.
+    // one first, then My Team, then Byte Repair. Each is a directory under
+    // projects/ like any other, but named by the app rather than the user.
     final anon = builtinProjects[0];
-    final byteRepair = builtinProjects[1];
+    final myTeam = builtinProjects[1];
+    final byteRepair = builtinProjects[2];
     final anonDir = anon.dir;
+    final myTeamDir = myTeam.dir;
     final byteRepairDir = byteRepair.dir;
 
     test("are project-shaped directory names", () {
@@ -93,6 +95,12 @@ void main() {
       expect(isProjectDirName(anonDir), isTrue);
       expect(isBuiltinProject(anonDir), isTrue);
       expect(builtinProjectOf(anonDir), same(anon));
+
+      expect(myTeamDir, "my-team");
+      expect(myTeam.label, myTeamProjectLabel);
+      expect(isProjectDirName(myTeamDir), isTrue);
+      expect(isBuiltinProject(myTeamDir), isTrue);
+      expect(builtinProjectOf(myTeamDir), same(myTeam));
 
       expect(byteRepairDir, "byte-repair");
       expect(byteRepair.label, byteRepairProjectLabel);
@@ -107,6 +115,9 @@ void main() {
       expect(isProjectName(anonDir), isFalse);
       expect(projectNameFrom("anonymous"), isNull);
       expect(projectNameFrom("Anonymous"), isNull);
+      expect(isProjectName(myTeamDir), isFalse);
+      expect(projectNameFrom("my-team"), isNull);
+      expect(projectNameFrom("My-Team"), isNull);
       expect(isProjectName(byteRepairDir), isFalse);
       expect(projectNameFrom("byte-repair"), isNull);
       expect(projectNameFrom("Byte-Repair"), isNull);
@@ -119,6 +130,7 @@ void main() {
       expect(projectHasSettingsPage(null), isFalse);
       expect(projectHasSettingsPage(defaultProjectDir), isFalse);
       expect(projectHasSettingsPage(anonDir), isFalse);
+      expect(projectHasSettingsPage(myTeamDir), isTrue);
       expect(projectHasSettingsPage(byteRepairDir), isTrue);
       expect(projectHasSettingsPage("work"), isTrue);
     });
@@ -127,8 +139,10 @@ void main() {
     // resolve to, since they cannot be deleted.
     test("are labelled and always resolve to themselves", () {
       expect(projectLabel(anonDir), anon.label);
+      expect(projectLabel(myTeamDir), myTeam.label);
       expect(projectLabel(byteRepairDir), byteRepair.label);
       expect(projectOrDefault(anonDir, const []), anonDir);
+      expect(projectOrDefault(myTeamDir, const []), myTeamDir);
       expect(projectOrDefault(byteRepairDir, const []), byteRepairDir);
       expect(projectOrDefault("deleted", const []), isNull);
     });
@@ -137,16 +151,28 @@ void main() {
     // than on a disk a user could delete or edit away from under a turn.
     // Byte Repair is the exception that proves the rule: it ships a note and
     // also reads the user's files on top of it, so it has a settings page to
-    // edit them from; anonymous does not.
+    // edit them from; anonymous does not. My Team's note is the room
+    // contract, and it is what any Omada project without a note of its own
+    // falls through to.
     test("ship their own instructions and read no file", () {
       expect(anon, isA<AnonymousProject>());
       expect(anon.bundledInstructions, contains("anonymous chat"));
       expect(anon.includesUserInstructions, isFalse);
       expect(anon.hasSettingsPage, isFalse);
+      expect(myTeam, isA<MyTeamProject>());
+      expect(myTeam.bundledInstructions, contains("team project"));
+      expect(myTeam.includesUserInstructions, isTrue);
+      expect(myTeam.hasSettingsPage, isTrue);
       expect(byteRepair, isA<ByteRepairProject>());
       expect(byteRepair.bundledInstructions, contains("ESBMC"));
       expect(byteRepair.includesUserInstructions, isTrue);
       expect(byteRepair.hasSettingsPage, isTrue);
+      // A future Omada-on built-in that ships no note of its own runs under
+      // My Team's; an Omada-off one ships none.
+      expect(
+          const BuiltinProject(dir: "work", label: "work", omada: true)
+              .bundledInstructions,
+          myTeam.bundledInstructions);
       expect(
           const BuiltinProject(dir: "work", label: "work")
               .bundledInstructions,
@@ -166,6 +192,10 @@ void main() {
     test("ship their own TTL defaults and empty-chat questions", () {
       expect(anon.tempChatTtl, TempChatTtl.hours24);
       expect(anon.emptyChatQuestion, "What would you like to discuss anonymously?");
+      expect(
+          myTeam.emptyChatQuestion,
+          "Speak to a team of collaborating agents. Use @ to converse.");
+      expect(myTeam.tempChatTtl, isNull);
       expect(byteRepair.tempChatTtl, isNull);
       expect(byteRepair.emptyChatQuestion, "What would you like to verify?");
       expect(const BuiltinProject(dir: "work", label: "work").tempChatTtl, isNull);
@@ -177,13 +207,15 @@ void main() {
     // Offered after the default and before the user's projects, and not twice.
     test("are in everyProject once each, after the default", () {
       final all = everyProject(["work"]);
-      expect(all, [null, anonDir, byteRepairDir, "work"]);
+      expect(all, [null, anonDir, myTeamDir, byteRepairDir, "work"]);
       expect(all.where((p) => p == anonDir), hasLength(1));
+      expect(all.where((p) => p == myTeamDir), hasLength(1));
       expect(all.where((p) => p == byteRepairDir), hasLength(1));
     });
 
     // Byte Repair keeps full capabilities — profile, memory and a shared
-    // workspace — where Anonymous takes them away.
+    // workspace — where Anonymous takes them away. My Team is the same shape,
+    // plus the Omada flag the room is.
     test("Byte Repair inherits profile, memory and shares its workspace", () {
       expect(byteRepair.profilePolicy, ProfilePolicy.inherit);
       expect(byteRepair.memory, MemoryPolicy.app);
@@ -192,6 +224,10 @@ void main() {
       expect(anon.profilePolicy, ProfilePolicy.none);
       expect(anon.memory, MemoryPolicy.off);
       expect(anon.sharedWorkspace, isFalse);
+      expect(myTeam.profilePolicy, ProfilePolicy.inherit);
+      expect(myTeam.memory, MemoryPolicy.app);
+      expect(myTeam.sharedWorkspace, isTrue);
+      expect(myTeam.omada, isTrue);
     });
 
     // Byte Repair opts into rootfs isolation: packages installed inside the
