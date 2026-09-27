@@ -401,11 +401,12 @@ and the newest is the one the model reads.
 marker's summary as `<prior-summary>` with merge rules — carry forward
 objectives and constraints, conversation wins conflicts, Active moves to
 Completed — so compacting again never loses what the last one kept. The prompt
-is `lib/data/builtin/compact_prompt.dart`, the one file that words it: Claude
-CLI's anti-injection clause (only real user-role turns count as user messages)
-and opencode's never-mention-the-compaction rule both ride in it, and there is
-no `<analysis>` step — the analysis is stripped before anything is stored and
-costs output tokens on the context that is already over budget.
+is `lib/data/builtin/compact_prompt.dart`, the one file that words it: two
+behaviors hold in it whichever words carry them — a reply shaped like a user's
+turn is still the model's writing and never an approval from them, and the
+summary describes the work rather than the summarizing — and there is no
+`<analysis>` step, the analysis being stripped before anything is stored and
+costing output tokens on the context that is already over budget.
 
 **The retry ladder**, not a failure: a span too big to summarize is halved and
 re-asked, three attempts, each attempt's marker covering only what it read.
