@@ -211,13 +211,9 @@ class _SidebarState extends ConsumerState<Sidebar> {
             ),
           ),
         );
-    // The app's own store. A user's project never shows it: a turn in one
-    // reads the default project's store only while its own toggle is off, so
-    // a button here would not say whose memories it opens, and when the
-    // toggle is on the page would be the wrong store altogether. The
-    // project's own is on its settings page ("Project memories"). The button
-    // belongs to the default project, and to a built-in whose spec keeps
-    // memory — both hold no store of their own, so the app store is theirs.
+    // The app's own store: what the default project shows beside its workspace
+    // in place of a settings page, and what a built-in with [MemoryPolicy.app]
+    // shows for the same reason.
     Widget memories() => IconButton(
           icon: const Icon(Icons.psychology_outlined),
           tooltip: "Memories",
@@ -242,7 +238,7 @@ class _SidebarState extends ConsumerState<Sidebar> {
     if (project == null) return [workspace(), memories()];
     return [
       if (spec?.sharedWorkspace ?? true) workspace(),
-      if (spec != null && spec.memory != MemoryPolicy.off) memories(),
+      if (spec == null || spec.memory != MemoryPolicy.off) memories(),
       if (projectHasSettingsPage(project)) settingsGear(),
     ];
   }
