@@ -353,9 +353,11 @@ class TurnSettings {
   /// is the main agent — the house — answering as it always has.
   final String? omadaMember;
 
-  /// Whether the project runs Omada, resolved with the turn's other facts so
-  /// the prompt and the capability set answer the same question. Members are
-  /// addressed by handle, and `task` is not offered.
+  /// Whether the project runs Omada, resolved with the turn's other facts.
+  /// The backend reads it for the session's viewer and nothing else: the
+  /// room contract the project runs under is [bundledInstructions], and the
+  /// capability the flag removes is `task` in [disabled], folded there.
+  /// Members are addressed by handle.
   final bool omada;
 
   /// How many model calls this turn may make before it stops. The app's own

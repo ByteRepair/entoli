@@ -278,6 +278,86 @@ void main() {
       expect(offSettings.disabled, isEmpty);
     });
 
+    test("an Omada-on user project runs under My Team's note, files read on top",
+        () async {
+      await repoWith(AppSettings()).createProject("team");
+      Directory(config.projectDir(project: "team")).createSync(recursive: true);
+      File(config.projectSettingsFile(project: "team"))
+          .writeAsStringSync('{"omada": true}');
+      await config.documents
+          .hydrate([config.projectSettingsFile(project: "team")]);
+      Directory(config.projectWorkspaceDir(project: "team"))
+          .createSync(recursive: true);
+      File(config.fs.path
+              .join(config.projectWorkspaceDir(project: "team"), "AGENTS.md"))
+          .writeAsStringSync("team rules");
+      final repo = repoWith(AppSettings());
+      final chat = await repo.createChat(project: "team");
+      await writeChatVia(repo, chat);
+
+      await repo.sendPrompt(chat.state.id, userMessage("hi")).toList();
+
+      final settings = backend.prompts.single.settings;
+      // The room contract is My Team's, resolved through the Omada answer,
+      // with the user's files read after it. The rendering itself is the
+      // backend's, covered by its bundled-note test.
+      expect(settings.bundledInstructions, contains("team project"));
+      expect(settings.includesUserInstructions, isTrue);
+    });
+
+    test("an Omada-off project ships no note and reads its files alone",
+        () async {
+      await repoWith(AppSettings()).createProject("plain");
+      final repo = repoWith(AppSettings());
+      final chat = await repo.createChat(project: "plain");
+      await writeChatVia(repo, chat);
+
+      await repo.sendPrompt(chat.state.id, userMessage("hi")).toList();
+
+      final settings = backend.prompts.single.settings;
+      expect(settings.bundledInstructions, isNull);
+      expect(settings.includesUserInstructions, isFalse);
+    });
+
+    test("a turn in My Team runs the room note and drops the task tool",
+        () async {
+      final repo = repoWith(AppSettings());
+      final chat = await repo.createChat(project: "my-team");
+      await writeChatVia(repo, chat);
+
+      await repo.sendPrompt(chat.state.id, userMessage("hi")).toList();
+
+      final settings = backend.prompts.single.settings;
+      expect(settings.project, "my-team");
+      expect(settings.omada, isTrue);
+      expect(settings.disabled, contains(AgentCapability.task));
+      expect(settings.bundledInstructions, contains("team project"));
+      expect(settings.includesUserInstructions, isTrue);
+    });
+
+    test("a project.json omada flag cannot turn Omada on in a built-in",
+        () async {
+      // The file is what a user project's toggle writes; a built-in's answer
+      // is its spec, so a stray one there must not be read.
+      Directory(config.projectDir(project: "anonymous"))
+          .createSync(recursive: true);
+      File(config.projectSettingsFile(project: "anonymous"))
+          .writeAsStringSync('{"omada": true}');
+      await config.documents
+          .hydrate([config.projectSettingsFile(project: "anonymous")]);
+      final repo = repoWith(AppSettings());
+      final chat = await repo.createChat(project: "anonymous");
+      await writeChatVia(repo, chat);
+
+      await repo.sendPrompt(chat.state.id, userMessage("hi")).toList();
+
+      final settings = backend.prompts.single.settings;
+      expect(settings.omada, isFalse);
+      expect(settings.disabled, isEmpty);
+      // Its own note still stands, not My Team's.
+      expect(settings.bundledInstructions, contains("anonymous chat"));
+    });
+
     // A draft is not on disk, so it answers for its own project: the same
     // resolution a saved chat gets, before anything has written it.
     test("a draft in a built-in project resolves before it is saved", () async {

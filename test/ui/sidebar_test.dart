@@ -532,13 +532,27 @@ void main() {
       expect(find.text("Round order"), findsNothing);
     });
 
-    testWidgets("a built-in's settings page has no Omada row", (tester) async {
+    testWidgets("a built-in's settings page has no Omada toggle", (tester) async {
       await app.pump(
         tester,
         ProjectSettingsPage(project: byteRepairProjectLabel.toLowerCase()),
       );
 
-      expect(find.text("Omada"), findsNothing);
+      // A built-in's answer is its spec: the page says it, rather than
+      // offering a toggle to change it. The ordering rows ride the same
+      // answer — My Team's page shows them, Byte Repair's shows nothing.
+      expect(find.text("Omada"), findsOneWidget);
+      expect(find.text("Round order"), findsNothing);
+    });
+
+    testWidgets("My Team's settings page shows the Omada state, not a toggle",
+        (tester) async {
+      await app.pump(tester, ProjectSettingsPage(project: "my-team"));
+
+      expect(find.text("Omada"), findsOneWidget);
+      expect(find.text("On — this project's chats carry several named agents."),
+          findsOneWidget);
+      expect(find.byType(SwitchListTile), findsNothing);
     });
 
     testWidgets("a built-in's settings page has no Description row", (tester) async {

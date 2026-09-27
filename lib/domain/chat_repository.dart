@@ -318,8 +318,18 @@ class ChatRepository {
     final projectSettings = await projectSettingsOf(project);
     // In an Omada-on project, members are brought in by mentioning them —
     // their turn follows — so the `task` relay has no job left. The capability
-    // mechanism drops it from the tool list and the prompt together.
-    final omada = projectSettings.omada;
+    // mechanism drops it from the tool list and the prompt together. A
+    // built-in's answer is its spec: the flag is what the project settings
+    // page reads back, and a user project's toggle never reaches one.
+    final omada = builtIn?.omada ?? projectSettings.omada;
+    // The room contract rides the Omada answer, not the project's kind: a
+    // user project with the toggle on runs under My Team's note, the way its
+    // prompt files derive from the built-ins'. The user's own instruction
+    // files are read on top of it, so their rules reach the turn and win —
+    // the only reading a user project's AGENTS.md has ever had. A project
+    // that ships no note of its own and runs no Omada gets none, and reads
+    // its files as it always has.
+    final omadaNote = builtIn?.bundledInstructions ?? (omada ? myTeamNote : null);
     if (omada) disabled.add(AgentCapability.task);
     // The default project's rules and writable roots are the app tier: they
     // apply to every project before its own, invisibly.
@@ -338,8 +348,12 @@ class ChatRepository {
           : await _resolveMemory(settings, project),
       sharedWorkspace: builtIn?.sharedWorkspace ?? true,
       disabled: disabled,
-      bundledInstructions: builtIn?.bundledInstructions,
-      includesUserInstructions: builtIn?.includesUserInstructions ?? false,
+      bundledInstructions: omadaNote,
+      // Where the note arrived by way of Omada rather than a built-in spec,
+      // the user's own files are read after it — the only reading a user
+      // project's AGENTS.md has ever had.
+      includesUserInstructions:
+          builtIn != null ? builtIn.includesUserInstructions : omadaNote != null,
       // The project's own command variables, beside the app-level ones.
       environment: projectSettings.environment ?? const {},
       // Chat rules first, then the project's, then the default project's:

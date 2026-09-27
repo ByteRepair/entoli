@@ -5,11 +5,34 @@ import "package:fs_shim/fs.dart";
 import "../../core/config.dart";
 import "../../core/log.dart";
 import "../../domain/bundled_prompt_file.dart";
+import "../../domain/builtin_project.dart" show builtinProjectOf, omadaBaseProject;
 import "../../domain/models.dart";
 import "../../domain/project.dart" show defaultProjectDir;
+import "../../domain/project_settings.dart";
 import "../../domain/prompt_library.dart";
 import "bundled_skill_data.dart";
 import "skill_validate.dart";
+
+/// The tiers in walk order: the default set first, then My Team's where the
+/// project runs Omada, then the project's own. The library's "later replaces
+/// earlier" rule is what makes the order the precedence — a project's own
+/// entry answers over a My Team one, a My Team one over a default one.
+List<String> _promptTiers({required String? project, required bool omada}) => [
+      defaultProjectDir,
+      if (omada && omadaBaseProject != project) omadaBaseProject,
+      if (project != null && project != defaultProjectDir) project,
+    ];
+
+/// Whether [project] runs Omada: a built-in's answer is its spec, a user
+/// project's its own `project.json`. Read once per library build — the
+/// sources are built at startup and on a skills-page reload, not per message.
+/// The config travels with the caller because a source may be built without
+/// one (`BundledPrompts`'s test shape); a null answers no.
+bool _omadaFor(String? project, {AppConfig? config}) {
+  if (config == null) return false;
+  return builtinProjectOf(project)?.omada ??
+      ProjectSettings.load(config, project: project).omada;
+}
 
 /// The presets, embedded in code at build time by `tool/gen_bundled_skills.dart`.
 /// The app is the source of truth for bundled skills and agents: the library
@@ -34,6 +57,11 @@ class BundledPrompts implements PromptSource {
   /// is the default project, the way it is everywhere else a project is named.
   final String? project;
 
+  /// Whether the project runs Omada, and so inherits My Team's agents. False
+  /// where there is no config to ask — the test shape, which loads no skills
+  /// either.
+  bool get _omada => _omadaFor(project, config: config);
+
   @override
   Future<List<PromptDocument>> load(CompletionKind kind) async {
     switch (kind) {
@@ -47,18 +75,13 @@ class BundledPrompts implements PromptSource {
   }
 
   List<PromptDocument> _loadBundledAgents() {
-    final project = this.project ?? defaultProjectDir;
     final documents = <PromptDocument>[];
-    // Default's first: the base set. A project's entries follow, so a
-    // same-named override replaces the default one for that project.
-    for (final file in bundledAgentFiles) {
-      if (file.project != defaultProjectDir) continue;
-      documents.add(
-          PromptDocument.parse(CompletionKind.agent, file.name, file.content));
-    }
-    if (project != defaultProjectDir) {
+    // The tiers in walk order: default's first (the base set), then My Team's
+    // where the project runs Omada, then the project's own. A later entry
+    // replaces an earlier same-named one for this project.
+    for (final tag in _promptTiers(project: project, omada: _omada)) {
       for (final file in bundledAgentFiles) {
-        if (file.project != project) continue;
+        if (file.project != tag) continue;
         documents.add(
             PromptDocument.parse(CompletionKind.agent, file.name, file.content));
       }
@@ -133,18 +156,21 @@ class DirectoryPrompts implements PromptSource {
   /// is the default project, the way it is everywhere else a project is named.
   final String? project;
 
+  /// Whether the project runs Omada, and so inherits My Team's agents.
+  bool get _omada => _omadaFor(project, config: config);
+
   @override
   Future<List<PromptDocument>> load(CompletionKind kind) async {
     final documents = <PromptDocument>[];
-    // Default's first, then the project's overrides. A project entry with the
-    // same name as a default one replaces it for that project — the library's
-    // "later replaces earlier" rule, the same one that lets a user's file
-    // override a bundled preset.
-    final defaultProject = await _loadKind(kind, defaultProjectDir);
-    documents.addAll(defaultProject);
-    final p = project;
-    if (p != null && p != defaultProjectDir) {
-      documents.addAll(await _loadKind(kind, p));
+    // The tiers in walk order — default's, then My Team's where the project
+    // runs Omada, then the project's own. A later entry with the same name
+    // replaces an earlier one for this project — the library's "later
+    // replaces earlier" rule, the same one that lets a user's file override a
+    // bundled preset. Skills walk the same two rungs they always have: My
+    // Team ships none, so an Omada project inherits the default's set as it
+    // always has, and an entry of its own still overrides.
+    for (final tier in _promptTiers(project: project, omada: _omada)) {
+      documents.addAll(await _loadKind(kind, tier));
     }
     return documents;
   }

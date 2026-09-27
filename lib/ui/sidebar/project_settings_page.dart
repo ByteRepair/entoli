@@ -121,13 +121,23 @@ class ProjectSettingsPage extends ConsumerWidget {
             title: const Text("Chats"),
             trailing: Text("$count"),
           ),
+          // The Omada rows: a user project's toggle, and — on or off — the
+          // ordering and round limit, which a built-in's Omada-on project
+          // (My Team) gets too, its on/off answer being its spec.
+          const Divider(),
           if (builtIn == null) ...[
-            const Divider(),
             _OmadaRow(project: project),
-            if (ref.watch(projectSettingsProvider(project).select((s) => s.omada))) ...[
-              _OmadaOrderingRow(project: project),
-              _OmadaMaxGenerationsRow(project: project),
-            ],
+          ] else ...[
+            ListTile(
+              title: const Text("Omada"),
+              subtitle: Text(builtIn.omada
+                  ? "On — this project's chats carry several named agents."
+                  : "Off."),
+            ),
+          ],
+          if (ref.watch(omadaOnProvider(project))) ...[
+            _OmadaOrderingRow(project: project),
+            _OmadaMaxGenerationsRow(project: project),
           ],
           // A direct turn's step limit is a question about turns, not about
           // Omada — built-ins included, where a project's own limit is the

@@ -277,35 +277,6 @@ const passWord = "pass";
 /// the reply carries no author — the label, not a member handle.
 const mainAgentLabel = "(main agent)";
 
-/// The one rule a member turn is told beyond its own instructions: the
-/// convention that makes declining possible, and the mention that makes
-/// handing off one. Appended to the member's prompt rather than the system
-/// prompt, which stays the one cacheable prefix.
-String memberTurnInstructions() => """
-## The room
-
-You are one member of a project team, answering a turn addressed to you. To
-hand work to another member, mention them by handle (for example
-@researcher) in your reply — their turn follows yours. To decline a turn
-addressed to you, reply with the single word `$passWord` and nothing else.
-Address the user plainly; the user reads what you write.
-
-Do not write your own handle in the reply — not even to sign it. A reply
-that names two members is read as addressing a group, and no one's turn
-follows a group.""";
-
-/// The house's half of the member's room contract: in an Omada-on project the
-/// main agent reaches members by handle too. Beside the member's half, never
-/// the system prompt — which stays the one cacheable prefix.
-String houseTurnInstructions() => """
-## The room
-
-You are the main agent of a project team, and you answer the user directly.
-To bring in another member, mention their handle (for example @researcher)
-in your reply — their turn follows yours, and you can pass them the part of
-the work that suits them. You cannot run a member yourself: addressing them
-by handle is the way.""";
-
 /// Where there is no shell, the model cannot run commands. But it does have a
 /// filesystem: the `read`/`write`/`edit` tools work on the workspace via the
 /// same `FileSystem` the app uses, so a browser can still produce files and

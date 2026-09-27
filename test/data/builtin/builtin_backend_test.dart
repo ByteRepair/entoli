@@ -9,7 +9,6 @@ import "package:path/path.dart" as p;
 import "package:agent_chat/core/config.dart";
 import "package:agent_chat/data/builtin/builtin_agent.dart";
 import "package:agent_chat/data/builtin/builtin_backend.dart";
-import "package:agent_chat/data/builtin/templates.dart" show houseTurnInstructions;
 import "package:agent_chat/data/builtin/llm/llm_client.dart";
 import "package:agent_chat/data/builtin/llm/llm_registry.dart";
 import "package:agent_chat/data/builtin/memory/store.dart";
@@ -150,20 +149,24 @@ void main() {
       expect(events.last, isA<DoneEvent>());
     });
 
-    test("an Omada-on turn withholds the task tool and names the room", () async {
+    test("an Omada-on turn withholds the task tool and runs the room note", () async {
       final backend = backendOver([
         [finish],
       ]);
 
       await send(backend, "hi",
-          omada: true, disabled: {AgentCapability.task});
+          omada: true,
+          disabled: {AgentCapability.task},
+          bundledInstructions: myTeamNote,
+          includesUserInstructions: true);
 
-      // The capability mechanism drops `task` from the tool list and the
-      // prompt's delegation section together; the overlay names the room.
+      // The capability mechanism drops `task` from the tool list; the room
+      // contract is the turn's instructions, resolved in the repository and
+      // rendered under it.
       final tools = client.calls.single.tools.map((t) => t.name).toSet();
       expect(tools, isNot(contains("task")));
       final turnMessage = client.sent.first[1].text;
-      expect(turnMessage, contains(houseTurnInstructions()));
+      expect(turnMessage, contains(myTeamNote!));
     });
 
     test("a turn outside Omada still offers the task tool", () async {
@@ -175,8 +178,8 @@ void main() {
 
       final tools = client.calls.single.tools.map((t) => t.name).toSet();
       expect(tools, contains("task"));
-      // No second system message: nothing to say about the room.
-      expect(client.sent.first[1].text, isNot(contains(houseTurnInstructions())));
+      // No note was handed, so nothing of the room reaches the prompt.
+      expect(client.sent.first[1].text, isNot(contains(myTeamNote!)));
     });
 
     test("a provider that is not configured is named", () async {

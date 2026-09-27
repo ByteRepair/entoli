@@ -383,6 +383,80 @@ void main() {
           reason: "esbmc-verifier must be visible to byte-repair");
     });
 
+    test("My Team inherits the default's agents and ships none of its own",
+        () async {
+      final agents =
+          await const BundledPrompts(project: "my-team").load(CompletionKind.agent);
+
+      expect(agents.map((a) => a.name).toSet(), {"explore", "general"});
+    });
+
+    test("an Omada-on user project inherits My Team's agents, an off one does not",
+        () async {
+      final config = tempConfig();
+      await config.ensureDirs();
+      // My Team's own agent directory: a project dir is one the user writes
+      // into only through the app, so the test writes it directly.
+      final onSettings = config.projectSettingsFile(project: "on-team");
+      Directory(config.projectDir(project: "on-team")).createSync(recursive: true);
+      File(onSettings).writeAsStringSync('{"omada": true}');
+      final offSettings = config.projectSettingsFile(project: "off-team");
+      Directory(config.projectDir(project: "off-team")).createSync(recursive: true);
+      File(offSettings).writeAsStringSync('{"omada": false}');
+      await config.documents.hydrate([onSettings, offSettings]);
+      Directory(
+              p.join(config.promptsDir(CompletionKind.agent, project: "my-team")))
+          .createSync(recursive: true);
+      File(p.join(
+              config.promptsDir(CompletionKind.agent, project: "my-team"),
+              "scout.md"))
+          .writeAsStringSync("---\ndescription: the scout\n---\n\nScout.\n");
+
+      final on = await PromptLibrary.from([
+        const BundledPrompts(project: "on-team"),
+        DirectoryPrompts(config, project: "on-team"),
+      ]);
+      final off = await PromptLibrary.from([
+        const BundledPrompts(project: "off-team"),
+        DirectoryPrompts(config, project: "off-team"),
+      ]);
+
+      expect(on.find(CompletionKind.agent, "scout"), isNotNull,
+          reason: "an Omada project inherits the Omada base's agents");
+      expect(off.find(CompletionKind.agent, "scout"), isNull,
+          reason: "an Omada-off project sees nothing of My Team's");
+    });
+
+    test("a project's own agent overrides a same-named My Team one", () async {
+      final config = tempConfig();
+      await config.ensureDirs();
+      final settings = config.projectSettingsFile(project: "team");
+      Directory(config.projectDir(project: "team")).createSync(recursive: true);
+      File(settings).writeAsStringSync('{"omada": true}');
+      await config.documents.hydrate([settings]);
+      Directory(
+              p.join(config.promptsDir(CompletionKind.agent, project: "my-team")))
+          .createSync(recursive: true);
+      File(p.join(
+              config.promptsDir(CompletionKind.agent, project: "my-team"),
+              "scout.md"))
+          .writeAsStringSync("---\ndescription: the base's\n---\n\nScout.\n");
+      Directory(
+              p.join(config.promptsDir(CompletionKind.agent, project: "team")))
+          .createSync(recursive: true);
+      File(p.join(config.promptsDir(CompletionKind.agent, project: "team"),
+              "scout.md"))
+          .writeAsStringSync("---\ndescription: the team's\n---\n\nScout.\n");
+
+      final library = await PromptLibrary.from([
+        const BundledPrompts(project: "team"),
+        DirectoryPrompts(config, project: "team"),
+      ]);
+
+      expect(library.find(CompletionKind.agent, "scout")!.description,
+          "the team's");
+    });
+
     test("a project's own agent overrides a same-named default one", () async {
       final config = tempConfig();
       await config.ensureDirs();
