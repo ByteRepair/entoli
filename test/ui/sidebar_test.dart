@@ -11,7 +11,6 @@ import "package:agent_chat/domain/project_settings.dart";
 import "package:agent_chat/domain/temp_chat_ttl.dart";
 import "package:agent_chat/providers.dart";
 import "package:agent_chat/ui/chat/chat_page.dart";
-import "package:agent_chat/ui/memory/memory_page.dart";
 import "package:agent_chat/ui/sidebar/chat_groups.dart";
 import "package:agent_chat/ui/sidebar/project_settings_page.dart";
 import "package:agent_chat/ui/sidebar/sidebar.dart";
@@ -289,32 +288,6 @@ void main() {
       expect(find.byType(WorkspacePage), findsOneWidget);
     });
 
-    // The memories button is the app store's, so only the default project
-    // shows it: where it opens is memory_page_test's, and that the page
-    // carries the default store is the dir it is built with.
-    testWidgets("the default project's memories button opens the memory page",
-        (tester) async {
-      await pumpBeside(tester);
-
-      expect(find.byTooltip("Memories"), findsOneWidget);
-      await tester.tap(find.byTooltip("Memories"));
-      await settleIo(tester);
-
-      final page = tester.widget<MemoryPage>(find.byType(MemoryPage));
-      expect(page.dir, app.config.memoryDir());
-    });
-
-    // A user's project never shows it — the app store is not the store its
-    // chats answer to, and its own is on the settings page.
-    testWidgets("a named project shows no memories button", (tester) async {
-      await io(tester, () => app.repo.createProject("work"));
-      await pumpBeside(tester);
-      await switchTo(tester, "work");
-
-      expect(app.container.read(selectedProjectProvider), "work");
-      expect(find.byTooltip("Memories"), findsNothing);
-    });
-
     // A built-in project is in the menu like any other, but it is not one the
     // user made, so there is nothing to delete it with.
     testWidgets("a built-in project is offered, and not deletable", (tester) async {
@@ -325,10 +298,9 @@ void main() {
       expect(find.text("Delete project…"), findsNothing);
     });
 
-    // Anonymous keeps no store at all (`MemoryPolicy.off`), so the slot
-    // beside the switcher holds nothing for it. Byte Repair keeps memory on
-    // the app's store, so its memories button stays; the workspace button is
-    // what its `sharedWorkspace` says.
+    // Anonymous has neither a settings page nor a shared workspace, so the
+    // slot beside the switcher holds nothing for it. Byte Repair has both,
+    // since its spec ships a note and reads the user's files on top of it.
     testWidgets("anonymous has no settings page or workspace button", (tester) async {
       await pumpBeside(tester);
       await switchTo(tester, anonProjectLabel);
@@ -336,7 +308,6 @@ void main() {
       expect(app.container.read(selectedProjectProvider), "anonymous");
       expect(find.byTooltip("Project settings"), findsNothing);
       expect(find.byTooltip("Default workspace"), findsNothing);
-      expect(find.byTooltip("Memories"), findsNothing);
     });
 
     testWidgets("Byte Repair has a settings gear that opens its page",
@@ -346,8 +317,6 @@ void main() {
 
       expect(app.container.read(selectedProjectProvider), "byte-repair");
       expect(find.byTooltip("Project settings"), findsOneWidget);
-      // Memory is the app's store for a built-in, so the button shows.
-      expect(find.byTooltip("Memories"), findsOneWidget);
       await tester.tap(find.byTooltip("Project settings"));
       await settleIo(tester);
 
@@ -360,7 +329,6 @@ void main() {
       await switchTo(tester, "work");
 
       expect(find.byTooltip("Default workspace"), findsNothing);
-      expect(find.byTooltip("Memories"), findsNothing);
       await tester.tap(find.byTooltip("Project settings"));
       await settleIo(tester);
 
