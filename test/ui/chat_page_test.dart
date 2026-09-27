@@ -179,10 +179,12 @@ void main() {
       await openEmpty(tester);
 
       expect(find.widgetWithText(ChoiceChip, anonProjectLabel), findsOneWidget);
+      expect(find.widgetWithText(ChoiceChip, myTeamProjectLabel), findsOneWidget);
       expect(find.widgetWithText(ChoiceChip, byteRepairProjectLabel), findsOneWidget);
-      expect(find.byType(ChoiceChip), findsNWidgets(2));
+      expect(find.byType(ChoiceChip), findsNWidgets(3));
       // Each built-in's badge carries its icon as the chip's avatar.
       expect(find.byIcon(Icons.visibility_off), findsOneWidget);
+      expect(find.byIcon(Icons.groups), findsOneWidget);
       expect(find.byIcon(Icons.verified_user), findsOneWidget);
     });
 

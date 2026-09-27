@@ -394,20 +394,16 @@ class BuiltinBackend implements AgentBackend {
       // of, so they come off the message that started it. A member turn is
       // the other shape: the overlay is the member's prompt from the library
       // as it stands now, and it replaces the mentions rather than joining
-      // them.
+      // them. The room contract itself is not the backend's business — the
+      // note an Omada project runs under is bundled instructions, resolved in
+      // the repository.
       final said =
           prompt ?? history.lastWhereOrNull((m) => m.role == MessageRole.user);
       final memberBody = settings.omadaMember == null
           ? null
           : memberPrompt(libraryFor(settings.project), settings.omadaMember!);
       final mentions = agentPromptFrom(said?.documents ?? const {});
-      final agentPrompt = memberBody == null
-          ? settings.omada
-              ? mentions == null
-                  ? houseTurnInstructions()
-                  : "$mentions\n\n${houseTurnInstructions()}"
-              : mentions
-          : "$memberBody\n\n${memberTurnInstructions()}";
+      final agentPrompt = memberBody ?? mentions;
       final events = prompt == null
           ? agent.resume(agentPrompt: agentPrompt)
           : agent.run(prompt, agentPrompt: agentPrompt);

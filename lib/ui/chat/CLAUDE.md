@@ -52,6 +52,18 @@ That is what keeps the label honest: it answers "who spoke", and the answer
 is a lie if an instruction overlay can put a name on the main agent's
 voice.
 
+**The room contract is My Team's note, not a per-turn overlay.** Every Omada
+turn runs under `MyTeamProject`'s bundled note (`assets/prompts/projects/
+my-team/system/instructions.md`): the room, the handles, `pass`, the one
+handle per reply — worded once for any participant, main agent or member,
+since both run under it. The project's own note comes first where it ships
+one, and the user's instruction files are read on top, the way they always
+are for a user project. A project's Omada answer decides whether the note is
+there at all — a built-in's spec (`my-team` on, everything else off), a user
+project's toggle — so flipping Omada off leaves the next turn the plain
+prompt it had. The per-turn wording that used to stand here
+(`houseTurnInstructions`/`memberTurnInstructions`) is gone.
+
 **The schedule is the room's order of speaking.** `_schedule` puts an item
 on each member's FIFO: a user prompt addressed by its documents, or a
 handoff — the reply that names them, one generation past the turn that wrote

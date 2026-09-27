@@ -409,7 +409,11 @@ and what makes it sub is the reply route, enforced structurally below: its
 events never reach the controller that writes `conv.jsonl`, so it cannot
 address the room. That route is the one thing Omada will change: in an
 Omada-on project the named member is promoted to address the room directly,
-and `task` goes away.
+and `task` goes away. The room contract that replaces the tool's prompting
+is not this file's business — it is the project's bundled note, My Team's
+(`assets/prompts/projects/my-team/system/instructions.md`), which the
+repository hands every Omada turn; see "The room contract is My Team's note"
+in `lib/ui/chat/CLAUDE.md`.
 
 `task` spawns a sub-agent with its own session under the named `@agent`'s
 prompt, runs it to completion headless, and returns its final text as the tool

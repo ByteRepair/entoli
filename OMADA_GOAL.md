@@ -88,6 +88,13 @@ stays — history is fact.
 
 ## What shipped
 
+- **My Team, the Omada base** — a built-in project (`my-team`) with Omada on
+  and the room contract for its note. It does not replace Default; it stands
+  beside it as the base Omada prompt data derives from, the way user
+  projects derive theirs from the default project: a user project with Omada
+  on runs under My Team's note and inherits its members, the project's own
+  entries and AGENTS.md above them. The chain is default < My Team < any
+  other Omada project.
 - **Settings** — the per-project toggle, the ordering dropdown, the italic
   marker, the built-in spec flag, `omadaOnProvider`.
 - **Direct chats defined** — the 1:1 contract above, written into
@@ -115,8 +122,9 @@ stays — history is fact.
   renders as typed entries (`entriesOf`), each row owning its alignment.
 - **`task` retired in Omada-on projects** — `AgentCapability.task` joins the
   disabled set, so the tool vanishes from the list and the prompt together;
-  the house's overlay names the room and points at handles. Direct chats keep
-  `task` and the sub-agent machinery intact.
+  the room contract is My Team's bundled note, resolved in the repository
+  (see `lib/ui/chat/CLAUDE.md`, "The room contract is My Team's note"). Direct
+  chats keep `task` and the sub-agent machinery intact.
 - **Phase C2 — flow control.** The settle-first handoff wave, send-while-
   running dispatching between turns (no mid-turn injection, protecting the
   projection-prefix invariant), the composer's empty-Stop/typed-Send rule,

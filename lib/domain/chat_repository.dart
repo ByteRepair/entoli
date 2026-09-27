@@ -316,11 +316,22 @@ class ChatRepository {
       disabled..add(AgentCapability.ask)..add(AgentCapability.task);
     }
     final projectSettings = await projectSettingsOf(project);
-    // In an Omada-on project, members are brought in by mentioning them —
-    // their turn follows — so the `task` relay has no job left. The capability
-    // mechanism drops it from the tool list and the prompt together.
-    final omada = projectSettings.omada;
+    // Whether Omada runs, resolved once by [omadaFor]: a built-in's answer is
+    // its spec, a user project's its toggle, and the default project's is
+    // false. In an Omada-on project, members are brought in by mentioning
+    // them — their turn follows — so the `task` relay has no job left. The
+    // capability mechanism drops it from the tool list and the prompt
+    // together.
+    final omada = omadaFor(project, projectOmada: projectSettings.omada);
     if (omada) disabled.add(AgentCapability.task);
+    // The instructions the turn runs under — the room contract where Omada is
+    // on and the project ships no note of its own — resolved by
+    // [BuiltinProject.turnInstructions] for a built-in and
+    // [BuiltinProject.turnInstructionsForUserProject] for a user project,
+    // with the user's own files read after the note where the answer says so.
+    final instructions = builtIn != null
+        ? builtIn.turnInstructions(omada: omada)
+        : BuiltinProject.turnInstructionsForUserProject(omada: omada);
     // The default project's rules and writable roots are the app tier: they
     // apply to every project before its own, invisibly.
     final defaultProjectSettings =
@@ -338,8 +349,8 @@ class ChatRepository {
           : await _resolveMemory(settings, project),
       sharedWorkspace: builtIn?.sharedWorkspace ?? true,
       disabled: disabled,
-      bundledInstructions: builtIn?.bundledInstructions,
-      includesUserInstructions: builtIn?.includesUserInstructions ?? false,
+      bundledInstructions: instructions.note,
+      includesUserInstructions: instructions.includesUser,
       // The project's own command variables, beside the app-level ones.
       environment: projectSettings.environment ?? const {},
       // Chat rules first, then the project's, then the default project's:
@@ -380,7 +391,6 @@ class ChatRepository {
       // The answering member is the caller's fact, not the chat's — it is
       // about the message the turn runs, not the settings it runs under.
       omadaMember: omadaMember,
-      omada: omada,
     );
   }
 

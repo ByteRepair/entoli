@@ -353,11 +353,6 @@ class TurnSettings {
   /// is the main agent — the house — answering as it always has.
   final String? omadaMember;
 
-  /// Whether the project runs Omada, resolved with the turn's other facts so
-  /// the prompt and the capability set answer the same question. Members are
-  /// addressed by handle, and `task` is not offered.
-  final bool omada;
-
   /// How many model calls this turn may make before it stops. The app's own
   /// answer for the level that resolved the turn — a project's own, else the
   /// app default, else the backend's. The backend's [BuiltinOptions.stepLimit]
@@ -392,7 +387,6 @@ class TurnSettings {
     this.includesUserInstructions = false,
     this.environment = const {},
     this.omadaMember,
-    this.omada = false,
     this.turnMaxSteps,
     this.tone = Tone.none,
     this.citations = false,
