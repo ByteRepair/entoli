@@ -103,6 +103,39 @@ class BuiltinProject {
   /// its files regardless.
   bool get includesUserInstructions => false;
 
+  /// The instructions a turn in this project runs under: [bundledInstructions]
+  /// with [includesUserInstructions] beside it, and the Omada answer deciding
+  /// the fall-through. A user project is [omadaBaseProject]'s to answer — its
+  /// room contract with the base's own [includesUserInstructions] riding
+  /// behind the note, so the flag stays the note's and not note-presence's,
+  /// which is what keeps a future note that must stand whole standing whole
+  /// for user projects too. Null is no note, the way a plain user project's
+  /// AGENTS.md is the whole instructions.
+  ({String? note, bool includesUser}) turnInstructions({required bool omada}) {
+    final note = bundledInstructions;
+    if (note != null) return (note: note, includesUser: includesUserInstructions);
+    if (!omada) return (note: null, includesUser: false);
+    final base = builtinProjectOf(omadaBaseProject);
+    return (
+      note: base?.bundledInstructions,
+      includesUser: base?.includesUserInstructions ?? true,
+    );
+  }
+
+  /// The same for a user project — no spec of its own, so the Omada answer
+  /// alone decides: the base's room contract where Omada is on, nothing
+  /// otherwise, and the user's files read after the note.
+  static ({String? note, bool includesUser}) turnInstructionsForUserProject(
+          {required bool omada}) =>
+      omada
+          ? (
+              note: myTeamNote,
+              includesUser:
+                  builtinProjectOf(omadaBaseProject)?.includesUserInstructions ??
+                      true,
+            )
+          : (note: null, includesUser: false);
+
   /// Whether a turn in this project is configured from a project settings
   /// page. A user project always has one; a built-in overrides this where the
   /// page would show more than its name and path. Default false (anonymous),
@@ -171,9 +204,9 @@ const myTeamProjectLabel = "My Team";
 const omadaBaseProject = "my-team";
 
 /// My Team's room contract, the note an Omada-on project runs under when it
-/// ships no note of its own. The same text [MyTeamProject.bundledInstructions]
-/// answers; named at the top level so the repository can hand it to a user
-/// project's turns without meeting the built-in itself.
+/// ships no note of its own. Named at the top level so the repository and the
+/// tests can reach it without meeting the built-in itself; the resolution a
+/// turn actually takes is [BuiltinProject.turnInstructions].
 String? get myTeamNote =>
     bundledPromptFileOf(bundledSystemPrompts, omadaBaseProject, "instructions")
         ?.content;
@@ -213,7 +246,7 @@ class AnonymousProject extends BuiltinProject {
 class MyTeamProject extends BuiltinProject {
   const MyTeamProject()
       : super(
-          dir: "my-team",
+          dir: omadaBaseProject,
           label: myTeamProjectLabel,
           icon: Icons.groups,
           omada: true,
@@ -288,6 +321,17 @@ BuiltinProject? builtinProjectOf(String? dir) {
 
 /// Whether [dir] names a built-in project, whatever its case.
 bool isBuiltinProject(String? dir) => builtinProjectOf(dir) != null;
+
+/// Whether [project] runs Omada. One rule, three readers: a built-in's answer
+/// is its spec, a user project's is the toggle in its `project.json`
+/// ([projectOmada], the answer the caller has already read), and the default
+/// project — which has no settings page for one — is false whatever a
+/// hand-written `projects/default/project.json` says. The UI's
+/// `omadaOnProvider`, the turn resolution in `ChatRepository._turnSettings`,
+/// and the prompt library's inheritance rung all ask this, so they cannot
+/// answer different questions.
+bool omadaFor(String? project, {required bool projectOmada}) =>
+    builtinProjectOf(project)?.omada ?? (project == null ? false : projectOmada);
 
 /// What [spec]'s policy makes of the app's profile. Null is no spec — a
 /// user's project, or the default one — and the policy is

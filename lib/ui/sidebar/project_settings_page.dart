@@ -121,20 +121,11 @@ class ProjectSettingsPage extends ConsumerWidget {
             title: const Text("Chats"),
             trailing: Text("$count"),
           ),
-          // The Omada rows: a user project's toggle, and — on or off — the
-          // ordering and round limit, which a built-in's Omada-on project
-          // (My Team) gets too, its on/off answer being its spec.
+          // The Omada rows: the toggle — read-only for a built-in, whose
+          // answer is its spec — and the ordering and round limit, shown
+          // wherever the answer is on.
           const Divider(),
-          if (builtIn == null) ...[
-            _OmadaRow(project: project),
-          ] else ...[
-            ListTile(
-              title: const Text("Omada"),
-              subtitle: Text(builtIn.omada
-                  ? "On — this project's chats carry several named agents."
-                  : "Off."),
-            ),
-          ],
+          _OmadaRow(project: project, builtIn: builtIn),
           if (ref.watch(omadaOnProvider(project))) ...[
             _OmadaOrderingRow(project: project),
             _OmadaMaxGenerationsRow(project: project),
@@ -333,23 +324,27 @@ class _UseProjectMemoryRow extends ConsumerWidget {
 }
 
 /// Whether this project's chats can carry several agents in one round. A
-/// user project's toggle; the page gates it off for a built-in.
+/// user project's toggle; a built-in's is the same row with the switch
+/// disabled, its answer being its spec — the state shown, not offered.
 class _OmadaRow extends ConsumerWidget {
-  const _OmadaRow({required this.project});
+  const _OmadaRow({required this.project, required this.builtIn});
 
   final String project;
+  final BuiltinProject? builtIn;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final on = ref.watch(projectSettingsProvider(project).select((s) => s.omada));
+    final on = ref.watch(omadaOnProvider(project));
     return SwitchListTile(
       title: const Text("Omada"),
       subtitle: const Text(
           "Several named agents take part in a chat's replies, alongside the "
           "main one."),
       value: on,
-      onChanged: (value) =>
-          ref.read(projectSettingsProvider(project).notifier).setOmada(value),
+      onChanged: builtIn == null
+          ? (value) =>
+              ref.read(projectSettingsProvider(project).notifier).setOmada(value)
+          : null,
     );
   }
 }

@@ -549,10 +549,14 @@ void main() {
         (tester) async {
       await app.pump(tester, ProjectSettingsPage(project: "my-team"));
 
-      expect(find.text("Omada"), findsOneWidget);
-      expect(find.text("On — this project's chats carry several named agents."),
-          findsOneWidget);
-      expect(find.byType(SwitchListTile), findsNothing);
+      // The one row, rendered with the switch disabled — a built-in's answer
+      // is its spec, so the state is shown, not offered. The ordering rows
+      // ride the same answer and are offered.
+      final toggle = tester.widget<SwitchListTile>(
+          find.widgetWithText(SwitchListTile, "Omada"));
+      expect(toggle.value, isTrue);
+      expect(toggle.onChanged, isNull);
+      expect(find.text("Round order"), findsOneWidget);
     });
 
     testWidgets("a built-in's settings page has no Description row", (tester) async {

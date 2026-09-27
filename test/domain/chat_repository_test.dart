@@ -11,7 +11,8 @@ import "package:agent_chat/domain/app_settings.dart";
 import "package:agent_chat/domain/chat_meta.dart";
 import "package:agent_chat/domain/chat_log.dart";
 import "package:agent_chat/domain/chat_repository.dart";
-import "package:agent_chat/domain/builtin_project.dart" show AgentCapability;
+import "package:agent_chat/domain/builtin_project.dart"
+    show AgentCapability, myTeamNote;
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/domain/profile.dart";
 import "package:agent_chat/domain/permission.dart";
@@ -254,38 +255,30 @@ void main() {
 
     test("an Omada-on project drops the task tool; an off one keeps it", () async {
       await repoWith(AppSettings()).createProject("team");
-      Directory(config.projectDir(project: "team"))
-          .createSync(recursive: true);
       // What the project settings page writes when Omada is flipped on.
-      File(config
-              .projectSettingsFile(project: "team"))
-          .writeAsStringSync('{"omada": true}');
       await config.documents
-          .hydrate([config.projectSettingsFile(project: "team")]);
+          .write(config.projectSettingsFile(project: "team"), '{"omada": true}');
       final repo = repoWith(AppSettings());
       final on = await repo.createChat(project: "team");
       await writeChatVia(repo, on);
       await repo.sendPrompt(on.state.id, userMessage("hi")).toList();
       final onSettings = backend.prompts.last.settings;
-      expect(onSettings.omada, isTrue);
+      expect(onSettings.bundledInstructions, myTeamNote);
       expect(onSettings.disabled, contains(AgentCapability.task));
 
       final off = await repo.createChat();
       await writeChatVia(repo, off);
       await repo.sendPrompt(off.state.id, userMessage("hi")).toList();
       final offSettings = backend.prompts.last.settings;
-      expect(offSettings.omada, isFalse);
+      expect(offSettings.bundledInstructions, isNull);
       expect(offSettings.disabled, isEmpty);
     });
 
     test("an Omada-on user project runs under My Team's note, files read on top",
         () async {
       await repoWith(AppSettings()).createProject("team");
-      Directory(config.projectDir(project: "team")).createSync(recursive: true);
-      File(config.projectSettingsFile(project: "team"))
-          .writeAsStringSync('{"omada": true}');
       await config.documents
-          .hydrate([config.projectSettingsFile(project: "team")]);
+          .write(config.projectSettingsFile(project: "team"), '{"omada": true}');
       Directory(config.projectWorkspaceDir(project: "team"))
           .createSync(recursive: true);
       File(config.fs.path
@@ -301,7 +294,7 @@ void main() {
       // The room contract is My Team's, resolved through the Omada answer,
       // with the user's files read after it. The rendering itself is the
       // backend's, covered by its bundled-note test.
-      expect(settings.bundledInstructions, contains("team project"));
+      expect(settings.bundledInstructions, myTeamNote);
       expect(settings.includesUserInstructions, isTrue);
     });
 
@@ -329,9 +322,8 @@ void main() {
 
       final settings = backend.prompts.single.settings;
       expect(settings.project, "my-team");
-      expect(settings.omada, isTrue);
       expect(settings.disabled, contains(AgentCapability.task));
-      expect(settings.bundledInstructions, contains("team project"));
+      expect(settings.bundledInstructions, myTeamNote);
       expect(settings.includesUserInstructions, isTrue);
     });
 
@@ -341,10 +333,8 @@ void main() {
       // is its spec, so a stray one there must not be read.
       Directory(config.projectDir(project: "anonymous"))
           .createSync(recursive: true);
-      File(config.projectSettingsFile(project: "anonymous"))
-          .writeAsStringSync('{"omada": true}');
-      await config.documents
-          .hydrate([config.projectSettingsFile(project: "anonymous")]);
+      await config.documents.write(
+          config.projectSettingsFile(project: "anonymous"), '{"omada": true}');
       final repo = repoWith(AppSettings());
       final chat = await repo.createChat(project: "anonymous");
       await writeChatVia(repo, chat);
@@ -352,7 +342,6 @@ void main() {
       await repo.sendPrompt(chat.state.id, userMessage("hi")).toList();
 
       final settings = backend.prompts.single.settings;
-      expect(settings.omada, isFalse);
       expect(settings.disabled, isEmpty);
       // Its own note still stands, not My Team's.
       expect(settings.bundledInstructions, contains("anonymous chat"));

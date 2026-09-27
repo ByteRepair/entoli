@@ -13,6 +13,7 @@ import "package:agent_chat/data/prompts/bundled_skills.dart";
 import "package:agent_chat/data/prompts/prompt_sources.dart";
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/domain/prompt_library.dart";
+import "package:agent_chat/domain/project_settings.dart";
 
 import "../../harness.dart";
 
@@ -22,6 +23,24 @@ Future<void> install(AppConfig config) => installBundledSkills(
     acquireWrite: (_) async {},
     releaseWrite: (_) async {});
 
+/// A project directory on disk with its `project.json` seeded the way the
+/// settings page writes it — through [ProjectSettings.save], which is
+/// `documents.write` underneath.
+Future<void> seedProject(AppConfig config, String project,
+    {required bool omada}) async {
+  Directory(config.projectDir(project: project)).createSync(recursive: true);
+  await (ProjectSettings()..omada = omada).save(config, project: project);
+}
+
+/// One agent file in [project]'s `agents/` directory.
+void seedAgent(AppConfig config, String project, String name,
+    String description) {
+  final dir = Directory(config.promptsDir(CompletionKind.agent, project: project));
+  dir.createSync(recursive: true);
+  File(p.join(dir.path, "$name.md"))
+      .writeAsStringSync("---\ndescription: $description\n---\n\n$name.\n");
+}
+
 void main() {
   test("the presets are embedded in code, and written to disk for bash", () async {
     final config = tempConfig();
@@ -29,7 +48,7 @@ void main() {
 
     final skills =
         await BundledPrompts(config: config).load(CompletionKind.skill);
-    final agents = await const BundledPrompts().load(CompletionKind.agent);
+    final agents = await BundledPrompts().load(CompletionKind.agent);
 
     expect(skills, isNotEmpty);
     expect(agents, isNotEmpty);
@@ -350,7 +369,7 @@ void main() {
         "missing", () async {
       final skills =
           await BundledPrompts(config: tempConfig()).load(CompletionKind.skill);
-      final agents = await const BundledPrompts().load(CompletionKind.agent);
+      final agents = await BundledPrompts().load(CompletionKind.agent);
 
       expect(skills.map((s) => s.name).toSet(), containsAll(localSkills));
       expect(agents.map((a) => a.name).toSet(), {"explore", "general"});
@@ -362,7 +381,7 @@ void main() {
       await install(config);
       final skills = await BundledPrompts(config: config, project: "byte-repair")
           .load(CompletionKind.skill);
-      final agents = await const BundledPrompts(project: "byte-repair")
+      final agents = await BundledPrompts(project: "byte-repair")
           .load(CompletionKind.agent);
 
       expect(skills.map((s) => s.name).toSet(), containsAll(localSkills));
@@ -372,9 +391,9 @@ void main() {
 
     test("esbmc-verifier is byte-repair's alone", () async {
       final defaultAgents =
-          await const BundledPrompts().load(CompletionKind.agent);
+          await BundledPrompts().load(CompletionKind.agent);
       final byteRepairAgents =
-          await const BundledPrompts(project: "byte-repair")
+          await BundledPrompts(project: "byte-repair")
               .load(CompletionKind.agent);
 
       expect(defaultAgents.any((a) => a.name == "esbmc-verifier"), isFalse,
@@ -386,7 +405,7 @@ void main() {
     test("My Team inherits the default's agents and ships none of its own",
         () async {
       final agents =
-          await const BundledPrompts(project: "my-team").load(CompletionKind.agent);
+          await BundledPrompts(project: "my-team").load(CompletionKind.agent);
 
       expect(agents.map((a) => a.name).toSet(), {"explore", "general"});
     });
@@ -397,27 +416,16 @@ void main() {
       await config.ensureDirs();
       // My Team's own agent directory: a project dir is one the user writes
       // into only through the app, so the test writes it directly.
-      final onSettings = config.projectSettingsFile(project: "on-team");
-      Directory(config.projectDir(project: "on-team")).createSync(recursive: true);
-      File(onSettings).writeAsStringSync('{"omada": true}');
-      final offSettings = config.projectSettingsFile(project: "off-team");
-      Directory(config.projectDir(project: "off-team")).createSync(recursive: true);
-      File(offSettings).writeAsStringSync('{"omada": false}');
-      await config.documents.hydrate([onSettings, offSettings]);
-      Directory(
-              p.join(config.promptsDir(CompletionKind.agent, project: "my-team")))
-          .createSync(recursive: true);
-      File(p.join(
-              config.promptsDir(CompletionKind.agent, project: "my-team"),
-              "scout.md"))
-          .writeAsStringSync("---\ndescription: the scout\n---\n\nScout.\n");
+      await seedProject(config, "on-team", omada: true);
+      await seedProject(config, "off-team", omada: false);
+      seedAgent(config, "my-team", "scout", "the scout");
 
       final on = await PromptLibrary.from([
-        const BundledPrompts(project: "on-team"),
+        BundledPrompts(project: "on-team"),
         DirectoryPrompts(config, project: "on-team"),
       ]);
       final off = await PromptLibrary.from([
-        const BundledPrompts(project: "off-team"),
+        BundledPrompts(project: "off-team"),
         DirectoryPrompts(config, project: "off-team"),
       ]);
 
@@ -430,26 +438,12 @@ void main() {
     test("a project's own agent overrides a same-named My Team one", () async {
       final config = tempConfig();
       await config.ensureDirs();
-      final settings = config.projectSettingsFile(project: "team");
-      Directory(config.projectDir(project: "team")).createSync(recursive: true);
-      File(settings).writeAsStringSync('{"omada": true}');
-      await config.documents.hydrate([settings]);
-      Directory(
-              p.join(config.promptsDir(CompletionKind.agent, project: "my-team")))
-          .createSync(recursive: true);
-      File(p.join(
-              config.promptsDir(CompletionKind.agent, project: "my-team"),
-              "scout.md"))
-          .writeAsStringSync("---\ndescription: the base's\n---\n\nScout.\n");
-      Directory(
-              p.join(config.promptsDir(CompletionKind.agent, project: "team")))
-          .createSync(recursive: true);
-      File(p.join(config.promptsDir(CompletionKind.agent, project: "team"),
-              "scout.md"))
-          .writeAsStringSync("---\ndescription: the team's\n---\n\nScout.\n");
+      await seedProject(config, "team", omada: true);
+      seedAgent(config, "my-team", "scout", "the base's");
+      seedAgent(config, "team", "scout", "the team's");
 
       final library = await PromptLibrary.from([
-        const BundledPrompts(project: "team"),
+        BundledPrompts(project: "team"),
         DirectoryPrompts(config, project: "team"),
       ]);
 
@@ -466,7 +460,7 @@ void main() {
           .writeAsStringSync("---\ndescription: mine\n---\n\nMy explore.\n");
 
       final library = await PromptLibrary.from([
-        const BundledPrompts(),
+        BundledPrompts(),
         DirectoryPrompts(config),
       ]);
 
@@ -484,7 +478,7 @@ void main() {
 
       // A project with no skills of its own sees the default's user skill.
       final library = await PromptLibrary.from([
-        const BundledPrompts(project: "my-project"),
+        BundledPrompts(project: "my-project"),
         DirectoryPrompts(config, project: "my-project"),
       ]);
 
@@ -509,7 +503,7 @@ void main() {
           .writeAsStringSync("---\nname: shared\ndescription: project's\n---\n\nProject.\n");
 
       final library = await PromptLibrary.from([
-        const BundledPrompts(project: "my-project"),
+        BundledPrompts(project: "my-project"),
         DirectoryPrompts(config, project: "my-project"),
       ]);
 

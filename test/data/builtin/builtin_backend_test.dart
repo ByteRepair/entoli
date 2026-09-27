@@ -98,7 +98,6 @@ void main() {
     MemorySettings memory = MemorySettings.off,
     String? bundledInstructions,
     bool includesUserInstructions = false,
-    bool omada = false,
     ApproveMode approveMode = ApproveMode.never,
     List<PermissionRule> permissions = const [],
   }) =>
@@ -118,8 +117,7 @@ void main() {
                   sharedWorkspace: sharedWorkspace,
                   disabled: disabled,
                   bundledInstructions: bundledInstructions,
-                  includesUserInstructions: includesUserInstructions,
-                  omada: omada))
+                  includesUserInstructions: includesUserInstructions))
           .toList();
 
   /// Carrying on the turn [history] ends in, under the same settings [send]
@@ -155,7 +153,6 @@ void main() {
       ]);
 
       await send(backend, "hi",
-          omada: true,
           disabled: {AgentCapability.task},
           bundledInstructions: myTeamNote,
           includesUserInstructions: true);

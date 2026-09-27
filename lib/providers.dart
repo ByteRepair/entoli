@@ -1067,10 +1067,10 @@ final projectSettingsProvider =
     NotifierProvider.family<ProjectSettingsNotifier, ProjectSettings, String?>(
         ProjectSettingsNotifier.new);
 
-/// Whether Omada runs in [project]: a built-in's answer is its spec, a user
-/// project's is the toggle in its `project.json`, and the default project's
-/// is false — it has no settings page for one. The read every surface makes,
-/// so a toggle landing re-renders each of them.
+/// Whether Omada runs in [project]: the one rule [omadaFor] resolves — a
+/// built-in's spec, a user project's toggle, the default project false —
+/// read the way the UI reads it, so a toggle landing re-renders each of
+/// these surfaces.
 final omadaOnProvider = Provider.family<bool, String?>((ref, project) {
   final spec = builtinProjectOf(project);
   if (spec != null) return spec.omada;
