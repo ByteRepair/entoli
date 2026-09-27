@@ -106,11 +106,6 @@ class BuiltinBackend implements AgentBackend {
   /// keep. Not a session: it is the newest request's fact, not the
   /// conversation's, and the controller reads it the way the controller reads
   /// everything else of the backend — through the callback that reported it.
-  /// The newest usage each chat's model reported — the fact the auto-compact
-  /// threshold reads, and what a backend that forgets on dispose must not
-  /// keep. Not a session: it is the newest request's fact, not the
-  /// conversation's, and the controller reads it the way the controller reads
-  /// everything else of the backend — through the callback that reported it.
   /// The window rides beside it because the turn that resolved the provider
   /// also resolved its config; the controller answers both from one fact.
   final Map<String, ({int contextTokens, int contextWindow})> _usage = {};
@@ -245,6 +240,13 @@ class BuiltinBackend implements AgentBackend {
         maxRetryBudget: options.rateLimitRetryBudget,
       );
       final gatedClient = GatedLlmClient(target.client, rateLimitGate);
+      // The window of the provider this turn runs on, resolved once where the
+      // turn's model was — the registry, on-device endpoint included — and
+      // ridden with each usage the turn reports. Frozen for the turn, the way
+      // the model itself is: a mid-turn settings edit reaches the next turn.
+      final contextWindow = registry
+              .endpointFor(settings.provider ?? "")?.config.effectiveContextWindow ??
+          defaultContextWindow;
       final subAgentLog = FileSubAgentLog(config, chatId, project: project);
       final subAgentRunner = SubAgentRunner(
         client: gatedClient,
@@ -409,19 +411,12 @@ class BuiltinBackend implements AgentBackend {
         },
         onShellOutput: (callId, text) =>
             controller.add(ShellOutputEvent(callId: callId, text: text)),
-        // The window is resolved where the turn's model was — the registry,
-        // on-device endpoint included — and rides with the usage, so the
-        // controller's threshold asks the backend rather than re-walking a
-        // provider list that answers a different question.
+        // The window rides with the usage, so the controller's threshold asks
+        // the backend rather than re-walking a provider list that answers a
+        // different question.
         onUsage: (usage) => _usage[chatId] = (
           contextTokens: usage.contextTokens,
-          contextWindow: settings.provider == null
-              ? defaultContextWindow
-              : registry
-                      .endpointFor(settings.provider!)
-                      ?.config
-                      .effectiveContextWindow ??
-                  defaultContextWindow,
+          contextWindow: contextWindow,
         ),
       );
       // The real kill replaces the placeholder.
@@ -723,13 +718,14 @@ class BuiltinBackend implements AgentBackend {
     final target = _resolveModel(settings.model, settings.provider);
     if (target == null) return null;
     if (history.isEmpty) return null;
-    // The ask has to fit the window with room for the summary it produces;
-    // a budget that would fill the whole window is how the last attempt got
-    // here in the first place.
-    final window = settings.provider == null
-        ? null
-        : contextWindowOf(registry.endpointFor(settings.provider!)?.config);
-    final budget = window == null ? null : window ~/ 2;
+    // The ask has to fit the window with room for the summary it produces; a
+    // budget that would fill the whole window is how the last attempt got
+    // here in the first place. The resolver already proved the endpoint
+    // exists: [target] is null where the provider is unconfigured, so the
+    // window is never null past this line.
+    final budget =
+        registry.endpointFor(settings.provider!)?.config.effectiveContextWindow ??
+            defaultContextWindow ~/ 2;
     // The retry ladder: a span too big to summarize is not a failure to give
     // up on but a span to summarize less of. Each attempt drops the oldest
     // half of what it was asked to read, so a conversation that will not fit
@@ -745,6 +741,8 @@ class BuiltinBackend implements AgentBackend {
         read.putIfAbsent(resource, () => _resourcesOf(chatId)(resource));
     List<Message> span = history;
     List<Message> halve() => span.sublist((span.length / 2).ceil());
+    // Loop-invariant: the markers do not change across the ladder.
+    final priorSummary = compactions.lastOrNull?.summary;
     for (var attempt = 0; attempt < 3; attempt++) {
       final projected = await projectionOf(span,
           load: loader, compactions: compactions);
@@ -752,11 +750,11 @@ class BuiltinBackend implements AgentBackend {
       final cut = CompactPrompt.build(
         conversation: projected,
         instructions: instructions,
-        priorSummary: priorSummaryOf(compactions),
+        priorSummary: priorSummary,
       );
       // Where the ask itself would not fit, dropping the oldest half is the
       // only answer; where it would, the span stands.
-      if (budget != null && estimateTokens(cut) > budget) {
+      if (estimateTokens(cut) > budget) {
         span = halve();
         continue;
       }
@@ -930,29 +928,23 @@ class BuiltinBackend implements AgentBackend {
   /// window, trimmed, and nothing where it streamed no completion at all. The
   /// window is what keeps a stuck provider from holding a pass forever.
   /// The one-shot read, in the three shapes that ask it: the last completion
-  /// the model streams within the window, trimmed, and [onEmpty] where it
-  /// streamed nothing. The window keeps a stuck provider from holding the
-  /// call forever; the timeout is on the stream rather than the future it
-  /// collects, a timed-out future leaving the response being read to nobody.
+  /// the model streams within the window, trimmed, and null where it streamed
+  /// nothing. The three call sites differ only in the timeout and in what an
+  /// empty answer means to them; the window keeps a stuck provider from
+  /// holding the call forever, and the timeout is on the stream rather than
+  /// the future it collects, a timed-out future leaving the response being
+  /// read to nobody.
   Future<String?> _oneCompletion(
     ({LlmClient client, String modelId}) target,
     List<LlmMessage> messages, {
     required Duration timeout,
-    String Function(String?) onEmpty = _identity,
   }) async {
     final chunks = await target.client
         .stream(messages, model: target.modelId)
         .timeout(timeout)
         .toList();
-    return onEmpty(chunks
-        .whereType<LlmCompletion>()
-        .lastOrNull
-        ?.message
-        .text
-        .trim());
+    return chunks.whereType<LlmCompletion>().lastOrNull?.message.text.trim();
   }
-
-  static String _identity(String? text) => text ?? "";
 
   /// The maintenance JSON, read as liberally as the model writes it: the old
   /// shape — an array of strings, or an object holding one — reads as new

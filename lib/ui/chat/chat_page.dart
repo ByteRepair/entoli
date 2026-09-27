@@ -906,64 +906,62 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
       children: [
         NotificationListener<ScrollNotification>(
           onNotification: _onScroll,
-          child: ListView.builder(
-            controller: _scroll,
-            itemCount: entries.length,
-            itemBuilder: (context, i) => switch (entries[i]) {
-              SectionEntry(:final omada) => ConversationSeparator(
-                  text: omada ? "Omada is turned on" : "Omada is turned off"),
-              CompactionEntry(:final summary) => ConversationSeparator(
-                  text: "Compact Conversation",
-                  body: MessageText(
-                    text: summary,
-                    isError: false,
-                    isWaiting: false,
-                    caret: false,
-                    onTapLink: (href) {
-                      final uri = Uri.tryParse(href);
-                      if (uri != null) {
-                        ref.read(linkOpenerProvider).open(context, uri);
-                      }
-                    },
-                  )),
-              MessageEntry(:final message, :final inOmadaSection, :final last) =>
-                Builder(builder: (context) {
-                  // A mirror has no editing controller: the log belongs to
-                  // the home device, so the whole row of things to do to a
-                  // message is out — and while a turn runs, the controller
-                  // refuses them all.
-                  final mutable = editing != null && !view.isRunning;
-                  return MessageBubble(
-                    chatId: widget.chatId,
-                    message: message,
-                    author: message.author,
-                    entoli: inOmadaSection,
-                    isWaiting: view.isRunning && last,
-                    waitingNotice: view.retry,
-                    waitingStatus: view.status,
-                    shellOutput: view.shellOutput,
-                    onTapLink: (href) {
-                      final uri = Uri.tryParse(href);
-                      if (uri != null) {
-                        ref.read(linkOpenerProvider).open(context, uri);
-                      }
-                    },
-                    threads: editing == null ? null : chat.branches[message.id],
-                    onThreadStep:
-                        mutable ? (step) => editing.stepThread(message.id, step) : null,
-                    onDelete: mutable ? () => editing.deleteThread(message.id) : null,
-                    onEdit: mutable && message.role == MessageRole.user
-                        ? (text) => editing.editAndResend(message.id, text)
-                        : null,
-                    onRegenerate: mutable ? () => editing.regenerate(message.id) : null,
-                    onSpeak: speechReady && message.hasText
-                        ? () => readAloud(context, ref, message.id, message.plainText)
-                        : null,
-                    isSpeaking: reading == message.id,
-                  );
-                }),
-            },
-          ),
+          child: Builder(builder: (context) {
+            // The one link-opening rule, both renderers of model-written
+            // markdown — a reply and a compaction summary — share it.
+            void openLink(String href) {
+              final uri = Uri.tryParse(href);
+              if (uri != null) ref.read(linkOpenerProvider).open(context, uri);
+            }
+            return ListView.builder(
+              controller: _scroll,
+              itemCount: entries.length,
+              itemBuilder: (context, i) => switch (entries[i]) {
+                SectionEntry(:final omada) => ConversationSeparator(
+                    text: omada ? "Omada is turned on" : "Omada is turned off"),
+                CompactionEntry(:final summary) => ConversationSeparator(
+                    text: "Compact Conversation",
+                    body: MessageText(
+                      text: summary,
+                      isError: false,
+                      isWaiting: false,
+                      caret: false,
+                      onTapLink: openLink,
+                    )),
+                MessageEntry(:final message, :final inOmadaSection, :final last) =>
+                  Builder(builder: (context) {
+                    // A mirror has no editing controller: the log belongs to
+                    // the home device, so the whole row of things to do to a
+                    // message is out — and while a turn runs, the controller
+                    // refuses them all.
+                    final mutable = editing != null && !view.isRunning;
+                    return MessageBubble(
+                      chatId: widget.chatId,
+                      message: message,
+                      author: message.author,
+                      entoli: inOmadaSection,
+                      isWaiting: view.isRunning && last,
+                      waitingNotice: view.retry,
+                      waitingStatus: view.status,
+                      shellOutput: view.shellOutput,
+                      onTapLink: openLink,
+                      threads: editing == null ? null : chat.branches[message.id],
+                      onThreadStep:
+                          mutable ? (step) => editing.stepThread(message.id, step) : null,
+                      onDelete: mutable ? () => editing.deleteThread(message.id) : null,
+                      onEdit: mutable && message.role == MessageRole.user
+                          ? (text) => editing.editAndResend(message.id, text)
+                          : null,
+                      onRegenerate: mutable ? () => editing.regenerate(message.id) : null,
+                      onSpeak: speechReady && message.hasText
+                          ? () => readAloud(context, ref, message.id, message.plainText)
+                          : null,
+                      isSpeaking: reading == message.id,
+                    );
+                  }),
+              },
+            );
+          }),
         ),
         // Only once the reader has left the end: up there a turn no longer
         // follows itself, and this is the way back.

@@ -538,7 +538,10 @@ The refusal for a `disable-model-invocation` skill is deliberate wording rather
 than a plain no. The skill is available, just not to the model, and one told
 only "no" will try its workflow by other means — so the answer says not to work
 around it. The tool is not even offered where every skill is user-only, which
-is the same fact read from the other side.
+is the same fact read from the other side. A skill flagged
+`invocation: callback` is refused and unlisted the same way: its body is the
+user-facing note, never a procedure for the model to follow — the same reason
+composition refuses to expand it.
 
 The system prompt lists the model-invocable skills under a Skills section, and
 an empty list produces nothing at all: a device with no skills keeps the prompt

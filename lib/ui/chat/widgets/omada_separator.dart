@@ -8,14 +8,9 @@ import "package:flutter/material.dart";
 /// Two boundaries share it: the room's Omada mode changing, and a compaction
 /// — the divider naming where the conversation's summary for the model began.
 /// The compaction's [body] is the summary itself, rendered beneath the line
-/// like a reply is; the mode flip has no furniture beneath it and no tap.
+/// like a reply is; the mode flip has no furniture beneath it.
 class ConversationSeparator extends StatelessWidget {
-  const ConversationSeparator({
-    super.key,
-    required this.text,
-    this.body,
-    this.onTap,
-  });
+  const ConversationSeparator({super.key, required this.text, this.body});
 
   /// What the divider says happened here.
   final String text;
@@ -23,10 +18,6 @@ class ConversationSeparator extends StatelessWidget {
   /// Furniture beneath the line, full width — a compaction's summary. Null
   /// for a boundary that is only a line.
   final Widget? body;
-
-  /// Where a boundary is tappable, where there is something to open. Null
-  /// for a boundary that is only a caption.
-  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -47,10 +38,10 @@ class ConversationSeparator extends StatelessWidget {
           Row(
             children: [
               Expanded(child: Divider(color: theme.colorScheme.outlineVariant)),
-              onTap == null
-                  ? caption
-                  : InkWell(onTap: onTap, borderRadius: BorderRadius.circular(6),
-                      child: caption),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                child: caption,
+              ),
               Expanded(child: Divider(color: theme.colorScheme.outlineVariant)),
             ],
           ),
