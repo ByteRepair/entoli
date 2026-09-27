@@ -425,11 +425,10 @@ abstract class AgentBackend {
   /// the one that measures the session as it stands.
   int? usageFor(String chatId) => null;
 
-  /// The context window of the provider that reported [usageFor]'s fact,
-  /// resolved where the turn itself was resolved — the backend, whose
-  /// registry reaches the on-device endpoint a settings list does not carry.
-  /// Null exactly where [usageFor] is null: no turn reported, nothing to
-  /// judge.
+  /// The context window the compaction threshold's share is taken against —
+  /// one app number (`AppSettings.totalContext`), read where the turn read
+  /// its settings. Null exactly where [usageFor] is null: no turn reported,
+  /// nothing to judge.
   int? contextWindowFor(String chatId) => null;
 
   /// One question, answered in one call: no tools, no session, nothing kept.

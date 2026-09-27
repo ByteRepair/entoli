@@ -687,6 +687,7 @@ class _AgentSection extends ConsumerWidget {
         ),
         const _RetryTurnsField(),
         const _MaxStepsField(),
+        const _TotalContextField(),
         const _AutoCompactField(),
         Divider(),
         const _DefaultPermissionsSection(),
@@ -768,6 +769,8 @@ class _AutoCompactField extends ConsumerWidget {
     final on = ref.watch(appSettingsProvider.select((s) => s.autoCompact));
     final percent =
         ref.watch(appSettingsProvider.select((s) => s.autoCompactPercent));
+    final total =
+        ref.watch(appSettingsProvider.select((s) => s.totalContext));
     return LabelledField(
       label: "Auto-compact",
       child: Column(
@@ -791,9 +794,10 @@ class _AutoCompactField extends ConsumerWidget {
                   .setAutoCompactPercent(v ?? AppSettings.defaultAutoCompactPercent),
             ),
             Text(
-              "When a chat's context reaches $percent% of the model's window, "
-              "the earlier part of it is summarized for the model — the "
-              "conversation you read is unchanged. /compact does it by hand.",
+              "When a chat's context reaches $percent% of ${total.inK} tokens "
+              "— the Total Context above — the earlier part of it is "
+              "summarized for the model; the conversation you read is "
+              "unchanged. /compact does it by hand.",
               style: Theme.of(context).textTheme.bodySmall,
             ),
           ],
@@ -801,6 +805,52 @@ class _AutoCompactField extends ConsumerWidget {
       ),
     );
   }
+}
+
+/// The model's total context, in tokens — one app number, the whole the
+/// auto-compact threshold's share is taken against and the summarizer's own
+/// ask must fit under. Asked for in a dialog, the way a description is: a
+/// value typed occasionally, not slid to.
+class _TotalContextField extends ConsumerWidget {
+  const _TotalContextField();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final total = ref.watch(appSettingsProvider.select((s) => s.totalContext));
+    return LabelledField(
+      label: "Total Context",
+      child: ResettableField(
+        onReset: () => ref
+            .read(appSettingsProvider.notifier)
+            .setTotalContext(AppSettings.defaultTotalContext),
+        resetLabel: "${AppSettings.defaultTotalContext.inK} (default)",
+        child: ListTile(
+          contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+          title: Text("${total.inK} tokens"),
+          subtitle: const Text("Tap to change"),
+          onTap: () async {
+            final text = await promptForText(
+              context,
+              title: "Total Context",
+              initial: "$total",
+              hint: "The model's context window, in tokens",
+              confirmLabel: "Save",
+            );
+            if (text == null || !context.mounted) return;
+            final parsed = int.tryParse(text.replaceAll(",", "").trim());
+            if (parsed == null) return;
+            ref
+                .read(appSettingsProvider.notifier)
+                .setTotalContext(parsed.clamp(1024, 1000000000));
+          },
+        ),
+      ),
+    );
+  }
+}
+
+extension on int {
+  String get inK => this >= 1000 && this % 1000 == 0 ? "${this ~/ 1000}k" : "$this";
 }
 
 /// How many times a turn that failed on a retryable error is carried on

@@ -8,6 +8,7 @@ import "package:uuid/uuid.dart";
 import "../../core/config.dart";
 import "../../core/log.dart";
 import "../../domain/agent_backend.dart";
+import "../../domain/app_settings.dart";
 import "../../domain/ask.dart";
 import "../../domain/chat_store.dart";
 import "../../domain/file_tools.dart";
@@ -240,13 +241,11 @@ class BuiltinBackend implements AgentBackend {
         maxRetryBudget: options.rateLimitRetryBudget,
       );
       final gatedClient = GatedLlmClient(target.client, rateLimitGate);
-      // The window of the provider this turn runs on, resolved once where the
-      // turn's model was — the registry, on-device endpoint included — and
-      // ridden with each usage the turn reports. Frozen for the turn, the way
-      // the model itself is: a mid-turn settings edit reaches the next turn.
-      final contextWindow = registry
-              .endpointFor(settings.provider ?? "")?.config.effectiveContextWindow ??
-          defaultContextWindow;
+      // The window the threshold's share is taken against, read fresh with the
+      // rest of the settings the way the registry reads its endpoints: a
+      // settings edit reaches the next turn, not the next launch. One app
+      // number — the guess, or the user's answer — for every provider.
+      final contextWindow = AppSettings.load(config).totalContext;
       final subAgentLog = FileSubAgentLog(config, chatId, project: project);
       final subAgentRunner = SubAgentRunner(
         client: gatedClient,
@@ -720,12 +719,8 @@ class BuiltinBackend implements AgentBackend {
     if (history.isEmpty) return null;
     // The ask has to fit the window with room for the summary it produces; a
     // budget that would fill the whole window is how the last attempt got
-    // here in the first place. The resolver already proved the endpoint
-    // exists: [target] is null where the provider is unconfigured, so the
-    // window is never null past this line.
-    final budget =
-        registry.endpointFor(settings.provider!)?.config.effectiveContextWindow ??
-            defaultContextWindow ~/ 2;
+    // here in the first place. The same app number the threshold reads.
+    final budget = AppSettings.load(config).totalContext ~/ 2;
     // The retry ladder: a span too big to summarize is not a failure to give
     // up on but a span to summarize less of. Each attempt drops the oldest
     // half of what it was asked to read, so a conversation that will not fit
@@ -1162,7 +1157,7 @@ class BuiltinBackend implements AgentBackend {
   int? contextWindowFor(String chatId) {
     final usage = _usage[chatId];
     // Null exactly where [usageFor] is null: the window rides the same fact,
-    // resolved where the turn's provider was.
+    // read with the turn's settings.
     if (usage == null) return null;
     return usage.contextWindow;
   }

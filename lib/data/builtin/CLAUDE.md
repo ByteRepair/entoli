@@ -588,17 +588,15 @@ for its own summarizer still gets a marker for its newest half.
 `LlmUsage` rides `LlmCompletion` — Anthropic's `message_start` and
 `message_delta` usage objects, OpenAI's final-chunk `usage` (asked for with
 `stream_options.include_usage`, without which OpenAI proper sends no usage
-at all) — and the agent reports it through `onUsage`. The window rides the
-same fact, resolved where the turn's provider was: the backend's registry
-reaches the on-device endpoint a settings list does not carry, so
-`usageFor` and `contextWindowFor` answer both halves of the threshold from
-one in-memory map, with no meta read on the settle path. A provider that
-reports nothing reports nothing, and the estimate (`length/4`, in
-`compact_prompt.dart`) is the summarizer's own budget, not the threshold's —
-compacting on a guess is not the trigger's business. The one number the
-trigger needs is also why `contextWindow` is a field on `LlmProviderConfig`
-(`effectiveContextWindow`, 128k default, the safe guess): the settings page
-is where a user who knows better sets the real one.
+at all) — and the agent reports it through `onUsage`. `usageFor` and
+`contextWindowFor` answer both halves of the threshold from one in-memory
+map, with no meta read on the settle path. A provider that reports nothing
+reports nothing, and the estimate (`length/4`, in `compact_prompt.dart`) is
+the summarizer's own budget, not the threshold's — compacting on a guess is
+not the trigger's business. The window itself is one app number:
+`AppSettings.totalContext` ("Total Context" under Settings > LLMs, 128k
+default, the safe guess) — every provider's window is guessed there, and a
+user who knows the real one sets it.
 
 The marker lands through `ChatRepository.appendCompaction` —
 `_rethread` with a `CompactionRecord`, the same append/reload/rebuild walk a

@@ -2,12 +2,6 @@
 /// `/chat/completions` is [openai]; Anthropic's `/messages` is its own.
 enum LlmApi { openai, anthropic }
 
-/// The window to assume where a provider or its model names none. Most hosted
-/// context windows today are one of a small set, and 128k sits under every one
-/// of them — underestimating costs an early compaction, overestimating costs a
-/// failed request, so the safe guess is the small one.
-const defaultContextWindow = 128000;
-
 /// An endpoint the agent can call, as the user configured it. Held in
 /// `settings.json` rather than guessed from environment variables: the same
 /// key reaches half a dozen gateways, and only the base URL says which one.
@@ -23,7 +17,6 @@ class LlmProviderConfig {
     this.models = const [],
     this.defaultModelId,
     this.defaultLightModelId,
-    this.contextWindow,
   });
 
   final String id;
@@ -51,17 +44,7 @@ class LlmProviderConfig {
   /// The light model behind the title, memory and classifier roles.
   final String? defaultLightModelId;
 
-  /// The context window this provider's models share, in tokens. Null means
-   /// the app guesses [defaultContextWindow]. The auto-compact threshold reads
-   /// it; a user who knows better sets the real number on the provider.
-   final int? contextWindow;
-
-   /// The window the compaction threshold and the summarizer's own budget ask
-   /// against: this provider's configured window, or [defaultContextWindow].
-   /// The one resolver of the answer, so the two cannot disagree.
-   int get effectiveContextWindow => contextWindow ?? defaultContextWindow;
-
-   String get displayName => label ?? id;
+  String get displayName => label ?? id;
 
   /// [lookup] reads the app's own environment and whatever settings adds, so a
   /// key can be named there instead of pasted here.
@@ -93,7 +76,6 @@ class LlmProviderConfig {
     List<String>? models,
     String? defaultModelId,
     String? defaultLightModelId,
-    int? contextWindow,
   }) =>
       LlmProviderConfig(
         id: id ?? this.id,
@@ -104,7 +86,6 @@ class LlmProviderConfig {
         models: models ?? this.models,
         defaultModelId: defaultModelId ?? this.defaultModelId,
         defaultLightModelId: defaultLightModelId ?? this.defaultLightModelId,
-        contextWindow: contextWindow ?? this.contextWindow,
       );
 
   Map<String, dynamic> toJson() => {
@@ -116,7 +97,6 @@ class LlmProviderConfig {
         if (models.isNotEmpty) "models": models,
         if (defaultModelId != null) "defaultModelId": defaultModelId,
         if (defaultLightModelId != null) "defaultLightModelId": defaultLightModelId,
-        if (contextWindow != null) "contextWindow": contextWindow,
       };
 
   /// Null for anything that does not name an id and a base URL: a half-written
@@ -138,7 +118,6 @@ class LlmProviderConfig {
       models: models is List ? models.whereType<String>().toList() : const [],
       defaultModelId: value["defaultModelId"] as String?,
       defaultLightModelId: value["defaultLightModelId"] as String?,
-      contextWindow: (value["contextWindow"] as num?)?.toInt(),
     );
   }
 }
