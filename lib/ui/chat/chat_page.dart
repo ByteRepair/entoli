@@ -23,8 +23,8 @@ import "../widgets/scrolling.dart";
 import "chat_settings_page.dart";
 import "chat_controller.dart";
 import "mirror_controller.dart";
+import "widgets/activity_label.dart" show formatRemaining;
 import "widgets/composer.dart";
-import "widgets/activity_label.dart";
 import "widgets/synced_device_cards.dart";
 import "widgets/message_bubble.dart";
 import "widgets/omada_separator.dart" show ConversationSeparator;
@@ -914,9 +914,18 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
                   text: omada ? "Omada is turned on" : "Omada is turned off"),
               CompactionEntry(:final summary) => ConversationSeparator(
                   text: "Compact Conversation",
-                  onTap: () => showActivitySheet(context,
-                      title: "Compact Conversation",
-                      sections: [(label: null, body: summary, isError: false)])),
+                  body: MessageText(
+                    text: summary,
+                    isError: false,
+                    isWaiting: false,
+                    caret: false,
+                    onTapLink: (href) {
+                      final uri = Uri.tryParse(href);
+                      if (uri != null) {
+                        ref.read(linkOpenerProvider).open(context, uri);
+                      }
+                    },
+                  )),
               MessageEntry(:final message, :final inOmadaSection, :final last) =>
                 Builder(builder: (context) {
                   // A mirror has no editing controller: the log belongs to
