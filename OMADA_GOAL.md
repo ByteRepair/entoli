@@ -110,6 +110,11 @@ stays — history is fact.
   `omadaMaxGenerations` dispatch waves (project override, app default ten);
   `pass` declines — and ends what agents hand each other, not a schedule the
   user made.
+- **Relay — fully parallel handoffs.** The third ordering, beside sequential
+  and parallel: dispatch gated on the per-member FIFOs alone, a handoff
+  evaluated the moment the turn that named it finishes, waves overlapping.
+  One turn per member still stands; the cap and `pass` work as in the other
+  orderings; one member failing still stops the round.
 - **Sectioned display** — `Message.omadaOn` on turn openers; separators at
   flips; "Entoli" on the house's replies in on-sections. The conversation
   renders as typed entries (`entriesOf`), each row owning its alignment.
@@ -129,10 +134,6 @@ stays — history is fact.
 
 - **Triggers, later.** What else may start a member's turn (schedule, file
   change) now that rounds exist.
-- **Fully parallel handoffs, later.** The parallel ordering that shipped is
-  settle-first by design; the other reading — a reply fanning out the moment
-  it finishes, siblings overlapping waves — is its own option in the Omada
-  settings, tracked as an issue.
 
 ## Design invariants carried
 

@@ -307,7 +307,9 @@ class AppSettings {
 
   /// The room's scheduling default for a project that picked none of its own:
   /// sequential runs the schedule one turn at a time, parallel answers with
-  /// one turn per member at once. `ProjectSettings.omadaOrdering` overrides
+  /// one turn per member at once, and relay answers what a reply names the
+  /// moment it is written — per member still one turn at a time, but with no
+  /// wave barrier between the waves. `ProjectSettings.omadaOrdering` overrides
   /// it per project; the enum lives with the project settings, which is
   /// where a per-project answer was first written.
   OmadaOrdering? omadaOrdering;

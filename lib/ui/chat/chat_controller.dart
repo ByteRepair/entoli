@@ -233,6 +233,12 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
   _RunningTurn? get _liveTurn =>
       _turns.length == 1 ? _turns.values.first : null;
 
+  /// The reply [turn] wrote, read back out of the conversation by id rather
+  /// than held on the turn: the settle wants it after the entry has left the
+  /// table, and the message may have grown parts since.
+  Message _replyOf(_RunningTurn turn) =>
+      state.chat!.messages.firstWhere((m) => m.id == turn.replyId);
+
   String get replyText => _reply?.plainText ?? "";
 
   /// Fold [parts] into the message [turn] is writing, by id rather than by
@@ -364,6 +370,11 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
   /// for that member's turn to finish instead of opening a second one beside
   /// it. Both ends of the queue — a say landing while a turn runs, and the
   /// drain a finishing turn runs — read it through this one method.
+  ///
+  /// Relay order drops the room's part of that rule, keeping the member's:
+  /// the dispatch runs whatever it may, its per-lane check leaving a say for
+  /// a busy member queued while one for an idle member — or for the idle
+  /// house — runs at once.
   void _drainSaid() {
     final chat = state.chat;
     if (chat == null) return;
@@ -371,7 +382,7 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
       final said = _said.removeAt(0);
       _schedule(chat, mentioned(chat, said), userPrompt: said);
     }
-    if (_turns.isNotEmpty) return;
+    if (_turns.isNotEmpty && _ordering != OmadaOrdering.relay) return;
     unawaited(_dispatch());
   }
 
@@ -563,6 +574,7 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
     turn.errorLine = "";
     turn.round = 0;
     turn.generation = generation;
+    turn.omadaMember = omadaMember ?? _memberAnswering(chat, prompt);
     applyState(await repo.saveState(updated.state));
     await turn.recorder.write(recordsOf(openingWithMode,
         siblingOf: replacing?.id,
@@ -673,12 +685,23 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
   /// because a round sees a chat the previous round just wrote to. The reply
   /// is the last assistant message — a say queued while the round ran (or a
   /// sibling reply, under parallel ordering) can sit below this turn's own.
-  Future<void> _startResume() async {
+  ///
+  /// [replyId] names the reply instead, and is what the retry branch passes:
+  /// the round belongs to one turn, and a room still running another — a
+  /// sibling's reply streaming below — must not have this round re-open the
+  /// sibling's recorder.
+  Future<void> _startResume({String? replyId}) async {
     final chat = state.chat;
-    final reply = chat!.messages.lastWhereOrNull((m) =>
-        m.role == MessageRole.assistant &&
-        shellBypassCommand(m.plainText) == null);
-    if (reply == null) return;
+    final reply = replyId == null
+        ? chat!.messages.lastWhereOrNull((m) =>
+            m.role == MessageRole.assistant &&
+            shellBypassCommand(m.plainText) == null)
+        : chat!.messages.firstWhereOrNull((m) => m.id == replyId);
+    if (reply == null ||
+        reply.role != MessageRole.assistant ||
+        shellBypassCommand(reply.plainText) != null) {
+      return;
+    }
 
     state = state.copyWith(isRunning: true, clearRetry: true, clearStatus: true);
     // Kept open across the round: a caller awaiting [turnDone] gets one
@@ -689,17 +712,15 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
     turn.recorder.open(reply.id, existing: reply.parts);
 
     _listen(turn, ref.read(chatRepositoryProvider).resumeTurn(chatId,
-        history: chat.messages, omadaMember: _memberResuming(chat)));
+        history: chat.messages, omadaMember: _memberResuming(chat, reply)));
   }
 
   /// The member a resumed turn runs under: whoever it started as, off the
   /// reply's own [Message.author] stamp rather than the library. A member
   /// deleted or renamed since falls back to the main agent — the backend's
   /// own overlay resolution answers the same way. Null is the main agent.
-  String? _memberResuming(Chat chat) {
-    final last = chat.messages.lastOrNull;
-    if (last == null || last.role != MessageRole.assistant) return null;
-    return _memberIfKnown(chat, nameOf(last.author));
+  String? _memberResuming(Chat chat, Message reply) {
+    return _memberIfKnown(chat, nameOf(reply.author));
   }
 
   void _listen(_RunningTurn turn, Stream<AgentEvent> stream) {
@@ -946,7 +967,7 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
       if (!ref.mounted) return;
       // A deleted chat has nothing to carry on.
       if (state.chat == null) return;
-      await _startResume();
+      await _startResume(replyId: turn.replyId);
       return;
     }
     await _endTurn(turn, reason);
@@ -1064,15 +1085,27 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
         .firstWhereOrNull((p) => p.id == providerId));
   }
 
-  /// A turn has ended: the room may hand off. The schedule may still hold
-  /// what the settle will not run now — an item the cap stops, or a member's
-  /// second item behind one still running — and this turn's reply hands off
-  /// with the wave, parked for the settle that ends it, rather than waiting
-  /// on a schedule that will not drain this settle. Where siblings were still
-  /// speaking when this turn finished, its reply is already waiting in
-  /// `_settledReplies` — handoffs evaluate at the settle, against every reply
-  /// that finished the wave, not only the last one written.
+  /// A turn has ended: the room may hand off. Under the wave orderings the
+  /// schedule may still hold what the settle will not run now — an item the
+  /// cap stops, or a member's second item behind one still running — and
+  /// this turn's reply hands off with the wave, parked for the settle that
+  /// ends it, rather than waiting on a schedule that will not drain this
+  /// settle. Where siblings were still speaking when this turn finished, its
+  /// reply is already waiting in `_settledReplies` — handoffs evaluate at the
+  /// settle, against every reply that finished the wave, not only the last
+  /// one written.
+  ///
+  /// Relay order has no wave: the reply is evaluated the moment its turn is
+  /// over, siblings beside it notwithstanding, and the members it names run
+  /// through the per-lane check at dispatch.
   Future<void> _settle(_RunningTurn turn, TurnEnd? reason) async {
+    if (_ordering == OmadaOrdering.relay) {
+      if (reason == TurnEnd.done) {
+        await _maybeHandoff(reason, [_replyOf(turn)]);
+      }
+      await _dispatch();
+      return;
+    }
     if (_turns.isNotEmpty) {
       // A sibling is still speaking: this reply hands off when the room
       // settles, not now — the wave waits, whatever order the siblings
@@ -1113,6 +1146,11 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
   /// reply's text against the library — the members named *now* are the ones
   /// handed to, the room's own wording — and scheduled through the same
   /// [_dispatch] path every turn takes.
+  ///
+  /// Under relay the entry is spent here: the schedule may run the handoff
+  /// while other turns are still in flight, and the entry behind this call
+  /// is this turn's own, so waiting for a wave's cleanup would hold a
+  /// generation the next wave reads as deeper than it ran.
   Future<void> _maybeHandoff(
       TurnEnd? reason, List<Message> replies) async {
     if (reason != TurnEnd.done) return;
@@ -1142,6 +1180,9 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
       // the finished turn's own, and the cap reads it at dispatch. The entry
       // is out of the table by now — the finished turn's own is what counts.
       final finished = _finishedGenerations[reply.id] ?? 0;
+      if (_ordering == OmadaOrdering.relay) {
+        _finishedGenerations.remove(reply.id);
+      }
       _schedule(chat, mentioned(chat, reply),
           reply: reply, generation: finished);
     }
@@ -1218,7 +1259,10 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
   /// the first of the schedule, whatever member it names — and what follows
   /// dispatches at the settle it causes. Parallel order answers with one
   /// turn per member at once, each FIFO's head: one turn per member still
-  /// stands, and what is left dispatches at the settle they cause.
+  /// stands, and what is left dispatches at the settle they cause. Relay
+  /// order keeps the per-member rule and drops the wave barrier: the head of
+  /// every FIFO whose member is idle, dispatched while anything else runs,
+  /// so what a reply names starts the moment the reply is done.
   ///
   /// A dispatched item is gone from its FIFO before the turn opens, so a
   /// settle re-entering while the turn runs finds the schedule behind it and
@@ -1245,10 +1289,18 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
   /// One pass over the schedule, serving any dispatch asked while it ran.
   Future<void> _dispatchPass() async {
     final parallel = _ordering == OmadaOrdering.parallel;
+    final relay = _ordering == OmadaOrdering.relay;
     // The cap counts dispatch waves of agent-to-agent work: an item in its
     // generation or under is the user's own and never blocked, one past it
     // is the round's and the cap stops the wave.
     final max = _maxGenerations;
+    // The members a running turn speaks for, under relay: the lanes a pass
+    // may not dispatch into. A member runs one turn at a time in every
+    // ordering — relay's difference is only what waits for a settle.
+    final busy = {
+      for (final turn in _turns.values)
+        if (turn.omadaMember != null) turn.omadaMember!,
+    };
     var dispatched = false;
     for (final member in _schedules.keys.toList()) {
       final items = _schedules[member];
@@ -1264,10 +1316,15 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
         if (items.isEmpty) _schedules.remove(member);
         continue;
       }
-      // Sequential runs one item at a time, and parallel runs one per
-      // member: either way one dispatch per member here, the rest at the
-      // settles this causes.
-      if (!parallel && dispatched) continue;
+      // Sequential runs one item at a time; parallel runs one per member;
+      // relay runs one per member with no turn in flight — the busy lane
+      // keeps its item for its next settle.
+      if (parallel && dispatched) continue;
+      if (relay) {
+        if (dispatched) continue;
+        if (member != null && busy.contains(member)) continue;
+      }
+      if (!parallel && !relay && dispatched) continue;
       items.removeAt(0);
       if (items.isEmpty) _schedules.remove(member);
       dispatched = true;
@@ -1543,6 +1600,10 @@ class _RunningTurn {
   /// and up for what agents handed to each other. The handoff that follows
   /// this turn reads it to know how deep the round has run.
   int generation = 0;
+
+  /// Who this turn speaks for, where a member does — what the relay ordering's
+  /// per-lane busy check reads. Null is the main agent's lane.
+  String? omadaMember;
 }
 
 /// Stop whatever turns are running the way the app going away stops them:
