@@ -1730,6 +1730,36 @@ void main() {
       await waitIdle(id, limit: const Duration(seconds: 5));
     });
 
+    test("relay fans a mention list out while a sibling still speaks",
+        () async {
+      await _inTeam(app);
+      await app.container
+          .read(projectSettingsProvider("team").notifier)
+          .setOmadaOrdering(OmadaOrdering.relay);
+      // Explore's turn holds the floor — its round carries no DoneEvent and
+      // the hold keeps the stream open — while the same message named build,
+      // whose lane is idle. Relay gates on the lanes, not on the room: both
+      // turns open, the second beside the first.
+      app.backend.hold = Completer<void>();
+      addTearDown(() => app.backend.hold?.complete());
+      app.backend.scriptedRounds = [
+        const [TextDelta("looking into it")],
+        const [TextDelta("me too")],
+      ];
+      final (id, _) = await startTurn(
+          "@explore and @build, have a look", project: "team");
+      await waitFor(() => app.backend.prompts.length >= 2,
+          what: "the fan-out", limit: const Duration(seconds: 5));
+
+      expect(app.backend.hold?.isCompleted, isFalse);
+      expect(app.backend.prompts[0].settings.omadaMember, "explore");
+      expect(app.backend.prompts[1].settings.omadaMember, "build");
+
+      app.backend.hold?.complete();
+      app.backend.hold = null;
+      await waitIdle(id, limit: const Duration(seconds: 5));
+    });
+
     test("relay queues a say for a busy member for their next turn", () async {
       await _inTeam(app);
       await app.container
