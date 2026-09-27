@@ -585,6 +585,28 @@ them under the project it left. Messages already composed keep what their
 `/skill` and `@agent` references meant when they were sent — the records are
 on the message, not looked up per turn.
 
+## What the user just sent
+
+**The prompt flies up from the composer to its row.** `ChatViewState.justSent`
+is the message id just said — set in `_sayLater` and in `openTurn` where the
+prompt is the user's, transient like `retry` and never persisted, so a reload
+and a thread switch animate nothing. Every send path rides it, because every
+path writes one of those two records: the composer, a say queued while a turn
+runs, an edited resend, a `!` command, `/compact`, a voice utterance, a
+reminder's prompt.
+
+The page listens for the field beside its scroll follow, and for the id it
+has not flown yet mounts `_SentFly` — a replica `MessageBubble` in the
+conversation's `Stack`, flying from the overlay's bottom edge to the real
+row's measured rect over 280 ms, fading in over the first third. The real row
+is laid out the whole time and merely transparent; the replica ends
+pixel-identical to what is behind it, so the handoff — reveal the row, drop
+the overlay, one frame — is no visible event. Where the row cannot be
+measured, the reader having scrolled up or the layout not caught up, the fly
+is dropped and the message simply appears, as it always did. An id already
+flown is never flown again: `justSent` rides every later state write of the
+turn, and the page's `_flown` set is what keeps a rebuild from replaying it.
+
 ## The chat page
 
 One app bar, whichever layout it is drawn in. Narrow, the sidebar is `ChatPage`'s

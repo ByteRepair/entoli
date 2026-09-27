@@ -1,3 +1,4 @@
+import "dart:async";
 import "dart:io";
 
 import "package:flutter/foundation.dart" show debugDefaultTargetPlatformOverride, TargetPlatform;
@@ -1169,6 +1170,66 @@ void main() {
       await tester.pump();
 
       expect(find.text("Kept 1 memory."), findsNothing);
+    });
+  });
+
+  group("what the user just sent", () {
+    testWidgets("flying from the composer, and landing once",
+        (tester) async {
+      final chat = await io(tester, () => app.seedChat(title: "flown"));
+      await open(tester, chat.state.id);
+
+      app.backend.hold = Completer<void>();
+      addTearDown(() => app.backend.hold?.complete());
+
+      await tester.enterText(find.byType(TextField).last, "sent in the air");
+      await tester.pump();
+      await tester.tap(find.byIcon(Icons.send));
+      // The fly is mid-flight: the replica and the hidden real row are both
+      // in the tree. One `runAsync` round lets the controller's write land,
+      // which is what the listen reads.
+      await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 20)));
+      await tester.pump();
+      await tester.pump();
+
+      expect(find.text("sent in the air"), findsNWidgets(2));
+
+      // The flight is over: the row is revealed and the replica is gone. The
+      // held turn keeps a spinner running, so settling means pumping past the
+      // flight's own 280ms.
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.pump(const Duration(milliseconds: 200));
+      await settleIo(tester);
+
+      expect(find.text("sent in the air"), findsOneWidget);
+    });
+
+    // The overlay is drawn over the list, so a turn ending while the bubble
+    // is in the air — or after it — must not leave the message doubled.
+    testWidgets("the turn ending clears the fly for good", (tester) async {
+      final chat = await io(tester, () => app.seedChat(title: "flown"));
+      await open(tester, chat.state.id);
+
+      await sendMessage(tester, "one turn");
+
+      expect(find.text("one turn"), findsOneWidget);
+    });
+
+    testWidgets("a message already on screen is not flown again",
+        (tester) async {
+      final chat = await io(tester, () => app.seedChat(title: "flown"));
+      await open(tester, chat.state.id);
+
+      app.backend.hold = Completer<void>();
+      addTearDown(() => app.backend.hold?.complete());
+      await sendMessage(tester, "first");
+
+      // The same write, re-read: the turn is still running, so `justSent`
+      // is still set — and the row is already flown, so nothing animates.
+      await tester.pump();
+
+      expect(find.text("first"), findsOneWidget);
     });
   });
 

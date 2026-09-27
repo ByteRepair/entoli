@@ -564,6 +564,15 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
   /// from re-prompting for the same expired chat.
   String? _expiryChecked;
 
+  /// The message ids already flown. Held on the body rather than read off
+  /// [ChatViewState.justSent], which is one write: a scroll-away dropped the
+  /// overlay's measure, and a rebuild of the same row must not replay it.
+  final Set<String> _flown = {};
+
+  /// The bubble currently flying from the composer to its row, and the frame
+  /// key that hides the real row until the handoff.
+  _SentFly? _flying;
+
   /// The page's half of the memory notes: the ones this chat is about land as
   /// a line, since the turn they came from is over by then.
   StreamSubscription<MemoryNote>? _memoryNotes;
@@ -592,6 +601,27 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
     _scroll.dispose();
     _atBottom.dispose();
     super.dispose();
+  }
+
+  /// The just-sent prompt: the page flies its bubble up from the composer.
+  /// Listened in [_local] beside the scroll follow; a mirror never sends one,
+  /// so its arm has nothing of this.
+  void _onStateChanged() {
+    final justSent = ref.read(chatControllerProvider(widget.chatId)).justSent;
+    if (justSent == null || _flown.contains(justSent)) return;
+    final message = ref
+        .read(chatControllerProvider(widget.chatId))
+        .chat
+        ?.messages
+        .where((m) => m.id == justSent && m.role == MessageRole.user)
+        .firstOrNull;
+    if (message == null) return;
+    _flown.add(justSent);
+    setState(() => _flying = _SentFly(
+          chatId: widget.chatId,
+          message: message,
+          onDone: () => setState(() => _flying = null),
+        ));
   }
 
   void _readPosition() {
@@ -684,6 +714,8 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
     final view = ref.watch(chatControllerProvider(widget.chatId));
     final notifier = ref.read(chatControllerProvider(widget.chatId).notifier);
     ref.listen(chatControllerProvider(widget.chatId), (_, _) => _scrollToBottom());
+    ref.listen(chatControllerProvider(widget.chatId).select((v) => v.justSent),
+        (_, _) => _onStateChanged());
     final chat = view.chat;
     if (chat == null) return _waiting();
     _opening(chat);
@@ -924,38 +956,54 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
                   // message is out — and while a turn runs, the controller
                   // refuses them all.
                   final mutable = editing != null && !view.isRunning;
-                  return MessageBubble(
-                    chatId: widget.chatId,
-                    message: message,
-                    author: message.author,
-                    entoli: inOmadaSection,
-                    isWaiting: view.isRunning && last,
-                    waitingNotice: view.retry,
-                    waitingStatus: view.status,
-                    shellOutput: view.shellOutput,
-                    onTapLink: (href) {
-                      final uri = Uri.tryParse(href);
-                      if (uri != null) {
-                        ref.read(linkOpenerProvider).open(context, uri);
-                      }
-                    },
-                    threads: editing == null ? null : chat.branches[message.id],
-                    onThreadStep:
-                        mutable ? (step) => editing.stepThread(message.id, step) : null,
-                    onDelete: mutable ? () => editing.deleteThread(message.id) : null,
-                    onEdit: mutable && message.role == MessageRole.user
-                        ? (text) => editing.editAndResend(message.id, text)
-                        : null,
-                    onRegenerate: mutable ? () => editing.regenerate(message.id) : null,
-                    onSpeak: speechReady && message.hasText
-                        ? () => readAloud(context, ref, message.id, message.plainText)
-                        : null,
-                    isSpeaking: reading == message.id,
+                  final flying = _flying;
+                  final flyRow = flying != null && flying.message.id == message.id;
+                  return _BubbleFrame(
+                    // The flying bubble covers the frame it is travelling to;
+                    // hidden until the handoff, so the two never show at once.
+                    hidden: flyRow,
+                    rowKey: flyRow ? flying.rowKey : null,
+                    child: MessageBubble(
+                      chatId: widget.chatId,
+                      message: message,
+                      author: message.author,
+                      entoli: inOmadaSection,
+                      isWaiting: view.isRunning && last,
+                      waitingNotice: view.retry,
+                      waitingStatus: view.status,
+                      shellOutput: view.shellOutput,
+                      onTapLink: (href) {
+                        final uri = Uri.tryParse(href);
+                        if (uri != null) {
+                          ref.read(linkOpenerProvider).open(context, uri);
+                        }
+                      },
+                      threads:
+                          editing == null ? null : chat.branches[message.id],
+                      onThreadStep: mutable
+                          ? (step) => editing.stepThread(message.id, step)
+                          : null,
+                      onDelete:
+                          mutable ? () => editing.deleteThread(message.id) : null,
+                      onEdit: mutable && message.role == MessageRole.user
+                          ? (text) => editing.editAndResend(message.id, text)
+                          : null,
+                      onRegenerate:
+                          mutable ? () => editing.regenerate(message.id) : null,
+                      onSpeak: speechReady && message.hasText
+                          ? () =>
+                              readAloud(context, ref, message.id, message.plainText)
+                          : null,
+                      isSpeaking: reading == message.id,
+                    ),
                   );
                 }),
             },
           ),
         ),
+        // The bubble the user just sent, flying up from the composer. Over the
+        // list, under the jump button: the button is for a reader who left.
+        ?_flying,
         // Only once the reader has left the end: up there a turn no longer
         // follows itself, and this is the way back.
         Positioned(
@@ -1079,5 +1127,149 @@ class _TtlLineState extends State<_TtlLine> {
   Widget build(BuildContext context) {
     final remaining = widget.expiresAt.difference(DateTime.now());
     return _TitleLine(icon: Icons.hourglass_empty, text: formatRemaining(remaining));
+  }
+}
+
+/// The list row that draws one message, held so the fly can measure where the
+/// bubble lands and so it can be hidden while the flying replica covers it.
+/// Invisible-but-laid-out, so nothing shifts under the animation.
+class _BubbleFrame extends StatelessWidget {
+  const _BubbleFrame({required this.child, this.hidden = false, this.rowKey});
+
+  final Widget child;
+  final bool hidden;
+  final GlobalKey? rowKey;
+
+  @override
+  Widget build(BuildContext context) => KeyedSubtree(
+        key: rowKey,
+        child: hidden
+            ? Opacity(opacity: 0, child: ExcludeSemantics(child: child))
+            : child,
+      );
+}
+
+/// The just-sent user bubble, flying from above the composer to the row the
+/// conversation just gave it. A replica of the real `MessageBubble` — same
+/// message, so the same colours, attachments and "You" label — drawn in the
+/// conversation's `Stack`, `Positioned` from the bottom edge to the measured
+/// rect of the real row, and `IgnorePointer` throughout: it lives ~300 ms and
+/// is nobody's to touch.
+///
+/// The real row is laid out the whole time, merely transparent, with its
+/// measure read here: the replica ends pixel-identical to what is behind it,
+/// so revealing the row and dropping the replica in the same frame is no
+/// visible handoff. Where the row cannot be measured — the reader scrolled up,
+/// or a cold start whose layout has not caught up — it is revealed untouched
+/// and the fly is dropped: the message simply appears, as it always did.
+class _SentFly extends StatefulWidget {
+  _SentFly({required this.chatId, required this.message, required this.onDone})
+      : rowKey = GlobalKey();
+
+  final String chatId;
+  final Message message;
+  final VoidCallback onDone;
+
+  /// Where the row the flight lands on is measured and hidden.
+  final GlobalKey rowKey;
+
+  @override
+  State<_SentFly> createState() => _SentFlyState();
+}
+
+class _SentFlyState extends State<_SentFly>
+    with SingleTickerProviderStateMixin {
+  static const _travel = Duration(milliseconds: 280);
+
+  late final _drive = AnimationController(vsync: this, duration: _travel)
+    ..addStatusListener((status) {
+      if (status == AnimationStatus.completed) widget.onDone();
+    });
+
+  /// The measured rect of the row, in this overlay's coordinates — the
+  /// overlay is `Positioned.fill` over the same `Stack`, so its box shares
+  /// the list's origin. Null until measured.
+  Rect? _target;
+
+  /// The height the flight starts above: the overlay's own bottom edge, which
+  /// is the top of the composer the bubble is flying out of.
+  double _height = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    // The measure has to wait for the frame the hidden row is laid out in:
+    // the message landed on the list this build, and only the frame after
+    // build knows where the builder put it.
+    WidgetsBinding.instance.addPostFrameCallback((_) => _start());
+  }
+
+  /// Reveal the row and drop the overlay in the same callback, so the two
+  /// never disagree about where the message is for even one frame.
+  void _start() {
+    final row = widget.rowKey.currentContext?.findRenderObject();
+    final here = context.findRenderObject();
+    if (row is! RenderBox || !row.hasSize || here is! RenderBox || !here.hasSize) {
+      widget.onDone();
+      return;
+    }
+    final rect =
+        MatrixUtils.transformRect(row.getTransformTo(here), Offset.zero & row.size);
+    if (rect.bottom < 0 || rect.top > here.size.height) {
+      // Off the viewport — the reader had scrolled up when it was sent. It
+      // appears in place instead of flying to where nobody is looking.
+      widget.onDone();
+      return;
+    }
+    setState(() {
+      _target = rect;
+      _height = here.size.height;
+      _drive.forward();
+    });
+  }
+
+  @override
+  void dispose() {
+    _drive.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final target = _target;
+    return Positioned.fill(
+      child: IgnorePointer(
+        child: target == null
+            ? const SizedBox.shrink()
+            : AnimatedBuilder(
+                animation: _drive,
+                builder: (context, child) {
+                  final t = Curves.easeOutCubic.transform(_drive.value);
+                  // Fade in over the first third: a bubble appearing at full
+                  // strength at the composer reads as a flash.
+                  final opacity = (t / 0.35).clamp(0.0, 1.0);
+                  // Carried out of the landing rect to wherever the flight
+                  // still has to go; `t == 1` puts it exactly on the row.
+                  final offset =
+                      Offset(0, (1 - t) * (_height - target.bottom));
+                  return Opacity(
+                    opacity: opacity,
+                    child: Transform.translate(offset: offset, child: child),
+                  );
+                },
+                child: Align(
+                  // The row's own alignment, so the replica is the same shape
+                  // in the same place: the target rect is measured off it.
+                  alignment: Alignment.topLeft,
+                  child: MessageBubble(
+                    chatId: widget.chatId,
+                    message: widget.message,
+                    author: widget.message.author,
+                    entoli: false,
+                  ),
+                ),
+              ),
+      ),
+    );
   }
 }

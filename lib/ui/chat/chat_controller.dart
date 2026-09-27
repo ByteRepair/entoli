@@ -34,9 +34,15 @@ class ChatViewState {
     this.status,
     this.unfinishedNotice,
     this.shellOutput,
+    this.justSent,
   });
   final Chat? chat;
   final bool isRunning;
+
+  /// The user message that was just sent, by id — the one the page flies up
+  /// from the composer. Transient like [retry]: the page's business, gone on
+  /// the next state write, and never persisted.
+  final String? justSent;
 
   /// What the turn is waiting to be allowed, keyed by the reply that asked
   /// for it — each turn's banner answers its own turn, and a room with two
@@ -94,6 +100,8 @@ class ChatViewState {
     bool clearUnfinishedNotice = false,
     String? shellOutput,
     bool clearShellOutput = false,
+    String? justSent,
+    bool clearJustSent = false,
   }) =>
       ChatViewState(
         chat: chat ?? this.chat,
@@ -108,6 +116,7 @@ class ChatViewState {
             : (unfinishedNotice ?? this.unfinishedNotice),
         shellOutput:
             clearShellOutput ? null : (shellOutput ?? this.shellOutput),
+        justSent: clearJustSent ? null : (justSent ?? this.justSent),
       );
 }
 
@@ -352,7 +361,8 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
     state = state.copyWith(
         chat: chat.copyWith(
             messages: [...chat.messages, userMsg],
-            state: chat.state.copyWith(updatedAt: DateTime.now())));
+            state: chat.state.copyWith(updatedAt: DateTime.now())),
+        justSent: userMsg.id);
     _said.add(userMsg);
     _drainSaid();
   }
@@ -551,7 +561,16 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
         .copyWith(state: chat.state.copyWith(updatedAt: DateTime.now()));
 
     final isFirst = chat.messages.isEmpty;
-    state = state.copyWith(chat: updated, isRunning: true, clearRetry: true, clearStatus: true);
+    state = state.copyWith(
+        chat: updated,
+        isRunning: true,
+        clearRetry: true,
+        clearStatus: true,
+        // Only the prompt the user said flies: the reply beside it is the
+        // turn's, and a handoff's prompt is an assistant message — one that
+        // clears rather than carries whatever was flying.
+        justSent: prompt.role == MessageRole.user ? prompt.id : null,
+        clearJustSent: prompt.role != MessageRole.user);
     // The prompt and the empty reply go down before the turn starts, so a chat
     // killed before the model says anything still shows what was asked. What
     // comes back carries the TTL anchor the save resolved, and is kept.
@@ -977,6 +996,9 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
       runningSubAgents: _withoutTurn(state.runningSubAgents, turn.replyId),
       clearRetry: _turns.isEmpty,
       clearStatus: _turns.isEmpty,
+      // The flight is over by now, or the reader scrolled away and it was
+      // dropped; either way nothing is waiting on it.
+      clearJustSent: _turns.isEmpty,
       unfinishedNotice: reason == TurnEnd.stepLimit
           ? "Step limit reached"
           : null,
