@@ -425,6 +425,13 @@ abstract class AgentBackend {
   /// the one that measures the session as it stands.
   int? usageFor(String chatId) => null;
 
+  /// The context window of the provider that reported [usageFor]'s fact,
+  /// resolved where the turn itself was resolved — the backend, whose
+  /// registry reaches the on-device endpoint a settings list does not carry.
+  /// Null exactly where [usageFor] is null: no turn reported, nothing to
+  /// judge.
+  int? contextWindowFor(String chatId) => null;
+
   /// One question, answered in one call: no tools, no session, nothing kept.
   /// A model of null resolves to the provider's light default — the title
   /// model is set as a provider without naming one. Null when the provider is
@@ -440,11 +447,11 @@ abstract class AgentBackend {
   /// loses what the previous one kept. [instructions] are the user's own focus
   /// for the summary, from `/compact <instructions>`; null is the plain one.
   ///
-  /// Returns the boundary and the summary, or null when nothing answered — a
-  /// provider that is not configured, a turn already running, a summarizer
-  /// that failed. The caller wants a marker to append, and there is no turn to
-  /// report a failure on; [logFailure] has said why.
-  Future<({String upToMessageId, String summary})?> compact(
+  /// Returns the marker's shape — boundary and summary — or null when
+  /// nothing answered: a provider that is not configured, a turn already
+  /// running, a summarizer that failed. The caller wants a marker to append,
+  /// and there is no turn to report a failure on; [logFailure] has said why.
+  Future<ConversationCompaction?> compact(
     String chatId, {
     required List<Message> history,
     required List<ConversationCompaction> compactions,

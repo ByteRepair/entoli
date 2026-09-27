@@ -52,11 +52,16 @@ class LlmProviderConfig {
   final String? defaultLightModelId;
 
   /// The context window this provider's models share, in tokens. Null means
-  /// the app guesses [defaultContextWindow]. The auto-compact threshold reads
-  /// it; a user who knows better sets the real number on the provider.
-  final int? contextWindow;
+   /// the app guesses [defaultContextWindow]. The auto-compact threshold reads
+   /// it; a user who knows better sets the real number on the provider.
+   final int? contextWindow;
 
-  String get displayName => label ?? id;
+   /// The window the compaction threshold and the summarizer's own budget ask
+   /// against: this provider's configured window, or [defaultContextWindow].
+   /// The one resolver of the answer, so the two cannot disagree.
+   int get effectiveContextWindow => contextWindow ?? defaultContextWindow;
+
+   String get displayName => label ?? id;
 
   /// [lookup] reads the app's own environment and whatever settings adds, so a
   /// key can be named there instead of pasted here.

@@ -2,7 +2,6 @@ import "package:collection/collection.dart";
 
 import "frontmatter.dart";
 import "models.dart";
-import "wired_skill.dart";
 
 /// One skill or agent, exactly as Entoli stores it: YAML frontmatter, then the
 /// template a skill expands to or the system prompt an agent runs under.
@@ -39,8 +38,13 @@ class PromptDocument {
       metadata["disable-model-invocation"]?.toLowerCase() != "true";
 
   /// Whether sending `/name` runs code rather than expanding the body as a
-  /// prompt template. See [WiredSkill] for what it dispatches to; the body is
-  /// then the skill's user-facing note, never something a model reads.
+  /// prompt template. What it dispatches to is the closed set in
+  /// `wired_skill.dart`; the body is then the skill's user-facing note, never
+  /// something a model reads.
+  ///
+  /// This is the decider where the document is in hand — composition time,
+  /// and the `skill` tool's gate — while the dispatch itself matches by name
+  /// alone, a build-stable set the reader of a resent turn can still answer.
   bool get isCallback => metadata["invocation"] == "callback";
 
   CompletionOption get option => CompletionOption(
@@ -135,7 +139,6 @@ class PromptLibrary {
 /// composer's menu — anything it can offer has to dispatch here.
 final RegExp skillReference = RegExp(r"^/([^\s/]+)(?:\s+([\s\S]*))?$");
 
-final _skillReference = skillReference;
 
 /// `@name` addresses an agent, but only where the handle starts, so an email
 /// address (`me@general`) and a path (`a@b.c`) are not mentions. Markdown
@@ -149,26 +152,35 @@ final _mention = RegExp(r"(?<![\w.-])@([\w.-]+)");
 /// Keyed by the reference as written, sigil included, so a skill and an agent
 /// of the same name do not collide. A name the library does not know is left
 /// out: it is more likely a path, or prose, than a document nobody defined.
-Map<String, String> promptDocuments(String text, PromptLibrary? library) => {
-      // A wired callback is not a thing the model is told what it meant: the
-      // turn runs code, and the skill's body is the user-facing note —
-      // expanded into the conversation it would be prose the model reads
-      // where no model is reading.
-      if (_skillReference.firstMatch(text.trim())?.group(1)
-          case final name? when !isWiredSkillName(name))
-        if (library?.find(CompletionKind.skill, name) case final document?)
-          "${CompletionKind.skill.trigger}$name": document.body,
-      for (final match in _mention.allMatches(text))
-        if (library?.find(CompletionKind.agent, match.group(1)!)
-            case final document?)
-          "${CompletionKind.agent.trigger}${match.group(1)}": document.body,
-    };
+Map<String, String> promptDocuments(String text, PromptLibrary? library) {
+  final documents = <String, String>{};
+  if (library case final lib?) {
+    // A wired callback is not a thing the model is told what it meant: the
+    // turn runs code, and the skill's body is the user-facing note —
+    // expanded into the conversation it would be prose the model reads where
+    // no model is reading. The document in hand is what answers, and this is
+    // where it is in hand: the reload-staleness hazard the documents map
+    // exists for does not apply at composition time.
+    if (skillReference.firstMatch(text.trim())?.group(1) case final name?) {
+      final document = lib.find(CompletionKind.skill, name);
+      if (document != null && !document.isCallback) {
+        documents["${CompletionKind.skill.trigger}$name"] = document.body;
+      }
+    }
+    for (final match in _mention.allMatches(text)) {
+      if (lib.find(CompletionKind.agent, match.group(1)!) case final document?) {
+        documents["${CompletionKind.agent.trigger}${match.group(1)}"] = document.body;
+      }
+    }
+  }
+  return documents;
+}
 
 /// The task the model is given: a skill's template with the arguments in it,
 /// or the message unchanged where it names no skill this one recorded.
 String expandedPrompt(String text, Map<String, String> documents) {
   if (documents.isEmpty) return text;
-  final match = _skillReference.firstMatch(text.trim());
+  final match = skillReference.firstMatch(text.trim());
   if (match == null) return text;
   final body = documents["${CompletionKind.skill.trigger}${match.group(1)}"];
   if (body == null) return text;

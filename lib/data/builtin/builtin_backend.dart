@@ -106,7 +106,14 @@ class BuiltinBackend implements AgentBackend {
   /// keep. Not a session: it is the newest request's fact, not the
   /// conversation's, and the controller reads it the way the controller reads
   /// everything else of the backend — through the callback that reported it.
-  final Map<String, LlmUsage> _usage = {};
+  /// The newest usage each chat's model reported — the fact the auto-compact
+  /// threshold reads, and what a backend that forgets on dispose must not
+  /// keep. Not a session: it is the newest request's fact, not the
+  /// conversation's, and the controller reads it the way the controller reads
+  /// everything else of the backend — through the callback that reported it.
+  /// The window rides beside it because the turn that resolved the provider
+  /// also resolved its config; the controller answers both from one fact.
+  final Map<String, ({int contextTokens, int contextWindow})> _usage = {};
   final _RunningTurns _running = _RunningTurns();
   final Map<String, StreamController<AgentEvent>> _controllers = {};
   final Map<String, List<ToolApproval>> _approvals = {};
@@ -402,7 +409,20 @@ class BuiltinBackend implements AgentBackend {
         },
         onShellOutput: (callId, text) =>
             controller.add(ShellOutputEvent(callId: callId, text: text)),
-        onUsage: (usage) => _usage[chatId] = usage,
+        // The window is resolved where the turn's model was — the registry,
+        // on-device endpoint included — and rides with the usage, so the
+        // controller's threshold asks the backend rather than re-walking a
+        // provider list that answers a different question.
+        onUsage: (usage) => _usage[chatId] = (
+          contextTokens: usage.contextTokens,
+          contextWindow: settings.provider == null
+              ? defaultContextWindow
+              : registry
+                      .endpointFor(settings.provider!)
+                      ?.config
+                      .effectiveContextWindow ??
+                  defaultContextWindow,
+        ),
       );
       // The real kill replaces the placeholder.
       _running.replace(stopKey, agent.cancel);
@@ -673,11 +693,9 @@ class BuiltinBackend implements AgentBackend {
     );
     if (target == null) return null;
     try {
-      final chunks = await target.client
-          .stream([LlmMessage(role: LlmRole.user, text: prompt)], model: target.modelId)
-          .timeout(const Duration(seconds: 60))
-          .toList();
-      final answer = chunks.whereType<LlmCompletion>().lastOrNull?.message.text.trim();
+      final answer = await _oneCompletion(
+          target, [LlmMessage(role: LlmRole.user, text: prompt)],
+          timeout: const Duration(seconds: 60));
       return answer == null || answer.isEmpty ? null : answer;
     } catch (_) {
       return null;
@@ -694,7 +712,7 @@ class BuiltinBackend implements AgentBackend {
   /// marker carries. Null with a log line, like every background failure —
   /// there is no turn to report it on.
   @override
-  Future<({String upToMessageId, String summary})?> compact(
+  Future<ConversationCompaction?> compact(
     String chatId, {
     required List<Message> history,
     required List<ConversationCompaction> compactions,
@@ -743,14 +761,12 @@ class BuiltinBackend implements AgentBackend {
         continue;
       }
       try {
-        final chunks = await target.client
-            .stream(cut, model: target.modelId)
-            .timeout(const Duration(minutes: 3))
-            .toList();
-        final reply = chunks.whereType<LlmCompletion>().lastOrNull?.message.text;
+        final reply = await _oneCompletion(target, cut,
+            timeout: const Duration(minutes: 3));
         final summary = reply == null ? null : CompactPrompt.summaryFrom(reply);
         if (summary != null) {
-          return (upToMessageId: span.last.id, summary: summary);
+          return ConversationCompaction(
+              upToMessageId: span.last.id, summary: summary);
         }
         logFailure("compact", "empty summary for $chatId");
       } catch (e) {
@@ -814,7 +830,9 @@ class BuiltinBackend implements AgentBackend {
         "its id, and delete spends one the exchange contradicts or supersedes. "
         "Any key may be an empty list where there is nothing to do.";
     try {
-      final answer = await _askBackground(target, question);
+      final answer = await _oneCompletion(target,
+          [LlmMessage(role: LlmRole.user, text: question)],
+          timeout: const Duration(seconds: 60)) ?? "";
       final ops = _maintainFrom(answer);
       if (ops.add.isEmpty && ops.replaces.isEmpty && ops.delete.isEmpty) return;
       final result = await store.maintain(
@@ -879,7 +897,9 @@ class BuiltinBackend implements AgentBackend {
           "behind a fact none of the entries held. If nothing is wrong, all "
           "three empty.";
       try {
-        final answer = await _askBackground(target, question);
+        final answer = await _oneCompletion(target,
+          [LlmMessage(role: LlmRole.user, text: question)],
+          timeout: const Duration(seconds: 60)) ?? "";
         final ops = _maintainFrom(answer);
         if (ops.add.isNotEmpty ||
             ops.replaces.isNotEmpty ||
@@ -909,15 +929,30 @@ class BuiltinBackend implements AgentBackend {
   /// The background answer: the last completion the model streams within the
   /// window, trimmed, and nothing where it streamed no completion at all. The
   /// window is what keeps a stuck provider from holding a pass forever.
-  Future<String> _askBackground(
-      ({LlmClient client, String modelId}) target, String question) async {
+  /// The one-shot read, in the three shapes that ask it: the last completion
+  /// the model streams within the window, trimmed, and [onEmpty] where it
+  /// streamed nothing. The window keeps a stuck provider from holding the
+  /// call forever; the timeout is on the stream rather than the future it
+  /// collects, a timed-out future leaving the response being read to nobody.
+  Future<String?> _oneCompletion(
+    ({LlmClient client, String modelId}) target,
+    List<LlmMessage> messages, {
+    required Duration timeout,
+    String Function(String?) onEmpty = _identity,
+  }) async {
     final chunks = await target.client
-        .stream([LlmMessage(role: LlmRole.user, text: question)],
-            model: target.modelId)
-        .timeout(const Duration(seconds: 60))
+        .stream(messages, model: target.modelId)
+        .timeout(timeout)
         .toList();
-    return chunks.whereType<LlmCompletion>().lastOrNull?.message.text.trim() ?? "";
+    return onEmpty(chunks
+        .whereType<LlmCompletion>()
+        .lastOrNull
+        ?.message
+        .text
+        .trim());
   }
+
+  static String _identity(String? text) => text ?? "";
 
   /// The maintenance JSON, read as liberally as the model writes it: the old
   /// shape — an array of strings, or an object holding one — reads as new
@@ -1130,6 +1165,15 @@ class BuiltinBackend implements AgentBackend {
 
   @override
   int? usageFor(String chatId) => _usage[chatId]?.contextTokens;
+
+  @override
+  int? contextWindowFor(String chatId) {
+    final usage = _usage[chatId];
+    // Null exactly where [usageFor] is null: the window rides the same fact,
+    // resolved where the turn's provider was.
+    if (usage == null) return null;
+    return usage.contextWindow;
+  }
 
   @override
   void closeChatShell(String chatId, {required String? project}) =>
