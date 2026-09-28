@@ -29,8 +29,14 @@ void main() {
   /// Nothing in this file is about attachment bytes except the two tests that
   /// pass a loader of their own.
   Future<List<LlmMessage>> project(List<Message> messages,
-          {bool first = true, String? viewer}) =>
-      projectionOf(messages, first: first, load: noResources, viewer: viewer);
+          {bool first = true,
+          String? viewer,
+          List<ConversationCompaction> compactions = const []}) =>
+      projectionOf(messages,
+          first: first,
+          load: noResources,
+          viewer: viewer,
+          compactions: compactions);
 
   setUp(() => next = 0);
 
@@ -410,6 +416,88 @@ void main() {
       expect(projected, hasLength(2));
       expect(projected.last.toolCalls, isEmpty);
       expect(projected.last.text, contains("found it"));
+    });
+  });
+
+  group("compactions", () {
+    const marker = ConversationCompaction(
+        upToMessageId: "m1", summary: "The user asked things.");
+
+    test("the messages below the boundary are the summary, the rest verbatim",
+        () async {
+      final projected = await project(
+          [
+            asked("first"),
+            said(MessageRole.assistant, const [MessagePart.text(text: "ok")]),
+            asked("second"),
+          ],
+          first: true,
+          compactions: [marker]);
+
+      expect(projected, hasLength(2));
+      expect(projected.first.role, LlmRole.user);
+      // The boundary message is summarized too: the first thing verbatim is
+      // what came after it.
+      expect(projected.last.text, contains("second"));
+      expect(projected.last.text, isNot(contains("first")));
+    });
+
+    test("the marker message is summarized with the rest of its span", () async {
+      final first = Message(
+          id: "m1",
+          role: MessageRole.user,
+          createdAt: at,
+          parts: const [MessagePart.text(text: "early work")]);
+      final projected = await projectionOf(
+          [first, asked("later")],
+          load: noResources,
+          compactions: [marker]);
+
+      // One message where two were, and the attachment bytes the span held
+      // are gone with it — the summary is what the model reads.
+      expect(projected, hasLength(2));
+      expect(projected.first.text, contains("The user asked things."));
+    });
+
+    test("the newest marker wins, an earlier one is a shadow", () async {
+      final projected = await projectionOf(
+          [
+            Message(id: "m1", role: MessageRole.user, createdAt: at),
+            Message(id: "m2", role: MessageRole.user, createdAt: at),
+            asked("third"),
+          ],
+          load: noResources,
+          compactions: [
+            const ConversationCompaction(upToMessageId: "m1", summary: "first"),
+            const ConversationCompaction(upToMessageId: "m2", summary: "second"),
+          ]);
+
+      expect(projected, hasLength(2));
+      expect(projected.first.text, contains("second"));
+      expect(projected.first.text, isNot(contains("first")));
+    });
+
+    test("a marker the projection was not handed is ignored", () async {
+      // A fragment — a history that stops short of the boundary — projects
+      // the span it was handed whole, which is what makes the slicing of a
+      // history safe without knowing where markers sit.
+      final projected = await projectionOf([asked("only")],
+          load: noResources, compactions: [marker]);
+
+      expect(projected.map((m) => m.text),
+          [userTurnText("only", at: at, first: true)]);
+    });
+
+    test("the first message after a marker is not dressed as a task", () async {
+      final projected = await projectionOf(
+          [
+            Message(id: "m1", role: MessageRole.user, createdAt: at),
+            asked("resumed work"),
+          ],
+          load: noResources,
+          compactions: [marker]);
+
+      expect(projected.last.text, userTurnText("resumed work", at: at, first: true));
     });
   });
 }

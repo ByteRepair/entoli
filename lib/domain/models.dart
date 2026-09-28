@@ -108,6 +108,24 @@ extension ChatStateTtl on ChatState {
   }
 }
 
+/// One compaction on the thread being read, as the log records it. The
+/// summary stands in for everything up to and including the message it names
+/// when the conversation is put in front of a model; the user still reads
+/// those messages, the divider saying where the summary took over. Derived by
+/// `replayTree` from the records rather than persisted as state, like
+/// `Chat.branches`: a rewind past the boundary drops the marker the same way
+/// it drops the messages under it.
+@freezed
+sealed class ConversationCompaction with _$ConversationCompaction {
+  const factory ConversationCompaction({
+    required String upToMessageId,
+    required String summary,
+  }) = _ConversationCompaction;
+
+  factory ConversationCompaction.fromJson(Map<String, dynamic> json) =>
+      _$ConversationCompactionFromJson(json);
+}
+
 /// A full chat: state + message tree. Persisted across `state.json` + `conv.jsonl`.
 @freezed
 abstract class Chat with _$Chat {
@@ -127,6 +145,12 @@ abstract class Chat with _$Chat {
     /// offer to carry on. Derived from the log by `endsUnfinished` rather than
     /// persisted — the absence of a closing record is the whole of it.
     @Default(false) bool unfinished,
+
+    /// The compaction markers on the thread being read, oldest first — see
+    /// [ConversationCompaction]. Derived by `replayTree` from the records, so
+    /// a rewind past a boundary drops the marker the same way it drops the
+    /// messages under it.
+    @Default([]) List<ConversationCompaction> compactions,
 
   }) = _Chat;
 

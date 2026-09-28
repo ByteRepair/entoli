@@ -74,6 +74,7 @@ class OpenAiClient implements LlmClient {
     final reasoning = StringBuffer();
     final calls = <int, _PartialCall>{};
     String? finishReason;
+    LlmUsage? usage;
 
     await for (final payload in decodeSse(response.stream)) {
       if (payload == "[DONE]") break;
@@ -103,6 +104,21 @@ class OpenAiClient implements LlmClient {
       }
 
       final choices = event["choices"];
+      // The usage object rides the final frame, often with `choices` empty,
+      // so it is read before the guard that skips such a frame.
+      final rawUsage = event["usage"];
+      if (rawUsage is Map<String, dynamic>) {
+        final promptTokens = (rawUsage["prompt_tokens"] as num?)?.toInt();
+        final completionTokens = (rawUsage["completion_tokens"] as num?)?.toInt();
+        if (promptTokens != null || completionTokens != null) {
+          final details = rawUsage["prompt_tokens_details"] as Map<String, dynamic>?;
+          usage = LlmUsage(
+            inputTokens: promptTokens ?? 0,
+            outputTokens: completionTokens ?? 0,
+            cacheReadTokens: (details?["cached_tokens"] as num?)?.toInt() ?? 0,
+          );
+        }
+      }
       if (choices is! List || choices.isEmpty) continue;
       final choice = choices.first as Map<String, dynamic>;
       finishReason = choice["finish_reason"] as String? ?? finishReason;
@@ -144,6 +160,7 @@ class OpenAiClient implements LlmClient {
 
     yield LlmCompletion(
       finishReason: finishReason,
+      usage: usage,
       message: LlmMessage(
         role: LlmRole.assistant,
         text: text.toString(),

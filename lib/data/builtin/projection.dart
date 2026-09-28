@@ -1,5 +1,7 @@
 import "dart:typed_data";
 
+import "package:collection/collection.dart";
+
 import "../../domain/ask.dart";
 import "../../domain/models.dart";
 import "../../domain/prompt_library.dart";
@@ -41,27 +43,62 @@ import "templates.dart";
 /// [load] answers with a resource's bytes. Asynchronous for that alone, which
 /// is what it costs to hand a model the image it was sent rather than the name
 /// of it.
+///
+/// [compactions] are the markers on the thread [messages] walks — the last one
+/// is what the model reads instead of everything before its boundary, the
+/// earlier ones being shadows an earlier compaction left. A marker whose
+/// boundary is not among [messages] is ignored, which is what makes a fragment
+/// (a `history` that stops short of it) project the span it was handed whole.
+/// The boundary message itself is summarized too, so the first message after a
+/// marker is the first thing the model reads verbatim — and `first` applies
+/// to the message the summary stands in for, so the task dress lands on the
+/// turn that opened the work.
 Future<List<LlmMessage>> projectionOf(
   List<Message> messages, {
   bool first = true,
   required ResourceLoader load,
   String? viewer,
+  List<ConversationCompaction> compactions = const [],
 }) async {
+  // The newest marker whose boundary the projection was handed, and where it
+  // sits. Anything before it is summarized; anything after it is verbatim.
+  // LastIndexWhere rather than indexWhere: an earlier marker is a shadow the
+  // newest one replaced, and the log can hold any number of those.
+  //
+  // Decided before the bytes are read, which is the point: the attachments of
+  // the summarized span are the expensive half of what the summary replaces,
+  // and the compacted tail is loaded whole. The ids decide the boundary, so
+  // this is one pass over ids before any load, not a scan per marker.
+  final live = {
+    for (final m in messages) m.id: m,
+  };
+  final marker = compactions.lastWhereOrNull((c) => live[c.upToMessageId] != null);
+  final from = marker == null
+      ? 0
+      : messages.indexWhere((m) => m.id == marker.upToMessageId) + 1;
   // Every resource at once rather than a message at a time: on the web each
   // read is its own IndexedDB transaction, and a long conversation's would
-  // otherwise be one round trip after another.
-  final files = await Future.wait(messages.map((m) =>
-      m.role == MessageRole.user ? _attachments(m, load) : _noFiles));
+  // otherwise be one round trip after another. Only the verbatim half's bytes
+  // are read — the summarized span's are what the summary replaced.
+  final files = await Future.wait(messages.asMap().entries.map((e) =>
+      e.value.role == MessageRole.user && e.key >= from
+          ? _attachments(e.value, load)
+          : _noFiles));
   final projected = <LlmMessage>[];
+  if (marker != null) {
+    projected.add(LlmMessage(role: LlmRole.user, text: summarizedTurnText(marker.summary)));
+  }
   for (final (index, message) in messages.indexed) {
+    // Before the marker: summarized, and the attachments with it — the bytes
+    // are the expensive half of what the summary replaces.
+    if (index < from) continue;
     switch (message.role) {
       case MessageRole.user:
         final text = _userText(message);
         if (text.isNotEmpty) {
           projected.add(LlmMessage(
             role: LlmRole.user,
-            text: userTurnText(text,
-                at: message.createdAt, first: first && projected.isEmpty),
+            text: userTurnText(text, at: message.createdAt, first: first && index == from),
             attachments: files[index],
           ));
         }

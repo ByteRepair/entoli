@@ -687,6 +687,7 @@ class _AgentSection extends ConsumerWidget {
         ),
         const _RetryTurnsField(),
         const _MaxStepsField(),
+        const _AutoCompactField(),
         Divider(),
         const _DefaultPermissionsSection(),
       ],
@@ -752,6 +753,52 @@ class _MaxStepsField extends ConsumerWidget {
       inherited: AppSettings.defaultTurnMaxSteps,
       onChanged: (v) =>
           ref.read(appSettingsProvider.notifier).setTurnMaxSteps(v),
+    );
+  }
+}
+
+/// Auto-compact: summarize the conversation when it grows past the slider's
+/// share of the model's window. Off, a long chat keeps growing until the
+/// provider refuses it. The manual `/compact` needs nothing here.
+class _AutoCompactField extends ConsumerWidget {
+  const _AutoCompactField();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final on = ref.watch(appSettingsProvider.select((s) => s.autoCompact));
+    final percent =
+        ref.watch(appSettingsProvider.select((s) => s.autoCompactPercent));
+    return LabelledField(
+      label: "Auto-compact",
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SwitchListTile(
+            contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+            title: const Text("Summarize long conversations"),
+            value: on,
+            onChanged: (value) =>
+                ref.read(appSettingsProvider.notifier).setAutoCompact(value),
+          ),
+          if (on) ...[
+            InheritableSlider(
+              label: "Compact at",
+              value: percent,
+              stops: AppSettings.autoCompactPercentStops,
+              inherited: AppSettings.defaultAutoCompactPercent,
+              onChanged: (v) => ref
+                  .read(appSettingsProvider.notifier)
+                  .setAutoCompactPercent(v ?? AppSettings.defaultAutoCompactPercent),
+            ),
+            Text(
+              "When a chat's context reaches $percent% of the model's window, "
+              "the earlier part of it is summarized for the model — the "
+              "conversation you read is unchanged. /compact does it by hand.",
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ],
+        ],
+      ),
     );
   }
 }

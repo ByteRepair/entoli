@@ -72,17 +72,25 @@ for. `_dispatch` runs what the schedule holds: **sequential** order
 dispatches one item at a time — the mention list is the schedule, and what
 follows dispatches at the settle it causes; **parallel** order dispatches
 one item per member at once, each FIFO's head, one turn per member still
-standing, and the rest at the settles they cause. Either way the item is off
-its FIFO before its turn opens, so a settle re-entering finds the schedule
-behind it and not the item running.
+standing, and the rest at the settles they cause; **relay** order keeps the
+per-member rule and drops the wave barrier — the head of every FIFO whose
+member has no turn in flight, dispatched while anything else runs. Either
+way the item is off its FIFO before its turn opens, so a settle re-entering
+finds the schedule behind it and not the item running.
 
-**A handoff wave waits for the room to settle.** A turn that finishes while
-a sibling is still speaking records its reply in `_settledReplies`; the
-settle the last sibling causes evaluates every reply the wave finished, in
-finish order, against the cap read at dispatch. A generation is the dispatch
-wave an item belongs to — zero is the user's own and uncapped, a handoff
-lands one past the turn that named it, and the cap (`omadaMaxGenerations`,
-project override over app default) stops the wave that would pass it.
+**A handoff wave waits for the room to settle — in the wave orderings.** A
+turn that finishes while a sibling is still speaking records its reply in
+`_settledReplies`; the settle the last sibling causes evaluates every reply
+the wave finished, in finish order, against the cap read at dispatch. Relay
+has no wave: a reply is evaluated the moment its turn is over, siblings
+beside it notwithstanding, and what it names runs through the per-lane check
+at dispatch — which is what "members start as soon as they are named" costs.
+A generation is the dispatch wave an item belongs to — zero is the user's
+own and uncapped, a handoff lands one past the turn that named it, and the
+cap (`omadaMaxGenerations`, project override over app default) stops the
+wave that would pass it. Under relay the finished turn's generation entry is
+spent when its handoff is scheduled — waves overlap, so a wave's cleanup
+cannot be the thing that retires the entry.
 
 **A pass ends what agents hand each other, not what the user asked for.** A
 reply that says nothing but `pass` clears the schedule of agent-addressed
@@ -98,7 +106,9 @@ the turn was finishing while it was typed — `_sayLater` dispatches it itself
 rather than waiting for a settle that already happened. Nothing is injected
 into a turn mid-flight, which is what protects the projection-prefix
 invariant; and a say whose members are named schedules them through the same
-ordering anything else takes.
+ordering anything else takes. Under relay the settle part of that rule
+shrinks to the member's: a say dispatches while the room is still busy, and
+the per-lane check is what keeps a say for a busy member on their FIFO.
 
 **Abort stops the round whole.** Every running turn is ended `aborted`, the
 queue of unsaid says is dropped, and the schedule is cleared — an aborted
@@ -161,7 +171,13 @@ did, and the Continue bar is the way on.
 
 The round is `_startResume()`, which is `resume()` without the guards: there is
 one carry-on mechanism, and a retry that built a second one would drift from
-it the way every second copy here has drifted. `_turnDone` stays open across
+it the way every second copy here has drifted. The round re-opens the reply
+**its own turn** was writing — passed by id — not "the last assistant
+message": under overlapping turns (relay, a parallel fan-out) a sibling's
+still-streaming reply can sit below, and resuming by position would re-open
+the wrong recorder. The user-facing Continue keeps the last-reply rule, an
+open chat with one unfinished reply being what it offers to carry on.
+`_turnDone` stays open across
 the rounds — a reminder awaiting it, or a voice handover, gets one completion,
 at the true end, not one per attempt. A `_retryGen` bumped by `abort` and
 `interrupt` is what keeps a round waiting out its backoff from firing after
@@ -538,6 +554,26 @@ a language and guessing one would colour a stack trace as though it were. A
 command that printed nothing says so on the exit row, rather than leaving a
 strip that reads as an answer cut off. What is behind all this is "Running a
 command yourself".
+
+### A compact turn, and its divider
+
+`/compact` is a callback, not a prompt: the composer dresses for it (an
+`auto_awesome` icon and a "Compact the conversation" hint — lighter than the
+shell's dressing, since nothing runs on the machine and no model is asked), the
+send dispatches it before the room's guards, and while a turn runs it is
+**refused, not queued** — a callback mid-turn is the session the turn is
+rewriting underneath it. The turn itself goes through the room's machinery:
+prompt logged as said, empty reply, the status row saying "Compacting the
+conversation" where a model's spinner would be, `turnEnd done`. Its product is
+the marker, not a reply.
+
+**The marker is a `ConversationSeparator`** — the same full-width divider the
+Omada mode flips are, generalized to take a caption and an optional tap —
+emitted by `entriesOf` just after the boundary message it covers, captioned
+"Compact Conversation". The tap opens the summary in the same sheet a tool
+run's drawer is, the one thing a boundary has to show. Auto-compact leaves the
+same trace with no turn around it: unawaited after a settled turn, the divider
+its only evidence, the way the memory extraction's note is.
 
 ## A chat whose home device is elsewhere
 

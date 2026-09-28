@@ -69,6 +69,8 @@ class AppSettings {
     this.omadaMaxGenerations = defaultOmadaMaxGenerations,
     this.omadaOrdering,
     this.turnMaxSteps,
+    this.autoCompact = defaultAutoCompact,
+    this.autoCompactPercent = defaultAutoCompactPercent,
     this.welcomeSeen = false,
   });
 
@@ -305,7 +307,9 @@ class AppSettings {
 
   /// The room's scheduling default for a project that picked none of its own:
   /// sequential runs the schedule one turn at a time, parallel answers with
-  /// one turn per member at once. `ProjectSettings.omadaOrdering` overrides
+  /// one turn per member at once, and relay answers what a reply names the
+  /// moment it is written — per member still one turn at a time, but with no
+  /// wave barrier between the waves. `ProjectSettings.omadaOrdering` overrides
   /// it per project; the enum lives with the project settings, which is
   /// where a per-project answer was first written.
   OmadaOrdering? omadaOrdering;
@@ -315,6 +319,17 @@ class AppSettings {
   /// default; the value rides every turn, an Omada member turn included,
   /// and the round's own bound is `omadaMaxGenerations` beside it.
   int? turnMaxSteps;
+
+  /// Whether the conversation is summarized when it grows past
+  /// [autoCompactPercent] of the model's window — the auto half of compaction,
+  /// which bounds a long chat without a prompt of its own. The manual half is
+  /// `/compact`, and needs nothing here.
+  bool autoCompact;
+
+  /// The share of the context window auto-compact acts at. A named constant
+  /// so the settings row's "Default (80%)" and the controller's check are one
+  /// number.
+  int autoCompactPercent;
 
   /// Whether the welcome tour has been finished. It is what first launch reads
   /// to decide whether to push the tour, and what its Done writes.
@@ -337,6 +352,12 @@ class AppSettings {
   /// "Default" entry names.
   static const turnStepStops = [20, 40, 60, 80, 100, 150];
   static const defaultTurnMaxSteps = 40;
+
+  /// Auto-compact's defaults: on, at eighty percent — low enough that the
+  /// summary itself and the turn that follows still fit above the window.
+  static const defaultAutoCompact = true;
+  static const defaultAutoCompactPercent = 80;
+  static const autoCompactPercentStops = [60, 70, 80, 90];
 
   /// The default when nothing is set: on, at ten prefixes. A named constant so
   /// the UI's "Default (10)" label and the provider's effective count are one
@@ -418,6 +439,11 @@ class AppSettings {
         omadaOrdering: OmadaOrdering.fromNameNullable(
             json["omadaOrdering"] as String?),
         turnMaxSteps: json["turnMaxSteps"] as int?,
+        autoCompact:
+            json["autoCompact"] as bool? ?? defaultAutoCompact,
+        autoCompactPercent: (json["autoCompactPercent"] as int? ??
+                defaultAutoCompactPercent)
+            .clamp(10, 95),
         welcomeSeen: json["welcomeSeen"] as bool? ?? false,
       );
     } catch (_) {
@@ -507,6 +533,8 @@ class AppSettings {
         omadaMaxGenerations: omadaMaxGenerations,
         omadaOrdering: omadaOrdering,
         turnMaxSteps: turnMaxSteps,
+        autoCompact: autoCompact,
+        autoCompactPercent: autoCompactPercent,
         welcomeSeen: welcomeSeen,
       );
 
@@ -573,6 +601,9 @@ class AppSettings {
         "omadaMaxGenerations": omadaMaxGenerations,
       if (omadaOrdering != null) "omadaOrdering": omadaOrdering!.name,
       if (turnMaxSteps != null) "turnMaxSteps": turnMaxSteps,
+      if (!autoCompact) "autoCompact": autoCompact,
+      if (autoCompactPercent != defaultAutoCompactPercent)
+        "autoCompactPercent": autoCompactPercent,
       if (welcomeSeen) "welcomeSeen": welcomeSeen,
     }));
   }
