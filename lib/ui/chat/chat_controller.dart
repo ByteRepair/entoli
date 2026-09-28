@@ -594,7 +594,7 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
     if (wired != null) {
       switch (wired.skill) {
         case WiredSkill.compact:
-          unawaited(_runCompactTurn(turn, prompt, wired.arguments));
+          unawaited(_runCompactTurn(turn, wired.arguments));
       }
       return;
     }
@@ -1278,6 +1278,7 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
       // per lane — relay's extra rule is the busy check below, not a
       // one-per-pass limit. The item is off its FIFO either way before the
       // turn opens.
+      final busy = {for (final turn in _turns.values) turn.omadaMember};
       if (!parallel && _ordering != OmadaOrdering.relay && dispatched) continue;
       if (_ordering == OmadaOrdering.relay && busy.contains(member)) continue;
       items.removeAt(0);
