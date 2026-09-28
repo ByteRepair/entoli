@@ -335,7 +335,8 @@ String _withoutShell({
 /// Empty produces nothing, so a device with no skills keeps the prompt — and
 /// the warmed prefix over it — exactly as it was.
 String skillsSection(List<PromptDocument> skills) {
-  final usable = skills.where((s) => s.modelInvocable).toList();
+  final usable =
+      skills.where((s) => s.modelInvocable && !s.isCallback).toList();
   if (usable.isEmpty) return "";
   final listed = [
     for (final skill in usable)

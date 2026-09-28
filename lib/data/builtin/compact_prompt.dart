@@ -1,5 +1,3 @@
-import "../../domain/llm_provider.dart";
-import "../../domain/models.dart";
 import "llm/llm_client.dart";
 
 final _summaryTags = RegExp(r"<summary>\s*([\s\S]*?)\s*</summary>");
@@ -38,10 +36,10 @@ class CompactPrompt {
     String? priorSummary,
   }) => [
         ...conversation,
-        LlmMessage(role: LlmRole.user, text: request(instructions, priorSummary)),
+        LlmMessage(role: LlmRole.user, text: _request(instructions, priorSummary)),
       ];
 
-  static String request(String? instructions, String? priorSummary) {
+  static String _request(String? instructions, String? priorSummary) {
     var text = """
 You will be handed a conversation and asked for one thing in return: a summary
 of it, written in <summary> tags and nothing else. This is a one-shot job —
@@ -101,20 +99,6 @@ $priorSummary
     final text = (match?.group(1) ?? reply).trim();
     return text.isEmpty ? null : text;
   }
-}
-
-/// The prior-summary text [history]'s last marker carries into a re-compaction,
-/// or null where the conversation has never been compacted.
-String? priorSummaryOf(List<ConversationCompaction> compactions) =>
-    compactions.isEmpty ? null : compactions.last.summary;
-
-/// The context window the compaction's own ask must fit in: the provider's
-/// configured one, or the default guess. Named so the threshold check and the
-/// summarizer's own budget ask the same question — the one resolver of the
-/// answer.
-int? contextWindowOf(LlmProviderConfig? config) {
-  if (config == null) return null;
-  return config.contextWindow ?? defaultContextWindow;
 }
 
 /// A rough count, by length: four characters to the token is the estimate

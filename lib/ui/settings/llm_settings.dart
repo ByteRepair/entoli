@@ -1,8 +1,10 @@
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
+import "../../domain/app_settings.dart";
 import "../../domain/llm_provider.dart";
 import "../../providers.dart";
+import "../widgets/dialogs.dart";
 import "../widgets/model_picker.dart";
 import "../widgets/resettable_field.dart";
 import "../widgets/section_header.dart";
@@ -52,4 +54,189 @@ class DefaultsSection extends ConsumerWidget {
       ],
     );
   }
+}/// How a turn runs and is bounded: the retry rounds, the step limit, the
+/// context window the auto-compact threshold reads against and acts at. One
+/// section because they are one subject — the turn's own behaviour — wherever
+/// the page that draws it sits.
+class TurnsSection extends ConsumerWidget {
+  const TurnsSection({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SectionHeader("Turns"),
+        RetryTurnsField(),
+        MaxStepsField(),
+        TotalContextField(),
+        AutoCompactField(),
+      ],
+    );
+  }
 }
+
+/// The most model calls one direct turn may make before it stops for the
+/// user. Null is the backend's own default; Omada member turns run under it
+/// too — the value rides every turn — and the round's own bound is the
+/// generations cap beside it.
+class MaxStepsField extends ConsumerWidget {
+  const MaxStepsField({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final steps = ref.watch(
+        appSettingsProvider.select((s) => s.turnMaxSteps));
+    return InheritableSlider(
+      label: "Max steps per turn",
+      value: steps,
+      stops: AppSettings.turnStepStops,
+      inherited: AppSettings.defaultTurnMaxSteps,
+      onChanged: (v) =>
+          ref.read(appSettingsProvider.notifier).setTurnMaxSteps(v),
+    );
+  }
+}
+
+/// Auto-compact: summarize the conversation when it grows past the slider's
+/// share of the model's window. Off, a long chat keeps growing until the
+/// provider refuses it. The manual `/compact` needs nothing here.
+class AutoCompactField extends ConsumerWidget {
+  const AutoCompactField({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final on = ref.watch(appSettingsProvider.select((s) => s.autoCompact));
+    final percent =
+        ref.watch(appSettingsProvider.select((s) => s.autoCompactPercent));
+    final total =
+        ref.watch(appSettingsProvider.select((s) => s.totalContext));
+    return LabelledField(
+      label: "Auto-compact",
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SwitchListTile(
+            contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+            title: const Text("Summarize long conversations"),
+            value: on,
+            onChanged: (value) =>
+                ref.read(appSettingsProvider.notifier).setAutoCompact(value),
+          ),
+          if (on) ...[
+            InheritableSlider(
+              label: "Compact at",
+              value: percent,
+              stops: AppSettings.autoCompactPercentStops,
+              inherited: AppSettings.defaultAutoCompactPercent,
+              onChanged: (v) => ref
+                  .read(appSettingsProvider.notifier)
+                  .setAutoCompactPercent(v ?? AppSettings.defaultAutoCompactPercent),
+            ),
+            Text(
+              "When a chat's context reaches $percent% of ${total.inK} tokens "
+              "— the Total Context above — the earlier part of it is "
+              "summarized for the model; the conversation you read is "
+              "unchanged. /compact does it by hand.",
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// The model's total context, in tokens — one app number, the whole the
+/// auto-compact threshold's share is taken against and the summarizer's own
+/// ask must fit under. Asked for in a dialog, the way a description is: a
+/// value typed occasionally, not slid to.
+class TotalContextField extends ConsumerWidget {
+  const TotalContextField({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final total = ref.watch(appSettingsProvider.select((s) => s.totalContext));
+    return LabelledField(
+      label: "Total Context",
+      child: ResettableField(
+        onReset: () => ref
+            .read(appSettingsProvider.notifier)
+            .setTotalContext(AppSettings.defaultTotalContext),
+        resetLabel: "${AppSettings.defaultTotalContext.inK} (default)",
+        child: ListTile(
+          contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+          title: Text("${total.inK} tokens"),
+          subtitle: const Text("Tap to change"),
+          onTap: () async {
+            final text = await promptForText(
+              context,
+              title: "Total Context",
+              initial: "$total",
+              hint: "The model's context window, in tokens",
+              confirmLabel: "Save",
+            );
+            if (text == null || !context.mounted) return;
+            final parsed = int.tryParse(text.replaceAll(",", "").trim());
+            if (parsed == null) return;
+            ref
+                .read(appSettingsProvider.notifier)
+                .setTotalContext(parsed.clamp(AppSettings.minTotalContext, AppSettings.maxTotalContext));
+          },
+        ),
+      ),
+    );
+  }
+}
+
+/// automatically before it is left failed. Off is the switch; the slider is
+/// the count, the shape the cores slider keeps.
+class RetryTurnsField extends ConsumerWidget {
+  const RetryTurnsField({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final retries = ref.watch(
+        appSettingsProvider.select((s) => s.turnRetries));
+    final on = retries > 0;
+    return LabelledField(
+      label: "Retry failed turns",
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SwitchListTile(
+            contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+            title: const Text("Automatic retry"),
+            value: on,
+            onChanged: (value) => ref
+                .read(appSettingsProvider.notifier)
+                .setTurnRetries(value ? AppSettings.defaultTurnRetries : 0),
+          ),
+          if (on) ...[
+            Slider(
+              value: retries.toDouble(),
+              min: 1,
+              max: AppSettings.maxTurnRetries.toDouble(),
+              divisions: AppSettings.maxTurnRetries - 1,
+              label: "$retries",
+              onChanged: (value) => ref
+                  .read(appSettingsProvider.notifier)
+                  .setTurnRetries(value.round()),
+            ),
+            Text(
+              "Carried on automatically up to $retries time${retries == 1 ? "" : "s"} "
+              "when a connection drops or the provider fails. Off, a failed turn "
+              "waits for you to press Continue.",
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+extension on int {
+  String get inK => this >= 1000 && this % 1000 == 0 ? "${this ~/ 1000}k" : "$this";
+}
+

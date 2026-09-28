@@ -568,7 +568,7 @@ class FakeBackend implements AgentBackend {
   final List<({String? instructions, int historyLength})> compactionCalls = [];
 
   @override
-  Future<({String upToMessageId, String summary})?> compact(String chatId,
+  Future<ConversationCompaction?> compact(String chatId,
       {required List<Message> history,
       required List<ConversationCompaction> compactions,
       required TurnSettings settings,
@@ -576,7 +576,8 @@ class FakeBackend implements AgentBackend {
     compactionCalls
         .add((instructions: instructions, historyLength: history.length));
     if (scriptedSummary == null) return null;
-    return (upToMessageId: history.lastOrNull?.id ?? "", summary: scriptedSummary!);
+    return ConversationCompaction(
+        upToMessageId: history.lastOrNull?.id ?? "", summary: scriptedSummary!);
   }
 
   @override
@@ -584,7 +585,6 @@ class FakeBackend implements AgentBackend {
 
   /// What `usageFor` answers, keyed by chat id, in context tokens.
   final Map<String, int> usageHolder = {};
-
 
   var didShutdown = false;
 

@@ -483,6 +483,11 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
   Future<void> setAutoCompactPercent(int value) =>
       _update((s) => s.autoCompactPercent = value);
 
+  /// The model's total context, in tokens — the whole the auto-compact
+  /// threshold's share is taken against, and the summarizer's own ceiling.
+  Future<void> setTotalContext(int value) =>
+      _update((s) => s.totalContext = value);
+
   /// Whether `@path` references inside an AGENTS.md pull in more files. The
   Future<void> setInstructionImports(bool value) =>
       _update((s) => s.instructionImports = value);
