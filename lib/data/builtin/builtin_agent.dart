@@ -299,7 +299,7 @@ List<LlmTool> agentTools({
       if (caps.ask) askTool,
       if (caps.task) taskTool,
       if (caps.webSearch) ...[websearchTool, webfetchTool],
-      if (skills.any((s) => s.modelInvocable)) skillTool,
+      if (skills.any((s) => s.modelInvocable && !s.isCallback)) skillTool,
       if (caps.artifact) artifactTool,
       if (!oneShot) ...[planAddTool, planNextTool, planDoneTool],
       // Presenting parks the turn on the panel's answer, so it rides `ask`
@@ -1184,11 +1184,13 @@ class BuiltinAgent {
           call,
           ShellResult.failed(skillUnknown(name, [
             for (final skill in skills)
-              if (skill.modelInvocable) skill.name,
+              if (skill.modelInvocable && !skill.isCallback) skill.name,
           ]))));
       return;
     }
-    if (!document.modelInvocable) {
+    // A callback's body is the user-facing note, never a procedure for the
+    // model to read — the same reason composition refuses to expand it.
+    if (!document.modelInvocable || document.isCallback) {
       yield ToolResultEvent(_ran(call, ShellResult.failed(skillReserved(name))));
       return;
     }

@@ -71,6 +71,7 @@ class AppSettings {
     this.turnMaxSteps,
     this.autoCompact = defaultAutoCompact,
     this.autoCompactPercent = defaultAutoCompactPercent,
+    this.totalContext = defaultTotalContext,
     this.welcomeSeen = false,
   });
 
@@ -331,6 +332,14 @@ class AppSettings {
   /// number.
   int autoCompactPercent;
 
+  /// The model's total context, in tokens — what [autoCompactPercent] is a
+  /// share of, and what the summarizer's own ask must fit under. One number
+  /// for the app: every provider's window is guessed here, and a user who
+  /// knows the real one sets it. Nothing reads this before the settings page
+  /// has a row for it, but the constant ships the guess so the row's "(128k)"
+  /// and the check are one number.
+  int totalContext;
+
   /// Whether the welcome tour has been finished. It is what first launch reads
   /// to decide whether to push the tour, and what its Done writes.
   bool welcomeSeen;
@@ -358,6 +367,16 @@ class AppSettings {
   static const defaultAutoCompact = true;
   static const defaultAutoCompactPercent = 80;
   static const autoCompactPercentStops = [60, 70, 80, 90];
+
+  /// The window the guess lands on: 128k sits under every hosted window
+  /// today — underestimating costs an early compaction, overestimating costs
+  /// a failed request, so the safe guess is the small one.
+  static const defaultTotalContext = 128000;
+
+  /// The bounds Total Context is clamped to, at load and at the settings
+  /// row's save — two sites that must agree, named once.
+  static const minTotalContext = 1024;
+  static const maxTotalContext = 1000000000;
 
   /// The default when nothing is set: on, at ten prefixes. A named constant so
   /// the UI's "Default (10)" label and the provider's effective count are one
@@ -444,6 +463,8 @@ class AppSettings {
         autoCompactPercent: (json["autoCompactPercent"] as int? ??
                 defaultAutoCompactPercent)
             .clamp(10, 95),
+        totalContext: (json["totalContext"] as int? ?? defaultTotalContext)
+            .clamp(minTotalContext, maxTotalContext),
         welcomeSeen: json["welcomeSeen"] as bool? ?? false,
       );
     } catch (_) {
@@ -535,6 +556,7 @@ class AppSettings {
         turnMaxSteps: turnMaxSteps,
         autoCompact: autoCompact,
         autoCompactPercent: autoCompactPercent,
+        totalContext: totalContext,
         welcomeSeen: welcomeSeen,
       );
 
@@ -604,6 +626,7 @@ class AppSettings {
       if (!autoCompact) "autoCompact": autoCompact,
       if (autoCompactPercent != defaultAutoCompactPercent)
         "autoCompactPercent": autoCompactPercent,
+      if (totalContext != defaultTotalContext) "totalContext": totalContext,
       if (welcomeSeen) "welcomeSeen": welcomeSeen,
     }));
   }

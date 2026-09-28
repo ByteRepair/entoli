@@ -356,7 +356,7 @@ bool endsUnfinished(List<Message> messages, List<ChatRecord> records) {
   // interrupted turn is then not offered, where it would have been resumable;
   // a name in the enum is the app's own, and shadowing one is not a state
   // worth a stamp on every message for.
-  if (prompt != null && isWiredSkillName(prompt.plainText)) return false;
+  if (prompt != null && wiredSkillFromText(prompt.plainText) != null) return false;
   TurnEnd? ended;
   for (final record in records) {
     if (record is TurnEndRecord && record.messageId == last.id) ended = record.reason;

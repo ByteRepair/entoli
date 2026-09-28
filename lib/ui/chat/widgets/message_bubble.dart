@@ -400,7 +400,7 @@ class _MessageBubbleState extends State<MessageBubble> {
 
     Widget said(String text, {bool isError = false, bool caret = false}) => Padding(
           padding: const EdgeInsets.only(bottom: 4),
-          child: _MessageText(
+          child: MessageText(
             text: text,
             isError: isError,
             isWaiting: widget.isWaiting,
@@ -613,8 +613,13 @@ class _MessageBubbleState extends State<MessageBubble> {
 /// One line of a message bubble: raw text while the reply streams or when it is
 /// an error, `MarkdownBody` once finished. Owns the markdown style sheet so the
 /// parent's build does not rebuild it on every scroll frame.
-class _MessageText extends StatefulWidget {
-  const _MessageText({
+///
+/// Public because two homes render reply text now: the bubble's, and the
+/// compaction summary beneath its divider — the same encoding, the same
+/// rendering, whether the model wrote it as a reply or as a summary.
+class MessageText extends StatefulWidget {
+  const MessageText({
+    super.key,
     required this.text,
     required this.isError,
     required this.isWaiting,
@@ -632,10 +637,10 @@ class _MessageText extends StatefulWidget {
   final ValueChanged<String>? onTapLink;
 
   @override
-  State<_MessageText> createState() => _MessageTextState();
+  State<MessageText> createState() => _MessageTextState();
 }
 
-class _MessageTextState extends State<_MessageText> {
+class _MessageTextState extends State<MessageText> {
   MarkdownStyleSheet? _styleSheet;
 
   /// Raw while the reply streams or when it is an error: there is no markdown

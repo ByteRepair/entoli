@@ -7,6 +7,7 @@ import "package:flutter_test/flutter_test.dart";
 import "package:agent_chat/data/sync/sync_hub.dart";
 import "package:agent_chat/domain/agent_backend.dart";
 import "package:agent_chat/domain/builtin_project.dart";
+import "package:agent_chat/domain/chat_log.dart";
 import "package:agent_chat/domain/chat_meta.dart";
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/domain/permission.dart";
@@ -1171,6 +1172,47 @@ void main() {
       await tester.pump();
 
       expect(find.text("Kept 1 memory."), findsNothing);
+    });
+  });
+
+  group("a compaction in the conversation", () {
+    testWidgets("the summary is rendered beneath the divider, without a tap",
+        (tester) async {
+      // A finished chat holding one exchange and a compaction marker of its
+      // own — written the way the real turn writes one: a record on the log,
+      // not a part of anything.
+      final at = DateTime.now();
+      final prompt = Message(
+          id: "m1", role: MessageRole.user, createdAt: at,
+          parts: const [MessagePart.text(text: "hello")]);
+      final reply = Message(
+          id: "m2",
+          role: MessageRole.assistant,
+          createdAt: at,
+          parts: const [MessagePart.text(text: "hi")]);
+      final chat = await io(tester, () async {
+        final state = makeState("compacted");
+        await app.repo.saveState(state);
+        await app.repo.append(state.id, [
+          ...recordsOf([prompt, reply]),
+          ChatRecord.turnEnd(messageId: "m2", reason: TurnEnd.done),
+          const ChatRecord.compaction(
+              upToMessageId: "m2", summary: "The user said hello."),
+        ]);
+        return app.repo.openChat(state.id);
+      });
+      await open(tester, chat.state.id);
+
+      // The divider is there, and the summary text with it — always visible,
+      // not behind a tap.
+      expect(find.byType(ConversationSeparator), findsOneWidget);
+      expect(find.text("Compact Conversation"), findsOneWidget);
+      expect(find.textContaining("The user said hello."), findsOneWidget);
+      // Rendered as a reply is: the AI text widget, not a sheet's content.
+      expect(
+          find.byWidgetPredicate(
+              (w) => w is MessageText && w.text.contains("The user said hello.")),
+          findsOneWidget);
     });
   });
 

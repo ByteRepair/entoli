@@ -128,7 +128,10 @@ keeps it, and the explicit remove clears it — because an empty field alone
 cannot say keep from clear once the field no longer echoes what is stored.
 The TURN password is in the store the same way; the TURN username is not a
 secret and rides in `settings.json` beside the URL.
-**LLMs** is what a new chat is answered by and what names it. **Memory** is
+**LLMs** is what a new chat is answered by and what names it, under a
+**Turns** section beside it — how a turn runs and is bounded: the retry
+rounds, the step limit, the Total Context window and the Auto-compact switch
+and share. **Memory** is
 what one conversation leaves the others: the two `AGENTS.md` files every turn
 is read from — the user's own at the root of the data directory and the
 project's in its workspace — and the ways a turn may keep what they pull in

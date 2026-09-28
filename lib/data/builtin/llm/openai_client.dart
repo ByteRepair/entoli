@@ -60,6 +60,11 @@ class OpenAiClient implements LlmClient {
         "model": model,
         "messages": mergeLeadingSystem(messages).map(_encodeMessage).toList(),
         "stream": true,
+        // Ask for the usage object on the final frame: OpenAI's streaming
+        // shape sends it only when asked, and the auto-compact threshold
+        // reads it. A gateway that drops the field degrades to no usage,
+        // which the parse below already answers.
+        "stream_options": {"include_usage": true},
         if (returnProgress) "return_progress": true,
         if (tools.isNotEmpty) ...{
           "tools": tools.map(_encodeTool).toList(),

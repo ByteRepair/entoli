@@ -568,12 +568,15 @@ conversation" where a model's spinner would be, `turnEnd done`. Its product is
 the marker, not a reply.
 
 **The marker is a `ConversationSeparator`** — the same full-width divider the
-Omada mode flips are, generalized to take a caption and an optional tap —
-emitted by `entriesOf` just after the boundary message it covers, captioned
-"Compact Conversation". The tap opens the summary in the same sheet a tool
-run's drawer is, the one thing a boundary has to show. Auto-compact leaves the
-same trace with no turn around it: unawaited after a settled turn, the divider
-its only evidence, the way the memory extraction's note is.
+Omada mode flips are, generalized to take a caption and furniture beneath the
+line — emitted by `entriesOf` just after the boundary message it covers,
+captioned "Compact Conversation". The summary is rendered beneath it in
+`MessageText`, the widget a reply's text is encoded in — the same markdown,
+code blocks and link taps, full width, always visible, nothing to tap. It is
+not selectable: the divider is metadata, and a selection container of its own
+is the per-row container the bubble's single region replaced. Auto-compact
+leaves the same trace with no turn around it: unawaited after a settled turn,
+the divider its only evidence, the way the memory extraction's note is.
 
 ## A chat whose home device is elsewhere
 
