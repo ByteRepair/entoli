@@ -14,6 +14,7 @@ import "../domain/chat_title.dart";
 import "../domain/models.dart";
 import "../domain/permission.dart";
 import "../domain/project.dart";
+import "../domain/wired_skill.dart";
 import "../domain/project_settings.dart";
 import "../domain/prompt_library.dart";
 import "../domain/shell.dart";
@@ -238,13 +239,16 @@ class ChatRepository {
   ///
   /// A `!` message names nothing either. It is not a thing said, and it is the
   /// one turn the user routed away from a model — in a chat that may have no
-  /// provider configured at all.
+  /// provider configured at all. A `invocation: callback` skill is the same:
+  /// a callback turn is not a thing said, and naming one is a model call on
+  /// the turn the user routed away from a model.
   Future<String?> suggestTitle(String text) async {
     final settings = _settings();
     final provider = settings.titleProviderId;
     final model = settings.titleModelId;
     if (provider == null || text.trim().isEmpty) return null;
     if (shellBypassCommand(text) != null) return null;
+    if (wiredSkillFromText(text) != null) return null;
     final answer = await _backend.ask(titlePrompt(text), model: model, provider: provider);
     return answer == null ? null : cleanTitle(answer);
   }
@@ -276,11 +280,15 @@ class ChatRepository {
   /// model answering fluently from the turn the user has just left.
   Stream<AgentEvent> sendPrompt(String chatId, Message prompt,
       {List<Message> history = const [],
+      List<ConversationCompaction> compactions = const [],
       bool replaces = false,
       String? omadaMember}) async* {
-    if (replaces) await _backend.resetSession(chatId, history: history);
+    if (replaces) {
+      await _backend.resetSession(chatId, history: history, compactions: compactions);
+    }
     yield* _backend.sendPrompt(chatId, prompt,
         history: history,
+        compactions: compactions,
         settings: await _turnSettings(chatId, omadaMember: omadaMember));
   }
 
@@ -288,11 +296,42 @@ class ChatRepository {
   /// runs under whatever the chat's settings are now, not whatever they were
   /// when the turn was cut off: the same rule an edit or a regenerate follows.
   Stream<AgentEvent> resumeTurn(String chatId,
-      {List<Message> history = const [], String? omadaMember}) async* {
+      {List<Message> history = const [],
+      List<ConversationCompaction> compactions = const [],
+      String? omadaMember}) async* {
     yield* _backend.resumeTurn(chatId,
         history: history,
+        compactions: compactions,
         settings: await _turnSettings(chatId, omadaMember: omadaMember));
   }
+
+  /// Summarize the conversation through the backend, resolved under the same
+  /// settings a turn in this chat would run. The boundary is what the caller
+  /// asked for — the last thing said — and the answer is the pair a
+  /// [CompactionRecord] is made of. Null when nothing answered; the controller
+  /// reads a log line, there being no turn to fail.
+  Future<({String upToMessageId, String summary})?> compact(
+      String chatId,
+      {required List<Message> history,
+      required List<ConversationCompaction> compactions,
+      required String? instructions}) async {
+    return _backend.compact(chatId,
+        history: history,
+        compactions: compactions,
+        settings: await _turnSettings(chatId),
+        instructions: instructions);
+  }
+
+  /// Rebuild the backend's session for [chatId] from [history], markers
+  /// applied — what a compaction does to the live session, the same way a
+  /// thread change does. Routed rather than called straight on the backend so
+  /// the repository is the one place a session is told what the conversation
+  /// is, and a second caller cannot forget the settings a rebuild resolves
+  /// under (it resolves none: the session is what the log says).
+  Future<void> resetSession(String chatId,
+      {required List<Message> history,
+      required List<ConversationCompaction> compactions}) =>
+      _backend.resetSession(chatId, history: history, compactions: compactions);
 
   /// The chat's own choice wins, else the app default, else whatever the
   /// backend picks. Never mix halves: a chat's model under the app default's
@@ -504,8 +543,10 @@ class ChatRepository {
     await append(chat.state.id, [record]);
     final now = await openChat(chat.state.id);
     // A session is the conversation the model has seen, and which conversation
-    // that is has just changed.
-    await _backend.resetSession(chat.state.id, history: now.messages);
+    // that is has just changed — markers included, since a rewind past one
+    // un-applies it.
+    await _backend.resetSession(chat.state.id,
+        history: now.messages, compactions: now.compactions);
     return now;
   }
 

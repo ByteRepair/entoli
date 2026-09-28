@@ -83,6 +83,12 @@ void main() {
     final cleared = ProjectSettings.load(config, project: "work");
     expect(cleared.omada, false);
     expect(cleared.omadaOrdering, OmadaOrdering.sequential);
+
+    // Relay rides the same name-based round trip.
+    await (ProjectSettings()..omadaOrdering = OmadaOrdering.relay)
+        .save(config, project: "work");
+    expect(ProjectSettings.load(config, project: "work").omadaOrdering,
+        OmadaOrdering.relay);
   });
 
   test("an ordering name that is not one is not an ordering", () async {

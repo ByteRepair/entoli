@@ -474,6 +474,15 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
   Future<void> setTurnMaxSteps(int? value) =>
       _update((s) => s.turnMaxSteps = value);
 
+  /// Whether the conversation is summarized at [setAutoCompactPercent]'s
+  /// share of the window. The manual `/compact` needs nothing here.
+  Future<void> setAutoCompact(bool value) =>
+      _update((s) => s.autoCompact = value);
+
+  /// The share of the window auto-compact acts at.
+  Future<void> setAutoCompactPercent(int value) =>
+      _update((s) => s.autoCompactPercent = value);
+
   /// Whether `@path` references inside an AGENTS.md pull in more files. The
   Future<void> setInstructionImports(bool value) =>
       _update((s) => s.instructionImports = value);

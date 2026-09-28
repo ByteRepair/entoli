@@ -278,6 +278,59 @@ void main() {
     expect(entry.online, isTrue);
   });
 
+  test("an interleaved round's log mirrors whole", () async {
+    // The relay ordering appends two turns' records as they happen, so the
+    // log holds one turn's records beside another's mid-flight. What crosses
+    // is the log as it stands, so the mirror reads the same conversation the
+    // home device draws — this pins the issue's "sync layer unchecked"
+    // against an ordering that arrives interleaved.
+    final now = DateTime.now();
+    final state = ChatState(
+        id: "relay-log", title: "Relay", createdAt: now, updatedAt: now);
+    await home.store.saveState(state);
+    await home.store.append(state.id, [
+      // The user prompt, then two turn openers in the order the room opened
+      // them — the second before the first's reply has finished streaming.
+      ChatRecord.message(
+          id: "u1", role: MessageRole.user, createdAt: now),
+      ChatRecord.message(
+          id: "r1", role: MessageRole.assistant, createdAt: now, author: "@explore"),
+      ChatRecord.message(
+          id: "r2", role: MessageRole.assistant, createdAt: now, author: "@build"),
+      // Explore finished first and wrote parts; build's are still coming.
+      ChatRecord.part(
+          messageId: "r1", index: 0, part: const TextPart(text: "over to @build")),
+      ChatRecord.part(messageId: "r2", index: 0, part: const TextPart(text: "on it")),
+      ChatRecord.part(
+          messageId: "r1",
+          index: 1,
+          part: const MessagePart.toolCall(
+              toolCall: ToolCall(
+                  id: "c1", name: "bash", argumentsJson: '{"command": "ls"}'),
+              responseId: "resp-1")),
+      ChatRecord.part(messageId: "r2", index: 1, part: const TextPart(text: " — done")),
+      const ChatRecord.turnEnd(messageId: "r1", reason: TurnEnd.done),
+      const ChatRecord.turnEnd(messageId: "r2", reason: TurnEnd.done),
+    ]);
+
+    final links = loopbackPair();
+    await pair(links.$1, links.$2);
+    away.hub.followChat(state.id);
+    await waitForSync(() => away.hub.mirror(state.id) != null);
+
+    final mirror = away.hub.mirror(state.id)!;
+    final homeRecords = (home.store as FakeChatStore).records(state.id);
+    expect(mirror.records.length, homeRecords.length);
+    // Records arrive in the order the log holds them, interleaved and all.
+    String recordId(ChatRecord r) => switch (r) {
+          MessageRecord(:final id) => id,
+          TurnEndRecord(:final messageId) => "end:$messageId",
+          _ => "",
+        };
+    expect([for (final r in mirror.records) recordId(r)],
+        [for (final r in homeRecords) recordId(r)]);
+  });
+
   test("appends on the home device reach the mirror", () async {
     final state = _seedChat(home);
     final links = loopbackPair();

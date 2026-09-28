@@ -564,6 +564,35 @@ carries` rule. The install and the settings page's import and delete write
 through `withWritableDir`, because the skills directories are read-only — see
 the root notes, "On-disk layout".
 
+## Compaction (the `compact` callback)
+
+`AgentBackend.compact` is the summarizer: the conversation projected the way
+any turn would read it — attachments as bytes, thinking as thinking — one user
+message over it (`compact_prompt.dart`'s template, the merge rules riding in
+it), one reply cut by `summaryFrom`. It runs on the chat's own model rather
+than the light default — the summary is only as good as the context it had —
+and guards on `_running.any`: a session being rewritten underneath it is not
+one to summarize. Null with a `logFailure` line, like every background call.
+
+**The retry ladder is the whole of the failure story.** The ask has to fit the
+window with room for the summary (the provider's `contextWindow`, half), and
+where it does not — or where the summarizer said nothing, or errored — the
+oldest half of the span is dropped and the ask is made again, three attempts.
+The boundary handed back covers only what was read, so a conversation too big
+for its own summarizer still gets a marker for its newest half.
+
+**Usage is parsed, not estimated, where the provider says anything.**
+`LlmUsage` rides `LlmCompletion` — Anthropic's `message_start` and
+`message_delta` usage objects, OpenAI's final-chunk `usage` — and the agent
+reports it through `onUsage`, the same turn-scoped view state `onShellOutput`
+is. `usageFor` answers it to the controller, which reads it against the
+window after a turn settles; a provider that reports nothing reports nothing,
+and the estimate (`length/4`, in `compact_prompt.dart`) is the summarizer's
+own budget, not the threshold's — compacting on a guess is not the trigger's
+business. The one number the trigger needs is also why `contextWindow` is a
+field on `LlmProviderConfig` (128k default, the safe guess): the settings page
+is where a user who knows better sets the real one.
+
 ## The plan (PLAN.md)
 
 The plan is a `PLAN.md` in the chat's own workspace — the directory the model

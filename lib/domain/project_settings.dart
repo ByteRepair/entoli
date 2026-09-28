@@ -10,7 +10,8 @@ import "tone.dart";
 /// adds one, wins over it.
 enum OmadaOrdering {
   sequential,
-  parallel;
+  parallel,
+  relay;
 
   static OmadaOrdering? fromNameNullable(String? name) =>
       name == null ? null : OmadaOrdering.values.asNameMap()[name];
@@ -19,10 +20,12 @@ enum OmadaOrdering {
 /// Human-readable labels, shared by the project settings page so the
 /// dropdown and the section's inherited entry name the same thing. The
 /// parallel ordering is Crossfire: several members working at the same time,
-/// each writing their own reply.
+/// each writing their own reply. Relay is the same start with no wave
+/// barrier: what a reply names runs while its siblings are still speaking.
 const omadaOrderingLabels = {
   OmadaOrdering.sequential: "Sequential",
   OmadaOrdering.parallel: "Crossfire",
+  OmadaOrdering.relay: "Relay",
 };
 
 /// One line each, under the ordering dropdown: what the round does under
@@ -33,6 +36,8 @@ const omadaOrderingDescriptions = {
       "the message names them.",
   OmadaOrdering.parallel: "Members run at the same time, each writes their "
       "own reply, in whatever order they finish.",
+  OmadaOrdering.relay: "Members start as soon as they are named, without "
+      "waiting for the room to settle.",
 };
 
 /// Project-scoped overrides. A project can override the app-level
