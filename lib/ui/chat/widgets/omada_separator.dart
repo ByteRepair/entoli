@@ -7,43 +7,42 @@ import "package:flutter/material.dart";
 ///
 /// Two boundaries share it: the room's Omada mode changing, and a compaction
 /// — the divider naming where the conversation's summary for the model began.
-/// The tap is the compaction's, the summary being the one thing a boundary
-/// has to show.
+/// The compaction's [body] is the summary itself, rendered beneath the line
+/// like a reply is; the mode flip has no furniture beneath it.
 class ConversationSeparator extends StatelessWidget {
-  const ConversationSeparator({
-    super.key,
-    required this.text,
-    this.onTap,
-  });
+  const ConversationSeparator({super.key, required this.text, this.body});
 
   /// What the divider says happened here.
   final String text;
 
-  /// Where the summary behind a boundary is shown, where there is one to
-  /// show. Null for a boundary that is only a line — a mode flip.
-  final VoidCallback? onTap;
+  /// Furniture beneath the line, full width — a compaction's summary. Null
+  /// for a boundary that is only a line.
+  final Widget? body;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final caption = Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 12),
-      child: Text(
-        text,
-        style: theme.textTheme.bodySmall
-            ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-      ),
-    );
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 16),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Expanded(child: Divider(color: theme.colorScheme.outlineVariant)),
-          onTap == null
-              ? caption
-              : InkWell(onTap: onTap, borderRadius: BorderRadius.circular(6),
-                  child: caption),
-          Expanded(child: Divider(color: theme.colorScheme.outlineVariant)),
+          Row(
+            children: [
+              Expanded(child: Divider(color: theme.colorScheme.outlineVariant)),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                child: Text(
+                  text,
+                  style: theme.textTheme.bodySmall
+                      ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                ),
+              ),
+              Expanded(child: Divider(color: theme.colorScheme.outlineVariant)),
+            ],
+          ),
+          if (body != null)
+            Padding(padding: const EdgeInsets.only(top: 8), child: body!),
         ],
       ),
     );

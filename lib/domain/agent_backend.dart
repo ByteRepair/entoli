@@ -440,11 +440,11 @@ abstract class AgentBackend {
   /// loses what the previous one kept. [instructions] are the user's own focus
   /// for the summary, from `/compact <instructions>`; null is the plain one.
   ///
-  /// Returns the boundary and the summary, or null when nothing answered — a
-  /// provider that is not configured, a turn already running, a summarizer
-  /// that failed. The caller wants a marker to append, and there is no turn to
-  /// report a failure on; [logFailure] has said why.
-  Future<({String upToMessageId, String summary})?> compact(
+  /// Returns the marker's shape — boundary and summary — or null when
+  /// nothing answered: a provider that is not configured, a turn already
+  /// running, a summarizer that failed. The caller wants a marker to append,
+  /// and there is no turn to report a failure on; [logFailure] has said why.
+  Future<ConversationCompaction?> compact(
     String chatId, {
     required List<Message> history,
     required List<ConversationCompaction> compactions,

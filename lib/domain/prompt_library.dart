@@ -2,7 +2,6 @@ import "package:collection/collection.dart";
 
 import "frontmatter.dart";
 import "models.dart";
-import "wired_skill.dart";
 
 /// One skill or agent, exactly as Entoli stores it: YAML frontmatter, then the
 /// template a skill expands to or the system prompt an agent runs under.
@@ -39,8 +38,13 @@ class PromptDocument {
       metadata["disable-model-invocation"]?.toLowerCase() != "true";
 
   /// Whether sending `/name` runs code rather than expanding the body as a
-  /// prompt template. See [WiredSkill] for what it dispatches to; the body is
-  /// then the skill's user-facing note, never something a model reads.
+  /// prompt template. What it dispatches to is the closed set in
+  /// `wired_skill.dart`; the body is then the skill's user-facing note, never
+  /// something a model reads.
+  ///
+  /// This is the decider where the document is in hand — composition time,
+  /// and the `skill` tool's gate — while the dispatch itself matches by name
+  /// alone, a build-stable set the reader of a resent turn can still answer.
   bool get isCallback => metadata["invocation"] == "callback";
 
   CompletionOption get option => CompletionOption(
@@ -135,8 +139,6 @@ class PromptLibrary {
 /// composer's menu — anything it can offer has to dispatch here.
 final RegExp skillReference = RegExp(r"^/([^\s/]+)(?:\s+([\s\S]*))?$");
 
-final _skillReference = skillReference;
-
 /// `@name` addresses an agent, but only where the handle starts, so an email
 /// address (`me@general`) and a path (`a@b.c`) are not mentions. Markdown
 /// dressing around a handle — `**@murasaki**` — does not stop it being one.
@@ -153,10 +155,12 @@ Map<String, String> promptDocuments(String text, PromptLibrary? library) => {
       // A wired callback is not a thing the model is told what it meant: the
       // turn runs code, and the skill's body is the user-facing note —
       // expanded into the conversation it would be prose the model reads
-      // where no model is reading.
-      if (_skillReference.firstMatch(text.trim())?.group(1)
-          case final name? when !isWiredSkillName(name))
-        if (library?.find(CompletionKind.skill, name) case final document?)
+      // where no model is reading. The document in hand is what answers, and
+      // this is where it is in hand: the reload-staleness hazard the
+      // documents map exists for does not apply at composition time.
+      if (skillReference.firstMatch(text.trim())?.group(1) case final name?)
+        if (library?.find(CompletionKind.skill, name)
+            case final document? when !document.isCallback)
           "${CompletionKind.skill.trigger}$name": document.body,
       for (final match in _mention.allMatches(text))
         if (library?.find(CompletionKind.agent, match.group(1)!)
@@ -168,7 +172,7 @@ Map<String, String> promptDocuments(String text, PromptLibrary? library) => {
 /// or the message unchanged where it names no skill this one recorded.
 String expandedPrompt(String text, Map<String, String> documents) {
   if (documents.isEmpty) return text;
-  final match = _skillReference.firstMatch(text.trim());
+  final match = skillReference.firstMatch(text.trim());
   if (match == null) return text;
   final body = documents["${CompletionKind.skill.trigger}${match.group(1)}"];
   if (body == null) return text;

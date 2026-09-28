@@ -60,22 +60,21 @@ Future<List<LlmMessage>> projectionOf(
   String? viewer,
   List<ConversationCompaction> compactions = const [],
 }) async {
-  // The newest marker whose boundary the projection was handed, and where it
-  // sits. Anything before it is summarized; anything after it is verbatim.
-  // LastIndexWhere rather than indexWhere: an earlier marker is a shadow the
-  // newest one replaced, and the log can hold any number of those.
-  //
-  // Decided before the bytes are read, which is the point: the attachments of
-  // the summarized span are the expensive half of what the summary replaces,
-  // and the compacted tail is loaded whole. The ids decide the boundary, so
-  // this is one pass over ids before any load, not a scan per marker.
-  final live = {
-    for (final m in messages) m.id: m,
-  };
-  final marker = compactions.lastWhereOrNull((c) => live[c.upToMessageId] != null);
+  // The newest marker whose boundary the projection was handed. Anything
+  // before its boundary is summarized; anything after it is verbatim.
+  // Reversed firstWhere: an earlier marker is a shadow the newest one
+  // replaced, and the log can hold any number of those. Decided before the
+  // bytes are read, which is the point: the attachments of the summarized
+  // span are the expensive half of what the summary replaces, and the
+  // compacted tail is loaded whole. The ids are one set up front, so the scan
+  // is one pass over ids plus one per marker, not a pass per marker. Ids are
+  // unique on a thread, so the newest marker's boundary is where its message
+  // sits.
+  final ids = {for (final m in messages) m.id};
+  final marker = compactions.lastWhereOrNull((c) => ids.contains(c.upToMessageId));
   final from = marker == null
       ? 0
-      : messages.indexWhere((m) => m.id == marker.upToMessageId) + 1;
+      : messages.lastIndexWhere((m) => m.id == marker.upToMessageId) + 1;
   // Every resource at once rather than a message at a time: on the web each
   // read is its own IndexedDB transaction, and a long conversation's would
   // otherwise be one round trip after another. Only the verbatim half's bytes
@@ -86,7 +85,8 @@ Future<List<LlmMessage>> projectionOf(
           : _noFiles));
   final projected = <LlmMessage>[];
   if (marker != null) {
-    projected.add(LlmMessage(role: LlmRole.user, text: summarizedTurnText(marker.summary)));
+    projected.add(LlmMessage(
+        role: LlmRole.user, text: summarizedTurnText(marker.summary)));
   }
   for (final (index, message) in messages.indexed) {
     // Before the marker: summarized, and the attachments with it — the bytes

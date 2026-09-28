@@ -538,7 +538,10 @@ The refusal for a `disable-model-invocation` skill is deliberate wording rather
 than a plain no. The skill is available, just not to the model, and one told
 only "no" will try its workflow by other means — so the answer says not to work
 around it. The tool is not even offered where every skill is user-only, which
-is the same fact read from the other side.
+is the same fact read from the other side. A skill flagged
+`invocation: callback` is refused and unlisted the same way: its body is the
+user-facing note, never a procedure for the model to follow — the same reason
+composition refuses to expand it.
 
 The system prompt lists the model-invocable skills under a Skills section, and
 an empty list produces nothing at all: a device with no skills keeps the prompt
@@ -583,15 +586,24 @@ for its own summarizer still gets a marker for its newest half.
 
 **Usage is parsed, not estimated, where the provider says anything.**
 `LlmUsage` rides `LlmCompletion` — Anthropic's `message_start` and
-`message_delta` usage objects, OpenAI's final-chunk `usage` — and the agent
-reports it through `onUsage`, the same turn-scoped view state `onShellOutput`
-is. `usageFor` answers it to the controller, which reads it against the
-window after a turn settles; a provider that reports nothing reports nothing,
-and the estimate (`length/4`, in `compact_prompt.dart`) is the summarizer's
-own budget, not the threshold's — compacting on a guess is not the trigger's
-business. The one number the trigger needs is also why `contextWindow` is a
-field on `LlmProviderConfig` (128k default, the safe guess): the settings page
-is where a user who knows better sets the real one.
+`message_delta` usage objects, OpenAI's final-chunk `usage` (asked for with
+`stream_options.include_usage`, without which OpenAI proper sends no usage
+at all) — and the agent reports it through `onUsage`. `usageFor` and
+`contextWindowFor` answer both halves of the threshold from one in-memory
+map, with no meta read on the settle path. A provider that reports nothing
+reports nothing, and the estimate (`length/4`, in `compact_prompt.dart`) is
+the summarizer's own budget, not the threshold's — compacting on a guess is
+not the trigger's business. The window itself is one app number:
+`AppSettings.totalContext` ("Total Context" under Settings > LLMs, 128k
+default, the safe guess) — every provider's window is guessed there, and a
+user who knows the real one sets it.
+
+The marker lands through `ChatRepository.appendCompaction` —
+`_rethread` with a `CompactionRecord`, the same append/reload/rebuild walk a
+thread change takes, reached from the controller through its own
+reentrancy-guarded wrapper. The summarizer's one-shot read is
+`_oneCompletion`, shared with `ask` and the memory extraction; the one-shot
+call sites differ only in timeout and what an empty answer means.
 
 ## The plan (PLAN.md)
 

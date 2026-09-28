@@ -20,13 +20,8 @@ enum WiredSkill {
 }
 
 /// The wired skills by name — the enum is the closed set, so this is the one
-/// lookup the dispatch and the name-only match share.
+/// lookup the dispatch shares.
 final _byName = {for (final s in WiredSkill.values) s.name: s};
-
-/// Whether [name] is one this build implements a callback for. The name-only
-/// half of [wiredSkillFromText]: the reader of a log asks it where the library
-/// the turn was sent under is not there to ask.
-bool isWiredSkillName(String name) => _byName.containsKey(name);
 
 /// The callback [text] would run, with the arguments after the name, or null
 /// where it dispatches as an ordinary message. The same [skillReference] shape
