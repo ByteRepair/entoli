@@ -896,6 +896,13 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
         ],
       );
 
+  /// The one link-opening rule, both renderers of model-written markdown — a
+  /// reply and a compaction summary — share it.
+  void _openLink(BuildContext context, String href) {
+    final uri = Uri.tryParse(href);
+    if (uri != null) ref.read(linkOpenerProvider).open(context, uri);
+  }
+
   Widget _conversation(
       Chat chat, ChatViewState view, ChatController? editing, Widget whenEmpty) {
     final speechReady = ref.watch(speechReadyProvider);
@@ -906,14 +913,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
       children: [
         NotificationListener<ScrollNotification>(
           onNotification: _onScroll,
-          child: Builder(builder: (context) {
-            // The one link-opening rule, both renderers of model-written
-            // markdown — a reply and a compaction summary — share it.
-            void openLink(String href) {
-              final uri = Uri.tryParse(href);
-              if (uri != null) ref.read(linkOpenerProvider).open(context, uri);
-            }
-            return ListView.builder(
+          child: ListView.builder(
               controller: _scroll,
               itemCount: entries.length,
               itemBuilder: (context, i) => switch (entries[i]) {
@@ -926,7 +926,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
                       isError: false,
                       isWaiting: false,
                       caret: false,
-                      onTapLink: openLink,
+                      onTapLink: (href) => _openLink(context, href),
                     )),
                 MessageEntry(:final message, :final inOmadaSection, :final last) =>
                   Builder(builder: (context) {
@@ -944,7 +944,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
                       waitingNotice: view.retry,
                       waitingStatus: view.status,
                       shellOutput: view.shellOutput,
-                      onTapLink: openLink,
+                      onTapLink: (href) => _openLink(context, href),
                       threads: editing == null ? null : chat.branches[message.id],
                       onThreadStep:
                           mutable ? (step) => editing.stepThread(message.id, step) : null,
@@ -959,9 +959,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
                       isSpeaking: reading == message.id,
                     );
                   }),
-              },
-            );
-          }),
+              }),
         ),
         // Only once the reader has left the end: up there a turn no longer
         // follows itself, and this is the way back.

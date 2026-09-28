@@ -102,14 +102,14 @@ class BuiltinBackend implements AgentBackend {
 
   final Map<String, BuiltinSession> _sessions = {};
 
-  /// The newest usage each chat's model reported — the fact the auto-compact
-  /// threshold reads, and what a backend that forgets on dispose must not
-  /// keep. Not a session: it is the newest request's fact, not the
-  /// conversation's, and the controller reads it the way the controller reads
-  /// everything else of the backend — through the callback that reported it.
-  /// The window rides beside it because the turn that resolved the provider
-  /// also resolved its config; the controller answers both from one fact.
-  final Map<String, ({int contextTokens, int contextWindow})> _usage = {};
+  /// The newest usage each chat's model reported, in context tokens — the
+  /// fact the auto-compact threshold reads, and what a backend that forgets
+  /// on dispose must not keep. Not a session: it is the newest request's
+  /// fact, not the conversation's, and the controller reads it the way the
+  /// controller reads everything else of the backend — through the callback
+  /// that reported it. The window it is judged against is the settings
+  /// object's, not this map's.
+  final Map<String, int> _usage = {};
   final _RunningTurns _running = _RunningTurns();
   final Map<String, StreamController<AgentEvent>> _controllers = {};
   final Map<String, List<ToolApproval>> _approvals = {};
@@ -241,11 +241,6 @@ class BuiltinBackend implements AgentBackend {
         maxRetryBudget: options.rateLimitRetryBudget,
       );
       final gatedClient = GatedLlmClient(target.client, rateLimitGate);
-      // The window the threshold's share is taken against, read fresh with the
-      // rest of the settings the way the registry reads its endpoints: a
-      // settings edit reaches the next turn, not the next launch. One app
-      // number — the guess, or the user's answer — for every provider.
-      final contextWindow = AppSettings.load(config).totalContext;
       final subAgentLog = FileSubAgentLog(config, chatId, project: project);
       final subAgentRunner = SubAgentRunner(
         client: gatedClient,
@@ -410,13 +405,7 @@ class BuiltinBackend implements AgentBackend {
         },
         onShellOutput: (callId, text) =>
             controller.add(ShellOutputEvent(callId: callId, text: text)),
-        // The window rides with the usage, so the controller's threshold asks
-        // the backend rather than re-walking a provider list that answers a
-        // different question.
-        onUsage: (usage) => _usage[chatId] = (
-          contextTokens: usage.contextTokens,
-          contextWindow: contextWindow,
-        ),
+        onUsage: (usage) => _usage[chatId] = usage.contextTokens,
       );
       // The real kill replaces the placeholder.
       _running.replace(stopKey, agent.cancel);
@@ -890,9 +879,9 @@ class BuiltinBackend implements AgentBackend {
           "behind a fact none of the entries held. If nothing is wrong, all "
           "three empty.";
       try {
-        final answer = await _oneCompletion(target,
-          [LlmMessage(role: LlmRole.user, text: question)],
-          timeout: const Duration(seconds: 60)) ?? "";
+      final answer = await _oneCompletion(
+            target, [LlmMessage(role: LlmRole.user, text: question)],
+            timeout: const Duration(seconds: 60)) ?? "";
         final ops = _maintainFrom(answer);
         if (ops.add.isNotEmpty ||
             ops.replaces.isNotEmpty ||
@@ -1151,16 +1140,7 @@ class BuiltinBackend implements AgentBackend {
   }
 
   @override
-  int? usageFor(String chatId) => _usage[chatId]?.contextTokens;
-
-  @override
-  int? contextWindowFor(String chatId) {
-    final usage = _usage[chatId];
-    // Null exactly where [usageFor] is null: the window rides the same fact,
-    // read with the turn's settings.
-    if (usage == null) return null;
-    return usage.contextWindow;
-  }
+  int? usageFor(String chatId) => _usage[chatId];
 
   @override
   void closeChatShell(String chatId, {required String? project}) =>

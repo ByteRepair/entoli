@@ -425,12 +425,6 @@ abstract class AgentBackend {
   /// the one that measures the session as it stands.
   int? usageFor(String chatId) => null;
 
-  /// The context window the compaction threshold's share is taken against —
-  /// one app number (`AppSettings.totalContext`), read where the turn read
-  /// its settings. Null exactly where [usageFor] is null: no turn reported,
-  /// nothing to judge.
-  int? contextWindowFor(String chatId) => null;
-
   /// One question, answered in one call: no tools, no session, nothing kept.
   /// A model of null resolves to the provider's light default — the title
   /// model is set as a provider without naming one. Null when the provider is

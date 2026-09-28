@@ -139,7 +139,6 @@ class PromptLibrary {
 /// composer's menu — anything it can offer has to dispatch here.
 final RegExp skillReference = RegExp(r"^/([^\s/]+)(?:\s+([\s\S]*))?$");
 
-
 /// `@name` addresses an agent, but only where the handle starts, so an email
 /// address (`me@general`) and a path (`a@b.c`) are not mentions. Markdown
 /// dressing around a handle — `**@murasaki**` — does not stop it being one.
@@ -152,29 +151,22 @@ final _mention = RegExp(r"(?<![\w.-])@([\w.-]+)");
 /// Keyed by the reference as written, sigil included, so a skill and an agent
 /// of the same name do not collide. A name the library does not know is left
 /// out: it is more likely a path, or prose, than a document nobody defined.
-Map<String, String> promptDocuments(String text, PromptLibrary? library) {
-  final documents = <String, String>{};
-  if (library case final lib?) {
-    // A wired callback is not a thing the model is told what it meant: the
-    // turn runs code, and the skill's body is the user-facing note —
-    // expanded into the conversation it would be prose the model reads where
-    // no model is reading. The document in hand is what answers, and this is
-    // where it is in hand: the reload-staleness hazard the documents map
-    // exists for does not apply at composition time.
-    if (skillReference.firstMatch(text.trim())?.group(1) case final name?) {
-      final document = lib.find(CompletionKind.skill, name);
-      if (document != null && !document.isCallback) {
-        documents["${CompletionKind.skill.trigger}$name"] = document.body;
-      }
-    }
-    for (final match in _mention.allMatches(text)) {
-      if (lib.find(CompletionKind.agent, match.group(1)!) case final document?) {
-        documents["${CompletionKind.agent.trigger}${match.group(1)}"] = document.body;
-      }
-    }
-  }
-  return documents;
-}
+Map<String, String> promptDocuments(String text, PromptLibrary? library) => {
+      // A wired callback is not a thing the model is told what it meant: the
+      // turn runs code, and the skill's body is the user-facing note —
+      // expanded into the conversation it would be prose the model reads
+      // where no model is reading. The document in hand is what answers, and
+      // this is where it is in hand: the reload-staleness hazard the
+      // documents map exists for does not apply at composition time.
+      if (skillReference.firstMatch(text.trim())?.group(1) case final name?)
+        if (library?.find(CompletionKind.skill, name)
+            case final document? when !document.isCallback)
+          "${CompletionKind.skill.trigger}$name": document.body,
+      for (final match in _mention.allMatches(text))
+        if (library?.find(CompletionKind.agent, match.group(1)!)
+            case final document?)
+          "${CompletionKind.agent.trigger}${match.group(1)}": document.body,
+    };
 
 /// The task the model is given: a skill's template with the arguments in it,
 /// or the message unchanged where it names no skill this one recorded.

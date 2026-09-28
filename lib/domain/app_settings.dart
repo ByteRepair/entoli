@@ -373,6 +373,11 @@ class AppSettings {
   /// a failed request, so the safe guess is the small one.
   static const defaultTotalContext = 128000;
 
+  /// The bounds Total Context is clamped to, at load and at the settings
+  /// row's save — two sites that must agree, named once.
+  static const minTotalContext = 1024;
+  static const maxTotalContext = 1000000000;
+
   /// The default when nothing is set: on, at ten prefixes. A named constant so
   /// the UI's "Default (10)" label and the provider's effective count are one
   /// number.
@@ -459,7 +464,7 @@ class AppSettings {
                 defaultAutoCompactPercent)
             .clamp(10, 95),
         totalContext: (json["totalContext"] as int? ?? defaultTotalContext)
-            .clamp(1024, 1000000000),
+            .clamp(minTotalContext, maxTotalContext),
         welcomeSeen: json["welcomeSeen"] as bool? ?? false,
       );
     } catch (_) {

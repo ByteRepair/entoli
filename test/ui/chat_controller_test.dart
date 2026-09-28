@@ -2300,7 +2300,6 @@ group("a banner answer through the controller", () {
       final (id, controller) = await chatWithCompactSkill();
       // Well under any share of the 128k window the fake reports.
       app.backend.usageHolder[id] = 60000;
-      app.backend.windowHolder[id] = 128000;
       await controller.send("grow a little");
       await waitIdle(id);
       expect(app.backend.compactionCalls, isEmpty);
@@ -2320,7 +2319,6 @@ group("a banner answer through the controller", () {
 
     test("does not run twice without a turn between, or when off", () async {
       final (id, controller) = await chatWithCompactSkill();
-      app.backend.windowHolder[id] = 128000;
       // Off: nothing compacts however deep the context.
       await app.container
           .read(appSettingsProvider.notifier)
