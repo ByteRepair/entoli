@@ -4,6 +4,7 @@ import "package:flutter/foundation.dart" show ValueListenable;
 
 import "../domain/ask.dart";
 import "../domain/builtin_project.dart";
+import "../domain/chat_log.dart";
 import "../domain/models.dart";
 import "../domain/permission.dart";
 import "../domain/profile.dart";
@@ -417,12 +418,39 @@ abstract class AgentBackend {
   /// one, and a page that is not interested never listens.
   Stream<MemoryNote> get memoryNotes;
 
+  /// What the chat's model last reported a request cost, in context tokens —
+  /// the auto-compact threshold's input. Null where nothing has reported:
+  /// no turn yet, a provider that says nothing, or the chat gone from the
+  /// backend. The newest completion is the newest request's fact, which is
+  /// the one that measures the session as it stands.
+  int? usageFor(String chatId) => null;
+
   /// One question, answered in one call: no tools, no session, nothing kept.
   /// A model of null resolves to the provider's light default — the title
   /// model is set as a provider without naming one. Null when the provider is
   /// not configured or says nothing — the caller wants a convenience, and
   /// there is no turn to report a failure on.
   Future<String?> ask(String prompt, {required String? model, required String? provider});
+
+  /// Summarize [history] so the model can carry on from less of it. One call,
+  /// no tools, no session — [ask] with the conversation in front of it.
+  ///
+  /// [compactions] say where the conversation is already summarized; the last
+  /// marker's summary is what the new one merges into, so re-compacting never
+  /// loses what the previous one kept. [instructions] are the user's own focus
+  /// for the summary, from `/compact <instructions>`; null is the plain one.
+  ///
+  /// Returns the boundary and the summary, or null when nothing answered — a
+  /// provider that is not configured, a turn already running, a summarizer
+  /// that failed. The caller wants a marker to append, and there is no turn to
+  /// report a failure on; [logFailure] has said why.
+  Future<({String upToMessageId, String summary})?> compact(
+    String chatId, {
+    required List<Message> history,
+    required List<ConversationCompaction> compactions,
+    required TurnSettings settings,
+    required String? instructions,
+  });
 
   /// Send a user prompt; stream events until the turn completes.
   ///
@@ -433,22 +461,34 @@ abstract class AgentBackend {
   /// seen nothing of the chat to answer it fluently. Read only where the
   /// session is empty.
   ///
+  /// [compactions] say where [history] is summarized. They ride beside it
+  /// rather than in it, for the same reason: a marker is not a message, and
+  /// folding one into the list would put words in the conversation nobody
+  /// said. The projection applies the newest whose boundary the history holds.
+  ///
   /// [prompt] is the message being logged for this turn, not the text of it —
   /// what the model is shown of a user turn is the whole message, attachments
   /// named rather than passed. See "The projection" in `lib/domain/CLAUDE.md`.
   Stream<AgentEvent> sendPrompt(String chatId, Message prompt,
-      {List<Message> history, TurnSettings settings});
+      {List<Message> history,
+      List<ConversationCompaction> compactions,
+      TurnSettings settings});
 
   /// Carry on the turn [history] ends in. No prompt, because there is no new
   /// thing to say: the model is handed back what it had already done. Unlike
   /// [sendPrompt] this rebuilds the session from [history] whether or not one
   /// is already held.
   Stream<AgentEvent> resumeTurn(String chatId,
-      {List<Message> history, TurnSettings settings});
+      {List<Message> history,
+      List<ConversationCompaction> compactions,
+      TurnSettings settings});
 
   /// Drop the chat's live session so the next prompt starts a clean one,
-  /// seeded with [history].
-  Future<void> resetSession(String chatId, {List<Message> history = const []});
+  /// seeded with [history]. [compactions] say where the conversation is
+  /// summarized: the rebuild puts the summary where the log put it.
+  Future<void> resetSession(String chatId,
+      {List<Message> history = const [],
+      List<ConversationCompaction> compactions = const []});
 
   /// Release everything this backend holds. Called when the app exits.
   Future<void> shutdown();

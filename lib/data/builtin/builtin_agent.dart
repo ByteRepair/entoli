@@ -353,6 +353,7 @@ class BuiltinAgent {
     this.saveArtifact,
     this.packageSkill,
     this.onShellOutput,
+    this.onUsage,
     this.loadResource = noResources,
     this.memory = MemorySettings.off,
     this.instructions = const [],
@@ -621,6 +622,13 @@ class BuiltinAgent {
   /// not reach the session, and the pair completing is what the conversation
   /// keeps.
   final void Function(String? callId, String text)? onShellOutput;
+
+  /// What each response cost, as the provider reported it. Turn-scoped view
+  /// state rather than a record: the newest completion is the newest request's
+  /// fact, and the newest request is what measures the session as it stands.
+  /// Null where the provider reports nothing, which is every completion a
+  /// test fakes unless it says otherwise.
+  final void Function(LlmUsage usage)? onUsage;
 
   /// [caps] with the platform's facts applied where [caps] cannot know them:
   /// a tool the device cannot run is not offered even if the turn was, and a
@@ -2326,6 +2334,9 @@ class BuiltinAgent {
               }
               rateLimitGate?.onSuccess();
               _completion = chunk;
+              if (chunk.usage != null && onUsage != null) {
+                onUsage!(chunk.usage!);
+              }
               return;
           }
         }

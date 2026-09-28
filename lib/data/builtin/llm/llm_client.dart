@@ -126,13 +126,43 @@ class LlmPromptProgress extends LlmChunk {
 }
 
 class LlmCompletion extends LlmChunk {
-  const LlmCompletion({required this.message, this.finishReason});
+  const LlmCompletion({required this.message, this.finishReason, this.usage});
 
   final LlmMessage message;
 
   /// Why the model stopped. `length` means it was cut off mid-thought, which
   /// reads as a missing tool call and would otherwise be blamed on the model.
   final String? finishReason;
+
+  /// What the provider said the request cost, where it said anything. The
+  /// auto-compact threshold reads it — a provider that reports nothing leaves
+  /// [usage] null and the estimate stands in.
+  final LlmUsage? usage;
+}
+
+/// What a provider said one request and its answer cost. Input counts the
+/// whole conversation sent, so the newest completion carries what the session
+/// is weighing; cache is the part of it that did not have to be re-read.
+class LlmUsage {
+  const LlmUsage({
+    required this.inputTokens,
+    required this.outputTokens,
+    this.cacheReadTokens = 0,
+    this.cacheWriteTokens = 0,
+  });
+
+  final int inputTokens;
+  final int outputTokens;
+  final int cacheReadTokens;
+  final int cacheWriteTokens;
+
+  /// What the request put in front of the model, cached tokens included —
+  /// they occupy the context window whether or not they cost anything.
+  int get totalInputTokens => inputTokens + cacheReadTokens + cacheWriteTokens;
+
+  /// The context this one exchange leaves behind: the input, grown by the
+  /// reply that will be sent back with it on the next call.
+  int get contextTokens => totalInputTokens + outputTokens;
 }
 
 /// A provider said no. [retryable] is the difference between waiting and

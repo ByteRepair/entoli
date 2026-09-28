@@ -2,6 +2,7 @@ import "package:collection/collection.dart";
 
 import "frontmatter.dart";
 import "models.dart";
+import "wired_skill.dart";
 
 /// One skill or agent, exactly as Entoli stores it: YAML frontmatter, then the
 /// template a skill expands to or the system prompt an agent runs under.
@@ -36,6 +37,11 @@ class PromptDocument {
   /// user's half alone: the tool refuses it, reserved for `/name`.
   bool get modelInvocable =>
       metadata["disable-model-invocation"]?.toLowerCase() != "true";
+
+  /// Whether sending `/name` runs code rather than expanding the body as a
+  /// prompt template. See [WiredSkill] for what it dispatches to; the body is
+  /// then the skill's user-facing note, never something a model reads.
+  bool get isCallback => metadata["invocation"] == "callback";
 
   CompletionOption get option => CompletionOption(
         name: name,
@@ -127,7 +133,9 @@ class PromptLibrary {
 /// the whole of the message and there is at most one, which is what anchoring
 /// both ends says. Matches what `activeCompletionToken` offers in the
 /// composer's menu — anything it can offer has to dispatch here.
-final _skillReference = RegExp(r"^/([^\s/]+)(?:\s+([\s\S]*))?$");
+final RegExp skillReference = RegExp(r"^/([^\s/]+)(?:\s+([\s\S]*))?$");
+
+final _skillReference = skillReference;
 
 /// `@name` addresses an agent, but only where the handle starts, so an email
 /// address (`me@general`) and a path (`a@b.c`) are not mentions. Markdown
@@ -142,7 +150,12 @@ final _mention = RegExp(r"(?<![\w.-])@([\w.-]+)");
 /// of the same name do not collide. A name the library does not know is left
 /// out: it is more likely a path, or prose, than a document nobody defined.
 Map<String, String> promptDocuments(String text, PromptLibrary? library) => {
-      if (_skillReference.firstMatch(text.trim())?.group(1) case final name?)
+      // A wired callback is not a thing the model is told what it meant: the
+      // turn runs code, and the skill's body is the user-facing note —
+      // expanded into the conversation it would be prose the model reads
+      // where no model is reading.
+      if (_skillReference.firstMatch(text.trim())?.group(1)
+          case final name? when !isWiredSkillName(name))
         if (library?.find(CompletionKind.skill, name) case final document?)
           "${CompletionKind.skill.trigger}$name": document.body,
       for (final match in _mention.allMatches(text))

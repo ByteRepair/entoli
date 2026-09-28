@@ -27,7 +27,7 @@ import "widgets/composer.dart";
 import "widgets/activity_label.dart";
 import "widgets/synced_device_cards.dart";
 import "widgets/message_bubble.dart";
-import "widgets/omada_separator.dart";
+import "widgets/omada_separator.dart" show ConversationSeparator;
 import "widgets/needs_setup_bar.dart";
 import "widgets/turn_surface.dart";
 import "widgets/view_only_bar.dart";
@@ -511,14 +511,25 @@ class SectionEntry extends ConversationEntry {
   final bool omada;
 }
 
+/// The divider after the message a compaction's boundary names. [summary] is
+/// what the drawer behind it shows.
+class CompactionEntry extends ConversationEntry {
+  const CompactionEntry(this.summary);
+
+  /// What the model reads in place of the messages above this line.
+  final String summary;
+}
+
 /// The conversation as rows, walked off the thread in order. A turn opener
 /// carrying a mode that differs from the running one emits a [SectionEntry]
 /// first — both flips are rows, the off-flip bounding an on-section — and
 /// every message carries whether it sits in an on-section, which is what
-/// names the main agent "Entoli" there.
+/// names the main agent "Entoli" there. A compaction boundary is said after
+/// the message it covers: the divider is where the summary took over.
 List<ConversationEntry> entriesOf(Chat chat) {
   final entries = <ConversationEntry>[];
   var on = false;
+  final byBoundary = {for (final c in chat.compactions) c.upToMessageId: c};
   for (final (index, m) in chat.messages.indexed) {
     final opener = m.omadaOn;
     if (opener != null && opener != on) {
@@ -527,6 +538,8 @@ List<ConversationEntry> entriesOf(Chat chat) {
     }
     entries.add(MessageEntry(m,
         inOmadaSection: on, last: index == chat.messages.length - 1));
+    final marker = byBoundary[m.id];
+    if (marker != null) entries.add(CompactionEntry(marker.summary));
   }
   return entries;
 }
@@ -897,7 +910,13 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
             controller: _scroll,
             itemCount: entries.length,
             itemBuilder: (context, i) => switch (entries[i]) {
-              SectionEntry(:final omada) => OmadaSeparator(omada: omada),
+              SectionEntry(:final omada) => ConversationSeparator(
+                  text: omada ? "Omada is turned on" : "Omada is turned off"),
+              CompactionEntry(:final summary) => ConversationSeparator(
+                  text: "Compact Conversation",
+                  onTap: () => showActivitySheet(context,
+                      title: "Compact Conversation",
+                      sections: [(label: null, body: summary, isError: false)])),
               MessageEntry(:final message, :final inOmadaSection, :final last) =>
                 Builder(builder: (context) {
                   // A mirror has no editing controller: the log belongs to
