@@ -18,6 +18,7 @@ import "data/sync/sync_hub.dart";
 import "domain/app_restart.dart";
 import "domain/app_secrets.dart";
 import "domain/models.dart" show CompletionKind;
+import "domain/trigger_manager.dart" show DeferredTriggerRegistryOwner, TriggerRegistryOwner;
 import "domain/project.dart" show everyProject;
 import "domain/prompt_library.dart";
 import "domain/sync/identity.dart";
@@ -138,9 +139,14 @@ class AppSession {
     final byteRepairBin = platform.byteRepairBinDir(cache);
     // The backend captures the closure; nothing reads the mirror until the
     // container does, so the load only has to be in before that.
+    // The registry the trigger tools run against — an adapter over the
+    // provider notifier, assigned like [settingsHome] is: read only from a
+    // running app, which is after the container exists.
+    late final TriggerRegistryOwner triggerOwnerHome;
     final backend = platform.createBackend(config, libraries, store,
         tools: toolset, rootfs: rootfs, abi: await abi, localLlm: server, kvCache: kvCache,
-        byteRepairBinDir: byteRepairBin, secrets: secrets, loginPath: await loginPath);
+        byteRepairBinDir: byteRepairBin, secrets: secrets, loginPath: await loginPath,
+        triggerRegistry: DeferredTriggerRegistryOwner(() => triggerOwnerHome));
     // One instance, shared: the prefill's notification and every other
     // foreground hold go through the same service.
     final foreground = ForegroundService();
@@ -244,6 +250,7 @@ class AppSession {
     // Arming reconnects for paired devices, so a desktop that has paired once
     // can be dialed again after a restart without opening a window first.
     settingsHome = container;
+    triggerOwnerHome = triggerRegistryOwner(container);
     // Before `ensureReady`, which starts listening: a peer that lands during
     // it would otherwise run the whole handshake against a hub with no
     // repository and be sent no welcome.

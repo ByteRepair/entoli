@@ -3,6 +3,7 @@ import "dart:async";
 import "package:clock/clock.dart";
 import "package:flutter/foundation.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
+import "package:uuid/uuid.dart";
 
 import "../core/config.dart";
 import "domain/file_tools.dart" show resolveWorkspacePath;
@@ -948,6 +949,25 @@ class Triggers extends Notifier<List<Trigger>> implements TriggerList {
   Future<void> remove(String id) =>
       write([for (final t in state) if (t.id != id) t]);
 
+  /// The chat-scoped registry the trigger tools' turn is handed: what it
+  /// registers carries this chat as its target, and what it may list and
+  /// remove is this chat's own. The reload below is what puts a
+  /// registration under watch the moment it lands.
+  Future<Trigger> registerFor(String chatId,
+      {required TriggerSource source, required String prompt, String? name}) async {
+    final draft = Trigger(
+      id: const Uuid().v4(),
+      name: name ?? "",
+      prompt: prompt,
+      source: source,
+      chatId: chatId,
+      byAgent: true,
+      nextFireAt: source.nextAfter(ref.read(clockProvider).now()),
+    );
+    await add(draft);
+    return draft;
+  }
+
   Future<void> setEnabled(String id, bool enabled) async {
     final at = state.indexWhere((t) => t.id == id);
     if (at < 0) return;
@@ -1269,4 +1289,29 @@ class ProjectSettingsNotifier extends Notifier<ProjectSettings> {
     await ref.read(chatRepositoryProvider).reanchorProjectTtl(project);
     ref.invalidate(chatListProvider);
   }
+}
+
+/// The adapter the backend's turn is handed: every read is the provider
+/// notifier's, so a registration lands in the list this process watches and
+/// is armed by the manager's own reload.
+TriggerRegistryOwner triggerRegistryOwner(ProviderContainer container) =>
+    _ProviderTriggerOwner(container);
+
+class _ProviderTriggerOwner implements TriggerRegistryOwner {
+  _ProviderTriggerOwner(this._container);
+
+  final ProviderContainer _container;
+
+  Triggers get _notifier => _container.read(triggersProvider.notifier);
+
+  @override
+  Future<List<Trigger>> triggers() async => _notifier.triggers;
+
+  @override
+  Future<Trigger> registerFor(String chatId,
+          {required TriggerSource source, required String prompt, String? name}) async =>
+      _notifier.registerFor(chatId, source: source, prompt: prompt, name: name);
+
+  @override
+  Future<void> remove(String id) async => _notifier.remove(id);
 }

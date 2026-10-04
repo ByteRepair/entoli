@@ -7,6 +7,28 @@ import "trigger.dart";
 import "trigger_kinds.dart";
 import "trigger_runner.dart";
 
+/// The seam the trigger tools reach, one per chat: the backend builds it
+/// with the chat's own id, so the tools carry no chat id of their own — a
+/// worker is withheld the registry outright, which is where a "whose chat"
+/// question could not have an answer anyway. `clock` rides it because a
+/// registration is a now-anchored fact and the registry, not the agent, is
+/// where what clock to read has been decided (the app's, or a test's).
+abstract interface class TriggerRegistry {
+  /// A fresh id (and request code where the source wants one), armed
+  /// against now, in the chat this registry answers for. Answers what was
+  /// stored, id and all.
+  Future<Trigger> register({
+    required TriggerSource source,
+    required String prompt,
+    String? name,
+  });
+
+  /// This chat's own — what the tools list, and what may be removed.
+  Future<List<Trigger>> own();
+
+  Future<void> remove(String id);
+}
+
 /// What the manager needs from whoever owns the trigger list. Read on use and
 /// written whole: the list is small, and a second copy of it anywhere would
 /// drift from the one on disk.
@@ -219,4 +241,61 @@ class TriggerManager {
       _runningIds.remove(trigger.id);
     }
   }
+}
+/// The chat-scoped face the agent's turn is handed: one chat's registry,
+/// over the whole list. The tools ask and answer in this chat's vocabulary;
+/// the list stays one, and the provider's reload is what watches a
+/// registration the moment it lands.
+class ChatTriggerRegistry implements TriggerRegistry {
+  ChatTriggerRegistry({required this.owner, required this.chatId, required this.now});
+
+  final TriggerRegistryOwner owner;
+  final String chatId;
+  final DateTime Function() now;
+
+  @override
+  Future<Trigger> register({required TriggerSource source, required String prompt, String? name}) =>
+      owner.registerFor(chatId, source: source, prompt: prompt, name: name);
+
+  @override
+  Future<List<Trigger>> own() async => [
+        for (final t in await owner.triggers())
+          if (t.byAgent && t.chatId == chatId) t,
+      ];
+
+  @override
+  Future<void> remove(String id) => owner.remove(id);
+}
+
+/// What a [ChatTriggerRegistry] acts through — the provider's notifier, or
+/// a test's stand-in. Async throughout: the list is where one turn's
+/// registration meets another's fire, and no read here is worth a
+/// synchronisation the provider has to invent.
+abstract interface class TriggerRegistryOwner {
+  Future<List<Trigger>> triggers();
+  Future<Trigger> registerFor(String chatId,
+      {required TriggerSource source, required String prompt, String? name});
+  Future<void> remove(String id);
+}
+
+/// The adapter handed out before the container exists and only read from a
+/// running app — `main`'s `late final` in one class: the lookup is called
+/// at first use, by which point the real one is assigned.
+class DeferredTriggerRegistryOwner implements TriggerRegistryOwner {
+  DeferredTriggerRegistryOwner(this._lookup);
+
+  final TriggerRegistryOwner Function() _lookup;
+
+  TriggerRegistryOwner get _owner => _lookup();
+
+  @override
+  Future<List<Trigger>> triggers() => _owner.triggers();
+
+  @override
+  Future<Trigger> registerFor(String chatId,
+          {required TriggerSource source, required String prompt, String? name}) =>
+      _owner.registerFor(chatId, source: source, prompt: prompt, name: name);
+
+  @override
+  Future<void> remove(String id) => _owner.remove(id);
 }
