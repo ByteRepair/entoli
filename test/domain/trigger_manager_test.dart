@@ -4,6 +4,7 @@ import "package:clock/clock.dart";
 import "package:flutter_test/flutter_test.dart";
 
 import "package:agent_chat/domain/trigger.dart";
+import "package:agent_chat/domain/file_watches.dart";
 import "package:agent_chat/domain/trigger_kinds.dart";
 import "package:agent_chat/domain/trigger_manager.dart";
 import "package:agent_chat/domain/trigger_runner.dart";
@@ -14,6 +15,24 @@ import "../fakes.dart";
 /// due under it. Pinned rather than the wall clock so the suite does not rot
 /// against the calendar.
 final _now = Clock.fixed(DateTime(2026, 8, 23, 9));
+
+/// The fake watcher a file-kind-in-manager test drives.
+class RecordingFileWatches implements FileWatches {
+  final events = StreamController<FileWatchEvent>.broadcast();
+  final roots = <String>[];
+
+  @override
+  bool get available => true;
+
+  @override
+  Stream<FileWatchEvent> watch(String root) {
+    roots.add(root);
+    return events.stream;
+  }
+
+  void push(String path, FileEventKind kind) =>
+      events.add(FileWatchEvent(path: path, kind: kind));
+}
 
 /// The list, held in memory — the manager reads and writes it through this,
 /// exactly as it does through the provider in the app.
@@ -306,5 +325,50 @@ void main() {
     await mgr.onNudged();
 
     expect(runner.firedIds, ["nudged"]);
+  });
+
+  group("with the file kind registered", () {
+    // See `trigger_file_kind_test.dart` for the kind in isolation; here the
+    // registry — a FileKind over a fake watcher — reaches a fire through
+    // the whole manager, and the fire is stamped like any other.
+    late RecordingFileWatches watches;
+
+    setUp(() {
+      watches = RecordingFileWatches();
+    });
+
+    test("a file fire runs the trigger and stamps it, and re-arms nothing",
+        () async {
+      list.triggers = [
+        trigger(id: "f1", source: FileSource(paths: const ["notes/"])),
+      ];
+      final mgr = TriggerManager(
+        kinds: [
+          FileKind(
+              fileWatches: watches,
+              resolve: (t, path) async => "/ws/$path"),
+        ],
+        alarmPort: alarms,
+        runner: runner,
+        list: list,
+        projects: () async => const [],
+        clock: _now,
+      );
+      final done = mgr.reload();
+      await pumpEventQueue();
+      expect(watches.roots, ["/ws/notes/"]);
+
+      watches.push("/ws/notes/build.log", FileEventKind.modify);
+      await pumpEventQueue();
+      await done;
+
+      expect(runner.firedIds, ["f1"]);
+      expect(runner.reasons.single, contains("build.log"));
+      final after = list.triggers.single;
+      expect(after.lastFiredAt, isNotNull);
+      // A file source is never on the clock.
+      expect(after.nextFireAt, isNull);
+    });
+
   });
 }
