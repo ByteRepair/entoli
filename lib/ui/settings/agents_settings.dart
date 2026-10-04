@@ -93,10 +93,10 @@ class _AgentsSectionState extends ConsumerState<AgentsSection> {
 
   Future<void> _add() async {
     final result = await Navigator.of(context).push<AgentEdit>(
-      MaterialPageRoute(builder: (_) => const AgentEditorPage(isNew: true)),
+      MaterialPageRoute(builder: (_) => AgentEditorPage(isNew: true, project: widget.project)),
     );
     if (result == null || !mounted) return;
-    await _save(result, replacing: false);
+    await _save(result, previous: null);
   }
 
   Future<void> _edit(PromptDocument agent) async {
@@ -104,6 +104,7 @@ class _AgentsSectionState extends ConsumerState<AgentsSection> {
       MaterialPageRoute(
         builder: (_) => AgentEditorPage(
           isNew: false,
+          project: widget.project,
           initialName: agent.name,
           initialDescription: agent.description ?? "",
           initialBody: agent.body,
@@ -111,41 +112,55 @@ class _AgentsSectionState extends ConsumerState<AgentsSection> {
       ),
     );
     if (result == null || !mounted) return;
-    await _save(result, replacing: true);
+    await _save(result, previous: agent.name);
   }
 
-  Future<void> _save(AgentEdit edit, {required bool replacing}) async {
+  /// [previous] is the name the edit started from — null on add, the agent's
+  /// own on edit. A different name on the way out is a rename: the new file is
+  /// written before the old one is deleted, so a failure halfway leaves the
+  /// agent where it was, or in both copies if only the delete failed. A
+  /// mention already written into a conversation keeps the meaning it was
+  /// recorded with; a new mention of the old name is the only thing a rename
+  /// loses. The collision that stops a rename is the editor's to show — it is
+  /// the layer the field is on — so only an add confirms here.
+  Future<void> _save(AgentEdit edit, {required String? previous}) async {
     if (!isFolderName(edit.name)) {
       _say("That name cannot be a file name.");
       return;
     }
     final config = ref.read(appConfigProvider);
-    final exists = await config.fs
-        .file(agentFilePath(config, edit.name, project: widget.project))
-        .exists();
-    if (!mounted) return;
-    if (!replacing && exists) {
-      final confirmed = await confirm(
-        context,
-        title: "Replace ${edit.name}?",
-        message: "An agent with that name is already installed. Saving this one "
-            "replaces it.",
-        confirmLabel: "Replace",
-      );
-      if (!confirmed) return;
+    if (previous == null) {
+      final exists = await config.fs
+          .file(agentFilePath(config, edit.name, project: widget.project))
+          .exists();
+      if (!mounted) return;
+      if (exists) {
+        final confirmed = await confirm(
+          context,
+          title: "Replace ${edit.name}?",
+          message: "An agent with that name is already installed. Saving this one "
+              "replaces it.",
+          confirmLabel: "Replace",
+        );
+        if (!confirmed) return;
+      }
     }
 
     await _write(
       edit.name,
       PromptDocument.toSource(description: edit.description, body: edit.body),
-      replacing ? "Saved ${edit.name}." : "Added ${edit.name}.",
+      "Saved ${edit.name}.",
+      removes: previous,
     );
   }
 
   /// The one write an agent page makes — editor save or import alike — with
   /// the library reload and directory rescan that land it on the list.
-  /// The create is load-bearing: `writeAsString` does not make parents.
-  Future<void> _write(String name, String source, String said) =>
+  /// [removes] names the file a rename takes away, written over first so a
+  /// failure halfway leaves the agent where it was. The create is
+  /// load-bearing: `writeAsString` does not make parents.
+  Future<void> _write(String name, String source, String said,
+          {String? removes}) =>
       _guard(() async {
         final config = ref.read(appConfigProvider);
         await platform.withWritableDir(
@@ -155,6 +170,11 @@ class _AgentsSectionState extends ConsumerState<AgentsSection> {
                 config.fs.file(agentFilePath(config, name, project: widget.project));
             await file.create(recursive: true);
             await file.writeAsString(source);
+            if (removes != null && removes != name) {
+              await config.fs
+                  .file(agentFilePath(config, removes, project: widget.project))
+                  .delete();
+            }
           },
         );
         await _reload();
@@ -325,7 +345,8 @@ class _AgentsSectionState extends ConsumerState<AgentsSection> {
     return ListTile(
       dense: true,
       title: Text(agent.name),
-      subtitle: agent.description == null ? null : Text(agent.description!),
+      subtitle:
+          agent.description == null ? null : Text(agent.description!, maxLines: 1, overflow: TextOverflow.ellipsis),
       onTap: owned ? () => _edit(agent) : null,
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
@@ -375,30 +396,39 @@ class _AgentsSectionState extends ConsumerState<AgentsSection> {
 /// What the editor page hands back on save.
 typedef AgentEdit = ({String name, String description, String body});
 
-/// Write an agent's system prompt. The name is fixed once the agent exists —
-/// it is the file name, and renaming it would orphan every `@name` mention
-/// already written into a conversation. The body is `CompletionField`, so
-/// `/skills` and `@agents` complete there the way they do in a reminder's
-/// prompt; an agent's prompt is dispatched through the same library.
-class AgentEditorPage extends StatefulWidget {
+/// Write an agent's system prompt. The name is the file name, so editing it
+/// renames the file — the section takes the old one away when the new one is
+/// written. A mention already written into a conversation keeps the meaning it
+/// was recorded with; a new mention of the old name is what a rename loses,
+/// which is why a rename onto a name another agent holds is refused here. The
+/// body is `CompletionField`, so `/skills` and `@agents` complete there the
+/// way they do in a reminder's prompt; an agent's prompt is dispatched through
+/// the same library.
+class AgentEditorPage extends ConsumerStatefulWidget {
   const AgentEditorPage({
     super.key,
     required this.isNew,
+    this.project,
     this.initialName = "",
     this.initialDescription = "",
     this.initialBody = "",
   });
 
   final bool isNew;
+
+  /// The project whose directory the name's existence is asked against and
+  /// whose library the body's completions offer. Null is the default project,
+  /// the way it is everywhere a project is named.
+  final String? project;
   final String initialName;
   final String initialDescription;
   final String initialBody;
 
   @override
-  State<AgentEditorPage> createState() => _AgentEditorPageState();
+  ConsumerState<AgentEditorPage> createState() => _AgentEditorPageState();
 }
 
-class _AgentEditorPageState extends State<AgentEditorPage> {
+class _AgentEditorPageState extends ConsumerState<AgentEditorPage> {
   late final TextEditingController _name = TextEditingController(text: widget.initialName);
   late final TextEditingController _description =
       TextEditingController(text: widget.initialDescription);
@@ -432,7 +462,7 @@ class _AgentEditorPageState extends State<AgentEditorPage> {
     if (mounted) Navigator.of(context).pop();
   }
 
-  void _save() {
+  Future<void> _save() async {
     final name = _name.text.trim();
     if (name.isEmpty) {
       setState(() => _nameError = "A name is required.");
@@ -442,6 +472,19 @@ class _AgentEditorPageState extends State<AgentEditorPage> {
       setState(() => _nameError = "That name cannot be a file name.");
       return;
     }
+    final renaming = !widget.isNew && name != widget.initialName;
+    if (renaming) {
+      final config = ref.read(appConfigProvider);
+      final taken = await config.fs
+          .file(agentFilePath(config, name, project: widget.project))
+          .exists();
+      if (!mounted) return;
+      if (taken) {
+        setState(() => _nameError = "An agent with that name already exists.");
+        return;
+      }
+    }
+    if (!mounted) return;
     Navigator.of(context).pop(
       (name: name, description: _description.text, body: _body.text),
     );
@@ -473,7 +516,6 @@ class _AgentEditorPageState extends State<AgentEditorPage> {
               TextField(
                 controller: _name,
                 autofocus: widget.isNew,
-                enabled: widget.isNew,
                 decoration: InputDecoration(
                   labelText: "Name",
                   hintText: "What @name will address this agent",
@@ -492,8 +534,10 @@ class _AgentEditorPageState extends State<AgentEditorPage> {
               const SizedBox(height: 12),
               LabelledField(
                 label: "System prompt",
+                padding: EdgeInsets.zero,
                 child: CompletionField(
                   controller: _body,
+                  project: widget.project,
                   minLines: 6,
                   maxLines: 12,
                   autofocus: !widget.isNew,
