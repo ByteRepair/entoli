@@ -110,6 +110,12 @@ dev_dependencies:
   # the classes a fake implementation has to extend.
   webview_flutter_platform_interface: ^2.15.1
 
+  # Faking the file chooser in tests — the same gap as the webview one:
+  # file_selector answers through its platform interface and a Fake, which the
+  # app-facing package does not re-export either of.
+  file_selector_platform_interface: ^2.7.0
+  plugin_platform_interface: ^2.1.8
+
   build_runner: ^2.15.1
   json_serializable: ^6.14.1
   freezed: ^3.2.5

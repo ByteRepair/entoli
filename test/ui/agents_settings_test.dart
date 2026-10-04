@@ -1,11 +1,23 @@
 import "dart:io";
+import "dart:typed_data";
 
+import "package:file_selector/file_selector.dart" show XFile, XTypeGroup;
+import "package:file_selector_platform_interface/file_selector_platform_interface.dart"
+    show FileSelectorPlatform;
 import "package:flutter/material.dart";
 import "package:flutter_test/flutter_test.dart";
+import "package:plugin_platform_interface/plugin_platform_interface.dart"
+    show MockPlatformInterfaceMixin;
 
+import "package:agent_chat/data/prompts/agent_pictures.dart"
+    show readAgentPicture;
+import "package:agent_chat/data/prompts/prompt_sources.dart" show promptTiers;
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/providers.dart";
 import "package:agent_chat/ui/settings/settings_page.dart";
+import "package:agent_chat/ui/sidebar/project_settings_page.dart"
+    show ProjectSettingsPage;
+import "package:agent_chat/ui/widgets/agent_picture.dart";
 
 import "../harness.dart";
 
@@ -199,14 +211,280 @@ void main() {
         isFalse,
       );
     });
+
+    testWidgets("the agent row's leading element is the picture slot", (tester) async {
+      await pumpSettings(tester, app, SettingsCategory.agents);
+      await reloadLibrary(tester, app);
+
+      // Every row leads with the circle: the person mark where no picture is
+      // set, which is what the bundled agents answer by default.
+      expect(find.byType(AgentPicture), findsAtLeastNWidgets(bundledAgents.length));
+    });
+
+    testWidgets("a picture picked in the editor is written as <name>.png "
+        "beside the .md", (tester) async {
+      final dir = app.config.promptsDir(CompletionKind.agent);
+      newFile("$dir/researcher.md", "---\ndescription: desc\n---\n\nBody.");
+
+      await pumpSettings(tester, app, SettingsCategory.agents);
+      await reloadLibrary(tester, app);
+
+      // Open the editor, pick a picture, save.
+      await tester.tap(find.descendant(
+        of: find.widgetWithText(ListTile, "researcher"),
+        matching: find.byIcon(Icons.edit_outlined),
+      ));
+      await settleIo(tester);
+      await pickImage(tester, name: "photo.png");
+      expect(find.textContaining("is set on save"), findsOneWidget);
+
+      await tester.tap(find.text("Save"));
+      await settleIo(tester, least: 15);
+
+      final image = File("$dir/researcher.png");
+      expect(image.existsSync(), isTrue);
+      expect(image.readAsBytesSync(), pngBytes);
+    });
+
+    testWidgets("a pick that is not a .png is refused", (tester) async {
+      final dir = app.config.promptsDir(CompletionKind.agent);
+      newFile("$dir/researcher.md", "---\ndescription: desc\n---\n\nBody.");
+
+      await pumpSettings(tester, app, SettingsCategory.agents);
+      await reloadLibrary(tester, app);
+
+      await tester.tap(find.descendant(
+        of: find.widgetWithText(ListTile, "researcher"),
+        matching: find.byIcon(Icons.edit_outlined),
+      ));
+      await settleIo(tester);
+      await pickImage(tester, name: "photo.jpg");
+
+      // Still on the editor, nothing set, no file written.
+      expect(find.textContaining("pick a PNG image"), findsOneWidget);
+      expect(File("$dir/researcher.png").existsSync(), isFalse);
+    });
+
+    testWidgets("the editor shows the picture the agent already has, and "
+        "removing it deletes the file", (tester) async {
+      final dir = app.config.promptsDir(CompletionKind.agent);
+      newFile("$dir/researcher.md", "---\ndescription: desc\n---\n\nBody.");
+      newFileBytes("$dir/researcher.png", pngBytes);
+
+      await pumpSettings(tester, app, SettingsCategory.agents);
+      await reloadLibrary(tester, app);
+
+      await tester.tap(find.descendant(
+        of: find.widgetWithText(ListTile, "researcher"),
+        matching: find.byIcon(Icons.edit_outlined),
+      ));
+      await settleIo(tester);
+
+      // The editor shows what is on disk, with a way to take it off.
+      expect(find.textContaining("is set on save"), findsNothing);
+      expect(find.textContaining("No picture"), findsNothing);
+      await tester.tap(find.descendant(
+        of: find.byType(ListView),
+        matching: find.byIcon(Icons.close),
+      ));
+      await tester.pump();
+      expect(find.text("The picture is removed on save."), findsOneWidget);
+
+      await tester.tap(find.text("Save"));
+      await settleIo(tester, least: 15);
+
+      expect(File("$dir/researcher.png").existsSync(), isFalse);
+    });
+
+    testWidgets("saving without touching the picture leaves it alone", (tester) async {
+      final dir = app.config.promptsDir(CompletionKind.agent);
+      newFile("$dir/researcher.md", "---\ndescription: desc\n---\n\nBody.");
+      newFileBytes("$dir/researcher.png", pngBytes);
+
+      await pumpSettings(tester, app, SettingsCategory.agents);
+      await reloadLibrary(tester, app);
+
+      await tester.tap(find.descendant(
+        of: find.widgetWithText(ListTile, "researcher"),
+        matching: find.byIcon(Icons.edit_outlined),
+      ));
+      await settleIo(tester);
+      expect(find.textContaining("is set on save"), findsNothing);
+
+      await tester.tap(find.text("Save"));
+      await settleIo(tester, least: 15);
+
+      expect(File("$dir/researcher.png").readAsBytesSync(), pngBytes);
+    });
+
+    testWidgets("a rename moves the picture with the agent", (tester) async {
+      final dir = app.config.promptsDir(CompletionKind.agent);
+      newFile("$dir/researcher.md", "---\ndescription: desc\n---\n\nBody.");
+      newFileBytes("$dir/researcher.png", pngBytes);
+
+      await pumpSettings(tester, app, SettingsCategory.agents);
+      await reloadLibrary(tester, app);
+
+      await tester.tap(find.descendant(
+        of: find.widgetWithText(ListTile, "researcher"),
+        matching: find.byIcon(Icons.edit_outlined),
+      ));
+      await settleIo(tester);
+
+      await tester.enterText(find.byType(TextField).at(0), "archivist");
+      await tester.tap(find.text("Save"));
+      await settleIo(tester, least: 15);
+
+      expect(File("$dir/researcher.png").existsSync(), isFalse);
+      expect(File("$dir/archivist.png").readAsBytesSync(), pngBytes);
+    });
+
+    testWidgets("deleting a user agent removes its picture with it", (tester) async {
+      final dir = app.config.promptsDir(CompletionKind.agent);
+      newFile("$dir/researcher.md", "---\ndescription: desc\n---\n\nBody.");
+      newFileBytes("$dir/researcher.png", pngBytes);
+
+      await pumpSettings(tester, app, SettingsCategory.agents);
+      await reloadLibrary(tester, app);
+
+      await tester.tap(find.descendant(
+        of: find.widgetWithText(ListTile, "researcher"),
+        matching: find.byIcon(Icons.close),
+      ));
+      await settleIo(tester);
+      await tester.tap(find.text("Remove"));
+      await settleIo(tester, least: 15);
+
+      expect(File("$dir/researcher.md").existsSync(), isFalse);
+      expect(File("$dir/researcher.png").existsSync(), isFalse);
+    });
+
+    testWidgets("an added agent can carry a picture from the start", (tester) async {
+      await pumpSettings(tester, app, SettingsCategory.agents);
+      await reloadLibrary(tester, app);
+
+      await tester.tap(find.text("Add agent"));
+      await settleIo(tester);
+      await pickImage(tester, name: "photo.png");
+      await tester.enterText(find.byType(TextField).at(0), "scout");
+      await tester.enterText(find.byType(TextField).at(1), "A scout.");
+      await tester.enterText(find.byType(TextField).at(2), "You are a scout.");
+      await tester.tap(find.text("Save"));
+      await settleIo(tester, least: 15);
+
+      final dir = app.config.promptsDir(CompletionKind.agent);
+      expect(File("$dir/scout.md").existsSync(), isTrue);
+      expect(File("$dir/scout.png").readAsBytesSync(), pngBytes);
+    });
+
+    testWidgets("an inherited picture shows on the row, not in this "
+        "project's editor", (tester) async {
+      // The default project holds the picture; the agent list here shows the
+      // tiers' answer, the editor only what this directory has to edit.
+      await io(tester, () => app.repo.createProject("work"));
+      final defaults = app.config.promptsDir(CompletionKind.agent, project: "default");
+      newFileBytes("$defaults/researcher.png", pngBytes);
+      newFile(
+        "${app.config.promptsDir(CompletionKind.agent, project: "work")}/researcher.md",
+        "---\ndescription: desc\n---\n\nBody.",
+      );
+
+      await app.pump(tester, const ProjectSettingsPage(project: "work"));
+      await scrollTo(tester, find.text("Agents"));
+      await tester.tap(find.text("Agents"));
+      await settleIo(tester);
+      await reloadLibrary(tester, app, project: "work");
+
+      // The row's circle resolves the tiers and shows what was inherited.
+      await tester.runAsync(() async {
+        final bytes = await readAgentPicture(
+          app.config,
+          "researcher",
+          promptTiers(project: "work", config: app.config),
+        );
+        expect(bytes, pngBytes);
+      });
+      await settleIo(tester);
+
+      await tester.tap(find.descendant(
+        of: find.widgetWithText(ListTile, "researcher"),
+        matching: find.byIcon(Icons.edit_outlined),
+      ));
+      await settleIo(tester);
+
+      // The editor shows this project's directory — nothing in it yet.
+      expect(find.textContaining("No picture"), findsOneWidget);
+      expect(find.textContaining("is set on save"), findsNothing);
+    });
   });
+}
+
+/// The bytes a test's pick brings in: the PNG signature, which is the whole
+/// of what the extension refusal and the file assertions ask of them. A test
+/// that renders them draws the fallback instead — decoding is not what those
+/// assert.
+final Uint8List pngBytes = Uint8List.fromList([
+  0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, // the PNG signature
+  ...List.filled(16, 0x20),
+]);
+
+/// Simulate a picture pick: the editor's chooser is the platform's, so the
+/// test takes `FileSelectorPlatform` over and answers it with a file carrying
+/// [name] and the bytes above.
+Future<void> pickImage(WidgetTester tester, {required String name}) async {
+  final previous = FileSelectorPlatform.instance;
+  FileSelectorPlatform.instance = _FakeFileSelector(name);
+  addTearDown(() => FileSelectorPlatform.instance = previous);
+  // The picture itself is the tap target — the row the editor draws it in.
+  await tester.tap(find.byTooltip("Choose a profile picture"));
+  await tester.pump();
+  await settleIo(tester);
+}
+
+/// Seeding a directory before any widget is pumped needs no runAsync; these
+/// are the test body's own synchronous writes.
+void newFile(String path, String text) {
+  final file = File(path);
+  file.createSync(recursive: true);
+  file.writeAsStringSync(text);
+}
+
+void newFileBytes(String path, List<int> bytes) {
+  final file = File(path);
+  file.createSync(recursive: true);
+  file.writeAsBytesSync(bytes);
+}
+
+class _FakeFileSelector extends Fake
+    with MockPlatformInterfaceMixin
+    implements FileSelectorPlatform {
+  _FakeFileSelector(this.name);
+
+  final String name;
+
+  /// The name is where the editor's `.png` check reads it, and a read of the
+  /// answer goes to the path — `XFile` answers `name` from it on io. So the
+  /// fake writes the bytes to a scratch file and hands that back: no subclass
+  /// of `XFile` to reimplement, which `cross_file` does not invite.
+  @override
+  Future<XFile?> openFile({
+    List<XTypeGroup>? acceptedTypeGroups,
+    String? initialDirectory,
+    String? confirmButtonText,
+  }) async {
+    final scratch = File("/tmp/entoli_test_pick_$name");
+    scratch.writeAsBytesSync(pngBytes);
+    addTearDown(scratch.deleteSync);
+    return XFile(scratch.path);
+  }
 }
 
 /// Reload the prompt library and settle, so the page reflects what is on disk
 /// rather than the test's seeded library.
-Future<void> reloadLibrary(WidgetTester tester, TestApp app) async {
+Future<void> reloadLibrary(WidgetTester tester, TestApp app,
+    {String? project}) async {
   await tester.runAsync(
-    () => app.container.read(promptLibraryProvider(null).notifier).reload(),
+    () => app.container.read(promptLibraryProvider(project).notifier).reload(),
   );
   await settleIo(tester);
 }

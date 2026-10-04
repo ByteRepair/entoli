@@ -1,3 +1,5 @@
+import "dart:typed_data";
+
 import "package:flutter/gestures.dart";
 import "package:flutter/material.dart";
 // `SelectedContent`, which material does not re-export.
@@ -10,6 +12,7 @@ import "../../../domain/models.dart";
 import "../../../domain/shell.dart";
 import "../../../domain/wired_skill.dart";
 import "../../widgets/action_icon.dart";
+import "../../widgets/agent_picture.dart" show AgentPictureImage;
 import "../../widgets/attachment_chip.dart";
 import "../../widgets/dialogs.dart";
 import "activity_label.dart";
@@ -25,6 +28,7 @@ class MessageBubble extends StatefulWidget {
     required this.chatId,
     required this.message,
     this.author,
+    this.avatar,
     this.entoli = false,
     this.isWaiting = false,
     this.waitingNotice,
@@ -48,6 +52,11 @@ class MessageBubble extends StatefulWidget {
   /// The addressed member to name over the reply, the way a prompt shows
   /// "You". Null draws nothing. See [Message.author].
   final String? author;
+
+  /// The author's profile picture, when the addressed member has one and the
+  /// section names who spoke. Bytes in hand — the page resolves them — so
+  /// the bubble stays a StatelessWidget-and-State over what it is told.
+  final Uint8List? avatar;
 
   /// The reply is in a section of the conversation where Omada is on: an
   /// unnamed reply is the main agent's, and says so — "Entoli" — the same
@@ -266,10 +275,25 @@ class _MessageBubbleState extends State<MessageBubble> {
                   if (name != null)
                     Padding(
                       padding: const EdgeInsets.only(left: 4, bottom: 2),
-                      child: Text(
-                        name,
-                        style: theme.textTheme.labelSmall
-                            ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          // The member's face where there is one, beside the
+                          // name. A reply's slot only: a prompt's "You" is
+                          // not a member, and the page passes no bytes for
+                          // one, but the widget agrees with how it reads.
+                          if (!isUser && widget.avatar != null) ...[
+                            AgentPictureImage(bytes: widget.avatar, size: 18),
+                            const SizedBox(width: 6),
+                          ],
+                          Flexible(
+                            child: Text(
+                              name,
+                              style: theme.textTheme.labelSmall
+                                  ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   // One region for the whole reply, so a drag runs from the
