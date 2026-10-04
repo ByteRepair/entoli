@@ -230,7 +230,7 @@ class _AgentsSectionState extends ConsumerState<AgentsSection> {
             }
           },
         );
-        await _reload();
+        await _reload(widget.project);
         await _scan();
         _invalidatePicture(name);
         if (removes != null && removes != name) _invalidatePicture(removes);
@@ -261,7 +261,7 @@ class _AgentsSectionState extends ConsumerState<AgentsSection> {
           if (await image.exists()) await image.delete();
         },
       );
-      await _reload();
+      await _reload(widget.project);
       await _scan();
       _invalidatePicture(agent.name);
       _say("Removed ${agent.name}.");
@@ -309,16 +309,26 @@ class _AgentsSectionState extends ConsumerState<AgentsSection> {
     await _write(name, source, "Imported $name.");
   }
 
-  /// An agent page has one directory it writes into, so one project's
-  /// library is all a change here has to rebuild.
-  Future<void> _reload() => ref
-      .read(promptLibraryProvider(widget.project).notifier)
-      .reload();
+  /// Re-read the library of the project a change landed in. The global page
+  /// writes the default project's directory, and every project's library
+  /// reads a rung of that one, so it reloads every project's; a project's
+  /// own pages have one target and reload that one alone.
+  Future<void> _reload(String? target) => target == null
+      ? reloadAllPromptLibraries(ref)
+      : ref.read(promptLibraryProvider(target).notifier).reload();
 
   /// The picture rows re-read after a write, a rename or a remove — also the
-  /// old name's on a rename, its file having moved with the agent.
-  void _invalidatePicture(String name) =>
+  /// old name's on a rename, its file having moved with the agent. A global
+  /// page's write lands in the default directory other projects inherit
+  /// pictures from, so it takes the whole family down; a project's picture
+  /// is read there and nowhere else.
+  void _invalidatePicture(String name) {
+    if (widget.project == null) {
+      ref.invalidate(agentPictureProvider);
+    } else {
       ref.invalidate(agentPictureProvider((project: widget.project, name: name)));
+    }
+  }
 
   Future<void> _export(PromptDocument agent) => _guard(() => exportAndSave(
         ref.read(appConfigProvider),

@@ -416,6 +416,125 @@ void main() {
       expect(find.textContaining("No picture"), findsOneWidget);
       expect(find.textContaining("is set on save"), findsNothing);
     });
+
+    testWidgets("an agent added on the global page is in the other projects' "
+        "@ menus without a restart", (tester) async {
+      // No manual reload after the save: the reload the page does itself is
+      // what is under test. A My Team chat's menu reads its own project's
+      // library, whose default rung is the directory the global page wrote.
+      await pumpSettings(tester, app, SettingsCategory.agents);
+      await reloadLibrary(tester, app);
+
+      await tester.tap(find.text("Add agent"));
+      await settleIo(tester);
+      await tester.enterText(find.byType(TextField).at(0), "researcher");
+      await tester.enterText(find.byType(TextField).at(1), "A research agent");
+      await tester.enterText(find.byType(TextField).at(2), "You are a research agent.");
+      await tester.tap(find.text("Save"));
+      await settleIo(tester, least: 15);
+
+      expect(
+        app.container
+            .read(completionsProvider(
+                (project: "my-team", kind: CompletionKind.agent)))
+            .map((option) => option.name),
+        contains("researcher"),
+      );
+    });
+
+    testWidgets("removing an agent on the global page leaves the other "
+        "projects' @ menus too", (tester) async {
+      final dir = app.config.promptsDir(CompletionKind.agent);
+      newFile("$dir/researcher.md", "---\ndescription: desc\n---\n\nBody.");
+
+      await pumpSettings(tester, app, SettingsCategory.agents);
+      // Both members built before the delete, so the answer under it is the
+      // delete's own and not a read that never happened.
+      await reloadLibrary(tester, app);
+      await reloadLibrary(tester, app, project: "my-team");
+      expect(
+        app.container
+            .read(completionsProvider(
+                (project: "my-team", kind: CompletionKind.agent)))
+            .map((option) => option.name),
+        contains("researcher"),
+      );
+
+      await tester.tap(find.descendant(
+        of: find.widgetWithText(ListTile, "researcher"),
+        matching: find.byIcon(Icons.close),
+      ));
+      await settleIo(tester);
+      await tester.tap(find.text("Remove"));
+      await settleIo(tester, least: 15);
+
+      expect(
+        app.container
+            .read(completionsProvider(
+                (project: "my-team", kind: CompletionKind.agent)))
+            .map((option) => option.name),
+        isNot(contains("researcher")),
+      );
+    });
+
+    testWidgets("a picture picked on the global page reaches the other "
+        "projects' avatars", (tester) async {
+      await pumpSettings(tester, app, SettingsCategory.agents);
+      await reloadLibrary(tester, app);
+
+      // Hold the member a My Team chat's avatar reads from across the save,
+      // so the answer under it is the save's doing and not a fresh read.
+      final hold = app.container
+          .listen(agentPictureProvider((project: "my-team", name: "scout")), (_, _) {});
+      addTearDown(hold.close);
+      expect(
+        await tester.runAsync(() => app.container
+            .read(agentPictureProvider((project: "my-team", name: "scout")).future)),
+        isNull,
+      );
+
+      await tester.tap(find.text("Add agent"));
+      await settleIo(tester);
+      await pickImage(tester, name: "photo.png");
+      await tester.enterText(find.byType(TextField).at(0), "scout");
+      await tester.enterText(find.byType(TextField).at(1), "A scout.");
+      await tester.enterText(find.byType(TextField).at(2), "You are a scout.");
+      await tester.tap(find.text("Save"));
+      await settleIo(tester, least: 15);
+
+      expect(
+        await tester.runAsync(() => app.container
+            .read(agentPictureProvider((project: "my-team", name: "scout")).future)),
+        pngBytes,
+      );
+    });
+
+    testWidgets("adding an agent on a project's own page reaches that "
+        "project's @ menu", (tester) async {
+      // One project's directory is one project's tier rung, so the reload a
+      // project page does is enough — pinned here so it stays that way.
+      await io(tester, () => app.repo.createProject("work"));
+      await app.pump(tester, const ProjectSettingsPage(project: "work"));
+      await scrollTo(tester, find.text("Agents"));
+      await tester.tap(find.text("Agents"));
+      await settleIo(tester);
+      await reloadLibrary(tester, app, project: "work");
+
+      await tester.tap(find.text("Add agent"));
+      await settleIo(tester);
+      await tester.enterText(find.byType(TextField).at(0), "tester");
+      await tester.enterText(find.byType(TextField).at(1), "A test agent");
+      await tester.enterText(find.byType(TextField).at(2), "You test things.");
+      await tester.tap(find.text("Save"));
+      await settleIo(tester, least: 15);
+
+      expect(
+        app.container
+            .read(completionsProvider((project: "work", kind: CompletionKind.agent)))
+            .map((option) => option.name),
+        contains("tester"),
+      );
+    });
   });
 }
 
