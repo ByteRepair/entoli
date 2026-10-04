@@ -951,18 +951,26 @@ class Triggers extends Notifier<List<Trigger>> implements TriggerList {
 
   /// The chat-scoped registry the trigger tools' turn is handed: what it
   /// registers carries this chat as its target, and what it may list and
-  /// remove is this chat's own. The reload below is what puts a
-  /// registration under watch the moment it lands.
+  /// remove is this chat's own. The reload the list change causes is what
+  /// puts a registration under watch the moment it lands.
+  ///
+  /// A timer is anchored here, where the clock is: the parse carried a
+  /// placeholder, and re-anchoring is what makes a countdown thirty
+  /// seconds from *this* rather than from somebody else's midnight.
   Future<Trigger> registerFor(String chatId,
       {required TriggerSource source, required String prompt, String? name}) async {
+    final now = ref.read(clockProvider).now();
+    final anchored = source is TimerSource
+        ? TimerSource(duration: source.duration, registeredAt: now)
+        : source;
     final draft = Trigger(
       id: const Uuid().v4(),
       name: name ?? "",
       prompt: prompt,
-      source: source,
+      source: anchored,
       chatId: chatId,
       byAgent: true,
-      nextFireAt: source.nextAfter(ref.read(clockProvider).now()),
+      nextFireAt: anchored.nextAfter(now),
     );
     await add(draft);
     return draft;
