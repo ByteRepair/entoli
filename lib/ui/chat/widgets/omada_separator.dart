@@ -1,9 +1,9 @@
 import "package:flutter/material.dart";
 
 /// A boundary said between the turns either side of it. Metadata rather than a
-/// message: full width, untinted, not selectable — the same furniture the
-/// labels above a bubble are. The caption names it, so a conversation explains
-/// its own boundaries on a reload.
+/// message: untinted, not selectable — the same furniture the labels above a
+/// bubble are. The caption names it, so a conversation explains its own
+/// boundaries on a reload.
 ///
 /// Two boundaries share it: the room's Omada mode changing, and a compaction
 /// — the divider naming where the conversation's summary for the model began.
@@ -15,8 +15,8 @@ class ConversationSeparator extends StatelessWidget {
   /// What the divider says happened here.
   final String text;
 
-  /// Furniture beneath the line, full width — a compaction's summary. Null
-  /// for a boundary that is only a line.
+  /// Furniture beneath the line — a compaction's summary, in the gutter a
+  /// reply keeps. Null for a boundary that is only a line.
   final Widget? body;
 
   @override
@@ -42,7 +42,12 @@ class ConversationSeparator extends StatelessWidget {
             ],
           ),
           if (body != null)
-            Padding(padding: const EdgeInsets.only(top: 8), child: body!),
+            Padding(
+              // The gutter a reply keeps: everything the model wrote sits
+              // inside it, the summary no less than a bubble.
+              padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+              child: body!,
+            ),
         ],
       ),
     );
