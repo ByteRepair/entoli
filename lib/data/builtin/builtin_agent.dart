@@ -366,7 +366,17 @@ class BuiltinAgent {
     this.permissions = const [],
     this.writableDirs = const [],
     this.sandboxReprompt = true,
+    this.claimInstruction,
   });
+
+  /// Marks an instruction file as first-reached in the conversation, as a
+  /// nested `AGENTS.md` read above a file mid-turn is pulled in; returning
+  /// true means this agent's turn is the one that records it. Held by the
+  /// backend over what the turn's history names, so one conversation records
+  /// a file once. Null — every sub-agent's case, having no conversation to
+  /// claim against and no events that reach the room — treats every finding
+  /// as new, which its own transcript is free to say.
+  final bool Function(String path)? claimInstruction;
 
   /// The sandbox helper a test hands in, where the shell is a fake with no
   /// driver behind it. The agent reads the real one through
@@ -1273,6 +1283,9 @@ class BuiltinAgent {
       argumentsJson: call.argumentsJson,
       argumentsText: args.path,
     ));
+    // Held beside the run rather than in it, for the event below: what the
+    // read pulled in, if anything, is reported the moment the result lands.
+    List<InstructionFile>? nested;
     Future<ShellResult> run() async {
       final file = fs.file(path);
       if (!await file.exists()) {
@@ -1298,7 +1311,7 @@ class BuiltinAgent {
         buf.writeln("$i: ${lines[i - 1]}");
       }
       final result = buf.toString();
-      final nested = memory.nested
+      nested = memory.nested
           ? await findNestedInstructions(
               fs,
               path,
@@ -1307,12 +1320,23 @@ class BuiltinAgent {
               excludes: memory.excludes,
             )
           : const <InstructionFile>[];
-      final output = nested.isEmpty
+      final output = nested!.isEmpty
           ? (result.isEmpty ? "(empty file)" : result)
-          : "$result\n\n${renderInstructions(nested)}";
+          : "$result\n\n${renderInstructions(nested!)}";
       return ShellResult(returnCode: 0, output: output);
     }
     yield* _runFileTool(call, path, readToolName, run);
+    // A denied or gated read never ran, so it pulled nothing in; a successful
+    // one reports what it reached here, the claim deciding which of the
+    // findings are this conversation's first.
+    final found = nested;
+    if (found != null && found.isNotEmpty) {
+      final fresh = [
+        for (final file in found)
+          if (claimInstruction == null || claimInstruction!(file.path)) file.ref,
+      ];
+      if (fresh.isNotEmpty) yield InstructionsReadEvent(fresh);
+    }
   }
 
   /// Write a file, creating or overwriting. The same gate as [read]: the

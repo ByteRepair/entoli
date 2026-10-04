@@ -130,6 +130,13 @@ class TurnRecorder {
         addPart(MessagePart.artifact(artifactId: artifactId, entryFile: entryFile, title: title));
       case SkillInstallEvent(:final installId, :final title):
         addPart(MessagePart.skillInstall(installId: installId, title: title));
+      case InstructionsReadEvent(:final files):
+        // The backend claims against the history, so this is already the
+        // conversation's first read of each file; the containment check is
+        // the belt-and-braces behind it — a retry round re-running the load
+        // beside parts that record it must not stack a second label.
+        final part = MessagePart.instructions(files: files);
+        if (!_parts.contains(part)) addPart(part);
       case ErrorEvent(:final message):
         _appendError(message);
       case StepLimitEvent():
@@ -354,6 +361,7 @@ class TurnRecorder {
         ArtifactPart() ||
         SkillInstallPart() ||
         ApprovalPart() ||
+        InstructionsPart() ||
         ErrorPart() =>
           part,
       };

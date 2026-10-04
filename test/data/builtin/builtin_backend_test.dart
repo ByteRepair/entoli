@@ -11,6 +11,8 @@ import "package:agent_chat/data/builtin/builtin_agent.dart";
 import "package:agent_chat/data/builtin/builtin_backend.dart";
 import "package:agent_chat/data/builtin/llm/llm_client.dart";
 import "package:agent_chat/data/builtin/llm/llm_registry.dart";
+import "package:agent_chat/data/builtin/memory/instructions.dart"
+    show InstructionFile, renderInstructions;
 import "package:agent_chat/data/builtin/memory/store.dart";
 import "package:agent_chat/data/local/file_chat_store.dart";
 import "package:agent_chat/data/local/file_sub_agent_log.dart";
@@ -295,6 +297,295 @@ void main() {
       // because it is rendered last, the way it is for a user's project.
       expect(system.indexOf("This is a Byte Repair project."),
           lessThan(system.indexOf("project rules")));
+    });
+
+    group("recording the first instruction read", () {
+      InstructionRef ref(String path, InstructionKind kind) =>
+          InstructionRef(path: path, kind: kind);
+
+      /// The shape `instructions_test.dart` builds, on this config's layout:
+      /// the global file at the data dir's root and the project's at its
+      /// workspace root.
+      void writeInstructions({bool importsIntoProject = false}) {
+        Directory(config.projectWorkspaceDir()).createSync(recursive: true);
+        File(config.globalInstructionsFile)
+            .writeAsStringSync(importsIntoProject ? "see @./notes.md" : "global rules");
+        if (importsIntoProject) {
+          File(p.join(config.projectWorkspaceDir(), "notes.md"))
+              .writeAsStringSync("the notes");
+        }
+        File(p.join(config.projectWorkspaceDir(), "AGENTS.md"))
+            .writeAsStringSync(importsIntoProject ? "see @./notes.md" : "project rules");
+      }
+
+      test("the first turn records every file it reads, before the response",
+          () async {
+        final backend = backendOver([
+          [finish],
+        ]);
+        writeInstructions();
+
+        final events = await send(backend, "hi");
+
+        final reads = events.whereType<InstructionsReadEvent>().toList();
+        expect(reads, hasLength(1));
+        expect(reads.single.files,
+            [ref(config.globalInstructionsFile, InstructionKind.global),
+             ref(p.join(config.projectWorkspaceDir(), "AGENTS.md"),
+                 InstructionKind.project)]);
+        // The read precedes the first response: the part is the reply's first,
+        // and the label renders above the thinking one.
+        expect(events.indexOf(reads.single), lessThan(
+            events.indexOf(events.whereType<ResponseStart>().first)));
+      });
+
+      test("a later turn re-reading the same files records nothing", () async {
+        final backend = backendOver([
+          [finish],
+          [finish],
+        ]);
+        writeInstructions();
+
+        final first = await send(backend, "hi");
+        final promptTurn = userMessage("hi", at: sentAt);
+        final reply = Message(
+            id: "reply-1",
+            role: MessageRole.assistant,
+            createdAt: sentAt,
+            parts: [
+              MessagePart.instructions(files: [
+                for (final e in first.whereType<InstructionsReadEvent>())
+                  ...e.files
+              ]),
+              MessagePart.text(text: "done", responseId: "r1"),
+            ]);
+        final events = await send(backend, "again",
+            history: [promptTurn, reply]);
+
+        expect(events.whereType<InstructionsReadEvent>(), isEmpty);
+        // The files are still in front of the model: recorded once, read
+        // every turn as ever.
+        expect(client.sent.last[1].text, contains("project rules"));
+      });
+
+      test("an import added between turns is the only thing recorded", () async {
+        final backend = backendOver([
+          [finish],
+          [finish],
+        ]);
+        writeInstructions();
+
+        final first = await send(backend, "hi");
+        final reply = Message(
+            id: "reply-1",
+            role: MessageRole.assistant,
+            createdAt: sentAt,
+            parts: [
+              MessagePart.instructions(files: [
+                for (final e in first.whereType<InstructionsReadEvent>())
+                  ...e.files
+              ]),
+              MessagePart.text(text: "done", responseId: "r1"),
+            ]);
+        // Between turns, the project file gains an import pointing at a new
+        // file, the way a user editing it between turns reaches the next one.
+        File(p.join(config.projectWorkspaceDir(), "AGENTS.md"))
+            .writeAsStringSync("project rules\nsee @./notes.md");
+        File(p.join(config.projectWorkspaceDir(), "notes.md"))
+            .writeAsStringSync("the notes");
+
+        final events = await send(backend, "again",
+            history: [
+              userMessage("hi", at: sentAt),
+              reply
+            ],
+            memory: MemorySettings(imports: true));
+
+        final reads = events.whereType<InstructionsReadEvent>().toList();
+        expect(reads, hasLength(1));
+        expect(reads.single.files,
+            [ref(p.join(config.projectWorkspaceDir(), "notes.md"),
+                InstructionKind.imported)]);
+      });
+
+      test("a read that pulls a nested AGENTS.md in records it, and the "
+          "rendered block still reaches the model", () async {
+        final backend = backendOver([
+          [readCall("sub/notes.txt")],
+          [finish],
+        ]);
+        writeInstructions();
+        // The chat's own workspace is where the file the model reads sits, and
+        // `sub/` above it is where its AGENTS.md was reached through.
+        final sub = p.join(config.workspaceDir(chatId), "sub");
+        Directory(sub).createSync(recursive: true);
+        File(p.join(sub, "AGENTS.md")).writeAsStringSync("sub rules");
+        File(p.join(sub, "notes.txt")).writeAsStringSync("the contents");
+
+        final events = await send(backend, "read it");
+
+        final nested = events
+            .whereType<InstructionsReadEvent>()
+            .skip(1)
+            .toList();
+        expect(nested, hasLength(1));
+        expect(nested.single.files,
+            [ref(p.join(sub, "AGENTS.md"), InstructionKind.directory)]);
+        // The block rides the result, which is the only route nested
+        // instructions reach the model by — the read's own numbered lines
+        // first, then the rendered instructions.
+        final result =
+            events.whereType<ToolResultEvent>().first.result;
+        expect(result.output, "1: the contents\n"
+            "\n\n"
+            "${renderInstructions([
+              InstructionFile(
+                  path: p.join(sub, "AGENTS.md"),
+                  kind: InstructionKind.directory,
+                  content: "sub rules")
+            ])}");
+      });
+
+      test("reading the same nested file again in a later turn records "
+          "nothing", () async {
+        final backend = backendOver([
+          [readCall("sub/notes.txt")],
+          [finish],
+          [readCall("sub/notes.txt")],
+          [finish],
+        ]);
+        writeInstructions();
+        final sub = p.join(config.workspaceDir(chatId), "sub");
+        Directory(sub).createSync(recursive: true);
+        File(p.join(sub, "AGENTS.md")).writeAsStringSync("sub rules");
+        File(p.join(sub, "notes.txt")).writeAsStringSync("the contents");
+
+        final first = await send(backend, "read it");
+        final reply = Message(
+            id: "reply-1",
+            role: MessageRole.assistant,
+            createdAt: sentAt,
+            parts: [
+              for (final e in first.whereType<InstructionsReadEvent>())
+                MessagePart.instructions(files: e.files),
+              MessagePart.text(text: "done", responseId: "r1"),
+            ]);
+        final events = await send(backend, "again",
+            history: [userMessage("hi", at: sentAt), reply]);
+
+        expect(events.whereType<InstructionsReadEvent>(),
+            isEmpty);
+      });
+
+      test("a rewind takes the record back, so re-running records again",
+          () async {
+        final backend = backendOver([
+          [finish],
+          [finish],
+        ]);
+        writeInstructions();
+
+        await send(backend, "hi");
+        // The history of the rewound conversation: the prompt and a reply
+        // that never carried the part, which is what a rewind past it leaves.
+        final events = await send(backend, "again",
+            history: [
+              userMessage("hi", at: sentAt),
+              Message(
+                  id: "reply-1",
+                  role: MessageRole.assistant,
+                  createdAt: sentAt,
+                  parts: [MessagePart.text(text: "done", responseId: "r1")]),
+            ]);
+
+        final reads = events.whereType<InstructionsReadEvent>().toList();
+        expect(reads, hasLength(1));
+        expect(reads.single.files, hasLength(2));
+      });
+
+      test("a retry round re-running the load is not recorded twice", () async {
+        // The first attempt fails the request; the turn's automatic retry
+        // (the controller's half — here the caller drives it) re-enters
+        // `resumeTurn` over a history holding the first round's part, so the
+        // second send's claim set already names every file.
+        final backend = backendOver([
+          [finish],
+          [finish],
+        ]);
+        client.failures[0] = const LlmException("blip", retryable: true);
+        writeInstructions();
+
+        final first = await send(backend, "hi");
+        expect(first.whereType<InstructionsReadEvent>(), hasLength(1));
+
+        final events = await resuming(backend, [
+          userMessage("hi", at: sentAt),
+          Message(
+              id: "reply-1",
+              role: MessageRole.assistant,
+              createdAt: sentAt,
+              parts: [
+                MessagePart.instructions(files: [
+                  for (final e in first.whereType<InstructionsReadEvent>())
+                    ...e.files
+                ]),
+                MessagePart.text(text: "done", responseId: "r1"),
+              ]),
+        ]);
+
+        expect(events.whereType<InstructionsReadEvent>(), isEmpty);
+      });
+
+      test("a ! command records nothing", () async {
+        final bypass = backendOver([], respond: (_) => ok(""));
+        writeInstructions();
+        Directory(config.workspaceDir(chatId)).createSync(recursive: true);
+
+        final events = await send(bypass, "!pwd");
+
+        expect(events.whereType<InstructionsReadEvent>(), isEmpty);
+        expect(events.whereType<ShellRunEvent>(), hasLength(1));
+      });
+
+      test("a bundled note without the user's files records nothing", () async {
+        final backend = backendOver([
+          [finish],
+        ]);
+        writeInstructions();
+
+        final events = await send(backend, "hi",
+            project: "anonymous",
+            sharedWorkspace: false,
+            bundledInstructions: "This is an anonymous chat.",
+            includesUserInstructions: false);
+
+        expect(events.whereType<InstructionsReadEvent>(), isEmpty);
+      });
+
+      test("a bundled note that includes the user's files records them",
+          () async {
+        final backend = backendOver([
+          [finish],
+        ]);
+        Directory(config.projectWorkspaceDir(project: "byte-repair"))
+            .createSync(recursive: true);
+        File(p.join(config.projectWorkspaceDir(project: "byte-repair"),
+            "AGENTS.md")).writeAsStringSync("project rules");
+        File(config.globalInstructionsFile).writeAsStringSync("global rules");
+
+        final events = await send(backend, "hi",
+            project: "byte-repair",
+            bundledInstructions: "This is a Byte Repair project.",
+            includesUserInstructions: true);
+
+        final reads = events.whereType<InstructionsReadEvent>().toList();
+        expect(reads, hasLength(1));
+        expect(reads.single.files, hasLength(2));
+        // The bundled note itself is not a file read, so it is not in the
+        // record.
+        expect(reads.single.files.where((f) => f.kind == InstructionKind.bundled),
+            isEmpty);
+      });
     });
 
     test("relevant memories are recalled into the turn", () async {

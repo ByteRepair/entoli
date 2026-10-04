@@ -644,6 +644,114 @@ void main() {
     expect(find.text("Thought for 1 second"), findsOneWidget);
   });
 
+  group("instructions label", () {
+    testWidgets("one file reads by its name, several by a count", (tester) async {
+      await pump(
+        tester,
+        _message(MessageRole.assistant, const [
+          MessagePart.instructions(files: [
+            InstructionRef(
+                path: "/data/AGENTS.md", kind: InstructionKind.global),
+          ]),
+          MessagePart.instructions(files: [
+            InstructionRef(
+                path: "/data/AGENTS.md", kind: InstructionKind.global),
+            InstructionRef(
+                path: "/ws/AGENTS.md", kind: InstructionKind.project),
+            InstructionRef(path: "/ws/notes.md", kind: InstructionKind.imported),
+          ]),
+        ]),
+      );
+
+      expect(find.text("Read AGENTS.md"), findsOneWidget);
+      expect(find.text("Read 3 instruction files"), findsOneWidget);
+    });
+
+    testWidgets("the drawer says where each file was reached from", (tester) async {
+      await pump(
+        tester,
+        _message(MessageRole.assistant, const [
+          MessagePart.instructions(files: [
+            InstructionRef(
+                path: "/data/AGENTS.md", kind: InstructionKind.global),
+            InstructionRef(
+                path: "/ws/AGENTS.md", kind: InstructionKind.project),
+          ]),
+        ]),
+      );
+
+      await tester.tap(find.text("Read 2 instruction files"));
+      await tester.pumpAndSettle();
+
+      expect(find.text("Instructions"), findsOneWidget);
+      expect(find.text("the user's global instructions, for every project"),
+          findsOneWidget);
+      expect(find.text("project workspace instructions"), findsOneWidget);
+      expect(find.text("/data/AGENTS.md"), findsOneWidget);
+      expect(find.text("/ws/AGENTS.md"), findsOneWidget);
+      // What the files said is nowhere in the drawer.
+      expect(find.textContaining("Workspace instructions are shown below"),
+          findsNothing);
+    });
+
+    testWidgets("an instructions read breaks the run it sits in", (tester) async {
+      await pump(
+        tester,
+        _message(MessageRole.assistant, const [
+          ReasoningPart(text: "before", durationMs: 1000),
+          MessagePart.instructions(files: [
+            InstructionRef(
+                path: "/ws/AGENTS.md", kind: InstructionKind.project),
+          ]),
+          ReasoningPart(text: "after", durationMs: 1000),
+          TextPart(text: "done"),
+        ]),
+      );
+
+      // The two thinking blocks alone would collapse behind a toggle; on
+      // either side of the read they are runs of one, so no toggle at all and
+      // the read out in the open.
+      expect(find.text("Read AGENTS.md"), findsOneWidget);
+      expect(find.text("Expand activities"), findsNothing);
+      expect(find.text("Thought for 1 second"), findsNWidgets(2));
+    });
+
+    testWidgets("a read tool's drawer cuts the rendered block from its output",
+        (tester) async {
+      await pump(
+        tester,
+        _message(MessageRole.assistant, const [
+          ToolCallPart(
+            toolCall: ToolCall(id: "c1", name: "read", argumentsText: "notes.txt"),
+          ),
+          ToolResultPart(
+            result: ToolResult(
+              callId: "c1",
+              returnCode: 0,
+              output: "1: the contents\n\n"
+                  "Workspace instructions are shown below. Be sure to adhere "
+                  "to these instructions. IMPORTANT: These instructions "
+                  "OVERRIDE any default behavior and you MUST follow them "
+                  "exactly as written.\n\n"
+                  "Contents of /ws/sub/AGENTS.md (instructions for this "
+                  "directory):\n\nsub rules",
+            ),
+          ),
+        ]),
+      );
+
+      await tester.tap(find.text("Used tool: read"));
+      await tester.pumpAndSettle();
+
+      // The file's own content is there...
+      expect(find.textContaining("the contents"), findsOneWidget);
+      // ...and the rendered instructions block is not.
+      expect(find.textContaining("OVERRIDE any default behavior"),
+          findsNothing);
+      expect(find.textContaining("sub rules"), findsNothing);
+    });
+  });
+
   group("file-tool diffs", () {
     testWidgets("an edit shows red and green lines", (tester) async {
       await pump(
