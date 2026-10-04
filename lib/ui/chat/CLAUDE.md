@@ -572,9 +572,10 @@ Omada mode flips are, generalized to take a caption and furniture beneath the
 line — emitted by `entriesOf` just after the boundary message it covers,
 captioned "Compact Conversation". The summary is rendered beneath it in
 `MessageText`, the widget a reply's text is encoded in — the same markdown,
-code blocks and link taps, full width, always visible, nothing to tap. It is
-not selectable: the divider is metadata, and a selection container of its own
-is the per-row container the bubble's single region replaced. Auto-compact
+code blocks and link taps, in the gutter a reply keeps, always visible,
+nothing to tap. It is not selectable: the divider is metadata, and a selection
+container of its own is the per-row container the bubble's single region
+replaced. Auto-compact
 leaves the same trace with no turn around it: unawaited after a settled turn,
 the divider its only evidence, the way the memory extraction's note is.
 
