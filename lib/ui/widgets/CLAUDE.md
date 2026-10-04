@@ -29,11 +29,11 @@ parts of the class.
 `CompletionField` is the field a prompt is written in: the menu of `/skills`
 and `@agents` that matches what has been typed, the arrows and tab and return
 that take one, and escape. It was the composer's, and it is here because the
-reminder editor writes a prompt too — one that is dispatched through the same
+trigger editor writes a prompt too — one that is dispatched through the same
 library, so being offered them in a chat and not there was the tell. Where the
 menu goes is the caller's, through `layout`: the composer's spans the whole
 composer rather than the field, since the `+` and Send are either side of it,
-and the reminder's prompt page puts it under a box that is the whole page.
+and the trigger's prompt page puts it under a box that is the whole page.
 `completionInsertItems` is the `+` button's two entries, for a menu that offers
 other things too — the composer's also attaches files. What a caller must not
 do is write its own trigger handling: `activeCompletionToken` has to keep
@@ -41,8 +41,8 @@ agreeing with `prompt_library.dart`, and one copy of it can.
 
 `TempChatTtlField` is how long a chat lives, as the chat settings page asks it —
 `Default` naming the project's or the app's answer, and the value written
-straight onto `meta.json`. The reminder editor asks with the same field: a
-reminder's chat is a chat, and a bool there could only ever have named one of
+straight onto `meta.json`. The trigger editor asks with the same field: the
+new chat a trigger makes is a chat, and a bool could only ever have named one of
 the five TTLs.
 
 `text_input.dart` is the pair of things a field wants and Material does not
@@ -50,7 +50,7 @@ give it. `replaceIn` writes over a range and leaves the caret after it —
 `CompletionField` types a completion with it and `TabIndents` an indent, and
 they were the same four lines twice. `TabIndents` makes Tab type two spaces
 rather than move the focus on, which every `CompletionField` of more than one
-line has — the composer and a reminder's prompt — and so does any
+line has — the composer and a trigger's prompt — and so does any
 `promptForText` of more than one line; the one-line fields are left alone,
 since there Tab is how the caret reaches the buttons.
 

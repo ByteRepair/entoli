@@ -402,7 +402,7 @@ typedef AgentEdit = ({String name, String description, String body});
 /// was recorded with; a new mention of the old name is what a rename loses,
 /// which is why a rename onto a name another agent holds is refused here. The
 /// body is `CompletionField`, so `/skills` and `@agents` complete there the
-/// way they do in a reminder's prompt; an agent's prompt is dispatched through
+/// way they do in a trigger's prompt; an agent's prompt is dispatched through
 /// the same library.
 class AgentEditorPage extends ConsumerStatefulWidget {
   const AgentEditorPage({

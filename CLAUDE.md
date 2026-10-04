@@ -36,7 +36,7 @@ named in a cross-reference is findable from this list.
 - `lib/data/local/CLAUDE.md` — Bundled tools, A whole Linux under proot,
   Running a model on the device
 - `android/CLAUDE.md` — Staying alive off screen, The workspaces in the Files
-  app, Being the assistant, Waking for a reminder, The app icon, The debug
+  app, Being the assistant, Waking for a trigger, The app icon, The debug
   build's own
 - `lib/ui/chat/CLAUDE.md` — When a turn is over, Thinking and tool runs,
   Selecting a reply, and copying it, How a reply is set, Code blocks, A command
@@ -139,9 +139,10 @@ beside the sync identity (`AppSecrets`), which is what keeps them out of
 `settings.json` and out of every backup zip; and the user's
  global `AGENTS.md`, the instructions that reach every turn in every user
  project, beside it.
-`<dataDir>/reminders.json` is the user's reminders, one JSON
-list; the boot receiver reads it with no engine running, which is why writes go
-through a rename.
+`<dataDir>/reminders.json` is the user's triggers — reminders generalized to
+schedule, timer and file sources — one JSON list; the boot receiver reads it
+with no engine running, which is why writes go through a rename. The file name
+is the reminder's and stayed, a rename being a migration.
 Data dir: `$AGENT_CHAT_CONFIG` if set, else `~/.config/agent-chat` (desktop),
 app-private storage (Android), and `/agent-chat` in a browser — where it is a
 name in IndexedDB rather than a path, and load-bearing all the same.
