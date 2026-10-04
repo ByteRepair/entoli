@@ -79,12 +79,15 @@ void main() {
       await settleIo(tester);
 
       // The editor is pre-filled with the agent's current contents. The name
-      // field is first and disabled on edit.
+      // field is first, and editable: editing it renames the agent.
       expect(
         tester.widget<TextField>(find.byType(TextField).at(0)).controller!.text,
         "researcher",
       );
-      expect(tester.widget<TextField>(find.byType(TextField).at(0)).enabled, isFalse);
+      // Unspecified reads as enabled, so the disabled state is what is asserted
+      // against.
+      expect(tester.widget<TextField>(find.byType(TextField).at(0)).enabled,
+          isNot(false));
 
       await tester.enterText(find.byType(TextField).at(1), "New desc");
       await tester.enterText(find.byType(TextField).at(2), "New body.");
@@ -93,6 +96,65 @@ void main() {
 
       expect(file.readAsStringSync(), contains("New body."));
       expect(file.readAsStringSync(), contains("New desc"));
+    });
+
+    testWidgets("renaming a user agent writes the new file and removes the "
+        "old one", (tester) async {
+      final file = File("${app.config.promptsDir(CompletionKind.agent)}/researcher.md");
+      await io(tester, () async {
+        await file.create(recursive: true);
+        await file.writeAsString("---\ndescription: Old desc\n---\n\nOld body.");
+      });
+
+      await pumpSettings(tester, app, SettingsCategory.agents);
+      await reloadLibrary(tester, app);
+
+      await tester.tap(find.descendant(
+        of: find.widgetWithText(ListTile, "researcher"),
+        matching: find.byIcon(Icons.edit_outlined),
+      ));
+      await settleIo(tester);
+
+      await tester.enterText(find.byType(TextField).at(0), "archivist");
+      await tester.tap(find.text("Save"));
+      await settleIo(tester, least: 15);
+
+      final newFile = File("${app.config.promptsDir(CompletionKind.agent)}/archivist.md");
+      expect(newFile.existsSync(), isTrue);
+      expect(newFile.readAsStringSync(), contains("Old body."));
+      expect(file.existsSync(), isFalse);
+      // The list follows the rename.
+      expect(find.text("archivist"), findsOneWidget);
+      expect(find.text("researcher"), findsNothing);
+    });
+
+    testWidgets("renaming onto a taken name is refused in the editor", (tester) async {
+      final dir = app.config.promptsDir(CompletionKind.agent);
+      await io(tester, () async {
+        for (final name in ["researcher", "archivist"]) {
+          final file = File("$dir/$name.md");
+          await file.create(recursive: true);
+          await file.writeAsString("---\ndescription: desc\n---\n\nBody.");
+        }
+      });
+
+      await pumpSettings(tester, app, SettingsCategory.agents);
+      await reloadLibrary(tester, app);
+
+      await tester.tap(find.descendant(
+        of: find.widgetWithText(ListTile, "researcher"),
+        matching: find.byIcon(Icons.edit_outlined),
+      ));
+      await settleIo(tester);
+
+      await tester.enterText(find.byType(TextField).at(0), "archivist");
+      await tester.tap(find.text("Save"));
+      await settleIo(tester);
+
+      // Still on the editor with the error; no file was touched.
+      expect(find.text("An agent with that name already exists."), findsOneWidget);
+      expect(File("$dir/researcher.md").readAsStringSync(), contains("Body."));
+      expect(File("$dir/archivist.md").readAsStringSync(), contains("Body."));
     });
 
     testWidgets("deleting a user agent removes its file", (tester) async {
