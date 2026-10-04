@@ -188,7 +188,7 @@ class TriggerManager {
     if (!_runningIds.add(trigger.id)) return;
     var fireLate = false;
     try {
-      fireLate = fire.late_;
+      fireLate = fire.lateFire;
       final kind = _kindOf(trigger);
       // A fire the platform will not hold is handed back to its alarm rather
       // than run — the kind knows whether there is one to hand back to.

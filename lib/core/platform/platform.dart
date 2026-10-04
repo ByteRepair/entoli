@@ -25,6 +25,7 @@ import "../../domain/local_llm.dart";
 import "../../domain/local_model_store.dart";
 import "../../domain/models.dart";
 import "../../domain/prompt_library.dart";
+import "../../domain/file_watches.dart";
 import "../../domain/reminder_alarms.dart";
 import "../../domain/rootfs_store.dart";
 import "../../domain/secret_store.dart";
@@ -350,6 +351,10 @@ AssistantLaunch createAssistantLaunch() => platformAssistantLaunch();
 /// The system clock a reminder is set against: AlarmManager on Android, the
 /// session bus's notifications on Linux, nothing anywhere else.
 Future<ReminderAlarms> createReminderAlarms() => platformReminderAlarms();
+
+/// The file system's own push, where the platform has one: inotify on the
+/// machine and Android, nothing in a browser.
+FileWatches createFileWatches() => platformFileWatches();
 
 /// The presets, and the user's own beside them. Their directory is on the
 /// config's filesystem, so it exists on every platform now. The bundled

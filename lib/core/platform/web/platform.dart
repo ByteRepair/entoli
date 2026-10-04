@@ -17,6 +17,7 @@ import "../../../domain/backup_handoff.dart";
 import "../../../domain/file_handoff.dart";
 import "../../../domain/local_llm.dart";
 import "../../../domain/local_model_store.dart";
+import "../../../domain/file_watches.dart";
 import "../../../domain/reminder_alarms.dart";
 import "../../../domain/rootfs_store.dart";
 import "../../../domain/secret_store.dart";
@@ -138,6 +139,11 @@ AssistantLaunch platformAssistantLaunch() => const UnavailableAssistantLaunch();
 /// and it has no session bus to post what a reminder did through either.
 Future<ReminderAlarms> platformReminderAlarms() async =>
     const UnavailableReminderAlarms();
+
+/// An IndexedDB file system has no inotify to carry, and nothing a browser
+/// runs is in the way of a change the app itself made — the app would have
+/// to hear its own writes, which the trigger's own edit is.
+FileWatches platformFileWatches() => const UnavailableFileWatches();
 
 /// IndexedDB, through the same `FileSystem` the rest of the app is written
 /// against. The layout under [platformDataDir] is the one on disk elsewhere.

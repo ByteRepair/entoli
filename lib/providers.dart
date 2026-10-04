@@ -5,8 +5,9 @@ import "package:flutter/foundation.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../core/config.dart";
+import "domain/file_tools.dart" show resolveWorkspacePath;
 import "../core/platform/platform.dart"
-    show createPromptSources, setupComplete;
+    show createFileWatches, createPromptSources, setupComplete;
 import "data/builtin/builtin_backend.dart";
 import "data/local/file_trigger_store.dart";
 import "domain/app_icon.dart";
@@ -964,6 +965,35 @@ class Triggers extends Notifier<List<Trigger>> implements TriggerList {
 final triggersProvider =
     NotifierProvider<Triggers, List<Trigger>>(() => Triggers(const []));
 
+/// The file kind's path resolution, over the config's own filesystem and
+/// the file tools' own rules — what `resolveWorkspacePath` answers — so a
+/// stored `project:notes/` means the project's directory, a bare relative
+/// path the chat's, exactly what a `read` would have opened. Computed in
+/// one place; the tools cannot resolve differently.
+/// The file kind's path resolution, over the config's own filesystem and
+/// the file tools' own rules — what `resolveWorkspacePath` answers — so a
+/// stored `project:notes/` means the project's directory, a bare relative
+/// path the chat's, exactly what a `read` would have opened. Computed in
+/// one place; the tools cannot resolve differently.
+Future<String> _resolveTriggerPath(
+  AppConfig config,
+  ChatRepository repo,
+  String path,
+  String chatId,
+  String? project,
+) async {
+  final chatWorkspace = config.workspaceDir(chatId, project: project);
+  final shared = builtinProjectOf(project)?.sharedWorkspace ?? true;
+  final projectWorkspace =
+      shared ? config.projectWorkspaceDir(project: project) : chatWorkspace;
+  return resolveWorkspacePath(
+    config.fs,
+    path,
+    chatWorkspace,
+    projectWorkspace,
+  );
+}
+
 final triggerTurnDriverProvider =
     Provider<TriggerTurnDriver>((ref) => throw UnimplementedError());
 
@@ -990,9 +1020,16 @@ final triggerManagerProvider = Provider<TriggerManager>((ref) {
     kinds: [
       ScheduleKind(alarms),
       TimerKind(alarms),
-      // FileKind rides in with commit 3; the registry line is what adding a
-      // source costs.
-      // FileKind(fileWatches: platformFileWatches()),
+      FileKind(
+        fileWatches: createFileWatches(),
+        resolve: (trigger, path) => _resolveTriggerPath(
+          ref.read(appConfigProvider),
+          ref.read(chatRepositoryProvider),
+          path,
+          trigger.chatId ?? trigger.id,
+          trigger.project,
+        ),
+      ),
     ],
     alarmPort: alarms,
     runner: ref.watch(triggerRunnerProvider),
