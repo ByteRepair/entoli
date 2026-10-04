@@ -2,11 +2,11 @@ import "package:flutter/material.dart";
 import "package:flutter_markdown_plus/flutter_markdown_plus.dart";
 import "package:flutter_test/flutter_test.dart";
 
-import "package:agent_chat/domain/reminder.dart";
+import "package:agent_chat/domain/trigger.dart";
 import "package:agent_chat/domain/temp_chat_ttl.dart";
 import "package:agent_chat/providers.dart";
-import "package:agent_chat/ui/reminders/incoming_open.dart";
-import "package:agent_chat/ui/settings/reminders.dart";
+import "package:agent_chat/ui/triggers/incoming_open.dart";
+import "package:agent_chat/ui/settings/triggers.dart";
 import "package:agent_chat/ui/settings/settings_page.dart";
 import "package:agent_chat/ui/widgets/resettable_field.dart";
 
@@ -17,20 +17,20 @@ import "../harness.dart";
 /// under another is still in the tree, so every finder here is anchored to the
 /// page it means.
 Finder get _promptField => find.descendant(
-      of: find.byType(ReminderPromptPage),
+      of: find.byType(TriggerPromptPage),
       matching: find.byType(TextField),
     );
 
 Finder _on(Type page, String label) =>
     find.descendant(of: find.byType(page), matching: find.text(label));
 
-/// Write [text] as the reminder's prompt, through the page that edits it.
+/// Write [text] as the trigger's prompt, through the page that edits it.
 Future<void> writePrompt(WidgetTester tester, String text) async {
   await scrollTo(tester, find.text("Edit prompt"));
   await tester.tap(find.text("Edit prompt"));
   await settleIo(tester);
   await tester.enterText(_promptField, text);
-  await tester.tap(_on(ReminderPromptPage, "Save"));
+  await tester.tap(_on(TriggerPromptPage, "Save"));
   await settleIo(tester);
 }
 
@@ -40,10 +40,10 @@ void main() {
     final app = TestApp.create();
     addTearDown(app.dispose);
     useWindow(tester, const Size(400, 900));
-    await pumpSettings(tester, app, SettingsCategory.reminders);
+    await pumpSettings(tester, app, SettingsCategory.triggers);
 
-    expect(find.textContaining("does not support reminders"), findsOneWidget);
-    expect(find.text("Add reminder"), findsNothing);
+    expect(find.textContaining("does not support triggers"), findsOneWidget);
+    expect(find.text("Add trigger"), findsNothing);
   });
 
   testWidgets("a platform that notifies but does not schedule says so",
@@ -54,11 +54,11 @@ void main() {
     final app = TestApp.create(reminderAlarms: alarms);
     addTearDown(app.dispose);
     useWindow(tester, const Size(400, 900));
-    await pumpSettings(tester, app, SettingsCategory.reminders);
+    await pumpSettings(tester, app, SettingsCategory.triggers);
 
     expect(find.textContaining("caught up at the next launch"), findsOneWidget);
     expect(find.textContaining("even when the app is closed"), findsNothing);
-    expect(find.text("Add reminder"), findsOneWidget);
+    expect(find.text("Add trigger"), findsOneWidget);
   });
 
   testWidgets("a platform that fires with the app closed says that",
@@ -67,7 +67,7 @@ void main() {
     final app = TestApp.create(reminderAlarms: alarms);
     addTearDown(app.dispose);
     useWindow(tester, const Size(400, 900));
-    await pumpSettings(tester, app, SettingsCategory.reminders);
+    await pumpSettings(tester, app, SettingsCategory.triggers);
 
     expect(find.textContaining("even when the app is closed"), findsOneWidget);
     expect(find.textContaining("caught up at the next launch"), findsNothing);
@@ -77,12 +77,12 @@ void main() {
     final alarms = FakeReminderAlarms();
     final app = TestApp.create(
       reminderAlarms: alarms,
-      reminders: [
-        Reminder(
+      triggers: [
+        Trigger(
           id: "r1",
           name: "Morning sweep",
           prompt: "check builds",
-          at: DateTime.now().add(const Duration(hours: 3)),
+          source: ScheduleSource(at: DateTime.now().add(const Duration(hours: 3))),
           nextFireAt: DateTime.now().add(const Duration(hours: 3)),
           requestCode: 1,
         ),
@@ -90,11 +90,11 @@ void main() {
     );
     addTearDown(app.dispose);
     useWindow(tester, const Size(400, 900));
-    await pumpSettings(tester, app, SettingsCategory.reminders);
+    await pumpSettings(tester, app, SettingsCategory.triggers);
 
     expect(find.text("Morning sweep"), findsOneWidget);
     expect(find.byType(Switch), findsOneWidget);
-    expect(find.text("Add reminder"), findsOneWidget);
+    expect(find.text("Add trigger"), findsOneWidget);
   });
 
   testWidgets("a permission granted in the system settings shows on the way back",
@@ -103,7 +103,7 @@ void main() {
     final app = TestApp.create(reminderAlarms: alarms);
     addTearDown(app.dispose);
     useWindow(tester, const Size(400, 900));
-    await pumpSettings(tester, app, SettingsCategory.reminders);
+    await pumpSettings(tester, app, SettingsCategory.triggers);
     expect(find.text("Exact times are not granted"), findsOneWidget);
 
     // Granted while the app is behind the system settings, then the app is
@@ -122,9 +122,9 @@ void main() {
     final app = TestApp.create(reminderAlarms: alarms);
     addTearDown(app.dispose);
     useWindow(tester, const Size(400, 900));
-    await pumpSettings(tester, app, SettingsCategory.reminders);
+    await pumpSettings(tester, app, SettingsCategory.triggers);
 
-    await tester.tap(find.text("Add reminder"));
+    await tester.tap(find.text("Add trigger"));
     await tester.pumpAndSettle();
 
     await scrollTo(tester, find.text("Save"));
@@ -138,44 +138,44 @@ void main() {
     final app = TestApp.create(reminderAlarms: alarms);
     addTearDown(app.dispose);
     useWindow(tester, const Size(400, 900));
-    await pumpSettings(tester, app, SettingsCategory.reminders);
+    await pumpSettings(tester, app, SettingsCategory.triggers);
 
-    await tester.tap(find.text("Add reminder"));
+    await tester.tap(find.text("Add trigger"));
     await settleIo(tester);
 
     await writePrompt(tester, "Summarise the workspace");
-    await scrollTo(tester, _on(ReminderEditorPage, "Save"));
-    await tester.tap(_on(ReminderEditorPage, "Save"));
+    await scrollTo(tester, _on(TriggerEditorPage, "Save"));
+    await tester.tap(_on(TriggerEditorPage, "Save"));
     await settleIo(tester);
 
     // The editor closed and the row is there, named by its only text.
     await pumpUntil(tester, find.textContaining("Summarise the workspace"));
-    expect(app.container.read(remindersProvider), hasLength(1));
+    expect(app.container.read(triggersProvider), hasLength(1));
     // The alarm request code was assigned.
     expect(
-        app.container.read(remindersProvider).single.requestCode, greaterThanOrEqualTo(1));
+        app.container.read(triggersProvider).single.requestCode, greaterThanOrEqualTo(1));
   });
 
   group("the editor", () {
     late TestApp app;
 
-    Future<void> openEditor(WidgetTester tester, {Reminder? reminder}) async {
+    Future<void> openEditor(WidgetTester tester, {Trigger? trigger}) async {
       app = TestApp.create(
         reminderAlarms: FakeReminderAlarms(),
-        reminders: [?reminder],
+        triggers: [?trigger],
       );
       addTearDown(app.dispose);
       useWindow(tester, const Size(400, 900));
-      await pumpSettings(tester, app, SettingsCategory.reminders);
-      await tester.tap(find.text(reminder == null ? "Add reminder" : reminder.name));
+      await pumpSettings(tester, app, SettingsCategory.triggers);
+      await tester.tap(find.text(trigger == null ? "Add trigger" : trigger.name));
       await settleIo(tester);
     }
 
-    Reminder seeded({String prompt = "check builds"}) => Reminder(
+    Trigger seeded({String prompt = "check builds"}) => Trigger(
           id: "r1",
           name: "Morning sweep",
           prompt: prompt,
-          at: DateTime.now().add(const Duration(hours: 3)),
+          source: ScheduleSource(at: DateTime.now().add(const Duration(hours: 3))),
           nextFireAt: DateTime.now().add(const Duration(hours: 3)),
           requestCode: 1,
         );
@@ -194,7 +194,7 @@ void main() {
 
     testWidgets("the prompt is shown as the message it will send",
         (tester) async {
-      await openEditor(tester, reminder: seeded(prompt: "# Sweep\n\n- builds"));
+      await openEditor(tester, trigger: seeded(prompt: "# Sweep\n\n- builds"));
 
       expect(
         tester.widget<MarkdownBody>(find.byType(MarkdownBody)).data,
@@ -215,7 +215,7 @@ void main() {
       await openEditor(tester);
       await writePrompt(tester, "Summarise **everything**");
 
-      expect(find.byType(ReminderPromptPage), findsNothing);
+      expect(find.byType(TriggerPromptPage), findsNothing);
       expect(
         tester.widget<MarkdownBody>(find.byType(MarkdownBody)).data,
         "Summarise **everything**",
@@ -223,7 +223,7 @@ void main() {
     });
 
     testWidgets("discarding leaves the prompt as it was", (tester) async {
-      await openEditor(tester, reminder: seeded());
+      await openEditor(tester, trigger: seeded());
 
       await tester.tap(find.text("Edit prompt"));
       await settleIo(tester);
@@ -233,7 +233,7 @@ void main() {
       await tester.tap(find.text("Discard"));
       await settleIo(tester);
 
-      expect(find.byType(ReminderPromptPage), findsNothing);
+      expect(find.byType(TriggerPromptPage), findsNothing);
       expect(
         tester.widget<MarkdownBody>(find.byType(MarkdownBody)).data,
         "check builds",
@@ -281,11 +281,11 @@ void main() {
       await tester.tap(find.text("24 hours").last);
       await settleIo(tester);
 
-      await scrollTo(tester, _on(ReminderEditorPage, "Save"));
-      await tester.tap(_on(ReminderEditorPage, "Save"));
+      await scrollTo(tester, _on(TriggerEditorPage, "Save"));
+      await tester.tap(_on(TriggerEditorPage, "Save"));
       await settleIo(tester);
 
-      expect(app.container.read(remindersProvider).single.tempChatTtl,
+      expect(app.container.read(triggersProvider).single.tempChatTtl,
           TempChatTtl.hours24);
     });
   });
@@ -303,7 +303,7 @@ void main() {
 
     await app.pump(
       tester,
-      const IncomingReminderOpen(child: Scaffold(body: Text("whatever was up"))),
+      const IncomingTriggerOpen(child: Scaffold(body: Text("whatever was up"))),
       settle: false,
     );
     alarms.tap(chat.state.id);

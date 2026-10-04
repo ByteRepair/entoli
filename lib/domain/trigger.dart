@@ -1,0 +1,456 @@
+import "chat_meta.dart";
+import "permission.dart";
+import "temp_chat_ttl.dart";
+
+/// How often a schedule repeats. Declaration order is the order the editor
+/// offers them in.
+enum ScheduleRepeat {
+  off("Does not repeat"),
+  hourly("Hourly"),
+  daily("Daily"),
+  weekly("Weekly"),
+  monthly("Monthly");
+
+  const ScheduleRepeat(this.label);
+
+  final String label;
+
+  /// An unknown name is a file written by a later build, so it falls back
+  /// rather than failing the whole list — the bargain [TempChatTtl.fromName]
+  /// makes.
+  static ScheduleRepeat fromName(String? name) =>
+      values.firstWhere((t) => t.name == name, orElse: () => ScheduleRepeat.off);
+}
+
+/// When a file trigger fires, and over which kinds of change. Declaration
+/// order is the order the editor offers them in.
+enum FileEvent {
+  create("Created"),
+  change("Changed"),
+  delete("Deleted"),
+  move("Moved");
+
+  const FileEvent(this.label);
+
+  final String label;
+
+  static FileEvent fromName(String? name) => values.firstWhere(
+      (t) => t.name == name,
+      orElse: () => throw ArgumentError.value(name, "event"));
+
+  /// [FileWatchEvent.kind]'s word for it.
+  String get watchKind => switch (this) {
+        FileEvent.create => "create",
+        FileEvent.change => "modify",
+        FileEvent.delete => "delete",
+        FileEvent.move => "move",
+      };
+}
+
+/// What sets a trigger off. Data, and nothing but: which behaviour watches
+/// for what is [TriggerKind]'s (see `trigger_kinds.dart`), so the model
+/// knows nothing of timers or watchers.
+sealed class TriggerSource {
+  const TriggerSource();
+
+  Map<String, dynamic> toJson();
+
+  /// When this source is next due, or null where it never is — one shot
+  /// behind its time, a timer elapsed, a file source (which is never on the
+  /// clock). Whoever changes when a trigger fires recomputes through this;
+  /// the stored [Trigger.nextFireAt] is what a boot receiver reads.
+  DateTime? nextAfter(DateTime after);
+
+  /// A description the trigger editor and the tools' results read: what this
+  /// source is, in the user's own words.
+  String describe();
+}
+
+/// A wall-clock moment, repeating or not: the reminder shape generalized.
+///
+/// [at] is the anchor the recurrence steps from, in local time — a monthly
+/// one keeps its day of the month, clamped into months too short for it.
+class ScheduleSource extends TriggerSource {
+  const ScheduleSource({required this.at, this.repeat = ScheduleRepeat.off});
+
+  final DateTime at;
+  final ScheduleRepeat repeat;
+
+  @override
+  DateTime? nextAfter(DateTime after) =>
+      occurrenceAfter(repeat, at, after);
+
+  @override
+  String describe() {
+    final when = _dateWords(at);
+    return switch (repeat) {
+      ScheduleRepeat.off => when,
+      _ => "$when, ${repeat.label.toLowerCase()}",
+    };
+  }
+
+  /// The moment in the user-editor's wording: today and tomorrow by name,
+  /// then the date. Lives on the source rather than the UI so the tool
+  /// results say it the same way.
+  String get describeWhen {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final day = DateTime(at.year, at.month, at.day);
+    final difference = day.difference(today).inDays;
+    final when = _timeWords(at);
+    return switch (difference) {
+      0 => "Today $when",
+      1 => "Tomorrow $when",
+      _ => "${_months[at.month - 1]} ${at.day} $when",
+    };
+  }
+
+  static String _dateWords(DateTime at) => _months[at.month - 1] != ""
+      ? "${at.day} ${_months[at.month - 1]} ${_timeWords(at)}"
+      : "";
+
+  static const _months = [
+    "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+    "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+  ];
+
+  static String _timeWords(DateTime at) {
+    final hour = at.hour % 12 == 0 ? 12 : at.hour % 12;
+    final minute = at.minute.toString().padLeft(2, "0");
+    return "$hour:$minute ${at.hour < 12 ? "AM" : "PM"}";
+  }
+
+  @override
+  Map<String, dynamic> toJson() => {
+        "kind": "schedule",
+        "at": at.toIso8601String(),
+        if (repeat != ScheduleRepeat.off) "repeat": repeat.name,
+      };
+
+  /// Calendar arithmetic, not fixed durations: a daily one stays at its
+  /// wall-clock time across a DST shift. Bounded walk — every step moves
+  /// forward one whole period, so this ends.
+  static DateTime? occurrenceAfter(
+      ScheduleRepeat repeat, DateTime at, DateTime after) {
+    if (repeat == ScheduleRepeat.off) {
+      return after.isBefore(at) ? at : null;
+    }
+    if (after.isBefore(at)) return at;
+    var t = at;
+    while (true) {
+      t = switch (repeat) {
+        ScheduleRepeat.hourly =>
+          DateTime(t.year, t.month, t.day, t.hour + 1, at.minute),
+        ScheduleRepeat.daily =>
+          DateTime(t.year, t.month, t.day + 1, at.hour, at.minute),
+        ScheduleRepeat.weekly =>
+          DateTime(t.year, t.month, t.day + 7, at.hour, at.minute),
+        ScheduleRepeat.monthly => _monthAfter(t, at),
+        ScheduleRepeat.off => throw StateError("unreachable"),
+      };
+      if (t.isAfter(after)) return t;
+    }
+  }
+
+  /// The same day-of-month in the following month, clamped into it: Jan 31
+  /// monthly lands on Feb 28 and is back on Mar 31, because the anchor's own
+  /// day is what every step derives from.
+  static DateTime _monthAfter(DateTime from, DateTime anchor) {
+    var year = from.year;
+    var month = from.month + 1;
+    if (month > 12) {
+      month = 1;
+      year++;
+    }
+    final day = anchor.day.clamp(1, _daysInMonth(year, month));
+    return DateTime(year, month, day, anchor.hour, anchor.minute);
+  }
+
+  static int _daysInMonth(int year, int month) {
+    if (month == 2) return _isLeap(year) ? 29 : 28;
+    const lengths = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+    return lengths[month - 1];
+  }
+
+  static bool _isLeap(int year) =>
+      year % 4 == 0 && (year % 100 != 0 || year % 400 == 0);
+}
+
+/// A one-shot countdown from when it was registered: "in thirty minutes".
+/// The wall-clock moment it points at is [registeredAt] plus [duration],
+/// which is what makes the alarm the schedule's and this one's share: both
+/// precompute a [Trigger.nextFireAt] a boot receiver can arm.
+class TimerSource extends TriggerSource {
+  const TimerSource({required this.duration, required this.registeredAt});
+
+  final Duration duration;
+
+  /// When it was set, local time — the anchor the countdown runs from.
+  final DateTime registeredAt;
+
+  @override
+  DateTime? nextAfter(DateTime after) {
+    final at = registeredAt.add(duration);
+    return at.isAfter(after) ? at : null;
+  }
+
+  @override
+  String describe() {
+    final minutes = duration.inMinutes;
+    if (minutes < 60) return "In $minutes minutes";
+    final hours = duration.inHours;
+    final leftover = minutes % 60;
+    return leftover == 0
+        ? "In $hours hours"
+        : "In $hours h $leftover min";
+  }
+
+  @override
+  Map<String, dynamic> toJson() => {
+        "kind": "timer",
+        "seconds": duration.inSeconds,
+        "registeredAt": registeredAt.toIso8601String(),
+      };
+}
+
+/// A change under one or more paths. Fires only while the process runs — a
+/// file watch is not a system clock, and nothing on any platform re-delivers
+/// an inotify event to a process that was not there. On Android the process
+/// being frozen holds the events until it thaws; the app closed drops them.
+class FileSource extends TriggerSource {
+  const FileSource({
+    required this.paths,
+    this.events = const {
+      FileEvent.create,
+      FileEvent.change,
+      FileEvent.delete,
+      FileEvent.move,
+    },
+    this.cooldown = const Duration(seconds: 5),
+  });
+
+  /// The paths to watch, as given — `project:`- or `chat:`-prefixed, relative,
+  /// or `~`-expanded, the same shapes the file tools resolve. Resolved where
+  /// the watch is built, not here: the model holds none of this at rest.
+  final List<String> paths;
+
+  /// Which changes fire. Every kind, where a registration says nothing.
+  final Set<FileEvent> events;
+
+  /// How long a trigger stays quiet after it fired, so a burst of writes is
+  /// one turn rather than one a line.
+  final Duration cooldown;
+
+  @override
+  DateTime? nextAfter(DateTime after) => null;
+
+  @override
+  String describe() => "${paths.length > 1 ? "${paths.length} paths" : paths.first}, "
+      "${events.map((e) => e.label.toLowerCase()).toSet().join(" or ")} changes";
+
+  @override
+  Map<String, dynamic> toJson() => {
+        "kind": "file",
+        "paths": paths,
+        if (events.length != FileEvent.values.length)
+          "events": [for (final e in events) e.name],
+        if (cooldown != const Duration(seconds: 5))
+          "cooldownSeconds": cooldown.inSeconds,
+      };
+}
+
+/// One trigger: a prompt run at a moment, after a countdown, or on a file
+/// change — in a new headless chat, or in the chat that registered it.
+///
+/// [nextFireAt] is precomputed rather than derived: the boot receiver reads
+/// this file with no engine running, and a second copy of the arithmetic in
+/// Kotlin would drift from this one across DST and month ends the way any
+/// second copy does.
+class Trigger {
+  /// [nextFireAt] is what the clock is set against, and null is nothing
+  /// armed — a fired one-shot, a timer gone, or a file source. Whoever
+  /// changes when a trigger fires recomputes it; the constructor stores what
+  /// it is given, so an edit into the past cannot quietly re-arm itself.
+  Trigger({
+    required this.id,
+    required this.name,
+    required this.prompt,
+    required this.source,
+    this.chatId,
+    this.project,
+    this.tempChatTtl,
+    this.enabled = true,
+    this.byAgent = false,
+    this.lastFiredAt,
+    this.nextFireAt,
+    this.requestCode,
+  });
+
+  final String id;
+  final String name;
+  final String prompt;
+  final TriggerSource source;
+
+  /// Where the turn runs. Null is a new chat, headless — what a schedule the
+  /// user set is, and what reminders always were. A chat id is the one that
+  /// registered the trigger, whose conversation carries on: its turns are
+  /// watched, and are not `headless`.
+  final String? chatId;
+
+  /// Which project. Null is the default project, the same null
+  /// [projectOrDefault] resolves; [chatId] wins over it where both are set,
+  /// the chat being already somewhere.
+  final String? project;
+
+  /// The new chat's own temporary-chat TTL, written straight onto its
+  /// `meta.json` — the same field the chat settings page sets, with the same
+  /// null meaning inherit the project or app default. Nothing where
+  /// [chatId] names the chat: it lives as long as it does.
+  final TempChatTtl? tempChatTtl;
+  final bool enabled;
+
+  /// Whether an agent registered it — through the trigger tools in its own
+  /// chat. The editor marks such a row and refuses to rewrite its prompt:
+  /// the conversation holds it.
+  final bool byAgent;
+
+  /// Stamped before the turn runs, never after: a crash mid-turn costs a
+  /// notification but must not re-run the whole prompt.
+  final DateTime? lastFiredAt;
+
+  /// What the clock is armed against, persisted for the boot receiver.
+  final DateTime? nextFireAt;
+
+  /// The PendingIntent request code, assigned once at creation by the store
+  /// and only for the clock kinds. Derived codes would collide occasionally,
+  /// and a collision silently overwrites another trigger's alarm.
+  final int? requestCode;
+
+  /// The new chat's `meta.json`: `approveMode` pinned to `never` because
+  /// nobody is there to press a banner, the TTL asked for, and `headless` so
+  /// every turn on it drops `ask_user` and `task`. A trigger pointed at an
+  /// existing chat is watched; its turns run under that chat's own meta.
+  ChatMeta get meta => ChatMeta(
+        approveMode: ApproveMode.never,
+        tempChatTtl: tempChatTtl,
+        headless: true,
+      );
+
+  Trigger copyWith({
+    String? name,
+    String? prompt,
+    TriggerSource? source,
+    bool clearChatId = false,
+    String? chatId,
+    String? project,
+    TempChatTtl? tempChatTtl,
+    bool clearTempChatTtl = false,
+    bool? enabled,
+    bool? byAgent,
+    DateTime? lastFiredAt,
+    bool clearLastFiredAt = false,
+    DateTime? nextFireAt,
+    bool clearNextFireAt = false,
+    int? requestCode,
+  }) =>
+      Trigger(
+        id: id,
+        name: name ?? this.name,
+        prompt: prompt ?? this.prompt,
+        source: source ?? this.source,
+        chatId: clearChatId ? null : (chatId ?? this.chatId),
+        project: project ?? this.project,
+        tempChatTtl: clearTempChatTtl ? null : (tempChatTtl ?? this.tempChatTtl),
+        enabled: enabled ?? this.enabled,
+        byAgent: byAgent ?? this.byAgent,
+        lastFiredAt: clearLastFiredAt ? null : (lastFiredAt ?? this.lastFiredAt),
+        nextFireAt: clearNextFireAt ? null : (nextFireAt ?? this.nextFireAt),
+        requestCode: requestCode ?? this.requestCode,
+      );
+
+  factory Trigger.fromJson(Map<String, dynamic> json) {
+    // The source is a map this build wrote, or the flat `at`/`repeat` keys an
+    // older one left on the trigger itself — the reminder shape. Held as
+    // schedule data rather than migrated: a legacy record is a trigger
+    // because the reader says so, the siblingOf bargain.
+    final raw = json["source"];
+    final source = raw is Map<String, dynamic>
+        ? _sourceFrom(raw)
+        : ScheduleSource(
+            at: _date(json["at"]) ?? DateTime(2026),
+            repeat: ScheduleRepeat.fromName(json["repeat"] as String?),
+          );
+    return Trigger(
+      id: json["id"] as String,
+      name: json["name"] as String? ?? "",
+      prompt: json["prompt"] as String? ?? "",
+      source: source,
+      chatId: json["chatId"] as String?,
+      project: json["project"] as String?,
+      tempChatTtl: TempChatTtl.fromNameNullable(json["tempChatTtl"] as String?) ??
+          // `temporary` is what a build before the TTL field wrote, and false
+          // there meant the one TTL a bool could name.
+          ((json["temporary"] as bool? ?? true) ? null : TempChatTtl.off),
+      byAgent: json["byAgent"] as bool? ?? false,
+      enabled: json["enabled"] as bool? ?? true,
+      lastFiredAt: _date(json["lastFiredAt"]),
+      nextFireAt: _date(json["nextFireAt"]),
+      requestCode: json["requestCode"] as int?,
+    );
+  }
+
+  static TriggerSource _sourceFrom(Map<String, dynamic> json) {
+    final kind = json["kind"] as String?;
+    return switch (kind) {
+      "timer" => TimerSource(
+          duration: Duration(seconds: json["seconds"] as int? ?? 0),
+          registeredAt: _date(json["registeredAt"]) ?? DateTime(2026),
+        ),
+      "file" => FileSource(
+          paths: [for (final p in json["paths"] as List? ?? const []) p as String],
+          events: {
+            for (final e in json["events"] as List? ?? const [])
+              FileEvent.fromName(e as String),
+            // Said nothing: everything.
+            if ((json["events"] as List?) == null) ...FileEvent.values,
+          },
+          cooldown: Duration(
+              seconds: json["cooldownSeconds"] as int? ??
+                  const Duration(seconds: 5).inSeconds),
+        ),
+        // An unknown kind is a file written by a later build: schedule
+        // is what a trigger used to be, and a fall back beats a lost list.
+        _ => ScheduleSource(
+            at: _date(json["at"]) ?? DateTime(2026),
+            repeat: ScheduleRepeat.fromName(json["repeat"] as String?),
+          ),
+    };
+  }
+
+  Map<String, dynamic> toJson() => {
+        "id": id,
+        "name": name,
+        "prompt": prompt,
+        "source": source.toJson(),
+        if (chatId != null) "chatId": chatId,
+        if (project != null) "project": project,
+        if (tempChatTtl != null) "tempChatTtl": tempChatTtl!.name,
+        if (byAgent) "byAgent": true,
+        if (!enabled) "enabled": false,
+        if (lastFiredAt != null) "lastFiredAt": lastFiredAt!.toIso8601String(),
+        if (nextFireAt != null) "nextFireAt": nextFireAt!.toIso8601String(),
+        if (requestCode != null) "requestCode": requestCode,
+      };
+
+  static DateTime? _date(Object? value) =>
+      value == null ? null : DateTime.tryParse(value as String);
+
+  /// Due now or overdue — both are catch-up's business. Null [nextFireAt] is
+  /// nothing armed: a fired one-shot, a timer gone, or a file source.
+  bool dueBy(DateTime after) =>
+      enabled && nextFireAt != null && !after.isBefore(nextFireAt!);
+
+  /// The first moment this source is next due after [after], through its
+  /// own arithmetic — what an editor preview and a re-enable read.
+  DateTime? nextOccurrence(DateTime after) => source.nextAfter(after);
+}

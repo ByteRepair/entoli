@@ -8,7 +8,7 @@ import "../core/config.dart";
 import "../core/platform/platform.dart"
     show createPromptSources, setupComplete;
 import "data/builtin/builtin_backend.dart";
-import "data/local/file_reminder_store.dart";
+import "data/local/file_trigger_store.dart";
 import "domain/app_icon.dart";
 import "domain/agent_backend.dart";
 import "domain/app_restart.dart";
@@ -38,10 +38,11 @@ import "domain/profile.dart";
 import "domain/project_settings.dart";
 import "domain/project.dart" show emptyChatQuestionFor, everyProject;
 import "domain/prompt_library.dart";
-import "domain/reminder.dart";
 import "domain/reminder_alarms.dart";
-import "domain/reminder_runner.dart";
-import "domain/reminder_scheduler.dart";
+import "domain/trigger.dart";
+import "domain/trigger_kinds.dart";
+import "domain/trigger_runner.dart";
+import "domain/trigger_manager.dart";
 import "domain/rootfs_store.dart";
 import "domain/shell.dart";
 import "data/sync/sync_hub.dart";
@@ -908,88 +909,102 @@ class AppHidden extends Notifier<bool> {
 /// not judged against the wall clock the suite happens to run on.
 final clockProvider = Provider<Clock>((ref) => const Clock());
 
-/// The user's reminders, seeded from disk before the container exists and
+/// The user's triggers, seeded from disk before the container exists and
 /// written through on every change — the same bargain [InstalledRootfs] makes.
-class Reminders extends Notifier<List<Reminder>> implements ReminderList {
-  Reminders(this._seed);
+class Triggers extends Notifier<List<Trigger>> implements TriggerList {
+  Triggers(this._seed);
 
-  final List<Reminder> _seed;
-  late FileReminderStore _store;
+  final List<Trigger> _seed;
+  late FileTriggerStore _store;
 
   @override
-  List<Reminder> build() {
-    _store = FileReminderStore(ref.watch(appConfigProvider));
+  List<Trigger> build() {
+    _store = FileTriggerStore(ref.watch(appConfigProvider));
     return _seed;
   }
 
   @override
-  List<Reminder> get reminders => state;
+  List<Trigger> get triggers => state;
 
   @override
-  Future<void> write(List<Reminder> reminders) async {
-    state = reminders;
-    await _store.save(reminders);
+  Future<void> write(List<Trigger> triggers) async {
+    state = triggers;
+    await _store.save(triggers);
   }
 
   @override
-  Future<void> replace(Reminder reminder) => write([
-        for (final r in state) if (r.id == reminder.id) reminder else r,
+  Future<void> replace(Trigger trigger) => write([
+        for (final t in state) if (t.id == trigger.id) trigger else t,
       ]);
 
   /// Add with its alarm request code assigned: the one place codes are handed
-  /// out, so they stay unique for the reminder's life.
-  Future<void> add(Reminder reminder) => write([
+  /// out, so they stay unique for the trigger's life.
+  Future<void> add(Trigger trigger) => write([
         ...state,
-        reminder.copyWith(requestCode: nextRequestCode(state)),
+        trigger.copyWith(requestCode: nextRequestCode(state)),
       ]);
 
   Future<void> remove(String id) =>
-      write([for (final r in state) if (r.id != id) r]);
+      write([for (final t in state) if (t.id != id) t]);
 
   Future<void> setEnabled(String id, bool enabled) async {
-    final at = state.indexWhere((r) => r.id == id);
+    final at = state.indexWhere((t) => t.id == id);
     if (at < 0) return;
-    final reminder = state[at];
-    final next = enabled ? reminder.nextOccurrence(ref.read(clockProvider).now()) : null;
-    // Disabling disarms it; re-enabling re-aims at the next occurrence.
-    await replace(reminder.copyWith(enabled: enabled, clearNextFireAt: true)
+    final trigger = state[at];
+    final next =
+        enabled ? trigger.nextOccurrence(ref.read(clockProvider).now()) : null;
+    // Disabling disarms it; re-enabling recomputes — a file trigger has
+    // nothing on the clock to re-arm, a repeating schedule its next
+    // occurrence, a one-shot past its time nothing.
+    await replace(trigger.copyWith(enabled: enabled, clearNextFireAt: true)
         .copyWith(nextFireAt: next));
   }
 }
 
-final remindersProvider =
-    NotifierProvider<Reminders, List<Reminder>>(() => Reminders(const []));
+final triggersProvider =
+    NotifierProvider<Triggers, List<Trigger>>(() => Triggers(const []));
 
-final reminderTurnDriverProvider =
-    Provider<ReminderTurnDriver>((ref) => throw UnimplementedError());
+final triggerTurnDriverProvider =
+    Provider<TriggerTurnDriver>((ref) => throw UnimplementedError());
 
-final reminderRunnerProvider = Provider<ReminderRunner>((ref) {
-  return ReminderRunner(
+final triggerRunnerProvider = Provider<TriggerRunner>((ref) {
+  return TriggerRunner(
     repo: ref.watch(chatRepositoryProvider),
-    driver: ref.watch(reminderTurnDriverProvider),
+    driver: ref.watch(triggerTurnDriverProvider),
+    alarms: ref.watch(reminderAlarmsProvider),
     onListChanged: (_) => ref.invalidate(chatListProvider),
-    onReminderFired: (reminder) =>
-        ref.read(remindersProvider.notifier).replace(reminder),
+    onTriggerFired: (trigger) =>
+        ref.read(triggersProvider.notifier).replace(trigger),
     clock: ref.watch(clockProvider),
   );
 });
 
 /// Started once beside the sweep timer. It listens to the list from here, so
-/// an edit anywhere re-arms the timer and re-syncs the alarms without the
-/// editor having to know the scheduler exists.
-final reminderSchedulerProvider = Provider<ReminderScheduler>((ref) {
-  final scheduler = ReminderScheduler(
-    alarms: ref.watch(reminderAlarmsProvider),
-    runner: ref.watch(reminderRunnerProvider),
-    list: ref.watch(remindersProvider.notifier),
+/// an edit anywhere rebuilds every kind's watch without the editor having to
+/// know the kinds exist. The registry — the kinds that exist, in the order
+/// they answer the source picker — is built here rather than held as a
+/// constant, because each kind takes its port.
+final triggerManagerProvider = Provider<TriggerManager>((ref) {
+  final alarms = ref.watch(reminderAlarmsProvider);
+  final manager = TriggerManager(
+    kinds: [
+      ScheduleKind(alarms),
+      TimerKind(alarms),
+      // FileKind rides in with commit 3; the registry line is what adding a
+      // source costs.
+      // FileKind(fileWatches: platformFileWatches()),
+    ],
+    alarmPort: alarms,
+    runner: ref.watch(triggerRunnerProvider),
+    list: ref.watch(triggersProvider.notifier),
     projects: () => ref.read(chatRepositoryProvider).listProjects(),
     clock: ref.watch(clockProvider),
   );
-  ref.onDispose(scheduler.dispose);
-  ref.listen(remindersProvider, (_, _) {
-    unawaited(scheduler.reload());
+  ref.onDispose(manager.dispose);
+  ref.listen(triggersProvider, (_, _) {
+    unawaited(manager.reload());
   });
-  return scheduler;
+  return manager;
 });
 
 final chatRepositoryProvider = Provider<ChatRepository>((ref) {

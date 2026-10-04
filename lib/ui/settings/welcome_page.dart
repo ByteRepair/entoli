@@ -348,11 +348,11 @@ class _ExtrasPage extends StatelessWidget {
           category: SettingsCategory.byteRepair,
         ),
         _SetupRow(
-          title: "Reminders",
+          title: "Triggers",
           detail:
-              "A prompt sent to a new chat at a time you pick, even when the "
-              "app is closed. Android only.",
-          category: SettingsCategory.reminders,
+              "A prompt sent to a chat at a time you pick, a countdown, or a "
+              "file changing, even when the app is closed.",
+          category: SettingsCategory.triggers,
         ),
         _SetupRow(
           title: "Voice",

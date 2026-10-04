@@ -30,7 +30,7 @@ import "package:agent_chat/domain/local_model_store.dart";
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/domain/prompt_library.dart";
 import "package:agent_chat/domain/reminder_alarms.dart";
-import "package:agent_chat/domain/reminder_runner.dart";
+import "package:agent_chat/domain/trigger_runner.dart";
 import "package:agent_chat/domain/voice.dart";
 import "package:agent_chat/domain/voice_model.dart";
 import "package:agent_chat/domain/download.dart";
@@ -273,10 +273,10 @@ class FakeAssistantLaunch implements AssistantLaunch {
   }
 }
 
-/// The system clock a reminder is set against, with the answers a test wants
+/// The alarm port a trigger is set against, with the answers a test wants
 /// to control. [fire] and [tap] are the two things Android does on its own:
 /// an alarm going off, and a notification being tapped.
-class FakeReminderAlarms implements ReminderAlarms {
+class FakeReminderAlarms implements ReminderAlarms {  // ignore: duplicate-ignore
   FakeReminderAlarms({this.available = true, this.schedulesOverride});
 
   @override
@@ -1343,17 +1343,17 @@ class LoopbackChannel implements ByteChannel {
   }
 }
 
-/// A [ReminderTurnDriver] that records what it was asked and returns a canned
+/// A [TriggerTurnDriver] that records what it was asked and returns a canned
 /// result. The runner's unit tests care about the orchestration — chat
 /// creation, stamping, the sidebar — not the turn itself, which is
 /// [ChatController]'s job and tested through it.
-class FakeReminderTurnDriver implements ReminderTurnDriver {
+class FakeTriggerTurnDriver implements TriggerTurnDriver {
   final List<({String chatId, String prompt})> calls = [];
-  ReminderOutcome outcome = ReminderOutcome.done;
+  TriggerOutcome outcome = TriggerOutcome.done;
   String snippet = "";
 
   @override
-  Future<({ReminderOutcome outcome, String snippet})> send(
+  Future<({TriggerOutcome outcome, String snippet})> send(
       String chatId, String prompt) async {
     calls.add((chatId: chatId, prompt: prompt));
     return (outcome: outcome, snippet: snippet);

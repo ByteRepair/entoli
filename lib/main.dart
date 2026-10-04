@@ -10,7 +10,7 @@ import "core/platform/app_icon.dart";
 import "core/platform/background_work.dart";
 import "core/platform/platform.dart" as platform;
 import "core/platform/system_palette.dart";
-import "data/local/file_reminder_store.dart";
+import "data/local/file_trigger_store.dart";
 import "data/local/file_selector_picker.dart";
 import "data/prompts/bundled_skills.dart";
 import "data/sync/file_devices.dart";
@@ -27,13 +27,13 @@ import "ui/chat/remote_turns.dart";
 import "ui/app_shell.dart";
 import "ui/welcome_gate.dart";
 import "ui/chat/chat_controller.dart";
-import "ui/chat/reminder_turn_driver.dart";
+import "ui/chat/trigger_turn_driver.dart";
 import "ui/assistant/incoming_assistant.dart";
 import "ui/focus_follows_keyboard.dart";
 import "ui/fonts.dart";
 import "ui/link_opener.dart";
 import "ui/share/incoming_shares.dart";
-import "ui/reminders/incoming_open.dart";
+import "ui/triggers/incoming_open.dart";
 import "ui/sidebar/sidebar.dart";
 import "ui/theme.dart";
 
@@ -165,7 +165,7 @@ class AppSession {
     // first. Both at once — they are two directories and neither needs the
     // other.
     final scans = await Future.wait([rootfs.installed(), localModels.installed()]);
-    final reminders = await FileReminderStore(config).load();
+    final triggers = await FileTriggerStore(config).load();
     // Started before the identity load and awaited below, so the session-bus
     // connect on Linux overlaps it rather than serialising behind it; nothing
     // between depends on the answer.
@@ -215,9 +215,9 @@ class AppSession {
         fileHandoffProvider.overrideWithValue(handoff),
         assistantLaunchProvider.overrideWithValue(platform.createAssistantLaunch()),
         reminderAlarmsProvider.overrideWithValue(await alarms),
-        remindersProvider.overrideWith(() => Reminders(reminders)),
-        reminderTurnDriverProvider
-            .overrideWith((ref) => ChatControllerReminderTurnDriver(ref)),
+        triggersProvider.overrideWith(() => Triggers(triggers)),
+        triggerTurnDriverProvider
+            .overrideWith((ref) => ChatControllerTriggerTurnDriver(ref)),
         backupHandoffProvider
             .overrideWithValue(platform.createBackupHandoff(config, handoff)),
         appRestartProvider.overrideWithValue(relaunch),
@@ -276,7 +276,7 @@ class AppSession {
     await sweep();
     // Started, not awaited: catch-up can run turns, and startup must not wait
     // on a model. Whatever it finds overdue was already stamped fired.
-    unawaited(container.read(reminderSchedulerProvider).start());
+    unawaited(container.read(triggerManagerProvider).start());
     return AppSession._(
       container,
       Timer.periodic(const Duration(minutes: 30), (_) => sweep()),
@@ -443,7 +443,7 @@ class _AgentChatAppState extends ConsumerState<AgentChatApp> {
       home: const FocusFollowsKeyboard(
         child: IncomingAssistant(
           child: IncomingShares(
-            child: IncomingReminderOpen(child: WelcomeGate(child: AppShell())),
+            child: IncomingTriggerOpen(child: WelcomeGate(child: AppShell())),
           ),
         ),
       ),
