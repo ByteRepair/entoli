@@ -121,68 +121,46 @@ class _AgentsSectionState extends ConsumerState<AgentsSection> {
   /// agent where it was, or in both copies if only the delete failed. A
   /// mention already written into a conversation keeps the meaning it was
   /// recorded with; a new mention of the old name is the only thing a rename
-  /// loses.
+  /// loses. The collision that stops a rename is the editor's to show — it is
+  /// the layer the field is on — so only an add confirms here.
   Future<void> _save(AgentEdit edit, {required String? previous}) async {
     if (!isFolderName(edit.name)) {
       _say("That name cannot be a file name.");
       return;
     }
     final config = ref.read(appConfigProvider);
-    if (previous != null && previous != edit.name) {
-      final renamed = await config.fs
+    if (previous == null) {
+      final exists = await config.fs
           .file(agentFilePath(config, edit.name, project: widget.project))
           .exists();
       if (!mounted) return;
-      if (renamed) {
-        _say("${edit.name} is already an agent here.");
-        return;
+      if (exists) {
+        final confirmed = await confirm(
+          context,
+          title: "Replace ${edit.name}?",
+          message: "An agent with that name is already installed. Saving this one "
+              "replaces it.",
+          confirmLabel: "Replace",
+        );
+        if (!confirmed) return;
       }
     }
-    final exists = await config.fs
-        .file(agentFilePath(config, edit.name, project: widget.project))
-        .exists();
-    if (!mounted) return;
-    if (previous == null && exists) {
-      final confirmed = await confirm(
-        context,
-        title: "Replace ${edit.name}?",
-        message: "An agent with that name is already installed. Saving this one "
-            "replaces it.",
-        confirmLabel: "Replace",
-      );
-      if (!confirmed) return;
-    }
 
-    await _guard(() async {
-      final config = ref.read(appConfigProvider);
-      await platform.withWritableDir(
-        config.promptsDir(CompletionKind.agent, project: widget.project),
-        () async {
-          final file =
-              config.fs.file(agentFilePath(config, edit.name, project: widget.project));
-          await file.create(recursive: true);
-          await file.writeAsString(
-            PromptDocument.toSource(description: edit.description, body: edit.body),
-          );
-          if (previous != null && previous != edit.name) {
-            await config.fs
-                .file(agentFilePath(config, previous, project: widget.project))
-                .delete();
-          }
-        },
-      );
-      await _reload();
-      await _scan();
-      final renamed = previous != null && previous != edit.name;
-      _say(renamed ? "Renamed $previous to ${edit.name}." : "Saved ${edit.name}.");
-    });
+    await _write(
+      edit.name,
+      PromptDocument.toSource(description: edit.description, body: edit.body),
+      "Saved ${edit.name}.",
+      removes: previous,
+    );
   }
 
-  /// The one write an import makes, with the library reload and directory
-  /// rescan that land it on the list. The editor's save writes inline: a
-  /// rename has an old file to take away in the same pass. The create is
+  /// The one write an agent page makes — editor save or import alike — with
+  /// the library reload and directory rescan that land it on the list.
+  /// [removes] names the file a rename takes away, written over first so a
+  /// failure halfway leaves the agent where it was. The create is
   /// load-bearing: `writeAsString` does not make parents.
-  Future<void> _write(String name, String source, String said) =>
+  Future<void> _write(String name, String source, String said,
+          {String? removes}) =>
       _guard(() async {
         final config = ref.read(appConfigProvider);
         await platform.withWritableDir(
@@ -192,6 +170,11 @@ class _AgentsSectionState extends ConsumerState<AgentsSection> {
                 config.fs.file(agentFilePath(config, name, project: widget.project));
             await file.create(recursive: true);
             await file.writeAsString(source);
+            if (removes != null && removes != name) {
+              await config.fs
+                  .file(agentFilePath(config, removes, project: widget.project))
+                  .delete();
+            }
           },
         );
         await _reload();
