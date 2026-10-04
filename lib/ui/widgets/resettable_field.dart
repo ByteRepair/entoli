@@ -66,17 +66,25 @@ class ResettableField extends StatelessWidget {
   }
 }
 
-/// A settings field under its caption. Shared so the two settings pages cannot
-/// drift apart on spacing.
+/// A settings field under its caption. Shared so the settings pages cannot
+/// drift apart on spacing. [padding] is for the caller whose page already
+/// insets itself — the agent editor's ListView carries the 16 — and defaults
+/// to the settings row's own.
 class LabelledField extends StatelessWidget {
-  const LabelledField({super.key, required this.label, required this.child});
+  const LabelledField({
+    super.key,
+    required this.label,
+    required this.child,
+    this.padding = const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+  });
 
   final String label;
   final Widget child;
+  final EdgeInsets padding;
 
   @override
   Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        padding: padding,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [

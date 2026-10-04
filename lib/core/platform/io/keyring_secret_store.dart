@@ -35,14 +35,14 @@ class KeyringSecretStore implements SecretStore {
   };
 
   final SecretStore _fallback;
-  FreeDesktopSecret? _service;
+  SecretServiceClient? _service;
   var _probed = false;
 
-  Future<FreeDesktopSecret?> _probe() async {
+  Future<SecretServiceClient?> _probe() async {
     if (_probed) return _service;
     _probed = true;
     try {
-      final service = FreeDesktopSecret();
+      final service = SecretServiceClient();
       await service.initialize();
       _service = service;
     } catch (_) {
