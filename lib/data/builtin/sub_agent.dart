@@ -210,6 +210,7 @@ class SubAgentRunner {
           case ShellOutputEvent():
           case StepLimitEvent():
           case InfoEvent():
+          case InstructionsReadEvent():
           case DoneEvent():
             break;
         }

@@ -5,6 +5,7 @@ import "package:fs_shim/fs_io.dart" show fileSystemIo;
 import "package:path/path.dart" as p;
 
 import "package:agent_chat/data/builtin/memory/instructions.dart";
+import "package:agent_chat/domain/models.dart";
 
 void main() {
   late Directory tmp;
