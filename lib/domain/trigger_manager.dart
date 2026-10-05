@@ -10,9 +10,7 @@ import "trigger_runner.dart";
 /// The seam the trigger tools reach, one per chat: the backend builds it
 /// with the chat's own id, so the tools carry no chat id of their own — a
 /// worker is withheld the registry outright, which is where a "whose chat"
-/// question could not have an answer anyway. `clock` rides it because a
-/// registration is a now-anchored fact and the registry, not the agent, is
-/// where what clock to read has been decided (the app's, or a test's).
+/// question could not have an answer anyway.
 abstract interface class TriggerRegistry {
   /// A fresh id (and request code where the source wants one), armed
   /// against now, in the chat this registry answers for. Answers what was
@@ -83,14 +81,15 @@ class TriggerManager {
   final ReminderAlarms alarmPort;
   final TriggerRuns runner;
   final TriggerList list;
+
+  /// The projects that exist, asked only when a fire has to name a new
+  /// chat's project — a chat-targeted fire resolves nothing in it.
   final Future<List<String>> Function() projects;
   final Clock clock;
 
   /// What a completion notification titles where the trigger carries no
-  /// name. A method rather than a constant because a legacy reminder falls
-  /// back on "Reminder", which is its word, not the manager's.
-  String nameOf(Trigger trigger) =>
-      trigger.name.isEmpty ? "Reminder" : trigger.name;
+  /// name. One wording, [Trigger.title]'s; there is no second copy.
+  String nameOf(Trigger trigger) => trigger.title;
 
   StreamSubscription<void>? _nudges;
   final Map<TriggerKind, StreamSubscription<TriggerFire>> _watches = {};
@@ -98,6 +97,16 @@ class TriggerManager {
   /// Triggers with a turn running. A second watcher arriving while one is
   /// under way finds the id here and stands down.
   final Set<String> _runningIds = {};
+
+  /// The fires this generation of watches has delivered and not finished —
+  /// one future to await, so a reload's caller settles what *its* watches
+  /// opened with rather than only starting it. Reset when the watches are
+  /// rebuilt: a previous generation's outstanding turn is the single-flight
+  /// set's business (a later watcher stands down against it), not this
+  /// reload's to wait behind. Contained all the same: the provider's own
+  /// listen calls reload unawaited, so a run that hangs hangs only the
+  /// drain that opened it, and nothing the user typed waits on it.
+  Future<void> _delivered = Future.value();
 
   /// Started once; it wires itself up rather than waiting to be watched.
   Future<void> start() async {
@@ -116,13 +125,19 @@ class TriggerManager {
   /// The kind whose source this trigger carries, or null — a source this
   /// build does not know (one written by a later build, or one the registry
   /// holds no entry for) has no behaviour to ask.
-  TriggerKind? _kindOf(Trigger trigger) => kinds
-      .cast<TriggerKind?>()
-      .firstWhere((kind) => kind!.matches(trigger), orElse: () => null);
+  TriggerKind? _kindOf(Trigger trigger) {
+    for (final kind in kinds) {
+      if (kind.matches(trigger)) return kind;
+    }
+    return null;
+  }
 
   /// The list changed: rebuild the kinds' watches — each diffing its own
   /// alarms, catching up its own past-due fires, and aiming its own timer —
-  /// then release the launch's hold.
+  /// then release the launch's hold. [awaitStarted] is what keeps the
+  /// release after whatever the watches report: a pump would cover the
+  /// microtasks and nothing else, and a watch still parked on a MethodChain
+  /// round trip's catch-up would then be released under.
   ///
   /// The release at the end is for the launch this is the first call of: an
   /// alarm that woke the process holds it, and by here whatever it woke us
@@ -134,64 +149,58 @@ class TriggerManager {
   /// receiver's hold before the turn's own foreground-service hold has
   /// registered. See "Waking for a reminder" in `android/CLAUDE.md`.
   Future<void> reload() async {
-    _rewatch();
-    await _drainWatches();
-    if (_runningIds.isEmpty) await alarmPort.doneFiring();
-  }
-
-  /// Every kind's watch rebuilt from the list as it stands. A kind's watch
-  /// answers synchronously begun; the fires it starts with — catch-up — are
-  /// drained before this returns, so `start()` has run what was overdue by
-  /// the time the caller moves on.
-  void _rewatch() {
+    final started = <Future<void>>[];
     for (final sub in _watches.values) {
       unawaited(sub.cancel());
     }
     _watches.clear();
+    // This generation's drain starts here: what the last one opened and
+    // never finished is not waited on a second time (see _delivered).
+    _delivered = Future.value();
     for (final kind in kinds) {
       final ofKind = [
         for (final t in list.triggers)
           if (kind.matches(t) && kind.armed(t)) t,
       ];
-      _watches[kind] = kind.watch(ofKind, clock).listen(_onFire);
+      final watch = kind.watch(ofKind, clock);
+      started.add(watch.started);
+      _watches[kind] = watch.stream.listen(_onFire);
     }
+    for (final future in started) {
+      await future;
+    }
+    // The catch-up fires settled to their claims — the claim is the
+    // synchronous head of every fire path, so the one pump the deliveries
+    // need (a non-sync controller queues them) is all the window this
+    // closes. A run hanging beyond that is what the single-flight set and
+    // its own list stamp answer for; awaiting one here would hang every
+    // edit behind it.
+    await _delivered;
+    await Future<void>.delayed(Duration.zero);
+    if (_runningIds.isEmpty) await alarmPort.doneFiring();
   }
 
-  /// Wait out the fires a rebuilt watch opens with — catch-up — so reload's
-  /// caller comes back to a settled room. The watches' buffers hold later
-  /// fires for the next drain; catch-up is these alone.
-  Future<void> _drainWatches() async {
-    // One round: a fire's own stamp re-enters reload, which rebuilds the
-    // watches again; the single-flight set makes a true re-fire a stand-down.
-    await _pump();
-  }
-
-  /// Let every watch's streamed fires be delivered, then stop.
-  Future<void> _pump() => Future<void>.delayed(Duration.zero);
-
+  /// A watch's stream delivers; the fire's work runs from here, chained so
+  /// a settle below has the one future everything outstanding hangs off.
   void _onFire(TriggerFire fire) {
-    unawaited(_handle(fire));
-  }
-
-  Future<void> _handle(TriggerFire fire) async {
-    final trigger = list.triggers.where((t) => t.id == fire.triggerId).firstOrNull;
-    if (trigger == null) return;
-    await _fire(trigger, fire);
+    _delivered = _delivered.then((_) => _fire(fire));
   }
 
   /// The system nudged while Dart was not listening — or while it was,
   /// which is the same news either way. The ids the alarm stashed are the
   /// fires it noticed; the kind's own catch-up is its own business (and
   /// watches were just rebuilt if anything changed), so this claims what
-  /// the system named and no more.
+  /// the system named and no more. The reason is the kind's — the same
+  /// words a timer-spotted fire would carry — for the same fire to say the
+  /// same thing about itself whichever watcher won the race.
   Future<void> onNudged() async {
     final ids = await alarmPort.takeFired();
     if (ids.isEmpty) return;
     for (final id in ids) {
-      final trigger =
-          list.triggers.where((t) => t.id == id).firstOrNull;
+      final trigger = list.triggers.where((t) => t.id == id).firstOrNull;
       if (trigger == null) continue;
-      await _fire(trigger, TriggerFire(trigger.id, "woken by the system clock"));
+      final reason = _kindOf(trigger)?.reasonOf(trigger) ?? "the clock reached its time";
+      await _fire(TriggerFire(trigger.id, reason));
     }
     // The receiver held the process for these; they are dealt with now, one
     // way or the other — unless one is still running, in which case its turn
@@ -202,69 +211,94 @@ class TriggerManager {
   }
 
   /// One fire of one trigger, whatever kind said it was due. The whole of
-  /// what every source has in common, and the only place that runs a turn.
-  Future<void> _fire(Trigger trigger, TriggerFire fire) async {
+  /// what every source has in common, and the only place that runs a turn
+  /// — and the only place that answers for one: the notification, the
+  /// stamp, and the disarm of a trigger whose target has gone all land
+  /// here, where the copy being replaced is the one the fire was decided
+  /// on.
+  Future<void> _fire(TriggerFire fire) async {
+    final trigger =
+        list.triggers.where((t) => t.id == fire.triggerId).firstOrNull;
+    if (trigger == null) return;
     // Claimed before the first await, not after: asking the platform whether
     // it can hold us is a round trip, and two watchers either side of it
     // would both find nothing running and both start a turn.
     if (!_runningIds.add(trigger.id)) return;
-    var fireLate = false;
+    final kind = _kindOf(trigger);
     try {
-      fireLate = fire.lateFire;
-      final kind = _kindOf(trigger);
       // A fire the platform will not hold is handed back to its alarm rather
       // than run — the kind knows whether there is one to hand back to.
       if (kind != null && await kind.defer(trigger)) return;
       kind?.ran(trigger);
-      final result = await runner.run(trigger, fire.reason, await projects());
+      final result =
+          await runner.run(trigger, fire.reason, await projects());
+      if (result.targetGone) {
+        // The chat a trigger pointed at has been deleted (a swept temp chat
+        // among them): the trigger is disarmed here rather than left armed
+        // against a chat that no longer exists — and rather than re-pointed
+        // at some other conversation. The runner words the notification; the
+        // stamp here is the disarm landing, from the copy this fire
+        // decided on, so nothing re-arms what it just switched off.
+        await list.replace(trigger.copyWith(
+            enabled: false, clearNextFireAt: true));
+        return;
+      }
+      final now = clock.now();
+      // How late the fire was is said once, from the one nextFireAt the
+      // fire was due at — the nudge's and the catch-up's the same, no
+      // watcher's race deciding the wording.
+      final late =
+          now.difference(trigger.nextFireAt ?? now) > ClockKind.late;
       await alarmPort.notify(
         title: nameOf(trigger),
         body: switch (result.outcome) {
           TriggerOutcome.done when result.snippet.isNotEmpty =>
-            fireLate ? "Ran late.\n\n${result.snippet}" : result.snippet,
-          TriggerOutcome.done => fireLate ? "Ran late. Finished." : "Finished.",
+            late ? "Ran late.\n\n${result.snippet}" : result.snippet,
+          TriggerOutcome.done => late ? "Ran late. Finished." : "Finished.",
           TriggerOutcome.error =>
-            fireLate ? "Ran late. The task failed." : "The task failed.",
+            late ? "Ran late. The task failed." : "The task failed.",
           TriggerOutcome.aborted => "The task was stopped.",
         },
         chatId: result.chatId,
       );
-      final now = clock.now();
       final next = kind?.nextFire(trigger, now);
-      final fired = trigger.copyWith(lastFiredAt: now, clearNextFireAt: true);
+      // The stamp is the runner's — it went in before the turn ran (that is
+      // the field's contract) — so this replacement is a delta on the list's
+      // current record, not a write from the fire's own stale copy: it
+      // advances what the watches build on (`nextFireAt`) and carries
+      // forward whatever the turn path stamped.
+      final current =
+          list.triggers.where((t) => t.id == trigger.id).firstOrNull ?? trigger;
+      final fired = current.copyWith(clearNextFireAt: true);
       await list.replace(next == null ? fired : fired.copyWith(nextFireAt: next));
-      // The replacement is what the kinds' watches rebuild on: the provider
-      // listening to its own list re-enters reload — and so a repeating
-      // trigger's next occurrence is watched by the new watch, not this one.
-      await reload();
     } finally {
       _runningIds.remove(trigger.id);
     }
   }
 }
+
 /// The chat-scoped face the agent's turn is handed: one chat's registry,
 /// over the whole list. The tools ask and answer in this chat's vocabulary;
 /// the list stays one, and the provider's reload is what watches a
 /// registration the moment it lands.
 class ChatTriggerRegistry implements TriggerRegistry {
-  ChatTriggerRegistry({required this.owner, required this.chatId, required this.now});
+  ChatTriggerRegistry(this._owner, this.chatId);
 
-  final TriggerRegistryOwner owner;
+  final TriggerRegistryOwner _owner;
   final String chatId;
-  final DateTime Function() now;
 
   @override
   Future<Trigger> register({required TriggerSource source, required String prompt, String? name}) =>
-      owner.registerFor(chatId, source: source, prompt: prompt, name: name);
+      _owner.registerFor(chatId, source: source, prompt: prompt, name: name);
 
   @override
   Future<List<Trigger>> own() async => [
-        for (final t in await owner.triggers())
+        for (final t in await _owner.triggers())
           if (t.byAgent && t.chatId == chatId) t,
       ];
 
   @override
-  Future<void> remove(String id) => owner.remove(id);
+  Future<void> remove(String id) => _owner.remove(id);
 }
 
 /// What a [ChatTriggerRegistry] acts through — the provider's notifier, or
@@ -278,24 +312,6 @@ abstract interface class TriggerRegistryOwner {
   Future<void> remove(String id);
 }
 
-/// The adapter handed out before the container exists and only read from a
-/// running app — `main`'s `late final` in one class: the lookup is called
-/// at first use, by which point the real one is assigned.
-class DeferredTriggerRegistryOwner implements TriggerRegistryOwner {
-  DeferredTriggerRegistryOwner(this._lookup);
-
-  final TriggerRegistryOwner Function() _lookup;
-
-  TriggerRegistryOwner get _owner => _lookup();
-
-  @override
-  Future<List<Trigger>> triggers() => _owner.triggers();
-
-  @override
-  Future<Trigger> registerFor(String chatId,
-          {required TriggerSource source, required String prompt, String? name}) =>
-      _owner.registerFor(chatId, source: source, prompt: prompt, name: name);
-
-  @override
-  Future<void> remove(String id) => _owner.remove(id);
-}
+/// What the backend holds: a registry per chat, built where the turn asks
+/// for one — one function rather than an adapter class per layer.
+typedef TriggerRegistryFactory = TriggerRegistry Function(String chatId);

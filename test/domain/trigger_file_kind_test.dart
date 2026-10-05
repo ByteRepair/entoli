@@ -1,30 +1,10 @@
-import "dart:async";
-
 import "package:clock/clock.dart";
 import "package:flutter_test/flutter_test.dart";
 
-import "package:agent_chat/domain/file_watches.dart";
 import "package:agent_chat/domain/trigger.dart";
 import "package:agent_chat/domain/trigger_kinds.dart";
 
-/// The watcher a test drives: events it [push]es, against a root it
-/// remembers being asked for.
-class FakeFileWatches implements FileWatches {
-  final roots = <String>[];
-
-  final _events = StreamController<FileWatchEvent>.broadcast();
-
-  void push(FileWatchEvent event) => _events.add(event);
-
-  @override
-  bool get available => true;
-
-  @override
-  Stream<FileWatchEvent> watch(String root) {
-    roots.add(root);
-    return _events.stream;
-  }
-}
+import "../fakes.dart";
 
 final _now = Clock.fixed(DateTime(2026, 8, 23, 9));
 
@@ -78,7 +58,7 @@ void main() {
     final fires = kind().watch(
         [fileTrigger(id: "a"), fileTrigger(id: "b", paths: ["notes/"])], _now);
     // The stream subscribes lazily on await; poke it with a first-listen.
-    final sub = fires.listen((_) {});
+    final sub = fires.stream.listen((_) {});
     await pumpEventQueue();
     expect(watches.roots.where((r) => r == "/ws/notes/"), hasLength(1));
 
@@ -91,11 +71,10 @@ void main() {
     final fires = kind().watch(
         [fileTrigger(id: "a"), fileTrigger(id: "b", paths: ["notes/todo.md"])],
         _now);
-    final sub = fires.listen(collected.add);
+    final sub = fires.stream.listen(collected.add);
     await pumpEventQueue();
 
-    watches.push(const FileWatchEvent(
-        path: "/ws/notes/todo.md", kind: FileEventKind.modify));
+    watches.push("/ws/notes/todo.md", FileEvent.change);
     await pumpEventQueue();
 
     expect(collected.map((f) => f.triggerId), containsAll(["a", "b"]));
@@ -107,16 +86,14 @@ void main() {
     final collected = <TriggerFire>[];
     final fires = kind()
         .watch([fileTrigger(id: "a", events: {FileEvent.change})], _now);
-    final sub = fires.listen(collected.add);
+    final sub = fires.stream.listen(collected.add);
     await pumpEventQueue();
 
-    watches.push(const FileWatchEvent(
-        path: "/ws/notes/a.md", kind: FileEventKind.delete));
+    watches.push("/ws/notes/a.md", FileEvent.delete);
     await pumpEventQueue();
     expect(collected, isEmpty);
 
-    watches.push(const FileWatchEvent(
-        path: "/ws/notes/a.md", kind: FileEventKind.modify));
+    watches.push("/ws/notes/a.md", FileEvent.change);
     await pumpEventQueue();
     expect(collected, hasLength(1));
     await sub.cancel();
@@ -126,14 +103,12 @@ void main() {
     final collected = <TriggerFire>[];
     final fires = kind().watch(
         [fileTrigger(id: "a", cooldown: const Duration(minutes: 1))], _now);
-    final sub = fires.listen(collected.add);
+    final sub = fires.stream.listen(collected.add);
     await pumpEventQueue();
 
-    watches.push(const FileWatchEvent(
-        path: "/ws/notes/a.md", kind: FileEventKind.modify));
+    watches.push("/ws/notes/a.md", FileEvent.change);
     await pumpEventQueue();
-    watches.push(const FileWatchEvent(
-        path: "/ws/notes/b.md", kind: FileEventKind.modify));
+    watches.push("/ws/notes/b.md", FileEvent.change);
     await pumpEventQueue();
 
     expect(collected, hasLength(1));
@@ -144,11 +119,10 @@ void main() {
     final collected = <TriggerFire>[];
     final fires =
         kind().watch([fileTrigger(id: "a", paths: ["notes"])], _now);
-    final sub = fires.listen(collected.add);
+    final sub = fires.stream.listen(collected.add);
     await pumpEventQueue();
 
-    watches.push(const FileWatchEvent(
-        path: "/ws/notes/build.log", kind: FileEventKind.delete));
+    watches.push("/ws/notes/build.log", FileEvent.delete);
     await pumpEventQueue();
 
     expect(collected.single.reason, contains("build.log"));

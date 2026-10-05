@@ -6,6 +6,7 @@ import "package:flutter_markdown_plus/flutter_markdown_plus.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:uuid/uuid.dart";
 
+import "../../domain/date_words.dart" show describeFire, shortDate, timeOfDay;
 import "../../domain/project.dart";
 import "../../domain/trigger.dart";
 import "../../domain/temp_chat_ttl.dart";
@@ -13,7 +14,7 @@ import "../../providers.dart";
 import "../chat/widgets/code_block.dart";
 import "../chat/widgets/reply_style.dart";
 import "../widgets/completion_field.dart";
-import "../widgets/dialogs.dart" show confirm;
+import "../widgets/dialogs.dart" show confirm, promptForText;
 import "../widgets/resettable_field.dart";
 import "../widgets/section_header.dart";
 import "../widgets/temp_chat_ttl_field.dart";
@@ -347,20 +348,28 @@ class _TriggerEditorPageState extends ConsumerState<TriggerEditorPage> {
         FileSource() => _SourceKind.file,
       };
 
-  /// A fresh source of the kind just picked, so switching kinds does not
-  /// carry one kind's data into another's row.
+  /// What each kind's rows hold while the other kind is showing — one slot
+  /// per kind, filled as its rows are edited. Written when a kind is left
+  /// as well as when its own row changes, so switching to Countdown and
+  /// back keeps what was typed rather than reading the trigger's original
+  /// once and losing every edit in between.
+  final _kept = <_SourceKind, TriggerSource>{};
+
+  /// A source of the kind just picked: this kind's kept state when there is
+  /// any, else what the trigger was saved with, else the kind's default.
   TriggerSource _sourceFor(_SourceKind kind) {
-    final current = widget.trigger?.source;
+    _kept[_kindOf(_source)] ??= _source;
+    return _kept[kind] ?? _keptFor(kind);
+  }
+
+  TriggerSource _keptFor(_SourceKind kind) {
+    final saved = widget.trigger?.source;
+    if (saved != null && _kindOf(saved) == kind) return saved;
     return switch (kind) {
-      _SourceKind.schedule => current is ScheduleSource
-          ? current
-          : ScheduleSource(at: _defaultAt()),
-      _SourceKind.timer => current is TimerSource
-          ? current
-          : TimerSource(
-              duration: const Duration(minutes: 30),
-              registeredAt: _clock.now()),
-      _SourceKind.file => current is FileSource ? current : const FileSource(paths: []),
+      _SourceKind.schedule => ScheduleSource(at: _defaultAt()),
+      _SourceKind.timer => TimerSource(
+          duration: const Duration(minutes: 30), registeredAt: _clock.now()),
+      _SourceKind.file => const FileSource(paths: []),
     };
   }
 
@@ -412,8 +421,7 @@ class _TriggerEditorPageState extends ConsumerState<TriggerEditorPage> {
               child: ListTile(
                 contentPadding: EdgeInsets.zero,
                 leading: const Icon(Icons.timer_outlined, size: 18),
-                title: Text(_TriggerEditorPageState.timerWords(
-                    (_source as TimerSource).duration)),
+                title: Text((_source as TimerSource).describe()),
                 subtitle: const Text("Countdown from being registered"),
                 onTap: _pickDuration,
               ),
@@ -429,18 +437,18 @@ class _TriggerEditorPageState extends ConsumerState<TriggerEditorPage> {
 
   Future<void> _pickDuration() async {
     final current = (_source as TimerSource).duration;
-    final minutes = await showInputDialog(
+    final minutes = await promptForText(
       context,
       title: "Countdown",
-      label: "Minutes",
-      initial: (current.inMinutes).toString(),
+      initial: "${current.inMinutes}",
+      confirmLabel: "Set",
+      hint: "Minutes",
     );
-    if (minutes == null) return;
+    if (!mounted || minutes == null) return;
     final parsed = int.tryParse(minutes);
     if (parsed == null || parsed <= 0) return;
     setState(() => _source = TimerSource(
         duration: Duration(minutes: parsed), registeredAt: _clock.now()));
-    if (!mounted) return;
   }
 
   Future<void> _editPrompt() async {
@@ -562,16 +570,6 @@ class _TriggerEditorPageState extends ConsumerState<TriggerEditorPage> {
     if (!mounted) return;
     Navigator.of(context).pop();
   }
-
-  /// The countdown in the editor's own words, from the tool's too — one
-  /// wording of a duration, wherever one is described.
-  static String timerWords(Duration duration) {
-    final minutes = duration.inMinutes;
-    if (minutes < 60) return "In $minutes minutes";
-    final hours = duration.inHours;
-    final leftover = minutes % 60;
-    return leftover == 0 ? "In $hours hours" : "In $hours h $leftover min";
-  }
 }
 
 enum _SourceKind { schedule, timer, file }
@@ -677,38 +675,6 @@ class _FileSourceFieldState extends ConsumerState<FileSourceField> {
   }
 }
 
-/// A one-line text dialog, for the countdown's minutes. Nothing else on this
-/// page wants one, which is why it lives this close to its one caller.
-Future<String?> showInputDialog(
-  BuildContext context, {
-  required String title,
-  required String label,
-  String? initial,
-}) async {
-  final controller = TextEditingController(text: initial ?? "");
-  final value = await showDialog<String>(
-    context: context,
-    builder: (context) => AlertDialog(
-      title: Text(title),
-      content: TextField(
-        controller: controller,
-        autofocus: true,
-        keyboardType: TextInputType.number,
-        decoration: InputDecoration(labelText: label),
-        onSubmitted: Navigator.of(context).pop,
-      ),
-      actions: [
-        TextButton(
-            onPressed: () => Navigator.of(context).pop(), child: const Text("Cancel")),
-        TextButton(
-            onPressed: () => Navigator.of(context).pop(controller.text),
-            child: const Text("Set")),
-      ],
-    ),
-  );
-  controller.dispose();
-  return value;
-}
 
 /// The prompt as the chat will render it, over the button that changes it.
 /// Formatted rather than raw: what a trigger sends is a message, and a
@@ -877,31 +843,4 @@ class _TriggerPromptPageState extends State<TriggerPromptPage> {
       ),
     );
   }
-}
-
-/// When the next fire is, in as few words as say it: today and tomorrow by
-/// name, then weekday and date.
-String describeFire(DateTime at, DateTime now) {
-  final today = DateTime(now.year, now.month, now.day);
-  final day = DateTime(at.year, at.month, at.day);
-  final difference = day.difference(today).inDays;
-  final when = timeOfDay(at);
-  if (difference == 0) return "Today $when";
-  if (difference == 1) return "Tomorrow $when";
-  return "${shortDate(at)} $when";
-}
-
-const _weekdays = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-const _months = [
-  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
-];
-
-String shortDate(DateTime at) =>
-    "${_weekdays[at.weekday - 1]} ${at.day} ${_months[at.month - 1]}";
-
-String timeOfDay(DateTime at) {
-  final hour = at.hour % 12 == 0 ? 12 : at.hour % 12;
-  final minute = at.minute.toString().padLeft(2, "0");
-  return "$hour:$minute ${at.hour < 12 ? "AM" : "PM"}";
 }

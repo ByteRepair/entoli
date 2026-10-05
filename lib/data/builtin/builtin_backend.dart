@@ -8,7 +8,7 @@ import "package:uuid/uuid.dart";
 import "../../core/config.dart";
 import "../../core/log.dart";
 import "../../domain/agent_backend.dart";
-import "../../domain/trigger_manager.dart" show ChatTriggerRegistry, TriggerRegistry, TriggerRegistryOwner;
+import "../../domain/trigger_manager.dart" show TriggerRegistryFactory;
 import "../../domain/app_settings.dart";
 import "../../domain/ask.dart";
 import "../../domain/chat_store.dart";
@@ -61,17 +61,10 @@ class BuiltinBackend implements AgentBackend {
   /// than passed per-turn: the store resolves which project a chat is in.
   final ChatStore store;
 
-  /// A chat-scoped registry per chat, built lazily where a turn asks for
-  /// one. Null where the app runs no trigger manager — every turn is then
-  /// offered the trio nowhere, the same answer a missing artifact store is.
-  final TriggerRegistryOwner? triggerRegistry;
-
-  TriggerRegistry _triggerRegistryFor(String chatId) =>
-      ChatTriggerRegistry(
-        owner: triggerRegistry!,
-        chatId: chatId,
-        now: () => DateTime.now(),
-      );
+  /// A chat-scoped registry per chat, built where a turn asks for one. Null
+  /// where the app runs no trigger manager — every turn is then offered the
+  /// trio nowhere, the same answer a missing artifact store is.
+  final TriggerRegistryFactory? triggerRegistry;
 
   /// Entoli's own skills and agents, per project. A turn's own references
   /// travel on the message, resolved where it was composed against the
@@ -405,9 +398,7 @@ class BuiltinBackend implements AgentBackend {
           }
           return store.createArtifact(chatId, resolved, entryFile, project: project);
         },
-        registerTrigger: triggerRegistry == null
-            ? null
-            : _triggerRegistryFor(chatId),
+        registerTrigger: triggerRegistry?.call(chatId),
         packageSkill: (path, name) async {
           final resolved = resolvePath(path);
           final pkg = await packageSkillDirectory(config.fs, resolved, name);

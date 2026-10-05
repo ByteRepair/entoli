@@ -1,5 +1,7 @@
 import "dart:async";
 
+import "trigger.dart" show FileEvent;
+
 /// The file system's own push: the platform's directory watcher, behind a
 /// port so the file kind of trigger cannot know which API it is being read
 /// from — `dart:io`'s on the machine and Android, nothing in a browser, and
@@ -22,18 +24,19 @@ abstract interface class FileWatches {
   Stream<FileWatchEvent> watch(String root);
 }
 
-/// One change the file system pushed.
+/// One change the file system pushed, in [FileEvent]'s vocabulary — the
+/// platform's own shapes translated at the edge (the one watch impl), so
+/// nothing inside matches by string names.
 class FileWatchEvent {
   const FileWatchEvent({required this.path, required this.kind});
 
   /// The path the event names, however the platform words it.
   final String path;
 
-  /// The change, in the kinds' small vocabulary.
-  final FileEventKind kind;
+  /// The change. One wording, matching a trigger's own [FileSource.events]
+  /// directly.
+  final FileEvent kind;
 }
-
-enum FileEventKind { create, modify, delete, move }
 
 /// Where nothing can watch: a browser, or the test that wants watch events
 /// decided rather than observed.

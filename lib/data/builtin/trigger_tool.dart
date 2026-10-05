@@ -32,8 +32,9 @@ const triggerSetTool = LlmTool(
       "prompt": {
         "type": "string",
         "description": "The message to send into this chat when it fires. "
-            "Write it so the sentence '(set by trigger_set: <reason>)' "
-            "below it makes sense — the reason says why the trigger fired.",
+            "When the trigger fires, the reason it fired is appended below "
+            "this message as one parenthetical line — write the prompt so a "
+            "sentence in that shape makes sense.",
       },
       "name": {
         "type": "string",
@@ -110,10 +111,11 @@ const triggerListTool = LlmTool(
 /// The three, in the order the list offers them.
 const triggerToolDefs = <LlmTool>[triggerSetTool, triggerRemoveTool, triggerListTool];
 
-/// One registration, parsed — the shape alone; the registry takes it and
-/// answers what it stored (id, chat target, the arming against now). Null
-/// where the arguments do not spell one — the caller rejects with
-/// [triggerSetProblem]'s words.
+/// One registration's shape, parsed — what the arguments spell, and nothing
+/// anchored to a clock. The registry arms it (a timer against its own
+/// registering moment), so no parse carries a fabricated moment and no
+/// holder has to overwrite one. Null where the arguments do not spell a
+/// registration — the caller rejects with [triggerSetProblem]'s words.
 class TriggerDraft {
   const TriggerDraft({
     required this.source,
@@ -162,8 +164,18 @@ TriggerSource? _scheduleSource(Map<String, dynamic> args) {
 TriggerSource? _timerSource(Map<String, dynamic> args) {
   final seconds = args["seconds"];
   if (seconds is! int || seconds <= 0) return null;
-  return TimerSource(duration: Duration(seconds: seconds), registeredAt: DateTime(2026));
+  // The anchor is the registry's to set (its registering moment); the parse
+  // spells the duration and nothing else — no fabricated moment to patch.
+  return TimerSource(duration: Duration(seconds: seconds), registeredAt: _draftAnchor);
 }
+
+/// The parse's placeholder for a timer's anchor: the epoch, a moment no
+/// registry keeps. `registeredAt` is required by the model's constructor; a
+/// draft carries a duration alone, so this stands where nothing reads it —
+/// the registry re-dates the source before anything is stored, and
+/// `nextAfter` on a draft is never asked.
+final _draftAnchor = DateTime.fromMillisecondsSinceEpoch(0);
+
 
 TriggerSource? _fileSource(Map<String, dynamic> args) {
   final raw = args["paths"];
@@ -173,16 +185,8 @@ TriggerSource? _fileSource(Map<String, dynamic> args) {
   final eventNames = args["events"];
   final events = eventNames == null
       ? FileEvent.values.toSet()
-      : {
-          for (final name in eventNames)
-            switch (name as String?) {
-              "create" => FileEvent.create,
-              "change" => FileEvent.change,
-              "delete" => FileEvent.delete,
-              "move" => FileEvent.move,
-              _ => throw ArgumentError("event"),
-            },
-        };
+      : _eventsFrom(eventNames);
+  if (events == null) return null;
   final cooldown = args["cooldownSeconds"];
   return FileSource(
     paths: paths,
@@ -193,6 +197,21 @@ TriggerSource? _fileSource(Map<String, dynamic> args) {
   );
 }
 
+/// The names the model wrote as events, through the enum's own
+/// [FileEvent.fromName] — one list of what an event is called. Null where
+/// one is not a name, the call being malformed rather than partial.
+Set<FileEvent>? _eventsFrom(List<dynamic> eventNames) {
+  final events = <FileEvent>{};
+  for (final name in eventNames) {
+    try {
+      events.add(FileEvent.fromName(name as String?));
+    } on ArgumentError {
+      return null;
+    }
+  }
+  return events;
+}
+
 /// What went wrong with a `trigger_set` call's arguments, worded for the
 /// result the tool answers with.
 String triggerSetProblem(String? source) =>
@@ -200,7 +219,3 @@ String triggerSetProblem(String? source) =>
     '"prompt": "..."} — a schedule wants {"at": "<ISO 8601>"}, a timer '
     '{"seconds": <count>}, a file {"paths": ["..."]}; that argument was '
     "missing or malformed.${source == null ? "" : " (source: $source)"}";
-
-/// A moment in the tools' answers, in the wording the settings page's row
-/// reads the same way: month and day first, then the time.
-String describeMoment(DateTime at) => ScheduleSource(at: at).describeWhen;

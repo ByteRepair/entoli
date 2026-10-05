@@ -1,11 +1,12 @@
-import "dart:async";
 import "dart:io" as io;
 
 import "../../domain/file_watches.dart";
+import "../../domain/trigger.dart" show FileEvent;
 
 /// The machine's watcher: `dart:io`'s `Directory.watch`, recursive — the
 /// file tools read workspaces whole, and a trigger over `project:notes/`
-/// means everything under it.
+/// means everything under it. The platform's event shapes are translated to
+/// [FileEvent] here and nowhere else.
 class IoFileWatches implements FileWatches {
   const IoFileWatches();
 
@@ -30,16 +31,16 @@ class IoFileWatches implements FileWatches {
     }
     return events
         .where((event) => event.path.isNotEmpty)
-        .map((io.FileSystemEvent event) {
-          final kind = event is io.FileSystemDeleteEvent
-              ? FileEventKind.delete
-              : event is io.FileSystemMoveEvent
-                  ? FileEventKind.move
-                  : event is io.FileSystemCreateEvent
-                      ? FileEventKind.create
-                      : FileEventKind.modify;
-          return FileWatchEvent(path: event.path, kind: kind);
-        })
+        .map((io.FileSystemEvent event) => FileWatchEvent(
+              path: event.path,
+              kind: event is io.FileSystemDeleteEvent
+                  ? FileEvent.delete
+                  : event is io.FileSystemMoveEvent
+                      ? FileEvent.move
+                      : event is io.FileSystemCreateEvent
+                          ? FileEvent.create
+                          : FileEvent.change,
+            ))
         .handleError((Object _) {
       // A watcher over a directory that has been removed since — a temp
       // workspace swept, a project deleted — is silence, not a crash: the

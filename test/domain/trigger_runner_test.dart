@@ -191,7 +191,8 @@ void main() {
           "Check the builds\n\n(file build.log changed)");
     });
 
-    test("a chat that has been deleted disarms the trigger", () async {
+    test("a chat that has been deleted answers gone and runs nothing",
+        () async {
       final repository = repo();
       final chat = await repository.createChat(title: "brief");
       final chatId = chat.state.id;
@@ -200,12 +201,15 @@ void main() {
       final (run, stamped, _, driver) = runner(repository, alarms: alarms);
       final result = await run.run(trigger(chatId: chatId), "", const []);
 
+      // No turn ran, and the notification is worded — the manager owns the
+      // disarm itself (targetGone), from the fire's own copy.
       expect(driver.calls, isEmpty);
+      expect(result.targetGone, isTrue);
       expect(result.outcome, TriggerOutcome.error);
-      // The trigger is disabled and disarmed, never re-pointed.
-      expect(stamped.single.enabled, isFalse);
-      expect(stamped.single.nextFireAt, isNull);
       expect(alarms.posted.single.body, contains("no longer exists"));
+      // No stamp mid-run: nothing fired, lastFiredAt is the manager's to
+      // decide with.
+      expect(stamped, isEmpty);
     });
   });
 }

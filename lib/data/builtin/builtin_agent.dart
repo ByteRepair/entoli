@@ -294,7 +294,6 @@ List<LlmTool> agentTools({
   List<PromptDocument> skills = const [],
   required bool offerMemory,
   bool oneShot = false,
-  bool offerTriggers = false,
 }) =>
     [
       file_tool_defs.readTool,
@@ -315,7 +314,7 @@ List<LlmTool> agentTools({
       if (caps.createSkill) createSkillTool,
       // Triggers ride the turn itself: only a top-level turn is its own
       // chat's, so only it may register.
-      if (caps.trigger && !oneShot && offerTriggers) ...triggerToolDefs,
+      if (caps.trigger && !oneShot) ...triggerToolDefs,
       if (offerMemory)
         ...[
           memorySaveTool,
@@ -669,7 +668,6 @@ class BuiltinAgent {
         skills: skills,
         offerMemory: memoryStore != null,
         oneShot: oneShot,
-        offerTriggers: true,
       );
 
   bool _cancelled = false;
@@ -1463,19 +1461,11 @@ class BuiltinAgent {
   }
 
   /// What registration says back: the id every later call speaks, and the
-  /// next fire where the source is on the clock.
-  String _triggerSetAnswer(Trigger stored) {
-    final line = switch (stored.source) {
-      ScheduleSource(:final at, :final repeat) =>
-        repeat == ScheduleRepeat.off
-            ? "Fires ${describeMoment(at)}."
-            : "Repeats ${repeat.label.toLowerCase()}.",
-      TimerSource() => "Fires once, after the countdown.",
-      FileSource(:final paths) =>
-        "Fires when ${paths.join(", ")} changes, while the app is running.",
-    };
-    return "Trigger ${stored.id} set. $line";
-  }
+  /// source's own description — one wording of what was armed, shared with
+  /// the settings row and the fire's reason rather than a second here.
+  String _triggerSetAnswer(Trigger stored) =>
+      "Trigger ${stored.id} set. ${stored.source.describe()}."
+      "${stored.source is FileSource ? " Fires only while the app is running." : ""}";
 
   /// Remove one of this chat's own triggers. Another chat's is not here to
   /// remove, and neither is a user-set one: the tools speak for the chat
@@ -1542,9 +1532,11 @@ class BuiltinAgent {
         ));
   }
 
+  /// The stored fire time, in the source's own wording — one vocabulary
+  /// with what `trigger_set` just said about it.
   String _whenLine(Trigger trigger) {
     final at = trigger.nextFireAt;
-    return at == null ? "" : ". Next: ${describeMoment(at)}";
+    return at == null ? "" : ". Next: ${trigger.source.describe()}";
   }
 
   /// A fact the model judged worth keeping. No approval: like `websearch`, it

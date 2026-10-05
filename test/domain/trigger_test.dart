@@ -12,7 +12,7 @@ void main() {
           name: "",
           prompt: "",
           source: ScheduleSource(at: at));
-      expect(trigger.nextOccurrence(DateTime(2026, 1, 1)), at);
+      expect(trigger.source.nextAfter(DateTime(2026, 1, 1)), at);
     });
 
     test("a past one-shot has nothing ahead of it", () {
@@ -22,7 +22,7 @@ void main() {
           name: "",
           prompt: "",
           source: ScheduleSource(at: at));
-      expect(trigger.nextOccurrence(DateTime(2026, 9, 1)), isNull);
+      expect(trigger.source.nextAfter(DateTime(2026, 9, 1)), isNull);
     });
 
     test("hourly keeps its minute and moves one hour", () {
@@ -34,9 +34,9 @@ void main() {
         prompt: "",
         source: ScheduleSource(at: at, repeat: ScheduleRepeat.hourly),
       );
-      expect(trigger.nextOccurrence(DateTime(2026, 8, 22, 9, 20)),
+      expect(trigger.source.nextAfter(DateTime(2026, 8, 22, 9, 20)),
           DateTime(2026, 8, 22, 9, 30));
-      expect(trigger.nextOccurrence(DateTime(2026, 8, 22, 9, 30)),
+      expect(trigger.source.nextAfter(DateTime(2026, 8, 22, 9, 30)),
           DateTime(2026, 8, 22, 10, 30));
     });
 
@@ -49,7 +49,7 @@ void main() {
         source: ScheduleSource(at: at, repeat: ScheduleRepeat.daily),
       );
       expect(
-        trigger.nextOccurrence(DateTime(2026, 8, 31, 23, 45)),
+        trigger.source.nextAfter(DateTime(2026, 8, 31, 23, 45)),
         DateTime(2026, 9, 1, 23, 45),
       );
     });
@@ -63,7 +63,7 @@ void main() {
         prompt: "",
         source: ScheduleSource(at: at, repeat: ScheduleRepeat.weekly),
       );
-      final next = trigger.nextOccurrence(at)!;
+      final next = trigger.source.nextAfter(at)!;
       expect(next, DateTime(2026, 8, 29, 8));
       expect(next.weekday, at.weekday);
     });
@@ -77,11 +77,11 @@ void main() {
         source: ScheduleSource(at: at, repeat: ScheduleRepeat.monthly),
       );
       // 2027 is not a leap year.
-      expect(trigger.nextOccurrence(at), DateTime(2027, 2, 28, 9));
+      expect(trigger.source.nextAfter(at), DateTime(2027, 2, 28, 9));
       // Back on its own day the month after, because every step derives from
       // the anchor's day rather than the last occurrence's.
       expect(
-        trigger.nextOccurrence(DateTime(2027, 2, 28, 9)),
+        trigger.source.nextAfter(DateTime(2027, 2, 28, 9)),
         DateTime(2027, 3, 31, 9),
       );
     });
@@ -94,7 +94,7 @@ void main() {
         prompt: "",
         source: ScheduleSource(at: at, repeat: ScheduleRepeat.monthly),
       );
-      expect(trigger.nextOccurrence(at), DateTime(2027, 2, 28, 9));
+      expect(trigger.source.nextAfter(at), DateTime(2027, 2, 28, 9));
       final leapAnchor = DateTime(2028, 1, 30, 9);
       final leap = Trigger(
         id: "r",
@@ -102,7 +102,7 @@ void main() {
         prompt: "",
         source: ScheduleSource(at: leapAnchor, repeat: ScheduleRepeat.monthly),
       );
-      expect(leap.nextOccurrence(leapAnchor), DateTime(2028, 2, 29, 9));
+      expect(leap.source.nextAfter(leapAnchor), DateTime(2028, 2, 29, 9));
     });
 
     test("a long-past-due daily walks forward to tomorrow, not to its anchor", () {
@@ -114,7 +114,7 @@ void main() {
         source: ScheduleSource(at: at, repeat: ScheduleRepeat.daily),
       );
       expect(
-        trigger.nextOccurrence(DateTime(2026, 8, 22, 12)),
+        trigger.source.nextAfter(DateTime(2026, 8, 22, 12)),
         DateTime(2026, 8, 23, 7),
       );
     });
@@ -131,7 +131,7 @@ void main() {
             registeredAt: DateTime(2026, 8, 22, 9)),
       );
       expect(
-          trigger.nextOccurrence(DateTime(2026, 8, 22, 9, 20)),
+          trigger.source.nextAfter(DateTime(2026, 8, 22, 9, 20)),
           DateTime(2026, 8, 22, 9, 30));
     });
 
@@ -144,7 +144,7 @@ void main() {
             duration: const Duration(minutes: 30),
             registeredAt: DateTime(2026, 8, 22, 9)),
       );
-      expect(trigger.nextOccurrence(DateTime(2026, 8, 22, 9, 31)), isNull);
+      expect(trigger.source.nextAfter(DateTime(2026, 8, 22, 9, 31)), isNull);
     });
   });
 
@@ -156,8 +156,7 @@ void main() {
         prompt: "",
         source: const FileSource(paths: ["notes.md"]),
       );
-      expect(trigger.nextOccurrence(DateTime(2026, 9, 1)), isNull);
-      expect(trigger.dueBy(DateTime(2100)), isFalse);
+      expect(trigger.source.nextAfter(DateTime(2026, 9, 1)), isNull);
     });
   });
 

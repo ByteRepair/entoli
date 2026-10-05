@@ -1,6 +1,7 @@
 import "chat_meta.dart";
 import "permission.dart";
 import "temp_chat_ttl.dart";
+import "date_words.dart" show describeFire;
 
 /// How often a schedule repeats. Declaration order is the order the editor
 /// offers them in.
@@ -23,7 +24,11 @@ enum ScheduleRepeat {
 }
 
 /// When a file trigger fires, and over which kinds of change. Declaration
-/// order is the order the editor offers them in.
+/// order is the order the editor offers them in. The one event vocabulary:
+/// what the viewer picks, what the tools accept, and what
+/// [FileWatchEvent.kind] carries — the platform watcher's own shapes are
+/// translated at [IoFileWatches], the edge, and nothing inside matches by
+/// string names.
 enum FileEvent {
   create("Created"),
   change("Changed"),
@@ -37,14 +42,6 @@ enum FileEvent {
   static FileEvent fromName(String? name) => values.firstWhere(
       (t) => t.name == name,
       orElse: () => throw ArgumentError.value(name, "event"));
-
-  /// [FileWatchEvent.kind]'s word for it.
-  String get watchKind => switch (this) {
-        FileEvent.create => "create",
-        FileEvent.change => "modify",
-        FileEvent.delete => "delete",
-        FileEvent.move => "move",
-      };
 }
 
 /// What sets a trigger off. Data, and nothing but: which behaviour watches
@@ -61,9 +58,11 @@ sealed class TriggerSource {
   /// the stored [Trigger.nextFireAt] is what a boot receiver reads.
   DateTime? nextAfter(DateTime after);
 
-  /// A description the trigger editor and the tools' results read: what this
-  /// source is, in the user's own words.
-  String describe();
+  /// A description the trigger row, the editor and the tools' results read:
+  /// what this source is, in the user's own words. [now] is the moment a
+  /// relative wording ("today") is judged against — the caller's clock, not
+  /// the wall's, the same steerability everything else date-shaped here has.
+  String describe({DateTime? now});
 }
 
 /// A wall-clock moment, repeating or not: the reminder shape generalized.
@@ -81,43 +80,12 @@ class ScheduleSource extends TriggerSource {
       occurrenceAfter(repeat, at, after);
 
   @override
-  String describe() {
-    final when = _dateWords(at);
+  String describe({DateTime? now}) {
+    final when = describeFire(at, now ?? DateTime.now());
     return switch (repeat) {
       ScheduleRepeat.off => when,
       _ => "$when, ${repeat.label.toLowerCase()}",
     };
-  }
-
-  /// The moment in the user-editor's wording: today and tomorrow by name,
-  /// then the date. Lives on the source rather than the UI so the tool
-  /// results say it the same way.
-  String get describeWhen {
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    final day = DateTime(at.year, at.month, at.day);
-    final difference = day.difference(today).inDays;
-    final when = _timeWords(at);
-    return switch (difference) {
-      0 => "Today $when",
-      1 => "Tomorrow $when",
-      _ => "${_months[at.month - 1]} ${at.day} $when",
-    };
-  }
-
-  static String _dateWords(DateTime at) => _months[at.month - 1] != ""
-      ? "${at.day} ${_months[at.month - 1]} ${_timeWords(at)}"
-      : "";
-
-  static const _months = [
-    "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-    "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
-  ];
-
-  static String _timeWords(DateTime at) {
-    final hour = at.hour % 12 == 0 ? 12 : at.hour % 12;
-    final minute = at.minute.toString().padLeft(2, "0");
-    return "$hour:$minute ${at.hour < 12 ? "AM" : "PM"}";
   }
 
   @override
@@ -179,7 +147,9 @@ class ScheduleSource extends TriggerSource {
 /// A one-shot countdown from when it was registered: "in thirty minutes".
 /// The wall-clock moment it points at is [registeredAt] plus [duration],
 /// which is what makes the alarm the schedule's and this one's share: both
-/// precompute a [Trigger.nextFireAt] a boot receiver can arm.
+/// precompute a [Trigger.nextFireAt] a boot receiver can arm. [registeredAt]
+/// is set by whoever registers — the tool parse carries none of its own, so
+/// no stored countdown is anchored anywhere but the registering moment.
 class TimerSource extends TriggerSource {
   const TimerSource({required this.duration, required this.registeredAt});
 
@@ -195,7 +165,7 @@ class TimerSource extends TriggerSource {
   }
 
   @override
-  String describe() {
+  String describe({DateTime? now}) {
     final minutes = duration.inMinutes;
     if (minutes < 60) return "In $minutes minutes";
     final hours = duration.inHours;
@@ -245,7 +215,8 @@ class FileSource extends TriggerSource {
   DateTime? nextAfter(DateTime after) => null;
 
   @override
-  String describe() => "${paths.length > 1 ? "${paths.length} paths" : paths.first}, "
+  String describe({DateTime? now}) =>
+      "${paths.length > 1 ? "${paths.length} paths" : paths.first}, "
       "${events.map((e) => e.label.toLowerCase()).toSet().join(" or ")} changes";
 
   @override
@@ -336,6 +307,11 @@ class Trigger {
         headless: true,
       );
 
+  /// What a completion notification titles where the trigger carries no
+  /// name. One copy of the fallback, so the wording of a nameless trigger
+  /// agrees wherever it is said.
+  String get title => name.isEmpty ? "Reminder" : name;
+
   Trigger copyWith({
     String? name,
     String? prompt,
@@ -376,10 +352,7 @@ class Trigger {
     final raw = json["source"];
     final source = raw is Map<String, dynamic>
         ? _sourceFrom(raw)
-        : ScheduleSource(
-            at: _date(json["at"]) ?? DateTime(2026),
-            repeat: ScheduleRepeat.fromName(json["repeat"] as String?),
-          );
+        : _legacySourceFrom(json);
     return Trigger(
       id: json["id"] as String,
       name: json["name"] as String? ?? "",
@@ -399,6 +372,12 @@ class Trigger {
     );
   }
 
+  static TriggerSource _legacySourceFrom(Map<String, dynamic> json) =>
+      ScheduleSource(
+        at: _date(json["at"]) ?? DateTime(2026),
+        repeat: ScheduleRepeat.fromName(json["repeat"] as String?),
+      );
+
   static TriggerSource _sourceFrom(Map<String, dynamic> json) {
     final kind = json["kind"] as String?;
     return switch (kind) {
@@ -406,25 +385,27 @@ class Trigger {
           duration: Duration(seconds: json["seconds"] as int? ?? 0),
           registeredAt: _date(json["registeredAt"]) ?? DateTime(2026),
         ),
-      "file" => FileSource(
-          paths: [for (final p in json["paths"] as List? ?? const []) p as String],
-          events: {
-            for (final e in json["events"] as List? ?? const [])
-              FileEvent.fromName(e as String),
-            // Said nothing: everything.
-            if ((json["events"] as List?) == null) ...FileEvent.values,
-          },
-          cooldown: Duration(
-              seconds: json["cooldownSeconds"] as int? ??
-                  const Duration(seconds: 5).inSeconds),
-        ),
-        // An unknown kind is a file written by a later build: schedule
-        // is what a trigger used to be, and a fall back beats a lost list.
-        _ => ScheduleSource(
-            at: _date(json["at"]) ?? DateTime(2026),
-            repeat: ScheduleRepeat.fromName(json["repeat"] as String?),
-          ),
+      "file" => _fileSourceFrom(json),
+      // An unknown kind is a file written by a later build: schedule is
+      // what a trigger used to be, and a fall back beats a lost list.
+      _ => _legacySourceFrom(json),
     };
+  }
+
+  static FileSource _fileSourceFrom(Map<String, dynamic> json) {
+    final rawEvents = json["events"] as List?;
+    return FileSource(
+      paths: [
+        for (final p in json["paths"] as List? ?? const []) p as String,
+      ],
+      // Said nothing: everything.
+      events: rawEvents == null
+          ? FileEvent.values.toSet()
+          : {for (final e in rawEvents) FileEvent.fromName(e as String)},
+      cooldown: Duration(
+          seconds:
+              json["cooldownSeconds"] as int? ?? const Duration(seconds: 5).inSeconds),
+    );
   }
 
   Map<String, dynamic> toJson() => {
@@ -444,13 +425,4 @@ class Trigger {
 
   static DateTime? _date(Object? value) =>
       value == null ? null : DateTime.tryParse(value as String);
-
-  /// Due now or overdue — both are catch-up's business. Null [nextFireAt] is
-  /// nothing armed: a fired one-shot, a timer gone, or a file source.
-  bool dueBy(DateTime after) =>
-      enabled && nextFireAt != null && !after.isBefore(nextFireAt!);
-
-  /// The first moment this source is next due after [after], through its
-  /// own arithmetic — what an editor preview and a re-enable read.
-  DateTime? nextOccurrence(DateTime after) => source.nextAfter(after);
 }

@@ -1,17 +1,21 @@
 import "package:clock/clock.dart";
 
-import "../core/log.dart";
 import "chat_repository.dart";
-import "models.dart";
+import "models.dart" show Chat;
 import "project.dart";
 import "reminder_alarms.dart";
+import "../core/log.dart";
 import "trigger.dart";
 
 /// How a trigger's turn ended, worded for the completion notification.
 enum TriggerOutcome { done, error, aborted }
 
-/// What one trigger run produced.
-typedef TriggerRunResult = ({String chatId, TriggerOutcome outcome, String snippet});
+/// What one trigger run produced. [targetGone] is whether the fire found
+/// its target chat deleted — no turn ran; the trigger was disarmed by the
+/// manager, which owns the bookkeeping, and the fire's own notification
+/// was worded by the runner.
+typedef TriggerRunResult
+    = ({String chatId, TriggerOutcome outcome, String snippet, bool targetGone});
 
 /// The seam between deciding a trigger is due and running its turn — what
 /// [TriggerManager] actually needs, and what its tests stand in for.
@@ -55,8 +59,8 @@ class TriggerRunner implements TriggerRuns {
   final ChatRepository repo;
   final TriggerTurnDriver driver;
 
-  /// The port's notify half — no scheduling — is how a fire answers for
-  /// itself when it cannot reach its chat, and how a headless one completes.
+  /// Notifies the one thing no one else words: a fire whose target chat has
+  /// gone, which is no turn's completion. Completions are the manager's.
   final ReminderAlarms alarms;
   final Clock clock;
 
@@ -68,61 +72,72 @@ class TriggerRunner implements TriggerRuns {
   final Future<void> Function(Trigger trigger) onTriggerFired;
 
   @override
-  Future<TriggerRunResult> run(
+  Future<({String chatId, TriggerOutcome outcome, String snippet, bool targetGone})> run(
     Trigger trigger,
     String reason,
     List<String> projects,
   ) async {
     final target = trigger.chatId;
-    if (target != null) return _runIntoChat(trigger, reason, target);
+    return target == null
+        ? _runNewChat(trigger, reason, projects)
+        : _runIntoChat(trigger, reason, target);
+  }
+
+  /// The headless half: the prompt the trigger set, the reason a line under
+  /// it, in a chat made for the fire.
+  Future<({String chatId, TriggerOutcome outcome, String snippet, bool targetGone})>
+      _runNewChat(Trigger trigger, String reason, List<String> projects) async {
     final project = projectOrDefault(trigger.project, projects);
     final chat = await repo.createChat(
-      title: trigger.name,
+      title: trigger.title,
       project: project,
       meta: trigger.meta,
     );
     await onTriggerFired(trigger.copyWith(lastFiredAt: clock.now()));
     onListChanged(chat.state.id);
-    final prompt = reason.isEmpty ? trigger.prompt : "${trigger.prompt}\n\n($reason)";
-    final result = await driver.send(chat.state.id, prompt);
-    return (chatId: chat.state.id, outcome: result.outcome, snippet: result.snippet);
+    final result = await driver.send(chat.state.id, prompted(trigger.prompt, reason));
+    return (
+      chatId: chat.state.id,
+      outcome: result.outcome,
+      snippet: result.snippet,
+      targetGone: false,
+    );
   }
 
   /// The chat-side half. The chat is validated before anything is stamped: a
   /// trigger naming a chat that has been deleted (a swept temp chat among
-  /// them) is disarmed rather than re-pointed, a notification saying so where
-  /// the fire had a name to say. Nothing re-runs the prompt somewhere else —
-  /// the conversation it answers is the one it named.
+  /// them) is the manager's to disarm — the fire answers for itself with a
+  /// notification, worded here where the words the disarm needs are, and
+  /// runs nothing. Nothing re-points the prompt at some other conversation.
   ///
   /// A same-chat fire while the user's own turn runs queues behind it on the
   /// room rather than being swallowed by Send's refusal — the driver awaits
   /// the running turn before speaking.
-  Future<TriggerRunResult> _runIntoChat(
-      Trigger trigger, String reason, String chatId) async {
+  Future<({String chatId, TriggerOutcome outcome, String snippet, bool targetGone})>
+      _runIntoChat(Trigger trigger, String reason, String chatId) async {
     Chat? chat;
     try {
-      chat = (await repo.loadState(chatId)) == null ? null : await repo.openChat(chatId);
+      chat = await repo.openChat(chatId);
     } catch (_) {
       chat = null;
     }
     if (chat == null) {
       logFailure("triggers", "target chat is gone; disarming", chatId);
       await alarms.notify(
-        title: trigger.name.isEmpty ? "Trigger" : trigger.name,
+        title: trigger.title,
         body: "The chat this trigger runs in no longer exists, so it was "
             "switched off.",
       );
-      await onTriggerFired(
-          trigger.copyWith(enabled: false, clearNextFireAt: true, lastFiredAt: null));
-      return (
-        chatId: chatId,
-        outcome: TriggerOutcome.error,
-        snippet: "",
-      );
+      return (chatId: chatId, outcome: TriggerOutcome.error, snippet: "", targetGone: true);
     }
     await onTriggerFired(trigger.copyWith(lastFiredAt: clock.now()));
-    final prompt = reason.isEmpty ? trigger.prompt : "${trigger.prompt}\n\n($reason)";
-    final result = await driver.send(chatId, prompt);
-    return (chatId: chatId, outcome: result.outcome, snippet: result.snippet);
+    final result = await driver.send(chatId, prompted(trigger.prompt, reason));
+    return (chatId: chatId, outcome: result.outcome, snippet: result.snippet, targetGone: false);
   }
+
+  /// The one wording of "the fire, and what set it off": the prompt, then
+  /// the kind's reason in a line below. The tool's schema description names
+  /// this shape, not a literal of a reason's own words.
+  static String prompted(String prompt, String reason) =>
+      reason.isEmpty ? prompt : "$prompt\n\n($reason)";
 }

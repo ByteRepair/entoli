@@ -29,7 +29,10 @@ import "package:agent_chat/domain/local_model.dart";
 import "package:agent_chat/domain/local_model_store.dart";
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/domain/prompt_library.dart";
+import "package:agent_chat/domain/file_watches.dart";
 import "package:agent_chat/domain/reminder_alarms.dart";
+import "package:agent_chat/domain/trigger.dart";
+import "package:agent_chat/domain/trigger_manager.dart";
 import "package:agent_chat/domain/trigger_runner.dart";
 import "package:agent_chat/domain/voice.dart";
 import "package:agent_chat/domain/voice_model.dart";
@@ -1358,4 +1361,93 @@ class FakeTriggerTurnDriver implements TriggerTurnDriver {
     calls.add((chatId: chatId, prompt: prompt));
     return (outcome: outcome, snippet: snippet);
   }
+}
+
+/// The file system's push, driven by hand: the roots a kind asked to watch,
+/// and the events [push] delivers to every watcher. The one
+/// [FileWatches] fake — the file-kind tests and the manager-through-file
+/// tests drive the same one, so a shape change is one edit.
+class FakeFileWatches implements FileWatches {
+  final _events = StreamController<FileWatchEvent>.broadcast();
+  final roots = <String>[];
+
+  @override
+  bool get available => true;
+
+  @override
+  Stream<FileWatchEvent> watch(String root) {
+    roots.add(root);
+    return _events.stream;
+  }
+
+  /// One change under one of the watched roots.
+  void push(String path, FileEvent kind) =>
+      _events.add(FileWatchEvent(path: path, kind: kind));
+}
+
+/// A [TriggerRuns] that records what it was asked and hangs on demand —
+/// the manager tests' stand-in, beside [FakeTriggerTurnDriver]. Stamps
+/// [Trigger.lastFiredAt] like the real runner does (before the run), since
+/// "one stamp owner" is the design: the manager's replacement carries this
+/// rather than writing its own.
+class StubRuns implements TriggerRuns {
+  final firedIds = <String>[];
+  final reasons = <String>[];
+
+  /// The stamp the manager's replacement carries, written through the list
+  /// the way the real runner's `onTriggerFired` is. A clock the tests pin.
+  DateTime Function()? nowOf;
+
+  /// Where the stamp lands. Wired by the test to its list's `replace`.
+  Future<void> Function(Trigger)? stampThrough;
+
+  /// Set when a test wants a run to hang, the way a real turn does.
+  Completer<void>? gate;
+
+  @override
+  Future<TriggerRunResult> run(Trigger trigger, String reason, List<String> projects) async {
+    firedIds.add(trigger.id);
+    reasons.add(reason);
+    final stamped = nowOf == null ? trigger : trigger.copyWith(lastFiredAt: nowOf!());
+    await stampThrough?.call(stamped);
+    if (gate != null) await gate!.future;
+    return (chatId: "chat-${trigger.id}", outcome: TriggerOutcome.done, snippet: "done", targetGone: false);
+  }
+}
+
+/// A [TriggerRegistry] recording what the tools registered and removed.
+class FakeTriggerRegistry implements TriggerRegistry {
+  final stored = <Trigger>[];
+  final removed = <String>[];
+
+  String? chatId;
+
+  @override
+  Future<Trigger> register({required TriggerSource source, required String prompt, String? name}) async {
+    final id = "t-${stored.length + 1}";
+    // The same anchor the provider's own registerFor applies: a timer is
+    // re-dated to the moment of registration, the parse's placeholder gone.
+    final now = DateTime(2026, 8, 23, 9);
+    final anchored = source is TimerSource
+        ? TimerSource(duration: source.duration, registeredAt: now)
+        : source;
+    final trigger = Trigger(
+        id: id,
+        name: name ?? "",
+        prompt: prompt,
+        source: anchored,
+        chatId: chatId,
+        byAgent: true,
+        nextFireAt: anchored.nextAfter(now));
+    stored.add(trigger);
+    return trigger;
+  }
+
+  @override
+  Future<List<Trigger>> own() async => [
+        for (final t in stored) if (t.chatId == chatId) t,
+      ];
+
+  @override
+  Future<void> remove(String id) async => removed.add(id);
 }

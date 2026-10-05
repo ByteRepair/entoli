@@ -3,8 +3,9 @@ import "dart:async";
 import "package:clock/clock.dart";
 import "package:flutter_test/flutter_test.dart";
 
-import "package:agent_chat/domain/trigger.dart";
 import "package:agent_chat/domain/file_watches.dart";
+import "package:agent_chat/domain/reminder_alarms.dart";
+import "package:agent_chat/domain/trigger.dart";
 import "package:agent_chat/domain/trigger_kinds.dart";
 import "package:agent_chat/domain/trigger_manager.dart";
 import "package:agent_chat/domain/trigger_runner.dart";
@@ -15,24 +16,6 @@ import "../fakes.dart";
 /// due under it. Pinned rather than the wall clock so the suite does not rot
 /// against the calendar.
 final _now = Clock.fixed(DateTime(2026, 8, 23, 9));
-
-/// The fake watcher a file-kind-in-manager test drives.
-class RecordingFileWatches implements FileWatches {
-  final events = StreamController<FileWatchEvent>.broadcast();
-  final roots = <String>[];
-
-  @override
-  bool get available => true;
-
-  @override
-  Stream<FileWatchEvent> watch(String root) {
-    roots.add(root);
-    return events.stream;
-  }
-
-  void push(String path, FileEventKind kind) =>
-      events.add(FileWatchEvent(path: path, kind: kind));
-}
 
 /// The list, held in memory — the manager reads and writes it through this,
 /// exactly as it does through the provider in the app.
@@ -57,32 +40,19 @@ class FakeList implements TriggerList {
   final written = <List<Trigger>>[];
 }
 
-/// The runs the manager asked for, and nothing else.
-class StubRunner implements TriggerRuns {
-  final firedIds = <String>[];
-  final reasons = <String>[];
-
-  /// Set when a test wants a run to hang, the way a real turn does.
-  Completer<void>? gate;
-
-  @override
-  Future<TriggerRunResult> run(Trigger trigger, String reason, List<String> projects) async {
-    firedIds.add(trigger.id);
-    reasons.add(reason);
-    if (gate != null) await gate!.future;
-    return (chatId: "chat-${trigger.id}", outcome: TriggerOutcome.done, snippet: "done");
-  }
-}
-
 TriggerManager manager(
   FakeList list,
-  StubRunner runner,
+  StubRuns runner,
   FakeReminderAlarms alarms, {
   List<TriggerKind>? kinds,
   required Clock clock,
 }) =>
     TriggerManager(
-      kinds: kinds ?? [ScheduleKind(alarms), TimerKind(alarms)],
+      kinds: kinds ??
+          [
+            ClockKind(alarms, matchOf: (t) => t.source is ScheduleSource, label: "Schedule"),
+            ClockKind(alarms, matchOf: (t) => t.source is TimerSource, label: "Timer"),
+          ],
       alarmPort: alarms,
       runner: runner,
       list: list,
@@ -92,12 +62,19 @@ TriggerManager manager(
 
 void main() {
   late FakeList list;
-  late StubRunner runner;
+  late StubRuns runner;
   late FakeReminderAlarms alarms;
 
   setUp(() {
     list = FakeList([]);
-    runner = StubRunner();
+    runner = StubRuns()
+      ..nowOf = () {
+        return DateTime(2026, 8, 23, 9);
+      }
+      // The stamp goes through the list's replace, as the real runner's
+      // onTriggerFired does — but bound lazily, since the test rewires
+      // list.triggers after setUp.
+      ..stampThrough = (trigger) => list.replace(trigger);
     alarms = FakeReminderAlarms();
   });
 
@@ -317,9 +294,13 @@ void main() {
       trigger(id: "other", nextFireAt: DateTime(2000), code: 8),
     ]);
     final mgr = manager(list, runner, alarms, clock: _now);
+    await mgr.reload();
+    // Settle the catch-up the first reload fires; the assertion is about the
+    // nudge below.
+    runner.firedIds.clear();
 
-    // Only the nudged id is in hand: the arm against the other would have
-    // re-armed it for the future, but catch-up here is the ids' alone.
+    // Only the nudged id is claimed: the alarm stashed one, and the other
+    // trigger — no longer overdue — is not fired by the nudge's arrival.
     list.triggers = [nudged, trigger(id: "other", nextFireAt: DateTime(2026, 9), code: 8)];
     alarms.fire("nudged");
     await mgr.onNudged();
@@ -327,10 +308,48 @@ void main() {
     expect(runner.firedIds, ["nudged"]);
   });
 
+  test("a nudged fire carries the kind's own reason, not the watcher's",
+      () async {
+    // Not armed at reload — the nudge is the news, not catch-up.
+    list.triggers = [
+      Trigger(
+        id: "late-r",
+        name: "n",
+        prompt: "p",
+        source: ScheduleSource(at: DateTime(2026, 8, 1, 9)),
+      ),
+    ];
+    final mgr = manager(list, runner, alarms, clock: _now);
+    await mgr.reload();
+    expect(runner.firedIds, isEmpty);
+
+    // Armed from the nudge's side, already overdue: the system noticed
+    // while the process was away.
+    list.triggers = [
+      Trigger(
+        id: "late-r",
+        name: "n",
+        prompt: "p",
+        source: ScheduleSource(at: DateTime(2026, 8, 1, 9)),
+        nextFireAt: DateTime(2026, 8, 1, 9),
+      ),
+    ];
+    alarms.fire("late-r");
+    await mgr.onNudged();
+
+    // The nudge asked the kind, so the reason is the schedule's own words —
+    // what was set, the same a timer-spotted fire carries — and the
+    // lateness is the manager's one computation: "Ran late." in the
+    // notification, for a nudge-late fire and not only a caught-up one.
+    expect(runner.reasons.single, contains("1 Aug"));
+    expect(runner.reasons.single, contains("9:00 AM"));
+    expect(alarms.posted.single.body, contains("late"));
+  });
+
   group("with the file kind registered", () {
-    // See `trigger_file_kind_test.dart` for the kind in isolation; here the
-    // registry — a FileKind over a fake watcher — reaches a fire through
-    // the whole manager, and the fire is stamped like any other.
+    // See `trigger_file_kind_test.dart` for the kind in isolation; here
+    // the registry — a FileKind over a fake watcher — reaches a fire
+    // through the whole manager, and the fire is stamped like any other.
     late RecordingFileWatches watches;
 
     setUp(() {
@@ -358,7 +377,7 @@ void main() {
       await pumpEventQueue();
       expect(watches.roots, ["/ws/notes/"]);
 
-      watches.push("/ws/notes/build.log", FileEventKind.modify);
+      watches.push("/ws/notes/build.log", FileEvent.change);
       await pumpEventQueue();
       await done;
 
@@ -370,5 +389,83 @@ void main() {
       expect(after.nextFireAt, isNull);
     });
 
+    test("a target chat that has gone disarms, once, with no completion",
+        () async {
+      list.triggers = [
+        Trigger(
+          id: "g1",
+          name: "n",
+          prompt: "p",
+          source: ScheduleSource(at: DateTime(2026, 8, 22, 9), repeat: ScheduleRepeat.daily),
+          chatId: "chat-gone",
+          nextFireAt: DateTime(2026, 8, 22, 9),
+        ),
+      ];
+      // The runner answers as the real one does to a deleted chat.
+      final runs = _GoneTargetRuns();
+      final mgr = TriggerManager(
+        kinds: [
+          ClockKind(alarms, matchOf: (t) => t.source is ScheduleSource, label: "Schedule"),
+        ],
+        alarmPort: alarms,
+        runner: runs,
+        list: list,
+        projects: () async => const [],
+        clock: _now,
+      );
+      await mgr.reload();
+
+      // The disarm is the fire's own stamp: disabled, nothing armed — and
+      // not silently reverted to armed the way a stale-copy stamp would.
+      final after = list.triggers.single;
+      expect(after.enabled, isFalse);
+      expect(after.nextFireAt, isNull);
+      // One notification — the runner's worded one — not a second
+      // "The task failed." beside it.
+      expect(runs.posts.single.body, contains("no longer exists"));
+      expect(alarms.posted, isEmpty);
+      // The runner was asked once — and answered targetGone; the disarm is
+      // the manager's, from the fire's own copy.
+      expect(runs.firedIds, ["g1"]);
+    });
   });
+}
+
+/// The file system's push, for the manager's file-kind group; the file-kind
+/// tests drive their own copy in [FakeFileWatches]. Same shape, second name
+/// only because this one is in a manager test's scope.
+class RecordingFileWatches implements FileWatches {
+  final events = StreamController<FileWatchEvent>.broadcast();
+  final roots = <String>[];
+
+  @override
+  bool get available => true;
+
+  @override
+  Stream<FileWatchEvent> watch(String root) {
+    roots.add(root);
+    return events.stream;
+  }
+
+  void push(String path, FileEvent kind) =>
+      events.add(FileWatchEvent(path: path, kind: kind));
+}
+
+/// A [TriggerRuns] that reports the target gone but posts as the real
+/// runner does — the worded notification being the runner's, before the
+/// manager's stamp.
+class _GoneTargetRuns implements TriggerRuns {
+  final firedIds = <String>[];
+  final posts =
+      <({String title, String body, String? chatId, String channel})>[];
+
+  @override
+  Future<TriggerRunResult> run(Trigger trigger, String reason, List<String> projects) async {
+    firedIds.add(trigger.id);
+    posts.add((title: trigger.title, body: "The chat this trigger runs in no "
+        "longer exists, so it was switched off.", chatId: null,
+        channel: ReminderAlarms.defaultChannel));
+    return (chatId: trigger.chatId ?? "", outcome: TriggerOutcome.error,
+        snippet: "", targetGone: true);
+  }
 }

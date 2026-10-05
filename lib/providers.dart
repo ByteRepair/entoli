@@ -980,8 +980,9 @@ class Triggers extends Notifier<List<Trigger>> implements TriggerList {
     final at = state.indexWhere((t) => t.id == id);
     if (at < 0) return;
     final trigger = state[at];
-    final next =
-        enabled ? trigger.nextOccurrence(ref.read(clockProvider).now()) : null;
+    final next = enabled
+        ? trigger.source.nextAfter(ref.read(clockProvider).now())
+        : null;
     // Disabling disarms it; re-enabling recomputes — a file trigger has
     // nothing on the clock to re-arm, a repeating schedule its next
     // occurrence, a one-shot past its time nothing.
@@ -993,32 +994,35 @@ class Triggers extends Notifier<List<Trigger>> implements TriggerList {
 final triggersProvider =
     NotifierProvider<Triggers, List<Trigger>>(() => Triggers(const []));
 
-/// The file kind's path resolution, over the config's own filesystem and
-/// the file tools' own rules — what `resolveWorkspacePath` answers — so a
-/// stored `project:notes/` means the project's directory, a bare relative
-/// path the chat's, exactly what a `read` would have opened. Computed in
-/// one place; the tools cannot resolve differently.
-/// The file kind's path resolution, over the config's own filesystem and
-/// the file tools' own rules — what `resolveWorkspacePath` answers — so a
-/// stored `project:notes/` means the project's directory, a bare relative
-/// path the chat's, exactly what a `read` would have opened. Computed in
-/// one place; the tools cannot resolve differently.
-Future<String> _resolveTriggerPath(
+/// The file kind's path resolution — `resolveWorkspacePath` over the pair
+/// of workspaces the turn's own file tools would resolve against: the
+/// same `sharedWorkspace` rule, the same guest translation (a path the
+/// model fed back from inside a guest watches on the host where the guest
+/// keeps it), the same `~`. A trigger registered by a tool names its own
+/// chat, whose workspace exists — the turn ran there; one the user set has
+/// no chat, and its relative base is the project's workspace, the directory
+/// a chat of its own would share. There are no arguments of the resolver's
+/// own to get wrong — everything it passes is what the read tool would be
+/// passed, which is the parity the tool schema promises.
+String _resolveTriggerPath(
   AppConfig config,
-  ChatRepository repo,
+  Shell shell,
   String path,
-  String chatId,
+  String? chatId,
   String? project,
-) async {
-  final chatWorkspace = config.workspaceDir(chatId, project: project);
+) {
+  final chatWorkspace =
+      chatId == null ? null : config.workspaceDir(chatId, project: project);
   final shared = builtinProjectOf(project)?.sharedWorkspace ?? true;
   final projectWorkspace =
-      shared ? config.projectWorkspaceDir(project: project) : chatWorkspace;
+      shared ? config.projectWorkspaceDir(project: project) : chatWorkspace!;
   return resolveWorkspacePath(
     config.fs,
     path,
-    chatWorkspace,
+    chatWorkspace ?? projectWorkspace,
     projectWorkspace,
+    guestRoot: shell.guestRoot,
+    homePath: shell.homeFor(projectWorkspace),
   );
 }
 
@@ -1046,15 +1050,17 @@ final triggerManagerProvider = Provider<TriggerManager>((ref) {
   final alarms = ref.watch(reminderAlarmsProvider);
   final manager = TriggerManager(
     kinds: [
-      ScheduleKind(alarms),
-      TimerKind(alarms),
+      ClockKind(alarms,
+          matchOf: (t) => t.source is ScheduleSource, label: "Schedule"),
+      ClockKind(alarms,
+          matchOf: (t) => t.source is TimerSource, label: "Timer"),
       FileKind(
         fileWatches: createFileWatches(),
-        resolve: (trigger, path) => _resolveTriggerPath(
+        resolve: (trigger, path) async => _resolveTriggerPath(
           ref.read(appConfigProvider),
-          ref.read(chatRepositoryProvider),
+          ref.read(shellProvider),
           path,
-          trigger.chatId ?? trigger.id,
+          trigger.chatId,
           trigger.project,
         ),
       ),
@@ -1299,14 +1305,11 @@ class ProjectSettingsNotifier extends Notifier<ProjectSettings> {
   }
 }
 
-/// The adapter the backend's turn is handed: every read is the provider
-/// notifier's, so a registration lands in the list this process watches and
-/// is armed by the manager's own reload.
-TriggerRegistryOwner triggerRegistryOwner(ProviderContainer container) =>
-    _ProviderTriggerOwner(container);
-
-class _ProviderTriggerOwner implements TriggerRegistryOwner {
-  _ProviderTriggerOwner(this._container);
+/// The one adapter the tools' registry rides over: the provider notifier,
+/// so a registration lands in the list this process watches and is armed by
+/// the manager's own reload.
+class ProviderTriggerOwner implements TriggerRegistryOwner {
+  ProviderTriggerOwner(this._container);
 
   final ProviderContainer _container;
 
@@ -1322,4 +1325,8 @@ class _ProviderTriggerOwner implements TriggerRegistryOwner {
 
   @override
   Future<void> remove(String id) async => _notifier.remove(id);
+
+  /// What the backend holds: one chat's face over this owner.
+  TriggerRegistry registryFor(String chatId) =>
+      ChatTriggerRegistry(this, chatId);
 }

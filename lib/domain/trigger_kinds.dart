@@ -8,17 +8,28 @@ import "trigger.dart";
 
 /// What a kind reports to the manager — which trigger fired, and the words
 /// the fire says for itself. The reason rides in the prompt the runner sends
-/// rather than in a side channel, so the log says why a turn started.
+/// rather than in a side channel, so the log says why a turn started. How
+/// late a fire was is the manager's to say: it owns the clock and answers
+/// once, whatever watcher noticed.
 class TriggerFire {
-  const TriggerFire(this.triggerId, this.reason, {this.lateFire = false});
+  const TriggerFire(this.triggerId, this.reason);
 
   final String triggerId;
   final String reason;
+}
 
-  /// Whether the fire arrived well past its time — a trigger missed while
-  /// the process was dead, caught up at launch. The completion's wording
-  /// says so; an exact alarm, arriving within seconds, does not.
-  final bool lateFire;
+/// What [TriggerKind.watch] answers: the fires, and how far they have
+/// started — [started] is past the catch-up, so what awaited it comes back
+/// to a settled watch, not to one still parked on port round trips. A
+/// promise a pump cannot keep on half the platforms, which is why the
+/// manager awaits it rather than guessing.
+class TriggerWatch {
+  TriggerWatch(this.stream, {required this.started});
+
+  final Stream<TriggerFire> stream;
+
+  /// Past catch-up: what was already due has been reported.
+  final Future<void> started;
 }
 
 /// The behaviour of one source kind: what watches the source becoming true,
@@ -39,18 +50,18 @@ abstract class TriggerKind {
   /// lets the manager skip building a watch it would never read.
   bool armed(Trigger trigger);
 
-  /// What to watch. Answers a stream that covers the triggers given, which
-  /// are exactly [matches] and [armed] over one snapshot of the list: the
-  /// manager swaps the list under one subscription per reload rather than
-  /// one per trigger. A clock kind's stream carries its own catch-up of
-  /// what passed while nothing was running and its own timer; a file
-  /// kind's, its watchers, each debounced.
+  /// What to watch. Covers the triggers given, which are exactly
+  /// [matches] and [armed] over one snapshot of the list: the manager swaps
+  /// the list under one subscription per reload rather than one per
+  /// trigger. A clock kind's watch carries its own catch-up of what passed
+  /// while nothing was running and its own timer; a file kind's, its
+  /// watchers, each debounced.
   ///
   /// The stream is controller-backed rather than a generator: a watcher
   /// torn down on a list change has to stop *now*, whatever it is parked
   /// on — a countdown hours out being a generator's undoing. One listen, so
   /// a single-subscription controller is right.
-  Stream<TriggerFire> watch(List<Trigger> triggers, Clock clock);
+  TriggerWatch watch(List<Trigger> triggers, Clock clock);
 
   /// Hand a fire back rather than run it, where the platform will not hold
   /// the process for the turn — answered before the runner is called, once
@@ -68,16 +79,19 @@ abstract class TriggerKind {
   /// Null where the kind is never on the clock.
   DateTime? nextFire(Trigger trigger, DateTime after);
 
-  /// The description the editor's source picker reads: what this kind is,
-  /// in the user's own words.
-  String get label;
+  /// Why this trigger's fire says it fired — the line the runner appends to
+  /// the prompt, the log's answer to why a turn started. Owned here because
+  /// it is the kind that witnessed what happened; the manager asks, it does
+  /// not invent.
+  String reasonOf(Trigger trigger);
 }
 
-/// What the wall-clock kinds share: the in-process timer aimed at the
-/// nearest armed `nextFireAt`, catch-up for what passed while nothing was
-/// running, the alarm diff that lets Android fire with the process dead,
-/// and the defer-to-alarm dance for a fire the platform cannot hold a turn
-/// under.
+/// What the wall-clock kinds are, without a class each: a match over the
+/// source, a label, and everything the clock kinds share — the in-process
+/// timer aimed at the nearest armed `nextFireAt`, catch-up for what passed
+/// while nothing was running, the alarm diff that lets Android fire with
+/// the process dead, and the defer-to-alarm dance for a fire the platform
+/// cannot hold a turn under.
 ///
 /// The timer is this class's own rather than the manager's because it is
 /// the "what to check" of a clock source: it fires on time whether or not
@@ -89,13 +103,20 @@ abstract class TriggerKind {
 /// seconds later, held. A watch is torn down on every list change, which is
 /// exactly when the diff has to run — one place, not two kept level by
 /// hand.
-abstract class ClockKind extends TriggerKind {
-  ClockKind(this.alarms);
+class ClockKind extends TriggerKind {
+  ClockKind(this.alarms, {required this.matchOf, required this.label});
 
-  /// The alarm port's scheduling half. Notify is not here: the manager is
-  /// where a fire answers for itself, and a kind has no conversation to
-  /// answer about.
+  final bool Function(Trigger) matchOf;
+
   final ReminderAlarms alarms;
+
+  /// What the settings page's picker words the kind as.
+  final String label;
+
+  /// How long past its time a fire may arrive without counting as missed.
+  /// An exact alarm lands within seconds; an inexact one can be minutes
+  /// late under Doze, which is honest lateness and worth saying.
+  static const late = Duration(minutes: 2);
 
   /// What is currently registered with the system, by request code — the
   /// diff between this and the watch's snapshot is what _diffAlarms
@@ -108,14 +129,8 @@ abstract class ClockKind extends TriggerKind {
   /// merely killable beats not running it at all.
   final Set<String> _deferred = {};
 
-  /// How long past its time a fire may arrive without counting as missed.
-  /// An exact alarm lands within seconds; an inexact one can be minutes
-  /// late under Doze, which is honest lateness and worth saying.
-  static const late = Duration(minutes: 2);
-
-  TriggerFire _fireOf(Trigger trigger, DateTime now, String reason) =>
-      TriggerFire(trigger.id, reason,
-          lateFire: now.difference(trigger.nextFireAt!) > late);
+  @override
+  bool matches(Trigger trigger) => matchOf(trigger);
 
   @override
   bool armed(Trigger trigger) =>
@@ -129,9 +144,24 @@ abstract class ClockKind extends TriggerKind {
   void ran(Trigger trigger) => _deferred.remove(trigger.id);
 
   @override
-  Stream<TriggerFire> watch(List<Trigger> triggers, Clock clock) {
+  String reasonOf(Trigger trigger) => trigger.source.describe();
+
+  @override
+  TriggerWatch watch(List<Trigger> triggers, Clock clock) {
     late StreamController<TriggerFire> controller;
     Timer? timer;
+
+    void fireDue(DateTime now) {
+      // Whatever has passed fires; a repeating trigger's stamp lands only
+      // once its turn has run, so the watch is rebuilt underneath this
+      // timer and this one is cancelled with it.
+      for (final trigger in triggers) {
+        final at = trigger.nextFireAt;
+        if (at != null && !at.isAfter(now)) {
+          controller.add(TriggerFire(trigger.id, reasonOf(trigger)));
+        }
+      }
+    }
 
     void aim() {
       timer?.cancel();
@@ -147,38 +177,24 @@ abstract class ClockKind extends TriggerKind {
       if (nearest == null) return;
       final wait = nearest.difference(clock.now());
       timer = Timer(wait.isNegative ? Duration.zero : wait, () {
-        final now = clock.now();
-        // Whatever has passed fires; a repeating trigger's stamp lands only
-        // once its turn has run, so the watch is rebuilt underneath this
-        // timer and this one is cancelled with it.
-        for (final trigger in triggers) {
-          final at = trigger.nextFireAt;
-          if (at != null && !at.isAfter(now)) {
-            controller.add(_fireOf(trigger, now, reasonOf(trigger)));
-          }
-        }
+        fireDue(clock.now());
         aim();
       });
     }
 
+    // Catch-up and the alarm diff run once, before [started] completes; the
+    // diff's unchanged codes cost nothing, so the round trips are the ones
+    // the list actually changed.
     Future<void> start() async {
-      // The alarm diff first: the boot receiver re-arms what it reads, and
-      // whatever the list changed is said to the system here.
       await _diffAlarms(triggers);
-      // Catch-up: what passed while nothing was running fires now.
-      final now = clock.now();
-      for (final trigger in triggers) {
-        final at = trigger.nextFireAt;
-        if (at != null && !at.isAfter(now)) {
-          controller.add(_fireOf(trigger, now, reasonOf(trigger)));
-        }
-      }
+      fireDue(clock.now());
       aim();
     }
 
+    final done = Completer<void>();
     controller = StreamController<TriggerFire>(
       onListen: () {
-        unawaited(start());
+        unawaited(start().then((_) => done.complete()));
       },
       onPause: () => timer?.cancel(),
       onResume: aim,
@@ -187,18 +203,7 @@ abstract class ClockKind extends TriggerKind {
         timer = null;
       },
     );
-    return controller.stream;
-  }
-
-  /// What the fire says set it off: the schedule or its next recurrence, in
-  /// the words the user set it with.
-  String reasonOf(Trigger trigger) {
-    final source = trigger.source;
-    return source is ScheduleSource
-        ? "schedule: ${source.describe()}"
-        : source is TimerSource
-            ? "timer: ${source.describe()}"
-            : "the clock reached its time";
+    return TriggerWatch(controller.stream, started: done.future);
   }
 
   /// Re-register every armed trigger with the system, cancelling whatever
@@ -239,38 +244,6 @@ abstract class ClockKind extends TriggerKind {
   }
 }
 
-/// The schedule source's kind: [ScheduleSource]'s recurrence against the
-/// system clock.
-class ScheduleKind extends ClockKind {
-  ScheduleKind(super.alarms);
-
-  @override
-  bool matches(Trigger trigger) => trigger.source is ScheduleSource;
-
-  @override
-  bool armed(Trigger trigger) => matches(trigger) && super.armed(trigger);
-
-  @override
-  String get label => "Schedule";
-}
-
-/// The timer source's kind: a one-shot countdown. Fires exactly as a
-/// schedule does — the alarm arithmetic differs, the manager's path is the
-/// same one — so it shares [ClockKind] with nothing of its own beyond the
-/// match.
-class TimerKind extends ClockKind {
-  TimerKind(super.alarms);
-
-  @override
-  bool matches(Trigger trigger) => trigger.source is TimerSource;
-
-  @override
-  bool armed(Trigger trigger) => matches(trigger) && super.armed(trigger);
-
-  @override
-  String get label => "Timer";
-}
-
 /// The file source's kind: watchers over resolved roots, debounced. A file
 /// trigger is never on the clock — nothing is handed to a system scheduler,
 /// and a fire missed while the process was not running is not re-delivered
@@ -281,7 +254,9 @@ class FileKind extends TriggerKind {
 
   /// The platform's watcher, or the unavailable one: a browser is where
   /// this kind has nothing to watch with, the way the alarms port is what
-  /// the clock kinds' answer rides on.
+  /// the clock kinds' answer rides on. Consulted at [armed] rather than
+  /// answered with silence at runtime, so the settings pages can say what
+  /// cannot fire.
   final FileWatches fileWatches;
 
   /// Resolves a stored path to a watchable root, through the same rules the
@@ -289,6 +264,12 @@ class FileKind extends TriggerKind {
   /// chat's workspace, `~` expanded. Set by whoever builds the kind, since
   /// where the workspaces are is the builder's to say.
   final Future<String> Function(Trigger trigger, String path)? resolve;
+
+  /// What each trigger fired last, for the cooldown — on the kind rather
+  /// than the watch, so a registration's rebuild (a stamp re-entering
+  /// reload, a toggle) does not reset it: the burst the cooldown exists to
+  /// damp is exactly the one a rebuild lands inside.
+  final Map<String, DateTime> _seen = {};
 
   @override
   bool matches(Trigger trigger) => trigger.source is FileSource;
@@ -299,7 +280,8 @@ class FileKind extends TriggerKind {
     return trigger.enabled &&
         source is FileSource &&
         source.paths.isNotEmpty &&
-        resolve != null;
+        resolve != null &&
+        fileWatches.available;
   }
 
   @override
@@ -312,16 +294,13 @@ class FileKind extends TriggerKind {
   void ran(Trigger trigger) {}
 
   @override
-  String get label => "Files";
+  String reasonOf(Trigger trigger) =>
+      "file ${(trigger.source as FileSource).paths.join(", ")}";
 
   @override
-  Stream<TriggerFire> watch(List<Trigger> triggers, Clock clock) {
+  TriggerWatch watch(List<Trigger> triggers, Clock clock) {
     late StreamController<TriggerFire> controller;
     final subscriptions = <StreamSubscription<FileWatchEvent>>[];
-
-    /// What each trigger fired last, for the cooldown: a burst of writes to
-    /// the watched path is one turn rather than one a line.
-    final seen = <String, DateTime>{};
 
     Future<void> start() async {
       // One root is one watcher, however many triggers name it: a fan of
@@ -339,7 +318,7 @@ class FileKind extends TriggerKind {
         final sub = fileWatches.watch(entry.key).listen(
               (event) {
                 for (final (trigger, source) in pairs) {
-                  final fire = _fireFor(event, trigger, source, clock, seen);
+                  final fire = _fireFor(event, trigger, source, clock);
                   if (fire != null) controller.add(fire);
                 }
               },
@@ -352,9 +331,10 @@ class FileKind extends TriggerKind {
       }
     }
 
+    final done = Completer<void>();
     controller = StreamController<TriggerFire>(
       onListen: () {
-        unawaited(start());
+        unawaited(start().then((_) => done.complete()));
       },
       onCancel: () async {
         for (final sub in subscriptions) {
@@ -363,24 +343,20 @@ class FileKind extends TriggerKind {
         subscriptions.clear();
       },
     );
-    return controller.stream;
+    return TriggerWatch(controller.stream, started: done.future);
   }
 
   /// Whether the event is one this trigger asks for, and whether its
   /// cooldown lets the answer be yes. The event is matched by *what* fired
-  /// (create/change/delete/move) and the trigger by *where* — its paths are
-  /// roots, and anything under one is in its reach.
-  TriggerFire? _fireFor(
-      FileWatchEvent event, Trigger trigger, FileSource source,
-      Clock clock, Map<String, DateTime> seen) {
-    if (!_eventMatches(event.kind, source.events)) return null;
-    final last = seen[trigger.id];
+  /// ([FileEvent], the one vocabulary) and the trigger by *where* — its
+  /// paths are roots, and anything under one is in its reach.
+  TriggerFire? _fireFor(FileWatchEvent event, Trigger trigger,
+      FileSource source, Clock clock) {
+    if (!source.events.contains(event.kind)) return null;
+    final last = _seen[trigger.id];
     final now = clock.now();
     if (last != null && now.difference(last) < source.cooldown) return null;
-    seen[trigger.id] = now;
+    _seen[trigger.id] = now;
     return TriggerFire(trigger.id, "file ${event.path} changed");
   }
-
-  static bool _eventMatches(FileEventKind kind, Set<FileEvent> events) =>
-      events.any((e) => e.watchKind == kind.name);
 }

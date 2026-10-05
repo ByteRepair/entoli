@@ -27,7 +27,7 @@ import "../../domain/models.dart";
 import "../../domain/prompt_library.dart";
 import "../../domain/file_watches.dart";
 import "../../domain/reminder_alarms.dart";
-import "../../domain/trigger_manager.dart" show TriggerRegistryOwner;
+import "../../domain/trigger_manager.dart" show TriggerRegistryFactory;
 import "../../domain/rootfs_store.dart";
 import "../../domain/secret_store.dart";
 import "../../domain/shell.dart";
@@ -64,7 +64,7 @@ BuiltinBackend createBackend(
   String? byteRepairBinDir,
   required AppSecrets secrets,
   String? loginPath,
-  TriggerRegistryOwner? triggerRegistry,
+  TriggerRegistryFactory? triggerRegistry,
 }) {
   AppSettings settings() => AppSettings.load(config);
   final backend = BuiltinBackend(
@@ -177,11 +177,6 @@ LocalPrefill? createLocalPrefill(
            // no memory tools; a turn with them misses the cache rather than
            // the cache serving a list no turn sends.
            offerMemory: false,
-           // A turn that registers sends the trigger trio in its list, so
-           // the warmed prefix carries them when the prefill warms a
-           // top-level turn's body — the flag is the same fact a turn's
-           // list reads.
-           offerTriggers: true,
          ),
       );
     },
