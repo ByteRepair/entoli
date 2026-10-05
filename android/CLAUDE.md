@@ -393,10 +393,12 @@ build's tab says it as well, which is honest and free. Linux is left alone:
 on GTK, and there is no second install to tell apart. Profile builds have no
 `res/` of their own and so carry the release name and artwork.
 
-## Waking for a reminder
+## Waking for a trigger
 
-A reminder set while the app was closed fires through AlarmManager, and the
-process may have been dead since it was set. `ReminderReceiver` is the entry
+A trigger set while the app was closed fires through AlarmManager, and the
+process may have been dead since it was set. Schedules and timers ride this;
+a file trigger has nothing here to hand to — it fires while the process runs,
+which is what a watcher is. `ReminderReceiver` is the entry
 point: it stashes the reminder id in `RemindersChannel`'s held-pending list
 (the same shape `AssistantChannel` has for the assistant gesture), starts
 `AgentService` synchronously inside the alarm's temporary allowlist window, and

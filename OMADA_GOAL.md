@@ -140,8 +140,14 @@ stays — history is fact.
 
 ## What remains
 
-- **Triggers, later.** What else may start a member's turn (schedule, file
-  change) now that rounds exist.
+Nothing. The deferred "Triggers, later" is Triggers (`lib/domain/trigger.dart`
+on) — a schedule, a timer or a file change can send into any chat, a room's
+included — and the trigger that names a *member* rather than the chat is
+landed with it: `Trigger.member`, checked at registration against the
+project's library, addressed by a mention the runner composes onto the head
+of the send, routed by the room like any say (see "Who a fire addresses" in
+`lib/domain/CLAUDE.md`). What the tools' `member` argument and the trigger's
+are is the same word, read once the room had a reason to.
 
 ## Design invariants carried
 

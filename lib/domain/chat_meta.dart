@@ -41,9 +41,9 @@ class ChatMeta {
   /// back from here.
   bool? memoryOff;
 
-  /// A chat nobody watches — a reminder's. Every turn on it drops `ask_user`
+  /// A chat nobody watches — a trigger's new one. Every turn on it drops `ask_user`
   /// and `task`, since nobody is there to answer or to need the fan-out, and
-  /// suppresses the title model, since the reminder already named the chat. Null
+  /// suppresses the title model, since a trigger already named the chat. Null
   /// means an ordinary chat the user drives.
   bool? headless;
 

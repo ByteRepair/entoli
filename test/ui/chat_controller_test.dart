@@ -20,7 +20,9 @@ import "package:agent_chat/providers.dart"
         appSettingsProvider,
         projectSettingsProvider,
         promptLibraryProvider;
+import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:agent_chat/ui/chat/chat_controller.dart";
+import "package:agent_chat/ui/chat/trigger_turn_driver.dart";
 import "package:agent_chat/ui/chat/chat_page.dart"
     show CompactionEntry, entriesOf, MessageEntry, SectionEntry;
 
@@ -2113,6 +2115,72 @@ void main() {
       await chatWithOneTurn("hello @nobody-knows-me", project: "team");
 
       expect(app.backend.prompts.single.settings.omadaMember, isNull);
+    });
+
+    test("a trigger fire naming a member is a say the room routes to them",
+        () async {
+      await _inTeam(app);
+      final chat = await app.repo.createChat(project: "team");
+      final id = chat.state.id;
+      final controller = app.container.read(chatControllerProvider(id).notifier);
+      await controller.send("kick things off");
+      await waitIdle(id);
+
+      // The fire is a `send` through the real driver — a user message naming
+      // the member in its text, routed onto their FIFO, answered under their
+      // author stamp like any say the room dispatched. The ref a driver
+      // needs comes from the provider it is read through.
+      final driver = app.container.read(
+          Provider<ChatControllerTriggerTurnDriver>(
+              (ref) => ChatControllerTriggerTurnDriver(ref)));
+      await driver.send(id, "@explore\n\ncheck the builds\n\n(schedule: 9:00)");
+      await waitIdle(id, limit: const Duration(seconds: 5));
+
+      final messages = messagesOf(id);
+      expect(textOf(messages[2]), contains("@explore"));
+      expect(app.backend.prompts.last.settings.omadaMember, "explore");
+      expect(app.backend.prompts.last.prompt.plainText,
+          "@explore\n\ncheck the builds\n\n(schedule: 9:00)");
+      expect(messages.last.author, "@explore");
+    });
+
+    test("a trigger fire naming no member reaches the house", () async {
+      await _inTeam(app);
+      final chat = await app.repo.createChat(project: "team");
+      final id = chat.state.id;
+      final controller = app.container.read(chatControllerProvider(id).notifier);
+      await controller.send("kick things off");
+      await waitIdle(id);
+
+      final driver = app.container.read(
+          Provider<ChatControllerTriggerTurnDriver>(
+              (ref) => ChatControllerTriggerTurnDriver(ref)));
+      await driver.send(id, "check the builds\n\n(schedule: 9:00)");
+      await waitIdle(id, limit: const Duration(seconds: 5));
+
+      expect(app.backend.prompts.last.settings.omadaMember, isNull);
+      expect(messagesOf(id).last.author, isNull);
+    });
+
+    test("a direct chat takes a member's fire as instruction material",
+        () async {
+      final chat = await app.repo.createChat();
+      final id = chat.state.id;
+      final controller = app.container.read(chatControllerProvider(id).notifier);
+      await controller.send("kick things off");
+      await waitIdle(id);
+
+      final driver = app.container.read(
+          Provider<ChatControllerTriggerTurnDriver>(
+              (ref) => ChatControllerTriggerTurnDriver(ref)));
+      await driver.send(id, "@explore\n\ncheck the builds");
+      await waitIdle(id, limit: const Duration(seconds: 5));
+
+      // Omada off: no promotion, no stamp — the mention rides inline, and
+      // the reply is the main agent's, the direct-chat contract whole.
+      expect(app.backend.prompts.last.settings.omadaMember, isNull);
+      expect(messagesOf(id).last.author, isNull);
+      expect(app.backend.prompts.last.prompt.plainText, contains("@explore"));
     });
   });
 group("a banner answer through the controller", () {

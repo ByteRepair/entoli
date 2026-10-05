@@ -179,7 +179,7 @@ enum MemoryPolicy {
 /// are not here. What a turn can run at all is the platform's fact, which a
 /// project does not widen or narrow either: `bash` and the prompt around it
 /// change with the shell, not with the project.
-enum AgentCapability { ask, task, artifact, createSkill, webSearch }
+enum AgentCapability { ask, task, artifact, createSkill, webSearch, trigger }
 
 /// What the menus and the title bar call the anonymous built-in. A const so
 /// the label and the tests that assert it name one string, the way
