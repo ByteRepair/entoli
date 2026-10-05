@@ -9,6 +9,7 @@ import "package:agent_chat/data/builtin/trigger_tool.dart";
 import "package:agent_chat/domain/agent_backend.dart";
 import "package:agent_chat/data/builtin/llm/llm_client.dart";
 import "package:agent_chat/domain/models.dart";
+import "package:agent_chat/domain/prompt_library.dart";
 import "package:agent_chat/domain/trigger.dart";
 import "package:agent_chat/domain/trigger_manager.dart";
 
@@ -22,8 +23,20 @@ class FakeRegistry implements TriggerRegistry {
 
   String? chatId;
 
+  PromptLibrary? library;
+
   @override
-  Future<Trigger> register({required TriggerSource source, required String prompt, String? name}) async {
+  Future<Trigger> register(
+      {required TriggerSource source,
+      required String prompt,
+      String? name,
+      String? member}) async {
+    if (member
+        case final name? when (library ?? PromptLibrary.empty)
+                .find(CompletionKind.agent, name) ==
+            null) {
+      throw ArgumentError.value(member, "member", "no agent named $member");
+    }
     final id = "t-${stored.length + 1}";
     // The same anchor the provider's own registerFor applies: a timer is
     // re-dated to the moment of registration, the parse's placeholder gone.
@@ -37,6 +50,7 @@ class FakeRegistry implements TriggerRegistry {
         prompt: prompt,
         source: anchored,
         chatId: chatId,
+        member: member,
         byAgent: true,
         nextFireAt: anchored.nextAfter(now));
     stored.add(trigger);
@@ -59,7 +73,10 @@ void main() {
   late Directory tempDir;
 
   setUp(() {
-    registry = FakeRegistry()..chatId = "chat-1";
+    registry = FakeRegistry()
+      ..chatId = "chat-1"
+      // What the room composes against: the test library's two agents.
+      ..library = testLibrary();
     tempDir = Directory.systemTemp.createTempSync("trigger-tool-test");
   });
 
@@ -153,6 +170,52 @@ void main() {
     final result = resultOf(events);
     expect(result.returnCode, -1);
     expect(result.exceptionInfo, contains(triggerSetProblem("timer")));
+  });
+
+  test("trigger_set stores the member it was given", () async {
+    final events = await agent([
+      fileCall(triggerSetName, {
+        "source": "schedule",
+        "prompt": "triage the bugs",
+        "at": "2026-08-24T09:00:00",
+        "member": "explore",
+      }),
+    ]).run(userMessage("hand it to explore")).toList();
+
+    expect(registry.stored.single.member, "explore");
+    final result = resultOf(events);
+    expect(result.returnCode, 0);
+    expect(result.output, contains("@explore"));
+  });
+
+  test("trigger_set refuses a member the project does not hold", () async {
+    // The setUp library holds explore and build only — nobody is not one.
+    final events = await agent([
+      fileCall(triggerSetName, {
+        "source": "schedule",
+        "prompt": "triage the bugs",
+        "at": "2026-08-24T09:00:00",
+        "member": "nobody",
+      }),
+    ]).run(userMessage("hand it to nobody")).toList();
+
+    final result = resultOf(events);
+    expect(result.returnCode, -1);
+    expect(result.exceptionInfo, contains("nobody"));
+    expect(registry.stored, isEmpty);
+  });
+
+  test("trigger_list names the member a fire is addressed to", () async {
+    await registry.register(
+        source: ScheduleSource(at: DateTime(2026, 8, 24, 9)),
+        prompt: "p",
+        member: "build");
+    final events = await agent([
+      fileCall(triggerListName, {}),
+    ]).run(userMessage("what is armed?")).toList();
+    final output = resultOf(events).output;
+    expect(output, contains("t-1"));
+    expect(output, contains("@build"));
   });
 
   test("trigger_list answers this chat's own with ids and next fires", () async {

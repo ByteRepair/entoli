@@ -429,7 +429,7 @@ class BuiltinBackend implements AgentBackend {
           }
           return store.createArtifact(chatId, resolved, entryFile, project: project);
         },
-        registerTrigger: triggerRegistry?.call(chatId),
+        registerTrigger: triggerRegistry?.call(chatId, project),
         packageSkill: (path, name) async {
           final resolved = resolvePath(path);
           final pkg = await packageSkillDirectory(config.fs, resolved, name);

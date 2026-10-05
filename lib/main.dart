@@ -148,7 +148,7 @@ class AppSession {
     final backend = platform.createBackend(config, libraries, store,
         tools: toolset, rootfs: rootfs, abi: await abi, localLlm: server, kvCache: kvCache,
         byteRepairBinDir: byteRepairBin, secrets: secrets, loginPath: await loginPath,
-        triggerRegistry: (chatId) => triggerRegistry(chatId));
+        triggerRegistry: (chatId, project) => triggerRegistry(chatId, project));
     // One instance, shared: the prefill's notification and every other
     // foreground hold go through the same service.
     final foreground = ForegroundService();
@@ -252,8 +252,8 @@ class AppSession {
     // Arming reconnects for paired devices, so a desktop that has paired once
     // can be dialed again after a restart without opening a window first.
     settingsHome = container;
-    triggerRegistry = (chatId) =>
-        ProviderTriggerOwner(container).registryFor(chatId);
+    triggerRegistry = (chatId, project) =>
+        ProviderTriggerOwner(container).registryFor(chatId, project);
     // Before `ensureReady`, which starts listening: a peer that lands during
     // it would otherwise run the whole handshake against a hub with no
     // repository and be sent no welcome.

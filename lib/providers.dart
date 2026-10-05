@@ -959,8 +959,11 @@ class Triggers extends Notifier<List<Trigger>> implements TriggerList {
   /// A timer is anchored here, where the clock is: the parse carried a
   /// placeholder, and re-anchoring is what makes a countdown thirty
   /// seconds from *this* rather than from somebody else's midnight.
+  /// Anchors a timer against the clock and adds with a request code
+  /// assigned: the one place codes are handed out, so they stay unique for
+  /// the trigger's life.
   Future<Trigger> registerFor(String chatId,
-      {required TriggerSource source, required String prompt, String? name}) async {
+      {required TriggerSource source, required String prompt, String? name, String? member}) async {
     final now = ref.read(clockProvider).now();
     final anchored = source is TimerSource
         ? TimerSource(duration: source.duration, registeredAt: now)
@@ -971,6 +974,7 @@ class Triggers extends Notifier<List<Trigger>> implements TriggerList {
       prompt: prompt,
       source: anchored,
       chatId: chatId,
+      member: member,
       byAgent: true,
       nextFireAt: anchored.nextAfter(now),
     );
@@ -1340,13 +1344,19 @@ class ProviderTriggerOwner implements TriggerRegistryOwner {
 
   @override
   Future<Trigger> registerFor(String chatId,
-          {required TriggerSource source, required String prompt, String? name}) async =>
-      _notifier.registerFor(chatId, source: source, prompt: prompt, name: name);
+          {required TriggerSource source, required String prompt, String? name, String? member}) async =>
+      _notifier.registerFor(chatId, source: source, prompt: prompt, name: name, member: member);
+
+  @override
+  PromptLibrary libraryFor(String? project) =>
+      // The chat-scoped registry checked its member against this; the
+      // project's own library is what every mention resolves against.
+      _container.read(promptLibraryProvider(project));
 
   @override
   Future<void> remove(String id) async => _notifier.remove(id);
 
   /// What the backend holds: one chat's face over this owner.
-  TriggerRegistry registryFor(String chatId) =>
-      ChatTriggerRegistry(this, chatId);
+  TriggerRegistry registryFor(String chatId, String? project) =>
+      ChatTriggerRegistry(this, chatId, project);
 }

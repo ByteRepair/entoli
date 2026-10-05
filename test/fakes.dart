@@ -1416,14 +1416,29 @@ class StubRuns implements TriggerRuns {
 }
 
 /// A [TriggerRegistry] recording what the tools registered and removed.
+/// [library] is the library a member registration is checked against — null
+/// and empty both hold no agent, so a test's member refusal is the shape the
+/// project-less case makes.
 class FakeTriggerRegistry implements TriggerRegistry {
   final stored = <Trigger>[];
   final removed = <String>[];
 
   String? chatId;
 
+  PromptLibrary? library;
+
   @override
-  Future<Trigger> register({required TriggerSource source, required String prompt, String? name}) async {
+  Future<Trigger> register(
+      {required TriggerSource source,
+      required String prompt,
+      String? name,
+      String? member}) async {
+    if (member
+        case final name? when (library ?? PromptLibrary.empty)
+                .find(CompletionKind.agent, name) ==
+            null) {
+      throw ArgumentError.value(member, "member", "no agent named $member");
+    }
     final id = "t-${stored.length + 1}";
     // The same anchor the provider's own registerFor applies: a timer is
     // re-dated to the moment of registration, the parse's placeholder gone.
@@ -1437,6 +1452,7 @@ class FakeTriggerRegistry implements TriggerRegistry {
         prompt: prompt,
         source: anchored,
         chatId: chatId,
+        member: member,
         byAgent: true,
         nextFireAt: anchored.nextAfter(now));
     stored.add(trigger);

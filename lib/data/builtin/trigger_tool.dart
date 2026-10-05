@@ -40,6 +40,15 @@ const triggerSetTool = LlmTool(
         "type": "string",
         "description": "Optional short name; shown in the Triggers settings.",
       },
+      "member": {
+        "type": "string",
+        "description": "Optional member of this project's Omada room to "
+            "address the fire to — the agent's name without the @. The fire "
+            "is sent as a message naming them, so the room routes it onto "
+            "their turn the way any mention does; in a project with Omada "
+            "off it is plain prose. Must be a name this project holds; the "
+            "registration is refused otherwise.",
+      },
       "at": {
         "type": "string",
         "description": "schedule: the wall-clock time to fire at, ISO 8601 "
@@ -121,11 +130,17 @@ class TriggerDraft {
     required this.source,
     required this.prompt,
     this.name = "",
+    this.member,
   });
 
   final TriggerSource source;
   final String prompt;
   final String name;
+
+  /// The member the fire is addressed to, sigil off. Null where the
+  /// arguments named none; validation is the registry's, which holds the
+  /// library.
+  final String? member;
 }
 
 TriggerDraft? triggerDraftFromArgs({required Map<String, dynamic> args}) {
@@ -143,6 +158,7 @@ TriggerDraft? triggerDraftFromArgs({required Map<String, dynamic> args}) {
     source: source,
     prompt: prompt.trim(),
     name: args["name"] is String ? args["name"] as String : "",
+    member: args["member"] is String ? (args["member"] as String).trim() : null,
   );
 }
 

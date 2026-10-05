@@ -3,6 +3,8 @@ import "dart:async";
 import "package:clock/clock.dart";
 
 import "reminder_alarms.dart";
+import "prompt_library.dart";
+import "models.dart" show CompletionKind;
 import "trigger.dart";
 import "trigger_kinds.dart";
 import "trigger_runner.dart";
@@ -14,11 +16,14 @@ import "trigger_runner.dart";
 abstract interface class TriggerRegistry {
   /// A fresh id (and request code where the source wants one), armed
   /// against now, in the chat this registry answers for. Answers what was
-  /// stored, id and all.
+  /// stored, id and all. A [member] name this chat's project's library does
+  /// not hold is refused with what was not found — the model can fix its
+  /// own registration.
   Future<Trigger> register({
     required TriggerSource source,
     required String prompt,
     String? name,
+    String? member,
   });
 
   /// This chat's own — what the tools list, and what may be removed.
@@ -281,15 +286,35 @@ class TriggerManager {
 /// over the whole list. The tools ask and answer in this chat's vocabulary;
 /// the list stays one, and the provider's reload is what watches a
 /// registration the moment it lands.
+///
+/// The project comes with the chat — it is what the fire's mention resolves
+/// against and what a [register] validates its member against. Validation
+/// rides the same library the composing turn was handed, so a member
+/// deleted mid-conversation is refused by the snapshot the room itself
+/// reads; a *stored* member later deleted is not re-checked (a stored
+/// record has nothing to consult every launch) and degrades at fire time to
+/// the room's own prose rule.
 class ChatTriggerRegistry implements TriggerRegistry {
-  ChatTriggerRegistry(this._owner, this.chatId);
+  ChatTriggerRegistry(this._owner, this.chatId, this.project);
 
   final TriggerRegistryOwner _owner;
   final String chatId;
+  final String? project;
 
   @override
-  Future<Trigger> register({required TriggerSource source, required String prompt, String? name}) =>
-      _owner.registerFor(chatId, source: source, prompt: prompt, name: name);
+  Future<Trigger> register(
+      {required TriggerSource source,
+      required String prompt,
+      String? name,
+      String? member}) async {
+    final library = _owner.libraryFor(project);
+    if (member != null && library?.find(CompletionKind.agent, member) == null) {
+      throw ArgumentError.value(
+          member, "member", "no agent named $member in this project");
+    }
+    return _owner.registerFor(chatId,
+        source: source, prompt: prompt, name: name, member: member);
+  }
 
   @override
   Future<List<Trigger>> own() async => [
@@ -308,10 +333,16 @@ class ChatTriggerRegistry implements TriggerRegistry {
 abstract interface class TriggerRegistryOwner {
   Future<List<Trigger>> triggers();
   Future<Trigger> registerFor(String chatId,
-      {required TriggerSource source, required String prompt, String? name});
+      {required TriggerSource source, required String prompt, String? name, String? member});
+
+  /// The named project's libraries — what a registration's member is
+  /// checked against, and the list the fire's own library rides. Null is
+  /// the default project.
+  PromptLibrary? libraryFor(String? project);
   Future<void> remove(String id);
 }
 
 /// What the backend holds: a registry per chat, built where the turn asks
 /// for one — one function rather than an adapter class per layer.
-typedef TriggerRegistryFactory = TriggerRegistry Function(String chatId);
+typedef TriggerRegistryFactory = TriggerRegistry Function(
+    String chatId, String? project);

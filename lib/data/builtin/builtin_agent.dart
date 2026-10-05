@@ -1468,7 +1468,10 @@ class BuiltinAgent {
     ));
     try {
       final stored = await registry!.register(
-          source: draft.source, prompt: draft.prompt, name: draft.name);
+          source: draft.source,
+          prompt: draft.prompt,
+          name: draft.name,
+          member: draft.member);
       yield ToolResultEvent(ToolResult(
             callId: call.id,
             returnCode: 0,
@@ -1488,7 +1491,9 @@ class BuiltinAgent {
   /// source's own description — one wording of what was armed, shared with
   /// the settings row and the fire's reason rather than a second here.
   String _triggerSetAnswer(Trigger stored) =>
-      "Trigger ${stored.id} set. ${stored.source.describe()}."
+      "Trigger ${stored.id} set. "
+      "${stored.member == null ? "" : "Fires addressed to @${stored.member}. "}"
+      "${stored.source.describe()}."
       "${stored.source is FileSource ? " Fires only while the app is running." : ""}";
 
   /// Remove one of this chat's own triggers. Another chat's is not here to
@@ -1546,6 +1551,7 @@ class BuiltinAgent {
     final lines = [
       for (final trigger in own)
         "- ${trigger.id}: ${trigger.name.isEmpty ? "(unnamed)" : trigger.name}"
+            "${trigger.member == null ? "" : " → @${trigger.member}"}"
             " — ${trigger.source.describe()}"
             "${_whenLine(trigger)}",
     ];
