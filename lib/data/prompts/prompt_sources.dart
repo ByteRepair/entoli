@@ -20,9 +20,8 @@ import "skill_validate.dart";
 /// Omada answer is the one rule [omadaFor] resolves; the rung rides it, so
 /// every source walks the same shape, skills included — My Team ships none,
 /// and the absence of tagged files is the whole of that.
-List<String> _promptTiers(
-        {required String? project, required AppConfig? config}) =>
-    _tiersFor(
+List<String> promptTiers({required String? project, required AppConfig? config}) =>
+    tiersFor(
       project,
       omada: omadaFor(
         project,
@@ -32,7 +31,7 @@ List<String> _promptTiers(
       ),
     );
 
-List<String> _tiersFor(String? project, {required bool omada}) => [
+List<String> tiersFor(String? project, {required bool omada}) => [
       defaultProjectDir,
       if (omada && omadaBaseProject != project) omadaBaseProject,
       if (project != null && project != defaultProjectDir) project,
@@ -67,7 +66,7 @@ class BundledPrompts implements PromptSource {
   /// built once per library build, so one resolution per source is one per
   /// build. False where there is no config to ask: `BundledPrompts`'s test
   /// shape, which loads no skills either.
-  late final List<String> _tiers = _promptTiers(project: project, config: config);
+  late final List<String> _tiers = promptTiers(project: project, config: config);
 
   @override
   Future<List<PromptDocument>> load(CompletionKind kind) async {
@@ -163,7 +162,7 @@ class DirectoryPrompts implements PromptSource {
 
   /// The tiers this source serves, resolved once per source — see
   /// [BundledPrompts._tiers].
-  late final List<String> _tiers = _promptTiers(project: project, config: config);
+  late final List<String> _tiers = promptTiers(project: project, config: config);
 
   @override
   Future<List<PromptDocument>> load(CompletionKind kind) async {

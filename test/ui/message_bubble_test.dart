@@ -1,4 +1,5 @@
 import "dart:convert";
+import "dart:typed_data";
 
 import "package:flutter/material.dart";
 // `RenderParagraph`, which material does not re-export.
@@ -41,6 +42,7 @@ void main() {
     bool isSpeaking = false,
     ValueChanged<String>? onTapLink,
     String? author,
+    Uint8List? avatar,
   }) =>
       app.pump(
         tester,
@@ -49,6 +51,7 @@ void main() {
             chatId: chatId,
             message: message,
             author: author,
+            avatar: avatar,
             isWaiting: isWaiting,
             waitingNotice: waitingNotice,
             waitingStatus: waitingStatus,
@@ -116,6 +119,34 @@ void main() {
       _message(MessageRole.assistant, [const TextPart(text: "Found them.")]),
     );
     expect(find.text("@researcher"), findsNothing);
+  });
+
+  testWidgets("an avatar rides the author name, and only there", (tester) async {
+    // The circle wraps what it is given in a ResizeImage (the decode budget);
+    // what arrives at an Image is read through it.
+    Uint8List? shown() {
+      final images = tester.widgetList<Image>(find.byType(Image)).toList();
+      if (images.isEmpty) return null;
+      return ((images.single.image as ResizeImage).imageProvider as MemoryImage)
+          .bytes;
+    }
+
+    await pump(
+      tester,
+      _message(MessageRole.assistant, [const TextPart(text: "Found them.")]),
+      author: "@researcher",
+      avatar: onePixelPng,
+    );
+    expect(find.text("@researcher"), findsOneWidget);
+    expect(shown(), onePixelPng);
+
+    // No bytes, no row change: the label alone, the same shape as before.
+    await pump(
+      tester,
+      _message(MessageRole.assistant, [const TextPart(text: "Found them.")]),
+      author: "@researcher",
+    );
+    expect(find.byType(Image), findsNothing);
   });
 
   testWidgets("the spinner gives way to the first text", (tester) async {
