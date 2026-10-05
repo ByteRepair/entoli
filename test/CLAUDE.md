@@ -78,7 +78,8 @@ so a test can see the row mid-flight. What a command actually runs under is not
 faked either: `local_shell_test.dart` builds a `ShellDriver` out of
 `/usr/bin/env`, which really runs, and `proot_test.dart` pins the guest driver's
 invocation itself as a pure function — between them they are what can be checked
-about proot on a machine with no Android on it. The persistent shell's own contract is checked the same
+about proot on a machine with no Android on it. The persistent shell's own
+contract is checked the same
 way: its session tests run real commands through the host's real shell, so a
 `cd` that does not stick, a stop that kills the shell, or a sentinel the
 dispatcher cannot print is a test failure rather than a discovery.
@@ -89,7 +90,16 @@ own contract** — `LocalShell`'s kill and sessions, `tree_ops`'s `chmod` and
 standing in for the process merely to say dart:io streams stdout and `kill`
 kills, the test asserts the framework rather than the app and is left out:
 `LinuxRecorder`'s stream-and-stop is pinned nowhere for that reason, and the
-first hand-run of voice mode is where a break there would show.
+first hand-run of voice mode is where a break there would show. Everywhere
+else an external system is faked, through a port the app already carries —
+a `Fake*` in `test/fakes.dart` where one exists — for the general rule:
+**mock what crosses the app's seam, and never assert against time.** Where
+the process stays real, its timing does not: a fixed `Future.delayed` aimed
+at the gap between starting and being ready is a bet on the runner's load (a
+suite run under `--concurrency 8` on a two-core machine is the load), and the
+wait is event-driven instead — poll a thing the code already publishes
+(`local_shell_test.dart`'s `printed` reads the run's live output) until it
+says the moment being aimed at has arrived.
 
 `TestApp.create(localLlm: …, localModels: …)` is the same pair for the On-device
 page — whether this build has a server at all, and which models are downloaded.

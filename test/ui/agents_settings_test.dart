@@ -3,10 +3,17 @@ import "dart:io";
 import "package:flutter/material.dart";
 import "package:flutter_test/flutter_test.dart";
 
+import "package:agent_chat/data/prompts/agent_pictures.dart"
+    show readAgentPicture;
+import "package:agent_chat/data/prompts/prompt_sources.dart" show promptTiers;
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/providers.dart";
 import "package:agent_chat/ui/settings/settings_page.dart";
+import "package:agent_chat/ui/sidebar/project_settings_page.dart"
+    show ProjectSettingsPage;
+import "package:agent_chat/ui/widgets/agent_picture.dart";
 
+import "../fakes.dart" show onePixelPng, testAttachment;
 import "../harness.dart";
 
 void main() {
@@ -199,14 +206,358 @@ void main() {
         isFalse,
       );
     });
+
+    testWidgets("the agent row's leading element is the picture slot", (tester) async {
+      await pumpSettings(tester, app, SettingsCategory.agents);
+      await reloadLibrary(tester, app);
+
+      // Every row leads with the circle: the person mark where no picture is
+      // set, which is what the bundled agents answer by default.
+      expect(find.byType(AgentPicture), findsAtLeastNWidgets(bundledAgents.length));
+    });
+
+    testWidgets("a picture picked in the editor is written as <name>.png "
+        "beside the .md", (tester) async {
+      final dir = app.config.promptsDir(CompletionKind.agent);
+      newFile("$dir/researcher.md", "---\ndescription: desc\n---\n\nBody.");
+
+      await pumpSettings(tester, app, SettingsCategory.agents);
+      await reloadLibrary(tester, app);
+
+      // Open the editor, pick a picture, save.
+      await tester.tap(find.descendant(
+        of: find.widgetWithText(ListTile, "researcher"),
+        matching: find.byIcon(Icons.edit_outlined),
+      ));
+      await settleIo(tester);
+      await pickImage(tester, app, name: "photo.png");
+      expect(find.textContaining("is set on save"), findsOneWidget);
+
+      await tester.tap(find.text("Save"));
+      await settleIo(tester, least: 15);
+
+      final image = File("$dir/researcher.png");
+      expect(image.existsSync(), isTrue);
+      expect(image.readAsBytesSync(), onePixelPng);
+    });
+
+    testWidgets("a pick that is not a .png is refused", (tester) async {
+      final dir = app.config.promptsDir(CompletionKind.agent);
+      newFile("$dir/researcher.md", "---\ndescription: desc\n---\n\nBody.");
+
+      await pumpSettings(tester, app, SettingsCategory.agents);
+      await reloadLibrary(tester, app);
+
+      await tester.tap(find.descendant(
+        of: find.widgetWithText(ListTile, "researcher"),
+        matching: find.byIcon(Icons.edit_outlined),
+      ));
+      await settleIo(tester);
+      await pickImage(tester, app, name: "photo.jpg");
+
+      // Still on the editor, nothing set, no file written.
+      expect(find.textContaining("pick a PNG image"), findsOneWidget);
+      expect(File("$dir/researcher.png").existsSync(), isFalse);
+    });
+
+    testWidgets("the editor shows the picture the agent already has, and "
+        "removing it deletes the file", (tester) async {
+      final dir = app.config.promptsDir(CompletionKind.agent);
+      newFile("$dir/researcher.md", "---\ndescription: desc\n---\n\nBody.");
+      newFileBytes("$dir/researcher.png", onePixelPng);
+
+      await pumpSettings(tester, app, SettingsCategory.agents);
+      await reloadLibrary(tester, app);
+
+      await tester.tap(find.descendant(
+        of: find.widgetWithText(ListTile, "researcher"),
+        matching: find.byIcon(Icons.edit_outlined),
+      ));
+      await settleIo(tester);
+
+      // The editor shows what is on disk, with a way to take it off.
+      expect(find.textContaining("is set on save"), findsNothing);
+      expect(find.textContaining("No picture"), findsNothing);
+      await tester.tap(find.descendant(
+        of: find.byType(ListView),
+        matching: find.byIcon(Icons.close),
+      ));
+      await tester.pump();
+      expect(find.text("The picture is removed on save."), findsOneWidget);
+
+      await tester.tap(find.text("Save"));
+      await settleIo(tester, least: 15);
+
+      expect(File("$dir/researcher.png").existsSync(), isFalse);
+    });
+
+    testWidgets("saving without touching the picture leaves it alone", (tester) async {
+      final dir = app.config.promptsDir(CompletionKind.agent);
+      newFile("$dir/researcher.md", "---\ndescription: desc\n---\n\nBody.");
+      newFileBytes("$dir/researcher.png", onePixelPng);
+
+      await pumpSettings(tester, app, SettingsCategory.agents);
+      await reloadLibrary(tester, app);
+
+      await tester.tap(find.descendant(
+        of: find.widgetWithText(ListTile, "researcher"),
+        matching: find.byIcon(Icons.edit_outlined),
+      ));
+      await settleIo(tester);
+      expect(find.textContaining("is set on save"), findsNothing);
+
+      await tester.tap(find.text("Save"));
+      await settleIo(tester, least: 15);
+
+      expect(File("$dir/researcher.png").readAsBytesSync(), onePixelPng);
+    });
+
+    testWidgets("a rename moves the picture with the agent", (tester) async {
+      final dir = app.config.promptsDir(CompletionKind.agent);
+      newFile("$dir/researcher.md", "---\ndescription: desc\n---\n\nBody.");
+      newFileBytes("$dir/researcher.png", onePixelPng);
+
+      await pumpSettings(tester, app, SettingsCategory.agents);
+      await reloadLibrary(tester, app);
+
+      await tester.tap(find.descendant(
+        of: find.widgetWithText(ListTile, "researcher"),
+        matching: find.byIcon(Icons.edit_outlined),
+      ));
+      await settleIo(tester);
+
+      await tester.enterText(find.byType(TextField).at(0), "archivist");
+      await tester.tap(find.text("Save"));
+      await settleIo(tester, least: 15);
+
+      expect(File("$dir/researcher.png").existsSync(), isFalse);
+      expect(File("$dir/archivist.png").readAsBytesSync(), onePixelPng);
+    });
+
+    testWidgets("deleting a user agent removes its picture with it", (tester) async {
+      final dir = app.config.promptsDir(CompletionKind.agent);
+      newFile("$dir/researcher.md", "---\ndescription: desc\n---\n\nBody.");
+      newFileBytes("$dir/researcher.png", onePixelPng);
+
+      await pumpSettings(tester, app, SettingsCategory.agents);
+      await reloadLibrary(tester, app);
+
+      await tester.tap(find.descendant(
+        of: find.widgetWithText(ListTile, "researcher"),
+        matching: find.byIcon(Icons.close),
+      ));
+      await settleIo(tester);
+      await tester.tap(find.text("Remove"));
+      await settleIo(tester, least: 15);
+
+      expect(File("$dir/researcher.md").existsSync(), isFalse);
+      expect(File("$dir/researcher.png").existsSync(), isFalse);
+    });
+
+    testWidgets("an added agent can carry a picture from the start", (tester) async {
+      await pumpSettings(tester, app, SettingsCategory.agents);
+      await reloadLibrary(tester, app);
+
+      await tester.tap(find.text("Add agent"));
+      await settleIo(tester);
+      await pickImage(tester, app, name: "photo.png");
+      await tester.enterText(find.byType(TextField).at(0), "scout");
+      await tester.enterText(find.byType(TextField).at(1), "A scout.");
+      await tester.enterText(find.byType(TextField).at(2), "You are a scout.");
+      await tester.tap(find.text("Save"));
+      await settleIo(tester, least: 15);
+
+      final dir = app.config.promptsDir(CompletionKind.agent);
+      expect(File("$dir/scout.md").existsSync(), isTrue);
+      expect(File("$dir/scout.png").readAsBytesSync(), onePixelPng);
+    });
+
+    testWidgets("an inherited picture shows on the row, not in this "
+        "project's editor", (tester) async {
+      // The default project holds the picture; the agent list here shows the
+      // tiers' answer, the editor only what this directory has to edit.
+      await io(tester, () => app.repo.createProject("work"));
+      final defaults = app.config.promptsDir(CompletionKind.agent, project: "default");
+      newFileBytes("$defaults/researcher.png", onePixelPng);
+      newFile(
+        "${app.config.promptsDir(CompletionKind.agent, project: "work")}/researcher.md",
+        "---\ndescription: desc\n---\n\nBody.",
+      );
+
+      await app.pump(tester, const ProjectSettingsPage(project: "work"));
+      await scrollTo(tester, find.text("Agents"));
+      await tester.tap(find.text("Agents"));
+      await settleIo(tester);
+      await reloadLibrary(tester, app, project: "work");
+
+      // The row's circle resolves the tiers and shows what was inherited.
+      await tester.runAsync(() async {
+        final bytes = await readAgentPicture(
+          app.config,
+          "researcher",
+          promptTiers(project: "work", config: app.config),
+        );
+        expect(bytes, onePixelPng);
+      });
+      await settleIo(tester);
+
+      await tester.tap(find.descendant(
+        of: find.widgetWithText(ListTile, "researcher"),
+        matching: find.byIcon(Icons.edit_outlined),
+      ));
+      await settleIo(tester);
+
+      // The editor shows this project's directory — nothing in it yet.
+      expect(find.textContaining("No picture"), findsOneWidget);
+      expect(find.textContaining("is set on save"), findsNothing);
+    });
+
+    testWidgets("an agent added on the global page is in the other projects' "
+        "@ menus without a restart", (tester) async {
+      // No manual reload after the save: the reload the page does itself is
+      // what is under test. A My Team chat's menu reads its own project's
+      // library, whose default rung is the directory the global page wrote.
+      await pumpSettings(tester, app, SettingsCategory.agents);
+      await reloadLibrary(tester, app);
+
+      await tester.tap(find.text("Add agent"));
+      await settleIo(tester);
+      await tester.enterText(find.byType(TextField).at(0), "researcher");
+      await tester.enterText(find.byType(TextField).at(1), "A research agent");
+      await tester.enterText(find.byType(TextField).at(2), "You are a research agent.");
+      await tester.tap(find.text("Save"));
+      await settleIo(tester, least: 15);
+
+      expect(
+        app.container
+            .read(completionsProvider(
+                (project: "my-team", kind: CompletionKind.agent)))
+            .map((option) => option.name),
+        contains("researcher"),
+      );
+    });
+
+    testWidgets("removing an agent on the global page leaves the other "
+        "projects' @ menus too", (tester) async {
+      final dir = app.config.promptsDir(CompletionKind.agent);
+      newFile("$dir/researcher.md", "---\ndescription: desc\n---\n\nBody.");
+
+      await pumpSettings(tester, app, SettingsCategory.agents);
+      // Both members built before the delete, so the answer under it is the
+      // delete's own and not a read that never happened.
+      await reloadLibrary(tester, app);
+      await reloadLibrary(tester, app, project: "my-team");
+      expect(
+        app.container
+            .read(completionsProvider(
+                (project: "my-team", kind: CompletionKind.agent)))
+            .map((option) => option.name),
+        contains("researcher"),
+      );
+
+      await tester.tap(find.descendant(
+        of: find.widgetWithText(ListTile, "researcher"),
+        matching: find.byIcon(Icons.close),
+      ));
+      await settleIo(tester);
+      await tester.tap(find.text("Remove"));
+      await settleIo(tester, least: 15);
+
+      expect(
+        app.container
+            .read(completionsProvider(
+                (project: "my-team", kind: CompletionKind.agent)))
+            .map((option) => option.name),
+        isNot(contains("researcher")),
+      );
+    });
+
+    testWidgets("a picture picked on the global page reaches the other "
+        "projects' avatars", (tester) async {
+      await pumpSettings(tester, app, SettingsCategory.agents);
+      await reloadLibrary(tester, app);
+
+      // Hold the member a My Team chat's avatar reads from across the save,
+      // so the answer under it is the save's doing and not a fresh read.
+      final hold = app.container
+          .listen(agentPictureProvider((project: "my-team", name: "scout")), (_, _) {});
+      addTearDown(hold.close);
+      expect(
+        await tester.runAsync(() => app.container
+            .read(agentPictureProvider((project: "my-team", name: "scout")).future)),
+        isNull,
+      );
+
+      await tester.tap(find.text("Add agent"));
+      await settleIo(tester);
+      await pickImage(tester, app, name: "photo.png");
+      await tester.enterText(find.byType(TextField).at(0), "scout");
+      await tester.enterText(find.byType(TextField).at(1), "A scout.");
+      await tester.enterText(find.byType(TextField).at(2), "You are a scout.");
+      await tester.tap(find.text("Save"));
+      await settleIo(tester, least: 15);
+
+      expect(
+        await tester.runAsync(() => app.container
+            .read(agentPictureProvider((project: "my-team", name: "scout")).future)),
+        onePixelPng,
+      );
+    });
+
+    testWidgets("adding an agent on a project's own page reaches that "
+        "project's @ menu", (tester) async {
+      // One project's directory is one project's tier rung, so the reload a
+      // project page does is enough — pinned here so it stays that way.
+      await io(tester, () => app.repo.createProject("work"));
+      await app.pump(tester, const ProjectSettingsPage(project: "work"));
+      await scrollTo(tester, find.text("Agents"));
+      await tester.tap(find.text("Agents"));
+      await settleIo(tester);
+      await reloadLibrary(tester, app, project: "work");
+
+      await tester.tap(find.text("Add agent"));
+      await settleIo(tester);
+      await tester.enterText(find.byType(TextField).at(0), "tester");
+      await tester.enterText(find.byType(TextField).at(1), "A test agent");
+      await tester.enterText(find.byType(TextField).at(2), "You test things.");
+      await tester.tap(find.text("Save"));
+      await settleIo(tester, least: 15);
+
+      expect(
+        app.container
+            .read(completionsProvider((project: "work", kind: CompletionKind.agent)))
+            .map((option) => option.name),
+        contains("tester"),
+      );
+    });
   });
 }
 
-/// Reload the prompt library and settle, so the page reflects what is on disk
-/// rather than the test's seeded library.
-Future<void> reloadLibrary(WidgetTester tester, TestApp app) async {
-  await tester.runAsync(
-    () => app.container.read(promptLibraryProvider(null).notifier).reload(),
-  );
+/// Simulate a picture pick: the editor's chooser is `AttachmentPicker`, which
+/// the harness fakes, so scripting the answer and tapping the picture is the
+/// whole of it — the pick carries [onePixelPng] under [name].
+Future<void> pickImage(WidgetTester tester, TestApp app,
+    {required String name}) async {
+  app.picker.scripted = [
+    testAttachment(name, mimeType: "image/png", bytes: onePixelPng),
+  ];
+  addTearDown(() => app.picker.scripted = const []);
+  // The picture itself is the tap target — the row the editor draws it in.
+  await tester.tap(find.byTooltip("Choose a profile picture"));
+  await tester.pump();
   await settleIo(tester);
+}
+
+/// Seeding a directory before any widget is pumped needs no runAsync; these
+/// are the test body's own synchronous writes.
+void newFile(String path, String text) {
+  final file = File(path);
+  file.createSync(recursive: true);
+  file.writeAsStringSync(text);
+}
+
+void newFileBytes(String path, List<int> bytes) {
+  final file = File(path);
+  file.createSync(recursive: true);
+  file.writeAsBytesSync(bytes);
 }
