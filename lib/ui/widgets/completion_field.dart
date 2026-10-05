@@ -118,7 +118,7 @@ Widget _stacked(Widget menu, Widget field) =>
 /// A text field that offers the app's `/skills` and `@agents` as they are
 /// typed: a menu of what matches, arrows and tab and return to take one, and
 /// escape to close it. Everywhere a prompt is written — the composer, and the
-/// reminder editor — writes it into this, so the two cannot come to disagree
+/// trigger editor — writes it into this, so the two cannot come to disagree
 /// about what a trigger character does.
 ///
 /// Nothing here asks for the field's focus unless [autofocus] is passed. On
@@ -145,7 +145,7 @@ class CompletionField extends ConsumerStatefulWidget {
 
   /// The project whose library the `/` and `@` menus offer. Null is the
   /// default project, the way it is everywhere a project is named. The
-  /// composer passes the chat's own; a reminder editor passes the reminder's.
+  /// composer passes the chat's own; a trigger editor passes the trigger's.
   final String? project;
   final InputDecoration? decoration;
   final TextStyle? style;

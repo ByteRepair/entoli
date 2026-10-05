@@ -28,6 +28,7 @@ import "../../../data/local/landlock.dart";
 import "../../../data/local/shared_backup.dart";
 import "../../../data/local/tree_ops.dart";
 import "../../../data/local/desktop_file_handoff.dart";
+import "../../../data/local/io_file_watches.dart";
 import "../../../data/local/linux_reminder_alarms.dart";
 import "../../../data/builtin/duckduckgo_search.dart";
 import "../../../data/builtin/local_shell.dart";
@@ -40,6 +41,7 @@ import "../../../domain/builtin_project.dart";
 import "../../../domain/file_handoff.dart";
 import "../../../domain/local_llm.dart";
 import "../../../domain/local_model_store.dart";
+import "../../../domain/file_watches.dart";
 import "../../../domain/reminder_alarms.dart";
 import "../../../domain/rootfs.dart";
 import "../../../domain/rootfs_store.dart";
@@ -342,6 +344,11 @@ Future<ReminderAlarms> platformReminderAlarms() async =>
             : const UnavailableReminderAlarms();
 
 FileSystem platformFileSystem() => fileSystemIo;
+
+/// Inotify on this platform: the machine's, and Android's — both are
+/// `dart:io`'s `Directory.watch` answered by the kernel. A web build never
+/// reaches here.
+FileWatches platformFileWatches() => IoFileWatches();
 
 /// `$AGENT_CHAT_CONFIG` if set, else `~/.config/agent-chat` on desktop and
 /// app-private storage on Android. A Linux debug build reads

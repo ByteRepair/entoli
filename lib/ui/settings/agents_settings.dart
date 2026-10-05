@@ -473,7 +473,7 @@ typedef AgentEdit = ({
 /// was recorded with; a new mention of the old name is what a rename loses,
 /// which is why a rename onto a name another agent holds is refused here. The
 /// body is `CompletionField`, so `/skills` and `@agents` complete there the
-/// way they do in a reminder's prompt; an agent's prompt is dispatched through
+/// way they do in a trigger's prompt; an agent's prompt is dispatched through
 /// the same library. The picture rides the same save: picked bytes are written
 /// as `<name>.png` beside the `.md`, a remove takes it away, and a save
 /// touching neither leaves what is there — a rename moves it, and a rename

@@ -39,7 +39,7 @@ enum's, which is also where the groupings live: a `dividerAbove` on the enum
 says a group ends before that category, and the list draws a `Divider` ahead of
 the tile — one source of truth for both. The six drawn groups: **General,
 Providers, On-device, LLMs** (the app and the plumbing that answers a chat);
-**Memory, Voice, Reminders** (what a conversation does beyond the text);
+**Memory, Voice, Triggers** (what a conversation does beyond the text);
 **Agents, Skills** (what a message addresses by name); **Terminal, Byte
 Repair** (where commands run); **Sync, Data** (the device and all of it at
 once); and **Welcome, About** (the app rather than anything it does), last.
@@ -83,16 +83,15 @@ Android's assistant gesture lands is a section under the same category rather
 than a category of its own: what the gesture opens is voice mode, so it is the
 same feature approached from the other end, and its two questions were a
 category with two lines in it. It keeps a file of its own all the same, since
-every other file here is one subject; see "Being the assistant". **Reminders**
-is drawn where the port is available — Android fires with the app closed,
-Linux notifies what a reminder did but cannot wake the process, and the page's
-description says which (`ReminderAlarms.schedules` is the question) — and where
-the port is unavailable it says so
-and offers nothing,
-the way a row for a missing device would. The permission rows re-read on the way
+every other file here is one subject; see "Being the assistant". **Triggers**
+is drawn where the port is available — Android fires a schedule with the app
+closed, Linux notifies what a trigger did but cannot wake the process, and the
+page's description says which (`ReminderAlarms.schedules` is the question) —
+and where the port is unavailable it says so and offers nothing, the way a row
+for a missing device would. The permission rows re-read on the way
 back to the app, since their answers can only change while it is behind in the
 system settings the rows open. The editor page is a route of its own;
-see "The reminder editor" below, and "Waking for a reminder" in
+see "The trigger editor" below, and "Waking for a reminder" in
 `android/CLAUDE.md`. **Skills** is the list of what the agent can be told to do by name — the bundled ones, which ship with the app, and the user's own, imported from a `.skill` file or removed with their files. The user's skills live in their own directory beside the extracted presets, so a bundled one is not deletable and a user's is; import and delete are the two things that change it, and they reload the library the moment they are done, the one way a change to it lands without a restart, where a skill dropped into the directory by hand still waits for one. **Every row opens the skill view page** (`lib/ui/skills/skill_view.dart`) — the description, the SKILL.md body rendered the way a reply is, the files, and the conformance problems where there are any, since the loader skips a skill that does not conform to the Agent Skills spec and this page is where the skip says why. The page's scan validates every folder in the project's own directory, so a skipped skill is a row of its own (`Not loaded`, warning badge, removable) rather than an absence with only a log line behind it, and a loaded row with a badged folder carries a warning icon ahead of its Export. **Export rides every row** — bundled and inherited included, since what the library serves is what the user is reading — through `prompt_export.dart`, which resolves the bytes the way the library does (the page's own directory, then a bundled preset, then the default project's) and zips a skill under its own folder, because that folder is what a `.skill` import names a skill by. The file leaves through `BackupHandoff`, the ungated port the backup rides, so a save dialog on the desktops, a download on the web and the share sheet on Android are all the same call. The import flow and the install-to combobox are the **footer**, fixed to the bottom of the page so they do not scroll with the list — the section owns its own scroll, and the hosts (`_categoryBody`'s second special case beside Welcome, the project settings page's prompts page) render it directly rather than under a `ListView` of their own. The same widget is a project settings page's too, under a `project` parameter: it then reads that project's library and scans that project's directory, so an entry it holds is editable there and everything else is a row that says where it came from — `Inherited` from the default project, or `Bundled`. A built-in's page is the read-only version of the same thing: no import, no remove, the badges and the export only, since what a turn in it may have is the spec's to say. A user project's page imports without the destination combobox — it is in that project — and the global page's import carries one, `Global` default, where a skill the user picks can land in any project. The skill-install preview page has the same combobox, so a model-drafted skill is aimed the same way; `InstallDestination` is the one widget both carry. A project's agents page is the same widget with `@name` prose: add, edit and delete against the project's directory, inherited rows badged. See "Skills and agents" in `lib/domain/CLAUDE.md`.
 **Agents** is the list of what a message can address by name — the bundled ones, which ship with the app and are read-only, and the user's own, written in-app and editable or removable. An agent is one flat `.md` file (a system prompt with `description` frontmatter), so it is written through an editor page rather than imported the way a skill's directory is; the name is the file name, and editing it on an existing agent renames the file — the new `.md` is written before the old one is taken away, a rename onto a name another agent holds is refused in the editor, and the only thing a rename loses is a new mention of the old name, since a mention already written into a conversation keeps the meaning it was recorded with. **Import agent** is the one way an outside `.md` comes in: it lands under its file's own name, with a replace-confirm where the name is taken and a refusal for an empty body, rather than through the editor — an editor pass before the write would be a second way to make the name and the file name diverge. Add and Import agent are the fixed footer, the two-button row the backup section draws. Export rides every row, the same `BackupHandoff` route the skills page takes, the `.md` itself the file — the picture is the device's own convenience and stays. Every row leads with the agent's profile picture (`AgentPicture`) — a person mark until one is set, resolved over the library's tier walk by `agentPictureProvider` — which the editor takes as its picker face too: a tap opens the chooser (PNG only, a non-PNG pick refused with a line saying so), picked bytes live in the editor until Save, and a remove beside the circle takes them off; a save touching neither leaves what the agent already had. The picture is `<name>.png` beside the `.md`, written, replaced, moved on a rename and deleted by the same `withWritableDir` block the `.md` rides, and deleted with the agent — every write here invalidates the provider the rows read. Add, edit, delete and import reload the library the moment they are done, the same one way a change to it lands without a restart — every project's where the page is the global one (the default directory is a rung of every project's tier walk, so an inherited agent and an inherited picture go stale everywhere if only `promptLibraryProvider(null)` is rebuilt; skills keep the same branch), the project's own where it is a project's page. See "Skills and agents" in `lib/domain/CLAUDE.md`.
 **Byte Repair** is the tooling for the built-in project of the same name: a
@@ -147,33 +146,44 @@ one file and back — see "Backing it all up". **About** is the
 app rather than anything it does, which is why it is last — see "What the app
 is".
 
-## The reminder editor
+## The trigger editor
 
-Four questions and the prompt, in `reminders.dart`. The name is one row and the
-date and time the next, sharing it half and half: what a reminder is set for is
-both of them, and either alone is half an answer — while a name beside them made
-the row three controls where two of them are one.
+The name, the prompt, and one row of "When" — a `SegmentedButton` over the
+three sources, each kind bringing its own rows under it: a schedule its date
+and time and repeat, a timer its countdown minutes, a file watch its paths,
+its kinds of change and its cooldown. Beside them the "Address to" row: the
+member the fire names, from the trigger's project's library, or nothing for
+the whole room — one row for both targets, since addressing is not a
+property of where the fire lands. A stored member the library has since
+lost keeps its place in the list marked `(deleted)` with the line saying a
+fire will reach the whole room, and is kept or exchanged rather than
+silently cleared. The kinds' rows are switched on the
+segment, so switching kinds does not carry one's data into another's; a
+`trigger_set` the agent registered shows as its own page instead: the prompt
+read-only and the project/TTL rows gone, the switch and the delete the whole
+of what is editable, since the prompt is its conversation's and an edit would
+be a conversation rewrite from a settings page.
 
-**The prompt is not typed here.** The middle of the page is what the reminder
+**The prompt is not typed here.** The middle of the page is what the trigger
 will send, rendered the way the chat will render it, over the button that opens
-`ReminderPromptPage` — a box that is the whole page, Save and Discard, and
-nothing else. A reminder is written once and read many times afterwards, so the
+`TriggerPromptPage` — a box that is the whole page, Save and Discard, and
+nothing else. A trigger is written once and read many times afterwards, so the
 page it is read on shows the message; and a prompt long enough to need the room
 had a box a few lines tall to grow in before. Discarding asks, and so does the
 back key through a `PopScope`, since it is the one way out that loses what was
 typed.
 
 What is typed in it is `CompletionField` — the composer's, so `/skills` and
-`@agents` complete there and the `+` offers them; a reminder's prompt is
+`@agents` complete there and the `+` offers them; a trigger's prompt is
 dispatched through the same library, and being offered them in a chat and not
 here was the tell. The preview is `MarkdownBody` under `replyStyleSheet`, which
 is the reply's own sheet rather than a second answer to how markdown is set.
 
 **Temporary chat is `TempChatTtlField`**, the chat settings page's combobox and
-nothing new: the reminder's chat is a chat, and its TTL is written onto
-`meta.json` as it is. It was a switch over a bool, which could name only one of
-the five windows the field offers — see "Reminders" in `lib/domain/CLAUDE.md`
-for what the old key reads as.
+nothing new: the new chat a trigger makes is a chat, and its TTL is written
+onto `meta.json` as it is. It was a switch over a bool, which could name only
+one of the five windows the field offers — see "Triggers" in
+`lib/domain/CLAUDE.md` for what the old key reads as.
 
 ## What the app is
 

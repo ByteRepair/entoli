@@ -9,7 +9,7 @@ import "resettable_field.dart";
 /// A chat's temporary-chat TTL override. Null means inherit the project (if
 /// set) or app default; the resolved value is named in the Default entry.
 ///
-/// Shared by the chat settings page and the reminder editor: a reminder's chat
+/// Shared by the chat settings page and the trigger editor: a new chat
 /// is a chat, and this is the field that decides how long one lives.
 class TempChatTtlField extends ConsumerWidget {
   const TempChatTtlField({
