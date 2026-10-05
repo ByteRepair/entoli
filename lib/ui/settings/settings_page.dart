@@ -38,7 +38,7 @@ import "llm_settings.dart";
 import "local_model_settings.dart";
 import "memory_settings.dart";
 import "privacy_policy_page.dart";
-import "reminders.dart";
+import "triggers.dart";
 import "skills_settings.dart";
 import "sync_settings.dart";
 import "terminal_settings.dart";
@@ -49,7 +49,7 @@ import "welcome_page.dart";
 /// are offered in. General, Providers, On-device and LLMs are the app and the
 /// plumbing that answers a chat — everything an endpoint is, where a model can
 /// run without a network, and everything a model is asked to do; Memory, Voice
-/// and Reminders are what a conversation does beyond the text; Agents and
+/// and Triggers are what a conversation does beyond the text; Agents and
 /// Skills are what a message addresses by name; Terminal and Byte Repair are
 /// where commands run; Sync and Data are the device and all of it at once —
 /// the chats, the settings and the workspaces as one file to keep; and
@@ -62,7 +62,7 @@ enum SettingsCategory {
   llms("LLMs", Icons.auto_awesome_outlined),
   memory("Memory", Icons.psychology, dividerAbove: true),
   voice("Voice", Icons.graphic_eq),
-  reminders("Reminders", Icons.alarm),
+  triggers("Triggers", Icons.alarm),
   agents("Agents", Icons.person_outline, dividerAbove: true),
   skills("Skills", Icons.extension),
   terminal("Terminal", Icons.terminal, dividerAbove: true),
@@ -242,7 +242,7 @@ List<Widget> _sectionsOf(SettingsCategory category) => switch (category) {
         ],
       // Says so and offers nothing where there is no clock to schedule with —
       // see the section itself.
-      SettingsCategory.reminders => const [RemindersSection()],
+      SettingsCategory.triggers => const [TriggersSection()],
       // Rendered by [_categoryBody] whole rather than filed here, for the
       // footers pinned to their bottoms.
       SettingsCategory.skills => const [],

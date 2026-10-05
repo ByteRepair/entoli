@@ -7,9 +7,11 @@ fact about the room; none of them permits or refuses anything.
 
 The room has two participants who speak, and a third shape that never does:
 
-- **The user**, whose send verb is `TurnDriver.send` — every way a reminder or
+- **The user**, whose send verb is `TurnDriver.send` — every way a trigger or
   a voice utterance speaks goes through the controller's `send` too, one path
-  rather than one per caller.
+  rather than one per caller. A trigger fire naming a member is a say like
+  any other: the mention in its text is what routes it, and nothing here
+  knows the fire was a trigger.
 - **The main agent**, behind the event stream. Every turn the controller
   drives today is its turn; its reply is the anonymous voice at the end of
   one. Sub-agents (a `task` call) are participants with a restricted reply
@@ -178,7 +180,7 @@ still-streaming reply can sit below, and resuming by position would re-open
 the wrong recorder. The user-facing Continue keeps the last-reply rule, an
 open chat with one unfinished reply being what it offers to carry on.
 `_turnDone` stays open across
-the rounds — a reminder awaiting it, or a voice handover, gets one completion,
+the rounds — a trigger awaiting it, or a voice handover, gets one completion,
 at the true end, not one per attempt. A `_retryGen` bumped by `abort` and
 `interrupt` is what keeps a round waiting out its backoff from firing after
 the user pressed stop: the wait holds nothing, and the generation is how it
@@ -201,10 +203,10 @@ from, whose stale errors stay in the parts.
 that ends `TurnEnd.error` while the app is hidden (the `appHiddenProvider`,
 written by the app root's lifecycle listener) posts a notification on the
 "turns" Android channel through `ReminderAlarms.notify` — the same tap
-machinery the reminder completions use, chat id on the content intent, so the
-tap opens the chat through the existing `IncomingReminderOpen` path. Gated on
-`headless` being false, since a reminder's chat is already notified by the
-scheduler that ran it — a second notice would be a double. Not gated on
+machinery the trigger completions use, chat id on the content intent, so the
+tap opens the chat through the existing `IncomingTriggerOpen` path. Gated on
+`headless` being false, since a fired trigger's new chat is already notified
+by the manager that ran it — a second notice would be a double. Not gated on
 anything per-chat: the user said the failure is visible enough when they are
 *in the app*, even on another chat. On every platform without a notification
 route the port is the no-op it always was, and the failure waits visibly in
@@ -718,7 +720,7 @@ The three fields are already standalone widgets, so the page that composes them
 is thirty lines.
 
 `_EmptyChat` is the body of both empty screens — `_NewChat`'s, and a chat that
-exists with nothing said in it yet, which is what voice mode and a reminder can
+exists with nothing said in it yet, which is what voice mode and a trigger can
 leave. It draws the mark, the question, the projects as badges, and a chip
 per `/skill` and `@agent` the library holds. The chips are discovery: the
 composer's menus are the only place those are named, and nothing names them
@@ -749,7 +751,7 @@ that bought was a page the user opens on that moves before anything has been
 touched. So both rows are built `settled`: what this screen is created with
 is already there, and everything from the first interaction on animates. The
 same body serves a chat that exists with nothing said in it yet — what voice
-mode and a reminder can leave — and it opens settled the same way. A remount
+mode and a trigger can leave — and it opens settled the same way. A remount
 across `navBreakpoint` rebuilds the rows, and they open settled again, which
 is right: that remount *is* the screen appearing. The say-so is scoped to the
 row's first build, so content that is not on screen at that moment — a cold
@@ -818,7 +820,7 @@ user project has neither, since only a built-in ships one.
 Tapping one types it into the composer through `insertCompletion`, which is the
 field's own insertion lifted out of its `State` so both callers reach it — it
 sits beside `CompletionField` in `ui/widgets/`, which is the composer's menu
-now that the reminder editor writes a prompt too. Both halves of that mattered.
+now that the trigger editor writes a prompt too. Both halves of that mattered.
 **Where** it lands is a rule: a skill goes to offset 0, because
 `prompt_library.dart`'s `_skillReference` is anchored there and
 `activeCompletionToken` gates `/` on `start == 0` — appended at the caret it

@@ -257,9 +257,13 @@ class AppConfig {
 
   String get settingsFile => fs.path.join(dataDir, "settings.json");
 
-  /// The user's reminders, one JSON list. Not a document in [Documents]:
+  /// The user's triggers, one JSON list. Not a document in [Documents]:
   /// nothing needs to read it synchronously, and Kotlin reads it behind the
   /// app's back to re-arm alarms — which is why writes go through a rename.
+  ///
+  /// Named for what was stored here rather than for what is: the file the
+  /// reminder feature wrote is the one the trigger feature reads, and
+  /// renaming it would be a migration, which renaming a feature is not.
   String get remindersFile => fs.path.join(dataDir, "reminders.json");
 
   /// Project-scoped overrides, in the project's own directory — the default

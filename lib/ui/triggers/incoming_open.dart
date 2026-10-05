@@ -7,25 +7,25 @@ import "../../domain/reminder_alarms.dart";
 import "../../providers.dart";
 import "../sidebar/sidebar.dart";
 
-/// Wraps the app so tapping a finished reminder's notification opens the chat
+/// Wraps the app so tapping a finished trigger's notification opens the chat
 /// it ran in. Both routes in, the shape [IncomingAssistant] has: the read at
 /// startup catches a tap that launched the app — including the cold start the
 /// alarm itself made, whose `main` ran with no activity and no frames — and
 /// the stream catches one arriving while it is up.
 ///
 /// The id is claimed before anything is asked of it, and validated against the
-/// chat list before being opened: a temporary reminder chat can have been
+/// chat list before being opened: a temporary trigger chat can have been
 /// swept between the notification posting and the tap.
-class IncomingReminderOpen extends ConsumerStatefulWidget {
-  const IncomingReminderOpen({super.key, required this.child});
+class IncomingTriggerOpen extends ConsumerStatefulWidget {
+  const IncomingTriggerOpen({super.key, required this.child});
 
   final Widget child;
 
   @override
-  ConsumerState<IncomingReminderOpen> createState() => _IncomingReminderOpenState();
+  ConsumerState<IncomingTriggerOpen> createState() => _IncomingTriggerOpenState();
 }
 
-class _IncomingReminderOpenState extends ConsumerState<IncomingReminderOpen> {
+class _IncomingTriggerOpenState extends ConsumerState<IncomingTriggerOpen> {
   StreamSubscription<String>? _taps;
 
   var _claiming = false;

@@ -7,6 +7,7 @@ import "package:uuid/uuid.dart";
 import "../../domain/agent_backend.dart";
 import "../../domain/artifact.dart";
 import "../../domain/ask.dart";
+import "../../domain/date_words.dart" show describeFire;
 import "../../domain/file_tools.dart";
 import "../../domain/models.dart";
 import "../../domain/permission.dart";
@@ -29,6 +30,9 @@ import "skill_create_tool.dart";
 import "skill_tool.dart";
 import "sub_agent.dart";
 import "task_tool.dart";
+import "trigger_tool.dart";
+import "../../domain/trigger.dart";
+import "../../domain/trigger_manager.dart" show TriggerRegistry;
 import "projection.dart";
 import "templates.dart";
 import "memory/instructions.dart";
@@ -58,6 +62,7 @@ String? runningTool(String name) => switch (name) {
       websearchToolName => "Searching the web",
       webfetchToolName => "Fetching a page",
       taskToolName => "Working on a sub-task",
+      triggerSetName => "Setting a trigger",
       artifactToolName => "Publishing the artifact",
       presentPlanToolName => "Presenting the plan",
       _ => null,
@@ -308,6 +313,9 @@ List<LlmTool> agentTools({
       // rest, the way it withholds `artifact`.
       if (caps.presentPlan) presentPlanTool,
       if (caps.createSkill) createSkillTool,
+      // Triggers ride the turn itself: only a top-level turn is its own
+      // chat's, so only it may register.
+      if (caps.trigger && !oneShot) ...triggerToolDefs,
       if (offerMemory)
         ...[
           memorySaveTool,
@@ -352,6 +360,7 @@ class BuiltinAgent {
     this.citations = false,
     this.saveArtifact,
     this.packageSkill,
+    this.registerTrigger,
     this.onShellOutput,
     this.onUsage,
     this.loadResource = noResources,
@@ -640,6 +649,12 @@ class BuiltinAgent {
   /// test fakes unless it says otherwise.
   final void Function(LlmUsage usage)? onUsage;
 
+  /// What the trigger tools run against — a registry over the app's own
+  /// trigger list — or null, which withholds the trio the way a missing
+  /// [subAgentRunner] withholds `task`. Null on a sub-agent: a trigger's
+  /// fire sends into *this* chat, which is one a worker is not.
+  final TriggerRegistry? registerTrigger;
+
   /// [caps] with the platform's facts applied where [caps] cannot know them:
   /// a tool the device cannot run is not offered even if the turn was, and a
   /// sub-agent's missing [subAgentRunner] or [saveArtifact] withholds `task`
@@ -651,6 +666,7 @@ class BuiltinAgent {
         task: caps.task && subAgentRunner != null,
         artifact: caps.artifact && saveArtifact != null,
         createSkill: caps.createSkill && packageSkill != null,
+        trigger: caps.trigger && registerTrigger != null,
       );
 
   /// What the model may call, and what the system prompt says. One value for
@@ -974,6 +990,21 @@ class BuiltinAgent {
 
       if (call.name == createSkillToolName && packageSkill != null) {
         yield* _createSkill(call);
+        continue;
+      }
+
+      if (call.name == triggerSetName && registerTrigger != null) {
+        yield* _triggerSet(call);
+        continue;
+      }
+
+      if (call.name == triggerRemoveName && registerTrigger != null) {
+        yield* _triggerRemove(call);
+        continue;
+      }
+
+      if (call.name == triggerListName && registerTrigger != null) {
+        yield* _triggerList(call);
         continue;
       }
 
@@ -1409,6 +1440,169 @@ class BuiltinAgent {
           returnCode: 0, output: "Edited ${args.path}: replaced $count occurrence(s).");
     }
     yield* _runFileTool(call, path, editToolName, run);
+  }
+
+  /// Register a trigger. The chat is the turn's own — a trigger fires into
+  /// the conversation that registered it — and the registration is watched
+  /// the moment the list lands. The model is told what it armed and when.
+  Stream<AgentEvent> _triggerSet(LlmToolCall call) async* {
+    final registry = registerTrigger;
+    final args = decodeArgs(call.argumentsJson);
+    if (args == null) {
+      yield* _reject(call, triggerSetProblem(null));
+      return;
+    }
+    final draft = triggerDraftFromArgs(args: args);
+    if (draft == null) {
+      yield* _reject(call, triggerSetProblem(stringArg(call.argumentsJson, "source")));
+      return;
+    }
+    // A file watch is never asked before it fires (and a fire's headless
+    // turn runs approveMode never), so the outside paths the read tool
+    // raises a banner over are refused here, where the call can still be
+    // answered — a watch over `~` or the machine is not a shape the tool
+    // takes.
+    if (draft.source is FileSource) {
+      final outside = [
+        for (final path in (draft.source as FileSource).paths)
+          if (outsideWorkspaces(fs, _resolvePath(path), workspace, projectWorkspace))
+            path,
+      ];
+      if (outside.isNotEmpty) {
+        yield* _reject(
+            call,
+            "A file trigger watches the workspaces: give workspace-relative "
+            "or project:-prefixed paths (${outside.join(", ")} reach past "
+            "them).");
+        return;
+      }
+    }
+    final label = [
+      if (draft.name.isNotEmpty) draft.name,
+      draft.source.describe(),
+    ].join(" — ");
+    yield ToolCallEvent(ToolCall(
+      id: call.id,
+      name: call.name,
+      argumentsJson: call.argumentsJson,
+      argumentsText: label,
+    ));
+    try {
+      final stored = await registry!.register(
+          source: draft.source,
+          prompt: draft.prompt,
+          name: draft.name,
+          member: draft.member);
+      yield ToolResultEvent(ToolResult(
+            callId: call.id,
+            returnCode: 0,
+            output: _triggerSetAnswer(stored),
+          ));
+    } catch (e) {
+      yield ToolResultEvent(ToolResult(
+            callId: call.id,
+            returnCode: -1,
+            output: "",
+            exceptionInfo: "The trigger could not be set: $e",
+          ));
+    }
+  }
+
+  /// What registration says back: the id every later call speaks, and the
+  /// source's own description — one wording of what was armed, shared with
+  /// the settings row and the fire's reason rather than a second here.
+  String _triggerSetAnswer(Trigger stored) =>
+      "Trigger ${stored.id} set. "
+      "${stored.member == null ? "" : "Fires addressed to @${stored.member}. "}"
+      "${stored.source.describe()}."
+      "${stored.source is FileSource ? " Fires only while the app is running." : ""}";
+
+  /// Remove one of this chat's own triggers. Another chat's is not here to
+  /// remove, and neither is a user-set one: the tools speak for the chat
+  /// that registered their targets.
+  Stream<AgentEvent> _triggerRemove(LlmToolCall call) async* {
+    final registry = registerTrigger;
+    final id = stringArg(call.argumentsJson, "id");
+    if (id == null || registry == null) {
+      yield* _reject(call,
+          'The $triggerRemoveName tool takes {"id": "<trigger id>"}; that '
+          "argument was missing.");
+      return;
+    }
+    yield ToolCallEvent(ToolCall(
+      id: call.id,
+      name: call.name,
+      argumentsJson: call.argumentsJson,
+      argumentsText: id,
+    ));
+    final own = (await registry.own()).where((t) => t.id == id).toList();
+    if (own.isEmpty) {
+      yield ToolResultEvent(ToolResult(
+            callId: call.id,
+            returnCode: -1,
+            output: "",
+            exceptionInfo:
+                "No trigger with that id was registered by this chat. "
+                "$triggerListName lists what may be removed.",
+          ));
+      return;
+    }
+    await registry.remove(id);
+    yield ToolResultEvent(ToolResult(
+          callId: call.id,
+          returnCode: 0,
+          output: "Trigger $id removed.",
+        ));
+  }
+
+  /// This chat's own triggers, with what each is waiting for.
+  Stream<AgentEvent> _triggerList(LlmToolCall call) async* {
+    final registry = registerTrigger;
+    yield ToolCallEvent(
+        ToolCall(id: call.id, name: call.name, argumentsJson: call.argumentsJson));
+    final own = (await registry?.own() ?? []) ;
+    if (own.isEmpty) {
+      yield ToolResultEvent(ToolResult(
+            callId: call.id,
+            returnCode: 0,
+            output: "No triggers registered for this chat.",
+          ));
+      return;
+    }
+    final lines = [
+      for (final trigger in own)
+        "- ${trigger.id}: ${trigger.name.isEmpty ? "(unnamed)" : trigger.name}"
+            "${trigger.member == null ? "" : " → @${trigger.member}"}"
+            " — ${trigger.source.describe()}"
+            "${_whenLine(trigger)}",
+    ];
+    yield ToolResultEvent(ToolResult(
+          callId: call.id,
+          returnCode: 0,
+          output: lines.join("\n"),
+        ));
+  }
+
+  /// The stored fire time, worded for the answer — what is armed now, not
+  /// the anchor a repeating source steps from, which goes stale as it fires
+  /// and would tell the model its own trigger is overdue.
+  String _whenLine(Trigger trigger) {
+    final at = trigger.nextFireAt;
+    return at == null ? "" : ". Next: ${_nextWording(at, trigger)}";
+  }
+
+  /// The source's own relative wording where it is on the clock ("in 30
+  /// minutes", "Sat 22 Aug, daily" from the *next* occurrence), the plain
+  /// moment otherwise. [describe] reads the anchor, so the schedule has to
+  /// be re-worded here against the stored time.
+  String _nextWording(DateTime at, Trigger trigger) {
+    final source = trigger.source;
+    return switch (source) {
+      ScheduleSource(:final repeat) =>
+        "${describeFire(at, DateTime.now())}"
+            "${repeat == ScheduleRepeat.off ? "" : ", ${repeat.label.toLowerCase()}"}",
+      _ => source.describe(),
+    };
   }
 
   /// A fact the model judged worth keeping. No approval: like `websearch`, it

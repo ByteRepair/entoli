@@ -13,6 +13,7 @@ import "../../domain/tone.dart";
 import "../../domain/prompt_library.dart";
 import "skill_tool.dart";
 import "task_tool.dart";
+import "trigger_tool.dart";
 
 /// The prompt prose this file assembles, embedded at build time from
 /// `assets/prompts/projects/default/system/` (`tool/gen_prompts.dart`). The
@@ -50,6 +51,7 @@ class AgentCapabilities {
     required this.task,
     required this.artifact,
     required this.createSkill,
+    this.trigger = false,
   });
 
   /// The full set, before the platform's facts or a project's takes away any
@@ -61,6 +63,7 @@ class AgentCapabilities {
     task: true,
     artifact: true,
     createSkill: true,
+    trigger: true,
   );
 
   /// Whether a command can run at all: the platform's fact, which a project
@@ -71,6 +74,7 @@ class AgentCapabilities {
   final bool task;
   final bool artifact;
   final bool createSkill;
+  final bool trigger;
 
   /// What this device can offer, minus what [disabled] takes away — the
   /// project's takes, and a headless turn's.
@@ -85,6 +89,7 @@ class AgentCapabilities {
           task: !disabled.contains(AgentCapability.task),
           artifact: !disabled.contains(AgentCapability.artifact),
           createSkill: !disabled.contains(AgentCapability.createSkill),
+          trigger: !disabled.contains(AgentCapability.trigger),
         );
 
   /// What a sub-agent runs under: unattended, so it asks nothing, fans out
@@ -96,6 +101,7 @@ class AgentCapabilities {
         task: false,
         artifact: false,
         createSkill: false,
+        trigger: false,
       );
 
   /// Whether `present_plan` is offered: the one tool that both parks the turn
@@ -392,6 +398,9 @@ String _toolFragments(AgentCapabilities caps, {bool oneShot = false}) {
           "\n   to work through a plan ($planFileName in the workspace)",
     if (caps.presentPlan)
       "`$presentPlanToolName`\n   to put the plan to the user for approval",
+    if (caps.trigger && !oneShot)
+      "`$triggerSetName`/`$triggerListName`/`$triggerRemoveName`"
+          "\n   to set what sends a message into this chat later",
   ];
   if (acts.length == 1) return acts.single;
   final head = acts.sublist(0, acts.length - 1).join(", ");
