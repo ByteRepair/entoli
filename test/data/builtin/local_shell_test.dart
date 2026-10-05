@@ -9,6 +9,21 @@ import "package:agent_chat/domain/shell.dart";
 
 List<String> _hostCommand(String _, String _) => const ["/bin/sh"];
 
+/// Wait for [piece] to appear in what [run] has printed so far, with a bound
+/// past which the test fails rather than hangs. Reads the run's own live
+/// view — polling it, since a `ValueListenable` carries no future — so a
+/// test that follows a start with a stop aims the stop at a command that is
+/// provably running. The substitute, a fixed sleep, is a bet on how fast a
+/// runner settles the shell up, and the CI failure that cost.
+Future<void> printed(ShellRun run, String piece) async {
+  final output = run.output!;
+  for (var waited = 0; waited < 5000 && !(output.value ?? "").contains(piece);
+      waited += 10) {
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+  }
+  expect((output.value ?? ""), contains(piece));
+}
+
 void main() {
   /// The project workspace and, inside it, the chat's own — what the two
   /// arguments to `start` are on a real run.
@@ -118,10 +133,13 @@ void main() {
 
   test("killing it early reports the interruption rather than an exit code",
       () async {
-    final run = LocalShell()
-        .start("sleep 30",
-            cwd: workspace.path, home: home.path, timeout: const Duration(seconds: 30));
-    await Future<void>.delayed(const Duration(milliseconds: 100));
+    final run = LocalShell().start("echo started; sleep 30",
+        cwd: workspace.path, home: home.path, timeout: const Duration(seconds: 30));
+    // The kill is aimed at a command that is running: waiting on the output
+    // it printed says so, where a fixed sleep is a bet on the runner's load.
+    // A SIGINT landing before the dispatcher's trap is up kills the shell,
+    // and the run settles -1.
+    await printed(run, "started");
     await run.kill();
 
     final result = await run.result;
@@ -180,8 +198,8 @@ void main() {
     });
 
     test("a stop leaves the shell where it was", () async {
-      final run = start("cd sub && sleep 30");
-      await Future<void>.delayed(const Duration(milliseconds: 100));
+      final run = start("cd sub && echo started; sleep 30");
+      await printed(run, "started");
       await run.kill();
 
       final killed = await run.result;
@@ -263,9 +281,8 @@ void main() {
       final output = run.output!;
 
       // The first line has printed while the command is still running.
-      await Future<void>.delayed(const Duration(milliseconds: 300));
+      await printed(run, "one");
       final early = output.value ?? "";
-      expect(early, contains("one"));
       expect(early, isNot(contains("three")));
 
       final result = await run.result;
@@ -291,7 +308,7 @@ void main() {
               home: home.path,
               timeout: const Duration(seconds: 30));
       final output = run.output!;
-      await Future<void>.delayed(const Duration(milliseconds: 200));
+      await printed(run, "started");
       await run.kill();
       await run.result;
 
@@ -335,8 +352,7 @@ void main() {
           oneShot: true);
       final output = run.output!;
 
-      await Future<void>.delayed(const Duration(milliseconds: 300));
-      expect(output.value ?? "", contains("one"));
+      await printed(run, "one");
 
       final result = await run.result;
       expect((output.value ?? ""), contains("two"));

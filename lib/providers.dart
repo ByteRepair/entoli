@@ -9,6 +9,7 @@ import "../core/platform/platform.dart"
     show createPromptSources, setupComplete;
 import "data/builtin/builtin_backend.dart";
 import "data/local/file_reminder_store.dart";
+import "data/prompts/agent_pictures.dart";
 import "domain/app_icon.dart";
 import "domain/agent_backend.dart";
 import "domain/app_restart.dart";
@@ -33,6 +34,7 @@ import "domain/local_llm.dart";
 import "domain/local_model.dart";
 import "domain/local_model_store.dart";
 import "domain/models.dart";
+import "data/prompts/prompt_sources.dart" show promptTiers;
 import "domain/permission.dart";
 import "domain/profile.dart";
 import "domain/project_settings.dart";
@@ -1073,6 +1075,24 @@ final completionsProvider =
     Provider.family<List<CompletionOption>, ({String? project, CompletionKind kind})>(
         (ref, spec) =>
             ref.watch(promptLibraryProvider(spec.project)).options(spec.kind));
+
+/// An agent's profile picture, or null where none is set. Named like the
+/// `.md` — `<agents dir>/<name>.png` — and resolved over the same tier walk
+/// the library answers mentions with, so a project's own picture wins over
+/// an inherited one. Auto-disposed like [attachmentBytesProvider]: held, an
+/// avatar on every row would keep every agent's file in memory. A page that
+/// changes one — the agents settings paths do — invalidates the family, an
+/// inherited picture being every project's to re-read after a default edit.
+final agentPictureProvider =
+    FutureProvider.autoDispose.family<Uint8List?, ({String? project, String name})>(
+        (ref, key) async {
+  final config = ref.watch(appConfigProvider);
+  return readAgentPicture(
+    config,
+    key.name,
+    promptTiers(project: key.project, config: config),
+  );
+});
 
 /// A project's own settings, loaded off `project.json`. Null is the default
 /// project, which lives in the data directory. The project name is the
