@@ -61,6 +61,39 @@ enum PermissionTier {
   runtime,
 }
 
+/// Where an instruction file was reached from — what the turn was reading
+/// when it loaded, and so what a label about the read says. Lives in the
+/// domain beside the part that records it; `renderInstructions` words the
+/// same values into the model's prompt, off the one shared phrase table
+/// below.
+enum InstructionKind {
+  /// At the data dir's root: the user's, for every project.
+  global,
+
+  /// At the project workspace root, shared by its chats.
+  project,
+
+  /// Reached through an `@path` reference in another instructions file.
+  imported,
+
+  /// Found above a file the agent read, mid-turn.
+  directory,
+
+  /// Shipped by the app for a project whose turns read no file: the note
+  /// stands in for the instruction files.
+  bundled,
+}
+
+/// What [InstructionKind] reads as, on a label's drawer and in the model's
+/// prompt. One table so the two cannot disagree — the `outcomeText` pattern.
+String instructionKindPhrase(InstructionKind kind) => switch (kind) {
+      InstructionKind.global => "the user's global instructions, for every project",
+      InstructionKind.project => "project workspace instructions",
+      InstructionKind.imported => "instructions imported by another file",
+      InstructionKind.directory => "instructions for this directory",
+      InstructionKind.bundled => "the app's own note on this kind of chat",
+    };
+
 @freezed
 abstract class ChatState with _$ChatState {
   const factory ChatState({
@@ -358,7 +391,30 @@ sealed class MessagePart with _$MessagePart {
     required String answer,
   }) = ApprovalPart;
 
+  /// The instruction files this turn was the first to read into the model's
+  /// context — the up-front `AGENTS.md` load, or a nested one a file read
+  /// pulled in. One part per first reach, at most: a later turn re-reading
+  /// the same file writes nothing, the claim being decided against what the
+  /// history already records. The content itself is not here — it rides the
+  /// per-turn system message, rewritten every turn — so this is the record
+  /// of the read, drawn as an activity label, and never part of what the
+  /// conversation says.
+  const factory MessagePart.instructions({
+    required List<InstructionRef> files,
+  }) = InstructionsPart;
+
   factory MessagePart.fromJson(Map<String, dynamic> json) => _$MessagePartFromJson(json);
+}
+
+@freezed
+abstract class InstructionRef with _$InstructionRef {
+  const factory InstructionRef({
+    required String path,
+    required InstructionKind kind,
+  }) = _InstructionRef;
+
+  factory InstructionRef.fromJson(Map<String, dynamic> json) =>
+      _$InstructionRefFromJson(json);
 }
 
 @freezed

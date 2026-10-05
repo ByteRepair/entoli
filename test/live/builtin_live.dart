@@ -162,6 +162,8 @@ void main() {
           log("info: $message");
         case StepLimitEvent(:final limit):
           log("step limit: $limit");
+        case InstructionsReadEvent(:final files):
+          log("instructions: ${files.map((f) => f.path).join(", ")}");
         case DoneEvent():
           log("done");
       }

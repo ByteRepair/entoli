@@ -6,7 +6,6 @@ import "package:fs_shim/fs_io.dart" show fileSystemIo;
 import "package:path/path.dart" as p;
 
 import "package:agent_chat/data/builtin/builtin_agent.dart";
-import "package:agent_chat/domain/shell.dart";
 import "package:agent_chat/data/builtin/memory/instructions.dart";
 import "package:agent_chat/data/builtin/memory/store.dart";
 import "package:agent_chat/data/builtin/memory_tools.dart";
@@ -17,6 +16,7 @@ import "package:agent_chat/domain/ask.dart";
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/domain/permission.dart";
 import "package:agent_chat/domain/plan.dart";
+import "package:agent_chat/domain/shell.dart";
 
 import "../../fakes.dart";
 import "builtin_fakes.dart";

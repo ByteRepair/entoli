@@ -547,6 +547,13 @@ class _MessageBubbleState extends State<MessageBubble> {
           // reader will never expand.
           flushRun();
           rows.add(_label(ApprovalLabel(part: part, result: results[part.approvalId])));
+        case InstructionsPart():
+          // The first reach of an instruction file: important like a
+          // permission — it changed what the model is working from, it happens
+          // at most once per file, and a collapse would hide the one moment
+          // the turn grew.
+          flushRun();
+          rows.add(_label(InstructionsLabel(part: part)));
         case ShellRunPart():
           // Not a label: a command the user ran is the answer to their message
           // rather than something the turn did on its way to one.
