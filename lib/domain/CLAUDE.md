@@ -867,9 +867,32 @@ its own chat's), and a headless turn is — a reminder may arm its next run.
 The registry the turn reaches is `ChatTriggerRegistry` — one chat's face
 over the list — built by the backend like `saveArtifact` is, with the
 provider's notifier behind it, so a registration is on disk and under watch
-the moment the tool answers. `trigger_set`'s parse is
+the moment the tool answers. The chat's project travels with the registry:
+a timer's `registeredAt` is the registering moment, and the member a
+`trigger_set` names is checked against that project's library there — an
+unknown one refuses the registration with what was not found, the model's
+error to fix. `trigger_set`'s parse is
 `triggerDraftFromArgs` and the registry anchors and stores; a timer's
 `registeredAt` is the registering moment, not the parse's.
+
+### Who a fire addresses
+
+`Trigger.member` is a name an Omada room routes the fire to, wherever the
+fire lands — one shape, no branching on the target: a chatless fire makes
+its headless chat with the member as its first speaker, a same-chat one
+queues on the member's FIFO. The runner puts the sigil'd mention on the
+head of the send text (`prompted(prompt, reason, member:)` — the one
+wording, the mention ahead of the prompt, the kind's reason below), and
+everything after that is the room's own machinery: the composer resolves
+the reference into the message's documents, `mentioned()` reads them, the
+FIFO and the author stamp follow, and the fire is generation zero — the
+user's own message analog, uncapped itself, its handoffs capped. In a
+direct chat nothing stamps; the mention rides inline as instruction
+material, the same rule any message the user sends takes. Validation lives
+where the library happens to be — registration and the editor — while a
+stored member later deleted is not re-checked: at fire time a name the
+library does not hold is prose, which the room's mention filter already
+answers.
 
 ### What a fire says
 

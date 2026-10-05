@@ -9,7 +9,9 @@ The room has two participants who speak, and a third shape that never does:
 
 - **The user**, whose send verb is `TurnDriver.send` — every way a trigger or
   a voice utterance speaks goes through the controller's `send` too, one path
-  rather than one per caller.
+  rather than one per caller. A trigger fire naming a member is a say like
+  any other: the mention in its text is what routes it, and nothing here
+  knows the fire was a trigger.
 - **The main agent**, behind the event stream. Every turn the controller
   drives today is its turn; its reply is the anonymous voice at the end of
   one. Sub-agents (a `task` call) are participants with a restricted reply
