@@ -808,6 +808,16 @@ the same file is never injected twice. They render as "## Workspace
 instructions" — the one section of the second message with no preamble of its
 own, because these are the instructions.
 
+**The first reach of each file is recorded** as an `InstructionsPart` on the
+reply — the turn's up-front load one part naming every file it first put in
+front of the model, a nested pull-in its own part — and drawn as an
+activity label. A later turn re-reading the same file records nothing: the
+claim set is derived per turn from what the history's parts already say, so a
+rewind takes the record back with it and a retry records nothing. The part
+carries paths, not content — the content rides the system message — and its
+label's drawer says what was read and whence, never what the files said; a
+`read`'s own drawer is cut below the rendered block for the same reason.
+
 ### Gating
 
 The instruction files have no gate: they are read into every turn, and a

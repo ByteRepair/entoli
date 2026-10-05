@@ -10,6 +10,12 @@ import "migrations.dart";
 /// project's workspace root.
 const instructionFileName = "AGENTS.md";
 
+/// The first sentence `renderInstructions` writes over the files it loaded —
+/// and the marker the read label's drawer cuts the tool output at, so the
+/// rendered block a nested read appends to a result is not shown as though it
+/// were the file's content. One const for both ends, so they cannot disagree.
+const instructionBlockHeader = "Workspace instructions are shown below";
+
 /// Composes the paths of the Entoli data directory, and holds the filesystem
 /// they lead into. This file builds names; [fs] is what they mean.
 ///

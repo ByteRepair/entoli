@@ -1,5 +1,6 @@
 import "dart:async";
 import "dart:math" as math;
+import "dart:typed_data";
 
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
@@ -8,6 +9,7 @@ import "../../domain/agent_backend.dart";
 import "../../domain/chat_meta.dart";
 import "../../domain/models.dart";
 import "../../domain/project.dart";
+import "../../domain/prompt_library.dart" show nameOf;
 import "../../providers.dart";
 import "../fonts.dart";
 import "../theme.dart";
@@ -903,6 +905,20 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
     if (uri != null) ref.read(linkOpenerProvider).open(context, uri);
   }
 
+  /// The bytes of the picture beside an addressed member's name: the named
+  /// member's, where the message names one — the same condition the label
+  /// answers, so the two never disagree. Null where it names none, so the
+  /// main agent's reply draws its label alone, whatever a file in the agents
+  /// directory might hold.
+  Uint8List? _avatarOf(Chat chat, Message message) {
+    final member = nameOf(message.author);
+    if (member == null) return null;
+    return ref
+        .watch(agentPictureProvider(
+            (project: chat.state.project, name: member)))
+        .value;
+  }
+
   Widget _conversation(
       Chat chat, ChatViewState view, ChatController? editing, Widget whenEmpty) {
     final speechReady = ref.watch(speechReadyProvider);
@@ -939,6 +955,10 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
                       chatId: widget.chatId,
                       message: message,
                       author: message.author,
+                      // The member's picture, only where a member speaks —
+                      // the label's own condition. Read per message: one
+                      // provider entry per addressed member.
+                      avatar: _avatarOf(chat, message),
                       entoli: inOmadaSection,
                       isWaiting: view.isRunning && last,
                       waitingNotice: view.retry,

@@ -677,6 +677,17 @@ the template, because that is the one thing every reader needs and none can
 work out. An agent is still one `.md` file: a system prompt, with nothing to
 run beside it.
 
+Beside the `.md` an agent may carry a profile picture, `<name>.png` in the
+same directory — a PNG, picked in the editor, written and removed with the
+agent. It is no part of the document: nothing parses it, nothing back-ups it
+specially (a directory that grows a picture is still carried by the
+members-are-files rule), and the model is never told of it. The picture a
+project shows is read over the same tier walk the library answers mentions
+with — a project's own answering over an inherited one — by
+`readAgentPicture`, which the `agentPictureProvider` serves and the agents
+list, the editor and the Omada reply's avatar read. A bundled agent has no
+picture until the user's own agent of the same name carries one.
+
 A skill has two halves to being reachable, and they are separate. **User
 invocation** is a `/name` in the composer, offered while the skill is
 `user-invocable` (the default); **model invocation** is the `skill` tool,

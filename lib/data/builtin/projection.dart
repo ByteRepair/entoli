@@ -251,6 +251,7 @@ Iterable<LlmMessage> _assistant(Message message) sync* {
         case ArtifactPart():
         case SkillInstallPart():
         case ApprovalPart():
+        case InstructionsPart():
         case ErrorPart():
           // Results are read off `results` by the call they answer. An error is
           // what the turn reported to the user; the model never saw it, so
@@ -258,7 +259,10 @@ Iterable<LlmMessage> _assistant(Message message) sync* {
           // view-only output; the model sees the call that produced it, not the
           // page. A permission banner is the gate's question, not the model's —
           // the model saw the command it triggered and the result it produced,
-          // and nothing of the banner between them.
+          // and nothing of the banner between them. An instructions record is
+          // the read's receipt, not a message: the files ride the second system
+          // message, rewritten every turn, and a nested find's content already
+          // rides the read result it was appended to.
           break;
       }
     }
@@ -319,6 +323,7 @@ String? _responseIdOf(MessagePart part) => switch (part) {
       ArtifactPart() ||
       SkillInstallPart() ||
       ApprovalPart() ||
+      InstructionsPart() ||
       ErrorPart() =>
         null,
     };

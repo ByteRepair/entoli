@@ -325,6 +325,34 @@ class BuiltinBackend implements AgentBackend {
         }
       }
       final loaded = await instructionsF;
+      // What the conversation has already recorded reading — one pass over the
+      // history's parts, the claim set the label emission below spends. Derived
+      // per turn rather than held on this object, so a rewind that takes a part
+      // out of the history also takes the file back out of it, and re-running
+      // the turn records the read again — the log as it now reads stays true.
+      // Held state would drift from the log and lie; this cannot.
+      final reached = {
+        for (final m in history)
+          for (final part in m.parts)
+            if (part is InstructionsPart)
+              for (final ref in part.files) ref.path,
+      };
+
+      // The read is the turn's own to claim, so it is claimed the moment the
+      // load answers: what it claims is what the history does not yet name,
+      // and two turns claiming the same new file would both have had to pass
+      // this synchronous stretch — the serialized-dispatch case. Two members'
+      // first turns dispatched in parallel each derive from a history that
+      // predates the other's reply and could both label a file new; the
+      // claim set answers for what the log can say, not for a window nobody
+      // else on this path guards.
+      // `add` answers what was new, and what was new is exactly what the
+      // event says.
+      final fresh = [
+        for (final file in loaded)
+          if (reached.add(file.path)) file.ref,
+      ];
+      if (fresh.isNotEmpty) controller.add(InstructionsReadEvent(fresh));
       final instructions = bundled == null
           ? loaded
           : [
@@ -378,6 +406,9 @@ class BuiltinBackend implements AgentBackend {
         memory:
             bundled != null ? const MemorySettings(nested: false) : settings.memory,
         instructions: instructions,
+        // Claims what a mid-turn read pulls in against the same set the
+        // up-front load spent, so a file reached either way is recorded once.
+        claimInstruction: reached.add,
         recall: recall,
         pinned: pinned,
         index: index,

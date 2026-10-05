@@ -8,6 +8,7 @@ import "package:path/path.dart" as p;
 import "package:agent_chat/core/config.dart";
 import "package:agent_chat/core/platform/io/platform.dart"
     show platformChmodReadOnly, platformChmodWritable;
+import "package:agent_chat/data/prompts/agent_pictures.dart";
 import "package:agent_chat/data/prompts/bundled_skill_data.dart";
 import "package:agent_chat/data/prompts/bundled_skills.dart";
 import "package:agent_chat/data/prompts/prompt_sources.dart";
@@ -525,6 +526,73 @@ void main() {
       expect(await defaultDir.exists(), isTrue);
       expect(defaultDir.listSync().whereType<Directory>().map((d) => p.basename(d.path)),
           contains("artifact"));
+    });
+  });
+
+  group("agent pictures", () {
+    void seedPicture(AppConfig config, String project, String name,
+        List<int> bytes) {
+      final dir =
+          Directory(config.promptsDir(CompletionKind.agent, project: project));
+      dir.createSync(recursive: true);
+      File(p.join(dir.path, "$name.png")).writeAsBytesSync(bytes);
+    }
+
+    test("the picture reads from where the .md reads — the project's own "
+        "answers over the default's", () async {
+      final config = tempConfig();
+      await config.ensureDirs();
+      seedPicture(config, "default", "scout", [1]);
+      seedPicture(config, "work", "scout", [2, 2]);
+
+      final tiers = promptTiers(project: "work", config: config);
+      expect(tiers, ["default", "work"]);
+
+      expect(
+        await readAgentPicture(config, "scout", tiers),
+        [2, 2],
+        reason: "the project's own picture wins, as its .md does",
+      );
+      expect(
+        await readAgentPicture(config, "scout",
+            promptTiers(project: null, config: config)),
+        [1],
+      );
+    });
+
+    test("an Omada rung's picture inherits the same way, and an off project "
+        "sees nothing of it", () async {
+      final config = tempConfig();
+      await config.ensureDirs();
+      await seedProject(config, "on-team", omada: true);
+      await seedProject(config, "off-team", omada: false);
+      seedPicture(config, "my-team", "scout", [7]);
+
+      expect(
+        await readAgentPicture(
+            config, "scout", promptTiers(project: "on-team", config: config)),
+        [7],
+      );
+      expect(
+        await readAgentPicture(
+            config, "scout", promptTiers(project: "off-team", config: config)),
+        isNull,
+      );
+    });
+
+    test("no tier holding one, and a missing file, are null rather than errors",
+        () async {
+      final config = tempConfig();
+      await config.ensureDirs();
+      final tiers = promptTiers(project: null, config: config);
+
+      expect(await readAgentPicture(config, "scout", tiers), isNull);
+      // A stray file with another extension is no picture — the .png alone is.
+      Directory(config.promptsDir(CompletionKind.agent, project: null))
+          .createSync(recursive: true);
+      File(p.join(config.promptsDir(CompletionKind.agent), "scout.jpg"))
+          .writeAsBytesSync([1]);
+      expect(await readAgentPicture(config, "scout", tiers), isNull);
     });
   });
 }

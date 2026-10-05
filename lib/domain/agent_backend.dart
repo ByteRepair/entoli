@@ -59,6 +59,17 @@ class ToolResultEvent extends AgentEvent {
   final ToolResult result;
 }
 
+/// Instruction files were read into the model's context for the first time in
+/// this conversation — the turn's up-front `AGENTS.md` load, or a nested file
+/// a `read` pulled in. Persisted as an [InstructionsPart] rather than
+/// turn-scoped view state: the read is a fact about the conversation, and a
+/// reloaded chat redraws the label it makes. Emitted only for files the
+/// history does not already record, so one conversation labels a file once.
+class InstructionsReadEvent extends AgentEvent {
+  const InstructionsReadEvent(this.files);
+  final List<InstructionRef> files;
+}
+
 /// A command the user ran themselves finished — the whole of a `!` turn, which
 /// never reaches a model. Carries the part rather than the command and its
 /// outcome separately, since the two are one thing that happened and the
