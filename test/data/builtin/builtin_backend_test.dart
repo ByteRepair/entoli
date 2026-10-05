@@ -303,18 +303,31 @@ void main() {
       InstructionRef ref(String path, InstructionKind kind) =>
           InstructionRef(path: path, kind: kind);
 
+      /// The reply whose parts record [first]'s read events and say "done" —
+      /// the shape a turn's own log entry takes, which is what the next
+      /// turn's history holds.
+      Message replyRecording(List<AgentEvent> first) => Message(
+            id: "reply-1",
+            role: MessageRole.assistant,
+            createdAt: sentAt,
+            parts: [
+              for (final read in first.whereType<InstructionsReadEvent>())
+                MessagePart.instructions(files: read.files),
+              const MessagePart.text(text: "done", responseId: "r1"),
+            ],
+          );
+
       /// The shape `instructions_test.dart` builds, on this config's layout:
       /// the global file at the data dir's root and the project's at its
       /// workspace root.
       void writeInstructions({bool importsIntoProject = false}) {
-        Directory(config.projectWorkspaceDir()).createSync(recursive: true);
         File(config.globalInstructionsFile)
             .writeAsStringSync(importsIntoProject ? "see @./notes.md" : "global rules");
         if (importsIntoProject) {
           File(p.join(config.projectWorkspaceDir(), "notes.md"))
               .writeAsStringSync("the notes");
         }
-        File(p.join(config.projectWorkspaceDir(), "AGENTS.md"))
+        File(config.projectInstructionsFile())
             .writeAsStringSync(importsIntoProject ? "see @./notes.md" : "project rules");
       }
 
@@ -347,20 +360,8 @@ void main() {
         writeInstructions();
 
         final first = await send(backend, "hi");
-        final promptTurn = userMessage("hi", at: sentAt);
-        final reply = Message(
-            id: "reply-1",
-            role: MessageRole.assistant,
-            createdAt: sentAt,
-            parts: [
-              MessagePart.instructions(files: [
-                for (final e in first.whereType<InstructionsReadEvent>())
-                  ...e.files
-              ]),
-              MessagePart.text(text: "done", responseId: "r1"),
-            ]);
         final events = await send(backend, "again",
-            history: [promptTurn, reply]);
+            history: [userMessage("hi", at: sentAt), replyRecording(first)]);
 
         expect(events.whereType<InstructionsReadEvent>(), isEmpty);
         // The files are still in front of the model: recorded once, read
@@ -376,17 +377,6 @@ void main() {
         writeInstructions();
 
         final first = await send(backend, "hi");
-        final reply = Message(
-            id: "reply-1",
-            role: MessageRole.assistant,
-            createdAt: sentAt,
-            parts: [
-              MessagePart.instructions(files: [
-                for (final e in first.whereType<InstructionsReadEvent>())
-                  ...e.files
-              ]),
-              MessagePart.text(text: "done", responseId: "r1"),
-            ]);
         // Between turns, the project file gains an import pointing at a new
         // file, the way a user editing it between turns reaches the next one.
         File(p.join(config.projectWorkspaceDir(), "AGENTS.md"))
@@ -395,10 +385,7 @@ void main() {
             .writeAsStringSync("the notes");
 
         final events = await send(backend, "again",
-            history: [
-              userMessage("hi", at: sentAt),
-              reply
-            ],
+            history: [userMessage("hi", at: sentAt), replyRecording(first)],
             memory: MemorySettings(imports: true));
 
         final reads = events.whereType<InstructionsReadEvent>().toList();
@@ -461,17 +448,8 @@ void main() {
         File(p.join(sub, "notes.txt")).writeAsStringSync("the contents");
 
         final first = await send(backend, "read it");
-        final reply = Message(
-            id: "reply-1",
-            role: MessageRole.assistant,
-            createdAt: sentAt,
-            parts: [
-              for (final e in first.whereType<InstructionsReadEvent>())
-                MessagePart.instructions(files: e.files),
-              MessagePart.text(text: "done", responseId: "r1"),
-            ]);
         final events = await send(backend, "again",
-            history: [userMessage("hi", at: sentAt), reply]);
+            history: [userMessage("hi", at: sentAt), replyRecording(first)]);
 
         expect(events.whereType<InstructionsReadEvent>(),
             isEmpty);
@@ -491,11 +469,7 @@ void main() {
         final events = await send(backend, "again",
             history: [
               userMessage("hi", at: sentAt),
-              Message(
-                  id: "reply-1",
-                  role: MessageRole.assistant,
-                  createdAt: sentAt,
-                  parts: [MessagePart.text(text: "done", responseId: "r1")]),
+              replyRecording(const []),
             ]);
 
         final reads = events.whereType<InstructionsReadEvent>().toList();
@@ -520,17 +494,7 @@ void main() {
 
         final events = await resuming(backend, [
           userMessage("hi", at: sentAt),
-          Message(
-              id: "reply-1",
-              role: MessageRole.assistant,
-              createdAt: sentAt,
-              parts: [
-                MessagePart.instructions(files: [
-                  for (final e in first.whereType<InstructionsReadEvent>())
-                    ...e.files
-                ]),
-                MessagePart.text(text: "done", responseId: "r1"),
-              ]),
+          replyRecording(first),
         ]);
 
         expect(events.whereType<InstructionsReadEvent>(), isEmpty);

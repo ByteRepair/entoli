@@ -6,11 +6,6 @@ import "../../../core/log.dart";
 import "../../../domain/models.dart"
     show InstructionKind, InstructionRef, instructionKindPhrase;
 
-// The enum lives in `domain/models.dart` beside the part that records it;
-// re-exported because every reader of this file read `InstructionKind` here.
-export "../../../domain/models.dart"
-    show InstructionKind, InstructionRef, instructionKindPhrase;
-
 /// AGENTS.md files, read for a turn and rendered into its second system
 /// message — this app's answer to Claude Code's CLAUDE.md memory. Two files a
 /// turn loads up front: the user's global one at the data dir's root, outside

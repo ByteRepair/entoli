@@ -1284,8 +1284,10 @@ class BuiltinAgent {
       argumentsText: args.path,
     ));
     // Held beside the run rather than in it, for the event below: what the
-    // read pulled in, if anything, is reported the moment the result lands.
-    List<InstructionFile>? nested;
+    // read pulled in, if anything. Empty is the honest "nothing" — a denied
+    // or gated read never ran, so it pulled nothing in — and it stands in
+    // for null, so nothing downstream has to test for it.
+    var nested = const <InstructionFile>[];
     Future<ShellResult> run() async {
       final file = fs.file(path);
       if (!await file.exists()) {
@@ -1320,19 +1322,17 @@ class BuiltinAgent {
               excludes: memory.excludes,
             )
           : const <InstructionFile>[];
-      final output = nested!.isEmpty
+      final output = nested.isEmpty
           ? (result.isEmpty ? "(empty file)" : result)
-          : "$result\n\n${renderInstructions(nested!)}";
+          : "$result\n\n${renderInstructions(nested)}";
       return ShellResult(returnCode: 0, output: output);
     }
     yield* _runFileTool(call, path, readToolName, run);
-    // A denied or gated read never ran, so it pulled nothing in; a successful
-    // one reports what it reached here, the claim deciding which of the
-    // findings are this conversation's first.
-    final found = nested;
-    if (found != null && found.isNotEmpty) {
+    // A successful read reports what it reached here, the claim deciding
+    // which of the findings are this conversation's first.
+    if (nested.isNotEmpty) {
       final fresh = [
-        for (final file in found)
+        for (final file in nested)
           if (claimInstruction == null || claimInstruction!(file.path)) file.ref,
       ];
       if (fresh.isNotEmpty) yield InstructionsReadEvent(fresh);

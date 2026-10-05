@@ -330,19 +330,21 @@ class BuiltinBackend implements AgentBackend {
             if (part is InstructionsPart)
               for (final ref in part.files) ref.path,
       };
+
       // The read is the turn's own to claim, so it is claimed the moment the
-      // load answers: a sibling turn running beside this one re-derives the
-      // set from the same history, and two claims of one new file would both
-      // have had to pass this synchronous loop since. Nothing already recorded
-      // is emitted, which is what makes a per-file read land once for the
-      // conversation, and what is claimed here is exactly what the event says.
-      final fresh = <InstructionRef>[];
-      for (final file in loaded) {
-        final path = file.path;
-        if (reached.contains(path)) continue;
-        reached.add(path);
-        fresh.add(file.ref);
-      }
+      // load answers: what it claims is what the history does not yet name,
+      // and two turns claiming the same new file would both have had to pass
+      // this synchronous stretch — the serialized-dispatch case. Two members'
+      // first turns dispatched in parallel each derive from a history that
+      // predates the other's reply and could both label a file new; the
+      // claim set answers for what the log can say, not for a window nobody
+      // else on this path guards.
+      // `add` answers what was new, and what was new is exactly what the
+      // event says.
+      final fresh = [
+        for (final file in loaded)
+          if (reached.add(file.path)) file.ref,
+      ];
       if (fresh.isNotEmpty) controller.add(InstructionsReadEvent(fresh));
       final instructions = bundled == null
           ? loaded
@@ -399,11 +401,7 @@ class BuiltinBackend implements AgentBackend {
         instructions: instructions,
         // Claims what a mid-turn read pulls in against the same set the
         // up-front load spent, so a file reached either way is recorded once.
-        claimInstruction: (path) {
-          final isNew = !reached.contains(path);
-          if (isNew) reached.add(path);
-          return isNew;
-        },
+        claimInstruction: reached.add,
         recall: recall,
         pinned: pinned,
         index: index,

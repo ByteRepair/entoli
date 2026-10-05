@@ -1,5 +1,6 @@
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
+import "package:path/path.dart" as p;
 
 import "../../../core/config.dart"
     show instructionBlockHeader, instructionFileName;
@@ -142,9 +143,13 @@ class InstructionsLabel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final files = part.files;
-    final text = files.length == 1
-        ? "Read ${_nameOf(files.single.path)}"
-        : "Read ${files.length} instruction files";
+    // What a single read is named by: the bare name where it is an
+    // instruction file proper, the path when it is anything else — a nested
+    // one is clearer as where it sits.
+    final text = switch (files) {
+      [final only] => "Read ${basenameOf(only.path)}",
+      final several => "Read ${several.length} instruction files",
+    };
     return _Label(
       icon: Icons.description_outlined,
       text: text,
@@ -162,16 +167,13 @@ class InstructionsLabel extends StatelessWidget {
       ),
     );
   }
-
-  /// What the label names the file by: the bare name where it is an
-  /// instruction file proper, the path when it is anything else — a nested
-  /// one is clearer as where it sits.
-  String _nameOf(String path) {
-    final segments = path.split("/");
-    final name = segments.last;
-    return name == instructionFileName ? name : path;
-  }
 }
+
+/// What a single file's label names it by: the bare name where it is an
+/// instruction file proper, the path when it is anything else — a nested one
+/// is clearer as where it sits.
+String basenameOf(String path) =>
+    p.basename(path) == instructionFileName ? instructionFileName : path;
 
 /// What a recorded decision reads as, on a label's text and in its drawer's
 /// Outcome section. The wording is the shared contract of the two — one
