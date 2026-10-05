@@ -159,6 +159,14 @@ void main() {
   group("the editor", () {
     late TestApp app;
 
+    /// The member dropdown, found through its row's label — the project
+    /// dropdown beside it is the same type.
+    Finder memberDropdown() => find.descendant(
+          of: find.ancestor(
+              of: find.text("Address to"), matching: find.byType(LabelledField)),
+          matching: find.byType(DropdownButtonFormField<String?>),
+        );
+
     Future<void> openEditor(WidgetTester tester, {Trigger? trigger}) async {
       app = TestApp.create(
         reminderAlarms: FakeReminderAlarms(),
@@ -287,6 +295,62 @@ void main() {
 
       expect(app.container.read(triggersProvider).single.tempChatTtl,
           TempChatTtl.hours24);
+    });
+
+    testWidgets("a member is picked from the library and saved sigil-off",
+        (tester) async {
+      await openEditor(tester);
+      await writePrompt(tester, "triage the bugs");
+
+      await scrollTo(tester, find.text("Address to"));
+      await tester.tap(memberDropdown());
+      await settleIo(tester);
+      await tester.tap(find.text("@explore").last);
+      await settleIo(tester);
+
+      await scrollTo(tester, _on(TriggerEditorPage, "Save"));
+      await tester.tap(_on(TriggerEditorPage, "Save"));
+      await settleIo(tester);
+
+      final stored = app.container.read(triggersProvider).single;
+      expect(stored.member, "explore");
+    });
+
+    testWidgets("the row names who the fire is addressed to", (tester) async {
+      await openEditor(
+        tester,
+        trigger: seeded().copyWith(member: "explore"),
+      );
+      await settleIo(tester);
+
+      await pumpUntil(tester, find.textContaining("@explore"));
+    });
+
+    testWidgets("a member the library has lost keeps its name and says so",
+        (tester) async {
+      await openEditor(
+        tester,
+        trigger: seeded().copyWith(member: "vanished"),
+      );
+      await settleIo(tester);
+
+      await scrollTo(tester, find.text("Address to"));
+      expect(find.text("@vanished (deleted)"), findsOneWidget);
+      expect(
+          find.textContaining("a fire will reach the whole room"),
+          findsOneWidget);
+
+      // Keeping is choosing it again; the stored record is not cleared
+      // behind the user's back.
+      await tester.tap(memberDropdown());
+      await settleIo(tester);
+      await tester.tap(find.text("@vanished (deleted)").last);
+      await settleIo(tester);
+      await scrollTo(tester, _on(TriggerEditorPage, "Save"));
+      await tester.tap(_on(TriggerEditorPage, "Save"));
+      await settleIo(tester);
+
+      expect(app.container.read(triggersProvider).single.member, "vanished");
     });
   });
 

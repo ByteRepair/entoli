@@ -7,6 +7,7 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:uuid/uuid.dart";
 
 import "../../domain/date_words.dart" show describeFire, shortDate, timeOfDay;
+import "../../domain/models.dart" show CompletionKind;
 import "../../domain/project.dart";
 import "../../domain/trigger.dart";
 import "../../domain/temp_chat_ttl.dart";
@@ -172,6 +173,7 @@ class _TriggerTile extends ConsumerWidget {
         source,
       if (trigger.source is ScheduleSource)
         (trigger.source as ScheduleSource).repeat.label,
+      if (trigger.member != null) "@${trigger.member}",
       if (project != null) projectLabel(project),
       if (trigger.byAgent) "Set by the agent",
     ].join(" · ");
@@ -234,6 +236,10 @@ class _TriggerEditorPageState extends ConsumerState<TriggerEditorPage> {
   late String _prompt;
   late TriggerSource _source;
   late String? _project;
+
+  /// The member the fire is addressed to, sigil off — edited on the editor's
+  /// own row, held through kind switches like the sources are.
+  late String? _member;
   late TempChatTtl? _tempChatTtl;
   late final Clock _clock;
 
@@ -246,6 +252,7 @@ class _TriggerEditorPageState extends ConsumerState<TriggerEditorPage> {
     _prompt = trigger?.prompt ?? "";
     _source = trigger?.source ?? _defaultSource();
     _project = trigger?.project;
+    _member = trigger?.member;
     _tempChatTtl = trigger?.tempChatTtl;
   }
 
@@ -307,6 +314,7 @@ class _TriggerEditorPageState extends ConsumerState<TriggerEditorPage> {
             ),
           ),
           ..._sourceFields(),
+          _memberField(!registered),
           _PromptPreview(prompt: _prompt, onEdit: _editPrompt, editable: !registered),
           const Divider(height: 1),
           if (!registered) ...[
@@ -347,6 +355,57 @@ class _TriggerEditorPageState extends ConsumerState<TriggerEditorPage> {
         TimerSource() => _SourceKind.timer,
         FileSource() => _SourceKind.file,
       };
+
+  /// The member row, both targets one shape: a chatless fire makes its new
+  /// chat with the member as the first speaker, a same-chat one queues on
+  /// the member's FIFO — the same dropdown either way, since addressing is
+  /// not a property of where the fire lands. A project's own members over
+  /// the inherited ones, the library's tier walk. A stored member the
+  /// library has since lost stays named, with the line saying what fires
+  /// will do about it — clearing it silently would rewrite what was armed.
+  Widget _memberField(bool editable) {
+    final members = ref
+        .watch(promptLibraryProvider(_project))
+        .entries(CompletionKind.agent)
+        .map((e) => e.name)
+        .toList();
+    final vanished = _member != null && !members.contains(_member);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        LabelledField(
+          label: "Address to",
+          child: DropdownButtonFormField<String?>(
+            initialValue: _member,
+            isExpanded: true,
+            decoration: const InputDecoration(hintText: "The whole room"),
+            items: [
+              const DropdownMenuItem(value: null, child: Text("The whole room")),
+              if (vanished)
+                DropdownMenuItem(
+                    value: _member, child: Text("@$_member (deleted)")),
+              for (final member in members)
+                DropdownMenuItem(value: member, child: Text("@$member")),
+            ],
+            // A vanished member can be kept as it is or exchanged, not
+            // re-picked from a list that no longer names it — and where the
+            // trigger is the agent's, nothing here may rewrite what it
+            // registered.
+            onChanged:
+                editable ? (member) => setState(() => _member = member) : null,
+          ),
+        ),
+        if (vanished)
+          const Padding(
+            padding: EdgeInsets.fromLTRB(16, 0, 16, 8),
+            child: Text(
+              "This agent no longer exists; a fire will reach the whole room.",
+              style: TextStyle(fontSize: 12),
+            ),
+          ),
+      ],
+    );
+  }
 
   /// What each kind's rows hold while the other kind is showing — one slot
   /// per kind, filled as its rows are edited. Written when a kind is left
@@ -532,6 +591,8 @@ class _TriggerEditorPageState extends ConsumerState<TriggerEditorPage> {
           prompt: prompt,
           source: _source,
           project: _project,
+          member: _member,
+          clearMember: _member == null,
           tempChatTtl: _tempChatTtl,
           clearTempChatTtl: _tempChatTtl == null,
           enabled: true,
@@ -554,6 +615,7 @@ class _TriggerEditorPageState extends ConsumerState<TriggerEditorPage> {
         prompt: prompt,
         source: _source,
         project: _project,
+        member: _member,
         tempChatTtl: _tempChatTtl,
       );
 
