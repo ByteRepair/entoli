@@ -130,6 +130,15 @@ class TurnRecorder {
         addPart(MessagePart.artifact(artifactId: artifactId, entryFile: entryFile, title: title));
       case SkillInstallEvent(:final installId, :final title):
         addPart(MessagePart.skillInstall(installId: installId, title: title));
+      case InstructionsReadEvent(:final files):
+        // The backend claims against the history for a main-agent turn, so
+        // this records the conversation's first read of each file. The
+        // containment check is for the turn that has no claim behind it —
+        // a sub-agent's, whose own transcript may re-record on a resume what
+        // it already recorded before it was interrupted. A reply never
+        // stacks two identical read records.
+        final part = MessagePart.instructions(files: files);
+        if (!_parts.contains(part)) addPart(part);
       case ErrorEvent(:final message):
         _appendError(message);
       case StepLimitEvent():
@@ -354,6 +363,7 @@ class TurnRecorder {
         ArtifactPart() ||
         SkillInstallPart() ||
         ApprovalPart() ||
+        InstructionsPart() ||
         ErrorPart() =>
           part,
       };

@@ -343,6 +343,23 @@ void main() {
         isEmpty);
   });
 
+  test("an instructions record contributes nothing: the files ride the "
+      "per-turn system message", () async {
+    final projected = await project([
+      asked("go"),
+      said(MessageRole.assistant, [
+        const MessagePart.instructions(files: [
+          InstructionRef(path: "/data/AGENTS.md", kind: InstructionKind.global),
+        ]),
+        const MessagePart.text(text: "done"),
+      ]),
+    ]);
+
+    expect(projected, hasLength(2));
+    expect(projected.last.role, LlmRole.assistant);
+    expect(projected.last.text, "done");
+  });
+
   group("per viewer", () {
     Message authoredReply(String by, [List<MessagePart>? parts]) => Message(
         id: "m${next++}",

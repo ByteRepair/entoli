@@ -306,7 +306,9 @@ hand anything over — the part lands and the reply is no longer empty.
 A run of two or more non-important activity labels collapses behind a single
 centered "Expand activities" toggle (`ActivityGroup`), default collapsed. What
 is important and so stays visible, breaking a run: an artifact button, a failed
-tool run, an `ask_user` question, and the live label a running turn is working
+tool run, an `ask_user` question, an instructions record (`InstructionsLabel`,
+the first reach of an `AGENTS.md` — rare by construction, once per file), and
+the live label a running turn is working
 on. Text, errors and files are not labels and break a run too. A lone label is
 left where it is — a toggle for one label is noise. The decision is per-part in
 `_rows` (buffer into a pending run, flush at any break), and the length check

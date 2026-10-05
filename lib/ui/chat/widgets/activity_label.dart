@@ -1,6 +1,9 @@
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
+import "package:path/path.dart" as p;
 
+import "../../../core/config.dart"
+    show instructionBlockHeader, instructionFileName;
 import "../../fonts.dart";
 import "../../skills/skill_install_preview.dart";
 import "../../../domain/ask.dart";
@@ -106,12 +109,71 @@ class ToolLabel extends StatelessWidget {
 }
 
 /// The drawer a tool run opens, whether it was drawn as a label or as a diff.
-List<ActivitySection> _runSections(ToolCall call, ToolResult? result) => [
-      (label: "Arguments", body: call.argumentsText ?? call.argumentsJson, isError: false),
-      (label: "Output", body: result?.output, isError: false),
-      (label: "Error", body: result?.exceptionInfo, isError: true),
-      (label: "Outcome", body: result?.permissionOutcome, isError: false),
-    ];
+/// The Output section is cut below the rendered-instructions header where a
+/// nested read appended one to the result: the drawer says what the file held,
+/// and the instructions block — the model's reading, not the file's — lives
+/// in its own record's drawer instead. Cut at the last occurrence, since the
+/// block is appended at the tail.
+List<ActivitySection> _runSections(ToolCall call, ToolResult? result) {
+  final output = result?.output;
+  String? shown = output;
+  if (output != null) {
+    final at = output.lastIndexOf(instructionBlockHeader);
+    if (at >= 0) shown = output.substring(0, at).trimRight();
+  }
+  return [
+    (label: "Arguments", body: call.argumentsText ?? call.argumentsJson, isError: false),
+    (label: "Output", body: shown, isError: false),
+    (label: "Error", body: result?.exceptionInfo, isError: true),
+    (label: "Outcome", body: result?.permissionOutcome, isError: false),
+  ];
+}
+
+/// The instruction files a turn was the first to read into the model's
+/// context — the up-front `AGENTS.md` load, or a nested one a file read
+/// pulled in. One label per read, on the part that records it; the drawer
+/// says what was read and where each file sat, never what the files said —
+/// the content rides the per-turn system prompt and the read results, and is
+/// the model's, not the conversation's.
+class InstructionsLabel extends StatelessWidget {
+  const InstructionsLabel({super.key, required this.part});
+
+  final InstructionsPart part;
+
+  @override
+  Widget build(BuildContext context) {
+    final files = part.files;
+    // What a single read is named by: the bare name where it is an
+    // instruction file proper, the path when it is anything else — a nested
+    // one is clearer as where it sits.
+    final text = switch (files) {
+      [final only] => "Read ${basenameOf(only.path)}",
+      final several => "Read ${several.length} instruction files",
+    };
+    return _Label(
+      icon: Icons.description_outlined,
+      text: text,
+      onTap: () => showActivitySheet(
+        context,
+        title: "Instructions",
+        sections: [
+          for (final ref in files)
+            (
+              label: instructionKindPhrase(ref.kind),
+              body: ref.path,
+              isError: false,
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// What a single file's label names it by: the bare name where it is an
+/// instruction file proper, the path when it is anything else — a nested one
+/// is clearer as where it sits.
+String basenameOf(String path) =>
+    p.basename(path) == instructionFileName ? instructionFileName : path;
 
 /// What a recorded decision reads as, on a label's text and in its drawer's
 /// Outcome section. The wording is the shared contract of the two — one

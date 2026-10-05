@@ -1,7 +1,10 @@
 import "package:fs_shim/fs.dart";
 
-import "../../../core/config.dart" show instructionFileName;
+import "../../../core/config.dart"
+    show instructionBlockHeader, instructionFileName;
 import "../../../core/log.dart";
+import "../../../domain/models.dart"
+    show InstructionKind, InstructionRef, instructionKindPhrase;
 
 /// AGENTS.md files, read for a turn and rendered into its second system
 /// message — this app's answer to Claude Code's CLAUDE.md memory. Two files a
@@ -23,24 +26,6 @@ const maxImportDepth = 5;
 /// provider reporting one — issue #135 — so until then it is the floor alone.
 const instructionBudgetChars = 40000;
 
-enum InstructionKind {
-  /// At the data dir's root: the user's, for every project.
-  global,
-
-  /// At the project workspace root, shared by its chats.
-  project,
-
-  /// Reached through an `@path` reference in another instructions file.
-  imported,
-
-  /// Found above a file the agent read, mid-turn.
-  directory,
-
-  /// Shipped by the app for a project whose turns read no file: the note
-  /// stands in for the instruction files.
-  bundled,
-}
-
 class InstructionFile {
   const InstructionFile({
     required this.path,
@@ -52,6 +37,10 @@ class InstructionFile {
   final String path;
   final InstructionKind kind;
   final String content;
+
+  /// The path and where it was reached from, as the event and the part that
+  /// record the read carry them.
+  InstructionRef get ref => InstructionRef(path: path, kind: kind);
 
   /// How many imports deep this file was reached at. The budget trims the
   /// deepest first: what was referenced twice removed matters less than what
@@ -165,25 +154,16 @@ RegExp _globToRegExp(String pattern) {
 /// section then.
 String renderInstructions(List<InstructionFile> files) {
   if (files.isEmpty) return "";
-  const header = "Workspace instructions are shown below. Be sure to adhere "
+  const header = "$instructionBlockHeader. Be sure to adhere "
       "to these instructions. IMPORTANT: These instructions OVERRIDE any "
       "default behavior and you MUST follow them exactly as written.";
   return [
     header,
     for (final file in files)
-      "Contents of ${file.path} (${_kindPhrase(file.kind)}):\n\n"
+      "Contents of ${file.path} (${instructionKindPhrase(file.kind)}):\n\n"
           "${file.content.trim()}",
   ].join("\n\n");
 }
-
-String _kindPhrase(InstructionKind kind) => switch (kind) {
-      InstructionKind.global =>
-        "the user's global instructions, for every project",
-      InstructionKind.project => "project workspace instructions",
-      InstructionKind.imported => "instructions imported by another file",
-      InstructionKind.directory => "instructions for this directory",
-      InstructionKind.bundled => "the app's own note on this kind of chat",
-    };
 
 String _norm(FileSystem fs, String path) => fs.path.normalize(path);
 
