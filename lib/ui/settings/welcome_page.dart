@@ -351,7 +351,7 @@ class _ExtrasPage extends StatelessWidget {
           title: "Triggers",
           detail:
               "A prompt sent to a chat at a time you pick, a countdown, or a "
-              "file changing, even when the app is closed.",
+              "file changing. A schedule fires even when the app is closed.",
           category: SettingsCategory.triggers,
         ),
         _SetupRow(

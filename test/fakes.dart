@@ -32,7 +32,6 @@ import "package:agent_chat/domain/prompt_library.dart";
 import "package:agent_chat/domain/file_watches.dart";
 import "package:agent_chat/domain/reminder_alarms.dart";
 import "package:agent_chat/domain/trigger.dart";
-import "package:agent_chat/domain/trigger_manager.dart";
 import "package:agent_chat/domain/trigger_runner.dart";
 import "package:agent_chat/domain/voice.dart";
 import "package:agent_chat/domain/voice_model.dart";
@@ -1413,57 +1412,4 @@ class StubRuns implements TriggerRuns {
     if (gate != null) await gate!.future;
     return (chatId: "chat-${trigger.id}", outcome: TriggerOutcome.done, snippet: "done", targetGone: false);
   }
-}
-
-/// A [TriggerRegistry] recording what the tools registered and removed.
-/// [library] is the library a member registration is checked against — null
-/// and empty both hold no agent, so a test's member refusal is the shape the
-/// project-less case makes.
-class FakeTriggerRegistry implements TriggerRegistry {
-  final stored = <Trigger>[];
-  final removed = <String>[];
-
-  String? chatId;
-
-  PromptLibrary? library;
-
-  @override
-  Future<Trigger> register(
-      {required TriggerSource source,
-      required String prompt,
-      String? name,
-      String? member}) async {
-    if (member
-        case final name? when (library ?? PromptLibrary.empty)
-                .find(CompletionKind.agent, name) ==
-            null) {
-      throw ArgumentError.value(member, "member", "no agent named $member");
-    }
-    final id = "t-${stored.length + 1}";
-    // The same anchor the provider's own registerFor applies: a timer is
-    // re-dated to the moment of registration, the parse's placeholder gone.
-    final now = DateTime(2026, 8, 23, 9);
-    final anchored = source is TimerSource
-        ? TimerSource(duration: source.duration, registeredAt: now)
-        : source;
-    final trigger = Trigger(
-        id: id,
-        name: name ?? "",
-        prompt: prompt,
-        source: anchored,
-        chatId: chatId,
-        member: member,
-        byAgent: true,
-        nextFireAt: anchored.nextAfter(now));
-    stored.add(trigger);
-    return trigger;
-  }
-
-  @override
-  Future<List<Trigger>> own() async => [
-        for (final t in stored) if (t.chatId == chatId) t,
-      ];
-
-  @override
-  Future<void> remove(String id) async => removed.add(id);
 }

@@ -50,8 +50,8 @@ TriggerManager manager(
     TriggerManager(
       kinds: kinds ??
           [
-            ClockKind(alarms, matchOf: (t) => t.source is ScheduleSource, label: "Schedule"),
-            ClockKind(alarms, matchOf: (t) => t.source is TimerSource, label: "Timer"),
+            ClockKind(alarms, matchOf: (t) => t.source is ScheduleSource),
+            ClockKind(alarms, matchOf: (t) => t.source is TimerSource),
           ],
       alarmPort: alarms,
       runner: runner,
@@ -405,7 +405,7 @@ void main() {
       final runs = _GoneTargetRuns();
       final mgr = TriggerManager(
         kinds: [
-          ClockKind(alarms, matchOf: (t) => t.source is ScheduleSource, label: "Schedule"),
+          ClockKind(alarms, matchOf: (t) => t.source is ScheduleSource),
         ],
         alarmPort: alarms,
         runner: runs,

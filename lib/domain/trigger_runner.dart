@@ -118,8 +118,16 @@ class TriggerRunner implements TriggerRuns {
     Chat? chat;
     try {
       chat = await repo.openChat(chatId);
-    } catch (_) {
+    } on StateError {
+      // The store's own "no chat" — the deleted-target case this arm exists
+      // for.
       chat = null;
+    } catch (e) {
+      // Anything else — a disk error, a storage blip — is not "gone": the
+      // trigger stays armed for its next slot, with a line saying what
+      // happened rather than a disarm and a lie about deletion.
+      logFailure("triggers", "could not open target chat; the fire is skipped", e);
+      return (chatId: chatId, outcome: TriggerOutcome.error, snippet: "", targetGone: false);
     }
     if (chat == null) {
       logFailure("triggers", "target chat is gone; disarming", chatId);

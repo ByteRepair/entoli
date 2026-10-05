@@ -7,6 +7,7 @@ import "package:uuid/uuid.dart";
 import "../../domain/agent_backend.dart";
 import "../../domain/artifact.dart";
 import "../../domain/ask.dart";
+import "../../domain/date_words.dart" show describeFire;
 import "../../domain/file_tools.dart";
 import "../../domain/models.dart";
 import "../../domain/permission.dart";
@@ -1456,6 +1457,26 @@ class BuiltinAgent {
       yield* _reject(call, triggerSetProblem(stringArg(call.argumentsJson, "source")));
       return;
     }
+    // A file watch is never asked before it fires (and a fire's headless
+    // turn runs approveMode never), so the outside paths the read tool
+    // raises a banner over are refused here, where the call can still be
+    // answered — a watch over `~` or the machine is not a shape the tool
+    // takes.
+    if (draft.source is FileSource) {
+      final outside = [
+        for (final path in (draft.source as FileSource).paths)
+          if (outsideWorkspaces(fs, _resolvePath(path), workspace, projectWorkspace))
+            path,
+      ];
+      if (outside.isNotEmpty) {
+        yield* _reject(
+            call,
+            "A file trigger watches the workspaces: give workspace-relative "
+            "or project:-prefixed paths (${outside.join(", ")} reach past "
+            "them).");
+        return;
+      }
+    }
     final label = [
       if (draft.name.isNotEmpty) draft.name,
       draft.source.describe(),
@@ -1562,11 +1583,26 @@ class BuiltinAgent {
         ));
   }
 
-  /// The stored fire time, in the source's own wording — one vocabulary
-  /// with what `trigger_set` just said about it.
+  /// The stored fire time, worded for the answer — what is armed now, not
+  /// the anchor a repeating source steps from, which goes stale as it fires
+  /// and would tell the model its own trigger is overdue.
   String _whenLine(Trigger trigger) {
     final at = trigger.nextFireAt;
-    return at == null ? "" : ". Next: ${trigger.source.describe()}";
+    return at == null ? "" : ". Next: ${_nextWording(at, trigger)}";
+  }
+
+  /// The source's own relative wording where it is on the clock ("in 30
+  /// minutes", "Sat 22 Aug, daily" from the *next* occurrence), the plain
+  /// moment otherwise. [describe] reads the anchor, so the schedule has to
+  /// be re-worded here against the stored time.
+  String _nextWording(DateTime at, Trigger trigger) {
+    final source = trigger.source;
+    return switch (source) {
+      ScheduleSource(:final repeat) =>
+        "${describeFire(at, DateTime.now())}"
+            "${repeat == ScheduleRepeat.off ? "" : ", ${repeat.label.toLowerCase()}"}",
+      _ => source.describe(),
+    };
   }
 
   /// A fact the model judged worth keeping. No approval: like `websearch`, it

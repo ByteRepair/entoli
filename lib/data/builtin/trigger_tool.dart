@@ -1,8 +1,8 @@
 import "../../domain/trigger.dart";
 import "llm/llm_client.dart";
 
-/// The trigger tools. Named in `lib/domain/trigger_tools.dart` beside the
-/// registry they run against, after the plan tools' pattern.
+/// The trigger tools. The registry they run against is in
+/// `lib/domain/trigger_manager.dart`, after the plan tools' pattern.
 
 const triggerSetName = "trigger_set";
 const triggerRemoveName = "trigger_remove";
@@ -163,10 +163,15 @@ TriggerDraft? triggerDraftFromArgs({required Map<String, dynamic> args}) {
 }
 
 TriggerSource? _scheduleSource(Map<String, dynamic> args) {
-  final at = DateTime.tryParse(args["at"] as String? ?? "");
+  final rawAt = args["at"];
+  // `is` over `as`: the arguments are the model's writing, and a number where
+  // the ISO string belongs is a bad argument to reject, not a TypeError to
+  // fail the turn with.
+  final at = rawAt is String ? DateTime.tryParse(rawAt) : null;
   if (at == null) return null;
-  final repeat = switch (args["repeat"] as String? ?? "off") {
-    "off" => ScheduleRepeat.off,
+  final rawRepeat = args["repeat"];
+  final repeat = switch (rawRepeat is String? ? rawRepeat : null) {
+    null || "off" => ScheduleRepeat.off,
     "hourly" => ScheduleRepeat.hourly,
     "daily" => ScheduleRepeat.daily,
     "weekly" => ScheduleRepeat.weekly,
@@ -201,7 +206,7 @@ TriggerSource? _fileSource(Map<String, dynamic> args) {
   final eventNames = args["events"];
   final events = eventNames == null
       ? FileEvent.values.toSet()
-      : _eventsFrom(eventNames);
+      : (eventNames is List ? _eventsFrom(eventNames) : null);
   if (events == null) return null;
   final cooldown = args["cooldownSeconds"];
   return FileSource(
@@ -219,8 +224,11 @@ TriggerSource? _fileSource(Map<String, dynamic> args) {
 Set<FileEvent>? _eventsFrom(List<dynamic> eventNames) {
   final events = <FileEvent>{};
   for (final name in eventNames) {
+    // `is` rather than `as`: a non-string element is rejected with the rest of
+    // the malformed call, and no cast error reaches the turn.
+    if (name is! String) return null;
     try {
-      events.add(FileEvent.fromName(name as String?));
+      events.add(FileEvent.fromName(name));
     } on ArgumentError {
       return null;
     }

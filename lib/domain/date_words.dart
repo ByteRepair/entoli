@@ -13,7 +13,10 @@ const _months = [
 String describeFire(DateTime at, DateTime now) {
   final today = DateTime(now.year, now.month, now.day);
   final day = DateTime(at.year, at.month, at.day);
-  final difference = day.difference(today).inDays;
+  // Whole days, round()ed: both are local midnights and the hours between
+  // them sit a whole day off by one hour per DST boundary crossed, which
+  // truncation would word as today (a 23-hour day before spring-forward).
+  final difference = (day.difference(today).inHours / 24).round();
   final when = timeOfDay(at);
   return switch (difference) {
     0 => "Today $when",

@@ -39,9 +39,23 @@ enum FileEvent {
 
   final String label;
 
+  /// An unknown name is a file written by a later build, so it falls back to
+  /// a change — the one every event kinds' writes carry — rather than
+  /// failing the record, the bargain [ScheduleRepeat.fromName] makes. A
+  /// record the reader cannot name is a lost fire, not a lost list.
   static FileEvent fromName(String? name) => values.firstWhere(
       (t) => t.name == name,
       orElse: () => throw ArgumentError.value(name, "event"));
+
+  /// The read-side of the enum: tolerant, for a stored list. [fromName] is
+  /// the parse's own voice, where a caller wants the refusal.
+  static FileEvent fromNameOr(String? name) => switch (name) {
+        "create" => create,
+        "change" => change,
+        "delete" => delete,
+        "move" => move,
+        _ => change,
+      };
 }
 
 /// What sets a trigger off. Data, and nothing but: which behaviour watches
@@ -166,8 +180,18 @@ class TimerSource extends TriggerSource {
 
   @override
   String describe({DateTime? now}) {
+    // Sub-minute first: the tool takes seconds, and a truncated "In 0
+    // minutes" tells the model nothing about what it armed.
+    if (duration < const Duration(minutes: 1)) {
+      return "In ${duration.inSeconds} seconds";
+    }
     final minutes = duration.inMinutes;
-    if (minutes < 60) return "In $minutes minutes";
+    if (minutes < 60) {
+      final leftover = duration.inSeconds % 60;
+      return leftover == 0
+          ? "In $minutes minutes"
+          : "In $minutes min $leftover sec";
+    }
     final hours = duration.inHours;
     final leftover = minutes % 60;
     return leftover == 0
@@ -413,17 +437,25 @@ class Trigger {
 
   static FileSource _fileSourceFrom(Map<String, dynamic> json) {
     final rawEvents = json["events"] as List?;
+    // A name this build does not know falls back rather than failing the
+    // record — an unknown kind's bargain, held here too. What is not a
+    // string (a hand edit, a corrupted field) is dropped the same way.
     return FileSource(
       paths: [
-        for (final p in json["paths"] as List? ?? const []) p as String,
+        for (final p in json["paths"] as List? ?? const [])
+          if (p is String) p,
       ],
       // Said nothing: everything.
       events: rawEvents == null
           ? FileEvent.values.toSet()
-          : {for (final e in rawEvents) FileEvent.fromName(e as String)},
+          : {
+              for (final e in rawEvents)
+                if (e is String) FileEvent.fromNameOr(e),
+            },
       cooldown: Duration(
-          seconds:
-              json["cooldownSeconds"] as int? ?? const Duration(seconds: 5).inSeconds),
+          seconds: json["cooldownSeconds"] is int
+              ? json["cooldownSeconds"] as int
+              : const Duration(seconds: 5).inSeconds),
     );
   }
 

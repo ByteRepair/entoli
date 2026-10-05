@@ -964,6 +964,7 @@ class Triggers extends Notifier<List<Trigger>> implements TriggerList {
   /// the trigger's life.
   Future<Trigger> registerFor(String chatId,
       {required TriggerSource source, required String prompt, String? name, String? member}) async {
+    final project = await ref.read(chatRepositoryProvider).projectOf(chatId);
     final now = ref.read(clockProvider).now();
     final anchored = source is TimerSource
         ? TimerSource(duration: source.duration, registeredAt: now)
@@ -975,6 +976,7 @@ class Triggers extends Notifier<List<Trigger>> implements TriggerList {
       source: anchored,
       chatId: chatId,
       member: member,
+      project: project,
       byAgent: true,
       nextFireAt: anchored.nextAfter(now),
     );
@@ -1020,8 +1022,12 @@ String _resolveTriggerPath(
   final chatWorkspace =
       chatId == null ? null : config.workspaceDir(chatId, project: project);
   final shared = builtinProjectOf(project)?.sharedWorkspace ?? true;
-  final projectWorkspace =
-      shared ? config.projectWorkspaceDir(project: project) : chatWorkspace!;
+  // A chatless trigger in a project whose workspace is not shared (the
+  // anonymous one — the editor offers it): there is no chat workspace to
+  // stand in for the project's, so the project's directory it is.
+  final projectWorkspace = shared
+      ? config.projectWorkspaceDir(project: project)
+      : (chatWorkspace ?? config.projectWorkspaceDir(project: project));
   return resolveWorkspacePath(
     config.fs,
     path,
@@ -1056,10 +1062,8 @@ final triggerManagerProvider = Provider<TriggerManager>((ref) {
   final alarms = ref.watch(reminderAlarmsProvider);
   final manager = TriggerManager(
     kinds: [
-      ClockKind(alarms,
-          matchOf: (t) => t.source is ScheduleSource, label: "Schedule"),
-      ClockKind(alarms,
-          matchOf: (t) => t.source is TimerSource, label: "Timer"),
+      ClockKind(alarms, matchOf: (t) => t.source is ScheduleSource),
+      ClockKind(alarms, matchOf: (t) => t.source is TimerSource),
       FileKind(
         fileWatches: createFileWatches(),
         resolve: (trigger, path) async => _resolveTriggerPath(

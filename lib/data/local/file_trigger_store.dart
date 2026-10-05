@@ -2,6 +2,7 @@ import "dart:convert";
 import "dart:math";
 
 import "../../core/config.dart";
+import "../../core/log.dart" show logFailure;
 import "../../domain/documents.dart" show RenameWriter;
 import "../../domain/trigger.dart";
 
@@ -23,11 +24,21 @@ class FileTriggerStore {
     try {
       final text = await _config.fs.file(_config.remindersFile).readAsString();
       final list = jsonDecode(text) as List<dynamic>;
-      return [
-        for (final entry in list)
-          if (entry is Map<String, dynamic>) Trigger.fromJson(entry),
-      ];
-    } catch (_) {
+      // Per record, not per file: one entry this build cannot read is one
+      // lost trigger, not a list emptied out and written back over its
+      // neighbours on the next save.
+      final triggers = <Trigger>[];
+      for (final entry in list) {
+        if (entry is! Map<String, dynamic>) continue;
+        try {
+          triggers.add(Trigger.fromJson(entry));
+        } catch (e) {
+          logFailure("triggers", "a stored trigger could not be read", e);
+        }
+      }
+      return triggers;
+    } catch (e) {
+      logFailure("triggers", "the trigger list could not be read", e);
       return const [];
     }
   }

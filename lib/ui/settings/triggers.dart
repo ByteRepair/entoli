@@ -287,7 +287,10 @@ class _TriggerEditorPageState extends ConsumerState<TriggerEditorPage> {
               tooltip: "Delete trigger",
               onPressed: _delete,
             ),
-          TextButton(onPressed: _save, child: const Text("Save")),
+          // The agent's trigger is the switch and the delete: anything else
+          // saved here would rewrite what its conversation armed (source,
+          // anchor, re-enable) from a page whose prompt it refuses to touch.
+          if (!registered) TextButton(onPressed: _save, child: const Text("Save")),
         ],
       ),
       body: ListView(
@@ -308,12 +311,17 @@ class _TriggerEditorPageState extends ConsumerState<TriggerEditorPage> {
                 ButtonSegment(value: _SourceKind.file, label: Text("Files")),
               ],
               selected: {_kindOf(_source)},
-              onSelectionChanged: (selection) => setState(() {
-                _source = _sourceFor(selection.first);
-              }),
+              // Nothing is saved from this page while it is the agent's, so
+              // nothing here looks editable either — the rows below follow
+              // the same gate.
+              onSelectionChanged: registered
+                  ? null
+                  : (selection) => setState(() {
+                      _source = _sourceFor(selection.first);
+                    }),
             ),
           ),
-          ..._sourceFields(),
+          ..._sourceFields(editable: !registered),
           _memberField(!registered),
           _PromptPreview(prompt: _prompt, onEdit: _editPrompt, editable: !registered),
           const Divider(height: 1),
@@ -433,8 +441,9 @@ class _TriggerEditorPageState extends ConsumerState<TriggerEditorPage> {
   }
 
   /// The rows the kind picked needs: date and time, countdown minutes, or
-  /// paths and their events.
-  List<Widget> _sourceFields() => switch (_kindOf(_source)) {
+  /// paths and their events. Read-only where the trigger is the agent's —
+  /// the switch and the delete are what is left.
+  List<Widget> _sourceFields({required bool editable}) => switch (_kindOf(_source)) {
         _SourceKind.schedule => [
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
@@ -442,7 +451,7 @@ class _TriggerEditorPageState extends ConsumerState<TriggerEditorPage> {
                 children: [
                   Expanded(
                     child: OutlinedButton.icon(
-                      onPressed: _pickDate,
+                      onPressed: editable ? _pickDate : null,
                       icon: const Icon(Icons.event_outlined, size: 18),
                       label: Text(shortDate((_source as ScheduleSource).at)),
                     ),
@@ -450,7 +459,7 @@ class _TriggerEditorPageState extends ConsumerState<TriggerEditorPage> {
                   const SizedBox(width: 12),
                   Expanded(
                     child: OutlinedButton.icon(
-                      onPressed: _pickTime,
+                      onPressed: editable ? _pickTime : null,
                       icon: const Icon(Icons.schedule_outlined, size: 18),
                       label: Text(timeOfDay((_source as ScheduleSource).at)),
                     ),
@@ -467,10 +476,12 @@ class _TriggerEditorPageState extends ConsumerState<TriggerEditorPage> {
                   for (final repeat in ScheduleRepeat.values)
                     DropdownMenuItem(value: repeat, child: Text(repeat.label)),
                 ],
-                onChanged: (repeat) => setState(() => _source =
-                    ScheduleSource(
-                        at: (_source as ScheduleSource).at,
-                        repeat: repeat ?? ScheduleRepeat.off)),
+                onChanged: editable
+                    ? (repeat) => setState(() => _source =
+                        ScheduleSource(
+                            at: (_source as ScheduleSource).at,
+                            repeat: repeat ?? ScheduleRepeat.off))
+                    : null,
               ),
             ),
           ],
@@ -482,14 +493,15 @@ class _TriggerEditorPageState extends ConsumerState<TriggerEditorPage> {
                 leading: const Icon(Icons.timer_outlined, size: 18),
                 title: Text((_source as TimerSource).describe()),
                 subtitle: const Text("Countdown from being registered"),
-                onTap: _pickDuration,
+                onTap: editable ? _pickDuration : null,
               ),
             ),
           ],
         _SourceKind.file => [
             FileSourceField(
               source: _source as FileSource,
-              onChanged: (source) => setState(() => _source = source),
+              onChanged:
+                  editable ? (source) => setState(() => _source = source) : null,
             ),
           ],
       };
@@ -575,12 +587,23 @@ class _TriggerEditorPageState extends ConsumerState<TriggerEditorPage> {
       _source = TimerSource(
           duration: timer.duration, registeredAt: _clock.now());
     }
-    if (_source is FileSource && (_source as FileSource).paths.isEmpty) {
-      ScaffoldMessenger.of(context)
-        ..hideCurrentSnackBar()
-        ..showSnackBar(
-            const SnackBar(content: Text("Name at least one path to watch.")));
-      return;
+    if (_source is FileSource) {
+      final file = _source as FileSource;
+      if (file.paths.isEmpty) {
+        ScaffoldMessenger.of(context)
+          ..hideCurrentSnackBar()
+          ..showSnackBar(
+              const SnackBar(content: Text("Name at least one path to watch.")));
+        return;
+      }
+      if (file.events.isEmpty) {
+        ScaffoldMessenger.of(context)
+          ..hideCurrentSnackBar()
+          ..showSnackBar(const SnackBar(
+              content: Text(
+                  "Pick what a change is — with nothing picked it would never fire.")));
+        return;
+      }
     }
     // Recomputed on save rather than carried over: an edit into the past means
     // the next occurrence after now, never a fire in the past.
@@ -641,10 +664,13 @@ enum _SourceKind { schedule, timer, file }
 /// typed the way the file tools read them — workspace-relative, or
 /// `project:`-prefixed — since the watch resolves them exactly there.
 class FileSourceField extends ConsumerStatefulWidget {
-  const FileSourceField({super.key, required this.source, required this.onChanged});
+  const FileSourceField(
+      {super.key, required this.source, required this.onChanged});
 
   final FileSource source;
-  final void Function(FileSource) onChanged;
+
+  /// Null where the row is read-only — an agent-registered trigger's.
+  final void Function(FileSource)? onChanged;
 
   @override
   ConsumerState<FileSourceField> createState() => _FileSourceFieldState();
@@ -681,7 +707,8 @@ class _FileSourceFieldState extends ConsumerState<FileSourceField> {
               IconButton(
                 icon: const Icon(Icons.add),
                 tooltip: "Add path",
-                onPressed: () => _add(_path.text),
+                onPressed:
+                    widget.onChanged == null ? null : () => _add(_path.text),
               ),
             ],
           ),
@@ -691,17 +718,19 @@ class _FileSourceFieldState extends ConsumerState<FileSourceField> {
             dense: true,
             leading: const Icon(Icons.insert_drive_file_outlined, size: 18),
             title: Text(path),
-            trailing: IconButton(
-              icon: const Icon(Icons.close),
-              tooltip: "Remove path",
-              onPressed: () => widget.onChanged(FileSource(
-                  paths: [
-                    for (final p in source.paths)
-                      if (p != path) p,
-                  ],
-                  events: source.events,
-                  cooldown: source.cooldown)),
-            ),
+            trailing: widget.onChanged == null
+                ? null
+                : IconButton(
+                    icon: const Icon(Icons.close),
+                    tooltip: "Remove path",
+                    onPressed: () => widget.onChanged!(FileSource(
+                        paths: [
+                          for (final p in source.paths)
+                            if (p != path) p,
+                        ],
+                        events: source.events,
+                        cooldown: source.cooldown)),
+                  ),
           ),
         LabelledField(
           label: "Fire on",
@@ -712,12 +741,14 @@ class _FileSourceFieldState extends ConsumerState<FileSourceField> {
                 FilterChip(
                   label: Text(event.label),
                   selected: source.events.contains(event),
-                  onSelected: (on) => widget.onChanged(FileSource(
-                      paths: source.paths,
-                      events: on
-                          ? {...source.events, event}
-                          : source.events.where((e) => e != event).toSet(),
-                      cooldown: source.cooldown)),
+                  onSelected: widget.onChanged == null
+                      ? null
+                      : (on) => widget.onChanged!(FileSource(
+                          paths: source.paths,
+                          events: on
+                              ? {...source.events, event}
+                              : source.events.where((e) => e != event).toSet(),
+                          cooldown: source.cooldown)),
                 ),
             ],
           ),
@@ -729,7 +760,7 @@ class _FileSourceFieldState extends ConsumerState<FileSourceField> {
   void _add(String text) {
     final path = text.trim();
     if (path.isEmpty || widget.source.paths.contains(path)) return;
-    widget.onChanged(FileSource(
+    widget.onChanged?.call(FileSource(
         paths: [...widget.source.paths, path],
         events: widget.source.events,
         cooldown: widget.source.cooldown));

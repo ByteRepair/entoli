@@ -1,7 +1,9 @@
 import "dart:async";
 
 import "package:clock/clock.dart";
+import "package:flutter/foundation.dart" show debugPrintStack, kDebugMode;
 
+import "../core/log.dart" show logFailure;
 import "reminder_alarms.dart";
 import "prompt_library.dart";
 import "models.dart" show CompletionKind;
@@ -187,8 +189,19 @@ class TriggerManager {
 
   /// A watch's stream delivers; the fire's work runs from here, chained so
   /// a settle below has the one future everything outstanding hangs off.
+  /// The fire's own failures are contained to it — an errored link left
+  /// standing would skip every fire chained after it for the life of the
+  /// generation, so the chain never carries an error and each fire logs its
+  /// own.
   void _onFire(TriggerFire fire) {
-    _delivered = _delivered.then((_) => _fire(fire));
+    _delivered = _delivered.then((_) async {
+      try {
+        await _fire(fire);
+      } catch (e, st) {
+        logFailure("triggers", "fire of ${fire.triggerId} failed", e);
+        if (kDebugMode) debugPrintStack(stackTrace: st, maxFrames: 12);
+      }
+    });
   }
 
   /// The system nudged while Dart was not listening — or while it was,
@@ -198,12 +211,19 @@ class TriggerManager {
   /// the system named and no more. The reason is the kind's — the same
   /// words a timer-spotted fire would carry — for the same fire to say the
   /// same thing about itself whichever watcher won the race.
+  ///
+  /// The ids are the system's say-so, not the list's: an alarm already
+  /// delivered before the trigger fired (a duplicate exact alarm) or before
+  /// it was switched off is a message about a fire that is no longer armed,
+  /// so a nudge is held to the same gate the watch itself answers — enabled
+  /// and still to come. The old scheduler's `dueBy` was this gate; it rides
+  /// here now that the kinds own the arithmetic.
   Future<void> onNudged() async {
     final ids = await alarmPort.takeFired();
     if (ids.isEmpty) return;
     for (final id in ids) {
       final trigger = list.triggers.where((t) => t.id == id).firstOrNull;
-      if (trigger == null) continue;
+      if (trigger == null || !_due(trigger, clock.now())) continue;
       final reason = _kindOf(trigger)?.reasonOf(trigger) ?? "the clock reached its time";
       await _fire(TriggerFire(trigger.id, reason));
     }
@@ -214,6 +234,15 @@ class TriggerManager {
     // can deliver a nudge mid-turn.
     if (_runningIds.isEmpty) await alarmPort.doneFiring();
   }
+
+  /// Whether a trigger is still armed against a moment that has arrived —
+  /// the one gate between a watcher's say-so and a run. A fired one-shot
+  /// (`nextFireAt` cleared) and a switched-off trigger both fail it, which
+  /// is what keeps a duplicate nudge from running a turn twice.
+  bool _due(Trigger trigger, DateTime now) =>
+      trigger.enabled &&
+      trigger.nextFireAt != null &&
+      !now.isBefore(trigger.nextFireAt!);
 
   /// One fire of one trigger, whatever kind said it was due. The whole of
   /// what every source has in common, and the only place that runs a turn

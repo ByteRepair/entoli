@@ -87,7 +87,7 @@ abstract class TriggerKind {
 }
 
 /// What the wall-clock kinds are, without a class each: a match over the
-/// source, a label, and everything the clock kinds share — the in-process
+/// source and everything the clock kinds share — the in-process
 /// timer aimed at the nearest armed `nextFireAt`, catch-up for what passed
 /// while nothing was running, the alarm diff that lets Android fire with
 /// the process dead, and the defer-to-alarm dance for a fire the platform
@@ -104,14 +104,11 @@ abstract class TriggerKind {
 /// exactly when the diff has to run — one place, not two kept level by
 /// hand.
 class ClockKind extends TriggerKind {
-  ClockKind(this.alarms, {required this.matchOf, required this.label});
+  ClockKind(this.alarms, {required this.matchOf});
 
   final bool Function(Trigger) matchOf;
 
   final ReminderAlarms alarms;
-
-  /// What the settings page's picker words the kind as.
-  final String label;
 
   /// How long past its time a fire may arrive without counting as missed.
   /// An exact alarm lands within seconds; an inexact one can be minutes
