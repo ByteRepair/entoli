@@ -53,13 +53,15 @@ void main() {
     );
   }
 
-  Trigger trigger({String? chatId, TriggerSource? source}) => Trigger(
+  Trigger trigger({String? chatId, TriggerSource? source, String? member}) =>
+      Trigger(
         id: "r1",
         name: "Morning sweep",
         prompt: "Check the builds",
         source: source ??
             ScheduleSource(at: DateTime(2026, 8, 22, 9)),
         chatId: chatId,
+        member: member,
       );
 
   test("runs the prompt in a new chat in the trigger's project", () async {
@@ -210,6 +212,32 @@ void main() {
       // No stamp mid-run: nothing fired, lastFiredAt is the manager's to
       // decide with.
       expect(stamped, isEmpty);
+    });
+  });
+
+  group("a trigger naming a member", () {
+    test("the chatless fire puts the mention ahead of the prompt", () async {
+      final (run, _, _, driver) = runner(repo());
+      await run.run(trigger(member: "researcher"), "", const []);
+
+      // Sigil included, on the head of the text: the composer resolves it
+      // from the documents and the room routes it like any message sent.
+      expect(driver.calls.single.prompt, "@researcher\n\nCheck the builds");
+    });
+
+    test("the same-chat fire is worded the one way", () async {
+      final repository = repo();
+      final chat = await repository.createChat(title: "room");
+      final (run, _, _, driver) = runner(repository);
+      await run.run(
+          trigger(chatId: chat.state.id, member: "researcher"),
+          "schedule: 9:00",
+          const []);
+
+      // Both targets one path — the mention, the prompt, the reason.
+      expect(driver.calls.single.chatId, chat.state.id);
+      expect(driver.calls.single.prompt,
+          "@researcher\n\nCheck the builds\n\n(schedule: 9:00)");
     });
   });
 }

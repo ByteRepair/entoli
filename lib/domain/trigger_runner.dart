@@ -1,7 +1,7 @@
 import "package:clock/clock.dart";
 
 import "chat_repository.dart";
-import "models.dart" show Chat;
+import "models.dart" show Chat, CompletionKind;
 import "project.dart";
 import "reminder_alarms.dart";
 import "../core/log.dart";
@@ -95,7 +95,7 @@ class TriggerRunner implements TriggerRuns {
     );
     await onTriggerFired(trigger.copyWith(lastFiredAt: clock.now()));
     onListChanged(chat.state.id);
-    final result = await driver.send(chat.state.id, prompted(trigger.prompt, reason));
+    final result = await driver.send(chat.state.id, prompted(trigger.prompt, reason, member: trigger.member));
     return (
       chatId: chat.state.id,
       outcome: result.outcome,
@@ -131,13 +131,21 @@ class TriggerRunner implements TriggerRuns {
       return (chatId: chatId, outcome: TriggerOutcome.error, snippet: "", targetGone: true);
     }
     await onTriggerFired(trigger.copyWith(lastFiredAt: clock.now()));
-    final result = await driver.send(chatId, prompted(trigger.prompt, reason));
+    final result =
+        await driver.send(chatId, prompted(trigger.prompt, reason, member: trigger.member));
     return (chatId: chatId, outcome: result.outcome, snippet: result.snippet, targetGone: false);
   }
 
-  /// The one wording of "the fire, and what set it off": the prompt, then
-  /// the kind's reason in a line below. The tool's schema description names
-  /// this shape, not a literal of a reason's own words.
-  static String prompted(String prompt, String reason) =>
-      reason.isEmpty ? prompt : "$prompt\n\n($reason)";
+  /// The one wording of "the fire, and what set it off": the prompt (its
+  /// mention first, where the trigger names a member — the composer resolves
+  /// the sigil'd reference from the documents and the room routes it like
+  /// any message sent), then the kind's reason in a line below. The tool's
+  /// schema description names this shape, not a literal of a reason's own
+  /// words.
+  static String prompted(String prompt, String reason, {String? member}) =>
+      [
+        if (member != null) "${CompletionKind.agent.trigger}$member",
+        prompt,
+        if (reason.isNotEmpty) "($reason)",
+      ].join("\n\n");
 }

@@ -248,6 +248,7 @@ class Trigger {
     required this.prompt,
     required this.source,
     this.chatId,
+    this.member,
     this.project,
     this.tempChatTtl,
     this.enabled = true,
@@ -272,6 +273,20 @@ class Trigger {
   /// [projectOrDefault] resolves; [chatId] wins over it where both are set,
   /// the chat being already somewhere.
   final String? project;
+
+  /// The member of an Omada room the fire is addressed to, sigil off —
+  /// `researcher`, not `@researcher` — resolved against the project's
+  /// library where the prompt is composed, and refused at registration
+  /// where the library does not hold them. One shape whatever the target:
+  /// a chatless fire makes the headless chat with this member as its first
+  /// speaker, a same-chat one queues the prompt on the named member's
+  /// FIFO, and either way the routing is the room's own — the mention the
+  /// runner composes routes like any message sent. Validation is where the
+  /// library happens to be (registration, and the editor's dropdown); a
+  /// stored member later deleted is not re-checked, and at fire time a
+  /// name the library does not hold is prose, which the room's mention
+  /// filter already answers.
+  final String? member;
 
   /// The new chat's own temporary-chat TTL, written straight onto its
   /// `meta.json` — the same field the chat settings page sets, with the same
@@ -318,6 +333,8 @@ class Trigger {
     TriggerSource? source,
     bool clearChatId = false,
     String? chatId,
+    String? member,
+    bool clearMember = false,
     String? project,
     TempChatTtl? tempChatTtl,
     bool clearTempChatTtl = false,
@@ -335,6 +352,7 @@ class Trigger {
         prompt: prompt ?? this.prompt,
         source: source ?? this.source,
         chatId: clearChatId ? null : (chatId ?? this.chatId),
+        member: clearMember ? null : (member ?? this.member),
         project: project ?? this.project,
         tempChatTtl: clearTempChatTtl ? null : (tempChatTtl ?? this.tempChatTtl),
         enabled: enabled ?? this.enabled,
@@ -359,6 +377,7 @@ class Trigger {
       prompt: json["prompt"] as String? ?? "",
       source: source,
       chatId: json["chatId"] as String?,
+      member: json["member"] as String?,
       project: json["project"] as String?,
       tempChatTtl: TempChatTtl.fromNameNullable(json["tempChatTtl"] as String?) ??
           // `temporary` is what a build before the TTL field wrote, and false
@@ -414,6 +433,7 @@ class Trigger {
         "prompt": prompt,
         "source": source.toJson(),
         if (chatId != null) "chatId": chatId,
+        if (member != null) "member": member,
         if (project != null) "project": project,
         if (tempChatTtl != null) "tempChatTtl": tempChatTtl!.name,
         if (byAgent) "byAgent": true,

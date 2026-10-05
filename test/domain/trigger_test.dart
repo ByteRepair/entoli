@@ -175,6 +175,7 @@ void main() {
             lastFiredAt: DateTime(2026, 8, 21, 9),
             nextFireAt: DateTime(2026, 8, 23, 9),
             requestCode: 4,
+            member: "explore",
           );
 
           final back = Trigger.fromJson(original.toJson());
@@ -185,6 +186,7 @@ void main() {
           expect(schedule.at, DateTime(2026, 8, 22, 9));
           expect(schedule.repeat, ScheduleRepeat.daily);
           expect(back.project, "work");
+          expect(back.member, "explore");
           expect(back.tempChatTtl, TempChatTtl.days7);
           expect(back.enabled, isFalse);
           expect(back.byAgent, isTrue);
@@ -243,6 +245,9 @@ void main() {
           expect(trigger.tempChatTtl, isNull);
           expect(trigger.enabled, isTrue);
           expect(trigger.requestCode, isNull);
+          // The same null every file before the field wrote: legacy reads as
+          // no member, which is what those records were.
+          expect(trigger.member, isNull);
           // The flat at/repeat keys are the schedule's: every reminder file
           // ever written reads as triggers without a migration.
           expect(trigger.source, isA<ScheduleSource>());
