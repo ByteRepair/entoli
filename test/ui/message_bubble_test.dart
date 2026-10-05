@@ -147,14 +147,6 @@ void main() {
       author: "@researcher",
     );
     expect(find.byType(Image), findsNothing);
-
-    // "You" is not a member, and never gets one.
-    await pump(
-      tester,
-      _message(MessageRole.user, [const TextPart(text: "Mine.")]),
-      avatar: onePixelPng,
-    );
-    expect(find.byType(Image), findsNothing);
   });
 
   testWidgets("the spinner gives way to the first text", (tester) async {

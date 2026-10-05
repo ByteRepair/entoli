@@ -31,18 +31,6 @@ const _agentFiles = XTypeGroup(
   webWildCards: ["text/markdown", "text/plain"],
 );
 
-/// The profile-picture chooser's filter. PNG only, and the editor refuses a
-/// pick whose name does not end in it — the chooser on some platforms filters
-/// loosely, and the file is stored under the agent's name with this one
-/// extension whatever the bytes decode as.
-const _imageFiles = XTypeGroup(
-  label: "Image",
-  mimeTypes: ["image/png"],
-  extensions: ["png"],
-  uniformTypeIdentifiers: ["public.png"],
-  webWildCards: ["image/png"],
-);
-
 /// The agents a message can address by name. The list is the library's; the
 /// page's own question is where each one came from — a bundled agent is
 /// Entoli's and not editable, the user's are written here and are. An agent is
@@ -199,6 +187,7 @@ class _AgentsSectionState extends ConsumerState<AgentsSection> {
   }) =>
       _guard(() async {
         final config = ref.read(appConfigProvider);
+        final renames = removes != null && removes != name;
         await platform.withWritableDir(
           config.promptsDir(CompletionKind.agent, project: widget.project),
           () async {
@@ -206,34 +195,30 @@ class _AgentsSectionState extends ConsumerState<AgentsSection> {
                 config.fs.file(agentFilePath(config, name, project: widget.project));
             await file.create(recursive: true);
             await file.writeAsString(source);
-            if (removes != null && removes != name) {
+            if (renames) {
               await config.fs
                   .file(agentFilePath(config, removes, project: widget.project))
                   .delete();
             }
             final image =
                 config.fs.file(agentPicturePath(config, name, project: widget.project));
-            if (picture != null) {
+            if (removePicture) {
+              if (await image.exists()) await image.delete();
+            } else if (picture != null) {
               await image.writeAsBytes(picture);
-            } else if (removes != null && removes != name) {
-              // A rename: the old picture follows where one stood under the
-              // old name, the new one standing over it where both were set.
+            } else if (renames) {
+              // A rename: the old picture moves with the agent, standing over
+              // it where both were set — rename over an existing file is fine.
               final oldImage = config.fs
                   .file(agentPicturePath(config, removes, project: widget.project));
-              if (await oldImage.exists()) {
-                await image.writeAsBytes(await oldImage.readAsBytes());
-                await oldImage.delete();
-              }
-            }
-            if (removePicture && await image.exists()) {
-              await image.delete();
+              if (await oldImage.exists()) await oldImage.rename(image.path);
             }
           },
         );
         await _reload(widget.project);
         await _scan();
         _invalidatePicture(name);
-        if (removes != null && removes != name) _invalidatePicture(removes);
+        if (renames) _invalidatePicture(removes);
         _say(said);
       });
 
@@ -469,10 +454,11 @@ class _AgentsSectionState extends ConsumerState<AgentsSection> {
 }
 
 /// What the editor page hands back on save. [picture] is a freshly picked
-/// image, written as the agent's picture; [removePicture] takes one away when
-/// there is one to take. Neither is set when the picture was left alone, so a
-/// save without an edit to it keeps whatever the agent already had — and a
-/// rename moves what it had under the old name.
+/// image, written as the agent's picture; [removePicture] takes it away on
+/// save. Exactly one of the two is set — an edit removed it (null bytes, true)
+/// or replaced it (bytes, false) — and neither is when the picture was left
+/// alone, so a save without an edit to it keeps whatever the agent already
+/// had — and a rename moves what it had under the old name.
 typedef AgentEdit = ({
   String name,
   String description,
@@ -490,7 +476,9 @@ typedef AgentEdit = ({
 /// way they do in a reminder's prompt; an agent's prompt is dispatched through
 /// the same library. The picture rides the same save: picked bytes are written
 /// as `<name>.png` beside the `.md`, a remove takes it away, and a save
-/// touching neither leaves what is there — a rename moves it with the agent.
+/// touching neither leaves what is there — a rename moves it, and a rename
+/// with a fresh pick or a remove replaces or takes the old one rather than
+/// leaving it behind.
 class AgentEditorPage extends ConsumerStatefulWidget {
   const AgentEditorPage({
     super.key,
@@ -528,12 +516,11 @@ class _AgentEditorPageState extends ConsumerState<AgentEditorPage> {
   String? _nameError;
 
   /// What the picture row shows: what the agent had, what a pick brought in,
-  /// or nothing after a remove. Null and [_removePicture] both null is "leave
-  /// it alone" — the shape a fresh save starts in. Seeded in [initState], an
-  /// initializer cannot read `widget`.
+  /// or nothing after a remove. Touched with [_picture] null is "removed on
+  /// save"; untouched is "leave it alone" altogether — two fields cover the
+  /// four states. Seeded in [initState], an initializer cannot read `widget`.
   Uint8List? _picture;
-  bool _removePicture = false;
-  bool _pictureChanged = false;
+  bool _pictureTouched = false;
 
   @override
   void initState() {
@@ -553,7 +540,7 @@ class _AgentEditorPageState extends ConsumerState<AgentEditorPage> {
       _name.text != widget.initialName ||
       _description.text != widget.initialDescription ||
       _body.text != widget.initialBody ||
-      _pictureChanged;
+      _pictureTouched;
 
   Future<void> _discard() async {
     if (_edited) {
@@ -569,33 +556,31 @@ class _AgentEditorPageState extends ConsumerState<AgentEditorPage> {
     if (mounted) Navigator.of(context).pop();
   }
 
-  /// What a pick or a remove records. One flag for "the picture was touched"
-  /// rather than deriving it from the bytes: a picked set of bytes is a
-  /// change, and so is removing what was there — neither is answerable from
-  /// one field.
-  void _touchPicture({required Uint8List? picture, required bool removed}) =>
-      setState(() {
-        _picture = picture;
-        _removePicture = removed;
-        _pictureChanged = picture != null || removed;
+  /// What a pick or a remove records: the touched flag is the save's answer,
+  /// the bytes only what the row shows and what goes back where a pick made.
+  void _pick(Uint8List? bytes) => setState(() {
+        _picture = bytes;
+        _pictureTouched = true;
       });
 
   /// The picture chooser. The image a pick brings in lives only in this page
   /// until Save: nothing is written by choosing, the way nothing else here is.
   Future<void> _pickPicture() async {
-    final file = await openFile(acceptedTypeGroups: const [_imageFiles]);
-    if (file == null) return;
-    final bytes = await file.readAsBytes();
-    if (!mounted) return;
-    if (!file.name.toLowerCase().endsWith(".png")) {
+    final attachment = await ref
+        .read(attachmentPickerProvider)
+        .pick(AttachmentKind.image)
+        .then((picks) => picks.isEmpty ? null : picks.single);
+    if (attachment == null) return;
+    if (!attachment.filename.toLowerCase().endsWith(".png")) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text("The picture is saved as a .png — pick a PNG image.")));
       return;
     }
-    _touchPicture(picture: bytes, removed: false);
+    _pick(attachment.bytes);
   }
 
-  void _clearPicture() => _touchPicture(picture: null, removed: true);
+  void _clearPicture() => _pick(null);
 
   Future<void> _save() async {
     final name = _name.text.trim();
@@ -627,9 +612,11 @@ class _AgentEditorPageState extends ConsumerState<AgentEditorPage> {
         body: _body.text,
         // Only what was touched: untouched bytes going back would have the
         // section rewrite the same picture over the new name on a rename —
-        // over what moving the old one there already put.
-        picture: _pictureChanged ? _picture : null,
-        removePicture: _removePicture,
+        // over what moving the old one there already put. Touched and null
+        // together is "remove on save", and the pair is never both empty and
+        // set.
+        picture: _pictureTouched ? _picture : null,
+        removePicture: _pictureTouched && _picture == null,
       ),
     );
   }
@@ -676,12 +663,12 @@ class _AgentEditorPageState extends ConsumerState<AgentEditorPage> {
                       // What the circle is now, in the editor's own words —
                       // and what save will do about it, where it does
                       // anything. Untouched says what is there, plainly.
-                      !_pictureChanged
+                      !_pictureTouched
                           ? _picture == null
                               ? "No picture. A PNG picked here is shown beside "
                                   "the agent's name in the list and in chat."
                               : "The agent's picture."
-                          : _removePicture
+                          : _picture == null
                               ? "The picture is removed on save."
                               : "A new picture is set on save.",
                       style: Theme.of(context).textTheme.bodySmall,

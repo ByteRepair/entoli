@@ -53,9 +53,10 @@ class MessageBubble extends StatefulWidget {
   /// "You". Null draws nothing. See [Message.author].
   final String? author;
 
-  /// The author's profile picture, when the addressed member has one and the
-  /// section names who spoke. Bytes in hand — the page resolves them — so
-  /// the bubble stays a StatelessWidget-and-State over what it is told.
+  /// The author's profile picture, drawn beside the name where the message
+  /// names an addressed member — the page's bytes are the whole gate. Bytes in
+  /// hand — the page resolves them — so the bubble stays a
+  /// StatelessWidget-and-State over what it is told.
   final Uint8List? avatar;
 
   /// The reply is in a section of the conversation where Omada is on: an
@@ -279,10 +280,10 @@ class _MessageBubbleState extends State<MessageBubble> {
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           // The member's face where there is one, beside the
-                          // name. A reply's slot only: a prompt's "You" is
-                          // not a member, and the page passes no bytes for
-                          // one, but the widget agrees with how it reads.
-                          if (!isUser && widget.avatar != null) ...[
+                          // name — the page's bytes are the whole gate already:
+                          // they arrive only where the label names a member,
+                          // and a prompt's "You" is never one.
+                          if (widget.avatar != null) ...[
                             AgentPictureImage(bytes: widget.avatar, size: 18),
                             const SizedBox(width: 6),
                           ],
