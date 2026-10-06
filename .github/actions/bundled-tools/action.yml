@@ -1,7 +1,7 @@
 name: Bundled tools
 description: >
-  Build the tools Entoli ships inside the APK — proot and its loader, and
-  llama.cpp's server for arm64 — and stage them where the Android build
+  Build the tools Entoli ships inside the Android app — proot and its loader,
+  and llama.cpp's server for arm64 — and stage them where the Android build
   packages them from. Cached on what decides the output, so a run that changes
   neither the versions nor the recipe pays for a download rather than three
   cross-compiles.
@@ -10,8 +10,8 @@ inputs:
   stage:
     description: >
       Whether to stage the built tools into jniLibs. The tools job sets this
-      false and uploads dist/ as an artifact; the APK job downloads it and
-      runs stage.sh itself, so the two never share a runner.
+      false and uploads dist/ as an artifact; the app build jobs download it
+      and runs stage.sh itself, so the two never share a runner.
     required: false
     default: 'true'
 
@@ -29,7 +29,7 @@ runs:
   using: composite
   steps:
     # One authority for the list: the build below and the release build's check
-    # that the tools actually made it into the APK both read it from here.
+    # that the tools actually made it into the bundle both read it from here.
     - id: abis
       shell: bash
       run: |
@@ -58,7 +58,7 @@ runs:
           { sudo apt-get update && sudo apt-get install -y ninja-build; }
 
     # build.sh builds the NPU backend only where it finds this, and says so
-    # nowhere a runner log is read — an APK without it installs, runs, and tells
+    # nowhere a runner log is read — an app without it installs, runs, and tells
     # the one kind of phone that has an NPU that it has no NPU. 660 MiB, on the
     # runs that build rather than restore.
     - name: Fetch the Hexagon SDK the NPU backend is built against
@@ -79,7 +79,7 @@ runs:
           tool/android/build.sh "$abi"
         done
 
-    - name: Stage them into the APK's native libraries
+    - name: Stage them into the app's native libraries
       if: inputs.stage == 'true'
       shell: bash
       run: tool/android/stage.sh
