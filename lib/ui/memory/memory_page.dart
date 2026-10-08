@@ -6,9 +6,9 @@ import "../../providers.dart";
 import "../widgets/dialogs.dart";
 import "../widgets/empty_pane.dart";
 
-/// The row that opens the explorer, on the project settings pages. The default
-/// project has no settings page, so its store is a button in the sidebar rather
-/// than a row.
+/// The row that opens the memories, on the project settings pages. The default
+/// project has no settings page, so its store is a button in the sidebar
+/// rather than a row.
 class MemoryTile extends StatelessWidget {
   const MemoryTile({super.key, required this.dir, required this.title});
 
