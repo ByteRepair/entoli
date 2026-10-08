@@ -108,35 +108,36 @@ void main() {
   });
 
   group("SettingsCardRow", () {
-    testWidgets("a phone-width row lays two equal cards out", (tester) async {
+    // Box widths only prove that a width was computed; whether two cards
+    // answer one line is the Wrap's decision. What is asserted is the layout's
+    // own geometry: the row children's rects, side by side where the width
+    // fits two and stacked where it does not.
+    testWidgets("a phone-width row lays two cards out side by side",
+        (tester) async {
+      useWindow(tester, const Size(400, 800));
       await app.pump(
         tester,
         Scaffold(
           body: ListView(children: [
-            Center(
-              child: SizedBox(
-                width: 400,
-                child: SettingsCardRow(children: [
-                  _card("One"),
-                  _card("Two"),
-                  _card("Three"),
-                ]),
-              ),
-            ),
+            SettingsCardRow(children: [
+              _card("One"),
+              _card("Two"),
+              _card("Three"),
+            ]),
           ]),
         ),
       );
 
-      final sizes = tester
-          .widgetList<SizedBox>(find.byType(SizedBox))
-          .where((s) => (s.width ?? 0) > 100 && s.width != 400.0)
-          .toList();
-      expect(sizes, hasLength(3));
-      // Two per line at this width — the third wraps beneath, at the same
-      // fixed width, every card the same size.
-      expect(sizes[0].width, sizes[1].width);
-      expect(sizes[2].width, sizes[0].width);
-      expect(sizes[0].width, (400 - 8) / 2);
+      final rects = _rowChildren(tester);
+      expect(rects, hasLength(3));
+      // The test window is phone-width: two share a line, the third wraps
+      // beneath it.
+      expect(rects[0].top, rects[1].top);
+      expect(rects[2].top, greaterThan(rects[0].bottom));
+      // And the line carries a gap between the two, not one card split.
+      expect(rects[1].left, greaterThan(rects[0].right));
+      expect(rects[0].width, rects[1].width);
+      expect(rects[2].width, rects[0].width);
     });
 
     testWidgets("a wide row's cards are capped, not stretched", (tester) async {
@@ -150,13 +151,10 @@ void main() {
         ),
       );
 
-      final sizes = tester
-          .widgetList<SizedBox>(find.byType(SizedBox))
-          .where((s) => (s.width ?? 0) > 100)
-          .toSet()
-          .map((s) => s.width)
-          .toSet();
-      expect(sizes, {240.0});
+      final rects = _rowChildren(tester);
+      expect(rects, hasLength(2));
+      expect(rects[0].width, 240.0);
+      expect(rects[1].width, 240.0);
     });
   });
 
@@ -187,6 +185,20 @@ void main() {
       expect(find.byType(WorkspacePage), findsNothing);
     });
   });
+}
+
+/// The rects of the row's own children — the boxed cards, not the wrapping
+/// `SizedBox`es the row and the page's own list might also carry.
+List<Rect> _rowChildren(WidgetTester tester) {
+  final boxes = tester.renderObjectList<RenderBox>(
+    find.descendant(
+      of: find.byType(SettingsCardRow),
+      matching: find.byWidgetPredicate(
+        (w) => w is SizedBox && w.width != null && w.child is SettingsCard,
+      ),
+    ),
+  );
+  return [for (final box in boxes) box.localToGlobal(Offset.zero) & box.size];
 }
 
 SettingsCard _card(String title) => SettingsCard(

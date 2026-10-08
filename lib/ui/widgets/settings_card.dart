@@ -4,7 +4,7 @@ import "../fonts.dart";
 import "dialogs.dart" show copyToClipboard;
 
 /// A settings card: the icon at the top left, the title beside it, the
-/// subtitle under, and, where it is tappable, the right-angle arrow at the
+/// subtitle under, and, where it tappable, the right-angle arrow at the
 /// top right saying so. A row of them is [SettingsCardRow].
 ///
 /// What a tap does is the caller's — [SettingsCard.copy] copies its value,
@@ -12,18 +12,15 @@ import "dialogs.dart" show copyToClipboard;
 /// fact and takes no gesture: no InkWell, no arrow.
 ///
 /// Where an action beside the tap is wanted, [trailing] takes it — the
-/// description card's [ResetButton] rides there, the tap staying the dialog.
+/// description card's reset button rides there, the tap staying the dialog.
 class SettingsCard extends StatelessWidget {
   const SettingsCard({
     super.key,
     required this.icon,
     required this.title,
     required this.subtitle,
-    this.subtitleStyle,
-    this.subtitleMaxLines = 2,
     this.onTap,
     this.trailing,
-    this.trailingIcon,
   }) : _copySaid = null;
 
   /// The card whose whole action is to copy [value], said in a snack bar.
@@ -37,22 +34,20 @@ class SettingsCard extends StatelessWidget {
     required String value,
     required String said,
   })  : subtitle = value,
-        subtitleStyle = const TextStyle(fontFamily: monoFamily),
-        subtitleMaxLines = 2,
         onTap = null,
         trailing = null,
-        trailingIcon = Icons.copy,
         _copySaid = said;
 
   final IconData icon;
   final String title;
   final String subtitle;
-  final TextStyle? subtitleStyle;
-  final int subtitleMaxLines;
   final VoidCallback? onTap;
   final Widget? trailing;
-  final IconData? trailingIcon;
   final String? _copySaid;
+
+  /// What the card's subtitle reads as, where the copy card holds a verbatim
+  /// value instead of a fact about the thing.
+  static const _mono = TextStyle(fontFamily: monoFamily);
 
   @override
   Widget build(BuildContext context) {
@@ -63,7 +58,15 @@ class SettingsCard extends StatelessWidget {
             ? null
             : () => copyToClipboard(context, subtitle, said: copy));
     final ending = trailing ??
-        (action == null ? null : Icon(trailingIcon ?? Icons.arrow_right));
+        (action == null
+            ? null
+            : copy == null
+                ? const Icon(Icons.arrow_right)
+                : const Icon(Icons.copy));
+    final style = copy == null
+        ? theme.textTheme.bodySmall
+            ?.copyWith(color: theme.colorScheme.onSurfaceVariant)
+        : _mono;
     return Card(
       margin: EdgeInsets.zero,
       child: InkWell(
@@ -87,10 +90,8 @@ class SettingsCard extends StatelessWidget {
               const SizedBox(height: 2),
               Text(
                 subtitle,
-                style: subtitleStyle ??
-                    theme.textTheme.bodySmall
-                        ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-                maxLines: subtitleMaxLines,
+                style: style,
+                maxLines: 2,
                 overflow: TextOverflow.ellipsis,
               ),
             ],
@@ -106,30 +107,30 @@ class SettingsCard extends StatelessWidget {
 /// reads as a grid, while flexing would give the pairs beside a wide one
 /// different widths line to line.
 class SettingsCardRow extends StatelessWidget {
-  const SettingsCardRow({super.key, required this.children, this.cap = 240});
+  const SettingsCardRow({super.key, required this.children});
 
   final List<Widget> children;
 
-  /// The widest a card becomes, so three on a wide window are still cards
-  /// rather than three slabs stretched across it.
-  final double cap;
-
   @override
   Widget build(BuildContext context) {
-    return LayoutBuilder(builder: (context, constraints) {
-      const gap = 8.0;
-      final width = ((constraints.maxWidth - gap) / 2).clamp(160.0, cap);
-      return Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 8),
-        child: Wrap(
+    // The padding is inside the layout, not around it: the width a card gets
+    // is halved out of what the line actually has to lay out in.
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8),
+      child: LayoutBuilder(builder: (context, constraints) {
+        const gap = 8.0;
+        const pad = 16.0;
+        final width =
+            ((constraints.maxWidth - pad - gap) / 2).clamp(160.0, 240.0);
+        return Wrap(
           spacing: gap,
           runSpacing: gap,
           children: [
             for (final child in children)
               SizedBox(width: width, child: child),
           ],
-        ),
-      );
-    });
+        );
+      }),
+    );
   }
 }

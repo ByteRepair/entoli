@@ -93,10 +93,11 @@ is the whole-card-is-the-button form (the copy icon rides in the arrow's slot
 and the tap itself copies, through the same `copyToClipboard`), a navigation
 card takes an `onTap` that pushes, and null `trailing`/`onTap` is a card that
 only states a fact — the Chats card. `SettingsCardRow` is the Wrap that holds
-a screen's worth of them at one fixed width, two per phone line and three
-where the window fits the cap; a card placed alone keeps its `ListTile` width
-by growing to its parent instead, which is what `WorkspaceTile` does where the
-chat settings page uses it.
+a screen's worth of them at one fixed width — the only place a row card's
+width is decided, every child boxed with it, so callers place children bare;
+two per phone line and capped where the window is wide. A card placed alone
+keeps its `ListTile` width by growing to its parent instead, which is what
+`WorkspaceTile` does where the chat settings page uses it.
 
 `floating_position.dart` and `chip_row.dart` are the empty-chat screen's two
 animation mechanisms, and anything else that wants the same motion reaches for

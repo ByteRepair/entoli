@@ -72,10 +72,6 @@ class ProjectSettingsPage extends ConsumerWidget {
 
   final String project;
 
-  /// The fixed width every card in the rows below takes, the row deciding the
-  /// per-screen answer from its own constraints.
-  static const cardWidth = 160.0;
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final chats = ref.watch(chatListProvider).value ?? const [];
@@ -101,16 +97,11 @@ class ProjectSettingsPage extends ConsumerWidget {
             _NameCard(project: project),
             _PathCard(path: path),
             if (builtIn == null) _DescriptionCard(project: project),
-            // A row card, held to the width the rest of the row was given,
-            // rather than filling the parent the way a lone line's tile does.
-            SizedBox(
-              width: ProjectSettingsPage.cardWidth,
-              child: WorkspaceTile(
-                root: ref
-                    .watch(appConfigProvider)
-                    .projectWorkspaceDir(project: project),
-                title: "Project workspace",
-              ),
+            WorkspaceTile(
+              root: ref
+                  .watch(appConfigProvider)
+                  .projectWorkspaceDir(project: project),
+              title: "Project workspace",
             ),
             _ChatsCard(count: count),
           ]),
@@ -265,7 +256,7 @@ class _ChatsCard extends StatelessWidget {
     return SettingsCard(
       icon: Icons.forum_outlined,
       title: "Chats",
-      subtitle: count == 1 ? "1" : "$count",
+      subtitle: "$count",
     );
   }
 }
