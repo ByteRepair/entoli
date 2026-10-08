@@ -517,6 +517,14 @@ void main() {
         (tester) async {
       await app.pump(tester, ProjectSettingsPage(project: "my-team"));
 
+      // The card sections sit above it, so the row is below the fold.
+      await tester.scrollUntilVisible(
+        find.text("Omada"),
+        200,
+        scrollable: find.byType(Scrollable).last,
+      );
+      await settleIo(tester);
+
       // The one row, rendered with the switch disabled — a built-in's answer
       // is its spec, so the state is shown, not offered. The ordering rows
       // ride the same answer and are offered.
