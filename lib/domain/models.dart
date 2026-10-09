@@ -539,6 +539,11 @@ enum CompletionKind {
   const CompletionKind(this.trigger, this.label, this.folder);
   final String trigger;
   final String label;
+
+  /// The directory the files defining them live in — and, being one string
+  /// for both, the marketplace site's section path too
+  /// (`byterepair.github.io/entoli-marketplace/<folder>/index.json`). The site
+  /// is laid out to match; renaming either half must rename both.
   final String folder;
 }
 

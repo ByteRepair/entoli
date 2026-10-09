@@ -9,6 +9,7 @@ import "package:flutter_test/flutter_test.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "package:fs_shim/fs_io.dart" show fileSystemIo;
+import "package:http/http.dart" as http;
 
 import "package:agent_chat/core/config.dart";
 import "package:agent_chat/data/builtin/llm/local_prefill.dart";
@@ -168,6 +169,7 @@ class TestApp {
     Clock? clock,
     bool appHidden = false,
     FakeSecretStore? secrets,
+    http.Client? marketplaceClient,
   }) {
     final config = tempConfig();
     final backend = FakeBackend();
@@ -247,6 +249,8 @@ class TestApp {
           backupHandoffProvider.overrideWithValue(backups),
           appRestartProvider.overrideWithValue(restart),
           linkOpenerProvider.overrideWithValue(linkOpener),
+          marketplaceClientProvider
+              .overrideWithValue(marketplaceClient ?? http.Client()),
           voiceProvider.overrideWithValue(speech),
           voiceModelStoreProvider.overrideWithValue(models),
           // Seeded the way the app seeds it, before the first frame: see
