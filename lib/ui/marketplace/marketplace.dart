@@ -63,28 +63,31 @@ Future<List<MarketplaceEntry>> fetchMarketplaceEntries(
   ]..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
 }
 
-/// One file of one entry: `README.md`, `PROMPT.md`, `profile.png`, or a
-/// skill's own `.skill` package. Null is a 404 — a file the entry does not
-/// carry (a picture, most often), which is an answer rather than a failure;
-/// anything else that goes wrong throws, so the page decides what an
-/// unreachable marketplace looks like.
-///
-/// A skill's package is not an entry file: the build writes it beside the
-/// entry's directory — `/skills/<slug>.skill` — rather than inside it, being
-/// the installable whole of what `data/skills/<slug>/` is, which itself
-/// remains served file by file for reading.
+/// One file of one entry: `README.md`, `PROMPT.md`, `profile.png`. Null is a
+/// 404 — a file the entry does not carry (a picture, most often), which is
+/// an answer rather than a failure; anything else that goes wrong throws, so
+/// the page decides what an unreachable marketplace looks like.
 Future<Uint8List?> fetchMarketplaceEntryFile(
   http.Client client,
   CompletionKind kind,
   String slug,
   String file,
-) async {
-  final uri = switch (file) {
-    ".skill" =>
-      Uri.parse("$marketplaceBaseUrl/${kind.folder}/$slug.skill"),
-    _ =>
-      Uri.parse("$marketplaceBaseUrl/${kind.folder}/$slug/$file"),
-  };
+) =>
+    _get(client, Uri.parse("$marketplaceBaseUrl/${kind.folder}/$slug/$file"));
+
+/// A skill's installable whole, the `.skill` the build writes beside the
+/// entry's directory — `/skills/<slug>.skill` — rather than inside it, where
+/// what `data/skills/<slug>/` is remains served file by file for reading.
+/// The path shape is this function's, not a file name the caller spells;
+/// the answer reads like [fetchMarketplaceEntryFile].
+Future<Uint8List?> fetchMarketplaceSkillPackage(
+  http.Client client,
+  CompletionKind kind,
+  String slug,
+) =>
+    _get(client, Uri.parse("$marketplaceBaseUrl/${kind.folder}/$slug.skill"));
+
+Future<Uint8List?> _get(http.Client client, Uri uri) async {
   final response = await client.get(uri);
   if (response.statusCode == 404) return null;
   if (response.statusCode != 200) {

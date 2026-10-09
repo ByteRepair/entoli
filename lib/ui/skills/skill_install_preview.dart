@@ -10,6 +10,7 @@ import "../../domain/models.dart";
 import "../../providers.dart";
 import "../chat/widgets/reply_style.dart";
 import "../widgets/dialogs.dart";
+import "../widgets/install_bar.dart";
 import "../widgets/install_destination.dart";
 
 /// A full page that shows a skill the model drafted and packaged, with an
@@ -125,21 +126,10 @@ class _SkillInstallPreviewPageState
               : _previewBody(theme),
       bottomNavigationBar: _package == null || _loading
           ? null
-          : SafeArea(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: FilledButton.icon(
-                  onPressed: _installing ? null : _install,
-                  icon: _installing
-                      ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.install_desktop),
-                  label: Text(_installing ? "Installing…" : "Install skill"),
-                ),
-              ),
+          : InstallBar(
+              installing: _installing,
+              label: "Install skill",
+              onPressed: _install,
             ),
     );
   }
@@ -172,20 +162,7 @@ class _SkillInstallPreviewPageState
         ),
         if (otherFiles.isNotEmpty) ...[
           const SizedBox(height: 24),
-          Text("Files", style: theme.textTheme.titleSmall),
-          const SizedBox(height: 8),
-          for (final (name, _) in otherFiles)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 4),
-              child: Row(
-                children: [
-                  Icon(Icons.insert_drive_file_outlined,
-                      size: 18, color: theme.colorScheme.onSurfaceVariant),
-                  const SizedBox(width: 8),
-                  Text(name, style: theme.textTheme.bodyMedium),
-                ],
-              ),
-            ),
+          PackageFileList(entries: otherFiles),
         ],
         const SizedBox(height: 24),
         InstallDestination(

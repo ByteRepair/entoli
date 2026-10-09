@@ -303,17 +303,10 @@ class _AgentsSectionState extends ConsumerState<AgentsSection> {
       : ref.read(promptLibraryProvider(target).notifier).reload();
 
   /// The picture rows re-read after a write, a rename or a remove — also the
-  /// old name's on a rename, its file having moved with the agent. A global
-  /// page's write lands in the default directory other projects inherit
-  /// pictures from, so it takes the whole family down; a project's picture
-  /// is read there and nowhere else.
-  void _invalidatePicture(String name) {
-    if (widget.project == null) {
-      ref.invalidate(agentPictureProvider);
-    } else {
-      ref.invalidate(agentPictureProvider((project: widget.project, name: name)));
-    }
-  }
+  /// old name's on a rename, its file having moved with the agent. The
+  /// whole-family rule for a global write is the shared helper's.
+  void _invalidatePicture(String name) =>
+      invalidateAgentPicture(ref, name, project: widget.project);
 
   Future<void> _export(PromptDocument agent) => _guard(() => exportAndSave(
         ref.read(appConfigProvider),

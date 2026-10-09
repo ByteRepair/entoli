@@ -12,6 +12,7 @@ import "../../domain/frontmatter.dart";
 import "../../providers.dart";
 import "../chat/widgets/reply_style.dart";
 import "../widgets/formatting.dart" show formatSize;
+import "../widgets/install_bar.dart";
 
 /// A full page showing one skill the library offers: its description, the
 /// SKILL.md body rendered, its files, and — where its frontmatter does not
@@ -167,24 +168,10 @@ class _SkillViewPageState extends ConsumerState<SkillViewPage> {
             ),
           if (_otherFiles.isNotEmpty) ...[
             const SizedBox(height: 24),
-            Text("Files", style: theme.textTheme.titleSmall),
-            const SizedBox(height: 8),
-            for (final (path, bytes) in _otherFiles)
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 4),
-                child: Row(
-                  children: [
-                    Icon(Icons.insert_drive_file_outlined,
-                        size: 18, color: theme.colorScheme.onSurfaceVariant),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(path, style: theme.textTheme.bodyMedium),
-                    ),
-                    Text(formatSize(bytes.length),
-                        style: theme.textTheme.bodySmall),
-                  ],
-                ),
-              ),
+            PackageFileList(
+              entries: _otherFiles,
+              sizeOf: formatSize,
+            ),
           ],
         ],
       ),
