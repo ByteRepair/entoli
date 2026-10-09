@@ -4,6 +4,7 @@ import "dart:ui" show AppExitResponse;
 import "package:flutter/material.dart";
 import "package:flutter/scheduler.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
+import "package:http/http.dart" as http;
 
 import "core/config.dart";
 import "core/platform/app_icon.dart";
@@ -219,6 +220,7 @@ class AppSession {
         systemAccentProvider.overrideWithValue(await accent),
         linkOpenerProvider
             .overrideWithValue(PlatformLinkOpener(store, syncHub)),
+        marketplaceClientProvider.overrideWithValue(http.Client()),
         backgroundWorkProvider.overrideWithValue(foreground),
         fileHandoffProvider.overrideWithValue(handoff),
         assistantLaunchProvider.overrideWithValue(platform.createAssistantLaunch()),

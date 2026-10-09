@@ -24,6 +24,7 @@ named in a cross-reference is findable from this list.
   Carrying on an interrupted turn, Starting a chat, and naming it, Skills and
   agents, Resending a message, Attachments, Reminders
 - `lib/ui/sidebar/CLAUDE.md` — The sidebar's list, Pinned chats
+- `lib/ui/marketplace/CLAUDE.md` — The marketplace page
 - `lib/data/builtin/CLAUDE.md` — The agent loop, Running the commands, Running a
   command yourself, Approvals, Questions, Sub-agents, Their own transcripts,
    Carrying one on, Web search, Skills, The plan, Memory
