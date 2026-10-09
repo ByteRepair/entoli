@@ -11,7 +11,13 @@ import "package:http/http.dart" as http;
 /// which is what a real one does and what a cancelled download is relying on
 /// to stop.
 class FakeNetwork extends http.BaseClient {
-  FakeNetwork(this.bodies, {this.headers = const {}});
+  FakeNetwork(this.bodies, {this.headers = const {}, this.missingAs404 = false});
+
+  /// True where an unlisted path answers 404 rather than refusing — what a
+  /// server with a directory tree (GitHub Pages) says about a file that is
+  /// not there. The marketplace's entry files lean on that: a missing
+  /// `profile.png` is an answer, not a failure.
+  final bool missingAs404;
 
   /// The same for whole bodies, which arrive in two halves — a download.
   factory FakeNetwork.inHalves(Map<String, List<int>> bodies) =>
@@ -45,6 +51,11 @@ class FakeNetwork extends http.BaseClient {
   Future<http.StreamedResponse> send(http.BaseRequest request) async {
     final pieces = bodies[request.url.path];
     if (pieces == null) {
+      if (missingAs404) {
+        asked++;
+        return http.StreamedResponse(const Stream.empty(), 404,
+            headers: headers, request: request);
+      }
       throw http.ClientException("connection refused", request.url);
     }
     asked++;

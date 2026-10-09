@@ -3,6 +3,7 @@ import "dart:async";
 import "package:clock/clock.dart";
 import "package:flutter/foundation.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
+import "package:http/http.dart" as http;
 import "package:uuid/uuid.dart";
 
 import "../core/config.dart";
@@ -74,6 +75,11 @@ final chatShellCwdProvider =
   return ref.watch(shellProvider).sessionCwd(workspace);
 });
 final appConfigProvider = Provider<AppConfig>((ref) => throw UnimplementedError());
+
+/// The client the marketplace's fetches ride. An override in tests, so the
+/// suite answers the URLs rather than the binding's all-400s stand-in.
+final marketplaceClientProvider =
+    Provider<http.Client>((ref) => throw UnimplementedError());
 final attachmentPickerProvider = Provider<AttachmentPicker>((ref) => throw UnimplementedError());
 final fileHandoffProvider = Provider<FileHandoff>((ref) => throw UnimplementedError());
 final backupHandoffProvider = Provider<BackupHandoff>((ref) => throw UnimplementedError());
