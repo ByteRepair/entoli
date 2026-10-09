@@ -59,7 +59,7 @@ class PromptDocument {
   /// dropped. The parsing lives in [Frontmatter], its own file so the
   /// build-time generators can share it without the freezed models.
   factory PromptDocument.parse(CompletionKind kind, String name, String source) {
-    final parsed = Frontmatter.parse(source.replaceAll("\r\n", "\n"));
+    final parsed = Frontmatter.parse(source);
     return PromptDocument(
       kind: kind,
       name: name,
