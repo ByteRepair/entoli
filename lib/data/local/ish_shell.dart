@@ -31,18 +31,20 @@ import "ish_ffi.dart";
 /// parses its child process's output.
 class IshShell extends Shell {
   IshShell({
-    required String Function() rootfsDir,
+    required this.rootfsDir,
     required this.dataDir,
     required this.environment,
     required String Function() platformDescription,
-  })  : _rootfsDir = rootfsDir,
-        _describe = platformDescription;
+  }) : _describe = platformDescription;
 
   /// Where the guest's rootfs is mounted from, asked per command: a Linux
   /// installed from the settings page reaches the next command, and one
   /// deleted stops being where commands run without the app having to be
-  /// restarted. Empty where none is installed.
-  final String Function() _rootfsDir;
+  /// restarted. Empty where none is installed. Held as the closure itself —
+  /// an initializing formal rather than a private field under a differently
+  /// named parameter, which is what `prefer_initializing_formals` asks for
+  /// and what CI's analyzer refuses otherwise.
+  final String Function() rootfsDir;
 
   final String dataDir;
 
@@ -50,12 +52,13 @@ class IshShell extends Shell {
 
   final String Function() _describe;
 
-  String get rootfsDir => _rootfsDir();
+  /// Where the rootfs directory is on the host: one ask of [rootfsDir].
+  String get rootfsPath => rootfsDir();
 
   /// Whether the thing commands would run in is there. Empty is how "no
   /// Linux installed" reads here, and false is what keeps the agent from
   /// offering the tool a device cannot answer — the browser's rule.
-  bool get rootfsInstalled => _rootfsDir().isNotEmpty;
+  bool get rootfsInstalled => rootfsDir().isNotEmpty;
 
   @override
   String get platformDescription => _describe();
@@ -117,7 +120,7 @@ class IshShell extends Shell {
     final guestCwd = guestWorkspacePath(guestRoot!, home, cwd);
     if (oneShot) {
       return _IshOneShotRun(
-        rootfsDir: rootfsDir,
+        rootfsDir: rootfsPath,
         dataDir: dataDir,
         home: home,
         guestCwd: guestCwd,
@@ -201,7 +204,7 @@ class _IshSession {
       if (old != null) _IshIsolate.instance.destroy(old);
       try {
         _sessionId = await _IshIsolate.instance.init(
-          rootfsDir: _shell.rootfsDir,
+          rootfsDir: _shell.rootfsPath,
           dataDir: _shell.dataDir,
           home: _workspaceHome,
           cwd: _guestCwd,
