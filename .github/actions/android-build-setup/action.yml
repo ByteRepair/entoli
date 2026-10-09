@@ -64,6 +64,27 @@ runs:
         java-version: "17"
         cache: ${{ inputs.release != 'true' && 'gradle' || '' }}
 
+    # The image ships NDKs under $ANDROID_HOME/ndk that no build of ours
+    # reads: ndkVersion comes from Flutter, not from the image. On
+    # ubuntu-24.04 three of them (~7 GB) sat beside the fourth Gradle went on
+    # to install, and at v4.6.0 the aab job died on a full disk inside
+    # signReleaseBundle with 82 MB left — this is that room back. The version
+    # Flutter pins is kept where the image carries it: ubuntu-26.04 (which
+    # ubuntu-latest migrates to) preinstalls exactly it.
+    #
+    # The number is flutter.ndkVersion of the SDK flutter-setup pins —
+    # FlutterExtension.kt's hardcoded one. A stale value never breaks the
+    # build: the worst it does is leave an unused NDK behind.
+    - name: Remove the preinstalled NDKs we do not build with
+      shell: bash
+      run: |
+        pinned=28.2.13676358
+        for d in "$ANDROID_HOME/ndk/"*; do
+          if [ "$(basename "$d")" != "$pinned" ]; then
+            rm -rf "$d"
+          fi
+        done
+
     - uses: ./.github/actions/flutter-setup
 
     - uses: actions/download-artifact@v8.0.1
