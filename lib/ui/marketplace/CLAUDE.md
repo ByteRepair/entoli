@@ -13,11 +13,13 @@ one. The section path is `CompletionKind.folder`, which is `"skills"` /
 anchored on the field's doc in `models.dart`, the place an edit would land.
 
 Entry files fetch as `/{folder}/{slug}/{file}`; the skill package is the one
-exception, fetched as `/{folder}/{slug}.skill` — the `.skill` file name is
-the marker — being the installable whole of `data/skills/<slug>/`, which the
-build also serves file by file. The package inside the entry's directory was
-the first shape, and it 404'd: the install said "No installable package is
-served for this skill" for a package that was live one path over.
+exception, fetched as `/{folder}/{slug}.skill` — its own function,
+`fetchMarketplaceSkillPackage`, so the path shape is named rather than a
+magic `.skill` file name the caller has to know — being the installable whole
+of `data/skills/<slug>/`, which the build also serves file by file. The
+package inside the entry's directory was the first shape, and it 404'd: the
+install said "No installable package is served for this skill" for a package
+that was live one path over.
 
 `fetchMarketplaceEntries` is the whole read, and it throws on anything it
 cannot do. What is absent in an entry's frontmatter — `version`, `tags` — is
@@ -72,8 +74,10 @@ would reach `Theme.of` before the first build, the exception an inherited
 widget read across the init gap throws.
 
 The failure pane is `Unreachable`, one widget the list's tab and the preview
-share, so the feature has one rendering of "could not reach" rather than two
-that drift.
+share, built on the shared `EmptyPane` (icon, title, the error as the detail
+line, the Try-again action), so the feature has one rendering of "could not
+reach" rather than two that drift, and carries the failure the page caught —
+a timeout is not a 500.
 
 ## Installing
 
@@ -95,10 +99,12 @@ folder is not load-bearing.
 files rather than a picked one: UTF-8 decode, `PromptDocument.parse`, refuse
 an empty body, `isFolderName` on the slug, replace-confirm, then one
 `withWritableDir` block writing `agentFilePath` and, where the site served
-one, `agentPicturePath` beside it. A global write (destination null) lands in
-the default project's directory that every project inherits from, so the whole
-`agentPictureProvider` family is invalidated — the same answer a global
-agents page's write gives; a named destination takes its own entry down.
+one, `agentPicturePath` beside it. The picture's invalidation is the shared
+`invalidateAgentPicture` (in `providers.dart`, under the provider itself):
+a global write (destination null) lands in the default project's directory
+that every project inherits from, so the whole `agentPictureProvider` family
+is invalidated — the same answer a global agents page's write gives; a named
+destination takes its own entry down.
 
 The destination is `InstallDestination` at the body's end, `Global` default —
 the same widget the skill-install preview page carries, so every install
@@ -110,3 +116,11 @@ unmounting disposed the fetch, so every flip re-ran the fetch and flashed the
 spinner over a list the visit already had. `AutomaticKeepAliveClientMixin`
 keeps both tabs mounted for the route's life; popping it disposes both, which
 is the reopen-re-fetches rule, preserved.
+
+Two shared widgets carry pieces of the rendering: the bottom bar is
+`InstallBar` (lib/ui/widgets/install_bar.dart), the same button the
+skill-install preview page shows, and the package-files list is
+`PackageFileList` from the same file, which the skill view and the
+skill-install preview also read — the skill view being the one that passes
+`sizeOf` for its size column. Snackbar lines go through the shared `say`,
+not a local messenger call.

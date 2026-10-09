@@ -131,6 +131,32 @@ void main() {
             agentPicture: agentPicture,
           ));
 
+  /// Opens an entry's preview and settles it — the list's settle, the tab
+  /// flip where there is one, the tap, then a wait for [until], defaulting
+  /// to the Install button the loaded preview draws (a refusal draws its
+  /// reason where the button would be, and passes its own [until]). The
+  /// agent tests sit on the second tab, the skill ones on the opening tab.
+  Future<void> openEntry(
+    WidgetTester tester, {
+    required CompletionKind kind,
+    required String slug,
+    Finder? until,
+  }) async {
+    await settleIo(tester);
+    if (kind != CompletionKind.skill) {
+      await tester.tap(find.text("Agents"));
+      await settleIo(tester);
+    }
+    await tester.tap(find.text(slug));
+    await pumpUntil(
+        tester,
+        until ??
+            find.text(kind == CompletionKind.skill
+                ? "Install skill"
+                : "Install agent"));
+    await settleIo(tester);
+  }
+
   testWidgets("tabs list the marketplace's skills and agents", (tester) async {
     await pumpList(tester);
     await settleIo(tester);
@@ -212,13 +238,15 @@ void main() {
       (tester) async {
     await pumpList(tester);
     await settleIo(tester);
-    await tester.tap(find.text("letterbox"));
-    await pumpUntil(tester, find.text("Install skill"));
+    // The list row's own meta line, before the push — both renderings assert.
+    expect(find.text("Entoli Team · v1.0.0 · layout"), findsOneWidget);
+    await openEntry(tester, kind: CompletionKind.skill, slug: "letterbox");
 
-    // The README, drawn as the entry's long description — the meta line is
-    // the same one the list drew, both now on stage.
+    // The README, drawn as the entry's long description — the meta line the
+    // list row drew before the push is the one the preview renders now; the
+    // list itself sits behind the opaque route, skipped by the finders.
     expect(find.text("Letterbox"), findsOneWidget);
-    expect(find.text("Entoli Team · v1.0.0 · layout"), findsNWidgets(2));
+    expect(find.text("Entoli Team · v1.0.0 · layout"), findsOneWidget);
     // The files the package carries beside SKILL.md.
     expect(find.text("references/tone.md"), findsOneWidget);
 
@@ -238,12 +266,7 @@ void main() {
   testWidgets("an agent's preview shows the picture and installs prompt and picture",
       (tester) async {
     await pumpList(tester);
-    await settleIo(tester);
-    await tester.tap(find.text("Agents"));
-    await settleIo(tester);
-    await tester.tap(find.text("diary"));
-    await pumpUntil(tester, find.text("Install agent"));
-    await settleIo(tester);
+    await openEntry(tester, kind: CompletionKind.agent, slug: "diary");
 
     expect(find.text("Diary"), findsOneWidget);
     expect(find.text("Keeps a diary of what was done."), findsOneWidget);
@@ -261,12 +284,7 @@ void main() {
   testWidgets("an agent with no picture installs the prompt alone",
       (tester) async {
     await pumpList(tester, agentPicture: false);
-    await settleIo(tester);
-    await tester.tap(find.text("Agents"));
-    await settleIo(tester);
-    await tester.tap(find.text("diary"));
-    await pumpUntil(tester, find.text("Install agent"));
-    await settleIo(tester);
+    await openEntry(tester, kind: CompletionKind.agent, slug: "diary");
 
     expect(find.byType(Image), findsNothing);
 
@@ -291,8 +309,7 @@ void main() {
     File(p.join(dir, "SKILL.md")).writeAsStringSync("old\n");
     File(p.join(dir, "obsolete.sh")).writeAsStringSync("old\n");
 
-    await tester.tap(find.text("letterbox"));
-    await pumpUntil(tester, find.text("Install skill"));
+    await openEntry(tester, kind: CompletionKind.skill, slug: "letterbox");
 
     await tester.tap(find.text("Install skill"));
     await pumpUntil(tester, find.text("Replace"));
@@ -312,10 +329,12 @@ void main() {
     // The parse runs at load now, so the refusal is on the page — where the
     // install button would be dead — and the press never happens.
     await pumpList(tester, skillPackageBody: "PK-not-really");
-    await settleIo(tester);
-    await tester.tap(find.text("letterbox"));
-    await pumpUntil(tester, find.textContaining("there is no SKILL.md in it"));
-    await settleIo(tester);
+    await openEntry(
+      tester,
+      kind: CompletionKind.skill,
+      slug: "letterbox",
+      until: find.textContaining("there is no SKILL.md in it"),
+    );
 
     // No Install offered, the parser's reason where it would have been.
     expect(find.text("Install skill"), findsNothing);

@@ -97,6 +97,7 @@ class _EntryListState extends ConsumerState<_EntryList>
                 ),
           loading: () => const Center(child: CircularProgressIndicator()),
           error: (e, _) => Unreachable(
+            detail: "$e",
             onRetry: () =>
                 ref.invalidate(marketplaceEntriesProvider(widget.kind)),
           ),
