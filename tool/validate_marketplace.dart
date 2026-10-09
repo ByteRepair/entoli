@@ -13,7 +13,6 @@ import "dart:io";
 import "package:agent_chat/data/prompts/skill_validate.dart";
 import "package:agent_chat/domain/frontmatter.dart";
 
-final _slugRe = RegExp(r"^[a-z0-9]+(-[a-z0-9]+)*$");
 final _semverRe = RegExp(
     r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)"
     r"(-((0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)"
@@ -55,7 +54,7 @@ void main(List<String> args) {
       problems.addAll(_validateEntry(dataRoot, entry.key, slug));
     }
   }
-  problems.addAll(_sectionProblems(dataRoot, touched.keys.toSet()));
+  problems.addAll(_sectionProblems(dataRoot, touched.keys));
 
   if (problems.isNotEmpty) {
     stderr
@@ -71,7 +70,8 @@ Map<String, Set<String>> _slugsFromDiff(String diff, String dataRoot) {
   final kept = <String, Set<String>>{};
   (String, String)? mapPath(String path) {
     final rest = path.split("/");
-    return rest.length < 2 || rest[0] != "data"
+    // data/<section>/<slug>/rest — shorter paths are not entry content.
+    return rest.length < 3 || rest[0] != "data"
         ? null
         : (rest[1], rest[2]);
   }
@@ -116,7 +116,7 @@ Set<String> _discoverSlugs(String dataRoot, String section) {
   return dir
       .listSync()
       .whereType<Directory>()
-      .map((d) => d.uri.pathSegments.where((s) => s.isNotEmpty).last)
+      .map(_basename)
       .toSet();
 }
 
@@ -125,7 +125,7 @@ List<String> _validateEntry(String dataRoot, String section, String slug) {
   final base = "$dataRoot/$section/$slug";
   final path = "$base/${section == "skills" ? "SKILL.md" : "PROMPT.md"}";
 
-  if (!_slugRe.hasMatch(slug)) {
+  if (!skillNameOk(slug)) {
     problems.add("$base: slug is not lowercase kebab-case");
   }
   for (final required in _requiredFiles[section]!) {
@@ -144,20 +144,21 @@ List<String> _validateEntry(String dataRoot, String section, String slug) {
   }
   if (section == "agents") {
     final png = File("$base/profile.png");
-    if (png.existsSync()) {
-      if (!_isPng(png.readAsBytesSync())) {
-        problems.add("$base/profile.png: not a PNG file");
-      }
+    if (png.existsSync() &&
+        !_isPng(png.openSync().readSync(_pngMagic.length))) {
+      problems.add("$base/profile.png: not a PNG file");
     }
     for (final extra in Directory(base).listSync()) {
-      final name = extra.uri.pathSegments.where((s) => s.isNotEmpty).last;
-      if (!_agentAllowedFiles.contains(name)) {
+      if (!_agentAllowedFiles.contains(_basename(extra))) {
         problems.add("$extra: not part of the agent schema");
       }
     }
   }
   return problems;
 }
+
+String _basename(FileSystemEntity entity) =>
+    entity.uri.pathSegments.where((s) => s.isNotEmpty).last;
 
 List<String> _validateDocument({
   required String section,
@@ -175,23 +176,21 @@ List<String> _validateDocument({
   }
 
   if (section == "skills") {
-    final name = parsed.name ?? slug;
+    // skillFrontmatterProblems validates the frontmatter name (or its folder
+    // fallback) against the slug and the spec caps; only the missing-name
+    // rule is added here, which the shared validator masks by that fallback.
     problems.addAll(skillFrontmatterProblems(parsed, slug).map((p) => "$path: $p"));
     if (parsed.name == null) problems.add("$path: missing 'name' in the frontmatter");
-    if (name != slug) {
-      // already reported by skillFrontmatterProblems; nothing extra to do
-    }
   } else {
-    final unexpected = parsed.scalars.keys
-        .where((k) => k != "description" && k != "metadata")
-        .toList();
-    for (final key in unexpected) {
-      problems.add(
-          "$path: unexpected frontmatter key \"$key\" (an agent carries only "
-          "description and metadata)");
-    }
-    if (parsed.scalars.containsKey("name")) {
-      problems.add("$path: an agent's name is its file name; no 'name' key");
+    for (final key in parsed.scalars.keys) {
+      if (key == "description" || key == "metadata") continue;
+      if (key == "name") {
+        problems.add("$path: an agent's name is its file name; no 'name' key");
+      } else {
+        problems.add(
+            "$path: unexpected frontmatter key \"$key\" (an agent carries only "
+            "description and metadata)");
+      }
     }
     if (parsed.description == null || parsed.description!.trim().isEmpty) {
       problems.add("$path: no description in the frontmatter");
@@ -221,7 +220,7 @@ List<String> _validateDocument({
 
 /// Sections are checked once, not per entry: a file sitting directly under
 /// data/skills/ or data/agents/ is not an entry and belongs to nothing.
-List<String> _sectionProblems(String dataRoot, Set<String> sections) {
+List<String> _sectionProblems(String dataRoot, Iterable<String> sections) {
   final problems = <String>[];
   for (final section in sections) {
     final dir = Directory("$dataRoot/$section");

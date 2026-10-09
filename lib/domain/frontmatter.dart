@@ -37,46 +37,44 @@ class Frontmatter {
     final text = source.replaceAll("\r\n", "\n");
     final split = _splitBlock(text);
     if (split == null) return Frontmatter(body: text.trim());
-    final (firstLineEnd, block, body) = split;
+    final (block, body) = split;
 
-    // Strict YAML first. A tab as a metadata indent the regex parser read is
-    // not YAML-legal, so tabs become the block's indent spaces before the
-    // strict try.
-    final yamlParsed = _fromYaml(
-      block.replaceAll(RegExp(r"^\t+", multiLine: true), "  "),
-      body,
-    );
+    // Strict YAML first, on the untouched block. Only where it refuses is a
+    // tab-indent prepass retried (tabs are legal YAML content but not legal
+    // indentation, so a block indented with tabs is what the prepass is for)
+    // and then the legacy regex parser.
+    final yamlParsed = _fromYaml(block, body);
     if (yamlParsed != null) return yamlParsed;
-
-    // Legacy fallback: the verbatim regex subset. Runs only where strict
-    // YAML refused — the empty block is one such shape it still reads.
-    return _fromScalars(
-      text,
-      firstLineEnd,
-      body,
-      block: block,
-    );
+    if (block.contains("\t")) {
+      final tabbed = _fromYaml(
+        block.replaceAll(_tabIndent, "  "),
+        body,
+      );
+      if (tabbed != null) return tabbed;
+    }
+    return _fromScalars(body: body, block: block);
   }
 
-  /// Splits normalized [text] at the fences: (opener's newline index, block
-  /// text, body text). Null where there is no block — no opener, or an
-  /// opener with no closer — which the caller reads as all body.
-  static (int, String, String)? _splitBlock(String text) {
+  /// Splits normalized [text] at the fences: (block text, body text). Null
+  /// where there is no block — no opener, or an opener with no closer —
+  /// which the caller reads as all body.
+  static (String, String)? _splitBlock(String text) {
     final firstLineEnd = text.indexOf("\n");
-    final opener = firstLineEnd < 0 ? text : text.substring(0, firstLineEnd);
+    if (firstLineEnd < 0) {
+      return _fence.hasMatch(text) ? null : null;
+    }
+    final opener = text.substring(0, firstLineEnd);
     if (!_fence.hasMatch(opener)) return null;
-    if (firstLineEnd < 0) return null;
     // The closing fence: a line that is only `---`. The empty block's closer
-    // rides the opener's own newline ("---\n---", the "\n---" at
-    // firstLineEnd itself), so an empty block is detected first; otherwise
+    // rides the opener's own newline ("---\n---", the "---" at
+    // firstLineEnd + 1), so an empty block is detected first; otherwise
     // the search runs after the opener's newline.
     if (text.startsWith("---", firstLineEnd + 1)) {
-      return (firstLineEnd, "", _afterFence(text, firstLineEnd + 3));
+      return ("", _afterFence(text, firstLineEnd + 3));
     }
     final close = text.indexOf("\n---", firstLineEnd + 1);
     if (close < 0) return null;
     return (
-      firstLineEnd,
       text.substring(firstLineEnd + 1, close),
       _afterFence(text, close + 3),
     );
@@ -90,18 +88,12 @@ class Frontmatter {
   }
 
   static final RegExp _fence = RegExp(r"^---[ \t]*$");
+  static final RegExp _tabIndent = RegExp(r"^\t+", multiLine: true);
 
   /// The string a scalar node carries: plain values come through as Dart
-  /// scalars, so everything is stringified the way a reader would see it —
-  /// booleans and numbers keep their YAML spelling, quotes are resolved.
-  static String _scalarString(YamlNode node) {
-    final value = node.value;
-    if (value is String) return value;
-    if (value is bool) return value ? "true" : "false";
-    if (value is int || value is double) return value.toString();
-    if (value == null) return "";
-    return value.toString();
-  }
+  /// scalars, stringified the way a reader would see it — quotes resolved,
+  /// booleans and numbers at their YAML spelling.
+  static String _scalarString(YamlNode node) => node.value?.toString() ?? "";
 
   /// The strict-YAML parse: null where the block is not a YAML mapping (the
   /// caller then tries the legacy parser), frontmatter where it is.
@@ -136,15 +128,13 @@ class Frontmatter {
       if (value == null || value is YamlMap || value is YamlList) return;
       scalars[key] = _scalarString(valueNode);
     });
-    return Frontmatter._(scalars: scalars, metadata: metadata, body: body);
+    return Frontmatter(scalars: scalars, metadata: metadata, body: body);
   }
 
   /// The legacy regex parse of the block the strict path refused — the port
   /// of the parser this file carried before the yaml package arrived.
-  static Frontmatter _fromScalars(
-    String text,
-    int firstLineEnd,
-    String body, {
+  static Frontmatter _fromScalars({
+    required String body,
     required String block,
   }) {
     final scalars = <String, String>{};
@@ -181,10 +171,7 @@ class Frontmatter {
       if (key == "metadata") continue;
       scalars[key] = _unquote(value.trim());
     }
-    if (scalars.isEmpty && metadata.isEmpty) {
-      return Frontmatter(body: body);
-    }
-    return Frontmatter._(scalars: scalars, metadata: metadata, body: body);
+    return Frontmatter(scalars: scalars, metadata: metadata, body: body);
   }
 
   static final RegExp _scalar = RegExp(r"^([A-Za-z0-9_.-]+):[ \t]*(.*)$");
@@ -203,7 +190,4 @@ class Frontmatter {
     }
     return value;
   }
-
-  const Frontmatter._(
-      {required this.scalars, required this.metadata, required this.body});
 }
