@@ -19,6 +19,7 @@ class EmptyPane extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final detail = this.detail;
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(32),
@@ -28,8 +29,12 @@ class EmptyPane extends StatelessWidget {
             Icon(icon, size: 48, color: theme.hintColor),
             const SizedBox(height: 12),
             Text(title),
-            const SizedBox(height: 4),
-            Text(detail, textAlign: TextAlign.center, style: theme.textTheme.bodySmall),
+            // An empty detail is no detail line at all — an empty Text still
+            // takes its line's height and reads as a stray gap.
+            if (detail.isNotEmpty) ...[
+              const SizedBox(height: 4),
+              Text(detail, textAlign: TextAlign.center, style: theme.textTheme.bodySmall),
+            ],
             if (action != null) ...[const SizedBox(height: 12), action!],
           ],
         ),

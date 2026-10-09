@@ -15,6 +15,7 @@ import "../../providers.dart";
 import "../chat/widgets/reply_style.dart";
 import "../widgets/agent_picture.dart";
 import "../widgets/dialogs.dart";
+import "../widgets/install_bar.dart";
 import "../widgets/install_destination.dart";
 import "../widgets/nothing.dart";
 import "unreachable.dart";
@@ -96,6 +97,9 @@ class _MarketplaceEntryPreviewPageState
     extends ConsumerState<MarketplaceEntryPreviewPage> {
   EntryPreview? _preview;
   bool _failed = false;
+
+  /// Why [_failed]: the fetch's error, for the failure pane's detail line.
+  String? _failureDetail;
   bool _installing = false;
 
   /// Where Install puts the entry: null is the default project, the way a
@@ -117,26 +121,22 @@ class _MarketplaceEntryPreviewPageState
       // The entry's files are independent round-trips to one host, so they
       // go out together: serially this is one round-trip apiece on the
       // spinner the user is staring at.
-      final answers = await Future.wait(<Future<Uint8List?>>[
+      final [readmeBytes, bodyBytes, picture] =
+          await Future.wait(<Future<Uint8List?>>[
         fetchMarketplaceEntryFile(client, kind, slug, "README.md"),
-        fetchMarketplaceEntryFile(
-            client,
-            kind,
-            slug,
-            switch (kind) {
-              // The package sits beside the entry's directory on the site,
-              // which fetchMarketplaceEntryFile's `.skill` file name spells.
-              CompletionKind.skill => ".skill",
-              CompletionKind.agent => "PROMPT.md",
-            }),
+        // The skill's whole package or the agent's prompt, fetched under the
+        // name each path shape has of its own.
+        switch (kind) {
+          CompletionKind.skill =>
+            fetchMarketplaceSkillPackage(client, kind, slug),
+          CompletionKind.agent =>
+            fetchMarketplaceEntryFile(client, kind, slug, "PROMPT.md"),
+        },
         // A skill has no third file; an agent's picture is there or not.
         kind == CompletionKind.skill
             ? Future<Uint8List?>.value()
             : fetchMarketplaceEntryFile(client, kind, slug, "profile.png"),
       ]);
-      final readmeBytes = answers[0];
-      final bodyBytes = answers[1];
-      final picture = answers[2];
       // Only a skill parses an intake package out of the body, and only an
       // agent holds its prompt's source for the install to write.
       SkillPackage? package;
@@ -177,7 +177,12 @@ class _MarketplaceEntryPreviewPageState
       }
     } catch (e) {
       logFailure("marketplace", "could not fetch $slug's preview", e);
-      if (mounted) setState(() => _failed = true);
+      if (mounted) {
+        setState(() {
+          _failed = true;
+          _failureDetail = "$e";
+        });
+      }
     }
   }
 
@@ -190,12 +195,12 @@ class _MarketplaceEntryPreviewPageState
       };
       if (!mounted) return;
       if (landed != null) {
-        _say(installedSnack("Installed", landed, _destination));
+        say(context, installedSnack("Installed", landed, _destination));
         Navigator.of(context).pop();
       }
     } catch (e) {
       logFailure("marketplace", "could not install ${widget.entry.slug}", e);
-      _say("Installing failed: $e");
+      if (mounted) say(context, "Installing failed: $e");
     } finally {
       if (mounted) setState(() => _installing = false);
     }
@@ -211,8 +216,10 @@ class _MarketplaceEntryPreviewPageState
     final preview = _preview;
     final pkg = preview?.package;
     if (pkg == null) {
-      _say(preview?.packageProblem ??
-          "The marketplace has no package for this skill.");
+      if (mounted) {
+        say(context,
+            preview?.packageProblem ?? "The marketplace has no package for this skill.");
+      }
       return null;
     }
     if (await config.fs
@@ -247,12 +254,16 @@ class _MarketplaceEntryPreviewPageState
     final source = preview?.promptSource;
     final document = preview?.prompt;
     if (source == null || document == null || document.body.isEmpty) {
-      _say("This agent cannot be installed: there is no prompt in it.");
+      if (mounted) {
+        say(context, "This agent cannot be installed: there is no prompt in it.");
+      }
       return null;
     }
     final name = widget.entry.slug;
     if (!isFolderName(name)) {
-      _say("This agent cannot be installed: its name cannot be a file name.");
+      if (mounted) {
+        say(context, "This agent cannot be installed: its name cannot be a file name.");
+      }
       return null;
     }
     final agentExists = await config.fs
@@ -283,21 +294,11 @@ class _MarketplaceEntryPreviewPageState
         }
       },
     );
-    // The picture the agent page draws is its own provider's read. A global
-    // write lands where every project inherits from, so the whole family
-    // goes down; a project's is read there and nowhere else.
-    if (_destination == null) {
-      ref.invalidate(agentPictureProvider);
-    } else {
-      ref.invalidate(agentPictureProvider((project: _destination, name: name)));
-    }
+    // The picture the agent page draws is its own provider's read; the
+    // null-destination case is the whole family, whose rule is written there.
+    invalidateAgentPicture(ref, name, project: _destination);
     await reloadAllPromptLibraries(ref);
     return name;
-  }
-
-  void _say(String message) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
   }
 
   @override
@@ -310,7 +311,7 @@ class _MarketplaceEntryPreviewPageState
     return Scaffold(
       appBar: AppBar(title: Text("Marketplace · ${widget.kind.label}")),
       body: _failed
-          ? Unreachable(onRetry: _load)
+          ? Unreachable(onRetry: _load, detail: _failureDetail)
           : preview == null
               ? const Center(child: CircularProgressIndicator())
               : _Body(
@@ -321,22 +322,10 @@ class _MarketplaceEntryPreviewPageState
                       setState(() => _destination = value),
                 ),
       bottomNavigationBar: installable
-          ? SafeArea(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: FilledButton.icon(
-                  onPressed: _installing ? null : _install,
-                  icon: _installing
-                      ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.install_desktop),
-                  label:
-                      Text(_installing ? "Installing…" : "Install $_kindWord"),
-                ),
-              ),
+          ? InstallBar(
+              installing: _installing,
+              label: "Install $_kindWord",
+              onPressed: _install,
             )
           : null,
     );
@@ -348,7 +337,7 @@ class _MarketplaceEntryPreviewPageState
       widget.kind == CompletionKind.skill ? "skill" : "agent";
 }
 
-class _Body extends StatelessWidget {
+class _Body extends StatefulWidget {
   const _Body({
     required this.entry,
     required this.preview,
@@ -362,11 +351,28 @@ class _Body extends StatelessWidget {
   final ValueChanged<String?> destinationChanged;
 
   @override
+  State<_Body> createState() => _BodyState();
+}
+
+class _BodyState extends State<_Body> {
+  /// Built once per theme, not per build: a fresh [replyStyleSheet] on every
+  /// rebuild re-parses the whole README, `MarkdownBody` reading a new style
+  /// sheet as new content. The same memo `MessageText` keeps.
+  MarkdownStyleSheet? _styleSheet;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _styleSheet = replyStyleSheet(Theme.of(context));
+  }
+
+  @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final preview = widget.preview;
+    final entry = widget.entry;
     final meta = entry.metaLine;
-    final files =
-        preview.package?.entries.where((e) => e.$1 != "SKILL.md").toList();
+    final files = preview.package?.entries.where((e) => e.$1 != "SKILL.md").toList();
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
@@ -394,7 +400,7 @@ class _Body extends StatelessWidget {
         if (preview.readme != null)
           MarkdownBody(
             data: preview.readme!,
-            styleSheet: replyStyleSheet(theme),
+            styleSheet: _styleSheet,
           )
         else
           const Nothing("This entry ships no README."),
@@ -404,25 +410,12 @@ class _Body extends StatelessWidget {
         ],
         if (files != null && files.isNotEmpty) ...[
           const SizedBox(height: 24),
-          Text("Files", style: theme.textTheme.titleSmall),
-          const SizedBox(height: 8),
-          for (final (name, _) in files)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 4),
-              child: Row(
-                children: [
-                  Icon(Icons.insert_drive_file_outlined,
-                      size: 18, color: theme.colorScheme.onSurfaceVariant),
-                  const SizedBox(width: 8),
-                  Text(name, style: theme.textTheme.bodyMedium),
-                ],
-              ),
-            ),
+          PackageFileList(entries: files),
         ],
         const SizedBox(height: 24),
         InstallDestination(
-          value: destinationValue,
-          onChanged: destinationChanged,
+          value: widget.destinationValue,
+          onChanged: widget.destinationChanged,
         ),
         const SizedBox(height: 8),
       ],
