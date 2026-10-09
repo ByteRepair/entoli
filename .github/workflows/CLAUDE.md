@@ -41,6 +41,20 @@ to be shared between two build jobs, and with one consumer left they paid the
 same configure twice and moved a multi-gigabyte entry nobody else read. The
 tools job does not touch Dart.
 
+**The aab job deletes the image's preinstalled NDKs, but for its own.** The
+runner image ships NDKs under `$ANDROID_HOME/ndk` that `ndkVersion` does not
+name — the build's pin comes from Flutter (`flutter.ndkVersion`, the
+FlutterExtension.kt constant of the SDK flutter-setup installs), not from
+the image. On ubuntu-24.04, where the v4.6.0 aab job died, three of them
+(~7 GB) sat beside the fourth Gradle went on to install itself, and the
+build failed inside `signReleaseBundle` with bundletool's "Location not
+within channel boundaries" — a disk-full error wearing a password — with 82
+MB left. The step deletes every NDK but the pinned one, which is why 26.04 —
+where ubuntu-latest lands in November 2026 and which preinstalls exactly
+Flutter 3.44's pin — keeps working with nothing to install. The number is
+stated in `android-build-setup` rather than read from Flutter, and a stale
+one never breaks the build: the worst it does is leave an NDK behind.
+
 **The Linux build is two jobs, not one, for the same reason.** `llama-linux`
 builds the desktop model server (`.github/actions/linux-llama`, over
 `tool/linux/build-llama.sh`) and uploads the stage as an artifact; `linux`
