@@ -1,6 +1,7 @@
 import "dart:convert";
 
 import "../core/config.dart";
+import "permission.dart";
 import "temp_chat_ttl.dart";
 import "tone.dart";
 
@@ -9,7 +10,8 @@ import "tone.dart";
 /// adds one, wins over it.
 enum OmadaOrdering {
   sequential,
-  parallel;
+  parallel,
+  relay;
 
   static OmadaOrdering? fromNameNullable(String? name) =>
       name == null ? null : OmadaOrdering.values.asNameMap()[name];
@@ -18,10 +20,12 @@ enum OmadaOrdering {
 /// Human-readable labels, shared by the project settings page so the
 /// dropdown and the section's inherited entry name the same thing. The
 /// parallel ordering is Crossfire: several members working at the same time,
-/// each writing their own reply.
+/// each writing their own reply. Relay is the same start with no wave
+/// barrier: what a reply names runs while its siblings are still speaking.
 const omadaOrderingLabels = {
   OmadaOrdering.sequential: "Sequential",
   OmadaOrdering.parallel: "Crossfire",
+  OmadaOrdering.relay: "Relay",
 };
 
 /// One line each, under the ordering dropdown: what the round does under
@@ -32,6 +36,8 @@ const omadaOrderingDescriptions = {
       "the message names them.",
   OmadaOrdering.parallel: "Members run at the same time, each writes their "
       "own reply, in whatever order they finish.",
+  OmadaOrdering.relay: "Members start as soon as they are named, without "
+      "waiting for the room to settle.",
 };
 
 /// Project-scoped overrides. A project can override the app-level
@@ -51,6 +57,9 @@ class ProjectSettings {
       this.turnMaxSteps,
       this.tone,
       this.citations,
+      this.permissions = const [],
+      this.writableDirs = const [],
+      this.sandboxReprompt,
       this.description});
 
   /// How long a temporary chat in this project lives. Null means inherit the
@@ -100,6 +109,18 @@ class ProjectSettings {
   /// then asks nothing — and null is the app default.
   String? description;
 
+  /// The project's standing permission rules, in front of the app's.
+  List<PermissionRule> permissions;
+
+  /// Directories this project's commands may additionally write to, beside
+  /// the workspace the sandbox grants — the machine paths a turn works in
+  /// that are not the workspaces.
+  List<String> writableDirs;
+
+  /// Whether a sandbox-denied write is offered back as an approval. Null
+  /// inherits the app default.
+  bool? sandboxReprompt;
+
   static ProjectSettings load(AppConfig config, {String? project}) {
     final text = config.documents.read(config.projectSettingsFile(project: project));
     if (text == null) return ProjectSettings();
@@ -122,6 +143,12 @@ class ProjectSettings {
         turnMaxSteps: json["turnMaxSteps"] as int?,
         tone: Tone.fromNameNullable(json["tone"] as String?),
         citations: json["citations"] as bool?,
+        permissions: permissionRulesFromJson(json["permissions"] as List<dynamic>?),
+        writableDirs: [
+          for (final w in (json["writableDirs"] as List<dynamic>? ?? const []))
+            if (w is String) w,
+        ],
+        sandboxReprompt: json["sandboxReprompt"] as bool?,
         description: json["description"] as String?,
       );
     } catch (_) {
@@ -140,6 +167,10 @@ class ProjectSettings {
       if (turnMaxSteps != null) "turnMaxSteps": turnMaxSteps,
       if (tone != null) "tone": tone!.name,
       if (citations != null) "citations": citations,
+      if (permissions.isNotEmpty)
+        "permissions": permissionRulesToJson(permissions),
+      if (writableDirs.isNotEmpty) "writableDirs": writableDirs,
+      if (sandboxReprompt != null) "sandboxReprompt": sandboxReprompt,
       // Empty is written as it stands: the screen asking nothing is a value
       // here, where an absent key is the app default.
       if (description != null) "description": description,
@@ -156,6 +187,9 @@ class ProjectSettings {
         turnMaxSteps: turnMaxSteps,
         tone: tone,
         citations: citations,
+        permissions: permissions,
+        writableDirs: writableDirs,
+        sandboxReprompt: sandboxReprompt,
         description: description,
       );
 }

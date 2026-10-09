@@ -10,7 +10,7 @@ written, so the only thing a kill can now cost is whatever had not been appended
 yet. That is what makes an interrupted turn something to offer to continue
 rather than something to apologise for.
 
-Six records. `message` opens one — before it holds anything, which is what the
+Seven records. `message` opens one — before it holds anything, which is what the
 empty assistant message at the head of a turn is — and its `siblingOf` names
 what it is an alternative to, or nothing at all, which puts it on the end of the
 thread being read; `replacesSibling` takes that one away rather than joining it,
@@ -19,7 +19,9 @@ when it was written — see "Commands and agents". `part` is one part of it, at 
 index. `append` is more text
 on the end of the part at an index. `turnEnd` closes the turn and says why:
 `done`, `aborted`, or `error`. `select` says which of a message's alternatives
-to read. `rewind` forgets a message and everything below it.
+to read. `rewind` forgets a message and everything below it. `compaction` says
+the conversation up to a message is summarized for the model, and still there
+for the user to read — see "Compaction" below.
 
 Nothing is mutable, so a part that changed is **superseded**: the same index
 written again wins, and `replay` applies records in order, so the last one
@@ -373,6 +375,66 @@ would take an image away from a model halfway through being asked about it. What
 it does mean is that an image-heavy chat is re-encoded on every step of every
 turn, and that compaction is what bounds it, exactly as with the text.
 
+### Compaction
+
+`conv.jsonl` gains a seventh record for the one thing both reference systems
+could not share with this format: the summary is a line in the log, not a state
+beside it. `compaction` names a message (`upToMessageId`) and carries the
+`summary` that stands in for everything up to and including it when the
+conversation reaches a model; the user keeps reading every message, the divider
+after the boundary saying where the summary took over. Written rather than
+performed for the same reason `rewind` is — a whole-log write is the one thing
+the format exists to avoid — and because a summary that lived only in the
+session would be lost on restart, where the next turn would re-inflate the
+whole log the projection rebuilt from.
+
+**The marker is applied by the projection and nowhere else.** `projectionOf`
+takes the markers beside `history` (never inside it — a marker is not a message,
+and folding one in would put words in the conversation nobody said), applies
+the newest whose boundary the history holds, and skips everything up to and
+including the boundary. Everything after it is verbatim, thinking and
+attachments included — so an image below the boundary is still an image.
+Earlier markers are shadows: each summarizes everything still live before it,
+and the newest is the one the model reads.
+
+**Re-compaction merges, anchored.** The summarizer is given the previous
+marker's summary as `<prior-summary>` with merge rules — carry forward
+objectives and constraints, conversation wins conflicts, Active moves to
+Completed — so compacting again never loses what the last one kept. The prompt
+is `lib/data/builtin/compact_prompt.dart`, the one file that words it: two
+behaviors hold in it whichever words carry them — a reply shaped like a user's
+turn is still the model's writing and never an approval from them, and the
+summary describes the work rather than the summarizing — and there is no
+`<analysis>` step, the analysis being stripped before anything is stored and
+costing output tokens on the context that is already over budget.
+
+**The retry ladder**, not a failure: a span too big to summarize is halved and
+re-asked, three attempts, each attempt's marker covering only what it read.
+`upToMessageId` is the honest boundary of what was actually summarized, which
+is why the field is on the record rather than implied.
+
+### Callbacks, and the wired skill
+
+A `/skill` flagged `metadata: invocation: callback` runs code instead of
+expanding its body as a prompt template — the same one `/` namespace the
+opencode-era offered commands under, where frontmatter decided what a send
+meant, restored under the built-in backend with the key the spec's `metadata:`
+map carries. What the callback does is the closed set in
+`lib/domain/wired_skill.dart` (`WiredSkill`), and the bundled `compact` skill
+is the one that ships. The body of a wired skill is the user's documentation,
+never sent to a model — `promptDocuments` refuses to expand one, so the
+conversation never gains prose pretending the model read it.
+
+**The check is the `shellBypassCommand` pattern**: one function read by every
+place that must not route a callback message to a model. The dispatch is in
+`ChatController.send` before the room's guards (refusing, not queueing, while
+a turn runs — a callback mid-turn is the session the turn is rewriting), and
+the same read covers the title namer, the resume offer (`endsUnfinished`), the
+composer's dress-up, and the Omada author stamp. A name in the enum dispatches
+whether or not the library still holds the skill — the reader of a turn being
+resent cannot ask what the frontmatter said when it ran — which is also the
+one cost: a user's own skill shadowing a wired name is not offered as prose.
+
 ### Carrying on an interrupted turn
 
 The design is deliberately dumb. Nothing resumes on its own, nothing is told to
@@ -452,8 +514,8 @@ relaunch used to abort every live turn, so work nobody stopped came back
 recorded as though they had.
 
 It reaches only the chats a `ChatController` is already driving, and a
-reminder's turn now has one — `ReminderRunner` drives the turn through
-`ChatController` via `ReminderTurnDriver`, the same path the user and
+trigger's turn now has one — `TriggerRunner` drives the turn through
+`ChatController` via `TriggerTurnDriver`, the same path the user and
 `VoiceController` take, so `interruptLiveTurns` reaches it.
 
 `Chat.unfinished` carries the answer out of the store as a bool — an id would
@@ -596,7 +658,7 @@ with. Its frontmatter is held to the [Agent Skills spec](https://agentskills.io)
 `description` of at most 1024 characters, and only the spec's keys
 (name, description, license, compatibility, metadata, allowed-tools) at the
 top level. Entoli's own keys (`argument-hint`, `user-invocable`,
-`disable-model-invocation`) live under the spec's `metadata:` map, which is
+`disable-model-invocation`, `invocation`) live under the spec's `metadata:` map, which is
 its extension point for per-client settings — see "The conversation log" in
 this file's parent for what the flags do. `skillProblems`, in
 `lib/data/prompts/skill_validate.dart`, is the one validator, and it runs
@@ -614,6 +676,17 @@ now a problem, not a normal state. Its body carries the base directory above
 the template, because that is the one thing every reader needs and none can
 work out. An agent is still one `.md` file: a system prompt, with nothing to
 run beside it.
+
+Beside the `.md` an agent may carry a profile picture, `<name>.png` in the
+same directory — a PNG, picked in the editor, written and removed with the
+agent. It is no part of the document: nothing parses it, nothing back-ups it
+specially (a directory that grows a picture is still carried by the
+members-are-files rule), and the model is never told of it. The picture a
+project shows is read over the same tier walk the library answers mentions
+with — a project's own answering over an inherited one — by
+`readAgentPicture`, which the `agentPictureProvider` serves and the agents
+list, the editor and the Omada reply's avatar read. A bundled agent has no
+picture until the user's own agent of the same name carries one.
 
 A skill has two halves to being reachable, and they are separate. **User
 invocation** is a `/name` in the composer, offered while the skill is
@@ -681,7 +754,7 @@ Omada is what makes a mention promote the named member, in Omada-on projects.
 
 `completions` is therefore **not** on `AgentBackend`: `completionsProvider`
 is a family keyed by project, reading the project's library directly and
-synchronous. The composer and the reminder editor pass the project they are in;
+synchronous. The composer and the trigger editor pass the project they are in;
 the repository's `composeUserPrompt` resolves the project's library through
 `libraryFor`, so a message is composed against the same set the chat it lands
 in will offer.
@@ -738,111 +811,97 @@ text and nothing else, which is what every projected message did before this.
 The store's resource I/O is async where the rest of it is sync: a JSON file is
 small enough to write on the UI thread, an attachment is not.
 
-## Reminders
+## Triggers
 
-A reminder runs a prompt in a new chat at a scheduled time, headlessly — nobody
-is watching, and on Android the process may have been dead since it was set. The
-pieces are `Reminder` (the model, `reminder.dart`), `ReminderRunner` (the
-headless turn, `reminder_runner.dart`), `ReminderScheduler` (the timer and
-catch-up, `reminder_scheduler.dart`), and `ReminderAlarms` (the platform port,
-`reminder_alarms.dart`). The store is `FileReminderStore`
-(`data/local/file_reminder_store.dart`); the port's Android impl is
-`AndroidReminderAlarms` (`data/local/android_reminder_alarms.dart`).
+A trigger runs a prompt at a moment, after a countdown, or on a file change —
+in a new headless chat, or in the chat that registered it. The pieces are
+`Trigger` (the model and its sealed `TriggerSource`, `trigger.dart`), three
+`TriggerKind`s (the behaviour, `trigger_kinds.dart`), `TriggerManager` (the
+fire path over the kinds, `trigger_manager.dart`), and `TriggerRunner` (the
+headless turn or the same-chat drive, `trigger_runner.dart`). The platform
+halves are `ReminderAlarms` (the clock and the notifications) and
+`FileWatches` (`file_watches.dart`; the impls under `data/local/`). The store
+is `FileTriggerStore`, over `<dataDir>/reminders.json` — the file name the
+reminder feature gave it, kept because a rename is a migration; legacy
+records are triggers because `fromFromJson` — `Trigger.fromJson` — reads the
+flat `at`/`repeat` shape a reminder was.
 
-**Linux's half is notifications, not scheduling.**
-`LinuxReminderAlarms` (`data/local/linux_reminder_alarms.dart`) posts over
-`org.freedesktop.Notifications` on the session bus — directly, not through a
-portal, since the portal's Notification interface exists for sandboxed apps and
-its action support is newer than the daemon's own. The completion notification
-carries a `default` action whose `ActionInvoked` becomes a chat id, and the
-tap reaches the app through the same held-pending split Android's channel has:
-`_pendingOpen` waits for `takeOpenChat`, the `openChat` stream is the nudge
-that makes `IncomingReminderOpen` drain it. A notification's id is the one the
-daemon answers, keyed to its chat id, so a tap on a repost cannot name the
-wrong chat. Nothing wakes the process: `schedules` is false, every reminder
-rides the in-process timer alone, and one missed while the app was closed is
-caught up at the next launch — which is what the reminders page says instead
-of promising a fire. A no-bus session (headless, minimal window manager, the
-dev toolbox) probes once at launch and falls back to
-`UnavailableReminderAlarms`, the way `KeyringSecretStore` falls back to the
-file; a daemon that appears later is next launch's business. What fires a
-reminder with the app closed is future work in the same shape — the app
-running collapsed in the background — not a system scheduler.
+### The layers
 
-**The runner drives the turn through `ChatController`, not beside it.**
-`ReminderRunner` creates the chat and stamps the reminder, then hands the turn
-to a `ReminderTurnDriver` whose implementation (`reminder_turn_driver.dart`,
-in the UI layer) reads `chatControllerProvider(chatId).notifier` and calls
-`send()` — the same path the user and `VoiceController` take. There is one
-code path that drives a turn, not two, so `ChatController.isRunning` and the
-backend's `runningTurns` are always in sync: the user opening the chat while
-the reminder runs sees the controller already driving it (`isRunning: true`,
-no `ResumeBar`), and `interruptLiveTurns` reaches the reminder turn on the way
-out of the app. The chat is `repo.createChat` with a `meta` — the same call
-the UI makes.
+- **Model, no behaviour.** `Trigger` and `TriggerSource` are data and JSON:
+  schedule (`ScheduleSource(at, repeat)`, the reminder shape),
+  `TimerSource(duration, registeredAt)` — "in thirty minutes", anchored by
+  whoever registers it (the provider's `registerFor` re-dates a parse's
+  placeholder to now) — and `FileSource(paths, events, cooldown)`. The
+  recurrence arithmetic moved with the reminder, statics on
+  `ScheduleSource`.
+- **Kinds, the behaviour.** `TriggerKind` answers five questions: does this
+  trigger match me; is it armed; what to watch; whether to defer the fire;
+  and what it is next. The registry is the manager's parameter — a source is
+  added by a line there, and nothing in the manager or the tools switches on
+  kind. `ClockKind` is the schedule and timer share: the alarm diff, the
+  catch-up at launch, the in-process timer, and the defer-to-alarm dance,
+  all moved off the scheduler it used to be. `FileKind` is watchers over
+  resolved roots — one root one watcher, per-trigger cooldowns, fires only
+  while the process runs (nothing on any platform re-delivers inotify to a
+  process that was not there) — paths resolved where the watch is built,
+  through the file tools' own `resolveWorkspacePath`, so a stored
+  `project:notes/` means what a `read` would have opened.
+- **The manager** is the room's side: the kind registry, the single fire
+  path — claim before the first await, defer, run, notify, stamp, reload —
+  and the nudge. It owns no timer, diff, or watcher of its own: every one of
+  those is the kind's.
+- **The runner** resolves the target. `chatId` null is the reminder flow —
+  `repo.createChat` with the trigger's meta, `headless` and
+  `approveMode: never`. A chat id drives the turn in that chat, not
+  headless (its `ask_user` has an owner); a chat that has been deleted
+  disarms the trigger, with a notification saying so, and never re-points
+  the prompt at some other conversation.
+- **The driver** is the one `ChatController.send` path, as before.
 
-**A headless turn must not park on an answer.** `TurnSettings.disabled` is the
-set of capabilities a turn is not offered; `ChatMeta.headless` (set by the
-reminder on the chat's `meta.json`) adds `ask` and `task` to it, since an
-`ask_user` parks the turn on a completer nobody will complete and a `task`
-fan-out could do the same through a sub-agent. A built-in project's takes
-(`builtin_project.dart`) fold into the same set — see "Projects" — so one value
-answers what the turn is and is not offered, and the prompt and the tool list
-cannot disagree. `meta.approveMode` is pinned to `never` for the same reason:
-an approval banner nobody presses is a turn that never ends.
+### The agent's own
 
-**How long the chat lives is the reminder's `tempChatTtl`**, written onto its
-`meta.json` as it is, null and all — the same field the chat settings page sets,
-inheriting the project's or the app's answer where it is null. It was a bool,
-and a bool could name only one of the five TTLs; `fromJson` still reads the old
-key, where false meant `TempChatTtl.off` and true meant inherit.
+`AgentCapability.trigger` is what offers the trio (`trigger_set`,
+`trigger_list`, `trigger_remove`); a sub-agent is not offered it (it is not
+its own chat's), and a headless turn is — a reminder may arm its next run.
+The registry the turn reaches is `ChatTriggerRegistry` — one chat's face
+over the list — built by the backend like `saveArtifact` is, with the
+provider's notifier behind it, so a registration is on disk and under watch
+the moment the tool answers. The chat's project travels with the registry:
+a timer's `registeredAt` is the registering moment, and the member a
+`trigger_set` names is checked against that project's library there — an
+unknown one refuses the registration with what was not found, the model's
+error to fix. `trigger_set`'s parse is
+`triggerDraftFromArgs` and the registry anchors and stores; a timer's
+`registeredAt` is the registering moment, not the parse's.
 
-**`lastFiredAt` is stamped before the turn runs, never after.** A crash mid-turn
-costs a notification but must not re-run the whole prompt against the workspace.
-The stamp goes through `onReminderFired` before the driver is called; the
-scheduler recomputes `nextFireAt` after the turn completes. A one-shot that
-fired has `nextFireAt` null (nothing armed); a repeating reminder moves to its
-next occurrence.
+### Who a fire addresses
 
-**Dart is the sole arbiter of what runs.** Kotlin only nudges — an id stashed
-beside `ReminderAlarms.takeFired` — so whichever of the three triggers notices
-first (the in-process timer, a nudge, startup catch-up) stamps the reminder and
-runs it, and the others find the stamp moved. A single-flight set keyed by
-reminder id guards against the overlap, and the id goes into it **before the
-first await** — asking the platform anything is a round trip, and two triggers
-either side of one would both find nothing running.
+`Trigger.member` is a name an Omada room routes the fire to, wherever the
+fire lands — one shape, no branching on the target: a chatless fire makes
+its headless chat with the member as its first speaker, a same-chat one
+queues on the member's FIFO. The runner puts the sigil'd mention on the
+head of the send text (`prompted(prompt, reason, member:)` — the one
+wording, the mention ahead of the prompt, the kind's reason below), and
+everything after that is the room's own machinery: the composer resolves
+the reference into the message's documents, `mentioned()` reads them, the
+FIFO and the author stamp follow, and the fire is generation zero — the
+user's own message analog, uncapped itself, its handoffs capped. In a
+direct chat nothing stamps; the mention rides inline as instruction
+material, the same rule any message the user sends takes. Validation lives
+where the library happens to be — registration and the editor — while a
+stored member later deleted is not re-checked: at fire time a name the
+library does not hold is prose, which the room's mention filter already
+answers.
 
-**A fire the platform will not hold is handed back to the alarm rather than
-run.** `_deferToAlarm` asks `ReminderAlarms.canHoldTurn` and, where the answer
-is no, re-arms the reminder for the time it was already due instead of starting
-a turn — the system delivers that at once, and its broadcast is the one moment
-a backgrounded app may hold the process open. Off screen the timer was
-otherwise starting turns nothing could keep alive, which Android kills partway
-through the reply, leaving the user a chat to press Continue on. Never twice
-without a run in between; `canHoldTurn` is true wherever there is nothing to
-ask, so this is Android's problem alone. See "Waking for a reminder" in
-`android/CLAUDE.md` for the other end, and for the hold the receiver takes and
-`doneFiring` releases.
+### What a fire says
 
-**`doneFiring` is a no-op while a fire's turn is running.** A fire stamps the
-reminder list mid-turn through `onReminderFired`, which re-enters `reload`
-(the `ref.listen` on the list), and a duplicate exact alarm re-nudges; either
-calling `doneFiring` then would release the receiver's hold before the turn's
-own foreground-service hold (`TurnKeepAlive`'s `running`) had registered, and
-the process is killed under it — the hazard "Staying alive off screen" names.
-`_runningIds` holds the fire from before its first await until it completes, so
-the release is gated on it being empty: a re-entrant reload or a duplicate nudge
-does nothing, and the fire's own handler releases once the turn is done, by
-which point `turns > 0` has the service. The turn completing is also what
-advances `nextFireAt`, so a kill that left it stale — and catch-up re-firing it
-as "Ran late" on the next open — no longer happens.
+The kind words its reason ("schedule: <the moment>", "file <path>
+changed"), and the reason rides in the prompt the runner sends — a line
+below what was set, so the log says why a turn started. The completion
+notification words the outcome as it always did, "Ran late" where catch-up
+found it so. The completion notification's tap is the chat the turn ran in,
+whatever the target; a same-chat trigger's completion is the conversation
+itself, and the notification is where it answers for a turn that finished
+unwatched.
 
-**Catch-up fires overdue reminders at launch**, the same lazy semantics the
-temp-chat sweep uses. A one-shot more than two minutes past its time says
-"Ran late" in its completion notification; an exact alarm arrives within
-seconds and does not.
-
-`nextFireAt` is precomputed and persisted, not derived on the Kotlin side: the
-boot receiver reads `reminders.json` with no engine running and arms AlarmManager
-against the times Dart already worked out. A second copy of the recurrence math
-in Kotlin would drift from this one across DST and month ends.

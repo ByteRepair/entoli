@@ -12,12 +12,14 @@ import "../../providers.dart";
 import "../memory/memory_page.dart";
 import "../profile/profile_page.dart";
 import "../settings/agents_settings.dart";
+import "../settings/permissions_section.dart";
 import "../settings/skills_settings.dart";
-import "../fonts.dart";
+import "../settings/writable_dirs_section.dart";
 import "../widgets/destructive_button.dart";
-import "../widgets/dialogs.dart";
+import "../widgets/dialogs.dart" show confirm, promptForText;
 import "../widgets/environment_section.dart";
 import "../widgets/resettable_field.dart";
+import "../widgets/settings_card.dart";
 import "../workspace/workspace_page.dart";
 import "sidebar.dart";
 
@@ -86,81 +88,72 @@ class ProjectSettingsPage extends ConsumerWidget {
       appBar: AppBar(title: const Text("Project settings")),
       body: ListView(
         children: [
-          _CopyField(
-            label: "Project name",
-            value: project,
-            snack: "Copied project name",
-          ),
+          // The cards: what the project is, what it holds, and how a turn
+          // reaches out of it. Name and path copy themselves — the whole card
+          // is the button the copy icon used to be — description keeps its
+          // dialog on the tap, workspace and the prompts pages keep their
+          // pushes, and chats states its count without one.
+          SettingsCardRow(children: [
+            _NameCard(project: project),
+            _PathCard(path: path),
+            if (builtIn == null) _DescriptionCard(project: project),
+            WorkspaceTile(
+              root: ref
+                  .watch(appConfigProvider)
+                  .projectWorkspaceDir(project: project),
+              title: "Project workspace",
+            ),
+            _ChatsCard(count: count),
+          ]),
           const Divider(),
-          _CopyField(
-            label: "Path",
-            value: path,
-            snack: "Copied project path",
-          ),
-          if (builtIn == null) ...[
-            const Divider(),
-            _DescriptionRow(project: project),
-          ],
+          // Instructions, skills and agents: what a turn in this project is
+          // told by name. The built-ins' pages are view-only — the sections
+          // gate themselves on the spec — but what they hold is shown, the way
+          // the Memory rows are.
+          SettingsCardRow(children: [
+            if (builtIn?.bundledInstructions == null ||
+                builtIn?.includesUserInstructions == true)
+              _ProfileCard(project: project),
+            _PromptsCard(
+              project: project,
+              kind: CompletionKind.skill,
+              icon: Icons.extension_outlined,
+            ),
+            _PromptsCard(
+              project: project,
+              kind: CompletionKind.agent,
+              icon: Icons.smart_toy_outlined,
+            ),
+          ]),
           const Divider(),
-          WorkspaceTile(
-            root: ref.watch(appConfigProvider).projectWorkspaceDir(project: project),
-            title: "Project workspace",
-          ),
+          SettingsCardRow(children: [
+            _EnvironmentCard(project: project),
+            if (builtIn == null) _PermissionsCard(project: project),
+          ]),
+          const Divider(),
           if (builtIn == null) ...[
-            const Divider(),
             _UseProjectMemoryRow(project: project),
             MemoryTile(
               dir: ref.watch(appConfigProvider).memoryDir(project: project),
               title: "Project memories",
             ),
-          ],
-          const Divider(),
-          ListTile(
-            title: const Text("Chats"),
-            trailing: Text("$count"),
-          ),
-          if (builtIn == null) ...[
             const Divider(),
-            _OmadaRow(project: project),
-            if (ref.watch(projectSettingsProvider(project).select((s) => s.omada))) ...[
-              _OmadaOrderingRow(project: project),
-              _OmadaMaxGenerationsRow(project: project),
-            ],
+          ],
+          // The Omada rows: the toggle — read-only for a built-in, whose
+          // answer is its spec — and the ordering and round limit, shown
+          // wherever the answer is on.
+          _OmadaRow(project: project, builtIn: builtIn),
+          if (ref.watch(omadaOnProvider(project))) ...[
+            _OmadaOrderingRow(project: project),
+            _OmadaMaxGenerationsRow(project: project),
           ],
           // A direct turn's step limit is a question about turns, not about
           // Omada — built-ins included, where a project's own limit is the
           // one a built-in note's turns also answer to.
           const Divider(),
           _TurnMaxStepsRow(project: project),
-          // A built-in that ships its own note reads no file, so there is no
-          // instructions to edit for one — unless it asks for the user's files
-          // on top of the note, in which case the project AGENTS.md is the
-          // file the row opens.
-          if (builtIn?.bundledInstructions == null ||
-              builtIn?.includesUserInstructions == true) ...[
-            const Divider(),
-            _ProfileRow(project: project),
-          ],
-          // What a turn in this project is told by name: the shared skills and
-          // agents pages against this project's directories. The built-ins'
-          // pages are view-only — the sections gate themselves on the spec —
-          // but what they hold is shown, the way the Memory rows are.
-          const Divider(),
-          _PromptsRow(
-            project: project,
-            kind: CompletionKind.skill,
-            icon: Icons.extension_outlined,
-          ),
-          const Divider(),
-          _PromptsRow(
-            project: project,
-            kind: CompletionKind.agent,
-            icon: Icons.smart_toy_outlined,
-          ),
           const Divider(),
           _TempChatTtlRow(project: project),
-          const Divider(),
-          _EnvironmentRow(project: project),
           if (builtIn == null) ...[
             const Divider(),
             DestructiveButton(
@@ -180,31 +173,34 @@ class ProjectSettingsPage extends ConsumerWidget {
   }
 }
 
-class _CopyField extends StatelessWidget {
-  const _CopyField({
-    required this.label,
-    required this.value,
-    required this.snack,
-  });
+class _NameCard extends StatelessWidget {
+  const _NameCard({required this.project});
 
-  final String label;
-  final String value;
-  final String snack;
+  final String project;
 
   @override
   Widget build(BuildContext context) {
-    return ListTile(
-      title: Text(label),
-      subtitle: Text(
-        value,
-        style: const TextStyle(fontFamily: monoFamily),
-        overflow: TextOverflow.ellipsis,
-      ),
-      trailing: IconButton(
-        icon: const Icon(Icons.copy),
-        tooltip: "Copy",
-        onPressed: () => copyToClipboard(context, value, said: snack),
-      ),
+    return SettingsCard.copy(
+      icon: Icons.badge_outlined,
+      title: "Project name",
+      value: project,
+      said: "Copied project name",
+    );
+  }
+}
+
+class _PathCard extends StatelessWidget {
+  const _PathCard({required this.path});
+
+  final String path;
+
+  @override
+  Widget build(BuildContext context) {
+    return SettingsCard.copy(
+      icon: Icons.route,
+      title: "Path",
+      value: path,
+      said: "Copied project path",
     );
   }
 }
@@ -213,8 +209,8 @@ class _CopyField extends StatelessWidget {
 /// app-wide question; empty means the screen asks nothing. The reset button
 /// is the way back to null — a blank save is the other value, not the
 /// default's.
-class _DescriptionRow extends ConsumerWidget {
-  const _DescriptionRow({required this.project});
+class _DescriptionCard extends ConsumerWidget {
+  const _DescriptionCard({required this.project});
 
   final String project;
 
@@ -222,16 +218,13 @@ class _DescriptionRow extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final description =
         ref.watch(projectSettingsProvider(project).select((s) => s.description));
-    return ListTile(
-      title: const Text("Description"),
+    return SettingsCard(
+      icon: Icons.description_outlined,
+      title: "Description",
       // What the screen asks for this project, the resolver owning the
       // null/blank/text cases; null out of it is the blank answer, shown
       // here as what it is.
-      subtitle: Text(
-        emptyChatQuestionFor(project, description: description) ?? "Empty",
-        maxLines: 2,
-        overflow: TextOverflow.ellipsis,
-      ),
+      subtitle: emptyChatQuestionFor(project, description: description) ?? "Empty",
       trailing: ResetButton(
         resetLabel: "default",
         onReset: () =>
@@ -253,18 +246,33 @@ class _DescriptionRow extends ConsumerWidget {
   }
 }
 
+class _ChatsCard extends StatelessWidget {
+  const _ChatsCard({required this.count});
+
+  final int count;
+
+  @override
+  Widget build(BuildContext context) {
+    return SettingsCard(
+      icon: Icons.forum_outlined,
+      title: "Chats",
+      subtitle: "$count",
+    );
+  }
+}
+
 /// Opens the editor for the project's instructions, and says whether the
 /// file is there.
-class _ProfileRow extends ConsumerStatefulWidget {
-  const _ProfileRow({required this.project});
+class _ProfileCard extends ConsumerStatefulWidget {
+  const _ProfileCard({required this.project});
 
   final String project;
 
   @override
-  ConsumerState<_ProfileRow> createState() => _ProfileRowState();
+  ConsumerState<_ProfileCard> createState() => _ProfileCardState();
 }
 
-class _ProfileRowState extends ConsumerState<_ProfileRow> {
+class _ProfileCardState extends ConsumerState<_ProfileCard> {
   bool? _set;
 
   @override
@@ -282,11 +290,10 @@ class _ProfileRowState extends ConsumerState<_ProfileRow> {
 
   @override
   Widget build(BuildContext context) {
-    return ListTile(
-      leading: const Icon(Icons.rule),
-      title: const Text("Instructions"),
-      subtitle: Text(_set == null ? "" : (_set! ? "Set" : "Not set")),
-      trailing: const Icon(Icons.chevron_right),
+    return SettingsCard(
+      icon: Icons.rule,
+      title: "Instructions",
+      subtitle: _set == null ? "" : (_set! ? "Set" : "Not set"),
       onTap: () async {
         await Navigator.of(context).push(
           MaterialPageRoute(builder: (_) => ProfilePage(project: widget.project)),
@@ -319,23 +326,27 @@ class _UseProjectMemoryRow extends ConsumerWidget {
 }
 
 /// Whether this project's chats can carry several agents in one round. A
-/// user project's toggle; the page gates it off for a built-in.
+/// user project's toggle; a built-in's is the same row with the switch
+/// disabled, its answer being its spec — the state shown, not offered.
 class _OmadaRow extends ConsumerWidget {
-  const _OmadaRow({required this.project});
+  const _OmadaRow({required this.project, required this.builtIn});
 
   final String project;
+  final BuiltinProject? builtIn;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final on = ref.watch(projectSettingsProvider(project).select((s) => s.omada));
+    final on = ref.watch(omadaOnProvider(project));
     return SwitchListTile(
       title: const Text("Omada"),
       subtitle: const Text(
           "Several named agents take part in a chat's replies, alongside the "
           "main one."),
       value: on,
-      onChanged: (value) =>
-          ref.read(projectSettingsProvider(project).notifier).setOmada(value),
+      onChanged: builtIn == null
+          ? (value) =>
+              ref.read(projectSettingsProvider(project).notifier).setOmada(value)
+          : null,
     );
   }
 }
@@ -425,8 +436,8 @@ class _TurnMaxStepsRow extends ConsumerWidget {
 /// The project's own command variables, beside the app-level ones. A name set
 /// here wins over one set there, and nothing set here is anything but the
 /// app's where the project sets none.
-class _EnvironmentRow extends ConsumerWidget {
-  const _EnvironmentRow({required this.project});
+class _EnvironmentCard extends ConsumerWidget {
+  const _EnvironmentCard({required this.project});
 
   final String project;
 
@@ -434,13 +445,12 @@ class _EnvironmentRow extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final settings = ref.watch(projectSettingsProvider(project));
     final count = settings.environment?.length ?? 0;
-    return ListTile(
-      leading: const Icon(Icons.key_outlined),
-      title: const Text("Environment"),
-      subtitle: Text(count == 0
+    return SettingsCard(
+      icon: Icons.key_outlined,
+      title: "Environment",
+      subtitle: count == 0
           ? "Default (inherited)"
-          : "$count variable${count == 1 ? "" : "s"}"),
-      trailing: const Icon(Icons.chevron_right),
+          : "$count variable${count == 1 ? "" : "s"}",
       onTap: () => Navigator.of(context).push(
         MaterialPageRoute(
           builder: (_) => _ProjectEnvironmentPage(project: project),
@@ -500,8 +510,8 @@ class _TempChatTtlRow extends ConsumerWidget {
 /// project's library serves, inherited and bundled included, since that is
 /// what a turn in the project is offered; the page itself says which are the
 /// project's own.
-class _PromptsRow extends ConsumerWidget {
-  const _PromptsRow({
+class _PromptsCard extends ConsumerWidget {
+  const _PromptsCard({
     required this.project,
     required this.kind,
     required this.icon,
@@ -515,11 +525,10 @@ class _PromptsRow extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final count =
         ref.watch(promptLibraryProvider(project)).entries(kind).length;
-    return ListTile(
-      leading: Icon(icon),
-      title: Text(kind.label),
-      subtitle: Text(count == 0 ? "None" : "$count"),
-      trailing: const Icon(Icons.chevron_right),
+    return SettingsCard(
+      icon: icon,
+      title: kind.label,
+      subtitle: count == 0 ? "None" : "$count",
       onTap: () => Navigator.of(context).push(
         MaterialPageRoute(
           builder: (_) => Scaffold(
@@ -534,6 +543,110 @@ class _PromptsRow extends ConsumerWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// The project's own permission rules, a page like the environment's — the
+/// same section widget both serve, over this tier's save.
+class _PermissionsCard extends ConsumerWidget {
+  const _PermissionsCard({required this.project});
+
+  final String project;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final settings = ref.watch(projectSettingsProvider(project));
+    final count = settings.permissions.length;
+    return SettingsCard(
+      icon: Icons.shield_outlined,
+      title: "Permissions",
+      subtitle: count == 0
+          ? "Default (inherited)"
+          : "$count rule${count == 1 ? "" : "s"}",
+      onTap: () => Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => _ProjectPermissionsPage(project: project),
+        ),
+      ),
+    );
+  }
+}
+
+class _ProjectPermissionsPage extends ConsumerWidget {
+  const _ProjectPermissionsPage({required this.project});
+
+  final String project;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final settings = ref.watch(projectSettingsProvider(project));
+    final theme = Theme.of(context);
+    return Scaffold(
+      appBar: AppBar(title: const Text("Permissions")),
+      body: ListView(children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+          child: Text(
+            "The app's own permissions (Settings > General > Agent) apply "
+            "before these, in every project, without being listed here.",
+            style: theme.textTheme.bodySmall
+                ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+          ),
+        ),
+        const SizedBox(height: 4),
+        PermissionsSection(
+          rules: settings.permissions,
+          description: "Standing rules for this project's chats. Writes "
+              "outside the workspaces that a rule grants are also where the "
+              "sandbox's write grant widens.",
+          onSaved: (rules) => ref
+              .read(projectSettingsProvider(project).notifier)
+              .setProjectPermissions(rules),
+        ),
+        const Divider(),
+        WritableDirsSection(
+          dirs: settings.writableDirs,
+          description: "Directories the project's sandboxed commands may "
+              "write to, beside the workspace.",
+          onSaved: (dirs) => ref
+              .read(projectSettingsProvider(project).notifier)
+              .setWritableDirs(dirs),
+        ),
+        const Divider(),
+        _SandboxRepromptRow(project: project),
+      ]),
+    );
+  }
+}
+
+/// Whether a sandbox-denied write is offered back here, over the app
+/// default. Null inherits; the row says what the effective answer is and a
+/// switch puts this project's own in place — the same
+/// inherit-then-override shape the TTL row keeps.
+class _SandboxRepromptRow extends ConsumerWidget {
+  const _SandboxRepromptRow({required this.project});
+
+  final String project;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final override = ref.watch(
+        projectSettingsProvider(project).select((s) => s.sandboxReprompt));
+    final inherited = ref.watch(
+        projectSettingsProvider(null).select((s) => s.sandboxReprompt ?? true));
+    return SwitchListTile(
+      title: const Text("Offer to rerun sandbox-denied commands"),
+      subtitle: Text(override == null
+          ? "Default (${inherited ? "on" : "off"}). A switch here overrides "
+              "the app's default for this project's chats."
+          : override
+              ? "On for this project's chats."
+              : "Off for this project's chats."),
+      value: override ?? inherited,
+      onChanged: (value) => ref
+          .read(projectSettingsProvider(project).notifier)
+          .setProjectSandboxReprompt(value),
     );
   }
 }

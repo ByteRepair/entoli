@@ -17,6 +17,7 @@ import "../../../domain/backup_handoff.dart";
 import "../../../domain/file_handoff.dart";
 import "../../../domain/local_llm.dart";
 import "../../../domain/local_model_store.dart";
+import "../../../domain/file_watches.dart";
 import "../../../domain/reminder_alarms.dart";
 import "../../../domain/rootfs_store.dart";
 import "../../../domain/secret_store.dart";
@@ -142,6 +143,11 @@ AssistantLaunch platformAssistantLaunch() => const UnavailableAssistantLaunch();
 Future<ReminderAlarms> platformReminderAlarms() async =>
     const UnavailableReminderAlarms();
 
+/// An IndexedDB file system has no inotify to carry, and nothing a browser
+/// runs is in the way of a change the app itself made — the app would have
+/// to hear its own writes, which the trigger's own edit is.
+FileWatches platformFileWatches() => const UnavailableFileWatches();
+
 /// IndexedDB, through the same `FileSystem` the rest of the app is written
 /// against. The layout under [platformDataDir] is the one on disk elsewhere.
 ///
@@ -189,6 +195,9 @@ Future<String?> platformCaptureLoginPath() async => null;
 /// No-op: a browser has no `chmod`, and no `bash` to guard against. The file
 /// tools' `safeRelativePath` already prevents reaching skill dirs.
 Future<void> platformChmodReadOnly(List<String> paths) async {}
+
+/// No-op: a browser has no `chmod`, so there is no lock to release either.
+Future<void> platformChmodWritable(List<String> paths) async {}
 
 /// No-op on the web: there is nothing to toggle. The action runs directly.
 Future<T> platformWithWritableDir<T>(

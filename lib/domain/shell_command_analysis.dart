@@ -15,6 +15,7 @@ class ShellCommandAnalysis {
     required this.modelable,
     required this.unmodelableReasons,
     required this.escalationReasons,
+    required this.command,
   });
 
   factory ShellCommandAnalysis.parse(String command, {bool isWindows = false}) {
@@ -23,6 +24,7 @@ class ShellCommandAnalysis {
         modelable: false,
         unmodelableReasons: const ["commands on this platform are not analyzed"],
         escalationReasons: const [],
+        command: command,
       );
     }
 
@@ -33,6 +35,7 @@ class ShellCommandAnalysis {
         modelable: false,
         unmodelableReasons: List.unmodifiable(reasons),
         escalationReasons: const [],
+        command: command,
       );
     }
     final parsed = _Pipeline._of(tokens);
@@ -90,6 +93,7 @@ class ShellCommandAnalysis {
               modelable: false,
               unmodelableReasons: List.unmodifiable(reasons),
               escalationReasons: const [],
+              command: command,
             );
           }
           final inside = _Pipeline._of(inner);
@@ -120,6 +124,7 @@ class ShellCommandAnalysis {
       modelable: true,
       unmodelableReasons: const [],
       escalationReasons: List.unmodifiable(escalations),
+      command: command,
     );
   }
 
@@ -135,13 +140,97 @@ class ShellCommandAnalysis {
   final List<String> escalationReasons;
 
   /// The sentence the model reads when this was escalated, or null where
-  /// nothing needs saying.
+  /// nothing needs saying. Not a bare refusal: the reasons are named, the
+  /// command's segments are offered where the parse saw them, and the way out
+  /// — split the command, or write the script to the workspace — is spelled
+  /// out, so the model rewrites instead of retrying the same shape.
   String? get escalationNote {
     final all = [...unmodelableReasons, ...escalationReasons];
     if (all.isEmpty) return null;
-    return "Not classified automatically (${all.join("; ")}): this command "
-        "was not run. Rewrite it so what it does is plain, or split it.";
+    final segments = modelableSegments;
+    final segmentAdvice =
+        segments == null || segments.length < 2
+            ? ""
+            : "\nSegments the command parses to, run each as its own bash "
+                "call instead:\n${[for (final s in segments) "- $s"].join("\n")}";
+    return "Not run: this command cannot be checked as one piece. The parse "
+        "found:\n${[for (final r in all) "- $r"].join("\n")}\n"
+        "A compound command is judged segment by segment, and one the parse "
+        "cannot model is judged for nothing — no rule and no classifier can "
+        "allow it. Rewrite it so what it does is plain, or split it into "
+        "separate bash calls, one per step."
+        "$segmentAdvice"
+        "\nA script too long to inline may be written to the workspace with "
+        "the write tool and run by its path.";
   }
+
+  /// The top-level pieces the parse could see, where it got far enough to see
+  /// them. Null where the tokenizer failed outright — an unterminated quote,
+  /// a substitution never closed — there being nothing reliable to name.
+  /// Computed on first read: the segments are consumed by the refusal note
+  /// and by per-segment rule matching, never by a command that parsed clean.
+  List<String>? get modelableSegments {
+    if (unmodelableReasons.isNotEmpty) return null;
+    return _segments ??= _segmentsOf(command!);
+  }
+
+  /// The command the parse ran over, kept for the lazy split above.
+  final String? command;
+  List<String>? _segments;
+}
+
+/// The top-level pieces [command] parses to, split on the operators the
+/// grammar takes and ignoring anything inside a quote or a substitution —
+/// those are one segment's own content. For the refusal note, naming what
+/// the model did write where the parse can see it.
+List<String> _segmentsOf(String command) {
+  final segments = <String>[];
+  final current = StringBuffer();
+  var depth = 0;
+  var quote = "";
+  for (var i = 0; i < command.length; i++) {
+    final c = command[i];
+    if (quote.isNotEmpty) {
+      current.write(c);
+      if (c == quote && (i == 0 || command[i - 1] != "\\")) quote = "";
+      continue;
+    }
+    if (c == "'" || c == "\"") {
+      quote = c;
+      current.write(c);
+      continue;
+    }
+    if (c == "(" || c == r"$") {
+      depth++;
+      current.write(c);
+      continue;
+    }
+    if (c == ")") {
+      depth--;
+      current.write(c);
+      continue;
+    }
+    if (depth == 0 && c == "\\") {
+      // A backslash escapes the next character; both belong to the segment.
+      current.write(c);
+      if (i + 1 < command.length) current.write(command[++i]);
+      continue;
+    }
+    if (depth == 0 && (c == "|" || c == "&" || c == ";" || c == "\n")) {
+      if (current.toString().trim().isNotEmpty) {
+        segments.add(current.toString().trim());
+      }
+      current.clear();
+      // `&&` and `||` swallow their second character.
+      if (i + 1 < command.length && command[i + 1] == c) i++;
+      continue;
+    }
+    current.write(c);
+  }
+  if (current.toString().trim().isNotEmpty) {
+    segments.add(current.toString().trim());
+  }
+  return segments;
 }
 
 /// Variables that decide where a command's writes, reads or tools land.

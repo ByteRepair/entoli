@@ -13,6 +13,7 @@ import "../../domain/tone.dart";
 import "../../domain/prompt_library.dart";
 import "skill_tool.dart";
 import "task_tool.dart";
+import "trigger_tool.dart";
 
 /// The prompt prose this file assembles, embedded at build time from
 /// `assets/prompts/projects/default/system/` (`tool/gen_prompts.dart`). The
@@ -50,6 +51,7 @@ class AgentCapabilities {
     required this.task,
     required this.artifact,
     required this.createSkill,
+    this.trigger = false,
   });
 
   /// The full set, before the platform's facts or a project's takes away any
@@ -61,6 +63,7 @@ class AgentCapabilities {
     task: true,
     artifact: true,
     createSkill: true,
+    trigger: true,
   );
 
   /// Whether a command can run at all: the platform's fact, which a project
@@ -71,6 +74,7 @@ class AgentCapabilities {
   final bool task;
   final bool artifact;
   final bool createSkill;
+  final bool trigger;
 
   /// What this device can offer, minus what [disabled] takes away — the
   /// project's takes, and a headless turn's.
@@ -85,6 +89,7 @@ class AgentCapabilities {
           task: !disabled.contains(AgentCapability.task),
           artifact: !disabled.contains(AgentCapability.artifact),
           createSkill: !disabled.contains(AgentCapability.createSkill),
+          trigger: !disabled.contains(AgentCapability.trigger),
         );
 
   /// What a sub-agent runs under: unattended, so it asks nothing, fans out
@@ -96,6 +101,7 @@ class AgentCapabilities {
         task: false,
         artifact: false,
         createSkill: false,
+        trigger: false,
       );
 
   /// Whether `present_plan` is offered: the one tool that both parks the turn
@@ -261,6 +267,17 @@ String peerTurnText(String text, {required String by, required DateTime at}) =>
         "user):\n\n$text",
         at);
 
+/// What a compaction summary reads as: a user-role message carrying the
+/// summary in place of the messages it stands for. Nobody said it — it says
+/// how to read what is below it, which makes it the same kind of thing as the
+/// system prompt — but it has to be a message of the conversation to sit
+/// between the summarized span and the verbatim one, so it is worded here like
+/// a user turn and stamped with no moment: there was none it was said at.
+String summarizedTurnText(String summary) =>
+    "The earlier part of this conversation has been summarized to keep the "
+    "context small. It follows; everything after it is the conversation "
+    "itself, unchanged.\n\n<summary>\n$summary\n</summary>";
+
 /// The member's prompt, from the library as it stands now: the file is the
 /// member. Null where the name is no longer in the library — the controller
 /// has already routed such a turn to the main agent, so this is unreachable
@@ -276,35 +293,6 @@ const passWord = "pass";
 /// What the conversation calls the main agent wherever a viewer is named and
 /// the reply carries no author — the label, not a member handle.
 const mainAgentLabel = "(main agent)";
-
-/// The one rule a member turn is told beyond its own instructions: the
-/// convention that makes declining possible, and the mention that makes
-/// handing off one. Appended to the member's prompt rather than the system
-/// prompt, which stays the one cacheable prefix.
-String memberTurnInstructions() => """
-## The room
-
-You are one member of a project team, answering a turn addressed to you. To
-hand work to another member, mention them by handle (for example
-@researcher) in your reply — their turn follows yours. To decline a turn
-addressed to you, reply with the single word `$passWord` and nothing else.
-Address the user plainly; the user reads what you write.
-
-Do not write your own handle in the reply — not even to sign it. A reply
-that names two members is read as addressing a group, and no one's turn
-follows a group.""";
-
-/// The house's half of the member's room contract: in an Omada-on project the
-/// main agent reaches members by handle too. Beside the member's half, never
-/// the system prompt — which stays the one cacheable prefix.
-String houseTurnInstructions() => """
-## The room
-
-You are the main agent of a project team, and you answer the user directly.
-To bring in another member, mention their handle (for example @researcher)
-in your reply — their turn follows yours, and you can pass them the part of
-the work that suits them. You cannot run a member yourself: addressing them
-by handle is the way.""";
 
 /// Where there is no shell, the model cannot run commands. But it does have a
 /// filesystem: the `read`/`write`/`edit` tools work on the workspace via the
@@ -353,7 +341,8 @@ String _withoutShell({
 /// Empty produces nothing, so a device with no skills keeps the prompt — and
 /// the warmed prefix over it — exactly as it was.
 String skillsSection(List<PromptDocument> skills) {
-  final usable = skills.where((s) => s.modelInvocable).toList();
+  final usable =
+      skills.where((s) => s.modelInvocable && !s.isCallback).toList();
   if (usable.isEmpty) return "";
   final listed = [
     for (final skill in usable)
@@ -409,6 +398,9 @@ String _toolFragments(AgentCapabilities caps, {bool oneShot = false}) {
           "\n   to work through a plan ($planFileName in the workspace)",
     if (caps.presentPlan)
       "`$presentPlanToolName`\n   to put the plan to the user for approval",
+    if (caps.trigger && !oneShot)
+      "`$triggerSetName`/`$triggerListName`/`$triggerRemoveName`"
+          "\n   to set what sends a message into this chat later",
   ];
   if (acts.length == 1) return acts.single;
   final head = acts.sublist(0, acts.length - 1).join(", ");

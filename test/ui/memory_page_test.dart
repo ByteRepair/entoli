@@ -10,6 +10,7 @@ import "package:agent_chat/ui/memory/memory_page.dart";
 import "package:agent_chat/ui/settings/settings_page.dart";
 import "package:agent_chat/ui/sidebar/project_settings_page.dart";
 import "package:agent_chat/ui/sidebar/sidebar.dart";
+import "package:agent_chat/ui/widgets/settings_card.dart";
 
 import "../harness.dart";
 
@@ -265,6 +266,13 @@ void main() {
       await io(tester, () => projectStore.add("research keeps its own"));
 
       await app.pump(tester, const ProjectSettingsPage(project: "research"));
+      // The card sections sit above it; the memory rows are below the fold.
+      await tester.scrollUntilVisible(
+        find.text("Memories"),
+        200,
+        scrollable: find.byType(Scrollable).last,
+      );
+      await settleIo(tester);
       await tester.tap(find.widgetWithText(ListTile, "Memories"));
       await settleIo(tester);
 
@@ -279,12 +287,12 @@ void main() {
       await app.pump(tester, const ProjectSettingsPage(project: "research"));
       await settleIo(tester);
       await scrollTo(tester, find.text("Instructions"));
-      expect(find.widgetWithText(ListTile, "Instructions"), findsOneWidget);
+      expect(find.widgetWithText(SettingsCard, "Instructions"), findsOneWidget);
 
       await app.pump(tester, const ProjectSettingsPage(project: "anonymous"));
       await settleIo(tester);
       await scrollTo(tester, find.text("Temporary chats"));
-      expect(find.widgetWithText(ListTile, "Instructions"), findsNothing);
+      expect(find.widgetWithText(SettingsCard, "Instructions"), findsNothing);
     });
 
     // Byte Repair is the built-in that has a settings page: its page shows the
@@ -297,7 +305,7 @@ void main() {
       await settleIo(tester);
       await scrollTo(tester, find.text("Environment"));
 
-      expect(find.widgetWithText(ListTile, "Instructions"), findsOneWidget);
+      expect(find.widgetWithText(SettingsCard, "Instructions"), findsOneWidget);
       expect(find.text("Temporary chats"), findsOneWidget);
       expect(find.text("Environment"), findsOneWidget);
       expect(find.text("Project memory"), findsNothing);

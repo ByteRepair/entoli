@@ -3,7 +3,7 @@ name: Release
 # Attaches the binaries a published release is downloaded from — a signed App
 # Bundle for Google Play and a Linux AppImage — to the tag they were built
 # from, each with a provenance attestation beside it, and uploads the bundle to
-# Play. The release APKs are off; `debug-build.yml` builds an APK by hand.
+# Play. There is no release APK; `debug-build.yml` builds an APK by hand.
 # `release-build.yml` is what builds them and can be run on its own;
 # `pages.yml` answers the same event for the web app.
 # See "Releasing" in CLAUDE.md.
@@ -40,7 +40,7 @@ jobs:
 
   # A job of its own so the keystore and `contents: write` are never held by
   # the same one, and one run of it per file so a bundle on the release is
-  # about the file it sits beside rather than naming all five.
+  # about the file it sits beside rather than naming all of them.
   publish:
     needs: build
     runs-on: ubuntu-latest
@@ -50,7 +50,7 @@ jobs:
       # off until the repository is public, where attest-build-provenance fails
     strategy:
       # Each entry attests and uploads a different file, so one that fails
-      # should leave the other three attached rather than cancel them.
+      # should leave the other binaries attached rather than cancel them.
       fail-fast: false
       matrix:
         asset: ${{ fromJSON(needs.build.outputs.assets) }}

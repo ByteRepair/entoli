@@ -7,15 +7,17 @@ import "package:flutter_test/flutter_test.dart";
 import "package:agent_chat/data/sync/sync_hub.dart";
 import "package:agent_chat/domain/agent_backend.dart";
 import "package:agent_chat/domain/builtin_project.dart";
+import "package:agent_chat/domain/chat_log.dart";
 import "package:agent_chat/domain/chat_meta.dart";
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/domain/permission.dart";
 import "package:agent_chat/domain/project.dart";
 import "package:agent_chat/domain/prompt_library.dart";
 import "package:agent_chat/providers.dart";
+import "package:agent_chat/ui/chat/widgets/omada_separator.dart";
+import "package:agent_chat/ui/widgets/agent_picture.dart" show AgentPictureImage;
 import "package:agent_chat/ui/chat/chat_controller.dart";
 import "package:agent_chat/ui/chat/chat_page.dart";
-import "package:agent_chat/ui/chat/widgets/omada_separator.dart";
 import "package:agent_chat/ui/chat/widgets/composer.dart";
 import "package:agent_chat/ui/chat/widgets/message_bubble.dart";
 import "package:agent_chat/ui/chat/widgets/needs_setup_bar.dart";
@@ -23,6 +25,7 @@ import "package:agent_chat/ui/chat/widgets/synced_device_cards.dart";
 import "package:agent_chat/ui/sidebar/sidebar.dart";
 import "package:agent_chat/ui/theme.dart";
 
+import "../fakes.dart" show onePixelPng;
 import "../harness.dart";
 
 void main() {
@@ -179,10 +182,12 @@ void main() {
       await openEmpty(tester);
 
       expect(find.widgetWithText(ChoiceChip, anonProjectLabel), findsOneWidget);
+      expect(find.widgetWithText(ChoiceChip, myTeamProjectLabel), findsOneWidget);
       expect(find.widgetWithText(ChoiceChip, byteRepairProjectLabel), findsOneWidget);
-      expect(find.byType(ChoiceChip), findsNWidgets(2));
+      expect(find.byType(ChoiceChip), findsNWidgets(3));
       // Each built-in's badge carries its icon as the chip's avatar.
       expect(find.byIcon(Icons.visibility_off), findsOneWidget);
+      expect(find.byIcon(Icons.groups), findsOneWidget);
       expect(find.byIcon(Icons.verified_user), findsOneWidget);
     });
 
@@ -838,7 +843,7 @@ void main() {
       expect(find.text("Omada is turned on"), findsOneWidget);
       expect(find.text("Omada is turned off"), findsOneWidget);
       // Two separators between three messages-and-replies.
-      expect(find.byType(OmadaSeparator), findsNWidgets(2));
+      expect(find.byType(ConversationSeparator), findsNWidgets(2));
     });
 
     testWidgets("a user message under a separator keeps its alignment",
@@ -1171,4 +1176,124 @@ void main() {
       expect(find.text("Kept 1 memory."), findsNothing);
     });
   });
+
+  group("a compaction in the conversation", () {
+    testWidgets("the summary is rendered beneath the divider, without a tap",
+        (tester) async {
+      // A finished chat holding one exchange and a compaction marker of its
+      // own — written the way the real turn writes one: a record on the log,
+      // not a part of anything.
+      final at = DateTime.now();
+      final prompt = Message(
+          id: "m1", role: MessageRole.user, createdAt: at,
+          parts: const [MessagePart.text(text: "hello")]);
+      final reply = Message(
+          id: "m2",
+          role: MessageRole.assistant,
+          createdAt: at,
+          parts: const [MessagePart.text(text: "hi")]);
+      final chat = await io(tester, () async {
+        final state = makeState("compacted");
+        await app.repo.saveState(state);
+        await app.repo.append(state.id, [
+          ...recordsOf([prompt, reply]),
+          ChatRecord.turnEnd(messageId: "m2", reason: TurnEnd.done),
+          const ChatRecord.compaction(
+              upToMessageId: "m2", summary: "The user said hello."),
+        ]);
+        return app.repo.openChat(state.id);
+      });
+      await open(tester, chat.state.id);
+
+      // The divider is there, and the summary text with it — always visible,
+      // not behind a tap.
+      expect(find.byType(ConversationSeparator), findsOneWidget);
+      expect(find.text("Compact Conversation"), findsOneWidget);
+      expect(find.textContaining("The user said hello."), findsOneWidget);
+      // Rendered as a reply is: the AI text widget, not a sheet's content.
+      expect(
+          find.byWidgetPredicate(
+              (w) => w is MessageText && w.text.contains("The user said hello.")),
+          findsOneWidget);
+    });
+  });
+
+  group("an addressed member's picture", () {
+    // An Omada-on section whose reply names the member it answers — what
+    // `MessageBubble.author` draws — with the member's picture seeded beside
+    // its `.md`. Written the way the controller stamps a round of them.
+    Future<String> seedOmadaChat(WidgetTester tester,
+        {required String member, String? project, bool omada = true}) =>
+        io(tester, () async {
+          final at = DateTime(2026, 1, 1, 12);
+          final said = [
+            Message(
+                id: "u1",
+                role: MessageRole.user,
+                createdAt: at,
+                parts: [TextPart(text: '@$member look into it')],
+                documents: {"@$member": "their prompt"},
+                omadaOn: omada),
+            Message(
+                id: "a1",
+                role: MessageRole.assistant,
+                createdAt: at,
+                parts: const [TextPart(text: "Looking.")],
+                author: "@$member"),
+          ];
+          final chat = await app.repo.createChat(project: project ?? "work");
+          await app.writeChat(chat.copyWith(messages: said));
+          return chat.state.id;
+        });
+
+    testWidgets("a member with a picture has it beside their name", (tester) async {
+      final dir = app.config.promptsDir(CompletionKind.agent, project: "work");
+      File("$dir/scout.md").createSync(recursive: true);
+      File("$dir/scout.md").writeAsStringSync(
+          "---\ndescription: the scout\n---\n\nYou look ahead.\n");
+      File("$dir/scout.png").writeAsBytesSync(onePixelPng);
+
+      final id = await seedOmadaChat(tester, member: "scout", project: "work");
+      await open(tester, id);
+
+      expect(find.text("@scout"), findsOneWidget);
+      final avatar = find.descendant(
+          of: find.byType(MessageBubble), matching: find.byType(Image));
+      expect(avatar, findsOneWidget);
+      // `cacheWidth` wraps the provider in a ResizeImage; underneath it is
+      // the memory image of the bytes the test seeded.
+      final inner = (tester.widget<Image>(avatar).image as ResizeImage)
+          .imageProvider as MemoryImage;
+      expect(inner.bytes, onePixelPng);
+    });
+
+    testWidgets("a member with no picture, and the main agent's reply, name "
+        "themselves alone", (tester) async {
+      final id = await seedOmadaChat(tester, member: "scout", project: "work");
+      await open(tester, id);
+
+      expect(find.text("@scout"), findsOneWidget);
+      expect(find.byType(AgentPictureImage), findsNothing);
+      expect(find.byType(Image), findsNothing);
+    });
+
+    testWidgets("a stamp in a direct chat's history shows its name and picture "
+        "the same", (tester) async {
+      final dir = app.config.promptsDir(CompletionKind.agent);
+      File("$dir/scout.md").createSync(recursive: true);
+      File("$dir/scout.md").writeAsStringSync(
+          "---\ndescription: the scout\n---\n\nYou look ahead.\n");
+      File("$dir/scout.png").writeAsBytesSync(onePixelPng);
+
+      final id = await seedOmadaChat(tester, member: "scout", omada: false);
+      await open(tester, id);
+
+      // A stamp already on the record is fact, wherever Omada now stands:
+      // the label shows in a direct chat's section too, and the picture —
+      // read against this chat's project, the default one here — with it.
+      expect(find.text("@scout"), findsOneWidget);
+      expect(find.byType(Image), findsOneWidget);
+    });
+  });
+
 }

@@ -9,6 +9,7 @@ import "package:flutter_test/flutter_test.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "package:fs_shim/fs_io.dart" show fileSystemIo;
+import "package:http/http.dart" as http;
 
 import "package:agent_chat/core/config.dart";
 import "package:agent_chat/data/builtin/llm/local_prefill.dart";
@@ -31,7 +32,7 @@ import "package:agent_chat/domain/llm_provider.dart";
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/ui/widgets/resettable_field.dart" show LabelledField;
 import "package:agent_chat/domain/prompt_library.dart";
-import "package:agent_chat/domain/reminder.dart";
+import "package:agent_chat/domain/trigger.dart";
 import "package:agent_chat/domain/shell.dart";
 import "package:agent_chat/domain/temp_chat_ttl.dart";
 import "package:agent_chat/domain/voice.dart";
@@ -62,7 +63,7 @@ Shell _defaultShell(bool proot, String? abi) =>
 
 /// The fixed "now" every test runs under, so a reminder's fire time is judged
 /// against this rather than the wall clock. Picked before every reminder fire
-/// date the suite uses, so a reminder due "today" stays due and one set for
+/// date the suite uses, so a trigger due "today" stays due and one set for
 /// later is not yet due.
 final _testNow = DateTime(2026, 7, 1, 12);
 
@@ -150,7 +151,7 @@ class TestApp {
     FakeFileHandoff? handoff,
     FakeVoice? voice,
     FakeReminderAlarms? reminderAlarms,
-    List<Reminder> reminders = const [],
+    List<Trigger> triggers = const [],
     Set<String> voiceModels = const {},
     NativeVoiceEngines nativeVoice = NativeVoiceEngines.none,
     Set<String> linuxes = const {},
@@ -168,6 +169,7 @@ class TestApp {
     Clock? clock,
     bool appHidden = false,
     FakeSecretStore? secrets,
+    http.Client? marketplaceClient,
   }) {
     final config = tempConfig();
     final backend = FakeBackend();
@@ -176,7 +178,7 @@ class TestApp {
     final files = handoff ?? FakeFileHandoff();
     final assist = FakeAssistantLaunch();
     final alarms = reminderAlarms ?? FakeReminderAlarms(available: false);
-    // Pinned so a reminder's fire time is not judged against the wall clock
+    // Pinned so a trigger's fire time is not judged against the wall clock
     // the suite happens to run on. A test that needs a different now passes
     // its own [Clock.fixed].
     final testClock = clock ?? Clock.fixed(_testNow);
@@ -241,12 +243,14 @@ class TestApp {
           assistantLaunchProvider.overrideWithValue(assist),
           reminderAlarmsProvider.overrideWithValue(alarms),
           appHiddenProvider.overrideWith(() => _AppHidden(appHidden)),
-          remindersProvider.overrideWith(() => Reminders(reminders)),
-          reminderTurnDriverProvider.overrideWithValue(FakeReminderTurnDriver()),
+          triggersProvider.overrideWith(() => Triggers(triggers)),
+          triggerTurnDriverProvider.overrideWithValue(FakeTriggerTurnDriver()),
           clockProvider.overrideWithValue(testClock),
           backupHandoffProvider.overrideWithValue(backups),
           appRestartProvider.overrideWithValue(restart),
           linkOpenerProvider.overrideWithValue(linkOpener),
+          marketplaceClientProvider
+              .overrideWithValue(marketplaceClient ?? http.Client()),
           voiceProvider.overrideWithValue(speech),
           voiceModelStoreProvider.overrideWithValue(models),
           // Seeded the way the app seeds it, before the first frame: see
@@ -291,7 +295,7 @@ class TestApp {
   final FakeFileHandoff handoff;
   final FakeAssistantLaunch assistant;
 
-  /// The clock a reminder is set against. Default unavailable, which is every
+  /// The clock a trigger is set against. Default unavailable, which is every
   /// platform but Android and so what most of the suite should be pretending
   /// to be.
   final FakeReminderAlarms reminderAlarms;

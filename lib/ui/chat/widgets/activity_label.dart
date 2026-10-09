@@ -1,6 +1,9 @@
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
+import "package:path/path.dart" as p;
 
+import "../../../core/config.dart"
+    show instructionBlockHeader, instructionFileName;
 import "../../fonts.dart";
 import "../../skills/skill_install_preview.dart";
 import "../../../domain/ask.dart";
@@ -55,16 +58,23 @@ class ToolLabel extends StatelessWidget {
   /// — the spinner below the message handles the no-text-yet case.
   final bool running;
 
-  bool get _failed => (result?.returnCode ?? 0) != 0;
+  bool get _failed =>
+      (result?.returnCode ?? 0) != 0 ||
+      (result?.violations.isNotEmpty ?? false);
 
   @override
   Widget build(BuildContext context) {
     final name = call?.name;
     final showSpinner = running && result == null;
     final verb = result == null ? "Using tool" : "Used tool";
+    final outcome = result?.permissionOutcome;
     return _Label(
       icon: _failed ? Icons.error_outline : Icons.terminal,
-      text: name == null ? verb : "$verb: $name",
+      text: name == null
+          ? verb
+          : outcome == null
+              ? "$verb: $name"
+              : "$verb: $name — $outcome",
       isError: _failed,
       // A running tool gets a spinner instead of a static icon, so the turn
       // shows it is busy even after the model has said something. The spinner
@@ -84,18 +94,141 @@ class ToolLabel extends StatelessWidget {
         context,
         title: name ?? "Tool",
         mono: true,
-        sections: _runSections(call!, result),
+        sections: [
+          ..._runSections(call!, result),
+          if (result != null && result!.violations.isNotEmpty)
+            (
+              label: "Sandbox",
+              body: result!.violations.join("\n"),
+              isError: true,
+            ),
+        ],
       ),
     );
   }
 }
 
 /// The drawer a tool run opens, whether it was drawn as a label or as a diff.
-List<ActivitySection> _runSections(ToolCall call, ToolResult? result) => [
-      (label: "Arguments", body: call.argumentsText ?? call.argumentsJson, isError: false),
-      (label: "Output", body: result?.output, isError: false),
-      (label: "Error", body: result?.exceptionInfo, isError: true),
-    ];
+/// The Output section is cut below the rendered-instructions header where a
+/// nested read appended one to the result: the drawer says what the file held,
+/// and the instructions block — the model's reading, not the file's — lives
+/// in its own record's drawer instead. Cut at the last occurrence, since the
+/// block is appended at the tail.
+List<ActivitySection> _runSections(ToolCall call, ToolResult? result) {
+  final output = result?.output;
+  String? shown = output;
+  if (output != null) {
+    final at = output.lastIndexOf(instructionBlockHeader);
+    if (at >= 0) shown = output.substring(0, at).trimRight();
+  }
+  return [
+    (label: "Arguments", body: call.argumentsText ?? call.argumentsJson, isError: false),
+    (label: "Output", body: shown, isError: false),
+    (label: "Error", body: result?.exceptionInfo, isError: true),
+    (label: "Outcome", body: result?.permissionOutcome, isError: false),
+  ];
+}
+
+/// The instruction files a turn was the first to read into the model's
+/// context — the up-front `AGENTS.md` load, or a nested one a file read
+/// pulled in. One label per read, on the part that records it; the drawer
+/// says what was read and where each file sat, never what the files said —
+/// the content rides the per-turn system prompt and the read results, and is
+/// the model's, not the conversation's.
+class InstructionsLabel extends StatelessWidget {
+  const InstructionsLabel({super.key, required this.part});
+
+  final InstructionsPart part;
+
+  @override
+  Widget build(BuildContext context) {
+    final files = part.files;
+    // What a single read is named by: the bare name where it is an
+    // instruction file proper, the path when it is anything else — a nested
+    // one is clearer as where it sits.
+    final text = switch (files) {
+      [final only] => "Read ${basenameOf(only.path)}",
+      final several => "Read ${several.length} instruction files",
+    };
+    return _Label(
+      icon: Icons.description_outlined,
+      text: text,
+      onTap: () => showActivitySheet(
+        context,
+        title: "Instructions",
+        sections: [
+          for (final ref in files)
+            (
+              label: instructionKindPhrase(ref.kind),
+              body: ref.path,
+              isError: false,
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// What a single file's label names it by: the bare name where it is an
+/// instruction file proper, the path when it is anything else — a nested one
+/// is clearer as where it sits.
+String basenameOf(String path) =>
+    p.basename(path) == instructionFileName ? instructionFileName : path;
+
+/// What a recorded decision reads as, on a label's text and in its drawer's
+/// Outcome section. The wording is the shared contract of the two — one
+/// helper so they cannot disagree. Null where the result carries none: a
+/// log from before the field existed, or a call nothing stood in front of.
+String? outcomeText(
+    PermissionSource? by, List<PermissionTier> tiers, PermissionDecision? decided) {
+  final allowed = switch (decided) {
+    PermissionDecision.deny => "denied",
+    null => null,
+    _ => "allowed",
+  };
+  final where = switch (tiers) {
+    [] => "",
+    [PermissionTier.once] => " by you",
+    [PermissionTier.chat] => " by this chat's rules",
+    [PermissionTier.project] => " by the project's rules",
+    [PermissionTier.defaultProject] => " by the app's rules",
+    [PermissionTier.runtime] => " by a rule granted this turn",
+    _ => " by the rules of ${tiers.map(_tierName).join(" and ")}",
+  };
+  return switch (by) {
+    PermissionSource.rule => tiers.isEmpty
+        ? null
+        : "${allowed ?? "allowed"}$where",
+    PermissionSource.classifier =>
+      decided == null ? "by the classifier" : "${allowed ?? "allowed"} by the classifier",
+    PermissionSource.human => "${allowed ?? "allowed"}$where",
+    PermissionSource.mode => "${allowed ?? "allowed"} by the approve mode",
+    PermissionSource.rerun => "rerun unconfined after you approved",
+    _ => null,
+  };
+}
+
+String _tierName(PermissionTier tier) => switch (tier) {
+      PermissionTier.chat => "this chat",
+      PermissionTier.project => "the project",
+      PermissionTier.defaultProject => "the app",
+      _ => tier.name,
+    };
+
+extension on ToolResult {
+  /// The outcome wording for this run's recorded decision — the label's
+  /// clause and the drawer's Outcome section. Null where nothing was
+  /// recorded, which is the old-log case and the ungated call's.
+  String? get permissionOutcome {
+    final wording = outcomeText(decidedBy, decidedTier, decided);
+    if (wording == null) return null;
+    // An old log records who decided but not what — the exit code is the
+    // only witness there, and it is right except for the banner answers,
+    // which the approval part records on its own.
+    if (decided == null && returnCode != 0) return null;
+    return wording;
+  }
+}
 
 /// A file write or edit drawn as red/green diff lines rather than a label,
 /// where the change is small enough to read at a glance. The before/after
@@ -293,6 +426,79 @@ class _AskLabelState extends State<AskLabel> {
               body: _answers.elementAtOrNull(i) ?? "Not answered",
               isError: false,
             ),
+        ],
+      ),
+    );
+  }
+}
+
+/// A permission banner the turn raised, once it is history: what was asked
+/// (the call, worded as the banner worded it) and what was answered. The
+/// panel that asked is gone by then; this reads the recorded part. A
+/// superseded answer reads in place — "asked" without an answer is a turn
+/// that ended with the banner up, which the deny-on-end recorded instead.
+class ApprovalLabel extends StatelessWidget {
+  const ApprovalLabel({super.key, required this.part, this.result});
+
+  final ApprovalPart part;
+
+  /// The result the call it asked about produced, carrying the outcome —
+  /// what decided the call — whose wording rides on the label and in the
+  /// drawer. Null where the call never produced one: a deny, an answer that
+  /// raced the turn out.
+  final ToolResult? result;
+
+  @override
+  Widget build(BuildContext context) {
+    // Raw answers, not the mapped wording: "deny" is what the enum records.
+    final denied =
+        part.answer == "deny" || part.answer == "asked";
+    final answer = switch (part.answer) {
+      "asked" => "asked (never answered)",
+      "allow" => "allowed",
+      "alwaysAllowChat" => "allowed, always in this chat",
+      "alwaysAllowProject" => "allowed, always in this project",
+      "deny" => "denied",
+      _ => part.answer,
+    };
+    // The outcome names what stood behind the call's fate, the answer what
+    // was pressed: on an "always" answer the two say the same thing, so the
+    // clause is left off there — and on a re-prompt's, whose result records
+    // the rerun the answer went on to, the first banner would wear the
+    // rerun's outcome.
+    final outcome = result?.permissionOutcome;
+    final clause = switch (part.answer) {
+      "alwaysAllowChat" || "alwaysAllowProject" || "asked" => null,
+      // A re-prompt's result records the rerun the answer went on to; the
+      // first banner must not wear that rerun's outcome.
+      _ when part.deniedDirs.isNotEmpty => null,
+      _ => outcome,
+    };
+    return _Label(
+      icon: denied ? Icons.gpp_maybe_outlined : Icons.gpp_good_outlined,
+      text: clause == null
+          ? "Permission: ${part.toolName} — $answer"
+          : "Permission: ${part.toolName} — $answer ($clause)",
+      isError: denied,
+      onTap: () => showActivitySheet(
+        context,
+        title: "Permission",
+        mono: true,
+        sections: [
+          (
+            label: part.toolName,
+            body: part.argumentsText,
+            isError: false,
+          ),
+          if (part.deniedDirs.isNotEmpty)
+            (
+              label: "Sandbox dirs granted",
+              body: part.deniedDirs.join("\n"),
+              isError: false,
+            ),
+          (label: "Answer", body: answer, isError: false),
+          if (outcome != null)
+            (label: "Outcome", body: outcome, isError: false),
         ],
       ),
     );

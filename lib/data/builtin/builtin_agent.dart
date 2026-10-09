@@ -7,6 +7,7 @@ import "package:uuid/uuid.dart";
 import "../../domain/agent_backend.dart";
 import "../../domain/artifact.dart";
 import "../../domain/ask.dart";
+import "../../domain/date_words.dart" show describeFire;
 import "../../domain/file_tools.dart";
 import "../../domain/models.dart";
 import "../../domain/permission.dart";
@@ -29,6 +30,9 @@ import "skill_create_tool.dart";
 import "skill_tool.dart";
 import "sub_agent.dart";
 import "task_tool.dart";
+import "trigger_tool.dart";
+import "../../domain/trigger.dart";
+import "../../domain/trigger_manager.dart" show TriggerRegistry;
 import "projection.dart";
 import "templates.dart";
 import "memory/instructions.dart";
@@ -58,6 +62,7 @@ String? runningTool(String name) => switch (name) {
       websearchToolName => "Searching the web",
       webfetchToolName => "Fetching a page",
       taskToolName => "Working on a sub-task",
+      triggerSetName => "Setting a trigger",
       artifactToolName => "Publishing the artifact",
       presentPlanToolName => "Presenting the plan",
       _ => null,
@@ -299,7 +304,7 @@ List<LlmTool> agentTools({
       if (caps.ask) askTool,
       if (caps.task) taskTool,
       if (caps.webSearch) ...[websearchTool, webfetchTool],
-      if (skills.any((s) => s.modelInvocable)) skillTool,
+      if (skills.any((s) => s.modelInvocable && !s.isCallback)) skillTool,
       if (caps.artifact) artifactTool,
       if (!oneShot) ...[planAddTool, planNextTool, planDoneTool],
       // Presenting parks the turn on the panel's answer, so it rides `ask`
@@ -308,6 +313,9 @@ List<LlmTool> agentTools({
       // rest, the way it withholds `artifact`.
       if (caps.presentPlan) presentPlanTool,
       if (caps.createSkill) createSkillTool,
+      // Triggers ride the turn itself: only a top-level turn is its own
+      // chat's, so only it may register.
+      if (caps.trigger && !oneShot) ...triggerToolDefs,
       if (offerMemory)
         ...[
           memorySaveTool,
@@ -352,7 +360,9 @@ class BuiltinAgent {
     this.citations = false,
     this.saveArtifact,
     this.packageSkill,
+    this.registerTrigger,
     this.onShellOutput,
+    this.onUsage,
     this.loadResource = noResources,
     this.memory = MemorySettings.off,
     this.instructions = const [],
@@ -362,7 +372,20 @@ class BuiltinAgent {
     this.memoryStore,
     this.memoryChat,
     this.sandboxHelper,
+    this.permissions = const [],
+    this.writableDirs = const [],
+    this.sandboxReprompt = true,
+    this.claimInstruction,
   });
+
+  /// Marks an instruction file as first-reached in the conversation, as a
+  /// nested `AGENTS.md` read above a file mid-turn is pulled in; returning
+  /// true means this agent's turn is the one that records it. Held by the
+  /// backend over what the turn's history names, so one conversation records
+  /// a file once. Null — every sub-agent's case, having no conversation to
+  /// claim against and no events that reach the room — treats every finding
+  /// as new, which its own transcript is free to say.
+  final bool Function(String path)? claimInstruction;
 
   /// The sandbox helper a test hands in, where the shell is a fake with no
   /// driver behind it. The agent reads the real one through
@@ -370,6 +393,49 @@ class BuiltinAgent {
   /// it is nullable and the real answer wins when both exist.
   @visibleForTesting
   final SandboxHelper? sandboxHelper;
+
+  /// The turn's standing rules, merged chat over project over app by the
+  /// repository. Consulted in [_runGated] before the classifier and the
+  /// banner; grown at runtime by an "Allow in Chat" or "Allow in Project"
+  /// banner answer, through [grantRuntimeRule].
+  List<PermissionRule> permissions;
+
+  /// What this turn's sandboxed commands may additionally write to, beside
+  /// the workspace — the rules' writes plus the project's writableDirs. Read
+  /// by [sandboxFor] per command, so a mid-turn grant reaches the next run.
+  final List<String> writableDirs;
+
+  /// Whether a sandbox-denied write is offered back as an approval. Off
+  /// reports the denial and moves on.
+  final bool sandboxReprompt;
+
+  /// Rules granted mid-turn by a banner answer. They sit in front of the
+  /// standing list — the user answered while watching this exact call — and
+  /// die with the turn, the standing copies being persisted by the backend.
+  final List<PermissionRule> _runtimeRules = [];
+
+  /// Adds a rule at the front of the evaluation, from a banner answer this
+  /// turn is still running under, stamped as this turn's own.
+  void grantRuntimeRule(PermissionRule rule) =>
+      _runtimeRules.insert(0, rule.copyWith(origin: PermissionTier.runtime));
+
+  /// What decided the call whose result is being composed, the tiers that
+  /// spoke, and the verdict itself — set by every decision site in the gate
+  /// and read by [_ran] onto the result it reports. Null where the mode's
+  /// default posture put the call behind the banner: the banner's own part
+  /// is the record then, and the answer that follows stamps it anew.
+  ({PermissionSource source, List<PermissionTier> tiers,
+          PermissionDecision decided})?
+      _decision;
+
+  /// Directories a re-prompt banner agreed to, live for the rest of the
+  /// turn — [sandboxFor] composes them into every command's grant, so an
+  /// "Allow in Chat" on a denial covers the next command without a banner.
+  /// The durable copies are the repository's to persist.
+  final Set<String> _runtimeDirs = {};
+
+  /// Grants [dirs] for the rest of this turn.
+  void grantRuntimeDirs(Iterable<String> dirs) => _runtimeDirs.addAll(dirs);
 
   /// The confinement a command runs under, from the shell's driver. Read per
   /// turn rather than held: the driver is resolved per command in the shell,
@@ -384,6 +450,7 @@ class BuiltinAgent {
       workspace: workspace,
       tmp: tmp,
       home: shell.machineHome,
+      extraWrites: [...writableDirs, ..._runtimeDirs],
     );
   }
 
@@ -575,6 +642,19 @@ class BuiltinAgent {
   /// keeps.
   final void Function(String? callId, String text)? onShellOutput;
 
+  /// What each response cost, as the provider reported it. Turn-scoped view
+  /// state rather than a record: the newest completion is the newest request's
+  /// fact, and the newest request is what measures the session as it stands.
+  /// Null where the provider reports nothing, which is every completion a
+  /// test fakes unless it says otherwise.
+  final void Function(LlmUsage usage)? onUsage;
+
+  /// What the trigger tools run against — a registry over the app's own
+  /// trigger list — or null, which withholds the trio the way a missing
+  /// [subAgentRunner] withholds `task`. Null on a sub-agent: a trigger's
+  /// fire sends into *this* chat, which is one a worker is not.
+  final TriggerRegistry? registerTrigger;
+
   /// [caps] with the platform's facts applied where [caps] cannot know them:
   /// a tool the device cannot run is not offered even if the turn was, and a
   /// sub-agent's missing [subAgentRunner] or [saveArtifact] withholds `task`
@@ -586,6 +666,7 @@ class BuiltinAgent {
         task: caps.task && subAgentRunner != null,
         artifact: caps.artifact && saveArtifact != null,
         createSkill: caps.createSkill && packageSkill != null,
+        trigger: caps.trigger && registerTrigger != null,
       );
 
   /// What the model may call, and what the system prompt says. One value for
@@ -912,6 +993,21 @@ class BuiltinAgent {
         continue;
       }
 
+      if (call.name == triggerSetName && registerTrigger != null) {
+        yield* _triggerSet(call);
+        continue;
+      }
+
+      if (call.name == triggerRemoveName && registerTrigger != null) {
+        yield* _triggerRemove(call);
+        continue;
+      }
+
+      if (call.name == triggerListName && registerTrigger != null) {
+        yield* _triggerList(call);
+        continue;
+      }
+
       if (call.name != "bash") {
         yield* _reject(call, unknownTool(call.name, _tools.map((t) => t.name)));
         continue;
@@ -934,9 +1030,14 @@ class BuiltinAgent {
       ));
 
       yield* _runGated(call, call.argumentsJson, "bash",
-          () => _execute(call, command),
-          argumentsText: command);
-      final result = _commandResult!;
+          () => _execute(call, command), argumentsText: command);
+      var result = _commandResult!;
+      // The sandbox's answer rides between the result and its report: a
+      // denied write is offered back once, the rerun's outcome replacing
+      // the denial as what the model and the conversation read. The re-prompt
+      // streams its own banner through, the turn recording it like the first.
+      yield* sandboxRepromptIfNeeded(call, command, result);
+      result = _commandResult!;
 
       yield ToolResultEvent(_ran(call, result));
     }
@@ -1058,14 +1159,21 @@ class BuiltinAgent {
   /// What the sandbox denied rides on it too, where one ran and denied
   /// something — the wording is `observation`'s, so the model reads it beside
   /// the output it belongs to.
-  ToolResult _ran(LlmToolCall call, ShellResult result) => ToolResult(
-        callId: call.id,
-        returnCode: result.returnCode,
-        output: result.output,
-        exceptionInfo: result.exceptionInfo,
-        cwd: result.cwd,
-        violations: result.violations,
-      );
+  ToolResult _ran(LlmToolCall call, ShellResult result) {
+    final decision = _decision;
+    _decision = null;
+    return ToolResult(
+      callId: call.id,
+      returnCode: result.returnCode,
+      output: result.output,
+      exceptionInfo: result.exceptionInfo,
+      cwd: result.cwd,
+      violations: result.violations,
+      decidedBy: decision?.source,
+      decidedTier: decision?.tiers ?? const [],
+      decided: decision?.decided,
+    );
+  }
 
   /// The model asking the user something. The call and its answers are a pair
   /// like any other, so a finished chat still shows what was asked and picked.
@@ -1117,11 +1225,13 @@ class BuiltinAgent {
           call,
           ShellResult.failed(skillUnknown(name, [
             for (final skill in skills)
-              if (skill.modelInvocable) skill.name,
+              if (skill.modelInvocable && !skill.isCallback) skill.name,
           ]))));
       return;
     }
-    if (!document.modelInvocable) {
+    // A callback's body is the user-facing note, never a procedure for the
+    // model to read — the same reason composition refuses to expand it.
+    if (!document.modelInvocable || document.isCallback) {
       yield ToolResultEvent(_ran(call, ShellResult.failed(skillReserved(name))));
       return;
     }
@@ -1204,6 +1314,11 @@ class BuiltinAgent {
       argumentsJson: call.argumentsJson,
       argumentsText: args.path,
     ));
+    // Held beside the run rather than in it, for the event below: what the
+    // read pulled in, if anything. Empty is the honest "nothing" — a denied
+    // or gated read never ran, so it pulled nothing in — and it stands in
+    // for null, so nothing downstream has to test for it.
+    var nested = const <InstructionFile>[];
     Future<ShellResult> run() async {
       final file = fs.file(path);
       if (!await file.exists()) {
@@ -1229,7 +1344,7 @@ class BuiltinAgent {
         buf.writeln("$i: ${lines[i - 1]}");
       }
       final result = buf.toString();
-      final nested = memory.nested
+      nested = memory.nested
           ? await findNestedInstructions(
               fs,
               path,
@@ -1244,6 +1359,15 @@ class BuiltinAgent {
       return ShellResult(returnCode: 0, output: output);
     }
     yield* _runFileTool(call, path, readToolName, run);
+    // A successful read reports what it reached here, the claim deciding
+    // which of the findings are this conversation's first.
+    if (nested.isNotEmpty) {
+      final fresh = [
+        for (final file in nested)
+          if (claimInstruction == null || claimInstruction!(file.path)) file.ref,
+      ];
+      if (fresh.isNotEmpty) yield InstructionsReadEvent(fresh);
+    }
   }
 
   /// Write a file, creating or overwriting. The same gate as [read]: the
@@ -1316,6 +1440,169 @@ class BuiltinAgent {
           returnCode: 0, output: "Edited ${args.path}: replaced $count occurrence(s).");
     }
     yield* _runFileTool(call, path, editToolName, run);
+  }
+
+  /// Register a trigger. The chat is the turn's own — a trigger fires into
+  /// the conversation that registered it — and the registration is watched
+  /// the moment the list lands. The model is told what it armed and when.
+  Stream<AgentEvent> _triggerSet(LlmToolCall call) async* {
+    final registry = registerTrigger;
+    final args = decodeArgs(call.argumentsJson);
+    if (args == null) {
+      yield* _reject(call, triggerSetProblem(null));
+      return;
+    }
+    final draft = triggerDraftFromArgs(args: args);
+    if (draft == null) {
+      yield* _reject(call, triggerSetProblem(stringArg(call.argumentsJson, "source")));
+      return;
+    }
+    // A file watch is never asked before it fires (and a fire's headless
+    // turn runs approveMode never), so the outside paths the read tool
+    // raises a banner over are refused here, where the call can still be
+    // answered — a watch over `~` or the machine is not a shape the tool
+    // takes.
+    if (draft.source is FileSource) {
+      final outside = [
+        for (final path in (draft.source as FileSource).paths)
+          if (outsideWorkspaces(fs, _resolvePath(path), workspace, projectWorkspace))
+            path,
+      ];
+      if (outside.isNotEmpty) {
+        yield* _reject(
+            call,
+            "A file trigger watches the workspaces: give workspace-relative "
+            "or project:-prefixed paths (${outside.join(", ")} reach past "
+            "them).");
+        return;
+      }
+    }
+    final label = [
+      if (draft.name.isNotEmpty) draft.name,
+      draft.source.describe(),
+    ].join(" — ");
+    yield ToolCallEvent(ToolCall(
+      id: call.id,
+      name: call.name,
+      argumentsJson: call.argumentsJson,
+      argumentsText: label,
+    ));
+    try {
+      final stored = await registry!.register(
+          source: draft.source,
+          prompt: draft.prompt,
+          name: draft.name,
+          member: draft.member);
+      yield ToolResultEvent(ToolResult(
+            callId: call.id,
+            returnCode: 0,
+            output: _triggerSetAnswer(stored),
+          ));
+    } catch (e) {
+      yield ToolResultEvent(ToolResult(
+            callId: call.id,
+            returnCode: -1,
+            output: "",
+            exceptionInfo: "The trigger could not be set: $e",
+          ));
+    }
+  }
+
+  /// What registration says back: the id every later call speaks, and the
+  /// source's own description — one wording of what was armed, shared with
+  /// the settings row and the fire's reason rather than a second here.
+  String _triggerSetAnswer(Trigger stored) =>
+      "Trigger ${stored.id} set. "
+      "${stored.member == null ? "" : "Fires addressed to @${stored.member}. "}"
+      "${stored.source.describe()}."
+      "${stored.source is FileSource ? " Fires only while the app is running." : ""}";
+
+  /// Remove one of this chat's own triggers. Another chat's is not here to
+  /// remove, and neither is a user-set one: the tools speak for the chat
+  /// that registered their targets.
+  Stream<AgentEvent> _triggerRemove(LlmToolCall call) async* {
+    final registry = registerTrigger;
+    final id = stringArg(call.argumentsJson, "id");
+    if (id == null || registry == null) {
+      yield* _reject(call,
+          'The $triggerRemoveName tool takes {"id": "<trigger id>"}; that '
+          "argument was missing.");
+      return;
+    }
+    yield ToolCallEvent(ToolCall(
+      id: call.id,
+      name: call.name,
+      argumentsJson: call.argumentsJson,
+      argumentsText: id,
+    ));
+    final own = (await registry.own()).where((t) => t.id == id).toList();
+    if (own.isEmpty) {
+      yield ToolResultEvent(ToolResult(
+            callId: call.id,
+            returnCode: -1,
+            output: "",
+            exceptionInfo:
+                "No trigger with that id was registered by this chat. "
+                "$triggerListName lists what may be removed.",
+          ));
+      return;
+    }
+    await registry.remove(id);
+    yield ToolResultEvent(ToolResult(
+          callId: call.id,
+          returnCode: 0,
+          output: "Trigger $id removed.",
+        ));
+  }
+
+  /// This chat's own triggers, with what each is waiting for.
+  Stream<AgentEvent> _triggerList(LlmToolCall call) async* {
+    final registry = registerTrigger;
+    yield ToolCallEvent(
+        ToolCall(id: call.id, name: call.name, argumentsJson: call.argumentsJson));
+    final own = (await registry?.own() ?? []) ;
+    if (own.isEmpty) {
+      yield ToolResultEvent(ToolResult(
+            callId: call.id,
+            returnCode: 0,
+            output: "No triggers registered for this chat.",
+          ));
+      return;
+    }
+    final lines = [
+      for (final trigger in own)
+        "- ${trigger.id}: ${trigger.name.isEmpty ? "(unnamed)" : trigger.name}"
+            "${trigger.member == null ? "" : " → @${trigger.member}"}"
+            " — ${trigger.source.describe()}"
+            "${_whenLine(trigger)}",
+    ];
+    yield ToolResultEvent(ToolResult(
+          callId: call.id,
+          returnCode: 0,
+          output: lines.join("\n"),
+        ));
+  }
+
+  /// The stored fire time, worded for the answer — what is armed now, not
+  /// the anchor a repeating source steps from, which goes stale as it fires
+  /// and would tell the model its own trigger is overdue.
+  String _whenLine(Trigger trigger) {
+    final at = trigger.nextFireAt;
+    return at == null ? "" : ". Next: ${_nextWording(at, trigger)}";
+  }
+
+  /// The source's own relative wording where it is on the clock ("in 30
+  /// minutes", "Sat 22 Aug, daily" from the *next* occurrence), the plain
+  /// moment otherwise. [describe] reads the anchor, so the schedule has to
+  /// be re-worded here against the stored time.
+  String _nextWording(DateTime at, Trigger trigger) {
+    final source = trigger.source;
+    return switch (source) {
+      ScheduleSource(:final repeat) =>
+        "${describeFire(at, DateTime.now())}"
+            "${repeat == ScheduleRepeat.off ? "" : ", ${repeat.label.toLowerCase()}"}",
+      _ => source.describe(),
+    };
   }
 
   /// A fact the model judged worth keeping. No approval: like `websearch`, it
@@ -1495,13 +1782,12 @@ class BuiltinAgent {
     // One output, so the model is told how to update it on a reload too — the
     // instructions used to be said to the model alone and were lost with the
     // session.
-    yield ToolResultEvent(ToolResult(
-          callId: call.id,
-          returnCode: 0,
-          output: "Artifact $label published. The user can view it in the app. "
-              "It is saved with the chat. To update it, edit the files and call "
-              "artifact again with artifact_id: \"$artifactId\".",
-        ));
+    yield ToolResultEvent(_ran(
+        call,
+        const ShellResult(returnCode: 0, output: "")).copyWith(
+        output: "Artifact $label published. The user can view it in the app. "
+            "It is saved with the chat. To update it, edit the files and call "
+            "artifact again with artifact_id: \"$artifactId\"."));
   }
 
   /// Package a skill the model drafted in its workspace and offer it to the
@@ -1761,9 +2047,16 @@ class BuiltinAgent {
     yield ToolResultEvent(ToolResult(callId: call.id, returnCode: -1, output: "", exceptionInfo: problem));
   }
 
-  /// Run [run] gated by [approveMode]: ask the user, classify then maybe ask,
-  /// or run directly. Emits the approval banner and circuit-breaker info as
-  /// needed, and sets [_commandResult] to the outcome.
+  /// Run [run] gated by the rules, then [approveMode]. Rules are the standing
+  /// decision, so they are consulted first in every mode: an allow runs, a
+  /// deny refuses without running or asking, an ask escalates — and no match
+  /// falls through to what the mode answers. A banner answer granted mid-turn
+  /// sits in front of the standing list.
+  ///
+  /// The rule's reach stops where the parse's does: a command with findings —
+  /// one the static layer cannot model — is escalated to the banner even
+  /// under an allow rule, never silently run. In `never` mode there is nobody
+  /// to ask, so the findings refuse the command the way the veto always has.
   /// [argumentsText] is what the banner shows: what this call does, worded
   /// here where it is already in hand rather than parsed back out of the JSON
   /// by whoever draws it.
@@ -1774,12 +2067,73 @@ class BuiltinAgent {
     Future<ShellResult> Function() run, {
     String? argumentsText,
   }) async* {
+    // A bash command is judged segment by segment: an allow that covers the
+    // head but not the tail escalates the whole, so a compound command's
+    // uncovered piece never rides a rule through. The parse is the one the
+    // veto runs too — computed once here and handed down.
+    final analysis = toolName == "bash"
+        ? ShellCommandAnalysis.parse(argumentsText ?? "",
+            isWindows: platformIsWindows)
+        : null;
+    final verdict = rulesDecideTraced(
+      [..._runtimeRules, ...permissions],
+      toolName,
+      command: argumentsText,
+      path: toolName == readToolName ||
+              toolName == writeToolName ||
+              toolName == editToolName
+          ? argumentsText
+          : null,
+      url: toolName == webfetchToolName ? argumentsText : null,
+      segments: analysis?.modelableSegments,
+    );
+    switch (verdict?.decision) {
+      case PermissionDecision.deny:
+        _decision = (
+          source: PermissionSource.rule,
+          tiers: verdict!.tiers,
+          decided: PermissionDecision.deny,
+        );
+        _commandResult = const ShellResult.failed(
+            "Denied by a permission rule you set. Do not retry this command; "
+            "tell the user what you were trying to do and let them decide.");
+        return;
+      case PermissionDecision.allow:
+        // An allow rule is a standing decision, but only for commands the
+        // parse can vouch for: a compound command whose later segments the
+        // rule does not cover runs with them unanswered. Findings here are a
+        // banner, in every mode but never — where nobody is watching.
+        final note = analysis?.escalationNote;
+        if (note != null) {
+          if (approveMode == ApproveMode.never) {
+            _commandResult = ShellResult.failed(note);
+            return;
+          }
+          yield* _askAndExecute(call, arguments, toolName, run, argumentsText);
+          return;
+        }
+        _decision = (
+          source: PermissionSource.rule,
+          tiers: verdict!.tiers,
+          decided: PermissionDecision.allow,
+        );
+        _commandResult = await run();
+        return;
+      case PermissionDecision.ask:
+      case null:
+        break;
+    }
     switch (approveMode) {
       case ApproveMode.ask:
         yield* _askAndExecute(call, arguments, toolName, run, argumentsText);
       case ApproveMode.auto:
         yield* _autoClassifyAndExecute(call, arguments, toolName, run, argumentsText);
       case ApproveMode.never:
+        _decision = (
+          source: PermissionSource.mode,
+          tiers: const [],
+          decided: PermissionDecision.allow,
+        );
         _commandResult = await run();
     }
   }
@@ -1836,7 +2190,36 @@ class BuiltinAgent {
       argumentsText: argumentsText,
     );
     yield ApprovalRequestEvent(approval);
-    final allowed = await approve(approval) == ApprovalResponse.allow;
+    final answer = await approve(approval);
+    // An "always" answer is the standing rule arriving: it applies to the
+    // rest of this turn at once, ahead of the persisted copy the next turn
+    // reads. The approval is in hand, so the derivation costs nothing here.
+    // A re-prompt's approval carries what it agreed to: the denied dirs.
+    if (approval.deniedDirs.isNotEmpty &&
+        (answer == ApprovalResponse.alwaysAllowChat ||
+            answer == ApprovalResponse.alwaysAllowProject)) {
+      // The paths, not the prose: grant them for the turn; the repository
+      // persists them to the tier the answer named.
+      grantRuntimeDirs(approval.deniedDirs);
+    } else if (answer == ApprovalResponse.alwaysAllowChat ||
+        answer == ApprovalResponse.alwaysAllowProject) {
+      final rule = ruleFromApproval(approval);
+      if (rule != null) grantRuntimeRule(rule);
+    }
+    final allowed = answer == ApprovalResponse.allow ||
+        answer == ApprovalResponse.alwaysAllowChat ||
+        answer == ApprovalResponse.alwaysAllowProject;
+    _decision = (
+      source: PermissionSource.human,
+      tiers: [
+        switch (answer) {
+          ApprovalResponse.alwaysAllowChat => PermissionTier.chat,
+          ApprovalResponse.alwaysAllowProject => PermissionTier.project,
+          _ => PermissionTier.once,
+        },
+      ],
+      decided: allowed ? PermissionDecision.allow : PermissionDecision.deny,
+    );
     _humanDecided = true;
     _commandResult = allowed
         ? await run()
@@ -1862,6 +2245,14 @@ class BuiltinAgent {
     final decision = await (classifier ?? const NoClassifier())
         .classify(toolName, arguments, workspace: workspace);
 
+    if (decision != PermissionDecision.ask) {
+      _consecutiveAsks = 0;
+      _decision = (
+        source: PermissionSource.classifier,
+        tiers: const [],
+        decided: decision,
+      );
+    }
     switch (decision) {
       case PermissionDecision.allow:
         _consecutiveAsks = 0;
@@ -1890,7 +2281,8 @@ class BuiltinAgent {
   /// person approved is the machine overriding its keeper.
   bool _humanDecided = false;
 
-  Future<ShellResult> _execute(LlmToolCall call, String command) async {
+  Future<ShellResult> _execute(LlmToolCall call, String command,
+      {bool unconfined = false}) async {
     if (_cancelled) {
       return const ShellResult.failed("The turn was stopped before this command ran.");
     }
@@ -1920,7 +2312,7 @@ class BuiltinAgent {
     // banner, not the mode, is what carries that — auto mode reaches the
     // banner through the classifier's ask — so the gate reads the flag the
     // run itself sets.
-    final sandbox = sandboxFor();
+    final sandbox = unconfined ? null : sandboxFor();
     if (sandbox != null && !_humanDecided) {
       final analysis =
           ShellCommandAnalysis.parse(command, isWindows: platformIsWindows);
@@ -1945,6 +2337,80 @@ class BuiltinAgent {
     } finally {
       _running = null;
     }
+  }
+
+  /// After a command the confinement denied: one offer to rerun it, unconfined
+  /// or with the denied directory joining the grant, rather than leaving the
+  /// denial for the model to discover. Off under [sandboxReprompt] false, on a
+  /// run a human already decided, in `never` mode — nobody is there to ask —
+  /// and past the one per call this turn allows.
+  ///
+  /// Streaming, because the banner is where the answer comes from; the caller
+  /// yields this between the first result and its report, and reads
+  /// [_commandResult] after — set by the rerun, still the denial where none
+  /// was asked for.
+  Stream<AgentEvent> sandboxRepromptIfNeeded(
+    LlmToolCall call,
+    String command,
+    ShellResult result,
+  ) async* {
+    if (result.violations.isEmpty ||
+        !sandboxReprompt ||
+        _humanDecided ||
+        approveMode == ApproveMode.never) {
+      return;
+    }
+    // The rerun rides the ordinary gated path — a denial the user denies here
+    // is the answer, not a loop. _askAndExecute sets _humanDecided, so this
+    // rerun's own result carries no second re-prompt, and its outcome is in
+    // _commandResult when the events are done: the caller reads it there.
+    // A write denial is rerun unconfined — the human read the command and
+    // answered — and a read denial rerun confined, there being nothing a
+    // grant could widen: a read refusal is the file's own perms.
+    final writeDenied = result.violations.any((v) => v.startsWith("writing "));
+    final deniedDirs = [
+      for (final violation in result.violations)
+        if (violation.startsWith("writing "))
+          violation.substring("writing ".length),
+    ];
+    // The re-prompt's approval carries what it is agreeing to: the denied
+    // directories. An "always" answer becomes a directory grant — runtime
+    // for the turn here, persisted by the repository — never a command-prose
+    // rule, which would match nothing next turn while claiming to.
+    //
+    // Its id is the call's own plus a suffix, deliberately not the call id:
+    // the ask banner and this banner are two questions about one call, and
+    // the approval plumbing keys by id — one completer, one view-state entry,
+    // one removal. Sharing the id made the second banner inherit the first's
+    // answer and vanish the moment the first was answered, which read as the
+    // whole chain executing on a prompt that was never given.
+    final approval = ToolApproval(
+      id: "${call.id}-reprompt",
+      toolName: "bash",
+      argumentsJson: call.argumentsJson,
+      argumentsText: result.violations.join("; "),
+      deniedDirs: deniedDirs,
+    );
+    yield ApprovalRequestEvent(approval);
+    final answer = await approve(approval);
+    if (answer == ApprovalResponse.alwaysAllowChat ||
+        answer == ApprovalResponse.alwaysAllowProject) {
+      grantRuntimeDirs(deniedDirs);
+    }
+    final allowed = answer == ApprovalResponse.allow ||
+        answer == ApprovalResponse.alwaysAllowChat ||
+        answer == ApprovalResponse.alwaysAllowProject;
+    _decision = (
+      source: allowed ? PermissionSource.rerun : PermissionSource.human,
+      tiers: allowed ? const [] : [PermissionTier.once],
+      decided: allowed ? PermissionDecision.allow : PermissionDecision.deny,
+    );
+    _humanDecided = true;
+    _commandResult = allowed
+        ? await _execute(call, command, unconfined: writeDenied)
+        : const ShellResult.failed("The user denied this command. Ask them what "
+            "to do instead, or try something else.");
+    _humanDecided = false;
   }
 
   /// Reports [run]'s output as it prints, each change no more than
@@ -2088,6 +2554,9 @@ class BuiltinAgent {
               }
               rateLimitGate?.onSuccess();
               _completion = chunk;
+              if (chunk.usage != null && onUsage != null) {
+                onUsage!(chunk.usage!);
+              }
               return;
           }
         }

@@ -5,7 +5,7 @@ publish_to: "none"
 # No `+build` suffix: release-build.yml derives the Android version code from
 # these three numbers, and a second number to bump is a second number to
 # forget.
-version: 4.2.0
+version: 4.6.0
 
 environment:
   sdk: ^3.12.2
@@ -95,6 +95,7 @@ dependencies:
   # keyring; direct here so Linux reminders can post over
   # org.freedesktop.Notifications — see linux_reminder_alarms.dart.
   dbus: ^0.7.15
+  yaml: ^3.1.4
 
 # `sherpa_onnx` depends on `sherpa_onnx_web` whatever platform is being built,
 # and that package ships a 14 MB WebAssembly build of onnxruntime as a

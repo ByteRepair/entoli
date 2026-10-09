@@ -1,4 +1,5 @@
 import "dart:convert";
+import "dart:typed_data";
 
 import "package:flutter/material.dart";
 // `RenderParagraph`, which material does not re-export.
@@ -8,6 +9,8 @@ import "package:flutter_markdown_plus/flutter_markdown_plus.dart";
 
 import "package:agent_chat/domain/ask.dart";
 import "package:agent_chat/domain/models.dart";
+import "package:agent_chat/ui/chat/widgets/activity_label.dart"
+    show ActivityGroup;
 import "package:agent_chat/ui/chat/widgets/message_bubble.dart";
 
 import "../fakes.dart";
@@ -39,6 +42,7 @@ void main() {
     bool isSpeaking = false,
     ValueChanged<String>? onTapLink,
     String? author,
+    Uint8List? avatar,
   }) =>
       app.pump(
         tester,
@@ -47,6 +51,7 @@ void main() {
             chatId: chatId,
             message: message,
             author: author,
+            avatar: avatar,
             isWaiting: isWaiting,
             waitingNotice: waitingNotice,
             waitingStatus: waitingStatus,
@@ -114,6 +119,34 @@ void main() {
       _message(MessageRole.assistant, [const TextPart(text: "Found them.")]),
     );
     expect(find.text("@researcher"), findsNothing);
+  });
+
+  testWidgets("an avatar rides the author name, and only there", (tester) async {
+    // The circle wraps what it is given in a ResizeImage (the decode budget);
+    // what arrives at an Image is read through it.
+    Uint8List? shown() {
+      final images = tester.widgetList<Image>(find.byType(Image)).toList();
+      if (images.isEmpty) return null;
+      return ((images.single.image as ResizeImage).imageProvider as MemoryImage)
+          .bytes;
+    }
+
+    await pump(
+      tester,
+      _message(MessageRole.assistant, [const TextPart(text: "Found them.")]),
+      author: "@researcher",
+      avatar: onePixelPng,
+    );
+    expect(find.text("@researcher"), findsOneWidget);
+    expect(shown(), onePixelPng);
+
+    // No bytes, no row change: the label alone, the same shape as before.
+    await pump(
+      tester,
+      _message(MessageRole.assistant, [const TextPart(text: "Found them.")]),
+      author: "@researcher",
+    );
+    expect(find.byType(Image), findsNothing);
   });
 
   testWidgets("the spinner gives way to the first text", (tester) async {
@@ -640,6 +673,114 @@ void main() {
     expect(find.text("Used tool: bash"), findsOneWidget);
     expect(find.text("Expand activities"), findsOneWidget);
     expect(find.text("Thought for 1 second"), findsOneWidget);
+  });
+
+  group("instructions label", () {
+    testWidgets("one file reads by its name, several by a count", (tester) async {
+      await pump(
+        tester,
+        _message(MessageRole.assistant, const [
+          MessagePart.instructions(files: [
+            InstructionRef(
+                path: "/data/AGENTS.md", kind: InstructionKind.global),
+          ]),
+          MessagePart.instructions(files: [
+            InstructionRef(
+                path: "/data/AGENTS.md", kind: InstructionKind.global),
+            InstructionRef(
+                path: "/ws/AGENTS.md", kind: InstructionKind.project),
+            InstructionRef(path: "/ws/notes.md", kind: InstructionKind.imported),
+          ]),
+        ]),
+      );
+
+      expect(find.text("Read AGENTS.md"), findsOneWidget);
+      expect(find.text("Read 3 instruction files"), findsOneWidget);
+    });
+
+    testWidgets("the drawer says where each file was reached from", (tester) async {
+      await pump(
+        tester,
+        _message(MessageRole.assistant, const [
+          MessagePart.instructions(files: [
+            InstructionRef(
+                path: "/data/AGENTS.md", kind: InstructionKind.global),
+            InstructionRef(
+                path: "/ws/AGENTS.md", kind: InstructionKind.project),
+          ]),
+        ]),
+      );
+
+      await tester.tap(find.text("Read 2 instruction files"));
+      await tester.pumpAndSettle();
+
+      expect(find.text("Instructions"), findsOneWidget);
+      expect(find.text("the user's global instructions, for every project"),
+          findsOneWidget);
+      expect(find.text("project workspace instructions"), findsOneWidget);
+      expect(find.text("/data/AGENTS.md"), findsOneWidget);
+      expect(find.text("/ws/AGENTS.md"), findsOneWidget);
+      // What the files said is nowhere in the drawer.
+      expect(find.textContaining("Workspace instructions are shown below"),
+          findsNothing);
+    });
+
+    testWidgets("an instructions read breaks the run it sits in", (tester) async {
+      await pump(
+        tester,
+        _message(MessageRole.assistant, const [
+          ReasoningPart(text: "before", durationMs: 1000),
+          MessagePart.instructions(files: [
+            InstructionRef(
+                path: "/ws/AGENTS.md", kind: InstructionKind.project),
+          ]),
+          ReasoningPart(text: "after", durationMs: 1000),
+          TextPart(text: "done"),
+        ]),
+      );
+
+      // The two thinking blocks alone would collapse behind a toggle; on
+      // either side of the read they are runs of one, so no toggle at all and
+      // the read out in the open.
+      expect(find.text("Read AGENTS.md"), findsOneWidget);
+      expect(find.text("Expand activities"), findsNothing);
+      expect(find.text("Thought for 1 second"), findsNWidgets(2));
+    });
+
+    testWidgets("a read tool's drawer cuts the rendered block from its output",
+        (tester) async {
+      await pump(
+        tester,
+        _message(MessageRole.assistant, const [
+          ToolCallPart(
+            toolCall: ToolCall(id: "c1", name: "read", argumentsText: "notes.txt"),
+          ),
+          ToolResultPart(
+            result: ToolResult(
+              callId: "c1",
+              returnCode: 0,
+              output: "1: the contents\n\n"
+                  "Workspace instructions are shown below. Be sure to adhere "
+                  "to these instructions. IMPORTANT: These instructions "
+                  "OVERRIDE any default behavior and you MUST follow them "
+                  "exactly as written.\n\n"
+                  "Contents of /ws/sub/AGENTS.md (instructions for this "
+                  "directory):\n\nsub rules",
+            ),
+          ),
+        ]),
+      );
+
+      await tester.tap(find.text("Used tool: read"));
+      await tester.pumpAndSettle();
+
+      // The file's own content is there...
+      expect(find.textContaining("the contents"), findsOneWidget);
+      // ...and the rendered instructions block is not.
+      expect(find.textContaining("OVERRIDE any default behavior"),
+          findsNothing);
+      expect(find.textContaining("sub rules"), findsNothing);
+    });
   });
 
   group("file-tool diffs", () {
@@ -1451,4 +1592,231 @@ void main() {
       expect(enabled(tester, buttonTipped("Regenerate")), isTrue);
     });
   });
+  group("recorded permissions", () {
+    MessagePart part(String answer) => MessagePart.approval(
+          approvalId: "a-1",
+          toolName: "bash",
+          argumentsText: "git status",
+          answer: answer,
+        );
+
+    testWidgets("an allowed banner reads allowed", (tester) async {
+      await pump(tester, _message(MessageRole.assistant, [part("allow")]));
+
+      expect(find.textContaining("Permission: bash — allowed"), findsOneWidget);
+    });
+
+    testWidgets("the scoped answers read as what they granted", (tester) async {
+      await pump(tester, _message(MessageRole.assistant, [
+        part("alwaysAllowChat"),
+        MessagePart.approval(
+            approvalId: "a-2",
+            toolName: "bash",
+            answer: "alwaysAllowProject"),
+      ]));
+
+      expect(
+          find.textContaining("allowed, always in this chat"), findsOneWidget);
+      expect(find.textContaining("allowed, always in this project"),
+          findsOneWidget);
+    });
+
+    testWidgets("a denied banner reads denied in the error colour",
+        (tester) async {
+      await pump(tester, _message(MessageRole.assistant, [part("deny")]));
+
+      // The wording is the contract; the icon carries the alarm visually.
+      expect(find.textContaining("Permission: bash — denied"), findsOneWidget);
+      expect(find.byIcon(Icons.gpp_maybe_outlined), findsOneWidget);
+    });
+
+    testWidgets("a banner the turn left outstanding reads never answered",
+        (tester) async {
+      await pump(tester, _message(MessageRole.assistant, [part("asked")]));
+
+      expect(find.textContaining("never answered"), findsOneWidget);
+    });
+
+    testWidgets("the drawer names the granted dirs", (tester) async {
+      await pump(tester, _message(MessageRole.assistant, [
+        MessagePart.approval(
+            approvalId: "a-3",
+            toolName: "bash",
+            argumentsText: "writing /home/x",
+            deniedDirs: const ["/home/x"],
+            answer: "alwaysAllowProject"),
+      ]));
+
+      await tester.tap(find.textContaining("Permission: bash"));
+      await tester.pumpAndSettle();
+
+      expect(find.text("Sandbox dirs granted"), findsOneWidget);
+      expect(find.text("/home/x"), findsOneWidget);
+      expect(find.text("Answer"), findsOneWidget);
+    });
+
+    testWidgets("a recorded permission breaks an activity run", (tester) async {
+      await pump(tester, _message(MessageRole.assistant, [
+        const TextPart(text: "checking"),
+        part("allow"),
+        part("allow"),
+      ]));
+
+      // A recorded permission is the user's own decision: it breaks the run
+      // of labels rather than collapsing behind a toggle.
+      expect(find.byType(ActivityGroup), findsNothing);
+      expect(find.textContaining("Permission: bash"), findsNWidgets(2));
+    });
+
+    testWidgets("the outcome rides on the label beside the answer",
+        (tester) async {
+      await pump(tester, _message(MessageRole.assistant, [
+        MessagePart.toolCall(
+            toolCall: const ToolCall(
+                id: "call-1", name: "bash", argumentsText: "git status")),
+        MessagePart.toolResult(result: const ToolResult(
+            callId: "call-1",
+            returnCode: 0,
+            output: "",
+            decidedBy: PermissionSource.rule,
+            decidedTier: [PermissionTier.chat],
+            decided: PermissionDecision.allow)),
+        part("allow"),
+      ]));
+
+      expect(find.textContaining("allowed by this chat's rules"),
+          findsOneWidget);
+    });
+
+    testWidgets("an always answer does not repeat the tier", (tester) async {
+      // "allowed, always in this chat" already says the scope; the outcome
+      // would say it a second time.
+      await pump(tester, _message(MessageRole.assistant, [
+        MessagePart.toolCall(
+            toolCall: const ToolCall(
+                id: "call-1", name: "bash", argumentsText: "git status")),
+        MessagePart.toolResult(result: const ToolResult(
+            callId: "call-1",
+            returnCode: 0,
+            output: "",
+            decidedBy: PermissionSource.human,
+            decidedTier: [PermissionTier.once],
+            decided: PermissionDecision.allow)),
+        part("alwaysAllowChat"),
+      ]));
+
+      expect(find.textContaining("Permission: bash — allowed, always in this chat"),
+          findsOneWidget);
+      expect(find.textContaining("by the rules of"), findsNothing);
+    });
+
+    testWidgets("a rule-deny reads what refused it", (tester) async {
+      await pump(tester, _message(MessageRole.assistant, [
+        MessagePart.toolCall(
+            toolCall: const ToolCall(
+                id: "call-1", name: "bash", argumentsText: "rm -rf build")),
+        MessagePart.toolResult(result: const ToolResult(
+            callId: "call-1",
+            returnCode: -1,
+            output: "",
+            exceptionInfo: "Denied by a permission rule you set.",
+            decidedBy: PermissionSource.rule,
+            decidedTier: [PermissionTier.project],
+            decided: PermissionDecision.deny)),
+      ]));
+
+      expect(find.textContaining("denied by the project's rules"),
+          findsOneWidget);
+    });
+
+    testWidgets("the drawer carries the Outcome section", (tester) async {
+      await pump(tester, _message(MessageRole.assistant, [
+        MessagePart.toolCall(
+            toolCall: const ToolCall(
+                id: "call-1", name: "bash", argumentsText: "git status")),
+        MessagePart.toolResult(result: const ToolResult(
+            callId: "call-1",
+            returnCode: 0,
+            output: "clean",
+            decidedBy: PermissionSource.classifier,
+            decidedTier: [],
+            decided: PermissionDecision.allow)),
+      ]));
+
+      await tester.tap(find.textContaining("Used tool: bash"));
+      await tester.pumpAndSettle();
+
+      expect(find.text("Outcome"), findsOneWidget);
+      expect(find.text("allowed by the classifier"), findsOneWidget);
+    });
+
+    testWidgets("a result from before the field existed says nothing",
+        (tester) async {
+      await pump(tester, _message(MessageRole.assistant, [
+        MessagePart.toolCall(
+            toolCall: const ToolCall(
+                id: "call-1", name: "bash", argumentsText: "git status")),
+        MessagePart.toolResult(result: const ToolResult(
+            callId: "call-1", returnCode: 0, output: "old log")),
+      ]));
+
+      expect(find.textContaining("Used tool: bash — "), findsNothing);
+      expect(find.text("Outcome"), findsNothing);
+    });
+
+    testWidgets("an ungated call says nothing", (tester) async {
+      // A read inside the workspace ran with nothing standing in front of it:
+      // the mode's default posture is not a decision to record.
+      await pump(tester, _message(MessageRole.assistant, [
+        MessagePart.toolCall(
+            toolCall: const ToolCall(
+                id: "call-1", name: "read", argumentsText: "notes.txt")),
+        MessagePart.toolResult(result: const ToolResult(
+            callId: "call-1", returnCode: 0, output: "hi")),
+      ]));
+
+      expect(find.textContaining("Used tool: read"), findsOneWidget);
+      expect(find.text("Outcome"), findsNothing);
+    });
+  });
+
+  group("sandbox violations on a tool label", () {
+    testWidgets("a clean return with violations reads failed in the error colour",
+        (tester) async {
+      await pump(tester, _message(MessageRole.assistant, [
+        MessagePart.toolCall(
+            toolCall: const ToolCall(
+                id: "c-1", name: "bash", argumentsText: "python3 build.py")),
+        MessagePart.toolResult(result: const ToolResult(
+            callId: "c-1",
+            returnCode: 0,
+            output: "mkdir: cannot create directory '/etc/x': Permission denied",
+            violations: ["writing /etc/x"])),
+      ]));
+
+      // The wording is the contract; the icon carries the alarm visually.
+      expect(find.textContaining("Used tool: bash"), findsOneWidget);
+      expect(find.byIcon(Icons.error_outline), findsOneWidget);
+    });
+
+    testWidgets("the drawer lists what the sandbox denied", (tester) async {
+      await pump(tester, _message(MessageRole.assistant, [
+        MessagePart.toolCall(
+            toolCall: const ToolCall(
+                id: "c-1", name: "bash", argumentsText: "python3 build.py")),
+        MessagePart.toolResult(result: const ToolResult(
+            callId: "c-1",
+            returnCode: 1,
+            output: "mkdir: Permission denied",
+            violations: ["writing /etc/x"])),
+      ]));
+
+      await tester.tap(find.textContaining("Used tool: bash"));
+      await tester.pumpAndSettle();
+
+      expect(find.text("Sandbox"), findsOneWidget);
+      expect(find.text("writing /etc/x"), findsOneWidget);
+    });
+  });
+
 }

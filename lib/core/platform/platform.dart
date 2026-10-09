@@ -25,7 +25,9 @@ import "../../domain/local_llm.dart";
 import "../../domain/local_model_store.dart";
 import "../../domain/models.dart";
 import "../../domain/prompt_library.dart";
+import "../../domain/file_watches.dart";
 import "../../domain/reminder_alarms.dart";
+import "../../domain/trigger_manager.dart" show TriggerRegistryFactory;
 import "../../domain/rootfs_store.dart";
 import "../../domain/secret_store.dart";
 import "../../domain/shell.dart";
@@ -62,6 +64,7 @@ BuiltinBackend createBackend(
   String? byteRepairBinDir,
   required AppSecrets secrets,
   String? loginPath,
+  TriggerRegistryFactory? triggerRegistry,
 }) {
   AppSettings settings() => AppSettings.load(config);
   final backend = BuiltinBackend(
@@ -98,6 +101,7 @@ BuiltinBackend createBackend(
     ),
     webSearch: platformWebSearch(),
     store: store,
+    triggerRegistry: triggerRegistry,
     registry: LlmRegistry(
       endpoints: () => llmEndpoints(settings, localLlm, kvCache),
       // Settings wins, but a key already exported is found without having to
@@ -358,6 +362,10 @@ AssistantLaunch createAssistantLaunch() => platformAssistantLaunch();
 /// session bus's notifications on Linux, nothing anywhere else.
 Future<ReminderAlarms> createReminderAlarms() => platformReminderAlarms();
 
+/// The file system's own push, where the platform has one: inotify on the
+/// machine and Android, nothing in a browser.
+FileWatches createFileWatches() => platformFileWatches();
+
 /// The presets, and the user's own beside them. Their directory is on the
 /// config's filesystem, so it exists on every platform now. The bundled
 /// skills are extracted to the config's filesystem first — `installBundledSkills`,
@@ -387,6 +395,10 @@ Future<String?> captureLoginPath() => platformCaptureLoginPath();
 /// unintentionally write to them. No-op on the web (no bash). See
 /// `platformChmodReadOnly`.
 Future<void> chmodReadOnly(List<String> paths) => platformChmodReadOnly(paths);
+
+/// Releases [platformChmodReadOnly]'s lock so the app's own writes can run —
+/// the install of the bundled skills is one. Re-lock afterwards.
+Future<void> chmodWritable(List<String> paths) => platformChmodWritable(paths);
 
 /// Toggles a directory writable for [action], then restores it read-only. The
 /// install and delete paths use this — they are the app's writes, not the

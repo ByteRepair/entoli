@@ -12,59 +12,34 @@ Two files are attached, each with a provenance attestation beside it: a signed
 resigns it into per-device APKs of its own. They carry the app's name rather
 than the package's, since a person is what downloads them.
 
-**The release APKs are off.** The `android` job in `release-build.yml` is
-commented out and the version job names no APKs: Play is the Android channel a
-release serves, and an APK for a hand install is what `debug-build.yml` builds
-when asked. The job is kept as comments, with the split, the version-code
-offset and the checks that came with it, so bringing it back is uncommenting —
-and the arithmetic below is why bringing it back also means publishing it
-beside Play rather than instead of it.
-
-**The APK was split per ABI, so a release page offered a choice rather than one
-file.** A universal APK carried three copies of every native library and a
-phone could use one of them — 125 MB of libraries where an arm64 device wants
-94 MB of them, most of that llama.cpp, which is built for arm64 alone. The cost
-was that a downloader had to know which one to take, and that **an installer
-matching `.apk` found three**: Obtainium asks which, or takes a regex like
-`entoli-.*-arm64-v8a\.apk` to stop asking. There was no universal APK beside
-them, deliberately — a fourth file that installs anywhere would be the one
-everybody takes, which is the arithmetic above undone.
-
-**Flutter offsets the version code per ABI, and going back to one APK is
-therefore a downgrade.** Under `--split-per-abi` its Gradle plugin sets
-`versionCode` to `abi * 1000 + <the code below>`, with `armeabi-v7a` 1,
-`arm64-v8a` 2 and `x86_64` 4 — so 1.0.0 shipped as 11000, 12000 and 14000
-rather than 10000. Within one ABI that stays monotonic in the version, and it
-is above what a universal APK of the same version would carry, so the split
-installed over an unsplit past. The reverse does not: a universal APK published
-after this would report a *lower* code than what is on the phone and Android
-would refuse it. Undoing the split means the release that does it also bumps
-the version far enough to clear the offset — one more reason the commented job
-stays commented until a release means to bring it back.
+**There is no release APK.** Play is the Android channel a release serves;
+Google builds the per-device APKs from the bundle itself, and anyone who wants
+a hand install builds one with `flutter build apk` — locally, or through
+`debug-build.yml`'s dispatch, which is where its debug application id and run
+numbers are handled. A release page offering a choice of APKs cost more than
+it returned: three flavours was one decision for a downloader to get right.
 
 **`release.yml` builds none of it.** The builds are `release-build.yml`'s,
 which it calls with the tag and which is dispatchable on its own, so whether a
 tag builds can be found out without publishing a release to ask. What the two
-Linux builds then share is one composite action,
-`.github/actions/linux-appimage`; they differ in the mode they pass it and in
-what they do with what comes back, which is a bundle and an AppImage either
-way. The four signing secrets are named at the call site rather than
-`inherit`ed, since only the Android jobs sign anything.
-**The Android build is three jobs, not one.** The native tools build fetches
-the Hexagon SDK and cross-compiles proot and llama.cpp — several gigabytes of
-intermediates a single runner did not have room for beside the Gradle build.
-`android-tools` builds only, uploads the stripped `dist/` as an artifact, and
-the runner is recycled with all its build directories. `build-common` primes
-Gradle on a fresh runner — wrapper, plugins, dependencies, the generated
-files `flutter build` writes — with `gradlew help`, where `build appbundle`
-has no `--config-only`, neither building any artifact — and saves the Gradle
-caches under a key derived from the Gradle files. `aab` downloads the tools
-artifact and restores that cache onto a fresh runner, then builds the App
-Bundle. A fourth job, `android`, built the split release APKs beside it and is
-commented out with the APKs themselves; when it was live, `debug-build.yml`
-split the same way, for the same reason, and it still does not pass
-`gradle-cache`, so it pays its own Gradle setup as it always did. The tools
-job does not touch Dart.
+Linux builds share is one composite action, `.github/actions/linux-appimage`;
+they differ in the mode they pass it and in what they do with what comes back,
+which is a bundle and an AppImage either way. The four signing secrets are
+named at the call site rather than `inherit`ed, since only the Android job
+signs anything.
+
+**The Android build is two jobs, not one.** The native tools build fetches the
+660 MiB Hexagon SDK and cross-compiles proot and llama.cpp — several gigabytes
+of intermediates a single runner did not have room for beside the Gradle
+build. `android-tools` builds only, uploads the stripped `dist/` as an
+artifact, and the runner is recycled with all its build directories. `aab`
+downloads that artifact onto a fresh runner with the full disk free for
+Gradle, and pays its own Gradle setup — wrapper download, plugin and
+dependency resolution, the SDK components Gradle fetches — inline. A priming
+job and a warm Gradle cache once stood between it and that work; they existed
+to be shared between two build jobs, and with one consumer left they paid the
+same configure twice and moved a multi-gigabyte entry nobody else read. The
+tools job does not touch Dart.
 
 **The Linux build is two jobs, not one, for the same reason.** `llama-linux`
 builds the desktop model server (`.github/actions/linux-llama`, over
@@ -90,17 +65,10 @@ gets there the same way; the pin replaces an accident (no OpenSSL for
 that ships OpenSSL fails at staging rather than on a phone. The app does
 its own downloading; the server is local inference.
 
-**The Gradle cache has one writer.** `build-common` saves it; the build jobs
-restore read-only (`cache/restore`), so two jobs never upload the same
-multi-gigabyte entry and a restore cannot race a save mid-run — a dependent
-job starts only after the job it needs has finished saving. The key is the
-hash of the Gradle files, so a build input change is a new key, filled by
-that run and read back by the next; the 7-day eviction handles the old one.
-
 The setup the build jobs share — keystore decode (release only), Java 17,
 Flutter, the tools download and staging — is one composite,
 `.github/actions/android-build-setup`, gated by a `release` boolean: debug
-passes `false` and skips the keystore; the release jobs pass it the four
+passes `false` and skips the keystore; the release job passes it the four
 secrets. It also rewrites `android/gradle.properties`' `-Xmx8G`
 /-`MaxMetaspaceSize=4G` down to 4G/1G on every runner: those are workstation
 figures, and a JVM that grows past what a hosted runner has left does not
@@ -118,14 +86,10 @@ tree: rebuilding an older release breaks if the script is renamed.
 **The version is `pubspec.yaml`'s `version:` and nothing else**, resolved in a
 job of its own before either build. Every file name is composed there, because
 an attestation records its subject by name and the file attested is uploaded
-from a different job than the one that built it. (The commented android job
-once had that job name the ABIs too, which is what a split is expected to
-produce rather than what it chose — the build failed on an APK it named and
-did not get, so a Flutter that changes its default platforms was an error
-rather than a release quietly missing a file.) A tag disagreeing with pubspec
-fails that job, since a binary reporting a version nobody released cannot be
-talked out of it afterwards — and failing there costs seconds rather than two
-toolchain installs.
+from a different job than the one that built it. A tag disagreeing with
+pubspec fails that job, since a binary reporting a version nobody released
+cannot be talked out of it afterwards — and failing there costs seconds
+rather than two toolchain installs.
 
 **A release that moves anything under the data directory needs a migration**
 named by that same version — see "Migrations" in the root CLAUDE.md. Nothing in
@@ -133,16 +97,14 @@ CI checks for one; the check is that the PR moving the files adds it.
 
 **The Android version code is derived from that version rather than stored**,
 as `major * 10000 + minor * 100 + patch` — 1.0.0 is 10000, 1.2.3 is 10203; the
-split APKs added the per-ABI offset above on top of it, and the AppImage gets
-it unoffset. So
-pubspec carries no `+build` suffix: a suffix would be a second number to bump
-and so a second number to forget, and forgetting it means a release that will
-not install over the one before it. **Minor and patch must stay below 100**, or
-1.0.100 and 1.1.0 compute the same code; the workflow fails rather than
-shipping the collision. The debug builds are a separate application id
-(`.debug`), so the run numbers `debug-build.yml` gives them are never compared
-against these. They carry their own name and icon too: see
-"The debug build's own".
+AppImage gets the same code. So pubspec carries no `+build` suffix: a suffix
+would be a second number to bump and so a second number to forget, and
+forgetting it means a release that will not install over the one before it.
+**Minor and patch must stay below 100**, or 1.0.100 and 1.1.0 compute the same
+code; the workflow fails rather than shipping the collision. The debug builds
+are a separate application id (`.debug`), so the run numbers `debug-build.yml`
+gives them are never compared against these. They carry their own name and
+icon too: see "The debug build's own".
 
 **Signing material never enters the repository.** Four secrets —
 `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`,
@@ -159,12 +121,10 @@ and that fallback is what the checks are built around.** Gradle generates a
 debug keystore on any runner that lacks one, so a build with the secrets
 missing still succeeds and ships a bundle nothing installs over at the next
 release. The run fails before it builds if any secret is empty, and asserts on
-the signer afterwards: the same `CN=Android Debug` string fails in
-`keytool -printcert -jarfile` on the AAB job (a bundle is a signed jar, so
-`apksigner` does not apply), and the commented APK job checked it with
-`apksigner verify --print-certs`. The
-signer's SHA-256 goes in the run summary, because a change in it is the one
-thing a user cannot recover from.
+the signer afterwards: the `CN=Android Debug` string fails the bundle in
+`keytool -printcert -jarfile`, the bundle being a signed jar. The signer's
+SHA-256 goes in the run summary, because a change in it is the one thing a
+user cannot recover from.
 
 **The keystore is the maintainer's and nothing here can regenerate it.**
 Android identifies an app by its signing key, so losing it ends the ability to
@@ -211,8 +171,8 @@ notifies every watcher a second time.
 `publish-play.yml` uploads the App Bundle to Google Play, which resigns it into
 per-device APKs of its own — the whole difference between the two channels: the
 AppImage is installed as it is, and the file sent to Play is an input to
-something Google builds. With the release APKs off, Play is the only Android
-channel a release serves. `release.yml` calls it after the build, in parallel
+something Google builds. Play is the only Android channel a release serves;
+`release.yml` calls it after the build, in parallel
 with the publish matrix that attaches binaries to the GitHub release.
 
 **Play App Signing uses the project's own keystore rather than a

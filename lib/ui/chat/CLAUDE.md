@@ -7,9 +7,11 @@ fact about the room; none of them permits or refuses anything.
 
 The room has two participants who speak, and a third shape that never does:
 
-- **The user**, whose send verb is `TurnDriver.send` — every way a reminder or
+- **The user**, whose send verb is `TurnDriver.send` — every way a trigger or
   a voice utterance speaks goes through the controller's `send` too, one path
-  rather than one per caller.
+  rather than one per caller. A trigger fire naming a member is a say like
+  any other: the mention in its text is what routes it, and nothing here
+  knows the fire was a trigger.
 - **The main agent**, behind the event stream. Every turn the controller
   drives today is its turn; its reply is the anonymous voice at the end of
   one. Sub-agents (a `task` call) are participants with a restricted reply
@@ -52,6 +54,18 @@ That is what keeps the label honest: it answers "who spoke", and the answer
 is a lie if an instruction overlay can put a name on the main agent's
 voice.
 
+**The room contract is My Team's note, not a per-turn overlay.** Every Omada
+turn runs under `MyTeamProject`'s bundled note (`assets/prompts/projects/
+my-team/system/instructions.md`): the room, the handles, `pass`, the one
+handle per reply — worded once for any participant, main agent or member,
+since both run under it. The project's own note comes first where it ships
+one, and the user's instruction files are read on top, the way they always
+are for a user project. A project's Omada answer decides whether the note is
+there at all — a built-in's spec (`my-team` on, everything else off), a user
+project's toggle — so flipping Omada off leaves the next turn the plain
+prompt it had. The per-turn wording that used to stand here
+(`houseTurnInstructions`/`memberTurnInstructions`) is gone.
+
 **The schedule is the room's order of speaking.** `_schedule` puts an item
 on each member's FIFO: a user prompt addressed by its documents, or a
 handoff — the reply that names them, one generation past the turn that wrote
@@ -60,17 +74,25 @@ for. `_dispatch` runs what the schedule holds: **sequential** order
 dispatches one item at a time — the mention list is the schedule, and what
 follows dispatches at the settle it causes; **parallel** order dispatches
 one item per member at once, each FIFO's head, one turn per member still
-standing, and the rest at the settles they cause. Either way the item is off
-its FIFO before its turn opens, so a settle re-entering finds the schedule
-behind it and not the item running.
+standing, and the rest at the settles they cause; **relay** order keeps the
+per-member rule and drops the wave barrier — the head of every FIFO whose
+member has no turn in flight, dispatched while anything else runs. Either
+way the item is off its FIFO before its turn opens, so a settle re-entering
+finds the schedule behind it and not the item running.
 
-**A handoff wave waits for the room to settle.** A turn that finishes while
-a sibling is still speaking records its reply in `_settledReplies`; the
-settle the last sibling causes evaluates every reply the wave finished, in
-finish order, against the cap read at dispatch. A generation is the dispatch
-wave an item belongs to — zero is the user's own and uncapped, a handoff
-lands one past the turn that named it, and the cap (`omadaMaxGenerations`,
-project override over app default) stops the wave that would pass it.
+**A handoff wave waits for the room to settle — in the wave orderings.** A
+turn that finishes while a sibling is still speaking records its reply in
+`_settledReplies`; the settle the last sibling causes evaluates every reply
+the wave finished, in finish order, against the cap read at dispatch. Relay
+has no wave: a reply is evaluated the moment its turn is over, siblings
+beside it notwithstanding, and what it names runs through the per-lane check
+at dispatch — which is what "members start as soon as they are named" costs.
+A generation is the dispatch wave an item belongs to — zero is the user's
+own and uncapped, a handoff lands one past the turn that named it, and the
+cap (`omadaMaxGenerations`, project override over app default) stops the
+wave that would pass it. Under relay the finished turn's generation entry is
+spent when its handoff is scheduled — waves overlap, so a wave's cleanup
+cannot be the thing that retires the entry.
 
 **A pass ends what agents hand each other, not what the user asked for.** A
 reply that says nothing but `pass` clears the schedule of agent-addressed
@@ -86,7 +108,9 @@ the turn was finishing while it was typed — `_sayLater` dispatches it itself
 rather than waiting for a settle that already happened. Nothing is injected
 into a turn mid-flight, which is what protects the projection-prefix
 invariant; and a say whose members are named schedules them through the same
-ordering anything else takes.
+ordering anything else takes. Under relay the settle part of that rule
+shrinks to the member's: a say dispatches while the room is still busy, and
+the per-lane check is what keeps a say for a busy member on their FIFO.
 
 **Abort stops the round whole.** Every running turn is ended `aborted`, the
 queue of unsaid says is dropped, and the schedule is cleared — an aborted
@@ -149,8 +173,14 @@ did, and the Continue bar is the way on.
 
 The round is `_startResume()`, which is `resume()` without the guards: there is
 one carry-on mechanism, and a retry that built a second one would drift from
-it the way every second copy here has drifted. `_turnDone` stays open across
-the rounds — a reminder awaiting it, or a voice handover, gets one completion,
+it the way every second copy here has drifted. The round re-opens the reply
+**its own turn** was writing — passed by id — not "the last assistant
+message": under overlapping turns (relay, a parallel fan-out) a sibling's
+still-streaming reply can sit below, and resuming by position would re-open
+the wrong recorder. The user-facing Continue keeps the last-reply rule, an
+open chat with one unfinished reply being what it offers to carry on.
+`_turnDone` stays open across
+the rounds — a trigger awaiting it, or a voice handover, gets one completion,
 at the true end, not one per attempt. A `_retryGen` bumped by `abort` and
 `interrupt` is what keeps a round waiting out its backoff from firing after
 the user pressed stop: the wait holds nothing, and the generation is how it
@@ -173,10 +203,10 @@ from, whose stale errors stay in the parts.
 that ends `TurnEnd.error` while the app is hidden (the `appHiddenProvider`,
 written by the app root's lifecycle listener) posts a notification on the
 "turns" Android channel through `ReminderAlarms.notify` — the same tap
-machinery the reminder completions use, chat id on the content intent, so the
-tap opens the chat through the existing `IncomingReminderOpen` path. Gated on
-`headless` being false, since a reminder's chat is already notified by the
-scheduler that ran it — a second notice would be a double. Not gated on
+machinery the trigger completions use, chat id on the content intent, so the
+tap opens the chat through the existing `IncomingTriggerOpen` path. Gated on
+`headless` being false, since a fired trigger's new chat is already notified
+by the manager that ran it — a second notice would be a double. Not gated on
 anything per-chat: the user said the failure is visible enough when they are
 *in the app*, even on another chat. On every platform without a notification
 route the port is the no-op it always was, and the failure waits visibly in
@@ -278,7 +308,9 @@ hand anything over — the part lands and the reply is no longer empty.
 A run of two or more non-important activity labels collapses behind a single
 centered "Expand activities" toggle (`ActivityGroup`), default collapsed. What
 is important and so stays visible, breaking a run: an artifact button, a failed
-tool run, an `ask_user` question, and the live label a running turn is working
+tool run, an `ask_user` question, an instructions record (`InstructionsLabel`,
+the first reach of an `AGENTS.md` — rare by construction, once per file), and
+the live label a running turn is working
 on. Text, errors and files are not labels and break a run too. A lone label is
 left where it is — a toggle for one label is noise. The decision is per-part in
 `_rows` (buffer into a pending run, flush at any break), and the length check
@@ -527,6 +559,30 @@ command that printed nothing says so on the exit row, rather than leaving a
 strip that reads as an answer cut off. What is behind all this is "Running a
 command yourself".
 
+### A compact turn, and its divider
+
+`/compact` is a callback, not a prompt: the composer dresses for it (an
+`auto_awesome` icon and a "Compact the conversation" hint — lighter than the
+shell's dressing, since nothing runs on the machine and no model is asked), the
+send dispatches it before the room's guards, and while a turn runs it is
+**refused, not queued** — a callback mid-turn is the session the turn is
+rewriting underneath it. The turn itself goes through the room's machinery:
+prompt logged as said, empty reply, the status row saying "Compacting the
+conversation" where a model's spinner would be, `turnEnd done`. Its product is
+the marker, not a reply.
+
+**The marker is a `ConversationSeparator`** — the same full-width divider the
+Omada mode flips are, generalized to take a caption and furniture beneath the
+line — emitted by `entriesOf` just after the boundary message it covers,
+captioned "Compact Conversation". The summary is rendered beneath it in
+`MessageText`, the widget a reply's text is encoded in — the same markdown,
+code blocks and link taps, in the gutter a reply keeps, always visible,
+nothing to tap. It is not selectable: the divider is metadata, and a selection
+container of its own is the per-row container the bubble's single region
+replaced. Auto-compact
+leaves the same trace with no turn around it: unawaited after a settled turn,
+the divider its only evidence, the way the memory extraction's note is.
+
 ## A chat whose home device is elsewhere
 
 `MirrorChatController` is the counterpart of `ChatController` for a chat being
@@ -664,7 +720,7 @@ The three fields are already standalone widgets, so the page that composes them
 is thirty lines.
 
 `_EmptyChat` is the body of both empty screens — `_NewChat`'s, and a chat that
-exists with nothing said in it yet, which is what voice mode and a reminder can
+exists with nothing said in it yet, which is what voice mode and a trigger can
 leave. It draws the mark, the question, the projects as badges, and a chip
 per `/skill` and `@agent` the library holds. The chips are discovery: the
 composer's menus are the only place those are named, and nothing names them
@@ -695,7 +751,7 @@ that bought was a page the user opens on that moves before anything has been
 touched. So both rows are built `settled`: what this screen is created with
 is already there, and everything from the first interaction on animates. The
 same body serves a chat that exists with nothing said in it yet — what voice
-mode and a reminder can leave — and it opens settled the same way. A remount
+mode and a trigger can leave — and it opens settled the same way. A remount
 across `navBreakpoint` rebuilds the rows, and they open settled again, which
 is right: that remount *is* the screen appearing. The say-so is scoped to the
 row's first build, so content that is not on screen at that moment — a cold
@@ -764,7 +820,7 @@ user project has neither, since only a built-in ships one.
 Tapping one types it into the composer through `insertCompletion`, which is the
 field's own insertion lifted out of its `State` so both callers reach it — it
 sits beside `CompletionField` in `ui/widgets/`, which is the composer's menu
-now that the reminder editor writes a prompt too. Both halves of that mattered.
+now that the trigger editor writes a prompt too. Both halves of that mattered.
 **Where** it lands is a rule: a skill goes to offset 0, because
 `prompt_library.dart`'s `_skillReference` is anchored there and
 `activeCompletionToken` gates `/` on `start == 0` — appended at the caret it

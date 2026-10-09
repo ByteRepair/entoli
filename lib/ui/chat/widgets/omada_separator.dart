@@ -1,32 +1,53 @@
 import "package:flutter/material.dart";
 
-/// A room whose Omada mode changed, said between the turns either side of
-/// it. Metadata rather than a message: full width, untinted, not selectable
-/// — the same furniture the labels above a bubble are. The caption names
-/// the flip, so a mixed-mode chat explains its own sections on a reload.
-class OmadaSeparator extends StatelessWidget {
-  const OmadaSeparator({super.key, required this.omada});
+/// A boundary said between the turns either side of it. Metadata rather than a
+/// message: untinted, not selectable — the same furniture the labels above a
+/// bubble are. The caption names it, so a conversation explains its own
+/// boundaries on a reload.
+///
+/// Two boundaries share it: the room's Omada mode changing, and a compaction
+/// — the divider naming where the conversation's summary for the model began.
+/// The compaction's [body] is the summary itself, rendered beneath the line
+/// like a reply is; the mode flip has no furniture beneath it.
+class ConversationSeparator extends StatelessWidget {
+  const ConversationSeparator({super.key, required this.text, this.body});
 
-  /// The mode the room entered at this boundary.
-  final bool omada;
+  /// What the divider says happened here.
+  final String text;
+
+  /// Furniture beneath the line — a compaction's summary, in the gutter a
+  /// reply keeps. Null for a boundary that is only a line.
+  final Widget? body;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 16),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Expanded(child: Divider(color: theme.colorScheme.outlineVariant)),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            child: Text(
-              omada ? "Omada is turned on" : "Omada is turned off",
-              style: theme.textTheme.bodySmall
-                  ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-            ),
+          Row(
+            children: [
+              Expanded(child: Divider(color: theme.colorScheme.outlineVariant)),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                child: Text(
+                  text,
+                  style: theme.textTheme.bodySmall
+                      ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                ),
+              ),
+              Expanded(child: Divider(color: theme.colorScheme.outlineVariant)),
+            ],
           ),
-          Expanded(child: Divider(color: theme.colorScheme.outlineVariant)),
+          if (body != null)
+            Padding(
+              // The gutter a reply keeps: everything the model wrote sits
+              // inside it, the summary no less than a bubble.
+              padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+              child: body!,
+            ),
         ],
       ),
     );

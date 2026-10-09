@@ -54,6 +54,9 @@ void main() {
     expect(copy.omada, true);
     expect(copy.omadaOrdering, OmadaOrdering.parallel);
     expect(copy.description, "What are we building?");
+    expect(copy.permissions, settings.permissions);
+    expect(copy.writableDirs, settings.writableDirs);
+    expect(copy.sandboxReprompt, settings.sandboxReprompt);
   });
 
   test("omada off writes nothing and an absent key loads as off", () async {
@@ -80,6 +83,12 @@ void main() {
     final cleared = ProjectSettings.load(config, project: "work");
     expect(cleared.omada, false);
     expect(cleared.omadaOrdering, OmadaOrdering.sequential);
+
+    // Relay rides the same name-based round trip.
+    await (ProjectSettings()..omadaOrdering = OmadaOrdering.relay)
+        .save(config, project: "work");
+    expect(ProjectSettings.load(config, project: "work").omadaOrdering,
+        OmadaOrdering.relay);
   });
 
   test("an ordering name that is not one is not an ordering", () async {

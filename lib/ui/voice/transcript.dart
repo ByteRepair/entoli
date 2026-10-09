@@ -98,6 +98,8 @@ List<VoiceLine> linesOf(MessageRole role, MessagePart part, [SpeakableText? grow
     case FilePart():
     case ArtifactPart():
     case SkillInstallPart():
+    case ApprovalPart():
+    case InstructionsPart():
       return const [];
   }
 }

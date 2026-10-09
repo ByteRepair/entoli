@@ -1,5 +1,6 @@
 import "dart:async";
 import "dart:math" as math;
+import "dart:typed_data";
 
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
@@ -8,6 +9,7 @@ import "../../domain/agent_backend.dart";
 import "../../domain/chat_meta.dart";
 import "../../domain/models.dart";
 import "../../domain/project.dart";
+import "../../domain/prompt_library.dart" show nameOf;
 import "../../providers.dart";
 import "../fonts.dart";
 import "../theme.dart";
@@ -23,11 +25,11 @@ import "../widgets/scrolling.dart";
 import "chat_settings_page.dart";
 import "chat_controller.dart";
 import "mirror_controller.dart";
+import "widgets/activity_label.dart" show formatRemaining;
 import "widgets/composer.dart";
-import "widgets/activity_label.dart";
 import "widgets/synced_device_cards.dart";
 import "widgets/message_bubble.dart";
-import "widgets/omada_separator.dart";
+import "widgets/omada_separator.dart" show ConversationSeparator;
 import "widgets/needs_setup_bar.dart";
 import "widgets/turn_surface.dart";
 import "widgets/view_only_bar.dart";
@@ -511,14 +513,25 @@ class SectionEntry extends ConversationEntry {
   final bool omada;
 }
 
+/// The divider after the message a compaction's boundary names. [summary] is
+/// what the drawer behind it shows.
+class CompactionEntry extends ConversationEntry {
+  const CompactionEntry(this.summary);
+
+  /// What the model reads in place of the messages above this line.
+  final String summary;
+}
+
 /// The conversation as rows, walked off the thread in order. A turn opener
 /// carrying a mode that differs from the running one emits a [SectionEntry]
 /// first — both flips are rows, the off-flip bounding an on-section — and
 /// every message carries whether it sits in an on-section, which is what
-/// names the main agent "Entoli" there.
+/// names the main agent "Entoli" there. A compaction boundary is said after
+/// the message it covers: the divider is where the summary took over.
 List<ConversationEntry> entriesOf(Chat chat) {
   final entries = <ConversationEntry>[];
   var on = false;
+  final byBoundary = {for (final c in chat.compactions) c.upToMessageId: c};
   for (final (index, m) in chat.messages.indexed) {
     final opener = m.omadaOn;
     if (opener != null && opener != on) {
@@ -527,6 +540,8 @@ List<ConversationEntry> entriesOf(Chat chat) {
     }
     entries.add(MessageEntry(m,
         inOmadaSection: on, last: index == chat.messages.length - 1));
+    final marker = byBoundary[m.id];
+    if (marker != null) entries.add(CompactionEntry(marker.summary));
   }
   return entries;
 }
@@ -883,6 +898,27 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
         ],
       );
 
+  /// The one link-opening rule, both renderers of model-written markdown — a
+  /// reply and a compaction summary — share it.
+  void _openLink(BuildContext context, String href) {
+    final uri = Uri.tryParse(href);
+    if (uri != null) ref.read(linkOpenerProvider).open(context, uri);
+  }
+
+  /// The bytes of the picture beside an addressed member's name: the named
+  /// member's, where the message names one — the same condition the label
+  /// answers, so the two never disagree. Null where it names none, so the
+  /// main agent's reply draws its label alone, whatever a file in the agents
+  /// directory might hold.
+  Uint8List? _avatarOf(Chat chat, Message message) {
+    final member = nameOf(message.author);
+    if (member == null) return null;
+    return ref
+        .watch(agentPictureProvider(
+            (project: chat.state.project, name: member)))
+        .value;
+  }
+
   Widget _conversation(
       Chat chat, ChatViewState view, ChatController? editing, Widget whenEmpty) {
     final speechReady = ref.watch(speechReadyProvider);
@@ -894,48 +930,56 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
         NotificationListener<ScrollNotification>(
           onNotification: _onScroll,
           child: ListView.builder(
-            controller: _scroll,
-            itemCount: entries.length,
-            itemBuilder: (context, i) => switch (entries[i]) {
-              SectionEntry(:final omada) => OmadaSeparator(omada: omada),
-              MessageEntry(:final message, :final inOmadaSection, :final last) =>
-                Builder(builder: (context) {
-                  // A mirror has no editing controller: the log belongs to
-                  // the home device, so the whole row of things to do to a
-                  // message is out — and while a turn runs, the controller
-                  // refuses them all.
-                  final mutable = editing != null && !view.isRunning;
-                  return MessageBubble(
-                    chatId: widget.chatId,
-                    message: message,
-                    author: message.author,
-                    entoli: inOmadaSection,
-                    isWaiting: view.isRunning && last,
-                    waitingNotice: view.retry,
-                    waitingStatus: view.status,
-                    shellOutput: view.shellOutput,
-                    onTapLink: (href) {
-                      final uri = Uri.tryParse(href);
-                      if (uri != null) {
-                        ref.read(linkOpenerProvider).open(context, uri);
-                      }
-                    },
-                    threads: editing == null ? null : chat.branches[message.id],
-                    onThreadStep:
-                        mutable ? (step) => editing.stepThread(message.id, step) : null,
-                    onDelete: mutable ? () => editing.deleteThread(message.id) : null,
-                    onEdit: mutable && message.role == MessageRole.user
-                        ? (text) => editing.editAndResend(message.id, text)
-                        : null,
-                    onRegenerate: mutable ? () => editing.regenerate(message.id) : null,
-                    onSpeak: speechReady && message.hasText
-                        ? () => readAloud(context, ref, message.id, message.plainText)
-                        : null,
-                    isSpeaking: reading == message.id,
-                  );
-                }),
-            },
-          ),
+              controller: _scroll,
+              itemCount: entries.length,
+              itemBuilder: (context, i) => switch (entries[i]) {
+                SectionEntry(:final omada) => ConversationSeparator(
+                    text: omada ? "Omada is turned on" : "Omada is turned off"),
+                CompactionEntry(:final summary) => ConversationSeparator(
+                    text: "Compact Conversation",
+                    body: MessageText(
+                      text: summary,
+                      isError: false,
+                      isWaiting: false,
+                      caret: false,
+                      onTapLink: (href) => _openLink(context, href),
+                    )),
+                MessageEntry(:final message, :final inOmadaSection, :final last) =>
+                  Builder(builder: (context) {
+                    // A mirror has no editing controller: the log belongs to
+                    // the home device, so the whole row of things to do to a
+                    // message is out — and while a turn runs, the controller
+                    // refuses them all.
+                    final mutable = editing != null && !view.isRunning;
+                    return MessageBubble(
+                      chatId: widget.chatId,
+                      message: message,
+                      author: message.author,
+                      // The member's picture, only where a member speaks —
+                      // the label's own condition. Read per message: one
+                      // provider entry per addressed member.
+                      avatar: _avatarOf(chat, message),
+                      entoli: inOmadaSection,
+                      isWaiting: view.isRunning && last,
+                      waitingNotice: view.retry,
+                      waitingStatus: view.status,
+                      shellOutput: view.shellOutput,
+                      onTapLink: (href) => _openLink(context, href),
+                      threads: editing == null ? null : chat.branches[message.id],
+                      onThreadStep:
+                          mutable ? (step) => editing.stepThread(message.id, step) : null,
+                      onDelete: mutable ? () => editing.deleteThread(message.id) : null,
+                      onEdit: mutable && message.role == MessageRole.user
+                          ? (text) => editing.editAndResend(message.id, text)
+                          : null,
+                      onRegenerate: mutable ? () => editing.regenerate(message.id) : null,
+                      onSpeak: speechReady && message.hasText
+                          ? () => readAloud(context, ref, message.id, message.plainText)
+                          : null,
+                      isSpeaking: reading == message.id,
+                    );
+                  }),
+              }),
         ),
         // Only once the reader has left the end: up there a turn no longer
         // follows itself, and this is the way back.

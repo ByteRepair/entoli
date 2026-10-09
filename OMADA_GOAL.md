@@ -88,6 +88,13 @@ stays — history is fact.
 
 ## What shipped
 
+- **My Team, the Omada base** — a built-in project (`my-team`) with Omada on
+  and the room contract for its note. It does not replace Default; it stands
+  beside it as the base Omada prompt data derives from, the way user
+  projects derive theirs from the default project: a user project with Omada
+  on runs under My Team's note and inherits its members, the project's own
+  entries and AGENTS.md above them. The chain is default < My Team < any
+  other Omada project.
 - **Settings** — the per-project toggle, the ordering dropdown, the italic
   marker, the built-in spec flag, `omadaOnProvider`.
 - **Direct chats defined** — the 1:1 contract above, written into
@@ -110,13 +117,19 @@ stays — history is fact.
   `omadaMaxGenerations` dispatch waves (project override, app default ten);
   `pass` declines — and ends what agents hand each other, not a schedule the
   user made.
+- **Relay — fully parallel handoffs.** The third ordering, beside sequential
+  and parallel: dispatch gated on the per-member FIFOs alone, a handoff
+  evaluated the moment the turn that named it finishes, waves overlapping.
+  One turn per member still stands; the cap and `pass` work as in the other
+  orderings; one member failing still stops the round.
 - **Sectioned display** — `Message.omadaOn` on turn openers; separators at
   flips; "Entoli" on the house's replies in on-sections. The conversation
   renders as typed entries (`entriesOf`), each row owning its alignment.
 - **`task` retired in Omada-on projects** — `AgentCapability.task` joins the
   disabled set, so the tool vanishes from the list and the prompt together;
-  the house's overlay names the room and points at handles. Direct chats keep
-  `task` and the sub-agent machinery intact.
+  the room contract is My Team's bundled note, resolved in the repository
+  (see `lib/ui/chat/CLAUDE.md`, "The room contract is My Team's note"). Direct
+  chats keep `task` and the sub-agent machinery intact.
 - **Phase C2 — flow control.** The settle-first handoff wave, send-while-
   running dispatching between turns (no mid-turn injection, protecting the
   projection-prefix invariant), the composer's empty-Stop/typed-Send rule,
@@ -127,12 +140,14 @@ stays — history is fact.
 
 ## What remains
 
-- **Triggers, later.** What else may start a member's turn (schedule, file
-  change) now that rounds exist.
-- **Fully parallel handoffs, later.** The parallel ordering that shipped is
-  settle-first by design; the other reading — a reply fanning out the moment
-  it finishes, siblings overlapping waves — is its own option in the Omada
-  settings, tracked as an issue.
+Nothing. The deferred "Triggers, later" is Triggers (`lib/domain/trigger.dart`
+on) — a schedule, a timer or a file change can send into any chat, a room's
+included — and the trigger that names a *member* rather than the chat is
+landed with it: `Trigger.member`, checked at registration against the
+project's library, addressed by a mention the runner composes onto the head
+of the send, routed by the room like any say (see "Who a fire addresses" in
+`lib/domain/CLAUDE.md`). What the tools' `member` argument and the trigger's
+are is the same word, read once the room had a reason to.
 
 ## Design invariants carried
 

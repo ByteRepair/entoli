@@ -8,6 +8,7 @@ import "../widgets/busy.dart";
 import "../widgets/dialogs.dart";
 import "../widgets/empty_pane.dart";
 import "../widgets/formatting.dart";
+import "../widgets/settings_card.dart";
 import "text_viewer_page.dart";
 
 /// The row that opens the explorer, on the chat and project settings pages
@@ -25,11 +26,10 @@ class WorkspaceTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ListTile(
-      leading: const Icon(Icons.folder_outlined),
-      title: const Text("Workspace"),
-      subtitle: const Text("Browse files"),
-      trailing: const Icon(Icons.chevron_right),
+    return SettingsCard(
+      icon: Icons.folder_outlined,
+      title: "Workspace",
+      subtitle: "Browse files",
       onTap: () => Navigator.of(context).push(
         MaterialPageRoute(builder: (_) => WorkspacePage(root: root, title: title)),
       ),

@@ -24,6 +24,7 @@ named in a cross-reference is findable from this list.
   Carrying on an interrupted turn, Starting a chat, and naming it, Skills and
   agents, Resending a message, Attachments, Reminders
 - `lib/ui/sidebar/CLAUDE.md` — The sidebar's list, Pinned chats
+- `lib/ui/marketplace/CLAUDE.md` — The marketplace page
 - `lib/data/builtin/CLAUDE.md` — The agent loop, Running the commands, Running a
   command yourself, Approvals, Questions, Sub-agents, Their own transcripts,
    Carrying one on, Web search, Skills, The plan, Memory
@@ -36,7 +37,7 @@ named in a cross-reference is findable from this list.
 - `lib/data/local/CLAUDE.md` — Bundled tools, A whole Linux under proot,
   Running a model on the device
 - `android/CLAUDE.md` — Staying alive off screen, The workspaces in the Files
-  app, Being the assistant, Waking for a reminder, The app icon, The debug
+  app, Being the assistant, Waking for a trigger, The app icon, The debug
   build's own
 - `ios/CLAUDE.md` — Why no host shell, The iSH driver, The rootfs, The
   workspace inside the guest
@@ -99,7 +100,10 @@ a folder that does not conform is skipped at load and said on the view page) —
 and `<dataDir>/projects/<project>/agents/*.md` are that project's agents. The
 default project's skills and agents are the base set every other project
 inherits; another project's own replace a same-named default entry for that
-project alone. The bundled skills and agents live in the binary:
+project alone. An Omada-on project has My Team's rung between the two: its
+agents are the default set, My Team's on top, its own above those — the
+chain `default` < `my-team` < the project, and only for agents, since My
+Team ships no skills. The bundled skills and agents live in the binary:
 `tool/gen_bundled_skills.dart` writes them, build-time, from
 `assets/prompts/projects/<project>/` — the locally written skills and agents —
 and from `build/skills-upstream/` into
@@ -138,9 +142,10 @@ beside the sync identity (`AppSecrets`), which is what keeps them out of
 `settings.json` and out of every backup zip; and the user's
  global `AGENTS.md`, the instructions that reach every turn in every user
  project, beside it.
-`<dataDir>/reminders.json` is the user's reminders, one JSON
-list; the boot receiver reads it with no engine running, which is why writes go
-through a rename.
+`<dataDir>/reminders.json` is the user's triggers — reminders generalized to
+schedule, timer and file sources — one JSON list; the boot receiver reads it
+with no engine running, which is why writes go through a rename. The file name
+is the reminder's and stayed, a rename being a migration.
 Data dir: `$AGENT_CHAT_CONFIG` if set, else `~/.config/agent-chat` (desktop),
 app-private storage (Android), and `/agent-chat` in a browser — where it is a
 name in IndexedDB rather than a path, and load-bearing all the same.
@@ -260,7 +265,8 @@ nothing means the default. `isProjectName` refuses `default` for the same
 reason: a second way to name it would be a second entry for it in every list.
 
 A **built-in project** is a directory the app ships rather than the user makes,
-declared in `builtin_project.dart` (`builtinProjects`, today `anonymous` and `byte-repair`).
+declared in `builtin_project.dart` (`builtinProjects`, today `anonymous`,
+`my-team` and `byte-repair`).
 It is a project in every respect that matters to the store — same layout, same
 movement, a chat can be in one — but its name is refused by `isProjectName`, so
 it cannot be created, renamed or deleted, and `everyProject` is where it is

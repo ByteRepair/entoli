@@ -69,6 +69,9 @@ class AppSettings {
     this.omadaMaxGenerations = defaultOmadaMaxGenerations,
     this.omadaOrdering,
     this.turnMaxSteps,
+    this.autoCompact = defaultAutoCompact,
+    this.autoCompactPercent = defaultAutoCompactPercent,
+    this.totalContext = defaultTotalContext,
     this.welcomeSeen = false,
   });
 
@@ -305,7 +308,9 @@ class AppSettings {
 
   /// The room's scheduling default for a project that picked none of its own:
   /// sequential runs the schedule one turn at a time, parallel answers with
-  /// one turn per member at once. `ProjectSettings.omadaOrdering` overrides
+  /// one turn per member at once, and relay answers what a reply names the
+  /// moment it is written — per member still one turn at a time, but with no
+  /// wave barrier between the waves. `ProjectSettings.omadaOrdering` overrides
   /// it per project; the enum lives with the project settings, which is
   /// where a per-project answer was first written.
   OmadaOrdering? omadaOrdering;
@@ -315,6 +320,25 @@ class AppSettings {
   /// default; the value rides every turn, an Omada member turn included,
   /// and the round's own bound is `omadaMaxGenerations` beside it.
   int? turnMaxSteps;
+
+  /// Whether the conversation is summarized when it grows past
+  /// [autoCompactPercent] of the model's window — the auto half of compaction,
+  /// which bounds a long chat without a prompt of its own. The manual half is
+  /// `/compact`, and needs nothing here.
+  bool autoCompact;
+
+  /// The share of the context window auto-compact acts at. A named constant
+  /// so the settings row's "Default (80%)" and the controller's check are one
+  /// number.
+  int autoCompactPercent;
+
+  /// The model's total context, in tokens — what [autoCompactPercent] is a
+  /// share of, and what the summarizer's own ask must fit under. One number
+  /// for the app: every provider's window is guessed here, and a user who
+  /// knows the real one sets it. Nothing reads this before the settings page
+  /// has a row for it, but the constant ships the guess so the row's "(128k)"
+  /// and the check are one number.
+  int totalContext;
 
   /// Whether the welcome tour has been finished. It is what first launch reads
   /// to decide whether to push the tour, and what its Done writes.
@@ -337,6 +361,22 @@ class AppSettings {
   /// "Default" entry names.
   static const turnStepStops = [20, 40, 60, 80, 100, 150];
   static const defaultTurnMaxSteps = 40;
+
+  /// Auto-compact's defaults: on, at eighty percent — low enough that the
+  /// summary itself and the turn that follows still fit above the window.
+  static const defaultAutoCompact = true;
+  static const defaultAutoCompactPercent = 80;
+  static const autoCompactPercentStops = [60, 70, 80, 90];
+
+  /// The window the guess lands on: 128k sits under every hosted window
+  /// today — underestimating costs an early compaction, overestimating costs
+  /// a failed request, so the safe guess is the small one.
+  static const defaultTotalContext = 128000;
+
+  /// The bounds Total Context is clamped to, at load and at the settings
+  /// row's save — two sites that must agree, named once.
+  static const minTotalContext = 1024;
+  static const maxTotalContext = 1000000000;
 
   /// The default when nothing is set: on, at ten prefixes. A named constant so
   /// the UI's "Default (10)" label and the provider's effective count are one
@@ -418,6 +458,13 @@ class AppSettings {
         omadaOrdering: OmadaOrdering.fromNameNullable(
             json["omadaOrdering"] as String?),
         turnMaxSteps: json["turnMaxSteps"] as int?,
+        autoCompact:
+            json["autoCompact"] as bool? ?? defaultAutoCompact,
+        autoCompactPercent: (json["autoCompactPercent"] as int? ??
+                defaultAutoCompactPercent)
+            .clamp(10, 95),
+        totalContext: (json["totalContext"] as int? ?? defaultTotalContext)
+            .clamp(minTotalContext, maxTotalContext),
         welcomeSeen: json["welcomeSeen"] as bool? ?? false,
       );
     } catch (_) {
@@ -507,6 +554,9 @@ class AppSettings {
         omadaMaxGenerations: omadaMaxGenerations,
         omadaOrdering: omadaOrdering,
         turnMaxSteps: turnMaxSteps,
+        autoCompact: autoCompact,
+        autoCompactPercent: autoCompactPercent,
+        totalContext: totalContext,
         welcomeSeen: welcomeSeen,
       );
 
@@ -573,6 +623,10 @@ class AppSettings {
         "omadaMaxGenerations": omadaMaxGenerations,
       if (omadaOrdering != null) "omadaOrdering": omadaOrdering!.name,
       if (turnMaxSteps != null) "turnMaxSteps": turnMaxSteps,
+      if (!autoCompact) "autoCompact": autoCompact,
+      if (autoCompactPercent != defaultAutoCompactPercent)
+        "autoCompactPercent": autoCompactPercent,
+      if (totalContext != defaultTotalContext) "totalContext": totalContext,
       if (welcomeSeen) "welcomeSeen": welcomeSeen,
     }));
   }

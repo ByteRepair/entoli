@@ -155,7 +155,7 @@ void main() {
           "─",
           "Memory",
           "Voice",
-          "Reminders",
+          "Triggers",
           "─",
           "Agents",
           "Skills",

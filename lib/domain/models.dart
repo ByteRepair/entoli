@@ -5,6 +5,95 @@ import "package:freezed_annotation/freezed_annotation.dart";
 part "models.freezed.dart";
 part "models.g.dart";
 
+/// What a permission decision was: run without asking, hold for the user,
+/// or refuse outright. The gate's verdict — what a rule records, what the
+/// classifier returns, what a banner answer amounts to.
+enum PermissionDecision {
+  /// Run it without asking.
+  allow,
+
+  /// Escalate to the user — emit the approval banner and wait.
+  ask,
+
+  /// Refuse it outright, without running or asking.
+  deny,
+}
+
+/// What decided a call's fate before it ran. Recorded on the call's
+/// [ToolResult] as `decidedBy`, so the label and its drawer say not just
+/// "allowed" but what allowed it. Null on a result from before the field
+/// existed — the UI then says nothing.
+enum PermissionSource {
+  /// A standing rule matched, at the [PermissionTier] recorded beside it.
+  rule,
+
+  /// The classifier model decided, in auto mode.
+  classifier,
+
+  /// A human answered the banner.
+  human,
+
+  /// The approve mode ran it itself — `never`, including a sub-agent's.
+  mode,
+
+  /// A sandbox-denied command, rerun after the human answered.
+  rerun,
+}
+
+/// Which tier carried the decision. A compound command's segments can be
+/// covered by several, so the record is the list of the ones that spoke.
+enum PermissionTier {
+  /// A banner answer, this one call only.
+  once,
+
+  /// A rule on the chat's `meta.json`, or an answer persisted there.
+  chat,
+
+  /// A rule on the chat's own project's `project.json`.
+  project,
+
+  /// A rule on the default project's — what General > Permissions edits,
+  /// which every project inherits. Worded "the app's rules" in the UI.
+  defaultProject,
+
+  /// A rule granted for the rest of the running turn, by an "always"
+  /// banner answer.
+  runtime,
+}
+
+/// Where an instruction file was reached from — what the turn was reading
+/// when it loaded, and so what a label about the read says. Lives in the
+/// domain beside the part that records it; `renderInstructions` words the
+/// same values into the model's prompt, off the one shared phrase table
+/// below.
+enum InstructionKind {
+  /// At the data dir's root: the user's, for every project.
+  global,
+
+  /// At the project workspace root, shared by its chats.
+  project,
+
+  /// Reached through an `@path` reference in another instructions file.
+  imported,
+
+  /// Found above a file the agent read, mid-turn.
+  directory,
+
+  /// Shipped by the app for a project whose turns read no file: the note
+  /// stands in for the instruction files.
+  bundled,
+}
+
+/// What [InstructionKind] reads as, on a label's drawer and in the model's
+/// prompt. One table so the two cannot disagree — the `outcomeText` pattern.
+String instructionKindPhrase(InstructionKind kind) => switch (kind) {
+      InstructionKind.global => "the user's global instructions, for every project",
+      InstructionKind.project => "project workspace instructions",
+      InstructionKind.imported => "instructions imported by another file",
+      InstructionKind.directory => "instructions for this directory",
+      InstructionKind.bundled => "the app's own note on this kind of chat",
+    };
+
 @freezed
 abstract class ChatState with _$ChatState {
   const factory ChatState({
@@ -52,6 +141,24 @@ extension ChatStateTtl on ChatState {
   }
 }
 
+/// One compaction on the thread being read, as the log records it. The
+/// summary stands in for everything up to and including the message it names
+/// when the conversation is put in front of a model; the user still reads
+/// those messages, the divider saying where the summary took over. Derived by
+/// `replayTree` from the records rather than persisted as state, like
+/// `Chat.branches`: a rewind past the boundary drops the marker the same way
+/// it drops the messages under it.
+@freezed
+sealed class ConversationCompaction with _$ConversationCompaction {
+  const factory ConversationCompaction({
+    required String upToMessageId,
+    required String summary,
+  }) = _ConversationCompaction;
+
+  factory ConversationCompaction.fromJson(Map<String, dynamic> json) =>
+      _$ConversationCompactionFromJson(json);
+}
+
 /// A full chat: state + message tree. Persisted across `state.json` + `conv.jsonl`.
 @freezed
 abstract class Chat with _$Chat {
@@ -71,6 +178,12 @@ abstract class Chat with _$Chat {
     /// offer to carry on. Derived from the log by `endsUnfinished` rather than
     /// persisted — the absence of a closing record is the whole of it.
     @Default(false) bool unfinished,
+
+    /// The compaction markers on the thread being read, oldest first — see
+    /// [ConversationCompaction]. Derived by `replayTree` from the records, so
+    /// a rewind past a boundary drops the marker the same way it drops the
+    /// messages under it.
+    @Default([]) List<ConversationCompaction> compactions,
 
   }) = _Chat;
 
@@ -262,7 +375,46 @@ sealed class MessagePart with _$MessagePart {
     required String title,
   }) = SkillInstallPart;
 
+  /// A permission the turn asked for and the answer it got. Not a
+  /// [ToolCallPart]: nothing ran because a model chose it, and a model
+  /// reading the conversation back would find itself having asked for what
+  /// its own gate asked. What the user is shown of a past turn's gating is
+  /// the banner and its answer — this is that, recorded. The toolName and
+  /// [ToolApproval.argumentsText] word the banner; [answer] is the response
+  /// as pressed. The turn-scoped view state carries the live banner; this
+  /// part is what a reload draws instead.
+  const factory MessagePart.approval({
+    required String approvalId,
+    required String toolName,
+    String? argumentsText,
+    @Default([]) List<String> deniedDirs,
+    required String answer,
+  }) = ApprovalPart;
+
+  /// The instruction files this turn was the first to read into the model's
+  /// context — the up-front `AGENTS.md` load, or a nested one a file read
+  /// pulled in. One part per first reach, at most: a later turn re-reading
+  /// the same file writes nothing, the claim being decided against what the
+  /// history already records. The content itself is not here — it rides the
+  /// per-turn system message, rewritten every turn — so this is the record
+  /// of the read, drawn as an activity label, and never part of what the
+  /// conversation says.
+  const factory MessagePart.instructions({
+    required List<InstructionRef> files,
+  }) = InstructionsPart;
+
   factory MessagePart.fromJson(Map<String, dynamic> json) => _$MessagePartFromJson(json);
+}
+
+@freezed
+abstract class InstructionRef with _$InstructionRef {
+  const factory InstructionRef({
+    required String path,
+    required InstructionKind kind,
+  }) = _InstructionRef;
+
+  factory InstructionRef.fromJson(Map<String, dynamic> json) =>
+      _$InstructionRefFromJson(json);
 }
 
 @freezed
@@ -290,6 +442,17 @@ abstract class ToolResult with _$ToolResult {
     String? exceptionInfo,
     String? cwd,
     @Default([]) List<String> violations,
+    /// What decided this call's fate before it ran, and the tiers that
+    /// spoke — a compound covered from two tiers carries both. Null on a
+    /// result from before the field existed, and null where nothing stood
+    /// in front of the call: the mode's default posture of asking is not a
+    /// decision to record, the banner it raises being its own record.
+    PermissionSource? decidedBy,
+    @Default([]) List<PermissionTier> decidedTier,
+    /// What the decider said — the verdict, recorded rather than inferred
+    /// from the exit code, which says whether the command ran but not why
+    /// it was held.
+    PermissionDecision? decided,
   }) = _ToolResult;
 
   factory ToolResult.fromJson(Map<String, dynamic> json) => _$ToolResultFromJson(json);
@@ -322,17 +485,30 @@ abstract class ToolApproval with _$ToolApproval {
     required String toolName,
     String? argumentsJson,
 
-    /// What the call actually does — the command for a `bash`, the URL for a
-    /// `webfetch`. The same field [ToolCall] carries and for the same reason:
-    /// the site that builds the call has it in hand, and a reader digging it
-    /// back out of the JSON is guessing at which key this tool used.
     String? argumentsText,
+
+    /// The directories a re-prompt banner is agreeing to — what the sandbox
+    /// refused while the command ran. Empty for an ordinary banner, where an
+    /// "always" answer derives a command rule instead.
+    @Default([]) List<String> deniedDirs,
   }) = _ToolApproval;
 
   factory ToolApproval.fromJson(Map<String, dynamic> json) => _$ToolApprovalFromJson(json);
 }
 
-enum ApprovalResponse { allow, deny }
+enum ApprovalResponse {
+  allow,
+
+  deny,
+
+  /// Allow, and write the rule on the chat's `meta.json` so the same call
+  /// runs unasked for the rest of this chat. Read back by the backend as
+  /// [allow], the persisted rule being the durable half.
+  alwaysAllowChat,
+
+  /// Allow, and write the rule on the project's `project.json`.
+  alwaysAllowProject,
+}
 
 /// A model the user can pick in settings.
 @freezed
@@ -363,6 +539,11 @@ enum CompletionKind {
   const CompletionKind(this.trigger, this.label, this.folder);
   final String trigger;
   final String label;
+
+  /// The directory the files defining them live in — and, being one string
+  /// for both, the marketplace site's section path too
+  /// (`byterepair.github.io/entoli-marketplace/<folder>/index.json`). The site
+  /// is laid out to match; renaming either half must rename both.
   final String folder;
 }
 

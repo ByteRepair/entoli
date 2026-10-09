@@ -1,3 +1,5 @@
+import "dart:typed_data";
+
 import "package:flutter/gestures.dart";
 import "package:flutter/material.dart";
 // `SelectedContent`, which material does not re-export.
@@ -8,7 +10,9 @@ import "../../../domain/ask.dart";
 import "../../../domain/formatted_text.dart";
 import "../../../domain/models.dart";
 import "../../../domain/shell.dart";
+import "../../../domain/wired_skill.dart";
 import "../../widgets/action_icon.dart";
+import "../../widgets/agent_picture.dart" show AgentPictureImage;
 import "../../widgets/attachment_chip.dart";
 import "../../widgets/dialogs.dart";
 import "activity_label.dart";
@@ -24,6 +28,7 @@ class MessageBubble extends StatefulWidget {
     required this.chatId,
     required this.message,
     this.author,
+    this.avatar,
     this.entoli = false,
     this.isWaiting = false,
     this.waitingNotice,
@@ -47,6 +52,12 @@ class MessageBubble extends StatefulWidget {
   /// The addressed member to name over the reply, the way a prompt shows
   /// "You". Null draws nothing. See [Message.author].
   final String? author;
+
+  /// The author's profile picture, drawn beside the name where the message
+  /// names an addressed member — the page's bytes are the whole gate. Bytes in
+  /// hand — the page resolves them — so the bubble stays a
+  /// StatelessWidget-and-State over what it is told.
+  final Uint8List? avatar;
 
   /// The reply is in a section of the conversation where Omada is on: an
   /// unnamed reply is the main agent's, and says so — "Entoli" — the same
@@ -206,6 +217,13 @@ class _MessageBubbleState extends State<MessageBubble> {
       ? shellBypassCommand(widget.message.plainText)
       : null;
 
+  /// Whether this prompt runs a callback rather than asking for anything said
+  /// — a `/skill` flagged `invocation: callback`. A command bubble is a
+  /// command; a callback bubble is a request the app carried out, so it reads
+  /// as one of the things the user said, just not something a model answered.
+  late final bool _wired = widget.message.role == MessageRole.user &&
+      wiredSkillFromText(widget.message.plainText) != null;
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -221,7 +239,7 @@ class _MessageBubbleState extends State<MessageBubble> {
       // the colour the things they said are in.
       MessageRole.user => (
           "You",
-          _command == null
+          _command == null && !_wired
               ? theme.colorScheme.primaryContainer
               : theme.colorScheme.surfaceContainerHighest
         ),
@@ -258,10 +276,25 @@ class _MessageBubbleState extends State<MessageBubble> {
                   if (name != null)
                     Padding(
                       padding: const EdgeInsets.only(left: 4, bottom: 2),
-                      child: Text(
-                        name,
-                        style: theme.textTheme.labelSmall
-                            ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          // The member's face where there is one, beside the
+                          // name — the page's bytes are the whole gate already:
+                          // they arrive only where the label names a member,
+                          // and a prompt's "You" is never one.
+                          if (widget.avatar != null) ...[
+                            AgentPictureImage(bytes: widget.avatar, size: 18),
+                            const SizedBox(width: 6),
+                          ],
+                          Flexible(
+                            child: Text(
+                              name,
+                              style: theme.textTheme.labelSmall
+                                  ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   // One region for the whole reply, so a drag runs from the
@@ -392,7 +425,7 @@ class _MessageBubbleState extends State<MessageBubble> {
 
     Widget said(String text, {bool isError = false, bool caret = false}) => Padding(
           padding: const EdgeInsets.only(bottom: 4),
-          child: _MessageText(
+          child: MessageText(
             text: text,
             isError: isError,
             isWaiting: widget.isWaiting,
@@ -533,6 +566,19 @@ class _MessageBubbleState extends State<MessageBubble> {
             installId: installId,
             title: title,
           ));
+        case ApprovalPart():
+          // A recorded permission: important by definition — it is the user's
+          // own decision, and a run of them collapses behind a toggle the
+          // reader will never expand.
+          flushRun();
+          rows.add(_label(ApprovalLabel(part: part, result: results[part.approvalId])));
+        case InstructionsPart():
+          // The first reach of an instruction file: important like a
+          // permission — it changed what the model is working from, it happens
+          // at most once per file, and a collapse would hide the one moment
+          // the turn grew.
+          flushRun();
+          rows.add(_label(InstructionsLabel(part: part)));
         case ShellRunPart():
           // Not a label: a command the user ran is the answer to their message
           // rather than something the turn did on its way to one.
@@ -599,8 +645,13 @@ class _MessageBubbleState extends State<MessageBubble> {
 /// One line of a message bubble: raw text while the reply streams or when it is
 /// an error, `MarkdownBody` once finished. Owns the markdown style sheet so the
 /// parent's build does not rebuild it on every scroll frame.
-class _MessageText extends StatefulWidget {
-  const _MessageText({
+///
+/// Public because two homes render reply text now: the bubble's, and the
+/// compaction summary beneath its divider — the same encoding, the same
+/// rendering, whether the model wrote it as a reply or as a summary.
+class MessageText extends StatefulWidget {
+  const MessageText({
+    super.key,
     required this.text,
     required this.isError,
     required this.isWaiting,
@@ -618,10 +669,10 @@ class _MessageText extends StatefulWidget {
   final ValueChanged<String>? onTapLink;
 
   @override
-  State<_MessageText> createState() => _MessageTextState();
+  State<MessageText> createState() => _MessageTextState();
 }
 
-class _MessageTextState extends State<_MessageText> {
+class _MessageTextState extends State<MessageText> {
   MarkdownStyleSheet? _styleSheet;
 
   /// Raw while the reply streams or when it is an error: there is no markdown

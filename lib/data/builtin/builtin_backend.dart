@@ -8,6 +8,8 @@ import "package:uuid/uuid.dart";
 import "../../core/config.dart";
 import "../../core/log.dart";
 import "../../domain/agent_backend.dart";
+import "../../domain/trigger_manager.dart" show TriggerRegistryFactory;
+import "../../domain/app_settings.dart";
 import "../../domain/ask.dart";
 import "../../domain/chat_store.dart";
 import "../../domain/file_tools.dart";
@@ -22,6 +24,7 @@ import "../../domain/web_search.dart";
 import "../local/file_sub_agent_log.dart";
 import "../prompts/skill_package.dart";
 import "builtin_agent.dart";
+import "compact_prompt.dart";
 import "memory/instructions.dart";
 import "memory/store.dart";
 import "llm/gated_client.dart";
@@ -46,6 +49,7 @@ class BuiltinBackend implements AgentBackend {
     required this.shell,
     required this.webSearch,
     required this.store,
+    this.triggerRegistry,
     this.options = const BuiltinOptions(),
   });
 
@@ -56,6 +60,11 @@ class BuiltinBackend implements AgentBackend {
   /// The chat store, which the agent writes artifacts to. Held here rather
   /// than passed per-turn: the store resolves which project a chat is in.
   final ChatStore store;
+
+  /// A chat-scoped registry per chat, built where a turn asks for one. Null
+  /// where the app runs no trigger manager — every turn is then offered the
+  /// trio nowhere, the same answer a missing artifact store is.
+  final TriggerRegistryFactory? triggerRegistry;
 
   /// Entoli's own skills and agents, per project. A turn's own references
   /// travel on the message, resolved where it was composed against the
@@ -99,6 +108,15 @@ class BuiltinBackend implements AgentBackend {
   ValueListenable<Set<String>> get runningTurns => _running;
 
   final Map<String, BuiltinSession> _sessions = {};
+
+  /// The newest usage each chat's model reported, in context tokens — the
+  /// fact the auto-compact threshold reads, and what a backend that forgets
+  /// on dispose must not keep. Not a session: it is the newest request's
+  /// fact, not the conversation's, and the controller reads it the way the
+  /// controller reads everything else of the backend — through the callback
+  /// that reported it. The window it is judged against is the settings
+  /// object's, not this map's.
+  final Map<String, int> _usage = {};
   final _RunningTurns _running = _RunningTurns();
   final Map<String, StreamController<AgentEvent>> _controllers = {};
   final Map<String, List<ToolApproval>> _approvals = {};
@@ -131,17 +149,21 @@ class BuiltinBackend implements AgentBackend {
     String chatId,
     Message prompt, {
     List<Message> history = const [],
+    List<ConversationCompaction> compactions = const [],
     TurnSettings settings = const TurnSettings(),
   }) =>
-      _start(chatId, prompt, history: history, settings: settings);
+      _start(chatId, prompt,
+          history: history, compactions: compactions, settings: settings);
 
   @override
   Stream<AgentEvent> resumeTurn(
     String chatId, {
     List<Message> history = const [],
+    List<ConversationCompaction> compactions = const [],
     TurnSettings settings = const TurnSettings(),
   }) =>
-      _start(chatId, null, history: history, settings: settings);
+      _start(chatId, null,
+          history: history, compactions: compactions, settings: settings);
 
   /// The stream is returned rather than yielded, so the caller is listening
   /// before the turn starts: closing a controller nobody listens to never
@@ -150,12 +172,13 @@ class BuiltinBackend implements AgentBackend {
     String chatId,
     Message? prompt, {
     List<Message> history = const [],
+    List<ConversationCompaction> compactions = const [],
     required TurnSettings settings,
   }) {
     final controller = StreamController<AgentEvent>();
     _controllers[chatId] = controller;
     unawaited(_runTurn(chatId, prompt, controller,
-        history: history, settings: settings));
+        history: history, compactions: compactions, settings: settings));
     return controller.stream;
   }
 
@@ -168,6 +191,7 @@ class BuiltinBackend implements AgentBackend {
     Message? prompt,
     StreamController<AgentEvent> controller, {
     List<Message> history = const [],
+    List<ConversationCompaction> compactions = const [],
     required TurnSettings settings,
   }) async {
     final project = settings.project;
@@ -240,6 +264,8 @@ class BuiltinBackend implements AgentBackend {
         log: subAgentLog,
         caps: caps,
         sharedWorkspace: settings.sharedWorkspace,
+        permissions: settings.permissions,
+        writableDirs: settings.writableDirs,
         project: project,
         tone: settings.tone,
         citations: settings.citations,
@@ -299,6 +325,34 @@ class BuiltinBackend implements AgentBackend {
         }
       }
       final loaded = await instructionsF;
+      // What the conversation has already recorded reading — one pass over the
+      // history's parts, the claim set the label emission below spends. Derived
+      // per turn rather than held on this object, so a rewind that takes a part
+      // out of the history also takes the file back out of it, and re-running
+      // the turn records the read again — the log as it now reads stays true.
+      // Held state would drift from the log and lie; this cannot.
+      final reached = {
+        for (final m in history)
+          for (final part in m.parts)
+            if (part is InstructionsPart)
+              for (final ref in part.files) ref.path,
+      };
+
+      // The read is the turn's own to claim, so it is claimed the moment the
+      // load answers: what it claims is what the history does not yet name,
+      // and two turns claiming the same new file would both have had to pass
+      // this synchronous stretch — the serialized-dispatch case. Two members'
+      // first turns dispatched in parallel each derive from a history that
+      // predates the other's reply and could both label a file new; the
+      // claim set answers for what the log can say, not for a window nobody
+      // else on this path guards.
+      // `add` answers what was new, and what was new is exactly what the
+      // event says.
+      final fresh = [
+        for (final file in loaded)
+          if (reached.add(file.path)) file.ref,
+      ];
+      if (fresh.isNotEmpty) controller.add(InstructionsReadEvent(fresh));
       final instructions = bundled == null
           ? loaded
           : [
@@ -314,8 +368,10 @@ class BuiltinBackend implements AgentBackend {
       if (prompt == null) {
         history = await _reviveSubAgents(history, subAgentRunner, subAgentLog, controller);
       }
-      final session =
-          await _sessionOf(chatId, history, rebuild: prompt == null, viewer: settings.omadaMember);
+      final session = await _sessionOf(chatId, history,
+          rebuild: prompt == null,
+          viewer: settings.omadaMember,
+          compactions: compactions);
       final agent = BuiltinAgent(
         session: session,
         loadResource: _resourcesOf(chatId),
@@ -350,6 +406,9 @@ class BuiltinBackend implements AgentBackend {
         memory:
             bundled != null ? const MemorySettings(nested: false) : settings.memory,
         instructions: instructions,
+        // Claims what a mid-turn read pulls in against the same set the
+        // up-front load spent, so a file reached either way is recorded once.
+        claimInstruction: reached.add,
         recall: recall,
         pinned: pinned,
         index: index,
@@ -357,6 +416,9 @@ class BuiltinBackend implements AgentBackend {
         memoryChat: settings.memory.agentTool ? chatId : null,
         caps: caps,
         sharedWorkspace: settings.sharedWorkspace,
+        permissions: settings.permissions,
+        writableDirs: settings.writableDirs,
+        sandboxReprompt: settings.sandboxReprompt ?? true,
         project: project,
         saveArtifact: (path, entryFile, {artifactId}) async {
           final resolved = resolvePath(path);
@@ -367,6 +429,7 @@ class BuiltinBackend implements AgentBackend {
           }
           return store.createArtifact(chatId, resolved, entryFile, project: project);
         },
+        registerTrigger: triggerRegistry?.call(chatId, project),
         packageSkill: (path, name) async {
           final resolved = resolvePath(path);
           final pkg = await packageSkillDirectory(config.fs, resolved, name);
@@ -381,6 +444,7 @@ class BuiltinBackend implements AgentBackend {
         },
         onShellOutput: (callId, text) =>
             controller.add(ShellOutputEvent(callId: callId, text: text)),
+        onUsage: (usage) => _usage[chatId] = usage.contextTokens,
       );
       // The real kill replaces the placeholder.
       _running.replace(stopKey, agent.cancel);
@@ -396,13 +460,7 @@ class BuiltinBackend implements AgentBackend {
           ? null
           : memberPrompt(libraryFor(settings.project), settings.omadaMember!);
       final mentions = agentPromptFrom(said?.documents ?? const {});
-      final agentPrompt = memberBody == null
-          ? settings.omada
-              ? mentions == null
-                  ? houseTurnInstructions()
-                  : "$mentions\n\n${houseTurnInstructions()}"
-              : mentions
-          : "$memberBody\n\n${memberTurnInstructions()}";
+      final agentPrompt = memberBody ?? mentions;
       final events = prompt == null
           ? agent.resume(agentPrompt: agentPrompt)
           : agent.run(prompt, agentPrompt: agentPrompt);
@@ -546,13 +604,22 @@ class BuiltinBackend implements AgentBackend {
   /// time they are called. The main agent's session keeps the warm path it
   /// has always had; there is one main agent per chat, so nothing can have
   /// written into its view since.
+  ///
+  /// [compactions] ride with [history] the way it rides with the prompt: the
+  /// projection reads only the markers whose boundary the history holds, so a
+  /// fragment projects the span it names and the summary lands where the log
+  /// put it.
   Future<BuiltinSession> _sessionOf(String chatId, List<Message> history,
-      {bool rebuild = false, String? viewer}) async {
+      {bool rebuild = false,
+      String? viewer,
+      List<ConversationCompaction> compactions = const []}) async {
     final key = viewer == null ? chatId : "$chatId\u0000$viewer";
     final session = _sessions.putIfAbsent(key, BuiltinSession.new);
     if (rebuild || viewer != null || session.isFresh) {
       session.replaceWith(await projectionOf(history,
-          load: _resourcesOf(chatId), viewer: viewer));
+          load: _resourcesOf(chatId),
+          viewer: viewer,
+          compactions: compactions));
     }
     return session;
   }
@@ -648,15 +715,89 @@ class BuiltinBackend implements AgentBackend {
     );
     if (target == null) return null;
     try {
-      final chunks = await target.client
-          .stream([LlmMessage(role: LlmRole.user, text: prompt)], model: target.modelId)
-          .timeout(const Duration(seconds: 60))
-          .toList();
-      final answer = chunks.whereType<LlmCompletion>().lastOrNull?.message.text.trim();
+      final answer = await _oneCompletion(
+          target, [LlmMessage(role: LlmRole.user, text: prompt)],
+          timeout: const Duration(seconds: 60));
       return answer == null || answer.isEmpty ? null : answer;
     } catch (_) {
       return null;
     }
+  }
+
+  /// The summarizer: the conversation as any turn would read it, one ask, one
+  /// reply. Unlike [ask] this runs on the chat's own model — the summary is
+  /// only as good as the context it had, and the light default was not the one
+  /// that saw the work. The window is minutes rather than [ask]'s sixty
+  /// seconds: a long conversation is a long read.
+  ///
+  /// [summaryFrom] cuts the tags, so what this hands back is the text the
+  /// marker carries. Null with a log line, like every background failure —
+  /// there is no turn to report it on.
+  @override
+  Future<ConversationCompaction?> compact(
+    String chatId, {
+    required List<Message> history,
+    required List<ConversationCompaction> compactions,
+    required TurnSettings settings,
+    required String? instructions,
+  }) async {
+    if (_running.any(chatId)) return null;
+    final target = _resolveModel(settings.model, settings.provider);
+    if (target == null) return null;
+    if (history.isEmpty) return null;
+    // The ask has to fit the window with room for the summary it produces; a
+    // budget that would fill the whole window is how the last attempt got
+    // here in the first place. The same app number the threshold reads.
+    final budget = AppSettings.load(config).totalContext ~/ 2;
+    // The retry ladder: a span too big to summarize is not a failure to give
+    // up on but a span to summarize less of. Each attempt drops the oldest
+    // half of what it was asked to read, so a conversation that will not fit
+    // whole still leaves a summary of its newest half — and a marker that
+    // covers only what was read.
+    //
+    // The loader is memoised across the attempts, which is the point of the
+    // ladder: the surviving half's attachments were just read, and a span
+    // that will not fit is the expected case for the chats this runs on —
+    // one read per resource, not one per attempt.
+    final read = <String, Future<Uint8List?>>{};
+    Future<Uint8List?> loader(String resource) =>
+        read.putIfAbsent(resource, () => _resourcesOf(chatId)(resource));
+    List<Message> span = history;
+    List<Message> halve() => span.sublist((span.length / 2).ceil());
+    // Loop-invariant: the markers do not change across the ladder.
+    final priorSummary = compactions.lastOrNull?.summary;
+    for (var attempt = 0; attempt < 3; attempt++) {
+      final projected = await projectionOf(span,
+          load: loader, compactions: compactions);
+      if (projected.isEmpty) return null;
+      final cut = CompactPrompt.build(
+        conversation: projected,
+        instructions: instructions,
+        priorSummary: priorSummary,
+      );
+      // Where the ask itself would not fit, dropping the oldest half is the
+      // only answer; where it would, the span stands.
+      if (estimateTokens(cut) > budget) {
+        span = halve();
+        continue;
+      }
+      try {
+        final reply = await _oneCompletion(target, cut,
+            timeout: const Duration(minutes: 3));
+        final summary = reply == null ? null : CompactPrompt.summaryFrom(reply);
+        if (summary != null) {
+          return ConversationCompaction(
+              upToMessageId: span.last.id, summary: summary);
+        }
+        logFailure("compact", "empty summary for $chatId");
+      } catch (e) {
+        logFailure("compact", "summarizer failed for $chatId", e);
+      }
+      // A reply that said nothing, or an error: halve and try once more, the
+      // same ladder the too-big ask takes.
+      span = halve();
+    }
+    return null;
   }
 
   /// What a turn that ended cleanly leaves behind: a background model reads
@@ -710,7 +851,9 @@ class BuiltinBackend implements AgentBackend {
         "its id, and delete spends one the exchange contradicts or supersedes. "
         "Any key may be an empty list where there is nothing to do.";
     try {
-      final answer = await _askBackground(target, question);
+      final answer = await _oneCompletion(target,
+          [LlmMessage(role: LlmRole.user, text: question)],
+          timeout: const Duration(seconds: 60)) ?? "";
       final ops = _maintainFrom(answer);
       if (ops.add.isEmpty && ops.replaces.isEmpty && ops.delete.isEmpty) return;
       final result = await store.maintain(
@@ -775,7 +918,9 @@ class BuiltinBackend implements AgentBackend {
           "behind a fact none of the entries held. If nothing is wrong, all "
           "three empty.";
       try {
-        final answer = await _askBackground(target, question);
+      final answer = await _oneCompletion(
+            target, [LlmMessage(role: LlmRole.user, text: question)],
+            timeout: const Duration(seconds: 60)) ?? "";
         final ops = _maintainFrom(answer);
         if (ops.add.isNotEmpty ||
             ops.replaces.isNotEmpty ||
@@ -805,14 +950,23 @@ class BuiltinBackend implements AgentBackend {
   /// The background answer: the last completion the model streams within the
   /// window, trimmed, and nothing where it streamed no completion at all. The
   /// window is what keeps a stuck provider from holding a pass forever.
-  Future<String> _askBackground(
-      ({LlmClient client, String modelId}) target, String question) async {
+  /// The one-shot read, in the three shapes that ask it: the last completion
+  /// the model streams within the window, trimmed, and null where it streamed
+  /// nothing. The three call sites differ only in the timeout and in what an
+  /// empty answer means to them; the window keeps a stuck provider from
+  /// holding the call forever, and the timeout is on the stream rather than
+  /// the future it collects, a timed-out future leaving the response being
+  /// read to nobody.
+  Future<String?> _oneCompletion(
+    ({LlmClient client, String modelId}) target,
+    List<LlmMessage> messages, {
+    required Duration timeout,
+  }) async {
     final chunks = await target.client
-        .stream([LlmMessage(role: LlmRole.user, text: question)],
-            model: target.modelId)
-        .timeout(const Duration(seconds: 60))
+        .stream(messages, model: target.modelId)
+        .timeout(timeout)
         .toList();
-    return chunks.whereType<LlmCompletion>().lastOrNull?.message.text.trim() ?? "";
+    return chunks.whereType<LlmCompletion>().lastOrNull?.message.text.trim();
   }
 
   /// The maintenance JSON, read as liberally as the model writes it: the old
@@ -973,6 +1127,8 @@ class BuiltinBackend implements AgentBackend {
     // Completed in place rather than removed: the agent may not have got round
     // to awaiting it yet, and it has to find this answer rather than a fresh
     // completer nobody will ever complete. `_clearApprovals` does the removing.
+    // The "always" answers reach the agent whole: it derives the standing rule
+    // from the approval it holds and grants it for the rest of the turn.
     final completer = _pending[approvalId];
     if (completer != null && !completer.isCompleted) completer.complete(response);
   }
@@ -999,11 +1155,14 @@ class BuiltinBackend implements AgentBackend {
   }
 
   @override
-  Future<void> resetSession(String chatId, {List<Message> history = const []}) async {
+  Future<void> resetSession(String chatId,
+      {List<Message> history = const [],
+      List<ConversationCompaction> compactions = const []}) async {
     await _running.stopAll(chatId);
     _sessions
         .putIfAbsent(chatId, BuiltinSession.new)
-        .replaceWith(await projectionOf(history, load: _resourcesOf(chatId)));
+        .replaceWith(await projectionOf(history,
+            load: _resourcesOf(chatId), compactions: compactions));
   }
 
   @override
@@ -1013,10 +1172,14 @@ class BuiltinBackend implements AgentBackend {
     shell.closeSession(config.workspaceDir(chatId, project: project));
     await abort(chatId);
     _sessions.remove(chatId);
+    _usage.remove(chatId);
     // Member sessions are keyed chat-prefixed, and a chat is gone with its
     // members' projections of it.
     _sessions.removeWhere((key, _) => key.startsWith("$chatId\u0000"));
   }
+
+  @override
+  int? usageFor(String chatId) => _usage[chatId];
 
   @override
   void closeChatShell(String chatId, {required String? project}) =>
@@ -1078,6 +1241,13 @@ class _RunningTurns extends ValueNotifier<Set<String>> {
   /// The chats with a turn in flight — what [runningTurns] publishes.
   Set<String> get chats =>
       {for (final key in _stops.keys) key.substring(0, key.indexOf("\u0000"))};
+
+  /// Whether [chatId] holds a turn in flight — the guard a background call
+  /// checks before it runs, since the session it would summarize is being
+  /// rewritten underneath it while one does. Keys rather than the set: the
+  /// answer is one `startsWith`, no materialized copy of the chats.
+  bool any(String chatId) =>
+      _stops.keys.any((k) => k.startsWith("$chatId\u0000"));
 
   /// Kills every stop [chatId] holds, in the order they were registered.
   Future<void> stopAll(String chatId) async {

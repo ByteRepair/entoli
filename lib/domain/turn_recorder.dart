@@ -130,6 +130,15 @@ class TurnRecorder {
         addPart(MessagePart.artifact(artifactId: artifactId, entryFile: entryFile, title: title));
       case SkillInstallEvent(:final installId, :final title):
         addPart(MessagePart.skillInstall(installId: installId, title: title));
+      case InstructionsReadEvent(:final files):
+        // The backend claims against the history for a main-agent turn, so
+        // this records the conversation's first read of each file. The
+        // containment check is for the turn that has no claim behind it —
+        // a sub-agent's, whose own transcript may re-record on a resume what
+        // it already recorded before it was interrupted. A reply never
+        // stacks two identical read records.
+        final part = MessagePart.instructions(files: files);
+        if (!_parts.contains(part)) addPart(part);
       case ErrorEvent(:final message):
         _appendError(message);
       case StepLimitEvent():
@@ -137,7 +146,15 @@ class TurnRecorder {
       // Turn-scoped view state, or the turn's own end. Listed rather than
       // defaulted so that a new kind of event has to be decided about here as
       // well as wherever it is drawn.
-      case ApprovalRequestEvent():
+      case ApprovalRequestEvent(:final approval):
+        // The banner is part of the turn's record now: what was asked and —
+        // superseded in place when the answer lands — what was answered.
+        addPart(MessagePart.approval(
+            approvalId: approval.id,
+            toolName: approval.toolName,
+            argumentsText: approval.argumentsText,
+            deniedDirs: approval.deniedDirs,
+            answer: "asked"));
       case QuestionRequestEvent():
       case SubAgentStartEvent():
       case SubAgentEndEvent():
@@ -192,6 +209,25 @@ class TurnRecorder {
   void dispose() {
     _flush?.cancel();
     _checkpoint?.cancel();
+  }
+
+  /// The answer a banner was given, superseding its "asked" part in place —
+  /// the same index written again, last wins, the same bargain parts make.
+  /// Called by the controller when the user answers; the banner's part keeps
+  /// its place in the arrival order. No-op where the turn was never opened or
+  /// the approval is not in this turn's parts (an answer racing the turn out).
+  void recordApprovalAnswer(String approvalId, String answer) {
+    if (_messageId == null) return;
+    flushDeltas();
+    final parts = List<MessagePart>.from(_parts);
+    final at = parts.indexWhere(
+        (p) => p is ApprovalPart && p.approvalId == approvalId && p.answer == "asked");
+    if (at < 0) return;
+    final asked = parts[at] as ApprovalPart;
+    parts[at] =
+        asked.copyWith(answer: answer);
+    _publish(parts);
+    checkpoint();
   }
 
   /// Every discrete part goes through here, and so do its record and the
@@ -326,6 +362,8 @@ class TurnRecorder {
         FilePart() ||
         ArtifactPart() ||
         SkillInstallPart() ||
+        ApprovalPart() ||
+        InstructionsPart() ||
         ErrorPart() =>
           part,
       };

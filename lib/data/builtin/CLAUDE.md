@@ -258,6 +258,35 @@ the banner), `auto` (a classifier model decides allow/ask/deny per command),
 `never` (run everything). An older file's `approveCommands` bool migrates:
 `true` → `ask`, `false` → `never`.
 
+Before the mode, the **rules** decide. `PermissionRule` (`lib/domain/permission.dart`)
+names a tool, a pattern and a decision, and the tiers merge chat over project
+over app (`meta.json`'s `permissions`, `project.json`'s, `settings.json`'s);
+deny outranks ask outranks allow whatever tier wrote it. For `bash` the
+pattern is a glob matched per segment — the pieces a top-level `|;&&` splits
+the command into — so a compound command must find an allow for every segment,
+and a command the parse cannot model is escalated to the banner even under an
+allow rule (refused in `never`, where nobody can answer). A rule-allow carries
+`writes`, the directories the sandbox grants beside the workspace — the same
+`writableDirs` a project sets — so an allow is one answer to "may it run *and*
+write there". What the sandbox denied while a command ran rides the result as
+`violations`, and — where `sandboxReprompt` is on and no human decided
+already — one offer to rerun is made: unconfined for a denied write, or with
+the denied directory joining the grant. What the sandbox denied is *reported*,
+not scraped: the confinement exports an `LD_PRELOAD` shim beside the helper
+(`entoli-deny-report.so`, compiled with it, best-effort) that records every
+syscall the kernel refused — `op\tpath`, one line, into a file under the
+grant — and the result reads that report, filters it against the grant, and
+words it. No wording table, no quote marks to chase: the denial is the
+syscall's, whatever the failing tool chose to print about it. The prose is
+now only a cross-check — a `Permission denied` in the command's output with
+an empty report (a static binary bypassing the shim) is a `denied (unreported)`
+violation and a `logFailure` line, so a blind channel is visible rather than
+silent; a shim that cannot work at all degrades to that same cross-check,
+never to a broken command. The two "always" banner answers write
+the derived rule: `ruleFromApproval` reads the command's leading words, the
+file's directory or the fetch's host, and the repository persists it to the
+tier the answer named.
+
 In `auto` mode, a `PermissionClassifier` (the `LlmClassifier` impl, or
 `NoClassifier` when no classifier model is configured) is asked before each
 `bash` and `webfetch` call. `allow` runs silently, `deny` refuses with a
@@ -280,6 +309,15 @@ when the event is forwarded, not when it is awaited, and an answer completes it
 in place rather than removing it — a user who clicks faster than the loop asks
 would otherwise leave it waiting on a completer nobody holds. A turn that ends
 with one outstanding denies it.
+
+`ApprovalBanner` carries four actions: Deny, Allow, **Allow in Chat** and
+**Allow in Project** — the prompt is where the decision lives, since nobody
+opens a settings page to pre-approve each chat. The two always-answers write
+the derived rule (see "Approvals" above) and hand a runtime copy to the
+running turn, so the rest of it is covered before the persisted file is read
+again. They are offered where rules are writable — not a mirrored chat, where
+the banner is being answered from the other device and the home device's
+banner asks the question.
 
 `ApprovalBanner` shows **the call, not the tool**. It named the tool and put the
 arguments JSON under it at two lines and an ellipsis, which is a consent dialog
@@ -371,7 +409,11 @@ and what makes it sub is the reply route, enforced structurally below: its
 events never reach the controller that writes `conv.jsonl`, so it cannot
 address the room. That route is the one thing Omada will change: in an
 Omada-on project the named member is promoted to address the room directly,
-and `task` goes away.
+and `task` goes away. The room contract that replaces the tool's prompting
+is not this file's business — it is the project's bundled note, My Team's
+(`assets/prompts/projects/my-team/system/instructions.md`), which the
+repository hands every Omada turn; see "The room contract is My Team's note"
+in `lib/ui/chat/CLAUDE.md`.
 
 `task` spawns a sub-agent with its own session under the named `@agent`'s
 prompt, runs it to completion headless, and returns its final text as the tool
@@ -496,7 +538,10 @@ The refusal for a `disable-model-invocation` skill is deliberate wording rather
 than a plain no. The skill is available, just not to the model, and one told
 only "no" will try its workflow by other means — so the answer says not to work
 around it. The tool is not even offered where every skill is user-only, which
-is the same fact read from the other side.
+is the same fact read from the other side. A skill flagged
+`invocation: callback` is refused and unlisted the same way: its body is the
+user-facing note, never a procedure for the model to follow — the same reason
+composition refuses to expand it.
 
 The system prompt lists the model-invocable skills under a Skills section, and
 an empty list produces nothing at all: a device with no skills keeps the prompt
@@ -521,6 +566,44 @@ list), the same `one value decides what the prompt names and what the tool list
 carries` rule. The install and the settings page's import and delete write
 through `withWritableDir`, because the skills directories are read-only — see
 the root notes, "On-disk layout".
+
+## Compaction (the `compact` callback)
+
+`AgentBackend.compact` is the summarizer: the conversation projected the way
+any turn would read it — attachments as bytes, thinking as thinking — one user
+message over it (`compact_prompt.dart`'s template, the merge rules riding in
+it), one reply cut by `summaryFrom`. It runs on the chat's own model rather
+than the light default — the summary is only as good as the context it had —
+and guards on `_running.any`: a session being rewritten underneath it is not
+one to summarize. Null with a `logFailure` line, like every background call.
+
+**The retry ladder is the whole of the failure story.** The ask has to fit the
+window with room for the summary (the provider's `contextWindow`, half), and
+where it does not — or where the summarizer said nothing, or errored — the
+oldest half of the span is dropped and the ask is made again, three attempts.
+The boundary handed back covers only what was read, so a conversation too big
+for its own summarizer still gets a marker for its newest half.
+
+**Usage is parsed, not estimated, where the provider says anything.**
+`LlmUsage` rides `LlmCompletion` — Anthropic's `message_start` and
+`message_delta` usage objects, OpenAI's final-chunk `usage` (asked for with
+`stream_options.include_usage`, without which OpenAI proper sends no usage
+at all) — and the agent reports it through `onUsage`. `usageFor` and
+`contextWindowFor` answer both halves of the threshold from one in-memory
+map, with no meta read on the settle path. A provider that reports nothing
+reports nothing, and the estimate (`length/4`, in `compact_prompt.dart`) is
+the summarizer's own budget, not the threshold's — compacting on a guess is
+not the trigger's business. The window itself is one app number:
+`AppSettings.totalContext` ("Total Context" under Settings > LLMs, 128k
+default, the safe guess) — every provider's window is guessed there, and a
+user who knows the real one sets it.
+
+The marker lands through `ChatRepository.appendCompaction` —
+`_rethread` with a `CompactionRecord`, the same append/reload/rebuild walk a
+thread change takes, reached from the controller through its own
+reentrancy-guarded wrapper. The summarizer's one-shot read is
+`_oneCompletion`, shared with `ask` and the memory extraction; the one-shot
+call sites differ only in timeout and what an empty answer means.
 
 ## The plan (PLAN.md)
 
@@ -724,6 +807,16 @@ them. `_loadedInstructions` holds the paths already in front of the model so
 the same file is never injected twice. They render as "## Workspace
 instructions" — the one section of the second message with no preamble of its
 own, because these are the instructions.
+
+**The first reach of each file is recorded** as an `InstructionsPart` on the
+reply — the turn's up-front load one part naming every file it first put in
+front of the model, a nested pull-in its own part — and drawn as an
+activity label. A later turn re-reading the same file records nothing: the
+claim set is derived per turn from what the history's parts already say, so a
+rewind takes the record back with it and a retry records nothing. The part
+carries paths, not content — the content rides the system message — and its
+label's drawer says what was read and whence, never what the files said; a
+`read`'s own drawer is cut below the rendered block for the same reason.
 
 ### Gating
 

@@ -3,12 +3,16 @@ import "dart:async";
 import "package:clock/clock.dart";
 import "package:flutter/foundation.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
+import "package:http/http.dart" as http;
+import "package:uuid/uuid.dart";
 
 import "../core/config.dart";
+import "domain/file_tools.dart" show resolveWorkspacePath;
 import "../core/platform/platform.dart"
-    show createPromptSources, setupComplete;
+    show createFileWatches, createPromptSources, setupComplete;
 import "data/builtin/builtin_backend.dart";
-import "data/local/file_reminder_store.dart";
+import "data/local/file_trigger_store.dart";
+import "data/prompts/agent_pictures.dart";
 import "domain/app_icon.dart";
 import "domain/agent_backend.dart";
 import "domain/app_restart.dart";
@@ -33,15 +37,17 @@ import "domain/local_llm.dart";
 import "domain/local_model.dart";
 import "domain/local_model_store.dart";
 import "domain/models.dart";
+import "data/prompts/prompt_sources.dart" show promptTiers;
 import "domain/permission.dart";
 import "domain/profile.dart";
 import "domain/project_settings.dart";
 import "domain/project.dart" show emptyChatQuestionFor, everyProject;
 import "domain/prompt_library.dart";
-import "domain/reminder.dart";
 import "domain/reminder_alarms.dart";
-import "domain/reminder_runner.dart";
-import "domain/reminder_scheduler.dart";
+import "domain/trigger.dart";
+import "domain/trigger_kinds.dart";
+import "domain/trigger_runner.dart";
+import "domain/trigger_manager.dart";
 import "domain/rootfs_store.dart";
 import "domain/shell.dart";
 import "data/sync/sync_hub.dart";
@@ -69,6 +75,11 @@ final chatShellCwdProvider =
   return ref.watch(shellProvider).sessionCwd(workspace);
 });
 final appConfigProvider = Provider<AppConfig>((ref) => throw UnimplementedError());
+
+/// The client the marketplace's fetches ride. An override in tests, so the
+/// suite answers the URLs rather than the binding's all-400s stand-in.
+final marketplaceClientProvider =
+    Provider<http.Client>((ref) => throw UnimplementedError());
 final attachmentPickerProvider = Provider<AttachmentPicker>((ref) => throw UnimplementedError());
 final fileHandoffProvider = Provider<FileHandoff>((ref) => throw UnimplementedError());
 final backupHandoffProvider = Provider<BackupHandoff>((ref) => throw UnimplementedError());
@@ -473,6 +484,20 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
   /// The step limit a direct turn runs under; null is the backend's default.
   Future<void> setTurnMaxSteps(int? value) =>
       _update((s) => s.turnMaxSteps = value);
+
+  /// Whether the conversation is summarized at [setAutoCompactPercent]'s
+  /// share of the window. The manual `/compact` needs nothing here.
+  Future<void> setAutoCompact(bool value) =>
+      _update((s) => s.autoCompact = value);
+
+  /// The share of the window auto-compact acts at.
+  Future<void> setAutoCompactPercent(int value) =>
+      _update((s) => s.autoCompactPercent = value);
+
+  /// The model's total context, in tokens — the whole the auto-compact
+  /// threshold's share is taken against, and the summarizer's own ceiling.
+  Future<void> setTotalContext(int value) =>
+      _update((s) => s.totalContext = value);
 
   /// Whether `@path` references inside an AGENTS.md pull in more files. The
   Future<void> setInstructionImports(bool value) =>
@@ -894,88 +919,179 @@ class AppHidden extends Notifier<bool> {
 /// not judged against the wall clock the suite happens to run on.
 final clockProvider = Provider<Clock>((ref) => const Clock());
 
-/// The user's reminders, seeded from disk before the container exists and
+/// The user's triggers, seeded from disk before the container exists and
 /// written through on every change — the same bargain [InstalledRootfs] makes.
-class Reminders extends Notifier<List<Reminder>> implements ReminderList {
-  Reminders(this._seed);
+class Triggers extends Notifier<List<Trigger>> implements TriggerList {
+  Triggers(this._seed);
 
-  final List<Reminder> _seed;
-  late FileReminderStore _store;
+  final List<Trigger> _seed;
+  late FileTriggerStore _store;
 
   @override
-  List<Reminder> build() {
-    _store = FileReminderStore(ref.watch(appConfigProvider));
+  List<Trigger> build() {
+    _store = FileTriggerStore(ref.watch(appConfigProvider));
     return _seed;
   }
 
   @override
-  List<Reminder> get reminders => state;
+  List<Trigger> get triggers => state;
 
   @override
-  Future<void> write(List<Reminder> reminders) async {
-    state = reminders;
-    await _store.save(reminders);
+  Future<void> write(List<Trigger> triggers) async {
+    state = triggers;
+    await _store.save(triggers);
   }
 
   @override
-  Future<void> replace(Reminder reminder) => write([
-        for (final r in state) if (r.id == reminder.id) reminder else r,
+  Future<void> replace(Trigger trigger) => write([
+        for (final t in state) if (t.id == trigger.id) trigger else t,
       ]);
 
   /// Add with its alarm request code assigned: the one place codes are handed
-  /// out, so they stay unique for the reminder's life.
-  Future<void> add(Reminder reminder) => write([
+  /// out, so they stay unique for the trigger's life.
+  Future<void> add(Trigger trigger) => write([
         ...state,
-        reminder.copyWith(requestCode: nextRequestCode(state)),
+        trigger.copyWith(requestCode: nextRequestCode(state)),
       ]);
 
   Future<void> remove(String id) =>
-      write([for (final r in state) if (r.id != id) r]);
+      write([for (final t in state) if (t.id != id) t]);
+
+  /// The chat-scoped registry the trigger tools' turn is handed: what it
+  /// registers carries this chat as its target, and what it may list and
+  /// remove is this chat's own. The reload the list change causes is what
+  /// puts a registration under watch the moment it lands.
+  ///
+  /// A timer is anchored here, where the clock is: the parse carried a
+  /// placeholder, and re-anchoring is what makes a countdown thirty
+  /// seconds from *this* rather than from somebody else's midnight.
+  /// Anchors a timer against the clock and adds with a request code
+  /// assigned: the one place codes are handed out, so they stay unique for
+  /// the trigger's life.
+  Future<Trigger> registerFor(String chatId,
+      {required TriggerSource source, required String prompt, String? name, String? member}) async {
+    final project = await ref.read(chatRepositoryProvider).projectOf(chatId);
+    final now = ref.read(clockProvider).now();
+    final anchored = source is TimerSource
+        ? TimerSource(duration: source.duration, registeredAt: now)
+        : source;
+    final draft = Trigger(
+      id: const Uuid().v4(),
+      name: name ?? "",
+      prompt: prompt,
+      source: anchored,
+      chatId: chatId,
+      member: member,
+      project: project,
+      byAgent: true,
+      nextFireAt: anchored.nextAfter(now),
+    );
+    await add(draft);
+    return draft;
+  }
 
   Future<void> setEnabled(String id, bool enabled) async {
-    final at = state.indexWhere((r) => r.id == id);
+    final at = state.indexWhere((t) => t.id == id);
     if (at < 0) return;
-    final reminder = state[at];
-    final next = enabled ? reminder.nextOccurrence(ref.read(clockProvider).now()) : null;
-    // Disabling disarms it; re-enabling re-aims at the next occurrence.
-    await replace(reminder.copyWith(enabled: enabled, clearNextFireAt: true)
+    final trigger = state[at];
+    final next = enabled
+        ? trigger.source.nextAfter(ref.read(clockProvider).now())
+        : null;
+    // Disabling disarms it; re-enabling recomputes — a file trigger has
+    // nothing on the clock to re-arm, a repeating schedule its next
+    // occurrence, a one-shot past its time nothing.
+    await replace(trigger.copyWith(enabled: enabled, clearNextFireAt: true)
         .copyWith(nextFireAt: next));
   }
 }
 
-final remindersProvider =
-    NotifierProvider<Reminders, List<Reminder>>(() => Reminders(const []));
+final triggersProvider =
+    NotifierProvider<Triggers, List<Trigger>>(() => Triggers(const []));
 
-final reminderTurnDriverProvider =
-    Provider<ReminderTurnDriver>((ref) => throw UnimplementedError());
+/// The file kind's path resolution — `resolveWorkspacePath` over the pair
+/// of workspaces the turn's own file tools would resolve against: the
+/// same `sharedWorkspace` rule, the same guest translation (a path the
+/// model fed back from inside a guest watches on the host where the guest
+/// keeps it), the same `~`. A trigger registered by a tool names its own
+/// chat, whose workspace exists — the turn ran there; one the user set has
+/// no chat, and its relative base is the project's workspace, the directory
+/// a chat of its own would share. There are no arguments of the resolver's
+/// own to get wrong — everything it passes is what the read tool would be
+/// passed, which is the parity the tool schema promises.
+String _resolveTriggerPath(
+  AppConfig config,
+  Shell shell,
+  String path,
+  String? chatId,
+  String? project,
+) {
+  final chatWorkspace =
+      chatId == null ? null : config.workspaceDir(chatId, project: project);
+  final shared = builtinProjectOf(project)?.sharedWorkspace ?? true;
+  // A chatless trigger in a project whose workspace is not shared (the
+  // anonymous one — the editor offers it): there is no chat workspace to
+  // stand in for the project's, so the project's directory it is.
+  final projectWorkspace = shared
+      ? config.projectWorkspaceDir(project: project)
+      : (chatWorkspace ?? config.projectWorkspaceDir(project: project));
+  return resolveWorkspacePath(
+    config.fs,
+    path,
+    chatWorkspace ?? projectWorkspace,
+    projectWorkspace,
+    guestRoot: shell.guestRoot,
+    homePath: shell.homeFor(projectWorkspace),
+  );
+}
 
-final reminderRunnerProvider = Provider<ReminderRunner>((ref) {
-  return ReminderRunner(
+final triggerTurnDriverProvider =
+    Provider<TriggerTurnDriver>((ref) => throw UnimplementedError());
+
+final triggerRunnerProvider = Provider<TriggerRunner>((ref) {
+  return TriggerRunner(
     repo: ref.watch(chatRepositoryProvider),
-    driver: ref.watch(reminderTurnDriverProvider),
+    driver: ref.watch(triggerTurnDriverProvider),
+    alarms: ref.watch(reminderAlarmsProvider),
     onListChanged: (_) => ref.invalidate(chatListProvider),
-    onReminderFired: (reminder) =>
-        ref.read(remindersProvider.notifier).replace(reminder),
+    onTriggerFired: (trigger) =>
+        ref.read(triggersProvider.notifier).replace(trigger),
     clock: ref.watch(clockProvider),
   );
 });
 
 /// Started once beside the sweep timer. It listens to the list from here, so
-/// an edit anywhere re-arms the timer and re-syncs the alarms without the
-/// editor having to know the scheduler exists.
-final reminderSchedulerProvider = Provider<ReminderScheduler>((ref) {
-  final scheduler = ReminderScheduler(
-    alarms: ref.watch(reminderAlarmsProvider),
-    runner: ref.watch(reminderRunnerProvider),
-    list: ref.watch(remindersProvider.notifier),
+/// an edit anywhere rebuilds every kind's watch without the editor having to
+/// know the kinds exist. The registry — the kinds that exist, in the order
+/// they answer the source picker — is built here rather than held as a
+/// constant, because each kind takes its port.
+final triggerManagerProvider = Provider<TriggerManager>((ref) {
+  final alarms = ref.watch(reminderAlarmsProvider);
+  final manager = TriggerManager(
+    kinds: [
+      ClockKind(alarms, matchOf: (t) => t.source is ScheduleSource),
+      ClockKind(alarms, matchOf: (t) => t.source is TimerSource),
+      FileKind(
+        fileWatches: createFileWatches(),
+        resolve: (trigger, path) async => _resolveTriggerPath(
+          ref.read(appConfigProvider),
+          ref.read(shellProvider),
+          path,
+          trigger.chatId,
+          trigger.project,
+        ),
+      ),
+    ],
+    alarmPort: alarms,
+    runner: ref.watch(triggerRunnerProvider),
+    list: ref.watch(triggersProvider.notifier),
     projects: () => ref.read(chatRepositoryProvider).listProjects(),
     clock: ref.watch(clockProvider),
   );
-  ref.onDispose(scheduler.dispose);
-  ref.listen(remindersProvider, (_, _) {
-    unawaited(scheduler.reload());
+  ref.onDispose(manager.dispose);
+  ref.listen(triggersProvider, (_, _) {
+    unawaited(manager.reload());
   });
-  return scheduler;
+  return manager;
 });
 
 final chatRepositoryProvider = Provider<ChatRepository>((ref) {
@@ -1060,6 +1176,37 @@ final completionsProvider =
         (ref, spec) =>
             ref.watch(promptLibraryProvider(spec.project)).options(spec.kind));
 
+/// An agent's profile picture, or null where none is set. Named like the
+/// `.md` — `<agents dir>/<name>.png` — and resolved over the same tier walk
+/// the library answers mentions with, so a project's own picture wins over
+/// an inherited one. Auto-disposed like [attachmentBytesProvider]: held, an
+/// avatar on every row would keep every agent's file in memory. A page that
+/// changes one — the agents settings paths do — invalidates the family, an
+/// inherited picture being every project's to re-read after a default edit.
+final agentPictureProvider =
+    FutureProvider.autoDispose.family<Uint8List?, ({String? project, String name})>(
+        (ref, key) async {
+  final config = ref.watch(appConfigProvider);
+  return readAgentPicture(
+    config,
+    key.name,
+    promptTiers(project: key.project, config: config),
+  );
+});
+
+/// Take the picture a write touched back down. A global write (null
+/// [project]) lands in the default project's directory that every project
+/// inherits pictures from, so the whole family goes; a project's is read
+/// there and nowhere else. The agents settings paths and a marketplace
+/// agent install both call it.
+void invalidateAgentPicture(WidgetRef ref, String name, {String? project}) {
+  if (project == null) {
+    ref.invalidate(agentPictureProvider);
+  } else {
+    ref.invalidate(agentPictureProvider((project: project, name: name)));
+  }
+}
+
 /// A project's own settings, loaded off `project.json`. Null is the default
 /// project, which lives in the data directory. The project name is the
 /// constructor argument, the way [ChatController] takes a chat id.
@@ -1067,10 +1214,10 @@ final projectSettingsProvider =
     NotifierProvider.family<ProjectSettingsNotifier, ProjectSettings, String?>(
         ProjectSettingsNotifier.new);
 
-/// Whether Omada runs in [project]: a built-in's answer is its spec, a user
-/// project's is the toggle in its `project.json`, and the default project's
-/// is false — it has no settings page for one. The read every surface makes,
-/// so a toggle landing re-renders each of them.
+/// Whether Omada runs in [project]: the one rule [omadaFor] resolves — a
+/// built-in's spec, a user project's toggle, the default project false —
+/// read the way the UI reads it, so a toggle landing re-renders each of
+/// these surfaces.
 final omadaOnProvider = Provider.family<bool, String?>((ref, project) {
   final spec = builtinProjectOf(project);
   if (spec != null) return spec.omada;
@@ -1162,6 +1309,29 @@ class ProjectSettingsNotifier extends Notifier<ProjectSettings> {
     await next.save(_config, project: project);
   }
 
+  /// The project's standing permission rules, saved whole.
+  Future<void> setProjectPermissions(List<PermissionRule> value) async {
+    final next = state.copy()..permissions = value;
+    state = next;
+    await next.save(_config, project: project);
+  }
+
+  /// The machine directories this project's commands may write to, beside
+  /// the workspace the sandbox grants.
+  Future<void> setWritableDirs(List<String> value) async {
+    final next = state.copy()..writableDirs = value;
+    state = next;
+    await next.save(_config, project: project);
+  }
+
+  /// Whether a sandbox-denied write is offered back as an approval. Null
+  /// inherits the app default.
+  Future<void> setProjectSandboxReprompt(bool? value) async {
+    final next = state.copy()..sandboxReprompt = value;
+    state = next;
+    await next.save(_config, project: project);
+  }
+
   /// What the new-chat screen asks over this project's badge. Null is the
   /// app default; empty is the screen asking nothing.
   Future<void> setDescription(String? value) async {
@@ -1180,4 +1350,36 @@ class ProjectSettingsNotifier extends Notifier<ProjectSettings> {
     await ref.read(chatRepositoryProvider).reanchorProjectTtl(project);
     ref.invalidate(chatListProvider);
   }
+}
+
+/// The one adapter the tools' registry rides over: the provider notifier,
+/// so a registration lands in the list this process watches and is armed by
+/// the manager's own reload.
+class ProviderTriggerOwner implements TriggerRegistryOwner {
+  ProviderTriggerOwner(this._container);
+
+  final ProviderContainer _container;
+
+  Triggers get _notifier => _container.read(triggersProvider.notifier);
+
+  @override
+  Future<List<Trigger>> triggers() async => _notifier.triggers;
+
+  @override
+  Future<Trigger> registerFor(String chatId,
+          {required TriggerSource source, required String prompt, String? name, String? member}) async =>
+      _notifier.registerFor(chatId, source: source, prompt: prompt, name: name, member: member);
+
+  @override
+  PromptLibrary libraryFor(String? project) =>
+      // The chat-scoped registry checked its member against this; the
+      // project's own library is what every mention resolves against.
+      _container.read(promptLibraryProvider(project));
+
+  @override
+  Future<void> remove(String id) async => _notifier.remove(id);
+
+  /// What the backend holds: one chat's face over this owner.
+  TriggerRegistry registryFor(String chatId, String? project) =>
+      ChatTriggerRegistry(this, chatId, project);
 }

@@ -37,6 +37,16 @@ class PromptDocument {
   bool get modelInvocable =>
       metadata["disable-model-invocation"]?.toLowerCase() != "true";
 
+  /// Whether sending `/name` runs code rather than expanding the body as a
+  /// prompt template. What it dispatches to is the closed set in
+  /// `wired_skill.dart`; the body is then the skill's user-facing note, never
+  /// something a model reads.
+  ///
+  /// This is the decider where the document is in hand — composition time,
+  /// and the `skill` tool's gate — while the dispatch itself matches by name
+  /// alone, a build-stable set the reader of a resent turn can still answer.
+  bool get isCallback => metadata["invocation"] == "callback";
+
   CompletionOption get option => CompletionOption(
         name: name,
         description: description,
@@ -49,7 +59,7 @@ class PromptDocument {
   /// dropped. The parsing lives in [Frontmatter], its own file so the
   /// build-time generators can share it without the freezed models.
   factory PromptDocument.parse(CompletionKind kind, String name, String source) {
-    final parsed = Frontmatter.parse(source.replaceAll("\r\n", "\n"));
+    final parsed = Frontmatter.parse(source);
     return PromptDocument(
       kind: kind,
       name: name,
@@ -127,7 +137,7 @@ class PromptLibrary {
 /// the whole of the message and there is at most one, which is what anchoring
 /// both ends says. Matches what `activeCompletionToken` offers in the
 /// composer's menu — anything it can offer has to dispatch here.
-final _skillReference = RegExp(r"^/([^\s/]+)(?:\s+([\s\S]*))?$");
+final RegExp skillReference = RegExp(r"^/([^\s/]+)(?:\s+([\s\S]*))?$");
 
 /// `@name` addresses an agent, but only where the handle starts, so an email
 /// address (`me@general`) and a path (`a@b.c`) are not mentions. Markdown
@@ -142,8 +152,15 @@ final _mention = RegExp(r"(?<![\w.-])@([\w.-]+)");
 /// of the same name do not collide. A name the library does not know is left
 /// out: it is more likely a path, or prose, than a document nobody defined.
 Map<String, String> promptDocuments(String text, PromptLibrary? library) => {
-      if (_skillReference.firstMatch(text.trim())?.group(1) case final name?)
-        if (library?.find(CompletionKind.skill, name) case final document?)
+      // A wired callback is not a thing the model is told what it meant: the
+      // turn runs code, and the skill's body is the user-facing note —
+      // expanded into the conversation it would be prose the model reads
+      // where no model is reading. The document in hand is what answers, and
+      // this is where it is in hand: the reload-staleness hazard the
+      // documents map exists for does not apply at composition time.
+      if (skillReference.firstMatch(text.trim())?.group(1) case final name?)
+        if (library?.find(CompletionKind.skill, name)
+            case final document? when !document.isCallback)
           "${CompletionKind.skill.trigger}$name": document.body,
       for (final match in _mention.allMatches(text))
         if (library?.find(CompletionKind.agent, match.group(1)!)
@@ -155,7 +172,7 @@ Map<String, String> promptDocuments(String text, PromptLibrary? library) => {
 /// or the message unchanged where it names no skill this one recorded.
 String expandedPrompt(String text, Map<String, String> documents) {
   if (documents.isEmpty) return text;
-  final match = _skillReference.firstMatch(text.trim());
+  final match = skillReference.firstMatch(text.trim());
   if (match == null) return text;
   final body = documents["${CompletionKind.skill.trigger}${match.group(1)}"];
   if (body == null) return text;

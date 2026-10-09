@@ -24,6 +24,7 @@ import "../widgets/app_mark.dart";
 import "../widgets/dialogs.dart";
 import "../widgets/editable_row.dart";
 import "../widgets/environment_section.dart";
+import "permissions_section.dart";
 import "../widgets/formatting.dart";
 import "../widgets/nav_drawer.dart";
 import "../widgets/provider_dialog.dart";
@@ -37,7 +38,7 @@ import "llm_settings.dart";
 import "local_model_settings.dart";
 import "memory_settings.dart";
 import "privacy_policy_page.dart";
-import "reminders.dart";
+import "triggers.dart";
 import "skills_settings.dart";
 import "sync_settings.dart";
 import "terminal_settings.dart";
@@ -48,7 +49,7 @@ import "welcome_page.dart";
 /// are offered in. General, Providers, On-device and LLMs are the app and the
 /// plumbing that answers a chat — everything an endpoint is, where a model can
 /// run without a network, and everything a model is asked to do; Memory, Voice
-/// and Reminders are what a conversation does beyond the text; Agents and
+/// and Triggers are what a conversation does beyond the text; Agents and
 /// Skills are what a message addresses by name; Terminal and Byte Repair are
 /// where commands run; Sync and Data are the device and all of it at once —
 /// the chats, the settings and the workspaces as one file to keep; and
@@ -61,7 +62,7 @@ enum SettingsCategory {
   llms("LLMs", Icons.auto_awesome_outlined),
   memory("Memory", Icons.psychology, dividerAbove: true),
   voice("Voice", Icons.graphic_eq),
-  reminders("Reminders", Icons.alarm),
+  triggers("Triggers", Icons.alarm),
   agents("Agents", Icons.person_outline, dividerAbove: true),
   skills("Skills", Icons.extension),
   terminal("Terminal", Icons.terminal, dividerAbove: true),
@@ -241,7 +242,7 @@ List<Widget> _sectionsOf(SettingsCategory category) => switch (category) {
         ],
       // Says so and offers nothing where there is no clock to schedule with —
       // see the section itself.
-      SettingsCategory.reminders => const [RemindersSection()],
+      SettingsCategory.triggers => const [TriggersSection()],
       // Rendered by [_categoryBody] whole rather than filed here, for the
       // footers pinned to their bottoms.
       SettingsCategory.skills => const [],
@@ -249,7 +250,11 @@ List<Widget> _sectionsOf(SettingsCategory category) => switch (category) {
       SettingsCategory.byteRepair => const [ByteRepairSection()],
       SettingsCategory.sync => const [SyncSection()],
       SettingsCategory.providers => const [_ProvidersEditor()],
-      SettingsCategory.llms => const [DefaultsSection()],
+      SettingsCategory.llms => const [
+          DefaultsSection(),
+          Divider(),
+          TurnsSection(),
+        ],
       // The two things the agent carries between conversations: the files the
       // user writes (instructions) and the ones it writes (memories).
       SettingsCategory.memory => const [
@@ -684,79 +689,49 @@ class _AgentSection extends ConsumerWidget {
                 ref.read(appSettingsProvider.notifier).setClassifierModel(choice),
           ),
         ),
-        const _RetryTurnsField(),
-        const _MaxStepsField(),
+        Divider(),
+        const _DefaultPermissionsSection(),
       ],
     );
   }
 }
 
-/// The most model calls one direct turn may make before it stops for the
-/// user. Null is the backend's own default; Omada member turns run under it
-/// too — the value rides every turn — and the round's own bound is the
-/// generations cap beside it.
-class _MaxStepsField extends ConsumerWidget {
-  const _MaxStepsField();
+/// The default project's permissions, which is what General holds: the tier
+/// every other project inherits before its own. The project settings page
+/// edits the same file for its own project; built-ins read it and add
+/// nothing.
+class _DefaultPermissionsSection extends ConsumerWidget {
+  const _DefaultPermissionsSection();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final steps = ref.watch(
-        appSettingsProvider.select((s) => s.turnMaxSteps));
-    return InheritableSlider(
-      label: "Max steps per turn",
-      value: steps,
-      stops: AppSettings.turnStepStops,
-      inherited: AppSettings.defaultTurnMaxSteps,
-      onChanged: (v) =>
-          ref.read(appSettingsProvider.notifier).setTurnMaxSteps(v),
-    );
-  }
-}
-
-/// How many times a turn that failed on a retryable error is carried on
-/// automatically before it is left failed. Off is the switch; the slider is
-/// the count, the shape the cores slider keeps.
-class _RetryTurnsField extends ConsumerWidget {
-  const _RetryTurnsField();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final retries = ref.watch(
-        appSettingsProvider.select((s) => s.turnRetries));
-    final on = retries > 0;
-    return LabelledField(
-      label: "Retry failed turns",
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SwitchListTile(
-            contentPadding: const EdgeInsets.symmetric(horizontal: 16),
-            title: const Text("Automatic retry"),
-            value: on,
-            onChanged: (value) => ref
-                .read(appSettingsProvider.notifier)
-                .setTurnRetries(value ? AppSettings.defaultTurnRetries : 0),
-          ),
-          if (on) ...[
-            Slider(
-              value: retries.toDouble(),
-              min: 1,
-              max: AppSettings.maxTurnRetries.toDouble(),
-              divisions: AppSettings.maxTurnRetries - 1,
-              label: "$retries",
-              onChanged: (value) => ref
-                  .read(appSettingsProvider.notifier)
-                  .setTurnRetries(value.round()),
-            ),
-            Text(
-              "Carried on automatically up to $retries time${retries == 1 ? "" : "s"} "
-              "when a connection drops or the provider fails. Off, a failed turn "
-              "waits for you to press Continue.",
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-          ],
-        ],
-      ),
+    final settings = ref.watch(projectSettingsProvider(null));
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        PermissionsSection(
+          rules: settings.permissions,
+          description: "Standing rules, consulted before the classifier and "
+              "the banner. A deny outranks an ask, which outranks an allow; a "
+              "command with segments a rule does not cover still waits.",
+          onSaved: (rules) => ref
+              .read(projectSettingsProvider(null).notifier)
+              .setProjectPermissions(rules),
+        ),
+        SwitchListTile(
+          title: const Text("Offer to rerun sandbox-denied commands"),
+          subtitle: Text((settings.sandboxReprompt ?? true)
+              ? "When the sandbox denies a write, one banner offers to rerun "
+                  "it unconfined, or to widen the grant to the denied "
+                  "directory. A project can override this."
+              : "Off: a denial is reported to the model and the turn moves "
+                  "on. A project can override this."),
+          value: settings.sandboxReprompt ?? true,
+          onChanged: (value) => ref
+              .read(projectSettingsProvider(null).notifier)
+              .setProjectSandboxReprompt(value),
+        ),
+      ],
     );
   }
 }

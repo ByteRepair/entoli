@@ -29,11 +29,11 @@ parts of the class.
 `CompletionField` is the field a prompt is written in: the menu of `/skills`
 and `@agents` that matches what has been typed, the arrows and tab and return
 that take one, and escape. It was the composer's, and it is here because the
-reminder editor writes a prompt too — one that is dispatched through the same
+trigger editor writes a prompt too — one that is dispatched through the same
 library, so being offered them in a chat and not there was the tell. Where the
 menu goes is the caller's, through `layout`: the composer's spans the whole
 composer rather than the field, since the `+` and Send are either side of it,
-and the reminder's prompt page puts it under a box that is the whole page.
+and the trigger's prompt page puts it under a box that is the whole page.
 `completionInsertItems` is the `+` button's two entries, for a menu that offers
 other things too — the composer's also attaches files. What a caller must not
 do is write its own trigger handling: `activeCompletionToken` has to keep
@@ -41,8 +41,8 @@ agreeing with `prompt_library.dart`, and one copy of it can.
 
 `TempChatTtlField` is how long a chat lives, as the chat settings page asks it —
 `Default` naming the project's or the app's answer, and the value written
-straight onto `meta.json`. The reminder editor asks with the same field: a
-reminder's chat is a chat, and a bool there could only ever have named one of
+straight onto `meta.json`. The trigger editor asks with the same field: the
+new chat a trigger makes is a chat, and a bool could only ever have named one of
 the five TTLs.
 
 `text_input.dart` is the pair of things a field wants and Material does not
@@ -50,7 +50,7 @@ give it. `replaceIn` writes over a range and leaves the caret after it —
 `CompletionField` types a completion with it and `TabIndents` an indent, and
 they were the same four lines twice. `TabIndents` makes Tab type two spaces
 rather than move the focus on, which every `CompletionField` of more than one
-line has — the composer and a reminder's prompt — and so does any
+line has — the composer and a trigger's prompt — and so does any
 `promptForText` of more than one line; the one-line fields are left alone,
 since there Tab is how the caret reaches the buttons.
 
@@ -85,6 +85,19 @@ to agree on that, and a code block's bar now uses the same button. Its null
 list. `copyToClipboard` is the other half of the same pairing: copying looks
 identical afterwards whatever did it, so what was taken is said in a snack bar
 from one place rather than each caller's own.
+
+`settings_card.dart` is the settings row that is a card: icon and title at the
+top, the subtitle under, the right-angle arrow at the top right where a tap
+does something. What the tap does stays the caller's — the `.copy` constructor
+is the whole-card-is-the-button form (the copy icon rides in the arrow's slot
+and the tap itself copies, through the same `copyToClipboard`), a navigation
+card takes an `onTap` that pushes, and null `trailing`/`onTap` is a card that
+only states a fact — the Chats card. `SettingsCardRow` is the Wrap that holds
+a screen's worth of them at one fixed width — the only place a row card's
+width is decided, every child boxed with it, so callers place children bare;
+two per phone line and capped where the window is wide. A card placed alone
+keeps its `ListTile` width by growing to its parent instead, which is what
+`WorkspaceTile` does where the chat settings page uses it.
 
 `floating_position.dart` and `chip_row.dart` are the empty-chat screen's two
 animation mechanisms, and anything else that wants the same motion reaches for

@@ -65,3 +65,11 @@ stays non-temporary and the combobox returns with `Off` selected — the user
 can re-enable temporary from there. Restoring the prior TTL state across a
 pin/unpin was rejected: it is more state to track for a case nobody asked for,
 and `off` is the honest answer for a chat that was just unpinned.
+
+## The bottom block
+
+Profile, Marketplace and Settings are the tiles under the list, and the new-chat
+FAB floats over them — the one part of the sidebar that is not a list of chats
+and has room to its right (see "Shared UI"). The tiles are plain `ListTile`s
+that push their pages; see `lib/ui/marketplace/CLAUDE.md` for what
+Marketplace's opens onto.

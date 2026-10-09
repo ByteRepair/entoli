@@ -32,6 +32,7 @@ import "../../../data/local/landlock.dart";
 import "../../../data/local/shared_backup.dart";
 import "../../../data/local/tree_ops.dart";
 import "../../../data/local/desktop_file_handoff.dart";
+import "../../../data/local/io_file_watches.dart";
 import "../../../data/local/linux_reminder_alarms.dart";
 import "../../../data/builtin/duckduckgo_search.dart";
 import "../../../data/builtin/local_shell.dart";
@@ -44,6 +45,7 @@ import "../../../domain/builtin_project.dart";
 import "../../../domain/file_handoff.dart";
 import "../../../domain/local_llm.dart";
 import "../../../domain/local_model_store.dart";
+import "../../../domain/file_watches.dart";
 import "../../../domain/reminder_alarms.dart";
 import "../../../domain/rootfs.dart";
 import "../../../domain/rootfs_store.dart";
@@ -396,6 +398,11 @@ Future<ReminderAlarms> platformReminderAlarms() async =>
 
 FileSystem platformFileSystem() => fileSystemIo;
 
+/// Inotify on this platform: the machine's, and Android's — both are
+/// `dart:io`'s `Directory.watch` answered by the kernel. A web build never
+/// reaches here.
+FileWatches platformFileWatches() => IoFileWatches();
+
 /// `$AGENT_CHAT_CONFIG` if set, else `~/.config/agent-chat` on desktop and
 /// app-private storage on Android. A Linux debug build reads
 /// `~/.config/agent-chat-debug`, so developing against an installed copy's
@@ -593,24 +600,29 @@ Future<void> platformChmodReadOnly(List<String> paths) async {
   }));
 }
 
-/// Toggles [path] writable for [action], then restores it to read-only. The
-/// install and delete paths use this: they are the app's own writes, not the
-/// model's, and they need the directory writable for the duration.
-Future<T> platformWithWritableDir<T>(
-    String path, Future<T> Function() action) async {
-  if (Platform.isLinux || Platform.isAndroid) {
+/// Makes each path in [paths] writable again (chmod -R u+w) — the other half
+/// of [platformChmodReadOnly]. No-op on Windows and macOS, where the lock does
+/// not exist to release.
+Future<void> platformChmodWritable(List<String> paths) async {
+  if (!Platform.isLinux && !Platform.isAndroid) return;
+  await Future.wait(paths.map((path) async {
     try {
       await Process.run("chmod", ["-R", "u+w", path]);
     } catch (_) {}
-  }
+  }));
+}
+
+/// Toggles [path] writable for [action], then restores it to read-only. The
+/// install and delete paths use this: they are the app's own writes, not the
+/// model's, and they need the directory writable for the duration. The two
+/// chmod halves are the pair above.
+Future<T> platformWithWritableDir<T>(
+    String path, Future<T> Function() action) async {
+  await platformChmodWritable([path]);
   try {
     return await action();
   } finally {
-    if (Platform.isLinux || Platform.isAndroid) {
-      try {
-        await Process.run("chmod", ["-R", "555", path]);
-      } catch (_) {}
-    }
+    await platformChmodReadOnly([path]);
   }
 }
 
