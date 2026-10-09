@@ -12,6 +12,7 @@ import "../../data/sync/sync_hub.dart" show RemoteChatEntry;
 import "../../providers.dart";
 import "../chat/chat_controller.dart";
 import "../memory/memory_page.dart";
+import "../marketplace/marketplace_page.dart";
 import "../profile/profile_page.dart";
 import "../settings/settings_page.dart";
 import "../widgets/anchored_menu.dart";
@@ -284,6 +285,13 @@ class _SidebarState extends ConsumerState<Sidebar> {
                       title: const Text("Profile"),
                       onTap: () => Navigator.of(context).push(
                         MaterialPageRoute(builder: (_) => const ProfilePage(project: null)),
+                      ),
+                    ),
+                    ListTile(
+                      leading: const Icon(Icons.storefront_outlined),
+                      title: const Text("Marketplace"),
+                      onTap: () => Navigator.of(context).push(
+                        MaterialPageRoute(builder: (_) => const MarketplacePage()),
                       ),
                     ),
                     ListTile(
