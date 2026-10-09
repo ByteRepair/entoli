@@ -1194,6 +1194,19 @@ final agentPictureProvider =
   );
 });
 
+/// Take the picture a write touched back down. A global write (null
+/// [project]) lands in the default project's directory that every project
+/// inherits pictures from, so the whole family goes; a project's is read
+/// there and nowhere else. The agents settings paths and a marketplace
+/// agent install both call it.
+void invalidateAgentPicture(WidgetRef ref, String name, {String? project}) {
+  if (project == null) {
+    ref.invalidate(agentPictureProvider);
+  } else {
+    ref.invalidate(agentPictureProvider((project: project, name: name)));
+  }
+}
+
 /// A project's own settings, loaded off `project.json`. Null is the default
 /// project, which lives in the data directory. The project name is the
 /// constructor argument, the way [ChatController] takes a chat id.
