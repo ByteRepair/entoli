@@ -2,11 +2,12 @@ name: Release build
 
 # The binaries a release is downloaded from, and the checks that stop a bad one
 # being built: a signed App Bundle for Google Play, a Linux AppImage and a
-# macOS DMG, all named after the version in pubspec. No APK: Play is the Android
-# channel a release serves, and a hand install builds one with
-# `flutter build apk` — locally, or through debug-build.yml's dispatch.
-# `release.yml` calls this and attaches what comes out; a dispatch says whether
-# a tag builds without publishing anything. See "Releasing" in AGENTS.md.
+# macOS DMG, named after the app and not the version, so the same names serve
+# every release. No APK: Play is the Android channel a release serves, and a
+# hand install builds one with `flutter build apk` — locally, or through
+# debug-build.yml's dispatch. `release.yml` calls this and attaches what comes
+# out; a dispatch says whether a tag builds without publishing anything.
+# See "Releasing" in AGENTS.md.
 on:
   workflow_call:
     inputs:
@@ -96,10 +97,12 @@ jobs:
           fi
 
           # The names are composed once, here: the publisher names the file it
-          # uploads from a different job than the one that built it.
-          aab="entoli-$version.aab"
-          appimage="entoli-$version-x86_64.AppImage"
-          dmg="entoli-$version-universal.dmg"
+          # uploads from a different job than the one that built it. None
+          # carries the version — the tag says it, and one name on every
+          # release is one name for a downloader to know.
+          aab="entoli.aab"
+          appimage="entoli-x86_64.AppImage"
+          dmg="entoli-universal.dmg"
 
           {
             echo "version=$version"
