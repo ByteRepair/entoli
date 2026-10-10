@@ -1,12 +1,12 @@
 name: Release build
 
 # The binaries a release is downloaded from, and the checks that stop a bad one
-# being built: a signed App Bundle for Google Play and a Linux AppImage, both
-# named after the version in pubspec. No APK: Play is the Android channel a
-# release serves, and a hand install builds one with `flutter build apk` —
-# locally, or through debug-build.yml's dispatch. `release.yml` calls this and
-# attaches what comes out; a dispatch says whether a tag builds without
-# publishing anything. See "Releasing" in CLAUDE.md.
+# being built: a signed App Bundle for Google Play, a Linux AppImage and a
+# macOS DMG, all named after the version in pubspec. No APK: Play is the Android
+# channel a release serves, and a hand install builds one with
+# `flutter build apk` — locally, or through debug-build.yml's dispatch.
+# `release.yml` calls this and attaches what comes out; a dispatch says whether
+# a tag builds without publishing anything. See "Releasing" in CLAUDE.md.
 on:
   workflow_call:
     inputs:
@@ -58,6 +58,7 @@ jobs:
       code: ${{ steps.version.outputs.code }}
       aab: ${{ steps.version.outputs.aab }}
       appimage: ${{ steps.version.outputs.appimage }}
+      dmg: ${{ steps.version.outputs.dmg }}
       assets: ${{ steps.version.outputs.assets }}
     steps:
       - uses: actions/checkout@v7.0.1
@@ -98,15 +99,19 @@ jobs:
           # uploads from a different job than the one that built it.
           aab="entoli-$version.aab"
           appimage="entoli-$version-x86_64.AppImage"
+          dmg="entoli-$version-universal.dmg"
 
           {
             echo "version=$version"
             echo "code=$((10#$major * 10000 + 10#$minor * 100 + 10#$patch))"
             echo "aab=$aab"
             echo "appimage=$appimage"
-            echo "assets=$(jq -nc --arg aab "$aab" --arg appimage "$appimage" \
+            echo "dmg=$dmg"
+            echo "assets=$(jq -nc --arg aab "$aab" --arg appimage "$appimage" --arg dmg "$dmg" \
               '[{file: $aab, artifact: "aab"}]
-                 + [{file: $appimage, artifact: "appimage"}]')"
+                 + [{file: $appimage, artifact: "appimage"}]
+                 + [{file: $dmg, artifact: "dmg"}]')"
+
           } >> "$GITHUB_OUTPUT"
 
   # The native tools build and the bundle build run on separate runners. The
@@ -340,3 +345,55 @@ jobs:
           if-no-files-found: error
           compression-level: 0
           retention-days: 7
+
+  # The macOS DMG, built from the same tree the AppImage is, on this host's
+  # architecture family and Intel both — Flutter's macOS build is universal
+  # unless the Xcode target narrows it, and one image covers both. Nothing
+  # signs it yet: enrollment is what brings the Developer ID identity and the
+  # notarytool profile, and `make-dmg.sh --sign` is where the former goes. What
+  # ships until then is ad-hoc signed, which Finder's right-click Open runs;
+  # see "The DMG" in macos/CLAUDE.md.
+  macos:
+    needs: version
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ inputs.tag }}
+
+      - uses: ./.github/actions/flutter-setup
+
+      - name: Build the app bundle
+        run: flutter build macos --release --build-number="${{ needs.version.outputs.code }}"
+
+      # make-dmg.sh fails when the app is not there, and codesign's verify step
+      # refuses to pass an image whose signature does not check out — there is
+      # no second place to catch a half-built one.
+      - name: Package the DMG
+        run: |
+          set -euo pipefail
+          app="build/macos/Build/Products/Release/Entoli.app"
+          [ -d "$app" ] || {
+            echo "::error::flutter build macos produced no $app"
+            exit 1
+          }
+          tool/macos/make-dmg.sh "$app" "dist/${{ needs.version.outputs.dmg }}"
+
+      - uses: actions/upload-artifact@v7.0.1
+        with:
+          name: dmg
+          path: dist/${{ needs.version.outputs.dmg }}
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
+
+      - name: Report what was built
+        run: |
+          set -euo pipefail
+          {
+            echo "### $(basename "dist/${{ needs.version.outputs.dmg }}")"
+            echo
+            echo '```'
+            shasum -a 256 "dist/${{ needs.version.outputs.dmg }}"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

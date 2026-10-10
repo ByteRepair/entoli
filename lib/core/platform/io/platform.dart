@@ -404,7 +404,7 @@ FileSystem platformFileSystem() => fileSystemIo;
 FileWatches platformFileWatches() => IoFileWatches();
 
 /// `$AGENT_CHAT_CONFIG` if set, else `~/.config/agent-chat` on desktop and
-/// app-private storage on Android. A Linux debug build reads
+/// app-private storage on Android. A desktop debug build reads
 /// `~/.config/agent-chat-debug`, so developing against an installed copy's
 /// data is not possible by accident.
 Future<String> platformDataDir() async {
@@ -412,7 +412,10 @@ Future<String> platformDataDir() async {
   return override ?? p.join(await _resolveBase(), _dirLeaf);
 }
 
-String get _dirLeaf => Platform.isLinux && kDebugMode ? "agent-chat-debug" : "agent-chat";
+String get _dirLeaf =>
+    (Platform.isLinux || Platform.isMacOS) && kDebugMode
+        ? "agent-chat-debug"
+        : "agent-chat";
 
 Future<String> _resolveBase() async {
   if (Platform.isLinux || Platform.isMacOS || Platform.isWindows) {
@@ -427,7 +430,7 @@ String get _home => LocalShell.machineHomeDir()!;
 /// Where things that can be fetched again live — the voice models, and a
 /// downloaded Linux beside them. `$AGENT_CHAT_CACHE` if set, else this platform's own cache
 /// directory, by hand rather than through `path_provider` so that the name
-/// beside `~/.config/agent-chat` is `~/.cache/agent-chat` — or, in a Linux
+/// beside `~/.config/agent-chat` is `~/.cache/agent-chat` — or, in a desktop
 /// debug build, the `-debug` sibling of each.
 ///
 /// **Android is the exception, and deliberately.** `getCacheDir()` is
@@ -443,7 +446,7 @@ Future<String> platformCacheDir() async {
     final xdg = Platform.environment["XDG_CACHE_HOME"];
     return p.join(xdg ?? p.join(_home, ".cache"), _dirLeaf);
   }
-  if (Platform.isMacOS) return p.join(_home, "Library", "Caches", "agent-chat");
+  if (Platform.isMacOS) return p.join(_home, "Library", "Caches", _dirLeaf);
   if (Platform.isWindows) {
     final local = Platform.environment["LOCALAPPDATA"] ?? p.join(_home, "AppData", "Local");
     return p.join(local, "agent-chat", "Cache");
