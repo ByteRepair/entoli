@@ -48,7 +48,7 @@ it is itself an AppImage and a CI runner has no FUSE to mount one with. The
 runtime it embeds is static, so the AppImage it produces does not send anyone
 looking for `libfuse2`.
 
-The debug one is uploaded beside the bundle rather than instead of it, and is
-`entoli-debug-x86_64.AppImage` with no version in the name: it is dispatched
-from a branch rather than cut from a tag, so pubspec's version would name a
-build nobody released.
+The debug one is uploaded beside the bundle rather than instead of it, as
+`entoli-debug-x86_64.AppImage` — `debug` standing where the release name has
+nothing — and no version in either: it is dispatched from a branch rather than
+cut from a tag, so pubspec's version would name a build nobody released.

@@ -7,14 +7,14 @@ the other, and only the first checks the tag against pubspec — a version
 disagreement stops the binaries and deploys the site anyway.
 
 Two files are attached, each with a provenance attestation beside it: a signed
-`entoli-<version>.aab` for Google Play and a
-`entoli-<version>-x86_64.AppImage`. The bundle is an input to Play, which
-resigns it into per-device APKs of its own. A third, `entoli-<version>-universal.dmg`,
-joins them unsigned: no Developer ID identity and notarytool profile exist
-until enrollment, the ad-hoc build running through Finder's right-click Open,
-and `release-build.yml`'s macos job grows the signing at the same time — see
-"The DMG" in `macos/AGENTS.md`. They carry the app's name rather than the
-package's, since a person is what downloads them.
+`entoli.aab` for Google Play and a `entoli-x86_64.AppImage`. The bundle is an
+input to Play, which resigns it into per-device APKs of its own. A third,
+`entoli-universal.dmg`, joins them unsigned: no Developer ID identity and
+notarytool profile exist until enrollment, the ad-hoc build running through
+Finder's right-click Open, and `release-build.yml`'s macos job grows the
+signing at the same time — see "The DMG" in `macos/AGENTS.md`. They carry the
+app's name rather than the package's, since a person is what downloads them,
+and no version, since the tag releases; the same names serve every release.
 
 **There is no release APK.** Play is the Android channel a release serves;
 Google builds the per-device APKs from the bundle itself, and anyone who wants
@@ -102,12 +102,14 @@ graph. The release workflows therefore need `tool/prepare.sh` in the tagged
 tree: rebuilding an older release breaks if the script is renamed.
 
 **The version is `pubspec.yaml`'s `version:` and nothing else**, resolved in a
-job of its own before either build. Every file name is composed there, because
-an attestation records its subject by name and the file attested is uploaded
-from a different job than the one that built it. A tag disagreeing with
-pubspec fails that job, since a binary reporting a version nobody released
-cannot be talked out of it afterwards — and failing there costs seconds
-rather than two toolchain installs.
+job of its own before either build. The file names are composed in that job
+too, and none of them carries the version — one name is one file on every
+release, the tag being what says the version. Composing them in that job still
+matters, because an attestation records its subject by name and the file
+attested is uploaded from a different job than the one that built it. A tag
+disagreeing with pubspec fails there, since a binary reporting a version nobody
+released cannot be talked out of it afterwards — and failing there costs
+seconds rather than two toolchain installs.
 
 **A release that moves anything under the data directory needs a migration**
 named by that same version — see "Migrations" in the root AGENTS.md. Nothing in
@@ -165,7 +167,7 @@ be about the file it sits beside. Each run attests its file and attaches the
 pair, so a download can be checked against the build that made it:
 
 ```sh
-gh attestation verify entoli-1.0.0-x86_64.AppImage --repo Yiannis128/agent-chat
+gh attestation verify entoli-x86_64.AppImage --repo Yiannis128/agent-chat
 ```
 
 The matrix is `fail-fast: false`, since each entry attests and uploads a
