@@ -2,6 +2,8 @@ import "dart:async";
 import "dart:io";
 
 import "package:http/http.dart" as http;
+
+import "../../core/tls.dart";
 import "package:path/path.dart" as p;
 
 import "../../domain/local_llm.dart";
@@ -14,7 +16,7 @@ import "../../core/log.dart";
 /// name it writes. The server this drives is the same one a turn reaches; these
 /// are two more requests to it, at `/slots/0` rather than `/chat/completions`.
 class FileKvCache implements LocalKvCache {
-  FileKvCache(this._dir, {http.Client? client}) : _http = client ?? http.Client() {
+  FileKvCache(this._dir, {http.Client? client}) : _http = client ?? tlsClient() {
     // The server is launched with this as its `--slot-save-path` and will not
     // create it, so it has to exist before the first turn. Android only and a
     // single `mkdir`, so synchronously at startup is cheaper than a guard on

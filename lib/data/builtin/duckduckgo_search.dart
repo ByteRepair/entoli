@@ -1,6 +1,8 @@
 import "dart:async";
 
 import "package:http/http.dart" as http;
+
+import "../../core/tls.dart";
 import "package:html/parser.dart";
 
 import "../../domain/shell.dart";
@@ -12,7 +14,7 @@ import "../../domain/web_search.dart";
 /// text, the same way the model would read a page if it could.
 class DuckDuckGoSearch extends WebSearch {
   DuckDuckGoSearch({http.Client? httpClient, this.timeout = const Duration(seconds: 30)})
-      : _http = httpClient ?? http.Client();
+      : _http = httpClient ?? tlsClient();
 
   final http.Client _http;
   final Duration timeout;
