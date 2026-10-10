@@ -1,0 +1,16 @@
+{
+  "fill" : { "automatic-gradient" : "extended-srgb:0.30980,0.27451,0.89804,1.00000" },
+  "groups" : [
+    {
+      "layers" : [
+        {
+          "fill" : "automatic",
+          "image-name" : "cookie-foreground.svg",
+          "name" : "cookie-foreground",
+          "position" : { "scale" : 1.0, "translation-in-points" : [ 0, 0 ] }
+        }
+      ]
+    }
+  ],
+  "supported-platforms" : { "squares" : "shared" }
+}

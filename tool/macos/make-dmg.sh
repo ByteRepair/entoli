@@ -37,4 +37,10 @@ cp -c -R "$app" "$staging/"
 ln -s /Applications "$staging/Applications"
 
 mkdir -p "$(dirname "$output")"
-hdiutil create -volname "$name" -srcfolder "$staging" -ov -format UDZO "$output"
+# Where diskutil has the image verb, that is the create hdiutil's is
+# deprecated for, and it overwrites by itself. Older macOS keeps hdiutil.
+if diskutil image >/dev/null 2>&1; then
+  diskutil image create from --format UDZO --volumeName "$name" "$staging" "$output"
+else
+  hdiutil create -volname "$name" -srcfolder "$staging" -ov -format UDZO "$output"
+fi
