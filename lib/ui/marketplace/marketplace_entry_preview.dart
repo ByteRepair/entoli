@@ -116,26 +116,26 @@ class _MarketplaceEntryPreviewPageState
     setState(() => _failed = false);
     final client = ref.read(marketplaceClientProvider);
     final kind = widget.kind;
-    final slug = widget.entry.slug;
+    final entry = widget.entry;
     try {
-      // The entry's files are independent round-trips to one host, so they
-      // go out together: serially this is one round-trip apiece on the
+      // The entry's files are independent round-trips to one host each, so
+      // they go out together: serially this is one round-trip apiece on the
       // spinner the user is staring at.
       final [readmeBytes, bodyBytes, picture] =
           await Future.wait(<Future<Uint8List?>>[
-        fetchMarketplaceEntryFile(client, kind, slug, "README.md"),
+        fetchMarketplaceEntryFile(client, kind, entry, "README.md"),
         // The skill's whole package or the agent's prompt, fetched under the
         // name each path shape has of its own.
         switch (kind) {
           CompletionKind.skill =>
-            fetchMarketplaceSkillPackage(client, kind, slug),
+            fetchMarketplaceSkillPackage(client, kind, entry),
           CompletionKind.agent =>
-            fetchMarketplaceEntryFile(client, kind, slug, "PROMPT.md"),
+            fetchMarketplaceEntryFile(client, kind, entry, "PROMPT.md"),
         },
         // A skill has no third file; an agent's picture is there or not.
         kind == CompletionKind.skill
             ? Future<Uint8List?>.value()
-            : fetchMarketplaceEntryFile(client, kind, slug, "profile.png"),
+            : fetchMarketplaceEntryFile(client, kind, entry, "profile.png"),
       ]);
       // Only a skill parses an intake package out of the body, and only an
       // agent holds its prompt's source for the install to write.
@@ -175,8 +175,15 @@ class _MarketplaceEntryPreviewPageState
           _failed = false;
         });
       }
+    } on MarketplacePackageProblem catch (e) {
+      // The listing and the source disagree; the page itself read fine, so
+      // the reason goes where the install button would be.
+      logFailure("marketplace", "${entry.slug}'s listing is stale", e);
+      if (mounted) {
+        setState(() => _preview = EntryPreview(packageProblem: "$e"));
+      }
     } catch (e) {
-      logFailure("marketplace", "could not fetch $slug's preview", e);
+      logFailure("marketplace", "could not fetch ${entry.slug}'s preview", e);
       if (mounted) {
         setState(() {
           _failed = true;
@@ -259,7 +266,9 @@ class _MarketplaceEntryPreviewPageState
       }
       return null;
     }
-    final name = widget.entry.slug;
+    // The file name is the agent's name, which the entry itself carries —
+    // [MarketplaceEntry.installName] for why.
+    final name = widget.entry.installName;
     if (!isFolderName(name)) {
       if (mounted) {
         say(context, "This agent cannot be installed: its name cannot be a file name.");
