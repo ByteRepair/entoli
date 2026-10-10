@@ -1,4 +1,8 @@
+<<<<<<<< HEAD:android/app/src/main/kotlin/io/github/yiannis128/agentchat/RemindersChannel.kt
+package io.github.yiannis128.agentchat
+========
 package io.byterepair.entoli
+>>>>>>>> origin/master:android/app/src/main/kotlin/io/byterepair/entoli/RemindersChannel.kt
 
 import android.app.ActivityManager
 import android.app.AlarmManager

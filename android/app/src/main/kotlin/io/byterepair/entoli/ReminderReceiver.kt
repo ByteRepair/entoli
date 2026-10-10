@@ -1,4 +1,8 @@
+<<<<<<<< HEAD:android/app/src/main/kotlin/io/github/yiannis128/agentchat/ReminderReceiver.kt
+package io.github.yiannis128.agentchat
+========
 package io.byterepair.entoli
+>>>>>>>> origin/master:android/app/src/main/kotlin/io/byterepair/entoli/ReminderReceiver.kt
 
 import android.content.BroadcastReceiver
 import android.content.Context
@@ -39,7 +43,11 @@ class ReminderReceiver : BroadcastReceiver() {
 
     companion object {
         private const val TAG = "ReminderReceiver"
+<<<<<<<< HEAD:android/app/src/main/kotlin/io/github/yiannis128/agentchat/ReminderReceiver.kt
+        const val ACTION_FIRE = "io.github.yiannis128.agentchat.FIRE_REMINDER"
+========
         const val ACTION_FIRE = "io.byterepair.entoli.FIRE_REMINDER"
+>>>>>>>> origin/master:android/app/src/main/kotlin/io/byterepair/entoli/ReminderReceiver.kt
         const val EXTRA_ID = "reminder_id"
     }
 }

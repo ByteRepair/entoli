@@ -1,4 +1,8 @@
+<<<<<<<< HEAD:android/app/src/main/kotlin/io/github/yiannis128/agentchat/ForegroundWork.kt
+package io.github.yiannis128.agentchat
+========
 package io.byterepair.entoli
+>>>>>>>> origin/master:android/app/src/main/kotlin/io/byterepair/entoli/ForegroundWork.kt
 
 import android.app.Notification
 import android.app.NotificationChannel
@@ -204,7 +208,11 @@ abstract class ForegroundWork : Service() {
 
     companion object {
         private const val TAG = "ForegroundWork"
+<<<<<<<< HEAD:android/app/src/main/kotlin/io/github/yiannis128/agentchat/ForegroundWork.kt
+        const val ACTION_STOP = "io.github.yiannis128.agentchat.STOP"
+========
         const val ACTION_STOP = "io.byterepair.entoli.STOP"
+>>>>>>>> origin/master:android/app/src/main/kotlin/io/byterepair/entoli/ForegroundWork.kt
         private const val WAKE_LOCK_TIMEOUT_MS = 6L * 60 * 60 * 1000
         private const val SWIPE_POLL_MS = 1000L
 

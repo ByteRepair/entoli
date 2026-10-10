@@ -1,4 +1,8 @@
+<<<<<<<< HEAD:android/app/src/main/kotlin/io/github/yiannis128/agentchat/VoiceChannel.kt
+package io.github.yiannis128.agentchat
+========
 package io.byterepair.entoli
+>>>>>>>> origin/master:android/app/src/main/kotlin/io/byterepair/entoli/VoiceChannel.kt
 
 import android.content.ComponentName
 import android.content.Context

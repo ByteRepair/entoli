@@ -1,4 +1,8 @@
+<<<<<<<< HEAD:android/app/src/main/kotlin/io/github/yiannis128/agentchat/FilesChannel.kt
+package io.github.yiannis128.agentchat
+========
 package io.byterepair.entoli
+>>>>>>>> origin/master:android/app/src/main/kotlin/io/byterepair/entoli/FilesChannel.kt
 
 import android.content.ActivityNotFoundException
 import android.content.Context
