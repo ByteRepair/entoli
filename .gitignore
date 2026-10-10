@@ -160,3 +160,6 @@ tool/ios/ish/dist/
 # (make-appimage.sh, make-dmg.sh). A release binary is not something to
 # commit.
 /dist/
+
+# Finder metadata; browsing the tree is not a change to it.
+.DS_Store
