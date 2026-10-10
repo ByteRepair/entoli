@@ -1,5 +1,7 @@
 import "dart:io";
+import "dart:isolate";
 
+import "package:ffi/ffi.dart";
 import "package:flutter/foundation.dart";
 import "package:flutter/services.dart" show rootBundle;
 import "package:record_platform_interface/record_platform_interface.dart"
@@ -22,6 +24,8 @@ import "../../../data/builtin/llm/local_kv_cache.dart";
 import "../../../data/local/file_kv_cache.dart";
 import "../../../data/local/file_local_model_store.dart";
 import "../../../data/local/file_rootfs_store.dart";
+import "../../../data/local/ish_ffi.dart";
+import "../../../data/local/ish_shell.dart";
 import "../../../data/local/llama_server.dart";
 import "../../../data/local/proot.dart";
 import "../../../data/local/landlock.dart";
@@ -59,8 +63,48 @@ import "signaling_server.dart";
 Shell platformShell({
   required Map<String, String> Function() environment,
   required ShellDriver? Function({String? project}) driver,
-}) =>
-    LocalShell(environment: environment, driver: driver);
+  String? dataDir,
+  RootfsStore? rootfsStore,
+
+  /// Asked per command rather than captured: which Linux the settings page
+  /// has picked. Null where the platform has no picker at all.
+  String? Function()? rootfsId,
+}) {
+  if (Platform.isIOS) {
+    // iOS has no host shell and no proot — the driver callback (which picks
+    // between the two on other platforms) is not exec-based here. IshShell
+    // drives the emulator through FFI; it resolves the rootfs the way
+    // platformDriver does, but without producing a ShellDriver, since there
+    // is nothing to exec. See ios/CLAUDE.md.
+    //
+    // The rootfs is resolved per command through these two closures, the way
+    // the driver callback is: a Linux installed from the settings page
+    // reaches the next command, and one deleted stops being where commands
+    // run without the app having to be restarted.
+    return IshShell(
+      rootfsDir: () {
+        final rootfs = rootfsById(rootfsId?.call());
+        final dir = rootfs != null && rootfsStore != null
+            ? rootfsStore.directoryOfSync(rootfs.id)
+            : null;
+        return dir ?? "";
+      },
+      dataDir: dataDir ?? "",
+      environment: environment,
+      platformDescription: () {
+        final rootfs = rootfsById(rootfsId?.call());
+        final dir = rootfs != null && rootfsStore != null
+            ? rootfsStore.directoryOfSync(rootfs.id)
+            : null;
+        return rootfs != null && dir != null
+            ? rootfs.describe("ios")
+            : "iOS, with no Linux installed. Install one from the Terminal "
+                "settings to run commands.";
+      },
+    );
+  }
+  return LocalShell(environment: environment, driver: driver);
+}
 
 /// What the next command runs under: the Linux the settings page picked,
 /// where it is installed, or the machine itself where there is no pick, or
@@ -156,8 +200,14 @@ String? _projectRootfsDir(AppConfig config, String project, String rootfsId) {
 }
 
 /// Which architecture this install is for, which decides the rootfs a download
-/// fetches. Null off Android.
-Future<String?> platformAbi() => BundledTools.abi();
+/// fetches. Null on the desktops, which have no catalog to pick from. iOS
+/// answers "ios" — its own key, since iSH emulates x86 and not the device's
+/// arm64 — so the Terminal page offers its i386 Alpine; the build-fault banner
+/// the Android ABI drives is gated on Android in the page that draws it.
+/// Android answers with its ABI: an APK built without its bundled tools is the
+/// one absence here that is a build fault, and that banner names the commands.
+Future<String?> platformAbi() =>
+    Platform.isIOS ? Future.value("ios") : BundledTools.abi();
 
 /// `assets/version.json` is a declared asset; the `assets/` prefix is part of
 /// the key, not just the on-disk path.
@@ -170,9 +220,12 @@ Future<String?> platformVersionJson() async {
 }
 
 /// Where a downloaded Linux is kept: beside the voice models, outside the data
-/// directory, and for the same reasons — see [RootfsStore].
+/// directory, and for the same reasons — see [RootfsStore]. On iOS the tar
+/// callback is iSH's fakefsify, not the system tar (which the exec ban denies).
 RootfsStore platformRootfsStore(String cacheDir) =>
-    FileRootfsStore(p.join(cacheDir, "rootfs"));
+    Platform.isIOS
+        ? FileRootfsStore(p.join(cacheDir, "rootfs"), tar: _ishFakefsify)
+        : FileRootfsStore(p.join(cacheDir, "rootfs"));
 
 /// The Byte Repair store, which installs the tooling — into the project's
 /// rootfs copy on Android, the app's own bin directory on the desktop —
@@ -195,7 +248,7 @@ ByteRepairStore platformByteRepairStore(
       project: project,
       workspace: workspace,
       installDir:
-          Platform.isAndroid ? guestEsbmcInstallDir : platformByteRepairBinDir(cacheDir)!,
+          Platform.isAndroid ? guestEsbmcInstallDir : platformByteRepairBinDir(cacheDir),
       // A guest's apk is a local package manager; the host fetches a 240 MB
       // ESBMC release zip over the network.
       installTimeout: Platform.isAndroid
@@ -502,6 +555,34 @@ Future<String?> platformHostname() async {
   } catch (_) {
     return null;
   }
+}
+
+/// iOS's rootfs unpack: iSH's `fakefsify` in-process, not the system `tar`
+/// (which iOS denies an app a child process to run). Converts the tarball into
+/// the fakefs SQLite layout the emulator reads. The FFI call blocks, so it
+/// runs on a fresh isolate rather than the UI one; `ishFakefsifyFn` is null
+/// off iOS, so this is never reached on a desktop or a browser.
+Future<ProcessResult> _ishFakefsify(String archive, String into) async {
+  if (!ishLinked) {
+    return ProcessResult(
+        1, 1, "", "iSH fakefsify is not linked into this build.");
+  }
+  return Isolate.run(() => _ishFakefsifyBody(archive, into));
+}
+
+ProcessResult _ishFakefsifyBody(String archive, String into) {
+  final fn = ishFakefsifyFn;
+  if (fn == null) {
+    return ProcessResult(
+        1, 1, "", "iSH fakefsify is not linked into this build.");
+  }
+  final archivePtr = archive.toNativeUtf8();
+  final intoPtr = into.toNativeUtf8();
+  final rc = fn(archivePtr, intoPtr);
+  calloc.free(archivePtr);
+  calloc.free(intoPtr);
+  if (rc == 0) return ProcessResult(0, 0, "", "");
+  return ProcessResult(1, rc, "", "fakefsify failed (errno $rc)");
 }
 
 /// Makes each path in [paths] read-only (chmod -R 555) so a weak model running

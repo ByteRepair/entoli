@@ -20,7 +20,7 @@ import io.flutter.plugin.common.MethodChannel
 // Says the process is busy while there is work it must not lose, so Android
 // does not kill it, and gives the user something to see and stop without
 // opening the app. The work itself stays in the Flutter isolate — see "Staying
-// alive off screen" in CLAUDE.md.
+// alive off screen" in AGENTS.md.
 //
 // One service per kind rather than one for all, because they are different
 // things to stop, and because Android insists a service that holds the

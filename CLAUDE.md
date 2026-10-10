@@ -1,6 +1,6 @@
 # Entoli
 
-Flutter (Linux/Web/Android) ChatGPT-style UI over a coding agent. Client-side:
+Flutter (Linux/Web/Android/iOS) ChatGPT-style UI over a coding agent. Client-side:
 it calls the user's own LLM endpoints and runs commands on their machine.
 
 The app is named Entoli; most of the identifiers are not, and deliberately.
@@ -39,6 +39,8 @@ named in a cross-reference is findable from this list.
 - `android/CLAUDE.md` — Staying alive off screen, The workspaces in the Files
   app, Being the assistant, Waking for a trigger, The app icon, The debug
   build's own
+- `ios/CLAUDE.md` — Why no host shell, The iSH driver, The rootfs, The
+  workspace inside the guest
 - `lib/ui/chat/CLAUDE.md` — When a turn is over, Thinking and tool runs,
   Selecting a reply, and copying it, How a reply is set, Code blocks, A command
   the user ran, A chat whose home device is elsewhere, The chat page
@@ -389,6 +391,14 @@ is `logDetail`, which is debug-only.
   toolbox, and is built for arm64 alone. `$HOME` rather than `~`: a tilde is not
   expanded as an argument to `env` or inside quotes, and the build then fails on
   a literal `~`.
+- iSH (iOS's emulator): `tool/ios/ish/build.sh`. The iSH source is a git
+  submodule (shallow) at `tool/ios/ish/src/`; the build inits it and its
+  `deps/` submodules, then compiles the core (libarchive included), the FFI
+  bridge, and the i386 vdso into an XCFramework. Needs macOS, Xcode, and
+  LLVM's clang/lld (brew install llvm) for the vdso. Not run by the app
+  build; without it an iOS build has no shell to run commands in. `git
+  submodule update --init
+  --recursive` fetches the source — a clone without it has an empty `src/`.
 - The Linux model server: `tool/linux/build-llama.sh`, native (no toolbox —
   host cmake, ninja and glslc), sharing the pin in `tool/android/versions.sh`.
   Stages into `build/llama/`, which `linux/CMakeLists.txt` installs into the

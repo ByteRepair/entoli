@@ -48,8 +48,12 @@ abstract class ByteRepairStore {
 
   /// Where the install script puts the tools it fetches: the rootfs's own
   /// `/usr/local/bin` inside a guest, the app's bin directory on the host.
-  /// Always set — the script refuses to guess a destination itself.
-  final String installDir;
+  /// Always set where an install can run — the script refuses to guess a
+  /// destination itself. Null where there is nothing to point at — a guest
+  /// reaches its own `/usr/local/bin` without help, and platforms with no
+  /// host shell have no host install — so a null here is "no host install",
+  /// never a path the script may guess around.
+  final String? installDir;
 
   /// How long the install script may run. Thirty minutes on the host, where
   /// ESBMC is a 240 MB release zip over the network; ten inside a guest,
@@ -102,7 +106,11 @@ abstract class ByteRepairStore {
     if (err != null) return ShellResult.failed(err);
     final body = await rootBundle.loadString("assets/scripts/byte-repair-setup.sh");
     final result = await _run(shell, body, installTimeout,
-        environment: {"ENV_INSTALL_DIR": installDir});
+        // Null installDir is the "no host install" answer — the setup's own
+        // refusal to guess a destination is what the model then reads.
+        environment: {
+          "ENV_INSTALL_DIR": installDir ?? "",
+        });
     if (result.returnCode == 0) await markSetupComplete();
     return result;
   }
