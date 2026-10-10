@@ -11,11 +11,16 @@ to the viewer](docs/screenshot.png)
 
 ## Obtaining Entoli
 
-Entoli ships for Linux, Android, and the web.
+Entoli ships for Linux, macOS, Android, and the web.
 
 **Linux**: download `entoli-<version>-x86_64.AppImage` from the
 [GitHub releases](https://github.com/Yiannis128/agent-chat/releases), make it
 executable, and run it.
+
+**macOS**: download `entoli-<version>-universal.dmg` from the
+[GitHub releases](https://github.com/Yiannis128/agent-chat/releases), open it,
+and drag the app to `/Applications`. The build is unsigned for now, so the
+first open is Finder's right-click Open rather than a double-click.
 
 **Android**: the app is distributed through Google Play closed testing.
 
@@ -29,7 +34,7 @@ executable, and run it.
 
 ## Development
 
-Entoli is a Flutter app targeting Linux, Android, and the web. Beyond the
+Entoli is a Flutter app targeting Linux, macOS, Android, and the web. Beyond the
 Flutter SDK, each platform needs a few native dev libraries; the lists below are
 the complete set, copy-pasteable into whichever package manager you use.
 
@@ -54,6 +59,12 @@ plus the C/C++ build toolchain.
   `gstreamer1-plugins-base-devel`
 - Ubuntu: `clang cmake ninja-build pkg-config libgtk-3-dev libgstreamer1.0-dev`
   `libgstreamer-plugins-base1.0-dev`
+
+### macOS
+
+Xcode and CocoaPods (`brew install cocoapods`). `flutter build macos` builds
+the app; `tool/macos/make-dmg.sh` packages it — see `macos/CLAUDE.md` for the
+entitlements decision and what signing adds.
 
 ### Android
 

@@ -9,8 +9,12 @@ disagreement stops the binaries and deploys the site anyway.
 Two files are attached, each with a provenance attestation beside it: a signed
 `entoli-<version>.aab` for Google Play and a
 `entoli-<version>-x86_64.AppImage`. The bundle is an input to Play, which
-resigns it into per-device APKs of its own. They carry the app's name rather
-than the package's, since a person is what downloads them.
+resigns it into per-device APKs of its own. A third, `entoli-<version>-universal.dmg`,
+joins them unsigned: no Developer ID identity and notarytool profile exist
+until enrollment, the ad-hoc build running through Finder's right-click Open,
+and `release-build.yml`'s macos job grows the signing at the same time — see
+"The DMG" in `macos/CLAUDE.md`. They carry the app's name rather than the
+package's, since a person is what downloads them.
 
 **There is no release APK.** Play is the Android channel a release serves;
 Google builds the per-device APKs from the bundle itself, and anyone who wants
