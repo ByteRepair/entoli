@@ -243,8 +243,15 @@ Frame it, from upstream.
     expect(find.text("letterbox"), findsOneWidget);
     expect(find.text("Frames the reply."), findsOneWidget);
     expect(find.text("Entoli Team · v1.0.0 · layout"), findsOneWidget);
-    // The remote rows joined from the ext index sit in the same list.
+    // The remote rows joined from the ext index sit in the same list, under
+    // the heading, the site's own entries ahead of them.
     expect(find.text("red-letter"), findsOneWidget);
+    expect(find.text("External"), findsOneWidget);
+    expect(
+      tester.getTopLeft(find.text("letterbox")).dy <
+          tester.getTopLeft(find.text("red-letter")).dy,
+      isTrue,
+    );
     expect(find.text("diary"), findsNothing);
 
     await tester.tap(find.text("Agents"));
@@ -252,7 +259,88 @@ Frame it, from upstream.
     expect(find.text("diary"), findsOneWidget);
     expect(find.text("Keeps a diary of what was done."), findsOneWidget);
     expect(find.text("letter-writer"), findsOneWidget);
+    // The agents list has its own halves the same way: diary first, the
+    // remote one under the heading.
+    expect(find.text("External"), findsOneWidget);
+    expect(
+      tester.getTopLeft(find.text("diary")).dy <
+          tester.getTopLeft(find.text("letter-writer")).dy,
+      isTrue,
+    );
     expect(find.text("letterbox"), findsNothing);
+  });
+
+  testWidgets("the toolbar's search filters the tab on screen", (tester) async {
+    await pumpList(tester);
+    await settleIo(tester);
+
+    // A name match.
+    await tester.enterText(find.byType(TextField), "letter");
+    await settleIo(tester);
+    expect(find.text("letterbox"), findsOneWidget);
+    expect(find.text("red-letter"), findsOneWidget);
+
+    // A description-only match: the name carries none of it.
+    await tester.enterText(find.byType(TextField), "an upstream");
+    await settleIo(tester);
+    expect(find.text("red-letter"), findsOneWidget);
+    expect(find.text("letterbox"), findsNothing);
+
+    await tester.enterText(find.byType(TextField), "zzz");
+    await settleIo(tester);
+    expect(find.text("Nothing matches here."), findsOneWidget);
+
+    await tester.tap(find.byTooltip("Clear search"));
+    await settleIo(tester);
+    expect(find.text("letterbox"), findsOneWidget);
+    expect(find.text("red-letter"), findsOneWidget);
+    expect(find.text("External"), findsOneWidget);
+  });
+
+  testWidgets("the tag picker ticks and the list filters", (tester) async {
+    await pumpList(tester);
+    await settleIo(tester);
+
+    await tester.tap(find.byTooltip("Filter by tag"));
+    await settleIo(tester);
+
+    // The tab's tags, each with its entry count.
+    expect(find.text("external"), findsOneWidget);
+    expect(find.text("layout"), findsOneWidget);
+    expect(find.text("1"), findsNWidgets(2));
+
+    await tester.tap(find.text("external"));
+    await settleIo(tester);
+    expect(find.text("Clear"), findsOneWidget);
+
+    await tester.pageBack();
+    await settleIo(tester);
+
+    // The one remote entry carries it; the local half is gone and the
+    // heading with it.
+    expect(find.text("red-letter"), findsOneWidget);
+    expect(find.text("letterbox"), findsNothing);
+    expect(find.text("External"), findsNothing);
+
+    // Reopened, the tick stood; ticking the other tag intersects to nothing.
+    await tester.tap(find.byTooltip("Filter by tag"));
+    await settleIo(tester);
+    await tester.tap(find.text("layout"));
+    await settleIo(tester);
+    await tester.pageBack();
+    await settleIo(tester);
+    expect(find.text("Nothing matches here."), findsOneWidget);
+
+    // Clearing gives the whole list back, heading and all.
+    await tester.tap(find.byTooltip("Filter by tag"));
+    await settleIo(tester);
+    await tester.tap(find.text("Clear"));
+    await settleIo(tester);
+    await tester.pageBack();
+    await settleIo(tester);
+    expect(find.text("External"), findsOneWidget);
+    expect(find.text("letterbox"), findsOneWidget);
+    expect(find.text("red-letter"), findsOneWidget);
   });
 
   testWidgets("an unreachable marketplace says so and retries", (tester) async {

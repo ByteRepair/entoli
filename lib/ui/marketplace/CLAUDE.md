@@ -4,6 +4,24 @@
 entries over Skills and Agents tabs. Tapping an entry opens
 `MarketplaceEntryPreviewPage`, which previews and installs it.
 
+The list is organized, and the organizing is `marketplace_groups.dart`, pure
+and tested without widgets. The site's own entries come first, each half
+alphabetical, and the remote half sits under an "External" heading — drawn
+only where both halves have something, a heading that separates nothing being
+no heading at all. A toolbar box searches (name and description alike, over
+the entries the fetch already holds, nothing re-read off disk) and the filter
+icon opens the tab's tag picker; both filter the list in the order it is
+drawn rather than re-ordering it — a description-only match keeps the
+alphabetical row it belongs in. The ticks are a **per-tab** `ValueNotifier`
+the page owns — the picker page ticks into it, so popping back is already
+filtered — and passing means carrying **every** tag ticked: the intersection,
+where an empty set filters nothing. Search and tags hold together, and a
+no-match result is `Nothing("Nothing matches here.")`, distinct from the
+empty-index line. The tag picker (`marketplace_tags.dart`) lists the tab's
+tags with each one's entry count, and Clear when anything is ticked. The
+search box and the heading row are the sidebar's two, copied rather than
+imported — extracting them out of the sidebar waits for a third caller.
+
 The list is the site's `index.json` per section
 (`byterepair.github.io/entoli-marketplace`, whose paths already carry
 `Access-Control-Allow-Origin: *`, so a browser build can fetch it). The URL is
