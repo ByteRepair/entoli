@@ -1,0 +1,53 @@
+<!--
+  The installer a release attaches: `entoli-installer.msi`. `flutter build
+  windows` in Release produces a bundle that moves together — the exe resolves
+  flutter_windows.dll and the plugin DLLs beside itself and the Dart assets in
+  data\ beside those — so the whole Release directory is harvested, and a
+  `Files` harvest is what keeps adding one file to a directory from hand.
+-->
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <Package
+      Name="Entoli"
+      Scope="perMachine"
+      Manufacturer="ByteRepair"
+      Version="$(Version)"
+      UpgradeCode="{EC8EF9A4-C91A-49D1-97F3-C45FFF776D7A}">
+
+    <!-- The UpgradeCode is the identity of every install to come: an installer
+         built later finds this one and replaces it, and an installer built
+         sooner refuses over it. Like the Android keystore, a change here is
+         not an update but a different app; it is never re-generated. -->
+    <MajorUpgrade
+        DowngradeErrorMessage="A newer version of Entoli is already installed." />
+
+    <StandardDirectory Id="ProgramFiles6432Folder">
+      <Directory Id="INSTALLFOLDER" Name="Entoli">
+        <!-- Unnamed bind path: make-msi.ps1 passes the Release bundle. The
+             ** recurses, so data\ trees with it. -->
+        <Files Include="**" />
+      </Directory>
+    </StandardDirectory>
+
+    <!-- A shortcut is its own component, with a registry value as its key
+         path: the component that does not install a file has to key on
+         something, and the key path is what makes it per-machine. -->
+    <StandardDirectory Id="ProgramMenuFolder">
+      <Component
+          Id="StartMenuShortcut"
+          Guid="{429392F1-A917-418E-AADF-92BC9CA70DD8}">
+        <Shortcut
+            Id="EntoliShortcut"
+            Name="Entoli"
+            Target="[INSTALLFOLDER]entoli.exe"
+            WorkingDirectory="INSTALLFOLDER" />
+        <RegistryValue
+            Root="HKLM"
+            Key="Software\ByteRepair\Entoli"
+            Name="InstallFolder"
+            Type="string"
+            Value="[INSTALLFOLDER]"
+            KeyPath="yes" />
+      </Component>
+    </StandardDirectory>
+  </Package>
+</Wix>

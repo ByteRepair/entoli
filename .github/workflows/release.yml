@@ -1,11 +1,11 @@
 name: Release
 
 # Attaches the binaries a published release is downloaded from — a signed App
-# Bundle for Google Play, a Linux AppImage and a macOS DMG — to the tag they
-# were built from, each with a provenance attestation beside it, and uploads
-# the bundle to Play. There is no release APK; `debug-build.yml` builds an APK
-# by hand. `release-build.yml` is what builds them and can be run on its own;
-# `pages.yml` answers the same event for the web app.
+# Bundle for Google Play, a Linux AppImage, a macOS DMG and a Windows MSI — to
+# the tag they were built from, each with a provenance attestation beside it,
+# and uploads the bundle to Play. There is no release APK; `debug-build.yml`
+# builds an APK by hand. `release-build.yml` is what builds them and can be run
+# on its own; `pages.yml` answers the same event for the web app.
 # See "Releasing" in AGENTS.md.
 on:
   release:

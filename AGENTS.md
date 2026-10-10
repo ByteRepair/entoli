@@ -46,6 +46,8 @@ named in a cross-reference is findable from this list.
   this host
 - `macos/Runner/entoli.icon/AGENTS.md` — the app icon's Icon Composer package:
   the layers, what the build does with them, and the Liquid Glass format notes
+- `windows/AGENTS.md` — The exe and its icon, The MSI, What is absent, and
+  honestly so, and nothing Windows runs on this host
 - `lib/ui/chat/AGENTS.md` — When a turn is over, Thinking and tool runs,
   Selecting a reply, and copying it, How a reply is set, Code blocks, A command
   the user ran, A chat whose home device is elsewhere, The chat page
@@ -392,6 +394,10 @@ is `logDetail`, which is debug-only.
 - macOS builds on this host natively: `flutter build macos`, packaged by
   `tool/macos/make-dmg.sh build/macos/Build/Products/Release/Entoli.app dist/entoli.dmg`.
   See `macos/AGENTS.md` for the entitlements decision and what signing adds.
+- Windows: nothing on this host builds or runs it. The `flutter build windows`
+  and the MSI are `release-build.yml`'s windows job (`windows-latest`); test
+  the chain by dispatching that workflow with no tag rather than waiting for
+  one. See `windows/AGENTS.md`.
 - Bundled tools (Android's proot and llama.cpp): `ANDROID_NDK_ROOT=$HOME/.android/ndk/<version>
   tool/android/build.sh arm64-v8a` then `tool/android/stage.sh`. None of it is run
   by the app build; without them an APK has no way to run a Linux and no model
