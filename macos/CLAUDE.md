@@ -73,11 +73,23 @@ it would be on any platform without a fallback to install. What the mic costs
 is one prompt: `NSMicrophoneUsageDescription` in `Info.plist` is the text TCC
 reads, the only permission a macOS build asks for.
 
+## The icon
+
+`Runner/entoli.icon` is the app icon's Icon Composer package — the layered
+format iOS 26 and macOS 26 render as Liquid Glass — one file for both
+platforms (`ios/Runner/entoli.icon` pointing into this tree through a
+symlink), its layers generated from `assets/icons/cookie.svg` with the
+squircle mask and the shadows left for the system: square layers only, the
+glass look is composed by the OS on top. The format's rules, the wiring and
+what was verified from where live in a CLAUDE.md inside the package itself.
+The `prompt` icon has no macOS copy, the way it has no PWA one.
+
 ## The DMG
 
 `tool/macos/make-dmg.sh <app> <output.dmg> [--sign identity]` is the packaging
 shape the AppImage's is: staging of app and `/Applications` symlink, one
-artifact out, `hdiutil` naming the volume after the app. The build produces a
+artifact out, the volume named after the app — `diskutil image create from`
+where macOS has the verb, `hdiutil` where it does not yet. The build produces a
 universal binary, ad-hoc signed. An ad-hoc build runs on the machine that made
 it and on another Mac through Finder's right-click Open, which is what an
 unsigned DMG asks of whoever downloads one; `--sign` adds the Developer ID

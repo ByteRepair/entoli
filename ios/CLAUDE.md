@@ -1,5 +1,13 @@
 # The iOS half
 
+## The icon
+
+`Runner/entoli.icon/CLAUDE.md` is a symlink into the macos half: the Icon
+Composer package both Apples compile the app icon from — one file for iOS and
+macOS, its layers generated from `assets/icons/cookie.svg`, the launcher
+switching being Android's `activity-alias` alone so only the default has a
+copy here.
+
 ## Why no host shell
 
 iOS refuses an app a child process. `fork`, `exec` and `posix_spawn` are denied
