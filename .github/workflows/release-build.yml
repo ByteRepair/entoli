@@ -108,10 +108,9 @@ jobs:
             echo "appimage=$appimage"
             echo "dmg=$dmg"
             echo "assets=$(jq -nc --arg aab "$aab" --arg appimage "$appimage" --arg dmg "$dmg" \
-              '[{file: $aab, artifact: "aab"}]
-                 + [{file: $appimage, artifact: "appimage"}]
-                 + [{file: $dmg, artifact: "dmg"}]')"
-
+              '[{file: $aab, artifact: "aab"},
+                 {file: $appimage, artifact: "appimage"},
+                 {file: $dmg, artifact: "dmg"}]')"
           } >> "$GITHUB_OUTPUT"
 
   # The native tools build and the bundle build run on separate runners. The
@@ -356,6 +355,8 @@ jobs:
   macos:
     needs: version
     runs-on: macos-latest
+    env:
+      DMG: ${{ needs.version.outputs.dmg }}
     steps:
       - uses: actions/checkout@v7.0.1
         with:
@@ -377,12 +378,12 @@ jobs:
             echo "::error::flutter build macos produced no $app"
             exit 1
           }
-          tool/macos/make-dmg.sh "$app" "dist/${{ needs.version.outputs.dmg }}"
+          tool/macos/make-dmg.sh "$app" "dist/$DMG"
 
       - uses: actions/upload-artifact@v7.0.1
         with:
           name: dmg
-          path: dist/${{ needs.version.outputs.dmg }}
+          path: dist/${{ env.DMG }}
           if-no-files-found: error
           compression-level: 0
           retention-days: 7
@@ -391,9 +392,9 @@ jobs:
         run: |
           set -euo pipefail
           {
-            echo "### $(basename "dist/${{ needs.version.outputs.dmg }}")"
+            echo "### $(basename "dist/$DMG")"
             echo
             echo '```'
-            shasum -a 256 "dist/${{ needs.version.outputs.dmg }}"
+            (cd dist && shasum -a 256 "$DMG")
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"

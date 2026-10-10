@@ -77,12 +77,13 @@ reads, the only permission a macOS build asks for.
 
 `tool/macos/make-dmg.sh <app> <output.dmg> [--sign identity]` is the packaging
 shape the AppImage's is: staging of app and `/Applications` symlink, one
-artifact out, `hdiutil` naming `Entoli`. The build produces a universal
-binary, ad-hoc signed. An ad-hoc build runs on the machine that made it and on
-another Mac through Finder's right-click Open, which is what an unsigned DMG
-asks of whoever downloads one; `--sign` adds the Developer ID identity under
-hardened runtime (`--deep` re-signs the engine and plugin frameworks Flutter
-left ad-hoc), and notarization is the distribution step after: `xcrun
+artifact out, `hdiutil` naming the volume after the app. The build produces a
+universal binary, ad-hoc signed. An ad-hoc build runs on the machine that made
+it and on another Mac through Finder's right-click Open, which is what an
+unsigned DMG asks of whoever downloads one; `--sign` adds the Developer ID
+identity under hardened runtime (`--deep` re-signs the engine and plugin
+frameworks Flutter left ad-hoc), and notarization is the distribution step
+after: `xcrun
 notarytool submit` on the DMG, `xcrun stapler staple` the same file, the image
 being notarizable whole so the ticket travels inside it. CI builds the
 unsigned DMG until enrollment; the job grows the signing identity and the

@@ -155,3 +155,8 @@ app.*.symbols
 # none until it runs prepare, same as the freezed sources above.
 /assets/version.json
 tool/ios/ish/dist/
+
+# Where the packaging tools say to put a hand-built artifact
+# (make-appimage.sh, make-dmg.sh). A release binary is not something to
+# commit.
+/dist/

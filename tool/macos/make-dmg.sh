@@ -10,11 +10,14 @@
 # being notarizable whole so the ticket travels inside it.
 set -euo pipefail
 
-app="${1:?usage: make-dmg.sh <Entoli.app> <output.dmg> [--sign identity]}"
-output="${2:?usage: make-dmg.sh <Entoli.app> <output.dmg> [--sign identity]}"
+usage="usage: make-dmg.sh <app> <output.dmg> [--sign <identity>]"
+app="${1:?"$usage"}"
+output="${2:?"$usage"}"
+# The name the volume takes, from the entry that decided it: AppInfo.xcconfig.
+name="$(basename "$app" .app)"
 
 if [ "${3:-}" = "--sign" ]; then
-  identity="${4:?usage: make-dmg.sh <app> <dmg> [--sign "Developer ID Application: name"]}"
+  identity="${4:?"$usage"}"
   # Hardened runtime without entitlements: the app is unsandboxed and runs
   # commands through dart:io, so the Release entitlements file stays empty
   # while ever it does. --deep re-signs the frameworks Flutter produced
@@ -26,12 +29,12 @@ fi
 
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
-staging="$work/Entoli"
+staging="$work/$name"
 mkdir -p "$staging"
-cp -R "$app" "$staging/"
+# -c clones on APFS and falls back to a copy elsewhere, so the bundle moves
+# without being read and written.
+cp -c -R "$app" "$staging/"
 ln -s /Applications "$staging/Applications"
 
-output_dir="$(dirname "$output")"
-mkdir -p "$output_dir"
-rm -f "$output"
-hdiutil create -volname Entoli -srcfolder "$staging" -ov -format UDZO "$output"
+mkdir -p "$(dirname "$output")"
+hdiutil create -volname "$name" -srcfolder "$staging" -ov -format UDZO "$output"

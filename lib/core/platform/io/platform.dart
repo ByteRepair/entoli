@@ -404,7 +404,7 @@ FileSystem platformFileSystem() => fileSystemIo;
 FileWatches platformFileWatches() => IoFileWatches();
 
 /// `$AGENT_CHAT_CONFIG` if set, else `~/.config/agent-chat` on desktop and
-/// app-private storage on Android. A desktop debug build reads
+/// app-private storage on Android. A Linux or macOS debug build reads
 /// `~/.config/agent-chat-debug`, so developing against an installed copy's
 /// data is not possible by accident.
 Future<String> platformDataDir() async {
@@ -430,8 +430,8 @@ String get _home => LocalShell.machineHomeDir()!;
 /// Where things that can be fetched again live — the voice models, and a
 /// downloaded Linux beside them. `$AGENT_CHAT_CACHE` if set, else this platform's own cache
 /// directory, by hand rather than through `path_provider` so that the name
-/// beside `~/.config/agent-chat` is `~/.cache/agent-chat` — or, in a desktop
-/// debug build, the `-debug` sibling of each.
+/// beside `~/.config/agent-chat` is `~/.cache/agent-chat` — or, in a Linux or
+/// macOS debug build, the `-debug` sibling of each.
 ///
 /// **Android is the exception, and deliberately.** `getCacheDir()` is
 /// evictable: the system empties it under storage pressure and the app's
