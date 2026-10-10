@@ -38,7 +38,14 @@ The tripwire after it is that failure's: the MSI must carry `entoli.exe` as
 a File row or make-msi.ps1 throws. The cabinet embeds (`MediaTemplate
 EmbedCab="yes"`): an external one is a second file beside the MSI, present
 where it was built and gone when a release carries the MSI alone — the size
-check is that regression's tripwire. The
+check is that regression's tripwire.
+
+**What an uninstall removes and what it keeps.** The installer removes what
+its tables hold: the Program Files folder, the Start Menu shortcut, the key
+path in `HKLM\Software\ByteRepair\Entoli` — and it keeps everything the app
+made while running, all of it outside the tables: the data directory and the
+voice cache survive it, the way an update does. A release that moves
+anything under the data directory answers by a migration instead. The
 **UpgradeCode is the identity of every install to come**: an installer built
 later finds this one and replaces it, one built sooner refuses in its name's
 sake, and one carrying a different UpgradeCode is a different app Windows
