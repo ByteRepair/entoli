@@ -12,7 +12,7 @@ on:
         required: true
         type: string
       version:
-        description: Version the bundle is named after, and the Play release name
+        description: The Play release name, and reported in the summary
         required: true
         type: string
       version_code:
@@ -33,7 +33,7 @@ jobs:
       contents: read
     env:
       TAG: ${{ inputs.tag }}
-      BUNDLE: dist/entoli-${{ inputs.version }}.aab
+      BUNDLE: dist/entoli.aab
       # Uploaded and reported from one value, so the summary cannot claim a
       # track the release did not go to.
       TRACK: alpha
