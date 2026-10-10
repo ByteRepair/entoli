@@ -57,7 +57,7 @@ if ($LASTEXITCODE -ne 0) {
     throw "make-msi.ps1: the UI extension did not install"
 }
 
-wix build -acceptEula wix7 -ext WixToolset.UI.wixext -arch x64 -o $Out -d Version=$Version -d BundlePath=$((Resolve-Path $Bundle).Path) -d LicenseRtf=$rtfPath "$PSScriptRoot\entoli.wxs"
+wix build -acceptEula wix7 -ext WixToolset.UI.wixext -bindvariable WixUILicenseRtf=$rtfPath -arch x64 -o $Out -d Version=$Version -d BundlePath=$((Resolve-Path $Bundle).Path) "$PSScriptRoot\entoli.wxs"
 if ($LASTEXITCODE -ne 0) {
     throw "make-msi.ps1: wix build failed"
 }
