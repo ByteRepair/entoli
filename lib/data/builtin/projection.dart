@@ -25,7 +25,7 @@ import "templates.dart";
 /// **This is the only thing that words a conversation for a model**, the turn
 /// being sent included — `BuiltinAgent._openTurn` projects the message it is
 /// about to log rather than wording one of its own. See "The projection" in
-/// `lib/domain/CLAUDE.md` for what that is worth and what it costs.
+/// `lib/domain/AGENTS.md` for what that is worth and what it costs.
 ///
 /// [first] says whether the first user message in [messages] is also the first
 /// of the conversation, which is the one dressed as a task. False where this is
@@ -177,7 +177,7 @@ Future<List<LlmAttachment>> _attachments(Message message, ResourceLoader load) a
 /// One turn's reply as the provider messages it becomes: one per response, each
 /// followed by the results answering its calls. What a running turn puts in
 /// front of the model, and what a reload rebuilds — the same function, so there
-/// is nothing to keep level. See "One accumulation" in `lib/domain/CLAUDE.md`.
+/// is nothing to keep level. See "One accumulation" in `lib/domain/AGENTS.md`.
 Iterable<LlmMessage> assistantMessages(List<MessagePart> parts) =>
     _assistant(unloggedMessage(MessageRole.assistant, _noDate, parts));
 

@@ -937,7 +937,7 @@ void main() {
       // turn takes. It is what the on-device KV cache rests on: a chat reopened
       // or regenerated has to send the text that was sent before, or every
       // cached prefix past the system prompt misses and the whole history is
-      // read again. See "The projection" in `lib/domain/CLAUDE.md`.
+      // read again. See "The projection" in `lib/domain/AGENTS.md`.
       final live = backendOver([
         [finish],
         [finish],

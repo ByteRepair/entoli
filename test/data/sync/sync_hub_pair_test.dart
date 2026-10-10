@@ -184,7 +184,7 @@ void main() {
   /// happily and serves nothing: no welcome, no chat list, no records. That
   /// is what shipped, because every test called `attach` in its own harness
   /// and `main` called it nowhere. `main` itself is not reachable from a test
-  /// (see `test/CLAUDE.md`), so what is pinned here is the symptom, loudly
+  /// (see `test/AGENTS.md`), so what is pinned here is the symptom, loudly
   /// enough to recognise if it comes back.
   test("a hub with no repository serves nothing", () async {
     final hub = await testSyncHub();

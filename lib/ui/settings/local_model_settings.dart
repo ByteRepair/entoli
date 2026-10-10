@@ -225,7 +225,7 @@ class _ThreadsSliderState extends ConsumerState<_ThreadsSlider> {
 /// How many prompt prefixes to keep warmed on disk, so reopening a chat
 /// restores its KV rather than reprocessing it. On by default at ten — the
 /// dumps are large, so there is a disk budget behind this and `Off` writes
-/// nothing. See "Persisting the KV cache to disk" in CLAUDE.md.
+/// nothing. See "Persisting the KV cache to disk" in AGENTS.md.
 ///
 /// It read "Cached chats" and counted neither chats nor turns: one dump is one
 /// request to the model, so a turn that runs five commands writes five, and the
@@ -259,7 +259,7 @@ class _KvCachePicker extends ConsumerWidget {
 
 /// Whether to warm the default on-device model's system prompt in the
 /// background. Off by default: on a phone it is minutes of the processor, so it
-/// is the user's to ask for. See "Prefilling the system prompt" in CLAUDE.md.
+/// is the user's to ask for. See "Prefilling the system prompt" in AGENTS.md.
 class _PrefillToggle extends ConsumerWidget {
   const _PrefillToggle();
 

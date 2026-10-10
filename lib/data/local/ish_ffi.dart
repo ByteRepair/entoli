@@ -6,7 +6,7 @@ import "package:ffi/ffi.dart";
 
 import "../../domain/shell.dart";
 // The dart:ffi bindings to the iSH bridge (tool/ios/ish/ish_bridge.c). The
-// bridge runs the iSH emulator core in-process — see ios/CLAUDE.md for why a
+// bridge runs the iSH emulator core in-process — see ios/AGENTS.md for why a
 // child-process shell cannot work on iOS.
 //
 // The symbols are linked into the app executable (a static lib, not a dylib),

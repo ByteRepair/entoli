@@ -360,7 +360,7 @@ final systemVoiceLanguagesProvider =
 /// project inherits, and a project's own overrides a same-named default entry
 /// for that project alone. Built once at startup and rebuilt only where
 /// something on screen says the disk changed — the Skills page, importing or
-/// deleting one. See "Skills and agents" in `lib/domain/CLAUDE.md` for why it
+/// deleting one. See "Skills and agents" in `lib/domain/AGENTS.md` for why it
 /// is otherwise read once: nothing downstream waits on it, and a file added
 /// behind the app's back reaches the next launch.
 ///
@@ -1105,7 +1105,7 @@ final chatRepositoryProvider = Provider<ChatRepository>((ref) {
     ref.watch(appConfigProvider),
     // The library is resolved per project at compose time: the message is
     // composed against the project's library, not an app-wide one — see
-    // "Skills and agents" in `lib/domain/CLAUDE.md`. Read fresh each time
+    // "Skills and agents" in `lib/domain/AGENTS.md`. Read fresh each time
     // rather than captured, so a reload reaches the next message.
     libraryFor: (project) => ref.read(promptLibraryProvider(project)),
   );

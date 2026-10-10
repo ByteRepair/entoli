@@ -2,7 +2,7 @@
 
 What the suite is built on, and the two or three things about it that are not
 obvious from reading a test. Everything about the app itself is in the root
-`CLAUDE.md`.
+`AGENTS.md`.
 
 ## What is shared
 
@@ -10,7 +10,7 @@ obvious from reading a test. Everything about the app itself is in the root
 with the backend faked — plus `tempConfig`, `makeState`, the dropdown finders,
 and the pumping helpers below. `writeSkill` writes a skill the library will
 actually offer: since skills are held to the Agent Skills spec (see
-"Skills and agents" in `lib/domain/CLAUDE.md`), its `SKILL.md` carries a
+"Skills and agents" in `lib/domain/AGENTS.md`), its `SKILL.md` carries a
 `name:` matching the folder and a `description`, and its `metadata:` argument
 is the way a test writes the client keys — `{"invocation": "callback"}` makes
 it one the controller dispatches. `test/fakes.dart` holds `FakeBackend`, whose
@@ -254,7 +254,7 @@ appear.
 through `handlePopRoute`, straight to the framework, and a real press is only
 forwarded while the framework has claimed the key. Whether the app *would*
 answer one says nothing about whether it would ever get one — see the back key
-in the root `CLAUDE.md` for what that costs.
+in the root `AGENTS.md` for what that costs.
 
 `frameworkHandlesBack` is the other half, so assert it beside any `pressBack`.
 It records what the app sent to `SystemNavigator.setFrameworkHandlesBack`,
@@ -311,7 +311,7 @@ neither. It is confirmed by hand, between two running instances.
 
 That gap has already cost two bugs that every loopback test passed — the frame
 header read through `frame.buffer`, and the hello exchange subscribing after
-it sent. Both are written up in `lib/data/sync/CLAUDE.md`; both would have
+it sent. Both are written up in `lib/data/sync/AGENTS.md`; both would have
 been silent again. Anything changed in `framing.dart` or in `SyncHub._establish`
 is worth confirming between two instances before it is believed.
 

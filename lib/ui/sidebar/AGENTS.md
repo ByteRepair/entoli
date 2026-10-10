@@ -71,5 +71,5 @@ and `off` is the honest answer for a chat that was just unpinned.
 Profile, Marketplace and Settings are the tiles under the list, and the new-chat
 FAB floats over them — the one part of the sidebar that is not a list of chats
 and has room to its right (see "Shared UI"). The tiles are plain `ListTile`s
-that push their pages; see `lib/ui/marketplace/CLAUDE.md` for what
+that push their pages; see `lib/ui/marketplace/AGENTS.md` for what
 Marketplace's opens onto.

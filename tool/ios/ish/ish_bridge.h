@@ -3,7 +3,7 @@
 // iOS denies an app a child process, so the shell every other platform has —
 // one that does Process.start of /bin/sh or a bundled proot — cannot work here.
 // iSH runs the whole guest in-process, and this is the thin C surface Dart
-// drives it through. See ios/CLAUDE.md for the constraints that shape it.
+// drives it through. See ios/AGENTS.md for the constraints that shape it.
 //
 // The session lifecycle mirrors LocalShell's _Session: a persistent guest
 // /bin/sh fed one base64 line at a time, whose output carries a marker naming

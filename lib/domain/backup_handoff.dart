@@ -1,7 +1,7 @@
 import "dart:typed_data";
 
 /// The backup on its way out of the app and back in. `FileHandoff` is the same
-/// job for a workspace file and this is not one — see CLAUDE.md, "Backing it
+/// job for a workspace file and this is not one — see AGENTS.md, "Backing it
 /// all up". Ungated, unlike that port: every platform has somewhere to put a
 /// file and a chooser to get one back — which is also why a skill or agent
 /// exported from the settings pages rides it, a `.skill` zip or an `.md`

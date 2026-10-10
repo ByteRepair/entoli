@@ -98,7 +98,7 @@ stays — history is fact.
 - **Settings** — the per-project toggle, the ordering dropdown, the italic
   marker, the built-in spec flag, `omadaOnProvider`.
 - **Direct chats defined** — the 1:1 contract above, written into
-  `lib/ui/chat/CLAUDE.md`; the author stamp gated on Omada.
+  `lib/ui/chat/AGENTS.md`; the author stamp gated on Omada.
 - **Authorship** — `Message.author`, stamped by the controller when the turn
   opens: the one member a single `@mention` addresses. The label reads it;
   sync carries it; old logs read as null.
@@ -128,7 +128,7 @@ stays — history is fact.
 - **`task` retired in Omada-on projects** — `AgentCapability.task` joins the
   disabled set, so the tool vanishes from the list and the prompt together;
   the room contract is My Team's bundled note, resolved in the repository
-  (see `lib/ui/chat/CLAUDE.md`, "The room contract is My Team's note"). Direct
+  (see `lib/ui/chat/AGENTS.md`, "The room contract is My Team's note"). Direct
   chats keep `task` and the sub-agent machinery intact.
 - **Phase C2 — flow control.** The settle-first handoff wave, send-while-
   running dispatching between turns (no mid-turn injection, protecting the
@@ -146,7 +146,7 @@ included — and the trigger that names a *member* rather than the chat is
 landed with it: `Trigger.member`, checked at registration against the
 project's library, addressed by a mention the runner composes onto the head
 of the send, routed by the room like any say (see "Who a fire addresses" in
-`lib/domain/CLAUDE.md`). What the tools' `member` argument and the trigger's
+`lib/domain/AGENTS.md`). What the tools' `member` argument and the trigger's
 are is the same word, read once the room had a reason to.
 
 ## Design invariants carried

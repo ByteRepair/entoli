@@ -17,7 +17,7 @@ import "../widgets/section_header.dart";
 ///
 /// It sits under Voice rather than in a category of its own, which is why this
 /// is a file rather than a private section of the page — see the Voice
-/// paragraph in CLAUDE.md.
+/// paragraph in AGENTS.md.
 class AssistantSection extends ConsumerWidget {
   const AssistantSection({super.key});
 

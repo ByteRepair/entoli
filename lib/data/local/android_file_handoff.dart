@@ -17,7 +17,7 @@ import "../../core/log.dart";
 /// Everything the channel is handed is a copy under the app's cache rather than
 /// the workspace file itself, because a `FileProvider` only mints URIs under
 /// the paths it is configured with and one cache directory is the whole of that
-/// configuration. See CLAUDE.md, "The workspace explorer".
+/// configuration. See AGENTS.md, "The workspace explorer".
 class AndroidFileHandoff implements FileHandoff {
   AndroidFileHandoff(this._fs) {
     _channel.setMethodCallHandler(_onCall);

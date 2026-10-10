@@ -38,10 +38,10 @@ dependencies:
   file_selector: ^1.1.0
   mime: ^2.0.0
   # A dart:io-shaped FileSystem with an IndexedDB backend, so the web build has
-  # the same layout as a disk. See CLAUDE.md, "On-disk layout".
+  # the same layout as a disk. See AGENTS.md, "On-disk layout".
   fs_shim: ^2.5.5
   # Neither a share sheet nor a browser download takes a folder, so a folder
-  # leaves the workspace as a zip. See CLAUDE.md, "The workspace explorer".
+  # leaves the workspace as a zip. See AGENTS.md, "The workspace explorer".
   archive: ^4.1.0
 
   # Icons
@@ -64,7 +64,7 @@ dependencies:
 
   # Voice mode. sherpa-onnx is speech recognition, speech synthesis and voice
   # activity detection from one dependency: `record` opens the microphone and
-  # `audioplayers` says the reply back. See "Voice mode" in CLAUDE.md, and
+  # `audioplayers` says the reply back. See "Voice mode" in AGENTS.md, and
   # issue #58 for why a browser gets none of this. The interface and Linux
   # packages are reached directly by the pw-record fallback, `LinuxRecorder`.
   sherpa_onnx: ^1.13.6
@@ -77,7 +77,7 @@ dependencies:
   uuid: ^4.6.0
   collection: ^1.19.1
   # A swappable clock so tests pin "now" rather than rotting against the
-  # calendar. The reminder feature reads it; see "Reminders" in CLAUDE.md.
+  # calendar. The reminder feature reads it; see "Reminders" in AGENTS.md.
   clock: ^1.1.2
   # navigator.storage.persist(), so what the browser stored is not evicted.
   web: ^1.1.1

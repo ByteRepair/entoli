@@ -12,7 +12,7 @@ import "../domain/workspace.dart";
 import "zip.dart";
 
 /// The whole data directory as a zip, and back again. The members are the
-/// files, at the paths they have under the data directory. See CLAUDE.md,
+/// files, at the paths they have under the data directory. See AGENTS.md,
 /// "Backing it all up".
 
 /// What the manifest says this is. A zip without one is refused before anything

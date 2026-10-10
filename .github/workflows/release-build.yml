@@ -6,7 +6,7 @@ name: Release build
 # channel a release serves, and a hand install builds one with
 # `flutter build apk` — locally, or through debug-build.yml's dispatch.
 # `release.yml` calls this and attaches what comes out; a dispatch says whether
-# a tag builds without publishing anything. See "Releasing" in CLAUDE.md.
+# a tag builds without publishing anything. See "Releasing" in AGENTS.md.
 on:
   workflow_call:
     inputs:
@@ -175,7 +175,7 @@ jobs:
       # From Gradle, so the id uploaded under cannot drift from the id the app
       # is built with. A file rather than a job output: GitHub drops an output
       # whose value contains a registered secret, and the key alias is a
-      # substring of io.byterepair.entoli — see "Releasing" in CLAUDE.md.
+      # substring of io.byterepair.entoli — see "Releasing" in AGENTS.md.
       - name: Record the application id
         run: |
           set -euo pipefail
@@ -351,7 +351,7 @@ jobs:
   # signs it yet: enrollment is what brings the Developer ID identity and the
   # notarytool profile, and `make-dmg.sh --sign` is where the former goes. What
   # ships until then is ad-hoc signed, which Finder's right-click Open runs;
-  # see "The DMG" in macos/CLAUDE.md.
+  # see "The DMG" in macos/AGENTS.md.
   macos:
     needs: version
     runs-on: macos-latest

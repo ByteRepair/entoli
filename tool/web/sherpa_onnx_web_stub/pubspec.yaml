@@ -2,7 +2,7 @@
 # unconditionally and which ships a 14 MB WebAssembly build of onnxruntime as a
 # web-platform asset. Plugin assets are not tree-shaken, so without this every
 # web build carries that 14 MB for a feature the web does not have — see "The
-# web" in the voice mode section of CLAUDE.md, and issue #58.
+# web" in the voice mode section of AGENTS.md, and issue #58.
 #
 # It only has to satisfy two things: pub's resolution, and the generated web
 # plugin registrant, which imports this library and calls `registerWith`.

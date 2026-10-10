@@ -37,12 +37,12 @@ endpoint's own business: an `LlmEndpoint` is a config and, where reaching it
 is not the ordinary thing, the client to reach it with — which is how the
 on-device server's "may not be answering yet" arrives without the registry
 knowing there is such a thing. See "Running a model on the device" in
-`lib/data/local/CLAUDE.md`.
+`lib/data/local/AGENTS.md`.
 
 **The key is resolved in one order, by `resolveKeyFor`**: the key stored for
 the provider id in the secret store, then `apiKeyEnv` in the environment.
 Only the named variable ever leaves `settings.json`; the stored one lives in
-the secret store — see "Secrets at rest" in `lib/data/sync/CLAUDE.md` — and
+the secret store — see "Secrets at rest" in `lib/data/sync/AGENTS.md` — and
 no `LlmProviderConfig` carries a key at all, so no write path has to strip
 one. The resolved key is the client cache signature's third term, so an
 edited stored key rebuilds the client the way an edited URL does.
@@ -66,7 +66,7 @@ Failures are reported as they happen: a rejected key or a bad request reaches
 that never opened) emits `RetryEvent` the instant it fails. `ErrorEvent` carries
 whether the failure was retryable — read off the exception the query died on —
 and that flag is what the controller's automatic retry rounds ask before
-re-entering `resume` (see `lib/ui/chat/CLAUDE.md`, "Automatic retry rounds");
+re-entering `resume` (see `lib/ui/chat/AGENTS.md`, "Automatic retry rounds");
 `_fail`, for a failure the turn never reached a model through, leaves it false.
 A request that died mid-stream is retryable too, and safe to resume, because
 resuming appends to the same reply rather than starting another.

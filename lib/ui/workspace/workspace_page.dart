@@ -40,7 +40,7 @@ class WorkspaceTile extends StatelessWidget {
 /// A workspace folder, and what can be done with what is in it. Listing,
 /// creating a folder and deleting go through the `FileSystem` and are on every
 /// platform; the routes out of the app are `FileHandoff`'s, and each is drawn
-/// only where it leads somewhere — see CLAUDE.md, "The workspace explorer".
+/// only where it leads somewhere — see AGENTS.md, "The workspace explorer".
 class WorkspacePage extends ConsumerStatefulWidget {
   const WorkspacePage({super.key, required this.root, required this.title});
 

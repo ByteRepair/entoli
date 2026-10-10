@@ -16,7 +16,7 @@ import "llm_client.dart";
 /// the LRU on its own, so there is no invalidation to write. It also subsumes
 /// the prefill's body KV: the warmed system+tools prefix is just the shortest
 /// key, saved by the same mechanism. See "Persisting the KV cache to disk" in
-/// `lib/data/local/CLAUDE.md`.
+/// `lib/data/local/AGENTS.md`.
 ///
 /// The concrete one is [FileKvCache], built on Android alone. Null everywhere
 /// else, which is what leaves the pool client caching nothing.

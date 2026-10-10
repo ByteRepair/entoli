@@ -401,7 +401,7 @@ counter leaves out, for the same reason.
 
 ## Sub-agents (the `task` tool)
 
-In the room's terms (see "The room and its participants" in `lib/ui/chat/CLAUDE.md`),
+In the room's terms (see "The room and its participants" in `lib/ui/chat/AGENTS.md`),
 a `task` call has the **main agent schedule delegated participant turns**: each
 sub-agent is a participant with the full per-participant shape — its own
 `BuiltinSession`, its transcript per call id, revived through `projectionOf` —
@@ -413,7 +413,7 @@ and `task` goes away. The room contract that replaces the tool's prompting
 is not this file's business — it is the project's bundled note, My Team's
 (`assets/prompts/projects/my-team/system/instructions.md`), which the
 repository hands every Omada turn; see "The room contract is My Team's note"
-in `lib/ui/chat/CLAUDE.md`.
+in `lib/ui/chat/AGENTS.md`.
 
 `task` spawns a sub-agent with its own session under the named `@agent`'s
 prompt, runs it to completion headless, and returns its final text as the tool

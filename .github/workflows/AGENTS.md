@@ -13,7 +13,7 @@ resigns it into per-device APKs of its own. A third, `entoli-<version>-universal
 joins them unsigned: no Developer ID identity and notarytool profile exist
 until enrollment, the ad-hoc build running through Finder's right-click Open,
 and `release-build.yml`'s macos job grows the signing at the same time — see
-"The DMG" in `macos/CLAUDE.md`. They carry the app's name rather than the
+"The DMG" in `macos/AGENTS.md`. They carry the app's name rather than the
 package's, since a person is what downloads them.
 
 **There is no release APK.** Play is the Android channel a release serves;
@@ -110,7 +110,7 @@ cannot be talked out of it afterwards — and failing there costs seconds
 rather than two toolchain installs.
 
 **A release that moves anything under the data directory needs a migration**
-named by that same version — see "Migrations" in the root CLAUDE.md. Nothing in
+named by that same version — see "Migrations" in the root AGENTS.md. Nothing in
 CI checks for one; the check is that the PR moving the files adds it.
 
 **The Android version code is derived from that version rather than stored**,

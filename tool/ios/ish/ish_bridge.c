@@ -3,7 +3,7 @@
 // iOS denies an app a child process, so the shell every other platform has —
 // one that does Process.start of /bin/sh or a bundled proot — cannot work here.
 // iSH runs the whole guest in-process, and this is the thin C surface Dart
-// drives it through. See ios/CLAUDE.md for the constraints that shape it.
+// drives it through. See ios/AGENTS.md for the constraints that shape it.
 //
 // The session lifecycle mirrors LocalShell's _Session: a persistent guest
 // /bin/sh fed one base64 line at a time, whose output carries a marker naming
@@ -172,7 +172,7 @@ ish_session *ish_session_init(
     // [home] is bound at /root by bind_workspace below, and [cwd] is where
     // the shell starts in the guest's own words. The data-dir bind stays as
     // the fallback spelling. See "The workspace inside the guest" in
-    // ios/CLAUDE.md.
+    // ios/AGENTS.md.
     if (!ish_booted) {
         ish_boot(rootfs_dir);
         if (!ish_booted) {
@@ -389,7 +389,7 @@ void ish_session_destroy(ish_session *session) {
 // Convert a tarball into iSH's fakefs layout, in-process. iSH's own
 // tools/fakefsify does this against libarchive; this wraps the same
 // fakefs_import it calls, so the iOS rootfs unpack does not need a child
-// process (the exec ban). See "The rootfs" in ios/CLAUDE.md.
+// process (the exec ban). See "The rootfs" in ios/AGENTS.md.
 //
 // fakefs_import begins with mkdir(into), which fails with EEXIST where the
 // directory is already there — and the Dart store always has it there, having

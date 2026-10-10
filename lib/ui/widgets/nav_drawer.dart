@@ -30,7 +30,7 @@ class NavDrawer extends StatelessWidget {
     return Drawer(
       width: width < _compact ? width : null,
       // Claims the back key from Android, which the drawer's own
-      // `LocalHistoryEntry` does not — see CLAUDE.md. Deleting this as dead
+      // `LocalHistoryEntry` does not — see AGENTS.md. Deleting this as dead
       // code is how it shipped broken once.
       child: PopScope(
         canPop: false,
