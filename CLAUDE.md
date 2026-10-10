@@ -1,6 +1,6 @@
 # Entoli
 
-Flutter (Linux/Web/Android/iOS) ChatGPT-style UI over a coding agent. Client-side:
+Flutter (Linux/Web/Android/iOS/macOS) ChatGPT-style UI over a coding agent. Client-side:
 it calls the user's own LLM endpoints and runs commands on their machine.
 
 The app is named Entoli; most of the identifiers are not, and deliberately.
@@ -41,6 +41,8 @@ named in a cross-reference is findable from this list.
   build's own
 - `ios/CLAUDE.md` — Why no host shell, The iSH driver, The rootfs, The
   workspace inside the guest
+- `macos/CLAUDE.md` — Why no sandbox, The entitlements, What a command runs on,
+  What is absent, and honestly so, Voice mode, The DMG, Tests on this host
 - `lib/ui/chat/CLAUDE.md` — When a turn is over, Thinking and tool runs,
   Selecting a reply, and copying it, How a reply is set, Code blocks, A command
   the user ran, A chat whose home device is elsewhere, The chat page
@@ -384,6 +386,9 @@ is `logDetail`, which is debug-only.
 - Package the Linux build:
   `tool/linux/make-appimage.sh build/linux/x64/release/bundle dist/entoli.AppImage`.
   Needs no toolbox; it downloads `appimagetool` itself.
+- macOS builds on this host natively: `flutter build macos`, packaged by
+  `tool/macos/make-dmg.sh build/macos/Build/Products/Release/Entoli.app dist/entoli.dmg`.
+  See `macos/CLAUDE.md` for the entitlements decision and what signing adds.
 - Bundled tools (Android's proot and llama.cpp): `ANDROID_NDK_ROOT=$HOME/.android/ndk/<version>
   tool/android/build.sh arm64-v8a` then `tool/android/stage.sh`. None of it is run
   by the app build; without them an APK has no way to run a Linux and no model
