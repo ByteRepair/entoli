@@ -85,7 +85,13 @@ void emitPromptFileList(StringBuffer buf, String varName,
 /// escape. Every line is a separate concatenation so the diff stays readable.
 /// `$` is escaped to `\$` so JavaScript template literals (`${item}`) in the
 /// embedded content are not read as Dart interpolations.
+///
+/// CRs are normalized to LF before anything else: a CRLF-checked-out file
+/// would otherwise leave a raw CR inside the literal, and the generated
+/// source is then not Dart on any host that read it so — and the const is
+/// generated content that two hosts' checksums must agree on.
 String stringLiteral(String s) {
+  s = s.replaceAll("\r\n", "\n").replaceAll("\r", "\n");
   final escaped = s
       .replaceAll("\\", "\\\\")
       .replaceAll('"', '\\"')
