@@ -394,10 +394,9 @@ is `logDetail`, which is debug-only.
 - macOS builds on this host natively: `flutter build macos`, packaged by
   `tool/macos/make-dmg.sh build/macos/Build/Products/Release/Entoli.app dist/entoli.dmg`.
   See `macos/AGENTS.md` for the entitlements decision and what signing adds.
-- Windows: nothing on this host builds or runs it. The `flutter build windows`
-  and the MSI are `release-build.yml`'s windows job (`windows-latest`); test
-  the chain by dispatching that workflow with no tag rather than waiting for
-  one. See `windows/AGENTS.md`.
+- Windows: nothing on this host builds or runs it. Its CI job is detached
+  from the release until the installer's packaging is proven; see
+  `windows/AGENTS.md` for what stands and what awaits.
 - Bundled tools (Android's proot and llama.cpp): `ANDROID_NDK_ROOT=$HOME/.android/ndk/<version>
   tool/android/build.sh arm64-v8a` then `tool/android/stage.sh`. None of it is run
   by the app build; without them an APK has no way to run a Linux and no model

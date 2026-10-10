@@ -1,13 +1,12 @@
 name: Release build
 
 # The binaries a release is downloaded from, and the checks that stop a bad one
-# being built: a signed App Bundle for Google Play, a Linux AppImage, a macOS
-# DMG and a Windows MSI, named after the app and not the version, so the same
-# names serve every release. No APK: Play is the Android channel a release
-# serves, and a hand install builds one with `flutter build apk` — locally, or
-# through debug-build.yml's dispatch. `release.yml` calls this and attaches
-# what comes out; a dispatch says whether a tag builds without publishing
-# anything.
+# being built: a signed App Bundle for Google Play, a Linux AppImage and a
+# macOS DMG, named after the app and not the version, so the same names serve
+# every release. No APK: Play is the Android channel a release serves, and a
+# hand install builds one with `flutter build apk` — locally, or through
+# debug-build.yml's dispatch. `release.yml` calls this and attaches what comes
+# out; a dispatch says whether a tag builds without publishing anything.
 # See "Releasing" in AGENTS.md.
 on:
   workflow_call:
@@ -61,7 +60,6 @@ jobs:
       aab: ${{ steps.version.outputs.aab }}
       appimage: ${{ steps.version.outputs.appimage }}
       dmg: ${{ steps.version.outputs.dmg }}
-      msi: ${{ steps.version.outputs.msi }}
       assets: ${{ steps.version.outputs.assets }}
     steps:
       - uses: actions/checkout@v7.0.1
@@ -105,7 +103,6 @@ jobs:
           aab="entoli.aab"
           appimage="entoli-x86_64.AppImage"
           dmg="entoli-universal.dmg"
-          msi="entoli-installer.msi"
 
           {
             echo "version=$version"
@@ -113,12 +110,10 @@ jobs:
             echo "aab=$aab"
             echo "appimage=$appimage"
             echo "dmg=$dmg"
-            echo "msi=$msi"
-            echo "assets=$(jq -nc --arg aab "$aab" --arg appimage "$appimage" --arg dmg "$dmg" --arg msi "$msi" \
+            echo "assets=$(jq -nc --arg aab "$aab" --arg appimage "$appimage" --arg dmg "$dmg" \
               '[{file: $aab, artifact: "aab"},
                  {file: $appimage, artifact: "appimage"},
-                 {file: $dmg, artifact: "dmg"},
-                 {file: $msi, artifact: "msi"}]')"
+                 {file: $dmg, artifact: "dmg"}]')"
           } >> "$GITHUB_OUTPUT"
 
   # The native tools build and the bundle build run on separate runners. The
@@ -406,49 +401,3 @@ jobs:
             (cd dist && shasum -a 256 "$DMG")
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
-
-  # The Windows MSI, built on the Windows runner nothing on this host can stand
-  # in for. Like the macos job it builds the app alone — no model server is
-  # cross-compiled for it, and what a Release build without one produces is
-  # what the installer packages — and like the DMG nothing signs it yet,
-  # SmartScreen's Run anyway being how the first run goes until a certificate
-  # exists; see windows/AGENTS.md.
-  windows:
-    needs: version
-    runs-on: windows-latest
-    env:
-      MSI: ${{ needs.version.outputs.msi }}
-      VERSION: ${{ needs.version.outputs.version }}
-    steps:
-      - uses: actions/checkout@v7.0.1
-        with:
-          ref: ${{ inputs.tag }}
-
-      - uses: ./.github/actions/flutter-setup
-
-      - name: Build the app
-        run: flutter build windows --release --build-number="${{ needs.version.outputs.code }}"
-
-      # make-msi.ps1 fails when the exe is not there, and wix build's harvest
-      # sees the whole release directory — there is no second place to catch a
-      # half-built one.
-      - name: Package the MSI
-        shell: pwsh
-        run: ./tool/windows/make-msi.ps1 "build/windows/x64/runner/Release" "dist/${{ env.MSI }}" -Version "${{ env.VERSION }}"
-
-      - uses: actions/upload-artifact@v7.0.1
-        with:
-          name: msi
-          path: dist/${{ env.MSI }}
-          if-no-files-found: error
-          compression-level: 0
-          retention-days: 7
-
-      - name: Report what was built
-        shell: pwsh
-        run: |
-          # A fence without quoting games: one backtick, three times.
-          $fence = [string][char]96 * 3
-          $hash = (Get-FileHash "dist/$env:MSI" -Algorithm SHA256).Hash.ToLower()
-          @("### $env:MSI", "", $fence, $hash, $fence) |
-            Add-Content $env:GITHUB_STEP_SUMMARY

@@ -6,7 +6,7 @@ Play, `pages.yml` deploys the web app from the same tag. Either can fail
 without the other, and only the first checks the tag against pubspec — a
 version disagreement stops the binaries and deploys the site anyway.
 
-Four files are attached, each with a provenance attestation beside it, named
+Three files are attached, each with a provenance attestation beside it, named
 after the app and not the package or the version (a person is what downloads
 them, and the tag is where a version lives), so the same names serve every
 release:
@@ -18,9 +18,10 @@ release:
   identity and a notarytool profile; until then it is ad-hoc signed, run
   through Finder's right-click Open, and `release-build.yml`'s macos job
   grows the signing at the same time — see "The DMG" in `macos/AGENTS.md`
-- `entoli-installer.msi`, the Windows build in a WiX package — unsigned like
-  the DMG, so SmartScreen warns until a code-signing certificate exists; the
-  packaging is `tool/windows/make-msi.ps1` — see `windows/AGENTS.md`
+
+A fourth, `entoli-installer.msi`, is written but not attached: the Windows
+job re-joins the release when its packaging has survived a run; see
+`windows/AGENTS.md`.
 
 **There is no release APK.** Play is the Android channel a release serves;
 Google builds the per-device APKs from the bundle itself, and anyone who
@@ -83,11 +84,6 @@ minutes, no logs.
 committed, so build_runner runs on every job; the action caches the asset
 graph. The release workflows therefore need `tool/prepare.sh` in the
 tagged tree: rebuilding an older release breaks if the script is renamed.
-
-**The macos and windows jobs build the app alone.** Nothing native is
-compiled beside them: no model server is built for either platform yet, so a
-release ships without one and the app's On-device page says what that is
-worth.
 
 ## The version
 

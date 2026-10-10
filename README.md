@@ -11,13 +11,7 @@ to the viewer](docs/screenshot.png)
 
 ## Obtaining Entoli
 
-Entoli ships for Windows, Linux, macOS, Android, and the web.
-
-**Windows**: download `entoli-installer.msi` from the
-[GitHub releases](https://github.com/Yiannis128/agent-chat/releases) and run
-it; it installs to Program Files and puts Entoli in the Start menu. The build
-is unsigned for now, so Smartscreen's More info, then Run anyway, is how the
-installer's first run goes.
+Entoli ships for Linux, macOS, Android, and the web.
 
 **Linux**: download `entoli-x86_64.AppImage` from the
 [GitHub releases](https://github.com/Yiannis128/agent-chat/releases), make it
