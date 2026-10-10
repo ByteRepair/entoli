@@ -77,7 +77,8 @@ reads, the only permission a macOS build asks for.
 
 `tool/macos/make-dmg.sh <app> <output.dmg> [--sign identity]` is the packaging
 shape the AppImage's is: staging of app and `/Applications` symlink, one
-artifact out, `hdiutil` naming the volume after the app. The build produces a
+artifact out, the volume named after the app — `diskutil image create from`
+where macOS has the verb, `hdiutil` where it does not yet. The build produces a
 universal binary, ad-hoc signed. An ad-hoc build runs on the machine that made
 it and on another Mac through Finder's right-click Open, which is what an
 unsigned DMG asks of whoever downloads one; `--sign` adds the Developer ID
