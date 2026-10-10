@@ -20,11 +20,18 @@
     <MajorUpgrade
         DowngradeErrorMessage="A newer version of Entoli is already installed." />
 
+    <!-- The cabinet rides inside the MSI: an external one is a second file a
+         release does not attach, and an installer that installs only where
+         the cab lies beside it is a 45 KB shell elsewhere. -->
+    <MediaTemplate EmbedCab="yes" />
+
     <StandardDirectory Id="ProgramFiles6432Folder">
       <Directory Id="INSTALLFOLDER" Name="Entoli">
-        <!-- Unnamed bind path: make-msi.ps1 passes the Release bundle. The
-             ** recurses, so data\ trees with it. -->
-        <Files Include="**" />
+        <!-- BundlePath: make-msi.ps1 passes it as the bundle's absolute path,
+           the fully-qualified pattern the docs recommend. A relative pattern
+           over a bind path resolved to nothing once — WIX8600 grades a
+           zero-file harvest a warning, and the build shipped green. -->
+      <Files Include="$(BundlePath)\**" />
       </Directory>
     </StandardDirectory>
 
