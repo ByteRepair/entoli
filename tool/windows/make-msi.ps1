@@ -36,7 +36,19 @@ if ($outDir) {
     New-Item -ItemType Directory -Force $outDir | Out-Null
 }
 
-wix build -acceptEula wix7 -arch x64 -b $Bundle -o $Out -d Version=$Version "$PSScriptRoot\entoli.wxs"
+wix build -acceptEula wix7 -arch x64 -o $Out -d Version=$Version -d BundlePath=$((Resolve-Path $Bundle).Path) "$PSScriptRoot\entoli.wxs"
 if ($LASTEXITCODE -ne 0) {
     throw "make-msi.ps1: wix build failed"
+}
+
+# WIX8600 grades a zero-file harvest a warning and the build ships green —
+# this is where it fails instead: the exe as a literal in the MSI's File
+# table is what the harvest having found the bundle looks like, and a size
+# under a megabyte is the cab-embedment the same class of silently-missing
+# payload — the table names the files either way.
+if (-not (Select-String -Path $Out -Pattern "entoli.exe" -Quiet)) {
+    throw "make-msi.ps1: the MSI carries no entoli.exe; the harvest found no files"
+}
+if ((Get-Item $Out).Length -lt 1048576) {
+    throw "make-msi.ps1: $(Split-Path $Out -Leaf) is under a megabyte; the cabinet is not embedding"
 }
