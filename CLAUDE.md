@@ -39,10 +39,13 @@ named in a cross-reference is findable from this list.
 - `android/CLAUDE.md` — Staying alive off screen, The workspaces in the Files
   app, Being the assistant, Waking for a trigger, The app icon, The debug
   build's own
-- `ios/CLAUDE.md` — Why no host shell, The iSH driver, The rootfs, The
-  workspace inside the guest
+- `ios/CLAUDE.md` — The icon, Why no host shell, The iSH driver, The rootfs,
+  The workspace inside the guest
 - `macos/CLAUDE.md` — Why no sandbox, The entitlements, What a command runs on,
-  What is absent, and honestly so, Voice mode, The DMG, Tests on this host
+  What is absent, and honestly so, Voice mode, The icon, The DMG, Tests on
+  this host
+- `macos/Runner/entoli.icon/CLAUDE.md` — the app icon's Icon Composer package:
+  the layers, what the build does with them, and the Liquid Glass format notes
 - `lib/ui/chat/CLAUDE.md` — When a turn is over, Thinking and tool runs,
   Selecting a reply, and copying it, How a reply is set, Code blocks, A command
   the user ran, A chat whose home device is elsewhere, The chat page

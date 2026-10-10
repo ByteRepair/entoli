@@ -268,7 +268,10 @@ checked in rather than built: `assets/icons/*.svg` is what the app draws,
 `ic_icon_background` are the Android adaptive layers named by
 `mipmap-anydpi-v26/ic_<name>.xml`, and `web/icons/` is the PWA set. Android
 reads no SVG, so its copies are the same path data as a vector drawable, and
-editing one means editing all of them — there is no generator. The cookie's
+editing one means editing all of them — there is no generator. The Apples'
+copy is one file for both platforms and the default only: `entoli.icon` under
+`macos/Runner/`, the Liquid Glass layers, with `ios/Runner/entoli.icon/CLAUDE.md`
+a symlink into it. The cookie's
 launcher layers are the exception: `drawable-*/dpi/ic_cookie_{bg,fg}.png` are
 `cookie.svg` rendered by `resvg` (`bg` is the gradient and sheen alone, `fg`
 the blob and glyphs with their drop shadows, at the five adaptive sizes), so
