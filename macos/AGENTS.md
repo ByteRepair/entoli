@@ -88,18 +88,64 @@ The `prompt` icon has no macOS copy, the way it has no PWA one.
 
 `tool/macos/make-dmg.sh <app> <output.dmg> [--sign identity]` is the packaging
 shape the AppImage's is: staging of app and `/Applications` symlink, one
-artifact out, the volume named after the app — `diskutil image create from`
-where macOS has the verb, `hdiutil` where it does not yet. The build produces a
-universal binary, ad-hoc signed. An ad-hoc build runs on the machine that made
-it and on another Mac through Finder's right-click Open, which is what an
-unsigned DMG asks of whoever downloads one; `--sign` adds the Developer ID
-identity under hardened runtime (`--deep` re-signs the engine and plugin
-frameworks Flutter left ad-hoc), and notarization is the distribution step
-after: `xcrun
-notarytool submit` on the DMG, `xcrun stapler staple` the same file, the image
-being notarizable whole so the ticket travels inside it. CI builds the
+artifact out. The volume takes the app's name plus Installer — "Entoli
+Installer" — so what a user sees mounted reads as the thing being installed,
+not the app itself; the staged item inside stays `<Name>.app`. The build
+produces a universal binary, ad-hoc signed. An ad-hoc build runs on the
+machine that made it and on another Mac through Finder's right-click Open,
+which is what an unsigned DMG asks of whoever downloads one; `--sign` adds
+the Developer ID identity under hardened runtime (`--deep` re-signs the
+engine and plugin frameworks Flutter left ad-hoc), and notarization is the
+distribution step after: `xcrun
+notarytool submit` on the DMG, `xcrun stapler staple` the same file, the
+image being notarizable whole so the ticket travels inside it. CI builds the
 unsigned DMG until enrollment; the job grows the signing identity and the
 notarytool profile when it happens.
+
+The window a user's mount opens with comes from committed data, not from any
+styling run at package time. One styling session on this Mac — a throwaway
+volume laid out by `dmg-layout.applescript` run against it — had its
+`.DS_Store` harvested and committed as `tool/macos/dmg-window.dsstore`
+(deliberately named nothing like `.DS_Store`: Finder parses the file only in
+the volume it is copied into). The background that session bound is committed
+beside it: `dmg-background.tiff`, two images per screen scale merged by
+`tiffutil -cathidpicheck` from `dmg-background.swift`'s renders — which types
+`cookie.svg`'s `bgGrad` stops, and is the authoring tool the pair of them
+regenerate from; a single 2x PNG once rendered unscaled and cropped, which is
+why the layering. `make-dmg.sh` copies the pair into the staging volume
+(`.DS_Store`, `.background/background.tiff`), stages the bundle's `.icns` as
+`.VolumeIcon.icns` — found in the bundle rather than named, the `.icon`
+package being the authority for that string, with an absent one a line and
+not a failure — then creates the UDRW, attaches it read-write once to set the
+custom-icon flag (`SetFile -a C`: a headless step, set on the flow's own
+mounted volume so it survives the convert — read back verified on the shipped
+artifact), detaches, and converts to the shipped UDZO. No Apple events, no
+measurement, no math at package time: a CI runner without Finder makes the
+same DMG this Mac does. There is nothing to fall back from — the layout is
+committed data, so every missing piece is one `[dmg]` line and a failed run.
+
+The capture recipe, for when the look itself changes: stage the app, the
+symlink, the background, the icns; create a UDRW; attach it read-write; run
+`tool/macos/dmg-layout.applescript` with the design's numbers; wait for the
+volume's `.DS_Store` to appear, then copy it to `tool/macos/dmg-window.dsstore`;
+detach — the shipped DMG comes from `make-dmg.sh` after that, not from the
+capture session. The numbers are the design's, once each, and carry two
+Finder facts learned by screenshot: `position` is the point an icon centers
+on, not a cell's top-left, so `Entoli.app` goes at {180, 243} and
+Applications at {420, 243} with their visual centers on the arrow line 65%
+down the artwork (the 17pt ride is the label Finder hangs under each 96pt
+glyph); the window content is 600x400 placed at {20, 20} — near the origin,
+where every screen finds it — which Finder recorded as `{20, 33}` through
+`{620, 463}`, its own margin. And nothing in the artwork is ever drawn in a
+flipped space: the texts convert baseline y as `h - y`, and a stroke that
+forgets paints 24pt off its row. The window size reasserts itself on every
+open; nothing locks it against a user resizing it once open.
+
+All of it stays on hdiutil even though macOS 27 deprecates it for
+`diskutil image`, because the new verb is the one that fails intermittently
+here — same staging, same command, exit 156 flipping run to run with nothing
+public about the code — where hdiutil has been reliable; only its
+deprecation notice is swallowed, everything else it says comes through.
 
 ## Tests on this host
 
