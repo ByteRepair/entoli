@@ -35,6 +35,20 @@ description: Keeps a diary of what was done.
 You keep a project diary. Append what was done each turn.
 """;
 
+/// An agent's PROMPT.md from the remote fixtures' source repository.
+const _upstreamPrompt = """---
+description: Writes letters home.
+---
+
+You write a letter home each turn.
+""";
+
+/// The remote fixtures' source repository, as the ext index names it, and
+/// the directory each of its entries carries.
+const upstreamRepo = "entoli-test/upstream";
+const upstreamSkillDir = "skills/red-letter";
+const upstreamAgentDir = "agents/letter-writer";
+
 void main() {
   TestApp? app;
   late FakeNetwork network;
@@ -59,10 +73,23 @@ void main() {
   String indexPath(CompletionKind kind) =>
       Uri.parse("$marketplaceBaseUrl/${kind.folder}/index.json").path;
 
+  /// The ext index's path for a section — the site's other index, where each
+  /// remote entry's source location is recorded.
+  String extIndexPath(CompletionKind kind) =>
+      Uri.parse("$marketplaceBaseUrl/ext/${kind.folder}/index.json").path;
+
+  /// The path of one raw file of the remote fixtures' source repository, at
+  /// the ref their location records name.
+  String rawPath(String dir, String file) =>
+      Uri.parse("https://raw.githubusercontent.com/$upstreamRepo/main/$dir/$file")
+          .path;
+
   /// An index naming one skill and one agent, and the files both answer.
   /// [skillPackageBody] stands in for the `.skill` bytes where a test wants
   /// a malformed one; [agentPicture] is whether the agent carries a
-  /// `profile.png`.
+  /// `profile.png`. A remote skill and agent ride along: their section rows,
+  /// their ext records (where the file lists name all they carry), and the
+  /// raw bodies their sources answer with.
   Map<String, List<List<int>>> site({
     String? skillPackageBody,
     bool agentPicture = true,
@@ -74,6 +101,13 @@ void main() {
     "author": "Entoli Team",
     "version": "1.0.0",
     "tags": ["layout"]
+  },
+  "upstream/red-letter": {
+    "name": "red-letter",
+    "description": "Frames the reply from an upstream repository.",
+    "author": "The Upstream Authors",
+    "version": "2.0.0",
+    "tags": ["external"]
   }
 }""")],
         indexPath(CompletionKind.agent): [utf8.encode("""{
@@ -81,8 +115,50 @@ void main() {
     "name": "diary",
     "description": "Keeps a diary of what was done.",
     "author": "Entoli Team"
+  },
+  "upstream/letter-writer": {
+    "name": "letter-writer",
+    "description": "Writes letters home.",
+    "author": "The Upstream Authors",
+    "tags": ["external"]
   }
 }""")],
+        extIndexPath(CompletionKind.skill): [utf8.encode("""{
+  "upstream/red-letter": {
+    "repo": "$upstreamRepo",
+    "dir": "$upstreamSkillDir",
+    "files": ["README.md", "SKILL.md", "references/tone.md"],
+    "ref": "main"
+  }
+}""")],
+        extIndexPath(CompletionKind.agent): [utf8.encode("""{
+  "upstream/letter-writer": {
+    "repo": "$upstreamRepo",
+    "dir": "$upstreamAgentDir",
+    "files": ["PROMPT.md", "README.md", "profile.png"],
+    "ref": "main"
+  }
+}""")],
+        rawPath(upstreamSkillDir, "README.md"): [
+          utf8.encode("# Red letter\n\nFrom upstream.\n")
+        ],
+        rawPath(upstreamSkillDir, "SKILL.md"): [utf8.encode("""---
+name: red-letter
+description: Frames the reply from upstream.
+metadata:
+  author: The Upstream Authors
+---
+
+Frame it, from upstream.
+""")],
+        rawPath(upstreamSkillDir, "references/tone.md"): [
+          utf8.encode("calm\n")
+        ],
+        rawPath(upstreamAgentDir, "PROMPT.md"): [utf8.encode(_upstreamPrompt)],
+        rawPath(upstreamAgentDir, "README.md"): [
+          utf8.encode("# Letter writer\n\nWrites letters.\n")
+        ],
+        rawPath(upstreamAgentDir, "profile.png"): [onePixelPng],
         entryPath(CompletionKind.skill, "letterbox", "README.md"): [
           utf8.encode("# Letterbox\n\nFrames the reply.\n")
         ],
@@ -167,13 +243,104 @@ void main() {
     expect(find.text("letterbox"), findsOneWidget);
     expect(find.text("Frames the reply."), findsOneWidget);
     expect(find.text("Entoli Team · v1.0.0 · layout"), findsOneWidget);
+    // The remote rows joined from the ext index sit in the same list, under
+    // the heading, the site's own entries ahead of them.
+    expect(find.text("red-letter"), findsOneWidget);
+    expect(find.text("External"), findsOneWidget);
+    expect(
+      tester.getTopLeft(find.text("letterbox")).dy <
+          tester.getTopLeft(find.text("red-letter")).dy,
+      isTrue,
+    );
     expect(find.text("diary"), findsNothing);
 
     await tester.tap(find.text("Agents"));
     await settleIo(tester);
     expect(find.text("diary"), findsOneWidget);
     expect(find.text("Keeps a diary of what was done."), findsOneWidget);
+    expect(find.text("letter-writer"), findsOneWidget);
+    // The agents list has its own halves the same way: diary first, the
+    // remote one under the heading.
+    expect(find.text("External"), findsOneWidget);
+    expect(
+      tester.getTopLeft(find.text("diary")).dy <
+          tester.getTopLeft(find.text("letter-writer")).dy,
+      isTrue,
+    );
     expect(find.text("letterbox"), findsNothing);
+  });
+
+  testWidgets("the toolbar's search filters the tab on screen", (tester) async {
+    await pumpList(tester);
+    await settleIo(tester);
+
+    // A name match.
+    await tester.enterText(find.byType(TextField), "letter");
+    await settleIo(tester);
+    expect(find.text("letterbox"), findsOneWidget);
+    expect(find.text("red-letter"), findsOneWidget);
+
+    // A description-only match: the name carries none of it.
+    await tester.enterText(find.byType(TextField), "an upstream");
+    await settleIo(tester);
+    expect(find.text("red-letter"), findsOneWidget);
+    expect(find.text("letterbox"), findsNothing);
+
+    await tester.enterText(find.byType(TextField), "zzz");
+    await settleIo(tester);
+    expect(find.text("Nothing matches here."), findsOneWidget);
+
+    await tester.tap(find.byTooltip("Clear search"));
+    await settleIo(tester);
+    expect(find.text("letterbox"), findsOneWidget);
+    expect(find.text("red-letter"), findsOneWidget);
+    expect(find.text("External"), findsOneWidget);
+  });
+
+  testWidgets("the tag picker ticks and the list filters", (tester) async {
+    await pumpList(tester);
+    await settleIo(tester);
+
+    await tester.tap(find.byTooltip("Filter by tag"));
+    await settleIo(tester);
+
+    // The tab's tags, each with its entry count.
+    expect(find.text("external"), findsOneWidget);
+    expect(find.text("layout"), findsOneWidget);
+    expect(find.text("1"), findsNWidgets(2));
+
+    await tester.tap(find.text("external"));
+    await settleIo(tester);
+    expect(find.text("Clear"), findsOneWidget);
+
+    await tester.pageBack();
+    await settleIo(tester);
+
+    // The one remote entry carries it; the local half is gone and the
+    // heading with it.
+    expect(find.text("red-letter"), findsOneWidget);
+    expect(find.text("letterbox"), findsNothing);
+    expect(find.text("External"), findsNothing);
+
+    // Reopened, the tick stood; ticking the other tag intersects to nothing.
+    await tester.tap(find.byTooltip("Filter by tag"));
+    await settleIo(tester);
+    await tester.tap(find.text("layout"));
+    await settleIo(tester);
+    await tester.pageBack();
+    await settleIo(tester);
+    expect(find.text("Nothing matches here."), findsOneWidget);
+
+    // Clearing gives the whole list back, heading and all.
+    await tester.tap(find.byTooltip("Filter by tag"));
+    await settleIo(tester);
+    await tester.tap(find.text("Clear"));
+    await settleIo(tester);
+    await tester.pageBack();
+    await settleIo(tester);
+    expect(find.text("External"), findsOneWidget);
+    expect(find.text("letterbox"), findsOneWidget);
+    expect(find.text("red-letter"), findsOneWidget);
   });
 
   testWidgets("an unreachable marketplace says so and retries", (tester) async {
@@ -295,6 +462,86 @@ void main() {
     expect(File(p.join(agentsDir, "diary.md")).readAsStringSync(), _diaryPrompt);
     // No picture served, none written.
     expect(File(p.join(agentsDir, "diary.png")).existsSync(), isFalse);
+  });
+
+  testWidgets("a remote skill previews out of its source and installs whole",
+      (tester) async {
+    await pumpList(tester);
+    await settleIo(tester);
+    // Its row is the ext record's join; the name the row shows is the entry's.
+    await openEntry(tester, kind: CompletionKind.skill, slug: "red-letter");
+
+    // The README from the source repository, drawn the way a local one is,
+    // and the file list the ext record named.
+    expect(find.text("red-letter"), findsOneWidget);
+    expect(find.text("From upstream."), findsOneWidget);
+    expect(find.text("references/tone.md"), findsOneWidget);
+
+    await tester.tap(find.text("Install skill"));
+    await settleIo(tester, least: 20, tries: 80);
+
+    // The whole of the listed directory lands under the frontmatter's name.
+    final dir = p.join(app!.config.promptsDir(CompletionKind.skill), "red-letter");
+    expect(File(p.join(dir, "SKILL.md")).existsSync(), isTrue);
+    expect(File(p.join(dir, "README.md")).existsSync(), isTrue);
+    expect(File(p.join(dir, "references", "tone.md")).existsSync(), isTrue);
+    expect(find.text("Install skill"), findsNothing);
+  });
+
+  testWidgets("a remote agent installs prompt and picture", (tester) async {
+    await pumpList(tester);
+    await openEntry(tester, kind: CompletionKind.agent, slug: "letter-writer");
+
+    expect(find.text("letter-writer"), findsOneWidget);
+    expect(find.byType(Image), findsOneWidget);
+
+    await tester.tap(find.text("Install agent"));
+    await settleIo(tester, least: 20, tries: 80);
+
+    // The file name is the remote directory's — the ext key's last segment.
+    final agentsDir = app!.config.promptsDir(CompletionKind.agent);
+    expect(File(p.join(agentsDir, "letter-writer.md")).readAsStringSync(),
+        _upstreamPrompt);
+    expect(File(p.join(agentsDir, "letter-writer.png")).existsSync(), isTrue);
+  });
+
+  testWidgets("a listing gone stale against its source refuses at the button",
+      (tester) async {
+    // A file the ext record names, the repository does not answer with.
+    final bodies = site()
+      ..remove(rawPath(upstreamSkillDir, "references/tone.md"));
+    await pumpMarket(tester, const MarketplacePage(), bodies: bodies);
+    await openEntry(
+      tester,
+      kind: CompletionKind.skill,
+      slug: "red-letter",
+      until: find.textContaining("stale against the source"),
+    );
+
+    expect(find.text("Install skill"), findsNothing);
+    expect(find.textContaining("stale against the source"), findsOneWidget);
+    final dir = p.join(app!.config.promptsDir(CompletionKind.skill), "red-letter");
+    expect(Directory(dir).existsSync(), isFalse);
+  });
+
+  testWidgets("a malformed ext index is an unreachable marketplace",
+      (tester) async {
+    await pumpMarket(
+      tester,
+      const MarketplacePage(),
+      bodies: {
+        indexPath(CompletionKind.skill): [utf8.encode("{}")],
+        indexPath(CompletionKind.agent): [utf8.encode("{}")],
+        extIndexPath(CompletionKind.skill): [
+          utf8.encode("""{
+  "upstream": {"repo": "$upstreamRepo"}
+}""")
+        ],
+        extIndexPath(CompletionKind.agent): [utf8.encode("{}")],
+      },
+    );
+    await settleIo(tester);
+    expect(find.text("Could not reach the marketplace."), findsOneWidget);
   });
 
   testWidgets("installing over an existing skill asks first, and Replace replaces",

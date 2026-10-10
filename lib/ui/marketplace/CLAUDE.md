@@ -4,6 +4,32 @@
 entries over Skills and Agents tabs. Tapping an entry opens
 `MarketplaceEntryPreviewPage`, which previews and installs it.
 
+The list is organized, and the organizing is `marketplace_groups.dart`, pure
+and tested without widgets. The site's own entries come first, each half
+alphabetical, and the remote half sits under an "External" heading — drawn
+only where both halves have something, a heading that separates nothing being
+no heading at all. The kinds that are tabs are one `_tabs` const in the page,
+which the TabBar's labels (`kind.label`), the tab pages and the filter icon's
+kind all read — one fact, the way `CompletionKind.folder` is held. A toolbar
+box searches — name and description alike, over the entries the fetch already
+holds, nothing re-read off disk; the needle is the sidebar's own
+`searchNeedle`, the one shared rule for what a typed query compares as, and
+the lowercased name and description the match reads are `late final` on the
+entry, once per entry rather than once per keystroke — and the filter icon
+opens the tab's tag picker. Both filter the list in the order it is drawn
+rather than re-ordering it — a description-only match keeps the alphabetical
+row it belongs in. The ticks are a **per-tab** `ValueNotifier` the page owns
+— the picker page ticks into it, so popping back is already filtered — and
+passing means carrying **every** tag ticked: the intersection, where an
+empty set filters nothing. Search and tags hold together, and a no-match
+result is `Nothing("Nothing matches here.")`, distinct from the empty-index
+line. The tag picker (`marketplace_tags.dart`) lists the tab's tags with
+each one's entry count, and Clear when anything is ticked; over a tab whose
+list has not landed it is never opened, the press saying "The tab has not
+loaded yet." The search box and the heading row are the sidebar's two,
+copied rather than imported — extracting them out of the sidebar waits for a
+third caller.
+
 The list is the site's `index.json` per section
 (`byterepair.github.io/entoli-marketplace`, whose paths already carry
 `Access-Control-Allow-Origin: *`, so a browser build can fetch it). The URL is
@@ -11,6 +37,8 @@ The list is the site's `index.json` per section
 one. The section path is `CompletionKind.folder`, which is `"skills"` /
 `"agents"`, the site's own directory names: one fact, written once — and
 anchored on the field's doc in `models.dart`, the place an edit would land.
+Fetched beside it is `/ext/<folder>/index.json`, the site's record of where
+every remote entry's files live, joined into the list by key.
 
 Entry files fetch as `/{folder}/{slug}/{file}`; the skill package is the one
 exception, fetched as `/{folder}/{slug}.skill` — its own function,
@@ -20,6 +48,21 @@ of `data/skills/<slug>/`, which the build also serves file by file. The
 package inside the entry's directory was the first shape, and it 404'd: the
 install said "No installable package is served for this skill" for a package
 that was live one path over.
+
+An entry whose ext record joins it is **remote**: the site serves none of its
+files. `MarketplaceLocation` carries what its record says — repo, the ref the
+publish resolved, the entry directory's path in that repository, every blob
+name under it — and the fetchers take it from there: each file from
+`raw.githubusercontent.com` at the record's ref (a file the record does not
+list is answered without a request), the package as its listed files fetched
+and zipped here. The zip is built in the flat shape `parseSkillPackage` reads
+a packaged directory out of, so a remote install walks the same intake a
+local one does. A listing gone stale against its source — a listed file now
+404s, the drift an unpinned ref is allowed — throws
+`MarketplacePackageProblem`, rendered where the button would be: the page
+itself read fine, there is just nothing to install. A site published before
+remote entries had an ext index answers the ext fetch with a 404, which reads
+as no locations, which is every entry local — the old behavior, unbroken.
 
 `fetchMarketplaceEntries` is the whole read, and it throws on anything it
 cannot do. What is absent in an entry's frontmatter — `version`, `tags` — is
@@ -96,10 +139,14 @@ parser strips the shallowest `SKILL.md`'s prefix, so the zip's top-level
 folder is not load-bearing.
 
 **An agent is the agents settings page's import shape**, aimed at the site's
-files rather than a picked one: UTF-8 decode, `PromptDocument.parse`, refuse
-an empty body, `isFolderName` on the slug, replace-confirm, then one
-`withWritableDir` block writing `agentFilePath` and, where the site served
-one, `agentPicturePath` beside it. The picture's invalidation is the shared
+files rather than a picked one (a remote one's raw files at its record, where
+a listing not naming the file answers it without a request): UTF-8 decode,
+`PromptDocument.parse`, refuse an empty body, `isFolderName` on the file name
+the entry carries — `installName`, the slug for a local entry, an ext key's
+last segment for a remote one, whose remote directory is what the
+marketplace names an agent by — replace-confirm, then one
+`withWritableDir` block writing `agentFilePath` and, where served one,
+`agentPicturePath` beside it. The picture's invalidation is the shared
 `invalidateAgentPicture` (in `providers.dart`, under the provider itself):
 a global write (destination null) lands in the default project's directory
 that every project inherits from, so the whole `agentPictureProvider` family
