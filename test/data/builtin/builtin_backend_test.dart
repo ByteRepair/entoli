@@ -1,3 +1,4 @@
+import "dart:async";
 import "dart:io";
 
 import "package:flutter_test/flutter_test.dart";
@@ -1110,8 +1111,11 @@ void main() {
       ]);
 
       final turn = asking(backend, "clean").toList();
-      await pumpEvents();
-      expect(await backend.pendingApprovals(chatId), hasLength(1));
+      expect(
+        await untilPending(
+            "The approval", () async => await backend.pendingApprovals(chatId)),
+        hasLength(1),
+      );
 
       await backend.abort(chatId);
       await turn.timeout(const Duration(seconds: 5));
@@ -1143,8 +1147,9 @@ void main() {
 
       final turn = asking(backend, "set up storage", approveMode: ApproveMode.never).toList();
 
-      await pumpEvents();
-      final pending = backend.pendingQuestions(chatId).single;
+      final pending =
+          (await untilPending("The question", () => backend.pendingQuestions(chatId)))
+              .single;
       expect(pending.questions.single.question, "Which database?");
 
       await backend.respondQuestions(chatId, pending.id, ["Postgres"]);
@@ -1176,8 +1181,7 @@ void main() {
       ]);
 
       final turn = asking(backend, "set up storage", approveMode: ApproveMode.never).toList();
-      await pumpEvents();
-      expect(backend.pendingQuestions(chatId), hasLength(1));
+      await untilPending("The question", () => backend.pendingQuestions(chatId));
 
       await backend.abort(chatId);
       await turn.timeout(const Duration(seconds: 5));
@@ -1966,6 +1970,23 @@ void main() {
 Future<void> pumpEvents() async {
   for (var i = 0; i < 20; i++) {
     await Future<void>.delayed(const Duration(milliseconds: 1));
+  }
+}
+
+/// A question or an approval is published when the turn's own async hops
+/// deliver it — on a loaded runner, more than one [pumpEvents] round's worth
+/// of hops, and nothing the turn is wrong about. So the arrival is polled
+/// ([read], to a deadline, the event-driven wait [untilMemory] is) and
+/// returned once it says something is on screen for the test to act on.
+Future<List> untilPending(String what, FutureOr<List> Function() read) async {
+  final deadline = DateTime.now().add(const Duration(seconds: 5));
+  while (true) {
+    final pending = await read();
+    if (pending.isNotEmpty) return pending;
+    if (DateTime.now().isAfter(deadline)) {
+      fail("$what never went pending");
+    }
+    await pumpEvents();
   }
 }
 
