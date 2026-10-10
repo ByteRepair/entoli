@@ -182,7 +182,7 @@ class AppConfig {
   /// `workspace/`. Every project derives from the default one: a project's
   /// own entry replaces a same-named default entry for that project alone,
   /// and what it does not override falls through. See "Skills and agents"
-  /// in `lib/domain/CLAUDE.md`. `null` is the default project, the way it is
+  /// in `lib/domain/AGENTS.md`. `null` is the default project, the way it is
   /// for every project-scoped path.
   String promptsDir(CompletionKind kind, {String? project}) =>
       fs.path.join(projectDir(project: project), kind.folder);

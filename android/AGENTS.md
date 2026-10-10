@@ -270,7 +270,7 @@ checked in rather than built: `assets/icons/*.svg` is what the app draws,
 reads no SVG, so its copies are the same path data as a vector drawable, and
 editing one means editing all of them — there is no generator. The Apples'
 copy is one file for both platforms and the default only: `entoli.icon` under
-`macos/Runner/`, the Liquid Glass layers, with `ios/Runner/entoli.icon/CLAUDE.md`
+`macos/Runner/`, the Liquid Glass layers, with `ios/Runner/entoli.icon/AGENTS.md`
 a symlink into it. The cookie's
 launcher layers are the exception: `drawable-*/dpi/ic_cookie_{bg,fg}.png` are
 `cookie.svg` rendered by `resvg` (`bg` is the gradient and sheen alone, `fg`
@@ -480,6 +480,6 @@ reminder chat can have been swept), and calls `openChat`.
 **A turn failure posts on the same port, its own channel.** `RemindersChannel`
 posts whatever its `channel` argument names — `reminders` for the reminder
 completions, `turns` for a turn that gave up on its retries with nobody
-watching (see `lib/ui/chat/CLAUDE.md`, "Automatic retry rounds"). One port and
+watching (see `lib/ui/chat/AGENTS.md`, "Automatic retry rounds"). One port and
 one tap route, two channels, so silencing one half of the app's bad news is a
 channel toggle rather than the feature's off switch.

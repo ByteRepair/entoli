@@ -41,7 +41,7 @@ import "templates.dart";
 /// this is what Entoli talks to: it holds a session per chat, resolves which
 /// endpoint a turn runs against, and hands the agent the message to run. What
 /// the composer's `/` and `@` syntax meant is already on that message — see
-/// "Commands and agents" in `lib/domain/CLAUDE.md`.
+/// "Commands and agents" in `lib/domain/AGENTS.md`.
 class BuiltinBackend implements AgentBackend {
   BuiltinBackend({
     required this.config,

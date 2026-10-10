@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Builds the iSH emulator core and the FFI bridge as a static library for iOS,
 # producing an XCFramework the app links. iSH runs the whole guest in-process
-# (see ios/CLAUDE.md), so this is a library, not an executable the app spawns.
+# (see ios/AGENTS.md), so this is a library, not an executable the app spawns.
 #
 #   tool/ios/ish/build.sh
 #
@@ -11,7 +11,7 @@
 #   IshCore.xcframework  — the emulator core + bridge, for device and sim.
 #
 # Not run by the app build, the way tool/android/build.sh is not: without it an
-# iOS build has no emulator to link. See "The iSH driver" in ios/CLAUDE.md.
+# iOS build has no emulator to link. See "The iSH driver" in ios/AGENTS.md.
 set -euo pipefail
 
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)

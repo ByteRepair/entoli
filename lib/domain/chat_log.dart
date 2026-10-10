@@ -329,7 +329,7 @@ Chat chatFrom(ChatState state, List<ChatRecord> records) {
 
 /// Whether the log stops in the middle of a turn: the last message of the
 /// thread being read is a reply, and nothing closed it. See "Carrying on an
-/// interrupted turn" in CLAUDE.md for why only the last one is asked about.
+/// interrupted turn" in AGENTS.md for why only the last one is asked about.
 ///
 /// Takes the replayed [messages] rather than replaying again: which messages a
 /// rewind left live is [replayTree]'s to answer. A resumed turn writes a second

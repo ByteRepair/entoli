@@ -3,7 +3,7 @@
 # the app packages it: an executable named lib*.so, because the installer only
 # extracts files matching that from an APK, and the native library directory is
 # the one place an app is allowed to exec from. See "Bundled tools" in
-# CLAUDE.md.
+# AGENTS.md.
 #
 #   ANDROID_NDK_ROOT=~/.android/ndk/28.2.13676358 tool/android/build.sh arm64-v8a
 #
@@ -15,7 +15,7 @@
 # The NPU is opt-in, since what it emits is built by Qualcomm's own toolchain.
 # `tool/android/setup.sh` fetches the SDK and this picks it up from where that
 # put it; HEXAGON_SDK_ROOT overrides for an SDK installed some other way. See
-# "Running a model on the device" in CLAUDE.md for what it buys and what it
+# "Running a model on the device" in AGENTS.md for what it buys and what it
 # costs.
 set -euo pipefail
 

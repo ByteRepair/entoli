@@ -20,52 +20,52 @@ The rest of these notes live in the directory they are about, so each one
 loads when that code is being read rather than on every session. A section
 named in a cross-reference is findable from this list.
 
-- `lib/domain/CLAUDE.md` — The conversation log, Threads, The projection,
+- `lib/domain/AGENTS.md` — The conversation log, Threads, The projection,
   Carrying on an interrupted turn, Starting a chat, and naming it, Skills and
   agents, Resending a message, Attachments, Reminders
-- `lib/ui/sidebar/CLAUDE.md` — The sidebar's list, Pinned chats
-- `lib/ui/marketplace/CLAUDE.md` — The marketplace page
-- `lib/data/builtin/CLAUDE.md` — The agent loop, Running the commands, Running a
+- `lib/ui/sidebar/AGENTS.md` — The sidebar's list, Pinned chats
+- `lib/ui/marketplace/AGENTS.md` — The marketplace page
+- `lib/data/builtin/AGENTS.md` — The agent loop, Running the commands, Running a
   command yourself, Approvals, Questions, Sub-agents, Their own transcripts,
    Carrying one on, Web search, Skills, The plan, Memory
-- `lib/data/builtin/llm/CLAUDE.md` — Reaching a provider, Errors, and how long
+- `lib/data/builtin/llm/AGENTS.md` — Reaching a provider, Errors, and how long
   the UI waits
-- `lib/data/sync/CLAUDE.md` — The threat model, the handshake, the framing
+- `lib/data/sync/AGENTS.md` — The threat model, the handshake, the framing
   layer, three rendezvous transports, the SyncHub, mirroring a chat, control
   and driving a turn from the other end, what the Sync page can do about a
   peer, secrets at rest
-- `lib/data/local/CLAUDE.md` — Bundled tools, A whole Linux under proot,
+- `lib/data/local/AGENTS.md` — Bundled tools, A whole Linux under proot,
   Running a model on the device
-- `android/CLAUDE.md` — Staying alive off screen, The workspaces in the Files
+- `android/AGENTS.md` — Staying alive off screen, The workspaces in the Files
   app, Being the assistant, Waking for a trigger, The app icon, The debug
   build's own
-- `ios/CLAUDE.md` — The icon, Why no host shell, The iSH driver, The rootfs,
+- `ios/AGENTS.md` — The icon, Why no host shell, The iSH driver, The rootfs,
   The workspace inside the guest
-- `macos/CLAUDE.md` — Why no sandbox, The entitlements, What a command runs on,
+- `macos/AGENTS.md` — Why no sandbox, The entitlements, What a command runs on,
   What is absent, and honestly so, Voice mode, The icon, The DMG, Tests on
   this host
-- `macos/Runner/entoli.icon/CLAUDE.md` — the app icon's Icon Composer package:
+- `macos/Runner/entoli.icon/AGENTS.md` — the app icon's Icon Composer package:
   the layers, what the build does with them, and the Liquid Glass format notes
-- `lib/ui/chat/CLAUDE.md` — When a turn is over, Thinking and tool runs,
+- `lib/ui/chat/AGENTS.md` — When a turn is over, Thinking and tool runs,
   Selecting a reply, and copying it, How a reply is set, Code blocks, A command
   the user ran, A chat whose home device is elsewhere, The chat page
-- `lib/data/voice/CLAUDE.md` — Voice mode, What listens and what speaks, The
+- `lib/data/voice/AGENTS.md` — Voice mode, What listens and what speaks, The
   Android system engines, Which language it is asked in, Ending the utterance,
   What counts as being spoken to, One listener, two engines, Mute is the user,
   not the conversation, Per side, not per session, The Kotlin, Where the models
   live, Hearing and speaking
-- `lib/ui/voice/CLAUDE.md` — Reading one message out, The screen, Touch to
+- `lib/ui/voice/AGENTS.md` — Reading one message out, The screen, Touch to
   speak, Taking turns
-- `lib/ui/workspace/CLAUDE.md` — The workspace explorer
-- `lib/ui/share/CLAUDE.md` — Sharing to Entoli
-- `lib/ui/CLAUDE.md` — Opening a link, The theme, What the settings page can
+- `lib/ui/workspace/AGENTS.md` — The workspace explorer
+- `lib/ui/share/AGENTS.md` — Sharing to Entoli
+- `lib/ui/AGENTS.md` — Opening a link, The theme, What the settings page can
   change about it, The keyboard and the caret
-- `lib/ui/settings/CLAUDE.md` — Setting overrides, What the app is, Backing it
+- `lib/ui/settings/AGENTS.md` — Setting overrides, What the app is, Backing it
   all up
-- `lib/ui/widgets/CLAUDE.md` — Shared UI, A catalog of things to download
-- `.github/workflows/CLAUDE.md` — Releasing
-- `tool/linux/CLAUDE.md` — The Linux AppImage
-- `test/CLAUDE.md` — how the tests are written and what they fake
+- `lib/ui/widgets/AGENTS.md` — Shared UI, A catalog of things to download
+- `.github/workflows/AGENTS.md` — Releasing
+- `tool/linux/AGENTS.md` — The Linux AppImage
+- `test/AGENTS.md` — how the tests are written and what they fake
 
 ## Architecture
 
@@ -100,7 +100,7 @@ inside the workspace the project shares rather than beside the conversation.
 Every project is a directory under `projects/`, the default one included.
 `<dataDir>/projects/<project>/skills/<name>/` is a skill — a directory with a
 `SKILL.md` and the files it runs with, not a single file, the frontmatter held
-to the Agent Skills spec (see "Skills and agents" in `lib/domain/CLAUDE.md`;
+to the Agent Skills spec (see "Skills and agents" in `lib/domain/AGENTS.md`;
 a folder that does not conform is skipped at load and said on the view page) —
 and `<dataDir>/projects/<project>/agents/*.md` are that project's agents. The
 default project's skills and agents are the base set every other project
@@ -128,7 +128,7 @@ which prune, reword Claude to Entoli and check the result when cutting a tag —
 not ours, and the one rule kept here is a tripwire: a fetched skill with no
 `LICENSE.txt` says so on stderr, and a test refuses any fetched skill whose
 licence is not Apache. A skill's own licence is registered per skill for the
-licence page (see "What the app is" in `lib/ui/settings/CLAUDE.md`), and a
+licence page (see "What the app is" in `lib/ui/settings/AGENTS.md`), and a
 file that is not text at all — a font, an archive — is embedded base64 beside
 its text siblings (`BundledPromptFile.binary`), which the self-heal and the
 export read back as bytes.
@@ -197,7 +197,7 @@ one implementation, `FileChatStore`, because the layout no longer varies.
 own commands and agents exist on every platform. Neither is chosen per platform
 any more; `core/platform/` builds both once.
 
-None of this is checked by loading a tab — see `test/CLAUDE.md` for how the
+None of this is checked by loading a tab — see `test/AGENTS.md` for how the
 browser's filesystem is exercised on the VM instead.
 
 ### Migrations
@@ -249,7 +249,7 @@ the injection moved open unstyled on desktop until the model re-publishes them.
 
 An artifact of a mirrored chat has no local directory to open: the sync hub
 carries the whole artifact as one zip over the ordinary resource channel (see
-"Attachments" in `lib/data/sync/CLAUDE.md`), `unzipRemoteArtifact` writes it
+"Attachments" in `lib/data/sync/AGENTS.md`), `unzipRemoteArtifact` writes it
 to a temp directory, and the local paths above take it from there. That
 staging is a port (`RemoteArtifacts` under `core/platform/io/`, the hub
 reached through a one-method interface), not a page: it owns the temp
@@ -391,7 +391,7 @@ is `logDetail`, which is debug-only.
   Needs no toolbox; it downloads `appimagetool` itself.
 - macOS builds on this host natively: `flutter build macos`, packaged by
   `tool/macos/make-dmg.sh build/macos/Build/Products/Release/Entoli.app dist/entoli.dmg`.
-  See `macos/CLAUDE.md` for the entitlements decision and what signing adds.
+  See `macos/AGENTS.md` for the entitlements decision and what signing adds.
 - Bundled tools (Android's proot and llama.cpp): `ANDROID_NDK_ROOT=$HOME/.android/ndk/<version>
   tool/android/build.sh arm64-v8a` then `tool/android/stage.sh`. None of it is run
   by the app build; without them an APK has no way to run a Linux and no model
@@ -427,7 +427,7 @@ is `logDetail`, which is debug-only.
   and it wants running again whenever a `@freezed` or `@JsonSerializable` type
   changes. `dart run build_runner watch` is the answer while editing
   `lib/domain/`. CI runs the script through `.github/actions/flutter-setup`.
-- Analyze: `flutter analyze`. Tests: `flutter test` — see `test/CLAUDE.md`.
+- Analyze: `flutter analyze`. Tests: `flutter test` — see `test/AGENTS.md`.
 - The repo is not `dart format` clean and is not meant to be; match the file you
   are in rather than reformatting it.
 

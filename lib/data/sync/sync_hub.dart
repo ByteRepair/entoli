@@ -117,7 +117,7 @@ class RemoteChatEntry {
 /// serve this device's chats to whoever is watching, and hold a copy of the
 /// ones it watches elsewhere. Both at once, always — and in one file, because
 /// they are the two ends of the same twelve messages. See this directory's
-/// CLAUDE.md for why that is not two files.
+/// AGENTS.md for why that is not two files.
 class SyncHub implements ArtifactBytes {
   SyncHub({
     required this.identity,

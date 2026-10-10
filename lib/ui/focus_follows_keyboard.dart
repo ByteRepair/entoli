@@ -3,7 +3,7 @@ import "package:flutter/material.dart";
 /// Drops the caret when the soft keyboard goes away, from the root of the app —
 /// the fact is the keyboard's rather than any one field's. Why the view insets
 /// are the only report of it, and why it is remembered rather than looked up, is
-/// in "The keyboard and the caret" in `CLAUDE.md`.
+/// in "The keyboard and the caret" in `AGENTS.md`.
 class FocusFollowsKeyboard extends StatefulWidget {
   const FocusFollowsKeyboard({super.key, required this.child});
 

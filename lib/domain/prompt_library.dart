@@ -146,7 +146,7 @@ final _mention = RegExp(r"(?<![\w.-])@([\w.-]+)");
 
 /// What the library says [text]'s references mean, ready to be written into the
 /// message as [Message.documents] and read back by [expandedPrompt] and
-/// [agentPromptFrom] — see "Skills and agents" in `lib/domain/CLAUDE.md`.
+/// [agentPromptFrom] — see "Skills and agents" in `lib/domain/AGENTS.md`.
 ///
 /// Keyed by the reference as written, sigil included, so a skill and an agent
 /// of the same name do not collide. A name the library does not know is left

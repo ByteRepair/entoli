@@ -1057,7 +1057,7 @@ void main() {
       await waitFor(() => textOf(messagesOf(id).last).isNotEmpty,
           what: "the reply to start");
       // By hand: a scripted turn does not drive this, and it is what says which
-      // chats are running — see `test/CLAUDE.md`.
+      // chats are running — see `test/AGENTS.md`.
       app.backend.runningTurns.value = {id};
       return id;
     }

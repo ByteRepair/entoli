@@ -276,7 +276,7 @@ abstract class Message with _$Message {
     @Default([]) List<MessagePart> parts,
     /// What this message's `/command` and `@agent` references meant when it was
     /// sent, keyed by the reference as written — `/review`, `@researcher`. See
-    /// "Commands and agents" in `lib/domain/CLAUDE.md`.
+    /// "Commands and agents" in `lib/domain/AGENTS.md`.
     @Default({}) Map<String, String> documents,
 
     /// The addressed member who authored this message, as keyed in

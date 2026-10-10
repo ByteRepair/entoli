@@ -63,7 +63,7 @@ plus the C/C++ build toolchain.
 ### macOS
 
 Xcode and CocoaPods (`brew install cocoapods`). `flutter build macos` builds
-the app; `tool/macos/make-dmg.sh` packages it — see `macos/CLAUDE.md` for the
+the app; `tool/macos/make-dmg.sh` packages it — see `macos/AGENTS.md` for the
 entitlements decision and what signing adds.
 
 ### Android

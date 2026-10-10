@@ -154,7 +154,7 @@ class TriggerManager {
   /// It is a no-op while a fire's turn is running: a fire stamps the trigger
   /// list mid-turn, which re-enters here, and releasing then would drop the
   /// receiver's hold before the turn's own foreground-service hold has
-  /// registered. See "Waking for a reminder" in `android/CLAUDE.md`.
+  /// registered. See "Waking for a reminder" in `android/AGENTS.md`.
   Future<void> reload() async {
     final started = <Future<void>>[];
     for (final sub in _watches.values) {

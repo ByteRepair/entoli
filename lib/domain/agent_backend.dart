@@ -479,7 +479,7 @@ abstract class AgentBackend {
   ///
   /// [prompt] is the message being logged for this turn, not the text of it —
   /// what the model is shown of a user turn is the whole message, attachments
-  /// named rather than passed. See "The projection" in `lib/domain/CLAUDE.md`.
+  /// named rather than passed. See "The projection" in `lib/domain/AGENTS.md`.
   Stream<AgentEvent> sendPrompt(String chatId, Message prompt,
       {List<Message> history,
       List<ConversationCompaction> compactions,

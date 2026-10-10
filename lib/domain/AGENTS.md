@@ -749,7 +749,7 @@ stripped, so what the user reads and what the model reads name the same agent.
 
 **An `@mention` is not a participant.** It stacks instructions for the turn —
 the reply is the main agent's — and who speaks is the controller's `_responder`
-decision (see "The room and its participants" in `lib/ui/chat/CLAUDE.md`).
+decision (see "The room and its participants" in `lib/ui/chat/AGENTS.md`).
 Omada is what makes a mention promote the named member, in Omada-on projects.
 
 `completions` is therefore **not** on `AgentBackend`: `completionsProvider`

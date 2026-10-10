@@ -119,7 +119,7 @@ class AgentCapabilities {
 /// for a device and a set of [AgentCapabilities] and so one cacheable prefix.
 /// What is per-chat — the workspace, an `@agent`'s own instructions — is
 /// [turnPrompt], a second system message after this one. See "Prefilling the
-/// system prompt" in `lib/data/local/CLAUDE.md` for what that buys. A
+/// system prompt" in `lib/data/local/AGENTS.md` for what that buys. A
 /// capability the turn is not offered is not said: each section names only
 /// what [caps] holds.
 String systemPrompt({
@@ -252,7 +252,7 @@ $recall""",
 /// `conv.jsonl`; wording it twice is what left a reopened or regenerated chat
 /// sending different text from the one that was cached, so [at] is the
 /// message's own `createdAt` rather than the clock. See "The projection" in
-/// `lib/domain/CLAUDE.md`.
+/// `lib/domain/AGENTS.md`.
 String userTurnText(String text, {required DateTime at, required bool first}) =>
     _withNow(first ? _firstTask(text) : text, at);
 
@@ -511,7 +511,7 @@ String unknownTool(String name, Iterable<String> available) =>
 /// the one it tracked just before it. Null where there is nothing to say: the
 /// turn's opening move, where nothing is tracked yet, a command that was killed
 /// or never ran, which leaves no directory to read, and one that stayed where
-/// it was. See "The projection" in `lib/domain/CLAUDE.md`.
+/// it was. See "The projection" in `lib/domain/AGENTS.md`.
 String? cwdChangedNote(String? before, String? after) =>
     (after == null || before == null || after == before)
         ? null

@@ -13,7 +13,7 @@ void replaceIn(TextEditingController controller, int start, int end, String text
 /// Makes Tab type an indent into [controller] rather than move the focus on.
 ///
 /// It wraps a field rather than being one, so a field with bindings of its own
-/// nests them inside this and takes Tab first. See the CLAUDE.md beside this.
+/// nests them inside this and takes Tab first. See the AGENTS.md beside this.
 class TabIndents extends StatelessWidget {
   const TabIndents({super.key, required this.controller, required this.child});
 

@@ -10,7 +10,7 @@ import "../widgets/empty_pane.dart";
 import "../widgets/formatting.dart";
 
 /// A text file from a workspace, read rather than handed to another app — see
-/// CLAUDE.md, "The workspace explorer".
+/// AGENTS.md, "The workspace explorer".
 class TextViewerPage extends ConsumerStatefulWidget {
   const TextViewerPage({super.key, required this.path, required this.name});
 

@@ -6,7 +6,7 @@ name: Release
 # the bundle to Play. There is no release APK; `debug-build.yml` builds an APK
 # by hand. `release-build.yml` is what builds them and can be run on its own;
 # `pages.yml` answers the same event for the web app.
-# See "Releasing" in CLAUDE.md.
+# See "Releasing" in AGENTS.md.
 on:
   release:
     types: [published]
@@ -91,7 +91,7 @@ jobs:
   # Upload the App Bundle to Google Play. Separate from the publish matrix,
   # which attaches binaries to the GitHub release: this is the one path that
   # sends the bundle to Play, which resigns it into per-device APKs of its own.
-  # See "Releasing" in CLAUDE.md.
+  # See "Releasing" in AGENTS.md.
   play:
     needs: build
     uses: ./.github/workflows/publish-play.yml

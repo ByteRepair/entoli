@@ -2,7 +2,7 @@ name: Publish to Google Play
 
 # Uploads the App Bundle built by release-build.yml to Google Play, which
 # resigns it into per-device APKs of its own. Called by release.yml and nothing
-# else. Setup is documented under "Releasing" in CLAUDE.md.
+# else. Setup is documented under "Releasing" in AGENTS.md.
 
 on:
   workflow_call:

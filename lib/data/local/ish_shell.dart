@@ -15,7 +15,7 @@ import "ish_ffi.dart";
 /// other platform has — one that does `Process.start` of `/bin/sh` or a bundled
 /// `proot` — cannot work here. iSH runs the whole guest in-process, and this
 /// is the `Shell` that drives it through the FFI bridge
-/// (`tool/ios/ish/ish_bridge.c`). See ios/CLAUDE.md.
+/// (`tool/ios/ish/ish_bridge.c`). See ios/AGENTS.md.
 ///
 /// It does not extend `LocalShell`: `LocalShell`'s persistent session is a
 /// single child process whose stdin is fed base64 lines and whose stdout is

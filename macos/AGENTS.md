@@ -81,7 +81,7 @@ platforms (`ios/Runner/entoli.icon` pointing into this tree through a
 symlink), its layers generated from `assets/icons/cookie.svg` with the
 squircle mask and the shadows left for the system: square layers only, the
 glass look is composed by the OS on top. The format's rules, the wiring and
-what was verified from where live in a CLAUDE.md inside the package itself.
+what was verified from where live in a AGENTS.md inside the package itself.
 The `prompt` icon has no macOS copy, the way it has no PWA one.
 
 ## The DMG
