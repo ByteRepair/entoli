@@ -51,6 +51,20 @@ CDN for the rootfs. The request includes your IP address and standard HTTP
 headers, under the host's own privacy policy. The files are stored on your
 device; inference and voice processing happen locally.
 
+### Marketplace
+
+Browsing the marketplace fetches its catalog and entry files from GitHub
+Pages (`byterepair.github.io`), and the files of a remote entry from
+`raw.githubusercontent.com`. The requests are plain GETs carrying your IP
+address and standard HTTP headers, under GitHub's own privacy policy.
+Installing an entry stores its files on your device; nothing else is sent.
+
+Marketplace entries are the work of their publishers, not of the app's
+authors, and installing one means using it under the licence its publisher
+assigned. Entries the site publishes itself are AGPL-3.0; external entries
+keep whatever their own authors gave them, and the app does not verify
+licences — a skill shows one only where its SKILL.md names it.
+
 ### Android speech recognition and text-to-speech
 
 Voice mode on Android uses the operating system's speech recognition and
@@ -89,7 +103,8 @@ feature:
 - **Boot-completed** — re-arming reminders after device restart.
 - **Foreground service** — keeping the process alive while a turn runs, while
   voice mode is active, or while a model downloads.
-- **Internet** — calling your configured LLM provider, web search, and sync.
+- **Internet** — calling your configured LLM provider, web search, the
+  marketplace, and sync.
 
 No permission collects data in the background.
 
