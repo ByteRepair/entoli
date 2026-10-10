@@ -8,19 +8,27 @@ The list is organized, and the organizing is `marketplace_groups.dart`, pure
 and tested without widgets. The site's own entries come first, each half
 alphabetical, and the remote half sits under an "External" heading — drawn
 only where both halves have something, a heading that separates nothing being
-no heading at all. A toolbar box searches (name and description alike, over
-the entries the fetch already holds, nothing re-read off disk) and the filter
-icon opens the tab's tag picker; both filter the list in the order it is
-drawn rather than re-ordering it — a description-only match keeps the
-alphabetical row it belongs in. The ticks are a **per-tab** `ValueNotifier`
-the page owns — the picker page ticks into it, so popping back is already
-filtered — and passing means carrying **every** tag ticked: the intersection,
-where an empty set filters nothing. Search and tags hold together, and a
-no-match result is `Nothing("Nothing matches here.")`, distinct from the
-empty-index line. The tag picker (`marketplace_tags.dart`) lists the tab's
-tags with each one's entry count, and Clear when anything is ticked. The
-search box and the heading row are the sidebar's two, copied rather than
-imported — extracting them out of the sidebar waits for a third caller.
+no heading at all. The kinds that are tabs are one `_tabs` const in the page,
+which the TabBar's labels (`kind.label`), the tab pages and the filter icon's
+kind all read — one fact, the way `CompletionKind.folder` is held. A toolbar
+box searches — name and description alike, over the entries the fetch already
+holds, nothing re-read off disk; the needle is the sidebar's own
+`searchNeedle`, the one shared rule for what a typed query compares as, and
+the lowercased name and description the match reads are `late final` on the
+entry, once per entry rather than once per keystroke — and the filter icon
+opens the tab's tag picker. Both filter the list in the order it is drawn
+rather than re-ordering it — a description-only match keeps the alphabetical
+row it belongs in. The ticks are a **per-tab** `ValueNotifier` the page owns
+— the picker page ticks into it, so popping back is already filtered — and
+passing means carrying **every** tag ticked: the intersection, where an
+empty set filters nothing. Search and tags hold together, and a no-match
+result is `Nothing("Nothing matches here.")`, distinct from the empty-index
+line. The tag picker (`marketplace_tags.dart`) lists the tab's tags with
+each one's entry count, and Clear when anything is ticked; over a tab whose
+list has not landed it is never opened, the press saying "The tab has not
+loaded yet." The search box and the heading row are the sidebar's two,
+copied rather than imported — extracting them out of the sidebar waits for a
+third caller.
 
 The list is the site's `index.json` per section
 (`byterepair.github.io/entoli-marketplace`, whose paths already carry
@@ -134,9 +142,9 @@ folder is not load-bearing.
 files rather than a picked one (a remote one's raw files at its record, where
 a listing not naming the file answers it without a request): UTF-8 decode,
 `PromptDocument.parse`, refuse an empty body, `isFolderName` on the file name
-— the slug for a local entry, an ext key's last segment for a remote one,
-which is the remote directory's own, the name the marketplace says an agent
-carries — replace-confirm, then one
+the entry carries — `installName`, the slug for a local entry, an ext key's
+last segment for a remote one, whose remote directory is what the
+marketplace names an agent by — replace-confirm, then one
 `withWritableDir` block writing `agentFilePath` and, where served one,
 `agentPicturePath` beside it. The picture's invalidation is the shared
 `invalidateAgentPicture` (in `providers.dart`, under the provider itself):

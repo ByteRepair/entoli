@@ -51,7 +51,7 @@ void main() {
 
   test("searching matches the name and the description alike", () {
     final entries = [
-      localEntry("alpha", tags: []),
+      localEntry("alpha"),
       localEntry("beta"),
     ];
     // The name.
@@ -116,9 +116,16 @@ void main() {
       remoteEntry("gamma", tags: ["beta"]),
     ]);
     expect(tags, [("beta", 2), ("zulu", 2)]);
-    // Two tags differing in case alone sort by what they read as, not what
-    // they hold.
-    final mixed = tagsOf([localEntry("alpha", tags: ["Beta", "beta"])]);
-    expect(mixed.map((t) => t.$1.toLowerCase()), ["beta", "beta"]);
+
+    // The sort is by what a tag reads as, not what it holds: ASCII order
+    // would put "Zulu" ahead of "alpha" (Z is 90, a is 97), and a plain
+    // compareTo fails this expectation.
+    expect(
+      tagsOf([
+        localEntry("alpha", tags: ["Zulu"]),
+        localEntry("beta", tags: ["alpha"]),
+      ]),
+      [("alpha", 1), ("Zulu", 1)],
+    );
   });
 }

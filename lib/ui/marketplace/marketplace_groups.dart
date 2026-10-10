@@ -1,3 +1,4 @@
+import "../sidebar/chat_groups.dart" show searchNeedle;
 import "marketplace.dart";
 
 /// The marketplace's list, grouped and filtered — the pure half of what
@@ -37,7 +38,7 @@ List<MarketplaceEntry> entriesMatching(
   String query,
   Set<String> tagged,
 ) {
-  final needle = query.trim().toLowerCase();
+  final needle = searchNeedle(query);
   return [
     for (final entry in entries)
       if ((needle.isEmpty || _matches(entry, needle)) &&
@@ -47,8 +48,8 @@ List<MarketplaceEntry> entriesMatching(
 }
 
 bool _matches(MarketplaceEntry entry, String needle) =>
-    entry.name.toLowerCase().contains(needle) ||
-    entry.description.toLowerCase().contains(needle);
+    entry.lowerName.contains(needle) ||
+    entry.lowerDescription.contains(needle);
 
 /// Every tag [entries] carry, with how many entries carry it — the tag
 /// picker's rows. Alphabetical, lower-case-compared the way the list is.

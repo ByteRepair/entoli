@@ -266,10 +266,9 @@ class _MarketplaceEntryPreviewPageState
       }
       return null;
     }
-    // The file name is the agent's name, and the marketplace names an agent
-    // after its remote directory — the ext key's last segment, which is the
-    // same string a local entry's whole slug already is.
-    final name = widget.entry.slug.split("/").last;
+    // The file name is the agent's name, which the entry itself carries —
+    // [MarketplaceEntry.installName] for why.
+    final name = widget.entry.installName;
     if (!isFolderName(name)) {
       if (mounted) {
         say(context, "This agent cannot be installed: its name cannot be a file name.");

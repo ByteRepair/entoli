@@ -4,6 +4,7 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 import "../../core/log.dart";
 import "../../domain/models.dart";
 import "../../providers.dart";
+import "../widgets/dialogs.dart" show say;
 import "../widgets/nothing.dart";
 import "marketplace.dart";
 import "marketplace_entry_preview.dart";
@@ -51,6 +52,13 @@ class MarketplacePage extends ConsumerStatefulWidget {
 }
 
 class _MarketplacePageState extends ConsumerState<MarketplacePage> {
+  /// The kinds that are tabs, in tab order — the one fact the TabBar's
+  /// labels, the tab pages and the filter icon's kind all read.
+  static const List<CompletionKind> _tabs = [
+    CompletionKind.skill,
+    CompletionKind.agent,
+  ];
+
   final _search = TextEditingController();
 
   /// The tabs listen to this rather than the page rebuilding on a keystroke —
@@ -60,7 +68,7 @@ class _MarketplacePageState extends ConsumerState<MarketplacePage> {
   /// The tags ticked per tab, in the page because the tabs outlive the tag
   /// picker page that ticks them; popped for good with it.
   final _tagged = {
-    for (final kind in CompletionKind.values) kind: ValueNotifier(<String>{}),
+    for (final kind in _tabs) kind: ValueNotifier(<String>{}),
   };
 
   @override
@@ -95,10 +103,9 @@ class _MarketplacePageState extends ConsumerState<MarketplacePage> {
               ),
             ),
           ],
-          bottom: const TabBar(
+          bottom: TabBar(
             tabs: [
-              Tab(text: "Skills"),
-              Tab(text: "Agents"),
+              for (final kind in _tabs) Tab(text: kind.label),
             ],
           ),
         ),
@@ -108,16 +115,12 @@ class _MarketplacePageState extends ConsumerState<MarketplacePage> {
             Expanded(
               child: TabBarView(
                 children: [
-                  _EntryList(
-                    kind: CompletionKind.skill,
-                    query: _query,
-                    tagged: _tagged[CompletionKind.skill]!,
-                  ),
-                  _EntryList(
-                    kind: CompletionKind.agent,
-                    query: _query,
-                    tagged: _tagged[CompletionKind.agent]!,
-                  ),
+                  for (final kind in _tabs)
+                    _EntryList(
+                      kind: kind,
+                      query: _query,
+                      tagged: _tagged[kind]!,
+                    ),
                 ],
               ),
             ),
@@ -129,16 +132,22 @@ class _MarketplacePageState extends ConsumerState<MarketplacePage> {
 
   /// The visible tab's tags, out of the data the tab already holds. The
   /// picker ticks into the page's notifier for the kind, so popping it back
-  /// leaves the list filtered.
+  /// leaves the list filtered. A tab whose list has not landed (a spinner or
+  /// a failure sits where the press comes from) has no tags to open for,
+  /// which is said rather than shown as a picker with nothing in it.
   void _openTags(BuildContext context) {
-    final kind = CompletionKind.values[DefaultTabController.of(context).index];
-    final tags = tagsOf(
-      ref.read(marketplaceEntriesProvider(kind)).asData?.value ?? const [],
-    );
+    final kind = _tabs[DefaultTabController.of(context).index];
+    final data = ref.read(marketplaceEntriesProvider(kind)).asData;
+    if (data == null) {
+      say(context, "The tab has not loaded yet.");
+      return;
+    }
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) =>
-            MarketplaceTagPickerPage(tags: tags, ticked: _tagged[kind]!),
+        builder: (_) => MarketplaceTagPickerPage(
+          tags: tagsOf(data.value),
+          ticked: _tagged[kind]!,
+        ),
       ),
     );
   }

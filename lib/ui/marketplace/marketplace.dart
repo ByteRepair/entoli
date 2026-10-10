@@ -70,8 +70,11 @@ class MarketplaceLocation {
 /// frontmatter set them. [location] is present only on an entry the site does
 /// not serve itself — a remote one, whose files are fetched from its source
 /// repository.
+///
+/// No const constructor: the search's lowercased forms are `late final` on
+/// the entry, and a generative const constructor cannot have them.
 class MarketplaceEntry {
-  const MarketplaceEntry({
+  MarketplaceEntry({
     required this.slug,
     required this.name,
     required this.description,
@@ -96,6 +99,17 @@ class MarketplaceEntry {
         if (version != null) "v$version",
         ...tags,
       ].join(" · ");
+
+  /// The name an agent installs under: the slug's last segment — an ext key
+  /// carries its manifest's name ahead of the entry's own, and the
+  /// marketplace names an agent after its remote directory. A skill's
+  /// installed name is its frontmatter's, so this is read only of agents.
+  String get installName => slug.split("/").last;
+
+  /// What the search matches against, lowercased once per entry — computed
+  /// off the first search pass rather than off every keystroke's.
+  late final String lowerName = name.toLowerCase();
+  late final String lowerDescription = description.toLowerCase();
 
   factory MarketplaceEntry.fromJson(
     String slug,
@@ -122,12 +136,10 @@ Future<List<MarketplaceEntry>> fetchMarketplaceEntries(
   http.Client client,
   CompletionKind kind,
 ) async {
-  final answers = await Future.wait<Object?>([
+  final (response, locations) = await (
     client.get(Uri.parse("$marketplaceBaseUrl/${kind.folder}/index.json")),
     _fetchLocations(client, kind),
-  ]);
-  final response = answers[0] as http.Response;
-  final locations = answers[1] as Map<String, MarketplaceLocation>;
+  ).wait;
   final body = utf8.decode(response.bodyBytes);
   final json = jsonDecode(body) as Map<String, Object?>;
   return [
