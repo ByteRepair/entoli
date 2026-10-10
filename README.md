@@ -13,11 +13,11 @@ to the viewer](docs/screenshot.png)
 
 Entoli ships for Linux, macOS, Android, and the web.
 
-**Linux**: download `entoli-<version>-x86_64.AppImage` from the
+**Linux**: download `entoli-x86_64.AppImage` from the
 [GitHub releases](https://github.com/Yiannis128/agent-chat/releases), make it
 executable, and run it.
 
-**macOS**: download `entoli-<version>-universal.dmg` from the
+**macOS**: download `entoli-universal.dmg` from the
 [GitHub releases](https://github.com/Yiannis128/agent-chat/releases), open it,
 and drag the app to `/Applications`. The build is unsigned for now, so the
 first open is Finder's right-click Open rather than a double-click.
