@@ -43,7 +43,7 @@ void main() {
     test("an unknown tone name loads as none", () async {
       await AppSettings(tone: Tone.direct).save(config);
       // Documents is the copy the loads read: a file written behind it is not
-      // seen until hydrate runs again (test/CLAUDE.md, "What the wire is not
+      // seen until hydrate runs again (test/AGENTS.md, "What the wire is not
       // tested against" is not this; the rule is "settings go through
       // config.documents").
       final path = config.settingsFile;

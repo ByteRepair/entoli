@@ -200,7 +200,7 @@ class _NewChatState extends ConsumerState<_NewChat> {
 /// The named projects the user has made, and the built-in ones the app ships —
 /// a built-in is always on offer, so the row is never empty. The default
 /// project is nothing selected, so it has no badge — see "The chat page" in
-/// CLAUDE.md.
+/// AGENTS.md.
 ///
 /// The row is a [ChipRow], so it animates both ways a badge moves: picking
 /// one grows the check, and the `AnimatedSize` inside each entry turns that

@@ -19,7 +19,7 @@ class TurnRecorder {
   /// A recorder with no log behind it: it accumulates the parts and nothing
   /// else. What `BuiltinAgent` keeps, so the conversation it sends the model is
   /// derived from the parts its own events produce rather than assembled a
-  /// second way beside them — see "The projection" in `lib/domain/CLAUDE.md`.
+  /// second way beside them — see "The projection" in `lib/domain/AGENTS.md`.
   TurnRecorder.parts()
       : append = _writesNothing,
         onParts = null,

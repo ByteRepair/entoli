@@ -8,7 +8,7 @@ import "package:record/record.dart" show RecordConfig;
 /// `record`'s Linux recorder with a `pw-record` fallback beside its
 /// `parecord`: only `startStream` — the one call the app makes — is taken
 /// over, the rest stays the stock implementation's. The why is "Hearing and
-/// speaking" in `lib/data/voice/CLAUDE.md`.
+/// speaking" in `lib/data/voice/AGENTS.md`.
 class LinuxRecorder extends RecordLinux {
   /// The environment the capture is looked up in. A field only so the test
   /// can point `PATH` at its own fake `pw-record` and drive the real spawn,

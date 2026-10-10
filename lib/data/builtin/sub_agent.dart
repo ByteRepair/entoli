@@ -23,7 +23,7 @@ import "templates.dart";
 /// transcript of its own under `subagents/`. What makes a sub-agent sub is
 /// the reply route: it runs to completion headless and never addresses the
 /// room — its final text returns as the tool result, readable by the main
-/// agent alone. See "Sub-agents" in `CLAUDE.md` for the rest.
+/// agent alone. See "Sub-agents" in `AGENTS.md` for the rest.
 class SubAgentRunner {
   SubAgentRunner({
     required this.client,

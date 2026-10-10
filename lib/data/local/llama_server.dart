@@ -18,7 +18,7 @@ import "../../core/log.dart";
 /// It is the native library directory, and that is not tidiness — it is the
 /// only place an app targeting a modern Android may execute a file from, which
 /// is the same rule that puts git and proot there. See "Bundled tools" in
-/// CLAUDE.md. Here the directory is load-bearing twice over:
+/// AGENTS.md. Here the directory is load-bearing twice over:
 /// the CPU-side backends are resolved out of it by the dynamic linker, and the
 /// Hexagon backend's DSP-side skeletons are resolved out of it by fastRPC.
 class LlamaBinaries {
@@ -79,7 +79,7 @@ class LlamaBinaries {
         // Always passed, and that is deliberate: llama.cpp's own `--fit` would
         // otherwise size this against the phone's whole RAM, since the CPU
         // backend reports every physical page as free. See "How much context"
-        // in CLAUDE.md.
+        // in AGENTS.md.
         "-c", "$contextLength",
         // The chat template as the publisher wrote it, which is what turns a
         // small model's tool call into an OpenAI one. Without it the agent's
@@ -95,14 +95,14 @@ class LlamaBinaries {
         // on: q8_0 KV is near-lossless but still a change to generation, so a
         // user who turned the cache off gets f16 and the behaviour they had.
         // The quant is part of the cache's namespace, so f16 and q8_0 dumps are
-        // never mixed. See "Persisting the KV cache to disk" in CLAUDE.md.
+        // never mixed. See "Persisting the KV cache to disk" in AGENTS.md.
         if (slotSavePath != null) ...[
           "--slot-save-path", slotSavePath,
           "-ctk", "q8_0",
           "-ctv", "q8_0",
         ],
         // Always named, [noDevice] included. See "The CPU is a device to name"
-        // in CLAUDE.md.
+        // in AGENTS.md.
         "-dev", device,
         if (device != noDevice) ...[
           // Everything the device will take. A phone has no separate pool of

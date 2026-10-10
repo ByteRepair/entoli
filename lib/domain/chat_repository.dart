@@ -492,7 +492,7 @@ class ChatRepository {
   /// sent it — resolved here, against the library as it is now, and never
   /// looked up again. A message built anywhere else would carry no references
   /// and quietly send the four characters the user typed; see "Commands and
-  /// agents" in `lib/domain/CLAUDE.md`.
+  /// agents" in `lib/domain/AGENTS.md`.
   ///
   /// [files] are already under the chat's `resources/`: the composer saves what
   /// it is holding with [saveAttachments] first, and a resend passes on the

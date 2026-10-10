@@ -22,7 +22,7 @@ void main() {
       pumpSettings(tester, app, SettingsCategory.data);
 
   /// Whole-data-directory I/O outlasts the default cap of real rounds — see
-  /// `test/CLAUDE.md`.
+  /// `test/AGENTS.md`.
   Future<void> settle(WidgetTester tester) =>
       settleIo(tester, least: 20, tries: 200);
 

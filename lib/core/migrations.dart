@@ -4,7 +4,7 @@ import "../domain/documents.dart";
 import "config.dart";
 
 /// A change to the data directory that a release makes once, to files an
-/// earlier release wrote. See "Migrations" in CLAUDE.md for writing one.
+/// earlier release wrote. See "Migrations" in AGENTS.md for writing one.
 class Migration {
   const Migration(this.version, this.apply);
 

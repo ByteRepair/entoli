@@ -18,7 +18,7 @@ import "local_model.dart";
 ///
 /// **It is a pool rather than one server.** Every model on disk is offered, and
 /// one is loaded when a turn actually asks for it — see "Loading one, and when"
-/// in `lib/data/local/CLAUDE.md`.
+/// in `lib/data/local/AGENTS.md`.
 abstract class LocalLlm {
   const LocalLlm();
 

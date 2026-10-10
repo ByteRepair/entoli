@@ -245,7 +245,7 @@ class AppSettings {
   /// when it is set as a default, so the first chat does not pay the whole
   /// prompt at once. Off by default: it is minutes of the CPU on a phone, so it
   /// is the user's to ask for. See "Prefilling the system prompt" in
-  /// `lib/data/local/CLAUDE.md`.
+  /// `lib/data/local/AGENTS.md`.
   bool localModelPrefill;
 
   /// How many CPU cores the model server may run on, or null for the default —
@@ -261,7 +261,7 @@ class AppSettings {
   /// One prompt is one request to the model, so it is neither per chat nor per
   /// turn: a turn writes one for each step it takes, and the bound is over
   /// every chat at once. It was called `Chats` and counted neither. See
-  /// "Persisting the KV cache to disk" in `lib/data/local/CLAUDE.md`.
+  /// "Persisting the KV cache to disk" in `lib/data/local/AGENTS.md`.
   int? localModelKvCachePrompts;
 
   /// This device's name as paired devices see it. Null falls back to

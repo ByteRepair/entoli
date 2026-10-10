@@ -416,7 +416,7 @@ On Android the process freezes when the screen does, and a frozen process's
 data channel is a channel the peer has already lost — this is why the phone's
 end of a pair goes quiet overnight while the desktop still lists it. The
 answer is the foreground service of "Staying alive off screen" in
-`android/CLAUDE.md`, as the sync `BackgroundJob`.
+`android/AGENTS.md`, as the sync `BackgroundJob`.
 
 `SyncKeepAlive` (`sync_keep_alive.dart`) is the keep-alive's owner, the same
 shape `TurnKeepAlive` is for turns: it watches `hub.peers`, reports the
@@ -522,7 +522,7 @@ reason to be doing.
 ## When something on the wire goes wrong
 
 `logFailure("sync", …)` on the paths that catch and drop — see "Saying what it
-did" in the root `CLAUDE.md` for the rule. Nothing logged here may carry a
+did" in the root `AGENTS.md` for the rule. Nothing logged here may carry a
 pairing secret, an SDP blob, or anything out of a conversation.
 
 ## What the Sync page can do about a peer

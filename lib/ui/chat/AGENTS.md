@@ -15,7 +15,7 @@ The room has two participants who speak, and a third shape that never does:
 - **The main agent**, behind the event stream. Every turn the controller
   drives today is its turn; its reply is the anonymous voice at the end of
   one. Sub-agents (a `task` call) are participants with a restricted reply
-  route — see "Sub-agents" in `lib/data/builtin/CLAUDE.md`: their only
+  route — see "Sub-agents" in `lib/data/builtin/AGENTS.md`: their only
   channel is the tool result to their delegator, and the main agent sends
   the message back. They never address the room, and nothing here draws
   them as speakers.
@@ -247,7 +247,7 @@ thing said replaces the one before it, and trouble wins it outright: a
 not. The wording is the agent loop's rather than this layer's, because what is
 worth saying differs per provider and per tool and only the loop knows which it
 is waiting on. Against a local model it is a real percentage — see
-`LlmPromptProgress`, and "How much context" in `lib/data/local/CLAUDE.md`;
+`LlmPromptProgress`, and "How much context" in `lib/data/local/AGENTS.md`;
 against everything else it is "Thinking" until the first token, which is the
 whole of what is knowable there.
 
@@ -729,7 +729,7 @@ they exist never finds out. Six at most, because everything the user has
 written is a menu and `/` is what opens the menu; with nothing at all in the
 library it says how to reach them instead.
 
-**Both rows are `ChipRow`s** (see "Shared UI" in `lib/ui/widgets/CLAUDE.md`),
+**Both rows are `ChipRow`s** (see "Shared UI" in `lib/ui/widgets/AGENTS.md`),
 which is why nothing here snaps when the set changes: picking a badge grows
 its check, the row re-flows around the growth, and a badge pushed onto a new
 line glides there rather than teleporting — that case is why the position
@@ -877,7 +877,7 @@ reversed viewport the offsets of older messages shift as the newest one grows,
 so a reader scrolled up during a turn would watch the text move.
 
 A turn follows itself only while the reader has not scrolled away from it —
-`ScrollFollow` (see `lib/ui/widgets/CLAUDE.md`), not a position test. The old
+`ScrollFollow` (see `lib/ui/widgets/AGENTS.md`), not a position test. The old
 test was per tick: every delta arriving while the reader dragged back through
 a turn pulled the view down again, so a scroll up inside `_slack` snapped
 back more often than it stayed. Now any gesture toward the older messages

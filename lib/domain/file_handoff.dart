@@ -8,7 +8,7 @@ import "package:fs_shim/fs.dart";
 /// Deliberately not the bytes — a batch waits on screen while a workspace is
 /// picked, and holding it as buffers is what a phone gets killed for. Each
 /// variant holds whatever its own source already had; [writeTo] is where that
-/// becomes a file. See CLAUDE.md, "The workspace explorer".
+/// becomes a file. See AGENTS.md, "The workspace explorer".
 abstract class IncomingFile {
   const IncomingFile(this.path);
 

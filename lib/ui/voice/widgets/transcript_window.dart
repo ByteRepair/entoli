@@ -7,7 +7,7 @@ import "../transcript.dart";
 
 /// Five lines of the conversation, and it **scrolls**: a window onto every line
 /// said rather than five that roll past and are gone. See "The screen" in
-/// CLAUDE.md for what follows from it being a viewport rather than a buffer.
+/// AGENTS.md for what follows from it being a viewport rather than a buffer.
 class TranscriptWindow extends StatefulWidget {
   const TranscriptWindow({super.key, required this.lines});
 

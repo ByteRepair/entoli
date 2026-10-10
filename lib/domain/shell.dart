@@ -53,7 +53,7 @@ class ShellResult {
 /// What this build ships beside the machine's own commands: the environment a
 /// command needs to find them, and the name the model is told they are there
 /// under. One value rather than two, so nothing can lay them out and forget to
-/// say so — see "Bundled tools" in CLAUDE.md.
+/// say so — see "Bundled tools" in AGENTS.md.
 class Toolset {
   const Toolset({required this.environment, this.names, this.proot});
 
@@ -152,7 +152,7 @@ abstract class SandboxHelper {
 
 /// Everything needed to run a command inside a downloaded Linux, bar the Linux.
 /// [binary] and [loader] are in the native library directory, which is the
-/// whole point of them — see "A whole Linux under proot" in CLAUDE.md.
+/// whole point of them — see "A whole Linux under proot" in AGENTS.md.
 class Proot {
   const Proot({
     required this.binary,

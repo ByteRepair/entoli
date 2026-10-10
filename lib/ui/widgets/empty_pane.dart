@@ -1,7 +1,7 @@
 import "package:flutter/material.dart";
 
 /// The middle of a page with nothing on it. Shared so that two states of the
-/// same page cannot drift apart by a few pixels of padding — see CLAUDE.md.
+/// same page cannot drift apart by a few pixels of padding — see AGENTS.md.
 class EmptyPane extends StatelessWidget {
   const EmptyPane({
     super.key,

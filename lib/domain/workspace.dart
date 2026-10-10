@@ -56,7 +56,7 @@ Future<List<WorkspaceEntry>> listWorkspace(FileSystem fs, String dir) async {
 
 /// The most of a file the viewer reads. A workspace holds the agent's logs, so
 /// there is no upper bound on what a tap can land on; what drawing that much
-/// costs is in `lib/ui/workspace/CLAUDE.md`.
+/// costs is in `lib/ui/workspace/AGENTS.md`.
 const textViewLimit = 128 * 1024;
 
 class WorkspaceText {

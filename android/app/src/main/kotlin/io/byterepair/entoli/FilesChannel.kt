@@ -19,7 +19,7 @@ import java.io.File
 
 // The workspace explorer's way out of the app and back in: ACTION_VIEW to open
 // a file, the share sheet to send a selection anywhere, and ACTION_SEND from
-// another app to bring one in. See "The workspace explorer" in CLAUDE.md.
+// another app to bring one in. See "The workspace explorer" in AGENTS.md.
 //
 // Everything handed out is a copy under cacheDir, because a FileProvider only
 // mints URIs under the paths in res/xml/file_paths.xml and one cache directory

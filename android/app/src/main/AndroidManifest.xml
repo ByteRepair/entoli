@@ -13,7 +13,7 @@
 
     <!-- The foreground services': they keep the process alive while a turn
          runs, while voice mode is listening, and while a model is downloading.
-         See "Staying alive off screen" in CLAUDE.md. -->
+         See "Staying alive off screen" in AGENTS.md. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC"/>
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>

@@ -37,7 +37,7 @@ abstract interface class ReminderAlarms {
 
   /// Asked from the Reminders settings page, where there is an activity to
   /// ask through. A cold-started process has none — see "Staying alive off
-  /// screen" in `android/CLAUDE.md` — which is why this is not called from a
+  /// screen" in `android/AGENTS.md` — which is why this is not called from a
   /// firing path.
   Future<void> requestNotifications();
 
