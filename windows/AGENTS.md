@@ -71,7 +71,9 @@ are escalated, not parsed. **The data directory is
 cache's `%LOCALAPPDATA%\agent-chat\Cache`, and `$AGENT_CHAT_CONFIG` over
 both. **Nothing signs it.** Like the DMG, the first run of both the installer
 and the app goes through SmartScreen's Run anyway until a code-signing
-certificate exists; the MSI's signing and the DMG's grow together. **No
-dialogs.** An MSI authored with no UI installs with what msiexec shows
-anyway — the elevation prompt and the progress — a `WixUI` authoring being
-the only thing more would need.
+certificate exists; the MSI's signing and the DMG's grow together. **The
+dialogs are WixUI_Minimal's.** One welcome screen carrying the AGPL off the
+repo's `LICENSE` — the Install button that follows it is where the user
+commits — then the progress and the finish; what is absent from it is
+WixUI_InstallDir's directory-choosing page, the install being to Program
+Files and nowhere else a person sets.

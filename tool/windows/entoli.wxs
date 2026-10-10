@@ -25,6 +25,13 @@
          the cab lies beside it is a 45 KB shell elsewhere. -->
     <MediaTemplate EmbedCab="yes" />
 
+    <!-- The welcome screen and its Install button, with the AGPL the app
+         ships under and the finish page after: WixUI_Minimal's one dialog.
+         The license text is the repo's own LICENSE, turned into rtf each
+         packaging, handed over as an absolute path the way BundlePath is. -->
+    <UIRef Id="WixUI_Minimal" />
+    <WixVariable Id="WixUILicenseRtf" Value="$(LicenseRtf)" />
+
     <StandardDirectory Id="ProgramFiles6432Folder">
       <Directory Id="INSTALLFOLDER" Name="Entoli">
         <!-- BundlePath: make-msi.ps1 passes it as the bundle's absolute path,
