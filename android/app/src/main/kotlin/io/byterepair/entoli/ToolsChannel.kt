@@ -10,7 +10,7 @@ import io.flutter.plugin.common.MethodChannel
 // for. Only the platform knows either: the path carries an install-specific
 // segment, so it changes with every app update and cannot be composed from the
 // package name, and the ABI decides which rootfs a download has to fetch. See
-// "Bundled tools" in CLAUDE.md for why they live there at all.
+// "Bundled tools" in AGENTS.md for why they live there at all.
 object ToolsChannel {
     fun register(context: Context, messenger: BinaryMessenger) {
         val appContext = context.applicationContext

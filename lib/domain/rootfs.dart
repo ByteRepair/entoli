@@ -106,6 +106,17 @@ const alpine = Rootfs(
       bytes: 3698422,
       sha256: "41f73e3cf5fa919b8aa5ca6b30dc48f0da2720776d7423e2a7748211456fe081",
     ),
+    // iOS, keyed "ios" rather than by an Android ABI — iSH emulates x86 and
+    // not the device's own arm64, so the guest is an i386 Alpine separate from
+    // the arm64 one Android fetches. See ios/CLAUDE.md.
+    "ios": RootfsImage(
+      arch: "i386",
+      url: "https://dl-cdn.alpinelinux.org/alpine/v3.24/releases/x86/"
+          "alpine-minirootfs-3.24.1-x86.tar.gz",
+      bytes: 3538048,
+      sha256:
+          "634355e2245c9d56186d1b86fb6e034453eb303aea15b573ca250b343376fffd",
+    ),
   },
 );
 

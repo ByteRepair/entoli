@@ -32,6 +32,9 @@ import "signaling.dart";
 Shell platformShell({
   required Map<String, String> Function() environment,
   required ShellDriver? Function() driver,
+  String? dataDir,
+  RootfsStore? rootfsStore,
+  String? Function()? rootfsId,
 }) =>
     const UnavailableShell();
 

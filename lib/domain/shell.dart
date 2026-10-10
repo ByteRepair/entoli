@@ -414,3 +414,49 @@ class _Unavailable implements ShellRun {
   @override
   Future<void> kill() async {}
 }
+
+/// What mini-swe-agent's own config sets: anything that would otherwise wait
+/// for a keypress or redraw a progress bar into the transcript. `BASH_ENV`
+/// is the empty one because a non-interactive shell sources it, and this
+/// shell answers to nothing but its queue.
+const defaultShellEnvironment = {
+  "PAGER": "cat",
+  "MANPAGER": "cat",
+  "GIT_PAGER": "cat",
+  "LESS": "-R",
+  "PIP_PROGRESS_BAR": "off",
+  "TQDM_DISABLE": "1",
+  "TERM": "dumb",
+  "BASH_ENV": "",
+};
+
+/// The persistent-shell dispatcher script, templated on a per-session token.
+/// Both the host shell ([LocalShell]) and the in-process emulator
+/// ([IshShell]) use it, which is why it lives here: the contract — a Ctrl-C
+/// the shell traps into a 130 while keeping its state, an `EXIT` trap that
+/// reports where the shell died, and a base64 line that keeps a multi-line
+/// command from stealing the queue — is the same whether the shell is a child
+/// process or an emulated guest. The marker carries the token so a command's
+/// output cannot forge the end of a run.
+///
+/// `IshShell`'s guest runs this inside iSH's `/bin/sh`, so a `cd` or an
+/// `export` in one emulated command sticks for the next, the same way it does
+/// on a real child process.
+String dispatcherScript(String token) => _dispatcherTemplate.replaceAll(
+      "@TOKEN@",
+      token,
+    );
+
+const _dispatcherTemplate = r"""
+trap 'true' INT
+trap 'printf "\n@@E@TOKEN@ rc=%s cwd=%s@@\n" "$?" "$(pwd)"' EXIT
+while IFS= read -r line; do
+  eval "$(printf '%s' "$line" | base64 -d)" </dev/null 2>&1
+  printf '\n@@E@TOKEN@ rc=%s cwd=%s@@\n' "$?" "$(pwd)"
+done
+""";
+
+/// The marker a completed command writes, parsed back for the result. Built
+/// from the same token [dispatcherScript] uses, so what scans the output is
+/// what wrote it.
+String dispatcherMarker(String token) => "@@E$token rc=";

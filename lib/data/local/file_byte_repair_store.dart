@@ -82,8 +82,10 @@ class FileByteRepairStore extends ByteRepairStore {
     final errors = await Future.wait([
       removeTree(p.join(config.projectDir(project: project), "rootfs")),
       removeTree(config.projectWorkspaceDir(project: project)),
-      // The host's fetched binaries.
-      if (!Platform.isAndroid) removeTree(p.dirname(installDir)),
+      // The host's fetched binaries; nothing on disk where there was
+      // nothing to point at.
+      if (!Platform.isAndroid && installDir != null)
+        removeTree(p.dirname(installDir!)),
     ]);
     final err = errors.where((e) => e != null).firstOrNull;
     if (err != null) {

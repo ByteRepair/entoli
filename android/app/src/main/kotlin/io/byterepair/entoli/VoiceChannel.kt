@@ -34,7 +34,7 @@ import java.util.Locale
 // Dart builds a `Listener`/`Speaker` pair per session and routes the
 // `android-recognition`/`android-speech` sentinels here; see
 // `android_voice.dart` for the Dart side and "What listens and what speaks" in
-// CLAUDE.md for the design. No new permissions: `RECORD_AUDIO` is already
+// AGENTS.md for the design. No new permissions: `RECORD_AUDIO` is already
 // declared and Dart asks for the grant before starting a session, the way the
 // sherpa path does.
 object VoiceChannel {
@@ -134,7 +134,7 @@ object VoiceChannel {
     // apps on it may have neither, and the sentinels are only worth offering —
     // or defaulting to — where the thing behind them exists. Recognition
     // follows the system's pick rather than mere installation — see
-    // "The probe's answer" in CLAUDE.md.
+    // "The probe's answer" in AGENTS.md.
     //
     // Both answers need the `<queries>` block in the manifest: from Android 11
     // an app sees only the packages it declares an interest in, and without it
@@ -194,7 +194,7 @@ object VoiceChannel {
     // `createSpeechRecognizer`, which resolves
     // `Settings.Secure.VOICE_RECOGNITION_SERVICE` and answers an unset one
     // with ERROR_CLIENT as the session opens. See "The Android system engines"
-    // in CLAUDE.md.
+    // in AGENTS.md.
     private fun recognitionServices(context: Context): List<ComponentName> {
         val installed = installedRecognitionServices(context)
         // Their pick and nothing else where they made one — walking past it
@@ -292,7 +292,7 @@ object VoiceChannel {
     // --- Speech recognition ---
 
     // The shapes the request is tried in, declared in the order they are tried.
-    // See "What is asked, and what to do when it is refused" in CLAUDE.md.
+    // See "What is asked, and what to do when it is refused" in AGENTS.md.
     private enum class Ask { OnDevice, Network, NetworkAnyLanguage }
 
     private var ask = Ask.OnDevice

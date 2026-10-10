@@ -28,6 +28,9 @@ dependencies:
   # Serialization
   json_annotation: ^4.12.0
   freezed_annotation: ^3.1.0
+  # FFI bindings to the iSH emulator core on iOS. A transitive dep before; direct
+  # now that lib/data/local/ish_ffi.dart uses its Utf8/calloc helpers.
+  ffi: ^2.1.4
 
   # Path / filesystem
   path: ^1.9.1

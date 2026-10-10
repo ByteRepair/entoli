@@ -14,7 +14,7 @@ import java.io.File
 import java.io.FileNotFoundException
 
 // The workspaces in the Files app and in every picker that asks for a file or a
-// folder. See "The workspaces in the Files app" in CLAUDE.md.
+// folder. See "The workspaces in the Files app" in AGENTS.md.
 //
 // Queried with no Flutter engine running — the Files app starts the process by
 // asking — so the layout `AppConfig` composes is read off the disk here, and
