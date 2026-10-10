@@ -84,7 +84,12 @@ void main() {
         text,
       );
       await tester.tap(find.widgetWithText(FilledButton, "Save"));
-      await settled(tester);
+      // The row is what the page publishes, two store steps after the tap —
+      // the write, then the read that redraws the list — and no frame is idle
+      // across either of them. A round floor bets on time and flaked once on a
+      // loaded runner, so the wait polls the row itself until it is on screen,
+      // however long the load stretches both steps.
+      await pumpUntil(tester, find.text(text));
     }
 
     testWidgets("a typed memory lands in the store and the list", (tester) async {
