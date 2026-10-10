@@ -11,7 +11,13 @@ to the viewer](docs/screenshot.png)
 
 ## Obtaining Entoli
 
-Entoli ships for Linux, macOS, Android, and the web.
+Entoli ships for Windows, Linux, macOS, Android, and the web.
+
+**Windows**: download `entoli-installer.msi` from the
+[GitHub releases](https://github.com/Yiannis128/agent-chat/releases) and run
+it; it installs to Program Files and puts Entoli in the Start menu. The build
+is unsigned for now, so Smartscreen's More info, then Run anyway, is how the
+installer's first run goes.
 
 **Linux**: download `entoli-x86_64.AppImage` from the
 [GitHub releases](https://github.com/Yiannis128/agent-chat/releases), make it
@@ -34,9 +40,10 @@ first open is Finder's right-click Open rather than a double-click.
 
 ## Development
 
-Entoli is a Flutter app targeting Linux, macOS, Android, and the web. Beyond the
-Flutter SDK, each platform needs a few native dev libraries; the lists below are
-the complete set, copy-pasteable into whichever package manager you use.
+Entoli is a Flutter app targeting Windows, Linux, macOS, Android, and the
+web. Beyond the Flutter SDK, each platform needs a few native dev libraries;
+the lists below are the complete set, copy-pasteable into whichever package
+manager you use.
 
 ### First, after cloning
 

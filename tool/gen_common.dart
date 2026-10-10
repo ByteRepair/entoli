@@ -16,7 +16,10 @@ List<Directory> promptProjects() {
     ..sort((a, b) => a.path.compareTo(b.path));
 }
 
-String basename(String path) => path.split("/").last;
+/// The leaf of a path the walk composed with a literal `/` and the OS's own
+/// separator both — the same string either way, so the leaf is split apart
+/// from the last of the two.
+String basename(String path) => path.split("/").last.split("\\").last;
 
 List<String> allFiles(Directory dir) {
   final files = <String>[];
@@ -24,7 +27,11 @@ List<String> allFiles(Directory dir) {
     if (entity is Directory) {
       files.addAll(allFiles(entity));
     } else if (entity is File) {
-      files.add(entity.path);
+      // The embedded const is one content whatever host generated it, and
+      // the relative paths inside it are read everywhere; a backslash
+      // generated here would not be a path on every other platform, and two
+      // generators' checksums would drift over the same tree.
+      files.add(entity.path.replaceAll("\\", "/"));
     }
   }
   return files;
@@ -78,7 +85,13 @@ void emitPromptFileList(StringBuffer buf, String varName,
 /// escape. Every line is a separate concatenation so the diff stays readable.
 /// `$` is escaped to `\$` so JavaScript template literals (`${item}`) in the
 /// embedded content are not read as Dart interpolations.
+///
+/// CRs are normalized to LF before anything else: a CRLF-checked-out file
+/// would otherwise leave a raw CR inside the literal, and the generated
+/// source is then not Dart on any host that read it so — and the const is
+/// generated content that two hosts' checksums must agree on.
 String stringLiteral(String s) {
+  s = s.replaceAll("\r\n", "\n").replaceAll("\r", "\n");
   final escaped = s
       .replaceAll("\\", "\\\\")
       .replaceAll('"', '\\"')
