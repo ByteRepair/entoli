@@ -84,7 +84,7 @@ void main() {
   });
 }
 
-/// The webview, faked at the platform interface — see `test/CLAUDE.md` for why
+/// The webview, faked at the platform interface — see `test/AGENTS.md` for why
 /// here. Only the members the page calls are answered: the rest of the
 /// interface keeps its default of throwing, so a new call shows up as a failure
 /// rather than as a silent no-op.

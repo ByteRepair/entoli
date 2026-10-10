@@ -3,7 +3,7 @@
 # rebuilds.
 #
 # git, curl and OpenSSL were here too, until Alpine's `apk` answered for them.
-# See "Bundled tools" in lib/data/local/CLAUDE.md.
+# See "Bundled tools" in lib/data/local/AGENTS.md.
 
 # Termux's fork rather than proot-me's: it carries the Android work — the
 # ashmem/memfd extension, --link2symlink, --kill-on-exit — and is the version

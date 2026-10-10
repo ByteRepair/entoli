@@ -21,7 +21,7 @@ import "voice_strategies.dart";
 /// microphone capability — the session opens and no audio ever arrives — and a
 /// phone whose only recognizer is in that position (a de-Googled one, or
 /// Google's under GrapheneOS's sandbox) hears nothing, whatever the app does.
-/// See "The Android system engines" in CLAUDE.md.
+/// See "The Android system engines" in AGENTS.md.
 ///
 /// Each half routes on its own pick, so the four pairings all work: system
 /// listening and speaking, a downloaded recognizer over the system's voice,

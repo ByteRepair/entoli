@@ -48,7 +48,7 @@ List<String> tiersFor(String? project, {required bool omada}) => [
 /// override a same-named default one for that project alone. [project] selects
 /// which project's overrides are layered on top of the default set, and `null`
 /// (or `"default"`) is the default project alone. See "Skills and agents" in
-/// `lib/domain/CLAUDE.md`.
+/// `lib/domain/AGENTS.md`.
 class BundledPrompts implements PromptSource {
   // Not const: the tiers resolve off the config at first use, and no caller
   // constructs one in a constant expression.

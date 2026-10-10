@@ -75,7 +75,7 @@ Shell platformShell({
     // between the two on other platforms) is not exec-based here. IshShell
     // drives the emulator through FFI; it resolves the rootfs the way
     // platformDriver does, but without producing a ShellDriver, since there
-    // is nothing to exec. See ios/CLAUDE.md.
+    // is nothing to exec. See ios/AGENTS.md.
     //
     // The rootfs is resolved per command through these two closures, the way
     // the driver callback is: a Linux installed from the settings page

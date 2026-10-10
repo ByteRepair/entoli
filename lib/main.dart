@@ -115,7 +115,7 @@ class AppSession {
     // project inherits, and a project's own overrides same-named default
     // entries for that project alone. Built once at startup so nothing
     // downstream waits on disk; see "Skills and agents" in
-    // `lib/domain/CLAUDE.md`. The builds read independent project dirs, so
+    // `lib/domain/AGENTS.md`. The builds read independent project dirs, so
     // they overlap rather than serialise.
     final libraries = Map.fromEntries(await Future.wait(projects.map((project) async =>
         MapEntry(project,

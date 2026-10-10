@@ -108,7 +108,7 @@ const alpine = Rootfs(
     ),
     // iOS, keyed "ios" rather than by an Android ABI — iSH emulates x86 and
     // not the device's own arm64, so the guest is an i386 Alpine separate from
-    // the arm64 one Android fetches. See ios/CLAUDE.md.
+    // the arm64 one Android fetches. See ios/AGENTS.md.
     "ios": RootfsImage(
       arch: "i386",
       url: "https://dl-cdn.alpinelinux.org/alpine/v3.24/releases/x86/"

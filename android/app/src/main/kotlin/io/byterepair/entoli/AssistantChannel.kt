@@ -11,7 +11,7 @@ import io.flutter.plugin.common.MethodChannel
 // The system's assistant gesture, reaching Dart. Registered as an assistant in
 // the manifest, Entoli is launched with ACTION_ASSIST; all Dart needs is that
 // it happened, since which project and which view a launch opens are settings.
-// See "Assistant registration" in CLAUDE.md.
+// See "Assistant registration" in AGENTS.md.
 //
 // Held rather than pushed, for the reason FilesChannel holds a staged share:
 // the gesture is usually what starts the app, and Dart is not listening for a

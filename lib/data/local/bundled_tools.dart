@@ -7,7 +7,7 @@ import "../../domain/shell.dart";
 
 /// The tools Entoli ships for Android, where the system has a shell but almost
 /// nothing to run in it. Today that is proot, and so a whole Linux rather than
-/// any one command. See "Bundled tools" in CLAUDE.md for why they live where
+/// any one command. See "Bundled tools" in AGENTS.md for why they live where
 /// they do and what that costs.
 class BundledTools {
   const BundledTools._();

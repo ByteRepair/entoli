@@ -28,7 +28,7 @@ typedef Warmup = ({
 /// whole point is its prefix — [warmup] is the stable head of what a real turn
 /// sends, so the server processes it into a slot and the chat that follows
 /// reuses it rather than paying the whole prompt at once. See "Prefilling the
-/// system prompt" in `lib/data/local/CLAUDE.md`.
+/// system prompt" in `lib/data/local/AGENTS.md`.
 class LocalPrefill {
   LocalPrefill({
     required this.llm,

@@ -19,7 +19,7 @@ import "../../domain/shell.dart";
 /// nothing on the host, where the machine's package manager is not ours to
 /// touch and static binaries are fetched instead). A binary already on PATH
 /// *and runnable* is never re-fetched — the script skips it; see "Byte
-/// Repair's environment, in two variables" in the directory's CLAUDE.md.
+/// Repair's environment, in two variables" in the directory's AGENTS.md.
 ///
 /// "Run Setup" owns the full lifecycle: it copies the base rootfs from cache
 /// into the project's data directory (for a project that opts into rootfs

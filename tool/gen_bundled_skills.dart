@@ -22,7 +22,7 @@
 // Each entry is tagged with the project it belongs to. `default` is the base
 // set every project inherits; another project's entries override a
 // same-named default one for that project alone. See "Skills and agents" in
-// lib/domain/CLAUDE.md.
+// lib/domain/AGENTS.md.
 import "dart:convert";
 import "dart:io";
 

@@ -329,7 +329,7 @@ List<LlmTool> agentTools({
 /// result, repeat until it says it is done.
 ///
 /// The skeleton is mini-swe-agent's `DefaultAgent`, ported; the termination
-/// protocol is deliberately not — see CLAUDE.md, "The agent loop".
+/// protocol is deliberately not — see AGENTS.md, "The agent loop".
 class BuiltinAgent {
   BuiltinAgent({
     required this.session,
@@ -725,7 +725,7 @@ class BuiltinAgent {
   /// and is gone when the turn ends — the way the system prompt is rewritten
   /// rather than added to. Nothing logs it, so a session that kept it would
   /// hold a message no reload could rebuild; see "The projection" in
-  /// `lib/domain/CLAUDE.md` for what that cost.
+  /// `lib/domain/AGENTS.md` for what that cost.
   Stream<AgentEvent> resume({String? agentPrompt}) async* {
     _setSystemPrompt(agentPrompt);
     final turn = _recorded(_loop);

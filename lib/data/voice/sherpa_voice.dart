@@ -21,7 +21,7 @@ import "wav.dart";
 /// fallback on an Android whose system recognizer cannot be used — see
 /// `AndroidVoice`. `start` builds a [SherpaListener] and a [SherpaSpeaker] and
 /// hands them to a [ComposedVoiceSession], which forwards both halves' events.
-/// See "Hearing and speaking" in CLAUDE.md for the two-worker design.
+/// See "Hearing and speaking" in AGENTS.md for the two-worker design.
 class SherpaVoice extends Voice {
   SherpaVoice(this._store, this._cacheDir);
 

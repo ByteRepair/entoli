@@ -8,7 +8,7 @@ plugins {
 
 // The environment before android/key.properties, so a stray properties file
 // cannot change what CI signs with and a password with a backslash in it is
-// not read as an escape. See "Releasing" in CLAUDE.md.
+// not read as an escape. See "Releasing" in AGENTS.md.
 val keystoreProperties = Properties().apply {
     val file = rootProject.file("key.properties")
     if (file.exists()) file.inputStream().use { load(it) }
@@ -39,7 +39,7 @@ android {
             // its native library directory. APK-wide rather than per library —
             // AGP has no finer lever — so every other `.so` is stored
             // compressed and unpacked at install too. See "Bundled tools" in
-            // CLAUDE.md.
+            // AGENTS.md.
             useLegacyPackaging = true
         }
     }

@@ -1,0 +1,1 @@
+../../../macos/Runner/entoli.icon/AGENTS.md

@@ -71,7 +71,7 @@ class ChatViewState {
   final String? shellOutput;
 
   /// Who may speak now — see [RoomPhase], whose facts "The room's phase is
-  /// one answer" in `lib/ui/chat/CLAUDE.md` owns.
+  /// one answer" in `lib/ui/chat/AGENTS.md` owns.
   RoomPhase get roomPhase => questions.values.any((q) => q.isNotEmpty)
       ? RoomPhase.waitingOnYou
       : isRunning
@@ -611,7 +611,7 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
   /// holds now; null is the main agent. The answer is not authorship: what
   /// names the author is [Message.author], stamped where the turn opens, and
   /// a member's reply is still role `assistant`. See "The room and its
-  /// participants" in `lib/ui/chat/CLAUDE.md`.
+  /// participants" in `lib/ui/chat/AGENTS.md`.
   String? _memberAnswering(Chat chat, Message prompt) {
     if (!ref.read(omadaOnProvider(chat.state.project))) return null;
     final named = prompt.role == MessageRole.assistant
@@ -639,7 +639,7 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
   /// addressed at all: `/compact @researcher` compacts, it does not hand the
   /// floor over. Omada off never stamps: the reply is the main agent's, and a
   /// label on it would claim a member authored what is the house's voice.
-  /// See "The contract between direct and Omada chats" in `lib/ui/chat/CLAUDE.md`.
+  /// See "The contract between direct and Omada chats" in `lib/ui/chat/AGENTS.md`.
   String? authorFor(Chat chat, Message prompt) =>
       !ref.read(omadaOnProvider(chat.state.project)) ||
               shellBypassCommand(prompt.plainText) != null ||
