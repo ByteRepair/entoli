@@ -10,12 +10,13 @@ is what makes the build `entoli.exe` — the app's name, not the package's, the
 name the release assets carry — and `main.cpp`'s `window.Create(L"Entoli")`
 with `Runner.rc`'s strings say Entoli everywhere else a user looks at a name.
 
-This platform does not run on the Mac the rest of the work happens on: the
-build and the installer are CI's (`release-build.yml`'s `windows` job,
-`windows-latest`), and any change to either is a push and a run. The runner
-image carries Visual Studio and the .NET SDK, so neither needs installing;
-the job is `./.github/actions/flutter-setup`, a `flutter build windows`, and
-the packaging script — every job that touches Dart sharing the same setup.
+This platform does not run on the Mac the rest of the work happens on, and
+its CI job sits detached from the release while the installer's packaging
+proves itself: `release-build.yml`'s `windows` job is gone until the harvest
+below lands, and a release attaches the MSI when a run of the whole chain —
+build, package, an `msiexec` install into Program Files, the checks, an
+uninstall — has gone green. That run is the scratch `windows-installer-test`
+branch's push workflow, off this content and deleted after.
 
 ## The MSI
 
@@ -29,7 +30,10 @@ refuses a bundle with no `entoli.exe` in it.
 `tool/windows/entoli.wxs` is the authoring. `Files Include="**"` harvests the
 bundle whole (the exe, the DLLs, `data\` and whatever a later build adds to
 the directory), into `ProgramFiles6432Folder\Entoli` — Program Files on an
-x64 machine, and the shortcut targets `[INSTALLFOLDER]entoli.exe` there. The
+x64 machine, and the shortcut targets `[INSTALLFOLDER]entoli.exe` there.
+That pattern's resolving to nothing is the part not yet proven — WIX8600
+grades a zero-file harvest a warning, and the fix and the release job's
+return land together. The
 **UpgradeCode is the identity of every install to come**: an installer built
 later finds this one and replaces it, one built sooner refuses in its name's
 sake, and one carrying a different UpgradeCode is a different app Windows
