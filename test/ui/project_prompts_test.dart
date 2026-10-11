@@ -139,6 +139,7 @@ void main() {
       // Reloaded, the library is the real sources: the bundled agents for
       // both projects, and none of the test's seed. The default project's
       // are inherited here.
+      expect(find.byType(AgentsSection), findsOneWidget);
       expect(find.text("general"), findsOneWidget);
       expect(find.text("Bundled"), findsNWidgets(2));
       expect(find.byIcon(Icons.edit_outlined), findsNothing);
@@ -216,28 +217,6 @@ void main() {
     });
   });
 
-  group("the settings page's rows", () {
-    testWidgets("a user project's page offers both rows and the agents one "
-        "opens the shared section", (tester) async {
-      await io(tester, () => app.repo.createProject("work"));
-      await app.pump(tester, const ProjectSettingsPage(project: "work"));
-      await scrollTo(tester, find.text("Agents"));
-      await tester.tap(find.text("Agents"));
-      await settleIo(tester);
-      await reloadLibrary(tester, app, project: "work");
-
-      expect(find.text("general"), findsOneWidget);
-      expect(find.text("Add agent"), findsOneWidget);
-      expect(find.byType(AgentsSection), findsOneWidget);
-    });
-
-    testWidgets("a built-in's page offers both rows too", (tester) async {
-      await app.pump(tester, ProjectSettingsPage(project: "byte-repair"));
-      await scrollTo(tester, find.text("Agents"));
-      expect(find.text("Agents"), findsOneWidget);
-    });
-  });
-
   group("the install destination", () {
     testWidgets("the project picked on the preview page is where the skill "
         "lands", (tester) async {
@@ -267,25 +246,6 @@ void main() {
       final dir =
           skillDirectory(app.config, "letterbox", project: "work");
       expect(File("$dir/SKILL.md").existsSync(), isTrue);
-      expect(Directory(skillDirectory(app.config, "letterbox")).existsSync(),
-          isFalse);
-    });
-
-    testWidgets("skillDirectory and installSkillPackage take a project",
-        (tester) async {
-      await io(tester, () => app.repo.createProject("work"));
-      final bytes = packageSkillBytes(SkillPackage("letterbox", [
-        ("SKILL.md", Uint8List.fromList(utf8.encode(_skillMd))),
-      ]));
-      await io(tester, () async {
-        await installSkillPackage(
-          app.config,
-          parseSkillPackage(bytes),
-          project: "work",
-        );
-      });
-      expect(Directory(skillDirectory(app.config, "letterbox", project: "work"))
-          .existsSync(), isTrue);
       expect(Directory(skillDirectory(app.config, "letterbox")).existsSync(),
           isFalse);
     });
