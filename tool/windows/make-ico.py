@@ -70,7 +70,14 @@ def decode_png(data: bytes) -> tuple[int, int, list[list[bytes]]]:
 def resize(
     width: int, height: int, rows: list[bytes], size: int
 ) -> list[bytes]:
-    """Box-average downscale; the source is never smaller than the target."""
+    """Box-average downscale; the source is never smaller than the target.
+
+    The average runs in premultiplied space: a transparent pixel's raw RGB
+    is otherwise full weight on it, and where the icon fades out the edges
+    darken against whatever they sit on. The ratio between the summed
+    premultiplied value and the summed alpha is the same as between the
+    averages, so the unpremultiply reads both sums directly.
+    """
     scale = width / size
     sy = height / size
     out = []
@@ -84,11 +91,20 @@ def resize(
             n = (bottom - top) * (right - left)
             for r in rows[top:bottom]:
                 for i in range(left * 4, right * 4, 4):
-                    px[0] += r[i]
-                    px[1] += r[i + 1]
-                    px[2] += r[i + 2]
-                    px[3] += r[i + 3]
-            line.extend(v // n for v in px)
+                    a = r[i + 3]
+                    px[0] += r[i] * a // 255
+                    px[1] += r[i + 1] * a // 255
+                    px[2] += r[i + 2] * a // 255
+                    px[3] += a
+            alpha = px[3] // n
+            if alpha == 0:
+                line.extend((0, 0, 0, alpha))
+            else:
+                line.extend(
+                    min(255, (px[j] * 255 + px[3] // 2) // px[3])
+                    for j in range(3)
+                )
+                line.append(alpha)
         out.append(bytes(line))
     return out
 
