@@ -48,6 +48,61 @@ page's catalog. A macOS turn is a Linux-desktop-with-no-Linux-installed turn:
 PATH. The login-PATH capture covers it the same way (`$SHELL` as a login
 shell, macOS's zsh on the list).
 
+## Waking for a trigger
+
+The schedule half is launchd, one user launch agent per request code under
+`~/Library/LaunchAgents/` — `RemindersPlugin.swift` writes it and boots it
+through `launchctl bootstrap gui/<uid>` (raw plists, not `SMAppService`, which
+wants its plist inside a signed bundle's `Contents/Library/LaunchAgents/`
+where a per-code runtime rewrite would break the signature). The label
+carries the bundle identifier plus the build's data half (`debug`/`release`),
+so a debug build's jobs never argue with an installed copy's over one
+namespace — the two stores are separate, and each prune would otherwise
+mistake the other's jobs for orphans. The job's whole
+business is one line: `open -gj <bundle> --args entoli-wake`. There is no
+one-shot calendar form in launchd to schedule with, so the moment is a
+`StartInterval` counted from the job's load, and what a changed interval is,
+is a bootout, a rewrite and a bootstrap. If the Mac sleeps through the
+moment, launchd runs the job once on wake-up — minutes or hours late, which
+is what the fire's "Ran late" wording is for, the same bargain Doze strikes.
+
+**A wake is not an opening.** The window reads the wake argument and stays
+behind (`orderOut`, set in `MainFlutterWindow.awakeFromNib`, where the
+delegate and the plugin register too), and the session quits the moment
+`doneFiring` says its work has drained — unless someone activated it, which
+is `AppDelegate.userShowedUp`, set by an activation watcher rather than a
+delegate override so nothing the framework forwards through is displaced.
+The turn the wake ran is the ordinary trigger flow: the clock kinds' catch-up
+runs it at watch start, unattended and headless exactly as it runs on an
+Android alarm's cold start, and the completion notification's tap opens the
+chat — a tap of a notification whose app has quit since launching a fresh
+process, whose `didReceive` holds the chat id the way `RemindersChannel.kt`
+holds a pending open, until `takeOpenChat` drains it.
+
+**Why `doneFiring` quits: the alternative is a hidden scheduler.** The
+in-process timer would happily keep aiming at the next fire forever, which is
+not the design — the next fire has a launchd job of its own, and a process
+standing hidden between jobs is a second scheduler to keep in step. Triggers
+firing during the drain are covered: `doneFiring` is only called when nothing
+is running and nothing delivered is outstanding, and the terminate trails the
+reply by a tenth of a second.
+
+**No fire half exists on the channel**, again deliberately: launchd's only
+power is starting a process, and a running app on this platform keeps its
+event loop, so `fired` is empty and `takeFired` answers nothing. The Android
+channel's held-pending fire list has no job to do here.
+
+**The prune is the part that keeps the jobs honest.** A trigger deleted or
+disabled while the app was closed leaves its plist behind, and a job nobody
+wants still wakes the app on the old schedule forever — a wake session whose
+catch-up finds nothing, opening and quitting: the zombie. `ReminderAlarms`
+gains `staleCodes(wanted)` for exactly this: the manager asks it once per
+reload with the union of what the clock kinds armed — the union, not a kind's
+own, since two clock kinds share one alarm port and each kind's wanted misses
+the other's codes — and cancels each answer, deleting plist and job together.
+Every other platform answers nothing, which is why the question can live on
+the port.
+
 ## What is absent, and honestly so
 
 No on-device models: the bundled llama.cpp server is built for Android and
@@ -59,10 +114,9 @@ Swift plugin of the app's own, on macOS 26 and later — a future version, at
 which point the settings page is where the story changes and nowhere else.
 
 The keyring is the file fallback (`KeyringSecretStore` probes a Secret Service
-through the session bus, which macOS does not run), and reminders take the app
-live timers — a reminder the app was closed through is caught up at the next
-launch, as on Windows and in a browser. Neither says anything different from
-an absence; nothing crashes over either.
+through the session bus, which macOS does not run) and says nothing different
+from an absence; nothing crashes over either. Triggers, by contrast, are all
+here now — see "Waking for a trigger" below.
 
 ## Voice mode
 

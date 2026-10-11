@@ -85,9 +85,11 @@ same feature approached from the other end, and its two questions were a
 category with two lines in it. It keeps a file of its own all the same, since
 every other file here is one subject; see "Being the assistant". **Triggers**
 is drawn where the port is available — Android fires a schedule with the app
-closed, Linux notifies what a trigger did but cannot wake the process, and the
-page's description says which (`ReminderAlarms.schedules` is the question) —
-and where the port is unavailable it says so and offers nothing, the way a row
+closed, macOS wakes it through launchd (both answer `schedules` yes; see
+"Waking for a trigger" in `macos/AGENTS.md`), Linux notifies what a trigger
+did but cannot wake the process, and the page's description says which
+(`ReminderAlarms.schedules` is the question) — and where the port is
+unavailable it says so and offers nothing, the way a row
 for a missing device would. The permission rows re-read on the way
 back to the app, since their answers can only change while it is behind in the
 system settings the rows open. The editor page is a route of its own;

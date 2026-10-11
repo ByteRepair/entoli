@@ -1,12 +1,13 @@
 /// The system clock a reminder is set against: AlarmManager on Android,
-/// nothing anywhere else. The scheduler drives this port; it never runs a
-/// prompt itself — Kotlin only ever nudges, and Dart decides what is due.
+/// launchd's user launch agents on macOS, nothing anywhere else. The scheduler
+/// drives this port; it never runs a prompt itself — Kotlin only ever nudges,
+/// and Dart decides what is due.
 ///
 /// Two routes in, the shape [AssistantLaunch] has for the assistant gesture:
-/// an alarm can be what starts the process, in which case Kotlin noticed it
-/// long before Dart was listening. So the fired ids wait in Kotlin until
-/// [takeFired] drains them, and [fired] is only a nudge for an isolate that
-/// was already up.
+/// an alarm can be what starts the process, in which case the platform
+/// noticed it long before Dart was listening. So the fired ids wait in Kotlin
+/// until [takeFired] drains them, and [fired] is only a nudge for an isolate
+/// that was already up.
 abstract interface class ReminderAlarms {
   /// The Android channels notifications post on. Kotlin spells its half of
   /// the ids itself — a method channel's strings are literals on both sides —
@@ -18,7 +19,7 @@ abstract interface class ReminderAlarms {
   bool get available;
 
   /// Whether the system clock fires a reminder with the process dead —
-  /// AlarmManager on Android and nowhere else. Where it is false the
+  /// AlarmManager on Android, launchd on macOS. Where it is false the
   /// reminders page says so rather than promising a fire the app's own timer
   /// cannot make: a desktop still notifies what a reminder did, but only one
   /// that fired while it was running.
@@ -44,6 +45,15 @@ abstract interface class ReminderAlarms {
   Future<void> schedule(int requestCode, DateTime at);
 
   Future<void> cancel(int requestCode);
+
+  /// The codes this port still holds that [wanted] does not name — jobs armed
+  /// by a launch whose knowledge is gone: a trigger deleted or disabled while
+  /// the app was closed has left its job behind, and on the platform that
+  /// keeps jobs as files (launchd) one of those would wake the app forever.
+  /// The manager cancels each answer through the ordinary path, after the
+  /// clock kinds have armed theirs; answering nothing is always legitimate,
+  /// and is what a port with nothing to enumerate says.
+  Future<List<int>> staleCodes(Set<int> wanted);
 
   /// Whether a turn started right now could be held open. Android refuses a
   /// backgrounded app the foreground service that holds the process, and a turn
@@ -110,6 +120,9 @@ class UnavailableReminderAlarms implements ReminderAlarms {
 
   @override
   Future<void> cancel(int requestCode) async {}
+
+  @override
+  Future<List<int>> staleCodes(Set<int> wanted) async => const [];
 
   @override
   Future<bool> canHoldTurn() async => true;

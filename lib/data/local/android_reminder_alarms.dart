@@ -67,6 +67,13 @@ class AndroidReminderAlarms implements ReminderAlarms {
   Future<void> cancel(int requestCode) =>
       _channel.invokeMethod("cancel", {"code": requestCode});
 
+  // Nothing Dart knows is held on this side: the boot receiver's re-arms live
+  // in Kotlin, and a fire it makes on a trigger since removed answers nothing
+  // to takeFired — the manager's own gate reads the list. No stale enumeration
+  // to offer, so no prune ever cancels anything here.
+  @override
+  Future<List<int>> staleCodes(Set<int> wanted) async => const [];
+
   // No answer means yes: a platform that cannot say is not a reason to leave a
   // reminder unrun, and running it merely killable is where every other
   // platform already is.
