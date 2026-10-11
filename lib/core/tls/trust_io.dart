@@ -16,6 +16,12 @@
 // verification failing alone, and the second verify is against Mozilla's
 // audited set, which a machine-in-the-middle chain is not on. A chain refused
 // by both fails as it would have.
+//
+// The bundled set is a circumvention, not a choice: dart-lang/sdk#52266
+// (https://github.com/dart-lang/sdk/issues/52266) is the Dart issue it exists
+// for — a dart:io handshake never triggering the store's population — and
+// once that is fixed, discard assets/certs/cacert.pem and the fallback here
+// with it.
 import "dart:io";
 
 import "package:flutter/services.dart" show rootBundle;
