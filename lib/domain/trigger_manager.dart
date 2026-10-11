@@ -176,6 +176,21 @@ class TriggerManager {
     for (final future in started) {
       await future;
     }
+    // The jobs the port still holds that no clock trigger wants — a trigger
+    // deleted or disabled while the app was closed left its job behind, and
+    // the diffs above cannot see past their own kinds: two clock kinds share
+    // one alarm port, and each kind's wanted misses the other's codes. The
+    // wanted here is the union the watches armed, asked of the port once.
+    if (alarmPort.available && alarmPort.schedules) {
+      final wanted = <int>{
+        for (final t in list.triggers)
+          if (t.requestCode != null && (_kindOf(t)?.armed(t) ?? false))
+            t.requestCode!,
+      };
+      for (final code in await alarmPort.staleCodes(wanted)) {
+        await alarmPort.cancel(code);
+      }
+    }
     // The catch-up fires settled to their claims — the claim is the
     // synchronous head of every fire path, so the one pump the deliveries
     // need (a non-sync controller queues them) is all the window this
