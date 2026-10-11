@@ -2401,8 +2401,11 @@ group("a banner answer through the controller", () {
       await controller.send("two");
       await waitIdle(id);
       expect(app.backend.compactionCalls, hasLength(1));
-      // The log is the guard: the marker covers the last message, so a second
-      // turn at the same usage runs none.
+      // The marker fronts the projection, so the next request weighs the
+      // summary and the fresh exchange, under the share again — what a real
+      // provider reports, which the fake models here. Holding usage over the
+      // share would ask for a second compaction, and rightly.
+      app.backend.usageHolder[id] = 30000;
       await controller.send("three");
       await waitIdle(id);
       expect(app.backend.compactionCalls, hasLength(1));
