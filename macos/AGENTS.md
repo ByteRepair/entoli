@@ -87,12 +87,15 @@ session has quit. What comes back is a wake whose catch-up finds nothing,
 which prunes the job and quits; bounded at one extra launch per such fire,
 and invisible for every schedule whose interval is longer than its turn.
 
-**A wake is not an opening.** The window reads the wake argument and stays
-behind (`orderOut`, set in `MainFlutterWindow.awakeFromNib`, where the
-delegate and the plugin register too), and the session quits the moment
-`doneFiring` says its work has drained — unless someone activated it, which
-is `AppDelegate.userShowedUp`, set by an activation watcher rather than a
-delegate override so nothing the framework forwards through is displaced.
+**A wake is not an opening.** The app hides itself — `orderOut` and
+`NSApp.hide` in `MainFlutterWindow.awakeFromNib`, where the delegate and the
+plugin register too — because `orderOut` alone loses to AppKit's
+visible-at-launch ordering, which re-fronts the window after the nib loads;
+the whole-app hide is what the `-j` launch flag would have done and cannot
+(relaunching hidden never runs an engine). The drained session quits the
+moment `doneFiring` says its work has drained — unless someone activated it,
+which is `AppDelegate.userShowedUp`, set by an activation watcher rather than
+a delegate override so nothing the framework forwards through is displaced.
 The turn the wake ran is the ordinary trigger flow: the clock kinds' catch-up
 runs it at watch start, unattended and headless exactly as it runs on an
 Android alarm's cold start, and the completion notification's tap opens the

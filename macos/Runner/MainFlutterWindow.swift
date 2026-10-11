@@ -27,18 +27,23 @@ class MainFlutterWindow: NSWindow {
     RemindersPlugin.register(with: flutterViewController.engine.binaryMessenger)
 
     // A wake session is not an opening anyone is watching: the trigger's
-    // launchd job started the process, the window stays behind, and the
-    // drained session quits from doneFiring. The first activation hereafter
-    // is the user's, which shows the window and stops the session being a
-    // wake — an observer rather than a delegate override, so no delegate the
-    // framework forwards through is displaced.
+    // launchd job started the process, and hiding is the application's own —
+    // `orderOut` alone loses to AppKit's visible-at-launch ordering, which
+    // re-fronts the window after this method returns, so the whole app hides
+    // instead (the -j launch flag this replaces never ran an engine). The
+    // first activation hereafter is the user's, which unhides the app,
+    // shows the window, and stops the session being a wake — an observer
+    // rather than a delegate override, so no delegate the framework
+    // forwards through is displaced.
     if AppDelegate.wake {
       self.orderOut(nil)
+      NSApp.hide(nil)
       NotificationCenter.default.addObserver(
         forName: NSApplication.didBecomeActiveNotification, object: nil,
         queue: .main
       ) { _ in
         AppDelegate.userShowedUp = true
+        NSApp.unhide(nil)
         for window in NSApplication.shared.windows
         where window is MainFlutterWindow && !window.isVisible {
           window.makeKeyAndOrderFront(nil)
