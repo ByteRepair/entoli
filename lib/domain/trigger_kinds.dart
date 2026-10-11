@@ -214,6 +214,18 @@ class ClockKind extends TriggerKind {
         if (t.nextFireAt != null && t.requestCode != null)
           t.requestCode!: t.nextFireAt!,
     };
+    // A repeating schedule's arm names its calendar, so the platforms with a
+    // calendar form can arm that instead of a count; a one shot and a timer
+    // have no calendar shape and carry null.
+    final calendars = <int, String?>{
+      for (final t in triggers)
+        if (t.nextFireAt != null && t.requestCode != null)
+          t.requestCode!: switch (t.source) {
+            final ScheduleSource s when s.repeat != ScheduleRepeat.off =>
+              s.repeat.name,
+            _ => null,
+          },
+    };
     for (final code in _armed.keys) {
       if (!wanted.containsKey(code)) await alarms.cancel(code);
     }
@@ -221,7 +233,8 @@ class ClockKind extends TriggerKind {
     // unchanged fire time is a no-op skipped here rather than a round trip.
     for (final entry in wanted.entries) {
       if (_armed[entry.key] != entry.value) {
-        await alarms.schedule(entry.key, entry.value);
+        await alarms.schedule(entry.key, entry.value,
+            calendar: calendars[entry.key]);
       }
     }
     _armed

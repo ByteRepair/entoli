@@ -92,12 +92,21 @@ idles on its AppKit runloop with no nib load and no Dart — and a hidden
 spawn starts Dart every time. What `open` would buy is one-instance activation,
 which the Runner answers itself: a wake session that finds another instance
 of the bundle id quits before the engine is built, the running copy's own
-timer being what fires its due anyway. There is no
-one-shot calendar form in launchd to schedule with, so the moment is a
-`StartInterval` counted from the job's load, and what a changed interval is,
-is a bootout, a rewrite and a bootstrap. If the Mac sleeps through the
-moment, launchd runs the job once on wake-up — minutes or hours late, which
-is what the fire's "Ran late" wording is for, the same bargain Doze strikes.
+timer being what fires its due anyway. A repeating
+schedule arms launchd's own calendar form — `StartCalendarInterval`, the
+hourly its minute and the rest their hour, the weekly its weekday and the
+monthly its day — wall-clock anchored, surviving DST the way the source's
+arithmetic does, and coalescing what a sleep swallows, launchd starting the
+job on the next wake; the man page promises an interval arm exactly the
+opposite ("if the system is asleep during the time of the next scheduled
+interval firing, that interval will be missed" — and the count is awake
+time, the clock a kqueue one, so a sleep inside a countdown pushes its tick
+late besides). A one shot or a timer has no calendar shape — launchd has no
+form for an arbitrary moment either — so it arms a `StartInterval` counted
+from the job's load, and what a changed interval is, is a bootout, a
+rewrite and a bootstrap. If the Mac misses the moment either way, the fire
+lands at the next launch's catch-up, which is what the fire's "Ran late"
+wording is for, the same bargain Doze strikes.
 
 That the interval repeats is also the one spurious fire the shape allows: a
 one-shot's job is cancelled only by the diff the fire's stamp triggers, so

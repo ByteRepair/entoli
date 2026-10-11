@@ -42,7 +42,13 @@ abstract interface class ReminderAlarms {
   /// firing path.
   Future<void> requestNotifications();
 
-  Future<void> schedule(int requestCode, DateTime at);
+  /// Arms the clock at [at]. A repeating schedule's arm names [calendar] —
+  /// its repeat's name — and the platforms with a calendar form arm that
+  /// instead of a count: launchd's calendar firings are wall-clock anchored
+  /// and coalesce what a sleep swallows, where an interval arm can be missed
+  /// outright and measures awake time. One shots and timers have no calendar
+  /// shape and leave it null everywhere.
+  Future<void> schedule(int requestCode, DateTime at, {String? calendar});
 
   Future<void> cancel(int requestCode);
 
@@ -116,7 +122,7 @@ class UnavailableReminderAlarms implements ReminderAlarms {
   Future<void> requestNotifications() async {}
 
   @override
-  Future<void> schedule(int requestCode, DateTime at) async {}
+  Future<void> schedule(int requestCode, DateTime at, {String? calendar}) async {}
 
   @override
   Future<void> cancel(int requestCode) async {}

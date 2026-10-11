@@ -340,7 +340,7 @@ class FakeReminderAlarms implements ReminderAlarms {  // ignore: duplicate-ignor
   }
 
   @override
-  Future<void> schedule(int requestCode, DateTime at) async {
+  Future<void> schedule(int requestCode, DateTime at, {String? calendar}) async {
     scheduled[requestCode] = at;
   }
 

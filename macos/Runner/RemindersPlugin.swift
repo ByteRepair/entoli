@@ -68,8 +68,10 @@ class RemindersPlugin: NSObject, UNUserNotificationCenterDelegate {
       result(FlutterError(code: "arguments", message: "code, at and store required", details: nil))
       return
     }
+    let calendar = arguments["calendar"] as? String
     do {
-      try writeJob(code: code, at: Date(timeIntervalSince1970: Double(millis) / 1000), store: store)
+      try writeJob(code: code, at: Date(timeIntervalSince1970: Double(millis) / 1000),
+                   store: store, calendar: calendar)
       result(nil)
     } catch {
       result(FlutterError(code: "schedule", message: String(describing: error), details: nil))
@@ -79,7 +81,7 @@ class RemindersPlugin: NSObject, UNUserNotificationCenterDelegate {
   /// launchd does not re-read a loaded plist, so a changed interval is
   /// bootout, rewrite, bootstrap. A bootout of a job never loaded reports
   /// failure; only the bootstrap after is a failure worth saying.
-  private func writeJob(code: Int, at: Date, store: String) throws {
+  private func writeJob(code: Int, at: Date, store: String, calendar: String?) throws {
     let label = Self.jobLabel(store: store, code: code)
     _ = try? runLaunchctl(["bootout", "gui/\(getuid())/\(label)"])
     let plist = Self.agentDirectory().appendingPathComponent("\(label).plist")
@@ -115,20 +117,30 @@ class RemindersPlugin: NSObject, UNUserNotificationCenterDelegate {
         + "exec /bin/launchctl bootout \"gui/\(getuid())/$L\"; fi; "
         + "export AGENT_CHAT_CONFIG='\(Self.shellQuoted(store))'; "
         + "\"$B\" entoli-wake & exit 0"
-    let content: [String: Any] = [
+    var content: [String: Any] = [
       "Label": label,
       "ProgramArguments": [
         "/bin/sh",
         "-c",
         wake,
       ],
-      // No one-shot calendar form exists here, so the moment is an interval
-      // counted from the load — which is what the rewrite re-dates.
-      "StartInterval": max(1, Int(at.timeIntervalSinceNow.rounded(.up))),
       // The detached app outlives the shell that spawned it; without this its
       // process group dies with the job's shell.
       "AbandonProcessGroup": true,
     ]
+    if let calendar {
+      // A repeating schedule's arm: wall-clock anchored, and what a sleep
+      // swallows coalesces into one firing on wake (launchd.plist(5)),
+      // where an interval arm is missed outright when the system is asleep
+      // at the moment and measures awake time besides. The entries are the
+      // next occurrence's only; the stamp re-arms after every fire.
+      content["StartCalendarInterval"] = Self.calendarEntries(calendar, at: at)
+    } else {
+      // No calendar form exists for an arbitrary moment, so a one shot or a
+      // timer arms an interval counted from the load — which is what the
+      // rewrite re-dates.
+      content["StartInterval"] = max(1, Int(at.timeIntervalSinceNow.rounded(.up)))
+    }
     guard (content as NSDictionary).write(toFile: plist.path, atomically: true) else {
       throw MessageError("plist not written to \(plist.path)")
     }
@@ -278,6 +290,26 @@ class RemindersPlugin: NSObject, UNUserNotificationCenterDelegate {
 
   static func jobLabel(store: String, code: Int) -> String {
     "\(jobPrefix(store: store))\(code)"
+  }
+
+  /// The `StartCalendarInterval` entries of a repeating schedule's next
+  /// occurrence: the hourly its minute, the rest their hour, the weekly its
+  /// weekday and the monthly its day. Whatever the clamp arithmetic does to
+  /// a monthly anchor's later occurrences, the entries only owe the next
+  /// one — the stamp re-arms. launchd counts Weekday from Sunday (0 and 7
+  /// both), Dart from Monday.
+  static func calendarEntries(_ repeatName: String, at: Date) -> [String: Int] {
+    let parts = Calendar.current
+      .dateComponents([.weekday, .day, .hour, .minute], from: at)
+    let hour = parts.hour ?? 0
+    let minute = parts.minute ?? 0
+    switch repeatName {
+    case "daily": return ["Hour": hour, "Minute": minute]
+    case "weekly":
+      return ["Weekday": (parts.weekday ?? 1) % 7, "Hour": hour, "Minute": minute]
+    case "monthly": return ["Day": parts.day ?? 1, "Hour": hour, "Minute": minute]
+    default: return ["Minute": minute]
+    }
   }
 
   /// launchd labels carry a restricted alphabet, and a store is an absolute

@@ -83,9 +83,15 @@ class MacosReminderAlarms implements ReminderAlarms {
       _channel.invokeMethod("requestNotifications");
 
   @override
-  Future<void> schedule(int requestCode, DateTime at) => _run(
+  Future<void> schedule(int requestCode, DateTime at, {String? calendar}) =>
+      _run(
         "schedule",
-        {"code": requestCode, "at": at.millisecondsSinceEpoch, "store": store},
+        {
+          "code": requestCode,
+          "at": at.millisecondsSinceEpoch,
+          "store": store,
+          "calendar": ?calendar,
+        },
         "schedule $requestCode",
       );
 
