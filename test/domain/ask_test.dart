@@ -69,17 +69,13 @@ void main() {
   ]
 }""";
 
-    test("a question written out at the top level is still one question", () {
+    test("the top-level question is read whole: wording, summary, clickable answers", () {
       final questions = askQuestionsFrom(decomposition);
+      final options = questions.single.options;
 
       expect(questions, hasLength(1));
       expect(questions.single.question, startsWith("Understand the complete history"));
       expect(questions.single.summary, startsWith("Decompose the question"));
-    });
-
-    test("whatever it called the answers, they are what can be clicked", () {
-      final options = askQuestionsFrom(decomposition).single.options;
-
       expect(options.map((o) => o.label), ["historical origins", "recent advances"]);
       expect(options.first.detail, "Identify foundational papers and early work.");
       // The label is for reading; the query is the form the model can use.
@@ -97,11 +93,10 @@ void main() {
   });
 
   group("nothing askable", () {
-    test("a question with no options is not one, because nothing is clickable", () {
+    test("nothing clickable is not a question", () {
+      // No options: nothing to click.
       expect(askQuestionsFrom(jsonEncode({"question": "What now?"})), isEmpty);
-    });
-
-    test("options with no question are not one either", () {
+      // Options with no question: nothing to answer about.
       expect(
           askQuestionsFrom(jsonEncode({
             "options": [
@@ -131,15 +126,15 @@ void main() {
       expect(askAnswersFrom(askAnswers(asked, ["Postgres", null])), ["Postgres", null]);
     });
 
-    test("name every question, so the model sees the one it did not get", () {
+    test("names every question, and says plainly when none were given", () {
       final written = askAnswers(asked, ["Postgres", null]);
 
+      // Both questions are named, so the model sees the one it did not get.
       expect(written, contains("Which database?"));
       expect(written, contains("Migrate?"));
       expect(written, isNot(contains("answered nothing")));
-    });
 
-    test("say so plainly when none of them were given", () {
+      // Nothing given at all: the note says so.
       expect(askAnswers(asked, [null, null]), contains("answered nothing"));
     });
 

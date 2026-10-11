@@ -144,15 +144,6 @@ void main() {
       expect((await repo.listChats()).single.project, "work");
     });
 
-    test("renaming one keeps everything else it says", () async {
-      final repo = repoWith(AppSettings());
-      final chat = await repo.createChat(project: "work");
-
-      await repo.retitle(chat.state.id, "Named early");
-
-      expect((await repo.listChats()).single.title, "Named early");
-      expect((await repo.openChat(chat.state.id)).state.project, "work");
-    });
   });
 
   group("projects", () {
@@ -205,52 +196,53 @@ void main() {
       await expectLater(repo.deleteProject("byte-repair"), throwsArgumentError);
     });
 
-    test("a turn in Byte Repair keeps the profile, memory and shared workspace",
-        () async {
+    /// A seeded turn in [project]; the settings the turn resolved.
+    turnSettings(String? project) async {
       final repo = repoWith(AppSettings(
         profile: const Profile(name: "Tea Fan"),
         autoMemory: true,
       ));
-      final chat = await repo.createChat(project: "byte-repair");
+      final chat = await repo.createChat(project: project);
       await writeChatVia(repo, chat);
-
       await repo.sendPrompt(chat.state.id, userMessage("hi")).toList();
+      return backend.prompts.last.settings;
+    }
 
-      final settings = backend.prompts.single.settings;
-      expect(settings.project, "byte-repair");
-      // Byte Repair inherits the app's profile and memory, unlike Anonymous.
-      expect(settings.profile, isNotNull);
-      expect(settings.memory.autoMemory, isTrue);
-      expect(settings.sharedWorkspace, isTrue);
-      expect(settings.disabled, isEmpty);
+    test("what a turn carries comes from the project's spec", () async {
+      // Byte Repair inherits the app's profile and memory, unlike Anonymous,
+      // and shares the workspace.
+      final br = await turnSettings("byte-repair");
+      expect(br.project, "byte-repair");
+      expect(br.profile, isNotNull);
+      expect(br.memory.autoMemory, isTrue);
+      expect(br.sharedWorkspace, isTrue);
+      expect(br.disabled, isEmpty);
       // It ships its own note about secure coding and ESBMC, and reads the
       // user's instruction files on top of it.
-      expect(settings.bundledInstructions, contains("ESBMC"));
-      expect(settings.includesUserInstructions, isTrue);
-    });
+      expect(br.bundledInstructions, contains("ESBMC"));
+      expect(br.includesUserInstructions, isTrue);
 
-    test("a turn in a built-in project drops the profile and memory", () async {
-      final repo = repoWith(AppSettings(
-        profile: const Profile(name: "Tea Fan"),
-        autoMemory: true,
-      ));
-      final chat = await repo.createChat(project: "anonymous");
-      await writeChatVia(repo, chat);
-
-      await repo.sendPrompt(chat.state.id, userMessage("hi")).toList();
-
-      final settings = backend.prompts.single.settings;
-      expect(settings.project, "anonymous");
-      // The app's profile is set, but the built-in says none.
-      expect(settings.profile, isNull);
-      // Auto-memory is on in the app, but the built-in says off.
-      expect(settings.memory.autoMemory, isFalse);
-      expect(settings.sharedWorkspace, isFalse);
+      // Anonymous: the app's profile is set, but the built-in says none.
+      final anon = await turnSettings("anonymous");
+      expect(anon.project, "anonymous");
+      expect(anon.profile, isNull);
+      expect(anon.memory.autoMemory, isFalse);
+      expect(anon.sharedWorkspace, isFalse);
       // A watched turn: nothing is taken away beyond the built-in's (none).
-      expect(settings.disabled, isEmpty);
+      expect(anon.disabled, isEmpty);
       // The built-in ships its own note; the user's files are not read.
-      expect(settings.bundledInstructions, contains("anonymous chat"));
-      expect(settings.includesUserInstructions, isFalse);
+      expect(anon.bundledInstructions, contains("anonymous chat"));
+      expect(anon.includesUserInstructions, isFalse);
+
+      // The default project keeps the app's profile and memory, and reads
+      // its files; nothing ships in their place.
+      final def = await turnSettings(null);
+      expect(def.project, isNull);
+      expect(def.profile, isNotNull);
+      expect(def.memory.autoMemory, isTrue);
+      expect(def.sharedWorkspace, isTrue);
+      expect(def.bundledInstructions, isNull);
+      expect(def.includesUserInstructions, isFalse);
     });
 
     test("an Omada-on project drops the task tool; an off one keeps it", () async {
@@ -363,26 +355,6 @@ void main() {
       expect(settings.sharedWorkspace, isFalse);
     });
 
-    test("the default project keeps the app's profile and memory", () async {
-      final repo = repoWith(AppSettings(
-        profile: const Profile(name: "Tea Fan"),
-        autoMemory: true,
-      ));
-      final chat = await repo.createChat();
-      await writeChatVia(repo, chat);
-
-      await repo.sendPrompt(chat.state.id, userMessage("hi")).toList();
-
-      final settings = backend.prompts.single.settings;
-      expect(settings.project, isNull);
-      expect(settings.profile, isNotNull);
-      expect(settings.memory.autoMemory, isTrue);
-      expect(settings.sharedWorkspace, isTrue);
-      // A user's project reads its files; nothing ships in their place.
-      expect(settings.bundledInstructions, isNull);
-      expect(settings.includesUserInstructions, isFalse);
-    });
-
     test("a move ends the shell the chat stood in, and only that one", () async {
       final repo = repoWith(AppSettings(defaultProviderId: "anthropic"));
       final chat = await repo.createChat();
@@ -433,7 +405,7 @@ void main() {
   // A rename that wrote the whole chat would put back the conversation it read.
   test("renaming writes the title without touching the conversation", () async {
     final repo = repoWith(AppSettings());
-    final chat = await repo.createChat();
+    final chat = await repo.createChat(project: "work");
     await writeChatVia(repo, chat);
     await writeChatVia(repo, chat.copyWith(messages: [
       Message(id: "m1", role: MessageRole.user, createdAt: DateTime(2026)),
@@ -443,7 +415,11 @@ void main() {
 
     final loaded = await repo.openChat(chat.state.id);
     expect(loaded.state.title, "Named");
+    // Everything else the chat says stands: where it is, its conversation,
+    // and the row the list shows.
+    expect(loaded.state.project, "work");
     expect(loaded.messages, hasLength(1));
+    expect((await repo.listChats()).single.title, "Named");
   });
 
   // The namer holds the state from before the turn it is naming, and writing
@@ -569,72 +545,51 @@ void main() {
   /// pairing never reaches — a chat moved between projects, and its own
   /// overrides changing.
   group("the change feed", () {
-    test("reports what was appended, to which chat", () async {
+    /// A saved chat with the feed already listening over it.
+    Future<({String chatId, List<RepoEvent> seen, ChatRepository repo})>
+        watchIt() async {
       final repo = repoWith(AppSettings());
       final chat = await savedChat(repo);
       final seen = <RepoEvent>[];
       repo.changes.listen(seen.add);
+      return (repo: repo, chatId: chat.state.id, seen: seen);
+    }
 
-      final record =
-          ChatRecord.turnEnd(messageId: "m1", reason: TurnEnd.done);
-      await repo.append(chat.state.id, [record]);
+    test("reports what the change feed carries", () async {
+      final record = ChatRecord.turnEnd(messageId: "m1", reason: TurnEnd.done);
+
+      // What was appended, to which chat.
+      var feed = await watchIt();
+      await feed.repo.append(feed.chatId, [record]);
       await pumpEventQueue();
+      expect(feed.seen.whereType<Appended>().single.chatId, feed.chatId);
+      expect(feed.seen.whereType<Appended>().single.records, [record]);
 
-      final event = seen.whereType<Appended>().single;
-      expect(event.chatId, chat.state.id);
-      expect(event.records, [record]);
-    });
-
-    test("a retitle is a state change carrying the new state", () async {
-      final repo = repoWith(AppSettings());
-      final chat = await savedChat(repo);
-      final seen = <RepoEvent>[];
-      repo.changes.listen(seen.add);
-
-      await repo.retitle(chat.state.id, "Renamed");
+      // A retitle is a state change carrying the new state.
+      feed = await watchIt();
+      await feed.repo.retitle(feed.chatId, "Renamed");
       await pumpEventQueue();
+      expect(feed.seen.whereType<StateChanged>().last.state.title, "Renamed");
 
-      expect(seen.whereType<StateChanged>().last.state.title, "Renamed");
-    });
-
-    test("a chat's own overrides are their own event", () async {
-      final repo = repoWith(AppSettings());
-      final chat = await savedChat(repo);
-      final seen = <RepoEvent>[];
-      repo.changes.listen(seen.add);
-
-      await repo.saveMeta(chat.state.id, ChatMeta(model: "qwen-2.5"));
+      // A chat's own overrides are their own event.
+      feed = await watchIt();
+      await feed.repo.saveMeta(feed.chatId, ChatMeta(model: "qwen-2.5"));
       await pumpEventQueue();
+      expect(feed.seen.whereType<MetaChanged>().single.chatId, feed.chatId);
+      expect(feed.seen.whereType<MetaChanged>().single.meta.model, "qwen-2.5");
 
-      final event = seen.whereType<MetaChanged>().single;
-      expect(event.chatId, chat.state.id);
-      expect(event.meta.model, "qwen-2.5");
-    });
-
-    test("a move says where the chat went", () async {
-      final repo = repoWith(AppSettings());
-      final chat = await savedChat(repo);
-      final seen = <RepoEvent>[];
-      repo.changes.listen(seen.add);
-
-      await repo.moveChat(chat.state.id, "work");
+      // A move says where the chat went.
+      feed = await watchIt();
+      await feed.repo.moveChat(feed.chatId, "work");
       await pumpEventQueue();
+      expect(feed.seen.whereType<Moved>().single.chatId, feed.chatId);
+      expect(feed.seen.whereType<Moved>().single.project, "work");
 
-      final event = seen.whereType<Moved>().single;
-      expect(event.chatId, chat.state.id);
-      expect(event.project, "work");
-    });
-
-    test("a delete names the chat that is gone", () async {
-      final repo = repoWith(AppSettings());
-      final chat = await savedChat(repo);
-      final seen = <RepoEvent>[];
-      repo.changes.listen(seen.add);
-
-      await repo.deleteChat(chat.state.id);
+      // A delete names the chat that is gone.
+      feed = await watchIt();
+      await feed.repo.deleteChat(feed.chatId);
       await pumpEventQueue();
-
-      expect(seen.whereType<Deleted>().single.chatId, chat.state.id);
+      expect(feed.seen.whereType<Deleted>().single.chatId, feed.chatId);
     });
   });
 
@@ -703,47 +658,35 @@ void main() {
       expect(meta.permissions, hasLength(1));
     });
 
-    test("a re-prompt's Always in Chat grants the dirs, not a command rule",
-        () async {
+    test("a re-prompt's dir grant lands in the tier the answer named", () async {
+      ToolApproval asked(String id, String dir) => ToolApproval(
+          id: id, toolName: "bash", argumentsText: "writing $dir",
+          deniedDirs: [dir]);
+
+      // Always in Chat: the chat's dirs, granted once.
       final repo = repoWith(AppSettings());
       final chat = await savedChat(repo);
-      await repo.respondApproval(
-        chat.state.id,
-        "d-1",
-        ApprovalResponse.alwaysAllowChat,
-        approval: ToolApproval(
-            id: "d-1",
-            toolName: "bash",
-            argumentsText: "writing /home/yiannis/Projects/x",
-            deniedDirs: const ["/home/yiannis/Projects/x"]),
-      );
+      await repo.respondApproval(chat.state.id, "d-1",
+          ApprovalResponse.alwaysAllowChat,
+          approval: asked("d-1", "/home/yiannis/Projects/x"));
       final meta = await repo.loadMeta(chat.state.id);
       expect(meta.writableDirs, ["/home/yiannis/Projects/x"]);
       // No command rule: the prose varies every turn and would claim to
       // allow what it cannot name.
       expect(meta.permissions, isEmpty);
       expect(backend.approvals.single.response, ApprovalResponse.alwaysAllowChat);
-    });
 
-    test("a re-prompt's Always in Project grants the project's dirs", () async {
-      final repo = repoWith(AppSettings());
-      final chat = await savedChat(repo);
-      await repo.respondApproval(
-        chat.state.id,
-        "d-2",
-        ApprovalResponse.alwaysAllowProject,
-        approval: ToolApproval(
-            id: "d-2",
-            toolName: "bash",
-            argumentsText: "writing /home/yiannis/Projects/y",
-            deniedDirs: const ["/home/yiannis/Projects/y"]),
-      );
+      // Always in Project: the project's dirs, and not the chat's.
+      final other = repoWith(AppSettings());
+      final projected = await savedChat(other);
+      await other.respondApproval(projected.state.id, "d-2",
+          ApprovalResponse.alwaysAllowProject,
+          approval: asked("d-2", "/home/yiannis/Projects/y"));
       final settings = ProjectSettings.load(
           config,
-          project: chat.state.project);
+          project: projected.state.project);
       expect(settings.writableDirs, ["/home/yiannis/Projects/y"]);
-      final meta = await repo.loadMeta(chat.state.id);
-      expect(meta.writableDirs, isEmpty);
+      expect((await other.loadMeta(projected.state.id)).writableDirs, isEmpty);
     });
 
     test("the same dir twice is not stacked", () async {

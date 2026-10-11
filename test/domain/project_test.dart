@@ -5,22 +5,16 @@ import "package:agent_chat/domain/project.dart";
 import "package:agent_chat/domain/temp_chat_ttl.dart";
 
 void main() {
-  test("a plain name is kept as it was typed", () {
+  test("projectNameFrom: typed kept, spaces dashed, path-hostile replaced, unusable null", () {
+    // Typed plain: kept as it was typed.
     expect(projectNameFrom("Website"), "Website");
-  });
-
-  test("spaces become dashes, so the name is one word in a path", () {
+    // Spaces become dashes, so the name is one word in a path.
     expect(projectNameFrom("  my  side project "), "my-side-project");
-  });
-
-  // The name ends up as a directory the model writes paths to.
-  test("anything a path cannot hold is replaced", () {
+    // The name ends up as a directory the model writes paths to.
     expect(projectNameFrom("../etc"), "etc");
     expect(projectNameFrom("a/b"), "a-b");
     expect(projectNameFrom(".hidden"), "hidden");
-  });
-
-  test("a name with nothing usable in it is not a name", () {
+    // Nothing usable in it: not a name.
     expect(projectNameFrom("   "), isNull);
     expect(projectNameFrom("///"), isNull);
     expect(projectNameFrom("..."), isNull);
@@ -50,29 +44,21 @@ void main() {
   });
 
   group("the empty-chat question", () {
-    // The default project and the user's projects have no shipped question;
-    // what they show is the description they set, or the app default.
-    test("the default question is what nothing set asks", () {
+    // The description set is the answer — the badge's own text, swept in by
+    // the screen's animation; the app default is what nothing set asks; and
+    // empty is the screen asking nothing, distinct from unset. The default
+    // project is gated at the provider, which reads no description for it;
+    // the function itself answers for any project that is not a built-in.
+    test("the description set, the app default where nothing set, nothing where empty", () {
       expect(emptyChatQuestionFor(null, description: null),
           defaultEmptyChatQuestion);
       expect(emptyChatQuestionFor("work", description: null),
           defaultEmptyChatQuestion);
-    });
-
-    // Where a project sets one, it is the answer — the badge's own text,
-    // swept in by the screen's animation. The default project is gated at
-    // the provider, which reads no description for it; the function itself
-    // answers for any project that is not a built-in.
-    test("a project's description is what it set", () {
       expect(emptyChatQuestionFor("work", description: "What are we building?"),
           "What are we building?");
       expect(
           emptyChatQuestionFor(null, description: "What are we building?"),
           "What are we building?");
-    });
-
-    // Empty is the screen asking nothing, distinct from unset.
-    test("empty asks nothing and null falls back", () {
       expect(emptyChatQuestionFor("work", description: ""), isNull);
       expect(emptyChatQuestionFor("work", description: "  "), isNull);
     });
