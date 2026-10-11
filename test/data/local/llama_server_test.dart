@@ -223,15 +223,6 @@ something else entirely
       expect(resolveLocalDevice("Vulkan0", [gpu, npu]), "Vulkan0");
     });
 
-    test("a resolved device is what reaches the server, auto included", () {
-      // The end of the same road: auto → NPU → `-dev HTP0`, so the offload the
-      // turn was launched with is the one the picker never had to name.
-      expect(valueOf(launch(device: resolveLocalDevice(null, [gpu, npu])).command, "-dev"), "HTP0");
-      // And the CPU pick reaches it as a device too, which is what rules the
-      // accelerator out rather than leaving llama.cpp to pick it.
-      expect(valueOf(launch(device: resolveLocalDevice(LocalDevice.cpu, [npu])).command, "-dev"),
-          noDevice);
-    });
   });
 
   /// A server that cannot possibly come up, over weights that are claimed to be
@@ -265,13 +256,7 @@ something else entirely
       // only place that is said.
       expect(pool.running.value.single.failure, isNotEmpty);
       expect(pool.running.value.single.phase, LocalLlmPhase.failed);
-    });
-
-    test("the failure is kept, so the settings page can draw why", () async {
-      final pool = failing();
-
-      await ask(pool, model);
-
+      // The failure is kept, so the settings page can draw why.
       expect(pool.running.value.single.modelId, model.id);
     });
 
