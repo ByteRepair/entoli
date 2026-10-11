@@ -5,6 +5,7 @@ import "package:fs_shim/fs_io.dart" show fileSystemIo;
 import "package:path/path.dart" as p;
 
 import "package:agent_chat/data/builtin/builtin_agent.dart";
+import "package:agent_chat/data/builtin/llm/llm_client.dart";
 import "package:agent_chat/domain/agent_backend.dart";
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/domain/permission.dart";
@@ -38,6 +39,7 @@ void main() {
     bool sandboxReprompt = true,
     ShellResult Function(String)? respond,
     PermissionClassifier? classifier,
+    FakeWebSearch? webSearch,
   }) {
     final tempDir = Directory.systemTemp.createTempSync("agent-gate-test");
     final project = p.join(tempDir.path, "project-ws");
@@ -64,6 +66,7 @@ void main() {
       writableDirs: writableDirs,
       sandboxReprompt: sandboxReprompt,
       classifier: classifier,
+      webSearch: webSearch,
     );
   }
 
@@ -406,17 +409,37 @@ void main() {
       final client = FakeLlmClient([
         [bashCall("git status")], [finish],
       ]);
+      final classifier = FakeClassifier()
+        ..decide = (_, _) => PermissionDecision.allow;
       final events = await agentOver(
         client,
         approveMode: ApproveMode.auto,
-        classifier: _StubClassifier(PermissionDecision.allow),
+        classifier: classifier,
       ).run(userMessage("go")).toList();
       expect(shell.ran, ["git status"]);
       expect(events.whereType<ApprovalRequestEvent>(), isEmpty);
+      // Only the bash command is classified — the finish is a text reply.
+      expect(classifier.classified.length, 1);
+      expect(classifier.classified.first.tool, "bash");
     });
 
-    test("a write past the workspace the classifier asks escalates",
-        () async {
+    test("a denied command is refused, not run", () async {
+      final client = FakeLlmClient([
+        [bashCall("rm -rf /")], [finish],
+      ]);
+      final events = await agentOver(
+        client,
+        approveMode: ApproveMode.auto,
+        classifier: FakeClassifier()
+          ..decide = (_, _) => PermissionDecision.deny,
+      ).run(userMessage("clean")).toList();
+
+      expect(shell.ran, isNot(contains("rm -rf /")));
+      expect(results(events).returnCode, -1);
+      expect(results(events).exceptionInfo, contains("Denied"));
+    });
+
+    test("a write past the workspace the classifier asks escalates", () async {
       final client = FakeLlmClient([
         [bashCall("cp notes.txt /etc/notes-backup")], [finish],
       ]);
@@ -428,6 +451,105 @@ void main() {
       ).run(userMessage("go")).toList();
       // The classifier's ask reached the banner; the test denied it there.
       expect(shell.ran, isEmpty);
+
+      // The answer rules: an allow runs it after the same banner.
+      final allowedClient = FakeLlmClient([
+        [bashCall("cp notes.txt /etc/notes-backup")], [finish],
+      ]);
+      final allowedEvents = await agentOver(
+        allowedClient,
+        approveMode: ApproveMode.auto,
+        approvals: [ApprovalResponse.allow],
+        classifier: _StubClassifier(PermissionDecision.ask),
+      ).run(userMessage("go")).toList();
+      expect(allowedEvents.whereType<ApprovalRequestEvent>().length, 1);
+      expect(shell.ran.last, contains("cp notes.txt"));
+    });
+
+    test("three consecutive asks pause auto mode for the rest of the turn", () async {
+      final client = FakeLlmClient([
+        [
+          LlmCompletion(
+            message: LlmMessage(
+              role: LlmRole.assistant,
+              toolCalls: [
+                for (final name in ["a", "b", "c", "d"])
+                  LlmToolCall(
+                      id: name, name: "bash", argumentsJson: '{"command":"$name"}'),
+              ],
+            ),
+          ),
+        ],
+        [finish],
+      ]);
+      final events = await agentOver(
+        client,
+        approveMode: ApproveMode.auto,
+        approvals: List.filled(4, ApprovalResponse.allow),
+        classifier: _StubClassifier(PermissionDecision.ask),
+      ).run(userMessage("test")).toList();
+
+      expect(events.whereType<InfoEvent>().single.message, contains("Auto mode paused"));
+      // All four commands got approval banners; the finish is a text reply,
+      // so it is not classified.
+      expect(events.whereType<ApprovalRequestEvent>().length, 4);
+
+      // And all allowed instead: the pause has nothing to pause for.
+      final allowedClient = FakeLlmClient([
+        [
+          LlmCompletion(
+            message: LlmMessage(
+              role: LlmRole.assistant,
+              toolCalls: [
+                for (final name in ["a", "b", "c", "d"])
+                  LlmToolCall(
+                      id: name, name: "bash", argumentsJson: '{"command":"$name"}'),
+              ],
+            ),
+          ),
+        ],
+        [finish],
+      ]);
+      final allowedEvents = await agentOver(
+        allowedClient,
+        approveMode: ApproveMode.auto,
+        classifier: _StubClassifier(PermissionDecision.allow),
+      ).run(userMessage("test")).toList();
+
+      expect(allowedEvents.whereType<InfoEvent>(), isEmpty);
+      expect(allowedEvents.whereType<ApprovalRequestEvent>(), isEmpty);
+    });
+
+    test("no classifier falls back to asking for every command", () async {
+      final client = FakeLlmClient([
+        [bashCall("ls")], [finish],
+      ]);
+      final events = await agentOver(
+        client,
+        approveMode: ApproveMode.auto,
+      ).run(userMessage("list")).toList();
+
+      // Only the bash command asks — the finish is a text reply.
+      expect(events.whereType<ApprovalRequestEvent>().length, 1);
+    });
+
+    test("webfetch goes through the classifier in auto mode", () async {
+      final client = FakeLlmClient([
+        [fetchCall("https://example.com")],
+        [finish],
+      ]);
+      final web = FakeWebSearch(fetchResult: (_) =>
+          const ShellResult(returnCode: 0, output: "page"));
+      final events = await agentOver(
+        client,
+        approveMode: ApproveMode.auto,
+        classifier: _StubClassifier(PermissionDecision.deny),
+        webSearch: web,
+      ).run(userMessage("fetch")).toList();
+
+      expect(web.fetched, isEmpty);
+      final result = events.whereType<ToolResultEvent>().first;
+      expect(result.result.exceptionInfo, contains("Denied"));
     });
 
     test("a rule decides ahead of the classifier", () async {
