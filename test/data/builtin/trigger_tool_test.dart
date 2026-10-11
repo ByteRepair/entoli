@@ -44,6 +44,12 @@ class FakeRegistry implements TriggerRegistry {
     final anchored = source is TimerSource
         ? TimerSource(duration: source.duration, registeredAt: now)
         : source;
+    // And the same refusal, at the same site — the tools' story runs it.
+    final problem = triggerScheduleProblem(anchored, now);
+    if (problem != null) {
+      throw ArgumentError.value(
+          (anchored as ScheduleSource).at, "at", problem);
+    }
     final trigger = Trigger(
         id: id,
         name: name ?? "",
@@ -202,6 +208,22 @@ void main() {
     final result = resultOf(events);
     expect(result.returnCode, -1);
     expect(result.exceptionInfo, contains("nobody"));
+    expect(registry.stored, isEmpty);
+  });
+
+  test("trigger_set refuses a one-shot already past, as a fixable error", () async {
+    final events = await agent([
+      fileCall(triggerSetName, {
+        "source": "schedule",
+        "prompt": "p",
+        "at": "2026-08-22T09:00:00",
+      }),
+    ]).run(userMessage("remind me")).toList();
+
+    final result = resultOf(events);
+    expect(result.returnCode, -1);
+    expect(result.exceptionInfo, contains("could not be set"));
+    expect(result.exceptionInfo, contains("never fire"));
     expect(registry.stored, isEmpty);
   });
 

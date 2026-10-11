@@ -873,7 +873,10 @@ a timer's `registeredAt` is the registering moment, and the member a
 unknown one refuses the registration with what was not found, the model's
 error to fix. `trigger_set`'s parse is
 `triggerDraftFromArgs` and the registry anchors and stores; a timer's
-`registeredAt` is the registering moment, not the parse's.
+`registeredAt` is the registering moment, not the parse's. A one-shot whose
+moment is already past is refused at registration — `triggerScheduleProblem`,
+the editor's future-guard shared at the anchor site — since a trigger armed
+against nothing answers success and fires nowhere.
 
 ### Who a fire addresses
 

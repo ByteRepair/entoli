@@ -133,6 +133,38 @@ void main() {
     expect(alarms.cancelled, [7]);
   });
 
+  group("the registration refusal", () {
+    TriggerSource schedule(DateTime at,
+            [ScheduleRepeat repeat = ScheduleRepeat.off]) =>
+        ScheduleSource(at: at, repeat: repeat);
+
+    test("a one-shot at or before the registering moment is refused", () {
+      final now = _now.now();
+      expect(triggerScheduleProblem(schedule(DateTime(2026, 8, 22, 9)), now), isNotNull);
+      // The boundary is the registering moment itself, which is already past.
+      expect(
+        triggerScheduleProblem(schedule(now), now),
+        "a one-shot at or before now would never fire; schedule it for a "
+        "future moment",
+      );
+    });
+
+    test("a repeating schedule, a timer and a future one-shot always arm", () {
+      final now = _now.now();
+      expect(
+          triggerScheduleProblem(schedule(DateTime(2026, 1), ScheduleRepeat.daily), now),
+          isNull);
+      expect(
+          triggerScheduleProblem(
+              TimerSource(
+                  duration: const Duration(minutes: 5),
+                  registeredAt: DateTime(2026, 8, 20)),
+              now),
+          isNull);
+      expect(triggerScheduleProblem(schedule(DateTime(2026, 9)), now), isNull);
+    });
+  });
+
   test("a fire well past its time says so in the notification", () async {
     list.triggers = [trigger(nextFireAt: DateTime(2026, 8, 1, 9))];
     await manager(list, runner, alarms, clock: _now).reload();

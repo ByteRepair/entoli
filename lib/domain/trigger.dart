@@ -478,3 +478,18 @@ class Trigger {
   static DateTime? _date(Object? value) =>
       value == null ? null : DateTime.tryParse(value as String);
 }
+
+/// What registering this source at [now] must refuse, or null where it
+/// arms honestly: a one-shot whose moment is already past arms against
+/// nothing and would never fire — the editor refuses that shape at save
+/// ("Pick a time in the future"), and the tool owes the model the same
+/// refusal, as a fixable error it can correct with a later moment. A
+/// repeating schedule's occurrences are ahead of it, and a timer counts
+/// from the registering moment only, so neither is ever past.
+String? triggerScheduleProblem(TriggerSource source, DateTime now) =>
+    source is ScheduleSource &&
+            source.repeat == ScheduleRepeat.off &&
+            !source.at.isAfter(now)
+        ? "a one-shot at or before now would never fire; schedule it for a "
+            "future moment"
+        : null;
