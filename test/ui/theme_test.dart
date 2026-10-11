@@ -270,9 +270,9 @@ void main() {
 
       await app.config.documents.write(app.config.settingsFile, '{"appTheme":"sepia"}');
       expect(AppSettings.load(app.config).appTheme, AppTheme.system);
-    });
 
-    test("a colour or a radius this build does not offer falls back", () async {
+      // A colour or a radius this build does not offer falls back, and one it
+      // offers is kept; the fallback is per field.
       await app.config.documents.write(app.config.settingsFile,
           '{"primaryColour":"chartreuse","secondaryColour":"teal","cornerRadius":"sharp"}');
 

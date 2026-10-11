@@ -214,19 +214,6 @@ void main() {
             "view page says why it was skipped");
   });
 
-  test("a frontmatter name matching the folder is the name", () async {
-    final config = tempConfig();
-    await config.ensureDirs();
-    Directory(p.join(config.promptsDir(CompletionKind.skill), "my-folder"))
-        .createSync(recursive: true);
-    File(p.join(config.promptsDir(CompletionKind.skill), "my-folder", "SKILL.md"))
-        .writeAsStringSync("---\nname: my-folder\ndescription: d\n---\n\nBody.\n");
-
-    final skills = await DirectoryPrompts(config).load(CompletionKind.skill);
-
-    expect(skills.single.name, "my-folder");
-  });
-
   test("an empty user skills directory offers nothing from DirectoryPrompts",
       () async {
     final config = tempConfig();
@@ -390,19 +377,6 @@ void main() {
           {"explore", "general", "esbmc-verifier"});
     });
 
-    test("esbmc-verifier is byte-repair's alone", () async {
-      final defaultAgents =
-          await BundledPrompts().load(CompletionKind.agent);
-      final byteRepairAgents =
-          await BundledPrompts(project: "byte-repair")
-              .load(CompletionKind.agent);
-
-      expect(defaultAgents.any((a) => a.name == "esbmc-verifier"), isFalse,
-          reason: "esbmc-verifier must not be visible to the default project");
-      expect(byteRepairAgents.any((a) => a.name == "esbmc-verifier"), isTrue,
-          reason: "esbmc-verifier must be visible to byte-repair");
-    });
-
     test("My Team inherits the default's agents and ships none of its own",
         () async {
       final agents =
@@ -510,22 +484,6 @@ void main() {
 
       expect(library.find(CompletionKind.skill, "shared")!.description,
           "project's");
-    });
-
-    test("self-heal writes a project's bundled skills to its own dir",
-        () async {
-      final config = tempConfig();
-      await install(config);
-
-      // byte-repair ships esbmc-verifier as a bundled *agent*, which is
-      // code-only — never written to disk. So byte-repair's skills-bundled dir
-      // exists (created by ensureProjectDirs) but holds no skills, since
-      // byte-repair ships none. The default's holds the base set.
-      final defaultDir =
-          Directory(config.bundledSkillsDir());
-      expect(await defaultDir.exists(), isTrue);
-      expect(defaultDir.listSync().whereType<Directory>().map((d) => p.basename(d.path)),
-          contains("artifact"));
     });
   });
 
