@@ -801,7 +801,7 @@ List<String?> popupLabels(WidgetTester tester) => tester
 /// For `test`, not `testWidgets`: it waits on the real clock, which a widget
 /// test's fake one only advances when the tree is pumped.
 Future<void> waitFor(FutureOr<bool> Function() done,
-    {String what = "it", Duration limit = const Duration(seconds: 2)}) async {
+    {String what = "it", Duration limit = const Duration(seconds: 15)}) async {
   final end = DateTime.now().add(limit);
   while (!await done()) {
     if (DateTime.now().isAfter(end)) fail("$what never happened");

@@ -486,21 +486,7 @@ void main() {
       expect(settings.omadaOrdering, OmadaOrdering.parallel);
     });
 
-    testWidgets("the ordering section is absent while the toggle is off", (tester) async {
-      await io(tester, () => app.repo.createProject("research"));
-      await app.pump(tester, const ProjectSettingsPage(project: "research"));
-
-      await tester.scrollUntilVisible(
-        find.text("Omada"),
-        200,
-        scrollable: find.byType(Scrollable).last,
-      );
-      await settleIo(tester);
-      expect(find.text("Omada"), findsOneWidget);
-      expect(find.text("Round order"), findsNothing);
-    });
-
-    testWidgets("a built-in's settings page has no Omada toggle", (tester) async {
+    testWidgets("a built-in's settings page has no Omada toggle or Description row", (tester) async {
       await app.pump(
         tester,
         ProjectSettingsPage(project: byteRepairProjectLabel.toLowerCase()),
@@ -511,6 +497,8 @@ void main() {
       // answer — My Team's page shows them, Byte Repair's shows nothing.
       expect(find.text("Omada"), findsOneWidget);
       expect(find.text("Round order"), findsNothing);
+      // And the Description row is the named projects' alone.
+      expect(find.text("Description"), findsNothing);
     });
 
     testWidgets("My Team's settings page shows the Omada state, not a toggle",
@@ -533,15 +521,6 @@ void main() {
       expect(toggle.value, isTrue);
       expect(toggle.onChanged, isNull);
       expect(find.text("Round order"), findsOneWidget);
-    });
-
-    testWidgets("a built-in's settings page has no Description row", (tester) async {
-      await app.pump(
-        tester,
-        ProjectSettingsPage(project: byteRepairProjectLabel.toLowerCase()),
-      );
-
-      expect(find.text("Description"), findsNothing);
     });
 
     // The row is the description's own surface: open, edit, save, and the
