@@ -45,6 +45,12 @@ class RemindersPlugin: NSObject, UNUserNotificationCenterDelegate {
     case "notificationsAllowed": notificationsAllowed(result)
     case "requestNotifications": requestNotifications(result)
     case "staleCodes": staleCodes(call, result)
+    case "takeOpenChat":
+      // The stash is the answer: a tap that launched the process delivered
+      // its chat id here before Dart's handler was listening, and the first
+      // drain takes it now. The "open" invoke was only the nudge.
+      result(pendingOpen)
+      pendingOpen = nil
     case "doneFiring": doneFiring(result)
     default: result(FlutterMethodNotImplemented)
     }
@@ -53,13 +59,14 @@ class RemindersPlugin: NSObject, UNUserNotificationCenterDelegate {
   private func schedule(_ call: FlutterMethodCall, _ result: @escaping FlutterResult) {
     guard let arguments = call.arguments as? [String: Any],
           let code = (arguments["code"] as? NSNumber)?.intValue,
-          let millis = (arguments["at"] as? NSNumber)?.int64Value
+          let millis = (arguments["at"] as? NSNumber)?.int64Value,
+          let store = arguments["store"] as? String
     else {
-      result(FlutterError(code: "arguments", message: "code and at required", details: nil))
+      result(FlutterError(code: "arguments", message: "code, at and store required", details: nil))
       return
     }
     do {
-      try writeJob(code: code, at: Date(timeIntervalSince1970: Double(millis) / 1000))
+      try writeJob(code: code, at: Date(timeIntervalSince1970: Double(millis) / 1000), store: store)
       result(nil)
     } catch {
       result(FlutterError(code: "schedule", message: String(describing: error), details: nil))
@@ -69,19 +76,35 @@ class RemindersPlugin: NSObject, UNUserNotificationCenterDelegate {
   /// launchd does not re-read a loaded plist, so a changed interval is
   /// bootout, rewrite, bootstrap. A bootout of a job never loaded reports
   /// failure; only the bootstrap after is a failure worth saying.
-  private func writeJob(code: Int, at: Date) throws {
-    let label = Self.jobLabel(code: code)
+  private func writeJob(code: Int, at: Date, store: String) throws {
+    let label = Self.jobLabel(store: store, code: code)
     _ = try? runLaunchctl(["bootout", "gui/\(getuid())/\(label)"])
     let plist = Self.agentDirectory().appendingPathComponent("\(label).plist")
     try Self.agentDirectory().ensureDirectory()
+    // The job runs under launchd's environment, which is not the one the app
+    // that armed it ran under — so the store rides in the command line and
+    // the wake re-derives the data directory from what was written here
+    // rather than from wherever launchd's own environment points. The wake
+    // execs the binary directly, never through `open`: a backgrounded
+    // `open -g` is deferred by launch services and sometimes never reaches
+    // its engine (a process idling on the AppKit runloop, no nib load, no
+    // Dart), and `-j` is worse — hidden launches never started one at all on
+    // this host — where a direct exec starts Dart every time. What `open`
+    // used to buy is one-instance activation, which the wake guard in the
+    // Runner answers instead: a wake finding another instance quits at once,
+    // the running copy's own timer being what fires its due anyway.
+    guard let executable = Bundle.main.executableURL?.path else {
+      throw MessageError("no executable in \(Bundle.main.bundlePath)")
+    }
+    let wake =
+        "export AGENT_CHAT_CONFIG='\(Self.shellQuoted(store))'; "
+        + "exec '\(Self.shellQuoted(executable))' entoli-wake"
     let content: [String: Any] = [
       "Label": label,
       "ProgramArguments": [
-        "/usr/bin/open",
-        "-gj",
-        Bundle.main.bundlePath,
-        "--args",
-        "entoli-wake",
+        "/bin/sh",
+        "-c",
+        wake,
       ],
       // No one-shot calendar form exists here, so the moment is an interval
       // counted from the load — which is what the rewrite re-dates.
@@ -93,14 +116,22 @@ class RemindersPlugin: NSObject, UNUserNotificationCenterDelegate {
     try runLaunchctl(["bootstrap", "gui/\(getuid())", plist.path])
   }
 
+  /// What `-c` reads back as one string: a literal quote becomes the
+  /// close-quote, escaped quote, open-quote idiom.
+  static func shellQuoted(_ string: String) -> String {
+    string.replacingOccurrences(
+      of: "'", with: "'\\''", options: .literal, range: nil)
+  }
+
   private func cancel(_ call: FlutterMethodCall, _ result: @escaping FlutterResult) {
     guard let arguments = call.arguments as? [String: Any],
-          let code = (arguments["code"] as? NSNumber)?.intValue
+          let code = (arguments["code"] as? NSNumber)?.intValue,
+          let store = arguments["store"] as? String
     else {
-      result(FlutterError(code: "arguments", message: "code required", details: nil))
+      result(FlutterError(code: "arguments", message: "code and store required", details: nil))
       return
     }
-    let label = Self.jobLabel(code: code)
+    let label = Self.jobLabel(store: store, code: code)
     // A job that was loaded gets booted; that a never-loaded one's bootout
     // reports failure is the usual answer, not news. The plist is what has to
     // be gone — a job loaded without its file is launchd's to error on, and
@@ -120,19 +151,28 @@ class RemindersPlugin: NSObject, UNUserNotificationCenterDelegate {
   /// The jobs launchd still holds that nothing on the clock wants — a trigger
   /// deleted or disabled while the app was closed left its plist behind, and
   /// without the prune below it would keep waking the app on the old
-  /// schedule. The plist's name is the code; the clock kind does the
-  /// cancelling through the channel.
+  /// schedule. The listing is scoped to this store's own prefix, so a job
+  /// belonging to another data directory (the debug leaf, an
+  /// `AGENT_CHAT_CONFIG` scratch) is never visible here and never pruned by
+  /// a session that is not its store's. The plist's name is the code; the
+  /// manager does the cancelling through the channel.
   private func staleCodes(_ call: FlutterMethodCall, _ result: @escaping FlutterResult) {
-    let wanted = Set(
-      ((call.arguments as? [String: Any])?["wanted"] as? [Any])?
+    guard let arguments = call.arguments as? [String: Any],
+          let store = arguments["store"] as? String
+    else {
+      result(FlutterError(code: "arguments", message: "store required", details: nil))
+      return
+    }
+    let wanted = Set((arguments["wanted"] as? [Any])?
         .compactMap { ($0 as? NSNumber)?.intValue } ?? [])
+    let prefix = Self.jobPrefix(store: store)
     let listed = (try? FileManager.default.contentsOfDirectory(
       at: Self.agentDirectory(), includingPropertiesForKeys: nil)) ?? []
     let stale = listed.compactMap { url -> Int? in
       guard url.pathExtension == "plist" else { return nil }
       let name = url.deletingPathExtension().lastPathComponent
-      guard name.hasPrefix(Self.jobPrefix) else { return nil }
-      guard let code = Int(name.dropFirst(Self.jobPrefix.count)) else { return nil }
+      guard name.hasPrefix(prefix) else { return nil }
+      guard let code = Int(name.dropFirst(prefix.count)) else { return nil }
       return wanted.contains(code) ? nil : code
     }
     result(stale)
@@ -208,24 +248,31 @@ class RemindersPlugin: NSObject, UNUserNotificationCenterDelegate {
     channel?.invokeMethod("open", arguments: chatId)
   }
 
-  /// The half the label is namespaced under: a debug build runs against its
-  /// own data directory (`agent-chat-debug`), so its jobs must never share
-  /// launchd's namespace with an installed copy's, where its prune would
-  /// mistake the other's jobs for orphans.
-  #if DEBUG
-  static let flavour = "debug"
-  #else
-  static let flavour = "release"
-  #endif
-
-  static var jobPrefix: String {
-    "\(Bundle.main.bundleIdentifier ?? "entoli").\(flavour).trigger."
+  /// The label carries the bundle identifier and the data directory the jobs
+  /// serve, Dart passing the latter per call so no rule of its is replicated
+  /// here. Two copies of one flavour with different data directories — the
+  /// debug leaf, an `AGENT_CHAT_CONFIG` scratch — then never share a
+  /// namespace, which is what keeps each one's prune to its own jobs.
+  static func jobPrefix(store: String) -> String {
+    "\(Bundle.main.bundleIdentifier ?? "entoli").\(storeMark(store)).trigger."
   }
 
-  /// The label carries this launch's bundle identifier, so a debug build's
-  /// jobs never argue with an installed copy's over one namespace.
-  static func jobLabel(code: Int) -> String {
-    "\(jobPrefix)\(code)"
+  static func jobLabel(store: String, code: Int) -> String {
+    "\(jobPrefix(store: store))\(code)"
+  }
+
+  /// launchd labels carry a restricted alphabet, and a store is an absolute
+  /// path: what a separator would have been becomes a dash. Paths differing
+  /// only in characters the label alphabet cannot hold, or sharing the first
+  /// hundred and sixty of them, would collide — vanishing among real paths.
+  static func storeMark(_ store: String) -> String {
+    let mark = String(
+      store.map { ch in
+        ch.isLetter || ch.isNumber || ch == "-" || ch == "." || ch == "_"
+            ? ch
+            : "-"
+      }.prefix(160))
+    return mark.isEmpty ? "default" : mark
   }
 
   /// The user's launch agents: an unsandboxed app may write there, and the

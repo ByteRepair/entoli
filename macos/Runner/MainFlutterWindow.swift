@@ -3,6 +3,20 @@ import FlutterMacOS
 
 class MainFlutterWindow: NSWindow {
   override func awakeFromNib() {
+    // A wake whose app already runs leaves at once: no second engine over
+    // one store, and the running copy's own timer is what fires its due.
+    // Direct-exec launches are not deduplicated by launch services the way
+    // `open` is, so this is the guard the wake command line relies on.
+    if AppDelegate.wake {
+      let others = NSWorkspace.shared.runningApplications.contains {
+        $0.bundleIdentifier == Bundle.main.bundleIdentifier
+            && $0.processIdentifier != ProcessInfo.processInfo.processIdentifier
+      }
+      if others {
+        exit(0)
+      }
+    }
+
     let flutterViewController = FlutterViewController()
     let windowFrame = self.frame
     self.contentViewController = flutterViewController

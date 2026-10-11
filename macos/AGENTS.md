@@ -55,16 +55,37 @@ The schedule half is launchd, one user launch agent per request code under
 through `launchctl bootstrap gui/<uid>` (raw plists, not `SMAppService`, which
 wants its plist inside a signed bundle's `Contents/Library/LaunchAgents/`
 where a per-code runtime rewrite would break the signature). The label
-carries the bundle identifier plus the build's data half (`debug`/`release`),
-so a debug build's jobs never argue with an installed copy's over one
-namespace — the two stores are separate, and each prune would otherwise
-mistake the other's jobs for orphans. The job's whole
-business is one line: `open -gj <bundle> --args entoli-wake`. There is no
+carries the bundle identifier plus the data directory the jobs serve, Dart
+handing it per call — the debug leaf, an `AGENT_CHAT_CONFIG` scratch and the
+installed copy each get their own namespace, so no prune ever sees a job
+that is not its store's. The job's whole
+business is one line of shell: export the store the jobs were armed for,
+then `exec` the bundle's own binary with the wake argument. The export is
+load-bearing: a job runs under launchd's environment, which is not the
+environment the app that armed it ran under, and the wake re-derives the
+data directory from what the command line says rather than from wherever
+launchd's own environment points. The exec goes to the binary directly and
+never through `open`, for a reason worth keeping: launch services defers the
+start of backgrounded `-g` launches, sometimes indefinitely — the process
+idles on its AppKit runloop with no nib load and no Dart — and a hidden
+`-j` launch never started an engine at all on this host, while a direct exec
+starts Dart every time. What `open` used to buy is one-instance activation,
+which the Runner answers itself: a wake session that finds another instance
+of the bundle id quits before the engine is built, the running copy's own
+timer being what fires its due anyway. There is no
 one-shot calendar form in launchd to schedule with, so the moment is a
 `StartInterval` counted from the job's load, and what a changed interval is,
 is a bootout, a rewrite and a bootstrap. If the Mac sleeps through the
 moment, launchd runs the job once on wake-up — minutes or hours late, which
 is what the fire's "Ran late" wording is for, the same bargain Doze strikes.
+
+That the interval repeats is also the one spurious fire the shape allows: a
+one-shot's job is cancelled only by the diff the fire's stamp triggers, so
+a turn that outlasts its own interval — a one-minute countdown with a
+several-minute turn — finds launchd re-running the job again after the
+session has quit. What comes back is a wake whose catch-up finds nothing,
+which prunes the job and quits; bounded at one extra launch per such fire,
+and invisible for every schedule whose interval is longer than its turn.
 
 **A wake is not an opening.** The window reads the wake argument and stays
 behind (`orderOut`, set in `MainFlutterWindow.awakeFromNib`, where the

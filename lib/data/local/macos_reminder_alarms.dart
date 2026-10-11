@@ -16,10 +16,15 @@ const _notifyTimeout = Duration(seconds: 10);
 /// Scheduling is one launchd job per request code under `~/Library/LaunchAgents/`,
 /// each running `open -gj` with a wake argument the Runner hides its window
 /// under — which is how a trigger fires with the process dead, what
-/// [schedules] is true worth. Notifications are UNUserNotificationCenter; a
-/// tapped one takes its chat id, held for [takeOpenChat] and nudged onto
-/// [openChat] — the held-pending split the Android channel and Linux's bus
-/// make of the same thing.
+/// [schedules] is true worth. The job's label carries the data directory
+/// [store], so another copy of this flavour pointed elsewhere never shares
+/// its jobs, and no prune of this store's ever sees them.
+///
+/// Notifications are UNUserNotificationCenter. A tapped one takes its chat id
+/// to the plugin's stash and nudges — the held-pending split Android's
+/// channel makes: the nudge reaches Dart when the handler is there and is
+/// dropped when it is not, and [takeOpenChat] drains the stash whichever way
+/// the nudge went, which is what makes a tap that launched the process work.
 ///
 /// There is deliberately no fire half. launchd's only power is starting a
 /// process, and a running app on this platform keeps its event loop — so
@@ -27,15 +32,17 @@ const _notifyTimeout = Duration(seconds: 10);
 /// catch-up, and [fired] is empty, [takeFired] answering nothing. The
 /// Android channel's held-pending fire list has no job to do here.
 class MacosReminderAlarms implements ReminderAlarms {
-  MacosReminderAlarms() {
+  MacosReminderAlarms(this.store) {
     _channel.setMethodCallHandler(_onCall);
   }
+
+  /// The data directory whose triggers the jobs serve — the label's
+  /// namespacing half.
+  final String store;
 
   static const _channel = MethodChannel("agent_chat/reminders");
 
   final _opens = StreamController<String>.broadcast();
-
-  String? _pendingOpen;
 
   @override
   bool get available => true;
@@ -50,10 +57,9 @@ class MacosReminderAlarms implements ReminderAlarms {
     switch (call.method) {
       case "open":
         final chatId = call.arguments as String?;
-        if (chatId != null) {
-          _pendingOpen = chatId;
-          _opens.add(chatId);
-        }
+        // Nudge only: the id itself lives in the plugin's stash, where a
+        // tap that launched the process left it for this drain.
+        if (chatId != null) _opens.add(chatId);
     }
   }
 
@@ -74,20 +80,20 @@ class MacosReminderAlarms implements ReminderAlarms {
   @override
   Future<void> schedule(int requestCode, DateTime at) => _run(
         "schedule",
-        {"code": requestCode, "at": at.millisecondsSinceEpoch},
+        {"code": requestCode, "at": at.millisecondsSinceEpoch, "store": store},
         "schedule $requestCode",
       );
 
   @override
   Future<void> cancel(int requestCode) =>
-      _run("cancel", {"code": requestCode}, "cancel $requestCode");
+      _run("cancel", {"code": requestCode, "store": store}, "cancel $requestCode");
 
   @override
   Future<List<int>> staleCodes(Set<int> wanted) async {
     try {
       return await _channel.invokeListMethod<int>(
             "staleCodes",
-            {"wanted": wanted.toList()},
+            {"wanted": wanted.toList(), "store": store},
           ) ??
           const [];
     } catch (error) {
@@ -136,11 +142,8 @@ class MacosReminderAlarms implements ReminderAlarms {
   Stream<void> get fired => const Stream<void>.empty();
 
   @override
-  Future<String?> takeOpenChat() async {
-    final chatId = _pendingOpen;
-    _pendingOpen = null;
-    return chatId;
-  }
+  Future<String?> takeOpenChat() =>
+      _channel.invokeMethod<String>("takeOpenChat");
 
   /// The clock kind's diff awaits [schedule] and [cancel] before its watch's
   /// `started` completes, and the manager's reload holds on that — a thrown

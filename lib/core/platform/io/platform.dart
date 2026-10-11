@@ -391,14 +391,15 @@ AssistantLaunch platformAssistantLaunch() => Platform.isAndroid
 /// to hand over — a reminder missed while the app is closed is caught up at
 /// the next launch. Windows has neither, and a browser's timers die with its
 /// tab.
-Future<ReminderAlarms> platformReminderAlarms() async =>
-    Platform.isAndroid
-        ? AndroidReminderAlarms()
-        : Platform.isLinux
-            ? await connectLinuxReminderAlarms()
-            : Platform.isMacOS
-                ? MacosReminderAlarms()
-                : const UnavailableReminderAlarms();
+Future<ReminderAlarms> platformReminderAlarms() async {
+  if (Platform.isAndroid) return AndroidReminderAlarms();
+  if (Platform.isLinux) return connectLinuxReminderAlarms();
+  // The data directory names the launchd jobs, so copies of this flavour
+  // pointed at different stores never share a namespace. Read here, once,
+  // rather than replicated in Swift beside the rule that derives it.
+  if (Platform.isMacOS) return MacosReminderAlarms(await platformDataDir());
+  return const UnavailableReminderAlarms();
+}
 
 FileSystem platformFileSystem() => fileSystemIo;
 
