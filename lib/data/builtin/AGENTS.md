@@ -80,6 +80,10 @@ wiring: `LocalShell`, `DuckDuckGoSearch` and `fileSystemIo` on desktop and
 Android; `UnavailableShell`, `UnavailableWebSearch` and `fileSystemWeb` in a
 browser. One import site is the point: an implementation a platform cannot use
 is not reachable from its program, so nothing further down has to test for it.
+(There is a second one, `lib/core/tls.dart`, for the TLS trust a network call
+verifies under — the io side reading the OS's store and falling back to the
+bundled Mozilla root set where a Windows machine's own has never been
+refreshed; a browser's TLS is the browser's own.)
 
 The chat store and the prompt sources used to be in that list and are not any
 more — one filesystem means one of each, built in `platform.dart` itself. What

@@ -149,6 +149,18 @@ flutter:
     # build, which has no shell to run it.
     - path: assets/scripts/byte-repair-setup.sh
       platforms: [android, ios, linux, macos, windows]
+    # The Mozilla root set the TLS fallback verifies against. Dart reads the
+    # OS's own root store for its HTTPS trust, and on Windows the store's
+    # population is schannel's, on demand, which a dart:io client never
+    # triggers: a machine between refreshes has no root for a newer chain, and
+    # every handshake dies with "unable to get local issuer certificate" — a
+    # fresh VM, an LTSC image, a box between updates. Where the system's trust
+    # refuses on a certificate verify alone, the request verifies once against
+    # this; see lib/core/tls.dart. Copied from https://curl.se/ca/cacert.pem
+    # (its header names its provenance and licence); refresh by re-copying and
+    # committing.
+    - path: assets/certs/cacert.pem
+      platforms: [windows]
 
   # The faces the artifact stylesheet names, bundled so the whole app wears
   # them and not only its artifacts. Both are OFL — `assets/fonts/OFL.txt` and

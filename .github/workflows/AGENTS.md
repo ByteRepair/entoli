@@ -19,9 +19,9 @@ release:
   through Finder's right-click Open, and `release-build.yml`'s macos job
   grows the signing at the same time — see "The DMG" in `macos/AGENTS.md`
 
-A fourth, `entoli-installer.msi`, is written but not attached: the Windows
-job re-joins the release when its packaging has survived a run; see
-`windows/AGENTS.md`.
+A fourth, `entoli-installer.msi`, attaches the same way: the version job's
+`assets` list carries it and the publish matrix uploads every entry alike;
+see `windows/AGENTS.md`.
 
 **There is no release APK.** Play is the Android channel a release serves;
 Google builds the per-device APKs from the bundle itself, and anyone who

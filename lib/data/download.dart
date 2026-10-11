@@ -3,6 +3,8 @@ import "dart:io";
 
 import "package:http/http.dart" as http;
 
+import "../../core/tls.dart";
+
 import "../domain/download.dart";
 
 /// Fetching something big onto the disk, reported as it goes and abandoned
@@ -16,7 +18,7 @@ import "../domain/download.dart";
 /// copy that gets fixed.
 class DownloadRun {
   DownloadRun({required this.run, required this.discard, http.Client? client})
-      : _client = client ?? http.Client() {
+      : _client = client ?? tlsClient() {
     _out = StreamController<DownloadProgress>(
       onListen: () => run(this).then(
         (_) async {

@@ -2,7 +2,8 @@ import "dart:async";
 import "dart:convert";
 
 import "package:crypto/crypto.dart" as slow;
-import "package:web_socket_channel/web_socket_channel.dart";
+
+import "../../../core/tls.dart";
 
 import "../../../domain/sync/relay_signaling.dart";
 
@@ -60,8 +61,7 @@ class RelaySignaler implements RelaySignaling {
     required String role,
     Duration timeout = const Duration(seconds: 15),
   }) async {
-    final channel = WebSocketChannel.connect(Uri.parse(relayUrl));
-    await channel.ready.timeout(timeout);
+    final channel = await tlsWebSocketChannel(Uri.parse(relayUrl), readyTimeout: timeout);
     return RelaySignaler(
         incoming: channel.stream,
         outgoing: channel.sink,

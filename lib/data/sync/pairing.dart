@@ -3,6 +3,8 @@ import "dart:async";
 import "package:flutter/foundation.dart";
 import "package:http/http.dart" as http;
 
+import "../../core/tls.dart";
+
 import "../../core/log.dart";
 import "../../domain/app_settings.dart";
 import "../../domain/sync/devices.dart";
@@ -79,7 +81,7 @@ class SyncPairing {
   })  : _turnPassword = turnPassword ?? (() => null),
         _lanFactory = lanSignaling,
         _relayDial = relayDial ?? RelaySignaler.connect,
-        _client = client ?? http.Client();
+        _client = client ?? tlsClient();
 
   final SyncIdentity identity;
   final DeviceRegistry registry;

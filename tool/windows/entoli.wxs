@@ -5,7 +5,8 @@
   data\ beside those — so the whole Release directory is harvested, and a
   `Files` harvest is what keeps adding one file to a directory from hand.
 -->
-<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+    xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
   <Package
       Name="Entoli"
       Scope="perMachine"
@@ -24,6 +25,14 @@
          release does not attach, and an installer that installs only where
          the cab lies beside it is a 45 KB shell elsewhere. -->
     <MediaTemplate EmbedCab="yes" />
+
+    <!-- The welcome screen and its Install button, with the AGPL the app
+         ships under and the finish page after: WixUI_Minimal's one dialog,
+         authored by the extension's own element — a bare UIRef of the set
+         reads "inaccessible due to its protection level". The license text
+         is the repo's own LICENSE, turned into rtf each packaging and bound
+         from the script, the way the docs' own page shows it. -->
+    <ui:WixUI Id="WixUI_Minimal" />
 
     <StandardDirectory Id="ProgramFiles6432Folder">
       <Directory Id="INSTALLFOLDER" Name="Entoli">
