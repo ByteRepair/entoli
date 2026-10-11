@@ -36,9 +36,8 @@ void main() {
         "-",
       ],
     );
-  });
-
-  test("a device goes across as --target, properties only where asked", () {
+    // A device goes across as --target, and the properties ride only where
+    // the config asked for any.
     expect(
       LinuxRecorder.pwRecordArgs(config(device: "alsa_input.usb-mic")),
       containsAllInOrder(["--target=alsa_input.usb-mic", "-"]),
@@ -67,10 +66,8 @@ void main() {
       );
       expect(LinuxRecorder.locate("pw-record", {"PATH": bin.path}),
           "${bin.path}/pw-record");
-    });
-
-    test("nothing found is null, an empty PATH included", () {
-      expect(LinuxRecorder.locate("parecord", {"PATH": bin.path}), isNull);
+      // Nothing found is null, an empty PATH included.
+      expect(LinuxRecorder.locate("pw-cli", {"PATH": bin.path}), isNull);
       expect(LinuxRecorder.locate("pw-record", const {}), isNull);
     });
   });

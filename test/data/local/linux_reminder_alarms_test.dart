@@ -62,12 +62,10 @@ void main() {
     // action, and the body's click arrives as "default".
     expect(bus.posted.single.actions, ["default", "Open"]);
     expect(bus.posted.single.replacesId, 0);
-  });
 
-  test("a notification with nothing to open offers no action", () async {
+    // Nothing to open: no action offers itself.
     await alarms.notify(title: "Entoli", body: "The turn failed.");
-
-    expect(bus.posted.single.actions, isEmpty);
+    expect(bus.posted.last.actions, isEmpty);
   });
 
   test("a tap arrives through both halves the port splits into", () async {
@@ -83,29 +81,18 @@ void main() {
     expect(pushed, ["c1"]);
     expect(await alarms.takeOpenChat(), "c1");
     expect(await alarms.takeOpenChat(), isNull);
-    await sub.cancel();
-  });
 
-  test("a tap on another notification's action is not an open", () async {
+    // Another notification's action is not an open, and neither is a tap
+    // against one that was never posted.
     await alarms.notify(title: "Morning sweep", body: "Finished.", chatId: "c1");
-
-    final opens = <String>[];
-    final sub = alarms.openChat.listen(opens.add);
     bus.invoke(bus.lastId, "dismiss");
     await Future<void>.delayed(Duration.zero);
-
-    expect(opens, isEmpty);
+    expect(pushed, ["c1"]);
     expect(await alarms.takeOpenChat(), isNull);
-    await sub.cancel();
-  });
 
-  test("a tap against a notification that was never posted is dropped", () async {
-    final opens = <String>[];
-    final sub = alarms.openChat.listen(opens.add);
     bus.invoke(99, "default");
     await Future<void>.delayed(Duration.zero);
-
-    expect(opens, isEmpty);
+    expect(pushed, ["c1"]);
     expect(await alarms.takeOpenChat(), isNull);
     await sub.cancel();
   });

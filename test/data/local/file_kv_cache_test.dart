@@ -4,6 +4,7 @@ import "package:agent_chat/data/builtin/llm/local_kv_cache.dart";
 import "package:agent_chat/data/local/file_kv_cache.dart";
 import "package:agent_chat/domain/local_llm.dart";
 import "package:flutter_test/flutter_test.dart";
+import "../../harness.dart";
 import "package:http/http.dart" as http;
 import "package:http/testing.dart";
 import "package:path/path.dart" as p;
@@ -91,15 +92,16 @@ void main() {
     // The save is answered but writes no file — that is the real server's job —
     // so the count is over the two dumps that were already there.
     await cache().keep(at, namespace: "ns", key: "new", count: 1);
-    await _settle();
+
+    // Eviction is deliberately un-awaited by `keep` — it must not gate a turn
+    // behind a directory listing — so the eviction is polled until the oldest
+    // dump is gone, not beaten at with a sleep.
+    await waitFor(
+        () => !File(p.join(dir.path, kvFilename("ns", "old"))).existsSync(),
+        what: "the old dump's eviction");
 
     expect(actions, ["save"]);
-    expect(File(p.join(dir.path, kvFilename("ns", "old"))).existsSync(), isFalse);
     expect(
         File(p.join(dir.path, kvFilename("ns", "recent"))).existsSync(), isTrue);
   });
 }
-
-/// Eviction is deliberately not awaited by `keep` — it must not gate a turn
-/// behind a directory listing — so a test that asserts on it waits for it.
-Future<void> _settle() => Future<void>.delayed(const Duration(milliseconds: 50));
