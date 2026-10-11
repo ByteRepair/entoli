@@ -7,6 +7,7 @@ import "package:agent_chat/data/builtin/llm/llm_client.dart";
 import "package:agent_chat/data/builtin/llm/rate_limit_gate.dart";
 
 import "../builtin_fakes.dart";
+import "../../../harness.dart";
 
 void main() {
   group("GatedLlmClient", () {
@@ -46,19 +47,21 @@ void main() {
     });
 
     test("releases the slot when the consumer cancels mid-stream", () async {
-      // A stream that never completes on its own.
+      // A stream that emits once and then never completes on its own.
       final controller = StreamController<LlmChunk>();
       final inner = _SingleCallClient(controller.stream);
       final gate = RateLimitGate(maxConcurrent: 1);
       final client = GatedLlmClient(inner, gate);
 
-      final sub = client.stream(const [], model: "m").listen((_) {});
-      // Let the subscription start and acquire the slot.
-      await Future<void>.delayed(const Duration(milliseconds: 10));
+      final seen = <LlmChunk>[];
+      final sub = client.stream(const [], model: "m").listen(seen.add);
+      // Mid-stream, not pre-acquire: a chunk has crossed before the cancel.
+      controller.add(const LlmCompletion(message: LlmMessage(role: LlmRole.assistant, text: "first chunk")));
+      await waitFor(() => seen.isNotEmpty, what: "the first chunk to cross");
       await sub.cancel();
-      await Future<void>.delayed(const Duration(milliseconds: 10));
 
-      // The slot is released; a new call can acquire it.
+      // No release to poll: the slot's fate is answered by the one below —
+      // if it were not released, this acquire would never come back.
       final next = _SingleCallClient(Stream.fromIterable(
         const [LlmCompletion(message: LlmMessage(role: LlmRole.assistant, text: "ok"))],
       ));

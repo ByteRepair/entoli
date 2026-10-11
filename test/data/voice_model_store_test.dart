@@ -8,6 +8,7 @@ import "package:flutter_test/flutter_test.dart";
 import "package:path/path.dart" as p;
 
 import "fake_network.dart";
+import "../harness.dart";
 
 /// What is worth pinning is the shape of what lands on disk — the marker that
 /// says a model is whole, and the nothing a cancelled download leaves behind.
@@ -67,13 +68,17 @@ void main() {
     net.hold = Completer<void>();
     final model = plainModel();
     final sub = store.install(model).listen(null);
-    // Enough for the first half of the first file to have been written.
-    await Future<void>.delayed(const Duration(milliseconds: 100));
+    // Under way mid-response: the first file's target exists, which the
+    // progress stream never says at this size (it reports per megabyte).
+    await waitFor(() => File(p.join(store.directoryFor(model), "model.onnx")).existsSync(),
+        what: "the download to be under way");
     await sub.cancel();
-    await Future<void>.delayed(const Duration(milliseconds: 100));
+    // The half-written download goes with the cancellation, in cleanup that
+    // is asynchronous on its own; gone is gone.
+    await waitFor(() => !Directory(store.directoryFor(model)).existsSync(),
+        what: "the half-written download to be cleaned out");
 
     expect(await store.installed(), isEmpty);
-    expect(Directory(store.directoryFor(model)).existsSync(), isFalse);
   });
 
   test("a model that will not download is not left half-installed", () async {

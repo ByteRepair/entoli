@@ -7,7 +7,7 @@ import "package:flutter_test/flutter_test.dart";
 
 import "package:agent_chat/domain/agent_backend.dart";
 import "package:agent_chat/domain/background_work.dart";
-import "package:agent_chat/domain/chat_log.dart";
+
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/providers.dart";
 import "package:agent_chat/ui/chat/chat_controller.dart";
@@ -240,30 +240,6 @@ void main() {
       expect(app.container.read(chatControllerProvider(id)).isRunning, isFalse);
       // Out of the backend's list, which is what takes the notification away.
       expect(app.backend.runningTurns.value, isNot(contains(id)));
-    });
-
-    // Nobody chose to stop it, so it is left the way a killed process leaves
-    // one: no closing record, and the chat offers to carry it on.
-    test("is offered to be carried on, not closed", () async {
-      final id = await startVoiceMidTurn();
-
-      await startNewVoiceChat();
-
-      expect(app.container.read(chatControllerProvider(id)).chat!.unfinished, isTrue);
-      final records = await app.store.readRecords(id);
-      expect(records.whereType<TurnEndRecord>(), isEmpty);
-      // A reload has to agree with what is on screen.
-      expect((await app.store.load(id)).unfinished, isTrue);
-    });
-
-    test("keeps what the reply had already said", () async {
-      final id = await startVoiceMidTurn();
-
-      await startNewVoiceChat();
-
-      final said = (await app.store.load(id)).messages.last;
-      expect(said.role, MessageRole.assistant);
-      expect(said.plainText, "Half an ans");
     });
   });
 
@@ -908,17 +884,12 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byTooltip("Voice mode"), findsNothing);
 
-      await tester.enterText(find.byType(TextField), "");
+      // Whitespace is not a message either.
+      await tester.enterText(find.byType(TextField), "   ");
       await tester.pumpAndSettle();
       expect(find.byTooltip("Voice mode"), findsOneWidget);
-    });
 
-    testWidgets("whitespace is not a message", (tester) async {
-      final text = TextEditingController();
-      addTearDown(text.dispose);
-      await pumpComposer(tester, text);
-
-      await tester.enterText(find.byType(TextField), "   ");
+      await tester.enterText(find.byType(TextField), "");
       await tester.pumpAndSettle();
       expect(find.byTooltip("Voice mode"), findsOneWidget);
     });

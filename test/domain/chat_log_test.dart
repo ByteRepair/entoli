@@ -82,19 +82,6 @@ void main() {
       expect(textOf(messages.single), "one two three");
     });
 
-    test("an append on a thinking block keeps how long it took", () {
-      final messages = replay([
-        message("m1", MessageRole.assistant),
-        const ChatRecord.part(
-            messageId: "m1", index: 0, part: MessagePart.reasoning(text: "hm", durationMs: 40)),
-        const ChatRecord.append(messageId: "m1", index: 0, text: "mm"),
-      ]);
-
-      final block = messages.single.parts.single as ReasoningPart;
-      expect(block.text, "hmmm");
-      expect(block.durationMs, 40);
-    });
-
     test("an append naming a part that cannot hold text is ignored", () {
       final messages = replay([
         message("m1", MessageRole.assistant),
@@ -147,17 +134,20 @@ void main() {
     });
 
     test("an append keeps what the part it lands on already carried", () {
+      // A thinking block's timing, signature and response survive growth.
       final messages = replay([
         message("m1", MessageRole.assistant),
         const ChatRecord.part(
             messageId: "m1",
             index: 0,
-            part: MessagePart.reasoning(text: "hm", signature: "sig", responseId: "r1")),
+            part: MessagePart.reasoning(
+                text: "hm", durationMs: 40, signature: "sig", responseId: "r1")),
         const ChatRecord.append(messageId: "m1", index: 0, text: "mm"),
       ]);
 
       final block = messages.single.parts.single as ReasoningPart;
       expect(block.text, "hmmm");
+      expect(block.durationMs, 40);
       expect(block.signature, "sig");
       expect(block.responseId, "r1");
     });
@@ -297,16 +287,6 @@ void main() {
       expect(replayed.messages.map(textOf), ["hello", "hi"]);
     });
 
-    // What the record meant before there were threads, and still does: the same
-    // assertion as "rewind drops its message and everything after it", reached
-    // from a message that has siblings.
-    test("deleting the last thread cuts the conversation off there", () {
-      final replayed = replayTree([...oneTurn(), ChatRecord.rewind(messageId: "a1")]);
-
-      expect(replayed.messages.map(textOf), ["hello"]);
-      expect(replayed.branches, isEmpty);
-    });
-
     test("a branch of a message that has gone goes on the end instead", () {
       final replayed = replayTree([
         ...oneTurn(),
@@ -373,12 +353,12 @@ void main() {
     test("a reply with nothing closing it was being written when the process died",
         () => expect(unfinishedIn(turn()), isTrue));
 
-    test("a turn that ended is not offered",
-        () => expect(unfinishedIn(turn(end: TurnEnd.done)), isFalse));
-
-    // The one case where the user has already said they want it to stop.
-    test("a turn the user stopped is not offered",
-        () => expect(unfinishedIn(turn(end: TurnEnd.aborted)), isFalse));
+    // Ended turns are not offered: a finished one because it finished, a
+    // stopped one because the user has already said they want it to stop.
+    test("a turn that ended is not offered", () {
+      expect(unfinishedIn(turn(end: TurnEnd.done)), isFalse);
+      expect(unfinishedIn(turn(end: TurnEnd.aborted)), isFalse);
+    });
 
     test("a turn that gave up is offered, like one that was killed",
         () => expect(unfinishedIn(turn(end: TurnEnd.error)), isTrue));

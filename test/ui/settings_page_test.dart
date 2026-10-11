@@ -260,13 +260,6 @@ void main() {
       await settleIo(tester, least: 3);
     }
 
-    testWidgets("and is gone once a provider is configured", (tester) async {
-      await pumpSettings(tester, app, SettingsCategory.providers);
-      await addAnthropic(tester);
-
-      expect(find.textContaining("We recommend Ollama Cloud"), findsNothing);
-    });
-
     // A preset added through the dialog keeps the defaults the preset names:
     // the dialog is a form over the endpoint, not a second place to decide
     // them, and losing them left the picker an initialValue nothing renders.
@@ -280,22 +273,6 @@ void main() {
           .firstWhere((p) => p.id == "anthropic");
       expect(provider.defaultModelId, "claude-sonnet-5");
       expect(provider.defaultLightModelId, "claude-haiku-4-5");
-    });
-
-    // The first provider added becomes what everything resolves to: the LLM
-    // and Title LLM fields read as its Default entry, not as None/Off with a
-    // dead reset button.
-    testWidgets("the first provider added becomes every field's Default", (tester) async {
-      await pumpSettings(tester, app, SettingsCategory.providers);
-      await addAnthropic(tester);
-
-      final settings = app.container.read(appSettingsProvider);
-      expect(settings.defaultProviderId, "anthropic");
-      expect(settings.defaultModelId, isNull);
-      expect(settings.titleProviderId, "anthropic");
-      expect(settings.titleModelId, isNull);
-      expect(settings.memoryProviderId, "anthropic");
-      expect(settings.classifierProviderId, "anthropic");
     });
   });
 

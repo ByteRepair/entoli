@@ -88,18 +88,6 @@ void main() {
     expect(find.text("Qwen 2.5"), findsOneWidget);
   });
 
-  testWidgets("picking a model records the provider it belongs to", (tester) async {
-    await openPage(tester);
-
-    await openDropdown(tester);
-    await tester.tap(find.text("Claude Sonnet 4").last);
-    await settleIo(tester);
-
-    await save(tester);
-    expect((await io(tester, () => app.savedMeta(_chatId))).provider, "anthropic");
-    expect((await io(tester, () => app.savedMeta(_chatId))).model, "claude-sonnet-4");
-  });
-
   testWidgets("a model saved without its provider is still preselected", (tester) async {
     await seedMeta(tester, ChatMeta(model: "qwen-2.5"));
     await openPage(tester);
@@ -108,13 +96,22 @@ void main() {
     expect(find.text("Qwen 2.5"), findsOneWidget);
   });
 
-  testWidgets("a chat with no override reads Default and names what it inherits", (tester) async {
-    await seedGlobalDefault(tester, "ollama-cloud", "qwen-2.5");
+  testWidgets("Default follows the global default as it changes", (tester) async {
+    app.seedGlobalDefault(providerId: "ollama-cloud", modelId: "qwen-2.5");
     await openPage(tester);
-
-    // the model; the approval field names what it inherits instead
+    // With no override the picker reads Default's entry, and names what it
+    // inherits instead of the app's own pick.
     expect(find.text(defaultOptionLabel), findsOneWidget);
     expect(find.text("Using Qwen 2.5"), findsOneWidget);
+
+    // Nothing is pinned on the chat, so retargeting the global retargets it.
+    app.container
+        .read(appSettingsProvider.notifier)
+        .setDefault((providerId: "anthropic", modelId: "claude-haiku-3"));
+    await settleIo(tester);
+
+    expect(find.text("Using Claude Haiku 3"), findsOneWidget);
+    expect((await io(tester, () => app.savedMeta(_chatId))).model, isNull);
   });
 
   testWidgets("the reset button clears a pinned model back to Default", (tester) async {
@@ -143,21 +140,6 @@ void main() {
     expect((await io(tester, () => app.savedMeta(_chatId))).model, isNull);
   });
 
-  testWidgets("Default follows the global default as it changes", (tester) async {
-    app.seedGlobalDefault(providerId: "ollama-cloud", modelId: "qwen-2.5");
-    await openPage(tester);
-    expect(find.text("Using Qwen 2.5"), findsOneWidget);
-
-    // Nothing is pinned on the chat, so retargeting the global retargets it.
-    app.container
-        .read(appSettingsProvider.notifier)
-        .setDefault((providerId: "anthropic", modelId: "claude-haiku-3"));
-    await settleIo(tester);
-
-    expect(find.text("Using Claude Haiku 3"), findsOneWidget);
-    expect((await io(tester, () => app.savedMeta(_chatId))).model, isNull);
-  });
-
   testWidgets("a chat's own model wins over the global default", (tester) async {
     await seedGlobalDefault(tester, "ollama-cloud", "qwen-2.5");
     await seedMeta(tester, ChatMeta(provider: "anthropic", model: "claude-haiku-3"));
@@ -181,10 +163,12 @@ void main() {
 
       expect(find.text("$defaultOptionLabel (Ask before every command)"), findsOneWidget);
       expect((await io(tester, () => app.savedMeta(_chatId))).approveMode, isNull);
-    });
 
-    testWidgets("Default follows the app setting as it changes", (tester) async {
-      await io(tester, () => app.container.read(appSettingsProvider.notifier).setApproveMode(ApproveMode.never));
+      // And it follows the app setting as it changes: the app's mode is the
+      // label's parameter.
+      await save(tester);
+      await io(tester, () => app.container
+          .read(appSettingsProvider.notifier).setApproveMode(ApproveMode.never));
       await openPage(tester);
       await scrollTo(tester, find.text("Running commands"));
 

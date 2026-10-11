@@ -219,28 +219,18 @@ void main() {
     expect(projected.last.text, "Which one? Rust");
   });
 
-  // A provider that sees a tool call with no result rejects the next turn.
-  test("a call whose result never landed is answered anyway", () async {
-    final projected = await project([
-      said(MessageRole.assistant, [
-        call("c1", "bash", '{"command":"sleep 1000"}', response: "r1"),
-      ]),
-    ]);
-
-    expect(projected.last.role, LlmRole.tool);
-    expect(projected.last.toolCallId, "c1");
-    expect(projected.last.text, contains("interrupted"));
-  });
-
   // A command's effects outlive the process that ran it, so "not executed"
   // would be a guess — and the wrong one half the time.
-  test("an interrupted command is not claimed to have been skipped", () async {
+  test("a call whose result never landed is answered anyway", () async {
     final projected = await project([
       said(MessageRole.assistant, [
         call("c1", "bash", '{"command":"make install"}', response: "r1"),
       ]),
     ]);
 
+    expect(projected.last.role, LlmRole.tool);
+    expect(projected.last.toolCallId, "c1");
+    expect(projected.last.text, contains("interrupted"));
     expect(projected.last.text, contains("may or may not have run"));
     expect(projected.last.text, isNot(contains("not executed")));
   });

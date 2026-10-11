@@ -53,6 +53,13 @@ void main() {
     expect(lines[0]["role"], "user");
     expect(lines[1]["runtimeType"], "part");
     expect(lines[1]["index"], 0);
+
+    // Reading it back gives the chat as it was written.
+    final loaded = await store.load("c1");
+    expect(loaded.state.id, "c1");
+    expect(loaded.state.title, "Test chat c1");
+    expect(loaded.messages.single.role, MessageRole.user);
+    expect((loaded.messages.single.parts.first as TextPart).text, "hello");
   });
 
   test("append adds to the log without rewriting what is there", () async {
@@ -86,36 +93,6 @@ void main() {
     expect((loaded.messages.single.parts.single as TextPart).text, "hello");
   });
 
-  test("load reads back a saved chat", () async {
-    final state = makeState("c2");
-    final messages = [
-      Message(
-        id: "m1",
-        role: MessageRole.user,
-        createdAt: DateTime.utc(2026, 1, 1),
-        parts: [const MessagePart.text(text: "hi")],
-      ),
-      Message(
-        id: "m2",
-        role: MessageRole.assistant,
-        createdAt: DateTime.utc(2026, 1, 1, 0, 0, 1),
-        parts: [const MessagePart.text(text: "hello back")],
-      ),
-    ];
-    await writeChatTo(store, Chat(state: state, messages: messages));
-
-    final loaded = await store.load("c2");
-    expect(loaded.state.id, "c2");
-    expect(loaded.state.title, "Test chat c2");
-    expect(loaded.messages.length, 2);
-    expect(loaded.messages[0].role, MessageRole.user);
-    expect(loaded.messages[1].role, MessageRole.assistant);
-    expect(
-      (loaded.messages[0].parts.first as TextPart).text,
-      "hi",
-    );
-  });
-
   test("list returns summaries sorted by updatedAt desc", () async {
     final older = ChatState(
       id: "older",
@@ -138,18 +115,16 @@ void main() {
     expect(summaries.last.id, "older");
   });
 
-  test("list skips dirs without state.json", () async {
+  test("list reads only the dirs that carry a state.json", () async {
+    // Nothing written: nothing.
+    expect(await store.list(), isEmpty);
+
     Directory(p.join(config.chatsDir(), "junk")).createSync();
     await store.saveState(makeState("real"));
 
     final summaries = await store.list();
     expect(summaries.length, 1);
     expect(summaries.first.id, "real");
-  });
-
-  test("list handles empty chats dir", () async {
-    final summaries = await store.list();
-    expect(summaries, isEmpty);
   });
 
   test("delete removes the chat directory and the workspace it ran in", () async {

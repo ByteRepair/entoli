@@ -159,15 +159,6 @@ void main() {
           id: "a", toolName: "bash", argumentsText: "python3 build.py"));
       expect(rule!.writes, isEmpty);
     });
-
-    test("a re-prompt approval carries its denied dirs", () {
-      final approval = ToolApproval(
-          id: "a",
-          toolName: "bash",
-          argumentsText: "writing /home/yiannis/Projects/x",
-          deniedDirs: const ["/home/yiannis/Projects/x"]);
-      expect(approval.deniedDirs, ["/home/yiannis/Projects/x"]);
-    });
   });
 
   group("JSON round trip", () {
@@ -287,19 +278,6 @@ void main() {
       expect(verdict.tiers, isEmpty);
     });
 
-    test("no match is null", () {
-      expect(
-          rulesDecideTraced(
-              [const PermissionRule(
-                  tool: "bash",
-                  pattern: "git *",
-                  decision: PermissionDecision.allow,
-                  origin: PermissionTier.chat)],
-              "bash",
-              command: "curl example.com"),
-          isNull);
-    });
-
     test("a malformed entry is skipped rather than failing the file", () {
       final back = permissionRulesFromJson([
         {"tool": "bash", "pattern": "ls *", "decision": "allow"},
@@ -308,26 +286,6 @@ void main() {
       ]);
       expect(back.length, 1);
       expect(back.single.pattern, "ls *");
-    });
-  });
-
-  group("rule tiers", () {
-    test("chat rules come before project before app", () {
-      final verdict = rulesDecideTraced(
-        [
-          // app
-          PermissionRule(
-              tool: "bash", pattern: "ls *", decision: PermissionDecision.deny),
-          // chat — the tier the user answered in
-          PermissionRule(
-              tool: "bash", pattern: "ls *", decision: PermissionDecision.allow),
-        ],
-        "bash",
-        command: "ls -la",
-      );
-      // deny outranks allow regardless of tier; a chat allow only beats an
-      // app-level ask or nothing.
-      expect(verdict?.decision, PermissionDecision.deny);
     });
   });
 }

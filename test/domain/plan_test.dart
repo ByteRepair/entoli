@@ -103,13 +103,10 @@ Some prose, with a list that is not the plan:
   group("planFind", () {
     const plan = "- [x] read the code\n- [~] write tests\n- [ ] add parser\n";
 
-    test("by number", () {
+    test("finds by number, and by text prefix, case-insensitively", () {
       expect(planFind(plan, "2")!.text, "write tests");
       expect(planFind(plan, "0"), isNull);
       expect(planFind(plan, "4"), isNull);
-    });
-
-    test("by text prefix, case-insensitively", () {
       expect(planFind(plan, "add")!.index, 3);
       expect(planFind(plan, "READ")!.index, 1);
     });
@@ -132,36 +129,29 @@ Some prose, with a list that is not the plan:
   });
 
   group("planNext and planProgress", () {
-    test("the first pending task, and the counts", () {
-      const plan = "- [x] one\n- [~] two\n- [ ] three\n- [ ] four\n";
-      expect(planNext(plan)!.index, 3);
-      expect(planProgress(plan), (1, 4));
-    });
+    test("the first pending task and the counts, up to nothing left", () {
+      // A plan with the work spread over the statuses.
+      const partial = "- [x] one\n- [~] two\n- [ ] three\n- [ ] four\n";
+      expect(planNext(partial)!.index, 3);
+      expect(planProgress(partial), (1, 4));
 
-    test("null when everything is taken", () {
-      const plan = "- [x] one\n- [~] two\n";
-      expect(planNext(plan), isNull);
-      expect(planProgress(plan), (1, 2));
-    });
+      // Everything already in hand: nothing to take.
+      const taken = "- [x] one\n- [~] two\n";
+      expect(planNext(taken), isNull);
+      expect(planProgress(taken), (1, 2));
 
-    test("an empty plan has nothing to take", () {
+      // No plan at all: nothing twice over.
       expect(planNext(null), isNull);
       expect(planProgress(null), (0, 0));
     });
   });
 
   group("the verdict", () {
-    test("go tells the model to start", () {
+    test("the verdict wording covers go, changes, and nothing answered", () {
       expect(planVerdict("go"), contains("Approved"));
       expect(planVerdict("go"), contains(planNextToolName));
-    });
-
-    test("changes tells the model to revise and re-present", () {
       expect(planVerdict("changes"), contains("Do not start executing"));
       expect(planVerdict("changes"), contains("artifact_id"));
-    });
-
-    test("nothing answered stops the turn rather than starting the work", () {
       expect(planVerdict(null), contains("Finish the turn"));
     });
   });
@@ -217,14 +207,13 @@ Some prose, with a list that is not the plan:
   });
 
   group("planApprovalQuestion", () {
-    test("asks one question with the two answers", () {
+    test("asks one question with the two answers, and the document round-trips", () {
       final q = planApprovalQuestion("The work");
       expect(q.question, contains("The work"));
       expect(q.options.map((o) => o.label), ["Go", "Request changes"]);
       expect(q.options.map((o) => o.answer), ["go", "changes"]);
-    });
 
-    test("the questions document round-trips through askQuestionsFrom", () {
+      // The JSON the tool sends parses into the same pair the panel runs.
       final questions = askQuestionsFrom(planApprovalQuestionsJson("The work"));
       expect(questions, hasLength(1));
       expect(questions.single.options.map((o) => o.answer), ["go", "changes"]);
