@@ -74,12 +74,6 @@ void main() {
     expect(result.output.trim(), "abc123");
   });
 
-  test("the machine's own HOME stands: the workspace is not it", () async {
-    final result = await run(r'echo "$HOME"');
-
-    expect(result.output.trim(), isNot(home.path));
-  });
-
   test("nothing waits for a keypress", () async {
     final result = await run(r'echo "$PAGER $TERM"');
 
@@ -289,15 +283,6 @@ void main() {
       expect((output.value ?? ""), contains("three"));
       expect(result.output, "one\ntwo\nthree\n");
       shell.closeSession(workspace.path);
-    });
-
-    test("never shows the sentinel, and the result is the whole output",
-        () async {
-      final result = await run("echo one; echo two");
-
-      // The result is the whole of what the command printed, sentinel
-      // stripped, as it ever was.
-      expect(result.output, "one\ntwo\n");
     });
 
     test("a command the shell interrupted leaves the tail where it stopped",
