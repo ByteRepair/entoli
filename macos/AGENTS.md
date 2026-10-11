@@ -125,7 +125,13 @@ reload with the union of what the clock kinds armed — the union, not a kind's
 own, since two clock kinds share one alarm port and each kind's wanted misses
 the other's codes — and cancels each answer, deleting plist and job together.
 Every other platform answers nothing, which is why the question can live on
-the port.
+the port. What the prune cannot reach is the app's own removal, so the job
+carries its removal with it: launchd never tidies a plist whose program is
+gone — each interval re-runs `sh` into a nonzero exit, forever — and there is
+no uninstaller to run the pruning, so the wake's command line checks the
+binary it was written for first and takes its plist and its service out
+itself when the check fails. Nothing is left behind after an uninstall, and
+nothing needs a hand.
 
 ## What is absent, and honestly so
 

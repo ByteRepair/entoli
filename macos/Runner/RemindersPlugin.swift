@@ -81,24 +81,31 @@ class RemindersPlugin: NSObject, UNUserNotificationCenterDelegate {
     _ = try? runLaunchctl(["bootout", "gui/\(getuid())/\(label)"])
     let plist = Self.agentDirectory().appendingPathComponent("\(label).plist")
     try Self.agentDirectory().ensureDirectory()
-    // The job runs under launchd's environment, which is not the one the app
-    // that armed it ran under — so the store rides in the command line and
-    // the wake re-derives the data directory from what was written here
-    // rather than from wherever launchd's own environment points. The wake
-    // execs the binary directly, never through `open`: a backgrounded
+    // The job runs under launchd's environment, which is not the one the old
+    // app that armed it ran under — so the store rides in the command line
+    // and the wake re-derives the data directory from what was written here.
+    // The wake execs the binary directly, never through `open`: backgrounded
     // `open -g` is deferred by launch services and sometimes never reaches
-    // its engine (a process idling on the AppKit runloop, no nib load, no
-    // Dart), and `-j` is worse — hidden launches never started one at all on
-    // this host — where a direct exec starts Dart every time. What `open`
-    // used to buy is one-instance activation, which the wake guard in the
-    // Runner answers instead: a wake finding another instance quits at once,
-    // the running copy's own timer being what fires its due anyway.
+    // its engine, and `-j` is worse — hidden launches never started one at
+    // all here. What `open` used to buy is one-instance activation, which
+    // the wake guard in the Runner answers instead. And the line carries the
+    // job's own removal, for the one case no writer survives — an
+    // uninstall — on which launchd never tidies anything: each interval
+    // re-runs `sh` into a nonzero exit forever. The binary it was written
+    // for is checked first; when it is gone the job takes its plist and its
+    // service out itself. A moved-but-alive app rewrites the job at its next
+    // launch's diff.
     guard let executable = Bundle.main.executableURL?.path else {
       throw MessageError("no executable in \(Bundle.main.bundlePath)")
     }
     let wake =
-        "export AGENT_CHAT_CONFIG='\(Self.shellQuoted(store))'; "
-        + "exec '\(Self.shellQuoted(executable))' entoli-wake"
+        "B='\(Self.shellQuoted(executable))'; "
+        + "P='\(Self.shellQuoted(plist.path))'; "
+        + "L='\(Self.shellQuoted(label))'; "
+        + "if [ ! -x \"$B\" ]; then rm -f \"$P\"; "
+        + "exec /bin/launchctl bootout \"gui/\(getuid())/$L\"; fi; "
+        + "export AGENT_CHAT_CONFIG='\(Self.shellQuoted(store))'; "
+        + "exec \"$B\" entoli-wake"
     let content: [String: Any] = [
       "Label": label,
       "ProgramArguments": [
