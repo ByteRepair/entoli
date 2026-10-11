@@ -38,7 +38,14 @@ The tripwire after it is that failure's: the MSI must carry `entoli.exe` as
 a File row or make-msi.ps1 throws. The cabinet embeds (`MediaTemplate
 EmbedCab="yes"`): an external one is a second file beside the MSI, present
 where it was built and gone when a release carries the MSI alone — the size
-check is that regression's tripwire. The
+check is that regression's tripwire.
+
+**What an uninstall removes and what it keeps.** The installer removes what
+its tables hold: the Program Files folder, the Start Menu shortcut, the key
+path in `HKLM\Software\ByteRepair\Entoli` — and it keeps everything the app
+made while running, all of it outside the tables: the data directory and the
+voice cache survive it, the way an update does. A release that moves
+anything under the data directory answers by a migration instead. The
 **UpgradeCode is the identity of every install to come**: an installer built
 later finds this one and replaces it, one built sooner refuses in its name's
 sake, and one carrying a different UpgradeCode is a different app Windows
@@ -71,7 +78,9 @@ are escalated, not parsed. **The data directory is
 cache's `%LOCALAPPDATA%\agent-chat\Cache`, and `$AGENT_CHAT_CONFIG` over
 both. **Nothing signs it.** Like the DMG, the first run of both the installer
 and the app goes through SmartScreen's Run anyway until a code-signing
-certificate exists; the MSI's signing and the DMG's grow together. **No
-dialogs.** An MSI authored with no UI installs with what msiexec shows
-anyway — the elevation prompt and the progress — a `WixUI` authoring being
-the only thing more would need.
+certificate exists; the MSI's signing and the DMG's grow together. **The
+dialogs are WixUI_Minimal's.** One welcome screen carrying the AGPL off the
+repo's `LICENSE` — the Install button that follows it is where the user
+commits — then the progress and the finish; what is absent from it is
+WixUI_InstallDir's directory-choosing page, the install being to Program
+Files and nowhere else a person sets.
