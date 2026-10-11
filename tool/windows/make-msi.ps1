@@ -8,7 +8,9 @@
 # WiX 7 is installed as a dotnet tool, pinned: it builds the file a release is
 # attached by, and a release tag can be moved. Its Open Source Maintenance Fee
 # EULA is accepted per invocation (-acceptEula wix7); the fee is an
-# organization's to pay, not an open-source release's.
+# organization's to pay, not an open-source release's. The welcome screen is
+# WixUI_Minimal's, the UI extension pinned beside the tool, its license page
+# generated from the repo's LICENSE below.
 param(
     [Parameter(Mandatory = $true)] [string] $Bundle,
     [Parameter(Mandatory = $true)] [string] $Out,
@@ -26,6 +28,9 @@ dotnet tool install --global wix --version $wixVersion
 if ($LASTEXITCODE -ne 0) {
     # A re-run finds the tool already installed; pin it back rather than fail.
     dotnet tool update --global wix --version $wixVersion
+    if ($LASTEXITCODE -ne 0) {
+        throw "make-msi.ps1: wix $wixVersion did not install"
+    }
 }
 # The image has the dotnet tools directory on PATH; being explicit anyway
 # means this script never depends on it.
@@ -36,7 +41,29 @@ if ($outDir) {
     New-Item -ItemType Directory -Force $outDir | Out-Null
 }
 
-wix build -acceptEula wix7 -arch x64 -o $Out -d Version=$Version -d BundlePath=$((Resolve-Path $Bundle).Path) "$PSScriptRoot\entoli.wxs"
+# The welcome dialog's license page: the repo's own LICENSE turned into rtf
+# in this run's temp, so an AGPL edit flows into the installer without a
+# second file to keep in step. RTF doubles nothing here; it escapes {, } and
+# \ and writes a paragraph break at each line — the CRs are read out to LF
+# first, or a CRLF checkout's pairs would be re-matched on the way past and
+# double every break. Non-ASCII would need \uN escapes, which is a throw
+# rather than an escape.
+$rtfPath = Join-Path ([System.IO.Path]::GetTempPath()) "entoli-license.rtf"
+$license = [System.IO.File]::ReadAllText("$PSScriptRoot\..\..\LICENSE")
+if ($license -match "[^\x00-\x7F]") {
+    throw "make-msi.ps1: the LICENSE carries non-ASCII the rtf escape below does not handle"
+}
+$license = $license.Replace("\", "\\").Replace("{", "\{").Replace("}", "\}")
+$license = $license.Replace("`r`n", "`n").Replace("`r", "`n")
+$license = $license.Replace("`n", "\par`r`n")
+[System.IO.File]::WriteAllText($rtfPath, "{\rtf1\ansi\pard\fs16 $license}")
+
+wix extension add -acceptEula wix7 -g WixToolset.UI.wixext -v 7.0.0
+if ($LASTEXITCODE -ne 0) {
+    throw "make-msi.ps1: the UI extension did not install"
+}
+
+wix build -acceptEula wix7 -ext WixToolset.UI.wixext -bindvariable WixUILicenseRtf=$rtfPath -arch x64 -o $Out -d Version=$Version -d BundlePath=$((Resolve-Path $Bundle).Path) "$PSScriptRoot\entoli.wxs"
 if ($LASTEXITCODE -ne 0) {
     throw "make-msi.ps1: wix build failed"
 }
