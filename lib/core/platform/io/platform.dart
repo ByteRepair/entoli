@@ -34,6 +34,7 @@ import "../../../data/local/tree_ops.dart";
 import "../../../data/local/desktop_file_handoff.dart";
 import "../../../data/local/io_file_watches.dart";
 import "../../../data/local/linux_reminder_alarms.dart";
+import "../../../data/local/macos_reminder_alarms.dart";
 import "../../../data/builtin/duckduckgo_search.dart";
 import "../../../data/builtin/local_shell.dart";
 import "../../../data/voice/android_voice.dart";
@@ -384,17 +385,21 @@ AssistantLaunch platformAssistantLaunch() => Platform.isAndroid
     ? AndroidAssistantLaunch()
     : const UnavailableAssistantLaunch();
 
-/// AlarmManager on Android; the session bus on Linux, whose notifications are
-/// what a reminder's completion and a turn failure post through. Scheduling
-/// rides the app's own timer where there is no clock to hand over — a reminder
-/// missed while the app is closed is caught up at the next launch. macOS and
-/// Windows have neither, and a browser's timers die with its tab.
-Future<ReminderAlarms> platformReminderAlarms() async =>
-    Platform.isAndroid
-        ? AndroidReminderAlarms()
-        : Platform.isLinux
-            ? await connectLinuxReminderAlarms()
-            : const UnavailableReminderAlarms();
+/// AlarmManager on Android, launchd jobs on macOS; the session bus on Linux,
+/// whose notifications are what a reminder's completion and a turn failure
+/// post through. Scheduling rides the app's own timer where there is no clock
+/// to hand over — a reminder missed while the app is closed is caught up at
+/// the next launch. Windows has neither, and a browser's timers die with its
+/// tab.
+Future<ReminderAlarms> platformReminderAlarms() async {
+  if (Platform.isAndroid) return AndroidReminderAlarms();
+  if (Platform.isLinux) return connectLinuxReminderAlarms();
+  // The data directory names the launchd jobs, so copies of this flavour
+  // pointed at different stores never share a namespace. Read here, once,
+  // rather than replicated in Swift beside the rule that derives it.
+  if (Platform.isMacOS) return MacosReminderAlarms(await platformDataDir());
+  return const UnavailableReminderAlarms();
+}
 
 FileSystem platformFileSystem() => fileSystemIo;
 

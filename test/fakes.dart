@@ -340,7 +340,7 @@ class FakeReminderAlarms implements ReminderAlarms {  // ignore: duplicate-ignor
   }
 
   @override
-  Future<void> schedule(int requestCode, DateTime at) async {
+  Future<void> schedule(int requestCode, DateTime at, {String? calendar}) async {
     scheduled[requestCode] = at;
   }
 
@@ -349,6 +349,15 @@ class FakeReminderAlarms implements ReminderAlarms {  // ignore: duplicate-ignor
     cancelled.add(requestCode);
     scheduled.remove(requestCode);
   }
+
+  /// Codes the fake says it still holds beyond what a diff wanted — the
+  /// launchd jobs a previous launch left behind. Empty unless a test writes
+  /// it, which is every platform's honest answer but macOS's to fill.
+  List<int> staleHeld = [];
+
+  @override
+  Future<List<int>> staleCodes(Set<int> wanted) async =>
+      [for (final code in staleHeld) if (!wanted.contains(code)) code];
 
   @override
   Future<bool> canHoldTurn() async => canHold;

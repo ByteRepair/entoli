@@ -975,6 +975,13 @@ class Triggers extends Notifier<List<Trigger>> implements TriggerList {
     final anchored = source is TimerSource
         ? TimerSource(duration: source.duration, registeredAt: now)
         : source;
+    // Refused where the editor refuses it: a born-disarmed one-shot is a
+    // success answer that fires nowhere — see [triggerScheduleProblem].
+    final problem = triggerScheduleProblem(anchored, now);
+    if (problem != null) {
+      throw ArgumentError.value(
+          (anchored as ScheduleSource).at, "at", problem);
+    }
     final draft = Trigger(
       id: const Uuid().v4(),
       name: name ?? "",

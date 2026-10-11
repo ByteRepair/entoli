@@ -48,6 +48,120 @@ page's catalog. A macOS turn is a Linux-desktop-with-no-Linux-installed turn:
 PATH. The login-PATH capture covers it the same way (`$SHELL` as a login
 shell, macOS's zsh on the list).
 
+## Waking for a trigger
+
+**The model the pieces below implement:** `reminders.json` is the only truth,
+and launchd jobs are projections of it — one per request code under the
+store's own prefix. Every actor converges the projection back to the truth.
+The app, at every watch build: scheduling what is armed, cancelling what is
+not, pruning what an earlier launch has left behind, and firing through its
+catch-up everything overdue, whoever started the session. The job, whose
+single line wakes the app with the store named and takes itself out when its
+binary is gone — an uninstall having no writer to prune anything. And
+launchd, loader and ticker alone: it bootstraps the directory at login, runs
+intervals, re-runs a job whose program is gone into a nonzero exit forever,
+and never janitors a third-party plist.
+
+The schedule half is launchd, one user launch agent per request code under
+`~/Library/LaunchAgents/` — `RemindersPlugin.swift` writes it and boots it
+through `launchctl bootstrap gui/<uid>` (raw plists, not `SMAppService`, which
+wants its plist inside a signed bundle's `Contents/Library/LaunchAgents/`
+where a per-code runtime rewrite would break the signature). The label
+carries the bundle identifier plus the data directory the jobs serve, Dart
+handing it per call — the debug leaf, an `AGENT_CHAT_CONFIG` scratch and the
+installed copy each get their own namespace, so no prune ever sees a job
+that is not its store's. The job's whole
+business is one line of shell: export the store the jobs were armed for,
+then spawn the bundle's own binary detached with the wake argument and exit.
+The exit is load-bearing twice: launchd's tracked instance is the shell
+alone, never the app — teardown of a service is SIGTERM to its tracked
+instance and then SIGKILL (`launchd.plist(5)`'s `ExitTimeOut`) — and the app
+boots this label out all the time (every diff, every cancel, the prune), a
+wake that exec'd itself dying at its first diff's bootout, before any fire
+ran; and the app outliving a job that has died is `AbandonProcessGroup`'s
+work, without which the detached spawn's process group dies with the shell.
+The export is
+load-bearing: a job runs under launchd's environment, which is not the
+environment the app that armed it ran under, and the wake re-derives the
+data directory from what the command line says rather than from wherever
+launchd's own environment points. The spawn goes to the binary directly and
+never through `open`, for a reason worth keeping: launch services defers the
+start of backgrounded `-g` launches, sometimes indefinitely — the process
+idles on its AppKit runloop with no nib load and no Dart — and a hidden
+`-j` launch never started an engine at all on this host, while a direct
+spawn starts Dart every time. What `open` would buy is one-instance activation,
+which the Runner answers itself: a wake session that finds another instance
+of the bundle id quits before the engine is built, the running copy's own
+timer being what fires its due anyway. A repeating
+schedule arms launchd's own calendar form — `StartCalendarInterval`, the
+hourly its minute and the rest their hour, the weekly its weekday and the
+monthly its day — wall-clock anchored, surviving DST the way the source's
+arithmetic does, and coalescing what a sleep swallows, launchd starting the
+job on the next wake; the man page promises an interval arm exactly the
+opposite ("if the system is asleep during the time of the next scheduled
+interval firing, that interval will be missed" — and the count is awake
+time, the clock a kqueue one, so a sleep inside a countdown pushes its tick
+late besides). A one shot or a timer has no calendar shape — launchd has no
+form for an arbitrary moment either — so it arms a `StartInterval` counted
+from the job's load, and what a changed interval is, is a bootout, a
+rewrite and a bootstrap. If the Mac misses the moment either way, the fire
+lands at the next launch's catch-up, which is what the fire's "Ran late"
+wording is for, the same bargain Doze strikes.
+
+That the interval repeats is also the one spurious fire the shape allows: a
+one-shot's job is cancelled only by the diff the fire's stamp triggers, so
+a turn that outlasts its own interval — a one-minute countdown with a
+several-minute turn — finds launchd re-running the job again after the
+session has quit. What comes back is a wake whose catch-up finds nothing,
+which prunes the job and quits; bounded at one extra launch per such fire,
+and invisible for every schedule whose interval is longer than its turn.
+
+**A wake is not an opening.** The app hides itself — `orderOut` and
+`NSApp.hide` in `MainFlutterWindow.awakeFromNib`, where the delegate and the
+plugin register too — because `orderOut` alone loses to AppKit's
+visible-at-launch ordering, which re-fronts the window after the nib loads;
+the whole-app hide is what the `-j` launch flag would have done and cannot
+(relaunching hidden never runs an engine). The drained session quits the
+moment `doneFiring` says its work has drained — unless someone activated it,
+which is `AppDelegate.userShowedUp`, set by an activation watcher rather than
+a delegate override so nothing the framework forwards through is displaced.
+The turn the wake ran is the ordinary trigger flow: the clock kinds' catch-up
+runs it at watch start, unattended and headless exactly as it runs on an
+Android alarm's cold start, and the completion notification's tap opens the
+chat — a tap of a notification whose app has quit since launching a fresh
+process, whose `didReceive` holds the chat id the way `RemindersChannel.kt`
+holds a pending open, until `takeOpenChat` drains it.
+
+**Why `doneFiring` quits: the alternative is a hidden scheduler.** The
+in-process timer would happily keep aiming at the next fire forever, which is
+not the design — the next fire has a launchd job of its own, and a process
+standing hidden between jobs is a second scheduler to keep in step. Triggers
+firing during the drain are covered: `doneFiring` is only called when nothing
+is running and nothing delivered is outstanding, and the terminate trails the
+reply by a tenth of a second.
+
+**No fire half exists on the channel**, again deliberately: launchd's only
+power is starting a process, and a running app on this platform keeps its
+event loop, so `fired` is empty and `takeFired` answers nothing. The Android
+channel's held-pending fire list has no job to do here.
+
+**The prune is the part that keeps the jobs honest.** A trigger deleted or
+disabled while the app was closed leaves its plist behind, and a job nobody
+wants still wakes the app on the old schedule forever — a wake session whose
+catch-up finds nothing, opening and quitting: the zombie. `ReminderAlarms`
+gains `staleCodes(wanted)` for exactly this: the manager asks it once per
+reload with the union of what the clock kinds armed — the union, not a kind's
+own, since two clock kinds share one alarm port and each kind's wanted misses
+the other's codes — and cancels each answer, deleting plist and job together.
+Every other platform answers nothing, which is why the question can live on
+the port. What the prune cannot reach is the app's own removal, so the job
+carries its removal with it: launchd never tidies a plist whose program is
+gone — each interval re-runs `sh` into a nonzero exit, forever — and there is
+no uninstaller to run the pruning, so the wake's command line checks the
+binary it was written for first and takes its plist and its service out
+itself when the check fails. Nothing is left behind after an uninstall, and
+nothing needs a hand.
+
 ## What is absent, and honestly so
 
 No on-device models: the bundled llama.cpp server is built for Android and
@@ -59,10 +173,9 @@ Swift plugin of the app's own, on macOS 26 and later — a future version, at
 which point the settings page is where the story changes and nowhere else.
 
 The keyring is the file fallback (`KeyringSecretStore` probes a Secret Service
-through the session bus, which macOS does not run), and reminders take the app
-live timers — a reminder the app was closed through is caught up at the next
-launch, as on Windows and in a browser. Neither says anything different from
-an absence; nothing crashes over either.
+through the session bus, which macOS does not run) and says nothing different
+from an absence; nothing crashes over either. Triggers, by contrast, are all
+here now — see "Waking for a trigger" below.
 
 ## Voice mode
 
