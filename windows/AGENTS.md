@@ -50,7 +50,8 @@ anything under the data directory answers by a migration instead. The
 later finds this one and replaces it, one built sooner refuses in its name's
 sake, and one carrying a different UpgradeCode is a different app Windows
 uninstalls beside, not over — it is never re-generated, like the Android
-keystore, and it is the one GUID `entoli.wxs` holds. The shortcut component
+keystore, and neither is the shortcut component's GUID below: the two are
+every GUID `entoli.wxs` holds. The shortcut component
 keys on a registry value under `Software\ByteRepair\Entoli` in HKLM, the
 key path being what a component that installs no file keys on. WiX 7 is the
 dotnet tool the script installs, pinned, and its EULA is accepted per
