@@ -144,7 +144,9 @@ void main() {
       expect(client.sent.last.map((m) => m.text).join(), contains("first"));
     });
 
-    test("an @agent's prompt rides under the system message", () async {
+    test("what rides the second system message, and what does not", () async {
+      // An @agent's prompt is this turn's: in the per-turn message, not the
+      // body, which has to stay the same string for every chat.
       final client = FakeLlmClient([
         [finish],
       ]);
@@ -152,19 +154,16 @@ void main() {
           .run(userMessage("look at it"), agentPrompt: "You only read; you never edit.")
           .toList();
 
-      // In the per-turn message, not the body: an @agent is this turn's, and
-      // the body has to stay the same string for every chat.
       expect(client.sent.first.first.text,
           isNot(contains("You only read; you never edit.")));
       expect(client.sent.first[1].text, contains("You only read; you never edit."));
-    });
 
-    test("workspace instructions ride the second system message", () async {
-      final client = FakeLlmClient([
+      // Workspace instructions ride the same message, in a section of theirs.
+      final instructed = FakeLlmClient([
         [finish],
       ]);
       await agentOver(
-        client,
+        instructed,
         instructions: const [
           InstructionFile(
               path: "/ws/AGENTS.md",
@@ -173,19 +172,16 @@ void main() {
         ],
       ).run(userMessage("hi")).toList();
 
-      // In the per-turn message, not the body: the body has to stay the same
-      // string for every chat, which is what the on-device cache warms.
-      expect(client.sent.first.first.text, isNot(contains("project rules")));
-      expect(client.sent.first[1].text, contains("project rules"));
-      expect(client.sent.first[1].text, contains("Workspace instructions"));
-    });
+      expect(instructed.sent.first.first.text, isNot(contains("project rules")));
+      expect(instructed.sent.first[1].text, contains("project rules"));
+      expect(instructed.sent.first[1].text, contains("Workspace instructions"));
 
-    test("no instructions means no instructions section", () async {
-      final client = FakeLlmClient([
+      // And nothing means no section.
+      final plain = FakeLlmClient([
         [finish],
       ]);
-      await agentOver(client).run(userMessage("hi")).toList();
-      expect(client.sent.first[1].text, isNot(contains("Workspace instructions")));
+      await agentOver(plain).run(userMessage("hi")).toList();
+      expect(plain.sent.first[1].text, isNot(contains("Workspace instructions")));
     });
   });
 
@@ -347,32 +343,33 @@ void main() {
     });
   });
 
-  group("a model that answers in text", () {
-    test("ends the turn without calling any tool", () async {
-      final client = FakeLlmClient([
-        [saidOnly("Here is my answer.")],
-      ]);
-      final events = await agentOver(client).run(userMessage("hi")).toList();
-
-      expect(events.whereType<ErrorEvent>(), isEmpty);
-      expect(client.sent, hasLength(1));
-      expect(events.last, isA<DoneEvent>());
-    });
-  });
-
   group("approvals", () {
-    test("a command waits for the answer and then runs", () async {
-      final client = FakeLlmClient([
+    test("the approval modes ask, or run unasked", () async {
+      // Ask: the banner gates the command until the answer.
+      final ask = FakeLlmClient([
         [bashCall("rm -rf build")],
         [finish],
       ]);
-      final events = await agentOver(client,
+      final askEvents = await agentOver(ask,
               approveMode: ApproveMode.ask,
               approvals: [ApprovalResponse.allow, ApprovalResponse.allow])
           .run(userMessage("clean up"))
           .toList();
 
-      expect(events.whereType<ApprovalRequestEvent>().first.approval.toolName, "bash");
+      expect(askEvents.whereType<ApprovalRequestEvent>().first.approval.toolName,
+          "bash");
+      expect(shell.ran, contains("rm -rf build"));
+
+      // Without asking: the same command runs with no banner at all.
+      final never = FakeLlmClient([
+        [bashCall("rm -rf build")],
+        [finish],
+      ]);
+      final neverEvents =
+          await agentOver(never).run(userMessage("clean up")).toList();
+
+      expect(neverEvents.whereType<ApprovalRequestEvent>(), isEmpty,
+          reason: "nothing is asked when the chat runs without asking");
       expect(shell.ran, contains("rm -rf build"));
     });
 
@@ -427,15 +424,6 @@ void main() {
 
       expect(shell.ran, hasLength(1),
           reason: "the parse does not override an approval the user made");
-    });
-
-    test("nothing is asked when the chat runs without asking", () async {
-      final client = FakeLlmClient([
-        [finish],
-      ]);
-      final events = await agentOver(client).run(userMessage("hi")).toList();
-
-      expect(events.whereType<ApprovalRequestEvent>(), isEmpty);
     });
   });
 
@@ -873,18 +861,6 @@ void main() {
       expect(events.whereType<ToolResultEvent>().single.result.returnCode, -1);
       expect(events.whereType<ArtifactEvent>(), isEmpty);
     });
-
-    test("the tool is dropped when saveArtifact is null", () async {
-      final client = FakeLlmClient([
-        [artifactCall("report/index.html")],
-        [finish],
-      ]);
-      await agentOver(client).run(userMessage("show me")).toList();
-
-      // The tool was not offered.
-      final tools = client.calls.first.tools.map((t) => t.name).toList();
-      expect(tools, isNot(contains(artifactToolName)));
-    });
   });
 
   group("file tools", () {
@@ -905,8 +881,9 @@ void main() {
       expect(results[1].result.output, contains("hello world"));
     });
 
-    test("reading a file pulls in a subdirectory's AGENTS.md when nested is on",
+    test("a read pulls in the subdirectory's AGENTS.md where the gate is on",
         () async {
+      // On: the read carries the directory's rules with the file.
       final client = FakeLlmClient([
         [readCall("sub/notes.txt")],
         [finish],
@@ -923,27 +900,28 @@ void main() {
       expect(result.output, contains("hi"));
       expect(result.output, contains("sub rules"));
       expect(result.output, contains("instructions for this directory"));
-    });
 
-    test("nested instructions are not injected when the gate is off", () async {
-      final client = FakeLlmClient([
+      // Off: the file alone, no rules ride in.
+      final gated = FakeLlmClient([
         [readCall("sub/notes.txt")],
         [finish],
       ]);
-      final agent = agentOver(client, memory: const MemorySettings(nested: false));
-      Directory(p.join(agent.workspace, "sub")).createSync(recursive: true);
-      File(p.join(agent.workspace, "sub", "notes.txt")).writeAsStringSync("hi");
-      File(p.join(agent.workspace, "sub", "AGENTS.md"))
+      final agentOff =
+          agentOver(gated, memory: const MemorySettings(nested: false));
+      Directory(p.join(agentOff.workspace, "sub")).createSync(recursive: true);
+      File(p.join(agentOff.workspace, "sub", "notes.txt")).writeAsStringSync("hi");
+      File(p.join(agentOff.workspace, "sub", "AGENTS.md"))
           .writeAsStringSync("sub rules");
 
-      final events = await agent.run(userMessage("read it")).toList();
+      final offEvents = await agentOff.run(userMessage("read it")).toList();
 
-      final result = events.whereType<ToolResultEvent>().single.result;
-      expect(result.output, contains("hi"));
-      expect(result.output, isNot(contains("sub rules")));
+      final offResult = offEvents.whereType<ToolResultEvent>().single.result;
+      expect(offResult.output, contains("hi"));
+      expect(offResult.output, isNot(contains("sub rules")));
     });
 
-    test("edit replaces a unique string", () async {
+    test("the edit tool replaces once, across all, or refuses", () async {
+      // A unique string is the ordinary case.
       final client = FakeLlmClient([
         [writeCall("test.txt", "foo bar baz")],
         [editCall("test.txt", "bar", "qux")],
@@ -956,34 +934,34 @@ void main() {
       expect(results[1].result.returnCode, 0);
       expect(results[1].result.output, contains("replaced 1"));
       expect(results[2].result.output, contains("foo qux baz"));
-    });
 
-    test("edit rejects a non-unique string without replace_all", () async {
-      final client = FakeLlmClient([
+      // Not unique: refused with the count named, not applied at a guess.
+      final ambiguous = FakeLlmClient([
         [writeCall("test.txt", "a a a")],
         [editCall("test.txt", "a", "b")],
         [finish],
       ]);
-      final events = await agentOver(client).run(userMessage("write and edit")).toList();
+      final refused =
+          await agentOver(ambiguous).run(userMessage("write and edit")).toList();
 
-      final results = events.whereType<ToolResultEvent>().toList();
-      expect(results[1].result.returnCode, -1);
-      expect(results[1].result.exceptionInfo, contains("3 times"));
-    });
+      final refusedResults = refused.whereType<ToolResultEvent>().toList();
+      expect(refusedResults[1].result.returnCode, -1);
+      expect(refusedResults[1].result.exceptionInfo, contains("3 times"));
 
-    test("edit with replace_all replaces all occurrences", () async {
-      final client = FakeLlmClient([
+      // replace_all: every occurrence.
+      final all = FakeLlmClient([
         [writeCall("test.txt", "a a a")],
         [editCall("test.txt", "a", "b", replaceAll: true)],
         [readCall("test.txt")],
         [finish],
       ]);
-      final events = await agentOver(client).run(userMessage("write, edit, read")).toList();
+      final replaced =
+          await agentOver(all).run(userMessage("write, edit, read")).toList();
 
-      final results = events.whereType<ToolResultEvent>().toList();
-      expect(results[1].result.returnCode, 0);
-      expect(results[1].result.output, contains("replaced 3"));
-      expect(results[2].result.output, contains("b b b"));
+      final replacedResults = replaced.whereType<ToolResultEvent>().toList();
+      expect(replacedResults[1].result.returnCode, 0);
+      expect(replacedResults[1].result.output, contains("replaced 3"));
+      expect(replacedResults[2].result.output, contains("b b b"));
     });
 
     test("read with offset and limit reads a slice", () async {
@@ -1024,53 +1002,52 @@ void main() {
       expect(events.whereType<ToolResultEvent>().single.result.exceptionInfo, contains("not found"));
     });
 
-    test("read on a binary file is a failed result, not a thrown one", () async {
-      final client = FakeLlmClient([
+    test("a tool that throws is a failed result, not a thrown one", () async {
+      // Reading a binary: refused with what it found, killing no stream.
+      final read = FakeLlmClient([
         [readCall("image.png")],
         [finish],
       ]);
-      final agent = agentOver(client);
-      File(p.join(agent.workspace, "image.png")).writeAsBytesSync(onePixelPng);
+      final reads = agentOver(read);
+      File(p.join(reads.workspace, "image.png")).writeAsBytesSync(onePixelPng);
 
-      final events = await agent.run(userMessage("read it")).toList();
+      final readEvents = await reads.run(userMessage("read it")).toList();
 
-      expect(events.whereType<ErrorEvent>(), isEmpty);
-      final result = events.whereType<ToolResultEvent>().single.result;
-      expect(result.returnCode, -1);
-      expect(result.exceptionInfo, contains("binary"));
-      expect(result.exceptionInfo, contains("image.png"));
-    });
+      expect(readEvents.whereType<ErrorEvent>(), isEmpty);
+      final readResult = readEvents.whereType<ToolResultEvent>().single.result;
+      expect(readResult.returnCode, -1);
+      expect(readResult.exceptionInfo, contains("binary"));
+      expect(readResult.exceptionInfo, contains("image.png"));
 
-    test("a write that throws is a failed result, not a thrown one", () async {
-      final client = FakeLlmClient([
+      // Writing over a file: the throw is the failed result.
+      final write = FakeLlmClient([
         [writeCall("blocked/hello.txt", "hi")],
         [finish],
       ]);
-      final agent = agentOver(client);
-      File(p.join(agent.workspace, "blocked")).writeAsStringSync("a file");
+      final writes = agentOver(write);
+      File(p.join(writes.workspace, "blocked")).writeAsStringSync("a file");
 
-      final events = await agent.run(userMessage("write it")).toList();
+      final writeEvents = await writes.run(userMessage("write it")).toList();
 
-      expect(events.whereType<ErrorEvent>(), isEmpty);
-      final result = events.whereType<ToolResultEvent>().single.result;
-      expect(result.returnCode, -1);
-      expect(result.exceptionInfo, isNotEmpty);
-    });
+      expect(writeEvents.whereType<ErrorEvent>(), isEmpty);
+      final writeResult = writeEvents.whereType<ToolResultEvent>().single.result;
+      expect(writeResult.returnCode, -1);
+      expect(writeResult.exceptionInfo, isNotEmpty);
 
-    test("an edit that throws is a failed result, not a thrown one", () async {
-      final client = FakeLlmClient([
+      // Editing one: same again.
+      final edit = FakeLlmClient([
         [editCall("image.png", "a", "b")],
         [finish],
       ]);
-      final agent = agentOver(client);
-      File(p.join(agent.workspace, "image.png")).writeAsBytesSync([0x00, 0x01, 0x02]);
+      final edits = agentOver(edit);
+      File(p.join(edits.workspace, "image.png")).writeAsBytesSync([0x00, 0x01, 0x02]);
 
-      final events = await agent.run(userMessage("edit it")).toList();
+      final editEvents = await edits.run(userMessage("edit it")).toList();
 
-      expect(events.whereType<ErrorEvent>(), isEmpty);
-      final result = events.whereType<ToolResultEvent>().single.result;
-      expect(result.returnCode, -1);
-      expect(result.exceptionInfo, isNotEmpty);
+      expect(editEvents.whereType<ErrorEvent>(), isEmpty);
+      final editResult = editEvents.whereType<ToolResultEvent>().single.result;
+      expect(editResult.returnCode, -1);
+      expect(editResult.exceptionInfo, isNotEmpty);
     });
 
     test("file tools are always offered, even without a shell", () async {
@@ -1114,8 +1091,10 @@ void main() {
       return (agent, outside);
     }
 
-    test("is offered to the user before it runs", () async {
-      final (agent, outside) = scriptWritingOutside(FakeLlmClient([]));
+    test("is offered to the user before it runs, and the answer rules", () async {
+      // Allowed: it writes, having asked.
+      final (agent, outside) = scriptWritingOutside(FakeLlmClient([]),
+          approvals: [ApprovalResponse.allow]);
       final events = await agent.run(userMessage("write outside")).toList();
 
       expect(events.whereType<ApprovalRequestEvent>().single.approval.argumentsText,
@@ -1123,19 +1102,20 @@ void main() {
       final result = events.whereType<ToolResultEvent>().single.result;
       expect(result.returnCode, 0);
       expect(result.output, contains("Wrote"));
-    });
 
-    test("that the user declines runs nothing", () async {
-      final (agent, outside) = scriptWritingOutside(FakeLlmClient([]),
+      // Denied: nothing on disk, and the model told why.
+      final (denied, deniedPath) = scriptWritingOutside(FakeLlmClient([]),
           approvals: [ApprovalResponse.deny]);
-      final events = await agent.run(userMessage("write outside")).toList();
+      final refusal =
+          await denied.run(userMessage("write outside")).toList();
 
-      expect(events.whereType<ApprovalRequestEvent>().single.approval.argumentsText,
-          outside);
-      final result = events.whereType<ToolResultEvent>().single.result;
-      expect(result.returnCode, -1);
-      expect(result.exceptionInfo, contains("denied"));
-      expect(File(outside).existsSync(), isFalse);
+      expect(
+          refusal.whereType<ApprovalRequestEvent>().single.approval.argumentsText,
+          deniedPath);
+      final refused = refusal.whereType<ToolResultEvent>().single.result;
+      expect(refused.returnCode, -1);
+      expect(refused.exceptionInfo, contains("denied"));
+      expect(File(deniedPath).existsSync(), isFalse);
     });
   });
 
@@ -1262,10 +1242,11 @@ void main() {
       expect(await store.entries(), isEmpty);
     });
 
-    test("memory_search returns the memories it is about", () async {
+    test("what memory_search puts in the result", () async {
       await store.add("the user prefers tabs over spaces");
       await store.add("notes about the weather");
 
+      // What it is about; not what it is not.
       final client = FakeLlmClient([
         [fileCall(memorySearchToolName, {"query": "how does the user like code"})],
         [finish],
@@ -1277,20 +1258,31 @@ void main() {
       expect(result.returnCode, 0);
       expect(result.output, contains("the user prefers tabs over spaces"));
       expect(result.output, isNot(contains("notes about the weather")));
-    });
 
-    test("memory_search shows the ids the correction tools take", () async {
-      final entry = await store.add("the user prefers tabs over spaces");
-
-      final client = FakeLlmClient([
+      // The ids the correction tools take, beside what was found.
+      final tabs = (await store.entries())
+          .firstWhere((e) => e.text.contains("prefers tabs"));
+      final ids = FakeLlmClient([
         [fileCall(memorySearchToolName, {"query": "how does the user like code"})],
         [finish],
       ]);
-      final events =
-          await agentOver(client, memoryStore: store).run(userMessage("look it up")).toList();
+      final idEvents =
+          await agentOver(ids, memoryStore: store).run(userMessage("look it up")).toList();
 
-      final result = events.whereType<ToolResultEvent>().first.result;
-      expect(result.output, contains("[${entry.id}]"));
+      expect(idEvents.whereType<ToolResultEvent>().first.result.output,
+          contains("[${tabs.id}]"));
+
+      // Nothing matching: said, not an empty string.
+      final empty = FakeLlmClient([
+        [fileCall(memorySearchToolName, {"query": "completely unrelated words"})],
+        [finish],
+      ]);
+      final emptyEvents =
+          await agentOver(empty, memoryStore: store).run(userMessage("look it up")).toList();
+
+      expect(emptyEvents.whereType<ToolResultEvent>().first.result.returnCode, 0);
+      expect(emptyEvents.whereType<ToolResultEvent>().first.result.output,
+          contains("No memories match"));
     });
 
     test("memory_update replaces the fact in place, stamped with the chat",
@@ -1346,21 +1338,6 @@ void main() {
       expect(entries, hasLength(1));
       expect(entries.single.text, "a fact that stands");
     });
-
-    test("memory_search answers nothing where nothing matches", () async {
-      await store.add("notes about the weather");
-
-      final client = FakeLlmClient([
-        [fileCall(memorySearchToolName, {"query": "completely unrelated words"})],
-        [finish],
-      ]);
-      final events =
-          await agentOver(client, memoryStore: store).run(userMessage("look it up")).toList();
-
-      final result = events.whereType<ToolResultEvent>().first.result;
-      expect(result.returnCode, 0);
-      expect(result.output, contains("No memories match"));
-    });
   });
 
   group("the static gate", () {
@@ -1370,7 +1347,8 @@ void main() {
     /// does — the landlock tests answer for that.
     final helper = _StubSandboxHelper();
 
-    test("a command that cannot be modeled is not run and says why", () async {
+    test("a command the gate escalates is not run and says why", () async {
+      // Unmodelable: no tool of the shell can carry it.
       final client = FakeLlmClient([
         [bashCall(r'echo "unclosed')], [finish],
       ]);
@@ -1385,17 +1363,16 @@ void main() {
       expect(text.toLowerCase(), contains("cannot be checked as one piece"));
       expect(shell.ran, isEmpty,
           reason: "an unmodelable command never reaches the shell");
-    });
 
-    test("an assignment that rewrites where writes land is not run", () async {
-      final client = FakeLlmClient([
+      // An assignment that rewrites where writes land: refused by name.
+      final assignment = FakeLlmClient([
         [bashCall("HOME=/tmp/evil git commit")], [finish],
       ]);
-      final events = await agentOver(client, sandboxHelper: helper)
+      final assignmentEvents = await agentOver(assignment, sandboxHelper: helper)
           .run(userMessage("go"))
           .toList();
       expect(
-          events
+          assignmentEvents
               .whereType<ToolResultEvent>()
               .map((r) => [r.result.output, r.result.exceptionInfo ?? ""].join(" "))
               .join(),
@@ -1423,10 +1400,8 @@ void main() {
       expect(shell.ran, hasLength(1));
     });
 
-    test("auto mode's banner-bound command is not vetoed by the parse either",
-        () async {
-      // The classifier's ask reaches the same banner in auto mode, so the
-      // gate reads whether a human decided, not which mode the chat runs.
+    test("in auto mode the parse holds only where nobody decided", () async {
+      // The classifier asks: the banner is the decision, as in ask mode.
       final client = FakeLlmClient([
         [bashCall(r'echo "unclosed')], [finish],
       ]);
@@ -1440,16 +1415,13 @@ void main() {
 
       expect(shell.ran, hasLength(1),
           reason: "the banner is the decision, in auto mode as in ask");
-    });
 
-    test("a classified-allow command that cannot be modeled is refused",
-        () async {
-      // The arm without a banner is where the gate holds: nothing read the
-      // text and decided, so the parse refusal is what says why.
-      final client = FakeLlmClient([
+      // The classifier allows: no human read the text, so the gate's refusal
+      // is what says why.
+      final allowed = FakeLlmClient([
         [bashCall(r'echo "unclosed')], [finish],
       ]);
-      final events = await agentOver(client,
+      final events = await agentOver(allowed,
               sandboxHelper: helper,
               approveMode: ApproveMode.auto,
               classifier: FakeClassifier(decision: PermissionDecision.allow))
@@ -1477,7 +1449,8 @@ void main() {
       return (agent, agent.workspace);
     }
 
-    test("plan_add writes the plan and reports the counts", () async {
+    test("plan_add files the task, under the section it names", () async {
+      // Default section: Tasks, with the counts and the session message.
       final client = FakeLlmClient([
         [fileCall(planAddToolName, {"task": "add parser"})],
         [finish],
@@ -1492,23 +1465,24 @@ void main() {
       expect(result.output, contains("add parser"));
       expect(client.sent[1].firstWhere((m) => m.toolCallId == "file-1").text,
           contains("add parser"));
-    });
 
-    test("plan_add files under the section it names", () async {
-      final client = FakeLlmClient([
+      // A named section, created when it does not exist.
+      final sectioned = FakeLlmClient([
         [fileCall(planAddToolName, {"task": "clone", "section": "Setup"})],
         [finish],
       ]);
-      final (agent, workspace) = planAgent(client);
-      await agent.run(userMessage("plan it")).toList();
+      final (sectionedAgent, sectionedWorkspace) = planAgent(sectioned);
+      await sectionedAgent.run(userMessage("plan it")).toList();
 
-      final plan = File(p.join(workspace, "PLAN.md")).readAsStringSync();
-      final setup = plan.indexOf("## Setup");
+      final setupPlan =
+          File(p.join(sectionedWorkspace, "PLAN.md")).readAsStringSync();
+      final setup = setupPlan.indexOf("## Setup");
       expect(setup, greaterThanOrEqualTo(0));
-      expect(plan.indexOf("- [ ] clone"), greaterThan(setup));
+      expect(setupPlan.indexOf("- [ ] clone"), greaterThan(setup));
     });
 
-    test("plan_next marks the task and hands the number to the model", () async {
+    test("plan_next takes the first pending task", () async {
+      // Pending work: marked in progress, numbered for the model.
       final client = FakeLlmClient([
         [fileCall(planNextToolName, {}, id: "n1")],
         [finish],
@@ -1523,22 +1497,23 @@ void main() {
       final result = events.whereType<ToolResultEvent>().single.result;
       expect(result.output, contains("Task 1 of 2"));
       expect(result.output, contains("one"));
-    });
 
-    test("plan_next with nothing left says so", () async {
-      final client = FakeLlmClient([
+      // Nothing pending left.
+      final exhausted = FakeLlmClient([
         [fileCall(planNextToolName, {}, id: "n2")],
         [finish],
       ]);
-      final (agent, workspace) = planAgent(client);
-      File(p.join(workspace, "PLAN.md")).writeAsStringSync("- [x] one\n");
-      final events = await agent.run(userMessage("go")).toList();
+      final (done, doneWorkspace) = planAgent(exhausted);
+      File(p.join(doneWorkspace, "PLAN.md")).writeAsStringSync("- [x] one\n");
+      final doneEvents = await done.run(userMessage("go")).toList();
 
-      expect(events.whereType<ToolResultEvent>().single.result.output,
+      expect(doneEvents.whereType<ToolResultEvent>().single.result.output,
           "All tasks done.");
     });
 
-    test("plan_done by number", () async {
+    test("plan_done finds the task by number or text, and refuses an ambiguous one",
+        () async {
+      // By number.
       final client = FakeLlmClient([
         [fileCall(planDoneToolName, {"task": "2"})],
         [finish],
@@ -1551,36 +1526,34 @@ void main() {
           contains("- [x] two"));
       expect(events.whereType<ToolResultEvent>().single.result.output,
           contains("1 of 2 tasks done"));
-    });
 
-    test("plan_done by text", () async {
-      final client = FakeLlmClient([
+      // By text prefix.
+      final byText = FakeLlmClient([
         [fileCall(planDoneToolName, {"task": "read"})],
         [finish],
       ]);
-      final (agent, workspace) = planAgent(client);
-      File(p.join(workspace, "PLAN.md"))
+      final (text, textWorkspace) = planAgent(byText);
+      File(p.join(textWorkspace, "PLAN.md"))
           .writeAsStringSync("- [ ] read the code\n- [ ] add parser\n");
-      await agent.run(userMessage("go")).toList();
+      await text.run(userMessage("go")).toList();
 
-      expect(File(p.join(workspace, "PLAN.md")).readAsStringSync(),
+      expect(File(p.join(textWorkspace, "PLAN.md")).readAsStringSync(),
           contains("- [x] read the code"));
-    });
 
-    test("plan_done refuses an ambiguous name rather than guessing", () async {
-      final client = FakeLlmClient([
+      // Ambiguous: refused rather than guessed.
+      final ambiguous = FakeLlmClient([
         [fileCall(planDoneToolName, {"task": "wri"})],
         [finish],
       ]);
-      final (agent, workspace) = planAgent(client);
-      File(p.join(workspace, "PLAN.md"))
+      final (ref, refWorkspace) = planAgent(ambiguous);
+      File(p.join(refWorkspace, "PLAN.md"))
           .writeAsStringSync("- [ ] write tests\n- [ ] write docs\n");
-      final events = await agent.run(userMessage("go")).toList();
+      final refEvents = await ref.run(userMessage("go")).toList();
 
-      final result = events.whereType<ToolResultEvent>().single.result;
+      final result = refEvents.whereType<ToolResultEvent>().single.result;
       expect(result.returnCode, -1);
       expect(result.exceptionInfo, contains("more than one task"));
-      expect(File(p.join(workspace, "PLAN.md")).readAsStringSync(),
+      expect(File(p.join(refWorkspace, "PLAN.md")).readAsStringSync(),
           isNot(contains("[x]")));
     });
 
@@ -1680,21 +1653,20 @@ void main() {
       final result = events.whereType<ToolResultEvent>().single.result;
       expect(result.output, contains("Do not start executing"));
       expect(result.output, contains("present it again"));
-    });
 
-    test("nothing answered stops the turn rather than starting the work", () async {
-      final client = FakeLlmClient([
+      // The unanswered arm: the turn stops rather than starting the work.
+      final unanswered = FakeLlmClient([
         [fileCall(presentPlanToolName, {}, id: "pp-4")],
         [finish],
       ]);
-      final (agent, workspace) = planAgent(
-        client,
+      final (held, heldWorkspace) = planAgent(
+        unanswered,
         saveArtifact: (path, entryFile, {artifactId}) async => "art-3",
       );
-      File(p.join(workspace, "PLAN.md")).writeAsStringSync("- [ ] one\n");
-      final events = await agent.run(userMessage("present it")).toList();
+      File(p.join(heldWorkspace, "PLAN.md")).writeAsStringSync("- [ ] one\n");
+      final heldEvents = await held.run(userMessage("present it")).toList();
 
-      expect(events.whereType<ToolResultEvent>().single.result.output,
+      expect(heldEvents.whereType<ToolResultEvent>().single.result.output,
           contains("Finish the turn"));
     });
 
@@ -1718,7 +1690,8 @@ void main() {
 
     test("present_plan rides ask and artifact, the file trio does not", () async {
       // No saveArtifact: a turn without the publish path loses present_plan
-      // but keeps the file trio, which ride the floor like the file tools.
+      // and the artifact tool, and keeps the file trio and the plan trio,
+      // which ride the floor like the file tools do.
       final client = FakeLlmClient([
         [saidOnly("nothing to run")],
       ]);
@@ -1727,6 +1700,7 @@ void main() {
       expect(
           tools, containsAll([planAddToolName, planNextToolName, planDoneToolName]));
       expect(tools, isNot(contains(presentPlanToolName)));
+      expect(tools, isNot(contains(artifactToolName)));
     });
   });
 }

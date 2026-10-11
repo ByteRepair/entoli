@@ -8,6 +8,7 @@ import "package:flutter_test/flutter_test.dart";
 import "package:path/path.dart" as p;
 
 import "fake_network.dart";
+import "../harness.dart";
 
 /// Against the machine's real `tar`, in one test, for the reason
 /// `voice_model_store_test.dart` is: what is worth pinning is the shape of
@@ -124,12 +125,19 @@ void main() {
     net.hold = Completer<void>();
 
     final sub = store.install(distro(), abi: "x86_64").listen(null);
-    await Future<void>.delayed(const Duration(milliseconds: 50));
+    // Under way mid-response: the tarball exists, which the progress stream
+    // never says at this size (it reports per megabyte).
+    await waitFor(
+        () => File(p.join(root.path, "rootfs", "testix", "_rootfs.tar.gz")).existsSync(),
+        what: "the download to be under way");
     await sub.cancel();
-    await Future<void>.delayed(const Duration(milliseconds: 50));
+    // The half-written download goes with the cancellation, in cleanup that
+    // is asynchronous on its own; gone is gone.
+    await waitFor(
+        () => !Directory(p.join(root.path, "rootfs", "testix")).existsSync(),
+        what: "the half-written download to be cleaned out");
 
     expect(await store.installed(), isEmpty);
-    expect(store.directoryOfSync("testix"), isNull);
   });
 
   test("an architecture the distribution has no build for is refused rather "

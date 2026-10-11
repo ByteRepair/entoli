@@ -65,24 +65,17 @@ void main() {
     expect(files.last.kind, InstructionKind.project);
   });
 
+  // Only the workspace root's AGENTS.md loads: the chat's own and any
+  // intermediate directory's wait for a read reaching them.
   test("a chat's own AGENTS.md is not loaded up front", () async {
     write("AGENTS.md", "project rules");
     write("chats/chat-1/AGENTS.md", "chat rules");
+    write("chats/AGENTS.md", "shared chat rules");
 
     final files = await load();
 
     expect(pathsOf(files), ["projects/default/workspace/AGENTS.md"]);
     expect(files.single.kind, InstructionKind.project);
-  });
-
-  test("an intermediate directory's AGENTS.md is not loaded up front",
-      () async {
-    write("chats/AGENTS.md", "shared chat rules");
-    write("AGENTS.md", "project rules");
-
-    final files = await load();
-
-    expect(pathsOf(files), ["projects/default/workspace/AGENTS.md"]);
   });
 
   test("nothing above the project workspace is read, the global named aside",
@@ -235,9 +228,8 @@ void main() {
       expect(text, contains("global rules"));
       expect(text, contains("project rules"));
       expect(text, contains("this is an anonymous chat"));
-    });
 
-    test("renders nothing for an empty list", () {
+      // Nothing to render: nothing.
       expect(renderInstructions(const []), isEmpty);
     });
   });

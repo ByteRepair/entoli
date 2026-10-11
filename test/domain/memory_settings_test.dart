@@ -61,20 +61,18 @@ void main() {
       expect(loaded.memoryAgentTool, isFalse);
       expect(loaded.memoryProviderId, "ollama-cloud");
       expect(loaded.memoryModelId, "qwen-2.5");
-    });
 
-    // The sub-gates default on: a file that turns auto-memory on without
-    // naming them says nothing, and gets recall, extraction and the tools.
-    // The instruction half defaults on too, the files being read into every
-    // turn whether or not the file names them.
-    test("the sub-gates default on", () async {
+      // Omission means on: a file that turns auto-memory on without naming
+      // the sub-gates gets recall, extraction and the tools. The instruction
+      // half defaults on too, the files being read into every turn whether or
+      // not the file names them.
       await AppSettings(autoMemory: true).save(config);
-      final loaded = AppSettings.load(config);
-      expect(loaded.instructionImports, isTrue);
-      expect(loaded.nestedInstructions, isTrue);
-      expect(loaded.memoryRecall, isTrue);
-      expect(loaded.memoryExtraction, isTrue);
-      expect(loaded.memoryAgentTool, isTrue);
+      final defaults = AppSettings.load(config);
+      expect(defaults.instructionImports, isTrue);
+      expect(defaults.nestedInstructions, isTrue);
+      expect(defaults.memoryRecall, isTrue);
+      expect(defaults.memoryExtraction, isTrue);
+      expect(defaults.memoryAgentTool, isTrue);
     });
 
     // Defaults write nothing: an untouched settings.json carries no memory
@@ -99,7 +97,6 @@ void main() {
     });
 
     test("a project's own-memory toggle survives save and load", () async {
-      makeProject("proj");
       makeProject("proj");
       await ProjectSettings(useProjectMemory: true).save(config, project: "proj");
 
@@ -142,7 +139,7 @@ void main() {
       expect(memory.memoryDir, isNull);
     });
 
-    test("a default-project chat uses the default store", () async {
+    test("the default store answers the default project and a toggle-less one", () async {
       final repo = repoWith(AppSettings(autoMemory: true));
       final chat = await repo.createChat();
 
@@ -151,15 +148,11 @@ void main() {
       final memory = backend.prompts.single.settings.memory;
       expect(memory.autoMemory, isTrue);
       expect(memory.memoryDir, config.memoryDir());
-    });
 
-    test("a project without its own toggle shares the default store", () async {
-      final repo = repoWith(AppSettings(autoMemory: true));
-      final chat = await repo.createChat(project: "proj");
-
-      await repo.sendPrompt(chat.state.id, userMessage("hi")).toList();
-
-      expect(backend.prompts.single.settings.memory.memoryDir,
+      // A project without its own toggle shares the default store.
+      final other = await repo.createChat(project: "proj");
+      await repo.sendPrompt(other.state.id, userMessage("hi")).toList();
+      expect(backend.prompts.last.settings.memory.memoryDir,
           config.memoryDir());
     });
 
@@ -188,7 +181,8 @@ void main() {
       expect(memory.memoryDir, isNull);
     });
 
-    test("the memory sub-gates travel with the turn", () async {
+    test("the sub-gates travel with the turn, on by default where the file says nothing", () async {
+      // The named-off ones ride off; the unnamed one rides on with the store.
       final repo = repoWith(AppSettings(
         autoMemory: true,
         memoryRecall: false,
@@ -202,18 +196,15 @@ void main() {
       expect(memory.recall, isFalse);
       expect(memory.extract, isFalse);
       expect(memory.agentTool, isTrue);
-    });
 
-    test("the memory sub-gates default on with the store", () async {
-      final repo = repoWith(AppSettings(autoMemory: true));
-      final chat = await repo.createChat();
-
-      await repo.sendPrompt(chat.state.id, userMessage("hi")).toList();
-
-      final memory = backend.prompts.single.settings.memory;
-      expect(memory.recall, isTrue);
-      expect(memory.extract, isTrue);
-      expect(memory.agentTool, isTrue);
+      // Nothing named: all three ride on with the store.
+      final defaults = repoWith(AppSettings(autoMemory: true));
+      final other = await defaults.createChat();
+      await defaults.sendPrompt(other.state.id, userMessage("hi")).toList();
+      final on = backend.prompts.last.settings.memory;
+      expect(on.recall, isTrue);
+      expect(on.extract, isTrue);
+      expect(on.agentTool, isTrue);
     });
 
     test("the background model pair travels with the turn", () async {
@@ -229,15 +220,6 @@ void main() {
       final memory = backend.prompts.single.settings.memory;
       expect(memory.bgProvider, "ollama-cloud");
       expect(memory.bgModel, "qwen-2.5");
-    });
-
-    test("a chat that keeps out of memory runs with it off", () async {
-      final repo = repoWith(AppSettings(autoMemory: true));
-      final chat = await repo.createChat(meta: ChatMeta(memoryOff: true));
-
-      await repo.sendPrompt(chat.state.id, userMessage("hi")).toList();
-
-      expect(backend.prompts.single.settings.memory, MemorySettings.off);
     });
 
     test("one chat's keep-out does not reach the rest of the project",

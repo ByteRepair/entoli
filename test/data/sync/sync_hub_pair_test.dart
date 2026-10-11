@@ -216,7 +216,6 @@ void main() {
     expect(home.hub.pairing.value!.sas, away.hub.pairing.value!.sas);
 
     home.hub.confirmPairing(true);
-    await Future<void>.delayed(const Duration(milliseconds: 300));
     away.hub.confirmPairing(true);
     await Future.wait([a, b]);
 
@@ -234,11 +233,17 @@ void main() {
         link: links.$1, weOffered: true, psk: psk);
     final b = away.hub.establishForTest(
         link: links.$2, weOffered: false, psk: psk);
+    // Both humans confirming — checked on both sides, the answer side's stage
+    // is seen first and the joiner's gate arms one hop later, so a confirm
+    // made on a one-sided tick would land on nothing.
     await waitForSync(() =>
+        home.hub.pairing.value?.stage == PairingStage.confirming &&
         away.hub.pairing.value?.stage == PairingStage.confirming);
 
-    // The other side has already sent its welcome by the time this one says
-    // no, so what it sent must not have been applied.
+    // The window below is the ordering contract, not a wait: both gates are
+    // answered, and the close a refusal runs must not outrun home's tail into
+    // its hello — the two then fail with the raw transport error, not the
+    // polite handshake exceptions both sides throw for themselves.
     home.hub.confirmPairing(true);
     await Future<void>.delayed(const Duration(milliseconds: 300));
     away.hub.confirmPairing(false);
@@ -683,10 +688,12 @@ void main() {
       final state = await mirrored();
 
       // Past the local guard, which is about not shouting into the void
-      // rather than about permission: the home device is what refuses.
+      // rather than about permission: the home device is what refuses. The
+      // frame was enqueued by the send already; one drain delivers and
+      // handles it.
       await away.hub.sendForTest(
           state.id, SyncMessage.promptSend(chatId: state.id, text: "hi"));
-      await Future<void>.delayed(const Duration(milliseconds: 50));
+      await Future<void>.delayed(Duration.zero);
 
       expect(turns.prompts, isEmpty);
     });

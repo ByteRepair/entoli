@@ -8,6 +8,7 @@ import "package:flutter_test/flutter_test.dart";
 import "package:path/path.dart" as p;
 
 import "../fake_network.dart";
+import "../../harness.dart";
 
 /// For the reason `file_rootfs_store_test.dart` is: what is worth pinning is
 /// the shape of what lands on disk — the marker that says a model is whole,
@@ -76,14 +77,18 @@ void main() {
   test("cancelling leaves nothing behind", () async {
     net.hold = Completer<void>();
     final subscription = store().install(gguf()).listen(null);
-    // Far enough in for the first half to have landed on disk.
-    await Future<void>.delayed(const Duration(milliseconds: 50));
+    // Under way mid-response: the target exists, which the progress stream
+    // never says at this size (it reports per megabyte).
+    await waitFor(() => File(p.join(root.path, "test-model", "model.gguf")).existsSync(),
+        what: "the download to be under way");
 
     await subscription.cancel();
-    await Future<void>.delayed(const Duration(milliseconds: 50));
+    // The half-written download goes with the cancellation, in cleanup that
+    // is asynchronous on its own; gone is gone.
+    await waitFor(() => !Directory(p.join(root.path, "test-model")).existsSync(),
+        what: "the half-written download to be cleaned out");
 
     expect(await store().installed(), isEmpty);
-    expect(Directory(p.join(root.path, "test-model")).existsSync(), isFalse);
   });
 
   test("an unfinished directory is not installed", () async {

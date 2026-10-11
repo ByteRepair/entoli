@@ -193,25 +193,19 @@ void main() {
       return ZipEncoder().encodeBytes(archive);
     }
 
-    test("something that is not a zip", () {
+    test("something that is not a backup", () {
       expect(
         () => parseBackup(Uint8List.fromList("not a zip".codeUnits)),
         throwsA(isA<BackupFormatException>()),
       );
-    });
-
-    test("a zip with no manifest in it", () {
+      // A zip, but none of ours: no manifest.
       expect(() => parseBackup(zipOf(null)), throwsA(isA<BackupFormatException>()));
-    });
-
-    test("a manifest that names another format", () {
+      // Ours, but another format's manifest.
       expect(
         () => parseBackup(zipOf({"format": "something-else", "version": 1})),
         throwsA(isA<BackupFormatException>()),
       );
-    });
-
-    test("one from a newer Entoli", () {
+      // A format and version this build speaks of but cannot read.
       expect(
         () => parseBackup(zipOf({"format": backupFormat, "version": backupVersion + 1})),
         throwsA(isA<BackupFormatException>()),

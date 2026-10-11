@@ -693,16 +693,6 @@ void main() {
       expect(system, isNot(contains("shared with every other")));
     });
 
-    test("a ! command's home is the chat's own where no workspace is shared",
-        () async {
-      final backend = backendOver([], respond: (_) => ok(""));
-      await send(backend, "!pwd", project: "anonymous", sharedWorkspace: false);
-
-      final workspace = config.workspaceDir(chatId, project: "anonymous");
-      expect(shell.cwds, [workspace]);
-      expect(shell.homes, [workspace]);
-    });
-
     // A project's takeaways are the same machinery a headless turn uses to drop
     // `ask` and `task`: one value, so the prompt and the tool list cannot
     // disagree. A capability a project takes away is not named in the prompt.
@@ -844,22 +834,20 @@ void main() {
 
   group("running a command yourself", () {
     test("a ! message runs the command and never reaches a model", () async {
-      final backend = backendOver([], respond: (_) => ok("hello\n"));
+      final backend = backendOver([], respond: (c) =>
+          c.startsWith("cat")
+              ? const ShellResult(returnCode: 2, output: "no such file")
+              : ok("hello\n"));
       final events = await send(backend, "!echo hello");
 
       expect(shell.ran, ["echo hello"]);
       expect(client.sent, isEmpty);
       final run = events.whereType<ShellRunEvent>().single.run;
       expect((run.command, run.returnCode, run.output), ("echo hello", 0, "hello\n"));
+      // What it exited with comes back with it, whatever the code.
+      final failing = await send(backend, "!cat nothing");
+      expect(failing.whereType<ShellRunEvent>().single.run.returnCode, 2);
       expect(events.last, isA<DoneEvent>());
-    });
-
-    test("what it exited with comes back with it", () async {
-      final backend = backendOver([],
-          respond: (_) => const ShellResult(returnCode: 2, output: "no such file"));
-      final events = await send(backend, "!cat nothing");
-
-      expect(events.whereType<ShellRunEvent>().single.run.returnCode, 2);
     });
 
     test("the command is what follows the bang, with the space gone", () async {
@@ -905,6 +893,12 @@ void main() {
       expect(shell.cwds, [config.workspaceDir(chatId)]);
       expect(shell.homes, [config.projectWorkspaceDir()]);
       expect(Directory(config.workspaceDir(chatId)).existsSync(), isTrue);
+
+      // Where no workspace is shared, the chat's own is the home too.
+      await send(backend, "!pwd", project: "anonymous", sharedWorkspace: false);
+      final workspace = config.workspaceDir(chatId, project: "anonymous");
+      expect(shell.cwds.last, workspace);
+      expect(shell.homes.last, workspace);
     });
 
     test("stopping the turn kills the command", () async {
@@ -1060,8 +1054,9 @@ void main() {
       final events = <AgentEvent>[];
       final turn = asking(backend, "clean").forEach(events.add);
 
-      await pumpEvents();
-      final pending = await backend.pendingApprovals(chatId);
+      // The banner's arrival is the turn's own async hop; polled, not beaten.
+      final pending = await untilPending(
+          "the approval", () => backend.pendingApprovals(chatId));
       expect(pending.single.toolName, "bash");
       expect(pending.single.argumentsJson, contains("rm -rf build"));
 
@@ -1079,8 +1074,8 @@ void main() {
       ]);
 
       final turn = asking(backend, "clean").toList();
-      await pumpEvents();
-      final first = (await backend.pendingApprovals(chatId)).single;
+      final first = (await untilPending(
+          "the approval", () => backend.pendingApprovals(chatId))).single;
       await backend.respondApproval(chatId, first.id, ApprovalResponse.deny);
       final events = await turn;
 
@@ -1300,6 +1295,12 @@ void main() {
           .result;
       expect(result.returnCode, 0);
       expect(result.output, contains("there are three"));
+      // The parent is shown the answer, not that it was interrupted: the
+      // sub-agent's own output is what answers its `task` call.
+      final answered = client.sent.last
+          .where((m) => m.role == LlmRole.tool && m.toolCallId == "task-1");
+      expect(answered.single.text, contains("there are three"));
+      expect(answered.single.text, isNot(contains("interrupted")));
     });
 
     test("what it had already done is put back in front of it", () async {
@@ -1312,23 +1313,6 @@ void main() {
       await resuming(backend, historyWithPendingTask());
 
       expect(client.sent.first.any((m) => m.text.contains("I was halfway through")), isTrue);
-    });
-
-    test("the parent is shown the answer, not that it was interrupted", () async {
-      await seedKilledSubAgent("task-1", "halfway");
-      final backend = backendOver([
-        [saidOnly("there are three")],
-        [finish],
-      ]);
-
-      await resuming(backend, historyWithPendingTask());
-
-      // The parent's own call is the second: the first is the revived
-      // sub-agent's. What answers its `task` call is the sub-agent's output.
-      final answered = client.sent.last
-          .where((m) => m.role == LlmRole.tool && m.toolCallId == "task-1");
-      expect(answered.single.text, contains("there are three"));
-      expect(answered.single.text, isNot(contains("interrupted")));
     });
 
     test("a call that never started keeps the interrupted wording", () async {
@@ -1556,16 +1540,13 @@ void main() {
       expect(client.sent.single.single.text, "name this");
     });
 
-    test("a provider that is gone answers nothing rather than failing", () async {
+    test("an ask that fails answers nothing rather than failing", () async {
       final backend = backendOver([]);
 
+      // The provider is not one the settings know.
       expect(await backend.ask("hi", model: "m", provider: "ghost"), isNull);
-    });
-
-    test("a request that fails answers nothing either", () async {
-      final backend = backendOver([]);
+      // And a request that fails mid-call answers null too.
       client.failures[0] = const LlmException("no", statusCode: 500);
-
       expect(await backend.ask("hi", model: "fake-model", provider: "fake"), isNull);
     });
 
@@ -1658,7 +1639,9 @@ void main() {
 
       await send(backend, "how should I indent this", memory: memory());
 
-      await pumpEvents();
+      // The extraction is unwatched background work: polled, not beaten.
+      await waitFor(() => client.sent.length >= 2, what: "the extraction call");
+
       final question = client.sent.last.last;
       expect(question.text, contains("how should I indent this"));
       expect(question.text, contains("use spaces, the user changed their mind"));

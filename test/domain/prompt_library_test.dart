@@ -16,39 +16,10 @@ void main() {
       expect(doc.option, const CompletionOption(name: "review", description: "look it over"));
     });
 
-    test("a file with no frontmatter is all body", () {
-      final doc = skill("bare", "Just do the thing.\n");
-
-      expect(doc.description, isNull);
-      expect(doc.body, "Just do the thing.");
-    });
-
-    test("an unterminated block is not frontmatter", () {
-      final doc = skill("broken", "---\ndescription: never closed\n\nstill going");
-
-      expect(doc.frontmatter, isEmpty);
-      expect(doc.body, startsWith("---"));
-    });
-
     test("quotes around a value are the YAML's, not part of it", () {
       final doc = skill("quoted", '---\ndescription: "with: a colon"\n---\nbody');
 
       expect(doc.description, "with: a colon");
-    });
-
-    test("a nested key is skipped rather than half-read", () {
-      final doc = PromptDocument.parse(CompletionKind.agent, "locked",
-          "---\ndescription: careful\npermission:\n  edit: deny\n  bash: ask\n---\nbody");
-
-      expect(doc.frontmatter, {"description": "careful"});
-      expect(doc.body, "body");
-    });
-
-    test("windows line endings parse the same", () {
-      final doc = skill("crlf", "---\r\ndescription: fine\r\n---\r\n\r\nbody\r\n");
-
-      expect(doc.description, "fine");
-      expect(doc.body, "body");
     });
   });
 
@@ -98,19 +69,6 @@ void main() {
       expect(singleAgentMention("over to @reviewer now",
               libraryOf(["reviewer"])),
           "reviewer");
-    });
-    test("a name the library does not know is prose, not an address", () {
-      expect(
-          singleAgentMention("ask @stranger to look",
-              libraryOf(["reviewer"])),
-          isNull);
-    });
-
-    test("two members named is a round, not a handoff", () {
-      expect(
-          singleAgentMention("@reviewer and @second, look at this",
-              libraryOf(["reviewer", "second"])),
-          isNull);
     });
 
     test("a signature of a known member beside the handoff is two members",

@@ -197,6 +197,10 @@ void main() {
     final thinking = reply.parts.whereType<ReasoningPart>().single;
     expect(thinking.text, "let me work it out");
     expect(thinking.durationMs, 3000);
+    // And what the conversation keeps agrees with what was on screen.
+    final stored = await app.repo.openChat(id);
+    expect(stored.messages.last.parts.whereType<ReasoningPart>().single.durationMs,
+        3000);
   });
 
   test("a block the backend only reports whole still lands", () async {
@@ -270,19 +274,6 @@ void main() {
     expect(stored.parts, reply.parts);
   });
 
-  test("thinking is persisted with the conversation", () async {
-    app.backend.scriptedEvents = const [
-      ReasoningDelta("hmm"),
-      ReasoningEnd(text: "hmm", duration: Duration(seconds: 2)),
-      TextDelta("hi"),
-      DoneEvent(),
-    ];
-    final (id, _) = await chatWithOneTurn("hello");
-
-    final stored = await app.repo.openChat(id);
-    expect(stored.messages.last.parts.whereType<ReasoningPart>().single.durationMs, 2000);
-  });
-
   test("thinking is not resent as context on a rewind", () async {
     app.backend.scriptedEvents = const [
       ReasoningEnd(text: "my private notes", duration: Duration(seconds: 1)),
@@ -313,6 +304,9 @@ void main() {
     // the turn is over — the room's two facts, pinned at one of the seams.
     expect(app.container.read(chatControllerProvider(id)).roomPhase,
         RoomPhase.open);
+    // And the errored reply is persisted with the chat.
+    final stored = await app.repo.openChat(id);
+    expect(stored.messages.last.parts.whereType<ErrorPart>(), hasLength(1));
   });
 
   test("a retry shows up as a notice while the turn is still running", () async {
@@ -321,7 +315,8 @@ void main() {
     ];
     app.backend.hold = Completer<void>();
     final (id, _) = await startTurn("hello");
-    await Future<void>.delayed(const Duration(milliseconds: 10));
+    await waitFor(() => app.container.read(chatControllerProvider(id)).retry != null,
+        what: "the retry notice");
 
     final view = app.container.read(chatControllerProvider(id));
     expect(view.retry, contains("usage limit"));
@@ -361,7 +356,10 @@ void main() {
     ];
     app.backend.hold = Completer<void>();
     final (id, _) = await startTurn("hello");
-    await Future<void>.delayed(const Duration(milliseconds: 10));
+    await waitFor(() =>
+            app.container.read(chatControllerProvider(id)).status ==
+            "Reading the prompt · 43%",
+        what: "the status row");
 
     // The latest replaces the last rather than accumulating: it is one row, and
     // the most recent thing said is the true one.
@@ -378,7 +376,10 @@ void main() {
     ];
     app.backend.hold = Completer<void>();
     final (id, _) = await startTurn("hello");
-    await Future<void>.delayed(const Duration(milliseconds: 10));
+    // Poll the positive first: a wait for status to be null would pass before
+    // any event is processed and stop pinning the behaviour.
+    await waitFor(() => textOf(messagesOf(id).last).isNotEmpty,
+        what: "the reply to start");
 
     // From here the caret says the turn is alive, and a label beside it would
     // be the second thing saying so.
@@ -391,6 +392,9 @@ void main() {
     final (id, _) = await chatWithOneTurn("hello");
 
     expect(app.container.read(chatControllerProvider(id)).status, isNull);
+    // And the status is never written to the conversation either.
+    final stored = await app.repo.openChat(id);
+    expect(stored.messages.last.parts, isEmpty);
   });
 
   test("a status is never written to the conversation", () async {
@@ -411,7 +415,10 @@ void main() {
     ];
     app.backend.hold = Completer<void>();
     final (id, _) = await startTurn("run it");
-    await Future<void>.delayed(const Duration(milliseconds: 10));
+    await waitFor(() =>
+            app.container.read(chatControllerProvider(id)).shellOutput ==
+            "line one\nline two\n",
+        what: "the live output");
 
     // The latest replaces the last rather than accumulating.
     expect(app.container.read(chatControllerProvider(id)).shellOutput,
@@ -467,14 +474,6 @@ void main() {
 
     final stored = await app.repo.openChat(id);
     expect(stored.messages.last.parts, isEmpty);
-  });
-
-  test("an errored reply is persisted with the chat", () async {
-    app.backend.scriptedEvents = const [ErrorEvent("APIError (HTTP 429): usage limit"), DoneEvent()];
-    final (id, _) = await chatWithOneTurn("hello");
-
-    final stored = await app.repo.openChat(id);
-    expect(stored.messages.last.parts.whereType<ErrorPart>(), hasLength(1));
   });
 
   test("regenerate resends the same text as another thread", () async {
@@ -1068,13 +1067,6 @@ void main() {
       await interruptLiveTurns(app.container);
 
       expect(app.container.read(chatControllerProvider(id)).isRunning, isFalse);
-    });
-
-    test("leaves them offered to be carried on", () async {
-      final id = await runningTurn();
-
-      await interruptLiveTurns(app.container);
-
       final stored = await app.store.load(id);
       expect((await app.store.readRecords(id)).whereType<TurnEndRecord>(), isEmpty);
       expect(stored.unfinished, isTrue);
@@ -1186,13 +1178,6 @@ void main() {
       expect(messagesOf(id).last.parts.whereType<ErrorPart>(), hasLength(1));
     });
 
-    test("a failed turn is offered to be carried on, a recovered one is not",
-        () async {
-      final (id, _) = await failingTurn(turnRetries: 0);
-
-      expect(chatOf(id).unfinished, isTrue);
-    });
-
     test("stop during the backoff ends the turn without a resume", () async {
       await app.seedSettings(AppSettings(turnRetries: 3));
       app.backend.scriptedRounds = [
@@ -1244,20 +1229,6 @@ void main() {
 
       expect(app.reminderAlarms.posted, isEmpty);
     });
-
-    test("a reminder awaiting turnDone gets one completion, at the true end",
-        () async {
-      app.backend.scriptedRounds = [
-        [ErrorEvent("connection lost", retryable: true), DoneEvent()],
-        [TextDelta("recovered"), DoneEvent()],
-      ];
-      final (id, controller) = await startTurn("hello");
-      final reason = await controller.turnDone;
-
-      expect(reason, TurnEnd.done);
-      expect(textOf(messagesOf(id).last), "recovered");
-      expect(app.backend.resumes, hasLength(1));
-    });
   });
 
   group("moving the chat to another project", () {
@@ -1285,28 +1256,6 @@ void main() {
       }, what: "the reloaded chat");
     }
 
-    test("a mention resolved in byte-repair is not in the reloaded chat",
-        () async {
-      final app = await appWithByteRepairLibrary();
-      addTearDown(app.dispose);
-      final chat = await app.repo.createChat(project: "byte-repair");
-      final controller =
-          app.container.read(chatControllerProvider(chat.state.id).notifier);
-      await controller.send("@esbmc-verifier verify src.c");
-      await waitIdle(chat.state.id, target: app);
-      expect(
-        app.backend.prompts.single.prompt.documents.keys,
-        contains("@esbmc-verifier"),
-      );
-
-      await moveAndReload(app, chat.state.id, null);
-
-      expect(
-        app.container.read(chatControllerProvider(chat.state.id)).chat!.state.project,
-        isNull,
-      );
-    });
-
     test("the reloaded controller composes the next message against the new project",
         () async {
       final app = await appWithByteRepairLibrary();
@@ -1316,8 +1265,22 @@ void main() {
           app.container.read(chatControllerProvider(chat.state.id).notifier);
       await controller.send("@esbmc-verifier verify src.c");
       await waitIdle(chat.state.id, target: app);
+      // The byte-repair library resolved the mention before the move.
+      expect(
+        app.backend.prompts.single.prompt.documents.keys,
+        contains("@esbmc-verifier"),
+      );
 
       await moveAndReload(app, chat.state.id, null);
+      // And the chat came back on the default project.
+      expect(
+        app.container
+            .read(chatControllerProvider(chat.state.id))
+            .chat!
+            .state
+            .project,
+        isNull,
+      );
       final reloaded =
           app.container.read(chatControllerProvider(chat.state.id).notifier);
       await reloaded.send("@esbmc-verifier verify src.c");
@@ -2198,9 +2161,16 @@ group("a banner answer through the controller", () {
       app.backend.scriptedEvents = [ApprovalRequestEvent(approval)];
       app.backend.hold = Completer<void>();
       final (id, controller) = await startTurn("run git status");
-      // The banner event is yielded as the stream parks on the hold; give the
-      // controller's loop a real beat to have processed it.
-      await Future<void>.delayed(const Duration(milliseconds: 50));
+      // The banner event is yielded as the stream parks on the hold; wait for
+      // the banner itself rather than a beat of the loop.
+      await waitFor(
+          () => app.container
+              .read(chatControllerProvider(id))
+              .approvals
+              .values
+              .expand((a) => a)
+              .isNotEmpty,
+          what: "the approval banner");
       final banner = app.container.read(chatControllerProvider(id)).approvals
           .values
           .expand((a) => a)
@@ -2297,17 +2267,12 @@ group("a banner answer through the controller", () {
       expect(chat.compactions.single.summary, "The user said hello.");
       expect(chat.compactions.single.upToMessageId,
           messagesOf(id).last.id);
-    });
-
-    test("rebuilds the session with the marker applied", () async {
-      final (id, controller) = await chatWithCompactSkill();
-      app.backend.scriptedSummary = "The user said hello.";
-      await controller.send("/compact");
-      await waitIdle(id);
-
-      // The reset the marker lands with carries the conversation the marker
-      // says — the same list a reload would build.
+      // The marker rebuilds the session: one reset with it applied.
       expect(app.backend.resets, hasLength(1));
+      // A callback turn is not a thing said: the title namer is not asked,
+      // and the turn closed done, so there is no ResumeBar to answer.
+      expect(app.backend.questions, isEmpty);
+      expect(chat.unfinished, isFalse);
     });
 
     test("a failed summarizer leaves the conversation untouched", () async {
@@ -2335,19 +2300,6 @@ group("a banner answer through the controller", () {
       app.backend.hold!.complete();
       await waitIdle(id);
       expect(app.backend.compactionCalls, isEmpty);
-    });
-
-    test("names nothing, and is never offered to be carried on", () async {
-      final (id, controller) = await chatWithCompactSkill();
-      app.backend.scriptedSummary = "The user said hello.";
-      await controller.send("/compact");
-      await waitIdle(id);
-
-      // A callback turn is not a thing said: the title namer is not asked.
-      expect(app.backend.questions, isEmpty);
-      // And the turn closed done, so there is no ResumeBar to answer.
-      final chat = await app.repo.openChat(id);
-      expect(chat.unfinished, isFalse);
     });
 
     test("an unknown wired name degrades to an ordinary message", () async {

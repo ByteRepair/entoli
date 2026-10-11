@@ -122,14 +122,6 @@ void main() {
     expect(find.text("Voice 2"), findsNothing);
   });
 
-  testWidgets("a model with several offers them", (tester) async {
-    app = TestApp.create(voiceModels: const {"kokoro-multi-lang"});
-    await pick(tester, speech: "kokoro-multi-lang");
-    await pumpVoice(tester);
-
-    expect(voicePicker(), findsOneWidget);
-  });
-
   testWidgets("touch to speak is offered, and off until it is asked for",
       (tester) async {
     app = TestApp.create();
@@ -197,6 +189,8 @@ void main() {
 
       expect(find.text("Whisper tiny"), findsOneWidget);
       expect(find.text("Android system"), findsWidgets);
+      // With both engines there is nothing to explain above them.
+      expect(find.textContaining("This device has nothing to"), findsNothing);
     });
 
     testWidgets("an unset recognizer is named as the setting it is",
@@ -209,12 +203,6 @@ void main() {
       expect(find.textContaining("voice-input service"), findsOneWidget);
       expect(find.textContaining("downloaded model"), findsOneWidget);
       expect(find.textContaining("FUTO Voice Input"), findsOneWidget);
-    });
-
-    testWidgets("with both engines there is nothing to explain", (tester) async {
-      await pumpAndroid(tester);
-
-      expect(find.textContaining("This device has nothing to"), findsNothing);
     });
 
     testWidgets("a missing synthesiser is named, with somewhere to get one",

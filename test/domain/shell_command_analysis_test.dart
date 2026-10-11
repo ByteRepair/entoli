@@ -8,15 +8,14 @@ void main() {
       ShellCommandAnalysis.parse(command);
 
   test("a plain read parses with nothing to say", () {
-    final a = parse("ls -la /usr/bin");
-    expect(a.modelable, isTrue);
-    expect(a.escalationReasons, isEmpty);
-  });
-
-  test("a pipe of reads parses with nothing to say", () {
-    final a = parse("cat /etc/os-release | grep PRETTY | wc -l");
-    expect(a.modelable, isTrue);
-    expect(a.escalationReasons, isEmpty);
+    for (final command in [
+      "ls -la /usr/bin",
+      "cat /etc/os-release | grep PRETTY | wc -l",
+    ]) {
+      final a = parse(command);
+      expect(a.modelable, isTrue);
+      expect(a.escalationReasons, isEmpty);
+    }
   });
 
   test("a redirect into the workspace needs nothing said", () {
@@ -40,74 +39,64 @@ void main() {
     expect(a.escalationReasons, isEmpty);
   });
 
-  test("an assignment to HOME escalates", () {
-    final a = parse("HOME=/tmp/evil git commit");
-    expect(a.modelable, isTrue);
-    expect(a.escalationReasons.single, contains("HOME"));
+  test("assignments to where writes land or how git reads its config escalate", () {
+    final home = parse("HOME=/tmp/evil git commit");
+    expect(home.modelable, isTrue);
+    expect(home.escalationReasons.single, contains("HOME"));
+
+    final gitDir = parse("GIT_DIR=/elsewhere git status");
+    expect(gitDir.escalationReasons.single, contains("GIT_DIR"));
+
+    final gitVar = parse("GIT_CONFIG_COUNT=1 git status");
+    expect(gitVar.modelable, isTrue);
+    expect(gitVar.escalationReasons, isNotEmpty);
   });
 
-  test("an assignment to GIT_DIR escalates", () {
-    final a = parse("GIT_DIR=/elsewhere git status");
-    expect(a.escalationReasons.single, contains("GIT_DIR"));
+  test("assignments that are not sensitive do not escalate", () {
+    // `-c` is a word, not an assignment; the include is an escalation only
+    // when set as an env var, which the sensitive test above covers.
+    final include = parse(r"git -c include.path=~/.evil/config status");
+    expect(include.modelable, isTrue);
+
+    final ordinary = parse("FOO=bar echo done");
+    expect(ordinary.modelable, isTrue);
+    expect(ordinary.escalationReasons, isEmpty);
   });
 
-  test("an assignment to a git include escalates", () {
-    final a = parse(r"git -c include.path=~/.evil/config status");
-    // `-c` is a word, not an assignment; the include itself is only an
-    // escalation when set as an env var — which the next test covers.
-    expect(a.modelable, isTrue);
+  test("a tokenizer failure is not modeled", () {
+    final quoted = parse(r"""echo "never closed""");
+    expect(quoted.modelable, isFalse);
+    expect(quoted.unmodelableReasons.single, contains("quote"));
+
+    // And neither is a substitution that never closes.
+    final substituted = parse(r"echo $(cat /etc/hostname");
+    expect(substituted.modelable, isFalse);
+
+    // A backtick is yesterday's substitution: refused by kind.
+    final backticked = parse("echo `cat /etc/hostname`");
+    expect(backticked.modelable, isFalse);
+    expect(backticked.unmodelableReasons.single, contains("backtick"));
   });
 
-  test("an assignment to a git config var escalates", () {
-    final a = parse("GIT_CONFIG_COUNT=1 git status");
-    expect(a.modelable, isTrue);
-    expect(a.escalationReasons, isNotEmpty);
-  });
+  test("redirects that are not write targets are not escalations", () {
+    // A here-document is a read, not a write target.
+    final here = parse("cat <<EOF\nhello\nEOF");
+    expect(here.modelable, isTrue);
+    expect(here.escalationReasons, isEmpty);
 
-  test("an ordinary assignment does not escalate", () {
-    final a = parse("FOO=bar echo done");
-    expect(a.modelable, isTrue);
-    expect(a.escalationReasons, isEmpty);
-  });
+    // So is an input redirect.
+    final input = parse("wc -l < /etc/passwd");
+    expect(input.modelable, isTrue);
+    expect(input.escalationReasons, isEmpty);
 
-  test("an unterminated quote is not modeled", () {
-    final a = parse(r"""echo "never closed""");
-    expect(a.modelable, isFalse);
-    expect(a.unmodelableReasons.single, contains("quote"));
-  });
+    // A fd-only redirect has no file target at all.
+    final fd = parse("ls >&2");
+    expect(fd.modelable, isTrue);
+    expect(fd.escalationReasons, isEmpty);
 
-  test("an unterminated substitution is not modeled", () {
-    final a = parse(r"echo $(cat /etc/hostname");
-    expect(a.modelable, isFalse);
-  });
-
-  test("a backtick substitution is not modeled", () {
-    final a = parse("echo `cat /etc/hostname`");
-    expect(a.modelable, isFalse);
-    expect(a.unmodelableReasons.single, contains("backtick"));
-  });
-
-  test("a here-document is parsed as a read, not a write target", () {
-    final a = parse("cat <<EOF\nhello\nEOF");
-    expect(a.modelable, isTrue);
-    expect(a.escalationReasons, isEmpty);
-  });
-
-  test("an input redirect is not a write target", () {
-    final a = parse("wc -l < /etc/passwd");
-    expect(a.modelable, isTrue);
-    expect(a.escalationReasons, isEmpty);
-  });
-
-  test("a fd-only redirect is not a file target", () {
-    final a = parse("ls >&2");
-    expect(a.modelable, isTrue);
-    expect(a.escalationReasons, isEmpty);
-  });
-
-  test("a redirect to /dev/null is harmless", () {
-    final a = parse("echo x > /dev/null");
-    expect(a.escalationReasons, isEmpty);
+    // And /dev/null is harmless.
+    final devnull = parse("echo x > /dev/null");
+    expect(devnull.escalationReasons, isEmpty);
   });
 
   test("commands sequenced by ; && || are all parsed", () {

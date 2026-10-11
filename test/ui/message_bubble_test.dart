@@ -98,10 +98,24 @@ void main() {
     expect(rendered.style?.color, Theme.of(context).colorScheme.error);
   });
 
-  testWidgets("an empty reply spins while the turn is running", (tester) async {
+  testWidgets("the spinner shows while nothing has been said", (tester) async {
+    // An empty reply, mid-turn.
     await pump(tester, _message(MessageRole.assistant, const []), isWaiting: true);
-
     expect(find.byType(CircularProgressIndicator), findsOneWidget);
+
+    // A tool call with no text yet: still nothing said by a person.
+    await pump(
+      tester,
+      _message(MessageRole.assistant, [
+        const ToolCallPart(toolCall: ToolCall(id: "1", name: "bash")),
+      ]),
+      isWaiting: true,
+    );
+    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+
+    // Finished having said nothing: over, and quiet.
+    await pump(tester, _message(MessageRole.assistant, const []));
+    expect(find.byType(CircularProgressIndicator), findsNothing);
   });
 
   testWidgets("an addressed reply is named, and the main agent's is not",
@@ -274,18 +288,6 @@ void main() {
     });
   });
 
-  testWidgets("a tool call with no text yet still spins", (tester) async {
-    await pump(
-      tester,
-      _message(MessageRole.assistant, [
-        const ToolCallPart(toolCall: ToolCall(id: "1", name: "bash")),
-      ]),
-      isWaiting: true,
-    );
-
-    expect(find.byType(CircularProgressIndicator), findsOneWidget);
-  });
-
   testWidgets("a retry notice sits beside the spinner in red", (tester) async {
     await pump(
       tester,
@@ -298,12 +300,6 @@ void main() {
     final notice = tester.widget<Text>(find.textContaining("usage limit"));
     final context = tester.element(find.byType(MessageBubble));
     expect(notice.style?.color, Theme.of(context).colorScheme.error);
-  });
-
-  testWidgets("a finished empty reply does not spin", (tester) async {
-    await pump(tester, _message(MessageRole.assistant, const []));
-
-    expect(find.byType(CircularProgressIndicator), findsNothing);
   });
 
   testWidgets("an errored reply shows the error", (tester) async {
@@ -333,7 +329,8 @@ void main() {
     expect(fired, 1);
   });
 
-  testWidgets("a reply still running offers no Retry", (tester) async {
+  testWidgets("Retry is offered only when the turn ended on an error", (tester) async {
+    // Still running: the turn has not ended, so nothing to retry.
     await pump(
       tester,
       _message(MessageRole.assistant, [const ErrorPart(message: "rate limited")]),
@@ -342,9 +339,8 @@ void main() {
     );
 
     expect(find.text("Retry"), findsNothing);
-  });
 
-  testWidgets("a healthy reply offers no Retry", (tester) async {
+    // Healthy: nothing to answer for.
     await pump(
       tester,
       _message(MessageRole.assistant, [const TextPart(text: "all good")]),
@@ -352,12 +348,10 @@ void main() {
     );
 
     expect(find.text("Retry"), findsNothing);
-  });
 
-  // A turn that failed and was carried on: the stale error is still in the
-  // parts, but the round after it said something, so the turn did not end on
-  // one and Retry has nothing to answer for.
-  testWidgets("a reply that errored and was carried on offers no Retry", (tester) async {
+    // A turn that failed and was carried on: the stale error is still in the
+    // parts, but the round after it said something, so the turn did not end
+    // on one and Retry has nothing to answer for.
     await pump(
       tester,
       _message(MessageRole.assistant, const [
@@ -382,6 +376,20 @@ void main() {
     expect(find.text("Thought for 12 seconds"), findsOneWidget);
     expect(find.text("391"), findsOneWidget);
     expect(find.text("17*23 = 391"), findsNothing);
+
+    // A long think is worded in minutes.
+    await pump(
+      tester,
+      _message(MessageRole.assistant, const [ReasoningPart(text: "...", durationMs: 125000)]),
+    );
+
+    expect(find.text("Thought for 2 minutes 5 seconds"), findsOneWidget);
+
+    // Nothing timed it — an older conversation, or a turn that was aborted —
+    // and the block is still worth opening.
+    await pump(tester, _message(MessageRole.assistant, const [ReasoningPart(text: "hmm")]));
+
+    expect(find.text("View thinking"), findsOneWidget);
   });
 
   testWidgets("the label opens the thinking in a drawer", (tester) async {
@@ -412,15 +420,6 @@ void main() {
     expect(tester.getSize(find.byType(BottomSheet)).height, screen);
   });
 
-  testWidgets("a long think is counted in minutes", (tester) async {
-    await pump(
-      tester,
-      _message(MessageRole.assistant, const [ReasoningPart(text: "...", durationMs: 125000)]),
-    );
-
-    expect(find.text("Thought for 2 minutes 5 seconds"), findsOneWidget);
-  });
-
   testWidgets("thinking still being written says so", (tester) async {
     await pump(
       tester,
@@ -429,13 +428,6 @@ void main() {
     );
 
     expect(find.text("Thinking…"), findsOneWidget);
-  });
-
-  // Nothing timed it: an older conversation, or a turn that was aborted.
-  testWidgets("an untimed block is still worth opening", (tester) async {
-    await pump(tester, _message(MessageRole.assistant, const [ReasoningPart(text: "hmm")]));
-
-    expect(find.text("View thinking"), findsOneWidget);
   });
 
   testWidgets("a tool run is one label, with the detail behind it", (tester) async {
@@ -912,7 +904,7 @@ void main() {
     expect(find.text("Expand activities"), findsOneWidget);
   });
 
-  testWidgets("a live thinking block is not collapsed", (tester) async {
+  testWidgets("a live block is not collapsed", (tester) async {
     await pump(
       tester,
       _message(MessageRole.assistant, const [
@@ -925,9 +917,7 @@ void main() {
     expect(find.text("Thinking…"), findsOneWidget);
     expect(find.text("Thought for 1 second"), findsOneWidget);
     expect(find.text("Expand activities"), findsNothing);
-  });
 
-  testWidgets("a live tool call is not collapsed", (tester) async {
     await pump(
       tester,
       _message(MessageRole.assistant, const [
@@ -958,7 +948,8 @@ void main() {
     expect(y("Used tool: bash"), lessThan(y("found it")));
   });
 
-  testWidgets("a user message offers both Edit and Regenerate", (tester) async {
+  testWidgets("the actions row offers what it was given", (tester) async {
+    // A user message can be edited and regenerated.
     await pump(
       tester,
       _message(MessageRole.user, [const TextPart(text: "hello")]),
@@ -970,9 +961,8 @@ void main() {
 
     expect(find.byTooltip("Edit"), findsOneWidget);
     expect(find.byTooltip("Regenerate"), findsOneWidget);
-  });
 
-  testWidgets("an assistant message offers only Regenerate", (tester) async {
+    // An assistant reply can only be regenerated.
     await pump(
       tester,
       _message(MessageRole.assistant, [const TextPart(text: "hi there")]),
@@ -983,11 +973,19 @@ void main() {
 
     expect(find.byTooltip("Edit"), findsNothing);
     expect(find.byTooltip("Regenerate"), findsOneWidget);
+
+    // Neither offered: neither is drawn.
+    await pump(tester, _message(MessageRole.user, [const TextPart(text: "hello")]));
+
+    await reveal(tester, find.text("hello"));
+
+    expect(find.byTooltip("Regenerate"), findsNothing);
+    expect(find.byTooltip("Edit"), findsNothing);
   });
 
   // The row keeps its height whatever is in it, so a message does not shift
   // under the pointer the moment the icons appear.
-  testWidgets("the actions are covered until the message is touched", (tester) async {
+  testWidgets("the actions are covered until the message is touched, and again covers them back", (tester) async {
     await pump(
       tester,
       _message(MessageRole.user, [const TextPart(text: "hello")]),
@@ -1001,16 +999,8 @@ void main() {
 
     expect(actionsOpacity(tester), 1);
     expect(tester.getRect(find.byType(MessageBubble)), before);
-  });
 
-  testWidgets("touching it again covers them back up", (tester) async {
-    await pump(
-      tester,
-      _message(MessageRole.user, [const TextPart(text: "hello")]),
-      onRegenerate: () {},
-    );
-
-    await reveal(tester, find.text("hello"));
+    // And touching it again covers them back up.
     await reveal(tester, find.text("hello"));
 
     expect(actionsOpacity(tester), 0);
@@ -1031,7 +1021,7 @@ void main() {
     expect(fired, 1);
   });
 
-  testWidgets("Edit opens the text prefilled and returns what was typed", (tester) async {
+  testWidgets("the edit dialog returns what was typed, or nothing on Cancel", (tester) async {
     String? edited;
     await pump(
       tester,
@@ -1044,28 +1034,20 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.widgetWithText(TextField, "helo"), findsOneWidget);
+    await tester.tap(find.text("Cancel"));
+    await tester.pumpAndSettle();
+
+    // Cancelled: the dialog is all it is, nothing sent.
+    expect(edited, isNull);
+
+    // And what was typed on it comes back through the callback.
+    await tester.tap(find.byTooltip("Edit"));
+    await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField), "hello");
     await tester.tap(find.text("Send"));
     await tester.pumpAndSettle();
 
     expect(edited, "hello");
-  });
-
-  testWidgets("cancelling the edit resends nothing", (tester) async {
-    String? edited;
-    await pump(
-      tester,
-      _message(MessageRole.user, [const TextPart(text: "helo")]),
-      onEdit: (text) => edited = text,
-    );
-
-    await reveal(tester, find.text("helo"));
-    await tester.tap(find.byTooltip("Edit"));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text("Cancel"));
-    await tester.pumpAndSettle();
-
-    expect(edited, isNull);
   });
 
   testWidgets("nothing is offered when neither action is", (tester) async {
@@ -1118,15 +1100,13 @@ void main() {
 
     // The arrows do not wrap, so each end is a dead one rather than a way back
     // round to where the reader started.
-    testWidgets("the first thread has no way back", (tester) async {
+    testWidgets("the arrows do not wrap", (tester) async {
       await pumpThread(tester, index: 0, count: 2);
 
       expect(find.text("1/2"), findsOneWidget);
       expect(enabled(tester, buttonTipped("Previous thread")), isFalse);
       expect(enabled(tester, buttonTipped("Next thread")), isTrue);
-    });
 
-    testWidgets("the last thread has no way on", (tester) async {
       await pumpThread(tester, index: 1, count: 2);
 
       expect(enabled(tester, buttonTipped("Previous thread")), isTrue);
@@ -1246,7 +1226,7 @@ void main() {
   });
 
   group("the message as text", () {
-    testWidgets("the copy button takes the message as it reads, rendered",
+    testWidgets("the copy buttons take it as it reads, and as it is kept",
         (tester) async {
       final copied = clipboard(tester);
       await pump(
@@ -1258,29 +1238,16 @@ void main() {
       );
       await reveal(tester, find.textContaining("bold"));
 
-      await tester.tap(find.byTooltip("Copy message"));
-      await tester.pumpAndSettle();
-
       // What was said, not what was thought, and as it reads rather than as
       // it is kept.
+      await tester.tap(find.byTooltip("Copy message"));
+      await tester.pumpAndSettle();
       expect(copied, ["here is bold code"]);
-    });
 
-    testWidgets("the raw copy button takes the markdown", (tester) async {
-      final copied = clipboard(tester);
-      await pump(
-        tester,
-        _message(MessageRole.assistant, [
-          const ReasoningPart(text: "thinking", durationMs: 12000),
-          const TextPart(text: "here is **bold** code"),
-        ]),
-      );
-      await reveal(tester, find.textContaining("bold"));
-
+      // The raw button is the kept form.
       await tester.tap(find.byTooltip("Copy raw markdown"));
       await tester.pumpAndSettle();
-
-      expect(copied, ["here is **bold** code"]);
+      expect(copied, ["here is bold code", "here is **bold** code"]);
     });
 
     testWidgets("formatted copy separates a heading from its paragraph, raw copy does not",
@@ -1544,10 +1511,8 @@ void main() {
 
       expect(find.text("hello"), findsOneWidget);
       expect(find.text("Exit code: 0"), findsOneWidget);
-    });
 
-    testWidgets("one that printed nothing says so rather than reading as cut off",
-        (tester) async {
+      // Nothing printed: said, so it does not read as cut off.
       await pump(
         tester,
         _message(MessageRole.assistant, const [
@@ -1600,13 +1565,13 @@ void main() {
           answer: answer,
         );
 
-    testWidgets("an allowed banner reads allowed", (tester) async {
+    testWidgets("the recorded answers read what they granted", (tester) async {
+      // Allowed, plainly.
       await pump(tester, _message(MessageRole.assistant, [part("allow")]));
 
       expect(find.textContaining("Permission: bash — allowed"), findsOneWidget);
-    });
 
-    testWidgets("the scoped answers read as what they granted", (tester) async {
+      // The scoped answers name what they granted.
       await pump(tester, _message(MessageRole.assistant, [
         part("alwaysAllowChat"),
         MessagePart.approval(
@@ -1619,19 +1584,14 @@ void main() {
           find.textContaining("allowed, always in this chat"), findsOneWidget);
       expect(find.textContaining("allowed, always in this project"),
           findsOneWidget);
-    });
 
-    testWidgets("a denied banner reads denied in the error colour",
-        (tester) async {
+      // Denied: the wording is the contract; the icon carries the alarm.
       await pump(tester, _message(MessageRole.assistant, [part("deny")]));
 
-      // The wording is the contract; the icon carries the alarm visually.
       expect(find.textContaining("Permission: bash — denied"), findsOneWidget);
       expect(find.byIcon(Icons.gpp_maybe_outlined), findsOneWidget);
-    });
 
-    testWidgets("a banner the turn left outstanding reads never answered",
-        (tester) async {
+      // A banner the turn left outstanding was never answered.
       await pump(tester, _message(MessageRole.assistant, [part("asked")]));
 
       expect(find.textContaining("never answered"), findsOneWidget);
@@ -1668,8 +1628,8 @@ void main() {
       expect(find.textContaining("Permission: bash"), findsNWidgets(2));
     });
 
-    testWidgets("the outcome rides on the label beside the answer",
-        (tester) async {
+    testWidgets("the outcome on the label reads its source and tier", (tester) async {
+      // A rule in this chat's tier said so.
       await pump(tester, _message(MessageRole.assistant, [
         MessagePart.toolCall(
             toolCall: const ToolCall(
@@ -1686,11 +1646,9 @@ void main() {
 
       expect(find.textContaining("allowed by this chat's rules"),
           findsOneWidget);
-    });
 
-    testWidgets("an always answer does not repeat the tier", (tester) async {
       // "allowed, always in this chat" already says the scope; the outcome
-      // would say it a second time.
+      // would say it a second time, so the human+once grant repeats nothing.
       await pump(tester, _message(MessageRole.assistant, [
         MessagePart.toolCall(
             toolCall: const ToolCall(
@@ -1708,9 +1666,8 @@ void main() {
       expect(find.textContaining("Permission: bash — allowed, always in this chat"),
           findsOneWidget);
       expect(find.textContaining("by the rules of"), findsNothing);
-    });
 
-    testWidgets("a rule-deny reads what refused it", (tester) async {
+      // A rule refusal reads what refused it.
       await pump(tester, _message(MessageRole.assistant, [
         MessagePart.toolCall(
             toolCall: const ToolCall(
@@ -1750,8 +1707,8 @@ void main() {
       expect(find.text("allowed by the classifier"), findsOneWidget);
     });
 
-    testWidgets("a result from before the field existed says nothing",
-        (tester) async {
+    testWidgets("a result with no decision on it says nothing", (tester) async {
+      // A result recorded before the field existed.
       await pump(tester, _message(MessageRole.assistant, [
         MessagePart.toolCall(
             toolCall: const ToolCall(
@@ -1762,9 +1719,7 @@ void main() {
 
       expect(find.textContaining("Used tool: bash — "), findsNothing);
       expect(find.text("Outcome"), findsNothing);
-    });
 
-    testWidgets("an ungated call says nothing", (tester) async {
       // A read inside the workspace ran with nothing standing in front of it:
       // the mode's default posture is not a decision to record.
       await pump(tester, _message(MessageRole.assistant, [

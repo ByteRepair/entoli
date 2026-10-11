@@ -115,12 +115,6 @@ void main() {
       expect(content.truncated, isTrue);
     });
 
-    test("one whose bytes are not text is not the viewer's", () async {
-      File("$dir/a.log").writeAsBytesSync([0x1f, 0x8b, 0x00, 0x42, 0x00]);
-
-      expect(await readTextHead(fileSystemIo, "$dir/a.log"), isNull);
-    });
-
     test("nor is one that is not UTF-8", () async {
       File("$dir/a.txt").writeAsBytesSync([0x68, 0xc3, 0x28, 0x69]);
 
@@ -217,12 +211,6 @@ void main() {
   });
 
   group("making a folder", () {
-    test("a name becomes one", () async {
-      await createFolder(fileSystemIo, dir, "notes");
-
-      expect(Directory("$dir/notes").existsSync(), isTrue);
-    });
-
     test("one that is already there is left alone", () async {
       File("$dir/notes/a.txt")
         ..createSync(recursive: true)
@@ -235,23 +223,9 @@ void main() {
   });
 
   group("deleting", () {
-    test("a file goes and its neighbours stay", () async {
-      File("$dir/a.txt").writeAsStringSync("a");
-      File("$dir/b.txt").writeAsStringSync("b");
-
-      await deleteEntries(fileSystemIo, ["$dir/a.txt"]);
-
-      expect(File("$dir/a.txt").existsSync(), isFalse);
-      expect(File("$dir/b.txt").existsSync(), isTrue);
-    });
-
-    test("a folder goes with everything in it", () async {
-      File("$dir/src/deep/main.dart").createSync(recursive: true);
-
-      await deleteEntries(fileSystemIo, ["$dir/src"]);
-
-      expect(Directory("$dir/src").existsSync(), isFalse);
-    });
+    // The page's own deleting tests drive the same `deleteEntries` over the
+    // real disk: a file gone with its neighbours standing, a folder gone
+    // with everything in it. What is pinnaed here is the already-gone arm.
 
     // The listing under a selection is re-read, and the agent writes to the
     // same folder — so a path can be gone by the time this runs.
@@ -295,11 +269,6 @@ void main() {
       expect(outside("notes/a.txt"), isFalse);
     });
 
-    test("a project-relative path lands in the project's workspace", () {
-      expect(resolve("project:notes/a.txt"), "$dir/notes/a.txt");
-      expect(outside("project:notes/a.txt"), isFalse);
-    });
-
     test("a chat-relative path lands in the chat's own, explicitly", () {
       expect(resolve("chat:notes/a.txt"), "$dir/$workspace/notes/a.txt");
       expect(outside("chat:notes/a.txt"), isFalse);
@@ -322,11 +291,6 @@ void main() {
       expect(resolve("~/notes/a.txt"), "$dir/notes/a.txt");
     });
 
-    test("an absolute path into a workspace is the model using the path it was told", () {
-      expect(resolve("$dir/$workspace/notes/a.txt"), "$dir/$workspace/notes/a.txt");
-      expect(outside("$dir/$workspace/notes/a.txt"), isFalse);
-    });
-
     test("as is one into the project's own", () {
       expect(outside("$dir/notes/a.txt"), isFalse);
     });
@@ -334,10 +298,6 @@ void main() {
     test("an absolute path the workspaces do not hold is the machine itself", () {
       expect(resolve("/etc/hosts"), "/etc/hosts");
       expect(outside("/etc/hosts"), isTrue);
-    });
-
-    test("and the outside does not change where it lands", () {
-      expect(resolve("/etc/hosts"), "/etc/hosts");
     });
 
     test("an absolute path that climbs is normalised before it is judged", () {

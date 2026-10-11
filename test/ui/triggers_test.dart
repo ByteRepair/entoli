@@ -46,12 +46,12 @@ void main() {
     expect(find.text("Add trigger"), findsNothing);
   });
 
-  testWidgets("a platform that notifies but does not schedule says so",
+  testWidgets("the description is the honest one per what the platform can do",
       (tester) async {
     // Linux's answer: notifications over the session bus, nothing to wake
     // the process with. The list works; the description is the honest one.
     final alarms = FakeReminderAlarms(schedulesOverride: false);
-    final app = TestApp.create(reminderAlarms: alarms);
+    var app = TestApp.create(reminderAlarms: alarms);
     addTearDown(app.dispose);
     useWindow(tester, const Size(400, 900));
     await pumpSettings(tester, app, SettingsCategory.triggers);
@@ -59,14 +59,10 @@ void main() {
     expect(find.textContaining("caught up at the next launch"), findsOneWidget);
     expect(find.textContaining("even when the app is closed"), findsNothing);
     expect(find.text("Add trigger"), findsOneWidget);
-  });
 
-  testWidgets("a platform that fires with the app closed says that",
-      (tester) async {
-    final alarms = FakeReminderAlarms();
-    final app = TestApp.create(reminderAlarms: alarms);
-    addTearDown(app.dispose);
-    useWindow(tester, const Size(400, 900));
+    // One that can fire closed says that instead.
+    app.dispose();
+    app = TestApp.create(reminderAlarms: FakeReminderAlarms());
     await pumpSettings(tester, app, SettingsCategory.triggers);
 
     expect(find.textContaining("even when the app is closed"), findsOneWidget);

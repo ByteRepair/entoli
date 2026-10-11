@@ -349,13 +349,9 @@ void main() {
       await settleIo(tester);
 
       expect(enabled(tester, send()), isFalse);
-    });
 
-    testWidgets("counts whitespace as nothing", (tester) async {
-      await pump(tester);
-
+      // Whitespace counts as nothing too: not worth sending before, not after.
       await type(tester, "   ");
-
       expect(enabled(tester, send()), isFalse);
     });
   });
@@ -434,8 +430,11 @@ void main() {
         (tester) async {
       withBar(tester);
       await pump(tester, workspace: workspace);
-      await type(tester, "!");
 
+      // Nothing outside a command draws it.
+      expect(find.text(workspace), findsNothing);
+
+      await type(tester, "!");
       expect(find.text(workspace), findsOneWidget);
     });
 
@@ -461,14 +460,8 @@ void main() {
 
       expect(copied, [workspace]);
     });
-
-    testWidgets("and is not drawn at all outside a command", (tester) async {
-      withBar(tester);
-      await pump(tester, workspace: workspace);
-
-      expect(find.text(workspace), findsNothing);
-    });
   });
+
   group("the keyboard", () {
     testWidgets("comes up when the field is tapped", (tester) async {
       await pump(tester);
@@ -480,19 +473,17 @@ void main() {
       expect(tester.testTextInput.isVisible, isTrue);
     });
 
-    testWidgets("stays down for a file that was attached", (tester) async {
+    // The picker and the menu it opens are both tapped rather than typed at,
+    // so there is nothing to bring the keyboard up for.
+    testWidgets("stays down for a file that was attached, and for a menu opened from +",
+        (tester) async {
       app.picker.scripted = [testAttachment("notes.txt")];
       await pump(tester);
       await insertVia(tester, "File");
 
       expect(find.text("notes.txt"), findsOneWidget);
       expect(tester.testTextInput.isVisible, isFalse);
-    });
 
-    // The menu it opens is tapped rather than typed at, so there is nothing
-    // to bring the keyboard up for.
-    testWidgets("stays down for a menu opened from +", (tester) async {
-      await pump(tester);
       await insertVia(tester, "Skills");
 
       expect(menuItems(tester), ["/init", "/revert", "/review"]);

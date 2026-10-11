@@ -150,7 +150,7 @@ void main() {
   });
 
   group("failures", () {
-    test("a rate limit is worth trying again, and says why", () async {
+    test("a rate limit is worth trying again, a rejected key is not", () async {
       expect(
         clientRejecting(429, "slow down").stream(const [], model: "gpt-test").toList(),
         throwsA(isA<LlmException>()
@@ -158,9 +158,7 @@ void main() {
             .having((e) => e.statusCode, "statusCode", 429)
             .having((e) => e.message, "message", "slow down")),
       );
-    });
-
-    test("a rejected key is not", () async {
+      // 401 is policy, not a blip.
       expect(
         clientRejecting(401, "invalid api key").stream(const [], model: "gpt-test").toList(),
         throwsA(isA<LlmException>().having((e) => e.retryable, "retryable", isFalse)),
@@ -204,15 +202,14 @@ void main() {
       expect(body.containsKey("temperature"), isFalse);
       expect(body.containsKey("reasoning_effort"), isFalse);
       expect(body.containsKey("tools"), isFalse);
-    });
 
-    test("carries temperature and effort when they are set", () async {
+      // And carries temperature and effort when they are set.
       await clientStreaming(["[DONE]"])
           .stream(const [], model: "gpt-test", temperature: 0.4, reasoningEffort: "high")
           .toList();
-
-      expect(sentBody()["temperature"], 0.4);
-      expect(sentBody()["reasoning_effort"], "high");
+      final with_ = sentBody();
+      expect(with_["temperature"], 0.4);
+      expect(with_["reasoning_effort"], "high");
     });
 
     test("the system messages at the head go as one", () async {
