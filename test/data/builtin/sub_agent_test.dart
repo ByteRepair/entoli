@@ -12,6 +12,8 @@ import "package:agent_chat/data/builtin/sub_agent.dart";
 import "package:agent_chat/domain/agent_backend.dart";
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/domain/permission.dart";
+
+import "../../harness.dart";
 import "package:agent_chat/domain/prompt_library.dart";
 import "package:agent_chat/domain/shell.dart";
 
@@ -384,8 +386,9 @@ void main() {
 
       final events = <AgentEvent>[];
       final doneFuture = agent.run(userMessage("delegate")).forEach(events.add);
-      // Let the sub-agent start.
-      await Future<void>.delayed(const Duration(milliseconds: 50));
+      // Let the sub-agent start: the sub-session being asked at all is the
+      // published fact the wait reads.
+      await waitFor(() => sub.sent.isNotEmpty, what: "the sub-agent to start");
       await agent.cancel();
       await doneFuture;
 

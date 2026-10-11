@@ -2,6 +2,8 @@ import "package:flutter_test/flutter_test.dart";
 
 import "package:agent_chat/data/builtin/llm/rate_limit_gate.dart";
 
+import "../../../harness.dart";
+
 void main() {
   group("RateLimitGate concurrency", () {
     test("acquire/release bounds in-flight to maxConcurrent", () async {
@@ -123,8 +125,8 @@ void main() {
       );
       gate.onRateLimited();
       expect(gate.retryBudgetExhausted(), isFalse);
-      await Future<void>.delayed(const Duration(milliseconds: 100));
-      expect(gate.retryBudgetExhausted(), isTrue);
+      await waitFor(() => gate.retryBudgetExhausted(),
+          what: "the budget to elapse");
     });
 
     test("onSuccess clears the budget marker", () async {
@@ -133,8 +135,8 @@ void main() {
         maxRetryBudget: const Duration(milliseconds: 80),
       );
       gate.onRateLimited();
-      await Future<void>.delayed(const Duration(milliseconds: 100));
-      expect(gate.retryBudgetExhausted(), isTrue);
+      await waitFor(() => gate.retryBudgetExhausted(),
+          what: "the budget to elapse");
       gate.onSuccess();
       expect(gate.retryBudgetExhausted(), isFalse);
     });
