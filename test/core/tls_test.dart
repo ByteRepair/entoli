@@ -18,14 +18,20 @@ http.StreamedResponse _answered(String body) => http.StreamedResponse(
 
 class _AnswerClient extends http.BaseClient {
   final String body;
+
+  /// A real IOClient finalizes its request before it opens the socket —
+  /// where the TLS handshake dies — so a fake playing one has to do the
+  /// same before it answers, or the retry's state is not the production one.
+  final bool finalizeRequest;
   int sent = 0;
   int closed = 0;
 
-  _AnswerClient(this.body);
+  _AnswerClient(this.body, {this.finalizeRequest = false});
 
   @override
   Future<http.StreamedResponse> send(http.BaseRequest request) async {
     sent += 1;
+    if (finalizeRequest) request.finalize();
     return _answered(body);
   }
 
@@ -37,14 +43,18 @@ class _AnswerClient extends http.BaseClient {
 
 class _RefusingClient extends http.BaseClient {
   final String refusal;
+  final bool finalizeRequest;
   int sent = 0;
   int closed = 0;
 
-  _RefusingClient({this.refusal = "CERTIFICATE_VERIFY_FAILED: no root there"});
+  _RefusingClient(
+      {this.refusal = "CERTIFICATE_VERIFY_FAILED: no root there",
+      this.finalizeRequest = false});
 
   @override
   Future<http.StreamedResponse> send(http.BaseRequest request) async {
     sent += 1;
+    if (finalizeRequest) request.finalize();
     throw HandshakeException(
         "Handshake error in client (OS Error:\n\t$refusal)");
   }
@@ -102,13 +112,46 @@ void main() {
     expect(moz.sent, 2);
   });
 
+  test("the re-send is a fresh request the fallback may finalize", () async {
+    final client = TlsFallbackClient(_RefusingClient(finalizeRequest: true),
+        windows: true,
+        fallback: _AnswerClient("m", finalizeRequest: true));
+
+    final response = await client.send(_request()..body = "hello");
+    expect(await response.stream.bytesToString(), "m");
+    client.close();
+  });
+
+  test("the pin is the refusing host's, not the wrapper's", () async {
+    final system = _RefusingClient();
+    final moz = _AnswerClient("m");
+    final client = TlsFallbackClient(system, windows: true, fallback: moz);
+
+    await client.send(http.Request("GET", Uri.parse("https://a.host/x")));
+    await client.send(http.Request("GET", Uri.parse("https://other.host/x")));
+    // The first host is pinned; the other still asks the system's store,
+    // refuses there, and earns its own retry under the bundled set.
+    expect(system.sent, 2);
+    expect(moz.sent, 2);
+    client.close();
+  });
+
   test("a fallback that refuses too leaves the original error standing",
       () async {
     final client = TlsFallbackClient(_RefusingClient(),
-        windows: true, fallback: _RefusingClient());
+        windows: true,
+        fallback: _RefusingClient(
+            refusal: "CERTIFICATE_VERIFY_FAILED: bundled too"));
 
-    await expectLater(
-        client.send(_request()), throwsA(isA<HandshakeException>()));
+    try {
+      await client.send(_request());
+      fail("the request did not throw");
+    } on HandshakeException catch (e) {
+      // The primary's refusal, not the fallback's own and not the StateError
+      // a finalize that cannot run again would have raised.
+      expect("$e", contains("no root there"));
+    }
+    client.close();
   });
 
   test("closing closes both clients", () async {

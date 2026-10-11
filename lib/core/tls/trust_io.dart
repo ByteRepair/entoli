@@ -29,8 +29,7 @@ const _mozillaAsset = "assets/certs/cacert.pem";
 
 /// The client a provider, a download, a search or the marketplace reaches a
 /// host with. See [TlsFallbackClient].
-http.Client tlsClient([http.Client? primary]) =>
-    TlsFallbackClient(primary ?? http.Client());
+http.Client tlsClient() => TlsFallbackClient(http.Client());
 
 /// The relay's WebSocket, under the same trust and the same fallback: the
 /// first connect waits on the store's verdict, and where it is the
@@ -49,19 +48,37 @@ Future<WebSocketChannel> tlsWebSocketChannel(
     await ready;
   } catch (e) {
     if (!Platform.isWindows || !_isCertificateVerify(e)) rethrow;
-    final client = HttpClient(context: await mozillaRootContext());
-    final socket =
-        await WebSocket.connect(uri.toString(), customClient: client);
-    return IOWebSocketChannel(socket);
+    final client = HttpClient(context: await _mozillaRootContext());
+    try {
+      final connect = WebSocket.connect(uri.toString(), customClient: client);
+      final socket = readyTimeout == null
+          ? await connect
+          : await connect.timeout(readyTimeout);
+      return IOWebSocketChannel(socket);
+    } on Object {
+      // close cancels the attempt's pending socket tasks, and the caller
+      // reads this attempt's own failure rather than the first refusal.
+      client.close(force: true);
+      rethrow;
+    }
   }
   return channel;
 }
 
-/// A `SecurityContext` whose trust is exactly the bundled Mozilla set.
-Future<SecurityContext> mozillaRootContext() async {
+Future<SecurityContext>? _mozillaRootMemo;
+
+/// The `SecurityContext` whose trust is exactly the bundled Mozilla set,
+/// read once: every client this file builds shares it, and none of them reads
+/// the asset until the system's store has refused.
+Future<SecurityContext> _mozillaRootContext() =>
+    _mozillaRootMemo ??= _loadMozillaRootContext();
+
+Future<SecurityContext> _loadMozillaRootContext() async {
   final data = await rootBundle.load(_mozillaAsset);
+  // The bundle's ByteData may be a view into a larger buffer, at an offset.
   return SecurityContext()
-    ..setTrustedCertificatesBytes(data.buffer.asUint8List());
+    ..setTrustedCertificatesBytes(
+        data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes));
 }
 
 /// [See "Reaching a provider" in lib/data/builtin/llm/AGENTS.md for the
@@ -72,9 +89,11 @@ Future<SecurityContext> mozillaRootContext() async {
 /// handshake fails keeps its original error — the same request runs again
 /// under the bundled set, and this client is the bundled-set client from then
 /// on, a per-endpoint fact: the host whose verify refused does not change
-/// under the same instance. The request is re-sent rather than rebuilt, the
-/// TLS handshake being where a `dart:io` client opens the socket, before its
-/// body is read.
+/// under the same instance. The retry is a fresh copy of the request, not
+/// the first send's instance: `finalize` is the first thing a `package:http`
+/// send does, before the socket the handshake dies on, so by the time this
+/// sees the refusal the original is unsendable — a second finalize answers
+/// "Can't finalize a finalized Request." before any connection starts.
 class TlsFallbackClient extends http.BaseClient {
   TlsFallbackClient(this._client, {bool? windows, http.Client? fallback})
       : _windows = windows ?? Platform.isWindows,
@@ -87,31 +106,30 @@ class TlsFallbackClient extends http.BaseClient {
   /// with one never loads the asset at all.
   final http.Client? _bundledFallback;
 
-  http.Client? _fallback;
   Future<http.Client>? _building;
+
+  /// The host whose certificate verify refused and now verifies under the
+  /// bundled set — a map, not a flag: one client instance can reach two
+  /// hosts (the marketplace's index and its raw entries), and their verdicts
+  /// are separate facts.
+  final Map<String, http.Client> _bundledHosts = {};
 
   @override
   Future<http.StreamedResponse> send(http.BaseRequest request) async {
-    final fallback = _fallback;
-    if (fallback != null) {
-      try {
-        return await fallback.send(request);
-      } on HandshakeException {
-        rethrow;
-      }
-    }
+    final pinned = _bundledHosts[request.url.host];
+    if (pinned != null) return pinned.send(request);
     try {
       return await _client.send(request);
     } on HandshakeException catch (e) {
       if (!_windows || !_isCertificateVerify(e)) rethrow;
       try {
         final client = await _mozillaClient();
-        _fallback = client;
-        return await client.send(request);
+        _bundledHosts[request.url.host] = client;
+        return await client.send(_replayable(request));
       } on Object {
         // The bundled set refused too: the original refusal is the one a
         // turn reads, and no third trust is claimed.
-        rethrow;
+        throw e;
       }
     }
   }
@@ -119,7 +137,9 @@ class TlsFallbackClient extends http.BaseClient {
   @override
   void close() {
     _client.close();
-    _fallback?.close();
+    for (final client in _bundledHosts.values) {
+      client.close();
+    }
   }
 
   /// The bundled set's client, built once, on the first
@@ -131,7 +151,7 @@ class TlsFallbackClient extends http.BaseClient {
           : _buildMozillaClient();
 
   static Future<http.Client> _buildMozillaClient() async {
-    final context = await mozillaRootContext();
+    final context = await _mozillaRootContext();
     return IOClient(HttpClient(context: context));
   }
 
@@ -139,6 +159,23 @@ class TlsFallbackClient extends http.BaseClient {
   // from a helper that is in no class: both the http send and that ready come
   // through one text check, so a wrapping layer's rewording does not get past
   // it.
+}
+
+/// A request the retry's send may finalize itself. The first send's
+/// `finalize` has already run by the time the handshake died, and a second
+/// send of that instance throws at finalize before any connection starts;
+/// a buffered `http.Request`'s method, url, headers and body bytes all stay
+/// readable after, which is all a copy needs. Only a buffered one replays —
+/// it is what every caller sends — anything else arrives again as before
+/// and stays the caller's.
+http.BaseRequest _replayable(http.BaseRequest request) {
+  if (request is! http.Request) return request;
+  return http.Request(request.method, request.url)
+    ..headers.addAll(request.headers)
+    ..bodyBytes = request.bodyBytes
+    ..followRedirects = request.followRedirects
+    ..maxRedirects = request.maxRedirects
+    ..persistentConnection = request.persistentConnection;
 }
 
 bool _isCertificateVerify(Object e) =>
