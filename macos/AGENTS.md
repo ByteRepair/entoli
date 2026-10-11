@@ -50,6 +50,18 @@ shell, macOS's zsh on the list).
 
 ## Waking for a trigger
 
+**The model the pieces below implement:** `reminders.json` is the only truth,
+and launchd jobs are projections of it — one per request code under the
+store's own prefix. Every actor converges the projection back to the truth.
+The app, at every watch build: scheduling what is armed, cancelling what is
+not, pruning what an earlier launch has left behind, and firing through its
+catch-up everything overdue, whoever started the session. The job, whose
+single line wakes the app with the store named and takes itself out when its
+binary is gone — an uninstall having no writer to prune anything. And
+launchd, loader and ticker alone: it bootstraps the directory at login, runs
+intervals, re-runs a job whose program is gone into a nonzero exit forever,
+and never janitors a third-party plist.
+
 The schedule half is launchd, one user launch agent per request code under
 `~/Library/LaunchAgents/` — `RemindersPlugin.swift` writes it and boots it
 through `launchctl bootstrap gui/<uid>` (raw plists, not `SMAppService`, which

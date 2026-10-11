@@ -14,9 +14,12 @@ const _notifyTimeout = Duration(seconds: 10);
 /// and `RemindersPlugin.swift`.
 ///
 /// Scheduling is one launchd job per request code under `~/Library/LaunchAgents/`,
-/// each running `open -gj` with a wake argument the Runner hides its window
-/// under — which is how a trigger fires with the process dead, what
-/// [schedules] is true worth. The job's label carries the data directory
+/// each a one-line `sh` that checks its binary, names [store] and execs this
+/// binary with a wake argument the Runner hides the whole app under — which
+/// is how a trigger fires with the process dead, what [schedules] is true
+/// worth. The job also removes itself when its binary is gone — an uninstall
+/// being the one case no writer survives — so no entry ever outlives the app
+/// that wrote it. The job's label carries the data directory
 /// [store], so another copy of this flavour pointed elsewhere never shares
 /// its jobs, and no prune of this store's ever sees them.
 ///

@@ -5,11 +5,12 @@ import Darwin
 
 /// macOS's half of `ReminderAlarms`: notifications over
 /// `UNUserNotificationCenter`, scheduling over launchd — one job per request
-/// code under `~/Library/LaunchAgents/`, each running `open -gj` with a wake
-/// argument the Runner hides its window under. The job is also the wake: a
-/// fire with the process dead launches the app, the clock kinds' own launch
-/// catch-up runs what is due, and a session nobody came to look at quits from
-/// `doneFiring`.
+/// code under `~/Library/LaunchAgents/`, each a one-line `sh` that checks its
+/// binary, names its store and execs this executable with the wake argument
+/// the Runner hides the whole app under, and removes itself when its binary
+/// is gone. The job is the wake: a fire with the process dead launches the
+/// app, the clock kinds' own launch catch-up runs what is due, and a session
+/// nobody came to look at quits from `doneFiring`.
 ///
 /// The call shapes are `RemindersChannel.kt`'s, and the errors stay on this
 /// side as a `FlutterError` for Dart to log: the clock kind's diff awaits
