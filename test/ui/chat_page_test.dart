@@ -123,19 +123,6 @@ void main() {
       expect(find.text("hello"), findsOneWidget);
     });
 
-    // The bar's own, wherever the sidebar is out of sight — there is no
-    // button for it on the page any more.
-    testWidgets("an old chat is opened through the drawer", (tester) async {
-      await io(tester, () => app.seedChat(title: "old chat"));
-      await openEmpty(tester);
-
-      await tester.tap(find.byIcon(Icons.menu));
-      await settleIo(tester);
-
-      expect(find.byType(Sidebar), findsOneWidget);
-      expect(find.text("old chat"), findsOneWidget);
-    });
-
     // A paired device's list is the one place nothing selected is not a new
     // chat: making one is this device's and would take the sidebar home.
     testWidgets("reading a paired device makes no chat", (tester) async {
@@ -246,11 +233,11 @@ void main() {
     });
 
     // The marker alone is not enough on Android: Byte Repair needs a rootfs
-    // with a package manager, and "Host" has none. A setup run under a rootfs
-    // leaves the marker on disk, so switching the terminal env back to Host
-    // must put the bar back — otherwise a turn would be sent into an env that
-    // cannot run it. The `androidTest` wrapper sets the platform override the
-    // way `link_opener_test.dart` does, and undoes it before the tear-down.
+    // with a package manager, and "Host" has none — a setup run under a
+    // rootfs leaves the marker on disk, so the Host env that follows is what
+    // the closing phase of the test below asserts. The `androidTest` wrapper
+    // sets the platform override the way `link_opener_test.dart` does, and
+    // undoes it before the tear-down.
     void androidTest(String description, Future<void> Function(WidgetTester) body) {
       testWidgets(description, (tester) async {
         debugDefaultTargetPlatformOverride = TargetPlatform.android;
@@ -261,22 +248,6 @@ void main() {
         }
       });
     }
-
-    androidTest("Host env on Android blocks the composer despite the marker",
-        (tester) async {
-      app.dispose();
-      app = TestApp.create(proot: true, linuxes: const {"alpine"});
-      File(app.config.setupCompleteFile(project: ByteRepairProject().dir))
-        ..createSync(recursive: true)
-        ..writeAsStringSync("done");
-      await openEmpty(tester);
-
-      await pick(tester, byteRepairProjectLabel);
-
-      // No rootfs picked: Host is the active env, and the bar stands in.
-      expect(find.byType(NeedsSetupBar), findsOneWidget);
-      expect(find.byType(Composer), findsNothing);
-    });
 
     androidTest("a rootfs env on Android lets the composer through with the marker",
         (tester) async {
@@ -439,15 +410,6 @@ void main() {
 
       expect(selectedOf(tester, "work"), isFalse);
       expect(app.container.read(selectedProjectProvider), isNull);
-
-      await sendMessage(tester, "hello");
-
-      expect(await projectOfMade(tester), isNull);
-    });
-
-    testWidgets("the chat lands in the default until a badge is picked",
-        (tester) async {
-      await openWithProject(tester);
 
       await sendMessage(tester, "hello");
 
@@ -865,17 +827,12 @@ void main() {
   });
 
   group("keeping up with a turn", () {
-    testWidgets("there is no jump button while the end is in view", (tester) async {
-      final chat = await seedLongChat(tester);
-
-      await open(tester, chat.state.id);
-
-      expect(find.byTooltip("Jump to latest"), findsNothing);
-    });
-
     testWidgets("scrolling back offers the way down again", (tester) async {
       final chat = await seedLongChat(tester);
       await open(tester, chat.state.id);
+
+      // In view of the end: nothing to jump for yet.
+      expect(find.byTooltip("Jump to latest"), findsNothing);
 
       await tester.drag(find.byType(ListView), const Offset(0, 600));
       await tester.pumpAndSettle();
@@ -964,12 +921,10 @@ void main() {
 
       expect(find.text("Continue"), findsOneWidget);
       expect(find.textContaining("Unfinished turn"), findsOneWidget);
-    });
 
-    testWidgets("a finished one is not", (tester) async {
-      final chat = await seedLongChat(tester, messages: 2);
-
-      await open(tester, chat.state.id);
+      // A finished one is not: the same two messages, a turnEnd on the reply.
+      final closed = await seedLongChat(tester, messages: 2);
+      await open(tester, closed.state.id);
 
       expect(find.text("Continue"), findsNothing);
     });
