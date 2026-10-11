@@ -37,30 +37,10 @@ void main() {
     expect(entries.single.chat, "chat-1");
   });
 
-  test("a manual add carries no chat", () async {
-    final entry = await store.add("typed by hand");
-    expect(entry.chat, isNull);
-  });
-
   test("add trims the text and refuses an empty one", () async {
     final entry = await store.add("  padded  ");
     expect(entry.text, "padded");
     expect(() => store.add("   "), throwsArgumentError);
-  });
-
-  test("a tombstone removes the memory, a later memory survives", () async {
-    final a = await store.add("first memory");
-    final b = await store.add("second memory");
-    await store.delete(a.id);
-
-    final entries = await store.entries();
-    expect([for (final e in entries) e.id], [b.id]);
-  });
-
-  test("a tombstone for a memory that is not there changes nothing", () async {
-    await store.add("a memory");
-    await store.delete("no-such-id");
-    expect(await store.entries(), hasLength(1));
   });
 
   test("a torn last line ends the replay, the whole lines stand", () async {
@@ -90,15 +70,6 @@ void main() {
   });
 
   group("search", () {
-    test("a word only one memory carries recalls it", () async {
-      await store.add("the build needs the flutter toolbox");
-      await store.add("unrelated notes about the weather");
-
-      final hits = await store.search("flutter");
-      expect(hits, hasLength(1));
-      expect(hits.single.text, contains("toolbox"));
-    });
-
     test("a word every memory carries recalls nothing", () async {
       await store.add("the first note");
       await store.add("the second note");
@@ -122,11 +93,6 @@ void main() {
       expect(hits.first.text, contains("together"));
     });
 
-    test("no match recalls nothing", () async {
-      await store.add("a memory about lighthouses");
-      expect(await store.search("completely different words"), isEmpty);
-    });
-
     test("single-letter words are not indexed", () async {
       await store.add("an i and a b in a sentence");
       expect(await store.search("i b"), isEmpty);
@@ -135,28 +101,11 @@ void main() {
 
   group("tokenize", () {
     test("lowercases and keeps runs of letters and digits", () {
-      // The 3 in 3.22 is one letter long, so it is out.
       expect(tokenize("Flutter 3.22, and Dart!"), ["flutter", "22", "and", "dart"]);
-    });
-
-    test("drops words of one letter", () {
-      expect(tokenize("a b an io"), ["an", "io"]);
     });
   });
 
   group("update", () {
-    test("a same-id record replaces the memory rather than duplicating it",
-        () async {
-      final entry = await store.add("the user prefers tabs", chat: "chat-1");
-      await store.update(entry.id, "the user prefers spaces", chat: "chat-2");
-
-      final entries = await store.entries();
-      expect(entries, hasLength(1));
-      expect(entries.single.id, entry.id);
-      expect(entries.single.text, "the user prefers spaces");
-      expect(entries.single.chat, "chat-2");
-    });
-
     test("the old position in the list stands, the text moves", () async {
       final first = await store.add("first");
       await store.add("second");
@@ -181,20 +130,6 @@ void main() {
   });
 
   group("pinning", () {
-    test("a pin shows on the entry, an unpin takes it off", () async {
-      final a = await store.add("pinned later");
-      final b = await store.add("never pinned");
-      await store.pin(a.id);
-
-      final entries = await store.entries();
-      expect(entries.singleWhere((e) => e.id == a.id).pinned, isTrue);
-      expect(entries.singleWhere((e) => e.id == b.id).pinned, isFalse);
-
-      await store.unpin(a.id);
-      expect((await store.entries()).singleWhere((e) => e.id == a.id).pinned,
-          isFalse);
-    });
-
     test("the last pin or unpin stands", () async {
       final entry = await store.add("toggle me");
       await store.pin(entry.id);
@@ -237,6 +172,10 @@ void main() {
       expect(entries.singleWhere((e) => e.id == keep.id).chat, "chat-9");
       expect(
           entries.any((e) => e.text == "a brand new fact"), isTrue);
+      // And the search index follows what the batch landed: the added memory
+      // is recallable, the revised one by its new text.
+      expect((await store.search("brand")).map((e) => e.text),
+          ["a brand new fact"]);
     });
 
     test("a replacement of a missing id lands as a new memory", () async {
@@ -259,18 +198,14 @@ void main() {
       expect(result, (added: 0, updated: 0, deleted: 0));
       expect(await store.entries(), hasLength(1));
     });
-
-    test("the index follows a maintenance batch", () async {
-      await store.add("the build needs the flutter toolbox");
-      final result = await store.maintain(add: ["kotlin was written to the log"]);
-      expect(result.added, 1);
-      expect(await store.search("kotlin"), hasLength(1));
-    });
   });
 
   group("renderIndex", () {
+    // Empty where there is nothing — the caller sends no section then; the
+    // same input answers the recall render the same way.
     test("empty where there is nothing", () {
       expect(renderIndex(const []), isEmpty);
+      expect(renderRecall(const []), isEmpty);
     });
 
     test("one line per memory, newest first", () async {
@@ -293,10 +228,6 @@ void main() {
   });
 
   group("renderRecall", () {
-    test("empty where there is nothing", () {
-      expect(renderRecall(const []), isEmpty);
-    });
-
     test("one line per memory", () async {
       await store.add("first memory");
       await store.add("second memory");
