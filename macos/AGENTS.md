@@ -72,16 +72,24 @@ handing it per call — the debug leaf, an `AGENT_CHAT_CONFIG` scratch and the
 installed copy each get their own namespace, so no prune ever sees a job
 that is not its store's. The job's whole
 business is one line of shell: export the store the jobs were armed for,
-then `exec` the bundle's own binary with the wake argument. The export is
+then spawn the bundle's own binary detached with the wake argument and exit.
+The exit is load-bearing twice: launchd's tracked instance is the shell
+alone, never the app — teardown of a service is SIGTERM to its tracked
+instance and then SIGKILL (`launchd.plist(5)`'s `ExitTimeOut`) — and the app
+boots this label out all the time (every diff, every cancel, the prune), a
+wake that exec'd itself dying at its first diff's bootout, before any fire
+ran; and the app outliving a job that has died is `AbandonProcessGroup`'s
+work, without which the detached spawn's process group dies with the shell.
+The export is
 load-bearing: a job runs under launchd's environment, which is not the
 environment the app that armed it ran under, and the wake re-derives the
 data directory from what the command line says rather than from wherever
-launchd's own environment points. The exec goes to the binary directly and
+launchd's own environment points. The spawn goes to the binary directly and
 never through `open`, for a reason worth keeping: launch services defers the
 start of backgrounded `-g` launches, sometimes indefinitely — the process
 idles on its AppKit runloop with no nib load and no Dart — and a hidden
-`-j` launch never started an engine at all on this host, while a direct exec
-starts Dart every time. What `open` used to buy is one-instance activation,
+`-j` launch never started an engine at all on this host, while a direct
+spawn starts Dart every time. What `open` would buy is one-instance activation,
 which the Runner answers itself: a wake session that finds another instance
 of the bundle id quits before the engine is built, the running copy's own
 timer being what fires its due anyway. There is no

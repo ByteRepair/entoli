@@ -6,9 +6,11 @@ import Darwin
 /// macOS's half of `ReminderAlarms`: notifications over
 /// `UNUserNotificationCenter`, scheduling over launchd — one job per request
 /// code under `~/Library/LaunchAgents/`, each a one-line `sh` that checks its
-/// binary, names its store and execs this executable with the wake argument
-/// the Runner hides the whole app under, and removes itself when its binary
-/// is gone. The job is the wake: a fire with the process dead launches the
+/// binary, names its store, spawns this executable detached with the wake
+/// argument the Runner hides the whole app under and exits — the shell is
+/// launchd's whole tracked instance, so every bootout and cancel the app
+/// performs touches nothing living — and removes itself when its binary is
+/// gone. The job is the wake: a fire with the process dead launches the
 /// app, the clock kinds' own launch catch-up runs what is due, and a session
 /// nobody came to look at quits from `doneFiring`.
 ///
@@ -85,17 +87,23 @@ class RemindersPlugin: NSObject, UNUserNotificationCenterDelegate {
     // The job runs under launchd's environment, which is not the one the old
     // app that armed it ran under — so the store rides in the command line
     // and the wake re-derives the data directory from what was written here.
-    // The wake execs the binary directly, never through `open`: backgrounded
-    // `open -g` is deferred by launch services and sometimes never reaches
-    // its engine, and `-j` is worse — hidden launches never started one at
-    // all here. What `open` used to buy is one-instance activation, which
-    // the wake guard in the Runner answers instead. And the line carries the
-    // job's own removal, for the one case no writer survives — an
-    // uninstall — on which launchd never tidies anything: each interval
-    // re-runs `sh` into a nonzero exit forever. The binary it was written
-    // for is checked first; when it is gone the job takes its plist and its
-    // service out itself. A moved-but-alive app rewrites the job at its next
-    // launch's diff.
+    // The wake is spawned detached and the shell exits at once: launchd's
+    // tracked instance is the shell alone, never the app, because teardown of
+    // a service is SIGTERM to its tracked instance and then SIGKILL
+    // (`launchd.plist(5)`, `ExitTimeOut`), and the app's own diffs boot out
+    // and cancel this label all the time — a wake that exec'd itself died at
+    // its first diff's bootout, before any fire ran. The app is spawned
+    // directly, never through `open`: backgrounded `open -g` is deferred by
+    // launch services and sometimes never reaches its engine, and `-j` is
+    // worse — hidden launches never started one at all here. What `open`
+    // would buy is one-instance activation, which the wake guard in the
+    // Runner answers instead. The line also carries the job's own removal,
+    // for the one case no writer survives — an uninstall — on which launchd
+    // never tidies anything: each interval re-runs `sh` into a nonzero exit
+    // forever. The binary it was written for is checked first; when it is
+    // gone the shell takes the plist and the service out itself — the one
+    // bootout that may exec, the shell meaning to die with the job. A
+    // moved-but-alive app rewrites the job at its next launch's diff.
     guard let executable = Bundle.main.executableURL?.path else {
       throw MessageError("no executable in \(Bundle.main.bundlePath)")
     }
@@ -106,7 +114,7 @@ class RemindersPlugin: NSObject, UNUserNotificationCenterDelegate {
         + "if [ ! -x \"$B\" ]; then rm -f \"$P\"; "
         + "exec /bin/launchctl bootout \"gui/\(getuid())/$L\"; fi; "
         + "export AGENT_CHAT_CONFIG='\(Self.shellQuoted(store))'; "
-        + "exec \"$B\" entoli-wake"
+        + "\"$B\" entoli-wake & exit 0"
     let content: [String: Any] = [
       "Label": label,
       "ProgramArguments": [
@@ -117,6 +125,9 @@ class RemindersPlugin: NSObject, UNUserNotificationCenterDelegate {
       // No one-shot calendar form exists here, so the moment is an interval
       // counted from the load — which is what the rewrite re-dates.
       "StartInterval": max(1, Int(at.timeIntervalSinceNow.rounded(.up))),
+      // The detached app outlives the shell that spawned it; without this its
+      // process group dies with the job's shell.
+      "AbandonProcessGroup": true,
     ]
     guard (content as NSDictionary).write(toFile: plist.path, atomically: true) else {
       throw MessageError("plist not written to \(plist.path)")

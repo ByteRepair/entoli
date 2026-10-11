@@ -14,8 +14,10 @@ const _notifyTimeout = Duration(seconds: 10);
 /// and `RemindersPlugin.swift`.
 ///
 /// Scheduling is one launchd job per request code under `~/Library/LaunchAgents/`,
-/// each a one-line `sh` that checks its binary, names [store] and execs this
-/// binary with a wake argument the Runner hides the whole app under — which
+/// each a one-line `sh` that checks its binary, names [store], spawns this
+/// binary detached with a wake argument the Runner hides the whole app under
+/// and exits — the shell is launchd's whole tracked instance, so the app's
+/// own bootouts and cancels of the label never SIGTERM a living one — which
 /// is how a trigger fires with the process dead, what [schedules] is true
 /// worth. The job also removes itself when its binary is gone — an uninstall
 /// being the one case no writer survives — so no entry ever outlives the app
