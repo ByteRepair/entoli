@@ -3,6 +3,8 @@ import "dart:convert";
 
 import "package:http/http.dart" as http;
 
+import "../../../core/tls.dart";
+
 import "http_stream.dart";
 import "llm_client.dart";
 import "openai_client.dart" show inlineText;
@@ -12,7 +14,7 @@ import "openai_client.dart" show inlineText;
 /// inside user turns, and thinking has to be handed back the way it came.
 class AnthropicClient implements LlmClient {
   AnthropicClient({required this.baseUrl, this.apiKey, http.Client? httpClient})
-      : _http = httpClient ?? http.Client();
+      : _http = httpClient ?? tlsClient();
 
   final Uri baseUrl;
   final String? apiKey;

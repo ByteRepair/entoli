@@ -3,6 +3,8 @@ import "dart:convert";
 
 import "package:http/http.dart" as http;
 
+import "../../../core/tls.dart";
+
 import "http_stream.dart";
 import "llm_client.dart";
 
@@ -16,7 +18,7 @@ class OpenAiClient implements LlmClient {
     this.apiKey,
     this.returnProgress = false,
     http.Client? httpClient,
-  }) : _http = httpClient ?? http.Client();
+  }) : _http = httpClient ?? tlsClient();
 
   final Uri baseUrl;
   final String? apiKey;

@@ -4,13 +4,13 @@ import "dart:ui" show AppExitResponse;
 import "package:flutter/material.dart";
 import "package:flutter/scheduler.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
-import "package:http/http.dart" as http;
 
 import "core/config.dart";
 import "core/platform/app_icon.dart";
 import "core/platform/background_work.dart";
 import "core/platform/platform.dart" as platform;
 import "core/platform/system_palette.dart";
+import "core/tls.dart";
 import "data/local/file_trigger_store.dart";
 import "data/local/file_selector_picker.dart";
 import "data/prompts/bundled_skills.dart";
@@ -220,7 +220,7 @@ class AppSession {
         systemAccentProvider.overrideWithValue(await accent),
         linkOpenerProvider
             .overrideWithValue(PlatformLinkOpener(store, syncHub)),
-        marketplaceClientProvider.overrideWithValue(http.Client()),
+        marketplaceClientProvider.overrideWithValue(tlsClient()),
         backgroundWorkProvider.overrideWithValue(foreground),
         fileHandoffProvider.overrideWithValue(handoff),
         assistantLaunchProvider.overrideWithValue(platform.createAssistantLaunch()),

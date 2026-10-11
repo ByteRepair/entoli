@@ -47,6 +47,19 @@ no `LlmProviderConfig` carries a key at all, so no write path has to strip
 one. The resolved key is the client cache signature's third term, so an
 edited stored key rebuilds the client the way an edited URL does.
 
+**The client's TLS trust is the system's root store, with one fallback.** The
+first handshake verifies against the OS's roots as the OS has them; where
+that refusal is the certificate verification alone — a Windows machine whose
+root store has never been refreshed past a root the provider now chains
+under, the store a `dart:io` client never triggering the refresh schannel's
+own lookups do (ollama.com's Google-signed chain is the case in point) — the
+same request runs once more against the Mozilla set bundled as
+`assets/certs/cacert.pem`, and that client is the endpoint's from then on.
+Everything else a handshake could die of keeps its own error, and a chain
+neither set trusts fails as it would have. See `lib/core/tls.dart`, which is
+where the app's second conditional import lives, the web side trusting its
+browser's TLS and having nothing to fall back from.
+
 A `RateLimitGate` is built per turn in `BuiltinBackend.sendPrompt` and shared by
 the parent `BuiltinAgent` and every sub-agent it spawns: it bounds in-flight
 `LlmClient.stream` calls to `BuiltinOptions.maxConcurrentLlmRequests` (4
