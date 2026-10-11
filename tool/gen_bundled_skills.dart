@@ -125,9 +125,11 @@ List<BundledPromptFile> _collectSkill(
   for (final file in allFiles(skillDir)) {
     final relative = file.substring(skillDir.path.length + 1);
     final binary = _isBinary(File(file));
+    // CRs come out before the hash and the embed both, so the sha256 the
+    // const carries describes the bytes it is paired with (normalizeCr).
     final content = binary
         ? base64Encode(File(file).readAsBytesSync())
-        : File(file).readAsStringSync();
+        : normalizeCr(File(file).readAsStringSync());
     final sha = binary
         ? sha256OfBytes(File(file).readAsBytesSync())
         : sha256Of(content);
@@ -161,7 +163,9 @@ List<BundledPromptFile> _collectAgents(Directory agentsRoot, String project) {
   for (final entity in agentsRoot.listSync()) {
     if (entity is! File || !entity.path.endsWith(".md")) continue;
     final name = basename(entity.path).replaceAll(".md", "");
-    final content = entity.readAsStringSync();
+    // As the skills' collect: the hash and the embed read one normalized
+    // text (normalizeCr).
+    final content = normalizeCr(entity.readAsStringSync());
     entries.add(BundledPromptFile(project, name, "", sha256Of(content),
         content));
   }

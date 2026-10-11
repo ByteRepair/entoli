@@ -40,6 +40,15 @@ List<String> allFiles(Directory dir) {
 String sha256Of(String content) =>
     crypto.sha256.convert(utf8.encode(content)).toString();
 
+/// CRs read out to LF: a line ending is an accident of the checkout that
+/// read the file, and the pair (sha256, content) a BundledPromptFile carries
+/// must describe the same bytes whatever host collected them — the content
+/// is embedded through stringLiteral, which reads the same way, so the hash
+/// of a CR-bearing file would disagree with its own content and the
+/// self-heal would rewrite it on every launch.
+String normalizeCr(String s) =>
+    s.replaceAll("\r\n", "\n").replaceAll("\r", "\n");
+
 String sha256OfBytes(List<int> bytes) => crypto.sha256.convert(bytes).toString();
 
 void sortByProject(List<BundledPromptFile> entries) {
@@ -84,14 +93,12 @@ void emitPromptFileList(StringBuffer buf, String varName,
 /// is avoided: the content may contain both " and ', and a raw string cannot
 /// escape. Every line is a separate concatenation so the diff stays readable.
 /// `$` is escaped to `\$` so JavaScript template literals (`${item}`) in the
-/// embedded content are not read as Dart interpolations.
-///
-/// CRs are normalized to LF before anything else: a CRLF-checked-out file
-/// would otherwise leave a raw CR inside the literal, and the generated
-/// source is then not Dart on any host that read it so — and the const is
-/// generated content that two hosts' checksums must agree on.
+/// embedded content are not read as Dart interpolations. CRs are read out
+/// first (normalizeCr), so one literal carries one line ending whatever ended
+/// the file it came from — the generators' own reads normalize too, this
+/// being the last place it still matters.
 String stringLiteral(String s) {
-  s = s.replaceAll("\r\n", "\n").replaceAll("\r", "\n");
+  s = normalizeCr(s);
   final escaped = s
       .replaceAll("\\", "\\\\")
       .replaceAll('"', '\\"')
