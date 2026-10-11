@@ -12,14 +12,10 @@ void main() {
     expect(args.artifactId, isNull);
   });
 
-  test("entryFile is the basename for a bare file", () {
-    final args = artifactArgsFrom('{"path": "chart.html"}');
-    expect(args!.entryFile, "chart.html");
-  });
-
-  test("entryFile is the basename for a nested path", () {
-    final args = artifactArgsFrom('{"path": "report/sub/page.html"}');
-    expect(args!.entryFile, "page.html");
+  test("entryFile is the basename, for a bare path and a nested one", () {
+    expect(artifactArgsFrom('{"path": "chart.html"}')!.entryFile, "chart.html");
+    expect(artifactArgsFrom('{"path": "report/sub/page.html"}')!.entryFile,
+        "page.html");
   });
 
   test("title defaults to empty string", () {
@@ -32,19 +28,13 @@ void main() {
     expect(args!.artifactId, "existing-id");
   });
 
-  test("null when path is missing", () {
+  test("null where no path can come of it", () {
+    // The key is not there.
     expect(artifactArgsFrom('{"title": "no path"}'), isNull);
-  });
-
-  test("null when path is empty", () {
+    // Or the path is empty.
     expect(artifactArgsFrom('{"path": ""}'), isNull);
-  });
-
-  test("null when json is invalid", () {
+    // The json is not json, or nothing at all.
     expect(artifactArgsFrom("not json"), isNull);
-  });
-
-  test("null when empty", () {
     expect(artifactArgsFrom(""), isNull);
     expect(artifactArgsFrom(null), isNull);
   });
