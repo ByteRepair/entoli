@@ -21,7 +21,7 @@
 // (https://github.com/dart-lang/sdk/issues/52266) is the Dart issue it exists
 // for — a dart:io handshake never triggering the store's population — and
 // once that is fixed, discard assets/certs/cacert.pem and the fallback here
-// with it.
+// with it; tracked on our end by #294.
 import "dart:io";
 
 import "package:flutter/services.dart" show rootBundle;
