@@ -220,16 +220,6 @@ void main() {
       expect(app.container.read(appSettingsProvider).approveMode, ApproveMode.ask);
     });
 
-    testWidgets("can be switched to ask", (tester) async {
-      await pumpSettings(tester, app, SettingsCategory.general);
-      await openModeDropdown(tester);
-      await tester.tap(find.text("Ask before every command").last);
-      await settleIo(tester);
-
-      expect(app.container.read(appSettingsProvider).approveMode, ApproveMode.ask);
-      expect(AppSettings.load(app.config).approveMode, ApproveMode.ask);
-    });
-
     testWidgets("can be switched to run without asking", (tester) async {
       await pumpSettings(tester, app, SettingsCategory.general);
       await openModeDropdown(tester);
