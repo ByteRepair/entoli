@@ -28,6 +28,9 @@ dotnet tool install --global wix --version $wixVersion
 if ($LASTEXITCODE -ne 0) {
     # A re-run finds the tool already installed; pin it back rather than fail.
     dotnet tool update --global wix --version $wixVersion
+    if ($LASTEXITCODE -ne 0) {
+        throw "make-msi.ps1: wix $wixVersion did not install"
+    }
 }
 # The image has the dotnet tools directory on PATH; being explicit anyway
 # means this script never depends on it.
@@ -41,15 +44,18 @@ if ($outDir) {
 # The welcome dialog's license page: the repo's own LICENSE turned into rtf
 # in this run's temp, so an AGPL edit flows into the installer without a
 # second file to keep in step. RTF doubles nothing here; it escapes {, } and
-# \ and writes a paragraph break at each line. Non-ASCII would need \uN
-# escapes, which is a throw rather than an escape.
+# \ and writes a paragraph break at each line — the CRs are read out to LF
+# first, or a CRLF checkout's pairs would be re-matched on the way past and
+# double every break. Non-ASCII would need \uN escapes, which is a throw
+# rather than an escape.
 $rtfPath = Join-Path ([System.IO.Path]::GetTempPath()) "entoli-license.rtf"
 $license = [System.IO.File]::ReadAllText("$PSScriptRoot\..\..\LICENSE")
 if ($license -match "[^\x00-\x7F]") {
     throw "make-msi.ps1: the LICENSE carries non-ASCII the rtf escape below does not handle"
 }
 $license = $license.Replace("\", "\\").Replace("{", "\{").Replace("}", "\}")
-$license = $license.Replace("`r`n", "\par`r`n").Replace("`n", "\par`r`n")
+$license = $license.Replace("`r`n", "`n").Replace("`r", "`n")
+$license = $license.Replace("`n", "\par`r`n")
 [System.IO.File]::WriteAllText($rtfPath, "{\rtf1\ansi\pard\fs16 $license}")
 
 wix extension add -acceptEula wix7 -g WixToolset.UI.wixext -v 7.0.0
