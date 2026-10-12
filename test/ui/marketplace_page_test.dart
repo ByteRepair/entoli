@@ -428,16 +428,31 @@ Frame it, from upstream.
     // Back to the list once it has installed.
     expect(find.text("Install skill"), findsNothing);
     expect(find.text("letterbox"), findsOneWidget);
+  });
 
-    // And installing over it asks first, with the replace wholesale: the file
-    // the new packaging drops is gone, the rest rewritten.
+  // Seeded before any install runs: on Linux the install path leaves the
+  // skills directory read-only, so the file the replace drops has to be
+  // written before the app lays the directory down.
+  testWidgets("installing over an existing skill asks first, and Replace replaces",
+      (tester) async {
+    await pumpList(tester);
+    await settleIo(tester);
+
+    // Seeded after the page pumps: on Linux an install lands its directory
+    // read-only again, so the file the replace drops must predate any install.
+    final dir = p.join(app!.config.promptsDir(CompletionKind.skill), "letterbox");
+    Directory(dir).createSync(recursive: true);
+    File(p.join(dir, "SKILL.md")).writeAsStringSync("old\n");
     File(p.join(dir, "obsolete.sh")).writeAsStringSync("old\n");
+
     await openEntry(tester, kind: CompletionKind.skill, slug: "letterbox");
+
     await tester.tap(find.text("Install skill"));
     await pumpUntil(tester, find.text("Replace"));
     await tester.tap(find.text("Replace"));
     await settleIo(tester, least: 20, tries: 80);
 
+    // The replace was wholesale: the dropped file is gone, the rest rewritten.
     expect(File(p.join(dir, "obsolete.sh")).existsSync(), isFalse);
     expect(File(p.join(dir, "SKILL.md")).readAsStringSync(), _letterboxMd);
     expect(File(p.join(dir, "references", "tone.md")).existsSync(), isTrue);
