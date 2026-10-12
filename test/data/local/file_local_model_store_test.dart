@@ -74,6 +74,9 @@ void main() {
     expect(Directory(p.join(root.path, "test-model")).existsSync(), isFalse);
   });
 
+  // Once stalled past the 30-second default on a loaded CI runner, the same
+  // commit green on the run beside it: runner load, not a race. Time to
+  // settle, and the default for every other test stands.
   test("cancelling leaves nothing behind", () async {
     net.hold = Completer<void>();
     final subscription = store().install(gguf()).listen(null);
@@ -88,7 +91,7 @@ void main() {
     expect(Directory(p.join(root.path, "test-model")).existsSync(), isFalse);
 
     expect(await store().installed(), isEmpty);
-  });
+  }, timeout: const Timeout(Duration(minutes: 2)));
 
   test("an unfinished directory is not installed", () async {
     // What a killed process leaves: the file, and no marker. Nothing may load

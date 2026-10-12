@@ -1,5 +1,6 @@
 import "dart:io";
 
+import "package:flutter/foundation.dart" show ValueNotifier;
 import "package:flutter_test/flutter_test.dart";
 import "package:fs_shim/fs_io.dart" show fileSystemIo;
 import "package:path/path.dart" as p;
@@ -17,6 +18,10 @@ import "builtin_fakes.dart";
 void main() {
   late BuiltinSession session;
   late FakeShell shell;
+
+  /// Where the chat's own workspace is — set by `agentOver` beside `shell`,
+  /// so the tests can lay files beside what the agent operates on.
+  late String workspaceDir;
 
   setUp(() => session = BuiltinSession());
 
@@ -46,6 +51,7 @@ void main() {
     final chat = p.join(project, "chats", "chat-1");
     Directory(chat).createSync(recursive: true);
     addTearDown(() => tempDir.deleteSync(recursive: true));
+    workspaceDir = chat;
     shell = FakeShell(respond ?? (_) => ok(""),
         canRunCommands: true);
     final allowed = [...approvals];
@@ -219,13 +225,15 @@ void main() {
     test("a bare command an Always answer covered is not asked again",
         () async {
       // The shape the live run tripped over: the rule an Always answer writes
-      // is `git status *`, and the next call is the bare `git status` — no
+      // is `npm test *`, and the next call is the bare `npm test` — no
       // arguments, nothing after the pattern's space. The banner must not
-      // return for what the user already said always to.
+      // return for what the user already said always to. `npm test` because
+      // the tier must not cover it first: the derivation is what is under
+      // test, not the parse's own read-only answer.
       final client = FakeLlmClient([
-        [bashCall("git status")],
-        [bashCall("git status")],
-        [bashCall("git status -sb")], [finish],
+        [bashCall("npm test")],
+        [bashCall("npm test")],
+        [bashCall("npm test --watch")], [finish],
       ]);
       final events = await agentOver(
         client,
@@ -235,13 +243,13 @@ void main() {
       final requests = events.whereType<ApprovalRequestEvent>().toList();
       expect(requests, hasLength(1),
           reason: "the Always answer covers the bare command and its args");
-      expect(shell.ran, ["git status", "git status", "git status -sb"]);
+      expect(shell.ran, ["npm test", "npm test", "npm test --watch"]);
     });
 
     test("a plain allow is one-shot: the next call asks again", () async {
       final client = FakeLlmClient([
-        [bashCall("git status")],
-        [bashCall("git status")], [finish],
+        [bashCall("npm test")],
+        [bashCall("npm test")], [finish],
       ]);
       await agentOver(
         client,
@@ -250,7 +258,7 @@ void main() {
       ).run(userMessage("go")).toList();
       // The first ran on the user's one answer; the second waited for the
       // banner again and was denied there.
-      expect(shell.ran, ["git status"]);
+      expect(shell.ran, ["npm test"]);
     });
 
     test("a deny on any segment of a compound refuses the whole", () async {
@@ -343,8 +351,9 @@ void main() {
     });
 
     test("a banner answer records you, once", () async {
+      // A command the parse does not cover: the banner is what decided it.
       final client = FakeLlmClient([
-        [bashCall("git status")], [finish],
+        [bashCall("python3 build.py")], [finish],
       ]);
       final events = await agentOver(
         client,
@@ -357,8 +366,9 @@ void main() {
     });
 
     test("never mode records the mode", () async {
+      // A command the parse does not cover: `never` is what decides it.
       final client = FakeLlmClient([
-        [bashCall("git status")], [finish],
+        [bashCall("python3 build.py")], [finish],
       ]);
       final events = await agentOver(client, approveMode: ApproveMode.never)
           .run(userMessage("go"))
@@ -369,8 +379,9 @@ void main() {
     });
 
     test("the classifier records itself", () async {
+      // A command the parse does not cover: the classifier decides it.
       final client = FakeLlmClient([
-        [bashCall("git status")], [finish],
+        [bashCall("python3 build.py")], [finish],
       ]);
       final events = await agentOver(
         client,
@@ -402,10 +413,10 @@ void main() {
   });
 
   group("auto mode", () {
-    test("a read the classifier allows runs without a banner", () async {
+    test("a read the parse proves non-modifying runs silently", () async {
       // The live shape this pins: chat with no rules, app mode auto, the
-      // classifier rates `git status` a read — the command runs silently,
-      // which is the classifier's answer and not a missed gate.
+      // parse rates `git status` non-modifying before any model is asked —
+      // the command runs and neither classifier nor banner saw it.
       final client = FakeLlmClient([
         [bashCall("git status")], [finish],
       ]);
@@ -418,9 +429,8 @@ void main() {
       ).run(userMessage("go")).toList();
       expect(shell.ran, ["git status"]);
       expect(events.whereType<ApprovalRequestEvent>(), isEmpty);
-      // Only the bash command is classified — the finish is a text reply.
-      expect(classifier.classified.length, 1);
-      expect(classifier.classified.first.tool, "bash");
+      // The deterministic tier decides before the classifier is paid for.
+      expect(classifier.classified, isEmpty);
     });
 
     test("a denied command is refused, not run", () async {
@@ -521,8 +531,11 @@ void main() {
     });
 
     test("no classifier falls back to asking for every command", () async {
+      // A command the parse does not cover: `auto` without a classifier is
+      // the fallback that asks — the bare `ls` beside it would run from the
+      // deterministic tier.
       final client = FakeLlmClient([
-        [bashCall("ls")], [finish],
+        [bashCall("touch note.txt")], [finish],
       ]);
       final events = await agentOver(
         client,
@@ -567,6 +580,161 @@ void main() {
       ).run(userMessage("go")).toList();
       // The user's deny outranks whatever the classifier would have said.
       expect(shell.ran, isEmpty);
+    });
+  });
+
+  group("the deterministic tiers", () {
+    /// A git repository beside the workspace, with the shell standing in it:
+    /// the case the grant policy is for — a repo the workspaces do not hold.
+    void makeRepo() {
+      final repo = p.join(workspaceDir, "..", "repo");
+      Directory(p.join(repo, ".git", "objects")).createSync(recursive: true);
+      Directory(p.join(repo, ".git", "refs")).createSync();
+      Directory(p.join(repo, ".git", "hooks")).createSync();
+      File(p.join(repo, ".git", "HEAD")).writeAsStringSync("ref: refs/heads/master\n");
+      File(p.join(repo, ".git", "index")).writeAsStringSync("");
+      File(p.join(repo, ".git", "config")).writeAsStringSync("[core]\n");
+      shell.sessionCwdValue = ValueNotifier(p.normalize(File(repo).path));
+    }
+
+    test("a read-only command runs without a banner in ask mode", () async {
+      final client = FakeLlmClient([
+        [bashCall("ls -la")], [finish],
+      ]);
+      final events = await agentOver(client, approveMode: ApproveMode.ask)
+          .run(userMessage("go"))
+          .toList();
+      expect(shell.ran, ["ls -la"]);
+      expect(events.whereType<ApprovalRequestEvent>(), isEmpty);
+    });
+
+    test("an ask rule still shows the read-only command it names", () async {
+      final client = FakeLlmClient([
+        [bashCall("ls -la")], [finish],
+      ]);
+      final events = await agentOver(
+        client,
+        approveMode: ApproveMode.ask,
+        permissions: [
+          const PermissionRule(
+              tool: "bash", pattern: "ls *", decision: PermissionDecision.ask),
+        ],
+      ).run(userMessage("go")).toList();
+      expect(events.whereType<ApprovalRequestEvent>(), hasLength(1),
+          reason: "the user's always-show-me outranks the parse's tier");
+    });
+
+    test("auto mode never sees the read-only command at all", () async {
+      var asked = 0;
+      final client = FakeLlmClient([[bashCall("grep -rn x .")], [finish]]);
+      final events = await agentOver(
+        client,
+        approveMode: ApproveMode.auto,
+        classifier: _SpyClassifier(() => asked++),
+      ).run(userMessage("go")).toList();
+      expect(shell.ran, hasLength(1));
+      expect(asked, 0, reason: "the parse covered it; no classifier call");
+      expect(events.whereType<ApprovalRequestEvent>(), isEmpty);
+    });
+
+    test("a vouched git command runs with its repo's .git beside the grant",
+        () async {
+      final client = FakeLlmClient([
+        [bashCall("git commit -m x")], [finish],
+      ]);
+      // The workspace the harness lays out must exist before makeRepo names
+      // the directory beside it.
+      final agent = agentOver(
+        client,
+        approveMode: ApproveMode.never,
+        sandboxHelper: _StubHelper(),
+      );
+      makeRepo();
+      final events = await agent.run(userMessage("go")).toList();
+      expect(shell.ran, hasLength(1));
+      expect(events.whereType<ApprovalRequestEvent>(), isEmpty);
+      final sandbox = shell.sandboxes.last!;
+      final repo = p.normalize(p.join(workspaceDir, "..", "repo"));
+      expect(sandbox.extraWrites, contains(p.join(repo, ".git", "objects")));
+      expect(sandbox.extraWrites, contains(p.join(repo, ".git", "index")));
+      expect(sandbox.extraWrites.map(p.basename),
+          isNot(contains(anyOf("config", "hooks"))));
+      // The decision the result records says what covered it.
+      final result = events.whereType<ToolResultEvent>().single.result;
+      expect(result.decided, PermissionDecision.allow);
+    });
+
+    test("a push stays on the banner path", () async {
+      final client = FakeLlmClient([
+        [bashCall("git push")], [finish],
+      ]);
+      final agent = agentOver(client, approveMode: ApproveMode.ask);
+      makeRepo();
+      final events = await agent.run(userMessage("go")).toList();
+      expect(events.whereType<ApprovalRequestEvent>(), hasLength(1));
+      // The harness's default answers the banner; what the test pins is that
+      // the banner is where the answer comes from, not the parse's vouch.
+      expect(shell.ran, hasLength(1));
+    });
+
+    test("a compound is covered when each of its parts is", () async {
+      final client = FakeLlmClient([
+        [bashCall("git status && git commit -m x")], [finish],
+      ]);
+      final agent = agentOver(
+        client,
+        approveMode: ApproveMode.never,
+        sandboxHelper: _StubHelper(),
+      );
+      makeRepo();
+      final events = await agent.run(userMessage("go")).toList();
+      expect(shell.ran, hasLength(1));
+      expect(events.whereType<ApprovalRequestEvent>(), isEmpty);
+    });
+
+    test("a fetcher command rides the network rules", () async {
+      final client = FakeLlmClient([[bashCall("curl https://example.com")], [finish]]);
+      final events = await agentOver(
+        client,
+        approveMode: ApproveMode.ask,
+        permissions: [
+          const PermissionRule(
+              tool: "webfetch", pattern: "*", decision: PermissionDecision.allow),
+        ],
+        webSearch: FakeWebSearch(),
+      ).run(userMessage("go")).toList();
+      expect(shell.ran, hasLength(1));
+      expect(events.whereType<ApprovalRequestEvent>(), isEmpty);
+    });
+
+    test("a fetcher with no standing answer still asks", () async {
+      final client = FakeLlmClient([[bashCall("curl https://example.com")], [finish]]);
+      final events = await agentOver(client, approveMode: ApproveMode.ask)
+          .run(userMessage("go"))
+          .toList();
+      // The banner is where the standing answer comes from; the harness's
+      // default allows it, and the command runs.
+      expect(events.whereType<ApprovalRequestEvent>(), hasLength(1));
+      expect(shell.ran, hasLength(1));
+    });
+
+    test("a denied domain refuses the fetcher command outright", () async {
+      final client = FakeLlmClient(
+          [[bashCall("curl https://evil.example/steal")], [finish]]);
+      final events = await agentOver(
+        client,
+        approveMode: ApproveMode.ask,
+        permissions: [
+          const PermissionRule(
+              tool: "webfetch",
+              pattern: "evil.example",
+              decision: PermissionDecision.deny),
+        ],
+      ).run(userMessage("go")).toList();
+      expect(shell.ran, isEmpty);
+      final result = results(events);
+      expect(result.returnCode, -1);
+      expect(result.exceptionInfo, contains("Denied by a permission rule"));
     });
   });
 
@@ -730,4 +898,18 @@ class _StubClassifier implements PermissionClassifier {
   Future<PermissionDecision> classify(String toolName, String argumentsJson,
           {required String workspace}) async =>
       decision;
+}
+
+/// A classifier that counts being consulted.
+class _SpyClassifier implements PermissionClassifier {
+  _SpyClassifier(this.ask);
+
+  final void Function() ask;
+
+  @override
+  Future<PermissionDecision> classify(String toolName, String argumentsJson,
+          {required String workspace}) async {
+    ask();
+    return PermissionDecision.allow;
+  }
 }

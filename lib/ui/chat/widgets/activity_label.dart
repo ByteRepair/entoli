@@ -203,6 +203,8 @@ String? outcomeText(
       decided == null ? "by the classifier" : "${allowed ?? "allowed"} by the classifier",
     PermissionSource.human => "${allowed ?? "allowed"}$where",
     PermissionSource.mode => "${allowed ?? "allowed"} by the approve mode",
+    PermissionSource.parse =>
+      "${allowed ?? "allowed"} by the command parse",
     PermissionSource.rerun => "rerun unconfined after you approved",
     _ => null,
   };
