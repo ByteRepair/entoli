@@ -64,24 +64,43 @@ void main() {
     await stubTool("esbmc", 'echo "esbmc version 99.0 stub"');
   }
 
-  /// The POSIX base every fetch-path run reaches for, then the fetch itself:
-  /// wget leaves a zip where the script told it to, and unzip copies [body]
-  /// as the binary it lands, in the [layout] a release ships — through
-  /// /bin/cp, the stubs being the whole of the PATH and `cp` not among them.
-  /// The binary is staged beside the config first, made executable before
-  /// the run, since the stubs are the whole of the PATH.
-  Future<void> stubEsbmcFetch(String layout, String body) async {
+  /// The POSIX base every fetch-path run needs, then the fetch itself: wget
+  /// leaves a zip where the script told it to — logging the URL it was aimed
+  /// at into the file answered — and unzip copies the staged [body] as the
+  /// [binary] it lands, [companion] riding beside it where a release ships
+  /// one, in the [layout] the release's archive holds. Through /bin/cp, the
+  /// stubs being the whole of the PATH and `cp` not among them; `uname`
+  /// answers [os] for `-s` and [arch] for `-m` where the run is told it is
+  /// on a platform other than this host's, the host's own `uname`
+  /// otherwise. Answers the log.
+  Future<File> stubEsbmcFetch(
+    String layout,
+    String body, {
+    String binary = "esbmc",
+    String? companion,
+    String? os,
+    String arch = "",
+  }) async {
+    final log = File(p.join(config.dataDir, "wget.log"))..createSync();
+    if (os == null) {
+      await stubReal("uname");
+    } else {
+      await stubTool("uname",
+          'if [ "\$1" = "-s" ]; then echo "$os"; else echo "$arch"; fi');
+    }
+    for (final name in ["mkdir", "find", "head", "mv", "rm", "chmod", "dirname"]) {
+      await stubReal(name);
+    }
+    await stubTool("wget", 'echo "\$4" >> "${log.path}"; echo zip > "\$3"');
     final staged = p.join(config.dataDir, "esbmc-staged");
     final file = File(staged)..writeAsStringSync("#!/bin/sh\n$body\n");
     await Process.run("chmod", ["+x", file.path]);
-    for (final name in ["mkdir", "uname", "find", "head", "mv", "rm", "chmod", "dirname"]) {
-      await stubReal(name);
-    }
-    await stubTool("wget", 'echo zip > "\$3"');
-    await stubTool("unzip",
-        'mkdir -p /tmp/_esbmc_extract/$layout && '
-        'cp "$staged" /tmp/_esbmc_extract/$layout/esbmc'
-        .replaceFirst("cp ", "/bin/cp "));
+    await stubTool("unzip", [
+      "mkdir -p /tmp/_esbmc_extract/$layout",
+      "cp \"$staged\" /tmp/_esbmc_extract/$layout/$binary",
+      if (companion != null) ": > /tmp/_esbmc_extract/$layout/$companion",
+    ].join(" && ").replaceFirst("cp ", "/bin/cp "));
+    return log;
   }
 
   test("the script refuses to run without ENV_INSTALL_DIR", () async {
@@ -97,6 +116,7 @@ void main() {
     await stubReal("mkdir");
     await stubReal("uname");
     await stubReal("cp");
+    await stubReal("chmod");
     await stubEsbmcOnPath();
     // A package manager that must not be called: nothing is missing.
     await stubTool("apk", 'echo "apk must not run" >&2; exit 1');
@@ -120,6 +140,7 @@ void main() {
     await stubReal("mkdir");
     await stubReal("uname");
     await stubReal("cp");
+    await stubReal("chmod");
     await stubEsbmcOnPath();
 
     final result = await runScript({"ENV_INSTALL_DIR": bin});
@@ -134,6 +155,7 @@ void main() {
     await stubReal("mkdir");
     await stubReal("uname");
     await stubReal("cp");
+    await stubReal("chmod");
     await stubEsbmcOnPath();
     final apkLog = File(p.join(config.dataDir, "apk.log"))..createSync();
     await stubTool("apk", 'echo "\$*" >> "${apkLog.path}"');
@@ -212,31 +234,22 @@ void main() {
         contains("cannot be run (see the error above); setup did not succeed"));
   });
 
-  /// One fetch run at a platform the script is told it is on: `uname`
-  /// answers [os] for `-s` and [arch] for `-m`, wget logs the URL it was
-  /// aimed at before leaving the zip the unzip stub copies the staged
-  /// [binary] into the `bin/` layout, and the POSIX base is real. Answers
-  /// the log — the URL is the only thing the selection is visible as.
+  /// One fetch run at a platform the script is told it is on: [fetchedFrom]
+  /// stubs with [os]/[arch] and the store's env mirrored on it — the
+  /// destination, the [binary] the release ships, [companion] beside it —
+  /// runs the script, and answers the URL the wget stub was aimed at.
   Future<String> fetchedFrom(String os, String arch, String binary,
       {String? companion}) async {
-    final log = File(p.join(config.dataDir, "wget.log"))..createSync();
-    await stubTool("uname",
-        'if [ "\$1" = "-s" ]; then echo "$os"; else echo "$arch"; fi');
-    for (final name in ["mkdir", "find", "head", "mv", "rm", "chmod", "dirname"]) {
-      await stubReal(name);
-    }
-    await stubTool("wget", 'echo "\$4" >> "${log.path}"; echo zip > "\$3"');
-    final staged = p.join(config.dataDir, "esbmc-staged");
-    final file = File(staged)
-      ..writeAsStringSync("#!/bin/sh\necho \"esbmc version 8.5 stub\"\n");
-    await Process.run("chmod", ["+x", file.path]);
-    await stubTool("unzip", [
-      "mkdir -p /tmp/_esbmc_extract/bin",
-      "cp \"$staged\" /tmp/_esbmc_extract/bin/$binary",
-      if (companion != null) ": > /tmp/_esbmc_extract/bin/$companion",
-    ].join(" && ").replaceFirst("cp ", "/bin/cp "));
-
-    final result = await runScript({"ENV_INSTALL_DIR": bin});
+    final log = await stubEsbmcFetch("bin",
+        'echo "esbmc version 8.5 stub"',
+        binary: binary,
+        companion: companion,
+        os: os,
+        arch: arch);
+    final result = await runScript({
+      "ENV_INSTALL_DIR": bin,
+      "ENV_ESBMC_BINARY": binary,
+    });
     expect(result.exitCode, 0, reason: result.stderr);
     return log.readAsStringSync();
   }
@@ -282,7 +295,7 @@ void main() {
     expect(result.stderr, contains("unsupported platform for ESBMC: FreeBSD"));
   });
 
-  test("the store passes its install dir as ENV_INSTALL_DIR, install only",
+  test("the store passes its install dir and the binary's name, install only",
       () async {
     final s = FileByteRepairStore(
       config: config,
@@ -295,6 +308,10 @@ void main() {
     await s.install(shell);
 
     expect(shell.environments.single?["ENV_INSTALL_DIR"], bin);
+    // The name is this platform's `esbmcFileName` — the one encoding of the
+    // name, what the script's find and the gate's check are both told.
+    expect(shell.environments.single?["ENV_ESBMC_BINARY"],
+        Platform.isWindows ? "esbmc.exe" : "esbmc");
     expect(shell.timeouts.single, const Duration(minutes: 30));
     // The version queries that follow a setup carry no install environment.
     await s.runToolVersion(shell, "esbmc");

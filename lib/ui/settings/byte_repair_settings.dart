@@ -1,5 +1,4 @@
 import "package:file_selector/file_selector.dart";
-import "package:flutter/foundation.dart" show defaultTargetPlatform, TargetPlatform;
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
@@ -17,10 +16,13 @@ import "../widgets/settings_warning_banner.dart";
 ///
 /// The setup runs only where it can: a rootfs env picked from the Terminal
 /// settings on Android, the host shell with a bin directory to install into
-/// on the desktops. Elsewhere — iOS, and the web — the category says so and
-/// hides the buttons, which could only report their own refusal; the delete
-/// stays, the data being real wherever the tooling is not, with its confirm
-/// message worded by the store's [ByteRepairStore.environmentDeletion].
+/// on the desktops — the store's [ByteRepairStore.capabilityBanner] answers
+/// where the platform's facts live, so this page neither guesses at a
+/// platform nor names a store's internals. Where it cannot run, the category
+/// says so and hides the buttons, which could only report their own refusal;
+/// the delete stays, the data being real wherever the tooling is not, with
+/// its confirm message the store's
+/// [ByteRepairStore.deleteConfirmMessage].
 class ByteRepairSection extends ConsumerStatefulWidget {
   const ByteRepairSection({super.key});
 
@@ -35,14 +37,8 @@ class _ByteRepairSectionState extends ConsumerState<ByteRepairSection> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final rootfsId = ref.watch(appSettingsProvider.select((s) => s.rootfsId));
     final store = ref.watch(byteRepairStoreProvider);
-    final isAndroid = defaultTargetPlatform == TargetPlatform.android;
-    // Whether the env on offer can take the tools: a guest with a package
-    // manager on Android, an install destination on the desktops — every
-    // one of the three composes one.
-    final capable = isAndroid ? rootfsId != null : store.installDir != null;
-    final environment = store.environmentDeletion;
+    final banner = store.capabilityBanner;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -53,16 +49,11 @@ class _ByteRepairSectionState extends ConsumerState<ByteRepairSection> {
               "verification of C code. Runs through the configured terminal "
               "environment, so it needs one with a package manager.",
         ),
-        if (!capable)
+        if (banner != null)
           SettingsWarningBanner(
             icon: Icons.warning_amber_rounded,
             color: theme.colorScheme.error,
-            text: isAndroid
-                ? 'Byte Repair does not work when using the "Host" terminal '
-                    "environment on this device. Please choose another "
-                    "terminal environment."
-                : "Byte Repair does not work on this platform: there is "
-                    "nowhere to install the tools it sets up.",
+            text: banner,
           )
         else ...[
           const SizedBox(height: 8),
@@ -117,12 +108,7 @@ class _ByteRepairSectionState extends ConsumerState<ByteRepairSection> {
           icon: Icons.delete_outline,
           label: "Delete Byte Repair Data",
           confirmTitle: "Delete Byte Repair environment?",
-          confirmMessage: environment == null
-              ? "This deletes the Byte Repair workspace (cloned repos, "
-                  "scratch files) and all chats in the project."
-              : "This deletes $environment, the Byte Repair workspace "
-                  "(cloned repos, scratch files), and all chats in the "
-                  "project. Run Setup to use Byte Repair again.",
+          confirmMessage: store.deleteConfirmMessage,
           onConfirmed: () async {
             // The environment first: it is the half that can fail, and
             // failing before the chats are gone leaves the user something

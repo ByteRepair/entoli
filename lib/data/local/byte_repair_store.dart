@@ -15,12 +15,16 @@ import "../../domain/shell.dart";
 ///
 /// The script's environment is declared by the caller, never probed by the
 /// script: [installDir] is where tools land (`/usr/local/bin` inside a guest,
-/// `<cacheDir>/byte-repair/bin` on the host), sent as `ENV_INSTALL_DIR`; the
-/// driver's environment carries `ENV_PACKAGE_MANAGER` (`apk` in a guest,
-/// nothing on the host, where the machine's package manager is not ours to
-/// touch and static binaries are fetched instead). A binary already on PATH
-/// *and runnable* is never re-fetched — the script skips it; see "Byte
-/// Repair's environment, in two variables" in the directory's AGENTS.md.
+/// `<cacheDir>/byte-repair/bin` on the host), sent as `ENV_INSTALL_DIR` by
+/// [installEnvironment]; the driver's environment carries
+/// `ENV_PACKAGE_MANAGER` (`apk` in a guest, nothing on the host, where the
+/// machine's package manager is not ours to touch and static binaries are
+/// fetched instead), and the io side's [installEnvironment] adds the binary's
+/// name, which the script does not probe — the one encoding of it lives with
+/// the gate that asks for the file it names. A binary already on PATH *and
+/// runnable* is never re-fetched — the script copies it into the bin
+/// directory instead; see "Byte Repair's environment, in three variables" in
+/// the directory's AGENTS.md.
 ///
 /// "Run Setup" owns the full lifecycle: it copies the base rootfs from cache
 /// into the project's data directory (for a project that opts into rootfs
@@ -38,7 +42,7 @@ abstract class ByteRepairStore {
     required this.config,
     required this.project,
     required this.workspace,
-    this.installDir = guestEsbmcInstallDir,
+    this.installDir,
     this.installTimeout = _guestInstallTimeout,
     this.rootfsStore,
   });
@@ -109,12 +113,17 @@ abstract class ByteRepairStore {
     final result = await _run(shell, body, installTimeout,
         // Null installDir is the "no host install" answer — the setup's own
         // refusal to guess a destination is what the model then reads.
-        environment: {
-          "ENV_INSTALL_DIR": installDir ?? "",
-        });
+        environment: installEnvironment());
     if (result.returnCode == 0) await markSetupComplete();
     return result;
   }
+
+  /// The environment the install run carries, layered over its driver's. The
+  /// base is the destination, as `ENV_INSTALL_DIR`; the concrete store can
+  /// add what its side of the platform owns — the binary's name, where the
+  /// gate asking for the file it names lives beside the const that answers.
+  Map<String, String> installEnvironment() =>
+      {"ENV_INSTALL_DIR": installDir ?? ""};
 
   /// Copies a user-picked ESBMC binary next to the tools the setup fetched,
   /// making it executable. The rootfs must already exist — run [install]
@@ -137,6 +146,32 @@ abstract class ByteRepairStore {
   /// not run a setup yet is the same by the state, not the platform. Reading
   /// the disk is the state: a Host env on Android copies nothing either.
   String? get environmentDeletion;
+
+  /// What the settings page draws where this store's environment cannot run
+  /// a setup — the env capability the section hides its buttons behind — or
+  /// null where the buttons can run: a guest with a package manager on
+  /// Android, an install destination on the desktops. The web's unavailable
+  /// store is never capable. Answering here keeps the platform's own facts
+  /// with what reads them (`defaultTargetPlatform`'s idea of a browser is
+  /// the phone it runs on, which is why the widget must not ask).
+  String? get capabilityBanner;
+
+  /// The delete confirm's message, composed from the two facts this class
+  /// holds: the [environmentDeletion] clause the setup left, and — through
+  /// [capabilityBanner] — whether a setup can stand where it was again.
+  /// Built here rather than wired through the widget's bits, the way the
+  /// stores' `_why` answers already reach their readers.
+  String get deleteConfirmMessage {
+    final environment = environmentDeletion;
+    final tail = capabilityBanner == null
+        ? " Run Setup to use Byte Repair again."
+        : "";
+    return environment == null
+        ? "This deletes the Byte Repair workspace (cloned repos, scratch "
+            "files) and all chats in the project.$tail"
+        : "This deletes $environment, the Byte Repair workspace (cloned "
+            "repos, scratch files), and all chats in the project.$tail";
+  }
 
   /// Runs `<command> --version` through [shell] and returns its raw output, or
   /// null where the command is not installed or the call failed. All three tools
@@ -182,7 +217,7 @@ class UnavailableByteRepairStore extends ByteRepairStore {
     required super.config,
     required super.project,
     required super.workspace,
-  }) : super(installDir: null);
+  });
 
   static const _why =
       "Byte Repair needs a terminal environment, which this platform does not have.";
@@ -201,4 +236,9 @@ class UnavailableByteRepairStore extends ByteRepairStore {
 
   @override
   String? get environmentDeletion => null;
+
+  @override
+  String? get capabilityBanner =>
+      "Byte Repair does not work on this platform: there is nowhere to "
+      "install the tools it sets up.";
 }

@@ -91,7 +91,7 @@ us, so a CVE in a bundled tool is a version bump in `versions.sh` and a release
 every user has to install. That is the cost that took git out of this list, and
 it is worth weighing before anything is added back to it.
 
-## Byte Repair's environment, in two variables
+## Byte Repair's environment, in three variables
 
 `byte-repair-setup.sh` answers to what it is told and probes nothing. Where to
 install is the store's `ENV_INSTALL_DIR` — `/usr/local/bin` inside a guest, the
@@ -109,9 +109,11 @@ which picks the ESBMC release the fetch lands, with `uname -m` splitting it on
 Linux alone: esbmc-macos, esbmc-windows and esbmc-linux or its armv8 brother.
 The machine it runs on is the machine the binary runs on, so this probe is
 honest; a platform whose name it does not know refuses at that case rather
-than fetching a zip that cannot run. Windows is the one name that also
-renames the binary — the archive ships `esbmc.exe` and the desktop execs by
-extension — and the one with no unzip of its own, where PowerShell's
+than fetching a zip that cannot run. The name the release's binary carries
+in is not probed at all — it is told (`ENV_ESBMC_BINARY`, the same
+`esbmcFileName` the gate asks for and the import writes under, one encoding
+of the name, Dart's), and the script's own default is the bare POSIX one.
+Windows is the one of the three with no unzip of its own, where PowerShell's
 Expand-Archive is the fallback the chain reaches. The binary's own `bin/`
 lands whole, not one file out of it: the windows release carries `libz3.dll`
 where its `esbmc.exe` is, and a single-binary move would leave an install
@@ -125,12 +127,13 @@ given all along.
 "Already installed" means *on PATH and runs* (`works`, a `--version` probe),
 not merely found: a binary present but unstartable — a local build missing its
 libraries — once read as installed, was skipped, and setup exited 0 having
-done nothing. The PATH binary the probe found is copied into the bin
-directory before the run's tail verifies it, so a setup that fetched nothing
-still leaves the chat page's gate the binary it asks for. The run ends on a
-verification of the binary that stands at the end (the fetched one, else
-whatever PATH answers); if that will not run, setup exits 1 and the settings
-page shows the loader's error.
+done nothing. The PATH binary that probe found is copied into the bin
+directory, so a setup that fetched nothing leaves the gate the file it asks
+for. The run's tail verifies that file outright, not whatever PATH answers:
+a bin directory holding an unstartable leftover behind a working machine
+binary is the setup's failure to report — exit 1 and the settings page
+showing the loader's error — where a fallback to PATH would have blessed
+the stale install.
 
 On every desktop the fetched tools reach their turns through the driver:
 `platformDriver`

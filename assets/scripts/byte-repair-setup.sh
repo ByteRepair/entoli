@@ -5,11 +5,14 @@
 # platform the binary must be a release of, and uname -m its word size where
 # the release splits by that.
 #
-# Both install decisions belong to the caller, not to this script:
+# The install decisions belong to the caller, not to this script:
 # - ENV_INSTALL_DIR: where to install. Refused when unset.
 # - ENV_PACKAGE_MANAGER: what installs packages there (apk on Alpine). Unset
 #   means the host, whose package manager is not ours to touch; anything the
 #   script then needs is fetched as a static binary instead.
+# - ENV_ESBMC_BINARY: the name the release's binary carries — esbmc, or the
+#   .exe anything Windows runs needs the extension to exec. Unset means the
+#   POSIX name.
 set -e
 
 if [ -z "$ENV_INSTALL_DIR" ]; then
@@ -69,9 +72,11 @@ fi
 # --- ESBMC --------------------------------------------------------------------
 # The asset follows the platform the script runs on, not the word size alone:
 # uname -s names the OS, and a guest's zip is not a desktop's — a mac picking
-# the linux one by its arm was the state before there was one of its own.
+# the linux one by its arm was the state before there was one of its own. The
+# binary's name is the caller's, not probed: the gate asking for the file the
+# setup lands and the import writing under it ask the same const.
 OS=$(uname -s)
-BINARY="esbmc"
+BINARY="${ENV_ESBMC_BINARY:-esbmc}"
 case "$OS" in
   Darwin)
     ASSET="esbmc-macos.zip"
@@ -84,9 +89,6 @@ case "$OS" in
     ;;
   MINGW*|MSYS*|CYGWIN*)
     ASSET="esbmc-windows.zip"
-    # Windows execs by extension; the archive ships it named .exe and nothing
-    # else lands the same machine.
-    BINARY="esbmc.exe"
     ;;
   *)
     echo "unsupported platform for ESBMC: $OS" >&2
@@ -94,7 +96,7 @@ case "$OS" in
     ;;
 esac
 
-if ! works esbmc; then
+if ! works "$BINARY"; then
   URL="https://github.com/esbmc/esbmc/releases/latest/download/$ASSET"
   TMPZIP="/tmp/_esbmc.zip"
 
@@ -153,26 +155,22 @@ z.extractall('$TMPDIR_EXTRACT')
   chmod +x "$BIN/$BINARY"
   rm -rf "$TMPDIR_EXTRACT" "$TMPZIP"
 else
-  # Nothing is fetched: the machine's own esbmc is the one this run found
-  # running. It is still what the turns find and the gate asks for
-  # afterwards, though, so it is copied into $BIN where it has not landed
-  # already — the re-setup run that would copy the file onto itself is the
-  # [ -f ]'s answer.
-  if command -v "$BINARY" >/dev/null 2>&1 && [ ! -f "$BIN/$BINARY" ]; then
+  # Nothing is fetched: the machine's own binary is the one running, but
+  # what the turns find and the gate asks for afterwards is what $BIN
+  # holds — so it is copied in. The re-setup run that would copy the file
+  # onto itself is the [ -f ]'s answer.
+  if [ ! -f "$BIN/$BINARY" ]; then
     cp "$(command -v "$BINARY")" "$BIN/$BINARY"
+    chmod +x "$BIN/$BINARY"
   fi
 fi
 
-# The binary that stands at the end is the one the turns will run. $BIN's is
-# what either arm above leaves standing — the fetched one moved in, the
-# machine's own copied; PATH's stays the fallback for the run that fetched
-# nothing, one the copy makes unreachable but for a failure set -e ended.
-if [ -x "$BIN/$BINARY" ]; then
-  CANDIDATE="$BIN/$BINARY"
-else
-  CANDIDATE="$BINARY"
-fi
-if ! "$CANDIDATE" --version 2>&1; then
-  echo "the esbmc at $CANDIDATE cannot be run (see the error above); setup did not succeed" >&2
+# The binary that stands at the end is the one the turns will run: what the
+# two arms above leave in $BIN, fetched or copied in. It is verified outright
+# rather than falling back to whatever PATH answers — a bin directory holding
+# an unstartable leftover while a machine binary works behind it would be the
+# gate, the turns and the setup's own exit reading three different things.
+if ! "$BIN/$BINARY" --version 2>&1; then
+  echo "the esbmc at $BIN/$BINARY cannot be run (see the error above); setup did not succeed" >&2
   exit 1
 fi

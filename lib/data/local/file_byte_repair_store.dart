@@ -1,6 +1,8 @@
 import "dart:io";
 
 import "package:file_selector/file_selector.dart";
+import "package:flutter/foundation.dart"
+    show TargetPlatform, defaultTargetPlatform;
 import "package:path/path.dart" as p;
 
 import "../../core/log.dart";
@@ -88,7 +90,7 @@ class FileByteRepairStore extends ByteRepairStore {
     // runs go together — on a slow phone either alone is a long wait, and the
     // workspace has no dependency on the rootfs being gone.
     final errors = await Future.wait([
-      removeTree(p.join(config.projectDir(project: project), "rootfs")),
+      removeTree(_rootfsTree),
       removeTree(config.projectWorkspaceDir(project: project)),
       // The host's fetched binaries; nothing on disk where there was
       // nothing to point at.
@@ -111,6 +113,37 @@ class FileByteRepairStore extends ByteRepairStore {
   }
 
   @override
+  Map<String, String> installEnvironment() => {
+        ...super.installEnvironment(),
+        // The binary's name is this side's answer — `.exe` where anything
+        // Windows runs execs by extension, bare where POSIX names the file —
+        // sent through the same "the script answers to what it is told" seam
+        // the destination rides.
+        "ENV_ESBMC_BINARY": esbmcFileName,
+      };
+
+  @override
+  String? get capabilityBanner {
+    // The env on offer: a "Host" env on Android has no package manager, a
+    // guest's rootfs pick is where one comes from; a desktop's host shell is
+    // capable where the platform composes a destination, and is told so
+    // where there is none — iOS, and the web's unavailable store. The
+    // target read, not `Platform.isAndroid`: the section's fixtures name
+    // their platform the way the UI facts are named everywhere else.
+    if (defaultTargetPlatform == TargetPlatform.android) {
+      return AppSettings.load(config).rootfsId == null
+          ? 'Byte Repair does not work when using the "Host" terminal '
+              "environment on this device. Please choose another terminal "
+              "environment."
+          : null;
+    }
+    return installDir == null
+        ? "Byte Repair does not work on this platform: there is nowhere to "
+            "install the tools it sets up."
+        : null;
+  }
+
+  @override
   String? get environmentDeletion {
     // What the setup leaves on disk is what a delete takes away, so the
     // dialog words it from the disk rather than from the platform: a Host
@@ -118,18 +151,25 @@ class FileByteRepairStore extends ByteRepairStore {
     // fetched nothing — the clause drops out of the dialog, which then
     // names the workspace and the chats alone. The host install checks the
     // bin itself; the delete takes the cache directory around it, but the
-    // bin is the one tree a run actually creates.
-    final rootfs =
-        Directory(p.join(config.projectDir(project: project), "rootfs"));
-    if (rootfs.existsSync()) {
+    // bin is the one tree a run actually creates. The [!Platform.isAndroid]
+    // guard is the delete's own: the value behind it on Android is the
+    // guest's `/usr/local/bin`, never a host tree this getter could word —
+    // the rootfs clause above answers whenever a guest is there at all.
+    if (Directory(_rootfsTree).existsSync()) {
       return "the Byte Repair rootfs (the Linux copy and everything "
           "installed into it)";
     }
-    if (installDir != null && Directory(installDir!).existsSync()) {
+    if (!Platform.isAndroid &&
+        installDir != null &&
+        Directory(installDir!).existsSync()) {
       return "the tools the setup fetched into the app's cache directory";
     }
     return null;
   }
+
+  /// The per-project rootfs copy the guest runs in — the tree the setup's
+  /// copy makes, [deleteEnvironment] takes whole, and this getter words.
+  String get _rootfsTree => p.join(config.projectDir(project: project), "rootfs");
 
   /// The per-project rootfs directory for the currently selected rootfs id, or
   /// null where the copy has not been created yet.

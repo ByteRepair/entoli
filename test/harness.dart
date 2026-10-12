@@ -769,17 +769,13 @@ Future<void> openCategory(WidgetTester tester, SettingsCategory category) async 
     await tester.drag(find.byType(Scrollable).first, const Offset(0, 400));
     await tester.pumpAndSettle();
   }
-  // Only when it is still off the bottom: [scrollTo] aligns what it reveals
-  // with the top of the list, which would push the categories above it out of
-  // the tree and leave the next call with nothing to tap.
-  if (categoryTile.evaluate().isEmpty) await scrollTo(tester, categoryTile);
-  // Found is not tappable: the tile low in the list is built into the cache
-  // extent before it is scrolled to, so the tap's aim can land past the
-  // window's edge and miss. Make visible what the drag above left waiting.
-  if (categoryTile.evaluate().isNotEmpty) {
-    await tester.ensureVisible(categoryTile);
-    await tester.pumpAndSettle();
-  }
+  // [scrollTo] answers every state left above it: not built, it drags up from
+  // the list's top; built, it only brings what is there to a tappable place —
+  // which a tile sitting in the cache extent past the window's edge still
+  // needs. Its drag-up is the reason the drag-down runs first: without the
+  // tile built it would align the list so far up that the categories above
+  // fall out of the tree and leave the next call with nothing to tap.
+  await scrollTo(tester, categoryTile);
   await tester.tap(categoryTile);
   await settleIo(tester);
 }

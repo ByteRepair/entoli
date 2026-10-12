@@ -506,9 +506,21 @@ void main() {
     final project = ByteRepairProject().dir;
 
     /// The confirm dialog's message, which is the whole of what the store's
-    /// [environmentDeletion] wording buys.
+    /// [ByteRepairStore.deleteConfirmMessage] buys.
     String deleteMessage(WidgetTester tester) =>
         tester.widget<Text>(find.textContaining("This deletes")).data!;
+
+    /// Opens the delete confirm, answers its message, and closes it again —
+    /// the run every message assert here is made of.
+    Future<String> deleteDialogMessage(WidgetTester tester) async {
+      await scrollTo(tester, find.text("Delete Byte Repair Data"));
+      await tester.tap(find.text("Delete Byte Repair Data"));
+      await settleIo(tester);
+      final message = deleteMessage(tester);
+      await tester.tap(find.text("Cancel"));
+      await settleIo(tester);
+      return message;
+    }
 
     /// A target platform named per test, the way `chat_page_test.dart`'s
     /// `androidTest` does: a `testWidgets` body is Android by default, and
@@ -540,16 +552,10 @@ void main() {
       expect(find.textContaining("nowhere to install the tools it sets up"),
           findsOneWidget);
 
-      await scrollTo(tester, find.text("Delete Byte Repair Data"));
-      await tester.tap(find.text("Delete Byte Repair Data"));
-      await settleIo(tester);
       expect(
-          deleteMessage(tester),
+          await deleteDialogMessage(tester),
           "This deletes the Byte Repair workspace (cloned repos, scratch "
           "files) and all chats in the project.");
-
-      await tester.tap(find.text("Cancel"));
-      await settleIo(tester);
     });
 
     targetTest("the fetched tools a setup left are named, the rootfs never",
@@ -563,22 +569,17 @@ void main() {
       expect(find.text("Run Setup"), findsOneWidget);
       expect(find.text("Import ESBMC"), findsOneWidget);
 
-      await scrollTo(tester, find.text("Delete Byte Repair Data"));
-      await tester.tap(find.text("Delete Byte Repair Data"));
-      await settleIo(tester);
-      final message = deleteMessage(tester);
+      final message = await deleteDialogMessage(tester);
       expect(message,
           contains("the tools the setup fetched into the app's cache directory"));
       expect(message, contains("Run Setup to use Byte Repair again"));
       expect(message, isNot(contains("rootfs")));
-
-      await tester.tap(find.text("Cancel"));
-      await settleIo(tester);
     });
 
     // The env check passes where a rootfs is picked, so the buttons come
     // back and the message names the copy the setup made.
-    targetTest("an Android rootfs env puts the buttons back, with the rootfs named",
+    targetTest(
+        "an Android rootfs env puts the buttons back, with the rootfs named",
         TargetPlatform.android, (tester) async {
       app.dispose();
       app = TestApp.create(proot: true, linuxes: const {"alpine"});
@@ -590,13 +591,8 @@ void main() {
 
       expect(find.text("Run Setup"), findsOneWidget);
 
-      await scrollTo(tester, find.text("Delete Byte Repair Data"));
-      await tester.tap(find.text("Delete Byte Repair Data"));
-      await settleIo(tester);
-      expect(deleteMessage(tester), contains("the Byte Repair rootfs"));
-
-      await tester.tap(find.text("Cancel"));
-      await settleIo(tester);
+      expect(
+          await deleteDialogMessage(tester), contains("the Byte Repair rootfs"));
     });
 
     // The Host env cannot run a setup, the same banner Android's Host has
@@ -615,13 +611,7 @@ void main() {
           find.textContaining('when using the "Host" terminal environment'),
           findsOneWidget);
 
-      await scrollTo(tester, find.text("Delete Byte Repair Data"));
-      await tester.tap(find.text("Delete Byte Repair Data"));
-      await settleIo(tester);
-      expect(deleteMessage(tester), isNot(contains("rootfs")));
-
-      await tester.tap(find.text("Cancel"));
-      await settleIo(tester);
+      expect(await deleteDialogMessage(tester), isNot(contains("rootfs")));
     });
   });
 }

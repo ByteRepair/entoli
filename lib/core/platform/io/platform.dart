@@ -293,9 +293,9 @@ ByteRepairStore platformByteRepairStore(
 /// Note `esbmcFileName` beside the store: the file asked for here follows
 /// the platform too.
 String? platformByteRepairBinDir(String cacheDir) =>
-    Platform.isAndroid || Platform.isIOS
-        ? null
-        : p.join(cacheDir, "byte-repair", "bin");
+    Platform.isLinux || Platform.isMacOS || Platform.isWindows
+        ? p.join(cacheDir, "byte-repair", "bin")
+        : null;
 
 /// Whether a project's `.setup-complete` marker is there. Synchronous because
 /// the chat page asks it in a build.

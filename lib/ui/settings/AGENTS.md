@@ -119,26 +119,6 @@ inside a rootfs they go to the guest's own `/usr/local/bin`; on Linux they go
 to `<cacheDir>/byte-repair/bin`, which the project's turns are given on PATH —
 so Byte Repair works on the host env with no root and nothing installed into
 the machine, and a tool already on the machine is used rather than fetched.
-See "Byte Repair's environment, in two variables" in `lib/data/local/AGENTS.md`.
-On
-Android the "Host" terminal env has no package manager, so the category says
-**Byte Repair** is the tooling for the built-in project of the same name: a
-banner saying whether the configured terminal env can run it, a button that
-runs a bundled install script through that env to create the project's own
-rootfs instance and put `make`, `github-cli` and ESBMC into it, a button to
-import a local ESBMC binary into the rootfs, a button to delete the whole
-environment (rootfs, workspace, and all chats in the project), and the
-versions found afterwards. "Run Setup" owns the full lifecycle — it copies
-the base rootfs from cache, runs the install script, and writes a
-`.setup-complete` marker — so the turn path no longer creates the rootfs
-lazily. The chat page gates the composer on that marker, showing a "setup
-required" bar until it is there; on the host the marker is not enough either,
-since the fetched tools live in a cache directory that can be emptied between
-setups, so the binary is asked after too. Where the tools land follows the env:
-inside a rootfs they go to the guest's own `/usr/local/bin`; on Linux they go
-to `<cacheDir>/byte-repair/bin`, which the project's turns are given on PATH —
-so Byte Repair works on the host env with no root and nothing installed into
-the machine, and a tool already on the machine is used rather than fetched.
 See "Byte Repair's environment, in three variables" in `lib/data/local/AGENTS.md`.
 On
 Android the "Host" terminal env has no package manager, so the category says
@@ -150,9 +130,19 @@ category is drawn, since the workspace and the chats are data wherever the
 tooling is not: its confirm message's environment clause is worded by the
 store's `environmentDeletion`, asked off the disk rather than assumed off
 the platform, so a delete over a project whose setup left nothing behind
-names the workspace and the chats alone. **Sync** is paired devices — this device's identity and
-name, the relay and TURN settings for internet pairing, the paired-device list,
-and the pairing window. See `lib/data/sync/AGENTS.md` for the threat model and
+names the workspace and the chats alone. **Sync** is paired devices — this device's name,
+the paired-device list, and the
+pairing controls. A pairing never renders inline: window, invite and pasted
+code all move to a screen of their own that ends on a paired screen naming
+the device, with Pair another device on it — see "The pairing flows as pages"
+in `lib/data/sync/AGENTS.md`. A paired device's row clicks through to its own
+page (Paired device page, `lib/ui/settings/paired_device_page.dart`) — the
+record and a rename, then both fingerprints under "Device fingerprint" and
+"This device" with the explanation of the comparison they exist for. The Sync
+list itself draws no fingerprint. The relay and TURN settings are screens
+of their own behind two rows on the page, and Keep connected off screen is
+Android's row only — the one platform whose process freezes with the screen.
+See `lib/data/sync/AGENTS.md` for the threat model and
 handshake. **Providers** is the endpoints — and the keys, which are not in
 `settings.json` at all: a key typed into the provider dialog (or the
 recommended-provider card) goes to the secret store, under the provider's id,
