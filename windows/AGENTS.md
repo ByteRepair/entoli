@@ -90,8 +90,12 @@ Files and nowhere else a person sets.
 
 A running exe cannot be renamed under itself, so the update is the MSI run:
 at startup the app downloads `entoli-installer.msi` into the cache and arms a
-detached PowerShell that waits for this process to exit, then runs
-`msiexec /i <that msi> /qn /norestart`. The installer's own elevation prompt
-is what the user answers on the way out; the next start is the upgraded
-install, reached through the same UpgradeCode and so this installer replacing
-its own prior work. See "The automatic update" in the root notes.
+detached PowerShell that waits for this process to exit, then starts
+`msiexec /i <that msi> /qn /norestart` under `Start-Process -Verb RunAs` —
+the UAC prompt the user answers on the way out. RunAs is load-bearing, not
+decorative: silent mode suppresses the elevation prompt itself, and a
+per-machine install that cannot ask fails with "insufficient privileges" and
+nothing to say so. A declined prompt is a no-op the next launch's check
+retries. The next start is the upgraded install, reached through the same
+UpgradeCode and so this installer replacing its own prior work. See "The
+automatic update" in the root notes.

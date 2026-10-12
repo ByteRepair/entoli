@@ -382,9 +382,12 @@ about:
   process possibly still reading from the bundle it just left.
 - **Windows installs over itself.** A running exe cannot be renamed and the
   release ships an installer, so the check arms one: a detached PowerShell
-  waits for this process to exit, then runs `msiexec /i entoli-installer.msi
-  /qn /norestart`. The installer's own elevation prompt is what the user sees
-  at quit; the next launch is the installed upgrade.
+  waits for this process to exit, then starts `msiexec /i
+  entoli-installer.msi /qn /norestart` under `Start-Process -Verb RunAs` —
+  the UAC prompt the user sees at quit. RunAs is what raises it: silent mode
+  suppresses the elevation prompt itself, and a per-machine install that
+  cannot ask fails with nothing to say so. The next launch is the installed
+  upgrade.
 
 Nothing is put in place before the download has arrived whole — the bytes are
 counted against the length the response declared, the one truncation being the
