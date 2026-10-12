@@ -384,11 +384,13 @@ class DesktopUpdater implements AppUpdateHost {
 }
 
 /// What the exit-armed installer runs, one line: hold until the app is gone,
-/// then install silently. msiexec asks for elevation itself, so the only
-/// hand this needs is the user saying yes to one prompt at quit.
+/// then install silently, under RunAs — the consent the user answers at
+/// quit. RunAs is load-bearing, not decorative: silent mode suppresses the
+/// elevation prompt itself, and a per-machine install that cannot ask fails
+/// with "insufficient privileges" and nothing to show for it.
 String windowsUpdateCommand(int pid, String msiPath) =>
     "Wait-Process -Id $pid -ErrorAction SilentlyContinue; "
-    "Start-Process msiexec.exe -ArgumentList '/i', "
+    "Start-Process msiexec.exe -Verb RunAs -ArgumentList '/i', "
     "'${msiPath.replaceAll("'", "''")}', '/qn', '/norestart'";
 
 /// The `.app` the running build executes from, or null where the executable
