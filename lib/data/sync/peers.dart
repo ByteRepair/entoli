@@ -46,6 +46,11 @@ class LivePeer {
 
   final SecureChannel channel;
   final String deviceId;
+
+  /// The peer's name as the handshake gave it — the address book's where the
+  /// pair is known there, its own hello name otherwise. Establish-time only:
+  /// every screen that can move a name reads the [PeerState] a rename
+  /// updates, with this as their fallback.
   final String deviceName;
   final void Function() _onClose;
   bool _closed = false;
@@ -164,6 +169,17 @@ class SyncPeers {
     final existing = states.value[deviceId];
     if (existing == null || existing.status == PeerStatus.error) return;
     setStatus(deviceId, name: existing.name, status: PeerStatus.offline);
+  }
+
+  /// What [deviceId] is filed under from now on. Only the name moves: a
+  /// rename is the address book's, not the connection's, and a status a
+  /// connection earned is not the rename's to touch. The screens that can
+  /// move a name read this [PeerState] — the row and the driven line among
+  /// them — so the live connection's own snapshot needs no writer here.
+  void renamed(String deviceId, String name) {
+    final existing = states.value[deviceId];
+    if (existing == null) return;
+    setStatus(deviceId, name: name, status: existing.status, error: existing.error);
   }
 
   void forget(String deviceId) =>

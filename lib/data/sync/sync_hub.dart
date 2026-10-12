@@ -42,8 +42,11 @@ class MirrorChat {
 
   final String peerId;
 
-  /// The home device's name, as its hello carried it — what the sidebar's
-  /// Remotes rows show under the title.
+  /// The home device's name as the connection presented it when the mirror
+  /// was created — the address book's, where one exists; else the hello's.
+  /// Fallback only: the Remotes rows derive their name from the device's
+  /// [PeerState] (which a rename updates) and reach for this when the device
+  /// has gone missing from it.
   final String deviceName;
   ChatState state;
   ChatMeta meta;
@@ -163,6 +166,10 @@ class SyncHub implements ArtifactBytes {
   String get defaultDeviceName => _signaling.defaultDeviceName;
   Future<PairingActivity> startPairingWindow() => _signaling.startPairingWindow();
   void cancelPairingWindow() => _signaling.cancelPairingWindow();
+
+  /// Ends a pairing in flight — the verb every pairing screen's back and
+  /// Done is; [cancelPairingWindow] adds the window's own teardown.
+  void cancelPairing() => _signaling.cancelPairing();
   Future<String?> pairWith(String text) => _signaling.pairWith(text);
   Future<String> createManualInvite() => _signaling.createManualInvite();
   void cancelManualInvite() => _signaling.cancelManualInvite();
@@ -173,6 +180,14 @@ class SyncHub implements ArtifactBytes {
 
   @visibleForTesting
   bool admitsReconnect(String psk) => _signaling.admitsReconnect(psk);
+
+  /// The codes-matched gate's own decision, pinned without racing a real
+  /// handshake: with no pairing open to ask on, a fresh pair must fail
+  /// rather than arm a confirmation nothing can complete.
+  @visibleForTesting
+  Future<bool> pairingGateForTest(String sas, String peerName,
+          {required bool isNew}) =>
+      _signaling.confirmGateForTest(sas, peerName, isNew: isNew);
 
   @visibleForTesting
   Future<void> establishForTest({
@@ -634,7 +649,8 @@ class SyncHub implements ArtifactBytes {
 
   void _refreshDriven() => drivenChats.value = {
         for (final entry in _control.entries)
-          entry.key: _peers[entry.value]?.deviceName ?? entry.value,
+          entry.key:
+              _peers.states.value[entry.value]?.name ?? entry.value,
       };
 
   /// The turn as this device's own controller has it, on its way to whoever
@@ -840,7 +856,12 @@ class SyncHub implements ArtifactBytes {
       _touch(chatId);
     }
     _peers.setStatus(deviceId,
-        name: live?.deviceName ?? deviceId, status: PeerStatus.offline);
+        // The book's name — a rename landed in the status already; the
+        // connection's snapshot is the fallback for what has gone missing.
+        name: _peers.states.value[deviceId]?.name ??
+            live?.deviceName ??
+            deviceId,
+        status: PeerStatus.offline);
     _peers.refreshServed();
     _rebuildRemotes();
   }
@@ -856,7 +877,12 @@ class SyncHub implements ArtifactBytes {
         RemoteChatEntry(
           chatId: mirror.state.id,
           deviceId: mirror.peerId,
-          deviceName: mirror.deviceName,
+          // The name is the book's, read at rebuild: a rename is one write
+          // through [PeerState], and every row it names follows at the next
+          // rebuild it lands in. The mirror's creation name is the fallback
+          // for a device that is not in the book.
+          deviceName:
+              _peers.states.value[mirror.peerId]?.name ?? mirror.deviceName,
           state: mirror.state,
           online: _peers.hasLive(mirror.peerId),
         ),
@@ -889,6 +915,19 @@ class SyncHub implements ArtifactBytes {
     }
     _pendingResources.clear();
     await _signaling.dispose();
+  }
+
+  /// What [deviceId] is filed under here, from now on. A rename is local to
+  /// this device's address book, like every name in it: the other device
+  /// keeps what it calls this one until renamed there too.
+  Future<void> rename(String deviceId, String name) async {
+    await registry.rename(deviceId, name);
+    // The row and the driven line are the book's; the mirrors' Remotes rows
+    // derive theirs from that same PeerState at rebuild. One write, then the
+    // two rebuilds, is every surface the name is said on.
+    _peers.renamed(deviceId, name);
+    _refreshDriven();
+    _rebuildRemotes();
   }
 
   /// Unpairs: drops the record, its secret, and any live connection. The

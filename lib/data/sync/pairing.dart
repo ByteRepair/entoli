@@ -29,6 +29,7 @@ class PairingActivity {
     this.code,
     this.stage = PairingStage.connecting,
     this.sas,
+    this.peerName,
     this.error,
   });
 
@@ -38,7 +39,32 @@ class PairingActivity {
   final String? code;
   final PairingStage stage;
   final String? sas;
+
+  /// The name the other device gave, where its handshake has arrived — what
+  /// the paired screen and the codes-matched view say when they name it.
+  /// Null before that.
+  final String? peerName;
   final String? error;
+
+  /// The same activity, changed where named. A field named null keeps what
+  /// it was: the notes carry a snapshot's facts forward, so a copy that did
+  /// not would drop one at every stage.
+  PairingActivity copyWith({
+    String? qr,
+    String? code,
+    PairingStage? stage,
+    String? sas,
+    String? peerName,
+    String? error,
+  }) =>
+      PairingActivity(
+        qr: qr ?? this.qr,
+        code: code ?? this.code,
+        stage: stage ?? this.stage,
+        sas: sas ?? this.sas,
+        peerName: peerName ?? this.peerName,
+        error: error ?? this.error,
+      );
 }
 
 enum PairingStage { connecting, confirming, done, failed }
@@ -219,15 +245,14 @@ class SyncPairing {
   /// can only ever join — which makes the relay the one thing missing rather
   /// than one of two.
   static String get noRoute => kIsWeb
-      ? "A browser cannot listen for a pairing. Set a relay URL above, or "
-          "use Manual invite and paste the reply back."
+      ? "A browser cannot listen for a pairing. Set a relay URL in Sync's "
+          "Internet relay settings, or use Manual invite and paste the "
+          "reply back."
       : "No way to be found: this build has no local network signaling and "
           "no relay URL is set.";
 
   void cancelPairingWindow() {
     _windowPsk = null;
-    _confirmation?.complete(false);
-    _confirmation = null;
     _relayWindow?.cancel();
     _relayWindow = null;
     unawaited(_relaySocket?.close());
@@ -236,17 +261,30 @@ class SyncPairing {
     // The offers subscription is *not* cancelled: it answers reconnects too,
     // and every pairing ends by closing its window. Cancelled here, the first
     // successful pair was also the last time anything answered a dial.
+    cancelPairing();
+  }
+
+  /// Ends a pairing in flight, wherever it is: a pending codes-matched gate
+  /// is answered no and the activity is dropped, so a screen parked on it
+  /// loses its subject. The general verb — every pairing screen's back and
+  /// Done is this one, on pages that opened no window; the window's verb
+  /// above is the window's own teardown beside it.
+  void cancelPairing() {
+    _confirmation?.complete(false);
+    _confirmation = null;
     activity.value = null;
   }
 
-  /// Drops a pending manual invite, closing the peer connection it held open.
-  /// A manual invite is not a window — `cancelPairingWindow` does not touch
-  /// it — so the invite page calls this on back, and the `RtcLink` that was
-  /// waiting for a reply is torn down rather than leaked.
+  /// Drops a pending manual invite, closing the peer connection it held
+  /// open, and ends a pairing in flight beside it — the same
+  /// route-teardown-then-general-drop shape the window's verb has, so the
+  /// invite page's back and Done is one call either way: pending before the
+  /// reply, gate answered no once the pair is completing.
   void cancelManualInvite() {
     final pending = _pendingManual;
     _pendingManual = null;
     if (pending != null) unawaited(pending.link.close());
+    cancelPairing();
   }
 
   /// A joiner reads [text] — scanned or pasted — and completes its half.
@@ -303,6 +341,10 @@ class SyncPairing {
   Future<String> _acceptManualInvite(PairingOffer invite) async {
     final link = await RtcLink.create(iceServers: iceServers());
     final answerSdp = await link.answer(invite.sdp);
+    // The pairing card opens here: the answered handshake runs under no
+    // window, so the codes-matched gate has this card to ask on and the
+    // paired or failed screen somewhere to end up.
+    activity.value = const PairingActivity();
     unawaited(_establish(
       link: await link.open(),
       weOffered: false,
@@ -329,6 +371,9 @@ class SyncPairing {
       throw const SignalingException("that answer belongs to another invite");
     }
     _pendingManual = null;
+    // The card is open while the pair completes: on this end the handshake
+    // also runs with no window open, and the gate asks on it.
+    activity.value = const PairingActivity();
     try {
       await pending.link.acceptAnswer(answer.sdp);
       await _establish(
@@ -413,12 +458,18 @@ class SyncPairing {
   String get deviceName => _settings().deviceName ?? defaultDeviceName;
 
   /// What it would be called with nothing set — the machine's own name where
-  /// there is one, since that is what its owner already calls it, and the
-  /// key's first characters otherwise, which at least cannot collide. Its own
-  /// getter because the Sync page's field wants exactly this: the hint has to
-  /// go on saying what the default is after a name has been typed over it.
+  /// there is one, since that is what its owner already calls it, and four
+  /// characters of the key's digest otherwise, which at least cannot
+  /// collide. Its own getter because the Sync page's field wants exactly
+  /// this: the hint has to go on saying what the default is after a name
+  /// has been typed over it.
+  ///
+  /// Four, not five of the grouped fingerprint: the next slice there is the
+  /// group's separating space, and this name once trailed by one. The slice
+  /// is [SyncIdentity.digest]'s rather than the display string's, so a
+  /// regrouped presentation would not change a nameless machine announces.
   String get defaultDeviceName =>
-      _hostname ?? "Entoli ${identity.fingerprint.substring(0, 5)}";
+      _hostname ?? "Entoli ${identity.digest.substring(0, 4)}";
 
   /// Where a peer could dial this device back, or null where it is not
   /// listening — a browser never is.
@@ -505,6 +556,13 @@ class SyncPairing {
   /// revoke, which is the whole point of one.
   bool admitsReconnect(String psk) =>
       _reconnects.containsKey(RelaySignaler.roomFor(psk));
+
+  /// The shared tail's gate, driven directly: a test pins the refusal rather
+  /// than racing a handshake to reach it. Public like [establishForTest] is;
+  /// the hub's own `visibleForTesting` wrapper is what bounds it.
+  Future<bool> confirmGateForTest(String sas, String peerName,
+          {required bool isNew}) =>
+      _sasGate(sas, peerName, isNew: isNew);
 
   /// Unpairs [deviceId]. The secret is read before the registry loses it:
   /// the token derived from it is what admits the device, and clearing
@@ -704,8 +762,11 @@ class SyncPairing {
       // before ours has — and what it sends is held by the channel until the
       // reader below attaches, so there is nothing to be careful about here.
       // It cost four bugs to stop needing that care; see the framing.
-      if (await _sasGate(handshake.sas!, isNew: knownDeviceId == null) ==
-          false) {
+      if (!await _sasGate(
+        handshake.sas!,
+        peer.name,
+        isNew: knownDeviceId == null,
+      )) {
         throw const HandshakeException("the codes did not match");
       }
 
@@ -797,7 +858,7 @@ class SyncPairing {
       // reason to be doing.
       _allowReconnect(deviceId, psk);
       unawaited(ensureReady());
-      _note(PairingStage.done);
+      _note(PairingStage.done, peerName: live.deviceName);
     } catch (error) {
       logFailure("sync", "could not establish a channel", error);
       await channel?.close();
@@ -808,33 +869,36 @@ class SyncPairing {
   }
 
   /// First pairings pause here for two humans to compare codes; reconnects
-  /// are pinned-key authenticated and walk straight through.
-  Future<bool> _sasGate(String sas, {required bool isNew}) async {
+  /// are pinned-key authenticated and walk straight through. The peer's name
+  /// rides with the SAS, so the confirm says who it is asking about. A gate
+  /// asks only where there is a pairing to ask on: the arm a human backed out
+  /// of — its page's back nulled the activity while the dial was still
+  /// connecting — arrives here with no screen the codes could be shown on,
+  /// and has to fail rather than wait out a confirmation nobody can give.
+  Future<bool> _sasGate(
+      String sas, String peerName, {required bool isNew}) async {
     if (!isNew) return true;
-    _note(PairingStage.confirming, sas: sas);
+    if (activity.value == null) {
+      throw const HandshakeException(
+          "the pairing ended before the codes were confirmed");
+    }
+    _note(PairingStage.confirming, sas: sas, peerName: peerName);
     final confirmation = _confirmation = Completer<bool>();
     return confirmation.future;
   }
 
-  void _note(PairingStage stage, {String? sas}) {
+  void _note(PairingStage stage, {String? sas, String? peerName}) {
     final current = activity.value;
     if (current == null) return;
-    activity.value = PairingActivity(
-      qr: current.qr,
-      code: current.code,
-      stage: stage,
-      sas: sas ?? current.sas,
-    );
+    activity.value =
+        current.copyWith(stage: stage, sas: sas, peerName: peerName);
   }
   void _fail(Object error) {
     logFailure("sync", "pairing failed", error);
     final current = activity.value;
     if (current == null || current.stage == PairingStage.done) return;
-    activity.value = PairingActivity(
-      qr: current.qr,
-      code: current.code,
+    activity.value = current.copyWith(
       stage: PairingStage.failed,
-      sas: current.sas,
       error: error.toString(),
     );
   }
