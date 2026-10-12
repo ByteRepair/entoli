@@ -260,6 +260,17 @@ here — same staging, same command, exit 156 flipping run to run with nothing
 public about the code — where hdiutil has been reliable; only its
 deprecation notice is swallowed, everything else it says comes through.
 
+## Self-update
+
+The release asset this platform updates itself from is the DMG: the check
+mounts it for the `Entoli.app` inside, `ditto`s that beside the running
+bundle, and swaps it in by rename — the move a drag-install makes, done under
+a running process, with the old bundle restored if the swap fails midway. The
+only permission it takes is writability of the directory the app sits in,
+which is what the drag needs too; running from the mounted image or from
+`flutter run`'s product is caught as not an installed bundle and says so.
+See "The automatic update" in the root notes.
+
 ## Tests on this host
 
 The suite runs real processes through the host's real shell, so a macOS host

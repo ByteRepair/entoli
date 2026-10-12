@@ -18,6 +18,7 @@ import "domain/agent_backend.dart";
 import "domain/app_restart.dart";
 import "domain/app_secrets.dart";
 import "domain/app_settings.dart";
+import "domain/app_update.dart";
 import "domain/app_theme.dart";
 import "domain/assistant_launch.dart";
 import "domain/assistant_view.dart";
@@ -323,6 +324,12 @@ final appVersionProvider = Provider<String?>((ref) => null);
 /// rather than describing a device that cannot run one.
 final prootAvailableProvider = Provider<bool>((ref) => false);
 
+/// What this build can do about a newer release of itself: the three desktops
+/// answer with the real platform half, everything else is the one that cannot.
+/// Overridden in `main` beside the rest of the platform ports.
+final appUpdateHostProvider = Provider<AppUpdateHost>(
+    (ref) => const UnavailableAppUpdateHost());
+
 /// Whether a message can be read out: a platform that can speak, and a speech
 /// model picked and installed. Half of [voiceReadyProvider], because reading a
 /// message out needs nothing to hear with.
@@ -580,6 +587,11 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
   /// they were, so turning it off again returns to what was picked.
   Future<void> setSystemPalette(bool follow) =>
       _update((s) => s.systemPalette = follow);
+
+  /// Whether the app replaces itself with a newer release it finds at
+  /// startup, where the platform it is on can do that.
+  Future<void> setAutoUpdate(bool value) =>
+      _update((s) => s.autoUpdate = value);
 
   /// Which project the assistant gesture opens a chat in. Null is the default
   /// project.

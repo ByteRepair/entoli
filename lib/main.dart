@@ -243,6 +243,8 @@ class AppSession {
         deviceAbiProvider.overrideWithValue(await abi),
         appVersionProvider.overrideWithValue(await version),
         prootAvailableProvider.overrideWithValue(toolset?.proot != null),
+        appUpdateHostProvider
+            .overrideWithValue(platform.createAppUpdateHost(cache)),
         localModelStoreProvider.overrideWithValue(localModels),
         localLlmProvider.overrideWithValue(server),
         localPrefillProvider.overrideWithValue(prefill),
@@ -278,6 +280,15 @@ class AppSession {
     // invalidates the sidebar's list on a deletion, so a stale row cannot
     // outlive the chat it points at.
     container.read(chatDeletionRefreshProvider);
+    // The automatic update check, started and not awaited: the release tag is
+    // a network round trip and a newer build a download, and startup must not
+    // wait on either. Nothing the check does disturbs this process — see "The
+    // automatic update" in the root notes — so its timing is the network's to
+    // decide.
+    unawaited(container.read(appUpdateHostProvider).check(
+          version: container.read(appVersionProvider),
+          enabled: container.read(appSettingsProvider).autoUpdate,
+        ));
     // Sweep expired temporary chats on startup, then every 30 minutes. The
     // timer is in-process and dies with the session: a chat expiring while the
     // app is closed is caught at the next launch. Skips the currently-open

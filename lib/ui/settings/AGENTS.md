@@ -66,7 +66,13 @@ place of the colours, and what any of it reaches is "What the settings page can
 change about it" — the **Agent** — command approval mode and the classifier
 model, which travel together because auto mode is unusable without one — the
 standing permission rules the agent consults before any of it, the environment,
-and deleting every chat. **Terminal** is where commands run —
+and deleting every chat. **Update** is the app keeping itself current: one
+switch, shown exactly where the platform half exists — Linux, Windows, macOS —
+and absent everywhere else without a word, since a phone and the web reach
+their newest build by means the row would only stand in front of. What the
+check then does is the platform side's (see "The automatic update" in the root
+notes), so the row's own story is one line: newer release, downloaded and put
+in place of this build. **Terminal** is where commands run —
 Android itself, or a Linux downloaded from the catalog under it; a category of
 its own for the reason Voice is one, and drawn on every platform, where it says
 that installing one is Android's. **On-device** is the model that answers

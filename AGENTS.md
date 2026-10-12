@@ -347,6 +347,51 @@ where a user names a project: a directory that could not have been created as a
 project is not listed as one, so a stray `.git` beside them is not a project
 with no chats in it.
 
+## The automatic update
+
+A desktop build replaces itself with the release the newest tag names. The tag
+comes from `https://github.com/ByteRepair/entoli/releases/latest` — the page's
+own URL, the tag read out of where its redirect lands, no API and no rate
+limit — and is compared against the running version by
+`versionIsNewer`. Everything is `lib/domain/app_update.dart` and
+`core/platform/io/update.dart`: the pure decisions (repo, the three asset
+names, the comparison) in the domain, the platform half — where a download is
+staged and what putting a build in place means here — behind
+`AppUpdateHost`.
+
+The switch is Settings > General > Update, one app-level bool in
+`settings.json`, **on by default and written only when off**, so a settings
+file from before it says nothing and gets the on default. The row shows on
+exactly the platforms the port serves — `appUpdateHostProvider`, overridden in
+`main` beside the rest of the platform ports; `UnavailableAppUpdateHost`
+everywhere else, which is why no phone sees a row. The check itself runs in
+`main` at startup, unawaited: the tag is a network round trip and a release a
+download, and nothing waits on either.
+
+What "put in place of this one" means is the one thing the platforms disagree
+about:
+
+- **Linux renames the AppImage file over `$APPIMAGE`**, the one this process
+  runs from. POSIX takes a name out from under a running binary; the old inode
+  keeps this process alive, and the next launch execs the new file.
+- **macOS swaps the bundle.** The image mounts for the `.app` inside it, which
+  `ditto` copies beside the running bundle — the engine directory checked
+  non-empty first, since a swap is the whole of the app — and two renames put
+  it in: old moved aside, new into the old name, the old put back if the
+  second rename fails. The aside stays for the stale sweep a day later, this
+  process possibly still reading from the bundle it just left.
+- **Windows installs over itself.** A running exe cannot be renamed and the
+  release ships an installer, so the check arms one: a detached PowerShell
+  waits for this process to exit, then runs `msiexec /i entoli-installer.msi
+  /qn /norestart`. The installer's own elevation prompt is what the user sees
+  at quit; the next launch is the installed upgrade.
+
+Nothing is put in place before the download has arrived whole, and a check
+that dies at any point takes its own staging back — those are the two halves
+of the risk: half a build staged is never half installed. A debug build checks
+nothing, a Linux not running from an AppImage checks nothing, and a check
+whose network is not there gets one `logFailure` line and no second try.
+
 ## Saying what it did
 
 **Anything the app catches and carries on from gets a line.** Not a trace of
