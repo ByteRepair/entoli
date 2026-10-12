@@ -635,8 +635,11 @@ void main() {
           config,
           project: chat.state.project);
       expect(settings.permissions, hasLength(1));
+      // The standing answer is the webfetch star: one approval covers the
+      // fetch tool and the fetcher commands alike, whatever host each one
+      // names next.
       expect(settings.permissions.single.tool, "webfetch");
-      expect(settings.permissions.single.pattern, "example.com");
+      expect(settings.permissions.single.pattern, "*");
       final chatMeta =
           await repo.loadMeta(chat.state.id);
       expect(chatMeta.permissions, isEmpty);

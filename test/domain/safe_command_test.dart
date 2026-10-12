@@ -1,0 +1,146 @@
+import "package:flutter_test/flutter_test.dart";
+
+import "package:agent_chat/domain/safe_command.dart";
+
+void main() {
+  group("non-modifying", () {
+    test("a known read tool with any flags", () {
+      for (final segment in [
+        "ls -la",
+        "cat /etc/hostname",
+        "grep -rn needle .",
+        "git status --short",
+        "git log --oneline -5",
+        "git branch",
+        "git remote -v",
+        "git worktree list",
+        "git rev-parse HEAD",
+      ]) {
+        expect(
+          profileSegment(segment).reach,
+          SegmentReach.nonModifying,
+          reason: segment,
+        );
+      }
+    });
+
+    test("the write and exec flags guard their programs", () {
+      for (final segment in [
+        "sort -o /etc/hosts names.txt",
+        "sort --output=/etc/hosts names.txt",
+        "find . -name '*.tmp' -delete",
+        "find . -exec rm {} +",
+        "file -C magic",
+        // A file named `2` is what `> 2` writes — fd duplication is the
+        // `&`'s to say, and the digits are not descriptors.
+        "ls > 2",
+        "git branch -D side-branch",
+        "git tag -d v1",
+        // The guarded flag's = spelling, which the vouch's scan catches and
+        // a whole-token scan would miss.
+        "git diff --output=/etc/hosts patch.diff",
+        // Two arguments is a write target, whatever the subcommand.
+        "git symbolic-ref HEAD refs/heads/evil",
+        // git spells reflog's delete without a dash.
+        "git reflog delete HEAD@{1}",
+        // Remote update fetches every remote and writes refs.
+        "git remote update",
+        "git -c core.fsmonitor=x status",
+        "git worktree remove ../other",
+      ]) {
+        expect(
+          profileSegment(segment).reach,
+          SegmentReach.other,
+          reason: segment,
+        );
+      }
+    });
+
+    test("a redirect to a file is a write this layer sees", () {
+      expect(profileSegment("ls > /etc/hosts").reach, SegmentReach.other);
+      expect(
+        profileSegment("grep -rn x . > out.txt").reach,
+        SegmentReach.other,
+      );
+      // Glued and spaced spell the same.
+      expect(profileSegment("ls >/etc/hosts").reach, SegmentReach.other);
+    });
+
+    test("the throwaway and descriptor targets are no writes", () {
+      for (final segment in [
+        "ls > /dev/null",
+        "git status 2>&1",
+        "cat x >&2",
+        "du . 2>/dev/null",
+      ]) {
+        expect(
+          profileSegment(segment).reach,
+          SegmentReach.nonModifying,
+          reason: segment,
+        );
+      }
+    });
+
+    test("anything the words cannot name stands down", () {
+      for (final segment in [
+        r'echo "$HOME"',
+        r"cat $(date).txt",
+        r"cd $(pwd) && ls",
+      ]) {
+        expect(profileSegment(segment).modelable, isFalse, reason: segment);
+      }
+    });
+  });
+
+  group("the fetch family", () {
+    test("a plain curl is a network segment with a host", () {
+      final profile = profileSegment("curl https://example.com/data.json");
+      expect(profile.reach, SegmentReach.network);
+      expect(profile.url, "https://example.com/data.json");
+    });
+
+    test("curl's disk flags change nothing the consult reads", () {
+      // Where the fetched bytes land is the sandbox's question, not the
+      // network rules'.
+      final profile = profileSegment("curl -o out.bin https://example.com/a");
+      expect(profile.reach, SegmentReach.network);
+      expect(profile.url, "https://example.com/a");
+    });
+
+    test("the family's bare-host shape reaches the same rules", () {
+      // `curl example.com` is http://example.com to the consult, the
+      // scheme the family itself defaults to — the standing answer covers
+      // the spelling people actually type.
+      for (final segment in [
+        "curl example.com/x",
+        "wget site.io/data.bin",
+        "http api.local:8080",
+      ]) {
+        expect(
+          profileSegment(segment).reach,
+          SegmentReach.network,
+          reason: segment,
+        );
+      }
+      expect(profileSegment("curl example.com/x").url, "http://example.com/x");
+      expect(profileSegment("http api.local:8080").url, "http://api.local:8080");
+    });
+
+    test("a fetcher with no nameable URL is not network", () {
+      expect(profileSegment("curl --help").reach, SegmentReach.other);
+    });
+  });
+
+  group("package managers stay mutations", () {
+    test("npm and pip are not reads and not network", () {
+      for (final segment in [
+        "npm install left-pad",
+        "pip install requests",
+        "curl -o x && npm install",
+      ]) {
+        final profile = profileSegment(segment);
+        expect(profile.reach, SegmentReach.other, reason: segment);
+      }
+    });
+  });
+}

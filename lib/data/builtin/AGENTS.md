@@ -342,6 +342,28 @@ again. They are offered where rules are writable — not a mirrored chat, where
 the banner is being answered from the other device and the home device's
 banner asks the question.
 
+**The deterministic tiers answer before any mode does.** Where the rules
+leave a `bash` command uncovered, the parse is consulted per segment, and
+every segment must find a cover before anything runs without asking: a
+segment the parse proves **non-modifying** (`safe_command.dart` — the
+read-only programs, their guarded write-capable flags, the redirects;
+anything its words cannot name stands down), or a mutation a **grant
+policy** vouches for (`command_grants.dart`), which is the sandbox grant the
+vouch answers with. The network half is one family: a `webfetch` call and a
+`curl` or `wget` segment share one decision, and the webfetch banner's
+standing answer writes a `webfetch *` rule covering both carriers, the
+per-domain rules being the settings page's to write. The git half is the
+grant: a vouched git mutation (`add`, `commit`, `fetch`, `merge`, ...) runs
+with its repository's `.git` joined to the sandbox — every child of that
+directory granted but `config` and `hooks`, the two that turn a repo grant
+into an execution the sandbox cannot see, a hook the user's own next git
+command runs. The vouch and the grant are one computation read twice, so
+nothing is vouched without a grant under it and nothing granted that was
+not vouched; a `cd` the command carries moves the repo the vouch answers
+for, and a `cd` the tracker cannot name loses the vouch. What the tiers do
+not cover asks, in every mode: pushes, resets, config and remote writes,
+and everything else the sandbox is the only boundary behind.
+
 `ApprovalBanner` shows **the call, not the tool**. It named the tool and put the
 arguments JSON under it at two lines and an ellipsis, which is a consent dialog
 asking to be waved through: what is being agreed to is the command, and the

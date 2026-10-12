@@ -31,27 +31,50 @@ void main() {
 
   group("rulesDecide", () {
     final allowGit = PermissionRule(
-        tool: "bash", pattern: "git status *", decision: PermissionDecision.allow);
+      tool: "bash",
+      pattern: "git status *",
+      decision: PermissionDecision.allow,
+    );
     final denyGit = PermissionRule(
-        tool: "bash", pattern: "git *", decision: PermissionDecision.deny);
+      tool: "bash",
+      pattern: "git *",
+      decision: PermissionDecision.deny,
+    );
     final allowWriteTmp = PermissionRule(
-        tool: "write",
-        pattern: "/tmp/scratch",
-        decision: PermissionDecision.allow,
-        writes: ["/tmp/scratch"]);
+      tool: "write",
+      pattern: "/tmp/scratch",
+      decision: PermissionDecision.allow,
+      writes: ["/tmp/scratch"],
+    );
 
     test("a matching allow runs", () {
       expect(
-          rulesDecideTraced([allowGit], "bash", command: "git status --short")
-              ?.decision,
-          PermissionDecision.allow);
+        rulesDecideTraced(
+          [allowGit],
+          "bash",
+          command: "git status --short",
+        )?.decision,
+        PermissionDecision.allow,
+      );
     });
 
     test("deny outranks allow, whatever the order", () {
-      expect(rulesDecideTraced([allowGit, denyGit], "bash", command: "git status")
-          ?.decision, PermissionDecision.deny);
-      expect(rulesDecideTraced([denyGit, allowGit], "bash", command: "git status")
-          ?.decision, PermissionDecision.deny);
+      expect(
+        rulesDecideTraced(
+          [allowGit, denyGit],
+          "bash",
+          command: "git status",
+        )?.decision,
+        PermissionDecision.deny,
+      );
+      expect(
+        rulesDecideTraced(
+          [denyGit, allowGit],
+          "bash",
+          command: "git status",
+        )?.decision,
+        PermissionDecision.deny,
+      );
     });
 
     test("an allow covered from two tiers names each of them", () {
@@ -59,19 +82,27 @@ void main() {
       // wording carries every tier that spoke for the answer — the chat's and
       // the app's, in the order the rules arrived.
       final chatAllow = PermissionRule(
-          tool: "bash",
-          pattern: "git *",
-          decision: PermissionDecision.allow,
-          origin: PermissionTier.chat);
+        tool: "bash",
+        pattern: "git *",
+        decision: PermissionDecision.allow,
+        origin: PermissionTier.chat,
+      );
       final appAllow = PermissionRule(
-          tool: "bash",
-          pattern: "git status *",
-          decision: PermissionDecision.allow,
-          origin: PermissionTier.defaultProject);
-      final verdict = rulesDecideTraced([appAllow, chatAllow], "bash",
-          command: "git status");
+        tool: "bash",
+        pattern: "git status *",
+        decision: PermissionDecision.allow,
+        origin: PermissionTier.defaultProject,
+      );
+      final verdict = rulesDecideTraced(
+        [appAllow, chatAllow],
+        "bash",
+        command: "git status",
+      );
       expect(verdict?.decision, PermissionDecision.allow);
-      expect(verdict?.tiers, [PermissionTier.defaultProject, PermissionTier.chat]);
+      expect(verdict?.tiers, [
+        PermissionTier.defaultProject,
+        PermissionTier.chat,
+      ]);
     });
 
     test("an uncovered command asks", () {
@@ -79,19 +110,20 @@ void main() {
       expect(rulesDecideTraced([], "bash", command: "anything"), null);
     });
 
-    test("a deny on one segment refuses a compound with uncovered others",
-        () {
+    test("a deny on one segment refuses a compound with uncovered others", () {
       // deny anywhere is a no for the whole: letting the rest ask would
       // offer the user a banner to re-litigate a no they already wrote.
       final verdict = rulesDecideTraced(
         [
           PermissionRule(
-              tool: "bash",
-              pattern: "rm *",
-              decision: PermissionDecision.deny),
+            tool: "bash",
+            pattern: "rm *",
+            decision: PermissionDecision.deny,
+          ),
         ],
         "bash",
-        command: "ls -ld /tmp/probe; rm -rf /tmp/probe 2>/dev/null || true; ls -ld /tmp/probe",
+        command:
+            "ls -ld /tmp/probe; rm -rf /tmp/probe 2>/dev/null || true; ls -ld /tmp/probe",
         segments: [
           "ls -ld /tmp/probe",
           "rm -rf /tmp/probe 2>/dev/null",
@@ -103,70 +135,188 @@ void main() {
     });
 
     test("a rule for another tool is skipped", () {
-      expect(rulesDecideTraced([allowWriteTmp], "bash", command: "cat /tmp/x"),
-          null);
+      expect(
+        rulesDecideTraced([allowWriteTmp], "bash", command: "cat /tmp/x"),
+        null,
+      );
     });
 
     test("a path rule matches the subtree of its directory", () {
       expect(
-          rulesDecideTraced([allowWriteTmp], "write", path: "/tmp/scratch/out.txt")
-              ?.decision,
-          PermissionDecision.allow);
+        rulesDecideTraced(
+          [allowWriteTmp],
+          "write",
+          path: "/tmp/scratch/out.txt",
+        )?.decision,
+        PermissionDecision.allow,
+      );
       expect(
-          rulesDecideTraced([allowWriteTmp], "write", path: "/tmp/other/out.txt"),
-          null);
+        rulesDecideTraced([allowWriteTmp], "write", path: "/tmp/other/out.txt"),
+        null,
+      );
     });
 
     test("a webfetch rule matches the host and subdomains", () {
       final rule = PermissionRule(
-          tool: "webfetch", pattern: "example.com", decision: PermissionDecision.allow);
+        tool: "webfetch",
+        pattern: "example.com",
+        decision: PermissionDecision.allow,
+      );
       expect(
-          rulesDecideTraced([rule], "webfetch",
-                  url: "https://www.example.com/page?q=1")
-              ?.decision,
-          PermissionDecision.allow);
+        rulesDecideTraced(
+          [rule],
+          "webfetch",
+          url: "https://www.example.com/page?q=1",
+        )?.decision,
+        PermissionDecision.allow,
+      );
       expect(
-          rulesDecideTraced([rule], "webfetch", url: "https://notexample.com/page"),
-          null);
+        rulesDecideTraced(
+          [rule],
+          "webfetch",
+          url: "https://notexample.com/page",
+        ),
+        null,
+      );
+    });
+
+    test("a webfetch * matches every host", () {
+      const rule = PermissionRule(
+        tool: "webfetch",
+        pattern: "*",
+        decision: PermissionDecision.allow,
+      );
+      expect(
+        rulesDecideTraced(
+          [rule],
+          "webfetch",
+          url: "https://anything.dev/",
+        )?.decision,
+        PermissionDecision.allow,
+      );
+      expect(
+        rulesDecideTraced(
+          [rule],
+          "webfetch",
+          url: "https://other.io/",
+        )?.decision,
+        PermissionDecision.allow,
+      );
+      // An ask rule on one domain still outranks the standing * — the
+      // per-domain rules are the settings page's to write.
+      const ask = PermissionRule(
+        tool: "webfetch",
+        pattern: "sensitive.example",
+        decision: PermissionDecision.ask,
+      );
+      expect(
+        rulesDecideTraced(
+          [rule, ask],
+          "webfetch",
+          url: "https://sensitive.example/x",
+        )?.decision,
+        PermissionDecision.ask,
+      );
     });
   });
 
   group("ruleFromApproval", () {
     test("a bash command becomes a prefix glob", () {
-      final rule = ruleFromApproval(ToolApproval(
+      final rule = ruleFromApproval(
+        ToolApproval(
           id: "a",
           toolName: "bash",
           argumentsText: "git checkout -b foo",
-          argumentsJson: '{"command": "git checkout -b foo"}'));
+          argumentsJson: '{"command": "git checkout -b foo"}',
+        ),
+      );
       expect(rule, isNotNull);
       expect(rule!.tool, "bash");
       expect(rule.pattern, "git checkout *");
       expect(rule.decision, PermissionDecision.allow);
     });
 
-    test("a compound command keeps only the words before the first operator", () {
-      final rule = ruleFromApproval(ToolApproval(
-          id: "a",
-          toolName: "bash",
-          argumentsText: "git status && python3 evil.py",
-          argumentsJson: "{}"));
-      expect(rule!.pattern, "git status *");
-    });
+    test(
+      "a compound command keeps only the words before the first operator",
+      () {
+        final rule = ruleFromApproval(
+          ToolApproval(
+            id: "a",
+            toolName: "bash",
+            argumentsText: "git status && python3 evil.py",
+            argumentsJson: "{}",
+          ),
+        );
+        expect(rule!.pattern, "git status *");
+      },
+    );
 
     test("a file tool's path becomes the pattern as written", () {
-      final rule = ruleFromApproval(ToolApproval(
-          id: "a", toolName: "write", argumentsText: "~/Projects/x/config.json"));
+      final rule = ruleFromApproval(
+        ToolApproval(
+          id: "a",
+          toolName: "write",
+          argumentsText: "~/Projects/x/config.json",
+        ),
+      );
       expect(rule!.tool, "write");
       expect(rule.pattern, "~/Projects/x/config.json");
     });
 
-    test("a fetch URL becomes the host", () {
-      final rule = ruleFromApproval(ToolApproval(
+    test("a fetch URL becomes every host, not one domain", () {
+      final rule = ruleFromApproval(
+        ToolApproval(
           id: "a",
           toolName: "webfetch",
           argumentsText: "https://docs.example.com/guide",
-          argumentsJson: "{}"));
-      expect(rule!.pattern, "example.com");
+          argumentsJson: "{}",
+        ),
+      );
+      expect(rule!.pattern, "*");
+      expect(globMatch("*", "anything"), isTrue);
+      // The consult the standing answer covers, wherever it points.
+      expect(
+        rulesDecideTraced(
+          [rule],
+          "webfetch",
+          url: "https://other.org/x",
+        )?.decision,
+        PermissionDecision.allow,
+      );
+    });
+
+    test("a single fetcher command derives the network answer too", () {
+      final rule = ruleFromApproval(
+        ToolApproval(
+          id: "a",
+          toolName: "bash",
+          argumentsText: "curl https://example.com/data.json",
+        ),
+      );
+      expect(rule!.tool, "webfetch");
+      expect(rule.pattern, "*");
+      // The bare-host spelling reaches the same answer.
+      final bare = ruleFromApproval(
+        ToolApproval(
+          id: "a",
+          toolName: "bash",
+          argumentsText: "wget example.com/data.bin",
+        ),
+      );
+      expect(bare!.tool, "webfetch");
+      expect(bare.pattern, "*");
+      // What the consult would not read again derives nothing: a
+      // redirecting or compound variant is command-shaped, its own shape
+      // being what matched it.
+      for (final command in [
+        "curl https://x.com > out.txt",
+        "cd ~/repo && curl https://x.com",
+      ]) {
+        final other = ruleFromApproval(
+          ToolApproval(id: "a", toolName: "bash", argumentsText: command),
+        );
+        expect(other!.tool, "bash", reason: command);
+      }
     });
 
     test("a call carrying nothing matchable is null", () {
@@ -175,8 +325,13 @@ void main() {
     });
 
     test("a plain banner derivation carries no writes", () {
-      final rule = ruleFromApproval(ToolApproval(
-          id: "a", toolName: "bash", argumentsText: "python3 build.py"));
+      final rule = ruleFromApproval(
+        ToolApproval(
+          id: "a",
+          toolName: "bash",
+          argumentsText: "python3 build.py",
+        ),
+      );
       expect(rule!.writes, isEmpty);
     });
   });
@@ -185,14 +340,16 @@ void main() {
     test("rules survive encoding", () {
       final rules = [
         const PermissionRule(
-            tool: "bash",
-            pattern: "git *",
-            decision: PermissionDecision.deny),
+          tool: "bash",
+          pattern: "git *",
+          decision: PermissionDecision.deny,
+        ),
         PermissionRule(
-            tool: "write",
-            pattern: "/tmp/x",
-            decision: PermissionDecision.allow,
-            writes: const ["/tmp/x"]),
+          tool: "write",
+          pattern: "/tmp/x",
+          decision: PermissionDecision.allow,
+          writes: const ["/tmp/x"],
+        ),
       ];
       final back = permissionRulesFromJson(permissionRulesToJson(rules));
       expect(back.length, 2);
@@ -204,10 +361,11 @@ void main() {
     test("the origin is not persisted", () {
       final rules = [
         const PermissionRule(
-            tool: "bash",
-            pattern: "git *",
-            decision: PermissionDecision.deny,
-            origin: PermissionTier.project),
+          tool: "bash",
+          pattern: "git *",
+          decision: PermissionDecision.deny,
+          origin: PermissionTier.project,
+        ),
       ];
       final back = permissionRulesFromJson(permissionRulesToJson(rules));
       // The tier is a fact of the file a rule was read from, not the rule.
@@ -218,11 +376,14 @@ void main() {
   group("rulesDecideTraced", () {
     test("an allow carries the winning rule's tier", () {
       final verdict = rulesDecideTraced(
-        [const PermissionRule(
+        [
+          const PermissionRule(
             tool: "bash",
             pattern: "git *",
             decision: PermissionDecision.allow,
-            origin: PermissionTier.chat)],
+            origin: PermissionTier.chat,
+          ),
+        ],
         "bash",
         command: "git status",
       );
@@ -231,18 +392,24 @@ void main() {
     });
 
     test("a deny carries the denying tier", () {
-      final verdict = rulesDecideTraced([
-        const PermissionRule(
+      final verdict = rulesDecideTraced(
+        [
+          const PermissionRule(
             tool: "bash",
             pattern: "git status *",
             decision: PermissionDecision.allow,
-            origin: PermissionTier.chat),
-        const PermissionRule(
+            origin: PermissionTier.chat,
+          ),
+          const PermissionRule(
             tool: "bash",
             pattern: "git *",
             decision: PermissionDecision.deny,
-            origin: PermissionTier.defaultProject),
-      ], "bash", command: "git push");
+            origin: PermissionTier.defaultProject,
+          ),
+        ],
+        "bash",
+        command: "git push",
+      );
       expect(verdict!.decision, PermissionDecision.deny);
       expect(verdict.tiers, [PermissionTier.defaultProject]);
     });
@@ -251,15 +418,17 @@ void main() {
       final verdict = rulesDecideTraced(
         [
           const PermissionRule(
-              tool: "bash",
-              pattern: "git status *",
-              decision: PermissionDecision.allow,
-              origin: PermissionTier.chat),
+            tool: "bash",
+            pattern: "git status *",
+            decision: PermissionDecision.allow,
+            origin: PermissionTier.chat,
+          ),
           const PermissionRule(
-              tool: "bash",
-              pattern: "git log *",
-              decision: PermissionDecision.allow,
-              origin: PermissionTier.project),
+            tool: "bash",
+            pattern: "git log *",
+            decision: PermissionDecision.allow,
+            origin: PermissionTier.project,
+          ),
         ],
         "bash",
         segments: ["git status", "git log --oneline"],
@@ -269,28 +438,37 @@ void main() {
     });
 
     test("a stronger rule clears the weaker tier", () {
-      final verdict = rulesDecideTraced([
-        const PermissionRule(
+      final verdict = rulesDecideTraced(
+        [
+          const PermissionRule(
             tool: "bash",
             pattern: "git *",
             decision: PermissionDecision.allow,
-            origin: PermissionTier.chat),
-        const PermissionRule(
+            origin: PermissionTier.chat,
+          ),
+          const PermissionRule(
             tool: "bash",
             pattern: "git push *",
             decision: PermissionDecision.deny,
-            origin: PermissionTier.project),
-      ], "bash", command: "git push origin");
+            origin: PermissionTier.project,
+          ),
+        ],
+        "bash",
+        command: "git push origin",
+      );
       expect(verdict!.decision, PermissionDecision.deny);
       expect(verdict.tiers, [PermissionTier.project]);
     });
 
     test("a rule with no origin matches but carries no tier", () {
       final verdict = rulesDecideTraced(
-        [const PermissionRule(
+        [
+          const PermissionRule(
             tool: "bash",
             pattern: "git *",
-            decision: PermissionDecision.allow)],
+            decision: PermissionDecision.allow,
+          ),
+        ],
         "bash",
         command: "git status",
       );
