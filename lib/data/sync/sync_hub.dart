@@ -482,8 +482,6 @@ class SyncHub implements ArtifactBytes {
         meta: ChatMeta(),
       );
       final mirror = _mirrors[state.id]!;
-      // The name is the connection's, every welcome: a device renamed while
-      // the mirror survived a disconnect is filed under the new one.
       if (state.updatedAt.isAfter(mirror.state.updatedAt)) {
         mirror.state = state;
       }
@@ -651,7 +649,8 @@ class SyncHub implements ArtifactBytes {
 
   void _refreshDriven() => drivenChats.value = {
         for (final entry in _control.entries)
-          entry.key: _peers[entry.value]?.deviceName ?? entry.value,
+          entry.key:
+              _peers.states.value[entry.value]?.name ?? entry.value,
       };
 
   /// The turn as this device's own controller has it, on its way to whoever
@@ -857,7 +856,12 @@ class SyncHub implements ArtifactBytes {
       _touch(chatId);
     }
     _peers.setStatus(deviceId,
-        name: live?.deviceName ?? deviceId, status: PeerStatus.offline);
+        // The book's name — a rename landed in the status already; the
+        // connection's snapshot is the fallback for what has gone missing.
+        name: _peers.states.value[deviceId]?.name ??
+            live?.deviceName ??
+            deviceId,
+        status: PeerStatus.offline);
     _peers.refreshServed();
     _rebuildRemotes();
   }

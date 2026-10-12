@@ -554,16 +554,17 @@ pairing code) and asks the comparison, which no bare hex row on a list could.
 `rename` is the registry's verb, one-sided like every name in it: it replaces
 the record (`PairedDevice.withName` on both registry implementations — the
 name is final on it) and `SyncPeers.renamed` moves the name through the
-status without touching whatever the connection earned, updating the live
-connection's name too. A peer's name is said from one book on every surface,
-and after the write they reach it two ways: the row and the chat page's
-driven line read the `PeerState`/live name directly (`SyncHub.rename`
-re-runs `_refreshDriven` for that, no control change to hang it on), and the
-mirrors' Remotes rows derive their name from that same `PeerState` at every
-`_rebuildRemotes` — where the mirror keeps only a creation-time fallback for
-a device missing from the book. Before this, the row showed the new name
-while the driven line and the Remotes rows kept the old one until a
-reconnect.
+status without touching whatever the connection earned. A peer's name is
+said from one book on every surface, and the surfaces *read* it rather than
+hold it: the row sees the `PeerState` the write updated, the chat page's
+driven line derives from that same state (`SyncHub.rename` re-runs
+`_refreshDriven` — no control change to hang a follow-on on), and the
+mirrors' Remotes rows derive theirs at every `_rebuildRemotes`.
+`MirrorChat.deviceName` and `LivePeer.deviceName` both survive as
+establish-time fallbacks for a device gone missing from the book, which is
+why neither had to grow a second writer. Before this rename work, the row
+showed the new name while the driven line and the Remotes rows kept the old
+one until a reconnect.
 Connect and disconnect live on the row and on the page — the row keeps them
 on sight of the list, the page beside the status they act on (connecting
 disables), and every one goes through one `catchAndSay` beside `say`: a
@@ -594,21 +595,22 @@ last until something reset it, which is why nothing here renders the
   null (usually a code that decodes to nothing) is said and the page pops;
   otherwise the failed arm is on the page.
 - **Manual invite** (`ManualInvitePage`): the blob and the reply field until
-  the reply is handed over, then the same stage view. Back cancels both
-  halves — a pending invite's held connection (`cancelManualInvite`), and,
-  once started, a pending gate.
+  the reply is handed over, then the same stage view. Back is one verb,
+  `cancelManualInvite` — a pending invite loses its held link, and, once the
+  reply is in, the completing pair's gate is answered no; the same
+  teardown-then-drop shape the window's verb has.
 
 The three build on `_PairingStageView` — confirm, paired, failed; the
 connecting arm is the hosting page's own (the window's QR; a spinner
 elsewhere). Non-window screens take `watching(context, hub, waitLabel)`,
 the whole body harness shared once: spinner before the activity, then the
-stages, pair-another and Done wired. "Pair another device" is every variant:
-the window's reopens in place; the other two push a fresh `PairingWindowPage`
-over themselves (`PairingWindowPage.openAnother`, the same verb the Sync
-page's button is). Back and Done on those screens are `cancelPairing` — the
-general verb that answers a pending gate no and drops the activity — while
-the window's back stays `cancelPairingWindow`, the window's teardown beside
-it.
+stages, pair-another and Done wired. Back is one `_cancelOnBack` scope —
+the pop contract (cancel before dispose, tree unlocked) stated once, the
+per-screen verb its argument: `cancelPairing` on the joiner,
+`cancelPairingWindow` on the window, `cancelManualInvite` on the invite.
+"Pair another device" is every variant: the window's reopens in place; the
+other two push a fresh `PairingWindowPage` over themselves
+(`PairingWindowPage.openAnother`, the same verb the Sync page's button is).
 
 **Both manual routes open the pairing card.** `createManualInvite` never did,
 nor `_acceptManualInvite` — the inviter completing a reply, and the invited

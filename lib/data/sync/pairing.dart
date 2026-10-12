@@ -275,14 +275,16 @@ class SyncPairing {
     activity.value = null;
   }
 
-  /// Drops a pending manual invite, closing the peer connection it held open.
-  /// A manual invite is not a window — `cancelPairingWindow` does not touch
-  /// it — so the invite page calls this on back, and the `RtcLink` that was
-  /// waiting for a reply is torn down rather than leaked.
+  /// Drops a pending manual invite, closing the peer connection it held
+  /// open, and ends a pairing in flight beside it — the same
+  /// route-teardown-then-general-drop shape the window's verb has, so the
+  /// invite page's back and Done is one call either way: pending before the
+  /// reply, gate answered no once the pair is completing.
   void cancelManualInvite() {
     final pending = _pendingManual;
     _pendingManual = null;
     if (pending != null) unawaited(pending.link.close());
+    cancelPairing();
   }
 
   /// A joiner reads [text] — scanned or pasted — and completes its half.

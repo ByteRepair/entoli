@@ -86,16 +86,6 @@ class SyncSection extends ConsumerWidget {
 /// setting has nothing to switch, so the row is not drawn.
 bool get _android => !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
 
-/// The muted explanatory paragraph a settings page keeps where a section's
-/// description would be — body small in the variant grey.
-Widget _muted(BuildContext context, String text) => Text(
-      text,
-      style: Theme.of(context)
-          .textTheme
-          .bodySmall
-          ?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
-    );
-
 /// The Internet relay, on its own screen — reached from the row on the Sync
 /// page. One field: the `wss://` URL both devices dial to pair across the
 /// internet, where the local network cannot reach them.
@@ -112,7 +102,7 @@ class RelaySettingsPage extends ConsumerWidget {
         children: [
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
-            child: _muted(
+            child: mutedParagraph(
                 context,
                 "A WebSocket relay for pairing when the devices are not on "
                 "the same network. Both dial the same room, derived from the "
@@ -133,7 +123,7 @@ class RelaySettingsPage extends ConsumerWidget {
           ),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            child: _muted(
+            child: mutedParagraph(
                 context,
                 "Any relay that speaks the room protocol works; "
                 "tool/sync/sync_relay_server.dart is a reference one. Leave "
@@ -163,7 +153,7 @@ class TurnSettingsPage extends ConsumerWidget {
         children: [
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
-            child: _muted(
+            child: mutedParagraph(
                 context,
                 "For NAT traversal. Bring your own, a self-hosted coturn is "
                 "recommended. Without one, symmetric-NAT pairs fail "
@@ -255,48 +245,33 @@ class _PairedDevices extends ConsumerWidget {
               ? "No devices paired yet. Pair a new device above."
               : null,
         ),
-        for (final peer in peers)
-          _PairedDeviceRow(
-            peer: peer,
-            onOpen: () => Navigator.of(context).push(MaterialPageRoute(
-              builder: (_) => PairedDevicePage(deviceId: peer.deviceId),
-            )),
-            onRevoke: () => hub.revoke(peer.deviceId),
-            onConnect: () => hub.connect(peer.deviceId),
-            onDisconnect: () => hub.disconnect(peer.deviceId),
-          ),
+        for (final peer in peers) _PairedDeviceRow(hub: hub, peer: peer),
       ],
     );
   }
 }
 
 class _PairedDeviceRow extends StatelessWidget {
-  const _PairedDeviceRow({
-    required this.peer,
-    required this.onOpen,
-    required this.onRevoke,
-    required this.onConnect,
-    required this.onDisconnect,
-  });
+  const _PairedDeviceRow({required this.hub, required this.peer});
 
+  final SyncHub hub;
   final PeerState peer;
-
-  /// The row is the device's page's way in: clicking it anywhere that is not
-  /// a button opens the device's own screen.
-  final VoidCallback onOpen;
-  final Future<void> Function() onRevoke;
-  final Future<void> Function() onConnect;
-  final Future<void> Function() onDisconnect;
 
   @override
   Widget build(BuildContext context) {
     final status = peer.status;
     final theme = Theme.of(context);
     final failure = peer.error;
+    void tried(Future<void> Function() work) =>
+        catchAndSay(context, work);
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: InkWell(
-        onTap: onOpen,
+        // The row is the device's page's way in: clicking it anywhere that
+        // is not a button opens the device's own screen.
+        onTap: () => Navigator.of(context).push(MaterialPageRoute(
+          builder: (_) => PairedDevicePage(deviceId: peer.deviceId),
+        )),
         borderRadius: const BorderRadius.all(Radius.circular(12)),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -309,17 +284,19 @@ class _PairedDeviceRow extends StatelessWidget {
                 Expanded(child: Text(peer.name)),
                 if (status == PeerStatus.online)
                   TextButton(
-                      onPressed: () => catchAndSay(context, onDisconnect),
+                      onPressed: () =>
+                          tried(() => hub.disconnect(peer.deviceId)),
                       child: const Text("Disconnect"))
                 else
                   TextButton(
                       onPressed: status == PeerStatus.connecting
                           ? null
-                          : () => catchAndSay(context, onConnect),
+                          : () => tried(() => hub.connect(peer.deviceId)),
                       child: const Text("Connect")),
                 TextButton(
                   onPressed: () =>
-                      confirmRevokeDevice(context, peer.name, onRevoke),
+                      confirmRevokeDevice(context, peer.name,
+                          () => hub.revoke(peer.deviceId)),
                   style: TextButton.styleFrom(
                       foregroundColor: theme.colorScheme.error),
                   child: const Text("Revoke"),
@@ -463,6 +440,23 @@ class _PairingControlsState extends ConsumerState<_PairingControls> {
   }
 }
 
+/// Back on a pairing screen is giving up: the route pops through this scope,
+/// whose cancel runs before dispose — while the tree is unlocked, so the
+/// activity notifier's listeners hear it — and then the pop completes. The
+/// cancel verb is the screen's: the joiner's is `cancelPairing`, the window's
+/// adds its teardown, the invite's drops the held link with it.
+PopScope _cancelOnBack(BuildContext context, VoidCallback cancel,
+        {required Widget child}) =>
+    PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) return;
+        cancel();
+        Navigator.of(context).pop();
+      },
+      child: child,
+    );
+
 /// The joiner's own screen: pushed by Pair, for a pasted code or a scanned
 /// one. A pairing this device did not open a window for still gets a screen —
 /// the wait on it, then the codes, then paired or failed — and going back
@@ -506,20 +500,13 @@ class _PairingJoinPageState extends State<PairingJoinPage> {
   @override
   Widget build(BuildContext context) {
     final hub = widget.hub;
-    return PopScope(
-      // Back is giving up on the pairing: at the codes gate it answers no, so
-      // neither side waits out a human who left. Nothing was armed on this
-      // end anywhere else.
-      canPop: false,
-      onPopInvokedWithResult: (didPop, _) {
-        if (didPop) return;
-        hub.cancelPairing();
-        Navigator.of(context).pop();
-      },
+    return _cancelOnBack(
+      context,
+      hub.cancelPairing,
       child: Scaffold(
         appBar: AppBar(title: const Text("Pairing")),
-        body:
-            _PairingStageView.watching(context, hub, "Waiting for the other device…"),
+        body: _PairingStageView.watching(
+            context, hub, "Waiting for the other device…"),
       ),
     );
   }
@@ -643,13 +630,11 @@ class _PairedView extends StatelessWidget {
               style: theme.textTheme.titleLarge,
             ),
             const SizedBox(height: 8),
-            Text(
-              "Either device can now dial the other without re-pairing, and "
-              "it is listed under Paired devices.",
-              style: theme.textTheme.bodySmall
-                  ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-              textAlign: TextAlign.center,
-            ),
+            mutedParagraph(
+                context,
+                "Either device can now dial the other without re-pairing, "
+                "and it is listed under Paired devices.",
+                textAlign: TextAlign.center),
             const SizedBox(height: 16),
             Wrap(
               spacing: 8,
@@ -719,44 +704,34 @@ class _PairingWindowPageState extends State<PairingWindowPage> {
   @override
   Widget build(BuildContext context) {
     final hub = widget.hub;
-    return PopScope(
-      // Back cancels: leaving the page is giving up on the window, and an open
-      // window left behind would hold a server and a relay room for nobody.
-      // `onPopInvokedWithResult` runs before dispose, when the tree is not
-      // locked, so the notifier's listeners can hear the cancel.
-      canPop: false,
-      onPopInvokedWithResult: (didPop, _) {
-        if (didPop) return;
-        hub.cancelPairingWindow();
-        Navigator.of(context).pop();
-      },
-      child: Scaffold(
-        appBar: AppBar(title: const Text("Pairing window")),
-        body: ValueListenableBuilder<PairingActivity?>(
-          valueListenable: hub.pairing,
-          builder: (context, pairing, _) {
-            if (pairing == null) {
-              return _busy
-                  ? const Center(child: CircularProgressIndicator())
-                  : const Center(child: Text("Pairing cancelled."));
-            }
-            return _PairingStageView(
-              hub: hub,
-              activity: pairing,
-              // The window's own connecting arm: the thing to do while
-              // waiting is show the code.
-              connecting: _PairingCodeBody(activity: pairing),
-              // "Pair another" is a window again, on this page: the activity
-              // notifier moves it back to the QR.
-              onPairAnother: () => unawaited(_openWindow(context)),
-              onDone: () {
-                hub.cancelPairingWindow();
-                Navigator.of(context).pop();
-              },
-            );
-          },
+    return _cancelOnBack(context, hub.cancelPairingWindow,
+        child: Scaffold(
+          appBar: AppBar(title: const Text("Pairing window")),
+          body: ValueListenableBuilder<PairingActivity?>(
+            valueListenable: hub.pairing,
+            builder: (context, pairing, _) {
+              if (pairing == null) {
+                return _busy
+                    ? const Center(child: CircularProgressIndicator())
+                    : const Center(child: Text("Pairing cancelled."));
+              }
+              return _PairingStageView(
+                hub: hub,
+                activity: pairing,
+                // The window's own connecting arm: the thing to do while
+                // waiting is show the code.
+                connecting: _PairingCodeBody(activity: pairing),
+                // "Pair another" is a window again, on this page: the
+                // activity notifier moves it back to the QR.
+                onPairAnother: () => unawaited(_openWindow(context)),
+                onDone: () {
+                  hub.cancelPairingWindow();
+                  Navigator.of(context).pop();
+                },
+              );
+            },
+          ),
         ),
-      ),
     );
   }
 }
@@ -845,19 +820,12 @@ class _ManualInvitePageState extends State<ManualInvitePage> {
 
   @override
   Widget build(BuildContext context) {
-    return PopScope(
-      // Back cancels what is left of the invite in either state: a pending
-      // one loses the held peer connection, and a started one answers a
-      // codes-matched gate nothing can answer after this human is gone.
-      // `onPopInvokedWithResult` runs before dispose, when the tree is not
-      // locked, so the notifier's listeners hear it.
-      canPop: false,
-      onPopInvokedWithResult: (didPop, _) {
-        if (didPop) return;
-        widget.hub.cancelManualInvite();
-        widget.hub.cancelPairing();
-        Navigator.of(context).pop();
-      },
+    // One verb: a pending invite loses its held link, and, once the reply is
+    // in, the completing pair's gate is answered no. See
+    // [SyncPairing.cancelManualInvite].
+    return _cancelOnBack(
+      context,
+      widget.hub.cancelManualInvite,
       child: Scaffold(
         appBar: AppBar(title: const Text("Manual invite")),
         body: _watching ? _watchingBody() : _inviteBody(),
@@ -1006,18 +974,14 @@ class _SasConfirm extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const Text("Confirm the codes match on both devices:"),
         if (pairing.peerName case final name? when name.isNotEmpty) ...[
           const SizedBox(height: 4),
-          Text(
-            "The other device calls itself \"$name\".",
-            style: theme.textTheme.bodySmall
-                ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-          ),
+          mutedParagraph(
+              context, 'The other device calls itself "$name".'),
         ],
         const SizedBox(height: 8),
         Center(

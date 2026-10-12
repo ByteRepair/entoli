@@ -11,8 +11,9 @@ import "../fonts.dart" show monoFamily;
 import "../widgets/dialogs.dart";
 import "../widgets/section_header.dart";
 
-/// The verbatim values' face: every fingerprint and the last address render
-/// in the same bundled mono the rest of the app holds its keys and codes in.
+/// The verbatim values' face: this page's fingerprints and last address
+/// render in the bundled mono, not the platform alias the rest of the sync
+/// screens' older literals spell.
 const _monoStyle = TextStyle(fontFamily: monoFamily, fontSize: 13);
 
 /// How a connection reads on screen. The paired-device row on the Sync page
@@ -114,6 +115,14 @@ class _PairedDevicePageState extends ConsumerState<PairedDevicePage> {
         .watch(syncPeersProvider.select((peers) => peers[widget.deviceId]));
     final device = _device;
     final theme = Theme.of(context);
+    // The record's fresh half is what this page's own Connect writes — a
+    // dial that ends marks the device seen. The one change worth re-reading
+    // for, answered when the status settles rather than as a comment.
+    ref.listen(
+        syncPeersProvider.select((peers) => peers[widget.deviceId]?.status),
+        (_, status) {
+      if (status != PeerStatus.connecting) _reload();
+    });
 
     // The header stays a category ("Paired device"); the name it would have
     // repeated sits one line down, and a title saying who this is a page
@@ -219,16 +228,14 @@ class _PairedDevicePageState extends ConsumerState<PairedDevicePage> {
       _FingerprintLine(hub.identity.fingerprint),
       Padding(
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-        child: Text(
-          "A fingerprint is a code derived from a device's sync key. It is "
-          "not a secret: it identifies a key and grants nothing. Connecting "
-          "still requires a pairing code. To verify the pair, compare the "
-          "Device fingerprint above with the code $name shows under This "
-          "device on its own Sync page. Matching codes mean the two devices "
-          "are still the ones that completed the pairing.",
-          style: theme.textTheme.bodySmall
-              ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-        ),
+        child: mutedParagraph(
+            context,
+            "A fingerprint is a code derived from a device's sync key. It is "
+            "not a secret: it identifies a key and grants nothing. "
+            "Connecting still requires a pairing code. To verify the pair, "
+            "compare the Device fingerprint above with the code $name shows "
+            "under This device on its own Sync page. Matching codes mean the "
+            "two devices are still the ones that completed the pairing."),
       ),
       // The row's destructive action, at the end of the page the way a
       // destructive action ends a page. A successful one leaves nothing for
