@@ -58,19 +58,22 @@ void main() {
     expect(seen, ["v=0 offer"]);
   });
 
-  test("a wrong code is refused", () async {
+  test("an offer that fails its check is refused with a 403", () async {
     routes.arm("123456");
     answerWith("v=0 answer");
 
+    // A wrong code.
     expect((await offer(code: "000000")).status, 403);
-  });
 
-  test("a disarmed window refuses everything", () async {
-    routes.arm("123456");
+    // A window that was disarmed refuses even the right code.
     routes.disarm();
-    answerWith("v=0 answer");
-
     expect((await offer(code: "123456")).status, 403);
+
+    // Tokens: one the routes never knew, and one that was revoked.
+    routes.allowReconnect("tok");
+    expect((await offer(token: "other")).status, 403);
+    routes.refuseReconnect("tok");
+    expect((await offer(token: "tok")).status, 403);
   });
 
   test("a reconnect token dials without a pairing window open", () async {
@@ -81,7 +84,7 @@ void main() {
     expect(sdpOf(await offer(token: "tok")), "v=0 answer");
   });
 
-  test("the offer says which token let it in", () async {
+  test("the offer hands over what let it in: token or nothing", () async {
     // A reconnect's handshake runs against that pair's secret, and the token
     // is the only thing in the request that says which pair it is.
     routes.allowReconnect("tok");
@@ -92,21 +95,12 @@ void main() {
     });
 
     await offer(token: "tok");
-
     expect(seen, ["tok"]);
-  });
 
-  test("an offer that used the window's code carries no token", () async {
+    // The window's code lets it in without one.
     routes.arm("123456");
-    final seen = <String?>[];
-    routes.offers.listen((offer) {
-      seen.add(offer.token);
-      routes.postAnswer(offer.id, "v=0 answer");
-    });
-
     await offer(code: "123456");
-
-    expect(seen, [null]);
+    expect(seen.last, isNull);
   });
 
   test("an unknown token is refused", () async {
@@ -199,21 +193,20 @@ void main() {
   });
 
   group("what a browser needs before it will dial a LAN address", () {
-    test("the preflight answers the private-network header", () async {
-      final reply = await routes
-          .handle(const SignalingRequest("OPTIONS", "/entoli/offer"));
-
-      expect(reply.status, 204);
-      expect(reply.headers["Access-Control-Allow-Origin"], "*");
-      expect(reply.headers["Access-Control-Allow-Private-Network"], "true");
-    });
-
     test("an ordinary response carries CORS too", () async {
       final reply =
           await routes.handle(const SignalingRequest("GET", "/entoli/health"));
 
       expect(reply.status, 200);
       expect(reply.headers["Access-Control-Allow-Origin"], "*");
+
+      // And the preflight that lets Chrome dial at all: 204 with the
+      // private-network answer beside it.
+      final preflight = await routes
+          .handle(const SignalingRequest("OPTIONS", "/entoli/offer"));
+      expect(preflight.status, 204);
+      expect(
+          preflight.headers["Access-Control-Allow-Private-Network"], "true");
     });
   });
 }

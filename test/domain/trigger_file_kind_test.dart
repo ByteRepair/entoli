@@ -79,7 +79,21 @@ void main() {
 
     expect(collected.map((f) => f.triggerId), containsAll(["a", "b"]));
     expect(collected.first.reason, contains("todo.md"));
+
+    // A delete event fires too, and a root naming a directory catches what
+    // happens under it.
+    final deletions = <TriggerFire>[];
+    final deleting = kind().watch(
+        [fileTrigger(id: "c", paths: ["notes"])], _now);
+    final deleteSub = deleting.stream.listen(deletions.add);
+    await pumpEventQueue();
+
+    watches.push("/ws/notes/build.log", FileEvent.delete);
+    await pumpEventQueue();
+
+    expect(deletions.single.reason, contains("build.log"));
     await sub.cancel();
+    await deleteSub.cancel();
   });
 
   test("an event of a kind the trigger did not name does not fire", () async {
@@ -112,20 +126,6 @@ void main() {
     await pumpEventQueue();
 
     expect(collected, hasLength(1));
-    await sub.cancel();
-  });
-
-  test("the reason words the path and the event", () async {
-    final collected = <TriggerFire>[];
-    final fires =
-        kind().watch([fileTrigger(id: "a", paths: ["notes"])], _now);
-    final sub = fires.stream.listen(collected.add);
-    await pumpEventQueue();
-
-    watches.push("/ws/notes/build.log", FileEvent.delete);
-    await pumpEventQueue();
-
-    expect(collected.single.reason, contains("build.log"));
     await sub.cancel();
   });
 }

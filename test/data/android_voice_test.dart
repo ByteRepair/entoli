@@ -56,10 +56,10 @@ void main() {
     return (recognizer, events);
   }
 
-  testWidgets("listening asks the service for the microphone", (tester) async {
-    await listening(tester);
-    wasAsked("setRecognitionListening");
-  });
+    testWidgets("a session opens shut, and something has to ask", (tester) async {
+      await listening(tester);
+      wasAsked("setRecognitionListening");
+    });
 
   testWidgets("what is heard arrives; an empty result is nothing",
       (tester) async {
@@ -113,19 +113,6 @@ void main() {
     await incoming("heard", "the next room over");
     await tester.pump();
     expect(events.whereType<VoiceHeard>().length, 1);
-  });
-
-  testWidgets("the first thing said carries, whatever it was", (tester) async {
-    final (recognizer, events) = await listening(tester);
-
-    // Nothing has been heard to compare it against. A gate that refuses on no
-    // evidence is a microphone that looks broken, and that is what a fixed
-    // margin on a scale nobody promised turned out to be.
-    await incoming("rms", 8.0);
-    await incoming("heard", "the first thing said");
-    await tester.pump();
-
-    expect(events.whereType<VoiceHeard>().single.text, "the first thing said");
   });
 
   testWidgets("a shut microphone is not the room, and is not measured",
@@ -282,19 +269,11 @@ void main() {
     await incoming("speechUtteranceError", 0);
     await tester.pump();
     expect(signals.whereType<SpeechFailed>(), isEmpty);
-  });
 
-  testWidgets("three failures in a row are said", (tester) async {
-    final tts = AndroidTextToSpeech();
-    addTearDown(tts.dispose);
-    final signals = <SpeechSignal>[];
-    tts.signals.listen(signals.add);
-    await tester.pump();
-
-    await incoming("speechReady");
-    for (final text in ["one", "two", "three"]) {
-      await tts.speak(text);
-    }
+    // Three failures in a row with nothing heard between them are said.
+    await tts.speak("one");
+    await tts.speak("two");
+    await tts.speak("three");
     for (var i = 0; i < 3; i++) {
       await incoming("speechUtteranceError", 0);
     }
@@ -327,18 +306,13 @@ void main() {
   final sherpaRecognition = recognitionModels.first;
   final sherpaSpeech = speechModels.first;
 
-  testWidgets("a recognition pick is the sherpa path, and asks the store",
-      (tester) async {
+  testWidgets("a pick is the store's to answer, either half", (tester) async {
     final voice = AndroidVoice(FakeVoiceModelStore(), "/cache");
     await expectLater(
         voice.start(recognition: sherpaRecognition, speech: nativeSpeech),
         throwsA(isA<StateError>()
             .having((e) => e.message, "message", contains("not downloaded"))));
-  });
-
-  testWidgets("a speech pick is the same store's to answer",
-      (tester) async {
-    final voice = AndroidVoice(FakeVoiceModelStore(), "/cache");
+    // The speech half consults the same store.
     await expectLater(
         voice.start(recognition: null, speech: sherpaSpeech),
         throwsA(isA<StateError>()

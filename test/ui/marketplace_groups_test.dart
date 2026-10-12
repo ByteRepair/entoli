@@ -40,12 +40,12 @@ void main() {
     ]);
     expect(groups.local.map((e) => e.name), ["alpha", "beta"]);
     expect(groups.remote.map((e) => e.name), ["alpha", "beta"]);
-  });
 
-  test("grouping keeps a category of one either side", () {
-    final groups = groupByOrigin([remoteEntry("alpha")]);
-    expect(groups.local, isEmpty);
-    expect(groups.remote.map((e) => e.name), ["alpha"]);
+    // A category of one either side: the other list is just empty, rather
+    // than the row moving where it does not belong.
+    expect(groupByOrigin([remoteEntry("alpha")]).local, isEmpty);
+    expect(groupByOrigin([remoteEntry("alpha")]).remote.map((e) => e.name),
+        ["alpha"]);
     expect(groupByOrigin([localEntry("alpha")]).remote, isEmpty);
   });
 
@@ -64,6 +64,11 @@ void main() {
         ["alpha"]);
     // Neither.
     expect(entriesMatching(entries, "gamma", {}), isEmpty);
+    // An empty query is no search: everything stands.
+    expect(
+        entriesMatching([localEntry("alpha"), remoteEntry("beta")], "  ", {})
+            .length,
+        2);
   });
 
   test("a matching list keeps the order it came in", () {
@@ -75,11 +80,6 @@ void main() {
     // is what stands: the filter ranks nothing, it only removes.
     expect(entriesMatching(entries, "a", {}).map((e) => e.name),
         ["zeta", "alpha"]);
-  });
-
-  test("an empty query is no search", () {
-    final entries = [localEntry("alpha"), remoteEntry("beta")];
-    expect(entriesMatching(entries, "  ", {}).length, 2);
   });
 
   test("the tag ticks are the intersection of what the entry carries", () {

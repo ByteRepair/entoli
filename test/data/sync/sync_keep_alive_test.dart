@@ -40,17 +40,15 @@ void main() {
     };
   }
 
-  test("a connected device is reported, by name", () async {
+  test("a peer that is not offline holds the service, by name", () async {
     connected("d1", "Laptop", PeerStatus.online);
-
     expect(work.synced.single, isNotNull);
     expect(work.synced.single!.names, ["Laptop"]);
-  });
 
-  test("a connecting one counts — the hold has to cover the dial", () async {
-    connected("d1", "Laptop", PeerStatus.connecting);
-
-    expect(work.synced.single, isNotNull);
+    // The dial, too: connecting is part of what has to be covered.
+    connected("d2", "Phone", PeerStatus.connecting);
+    expect(work.synced, hasLength(2));
+    expect(work.synced.last, isNotNull);
   });
 
   test("going offline releases the hold", () async {

@@ -228,16 +228,12 @@ void main() {
   });
 
   group("SpeechFailures", () {
-    test("one sentence lost is not a broken engine", () {
+    test("two failures are not broken, three in a row is", () {
       final failures = SpeechFailures();
       expect(failures.dropped(), isFalse);
       expect(failures.dropped(), isFalse);
-    });
 
-    test("three in a row is", () {
-      final failures = SpeechFailures();
-      failures.dropped();
-      failures.dropped();
+      // The third in a row with nothing said between them is said.
       expect(failures.dropped(), isTrue);
     });
 

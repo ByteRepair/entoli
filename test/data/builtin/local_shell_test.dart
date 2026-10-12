@@ -798,6 +798,14 @@ group("sandbox violation reading", () {
     expect(verdict.violations, isEmpty);
   });
 
+  // Nor /dev/tty: the shell's own terminal plumbing, denials there are not
+  // what the command was about.
+  test("/dev/tty is never a violation either", () {
+    final verdict = sandboxViolations(
+        ["open\t/dev/tty"], "", "/", const CommandSandbox(workspace: "/home/u/ws"));
+    expect(verdict.violations, isEmpty);
+  });
+
   test("the same denial twice is one entry", () {
     final verdict = sandboxViolations(
         ["mkdir\t/etc/a", "mkdir\t/etc/a"], "", "/",

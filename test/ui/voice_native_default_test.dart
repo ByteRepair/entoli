@@ -80,6 +80,12 @@ void main() {
       expect(settings.voiceRecognitionModelId, isNull);
       expect(settings.voiceSpeechModelId, isNull);
       expect(app.container.read(speechReadyProvider), isFalse);
+      // The default nativeVoice is none too: off Android, voice mode is not
+      // ready with nothing downloaded.
+      final plain = TestApp.create();
+      addTearDown(plain.dispose);
+      expect(plain.container.read(voiceReadyProvider), isFalse);
+      expect(plain.container.read(speechReadyProvider), isFalse);
     });
 
     test("a sentinel already in the settings file is not honoured either",
@@ -91,29 +97,16 @@ void main() {
       await app.seedSettings(AppSettings(voiceSpeechModelId: nativeSpeech.id));
       app.container.invalidate(appSettingsProvider);
       // Pinned by hand, or carried from a phone that had a synthesiser. Either
-      // way there is nothing here to say it with.
+      // way there is nothing here to say it with — which is also the desktop's
+      // answer to a phone-carried file: read-aloud stays unoffered.
       expect(app.container.read(speechReadyProvider), isFalse);
-    });
-  });
 
-  group("off Android", () {
-    test("voice mode is not ready with nothing downloaded", () async {
-      final app = TestApp.create();
-      addTearDown(app.dispose);
-      expect(app.container.read(voiceReadyProvider), isFalse);
-      expect(app.container.read(speechReadyProvider), isFalse);
-    });
-
-    test("a settings file carried from a phone does not light up read-aloud",
-        () async {
-      final app = TestApp.create();
-      addTearDown(app.dispose);
-      await app.seedSettings(
-        AppSettings(voiceSpeechModelId: nativeSpeech.id));
-      app.container.invalidate(appSettingsProvider);
-      // The sentinel is not installed on a desktop, so reading a message out is
-      // not offered.
-      expect(app.container.read(speechReadyProvider), isFalse);
+      final desktop = TestApp.create();
+      addTearDown(desktop.dispose);
+      await desktop.seedSettings(
+          AppSettings(voiceSpeechModelId: nativeSpeech.id));
+      desktop.container.invalidate(appSettingsProvider);
+      expect(desktop.container.read(speechReadyProvider), isFalse);
     });
   });
 }

@@ -133,8 +133,8 @@ void main() {
   });
 
   group("the fixed footers", () {
-    testWidgets("the skills page's import button stays put while the list "
-        "scrolls", (tester) async {
+    testWidgets("the import and add buttons stay put while the list scrolls",
+        (tester) async {
       await io(tester, () async {
         for (var i = 0; i < 30; i++) {
           await writeSkill(app, "skill-$i");
@@ -153,20 +153,18 @@ void main() {
       expect(importButton, findsOneWidget);
       // The combo rides the footer with it.
       expect(find.byType(InstallDestination), findsOneWidget);
-    });
 
-    testWidgets("the agents page's add and import buttons stay put while the "
-        "list scrolls", (tester) async {
+      // The agents page's footer is the same rule with its own buttons.
       await pumpSettings(tester, app, SettingsCategory.agents);
       await reloadLibrary(tester, app);
 
       final addButton = find.text("Add agent");
-      final importButton = find.text("Import agent");
-      final before = tester.getTopRight(addButton).dy;
+      final importAgent = find.text("Import agent");
+      final beforeAdd = tester.getTopRight(addButton).dy;
       await tester.drag(find.byType(ListView).first, const Offset(0, -600));
       await tester.pumpAndSettle();
-      expect(tester.getTopRight(addButton).dy, before);
-      expect(importButton, findsOneWidget);
+      expect(tester.getTopRight(addButton).dy, beforeAdd);
+      expect(importAgent, findsOneWidget);
     });
   });
 
@@ -201,13 +199,6 @@ void main() {
       expect(find.text("imported"), findsOneWidget);
       // The project's own row, against the inherited and bundled ones.
       expect(find.byIcon(Icons.close), findsOneWidget);
-    });
-
-    testWidgets("the global page's import sits under the install-to combo "
-        "in the footer", (tester) async {
-      await pumpSettings(tester, app, SettingsCategory.skills);
-      expect(find.text("Import skill"), findsOneWidget);
-      expect(find.byType(InstallDestination), findsOneWidget);
     });
   });
 }

@@ -124,31 +124,26 @@ void main() {
 
       tearDown(() => server.hold?.complete());
 
-      test("a body already on disk is restored rather than read again",
-          () async {
-        final kv = FakeLocalKvCache(hit: true);
+      test("the cache is the warm-up's first consult", () async {
         final background = FakeBackgroundWork();
-
+        // Hit: a warm that hits is the warm-up, so the prompt is not sent and
+        // nothing is written back over what was already there.
+        final kv = FakeLocalKvCache(hit: true);
         await make(llm, background, kvCache: kv, server: server)
             .warm("local-model");
 
-        // The whole of the fix: a warm that hits is the warm-up, so the prompt
-        // is not sent and nothing is written back over what was already there.
         expect(server.asked, 0);
         expect(kv.warmed.single, kvPrefixKeys(messages, const []));
         expect(kv.kept, isEmpty);
         expect(background.prefills.last, isNull);
-      });
 
-      test("a miss reads the prompt and saves the body", () async {
-        final kv = FakeLocalKvCache();
-        final background = FakeBackgroundWork();
-
-        await make(llm, background, kvCache: kv, server: server)
+        // A miss reads the prompt and saves the body.
+        final miss = FakeLocalKvCache();
+        await make(llm, background, kvCache: miss, server: server)
             .warm("local-model");
 
         expect(server.asked, 1);
-        expect(kv.kept, [kvPrefixKeys(messages, const []).last]);
+        expect(miss.kept, [kvPrefixKeys(messages, const []).last]);
       });
 
       test("the notification's Stop ends the warm-up", () async {

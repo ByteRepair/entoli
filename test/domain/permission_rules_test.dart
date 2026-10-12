@@ -54,6 +54,26 @@ void main() {
           ?.decision, PermissionDecision.deny);
     });
 
+    test("an allow covered from two tiers names each of them", () {
+      // Two rules matching the same command, both allowing: neither wins, the
+      // wording carries every tier that spoke for the answer — the chat's and
+      // the app's, in the order the rules arrived.
+      final chatAllow = PermissionRule(
+          tool: "bash",
+          pattern: "git *",
+          decision: PermissionDecision.allow,
+          origin: PermissionTier.chat);
+      final appAllow = PermissionRule(
+          tool: "bash",
+          pattern: "git status *",
+          decision: PermissionDecision.allow,
+          origin: PermissionTier.defaultProject);
+      final verdict = rulesDecideTraced([appAllow, chatAllow], "bash",
+          command: "git status");
+      expect(verdict?.decision, PermissionDecision.allow);
+      expect(verdict?.tiers, [PermissionTier.defaultProject, PermissionTier.chat]);
+    });
+
     test("an uncovered command asks", () {
       expect(rulesDecideTraced([allowGit], "bash", command: "git push"), null);
       expect(rulesDecideTraced([], "bash", command: "anything"), null);

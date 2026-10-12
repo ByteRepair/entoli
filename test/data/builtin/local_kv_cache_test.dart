@@ -10,14 +10,14 @@ void main() {
   LlmMessage user(String t) => LlmMessage(role: LlmRole.user, text: t);
 
   group("kvNamespace", () {
-    test("is stable for the same model, context and device", () {
+    test("is a faithful function of what the dump is tied to", () {
+      // The same binding answers the same string: no hidden entropy to make
+      // two dumps land apart for no reason.
       expect(
         kvNamespace(modelId: "qwen", contextLength: 8192, device: "HTP0"),
         kvNamespace(modelId: "qwen", contextLength: 8192, device: "HTP0"),
       );
-    });
 
-    test("changes when anything a dump is tied to changes", () {
       final base = kvNamespace(modelId: "qwen", contextLength: 8192, device: null);
       // A different model, context, or device makes another namespace — which is
       // the whole of the invalidation: the dump lands where nothing looks.

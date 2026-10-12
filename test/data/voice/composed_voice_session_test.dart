@@ -74,21 +74,6 @@ List<VoiceEvent> collectEvents(ComposedVoiceSession session) {
 void main() {
   group("ComposedVoiceSession", () {
 
-    test("VoiceHeard is forwarded unchanged", () async {
-      final listener = _FakeListener();
-      final speaker = _FakeSpeaker();
-      final session = ComposedVoiceSession(listener, speaker);
-      final events = collectEvents(session);
-      await session.setListening(true);
-
-      listener.hear("hello there");
-      await Future.delayed(Duration.zero);
-
-      expect(events, contains(predicate<VoiceEvent>((e) =>
-          e is VoiceHeard && e.text == "hello there")));
-      await session.dispose();
-    });
-
     test("a shut microphone says nothing, whatever the engine flushes",
         () async {
       final listener = _FakeListener();
@@ -121,6 +106,7 @@ void main() {
       await session.setListening(true);
       listener.hear("now they did");
       await Future.delayed(Duration.zero);
+      // Forwarded unchanged.
       expect(events.whereType<VoiceHeard>().single.text, "now they did");
       await session.dispose();
     });
@@ -174,19 +160,10 @@ void main() {
       await Future.delayed(Duration.zero);
 
       expect(events, contains(const VoiceFellSilent()));
-      await session.dispose();
-    });
 
-    test("a speaker failure becomes VoiceFailed", () async {
-      final listener = _FakeListener();
-      final speaker = _FakeSpeaker();
-      final session = ComposedVoiceSession(listener, speaker);
-      final events = collectEvents(session);
-      await session.setListening(true);
-
+      // A speaker failure is re-published too, as the failure it was.
       speaker.fail("boom");
       await Future.delayed(Duration.zero);
-
       expect(events, contains(predicate<VoiceEvent>((e) =>
           e is VoiceFailed && e.message == "boom")));
       await session.dispose();

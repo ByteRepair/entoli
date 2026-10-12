@@ -40,26 +40,22 @@ void main() {
   });
 
   group("the i386 rootfs for iOS", () {
-    final image = alpine.imageFor("ios");
-
-    test("exists, since iSH emulates x86 and not the device's arm64", () {
-      expect(image, isNotNull);
-    });
+    final image = alpine.imageFor("ios")!;
 
     test("is the i386 Alpine minirootfs, not the arm64 one Android fetches", () {
-      expect(image!.arch, "i386");
+      expect(image.arch, "i386");
       expect(image.url, contains("/x86/"));
       expect(image.url, contains("alpine-minirootfs-3.24.1-x86.tar.gz"));
     });
 
     test("is checked before anything is unpacked, since it is a Linux that runs",
         () {
-      expect(image!.sha256,
+      expect(image.sha256,
           "634355e2245c9d56186d1b86fb6e034453eb303aea15b573ca250b343376fffd");
     });
 
     test("the size is exact, so the bar reads before the first byte arrives", () {
-      expect(image!.bytes, 3538048);
+      expect(image.bytes, 3538048);
     });
 
     test("the ios key is the only non-Android one the catalog carries", () {

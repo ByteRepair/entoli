@@ -61,16 +61,16 @@ void main() {
       expect(File("$dir/index.html").existsSync(), isTrue);
     });
 
-    test("answers null and stages nothing where the entry file is missing",
-        () async {
+    test("answers null where the artifact is not there", () async {
+      // Nothing at the hub by that id.
+      expect(await remote.fetch("c1", "gone", entryFile: "index.html"), isNull);
+
+      // The zip carries no entry file by the name the page asked for: null,
+      // and nothing staged.
       hub.artifacts["c1/a1"] = zipOf({"other.html": utf8.encode("<p>")});
       final dir = await remote.fetch("c1", "a1", entryFile: "index.html");
 
       expect(dir, isNull);
-    });
-
-    test("answers null where the artifact is not there", () async {
-      expect(await remote.fetch("c1", "gone", entryFile: "index.html"), isNull);
     });
 
     test("a re-fetch replaces the directory and takes the old one down",
