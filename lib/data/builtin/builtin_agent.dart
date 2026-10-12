@@ -215,12 +215,6 @@ class BuiltinSession {
 
   bool get isFresh => messages.isEmpty;
 
-  /// Whether anything has been said yet, which is what decides if a prompt is
-  /// dressed as the opening task. Not [isFresh]: the system prompt is written
-  /// into the same list, so a session that has one is not empty and has still
-  /// heard nothing.
-  bool get hasConversation => messages.any((m) => m.role != LlmRole.system);
-
   /// The conversation behind the system block: what [projectionOf] builds and
   /// what parity compares, the scaffolding above it being rewritten per turn.
   List<LlmMessage> get conversation =>
@@ -241,6 +235,13 @@ class BuiltinSession {
   /// The live tail: what the last turn appended beyond the covered prefix.
   List<LlmMessage> get tail =>
       conversation.sublist(coveredEntries);
+
+  /// The fill's bookkeeping: [messages] are the log span this conversation
+  /// words, one id to a message whatever the wordings a message words.
+  void coveredBy(List<Message> messages) {
+    covered = [for (final message in messages) message.id];
+    coveredEntries = conversation.length;
+  }
 
   /// The covered prefix grew by [entries] wordings worded over [ids] on the
   /// log — after a sync confirmed, or appended, those entries.

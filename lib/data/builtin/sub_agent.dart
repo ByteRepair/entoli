@@ -123,7 +123,9 @@ class SubAgentRunner {
     final said = unloggedMessage(
         MessageRole.user, DateTime.now(), [MessagePart.text(text: prompt)]);
     return _drive(session, agentPrompt, callId,
-        (agent) => agent.run(said, agentPrompt: agentPrompt));
+        // The task is dressed: a fresh session's first own mail, what the
+        // instance template frames it as.
+        (agent) => agent.run(said, agentPrompt: agentPrompt, mayDress: true));
   }
 
   /// Carry on the sub-agent [callId] left off in, over a session rebuilt from

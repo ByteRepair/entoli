@@ -107,32 +107,26 @@ Future<List<LlmMessage>> projectionOf(
       case MessageRole.user:
         final text = _userText(message);
         if (text.isEmpty) break;
+        // The dress is the viewer's first mail: in [first], once. A call
+        // that worded a delta or a live prompt already decided it is that
+        // message, and a fragment (first false) dresses nothing.
         final mine = addressedTo(message, viewer);
-        if (mine) {
-          // The dress is the viewer's first mail: in [first], once. A call
-          // that worded a delta or a live prompt already decided it is that
-          // message, and a fragment (first false) dresses nothing.
-          final dress = first && !myMailSeen;
-          myMailSeen = true;
-          projected.add(LlmMessage(
-            role: LlmRole.user,
-            text: userTurnText(text, at: message.createdAt, first: dress),
-            attachments: files[index],
-          ));
-        } else {
-          // Somebody else's mail: who it was for rides the wording, the way a
-          // peer reply's author does — a member reading the house's mail sees
-          // (main agent) where [addressees] is empty.
-          projected.add(LlmMessage(
-            role: LlmRole.user,
-            text: addressedUserTurnText(text,
+        final wording = mine
+            ? userTurnText(text, at: message.createdAt, first: first && !myMailSeen)
+            // Somebody else's mail: who it was for rides the wording, the
+            // way a peer reply's author does — a member reading the house's
+            // mail sees (main agent) where the say addressed nobody.
+            : addressedUserTurnText(text,
                 to: message.addressees.isEmpty
                     ? mainAgentLabel
                     : message.addressees.join(", "),
-                at: message.createdAt),
-            attachments: files[index],
-          ));
-        }
+                at: message.createdAt);
+        if (mine) myMailSeen = true;
+        projected.add(LlmMessage(
+          role: LlmRole.user,
+          text: wording,
+          attachments: files[index],
+        ));
       case MessageRole.assistant:
         // Someone else's reply reaches this viewer labeled as theirs: an
         // assistant message is, by provider convention, the model's own words,

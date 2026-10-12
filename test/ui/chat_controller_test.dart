@@ -2083,11 +2083,18 @@ void main() {
     test("the say the room routed to one member records who it addressed",
         () async {
       await _inTeam(app);
-      await chatWithOneTurn("hello @explore", project: "team");
+      final (id, _) =
+          await chatWithOneTurn("hello @explore", project: "team");
 
       // The routing record rides the say: the room's own answer to who a say
-      // was for, worded for every other participant by the projection.
+      // was for, worded for every other participant by the projection — the
+      // record on screen reads the same as the copy the backend worded.
+      final say = messagesOf(id).first;
+      expect(say.addressees, ["@explore"]);
       expect(app.backend.prompts.single.prompt.addressees, ["@explore"]);
+      // And the author stamp rides the reply, as the sync's covered ids
+      // expect.
+      expect(messagesOf(id).last.author, "@explore");
     });
 
     test("the house's mail words nobody", () async {
@@ -2104,21 +2111,6 @@ void main() {
       await waitIdle(id);
 
       expect(app.backend.prompts.single.prompt.addressees, isEmpty);
-    });
-
-    test("the room's settle bookkeeping never worded anything twice",
-        () async {
-      await _inTeam(app);
-      final (id, _) = await chatWithOneTurn("hello @explore", project: "team");
-
-      // The room's own exchange: the say records who it addressed; the reply
-      // carries the author stamp; the turn's records are what the sync's
-      // covered ids read — the session's wordings come from them.
-      final say = messagesOf(id).first;
-      expect(say.addressees, ["@explore"]);
-      final reply = messagesOf(id).last;
-      expect(reply.author, "@explore");
-      expect(app.backend.prompts.single.prompt.addressees, ["@explore"]);
     });
 
     test("a queued say records who it is for, at say time", () async {

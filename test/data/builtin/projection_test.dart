@@ -358,6 +358,15 @@ void main() {
         parts: parts ?? const [MessagePart.text(text: "the logs say 404")],
         author: by);
 
+    /// A say the room routed: [to] is who it addressed, sigils on as typed.
+    Message addressed(String text, List<String> to) => Message(
+          id: "m${next++}",
+          role: MessageRole.user,
+          createdAt: at,
+          parts: [MessagePart.text(text: text)],
+          addressees: to,
+        );
+
     test("another member's reply reads as a labeled message, not as the viewer's own",
         () async {
       final projected = await project([
@@ -427,14 +436,6 @@ void main() {
 
     test("the room's says word who they were addressed to, per viewer",
         () async {
-      Message addressed(String text, List<String> addressees) => Message(
-            id: "m${next++}",
-            role: MessageRole.user,
-            createdAt: at,
-            parts: [MessagePart.text(text: text)],
-            addressees: addressees,
-          );
-
       // A say addressed to the researcher, read by the reviewer: the
       // addressee is on the face of it, and the reviewer's model is not told
       // the user was talking to them.
@@ -473,12 +474,7 @@ void main() {
     test("the group a say addressed words whole, for a member it left out",
         () async {
       final projected = await project([
-        Message(
-            id: "m${next++}",
-            role: MessageRole.user,
-            createdAt: at,
-            parts: const [MessagePart.text(text: "look into it")],
-            addressees: const ["@researcher", "@reviewer"]),
+        addressed("look into it", const ["@researcher", "@reviewer"]),
       ], viewer: "planner");
 
       expect(projected.single.text, contains("addressed to @researcher, @reviewer"));
@@ -486,14 +482,6 @@ void main() {
 
     test("the dress is the viewer's first own mail, not the room's opener",
         () async {
-      Message addressed(String text, List<String> to) => Message(
-            id: "m${next++}",
-            role: MessageRole.user,
-            createdAt: at,
-            parts: [MessagePart.text(text: text)],
-            addressees: to,
-          );
-
       // The room opened on the house's mail; the reviewer's first own mail
       // came later, and is what their session dresses.
       final forReviewer = await project([

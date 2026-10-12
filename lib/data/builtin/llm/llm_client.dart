@@ -1,6 +1,8 @@
 import "dart:convert";
 import "dart:typed_data";
 
+import "package:collection/collection.dart";
+
 /// The conversation as a provider sees it. Deliberately not `Message` from the
 /// domain: that is what Entoli persists, this is what goes over the wire,
 /// and the two diverge (a tool result is a message here, a part there).
@@ -12,6 +14,19 @@ class LlmToolCall {
   final String id;
   final String name;
   final String argumentsJson;
+
+  /// By field: the session's wordings are built twice over the same records
+  /// (live, and read back), and every parity check between them compares
+  /// these by value.
+  @override
+  bool operator ==(Object other) =>
+      other is LlmToolCall &&
+      id == other.id &&
+      name == other.name &&
+      argumentsJson == other.argumentsJson;
+
+  @override
+  int get hashCode => Object.hash(id, name, argumentsJson);
 }
 
 /// A file the user attached, as the provider takes it. Text is inlined into
@@ -35,6 +50,19 @@ class LlmAttachment {
   late final String base64 = base64Encode(bytes);
 
   late final String asText = utf8.decode(bytes, allowMalformed: true);
+
+  /// By field, as [LlmToolCall]'s — the bytes read back from the same file
+  /// are the same bytes, two instances or not.
+  @override
+  bool operator ==(Object other) =>
+      other is LlmAttachment &&
+      filename == other.filename &&
+      mimeType == other.mimeType &&
+      const ListEquality<int>().equals(bytes, other.bytes);
+
+  @override
+  int get hashCode =>
+      Object.hash(filename, mimeType, const ListEquality<int>().hash(bytes));
 }
 
 class LlmMessage {
