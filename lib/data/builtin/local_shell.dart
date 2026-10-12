@@ -1135,13 +1135,12 @@ class _OneShotRun implements ShellRun {
     "create", "mkdir", "unlink", "rename", "link", "truncate", "chmod",
   };
   final found = <String, bool>{};
-  var reported = 0;
+  var explained = 0;
   for (final line in reportLines) {
     final tab = line.indexOf("\t");
     final op = tab < 0 ? "" : line.substring(0, tab).trim();
     final raw = tab < 0 ? line : line.substring(tab + 1);
     if (raw.trim().isEmpty) continue;
-    reported++;
     final path = resolve(raw);
     if (pathInside(path, workspace) ||
         tmp != null && pathInside(path, tmp) ||
@@ -1153,17 +1152,19 @@ class _OneShotRun implements ShellRun {
     // command was about.
     if (path == "/dev/null" || path == "/dev/tty") continue;
     found[path] = (found[path] ?? false) || writeOps.contains(op);
+    explained++;
     if (found.length >= 5) break;
   }
 
   // The prose cross-check. The denial words are few and stable — what the
   // kernel's refusals read like in C — and only a report that named nothing
-  // while they appear is a channel problem, not a wording problem: a report
+  // of its own while they appear is a channel problem, not a wording
+  // problem: a line about shell plumbing or a denial inside the grant
+  // explains nothing the output screams about and does not count. A report
   // line and a prose line of the same denial collapse into one entry.
   final proseDenied = RegExp(r"Permission denied|Read-only file system|"
       r"Operation not permitted");
-  final unreported =
-      proseDenied.hasMatch(outputText) && (reported == 0);
+  final unreported = proseDenied.hasMatch(outputText) && (explained == 0);
 
   return (
     violations: [
