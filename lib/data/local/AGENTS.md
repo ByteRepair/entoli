@@ -95,7 +95,7 @@ it is worth weighing before anything is added back to it.
 
 `byte-repair-setup.sh` answers to what it is told and probes nothing. Where to
 install is the store's `ENV_INSTALL_DIR` — `/usr/local/bin` inside a guest, the
-app's own `<cacheDir>/byte-repair/bin` on the host — and the script exits
+app's own `<cacheDir>/byte-repair/bin` on the Linux host — and the script exits
 rather than guess a destination. What installs packages is the driver's
 `ENV_PACKAGE_MANAGER` — `apk` in a guest, from the same `Rootfs.packageManager`
 the system prompt names, and nothing on the host, whose package manager is not
@@ -111,7 +111,8 @@ done nothing. The run ends on a verification of the binary that stands at the
 end (the fetched one, else whatever PATH answers); if that will not run,
 setup exits 1 and the settings page shows the loader's error.
 
-On the host the fetched tools reach their turns through the driver: `platformDriver`
+On the Linux host the fetched tools reach their turns through the driver:
+`platformDriver`
 prefixes the bin directory onto `PATH` for rootfs-isolated projects alone, the
 way the project's rootfs copy is its own. A user-set `PATH` in the command
 environment still wins over it. The chat page's setup gate asks after the

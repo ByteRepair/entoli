@@ -123,19 +123,9 @@ See "Byte Repair's environment, in two variables" in `lib/data/local/AGENTS.md`.
 On
 Android the "Host" terminal env has no package manager, so the category says
 so and hides the rest until a rootfs is picked from Terminal; on every other
-platform the host shell is the only env and is capable. **Sync** is paired devices — this device's name,
-the paired-device list, and the
-pairing controls. A pairing never renders inline: window, invite and pasted
-code all move to a screen of their own that ends on a paired screen naming
-the device, with Pair another device on it — see "The pairing flows as pages"
-in `lib/data/sync/AGENTS.md`. A paired device's row clicks through to its own
-page (Paired device page, `lib/ui/settings/paired_device_page.dart`) — the
-record and a rename, then both fingerprints under "Device fingerprint" and
-"This device" with the explanation of the comparison they exist for. The Sync
-list itself draws no fingerprint. The relay and TURN settings are screens
-of their own behind two rows on the page, and Keep connected off screen is
-Android's row only — the one platform whose process freezes with the screen.
-See `lib/data/sync/AGENTS.md` for the threat model and
+platform the host shell is the only env and is capable. **Sync** is paired devices — this device's identity and
+name, the relay and TURN settings for internet pairing, the paired-device list,
+and the pairing window. See `lib/data/sync/AGENTS.md` for the threat model and
 handshake. **Providers** is the endpoints — and the keys, which are not in
 `settings.json` at all: a key typed into the provider dialog (or the
 recommended-provider card) goes to the secret store, under the provider's id,

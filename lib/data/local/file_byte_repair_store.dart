@@ -102,6 +102,27 @@ class FileByteRepairStore extends ByteRepairStore {
     }
   }
 
+  @override
+  String? get environmentDeletion {
+    // What the setup leaves on disk is what a delete takes away, so the
+    // dialog words it from the disk rather than from the platform: a Host
+    // env on Android made no copy, and a desktop that has not run a setup
+    // fetched nothing — the clause drops out of the dialog, which then
+    // names the workspace and the chats alone. The host install checks the
+    // bin itself; the delete takes the cache directory around it, but the
+    // bin is the one tree a run actually creates.
+    final rootfs =
+        Directory(p.join(config.projectDir(project: project), "rootfs"));
+    if (rootfs.existsSync()) {
+      return "the Byte Repair rootfs (the Linux copy and everything "
+          "installed into it)";
+    }
+    if (installDir != null && Directory(installDir!).existsSync()) {
+      return "the tools the setup fetched into the app's cache directory";
+    }
+    return null;
+  }
+
   /// The per-project rootfs directory for the currently selected rootfs id, or
   /// null where the copy has not been created yet.
   String? get _rootfsDir {

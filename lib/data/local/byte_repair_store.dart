@@ -8,9 +8,10 @@ import "../../domain/shell.dart";
 
 /// Installs and queries the Byte Repair tooling — make, github-cli and ESBMC —
 /// so they are on PATH for every agent turn in the project. The install runs
-/// through the configured terminal env (proot rootfs on Android, host shell on
-/// desktop) with [project], so it reaches the project's own rootfs instance or
-/// the injected bin directory.
+/// through the configured terminal env (proot rootfs on Android, the host
+/// shell on the desktops, with a bin directory to inject on Linux alone) with
+/// [project], so it reaches the project's own rootfs instance or the injected
+/// bin directory.
 ///
 /// The script's environment is declared by the caller, never probed by the
 /// script: [installDir] is where tools land (`/usr/local/bin` inside a guest,
@@ -47,12 +48,13 @@ abstract class ByteRepairStore {
   final String workspace;
 
   /// Where the install script puts the tools it fetches: the rootfs's own
-  /// `/usr/local/bin` inside a guest, the app's bin directory on the host.
-  /// Always set where an install can run — the script refuses to guess a
-  /// destination itself. Null where there is nothing to point at — a guest
+  /// `/usr/local/bin` inside a guest, the app's bin directory on the Linux
+  /// host. Always set where an install can run — the script refuses to guess
+  /// a destination itself. Null where there is nothing to point at — a guest
   /// reaches its own `/usr/local/bin` without help, and platforms with no
-  /// host shell have no host install — so a null here is "no host install",
-  /// never a path the script may guess around.
+  /// host install — macOS among the desktops, and the web — have none — so a
+  /// null here is "no host install", never a path the script may guess
+  /// around.
   final String? installDir;
 
   /// How long the install script may run. Thirty minutes on the host, where
@@ -121,11 +123,21 @@ abstract class ByteRepairStore {
   Future<String?> importEsbmc(XFile file);
 
   /// Deletes the Byte Repair environment: the per-project rootfs (the Alpine
-  /// copy and everything installed into it), the workspace (cloned repos,
-  /// scratch files), and the `.setup-complete` marker. Chats are the settings
-  /// page's to delete, through the repository. Null on success, an error
-  /// message on failure.
+  /// copy and everything installed into it) on Android, the fetched tools'
+  /// cache directory on the Linux host, the workspace (cloned repos, scratch
+  /// files), and the `.setup-complete` marker. Chats are the settings page's
+  /// to delete, through the repository. Null on success, an error message on
+  /// failure.
   Future<String?> deleteEnvironment();
+
+  /// One line naming what [deleteEnvironment] clears of the environment, for
+  /// the settings page's confirm dialog: the setup's own tree, whatever state
+  /// it left behind. null where nothing setup made is on disk — the dialog
+  /// then names the workspace and the chats alone, which is what a platform
+  /// with no install destination (macOS, the web) has. Reading the disk is
+  /// the state, not the platform: a Host env on Android copies nothing, and
+  /// a desktop with a destination may not have run a setup yet either.
+  String? get environmentDeletion;
 
   /// Runs `<command> --version` through [shell] and returns its raw output, or
   /// null where the command is not installed or the call failed. All three tools
@@ -171,7 +183,7 @@ class UnavailableByteRepairStore extends ByteRepairStore {
     required super.config,
     required super.project,
     required super.workspace,
-  });
+  }) : super(installDir: null);
 
   static const _why =
       "Byte Repair needs a terminal environment, which this platform does not have.";
@@ -187,4 +199,7 @@ class UnavailableByteRepairStore extends ByteRepairStore {
 
   @override
   Future<String?> deleteEnvironment() async => _why;
+
+  @override
+  String? get environmentDeletion => null;
 }

@@ -15,6 +15,8 @@ import "package:agent_chat/core/config.dart";
 import "package:agent_chat/data/builtin/llm/local_prefill.dart";
 import "package:agent_chat/data/builtin/local_shell.dart";
 import "package:agent_chat/data/local/file_chat_store.dart";
+import "package:agent_chat/data/local/byte_repair_store.dart"
+    show guestEsbmcInstallDir;
 import "package:agent_chat/data/local/file_byte_repair_store.dart";
 import "package:agent_chat/data/sync/sync_hub.dart" show RemoteChatEntry, SyncHub;
 import "package:agent_chat/domain/sync/devices.dart";
@@ -126,6 +128,11 @@ class TestApp {
   /// build could run one at all — the two halves the Terminal page turns on.
   /// The default is a build with no proot in it, which is every platform but
   /// Android and so what most of the suite should be pretending to be.
+  /// [byteRepairInstallDir] is where a host setup would land its tools, which
+  /// decides whether the Byte Repair section can run one at all. The default
+  /// is the guest's `/usr/local/bin`, the Android answer, which keeps the
+  /// section capable in every other fixture; null is a desktop with no
+  /// install destination, macOS's shape.
   /// [abi] is what the device answers with, and only Android answers at all —
   /// so it is named by a test that is about one, and left alone by the rest.
   /// [systemAccent] is the colour the system is themed to, which is the other
@@ -158,6 +165,7 @@ class TestApp {
     NativeVoiceEngines nativeVoice = NativeVoiceEngines.none,
     Set<String> linuxes = const {},
     bool proot = false,
+    String? byteRepairInstallDir = guestEsbmcInstallDir,
     Set<String> localModels = const {},
     FakeLocalLlm? localLlm,
     bool prefill = false,
@@ -266,6 +274,7 @@ class TestApp {
               config: config,
               project: ByteRepairProject().dir,
               workspace: config.projectWorkspaceDir(project: ByteRepairProject().dir),
+              installDir: byteRepairInstallDir,
               rootfsStore: linux)),
           installedRootfsProvider.overrideWith(() => InstalledRootfs(linuxes)),
           localModelStoreProvider.overrideWithValue(onDevice),
@@ -764,6 +773,13 @@ Future<void> openCategory(WidgetTester tester, SettingsCategory category) async 
   // with the top of the list, which would push the categories above it out of
   // the tree and leave the next call with nothing to tap.
   if (categoryTile.evaluate().isEmpty) await scrollTo(tester, categoryTile);
+  // Found is not tappable: the tile low in the list is built into the cache
+  // extent before it is scrolled to, so the tap's aim can land past the
+  // window's edge and miss. Make visible what the drag above left waiting.
+  if (categoryTile.evaluate().isNotEmpty) {
+    await tester.ensureVisible(categoryTile);
+    await tester.pumpAndSettle();
+  }
   await tester.tap(categoryTile);
   await settleIo(tester);
 }
