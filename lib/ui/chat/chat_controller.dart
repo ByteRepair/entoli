@@ -339,8 +339,13 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
   final List<Message> _said = [];
 
   Future<void> _sayLater(String text, List<MessagePart> files) async {
-    final userMsg = ref.read(chatRepositoryProvider).composeUserPrompt(text,
+    final say = ref.read(chatRepositoryProvider).composeUserPrompt(text,
         project: state.chat?.state.project, files: files);
+    // The routing record rides the say the moment it lands, the same stamp a
+    final userMsg = state.chat == null
+        ? say
+        : say.copyWith(
+            addressees: _stampedMentions(state.chat!, say));
     // The say lands on the log through the room's one append funnel; state
     // is re-read after the write, so what changed in flight is not ours to
     // revert.
@@ -543,10 +548,26 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
     // heard of Omada — so the first flip is the on-flip; the off-flip is
     // what bounds an on-section for the label rule.
     final omada = ref.read(omadaOnProvider(chat.state.project));
+    final head = opening.first;
+    // The room's routing record rides the say where it is written: who it
+    // addressed, when it is one being said now — a handoff (the reply whose
+    // mention routes the next member) carries none, its mail being behind it.
     final openingWithMode = [
-      opening.first.copyWith(omadaOn: omada),
+      head.role == MessageRole.user
+          ? head.copyWith(
+              omadaOn: omada, addressees: _stampedMentions(chat, head))
+          : head.copyWith(omadaOn: omada),
       ...opening.sublist(1),
     ];
+    // The say travels to the backend with the routing record on it, whatever
+    // role the prompt is: a say said now is stamped here, an already-logged
+    // one kept as it was recorded, and a handoff's prompt (the mentioning
+    // reply) carries none. The room's other participants word this message
+    // later through the settle, so the copy they word is the stamped one.
+    final say = prompt.role == MessageRole.user
+        ? prompt.copyWith(
+            omadaOn: prompt.omadaOn ?? omada, addressees: _stampedMentions(chat, prompt))
+        : prompt;
     final updated = chat
         .withTurn(openingWithMode, replacing: replacing)
         .copyWith(state: chat.state.copyWith(updatedAt: DateTime.now()));
@@ -598,7 +619,7 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
       }
       return;
     }
-    _listen(turn, repo.sendPrompt(chatId, prompt,
+    _listen(turn, repo.sendPrompt(chatId, say,
         history: history,
         compactions: chat.compactions,
         replaces: replacing != null,
@@ -1187,6 +1208,14 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
         : mentionsIn(message.plainText,
             ref.read(promptLibraryProvider(chat.state.project)));
   }
+
+  /// The routing record a say carries: [mentioned]'s answer, sigils on — the
+  /// as-typed dialect the author stamp and the mention documents keep, and
+  /// the one the projection words addresses and identities in.
+  List<String> _stampedMentions(Chat chat, Message message) => [
+        for (final member in mentioned(chat, message))
+          "${CompletionKind.agent.trigger}$member",
+      ];
 
   /// The room's scheduling. `_schedules` is one FIFO per member of what they
   /// have been addressed to run; a member runs one turn at a time and reads

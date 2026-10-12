@@ -284,6 +284,13 @@ abstract class Message with _$Message {
     /// written before this existed.
     String? author,
 
+    /// The members the room routed this say to, sigils on as typed, in the
+    /// order mentioned — the room's own record of who was being spoken to,
+    /// not a re-parse of the text. Empty is the house's mail, and every
+    /// message written before the field existed. A member's reply carries
+    /// none: who it addresses is the mention in its text.
+    @Default([]) List<String> addressees,
+
     /// The room's Omada state when this turn was opened, written on the
     /// turn's first message by the controller. What sections the thread
     /// holds derives from these stamps. Null on every message that is not a

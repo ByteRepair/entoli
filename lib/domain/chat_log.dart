@@ -80,6 +80,8 @@ sealed class ChatRecord with _$ChatRecord {
     @Default({}) Map<String, String> documents,
     /// See [Message.author]. About the message, like [documents].
     String? author,
+    /// See [Message.addressees]. About the message, like [documents].
+    @Default([]) List<String> addressees,
     /// See [Message.omadaOn]. About the message, like [documents].
     bool? omadaOn,
   }) = MessageRecord;
@@ -226,6 +228,7 @@ Replayed replayTree(Iterable<ChatRecord> records) {
           :final replacesSibling,
           :final documents,
           :final author,
+          :final addressees,
           :final omadaOn
         ):
         // A branch of a message that has since been deleted goes on the end
@@ -243,6 +246,7 @@ Replayed replayTree(Iterable<ChatRecord> records) {
             createdAt: createdAt,
             documents: documents,
             author: author,
+            addressees: addressees,
             omadaOn: omadaOn);
         // After this one has joined them, so what it replaces is still there to
         // be found — and so that one record says the whole of where a message
@@ -411,6 +415,7 @@ List<ChatRecord> recordsOf(List<Message> messages,
           createdAt: message.createdAt,
           documents: message.documents,
           author: message.author,
+          addressees: message.addressees,
           omadaOn: message.omadaOn,
           siblingOf: at == 0 ? siblingOf : null,
           replacesSibling: at == 0 && replacing,

@@ -1,5 +1,6 @@
 import "dart:async";
 import "dart:convert";
+import "dart:math" as math;
 
 import "package:collection/collection.dart";
 import "package:flutter/foundation.dart";
@@ -11,6 +12,7 @@ import "../../domain/agent_backend.dart";
 import "../../domain/trigger_manager.dart" show TriggerRegistryFactory;
 import "../../domain/app_settings.dart";
 import "../../domain/ask.dart";
+import "../../domain/chat_log.dart" show replayTree;
 import "../../domain/chat_store.dart";
 import "../../domain/file_tools.dart";
 import "../../domain/llm_provider.dart";
@@ -374,6 +376,7 @@ class BuiltinBackend implements AgentBackend {
           compactions: compactions);
       final agent = BuiltinAgent(
         session: session,
+        viewer: settings.omadaMember,
         loadResource: _resourcesOf(chatId),
         client: gatedClient,
         shell: shell,
@@ -461,9 +464,18 @@ class BuiltinBackend implements AgentBackend {
           : memberPrompt(libraryFor(settings.project), settings.omadaMember!);
       final mentions = agentPromptFrom(said?.documents ?? const {});
       final agentPrompt = memberBody ?? mentions;
+      // The dress is the room's: the viewer's first own mail, which is what a
+      // whole-span walk of the history decides — and what the session the
+      // turn is about to word into answers when the history is a fresh
+      // session's own (an empty history says nothing yet only of a
+      // conversation that has not begun). A warm session and an empty history
+      // is the caller saying nothing about the room; it does not dress.
+      final mayDress = !(!session.isFresh && history.isEmpty) &&
+          !history.any((m) => addressedTo(m, settings.omadaMember));
       final events = prompt == null
           ? agent.resume(agentPrompt: agentPrompt)
-          : agent.run(prompt, agentPrompt: agentPrompt);
+          : agent.run(prompt,
+              agentPrompt: agentPrompt, mayDress: mayDress);
 
       var reply = "";
       var endedDone = false;
@@ -581,29 +593,26 @@ class BuiltinBackend implements AgentBackend {
     // The same two functions a turn with a model in it uses, over the same one
     // part that was just reported: the prompt through `projectionOf`, the reply
     // through `assistantMessages`. The `!` turn writes its own reply, and that
-    // is the only way it differs.
-    final opens = !session.hasConversation;
+    // is the only way it differs. The dress is the room's fact: the house's
+    // first house-mail dresses, and an empty history on a warm session says
+    // nothing about the room, so it does.
+    final dress = !(!session.isFresh && history.isEmpty) &&
+        !history.any((m) => addressedTo(m, null));
     session.messages
       ..addAll(await projectionOf([prompt],
-          first: opens, load: _resourcesOf(chatId)))
+          first: dress, load: _resourcesOf(chatId)))
       ..addAll(assistantMessages([part]));
   }
 
-  /// The chat's session, filled from [history] where it is one this backend was
-  /// not already holding — which is a chat opened after a restart, and empty.
-  /// Filling it is what keeps the conversation going rather than starting it
-  /// over. [rebuild] fills it whether or not it is empty, which a resume does
-  /// so that carrying on in the same process and carrying on after a restart
-  /// put the same thing in front of the model — a checkpoint that failed is
-  /// swallowed, so a live session can hold more than the log does.
+  /// The chat's session, worded for [viewer] — null the house — and filled
+  /// from [history] where a fill is due: a session this backend was never
+  /// holding (a chat opened after a restart, and each participant of a room
+  /// whose turn this is fills whole, worded for them), or one a resume
+  /// rebuilds whether or not it is held.
   ///
-  /// [viewer] is the member answering, whose session is worded for them — the
-  /// other participants' replies as labeled user messages — and rebuilt from
-  /// the log on every turn of theirs: the session is a cache, the log is the
-  /// truth, and whoever else spoke since they last ran is in the log by the
-  /// time they are called. The main agent's session keeps the warm path it
-  /// has always had; there is one main agent per chat, so nothing can have
-  /// written into its view since.
+  /// **A warm session runs `_syncSession` first** — the room's history worded
+  /// onto it, appended where the log has gained since the covered ids. See
+  /// that method for the one rule it is.
   ///
   /// [compactions] ride with [history] the way it rides with the prompt: the
   /// projection reads only the markers whose boundary the history holds, so a
@@ -615,14 +624,172 @@ class BuiltinBackend implements AgentBackend {
       List<ConversationCompaction> compactions = const []}) async {
     final key = viewer == null ? chatId : "$chatId\u0000$viewer";
     final session = _sessions.putIfAbsent(key, BuiltinSession.new);
-    if (rebuild || viewer != null || session.isFresh) {
+    if (rebuild || session.isFresh) {
       session.replaceWith(await projectionOf(history,
-          load: _resourcesOf(chatId),
-          viewer: viewer,
-          compactions: compactions));
+          load: _resourcesOf(chatId), viewer: viewer, compactions: compactions));
+      session
+        ..covered = [for (final message in history) message.id]
+        ..coveredEntries = session.conversation.length;
+      return session;
     }
+    await _syncSession(session, chatId, history, viewer: viewer);
     return session;
   }
+
+  /// The warm session behind [history] — which is the thread as the room
+  /// holds it now, ending before the prompt this dispatch is sending. The
+  /// session is a cache the log is the truth of; in a room other
+  /// participants write while this one is idle, and **this one rule is how
+  /// every participant catches up**: the span the log gained since the
+  /// session's covered prefix is worded onto the covered end, one wording per
+  /// message — which is one a projection of a whole span also builds, the cwd
+  /// note included — with the messages already held (say the last turn's own
+  /// prompt and reply, the live tail) confirmed against the log's wordings
+  /// and covered, so nothing is worded and nothing re-encodes twice, and the
+  /// warm prefix stays a prefix.
+  ///
+  /// What the log no longer explains is re-worded **from the log itself** —
+  /// the store's records, replayed — never from the caller's history, whose
+  /// stale copy is exactly what a held session's own words are there to win
+  /// over: a rewind the explicit reset missed, a tail richer than the log (a
+  /// checkpoint that failed, an aborted turn's last second). The wording
+  /// failures a divergence can have are the store's; a session left behind
+  /// here is re-synced at the next dispatch over whatever the log says then.
+  Future<void> _syncSession(
+    BuiltinSession session,
+    String chatId,
+    List<Message> history, {
+    required String? viewer,
+  }) async {
+    // No history is the caller saying nothing about the room — the held
+    // words stand, whatever they are. The room's own dispatches always pass
+    // the thread; the shortcut belongs to the fills.
+    if (history.isEmpty) return;
+    final covered = session.covered;
+    final ids = [for (final message in history) message.id];
+    final headMismatch = !const ListEquality<String>()
+        .equals(ids.take(covered.length).toList(), covered);
+    if (headMismatch) {
+      return _refillFromLog(session, chatId, viewer: viewer);
+    }
+    final gained = history.sublist(covered.length);
+    if (gained.isEmpty) return;
+
+    // The dress, per message, is a fact of the room: the viewer's first own
+    // mail dresses and nothing after it does. [before] is what the covered
+    // span holds; [ownBefore] carries through the walk.
+    final before = history.take(covered.length).toList();
+    var ownBefore = before.any((m) => addressedTo(m, viewer));
+
+    final tail = session.tail;
+    if (tail.isEmpty) {
+      // Nothing to confirm; the whole gained span is new wordings.
+      await _wordings(session, chatId, gained,
+          viewer: viewer, ownBefore: ownBefore);
+      return;
+    }
+    final flat = <LlmMessage>[];
+    final widths = <int>[];
+    for (final message in gained) {
+      final mine = addressedTo(message, viewer);
+      final entries = await projectionOf([message],
+          first: mine && !ownBefore,
+          viewer: viewer,
+          load: _resourcesOf(chatId));
+      widths.add(entries.length);
+      flat.addAll(entries);
+      ownBefore = ownBefore || mine;
+    }
+    // The live tail beyond the covered prefix is the last turns' own
+    // wording, which the log now explains; confirm the leading wordings
+    // whole messages at a time, and word on from there.
+    final common = _commonPrefix(tail, flat);
+    var matched = 0, at = 0;
+    while (at < gained.length && matched + widths[at] <= common) {
+      matched += widths[at];
+      at++;
+    }
+    if (matched != common ||
+        (matched < flat.length && common < tail.length)) {
+      // The wording diverges inside a message, or there is log to word
+      // after a tail the projection does not word whole: the log says it
+      // again, from itself.
+      return _refillFromLog(session, chatId, viewer: viewer);
+    }
+    // Whatever the log words past the tail, the session words too; a tail
+    // the log words less of stays, un-covered and picked up at no later
+    // dispatch until the next divergence fills whole.
+    session.messages.addAll(flat.sublist(matched));
+    session.advance(flat.length, [for (final message in gained) message.id]);
+  }
+
+  /// Fill [session] whole from the log, the room's one source of truth. A
+  /// log that says nothing leaves the session as it stands — the held words
+  /// are all the truth there is, and a divergence with nothing to resolve
+  /// against is left alone.
+  Future<void> _refillFromLog(
+      BuiltinSession session, String chatId,
+      {required String? viewer}) async {
+    final replayed = replayTree(await store.readRecords(chatId));
+    if (replayed.messages.isEmpty) return;
+    session.replaceWith(await projectionOf(replayed.messages,
+        load: _resourcesOf(chatId),
+        viewer: viewer,
+        compactions: replayed.compactions));
+    session
+      ..covered = [for (final message in replayed.messages) message.id]
+      ..coveredEntries = session.conversation.length;
+  }
+
+  /// Word [messages] onto [session] for [viewer] — the wordings the log
+  /// gained beyond what the covered set holds, appended and recorded. The
+  /// dress, per message, is the room's fact: the viewer's first own mail
+  /// dresses and nothing after it does, [ownBefore] being whether theirs has
+  /// gone by before [messages] did.
+  Future<void> _wordings(
+    BuiltinSession session,
+    String chatId,
+    List<Message> messages, {
+    required String? viewer,
+    required bool ownBefore,
+  }) async {
+    var worded = 0;
+    final ids = <String>[];
+    for (final message in messages) {
+      if (session.covered.contains(message.id)) continue;
+      final mine = addressedTo(message, viewer);
+      final entries = await projectionOf([message],
+          first: mine && !ownBefore, viewer: viewer, load: _resourcesOf(chatId));
+      session.messages.addAll(entries);
+      ids.add(message.id);
+      worded += entries.length;
+      ownBefore = ownBefore || mine;
+    }
+    if (ids.isNotEmpty) {
+      session.advance(worded, ids);
+    }
+  }
+
+  /// Where two message lists first differ, their common prefix length.
+  static int _commonPrefix(List<LlmMessage> a, List<LlmMessage> b) {
+    final n = math.min(a.length, b.length);
+    var at = 0;
+    while (at < n && _sameWording(a[at], b[at])) {
+      at++;
+    }
+    return at;
+  }
+
+  /// Byte-for-byte the same conversation entry — what parity says a live
+  /// accumulation and a projection of the same records are.
+  static bool _sameWording(LlmMessage a, LlmMessage b) =>
+      a.role == b.role &&
+      a.text == b.text &&
+      a.reasoning == b.reasoning &&
+      a.reasoningSignature == b.reasoningSignature &&
+      a.toolCallId == b.toolCallId &&
+      const ListEquality<LlmToolCall>().equals(a.toolCalls, b.toolCalls) &&
+      const ListEquality<LlmAttachment>().equals(a.attachments, b.attachments);
 
   /// The user's own `!` command, watched through the agent's one watch shape —
   /// no call id, there being nothing called a tool.
@@ -1159,10 +1326,16 @@ class BuiltinBackend implements AgentBackend {
       {List<Message> history = const [],
       List<ConversationCompaction> compactions = const []}) async {
     await _running.stopAll(chatId);
-    _sessions
-        .putIfAbsent(chatId, BuiltinSession.new)
-        .replaceWith(await projectionOf(history,
-            load: _resourcesOf(chatId), compactions: compactions));
+    final house = _sessions.putIfAbsent(chatId, BuiltinSession.new);
+    house.replaceWith(await projectionOf(history,
+        load: _resourcesOf(chatId), compactions: compactions));
+    house
+      ..covered = [for (final message in history) message.id]
+      ..coveredEntries = house.conversation.length;
+    // The room's other participants read on their own dispatches, which the
+    // sync fills from wherever the log now is: a session worded for them
+    // before the rewind holds a conversation the log no longer describes.
+    _sessions.removeWhere((key, _) => key.startsWith("$chatId\u0000"));
   }
 
   @override
