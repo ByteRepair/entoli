@@ -204,6 +204,8 @@ void main() {
           reason: "the waiter installs this once the process is gone");
       expect(scripts, hasLength(1));
       expect(scripts.single, contains("Wait-Process -Id"));
+      expect(scripts.single, contains("-Verb RunAs"),
+          reason: "silent mode suppresses the elevation prompt; RunAs asks");
       expect(scripts.single, contains("'/qn'"));
       expect(scripts.single, contains("'${msi.path}'"));
     });
@@ -211,6 +213,9 @@ void main() {
     test("the waiter waits for the app and installs silently", () {
       final script = windowsUpdateCommand(4242, r"C:\Users\a b\entoli.msi");
       expect(script, startsWith("Wait-Process -Id 4242 "));
+      expect(script, contains("-Verb RunAs"),
+          reason: "the per-machine install cannot elevate itself; RunAs "
+              "is the prompt the user answers at quit");
       expect(script, contains("'/i'"));
       expect(script, contains("'/qn'"));
       expect(script, contains("'/norestart'"));
