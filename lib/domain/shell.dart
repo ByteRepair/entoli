@@ -107,6 +107,16 @@ class CommandSandbox {
   static String violationsNote(List<String> violations) =>
       "\n\nDenied by the sandbox: ${violations.join("; ")}. The command "
       "carried on; what it printed above is what it could reach.";
+
+  /// This one with [extraWrites] replacing its own — the grant policy's
+  /// addition composed on the run's sandbox, where the granted paths ride
+  /// beside the workspaces rather than a rebuild of the whole shape.
+  CommandSandbox copyWith({List<String>? extraWrites}) => CommandSandbox(
+        workspace: workspace,
+        tmp: tmp,
+        home: home,
+        extraWrites: extraWrites ?? this.extraWrites,
+      );
 }
 
 /// Whether [path] is [root] or under it, compared by components so `/w/x`

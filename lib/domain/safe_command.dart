@@ -26,6 +26,7 @@ const nonModifyingPrograms = {
   "df",
   "pwd",
   "echo",
+  "printf",
   "true",
   "uname",
   "whoami",
@@ -62,7 +63,7 @@ const nonModifyingPrograms = {
 /// Programs non-modifying only when none of these words appear among their
 /// arguments — the write-, execute- or set-capable flags of otherwise safe
 /// tools. A listed flag present means the segment is not proven read-only.
-const _guardedFlags = <String, Set<String>>{
+const guardedFlags = <String, Set<String>>{
   "sort": {"-o", "--output"},
   "file": {"-m", "--magic-file", "-f", "--files-from", "-C", "--compile"},
   "find": {
@@ -80,7 +81,9 @@ const _guardedFlags = <String, Set<String>>{
 };
 
 /// The read-only subcommands of `git`. The command carries its own guards:
-/// flags and sub-sub-commands of these that write are in [gitGuardedArgs].
+/// flags and sub-sub-commands of these that write are in [gitGuardedArgs],
+/// and the two whose bare positional argument creates a thing — `git branch
+/// feature`, `git tag v1` — take the positional rule in [_gitProfile].
 const _gitNonModifyingSubcommands = {
   "status",
   "log",
@@ -125,7 +128,7 @@ const gitGuardedArgs = {
   "tag": {"-a", "-s", "-d", "-f", "-m", "-F", "--force"},
   "diff": {"--output"},
   "log": {"--output"},
-  "reflog": {"-delete", "expire"},
+  "reflog": {"delete", "-delete", "expire"},
   "remote": {
     "add",
     "remove",
@@ -134,50 +137,27 @@ const gitGuardedArgs = {
     "set-head",
     "set-branches",
     "prune",
+    "update",
   },
   "worktree": {"prune", "remove", "lock", "unlock", "move", "repair"},
 };
+
+/// Whether any of [args] trips [guards] — the flags' plain forms and their
+/// `--flag=value` spellings. One predicate for every reader of the guard
+/// tables, so the flag tables cannot mean two things to two callers.
+bool anyGuardedArg(Set<String>? guards, Iterable<String> args) {
+  if (guards == null) return false;
+  return args.any((w) {
+    final lower = w.toLowerCase();
+    return guards.contains(lower) || guards.any((g) => lower.startsWith("$g="));
+  });
+}
 
 /// The fetcher family: shell programs whose work is reaching a host, so a
 /// segment starting with one of these is consulted under the same rules the
 /// `webfetch` tool answers to. Package managers are deliberately absent —
 /// their network half comes attached to installs, which are mutations.
 const fetchFamilyPrograms = {"curl", "wget", "wget2", "http", "https"};
-
-/// curl arguments that put the fetched bytes or headers on the disk, which a
-/// network allow does not by itself vouch for — the sandbox is what bounds
-/// where they land.
-const _curlDiskArgs = {
-  "-o",
-  "-O",
-  "-c",
-  "-C",
-  "-d",
-  "-D",
-  "-F",
-  "-J",
-  "-K",
-  "-T",
-  "--data",
-  "--data-raw",
-  "--data-binary",
-  "--data-urlencode",
-  "--form",
-  "--form-string",
-  "--upload-file",
-  "--output",
-  "--output-dir",
-  "--remote-name",
-  "--remote-name-all",
-  "--remote-header-name",
-  "--cookie-jar",
-  "--dump-header",
-  "--dump-binary",
-  "--create-dirs",
-  "--config",
-  "--trace",
-  "--trace-ascii",
-};
 
 /// How much one segment's effect is proven by its own text.
 enum SegmentReach {
@@ -204,12 +184,11 @@ class SegmentProfile {
     this.program,
     this.words,
     this.url,
-    this.writesDisk,
   );
 
   /// The parse failed: treat as [SegmentReach.other] everywhere.
-  const SegmentProfile.unmodeled(String program)
-    : this._(false, SegmentReach.other, program, const [], null, false);
+  const SegmentProfile.unmodeled()
+    : this._(false, SegmentReach.other, "", const [], null);
 
   final bool modelable;
 
@@ -222,13 +201,9 @@ class SegmentProfile {
   /// subcommand shape off these.
   final List<String> words;
 
-  /// The URL token for a [SegmentReach.network] segment, as written.
+  /// The URL for a [SegmentReach.network] segment, scheme-normalized so the
+  /// same consult takes it whatever spelling named the host.
   final String? url;
-
-  /// Whether the segment puts bytes on the disk beyond what its redirects
-  /// are checked for — a curl `-o`, a plain `wget` — so a network allow
-  /// still leaves the write where the sandbox is the boundary.
-  final bool writesDisk;
 }
 
 /// Classifies [segment]. Reads the surface shape only — quotes and the
@@ -236,44 +211,22 @@ class SegmentProfile {
 SegmentProfile profileSegment(String segment) {
   final parsed = _read(segment);
   if (parsed == null) {
-    return const SegmentProfile.unmodeled("");
+    return const SegmentProfile.unmodeled();
   }
   final words = parsed;
-  if (words.isEmpty) return const SegmentProfile.unmodeled("");
+  if (words.isEmpty) return const SegmentProfile.unmodeled();
   final program = words.first.toLowerCase();
   if (_diskRedirect(words)) {
     // A redirect to a file the segment names is a write this layer sees —
-    // except the ones every command throws output away through.
-    return SegmentProfile._(
-      true,
-      SegmentReach.other,
-      program,
-      words,
-      null,
-      true,
-    );
+    // the exemptions are what every command throws output away through.
+    return SegmentProfile._(true, SegmentReach.other, program, words, null);
   }
   if (fetchFamilyPrograms.contains(program)) {
     final url = _urlOf(words);
     if (url == null) {
-      return SegmentProfile._(
-        true,
-        SegmentReach.other,
-        program,
-        words,
-        null,
-        false,
-      );
+      return SegmentProfile._(true, SegmentReach.other, program, words, null);
     }
-    final disk = _writesDiskFor(program, words);
-    return SegmentProfile._(
-      true,
-      SegmentReach.network,
-      program,
-      words,
-      url,
-      disk,
-    );
+    return SegmentProfile._(true, SegmentReach.network, program, words, url);
   }
   if (program == "env" && words.length == 1) {
     return SegmentProfile._(
@@ -282,30 +235,22 @@ SegmentProfile profileSegment(String segment) {
       program,
       words,
       null,
-      false,
     );
   }
   if (program == "git") {
     return _gitProfile(program, words);
   }
-  if (nonModifyingPrograms.contains(program) && !_hasGuardedFlag(words)) {
+  if (nonModifyingPrograms.contains(program) &&
+      !anyGuardedArg(guardedFlags[program], words.skip(1))) {
     return SegmentProfile._(
       true,
       SegmentReach.nonModifying,
       program,
       words,
       null,
-      false,
     );
   }
-  return SegmentProfile._(
-    true,
-    SegmentReach.other,
-    program,
-    words,
-    null,
-    false,
-  );
+  return SegmentProfile._(true, SegmentReach.other, program, words, null);
 }
 
 SegmentProfile _gitProfile(String program, List<String> words) {
@@ -313,60 +258,31 @@ SegmentProfile _gitProfile(String program, List<String> words) {
     // `git -c core.fsmonitor=<program> ...`: configuration in the command
     // decides what later git tools run, and the parse's whole-command veto
     // catches the assignment on top of this.
-    return SegmentProfile._(
-      true,
-      SegmentReach.other,
-      program,
-      words,
-      null,
-      false,
-    );
+    return SegmentProfile._(true, SegmentReach.other, program, words, null);
   }
   final sub = words.length >= 2 ? words[1].toLowerCase() : "";
   if (sub.isEmpty || !_gitNonModifyingSubcommands.contains(sub)) {
-    return SegmentProfile._(
-      true,
-      SegmentReach.other,
-      program,
-      words,
-      null,
-      false,
-    );
+    return SegmentProfile._(true, SegmentReach.other, program, words, null);
   }
-  final guarded = gitGuardedArgs[sub];
   final tail = words.sublist(2);
-  if (guarded != null && tail.any((w) => guarded.contains(w.toLowerCase()))) {
-    return SegmentProfile._(
-      true,
-      SegmentReach.other,
-      program,
-      words,
-      null,
-      false,
-    );
+  if (anyGuardedArg(gitGuardedArgs[sub], tail)) {
+    return SegmentProfile._(true, SegmentReach.other, program, words, null);
+  }
+  // The two subcommands whose plain positional argument creates a thing:
+  // `git branch feature` writes refs/heads/feature as surely as -d deletes
+  // one, and the guard table cannot name a shape a flag never carries.
+  if ((sub == "branch" || sub == "tag") &&
+      tail.any((w) => !w.startsWith("-"))) {
+    return SegmentProfile._(true, SegmentReach.other, program, words, null);
   }
   // A second-level subcommand reads: `remote add`, `worktree remove`, and
   // `symbolic-ref` with a target all write through the guard list; the read
   // shapes name nothing to write to.
-  if (sub == "symbolic-ref" && tail.length > 2) {
-    return SegmentProfile._(
-      true,
-      SegmentReach.other,
-      program,
-      words,
-      null,
-      false,
-    );
+  if (sub == "symbolic-ref" && tail.length >= 2) {
+    return SegmentProfile._(true, SegmentReach.other, program, words, null);
   }
-  if (sub == "worktree" && tail.isNotEmpty && !{"list"}.contains(tail.first)) {
-    return SegmentProfile._(
-      true,
-      SegmentReach.other,
-      program,
-      words,
-      null,
-      false,
-    );
+  if (sub == "worktree" && tail.isNotEmpty && tail.first != "list") {
+    return SegmentProfile._(true, SegmentReach.other, program, words, null);
   }
   return SegmentProfile._(
     true,
@@ -374,24 +290,64 @@ SegmentProfile _gitProfile(String program, List<String> words) {
     program,
     words,
     null,
-    false,
   );
 }
 
-/// Whether any argument trips its program's guard list.
-bool _hasGuardedFlag(List<String> words) {
-  final guards = _guardedFlags[words.first.toLowerCase()];
-  if (guards == null) return false;
-  return words.skip(1).any((w) {
-    final lower = w.toLowerCase();
-    return guards.contains(lower) || guards.any((g) => lower.startsWith("$g="));
-  });
+/// The redirect targets that are not writes: the files every command throws
+/// output away through, and the fd-duplication forms — whose marker is the
+/// `&` the tokenizer keeps as its own word, so `2>&1` reads as `>` with the
+/// target `&`. A bare `> 2` stays a write: in the shell that is a file
+/// named `2`, not a descriptor.
+final _fdTarget = RegExp(r"^&\d*$");
+
+bool _isExemptRedirectWord(String word) {
+  final w = word.toLowerCase();
+  return w == "/dev/null" ||
+      w == "/dev/stdout" ||
+      w == "/dev/stderr" ||
+      _fdTarget.hasMatch(w);
 }
 
-/// `_read` of a segment: its words, lowercased nowhere — the caller cases
-/// where it asks. Null where the words cannot be named plainly: an
-/// expansion, a substitution, a quote left open, a grouping — the segment is
-/// one the deterministic layer answers for nothing.
+/// Whether the segment's words carry a redirect whose target names a file:
+/// the ops the words keep — `>` and `>>` — are checked against the word
+/// that follows them and against the exemption forms.
+bool _diskRedirect(List<String> words) {
+  for (var i = 0; i < words.length; i++) {
+    final w = words[i];
+    if (!(w == ">" || w == ">>")) continue;
+    final target = i + 1 < words.length ? words[i + 1] : "";
+    if (target.isEmpty || _isExemptRedirectWord(target)) continue;
+    return true;
+  }
+  return false;
+}
+
+final _scheme = RegExp(r"^[a-zA-Z][a-zA-Z0-9+.-]*://");
+
+/// The URL of a fetcher segment: the first argument that names one by
+/// scheme, or — the family's bare-host shape, `curl example.com` — the
+/// first argument that could be a host, spelled with the scheme the family
+/// itself defaults to. Null where none is confidently nameable, which is
+/// the same answer "consult nothing, let the mode ask".
+String? _urlOf(List<String> words) {
+  for (var i = 1; i < words.length; i++) {
+    final w = words[i];
+    if (_scheme.hasMatch(w)) return w;
+  }
+  for (var i = 1; i < words.length; i++) {
+    final w = words[i];
+    if (w.startsWith("-")) continue;
+    if (w != words.first && (w.contains(".") || w.contains(":"))) {
+      return "http://$w";
+    }
+  }
+  return null;
+}
+
+/// `_read` of a segment: its words. Null where the words cannot be named
+/// plainly — an expansion, a substitution, a backtick, a quote left open, a
+/// grouping — the segment is one the deterministic layer answers for
+/// nothing, the same answer the whole-command parse gives its own shapes.
 List<String>? _read(String segment) {
   final words = <String>[];
   final current = StringBuffer();
@@ -422,7 +378,7 @@ List<String>? _read(String segment) {
         quote = "'";
       case '"':
         quote = '"';
-      case r"$" || "(" || ")":
+      case r"$" || "(" || ")" || "`":
         return null;
       case "\\":
         if (i + 1 < segment.length) current.write(segment[++i]);
@@ -433,8 +389,7 @@ List<String>? _read(String segment) {
         // them, so the redirect check reads `ls > /tmp/x` and `ls >/tmp/x`
         // the same. `>>` stays one op; `&` `|` mean nothing outside quotes
         // at this layer and are kept as the words they would glue into.
-        final two = i + 1 < segment.length ? segment[i + 1] : "";
-        if (c == ">" && two == ">") {
+        if (c == ">" && i + 1 < segment.length && segment[i + 1] == ">") {
           flush();
           words.add(">>");
           i++;
@@ -448,116 +403,4 @@ List<String>? _read(String segment) {
   }
   flush();
   return words;
-}
-
-/// Whether the segment's words carry a redirect whose target names a file:
-/// the ops the words keep — `>` and `>>` — are checked against the words
-/// that follow them and against exemption forms.
-// Redirect targets are judged inside [_diskRedirect]: the ops the words
-// keep — `>` and `>>` — are checked against the word that follows them and
-// against the exemption forms.
-bool _diskRedirect(List<String> words) {
-  for (var i = 0; i < words.length; i++) {
-    final w = words[i];
-    if (!(w == ">" || w == ">>")) continue;
-    final target = i + 1 < words.length ? words[i + 1] : "";
-    if (target.isEmpty || _isExemptRedirectWord(target)) continue;
-    return true;
-  }
-  return false;
-}
-
-/// The redirect targets that are not writes: the descriptors and `/dev/null`
-/// a command throws output away through.
-bool _isExemptRedirectWord(String word) {
-  final w = word.toLowerCase();
-  return w == "/dev/null" ||
-      w == "/dev/stdout" ||
-      w == "/dev/stderr" ||
-      w == "&" ||
-      w == "1" ||
-      w == "2" ||
-      w == "&1" ||
-      w == "&2" ||
-      w == ">&1" ||
-      w == ">&2" ||
-      RegExp(r"^\d*>&\d?$").hasMatch(w) ||
-      RegExp(r"^\d?>&\d?$").hasMatch(w);
-}
-
-/// The URL token of a fetcher segment, as written: the first argument that
-/// names one by scheme, or — httpie's shape — the first non-argument word
-/// after the program that carries a dot or a colon. Null where none is
-/// confidently nameable: the segment is one the network rules are not
-/// consulted on at all.
-String? _urlOf(List<String> words) {
-  final scheme = RegExp(r"^[a-zA-Z][a-zA-Z0-9+.-]*://");
-  for (var i = 1; i < words.length; i++) {
-    final w = words[i];
-    if (scheme.hasMatch(w)) return w;
-  }
-  final program = words.first;
-  if (program == "http" || program == "https") {
-    for (var i = 1; i < words.length; i++) {
-      final w = words[i];
-      if (w.startsWith("-")) continue;
-      if (w.contains(".") || w.contains(":")) return w;
-    }
-  }
-  return null;
-}
-
-/// Whether the fetch program's arguments put bytes on the disk: curl's write
-/// flags explicitly, a plain `wget` always (the file it leaves beside the
-/// caller is its whole point) unless it names stdout.
-bool _writesDiskFor(String program, List<String> words) {
-  if (program == "wget" || program == "wget2") {
-    for (var i = 1; i < words.length; i++) {
-      final w = words[i];
-      if (w == "-O" &&
-          i + 1 < words.length &&
-          {"-", "/dev/stdout", "/dev/stderr"}.contains(words[i + 1])) {
-        return false;
-      }
-      if (w == "--output-document" &&
-          i + 1 < words.length &&
-          words[i + 1] == "-") {
-        return false;
-      }
-      if (w.startsWith("--output-document=") &&
-          {
-            "=-",
-            "=/dev/stdout",
-            "=/dev/stderr",
-          }.any((f) => w == "--output-document${f.substring(1)}")) {
-        return false;
-      }
-    }
-    return true;
-  }
-  if (program == "http" || program == "https") {
-    // httpie: reads to stdout unless downloading or writing a body that
-    // came from a file this layer does not read — the conservative answer
-    // is a disk write wherever a flag suggests one.
-    return words
-        .skip(1)
-        .any(
-          (w) =>
-              _curlDiskArgs.contains(w.toLowerCase()) ||
-              (w.startsWith("--") &&
-                  _curlDiskArgs.any(
-                    (a) => a.startsWith("--") && w.toLowerCase().startsWith(a),
-                  )),
-        );
-  }
-  return words.skip(1).any((w) {
-    final lower = w.toLowerCase();
-    if (_curlDiskArgs.contains(lower)) return true;
-    if (lower.startsWith("--")) {
-      return _curlDiskArgs.any(
-        (a) => a.startsWith("--") && lower.startsWith(a),
-      );
-    }
-    return false;
-  });
 }

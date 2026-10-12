@@ -32,47 +32,27 @@ const vouchedGitSubcommands = {
 /// `core.pager` are programs the same config edit can have a command run.
 const protectedGitChildren = {"config", "hooks"};
 
+final _separator = RegExp(r"[/\\]");
+final _worktreeBoundary = RegExp(r"/\.git/worktrees(?:/|$)");
+final _gitdirLine = RegExp(r"^gitdir:\s*(.+)$", multiLine: true);
+final _spaces = RegExp(r"\s+");
+
 /// What the grant layer answers for one command: the profile of each
-/// segment, where the segment runs once the command's own `cd`s are
-/// tracked, and, for the segments a policy vouches for, the grant the vouch
-/// is backed by. One computation, read by both the approval gate and the
-/// sandbox composer — the invariant that makes the pair honest is that
+/// segment and, for the segments the git policy vouches for, the grant the
+/// vouch is backed by. One computation, read by both the approval gate and
+/// the sandbox composer — the invariant that makes the pair honest is that
 /// nothing is vouched for here without a grant under it, and nothing
 /// granted that was not vouched.
 class CommandGrants {
-  const CommandGrants({
-    required this.profiles,
-    required this.workDirs,
-    required this.gitGrants,
-  });
+  const CommandGrants({required this.profiles, required this.gitGrants});
 
   /// One [SegmentProfile] per segment, in order.
   final List<SegmentProfile> profiles;
-
-  /// The directory each segment runs in — the command's `cd`s resolved
-  /// against [input.start] — or null where the tracker lost the directory,
-  /// which no vouch survives.
-  final List<String?> workDirs;
 
   /// The git grant for each vouched segment that had one. A vouched segment
   /// with none — the command runs somewhere with no repo above it — is not
   /// covered, for the grant being the thing the vouch is honest about.
   final Map<int, GitGrant> gitGrants;
-
-  /// Whether segment [i] has a deterministic cover: the parse proved it
-  /// non-modifying, or a vouch is backed by a grant. The callers add what
-  /// they know beside this — rule allows for a segment, a network allow.
-  bool covers(int i) =>
-      profiles[i].reach == SegmentReach.nonModifying ||
-      gitGrants.containsKey(i);
-
-  /// Whether every segment is covered by this deterministic half alone.
-  bool get allCovered {
-    for (var i = 0; i < profiles.length; i++) {
-      if (!covers(i)) return false;
-    }
-    return profiles.isNotEmpty;
-  }
 }
 
 /// The inputs one command's assessment is made of. [start] is where the
@@ -98,78 +78,112 @@ class CommandGrantsInput {
 /// Assesses one command. The expensive parts are directory reads — walking
 /// up for the repo and listing its `.git` — so the answer is a value both
 /// the gate and the composer recompute for the same inputs; nothing is held
-/// between calls to drift.
+/// between calls to drift. The walk within one call is memoised by
+/// directory, which answers the same question once for a compound that
+/// names the same repo twice and still holds no state after the call.
 Future<CommandGrants> commandGrantsFor(CommandGrantsInput input) async {
   final profiles = [
     for (final segment in input.segments) profileSegment(segment),
   ];
-  final workDirs = <String?>[];
+  final workDirs = List<String?>.filled(profiles.length, null);
   var cwd = input.start;
   var lost = false;
-  for (final profile in profiles) {
+  for (var i = 0; i < profiles.length; i++) {
+    final profile = profiles[i];
     if (lost) {
-      workDirs.add(null);
+      workDirs[i] = null;
       continue;
     }
-    if (!profile.modelable || profile.words.isEmpty) {
-      workDirs.add(null);
+    if (!profile.modelable) {
+      workDirs[i] = null;
+      // A segment the words cannot name may still have moved the shell: a
+      // `cd` or `pushd` with an expansion inside it sends the directory
+      // somewhere unnameable, and no vouch survives standing on a directory
+      // the parse never named.
+      final lead = input.segments[i].trim().split(_spaces).first;
+      if (lead == "cd" || lead == "pushd" || lead == "popd") {
+        lost = true;
+      }
       continue;
     }
-    if (profile.words.first.toLowerCase() == "cd") {
+    if (profile.words.isEmpty) {
+      workDirs[i] = null;
+      continue;
+    }
+    final lead = profile.words.first.toLowerCase();
+    if (lead == "popd" || (lead == "pushd" && profile.words.length == 1)) {
+      // A bare `pushd` swaps the tracker's stack, which this reads nothing
+      // of, and `popd`'s destination is the same unknown.
+      workDirs[i] = null;
+      lost = true;
+      continue;
+    }
+    if (lead == "cd" || lead == "pushd") {
       final next = await _resolveCd(input.fs, input.home, cwd, profile.words);
       if (next == null) {
         // Lost: this and everything after runs where the parse cannot say.
         // A cd that fails short-circuits the rest under `&&`, but a `;`
         // compound runs on in the old directory — so the tracker only
         // stands where the target exists, and loses otherwise.
-        workDirs.add(null);
+        workDirs[i] = null;
         lost = true;
         continue;
       }
       cwd = next;
-      workDirs.add(cwd);
+      workDirs[i] = cwd;
       continue;
     }
-    workDirs.add(cwd);
+    workDirs[i] = cwd;
   }
   final gitGrants = <int, GitGrant>{};
+  final walked = <String, GitGrant?>{};
   for (var i = 0; i < profiles.length; i++) {
     final profile = profiles[i];
     // A proven non-modifying segment writes nothing worth granting and is
     // covered by its reach; only the grant-backed half is discovered here.
     if (profile.reach == SegmentReach.nonModifying) continue;
-    final dir = i < workDirs.length ? workDirs[i] : null;
-    if (dir == null || !segmentVouched(profile)) continue;
-    final grant = await gitGrantFor(input.fs, dir, input.home, profile.words);
+    if (!segmentVouched(profile)) continue;
+    final dir = workDirs[i];
+    if (dir == null) continue;
+    // The same repo asked for twice in one compound — `git add x && git
+    // commit -m y` — is one walk and one listing. Only the walk-up is
+    // memoised: an explicit `--git-dir` resolves against the segment's own
+    // directory, so its answer is not portable between segments.
+    GitGrant? grant;
+    if (_gitDirOverride(profile.words) == null) {
+      if (!walked.containsKey(dir)) {
+        walked[dir] = await gitGrantFor(
+          input.fs,
+          dir,
+          input.home,
+          profile.words,
+        );
+      }
+      grant = walked[dir];
+    } else {
+      grant = await gitGrantFor(input.fs, dir, input.home, profile.words);
+    }
     if (grant != null) gitGrants[i] = grant;
   }
-  return CommandGrants(
-    profiles: profiles,
-    workDirs: workDirs,
-    gitGrants: gitGrants,
-  );
+  return CommandGrants(profiles: profiles, gitGrants: gitGrants);
 }
 
-/// Whether the git grant policy vouches for [profile]. A segment the parse
-/// already proved non-modifying needs no vouch; a `git` mutation does, and
-/// one is given only for the subcommands above, in their plain shapes —
-/// `-c` never, and the guarded deletions and renames of `branch` and `tag`
-/// not either, the banner being the right place to learn about those.
+/// Whether the git grant policy vouches for [profile]: a `git` mutation in
+/// one of the plain shapes, not the guarded deletions and renames and never
+/// a `-c`. Non-modifying segments arrive already covered by their reach and
+/// never reach this.
 bool segmentVouched(SegmentProfile profile) {
-  if (profile.reach == SegmentReach.nonModifying) return true;
   if (!profile.modelable) return false;
   final words = profile.words;
   if (words.length < 2 || words[0].toLowerCase() != "git") return false;
   if (words[1] == "-c") return false;
   final sub = words[1].toLowerCase();
   if (!vouchedGitSubcommands.contains(sub)) return false;
-  final guards = gitGuardedArgs[sub];
-  if (guards != null &&
-      words.skip(2).any((w) {
-        final lower = w.toLowerCase();
-        return guards.contains(lower) ||
-            guards.any((g) => lower.startsWith("$g="));
-      })) {
+  if (anyGuardedArg(gitGuardedArgs[sub], words.skip(2))) return false;
+  // The same positional rule the read-only tier holds branch and tag to: a
+  // bare name in `git tag v1` is a ref being created, the banner's to see.
+  if ((sub == "branch" || sub == "tag") &&
+      words.skip(2).any((w) => !w.startsWith("-"))) {
     return false;
   }
   return true;
@@ -210,7 +224,9 @@ Future<GitGrant?> gitGrantFor(
   } else {
     gitDir = await _walkUpForGitDir(fs, cwd);
   }
-  if (gitDir == null) return null;
+  if (gitDir == null) {
+    return null;
+  }
   final paths = <String>[];
   // The worktree's own checkout directory is deliberately outside this
   // grant: a worktree add checks out into where its argument names, and
@@ -218,7 +234,7 @@ Future<GitGrant?> gitGrantFor(
   // usually — is the sandbox's ordinary answer, with the re-prompt behind
   // it.
   await for (final entity in fs.directory(gitDir).list()) {
-    final name = entity.path.split(RegExp(r"[/\\]")).last;
+    final name = entity.path.split(_separator).last;
     if (protectedGitChildren.contains(name)) continue;
     paths.add(entity.path);
   }
@@ -251,15 +267,11 @@ Future<String?> _walkUpForGitDir(FileSystem fs, String cwd) async {
     final fileEntity = fs.file(dotGit);
     if (await fileEntity.exists()) {
       final text = await fileEntity.readAsString();
-      final match = RegExp(
-        r"^gitdir:\s*(.+)$",
-        multiLine: true,
-      ).firstMatch(text);
+      final match = _gitdirLine.firstMatch(text);
       if (match == null) return null;
       final pointed = _resolve(fs, dir, match.group(1)!.trim(), null);
       if (pointed == null) return null;
-      final worktreeBoundary = RegExp(r"/\.git/worktrees(?:/|$)");
-      final boundary = worktreeBoundary.firstMatch(pointed);
+      final boundary = _worktreeBoundary.firstMatch(pointed);
       if (boundary == null) return pointed;
       return "${pointed.substring(0, boundary.start)}/.git";
     }
@@ -278,7 +290,9 @@ String? _resolve(FileSystem fs, String from, String target, String? home) {
   if (target.startsWith("/")) return fs.path.normalize(target);
   if (target == "~" || target.startsWith("~/")) {
     if (home == null) return null;
-    return fs.path.normalize(home + (target == "~" ? "" : target.substring(1)));
+    return fs.path.normalize(
+      "$home${target == "~" ? "" : target.substring(1)}",
+    );
   }
   return fs.path.normalize(fs.path.join(from, target));
 }
@@ -293,7 +307,7 @@ Future<String?> _resolveCd(
   List<String> words,
 ) async {
   final target = words.length == 1 ? "~" : words[1];
-  if (target == "-" || target.length > 1 && target.startsWith("\$")) {
+  if (target == "-" || target.length > 1 && target.startsWith(r"$")) {
     return null;
   }
   final resolved = _resolve(fs, cwd, target, home);

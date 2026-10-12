@@ -1,6 +1,6 @@
 import "models.dart"
     show PermissionDecision, PermissionTier, ToolApproval;
-import "safe_command.dart" show fetchFamilyPrograms, profileSegment;
+import "safe_command.dart" show SegmentReach, profileSegment;
 import "shell.dart" show pathInside;
 import "shell_command_analysis.dart" show ShellCommandAnalysis;
 
@@ -268,14 +268,6 @@ RuleVerdict? rulesDecideTraced(
   return _strongestTraced(rules, toolName, subject);
 }
 
-/// What the rules say about one subject in isolation — the consult the
-/// deterministic tiers read per command segment: a bash rule over the
-/// segment's text, a webfetch rule over a fetcher segment's URL, one
-/// subject at a time. The whole-call consult is [rulesDecideTraced].
-RuleVerdict? ruleVerdictFor(List<PermissionRule> rules, String toolName,
-        {String? command, String? path, String? url}) =>
-    rulesDecideTraced(rules, toolName, command: command, path: path, url: url);
-
 /// The verdict [rules] makes of one subject, with the tiers of the rules
 /// that made it — the strongest decision wins; every rule at that strength
 /// adds its origin, so a subject covered by two tiers says both.
@@ -347,10 +339,12 @@ PermissionRule? ruleFromApproval(ToolApproval? approval) {
     case "bash":
       final command = approval.argumentsText ?? "";
       if (command.trim().isEmpty) return null;
-      // A command that is one fetch — the fetcher family, one segment — is
-      // a network subject, not a command-prefix one: the standing answer is
-      // the same `webfetch *` a webfetch banner writes, so one approval
-      // covers the tool and the command carrier together.
+      // A command that is one fetch — reach network, the fetcher family
+      // with a host the consult reads — is a network subject, not a
+      // command-prefix one: the standing answer is the same `webfetch *` a
+      // webfetch banner writes, so what the next identical call is read by
+      // is what this one was allowed by. A redirecting or compound variant
+      // stays command-shaped, where its own shape is what matched.
       final segments = ShellCommandAnalysis.parse(command).modelableSegments;
       final profile =
           segments == null ? null : profileSegment(segments.first);
@@ -358,7 +352,7 @@ PermissionRule? ruleFromApproval(ToolApproval? approval) {
           segments.length == 1 &&
           profile != null &&
           profile.modelable &&
-          fetchFamilyPrograms.contains(profile.program)) {
+          profile.reach == SegmentReach.network) {
         return const PermissionRule(
           tool: "webfetch",
           pattern: "*",

@@ -31,8 +31,20 @@ void main() {
         "find . -name '*.tmp' -delete",
         "find . -exec rm {} +",
         "file -C magic",
+        // A file named `2` is what `> 2` writes — fd duplication is the
+        // `&`'s to say, and the digits are not descriptors.
+        "ls > 2",
         "git branch -D side-branch",
         "git tag -d v1",
+        // The guarded flag's = spelling, which the vouch's scan catches and
+        // a whole-token scan would miss.
+        "git diff --output=/etc/hosts patch.diff",
+        // Two arguments is a write target, whatever the subcommand.
+        "git symbolic-ref HEAD refs/heads/evil",
+        // git spells reflog's delete without a dash.
+        "git reflog delete HEAD@{1}",
+        // Remote update fetches every remote and writes refs.
+        "git remote update",
         "git -c core.fsmonitor=x status",
         "git worktree remove ../other",
       ]) {
@@ -85,35 +97,33 @@ void main() {
       final profile = profileSegment("curl https://example.com/data.json");
       expect(profile.reach, SegmentReach.network);
       expect(profile.url, "https://example.com/data.json");
-      expect(profile.writesDisk, isFalse);
     });
 
-    test("curl's disk flags do not change the reach, only the note", () {
+    test("curl's disk flags change nothing the consult reads", () {
+      // Where the fetched bytes land is the sandbox's question, not the
+      // network rules'.
       final profile = profileSegment("curl -o out.bin https://example.com/a");
       expect(profile.reach, SegmentReach.network);
-      expect(profile.writesDisk, isTrue);
+      expect(profile.url, "https://example.com/a");
     });
 
-    test("wget writes by default, stdout forms read", () {
-      expect(
-        profileSegment("wget https://example.com/a.bin").writesDisk,
-        isTrue,
-      );
-      expect(
-        profileSegment("wget -q -O - https://example.com/a.bin").writesDisk,
-        isFalse,
-      );
-      // A spelling the classifier does not read as stdout is still a
-      // network segment — the sandbox is what bounds wherever the file
-      // lands.
-      expect(
-        profileSegment("wget -qO- https://example.com/a.bin").reach,
-        SegmentReach.network,
-      );
-      expect(
-        profileSegment("wget -qO- https://example.com/a.bin").writesDisk,
-        isTrue,
-      );
+    test("the family's bare-host shape reaches the same rules", () {
+      // `curl example.com` is http://example.com to the consult, the
+      // scheme the family itself defaults to — the standing answer covers
+      // the spelling people actually type.
+      for (final segment in [
+        "curl example.com/x",
+        "wget site.io/data.bin",
+        "http api.local:8080",
+      ]) {
+        expect(
+          profileSegment(segment).reach,
+          SegmentReach.network,
+          reason: segment,
+        );
+      }
+      expect(profileSegment("curl example.com/x").url, "http://example.com/x");
+      expect(profileSegment("http api.local:8080").url, "http://api.local:8080");
     });
 
     test("a fetcher with no nameable URL is not network", () {

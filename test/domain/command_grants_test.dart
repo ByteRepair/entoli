@@ -6,6 +6,7 @@ import "package:fs_shim/fs_io.dart" show fileSystemIo;
 import "package:path/path.dart" as p;
 
 import "package:agent_chat/domain/command_grants.dart";
+import "package:agent_chat/domain/safe_command.dart";
 
 FileSystem get fs => fileSystemIo;
 
@@ -46,6 +47,18 @@ void main() {
     );
   }
 
+  /// Whether every segment has a deterministic cover: provably
+  /// non-modifying, or carried by a grant. What the gate's tier loop says,
+  /// said here so the tests read the answer and not the machinery.
+  bool covered(CommandGrants grants) {
+    for (var i = 0; i < grants.profiles.length; i++) {
+      final covered = grants.profiles[i].reach == SegmentReach.nonModifying ||
+          grants.gitGrants.containsKey(i);
+      if (!covered) return false;
+    }
+    return grants.profiles.isNotEmpty;
+  }
+
   test(
     "a git mutation in a repo is vouched with its .git beside the grant",
     () async {
@@ -59,7 +72,7 @@ void main() {
       expect(grant.paths, contains(p.join(repo, ".git", "index")));
       expect(grant.paths.map(p.basename), isNot(contains("config")));
       expect(grant.paths.map(p.basename), isNot(contains("hooks")));
-      expect(grants.allCovered, isTrue);
+      expect(covered(grants), isTrue);
     },
   );
 
@@ -74,7 +87,6 @@ void main() {
   test("no repo above, no vouch — the banner path decides", () async {
     final grants = await assess("git commit -m x");
     expect(grants.gitGrants, isEmpty);
-    expect(grants.allCovered, isFalse);
   });
 
   test(
@@ -87,13 +99,15 @@ void main() {
         "git checkout master",
         "git config user.email a@b",
         "git -c core.fsmonitor=x commit -m x",
+        "git tag v1.0",
+        "git branch feature",
       ]) {
         final grants = await assess(
           command,
           cwd: makeRepo(p.join(root.path, "repo")),
         );
         expect(grants.gitGrants, isEmpty, reason: command);
-        expect(grants.allCovered, isFalse, reason: command);
+        expect(covered(grants), isFalse, reason: command);
       }
     },
   );
@@ -112,7 +126,7 @@ void main() {
       final grant = grants.gitGrants.values.single;
       expect(grant.gitDir, p.join(main, ".git"));
       expect(grant.paths, contains(p.join(main, ".git", "refs")));
-      expect(grants.allCovered, isTrue);
+      expect(covered(grants), isTrue);
     },
   );
 
@@ -125,20 +139,23 @@ void main() {
         "cd ${p.join(root.path, 'repo', 'lib')} && git commit -m x",
       );
       expect(grants.gitGrants, hasLength(1));
-      expect(grants.allCovered, isTrue);
+      expect(covered(grants), isTrue);
     },
   );
 
   test("a `cd` the tracker cannot name loses the vouch", () async {
-    makeRepo(p.join(root.path, "repo"));
+    // The repo sits where the shell starts, so a tracker that wrongly kept
+    // going through an unnameable `cd` would vouch a grant for it.
+    final repo = makeRepo(p.join(root.path, "repo"));
     for (final command in [
       "cd \$WHEREVER && git commit -m x",
       "cd /not/a/place && git commit -m x",
       "cd - && git commit -m x",
+      "popd && git commit -m x",
     ]) {
-      final grants = await assess(command);
+      final grants = await assess(command, cwd: repo);
       expect(grants.gitGrants, isEmpty, reason: command);
-      expect(grants.allCovered, isFalse, reason: command);
+      expect(covered(grants), isFalse, reason: command);
     }
   });
 
@@ -152,7 +169,7 @@ void main() {
         hasLength(1),
         reason: "only the mutating segment is vouched",
       );
-      expect(grants.allCovered, isTrue);
+      expect(covered(grants), isTrue);
     },
   );
 }
