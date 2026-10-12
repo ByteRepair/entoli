@@ -91,8 +91,14 @@ class _PairedDevicePageState extends ConsumerState<PairedDevicePage> {
       initial: current,
       confirmLabel: "Rename",
     );
-    if (next == null || next == current) return;
-    await ref.read(syncHubProvider).rename(widget.deviceId, next);
+    if (!mounted || next == null || next == current) return;
+    try {
+      await ref.read(syncHubProvider).rename(widget.deviceId, next);
+    } catch (error) {
+      // A registry write that could not get through is said, not dropped:
+      // an unawaited failure under a pressed button does nothing on screen.
+      if (mounted) say(context, error);
+    }
   }
 
   /// A dial that could not find the device is said on this page, not left as

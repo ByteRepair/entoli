@@ -42,9 +42,10 @@ class MirrorChat {
 
   final String peerId;
 
-  /// The home device's name, as its hello carried it — what the sidebar's
-  /// Remotes rows show under the title.
-  final String deviceName;
+  /// The home device's name — the address book's answer when the pair is
+  /// known there, the hello's otherwise. The sidebar's Remotes rows show it
+  /// under the title; a rename (and a reconnect's re-hello) updates it.
+  String deviceName;
   ChatState state;
   ChatMeta meta;
   final List<ChatRecord> records = [];
@@ -173,6 +174,14 @@ class SyncHub implements ArtifactBytes {
 
   @visibleForTesting
   bool admitsReconnect(String psk) => _signaling.admitsReconnect(psk);
+
+  /// The codes-matched gate's own decision, pinned without racing a real
+  /// handshake: with no pairing open to ask on, a fresh pair must fail
+  /// rather than arm a confirmation nothing can complete.
+  @visibleForTesting
+  Future<bool> pairingGateForTest(String sas, String peerName,
+          {required bool isNew}) =>
+      _signaling.confirmGateForTest(sas, peerName, isNew: isNew);
 
   @visibleForTesting
   Future<void> establishForTest({
@@ -467,6 +476,9 @@ class SyncHub implements ArtifactBytes {
         meta: ChatMeta(),
       );
       final mirror = _mirrors[state.id]!;
+      // The name is the connection's, every welcome: a device renamed while
+      // the mirror survived a disconnect is filed under the new one.
+      mirror.deviceName = peer.deviceName;
       if (state.updatedAt.isAfter(mirror.state.updatedAt)) {
         mirror.state = state;
       }
@@ -896,7 +908,19 @@ class SyncHub implements ArtifactBytes {
   /// keeps what it calls this one until renamed there too.
   Future<void> rename(String deviceId, String name) async {
     await registry.rename(deviceId, name);
+    // Every surface that says a peer's name says it from this book, so a
+    // rename reaches all three: the row, the live connection's driven line,
+    // and the mirrors' Remotes rows. A registry read on its own fills gaps
+    // only, which is what would have left the rest stale until a restart.
     _peers.renamed(deviceId, name);
+    // The driven line reads the live connection's name, so it is this
+    // rename's business to refresh it — the next control change might be
+    // far away.
+    _refreshDriven();
+    for (final chatId in _mirrorsOf(deviceId)) {
+      _mirrors[chatId]!.deviceName = name;
+    }
+    _rebuildRemotes();
   }
 
   /// Unpairs: drops the record, its secret, and any live connection. The

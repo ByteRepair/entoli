@@ -552,8 +552,14 @@ are (public, naming a key, granting nothing — connecting still needs the
 pairing code) and asks the comparison, which no bare hex row on a list could.
 `rename` is the registry's verb, one-sided like every name in it: it replaces
 the record (the name is final on it) and `SyncPeers.renamed` moves the name
-through the status without touching whatever the connection earned, so the
-row and the page's title follow while the page is open.
+through the status without touching whatever the connection earned. The name
+a peer goes by is said from one book on three surfaces, and the rename
+reaches all three: the row, the live connection's (`LivePeer.deviceName`,
+and `SyncHub.rename` re-runs `_refreshDriven` so the chat page's driven line
+follows without a control change to hang it on), and the mirrors'
+(`MirrorChat.deviceName`, also re-stamped by every welcome) — before this,
+the row showed the new name while the driven line and the Remotes rows kept
+the old one until a reconnect.
 Connect and disconnect live on the row and on the page — the row keeps them
 on sight of the list, the page beside the status they act on (connecting
 disables, a failed dial is said on its screen the way the row's is). Revoke
@@ -602,7 +608,13 @@ device answering one, each ran their handshake with `activity == null`, and
 nothing anywhere, and a *fresh* manual pairing hung on both ends at the same
 step. Every real route now opens a card first, which is the same rule
 `establishForTest`'s comment states for itself; a test cannot catch a
-hang-that-renders-nothing, and none of them did.
+hang-that-renders-nothing, and none of them did. The rule is now enforced
+rather than assumed: the gate (pinned by `pairingGateForTest`) refuses a
+*fresh* pair where the activity has gone — the arm whose human backed out
+while the dial was still connecting arrives with no screen to show codes on,
+and fails the handshake instead of arming a confirmation nobody can complete,
+which is what had the channel and its LivePeer leaking until some future
+pairing action completed the complement.
 
 Going back cancels through a `PopScope` rather than `dispose`: `dispose` runs
 with the widget tree locked, and the activity notifier's

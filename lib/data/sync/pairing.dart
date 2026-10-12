@@ -527,6 +527,13 @@ class SyncPairing {
   bool admitsReconnect(String psk) =>
       _reconnects.containsKey(RelaySignaler.roomFor(psk));
 
+  /// The shared tail's gate, driven directly: a test pins the refusal rather
+  /// than racing a handshake to reach it. Public like [establishForTest] is;
+  /// the hub's own `visibleForTesting` wrapper is what bounds it.
+  Future<bool> confirmGateForTest(String sas, String peerName,
+          {required bool isNew}) =>
+      _sasGate(sas, peerName, isNew: isNew);
+
   /// Unpairs [deviceId]. The secret is read before the registry loses it:
   /// the token derived from it is what admits the device, and clearing
   /// everything *except* that left a revoked device still dialling in, and
@@ -834,10 +841,18 @@ class SyncPairing {
 
   /// First pairings pause here for two humans to compare codes; reconnects
   /// are pinned-key authenticated and walk straight through. The peer's name
-  /// rides with the SAS, so the confirm says who it is asking about.
+  /// rides with the SAS, so the confirm says who it is asking about. A gate
+  /// asks only where there is a pairing to ask on: the arm a human backed out
+  /// of — its page's back nulled the activity while the dial was still
+  /// connecting — arrives here with no screen the codes could be shown on,
+  /// and has to fail rather than wait out a confirmation nobody can give.
   Future<bool> _sasGate(
       String sas, String peerName, {required bool isNew}) async {
     if (!isNew) return true;
+    if (activity.value == null) {
+      throw const HandshakeException(
+          "the pairing ended before the codes were confirmed");
+    }
     _note(PairingStage.confirming, sas: sas, peerName: peerName);
     final confirmation = _confirmation = Completer<bool>();
     return confirmation.future;

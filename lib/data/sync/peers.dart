@@ -46,7 +46,12 @@ class LivePeer {
 
   final SecureChannel channel;
   final String deviceId;
-  final String deviceName;
+
+  /// The peer's name as it was given for this connection — the address book's
+  /// when the pair is known there, its own hello name otherwise. A rename
+  /// updates it through [SyncPeers.renamed], so what the driven line reads
+  /// stays the book's answer. Mutable for that one writer.
+  String deviceName;
   final void Function() _onClose;
   bool _closed = false;
 
@@ -168,10 +173,12 @@ class SyncPeers {
 
   /// What [deviceId] is filed under from now on. Only the name moves: a
   /// rename is the address book's, not the connection's, and a status a
-  /// connection earned is not the rename's to touch.
+  /// connection earned is not the rename's to touch. The live connection
+  /// carries the name too — the driven line reads it, not the row.
   void renamed(String deviceId, String name) {
     final existing = states.value[deviceId];
     if (existing == null) return;
+    _live[deviceId]?.deviceName = name;
     setStatus(deviceId, name: name, status: existing.status, error: existing.error);
   }
 
