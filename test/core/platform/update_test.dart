@@ -1,6 +1,7 @@
 import "dart:io";
 
 import "package:flutter_test/flutter_test.dart";
+import "package:http/http.dart" as http;
 
 import "package:agent_chat/core/platform/io/update.dart";
 import "package:agent_chat/domain/app_update.dart";
@@ -148,6 +149,39 @@ void main() {
           .check(version: "1.2.3", enabled: true);
 
       expect(image.readAsStringSync(), "old");
+    });
+
+    test("a debug or profile run asks nothing at all", () async {
+      final network = release("v1.3.0", appImageAsset, "new".codeUnits);
+      await DesktopUpdater(
+        flavour: UpdateFlavour.linux,
+        cacheDir: tmp.path,
+        appImage: "${tmp.path}/entoli-x86_64.AppImage",
+        debug: true,
+        httpClient: network,
+      ).check(version: "1.2.3", enabled: true);
+
+      expect(network.asked, 0);
+    });
+
+    test("a body that arrives short of its declared length is refused",
+        () async {
+      final image = File("${tmp.path}/entoli-x86_64.AppImage")
+        ..writeAsStringSync("old");
+      // Three of the four bytes the response declares, and no error — the
+      // eof a broken CDN hands over, which reads as a whole file.
+      await DesktopUpdater(
+        flavour: UpdateFlavour.linux,
+        cacheDir: tmp.path,
+        appImage: image.path,
+        debug: false,
+        httpClient: _ShortBody("fresh".codeUnits.sublist(0, 3), 4),
+      ).check(version: "1.2.3", enabled: true);
+
+      expect(image.readAsStringSync(), "old",
+          reason: "a partial build is never put in place");
+      expect(tmp.listSync().where((e) => e.path.contains(".entoli-")),
+          isEmpty, reason: "the partial download goes with the refusal");
     });
   });
 
@@ -317,4 +351,34 @@ void main() {
           isFalse, reason: "the refused download goes with the refusal");
     });
   }, skip: !Platform.isMacOS ? "hdiutil and ditto" : null);
+}
+
+/// The release page for the one case FakeNetwork cannot play: a body that
+/// ends cleanly short of the length its response declared, which is what a
+/// broken CDN hands a download that "succeeds".
+class _ShortBody extends http.BaseClient {
+  _ShortBody(this.body, this.declared);
+
+  final List<int> body;
+  final int? declared;
+
+  @override
+  Future<http.StreamedResponse> send(http.BaseRequest request) async {
+    if (request.url.path.endsWith("releases/latest")) {
+      return http.StreamedResponse(
+        Stream.empty(),
+        302,
+        headers: {
+          "location": "https://github.com/$updateRepo/releases/tag/v1.3.0",
+        },
+        request: request,
+      );
+    }
+    return http.StreamedResponse(
+      Stream.value(body),
+      200,
+      contentLength: declared,
+      request: request,
+    );
+  }
 }

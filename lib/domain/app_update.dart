@@ -60,14 +60,18 @@ List<int> versionParts(String version) {
   return [for (final part in core.split(".")) int.tryParse(part) ?? 0];
 }
 
-/// The tag a `releases/latest` redirect points at, or null where it does not —
-/// the segment after the path's `tag/` is the whole of what the check wants,
-/// and GitHub puts it there.
+/// The tag a `releases/latest` redirect points at, or null where it does not.
+/// The segment after the path's `tag/` is the whole of what the check wants,
+/// and GitHub puts it there — one segment, even where a stray `/` follows.
 String? latestTagOf(Uri location) {
   const marker = "/tag/";
   final at = location.path.indexOf(marker);
   if (at < 0) return null;
-  return Uri.decodeComponent(location.path.substring(at + marker.length));
+  final segment = location.path
+      .substring(at + marker.length)
+      .split("/")
+      .first;
+  return Uri.decodeComponent(segment);
 }
 
 /// The platform half of the automatic update — see "The automatic update" in

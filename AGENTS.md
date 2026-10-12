@@ -386,9 +386,12 @@ about:
   /qn /norestart`. The installer's own elevation prompt is what the user sees
   at quit; the next launch is the installed upgrade.
 
-Nothing is put in place before the download has arrived whole, and a check
-that dies at any point takes its own staging back — those are the two halves
-of the risk: half a build staged is never half installed. A debug build checks
+Nothing is put in place before the download has arrived whole — the bytes are
+counted against the length the response declared, the one truncation being the
+one that arrives as success — and a check that dies at any point takes its own
+staging back. The check runs once per process, not once per session: a restart
+a restore builds is this process still running, and a second check would arm a
+second Windows exit-waiter over the first's. A debug or profile build checks
 nothing, a Linux not running from an AppImage checks nothing, and a check
 whose network is not there gets one `logFailure` line and no second try.
 

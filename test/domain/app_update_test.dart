@@ -43,6 +43,12 @@ void main() {
       expect(latestTagOf(location), "v1.2.4");
     });
 
+    test("a trailing slash stays out of the tag", () {
+      final location = Uri.parse(
+          "https://github.com/$updateRepo/releases/tag/v1.2.4/");
+      expect(latestTagOf(location), "v1.2.4");
+    });
+
     test("nothing else on GitHub is a release", () {
       expect(
           latestTagOf(Uri.parse("https://github.com/$updateRepo/releases")),

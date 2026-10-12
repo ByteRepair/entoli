@@ -1,6 +1,7 @@
 import "dart:io";
 
-import "package:flutter/foundation.dart" show kDebugMode;
+import "package:flutter/foundation.dart"
+    show kDebugMode, kProfileMode;
 import "package:http/http.dart" as http;
 import "package:path/path.dart" as p;
 
@@ -57,9 +58,9 @@ class DesktopUpdater implements AppUpdateHost {
     /// is a detached PowerShell waiting for this process to die.
     this.spawn,
 
-    /// Whether to treat this run as a debug build, which checks nothing. Null
-    /// asks what this run is, which under `flutter test` is a debug build —
-    /// so a test that wants the check to run passes `false`.
+    /// Whether to treat this run as a debug or profile build, which checks
+    /// nothing. Null asks what this run is, which under `flutter test` is a
+    /// debug build — so a test that wants the check to run passes `false`.
     this.debug,
   })  : appImage = appImage ?? Platform.environment["APPIMAGE"],
         bundle = bundle ?? _resolvedBundle();
@@ -77,7 +78,8 @@ class DesktopUpdater implements AppUpdateHost {
   /// null for the detached PowerShell.
   final Future<void> Function(String script)? spawn;
 
-  /// Whether this run counts as a debug build, and so checks nothing.
+  /// Whether this run counts as a debug or profile build, and so checks
+  /// nothing.
   final bool? debug;
 
   @override
@@ -86,9 +88,10 @@ class DesktopUpdater implements AppUpdateHost {
   @override
   Future<void> check({required String? version, required bool enabled}) async {
     if (!enabled) return logDetail(_tag, () => "off");
-    // A debug build has no release behind it to be newer than, and a developer
-    // has better things than the build tree under them being swapped.
-    if (debug ?? kDebugMode) {
+    // A debug or profile build has no release behind it to be newer than, and
+    // a developer has better things than the build tree under them being
+    // swapped.
+    if (debug ?? (kDebugMode || kProfileMode)) {
       return logDetail(_tag, () => "debug build; not checked");
     }
     if (version == null) {
@@ -102,26 +105,30 @@ class DesktopUpdater implements AppUpdateHost {
     // places is anything running.
     await _dropStale();
     final client = httpClient ?? tlsClient();
+    String? staged;
     try {
       final tag = await _latestTag(client);
       if (!versionIsNewer(version, tag)) {
         return logDetail(_tag, () => "$version is current against $tag");
       }
-      final staged = await _download(client, tag);
-      try {
-        await switch (flavour) {
-          UpdateFlavour.linux => _replaceAppImage(staged),
-          UpdateFlavour.macos => _swapBundle(staged),
-          UpdateFlavour.windows => _armInstaller(staged),
-        };
-        logDetail(_tag, () => "put $tag in place; the next start runs it");
-      } catch (error) {
-        // Nothing half-staged stays: a replace that did not happen takes its
-        // own staging back, the download with it.
-        await _discard(staged);
-        rethrow;
-      }
+      // Named here rather than inside the download, so a download that
+      // stops short leaves the file the catch below knows to take back.
+      staged = switch (flavour) {
+        UpdateFlavour.linux => p.join(p.dirname(appImage!), _stagingName),
+        UpdateFlavour.macos => _cacheStage(assetFor(flavour)),
+        UpdateFlavour.windows => _cacheStage(assetFor(flavour)),
+      };
+      await _download(client, tag, staged);
+      await switch (flavour) {
+        UpdateFlavour.linux => _replaceAppImage(staged),
+        UpdateFlavour.macos => _swapBundle(staged),
+        UpdateFlavour.windows => _armInstaller(staged),
+      };
+      logDetail(_tag, () => "put $tag in place; the next start runs it");
     } catch (error) {
+      // Nothing half-staged stays: a download that stopped short or a replace
+      // that did not happen takes its own staging back.
+      if (staged != null) await _discard(staged);
       logFailure(_tag, "updating to the latest release failed", error);
     } finally {
       client.close();
@@ -166,36 +173,46 @@ class DesktopUpdater implements AppUpdateHost {
       return tag;
     } finally {
       // A redirect's body is nothing, but a body nobody reads holds the
-      // socket until the client is closed.
-      await response.stream.drain<void>();
+      // socket until the client is closed. A body that errors while it is
+      // drained says nothing about the tag, which is already in hand.
+      try {
+        await response.stream.drain<void>();
+      } catch (_) {}
     }
   }
 
-  /// The release asset, streamed to where [flavour] stages it: Linux beside
-  /// the AppImage it will rename over — one filesystem, so the rename is
-  /// atomic — macOS and Windows in the cache's updates directory.
-  Future<String> _download(http.Client client, String tag) async {
-    final asset = assetFor(flavour);
-    final staged = switch (flavour) {
-      UpdateFlavour.linux => p.join(p.dirname(appImage!), _stagingName),
-      UpdateFlavour.macos => _cacheStage(asset),
-      UpdateFlavour.windows => _cacheStage(asset),
-    };
+  /// The release asset, streamed onto [staged] — beside the AppImage it will
+  /// rename over on Linux, one filesystem so the rename is atomic, and in the
+  /// cache's updates directory on the other two.
+  Future<void> _download(http.Client client, String tag, String staged) async {
     // The cache stage's directory, on the desktops that use it. Beside the
     // AppImage there is nothing to make: it exists because the app runs there.
     await Directory(p.dirname(staged)).create(recursive: true);
+    final asset = assetFor(flavour);
     final url = assetDownloadUrl(tag, asset);
     final response = await client.send(http.Request("GET", Uri.parse(url)));
     if (response.statusCode != 200) {
       throw HttpException("${response.statusCode} for $asset");
     }
     final sink = File(staged).openWrite();
+    var received = 0;
     try {
-      await sink.addStream(response.stream);
+      await sink.addStream(response.stream.map((chunk) {
+        received += chunk.length;
+        return chunk;
+      }));
     } finally {
       await sink.close();
     }
-    return staged;
+    // A stream that ends cleanly short of what it said it brings is the one
+    // truncation that looks like success — no error, a whole-looking file.
+    // The length the response declared is the only check a download has, and
+    // a body no length was declared for (chunked) is not compared.
+    final expected = response.contentLength;
+    if (expected != null && received != expected) {
+      throw HttpException(
+          "$asset arrived at $received of $expected bytes");
+    }
   }
 
   String _cacheStage(String asset) => p.join(cacheDir, "updates", asset);
