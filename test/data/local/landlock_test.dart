@@ -188,13 +188,11 @@ void main() {
         environment: {"PATH": "/usr/bin:/bin"});
     expect(await refused.exitCode, isNot(0),
         reason: "the extra root does not widen anything past itself");
-  });
 
-  test("a sandbox without extra writes carries no --write", () async {
-    if (!landlockUsable) return;
-    final prefix = await helper.prefixFor(CommandSandbox(
+    // Without extra writes there is no --write in the prefix at all.
+    final plain = await helper.prefixFor(CommandSandbox(
         workspace: p.join(cache.path, "ws"), tmp: tmp.path));
-    expect(prefix, isNot(contains("--write")));
+    expect(plain, isNot(contains("--write")));
   });
 
   test("an extra write root that is a file grants the file's rights",

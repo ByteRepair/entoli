@@ -52,6 +52,11 @@ void main() {
     expect(find.byTooltip("Download"), findsOneWidget);
     expect(find.byTooltip("Delete"), findsNothing);
     expect(find.textContaining("tool/android/build.sh"), findsNothing);
+
+    // Nothing installed yet, so nothing to pick: commands run on the host.
+    expect(find.text("Commands run on"), findsOneWidget);
+    expect(find.text("Host"), findsOneWidget);
+    expect(find.text("Alpine Linux"), findsNothing);
   });
 
   testWidgets("an architecture this build has no image for is said rather than "
@@ -63,16 +68,6 @@ void main() {
     final button = tester.widget<IconButton>(
         find.widgetWithIcon(IconButton, Icons.download_outlined));
     expect(button.onPressed, isNull);
-  });
-
-  testWidgets("nothing installed means nothing to pick: commands run on the host",
-      (tester) async {
-    app = TestApp.create(proot: true);
-    await pumpTerminal(tester);
-
-    expect(find.text("Commands run on"), findsOneWidget);
-    expect(find.text("Host"), findsOneWidget);
-    expect(find.text("Alpine Linux"), findsNothing);
   });
 
   testWidgets("downloading one adds it to the picker and leaves it unpicked",

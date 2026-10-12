@@ -13,13 +13,12 @@ void main() {
       ));
       expect(options.threads, 4);
       expect(options.kvCachePrompts, 30);
-    });
 
-    test("null cache-count is the default ten, and zero is off", () {
+      // Nothing set is the default ten, and the default is on, so the server
+      // still sees caching; zero is off and is not defaulted away.
       expect(poolOptions(AppSettings()).kvCachePrompts, AppSettings.defaultKvCachePrompts);
-      expect(poolOptions(AppSettings(localModelKvCachePrompts: 0)).kvCachePrompts, 0);
-      // The default is on, so nothing set still reaches the server as caching.
       expect(poolOptions(AppSettings()).kvCachePrompts, greaterThan(0));
+      expect(poolOptions(AppSettings(localModelKvCachePrompts: 0)).kvCachePrompts, 0);
     });
   });
 

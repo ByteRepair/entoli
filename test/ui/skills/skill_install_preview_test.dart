@@ -84,18 +84,6 @@ void main() {
     expect(_installButton, findsNothing);
   });
 
-  testWidgets("a package the store cannot hand over says so", (tester) async {
-    final store = FakeChatStore();
-    final app = TestApp.create(store: store);
-    addTearDown(app.dispose);
-
-    // Nothing staged under this id.
-    await app.pump(tester, const _Launcher(), settle: false);
-    await pumpUntil(tester, find.textContaining("could not be read"));
-
-    expect(_installButton, findsNothing);
-  });
-
   testWidgets("installing over an existing skill asks first, and Replace replaces",
       (tester) async {
     final store = FakeChatStore();
@@ -125,4 +113,17 @@ void main() {
     expect(File(p.join(dir, "SKILL.md")).readAsStringSync(), _skillMd);
     expect(File(p.join(dir, "scripts", "run.sh")).existsSync(), isTrue);
   });
+
+  testWidgets("a package the store cannot hand over says so", (tester) async {
+    final store = FakeChatStore();
+    final app = TestApp.create(store: store);
+    addTearDown(app.dispose);
+
+    // Nothing staged under this id.
+    await app.pump(tester, const _Launcher(), settle: false);
+    await pumpUntil(tester, find.textContaining("could not be read"));
+
+    expect(_installButton, findsNothing);
+  });
+
 }

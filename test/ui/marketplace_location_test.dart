@@ -23,9 +23,8 @@ void main() {
       pinned.file("README.md").toString(),
       "https://raw.githubusercontent.com/some/source/main/skills/x/README.md",
     );
-  });
 
-  test("an unpinned ref reads the default branch, as raw spells it", () {
+    // Unpinned, the default branch, as raw spells it.
     expect(
       location(complete).file("SKILL.md").toString(),
       "https://raw.githubusercontent.com/some/source/HEAD/skills/x/SKILL.md",
@@ -46,9 +45,8 @@ void main() {
         )),
       );
     }
-  });
 
-  test("a file list is a list of strings", () {
+    // And the file list is a list of strings, not of anything else.
     expect(
       () => location({...complete, "files": [1]}),
       throwsA(predicate(

@@ -58,7 +58,8 @@ void main() {
       expect(theirs.sent, isEmpty);
     });
 
-    test("a role that reconnects replaces the one that was there", () async {
+    test("a reconnecting role takes the slot over, and its predecessor's "
+        "leave changes nothing", () async {
       final host = join("room", "i");
       final joiner = join("room", "j");
       final again = join("room", "j");
@@ -68,6 +69,15 @@ void main() {
 
       expect(again.sent, ["answer"]);
       expect(joiner.sent, isEmpty);
+
+      // Rejoining and then dropping the old socket is the ordinary shape of
+      // a reconnect, and taking the room down with it would strand the new
+      // one.
+      await joiner.leave();
+      host.say("answer again");
+      await pumpEventQueue();
+
+      expect(again.sent, ["answer", "answer again"]);
     });
 
     test("a side that has left is not still forwarded to", () async {
@@ -81,39 +91,20 @@ void main() {
       expect(joiner.sent, isEmpty);
     });
 
-    test("the one it replaced leaving does not empty the room", () async {
-      // Rejoining and then dropping the old socket is the ordinary shape of a
-      // reconnect, and taking the room down with it would strand the new one.
-      final host = join("room", "i");
-      final joiner = join("room", "j");
-      final again = join("room", "j");
-      await joiner.leave();
-
-      host.say("answer");
-      await pumpEventQueue();
-
-      expect(again.sent, ["answer"]);
-    });
-
-    test("something that is not a join is shown the door", () async {
+    test("an invalid first message — non-join or bad role — closes the peer",
+        () async {
       final peer = _FakePeer();
       rooms.adopt(peer);
 
       peer.say("not json at all");
       await pumpEventQueue();
-
       expect(peer.closed, isTrue);
-    });
 
-    test("a join naming a role the protocol does not have is refused",
-        () async {
-      final peer = _FakePeer();
-      rooms.adopt(peer);
-
-      peer.say(jsonEncode({"join": "room", "role": "eavesdropper"}));
+      final second = _FakePeer();
+      rooms.adopt(second);
+      second.say(jsonEncode({"join": "room", "role": "eavesdropper"}));
       await pumpEventQueue();
-
-      expect(peer.closed, isTrue);
+      expect(second.closed, isTrue);
     });
   });
 
@@ -141,17 +132,13 @@ void main() {
       await incoming.close();
     });
 
-    test("it joins its room before anything else goes out", () async {
+    test("the join is first, and the send is echoed whole", () async {
       await signaler.send({"offer": "v=0 offer"});
       await pumpEventQueue();
 
+      // The room join is what announces the role.
       expect(sent.first, jsonEncode({"join": "room", "role": "i"}));
-    });
-
-    test("what it sends is what the other side is given", () async {
-      await signaler.send({"offer": "v=0 offer"});
-      await pumpEventQueue();
-
+      // And what was sent is what the other side is given.
       expect(jsonDecode(sent.last! as String), {"offer": "v=0 offer"});
     });
 

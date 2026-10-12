@@ -57,21 +57,19 @@ void main() {
       expect(tools, containsAll(["websearch", "webfetch", "bash"]));
     });
 
-    test("websearch/webfetch are not offered when unavailable", () async {
-      final client = FakeLlmClient([[finish]]);
-      web = FakeWebSearch(available: false);
-      await agentWith(client).run(userMessage("hi")).toList();
-
-      final tools = client.calls.first.tools.map((t) => t.name).toSet();
+    test("websearch/webfetch are not offered when absent or unavailable", () async {
+      // Nothing is wired at all.
+      var client = FakeLlmClient([[finish]]);
+      await agentWith(client, useDefaultWeb: false).run(userMessage("hi")).toList();
+      var tools = client.calls.first.tools.map((t) => t.name).toSet();
       expect(tools, isNot(contains("websearch")));
       expect(tools, isNot(contains("webfetch")));
-    });
 
-    test("websearch/webfetch are not offered when webSearch is null", () async {
-      final client = FakeLlmClient([[finish]]);
-      await agentWith(client, useDefaultWeb: false).run(userMessage("hi")).toList();
-
-      final tools = client.calls.first.tools.map((t) => t.name).toSet();
+      // Something is wired, and it says itself unavailable.
+      client = FakeLlmClient([[finish]]);
+      web = FakeWebSearch(available: false);
+      await agentWith(client).run(userMessage("hi")).toList();
+      tools = client.calls.first.tools.map((t) => t.name).toSet();
       expect(tools, isNot(contains("websearch")));
       expect(tools, isNot(contains("webfetch")));
     });

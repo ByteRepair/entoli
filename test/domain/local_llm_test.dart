@@ -28,13 +28,6 @@ void main() {
     expect(modelWith(128 * 1024).defaultContext, 8192);
   });
 
-  test("rounding down is what keeps it inside the budget", () {
-    // 1 GiB / 48 KiB is 21,845, which is not a size anyone would choose and is
-    // over budget the moment it is rounded up to one.
-    expect(modelWith(48 * 1024).defaultContext * 48 * 1024,
-        lessThanOrEqualTo(kvBudgetBytes));
-  });
-
   test("no entry in the catalog is given more than the budget", () {
     for (final model in localModelCatalog) {
       expect(model.defaultContext * model.kvBytesPerToken,

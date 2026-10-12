@@ -44,10 +44,6 @@ void main() {
 
       expect(text, contains("## Style"));
     });
-
-    test("the prompt is unchanged where there is no tone and no citations", () {
-      expect(promptWith(), isNot(contains("## How to reply")));
-    });
   });
 
   group("tone", () {

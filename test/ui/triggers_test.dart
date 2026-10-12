@@ -2,6 +2,7 @@ import "package:flutter/material.dart";
 import "package:flutter_markdown_plus/flutter_markdown_plus.dart";
 import "package:flutter_test/flutter_test.dart";
 
+import "package:agent_chat/domain/date_words.dart" show describeFire;
 import "package:agent_chat/domain/trigger.dart";
 import "package:agent_chat/domain/temp_chat_ttl.dart";
 import "package:agent_chat/providers.dart";
@@ -71,6 +72,9 @@ void main() {
 
   testWidgets("lists reminders with their next fire", (tester) async {
     final alarms = FakeReminderAlarms();
+    // A fire far from any clock this suite runs on: far enough that the row's
+    // wording is the short date, never today or tomorrow.
+    final fires = DateTime(2027, 3, 5, 20, 30);
     final app = TestApp.create(
       reminderAlarms: alarms,
       triggers: [
@@ -78,8 +82,8 @@ void main() {
           id: "r1",
           name: "Morning sweep",
           prompt: "check builds",
-          source: ScheduleSource(at: DateTime.now().add(const Duration(hours: 3))),
-          nextFireAt: DateTime.now().add(const Duration(hours: 3)),
+          source: ScheduleSource(at: fires),
+          nextFireAt: fires,
           requestCode: 1,
         ),
       ],
@@ -91,6 +95,9 @@ void main() {
     expect(find.text("Morning sweep"), findsOneWidget);
     expect(find.byType(Switch), findsOneWidget);
     expect(find.text("Add trigger"), findsOneWidget);
+    // And the row says when it next fires — the wording the row derives.
+    expect(find.textContaining(describeFire(fires, DateTime.now())),
+        findsOneWidget);
   });
 
   testWidgets("a permission granted in the system settings shows on the way back",

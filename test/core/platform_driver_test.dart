@@ -39,20 +39,17 @@ void main() {
         byteRepairBinDir: bin,
       );
 
-  test("an isolated project's turns find the fetched tools, on the machine "
-      "itself", () {
+  test("PATH injection happens iff the project is isolated and a bin exists", () {
     final path = driverOf(project: "byte-repair")!.environment["PATH"];
     // Ahead of the machine's own directories, so a fetched tool shadows a
     // system one rather than the other way round.
     expect(path, startsWith("$binDir:"));
-  });
 
-  test("no other project's turns see the bin directory", () {
+    // No other project's turns see the bin directory.
     expect(driverOf(project: null)?.environment["PATH"], isNull);
     expect(driverOf(project: "some-project")?.environment["PATH"], isNull);
-  });
 
-  test("no bin directory, no injection", () {
+    // And no bin directory, no injection.
     expect(driverOf(bin: null, project: "byte-repair")?.environment["PATH"],
         isNull);
     expect(driverOf(bin: null, project: null)?.environment["PATH"], isNull);

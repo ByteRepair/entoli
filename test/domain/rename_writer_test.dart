@@ -1,6 +1,8 @@
 import "package:flutter_test/flutter_test.dart";
 import "package:agent_chat/domain/documents.dart";
 
+import "dart:async";
+
 void main() {
   test("overlapping writes land in the order they were asked", () async {
     final written = <String>[];
@@ -18,23 +20,6 @@ void main() {
     ]);
 
     expect(written, ["first", "second", "third"]);
-  });
-
-  test("a write landing behind queues behind it, not through it", () async {
-    // The ordering property a reader of the file answers from: the last write
-    // asked is the last one to run, whatever the overlap.
-    final written = <String>[];
-    final writer = RenameWriter((path, text) async {
-      await Future<void>.delayed(const Duration(milliseconds: 5));
-      written.add(text);
-    });
-
-    final first = writer.write("settings", "first");
-    final second = writer.write("settings", "second");
-    await first;
-    await second;
-
-    expect(written, ["first", "second"]);
   });
 
   test("a failed write drains its entry and does not wedge the path",
@@ -79,22 +64,37 @@ void main() {
   });
 
   test("paths drain once their tail finishes", () async {
-    final writer = RenameWriter((path, text) async {});
+    // The third write hangs on the hold, so `started` says the drained path
+    // ran it at once: no stopwatch, which was a bet on the runner's load.
+    final hang = Completer<void>();
+    var calls = 0;
+    var started = false;
+    final writer = RenameWriter((path, text) async {
+      calls += 1;
+      if (calls == 3) {
+        started = true;
+        await hang.future;
+      }
+    });
 
     await writer.write("settings", "a");
     await writer.write("settings", "b");
 
     // The entry leaves with the write that finished. The removal runs one
     // microtask behind the write's own completion, so let it land.
-    await Future<void>.delayed(Duration.zero);
+    await pumpEventQueue();
     expect(writer.pendingWrites, 0);
 
-    // Nothing to wait on: a third write asked now starts immediately rather
-    // than behind a tail that already answered.
-    final stopwatch = Stopwatch()..start();
-    await writer.write("settings", "c");
-    expect(stopwatch.elapsed, lessThan(const Duration(milliseconds: 10)));
-    await Future<void>.delayed(Duration.zero);
+    // Nothing to wait on: a third write asked now starts at once rather
+    // than standing behind a tail that already answered.
+    final third = writer.write("settings", "c");
+    await pumpEventQueue();
+    expect(started, isTrue, reason: "the drained path starts its next write");
+    expect(writer.pendingWrites, 1);
+
+    hang.complete();
+    await third;
+    await pumpEventQueue();
     expect(writer.pendingWrites, 0);
   });
 }

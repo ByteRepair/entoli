@@ -39,16 +39,10 @@ void main() {
 
       expect(lastNotice()?.label, tiny.name);
       expect(lastNotice()?.total, tiny.bytes);
-    });
 
-    testWidgets("counts them where there are several, in the catalog's own "
-        "words", (tester) async {
-      app = TestApp.create();
-      app.voiceModels.installing = Completer<void>();
-      await app.pump(tester, const SizedBox());
-
+      // Where there are several, the count is in the catalog's own words,
+      // and the total is the pair of them.
       final downloads = app.container.read(voiceModelsProvider.notifier);
-      downloads.install(tiny);
       downloads.install(aVoice);
       await settleIo(tester);
 
@@ -68,7 +62,9 @@ void main() {
       expect(lastNotice()?.label, alpine.name);
     });
 
-    testWidgets("is taken away when the last one finishes", (tester) async {
+    testWidgets("is taken away when the last one finishes, and by its own Stop",
+        (tester) async {
+      // Nothing held: the download settles at once and the notice is gone.
       app = TestApp.create();
       await app.pump(tester, const SizedBox());
 
@@ -76,17 +72,16 @@ void main() {
       await settleIo(tester);
 
       expect(lastNotice(), isNull);
-    });
 
-    testWidgets("and when the notification's own Stop is pressed", (tester) async {
+      // Held, then stopped from the notification: the button asks rather than
+      // acts — whoever owns the work stops it, and that is what takes the
+      // notification away.
       app = TestApp.create();
       app.voiceModels.installing = Completer<void>();
       await app.pump(tester, const SizedBox());
       app.container.read(voiceModelsProvider.notifier).install(tiny);
       await settleIo(tester);
 
-      // The button asks rather than acts: whoever owns the work stops it, and
-      // that is what takes the notification away.
       app.work.stop(BackgroundJob.download);
       await settleIo(tester);
 

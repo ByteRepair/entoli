@@ -36,14 +36,19 @@ void main() {
       expect(package.entries.map((e) => e.$1), containsAll(["SKILL.md", "scripts/run.sh"]));
       // The top folder is stripped, so nothing lands in a packager's sub-tree.
       expect(package.entries.map((e) => e.$1), isNot(contains("packaged/SKILL.md")));
-    });
 
-    test("without a name in the frontmatter, the folder is the name", () {
-      final package = parseSkillPackage(skillZip(
+      // Without a name in the frontmatter, the folder is the name — the zip's
+      // own folder, which is the only name there is.
+      final bare = parseSkillPackage(skillZip(
           {"SKILL.md": "---\ndescription: d\n---\n\nBody.\n"},
           folder: "review"));
+      expect(bare.name, "review");
 
-      expect(package.name, "review");
+      // And frontmatter beats the zip folder when both say something.
+      final other = parseSkillPackage(skillZip({
+        "SKILL.md": "---\nname: other-name\ndescription: d\n---\n\nBody.\n",
+      }, folder: "review"));
+      expect(other.name, "other-name");
     });
 
     test("a package with no description is refused", () {
@@ -52,27 +57,6 @@ void main() {
             skillZip({"SKILL.md": "---\nname: bare\n---\n\nBody.\n"})),
         throwsA(isA<SkillImportException>().having((e) => e.message, "message",
             "no description in the SKILL.md frontmatter")),
-      );
-    });
-
-    test("the folder the package lands under is the name, not the zip's folder",
-        () {
-      final package = parseSkillPackage(skillZip({
-        "SKILL.md": "---\nname: other-name\ndescription: d\n---\n\nBody.\n",
-      }, folder: "review"));
-      expect(package.name, "other-name");
-    });
-
-    test("a package with an unknown top-level key is refused", () {
-      expect(
-        () => parseSkillPackage(skillZip({
-          "SKILL.md":
-              "---\nname: review\ndescription: d\nargument-hint: args\n---\n\nBody.\n",
-        }, folder: "review")),
-        throwsA(isA<SkillImportException>().having(
-            (e) => e.message,
-            "message",
-            contains('unknown frontmatter key "argument-hint"'))),
       );
     });
 

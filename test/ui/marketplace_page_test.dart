@@ -430,6 +430,50 @@ Frame it, from upstream.
     expect(find.text("letterbox"), findsOneWidget);
   });
 
+  // Seeded before any install runs: on Linux the install path leaves the
+  // skills directory read-only, so the file the replace drops has to be
+  // written before the app lays the directory down.
+  testWidgets("installing over an existing skill asks first, and Replace replaces",
+      (tester) async {
+    await pumpList(tester);
+    await settleIo(tester);
+
+    // Seeded after the page pumps: on Linux an install lands its directory
+    // read-only again, so the file the replace drops must predate any install.
+    final dir = p.join(app!.config.promptsDir(CompletionKind.skill), "letterbox");
+    Directory(dir).createSync(recursive: true);
+    File(p.join(dir, "SKILL.md")).writeAsStringSync("old\n");
+    File(p.join(dir, "obsolete.sh")).writeAsStringSync("old\n");
+
+    await openEntry(tester, kind: CompletionKind.skill, slug: "letterbox");
+
+    await tester.tap(find.text("Install skill"));
+    await pumpUntil(tester, find.text("Replace"));
+    await tester.tap(find.text("Replace"));
+    await settleIo(tester, least: 20, tries: 80);
+
+    // The replace was wholesale: the dropped file is gone, the rest rewritten.
+    expect(File(p.join(dir, "obsolete.sh")).existsSync(), isFalse);
+    expect(File(p.join(dir, "SKILL.md")).readAsStringSync(), _letterboxMd);
+    expect(File(p.join(dir, "references", "tone.md")).existsSync(), isTrue);
+  });
+
+    testWidgets("an agent with no picture installs the prompt alone",
+        (tester) async {
+      await pumpList(tester, agentPicture: false);
+      await openEntry(tester, kind: CompletionKind.agent, slug: "diary");
+
+      expect(find.byType(Image), findsNothing);
+
+      await tester.tap(find.text("Install agent"));
+      await settleIo(tester, least: 20, tries: 80);
+
+      final agentsDir = app!.config.promptsDir(CompletionKind.agent);
+      expect(File(p.join(agentsDir, "diary.md")).readAsStringSync(), _diaryPrompt);
+      // No picture served, none written.
+      expect(File(p.join(agentsDir, "diary.png")).existsSync(), isFalse);
+    });
+
   testWidgets("an agent's preview shows the picture and installs prompt and picture",
       (tester) async {
     await pumpList(tester);
@@ -446,22 +490,6 @@ Frame it, from upstream.
     final agentsDir = app!.config.promptsDir(CompletionKind.agent);
     expect(File(p.join(agentsDir, "diary.md")).readAsStringSync(), _diaryPrompt);
     expect(File(p.join(agentsDir, "diary.png")).existsSync(), isTrue);
-  });
-
-  testWidgets("an agent with no picture installs the prompt alone",
-      (tester) async {
-    await pumpList(tester, agentPicture: false);
-    await openEntry(tester, kind: CompletionKind.agent, slug: "diary");
-
-    expect(find.byType(Image), findsNothing);
-
-    await tester.tap(find.text("Install agent"));
-    await settleIo(tester, least: 20, tries: 80);
-
-    final agentsDir = app!.config.promptsDir(CompletionKind.agent);
-    expect(File(p.join(agentsDir, "diary.md")).readAsStringSync(), _diaryPrompt);
-    // No picture served, none written.
-    expect(File(p.join(agentsDir, "diary.png")).existsSync(), isFalse);
   });
 
   testWidgets("a remote skill previews out of its source and installs whole",
@@ -542,32 +570,6 @@ Frame it, from upstream.
     );
     await settleIo(tester);
     expect(find.text("Could not reach the marketplace."), findsOneWidget);
-  });
-
-  testWidgets("installing over an existing skill asks first, and Replace replaces",
-      (tester) async {
-    await pumpList(tester);
-    await settleIo(tester);
-
-    // A skill already installed under the same name, with a file the new
-    // packaging would drop.
-    final dir = p.join(app!.config.promptsDir(CompletionKind.skill), "letterbox");
-    Directory(dir).createSync(recursive: true);
-    File(p.join(dir, "SKILL.md")).writeAsStringSync("old\n");
-    File(p.join(dir, "obsolete.sh")).writeAsStringSync("old\n");
-
-    await openEntry(tester, kind: CompletionKind.skill, slug: "letterbox");
-
-    await tester.tap(find.text("Install skill"));
-    await pumpUntil(tester, find.text("Replace"));
-
-    await tester.tap(find.text("Replace"));
-    await settleIo(tester, least: 20, tries: 80);
-
-    // The replace was wholesale: the dropped file is gone, the rest rewritten.
-    expect(File(p.join(dir, "obsolete.sh")).existsSync(), isFalse);
-    expect(File(p.join(dir, "SKILL.md")).readAsStringSync(), _letterboxMd);
-    expect(File(p.join(dir, "references", "tone.md")).existsSync(), isTrue);
   });
 
   testWidgets("a package the intake refuses is said so, and nothing lands",

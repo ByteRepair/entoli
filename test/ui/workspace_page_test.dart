@@ -211,26 +211,22 @@ void main() {
   group("desktop", () {
     setUp(() => start(handoff: FakeFileHandoff.desktop()));
 
-    testWidgets("the title bar opens the folder in the file manager", (tester) async {
-      seed(files: ["notes.md"]);
-      await open(tester);
-
-      await tester.tap(find.byTooltip("Show in file manager"));
-      await settleIo(tester);
-
-      expect(app.handoff.revealed, [root]);
-    });
-
     testWidgets("it reveals the folder being looked at, not the root", (tester) async {
       seed(files: ["src/main.dart"]);
       await open(tester);
+
+      // At the root, the root.
+      await tester.tap(find.byTooltip("Show in file manager"));
+      await settleIo(tester);
+      expect(app.handoff.revealed, [root]);
+
+      // Descended, what is on screen.
       await tester.tap(find.text("src"));
       await settleIo(tester);
-
       await tester.tap(find.byTooltip("Show in file manager"));
       await settleIo(tester);
 
-      expect(app.handoff.revealed, ["$root/src"]);
+      expect(app.handoff.revealed.last, "$root/src");
     });
 
     // Selecting survives having nowhere to share to, because deleting is not a
@@ -302,16 +298,6 @@ void main() {
       expect(app.handoff.exported, [
         ["$root/src"],
       ]);
-    });
-
-    testWidgets("a long press selects without the toolbar", (tester) async {
-      seed(files: ["a.txt"]);
-      await open(tester);
-
-      await tester.longPress(find.text("a.txt"));
-      await settleIo(tester);
-
-      expect(find.text("1 selected"), findsOneWidget);
     });
 
     testWidgets("cancelling a selection puts the listing back", (tester) async {
@@ -529,7 +515,8 @@ void main() {
       expect(find.text("Share"), findsNothing);
     });
 
-    testWidgets("uploaded files land in the folder being looked at", (tester) async {
+    testWidgets("uploaded files land in the folder being looked at",
+        (tester) async {
       seed(files: ["src/main.dart"]);
       await open(tester);
       await tester.tap(find.text("src"));

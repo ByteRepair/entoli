@@ -23,39 +23,32 @@ void main() {
     Frontmatter named(String name) =>
         _parse("---\nname: $name\ndescription: d\n---\n\nBody.");
 
-    test("uppercase refused", () {
-      expect(skillFrontmatterProblems(named("PDF-Processing"), "PDF-Processing"),
-          isNotEmpty);
+    test("names the grammar refuses", () {
+      // Each carries its own reason; only the shape is being asked about, so
+      // one not-empty assertion per row.
+      for (final name in [
+        "PDF-Processing", // uppercase
+        "-pdf", // leading hyphen
+        "pdf--processing", // consecutive hyphens
+        "pdf-", // trailing hyphen
+      ]) {
+        expect(skillFrontmatterProblems(named(name), name), isNotEmpty,
+            reason: "$name is not a skill name");
+      }
+      expect(skillNameOk("pdf_processing"), isFalse, reason: "underscore");
     });
 
-    test("leading hyphen refused", () {
-      expect(skillFrontmatterProblems(named("-pdf"), "-pdf"), isNotEmpty);
-    });
-
-    test("consecutive hyphens refused", () {
-      expect(skillFrontmatterProblems(named("pdf--processing"), "pdf--processing"),
-          isNotEmpty);
-    });
-
-    test("trailing hyphen refused", () {
-      expect(skillFrontmatterProblems(named("pdf-"), "pdf-"), isNotEmpty);
-    });
-
-    test("over 64 characters refused", () {
+    test("the 64-character cap, hyphens counting", () {
       final long = "a" * 65;
       expect(
           skillFrontmatterProblems(named(long), long),
           contains("name is 65 characters (max 64)"));
-    });
-
-    test("65 with digits and hyphens still length-capped", () {
-      final long = List.filled(64, "a").join("-");
-      expect(skillNameOk(long), isFalse);
       expect(skillNameOk("a" * 64), isTrue);
-    });
 
-    test("underscores refused", () {
-      expect(skillNameOk("pdf_processing"), isFalse);
+      // Hyphens and digits are characters like any other: the list of 64
+      // names joined by 63 hyphens is 127 long.
+      final joined = List.filled(64, "a").join("-");
+      expect(skillNameOk(joined), isFalse);
     });
 
     test("name and folder must match", () {

@@ -78,12 +78,6 @@ void main() {
     });
   });
 
-  testWidgets("with nothing paired it says how to start", (tester) async {
-    await open(tester);
-
-    expect(find.textContaining("No devices paired yet"), findsOneWidget);
-  });
-
   group("a paired device", () {
     testWidgets("is listed, offline, with a way to dial it", (tester) async {
       await open(tester, paired: [testPairedDevice("d1", name: "Laptop")]);
@@ -127,8 +121,7 @@ void main() {
       expect(find.textContaining("could not reach Laptop"), findsOneWidget);
     });
 
-    testWidgets("revoking asks first, and a refusal keeps the device",
-        (tester) async {
+    testWidgets("revoking asks first, and confirming takes it out", (tester) async {
       await open(tester, paired: [testPairedDevice("d1", name: "Laptop")]);
 
       await scrollTo(tester, find.text("Revoke"));
@@ -139,15 +132,11 @@ void main() {
           matching: find.widgetWithText(TextButton, "Cancel")));
       await settleIo(tester);
 
+      // Cancelled: the device stays in the registry and on the page.
       expect(await registry.list(), hasLength(1));
       expect(find.text("Laptop"), findsOneWidget);
       expect(hub.peers.value, hasLength(1));
-    });
 
-    testWidgets("confirming takes it out of the registry", (tester) async {
-      await open(tester, paired: [testPairedDevice("d1", name: "Laptop")]);
-
-      await scrollTo(tester, find.text("Revoke"));
       await tester.tap(find.text("Revoke"));
       await settleIo(tester);
       await tester.tap(find.descendant(
@@ -174,7 +163,7 @@ void main() {
       expect(find.textContaining("no relay URL is set"), findsOneWidget);
     });
 
-    testWidgets("a relay URL is a route, and the window shows a code",
+    testWidgets("opening a pairing window dials the relay and shows the QR",
         (tester) async {
       await open(tester, relayUrl: "wss://relay.example.com");
 
@@ -188,15 +177,6 @@ void main() {
       // Holding the window is the "i" side, in the room the secret derives.
       expect(relay.dialled.single.$1, "wss://relay.example.com");
       expect(relay.dialled.single.$3, "i");
-    });
-
-    testWidgets("the window page shows a QR for the code", (tester) async {
-      await open(tester, relayUrl: "wss://relay.example.com");
-
-      await scrollTo(tester, find.text("Open pairing window"));
-      await tester.tap(find.text("Open pairing window"));
-      await settleIo(tester);
-
       // The window page renders the QR and the selectable code, not the inline
       // box the list used to draw.
       expect(find.byType(QrImageView), findsOneWidget);

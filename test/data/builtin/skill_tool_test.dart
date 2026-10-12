@@ -74,25 +74,21 @@ void main() {
   final finish = saidOnly("done");
 
   group("offering", () {
-    test("the skill tool is offered with a model-invocable skill", () async {
-      final client = FakeLlmClient([[finish]]);
+    test("the skill tool is offered iff a model-invocable skill exists", () async {
+      // One is.
+      var client = FakeLlmClient([[finish]]);
       await agentWith(client, [skillDoc("review")]).run(userMessage("hi")).toList();
-
       expect(client.calls.first.tools.map((t) => t.name), contains("skill"));
-    });
 
-    test("with no skills, the skill tool is not offered", () async {
-      final client = FakeLlmClient([[finish]]);
+      // None is.
+      client = FakeLlmClient([[finish]]);
       await agentWith(client, const []).run(userMessage("hi")).toList();
-
       expect(client.calls.first.tools.map((t) => t.name), isNot(contains("skill")));
-    });
 
-    test("a user-only skill does not turn the skill tool on", () async {
-      final client = FakeLlmClient([[finish]]);
+      // A skill exists, but it is the user's: the model may not call it.
+      client = FakeLlmClient([[finish]]);
       await agentWith(client, [skillDoc("private", modelInvocable: false)])
           .run(userMessage("hi")).toList();
-
       expect(client.calls.first.tools.map((t) => t.name), isNot(contains("skill")));
     });
 
@@ -109,14 +105,12 @@ void main() {
       expect(text, contains("## Skills"));
       expect(text, contains("review: look it over"));
       expect(text, isNot(contains("private")));
-    });
 
-    test("no skills leaves the section out of the prompt", () {
-      final text =
+      // And with no skills, the section is left out of the prompt.
+      final bare =
           agentSystemMessage(platform: "test", caps: AgentCapabilities.full)
               .text;
-
-      expect(text, isNot(contains("## Skills")));
+      expect(bare, isNot(contains("## Skills")));
     });
   });
 
@@ -186,22 +180,21 @@ void main() {
       expect(result.exceptionInfo, contains("ghost"));
       expect(result.exceptionInfo, contains("review"));
       expect(result.exceptionInfo, contains("brief"));
-    });
 
-    test("with none installed, the refusal says so", () async {
-      final client = FakeLlmClient([
+      // With none installed, the refusal says so rather than listing nothing.
+      final empty = FakeLlmClient([
         [skillCall("ghost")],
         [finish],
       ]);
-      final events = await agentWith(client, const [])
+      final none = await agentWith(empty, const [])
           .run(userMessage("go")).toList();
 
-      final result = events
+      final noneResult = none
           .whereType<ToolResultEvent>()
           .firstWhere((e) => e.result.callId == "sk-1")
           .result;
-      expect(result.returnCode, -1);
-      expect(result.exceptionInfo, contains("none are installed"));
+      expect(noneResult.returnCode, -1);
+      expect(noneResult.exceptionInfo, contains("none are installed"));
     });
 
     test("a user-only skill is refused, not worked around", () async {

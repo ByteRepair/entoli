@@ -52,20 +52,17 @@ void main() {
           await packageSkillDirectory(fileSystemIo, dir.path, "from-arg");
 
       expect(package.name, "from-arg");
-    });
 
-    test("without a name argument or frontmatter name, the folder is the name",
-        () async {
+      // Without a name argument or frontmatter name, the folder is the name:
+      // the folder is a temp dir whose name is not a spec name, so the
+      // packager is handed the name the folder would be renamed to.
       write({
         "SKILL.md": "---\ndescription: d\n---\n\nDo it.\n",
       });
-
-      // The folder is a temp dir whose name is not a spec name, so the
-      // packager is handed the name the folder would be renamed to.
-      final package =
+      final fromFolder =
           await packageSkillDirectory(fileSystemIo, dir.path, "demo");
 
-      expect(package.name, "demo");
+      expect(fromFolder.name, "demo");
     });
 
     test("a frontmatter that does not conform is refused with the reasons",
