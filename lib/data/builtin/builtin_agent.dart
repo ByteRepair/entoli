@@ -219,6 +219,34 @@ class BuiltinSession {
   /// heard nothing.
   bool get hasConversation => messages.any((m) => m.role != LlmRole.system);
 
+  /// The conversation behind the system block: what [projectionOf] builds and
+  /// what parity compares, the scaffolding above it being rewritten per turn.
+  List<LlmMessage> get conversation =>
+      messages.skipWhile((m) => m.role == LlmRole.system).toList();
+
+  /// The ids of the log messages whose projected wording the conversation
+  /// holds — the covered prefix of [coveredEntries] conversation entries,
+  /// which is everything before the live tail of the turn running now. How a
+  /// sync knows what the log has gained since the session was last at it:
+  /// everything after these ids is either the tail to confirm or the log's
+  /// new wording to append. Set by the fills that word whole histories; see
+  /// `BuiltinBackend._sessionOf`.
+  List<String> covered = const [];
+
+  /// How many conversation entries [covered] worded.
+  int coveredEntries = 0;
+
+  /// The live tail: what the last turn appended beyond the covered prefix.
+  List<LlmMessage> get tail =>
+      conversation.sublist(coveredEntries);
+
+  /// The covered prefix grew by [entries] wordings worded over [ids] on the
+  /// log — after a sync confirmed, or appended, those entries.
+  void advance(int entries, List<String> ids) {
+    coveredEntries += entries;
+    covered = [...covered, ...ids];
+  }
+
   /// Put the conversation back into a session that does not have it — one
   /// rewound, or one belonging to a chat opened after a restart. `project` is
   /// what builds the argument, out of what `conv.jsonl` kept.
@@ -333,6 +361,7 @@ List<LlmTool> agentTools({
 class BuiltinAgent {
   BuiltinAgent({
     required this.session,
+    this.viewer,
     required this.client,
     required this.shell,
     this.oneShot = false,
@@ -377,6 +406,12 @@ class BuiltinAgent {
     this.sandboxReprompt = true,
     this.claimInstruction,
   });
+
+  /// Who this turn answers as: null the house, or the member's bare name the
+  /// room routed the say to — the session is worded for them, and the live
+  /// prompt's wording must match what a reload rebuilds, so the viewer rides
+  /// the agent the way the session does.
+  final String? viewer;
 
   /// Marks an instruction file as first-reached in the conversation, as a
   /// nested `AGENTS.md` read above a file mid-turn is pulled in; returning
@@ -706,9 +741,12 @@ class BuiltinAgent {
   }
 
   /// [prompt] is the message being logged for this turn, projected rather than
-  /// worded here — see [projectionOf].
-  Stream<AgentEvent> run(Message prompt, {String? agentPrompt}) async* {
-    await _openTurn(prompt, agentPrompt);
+  /// worded here — see [projectionOf]. [mayDress] is whether it may dress as
+  /// the task — the viewer's first own mail, decided by the caller against
+  /// the history it holds, the decision a whole-span walk would make.
+  Stream<AgentEvent> run(Message prompt,
+      {String? agentPrompt, bool mayDress = false}) async* {
+    await _openTurn(prompt, mayDress, agentPrompt);
     yield* _recorded(_loop)();
   }
 
@@ -819,10 +857,16 @@ class BuiltinAgent {
     yield const DoneEvent();
   }
 
-  Future<void> _openTurn(Message prompt, String? agentPrompt) async {
+  Future<void> _openTurn(
+      Message prompt, bool mayDress, String? agentPrompt) async {
     _setSystemPrompt(agentPrompt);
+    // The wording the live turn sends is the wording a reload rebuilds: both
+    // call the projection, and the dress decision — may this message dress —
+    // is the caller's, computed against the history it holds: the viewer's
+    // first own mail dresses, and a whole-span walk decides the same first;
+    // see "The room and its participants".
     session.messages.addAll(await projectionOf([prompt],
-        first: !session.hasConversation, load: loadResource));
+        first: mayDress, viewer: viewer, load: loadResource));
   }
 
   /// The system prompt is rewritten every turn rather than once, so an

@@ -54,6 +54,21 @@ That is what keeps the label honest: it answers "who spoke", and the answer
 is a lie if an instruction overlay can put a name on the main agent's
 voice.
 
+**The routing record rides the say.** `Message.addressees` is stamped where
+the say is written — a fresh send in `openTurn`, a say queued while the room
+ran in `_sayLater` — with who the room resolved it to, sigils on as typed,
+empty for the house's mail; old logs read empty. It is room data, not text:
+`documents` say what the references *meant*, this says who the room sent it
+to, and a member deleted from the library after the fact does not rewrite
+the room's past. The wording half of it is the projection's, per viewer —
+see "The room's mail is worded per viewer too" in `lib/domain/AGENTS.md` —
+and what makes the room's other participants' sessions current with it is
+the dispatch-time sync, **`_syncSession`** (see "The agent loop":
+`BuiltinBackend._syncSession`): every dispatch's history is the room's
+whole thread, and a participant's session words what it has never heard,
+confirmed against the log before a word is appended — the house catching up
+with the room's member turns, and each member with the others.
+
 **The room contract is My Team's note, not a per-turn overlay.** Every Omada
 turn runs under `MyTeamProject`'s bundled note (`assets/prompts/projects/
 my-team/system/instructions.md`): the room, the handles, `pass`, the one

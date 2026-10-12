@@ -212,6 +212,16 @@ build" are one expression rather than two kept level by hand. It is why
 attachments: the pieces travelling separately is what let them be assembled two
 ways.
 
+**The room's mail is worded per viewer too.** A say the user addressed to a
+member is, in every other participant's session, a user-role message naming
+who it was for (`addressedUserTurnText`, off `Message.addressees` — the
+room's own routing record, stamped at dispatch, empty for the house's mail) —
+the way a peer reply names who wrote it; a model cannot be asked to read a
+sigil in someone else's prose and know whose mail it is. What the addressee
+reads is verbatim, and the task dress (`_firstTask`) is the message that
+opened the *viewer's* work — the first own mail — which in a direct chat is
+the conversation's opener, so the rule reduces there to today's bytes.
+
 ### One accumulation
 
 Wording a turn once was half of it. A turn was still *built up* twice — the

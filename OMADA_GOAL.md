@@ -75,6 +75,15 @@ stays — history is fact.
   A's earlier replies reach B labeled as A's words (projected as user-role
   messages prefixed with the author, per the projection's parity rule), never
   as B's own assistant turns.
+- **Address is visible to every viewer.** A say records who the room routed
+  it to (`Message.addressees`, stamped at dispatch, empty for the house's
+  mail), and every participant but the addressee reads it labeled by who it
+  was for — the way replies are labeled by who wrote them: in B's session
+  the say you addressed to A reads as someone else's mail, and the task
+  dress lands on the first message that was B's. What carries it between
+  participants is the dispatch-time sync (`_syncSession`): every dispatch's
+  history is the room's thread, and each participant's session words what it
+  has never heard — the house catching up with the room's turns.
 - **Loops are capped.** Members may hand off to each other, but the round
   stops at `omadaMaxGenerations` dispatch waves of agent-to-agent work (the
   user's message is generation zero and uncapped) until the user speaks —
@@ -137,6 +146,15 @@ stays — history is fact.
   questions, and the app-level ordering default. The recorder kept its
   one-reply-per-turn shape: the assumption lives in the per-turn instance,
   which is what lets two replies grow beside each other.
+- **Phase C3 — the room's sessions.** `BuiltinBackend._syncSession`, the one
+  rule every participant catches up by: a dispatch's history words what the
+  log has gained since the session's covered ids onto the covered end,
+  confirming the live tail against the log's wordings first; a divergence
+  re-words from the log itself. A warm session had been behind the log the
+  moment members could speak — the house's second turn never saw the round
+  it was being thanked for — and the task dress, which had dressed the
+  room's opener for every viewer, is decided per message from the history:
+  the viewer's first own mail.
 
 ## What remains
 

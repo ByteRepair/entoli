@@ -27,18 +27,27 @@ import "templates.dart";
 /// about to log rather than wording one of its own. See "The projection" in
 /// `lib/domain/AGENTS.md` for what that is worth and what it costs.
 ///
-/// [first] says whether the first user message in [messages] is also the first
-/// of the conversation, which is the one dressed as a task. False where this is
-/// a fragment appended to a session that already holds the rest — see
-/// `_runBypass`.
+/// [first] says whether a user message in [messages] may be dressed as the
+/// task — the fragment question: false where this is a fragment appended to a
+/// session that already holds the rest, see `_runBypass`. The one dressed is
+/// the message that opened the viewer's work, not the conversation's opener:
+/// its first own mail — the first message the room addressed to [viewer], or
+/// undirected mail for the house. A call that has already decided the message
+/// is that first mail — a live prompt, a delta the session has never worded —
+/// passes the decision through [first]; the walk only adds that it dresses
+/// once and only its own mail.
 ///
 /// [viewer] is whose session this projection words the conversation for — null
 /// for the main agent, a member's `@name` for their own. A reply authored by
 /// another participant is worded as a user-role message labeled with who wrote
 /// it, so the viewer's model never reads another agent's words as its own; the
-/// human user's messages stay exactly as they are. A reply with no author is
-/// the viewer's own — today every conversation's shape, and byte-identical
-/// to what this worded before Omada existed.
+/// mail the user sent somewhere else is worded the same way, labeled with who
+/// it was for ([addressedUserTurnText], off `Message.addressees`, the room's
+/// routing record) — so no reader of a room mistakes someone else's mail for
+/// theirs. What the addressee's view word verbatim is theirs, and the house's
+/// view of undirected mail. A reply with no author is the viewer's own —
+/// today every conversation's shape, and byte-identical to what this worded
+/// before Omada existed.
 ///
 /// [load] answers with a resource's bytes. Asynchronous for that alone, which
 /// is what it costs to hand a model the image it was sent rather than the name
@@ -84,6 +93,8 @@ Future<List<LlmMessage>> projectionOf(
           ? _attachments(e.value, load)
           : _noFiles));
   final projected = <LlmMessage>[];
+  // Whether the viewer's first mail has gone by: the dress is once per walk.
+  var myMailSeen = false;
   if (marker != null) {
     projected.add(LlmMessage(
         role: LlmRole.user, text: summarizedTurnText(marker.summary)));
@@ -95,10 +106,30 @@ Future<List<LlmMessage>> projectionOf(
     switch (message.role) {
       case MessageRole.user:
         final text = _userText(message);
-        if (text.isNotEmpty) {
+        if (text.isEmpty) break;
+        final mine = addressedTo(message, viewer);
+        if (mine) {
+          // The dress is the viewer's first mail: in [first], once. A call
+          // that worded a delta or a live prompt already decided it is that
+          // message, and a fragment (first false) dresses nothing.
+          final dress = first && !myMailSeen;
+          myMailSeen = true;
           projected.add(LlmMessage(
             role: LlmRole.user,
-            text: userTurnText(text, at: message.createdAt, first: first && index == from),
+            text: userTurnText(text, at: message.createdAt, first: dress),
+            attachments: files[index],
+          ));
+        } else {
+          // Somebody else's mail: who it was for rides the wording, the way a
+          // peer reply's author does — a member reading the house's mail sees
+          // (main agent) where [addressees] is empty.
+          projected.add(LlmMessage(
+            role: LlmRole.user,
+            text: addressedUserTurnText(text,
+                to: message.addressees.isEmpty
+                    ? mainAgentLabel
+                    : message.addressees.join(", "),
+                at: message.createdAt),
             attachments: files[index],
           ));
         }
