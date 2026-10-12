@@ -114,7 +114,10 @@ if ! works esbmc; then
 
   if have unzip; then
     unzip -o "$TMPZIP" -d "$TMPDIR_EXTRACT"
-  elif have python3; then
+  # Found is not running here either — works, not have: Windows' Store
+  # python3 stub is on every default install's PATH and dies when run, and
+  # set -e would end the setup before a real answer below it is reached.
+  elif works python3; then
     python3 -c "
 import zipfile
 z = zipfile.ZipFile('$TMPZIP')
@@ -149,11 +152,21 @@ z.extractall('$TMPDIR_EXTRACT')
   mv -f "$ESBMC_BIN_DIR"/* "$BIN/"
   chmod +x "$BIN/$BINARY"
   rm -rf "$TMPDIR_EXTRACT" "$TMPZIP"
+else
+  # Nothing is fetched: the machine's own esbmc is the one this run found
+  # running. It is still what the turns find and the gate asks for
+  # afterwards, though, so it is copied into $BIN where it has not landed
+  # already — the re-setup run that would copy the file onto itself is the
+  # [ -f ]'s answer.
+  if command -v "$BINARY" >/dev/null 2>&1 && [ ! -f "$BIN/$BINARY" ]; then
+    cp "$(command -v "$BINARY")" "$BIN/$BINARY"
+  fi
 fi
 
-# The binary that stands at the end is the one the turns will run. Reaching
-# here without $BIN/$BINARY means the works probe passed and no fetch landed,
-# so PATH's is the only candidate there can be.
+# The binary that stands at the end is the one the turns will run. $BIN's is
+# what either arm above leaves standing — the fetched one moved in, the
+# machine's own copied; PATH's stays the fallback for the run that fetched
+# nothing, one the copy makes unreachable but for a failure set -e ended.
 if [ -x "$BIN/$BINARY" ]; then
   CANDIDATE="$BIN/$BINARY"
 else

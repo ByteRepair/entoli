@@ -96,6 +96,7 @@ void main() {
   test("a tool already on PATH is never re-fetched", () async {
     await stubReal("mkdir");
     await stubReal("uname");
+    await stubReal("cp");
     await stubEsbmcOnPath();
     // A package manager that must not be called: nothing is missing.
     await stubTool("apk", 'echo "apk must not run" >&2; exit 1');
@@ -105,12 +106,20 @@ void main() {
 
     expect(result.exitCode, 0, reason: result.stderr);
     expect(result.stdout, contains("esbmc version 99.0 stub"));
+    // The machine's own copy is still what the gate asks after and the
+    // turns find, so it lands in the bin directory whatever arm of the
+    // fetch brought it: a run that fetched nothing reads the same to the
+    // gate as one that did.
+    final installed = File(p.join(bin, "esbmc"));
+    expect(installed.existsSync(), isTrue);
+    expect(installed.readAsStringSync(), contains("99.0 stub"));
   });
 
   test("missing tools with no package manager provided are skipped in one "
       "note, and the run carries on", () async {
     await stubReal("mkdir");
     await stubReal("uname");
+    await stubReal("cp");
     await stubEsbmcOnPath();
 
     final result = await runScript({"ENV_INSTALL_DIR": bin});
@@ -124,6 +133,7 @@ void main() {
       "own package names", () async {
     await stubReal("mkdir");
     await stubReal("uname");
+    await stubReal("cp");
     await stubEsbmcOnPath();
     final apkLog = File(p.join(config.dataDir, "apk.log"))..createSync();
     await stubTool("apk", 'echo "\$*" >> "${apkLog.path}"');

@@ -133,9 +133,9 @@ abstract class ByteRepairStore {
   /// the settings page's confirm dialog: the setup's own tree, whatever state
   /// it left behind. null where nothing setup made is on disk — the dialog
   /// then names the workspace and the chats alone, which is what a platform
-  /// with no install destination (macOS, the web) has. Reading the disk is
-  /// the state, not the platform: a Host env on Android copies nothing, and
-  /// a desktop with a destination may not have run a setup yet either.
+  /// with no install destination (iOS, the web) has, and a desktop that has
+  /// not run a setup yet is the same by the state, not the platform. Reading
+  /// the disk is the state: a Host env on Android copies nothing either.
   String? get environmentDeletion;
 
   /// Runs `<command> --version` through [shell] and returns its raw output, or

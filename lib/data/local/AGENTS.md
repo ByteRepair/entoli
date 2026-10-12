@@ -125,9 +125,12 @@ given all along.
 "Already installed" means *on PATH and runs* (`works`, a `--version` probe),
 not merely found: a binary present but unstartable — a local build missing its
 libraries — once read as installed, was skipped, and setup exited 0 having
-done nothing. The run ends on a verification of the binary that stands at the
-end (the fetched one, else whatever PATH answers); if that will not run,
-setup exits 1 and the settings page shows the loader's error.
+done nothing. The PATH binary the probe found is copied into the bin
+directory before the run's tail verifies it, so a setup that fetched nothing
+still leaves the chat page's gate the binary it asks for. The run ends on a
+verification of the binary that stands at the end (the fetched one, else
+whatever PATH answers); if that will not run, setup exits 1 and the settings
+page shows the loader's error.
 
 On every desktop the fetched tools reach their turns through the driver:
 `platformDriver`
