@@ -7,7 +7,8 @@ import "package:agent_chat/domain/ask.dart";
 import "package:agent_chat/domain/permission.dart";
 import "package:agent_chat/domain/shell.dart";
 import "package:agent_chat/domain/web_search.dart";
-import "package:flutter/foundation.dart" show ValueListenable;
+import "package:flutter/foundation.dart"
+    show ValueListenable, ValueNotifier;
 
 /// A model that says whatever the test scripted, one list of chunks per call.
 class FakeLlmClient implements LlmClient {
@@ -141,6 +142,14 @@ class FakeShell extends Shell {
 
   /// Commands that never finish on their own, so a test can drive an abort.
   final Set<String> hang = {};
+
+  /// What a persistent shell's standing directory reads as, where a test
+  /// names one — the grant policy's cwd discovery reads it per command.
+  /// Null is the base's answer: no session, the caller falls back to cwd.
+  ValueNotifier<String?>? sessionCwdValue;
+
+  @override
+  ValueListenable<String?>? sessionCwd(String cwd) => sessionCwdValue;
 
   @override
   void closeSession(String cwd) => closedSessions.add(cwd);

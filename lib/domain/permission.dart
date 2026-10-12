@@ -1,5 +1,6 @@
 import "models.dart"
     show PermissionDecision, PermissionTier, ToolApproval;
+import "safe_command.dart" show fetchFamilyPrograms, profileSegment;
 import "shell.dart" show pathInside;
 import "shell_command_analysis.dart" show ShellCommandAnalysis;
 
@@ -267,6 +268,14 @@ RuleVerdict? rulesDecideTraced(
   return _strongestTraced(rules, toolName, subject);
 }
 
+/// What the rules say about one subject in isolation — the consult the
+/// deterministic tiers read per command segment: a bash rule over the
+/// segment's text, a webfetch rule over a fetcher segment's URL, one
+/// subject at a time. The whole-call consult is [rulesDecideTraced].
+RuleVerdict? ruleVerdictFor(List<PermissionRule> rules, String toolName,
+        {String? command, String? path, String? url}) =>
+    rulesDecideTraced(rules, toolName, command: command, path: path, url: url);
+
 /// The verdict [rules] makes of one subject, with the tiers of the rules
 /// that made it — the strongest decision wins; every rule at that strength
 /// adds its origin, so a subject covered by two tiers says both.
@@ -311,8 +320,12 @@ String? _hostOf(String? url) {
 }
 
 /// A host pattern matches itself and its subdomains: `example.com` covers
-/// `www.example.com` and `example.com`, not `notexample.com`.
+/// `www.example.com` and `example.com`, not `notexample.com`. A pattern of
+/// `*` matches every host — what the webfetch banner's standing answers
+/// write, one answer covering the fetch tool and the fetcher commands
+/// alike, the per-domain rules being the settings page's to add.
 bool _hostMatch(String pattern, String host) {
+  if (pattern == "*") return true;
   final p = pattern.toLowerCase();
   return host == p || host.endsWith(".$p");
 }
@@ -334,6 +347,24 @@ PermissionRule? ruleFromApproval(ToolApproval? approval) {
     case "bash":
       final command = approval.argumentsText ?? "";
       if (command.trim().isEmpty) return null;
+      // A command that is one fetch — the fetcher family, one segment — is
+      // a network subject, not a command-prefix one: the standing answer is
+      // the same `webfetch *` a webfetch banner writes, so one approval
+      // covers the tool and the command carrier together.
+      final segments = ShellCommandAnalysis.parse(command).modelableSegments;
+      final profile =
+          segments == null ? null : profileSegment(segments.first);
+      if (segments != null &&
+          segments.length == 1 &&
+          profile != null &&
+          profile.modelable &&
+          fetchFamilyPrograms.contains(profile.program)) {
+        return const PermissionRule(
+          tool: "webfetch",
+          pattern: "*",
+          decision: PermissionDecision.allow,
+        );
+      }
       return PermissionRule(
         tool: "bash",
         pattern: _commandPrefix(command.trim()),
@@ -350,15 +381,14 @@ PermissionRule? ruleFromApproval(ToolApproval? approval) {
     case "webfetch":
       final host = _hostOf(approval.argumentsText);
       if (host == null) return null;
-      // The registrable two-label suffix rather than the whole host: the
-      // rule covers what the fetch reached next time, and matching is
-      // subdomain-inclusive, so docs.example.com is covered by example.com.
-      final labels = host.split(".");
-      final registrable =
-          labels.length <= 2 ? host : labels.sublist(labels.length - 2).join(".");
-      return PermissionRule(
+      // `*` rather than the registrable suffix: the standing answer covers
+      // every host the model fetches, tool or fetcher command — webfetch
+      // itself, the curl and wget segments a command carries. Per-domain
+      // rules remain the settings page's to write, and an ask rule there
+      // still outranks this for the domain it names.
+      return const PermissionRule(
         tool: "webfetch",
-        pattern: registrable,
+        pattern: "*",
         decision: PermissionDecision.allow,
       );
     default:

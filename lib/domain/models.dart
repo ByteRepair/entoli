@@ -38,6 +38,11 @@ enum PermissionSource {
 
   /// A sandbox-denied command, rerun after the human answered.
   rerun,
+
+  /// The command parse vouched for it — every segment provably
+  /// non-modifying, or mutations covered by a grant policy — decided before
+  /// any rule, model or person was asked.
+  parse,
 }
 
 /// Which tier carried the decision. A compound command's segments can be

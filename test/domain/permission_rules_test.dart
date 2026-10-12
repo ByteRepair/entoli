@@ -129,6 +129,30 @@ void main() {
           rulesDecideTraced([rule], "webfetch", url: "https://notexample.com/page"),
           null);
     });
+
+    test("a webfetch * matches every host", () {
+      const rule = PermissionRule(
+          tool: "webfetch", pattern: "*", decision: PermissionDecision.allow);
+      expect(
+          rulesDecideTraced([rule], "webfetch", url: "https://anything.dev/")
+              ?.decision,
+          PermissionDecision.allow);
+      expect(
+          rulesDecideTraced(
+                  [rule], "webfetch", url: "https://other.io/")?.decision,
+          PermissionDecision.allow);
+      // An ask rule on one domain still outranks the standing * — the
+      // per-domain rules are the settings page's to write.
+      const ask = PermissionRule(
+          tool: "webfetch",
+          pattern: "sensitive.example",
+          decision: PermissionDecision.ask);
+      expect(
+          rulesDecideTraced(
+                  [rule, ask], "webfetch", url: "https://sensitive.example/x")
+              ?.decision,
+          PermissionDecision.ask);
+    });
   });
 
   group("ruleFromApproval", () {
@@ -160,13 +184,34 @@ void main() {
       expect(rule.pattern, "~/Projects/x/config.json");
     });
 
-    test("a fetch URL becomes the host", () {
+    test("a fetch URL becomes every host, not one domain", () {
       final rule = ruleFromApproval(ToolApproval(
           id: "a",
           toolName: "webfetch",
           argumentsText: "https://docs.example.com/guide",
           argumentsJson: "{}"));
-      expect(rule!.pattern, "example.com");
+      expect(rule!.pattern, "*");
+      expect(globMatch("*", "anything"), isTrue);
+      // The consult the standing answer covers, wherever it points.
+      expect(ruleVerdictFor([rule], "webfetch", url: "https://other.org/x")
+          ?.decision, PermissionDecision.allow);
+    });
+
+    test("a single fetcher command derives the network answer too", () {
+      final rule = ruleFromApproval(ToolApproval(
+          id: "a",
+          toolName: "bash",
+          argumentsText: "curl https://example.com/data.json"));
+      expect(rule!.tool, "webfetch");
+      expect(rule.pattern, "*");
+      // A compound is still command-shaped: only the fetch alone writes the
+      // network rule.
+      final compound = ruleFromApproval(ToolApproval(
+          id: "a",
+          toolName: "bash",
+          argumentsText: "cd ~/repo && curl https://example.com"));
+      expect(compound!.tool, "bash");
+      expect(compound.pattern, "cd ~/repo *");
     });
 
     test("a call carrying nothing matchable is null", () {

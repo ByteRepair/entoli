@@ -7,6 +7,7 @@ import "package:uuid/uuid.dart";
 import "../../domain/agent_backend.dart";
 import "../../domain/artifact.dart";
 import "../../domain/ask.dart";
+import "../../domain/command_grants.dart";
 import "../../domain/date_words.dart" show describeFire;
 import "../../domain/file_tools.dart";
 import "../../domain/models.dart";
@@ -14,6 +15,7 @@ import "../../domain/permission.dart";
 import "../../domain/plan.dart";
 import "../../domain/profile.dart";
 import "../../domain/prompt_library.dart";
+import "../../domain/safe_command.dart" show SegmentReach;
 import "../../domain/shell.dart";
 import "../../domain/shell_command_analysis.dart";
 import "../../domain/tone.dart";
@@ -1269,7 +1271,9 @@ class BuiltinAgent {
     yield ToolResultEvent(_ran(call, result));
   }
 
-  /// Fetch a URL. Read-only, so no approval.
+  /// Fetch a URL. The network rules answer for it — the same family a
+  /// `curl` or `wget` segment in a command consults — and the banner is
+  /// where one standing answer comes from.
   Stream<AgentEvent> _webFetch(LlmToolCall call) async* {
     final url = stringArg(call.argumentsJson, "url");
     if (url == null) {
@@ -2123,6 +2127,31 @@ class BuiltinAgent {
       case null:
         break;
     }
+    // Where the rules left the command uncovered, the deterministic tiers
+    // answer before any mode does: a segment the parse proves
+    // non-modifying, a fetch the network rules allow, or a git mutation a
+    // grant policy vouches for — every segment covered, or none is. An
+    // "always show me" ask rule on any segment outranks the tier that would
+    // cover it, the banner being what the user asked for there.
+    if (toolName == "bash" && verdict == null) {
+      final tiered = await _deterministicBashVerdict(
+          analysis ?? ShellCommandAnalysis.parse(argumentsText ?? "",
+              isWindows: platformIsWindows));
+      if (tiered != null) {
+        _decision = (
+          source: tiered.source,
+          tiers: tiered.tiers,
+          decided: tiered.decided,
+        );
+        _commandResult = tiered.decided == PermissionDecision.allow
+            ? await run()
+            : const ShellResult.failed(
+                "Denied by a permission rule you set. Do not retry this "
+                "command; tell the user what you were trying to do and let "
+                "them decide.");
+        return;
+      }
+    }
     switch (approveMode) {
       case ApproveMode.ask:
         yield* _askAndExecute(call, arguments, toolName, run, argumentsText);
@@ -2312,13 +2341,39 @@ class BuiltinAgent {
     // banner, not the mode, is what carries that — auto mode reaches the
     // banner through the classifier's ask — so the gate reads the flag the
     // run itself sets.
-    final sandbox = unconfined ? null : sandboxFor();
+    var sandbox = unconfined ? null : sandboxFor();
+    final analysis =
+        sandbox == null
+            ? null
+            : ShellCommandAnalysis.parse(command, isWindows: platformIsWindows);
     if (sandbox != null && !_humanDecided) {
-      final analysis =
-          ShellCommandAnalysis.parse(command, isWindows: platformIsWindows);
-      final note = analysis.escalationNote;
+      final note = analysis!.escalationNote;
       if (note != null) {
         return ShellResult.failed(note);
+      }
+    }
+    // The grant policies beside the standing grant, composed here for the
+    // same inputs the gate vouched with — the command's segments against the
+    // directory the shell is standing in. A vouched git command runs with
+    // its repository's `.git` beside the workspaces, every child granted but
+    // the protected ones.
+    if (sandbox != null) {
+      final grants = await commandGrantsFor(CommandGrantsInput(
+          fs: fs,
+          start: shell.sessionCwd(workspace)?.value ?? workspace,
+          home: shell.machineHome,
+          segments: analysis!.modelableSegments ?? const []));
+      if (grants.gitGrants.isNotEmpty) {
+        final paths = [
+          for (final grant in grants.gitGrants.values) ...grant.paths,
+        ];
+        if (paths.isNotEmpty) {
+          sandbox = CommandSandbox(
+              workspace: sandbox.workspace,
+              tmp: sandbox.tmp,
+              home: sandbox.home,
+              extraWrites: [...sandbox.extraWrites, ...paths]);
+        }
       }
     }
     final run = shell.start(command,
@@ -2337,6 +2392,85 @@ class BuiltinAgent {
     } finally {
       _running = null;
     }
+  }
+
+  /// The deterministic bash tiers the rules leave standing: every segment
+  /// covered by a rule allow, proven non-modifying by its own text, allowed
+  /// by the network rules as a fetch, or vouched for by a grant policy with
+  /// a grant the sandbox will carry. Null where any segment is uncovered,
+  /// and where an ask rule wanted to see any of it — the mode's own path
+  /// decides those, every time. A deny from the network rules is returned
+  /// as one, refusal being what the rule said.
+  Future<({PermissionSource source, List<PermissionTier> tiers,
+          PermissionDecision decided})?> _deterministicBashVerdict(
+      ShellCommandAnalysis analysis) async {
+    final segments = analysis.modelableSegments;
+    if (segments == null || segments.isEmpty) return null;
+    final rules = [..._runtimeRules, ...permissions];
+    final cwd = shell.sessionCwd(workspace)?.value ?? workspace;
+    final grants = await commandGrantsFor(CommandGrantsInput(
+        fs: fs,
+        start: cwd,
+        home: shell.machineHome,
+        segments: segments));
+    final tiers = <PermissionTier>{};
+    var ruled = false;
+    for (var i = 0; i < segments.length; i++) {
+      final segment = segments[i];
+      final profile = grants.profiles[i];
+      if (!profile.modelable) return null;
+      final segmentVerdict = ruleVerdictFor(rules, "bash", command: segment);
+      switch (segmentVerdict?.decision) {
+        case PermissionDecision.deny:
+          return (
+            source: PermissionSource.rule,
+            tiers: segmentVerdict!.tiers.toList(),
+            decided: PermissionDecision.deny,
+          );
+        case PermissionDecision.ask:
+          return null;
+        case PermissionDecision.allow:
+          tiers.addAll(segmentVerdict!.tiers);
+          ruled = true;
+          continue;
+        case null:
+          break;
+      }
+      switch (profile.reach) {
+        case SegmentReach.nonModifying:
+          continue;
+        case SegmentReach.network:
+          // The same consult a `webfetch` call takes — one standing answer
+          // covers the tool and the fetcher commands alike — with the
+          // segment's host as the subject. A fetch whose host no rule speaks
+          // for is uncovered, wherever the mode asks about it next.
+          final network =
+              ruleVerdictFor(rules, "webfetch", url: profile.url);
+          switch (network?.decision) {
+            case PermissionDecision.deny:
+              return (
+                source: PermissionSource.rule,
+                tiers: network!.tiers.toList(),
+                decided: PermissionDecision.deny,
+              );
+            case PermissionDecision.allow:
+              tiers.addAll(network!.tiers);
+              ruled = true;
+              continue;
+            case PermissionDecision.ask:
+            case null:
+              return null;
+          }
+        case SegmentReach.other:
+          if (!grants.gitGrants.containsKey(i)) return null;
+          continue;
+      }
+    }
+    return (
+      source: ruled ? PermissionSource.rule : PermissionSource.parse,
+      tiers: ruled ? tiers.toList() : const <PermissionTier>[],
+      decided: PermissionDecision.allow,
+    );
   }
 
   /// After a command the confinement denied: one offer to rerun it, unconfined
