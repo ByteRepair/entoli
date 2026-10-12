@@ -86,6 +86,16 @@ class SyncSection extends ConsumerWidget {
 /// setting has nothing to switch, so the row is not drawn.
 bool get _android => !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
 
+/// The muted explanatory paragraph a settings page keeps where a section's
+/// description would be — body small in the variant grey.
+Widget _muted(BuildContext context, String text) => Text(
+      text,
+      style: Theme.of(context)
+          .textTheme
+          .bodySmall
+          ?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
+    );
+
 /// The Internet relay, on its own screen — reached from the row on the Sync
 /// page. One field: the `wss://` URL both devices dial to pair across the
 /// internet, where the local network cannot reach them.
@@ -94,21 +104,24 @@ class RelaySettingsPage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final settings = ref.watch(appSettingsProvider);
     return Scaffold(
       appBar: AppBar(title: const Text("Internet relay")),
       body: ListView(
         padding: const EdgeInsets.symmetric(vertical: 8),
         children: [
-          SectionHeader(
-            "Internet relay",
-            description: "A WebSocket relay for pairing when the devices are "
-                "not on the same network. Both dial the same room, derived "
-                "from the pairing secret — the relay sees nothing readable.",
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+            child: _muted(
+                context,
+                "A WebSocket relay for pairing when the devices are not on "
+                "the same network. Both dial the same room, derived from the "
+                "pairing secret, so the relay sees nothing readable."),
           ),
           LabelledField(
             label: "Relay URL",
             child: TextFormField(
-              initialValue: ref.watch(appSettingsProvider).syncRelayUrl ?? "",
+              initialValue: settings.syncRelayUrl ?? "",
               decoration: const InputDecoration(
                 hintText: "wss://relay.example.com",
                 isDense: true,
@@ -120,16 +133,12 @@ class RelaySettingsPage extends ConsumerWidget {
           ),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            child: Text(
-              "Any relay that speaks the room protocol works; "
-              "tool/sync/sync_relay_server.dart is a reference one. Leave "
-              "empty when the devices meet over the local network or manual "
-              "paste.",
-              style: Theme.of(context)
-                  .textTheme
-                  .bodySmall
-                  ?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
-            ),
+            child: _muted(
+                context,
+                "Any relay that speaks the room protocol works; "
+                "tool/sync/sync_relay_server.dart is a reference one. Leave "
+                "empty when the devices meet over the local network or "
+                "manual paste."),
           ),
         ],
       ),
@@ -145,22 +154,25 @@ class TurnSettingsPage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final settings = ref.watch(appSettingsProvider);
     final secrets = ref.watch(appSecretsProvider);
     return Scaffold(
       appBar: AppBar(title: const Text("TURN server")),
       body: ListView(
         padding: const EdgeInsets.symmetric(vertical: 8),
         children: [
-          SectionHeader(
-            "TURN server",
-            description: "For NAT traversal. Bring your own — a self-hosted "
-                "coturn is recommended. Without one, symmetric-NAT pairs "
-                "fail honestly.",
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+            child: _muted(
+                context,
+                "For NAT traversal. Bring your own, a self-hosted coturn is "
+                "recommended. Without one, symmetric-NAT pairs fail "
+                "honestly."),
           ),
           LabelledField(
             label: "TURN URL",
             child: TextFormField(
-              initialValue: ref.watch(appSettingsProvider).turnUrl ?? "",
+              initialValue: settings.turnUrl ?? "",
               decoration: const InputDecoration(
                 hintText: "turn:turn.example.com:3478",
                 isDense: true,
@@ -173,7 +185,7 @@ class TurnSettingsPage extends ConsumerWidget {
           LabelledField(
             label: "TURN username",
             child: TextFormField(
-              initialValue: ref.watch(appSettingsProvider).turnUsername ?? "",
+              initialValue: settings.turnUsername ?? "",
               decoration: const InputDecoration(isDense: true),
               onChanged: (value) => ref
                   .read(appSettingsProvider.notifier)
@@ -252,7 +264,6 @@ class _PairedDevices extends ConsumerWidget {
             onRevoke: () => hub.revoke(peer.deviceId),
             onConnect: () => hub.connect(peer.deviceId),
             onDisconnect: () => hub.disconnect(peer.deviceId),
-            onFailed: (error) => say(context, error),
           ),
       ],
     );
@@ -266,7 +277,6 @@ class _PairedDeviceRow extends StatelessWidget {
     required this.onRevoke,
     required this.onConnect,
     required this.onDisconnect,
-    required this.onFailed,
   });
 
   final PeerState peer;
@@ -277,11 +287,6 @@ class _PairedDeviceRow extends StatelessWidget {
   final Future<void> Function() onRevoke;
   final Future<void> Function() onConnect;
   final Future<void> Function() onDisconnect;
-
-  /// A dial that could not find the device. Reported here rather than left to
-  /// the future nobody awaits: `onPressed` takes a `VoidCallback`, so an
-  /// unawaited failure is an unhandled error and a button that did nothing.
-  final void Function(Object error) onFailed;
 
   @override
   Widget build(BuildContext context) {
@@ -304,13 +309,13 @@ class _PairedDeviceRow extends StatelessWidget {
                 Expanded(child: Text(peer.name)),
                 if (status == PeerStatus.online)
                   TextButton(
-                      onPressed: () => _tried(onDisconnect),
+                      onPressed: () => catchAndSay(context, onDisconnect),
                       child: const Text("Disconnect"))
                 else
                   TextButton(
                       onPressed: status == PeerStatus.connecting
                           ? null
-                          : () => _tried(onConnect),
+                          : () => catchAndSay(context, onConnect),
                       child: const Text("Connect")),
                 TextButton(
                   onPressed: () =>
@@ -335,9 +340,6 @@ class _PairedDeviceRow extends StatelessWidget {
       ),
     );
   }
-
-  void _tried(Future<void> Function() work) =>
-      unawaited(work().catchError(onFailed));
 }
 
 /// The buttons that start a pairing, plus the paste-a-code field. Every
@@ -383,7 +385,8 @@ class _PairingControlsState extends ConsumerState<_PairingControls> {
             runSpacing: 8,
             children: [
               FilledButton(
-                onPressed: _openWindow,
+                onPressed: () =>
+                    PairingWindowPage.openAnother(context, widget.hub),
                 child: const Text("Open pairing window"),
               ),
               FilledButton.tonal(
@@ -425,19 +428,6 @@ class _PairingControlsState extends ConsumerState<_PairingControls> {
         ),
       ],
     );
-  }
-
-  Future<void> _openWindow() async {
-    try {
-      await widget.hub.startPairingWindow();
-      if (mounted) {
-        await Navigator.of(context).push(MaterialPageRoute(
-          builder: (_) => PairingWindowPage(hub: widget.hub),
-        ));
-      }
-    } catch (e) {
-      if (mounted) say(context, e);
-    }
   }
 
   Future<void> _createInvite() async {
@@ -523,32 +513,13 @@ class _PairingJoinPageState extends State<PairingJoinPage> {
       canPop: false,
       onPopInvokedWithResult: (didPop, _) {
         if (didPop) return;
-        hub.cancelPairingWindow();
+        hub.cancelPairing();
         Navigator.of(context).pop();
       },
       child: Scaffold(
         appBar: AppBar(title: const Text("Pairing")),
-        body: ValueListenableBuilder<PairingActivity?>(
-          valueListenable: hub.pairing,
-          builder: (context, pairing, _) {
-            if (pairing == null) {
-              return const Center(child: CircularProgressIndicator());
-            }
-            return _PairingStageView(
-              hub: hub,
-              activity: pairing,
-              connecting:
-                  const _PairingWait("Waiting for the other device…"),
-              // A fresh window pushes over this screen; this pairing is over.
-              onPairAnother: () =>
-                  PairingWindowPage.openAnother(context, hub),
-              onDone: () {
-                hub.cancelPairingWindow();
-                Navigator.of(context).pop();
-              },
-            );
-          },
-        ),
+        body:
+            _PairingStageView.watching(context, hub, "Waiting for the other device…"),
       ),
     );
   }
@@ -587,6 +558,34 @@ class _PairingStageView extends StatelessWidget {
         ),
       PairingStage.failed => _pairingFailed(context, activity.error),
     };
+  }
+
+  /// The harness a pairing screen that is not the window's one shares: it
+  /// shows a spinner before the activity arrives (the pairing is being
+  /// opened), then the stages, with the contract all three pages state once
+  /// here — "Pair another device" is a fresh window pushed over this screen,
+  /// and Done cancels what is left of the pairing on the way back to the
+  /// Sync page.
+  static Widget watching(
+      BuildContext context, SyncHub hub, String waitLabel) {
+    return ValueListenableBuilder<PairingActivity?>(
+      valueListenable: hub.pairing,
+      builder: (context, pairing, _) {
+        if (pairing == null) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        return _PairingStageView(
+          hub: hub,
+          activity: pairing,
+          connecting: _PairingWait(waitLabel),
+          onPairAnother: () => PairingWindowPage.openAnother(context, hub),
+          onDone: () {
+            hub.cancelPairing();
+            Navigator.of(context).pop();
+          },
+        );
+      },
+    );
   }
 }
 
@@ -856,7 +855,7 @@ class _ManualInvitePageState extends State<ManualInvitePage> {
       onPopInvokedWithResult: (didPop, _) {
         if (didPop) return;
         widget.hub.cancelManualInvite();
-        widget.hub.cancelPairingWindow();
+        widget.hub.cancelPairing();
         Navigator.of(context).pop();
       },
       child: Scaffold(
@@ -909,27 +908,8 @@ class _ManualInvitePageState extends State<ManualInvitePage> {
 
   /// The reply accepted: how the pairing goes is all that is left on this
   /// page, drawn by the same stages every pairing screen ends on.
-  Widget _watchingBody() {
-    final hub = widget.hub;
-    return ValueListenableBuilder<PairingActivity?>(
-      valueListenable: hub.pairing,
-      builder: (context, pairing, _) {
-        if (pairing == null) {
-          return const Center(child: CircularProgressIndicator());
-        }
-        return _PairingStageView(
-          hub: hub,
-          activity: pairing,
-          connecting: const _PairingWait("Completing the pairing…"),
-          onPairAnother: () => PairingWindowPage.openAnother(context, hub),
-          onDone: () {
-            hub.cancelPairingWindow();
-            Navigator.of(context).pop();
-          },
-        );
-      },
-    );
-  }
+  Widget _watchingBody() =>
+      _PairingStageView.watching(context, widget.hub, "Completing the pairing…");
 
   Future<void> _complete() async {
     final text = _replyController.text.trim();

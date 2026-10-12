@@ -662,10 +662,11 @@ void main() {
       // A lock, a status, a subscription: none of that moved.
       expect(away.hub.holdsControl(state.id), isTrue);
 
-      // The mirror side's Remotes rows are another book's answer.
+      // The mirror side: its Remotes rows derive their name from the book,
+      // which is what shows on screen — the mirror's own field stays the
+      // creation-time fallback.
       expect(away.hub.mirror(state.id)!.deviceName, home.hub.deviceName);
       await away.hub.rename(home.identity.id, "Renamed Home");
-      expect(away.hub.mirror(state.id)!.deviceName, "Renamed Home");
       expect(
           away.hub.remotes.value
               .firstWhere((entry) => entry.chatId == state.id)

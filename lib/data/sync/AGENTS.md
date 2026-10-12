@@ -541,8 +541,9 @@ one until somebody revokes there too.
 pushes `PairedDevicePage` — the record as this device holds it (the name, the
 connection, when it was last reached and on which address, when it was
 paired), a rename beside the name, and under all of it the two fingerprints a
-pair exists to compare: the peer's, over the stored key (`SyncIdentity
-.fingerprintOf`, so both codes come from one function), and this device's own
+pair exists to compare: the peer's, read off the record itself
+(`PairedDevice.fingerprint`, which asks `SyncIdentity.fingerprintOf` — both
+codes come from one function), and this device's own
 labelled "This device". That is where the fingerprint belongs in the
 interface and is the only place it is drawn — the Sync page itself carries
 none. The point of a fingerprint is two displays agreeing, and this is a page
@@ -551,22 +552,26 @@ device" *on the other device*. The paragraph under both codes says what they
 are (public, naming a key, granting nothing — connecting still needs the
 pairing code) and asks the comparison, which no bare hex row on a list could.
 `rename` is the registry's verb, one-sided like every name in it: it replaces
-the record (the name is final on it) and `SyncPeers.renamed` moves the name
-through the status without touching whatever the connection earned. The name
-a peer goes by is said from one book on three surfaces, and the rename
-reaches all three: the row, the live connection's (`LivePeer.deviceName`,
-and `SyncHub.rename` re-runs `_refreshDriven` so the chat page's driven line
-follows without a control change to hang it on), and the mirrors'
-(`MirrorChat.deviceName`, also re-stamped by every welcome) — before this,
-the row showed the new name while the driven line and the Remotes rows kept
-the old one until a reconnect.
+the record (`PairedDevice.withName` on both registry implementations — the
+name is final on it) and `SyncPeers.renamed` moves the name through the
+status without touching whatever the connection earned, updating the live
+connection's name too. A peer's name is said from one book on every surface,
+and after the write they reach it two ways: the row and the chat page's
+driven line read the `PeerState`/live name directly (`SyncHub.rename`
+re-runs `_refreshDriven` for that, no control change to hang it on), and the
+mirrors' Remotes rows derive their name from that same `PeerState` at every
+`_rebuildRemotes` — where the mirror keeps only a creation-time fallback for
+a device missing from the book. Before this, the row showed the new name
+while the driven line and the Remotes rows kept the old one until a
+reconnect.
 Connect and disconnect live on the row and on the page — the row keeps them
 on sight of the list, the page beside the status they act on (connecting
-disables, a failed dial is said on its screen the way the row's is). Revoke
-is on both, asking first through one shared dialog (`confirmRevokeDevice`)
-so the two wordings — and the promise about what a revoke does not do —
-cannot drift; confirming from the page pops it, leaving nothing for it to
-stand in for.
+disables), and every one goes through one `catchAndSay` beside `say`: a
+sync verb's future nobody awaits, caught and reported, the mounted check on
+the report. Revoke
+is on both, asking first through one shared dialog (`confirmRevokeDevice`),
+which owns the revoke's failure the same way; confirming from the page pops
+it, leaving nothing for it to stand in for.
 
 ## The pairing flows as pages
 
@@ -587,19 +592,23 @@ last until something reset it, which is why nothing here renders the
   does not await `pairWith` — the page starts it one post-frame in, so the
   wait it is pushed for is what is on screen. A throw with the activity still
   null (usually a code that decodes to nothing) is said and the page pops;
-  otherwise the failed arm is on the page. Back completes a pending
-  codes-matched gate with "no", so neither side waits out a human who left.
+  otherwise the failed arm is on the page.
 - **Manual invite** (`ManualInvitePage`): the blob and the reply field until
   the reply is handed over, then the same stage view. Back cancels both
-  halves — a pending invite's held connection, and, once started, a pending
-  gate.
+  halves — a pending invite's held connection (`cancelManualInvite`), and,
+  once started, a pending gate.
 
-The three share `_PairingStageView` — confirm, paired, failed; the connecting
-arm is the hosting page's own (the window's QR; a spinner where there is
-nothing to show but the wait). "Pair another device" is every variant: the
-window's reopens in place; the other two push a fresh `PairingWindowPage` over
-themselves (`PairingWindowPage.openAnother`). "Done" everywhere cancels what
-is left of the pairing and returns to the Sync page.
+The three build on `_PairingStageView` — confirm, paired, failed; the
+connecting arm is the hosting page's own (the window's QR; a spinner
+elsewhere). Non-window screens take `watching(context, hub, waitLabel)`,
+the whole body harness shared once: spinner before the activity, then the
+stages, pair-another and Done wired. "Pair another device" is every variant:
+the window's reopens in place; the other two push a fresh `PairingWindowPage`
+over themselves (`PairingWindowPage.openAnother`, the same verb the Sync
+page's button is). Back and Done on those screens are `cancelPairing` — the
+general verb that answers a pending gate no and drops the activity — while
+the window's back stays `cancelPairingWindow`, the window's teardown beside
+it.
 
 **Both manual routes open the pairing card.** `createManualInvite` never did,
 nor `_acceptManualInvite` — the inviter completing a reply, and the invited

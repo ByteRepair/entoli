@@ -42,10 +42,12 @@ class MirrorChat {
 
   final String peerId;
 
-  /// The home device's name — the address book's answer when the pair is
-  /// known there, the hello's otherwise. The sidebar's Remotes rows show it
-  /// under the title; a rename (and a reconnect's re-hello) updates it.
-  String deviceName;
+  /// The home device's name as the connection presented it when the mirror
+  /// was created — the address book's, where one exists; else the hello's.
+  /// Fallback only: the Remotes rows derive their name from the device's
+  /// [PeerState] (which a rename updates) and reach for this when the device
+  /// has gone missing from it.
+  final String deviceName;
   ChatState state;
   ChatMeta meta;
   final List<ChatRecord> records = [];
@@ -164,6 +166,10 @@ class SyncHub implements ArtifactBytes {
   String get defaultDeviceName => _signaling.defaultDeviceName;
   Future<PairingActivity> startPairingWindow() => _signaling.startPairingWindow();
   void cancelPairingWindow() => _signaling.cancelPairingWindow();
+
+  /// Ends a pairing in flight — the verb every pairing screen's back and
+  /// Done is; [cancelPairingWindow] adds the window's own teardown.
+  void cancelPairing() => _signaling.cancelPairing();
   Future<String?> pairWith(String text) => _signaling.pairWith(text);
   Future<String> createManualInvite() => _signaling.createManualInvite();
   void cancelManualInvite() => _signaling.cancelManualInvite();
@@ -478,7 +484,6 @@ class SyncHub implements ArtifactBytes {
       final mirror = _mirrors[state.id]!;
       // The name is the connection's, every welcome: a device renamed while
       // the mirror survived a disconnect is filed under the new one.
-      mirror.deviceName = peer.deviceName;
       if (state.updatedAt.isAfter(mirror.state.updatedAt)) {
         mirror.state = state;
       }
@@ -868,7 +873,12 @@ class SyncHub implements ArtifactBytes {
         RemoteChatEntry(
           chatId: mirror.state.id,
           deviceId: mirror.peerId,
-          deviceName: mirror.deviceName,
+          // The name is the book's, read at rebuild: a rename is one write
+          // through [PeerState], and every row it names follows at the next
+          // rebuild it lands in. The mirror's creation name is the fallback
+          // for a device that is not in the book.
+          deviceName:
+              _peers.states.value[mirror.peerId]?.name ?? mirror.deviceName,
           state: mirror.state,
           online: _peers.hasLive(mirror.peerId),
         ),
@@ -908,18 +918,11 @@ class SyncHub implements ArtifactBytes {
   /// keeps what it calls this one until renamed there too.
   Future<void> rename(String deviceId, String name) async {
     await registry.rename(deviceId, name);
-    // Every surface that says a peer's name says it from this book, so a
-    // rename reaches all three: the row, the live connection's driven line,
-    // and the mirrors' Remotes rows. A registry read on its own fills gaps
-    // only, which is what would have left the rest stale until a restart.
+    // The row and the driven line are the book's; the mirrors' Remotes rows
+    // derive theirs from that same PeerState at rebuild. One write, then the
+    // two rebuilds, is every surface the name is said on.
     _peers.renamed(deviceId, name);
-    // The driven line reads the live connection's name, so it is this
-    // rename's business to refresh it — the next control change might be
-    // far away.
     _refreshDriven();
-    for (final chatId in _mirrorsOf(deviceId)) {
-      _mirrors[chatId]!.deviceName = name;
-    }
     _rebuildRemotes();
   }
 

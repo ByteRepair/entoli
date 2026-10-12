@@ -45,6 +45,26 @@ class PairingActivity {
   /// Null before that.
   final String? peerName;
   final String? error;
+
+  /// The same activity, changed where named. A field named null keeps what
+  /// it was: the notes carry a snapshot's facts forward, so a copy that did
+  /// not would drop one at every stage.
+  PairingActivity copyWith({
+    String? qr,
+    String? code,
+    PairingStage? stage,
+    String? sas,
+    String? peerName,
+    String? error,
+  }) =>
+      PairingActivity(
+        qr: qr ?? this.qr,
+        code: code ?? this.code,
+        stage: stage ?? this.stage,
+        sas: sas ?? this.sas,
+        peerName: peerName ?? this.peerName,
+        error: error ?? this.error,
+      );
 }
 
 enum PairingStage { connecting, confirming, done, failed }
@@ -233,8 +253,6 @@ class SyncPairing {
 
   void cancelPairingWindow() {
     _windowPsk = null;
-    _confirmation?.complete(false);
-    _confirmation = null;
     _relayWindow?.cancel();
     _relayWindow = null;
     unawaited(_relaySocket?.close());
@@ -243,6 +261,17 @@ class SyncPairing {
     // The offers subscription is *not* cancelled: it answers reconnects too,
     // and every pairing ends by closing its window. Cancelled here, the first
     // successful pair was also the last time anything answered a dial.
+    cancelPairing();
+  }
+
+  /// Ends a pairing in flight, wherever it is: a pending codes-matched gate
+  /// is answered no and the activity is dropped, so a screen parked on it
+  /// loses its subject. The general verb — every pairing screen's back and
+  /// Done is this one, on pages that opened no window; the window's verb
+  /// above is the window's own teardown beside it.
+  void cancelPairing() {
+    _confirmation?.complete(false);
+    _confirmation = null;
     activity.value = null;
   }
 
@@ -428,18 +457,17 @@ class SyncPairing {
 
   /// What it would be called with nothing set — the machine's own name where
   /// there is one, since that is what its owner already calls it, and four
-  /// characters of the key's fingerprint otherwise, which at least cannot
+  /// characters of the key's digest otherwise, which at least cannot
   /// collide. Its own getter because the Sync page's field wants exactly
-  /// this: the hint has to go on saying what the default is after a name has
-  /// been typed over it.
+  /// this: the hint has to go on saying what the default is after a name
+  /// has been typed over it.
   ///
-  /// Four, not five: the fingerprint is grouped in fours of hex, so a fifth
-  /// character is the group's separating space and the name trailed by one.
-  /// This slice is the one place the key shows a user anything at all — the
-  /// fingerprint itself is nowhere in the interface, nothing on screen asks
-  /// anyone to compare one.
+  /// Four, not five of the grouped fingerprint: the next slice there is the
+  /// group's separating space, and this name once trailed by one. The slice
+  /// is [SyncIdentity.digest]'s rather than the display string's, so a
+  /// regrouped presentation would not change a nameless machine announces.
   String get defaultDeviceName =>
-      _hostname ?? "Entoli ${identity.fingerprint.substring(0, 4)}";
+      _hostname ?? "Entoli ${identity.digest.substring(0, 4)}";
 
   /// Where a peer could dial this device back, or null where it is not
   /// listening — a browser never is.
@@ -732,12 +760,11 @@ class SyncPairing {
       // before ours has — and what it sends is held by the channel until the
       // reader below attaches, so there is nothing to be careful about here.
       // It cost four bugs to stop needing that care; see the framing.
-      if (await _sasGate(
-            handshake.sas!,
-            peer.name,
-            isNew: knownDeviceId == null,
-          ) ==
-          false) {
+      if (!await _sasGate(
+        handshake.sas!,
+        peer.name,
+        isNew: knownDeviceId == null,
+      )) {
         throw const HandshakeException("the codes did not match");
       }
 
@@ -861,24 +888,15 @@ class SyncPairing {
   void _note(PairingStage stage, {String? sas, String? peerName}) {
     final current = activity.value;
     if (current == null) return;
-    activity.value = PairingActivity(
-      qr: current.qr,
-      code: current.code,
-      stage: stage,
-      sas: sas ?? current.sas,
-      peerName: peerName ?? current.peerName,
-    );
+    activity.value =
+        current.copyWith(stage: stage, sas: sas, peerName: peerName);
   }
   void _fail(Object error) {
     logFailure("sync", "pairing failed", error);
     final current = activity.value;
     if (current == null || current.stage == PairingStage.done) return;
-    activity.value = PairingActivity(
-      qr: current.qr,
-      code: current.code,
+    activity.value = current.copyWith(
       stage: PairingStage.failed,
-      sas: current.sas,
-      peerName: current.peerName,
       error: error.toString(),
     );
   }

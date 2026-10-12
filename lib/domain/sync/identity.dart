@@ -23,15 +23,19 @@ class SyncIdentity {
   /// Stable across reconnects of the same keys; changes when the identity does.
   final String id;
 
-  /// The fingerprint over any public key. A paired device's stored key
-  /// answers the same question this device's own getter does, so they are one
-  /// function: two screens that derive the same code from the same key agree
-  /// by construction, which is what makes the comparison a check.
+  /// The SHA-256 of [publicKey] as uppercase hex, ungrouped. What
+  /// [fingerprintOf] groups, and what a nameless machine's device name
+  /// slices: the announced name rests on this shape rather than on the
+  /// fingerprint's presentation, where regrouping would land a space in it.
+  static String digestOf(List<int> publicKey) =>
+      slow.sha256.convert(publicKey).toString().toUpperCase();
+
+  /// [digestOf], grouped in fours — the shape both screens show.
   static String fingerprintOf(List<int> publicKey) {
-    final digest = slow.sha256.convert(publicKey).toString();
+    final digest = digestOf(publicKey);
     return [
       for (var i = 0; i + 4 <= digest.length; i += 4) digest.substring(i, i + 4),
-    ].join(" ").toUpperCase();
+    ].join(" ");
   }
 
   /// Hex of the public key's SHA-256, grouped in fours — a stable name for
@@ -39,6 +43,9 @@ class SyncIdentity {
   /// compared with what the other device shows under "This device"; nowhere
   /// else reaches a user with it.
   String get fingerprint => fingerprintOf(publicKey);
+
+  /// This device's own [digestOf] — the name's fallback slice reads it.
+  String get digest => digestOf(publicKey);
 
   String get publicKeyB64 => base64Encode(publicKey);
 

@@ -1,5 +1,4 @@
 import "dart:async";
-import "dart:convert";
 
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
@@ -7,14 +6,18 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 import "../../data/sync/sync_hub.dart";
 import "../../domain/date_words.dart";
 import "../../domain/sync/devices.dart";
-import "../../domain/sync/identity.dart";
 import "../../providers.dart";
+import "../fonts.dart" show monoFamily;
 import "../widgets/dialogs.dart";
 import "../widgets/section_header.dart";
 
-/// How a connection status reads on screen, shared by the paired-device row
-/// on the Sync page and by the device's own page below — one home so the row
-/// and the page cannot drift.
+/// The verbatim values' face: every fingerprint and the last address render
+/// in the same bundled mono the rest of the app holds its keys and codes in.
+const _monoStyle = TextStyle(fontFamily: monoFamily, fontSize: 13);
+
+/// How a connection reads on screen. The paired-device row on the Sync page
+/// and the device's own page below share the icon and the colour — one home
+/// so the two cannot drift; the word is the page's alone, private for it.
 IconData peerStatusIcon(PeerStatus status) => switch (status) {
       PeerStatus.online => Icons.circle,
       PeerStatus.connecting => Icons.circle_outlined,
@@ -29,7 +32,7 @@ Color peerStatusColor(PeerStatus status, ThemeData theme) => switch (status) {
       PeerStatus.error => theme.colorScheme.error,
     };
 
-String peerStatusWord(PeerStatus status) => switch (status) {
+String _peerStatusWord(PeerStatus status) => switch (status) {
       PeerStatus.online => "Connected",
       PeerStatus.connecting => "Connecting…",
       PeerStatus.offline => "Not connected",
@@ -101,18 +104,14 @@ class _PairedDevicePageState extends ConsumerState<PairedDevicePage> {
     }
   }
 
-  /// A dial that could not find the device is said on this page, not left as
-  /// an unhandled error under a pressed button — the row's own rule, here for
-  /// its Connect and Disconnect.
-  void _tried(Future<void> Function() work) =>
-      unawaited(work().catchError((Object error) {
-        if (mounted) say(context, error);
-      }));
-
   @override
   Widget build(BuildContext context) {
     final hub = ref.watch(syncHubProvider);
-    final peer = ref.watch(syncPeersProvider)[widget.deviceId];
+    // One device's state, and only that device's: the page is rebuilt when
+    // its own name, status or error moves, not when an unrelated device's
+    // dial does.
+    final peer = ref
+        .watch(syncPeersProvider.select((peers) => peers[widget.deviceId]));
     final device = _device;
     final theme = Theme.of(context);
 
@@ -151,7 +150,7 @@ class _PairedDevicePageState extends ConsumerState<PairedDevicePage> {
     final name = peer?.name ?? device.name;
     final status =
         peer?.status ?? PeerStatus.offline; // published at every startup.
-    final peerFingerprint = fingerprintOfB64(device.publicKey);
+    final peerFingerprint = device.fingerprint;
     return [
       // The name as this device files it, and the rename beside it. Nothing
       // here renames the peer itself: names are each side's own.
@@ -171,7 +170,7 @@ class _PairedDevicePageState extends ConsumerState<PairedDevicePage> {
       ListTile(
         leading: Icon(peerStatusIcon(status),
             size: 20, color: peerStatusColor(status, theme)),
-        title: Text(peerStatusWord(status)),
+        title: Text(_peerStatusWord(status)),
         subtitle: peer?.error == null ? null : Text(peer!.error!),
         // The row's action, beside the status it acts on. Connecting is the
         // wait's own state; a dial that finds nothing is said on this page.
@@ -179,12 +178,12 @@ class _PairedDevicePageState extends ConsumerState<PairedDevicePage> {
             ? null
             : status == PeerStatus.online
                 ? TextButton(
-                    onPressed: () => _tried(
-                        () => hub.disconnect(widget.deviceId)),
+                    onPressed: () => catchAndSay(
+                        context, () => hub.disconnect(widget.deviceId)),
                     child: const Text("Disconnect"))
                 : TextButton(
-                    onPressed: () =>
-                        _tried(() => hub.connect(widget.deviceId)),
+                    onPressed: () => catchAndSay(
+                        context, () => hub.connect(widget.deviceId)),
                     child: const Text("Connect")),
       ),
       ListTile(
@@ -194,8 +193,7 @@ class _PairedDevicePageState extends ConsumerState<PairedDevicePage> {
       if (device.lastAddress != null)
         ListTile(
           title: const Text("Last address"),
-          subtitle: Text(device.lastAddress!,
-              style: const TextStyle(fontFamily: "monospace", fontSize: 13)),
+          subtitle: Text(device.lastAddress!, style: _monoStyle),
         ),
       ListTile(
         title: const Text("Paired"),
@@ -256,19 +254,12 @@ class _PairedDevicePageState extends ConsumerState<PairedDevicePage> {
   }
 }
 
-/// The fingerprint of a stored key, or null where it will not decode — a
-/// record this device wrote, so only a hand-edit could break it.
-String? fingerprintOfB64(String publicKeyB64) {
-  try {
-    return SyncIdentity.fingerprintOf(base64Decode(publicKeyB64));
-  } catch (_) {
-    return null;
-  }
-}
-
 /// Revoking asks first, wherever it is asked from. The row on the Sync page
 /// and the device's own page share this one dialog, so the two wordings (and
-/// the promise about what a revoke does not do) cannot drift apart.
+/// the promise about what a revoke does not do) cannot drift apart; the
+/// revoke's own failure is its catch, where the row's connect and disconnect
+/// go through `catchAndSay` — [say]'s rule holds for every verb under a
+/// button. False leaves both surfaces as they were: not revoked, not popped.
 Future<bool> confirmRevokeDevice(
   BuildContext context,
   String name,
@@ -282,8 +273,14 @@ Future<bool> confirmRevokeDevice(
     confirmLabel: "Revoke",
     destructive: true,
   );
-  if (ok) await revoke();
-  return ok;
+  if (!ok) return false;
+  try {
+    await revoke();
+  } catch (error) {
+    if (context.mounted) say(context, error);
+    return false;
+  }
+  return true;
 }
 
 /// A fingerprint as a row: the key icon, the grouped hex, and the copy
@@ -304,10 +301,7 @@ class _FingerprintLine extends StatelessWidget {
               size: 20, color: theme.colorScheme.onSurfaceVariant),
           const SizedBox(width: 8),
           Expanded(
-            child: Text(
-              value,
-              style: const TextStyle(fontFamily: "monospace", fontSize: 13),
-            ),
+            child: Text(value, style: _monoStyle),
           ),
           IconButton(
             tooltip: "Copy fingerprint",

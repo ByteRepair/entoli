@@ -1,5 +1,4 @@
 import "dart:async";
-import "dart:convert";
 
 import "package:flutter/foundation.dart";
 import "package:flutter/material.dart";
@@ -9,7 +8,6 @@ import "package:qr_flutter/qr_flutter.dart";
 import "package:agent_chat/data/sync/sync_hub.dart";
 import "package:agent_chat/domain/app_settings.dart";
 import "package:agent_chat/domain/sync/devices.dart";
-import "package:agent_chat/domain/sync/identity.dart";
 import "package:agent_chat/ui/settings/settings_page.dart";
 
 import "../fakes.dart";
@@ -397,7 +395,8 @@ void main() {
 
   group("clicking a paired device's row", () {
     testWidgets("opens the device's own page", (tester) async {
-      await open(tester, paired: [testPairedDevice("d1", name: "Laptop")]);
+      final device = testPairedDevice("d1", name: "Laptop");
+      await open(tester, paired: [device]);
 
       await scrollTo(tester, find.text("Laptop"));
       await tester.tap(find.text("Laptop"));
@@ -411,10 +410,8 @@ void main() {
       expect(find.text("Rename"), findsOneWidget);
       expect(find.text("This device"), findsOneWidget);
       expect(find.text(hub.identity.fingerprint), findsOneWidget);
-      // The stored key's fingerprint, computable here because the fixture's
-      // key is a fixture's key.
-      expect(find.text(SyncIdentity.fingerprintOf(base64Decode("cHVibGlj"))),
-          findsOneWidget);
+      // The stored key's, from the record itself.
+      expect(find.text(device.fingerprint!), findsOneWidget);
       expect(find.text("Open pairing window"), findsNothing);
     });
 
