@@ -1,3 +1,7 @@
+import "dart:convert";
+
+import "identity.dart" show SyncIdentity;
+
 /// A paired device, as the registry holds it. Everything here is public:
 /// the pairing secret that authenticates reconnects is kept beside it in the
 /// [SecretStore], never in this record.
@@ -23,6 +27,30 @@ class PairedDevice {
   /// The host:port its LAN signaling server answered on last time. A hint for
   /// reconnecting, not a promise — ports move across restarts.
   String? lastAddress;
+
+  /// The record as [name] addresses it: what a rename is. The name is final
+  /// on the record, so a rename is this replacement — every other fact
+  /// carried over whole — rather than a field write.
+  PairedDevice withName(String name) => PairedDevice(
+        id: id,
+        name: name,
+        publicKey: publicKey,
+        addedAt: addedAt,
+        lastSeenAt: lastSeenAt,
+        lastAddress: lastAddress,
+      );
+
+  /// The fingerprint over this record's stored key, or null where it will
+  /// not decode. A record this app wrote, so only a hand-edit breaks one;
+  /// the code itself comes from [SyncIdentity.fingerprintOf], so both ends'
+  /// screens derive the same answer from the same key by construction.
+  String? get fingerprint {
+    try {
+      return SyncIdentity.fingerprintOf(base64Decode(publicKey));
+    } catch (_) {
+      return null;
+    }
+  }
 
   Map<String, dynamic> toJson() => {
         "id": id,
@@ -59,6 +87,11 @@ abstract interface class DeviceRegistry {
   Future<void> remove(String id);
 
   Future<void> markSeen(String id, {String? address});
+
+  /// What this device addresses [id] by, from now on. A name in this
+  /// registry is the one this device files the peer under, for its own rows —
+  /// the other device keeps its own, the way it keeps this device's.
+  Future<void> rename(String id, String name);
 
   /// The shared secret this pair authenticated with, or null.
   Future<String?> pairingSecret(String id);

@@ -1216,6 +1216,13 @@ class FakeDeviceRegistry implements DeviceRegistry {
   }
 
   @override
+  Future<void> rename(String id, String name) async {
+    final device = _devices[id];
+    if (device == null) return;
+    _devices[id] = device.withName(name);
+  }
+
+  @override
   Future<String?> pairingSecret(String id) async => _secrets[id];
 
   @override

@@ -1,3 +1,5 @@
+import "dart:async";
+
 import "package:flutter/material.dart";
 import "package:flutter/services.dart";
 
@@ -22,6 +24,15 @@ Future<void> copyToClipboard(
 /// for a caught failure, hoisted so they stop duplicating it.
 void say(BuildContext context, Object error) =>
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("$error")));
+
+/// Run a [work] whose future nobody would await — a sync verb handed to an
+/// `onPressed` — and catch its failure with [say], where dropping it left a
+/// button that did nothing and an unhandled error. Reported only while the
+/// context survives; the work itself runs whatever the tree does.
+void catchAndSay(BuildContext context, Future<void> Function() work) =>
+    unawaited(work().catchError((Object error) {
+      if (context.mounted) say(context, error);
+    }));
 
 /// Ask which project something belongs under. The answer is wrapped because
 /// the default project is null as well, and a dismissed dialog must not read

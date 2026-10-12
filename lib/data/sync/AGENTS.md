@@ -537,23 +537,101 @@ every one of those buttons goes through a catch that reports.
 Revoking asks first, and says what it does not do: the other device keeps this
 one until somebody revokes there too.
 
+**The row is the device's page's way in.** Clicking a paired device's row
+pushes `PairedDevicePage` — the record as this device holds it (the name, the
+connection, when it was last reached and on which address, when it was
+paired), a rename beside the name, and under all of it the two fingerprints a
+pair exists to compare: the peer's, read off the record itself
+(`PairedDevice.fingerprint`, which asks `SyncIdentity.fingerprintOf` — both
+codes come from one function), and this device's own
+labelled "This device". That is where the fingerprint belongs in the
+interface and is the only place it is drawn — the Sync page itself carries
+none. The point of a fingerprint is two displays agreeing, and this is a page
+where one finally has a pair: "Device fingerprint" here against "This
+device" *on the other device*. The paragraph under both codes says what they
+are (public, naming a key, granting nothing — connecting still needs the
+pairing code) and asks the comparison, which no bare hex row on a list could.
+`rename` is the registry's verb, one-sided like every name in it: it replaces
+the record (`PairedDevice.withName` on both registry implementations — the
+name is final on it) and `SyncPeers.renamed` moves the name through the
+status without touching whatever the connection earned. A peer's name is
+said from one book on every surface, and the surfaces *read* it rather than
+hold it: the row sees the `PeerState` the write updated, the chat page's
+driven line derives from that same state (`SyncHub.rename` re-runs
+`_refreshDriven` — no control change to hang a follow-on on), and the
+mirrors' Remotes rows derive theirs at every `_rebuildRemotes`.
+`MirrorChat.deviceName` and `LivePeer.deviceName` both survive as
+establish-time fallbacks for a device gone missing from the book, which is
+why neither had to grow a second writer. Before this rename work, the row
+showed the new name while the driven line and the Remotes rows kept the old
+one until a reconnect.
+Connect and disconnect live on the row and on the page — the row keeps them
+on sight of the list, the page beside the status they act on (connecting
+disables), and every one goes through one `catchAndSay` beside `say`: a
+sync verb's future nobody awaits, caught and reported, the mounted check on
+the report. Revoke
+is on both, asking first through one shared dialog (`confirmRevokeDevice`),
+which owns the revoke's failure the same way; confirming from the page pops
+it, leaving nothing for it to stand in for.
+
 ## The pairing flows as pages
 
-"Open pairing window" and "Manual invite" each push their own page rather than
-rendering inline, and going back cancels. The window page shows the
-`entoli-pair:` code as a QR (`qr_flutter`) and selectable text; the SAS
-confirm renders on the same page once a device connects. Manual invite's offer
-blob carries a full SDP offer and is too large for a reliable QR, so that page
-is selectable text only, with a field for the reply the other device sends
-back. Back cancels through a `PopScope` rather than `dispose`: `dispose` runs
+Any pairing started — a window, a manual invite, a pasted or scanned code —
+goes to a screen of its own, and the Sync page's controls never move for any
+of it: pairing another device stays one button away on the page the whole
+time. There used to be an inline status that *replaced* the controls with
+"Paired." while any pairing was in flight; that made the first pairing the
+last until something reset it, which is why nothing here renders the
+`PairingActivity` on the list page.
+
+- **Window host** (`PairingWindowPage`): the QR, the codes confirm, then the
+  paired screen. "Pair another device" opens a fresh window *on the same
+  page* — a `bool` over the page holds a spinner across the gap where
+  `startPairingWindow` cancels the old activity before opening the new, so
+  the page never says "Pairing cancelled." for a window it is opening.
+- **Joiner** (`PairingJoinPage`): pushed by Pair (scanned or pasted), which
+  does not await `pairWith` — the page starts it one post-frame in, so the
+  wait it is pushed for is what is on screen. A throw with the activity still
+  null (usually a code that decodes to nothing) is said and the page pops;
+  otherwise the failed arm is on the page.
+- **Manual invite** (`ManualInvitePage`): the blob and the reply field until
+  the reply is handed over, then the same stage view. Back is one verb,
+  `cancelManualInvite` — a pending invite loses its held link, and, once the
+  reply is in, the completing pair's gate is answered no; the same
+  teardown-then-drop shape the window's verb has.
+
+The three build on `_PairingStageView` — confirm, paired, failed; the
+connecting arm is the hosting page's own (the window's QR; a spinner
+elsewhere). Non-window screens take `watching(context, hub, waitLabel)`,
+the whole body harness shared once: spinner before the activity, then the
+stages, pair-another and Done wired. Back is one `_cancelOnBack` scope —
+the pop contract (cancel before dispose, tree unlocked) stated once, the
+per-screen verb its argument: `cancelPairing` on the joiner,
+`cancelPairingWindow` on the window, `cancelManualInvite` on the invite.
+"Pair another device" is every variant: the window's reopens in place; the
+other two push a fresh `PairingWindowPage` over themselves
+(`PairingWindowPage.openAnother`, the same verb the Sync page's button is).
+
+**Both manual routes open the pairing card.** `createManualInvite` never did,
+nor `_acceptManualInvite` — the inviter completing a reply, and the invited
+device answering one, each ran their handshake with `activity == null`, and
+`_note` no-ops into a null activity: the codes-matched gate paused, rendered
+nothing anywhere, and a *fresh* manual pairing hung on both ends at the same
+step. Every real route now opens a card first, which is the same rule
+`establishForTest`'s comment states for itself; a test cannot catch a
+hang-that-renders-nothing, and none of them did. The rule is now enforced
+rather than assumed: the gate (pinned by `pairingGateForTest`) refuses a
+*fresh* pair where the activity has gone — the arm whose human backed out
+while the dial was still connecting arrives with no screen to show codes on,
+and fails the handshake instead of arming a confirmation nobody can complete,
+which is what had the channel and its LivePeer leaking until some future
+pairing action completed the complement.
+
+Going back cancels through a `PopScope` rather than `dispose`: `dispose` runs
 with the widget tree locked, and the activity notifier's
 `ValueListenableBuilder` would otherwise be told to rebuild mid-unmount. The
-invite page calls `cancelManualInvite` — which closes the held `RtcLink` as
-well as dropping the pending reference — rather than `cancelPairingWindow`,
-since a manual invite never opened a window. The window page cancels its own
-window the same way. The paste-a-code field has a camera-scan button on
-Android only (`mobile_scanner`); the manifest carries `CAMERA` and a
-non-required camera feature for it.
+paste-a-code field has a camera-scan button on Android only (`mobile_scanner`);
+the manifest carries `CAMERA` and a non-required camera feature for it.
 
 ## Secrets at rest
 

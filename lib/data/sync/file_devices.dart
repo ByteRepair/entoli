@@ -79,6 +79,13 @@ class FileDeviceRegistry implements DeviceRegistry {
   }
 
   @override
+  Future<void> rename(String id, String name) async {
+    final device = await byId(id);
+    if (device == null) return;
+    await add(device.withName(name));
+  }
+
+  @override
   Future<String?> pairingSecret(String id) async {
     final raw = await _secrets.read(pairingSecretsKey);
     if (raw == null) return null;

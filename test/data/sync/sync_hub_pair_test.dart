@@ -107,6 +107,22 @@ void main() {
     expect(psk, isNot(contains("=")));
   });
 
+  test("the codes gate refuses a handshake whose pairing page is gone",
+      () async {
+    // What a human's back does while their dial is still connecting: the
+    // PopScope nulls the activity, and the handshake is still on the wire.
+    // Arming a confirmation into that waits forever on a human who left and
+    // holds the channel open under them; failing takes the pair down.
+    await expectLater(
+      home.hub.pairingGateForTest(generatePsk(), "Laptop", isNew: true),
+      throwsA(isA<HandshakeException>()),
+    );
+    // A reconnect (known pair) walks straight through with nothing open,
+    // which is what it always did.
+    expect(home.hub.pairing.value, isNull);
+    expect(await home.hub.pairingGateForTest("", "", isNew: false), isTrue);
+  });
+
   /// A data channel refuses a message past its negotiated maximum, and a
   /// conversation of any length is far past it — the chats this was first run
   /// against were 74KB, 256KB and 485KB of `conv.jsonl`, and every one of
@@ -630,6 +646,32 @@ void main() {
       expect(home.hub.heldBy(state.id), away.identity.id);
       expect(home.hub.drivenChats.value[state.id], away.hub.deviceName);
       expect(away.hub.mirror(state.id)!.controlHolder, away.identity.id);
+    });
+
+    test("a rename of a connected device lands on every name it is said",
+        () async {
+      final state = await mirrored();
+      await away.hub.requestControl(state.id);
+      await waitForSync(() => away.hub.holdsControl(state.id));
+      expect(home.hub.drivenChats.value[state.id], away.hub.deviceName);
+
+      // The home end's row and its driven line read one book.
+      await home.hub.rename(away.identity.id, "Renamed Away");
+      expect(home.hub.drivenChats.value[state.id], "Renamed Away");
+      expect(home.hub.peers.value[away.identity.id]!.name, "Renamed Away");
+      // A lock, a status, a subscription: none of that moved.
+      expect(away.hub.holdsControl(state.id), isTrue);
+
+      // The mirror side: its Remotes rows derive their name from the book,
+      // which is what shows on screen — the mirror's own field stays the
+      // creation-time fallback.
+      expect(away.hub.mirror(state.id)!.deviceName, home.hub.deviceName);
+      await away.hub.rename(home.identity.id, "Renamed Home");
+      expect(
+          away.hub.remotes.value
+              .firstWhere((entry) => entry.chatId == state.id)
+              .deviceName,
+          "Renamed Home");
     });
 
     test("a second device is refused, and hears who has it", () async {
