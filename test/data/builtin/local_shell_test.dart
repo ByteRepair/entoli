@@ -806,6 +806,30 @@ group("sandbox violation reading", () {
     expect(verdict.violations, isEmpty);
   });
 
+  test("a report of only shell plumbing does not mask an unexplained denial", () {
+    // What the shim saw was the shell's own /dev/tty; the command's denial
+    // it could not name (an LFS-built binary the shim missed) is the
+    // cross-check's to word, not something a report line waves through.
+    final verdict = sandboxViolations(
+        ["open\t/dev/tty"],
+        "git: fatal: cannot lock ref: Permission denied",
+        "/", const CommandSandbox(workspace: "/home/u/ws"));
+    expect(verdict.violations, hasLength(1));
+    expect(verdict.violations.single, contains("could not name"));
+    expect(verdict.unreported, isTrue);
+  });
+
+  test("a report of only in-grant denials does not mask one either", () {
+    final verdict = sandboxViolations(
+        ["open\t/home/u/ws/local.txt"],
+        "touch: cannot touch '/etc/hosts': Permission denied",
+        "/",
+        const CommandSandbox(workspace: "/home/u/ws"));
+    expect(verdict.violations, hasLength(1));
+    expect(verdict.violations.single, contains("could not name"));
+    expect(verdict.unreported, isTrue);
+  });
+
   test("the same denial twice is one entry", () {
     final verdict = sandboxViolations(
         ["mkdir\t/etc/a", "mkdir\t/etc/a"], "", "/",

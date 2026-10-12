@@ -385,6 +385,13 @@ static int (*real_symlink)(const char *, const char *);
 static int (*real_truncate)(const char *, off_t);
 static int (*real_fchmodat)(int, const char *, mode_t, int);
 static int (*real_execve)(const char *, char *const[], char *const[]);
+/* The large-file names: an LFS build (every modern one — git's ref locks
+ * here went through open64) binds these, and without interposing them the
+ * plain wrappers see nothing of its denials. */
+static int (*real_open64)(const char *, int, ...);
+static int (*real_openat64)(int, const char *, int, ...);
+static int (*real_creat64)(const char *, mode_t);
+static int (*real_truncate64)(const char *, off_t);
 
 /* Resolved at load time, before any command runs. A symbol libc does not
  * export is left null; the wrapper checks. */
@@ -401,6 +408,10 @@ __attribute__((constructor)) static void resolve_reals(void) {
   real_truncate = dlsym(RTLD_NEXT, "truncate");
   real_fchmodat = dlsym(RTLD_NEXT, "fchmodat");
   real_execve = dlsym(RTLD_NEXT, "execve");
+  real_open64 = dlsym(RTLD_NEXT, "open64");
+  real_openat64 = dlsym(RTLD_NEXT, "openat64");
+  real_creat64 = dlsym(RTLD_NEXT, "creat64");
+  real_truncate64 = dlsym(RTLD_NEXT, "truncate64");
 }
 
 static const char *report_path(void) {
@@ -458,6 +469,20 @@ int open(const char *path, int flags, ...) {
   return rc;
 }
 
+int open64(const char *path, int flags, ...) {
+  GUARD(real_open64)
+  mode_t mode = 0;
+  if (flags & (O_CREAT | O_TMPFILE)) {
+    va_list ap;
+    va_start(ap, flags);
+    mode = va_arg(ap, int);
+    va_end(ap);
+  }
+  int rc = real_open64(path, flags, mode);
+  REPORT_ON_DENY(flags & (O_CREAT | O_TMPFILE) ? "create" : "open", path);
+  return rc;
+}
+
 int openat(int dirfd, const char *path, int flags, ...) {
   GUARD(real_openat)
   mode_t mode = 0;
@@ -472,9 +497,30 @@ int openat(int dirfd, const char *path, int flags, ...) {
   return rc;
 }
 
+int openat64(int dirfd, const char *path, int flags, ...) {
+  GUARD(real_openat64)
+  mode_t mode = 0;
+  if (flags & (O_CREAT | O_TMPFILE)) {
+    va_list ap;
+    va_start(ap, flags);
+    mode = va_arg(ap, int);
+    va_end(ap);
+  }
+  int rc = real_openat64(dirfd, path, flags, mode);
+  REPORT_ON_DENY(flags & O_CREAT ? "create" : "open", path);
+  return rc;
+}
+
 int creat(const char *path, mode_t mode) {
   GUARD(real_creat)
   int rc = real_creat(path, mode);
+  REPORT_ON_DENY("create", path);
+  return rc;
+}
+
+int creat64(const char *path, mode_t mode) {
+  GUARD(real_creat64)
+  int rc = real_creat64(path, mode);
   REPORT_ON_DENY("create", path);
   return rc;
 }
@@ -524,6 +570,13 @@ int symlink(const char *target, const char *path) {
 int truncate(const char *path, off_t length) {
   GUARD(real_truncate)
   int rc = real_truncate(path, length);
+  REPORT_ON_DENY("truncate", path);
+  return rc;
+}
+
+int truncate64(const char *path, off_t length) {
+  GUARD(real_truncate64)
+  int rc = real_truncate64(path, length);
   REPORT_ON_DENY("truncate", path);
   return rc;
 }

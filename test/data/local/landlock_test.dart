@@ -226,6 +226,20 @@ void main() {
     expect(fresh.code, isNot(0),
         reason: "the file rights do not include creating one beside it");
   });
+
+  // What the report shim interposes, pinned at source level: an LFS-built
+  // binary (git on this host, python) binds `open64`/`openat64` rather than
+  // the plain names, and a shim that wrapped those alone reported nothing
+  // for it — the denial the result then could not say. The wrapper list and
+  // the resolver have to stay in step; this is the tripwire for both.
+  test("the report shim interposes the large-file symbol names", () {
+    for (final symbol in ["open", "openat", "open64", "openat64"]) {
+      expect(reportShimSource, contains('dlsym(RTLD_NEXT, "$symbol")'),
+          reason: "$symbol is resolved");
+      expect(reportShimSource, contains('int $symbol('),
+          reason: "$symbol is wrapped");
+    }
+  });
 }
 
 /// Whether the helper is there on this machine. Set by `setUpAll`'s first
