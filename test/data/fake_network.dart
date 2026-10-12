@@ -38,6 +38,11 @@ class FakeNetwork extends http.BaseClient {
   /// One per request that was answered.
   var asked = 0;
 
+  /// Whether [close] has run, which later hold-point arrivals check — the
+  /// close completed whoever was waiting then, and the hole is the response
+  /// that reaches the hold only after it.
+  var _closed = false;
+
   /// Completed to let held responses finish. Null means nothing is held.
   Completer<void>? hold;
 
@@ -70,13 +75,14 @@ class FakeNetwork extends http.BaseClient {
     }
   }
 
-  /// Whether the response goes on: false once the client was closed while
-  /// [hold] had it stopped.
+  /// Whether the response goes on: false once the client was closed, whether
+  /// it was stopped in the hold when that happened or arrived there after.
   Future<bool> _carriesOn() async {
     final held = hold;
     if (held == null) return true;
     final abandoned = Completer<void>();
     _abandoned.add(abandoned);
+    if (_closed) return false;
     await Future.any([held.future, abandoned.future]);
     if (abandoned.isCompleted) return false;
     _abandoned.remove(abandoned);
@@ -85,6 +91,7 @@ class FakeNetwork extends http.BaseClient {
 
   @override
   void close() {
+    _closed = true;
     for (final abandoned in _abandoned) {
       if (!abandoned.isCompleted) abandoned.complete();
     }
