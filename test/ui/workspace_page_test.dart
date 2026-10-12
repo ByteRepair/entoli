@@ -531,6 +531,7 @@ void main() {
       expect(app.handoff.imports, [false]);
       expect(File("$root/src/added.txt").readAsStringSync(), "new");
       expect(find.text("added.txt"), findsOneWidget);
+    });
 
     testWidgets("uploading a folder asks for one and keeps its shape", (tester) async {
       await open(tester);
