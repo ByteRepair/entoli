@@ -1,8 +1,9 @@
 #!/bin/sh
 # Byte Repair setup: installs make, github-cli, and ESBMC so they are on PATH
 # for every agent turn in the project. Runs inside the configured terminal env
-# (proot rootfs on Android, host shell on desktop), so uname -m picks the arch
-# the binary actually runs on.
+# (proot rootfs on Android, host shell on the desktops), so uname -s picks the
+# platform the binary must be a release of, and uname -m its word size where
+# the release splits by that.
 #
 # Both install decisions belong to the caller, not to this script:
 # - ENV_INSTALL_DIR: where to install. Refused when unset.
@@ -66,12 +67,29 @@ if [ -n "$PKGS" ]; then
 fi
 
 # --- ESBMC --------------------------------------------------------------------
-ARCH=$(uname -m)
-case "$ARCH" in
-  x86_64|amd64)   ASSET="esbmc-linux.zip" ;;
-  aarch64|arm64)  ASSET="esbmc-linux-armv8.zip" ;;
+# The asset follows the platform the script runs on, not the word size alone:
+# uname -s names the OS, and a guest's zip is not a desktop's — a mac picking
+# the linux one by its arm was the state before there was one of its own.
+OS=$(uname -s)
+BINARY="esbmc"
+case "$OS" in
+  Darwin)
+    ASSET="esbmc-macos.zip"
+    ;;
+  Linux)
+    case "$(uname -m)" in
+      aarch64|arm64) ASSET="esbmc-linux-armv8.zip" ;;
+      *)             ASSET="esbmc-linux.zip" ;;
+    esac
+    ;;
+  MINGW*|MSYS*|CYGWIN*)
+    ASSET="esbmc-windows.zip"
+    # Windows execs by extension; the archive ships it named .exe and nothing
+    # else lands the same machine.
+    BINARY="esbmc.exe"
+    ;;
   *)
-    echo "unsupported architecture for ESBMC: $ARCH" >&2
+    echo "unsupported platform for ESBMC: $OS" >&2
     exit 1
     ;;
 esac
@@ -104,31 +122,42 @@ z.extractall('$TMPDIR_EXTRACT')
 "
   elif command -v busybox >/dev/null 2>&1 && busybox unzip >/dev/null 2>&1; then
     busybox unzip -o "$TMPZIP" -d "$TMPDIR_EXTRACT"
+  elif have cygpath && have powershell.exe; then
+    # Git-for-Windows' bash ships no unzip; PowerShell's Expand-Archive is a
+    # call away, and cygpath is what turns the MSYS paths into arguments it
+    # reads.
+    powershell.exe -NoProfile -Command "Expand-Archive -Force -Path \"$(cygpath -w $TMPZIP)\" -DestinationPath \"$(cygpath -w $TMPDIR_EXTRACT)\"" >/dev/null
   else
-    echo "no unzip tool available (unzip, python3, busybox)" >&2
+    echo "no unzip tool available (unzip, python3, busybox, powershell)" >&2
     rm -f "$TMPZIP"
     exit 1
   fi
 
-  ESBMC_BIN=$(find "$TMPDIR_EXTRACT" -name esbmc -type f | head -1)
+  ESBMC_BIN=$(find "$TMPDIR_EXTRACT" -name "$BINARY" -type f | head -1)
   if [ -z "$ESBMC_BIN" ]; then
     echo "esbmc binary not found in archive" >&2
     rm -rf "$TMPDIR_EXTRACT" "$TMPZIP"
     exit 1
   fi
 
-  mv "$ESBMC_BIN" "$BIN/esbmc"
-  chmod +x "$BIN/esbmc"
+  # The binary's own directory moves whole, not the binary alone: a release's
+  # bin/ carries what loads the binary with it (the windows release's
+  # libz3.dll), and one file taken out of its company is the one that cannot
+  # start afterwards. Nothing from the levels above — README, licenses,
+  # headers — follows.
+  ESBMC_BIN_DIR=$(dirname "$ESBMC_BIN")
+  mv -f "$ESBMC_BIN_DIR"/* "$BIN/"
+  chmod +x "$BIN/$BINARY"
   rm -rf "$TMPDIR_EXTRACT" "$TMPZIP"
 fi
 
 # The binary that stands at the end is the one the turns will run. Reaching
-# here without $BIN/esbmc means the works probe passed and no fetch landed, so
-# PATH's is the only candidate there can be.
-if [ -x "$BIN/esbmc" ]; then
-  CANDIDATE="$BIN/esbmc"
+# here without $BIN/$BINARY means the works probe passed and no fetch landed,
+# so PATH's is the only candidate there can be.
+if [ -x "$BIN/$BINARY" ]; then
+  CANDIDATE="$BIN/$BINARY"
 else
-  CANDIDATE="esbmc"
+  CANDIDATE="$BINARY"
 fi
 if ! "$CANDIDATE" --version 2>&1; then
   echo "the esbmc at $CANDIDATE cannot be run (see the error above); setup did not succeed" >&2
