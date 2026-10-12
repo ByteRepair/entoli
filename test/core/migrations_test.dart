@@ -39,26 +39,27 @@ void main() {
     expect(await stamped(), "1.0.0");
   });
 
-  test("a directory with no stamp is older than every entry there is", () async {
+  test("the stamp is where the chain resumes", () async {
+    // No stamp: older than every entry, so the whole chain runs.
     await runMigrations(config,
         fresh: false, chain: [step("0.1.3"), step("0.2.0"), step("1.0.0")]);
 
     expect(ran, ["0.1.3", "0.2.0", "1.0.0"]);
     expect(await stamped(), "1.0.0");
-  });
+    ran.clear();
 
-  test("only the entries after the one stamped run", () async {
+    // A stamp mid-chain: only the entries after it run.
     await stamp("0.2.0");
-
     await runMigrations(config,
         fresh: false, chain: [step("0.1.3"), step("0.2.0"), step("1.0.0")]);
 
     expect(ran, ["1.0.0"]);
-  });
+    ran.clear();
 
-  test("a stamp from a build newer than this one is left where it is", () async {
+    // A stamp from a build newer than this one is left where it is, and
+    // nothing runs here.
+    await runMigrations(config, fresh: false, chain: [step("9.9.9")]);
     await stamp("2.0.0");
-
     await runMigrations(config, fresh: false, chain: [step("0.1.3"), step("1.0.0")]);
 
     expect(ran, isEmpty);

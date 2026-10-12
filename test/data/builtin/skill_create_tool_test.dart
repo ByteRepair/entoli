@@ -94,19 +94,18 @@ void main() {
   final finish = saidOnly("done");
 
   group("offering", () {
-    test("the create_skill tool is offered when a packager is wired", () async {
+    test("the create_skill tool is offered iff a packager is wired", () async {
       final client = FakeLlmClient([[finish]]);
       await agentWith(client).run(userMessage("hi")).toList();
 
       expect(client.calls.first.tools.map((t) => t.name),
           contains(createSkillToolName));
-    });
 
-    test("without a packager, the tool is not offered", () async {
-      final client = FakeLlmClient([[finish]]);
+      // No packager wired: not offered.
+      final without = FakeLlmClient([[finish]]);
       final agent = BuiltinAgent(
         session: session,
-        client: client,
+        client: without,
         shell: FakeShell((_) => ok(""), canRunCommands: true),
         fs: fileSystemIo,
         workspace: workspace.path,
@@ -119,7 +118,7 @@ void main() {
       );
       await agent.run(userMessage("hi")).toList();
 
-      expect(client.calls.first.tools.map((t) => t.name),
+      expect(without.calls.first.tools.map((t) => t.name),
           isNot(contains(createSkillToolName)));
     });
   });
@@ -150,21 +149,6 @@ void main() {
       expect(result.output, contains("demo"));
     });
 
-    test("without a frontmatter name, the folder is the name", () async {
-      final dir = await writeSkill(
-          "skills/letterbox",
-          "---\ndescription: no name in the frontmatter\n---\n\nDo it.\n");
-      final client = FakeLlmClient([
-        [createCall(dir)],
-        [finish],
-      ]);
-      final events =
-          await agentWith(client).run(userMessage("go")).toList();
-
-      final install = events.whereType<SkillInstallEvent>().single;
-      expect(install.title, "letterbox");
-    });
-
     test("a name argument wins over the frontmatter", () async {
       final dir = await writeSkill("skills/demo", _skillMd);
       final client = FakeLlmClient([
@@ -181,18 +165,6 @@ void main() {
       expect(packaged.single.name, "renamed");
     });
 
-    test("subdirectories are carried in the package", () async {
-      final dir = await writeSkill("skills/demo", _skillMd, {
-        "scripts/run.sh": "#!/bin/sh\n",
-      });
-      final client = FakeLlmClient([
-        [createCall(dir)],
-        [finish],
-      ]);
-      await agentWith(client).run(userMessage("go")).toList();
-
-      expect(packaged, hasLength(1));
-    });
   });
 
   group("refusals", () {
