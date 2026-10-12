@@ -341,7 +341,8 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
   Future<void> _sayLater(String text, List<MessagePart> files) async {
     final say = ref.read(chatRepositoryProvider).composeUserPrompt(text,
         project: state.chat?.state.project, files: files);
-    // The routing record rides the say the moment it lands, the same stamp a
+    // The routing record rides the say the moment it lands — the same stamp a
+    // fresh send writes where the prompt is not on the log yet.
     final userMsg = state.chat == null
         ? say
         : say.copyWith(
@@ -376,7 +377,11 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
     if (chat == null) return;
     while (_said.isNotEmpty) {
       final said = _said.removeAt(0);
-      _schedule(chat, mentioned(chat, said), userPrompt: said);
+      // The routing is the stamp: the record the say landed with is the
+      // room's answer to who it addressed, and is not re-read from the
+      // library while the room runs.
+      _schedule(chat, [for (final a in said.addressees) ?nameOf(a)],
+          userPrompt: said);
     }
     if (_turns.isNotEmpty && _ordering != OmadaOrdering.relay) return;
     unawaited(_dispatch());
@@ -541,33 +546,28 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
     int generation = 0,
   }) async {
     final repo = ref.read(chatRepositoryProvider);
+    final omada = ref.read(omadaOnProvider(chat.state.project));
+    // The routing record rides the say where it is written — a fresh send's
+    // or an edit's say, stamped the one time here and the same copy logged
+    // and sent; a say already on the log keeps the record the room made
+    // where it landed, the way [omadaOn] is kept, since a member the library
+    // lost since does not rewrite the room's past.
+    final logged = chat.messages.contains(prompt);
+    final say = logged
+        ? prompt
+        : prompt.copyWith(omadaOn: omada, addressees: _stampedMentions(chat, prompt));
     // The room's mode at this turn, stamped on the turn's opener: the page
     // derives sections from these stamps, a separator above an opener that
     // flips from the last one. The implicit off a chat starts in is not a
     // section — nothing separates the first exchange from a chat that never
     // heard of Omada — so the first flip is the on-flip; the off-flip is
     // what bounds an on-section for the label rule.
-    final omada = ref.read(omadaOnProvider(chat.state.project));
-    final head = opening.first;
-    // The room's routing record rides the say where it is written: who it
-    // addressed, when it is one being said now — a handoff (the reply whose
-    // mention routes the next member) carries none, its mail being behind it.
     final openingWithMode = [
-      head.role == MessageRole.user
-          ? head.copyWith(
-              omadaOn: omada, addressees: _stampedMentions(chat, head))
-          : head.copyWith(omadaOn: omada),
+      identical(opening.first, prompt)
+          ? say
+          : opening.first.copyWith(omadaOn: omada),
       ...opening.sublist(1),
     ];
-    // The say travels to the backend with the routing record on it, whatever
-    // role the prompt is: a say said now is stamped here, an already-logged
-    // one kept as it was recorded, and a handoff's prompt (the mentioning
-    // reply) carries none. The room's other participants word this message
-    // later through the settle, so the copy they word is the stamped one.
-    final say = prompt.role == MessageRole.user
-        ? prompt.copyWith(
-            omadaOn: prompt.omadaOn ?? omada, addressees: _stampedMentions(chat, prompt))
-        : prompt;
     final updated = chat
         .withTurn(openingWithMode, replacing: replacing)
         .copyWith(state: chat.state.copyWith(updatedAt: DateTime.now()));

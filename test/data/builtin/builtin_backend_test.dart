@@ -1687,6 +1687,65 @@ void main() {
       expect(transcript(), isNot(contains("somebody else's")));
       expect(transcript(), isNot(contains("the fake exchange")));
     });
+
+    test("a warm session's live tail confirms across a tool-calling turn",
+        () async {
+      // The turn before this dispatch called a tool; the session's wording of
+      // it holds a tool call and an observation. The sync re-words the same
+      // records per message to confirm the tail, and the two wordings must
+      // agree by content: an entry that matched only by instance identity
+      // would break the confirm here, leave the session's covered ids where
+      // they were, and every room turn after it never worded into this
+      // session at all.
+      final backend = backendOver([
+        [bashCall("grep logs", id: "c1")],
+        [saidOnly("found ten hits")],
+        [saidOnly("done two")],
+        [saidOnly("done four")],
+      ], respond: (_) => ok("hits\n"));
+
+      final m1 = sayFor("grep the logs, @explore", const ["@explore"]);
+      final live = Message(
+          id: "m-live",
+          role: MessageRole.assistant,
+          createdAt: sentAt,
+          parts: const [
+            MessagePart.toolCall(
+                toolCall: ToolCall(
+                    id: "c1",
+                    name: "bash",
+                    argumentsJson: '{"command":"grep logs"}'),
+                responseId: "r1"),
+            MessagePart.toolResult(
+                result: ToolResult(callId: "c1", returnCode: 0, output: "hits\n")),
+            MessagePart.text(text: "found ten hits", responseId: "r2"),
+          ],
+          author: "@explore");
+      await backend.sendPrompt(chatId, m1,
+          settings: const TurnSettings(
+              model: "fake-model",
+              provider: "fake",
+              approveMode: ApproveMode.never,
+              omadaMember: "explore")).toList();
+
+      // The room's own turn ran between, worded only into the house's
+      // session — never this one's.
+      final m2 = sayFor("anyone home?", const []);
+      final r2 = replyBy("done two");
+      await send(backend, "house filler", history: [m1, live, m2, r2],
+          omadaMember: null);
+
+      // And @explore's next dispatch words the house's exchange in; the tool
+      // call's wording confirms once, and the prompt below words nothing
+      // twice.
+      await send(backend, "carry on, @explore",
+          history: [m1, live, m2, r2], omadaMember: "explore");
+      expect(transcript(), contains("anyone home?"));
+      expect(transcript(), contains("Message from (main agent)"));
+      // And the turn's own prompt is the say, never worded twice, whether
+      // directly or inside the wording of the tool turn that confirmed it.
+      expect(transcript().split("grep the logs"), hasLength(2));
+    });
   });
 
   group("asking one question", () {
