@@ -17,10 +17,10 @@ import "../widgets/settings_warning_banner.dart";
 ///
 /// The setup runs only where it can: a rootfs env picked from the Terminal
 /// settings on Android, the host shell with a bin directory to install into
-/// on the desktops — Linux alone. Elsewhere the category says so and hides
-/// the buttons, which could only report their own refusal; the delete stays,
-/// the data being real wherever the tooling is not, with its confirm message
-/// worded by the store's [ByteRepairStore.environmentDeletion].
+/// on the desktops. Elsewhere — iOS, and the web — the category says so and
+/// hides the buttons, which could only report their own refusal; the delete
+/// stays, the data being real wherever the tooling is not, with its confirm
+/// message worded by the store's [ByteRepairStore.environmentDeletion].
 class ByteRepairSection extends ConsumerStatefulWidget {
   const ByteRepairSection({super.key});
 
@@ -39,8 +39,8 @@ class _ByteRepairSectionState extends ConsumerState<ByteRepairSection> {
     final store = ref.watch(byteRepairStoreProvider);
     final isAndroid = defaultTargetPlatform == TargetPlatform.android;
     // Whether the env on offer can take the tools: a guest with a package
-    // manager on Android, an install destination on the desktops — Linux's
-    // cache directory alone.
+    // manager on Android, an install destination on the desktops — every
+    // one of the three composes one.
     final capable = isAndroid ? rootfsId != null : store.installDir != null;
     final environment = store.environmentDeletion;
 

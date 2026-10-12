@@ -117,9 +117,9 @@ See "Byte Repair's environment, in two variables" in `lib/data/local/AGENTS.md`.
 On
 Android the "Host" terminal env has no package manager, so the category says
 so and hides the rest until a rootfs is picked from Terminal; the desktops'
-host shell runs the setup where it has an install destination — Linux — and
-macOS and the web draw the same banner over the buttons, which could only
-report their own refusal. The delete sits below the banner everywhere the
+host shells are each given an install destination and so are capable, the
+banner over the buttons being drawn where there is none — iOS and the web.
+The delete sits below the banner everywhere the
 category is drawn, since the workspace and the chats are data wherever the
 tooling is not: its confirm message's environment clause is worded by the
 store's `environmentDeletion`, asked off the disk rather than assumed off

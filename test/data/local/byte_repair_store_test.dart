@@ -46,8 +46,8 @@ void main() {
   }
 
   /// A tool the script runs unchanged, resolved off the host's own PATH —
-  /// the POSIX base (mkdir, find, chmod, mv, rm, head, uname) every machine
-  /// this suite can run on has, whatever else it is missing.
+  /// the POSIX base (mkdir, find, chmod, mv, rm, head, uname, dirname) every
+  /// machine this suite can run on has, whatever else it is missing.
   Future<void> stubReal(String name) =>
       stubTool(name, 'PATH=/usr/bin:/bin exec $name "\$@"');
 
@@ -74,7 +74,7 @@ void main() {
     final staged = p.join(config.dataDir, "esbmc-staged");
     final file = File(staged)..writeAsStringSync("#!/bin/sh\n$body\n");
     await Process.run("chmod", ["+x", file.path]);
-    for (final name in ["mkdir", "uname", "find", "head", "mv", "rm", "chmod"]) {
+    for (final name in ["mkdir", "uname", "find", "head", "mv", "rm", "chmod", "dirname"]) {
       await stubReal(name);
     }
     await stubTool("wget", 'echo zip > "\$3"');
@@ -200,6 +200,76 @@ void main() {
     expect(result.exitCode, isNot(0));
     expect(result.stderr,
         contains("cannot be run (see the error above); setup did not succeed"));
+  });
+
+  /// One fetch run at a platform the script is told it is on: `uname`
+  /// answers [os] for `-s` and [arch] for `-m`, wget logs the URL it was
+  /// aimed at before leaving the zip the unzip stub copies the staged
+  /// [binary] into the `bin/` layout, and the POSIX base is real. Answers
+  /// the log — the URL is the only thing the selection is visible as.
+  Future<String> fetchedFrom(String os, String arch, String binary,
+      {String? companion}) async {
+    final log = File(p.join(config.dataDir, "wget.log"))..createSync();
+    await stubTool("uname",
+        'if [ "\$1" = "-s" ]; then echo "$os"; else echo "$arch"; fi');
+    for (final name in ["mkdir", "find", "head", "mv", "rm", "chmod", "dirname"]) {
+      await stubReal(name);
+    }
+    await stubTool("wget", 'echo "\$4" >> "${log.path}"; echo zip > "\$3"');
+    final staged = p.join(config.dataDir, "esbmc-staged");
+    final file = File(staged)
+      ..writeAsStringSync("#!/bin/sh\necho \"esbmc version 8.5 stub\"\n");
+    await Process.run("chmod", ["+x", file.path]);
+    await stubTool("unzip", [
+      "mkdir -p /tmp/_esbmc_extract/bin",
+      "cp \"$staged\" /tmp/_esbmc_extract/bin/$binary",
+      if (companion != null) ": > /tmp/_esbmc_extract/bin/$companion",
+    ].join(" && ").replaceFirst("cp ", "/bin/cp "));
+
+    final result = await runScript({"ENV_INSTALL_DIR": bin});
+    expect(result.exitCode, 0, reason: result.stderr);
+    return log.readAsStringSync();
+  }
+
+  test("macOS' release is the mac zip, installed bare", () async {
+    expect(await fetchedFrom("Darwin", "arm64", "esbmc"),
+        contains("esbmc-macos.zip"));
+    expect(File(p.join(bin, "esbmc")).existsSync(), isTrue);
+  });
+
+  test("Linux splits the release by the arch it runs on", () async {
+    expect(await fetchedFrom("Linux", "aarch64", "esbmc"),
+        contains("esbmc-linux-armv8.zip"));
+    expect(await fetchedFrom("Linux", "x86_64", "esbmc"),
+        contains("esbmc-linux.zip"));
+  });
+
+  test("Windows' release is the windows zip, installed with its extension",
+      () async {
+    expect(
+        await fetchedFrom("MINGW64_NT-10.0-19045", "x86_64", "esbmc.exe"),
+        contains("esbmc-windows.zip"));
+    expect(File(p.join(bin, "esbmc.exe")).existsSync(), isTrue);
+  });
+
+  test("what loads the binary rides with it out of the archive", () async {
+    // The windows release's shape: libz3.dll beside esbmc.exe — an install
+    // that moved the binary alone would be a machine with no loader answer
+    // to where its z3 is.
+    await fetchedFrom("MINGW64_NT-10.0-19045", "x86_64", "esbmc.exe",
+        companion: "libz3.dll");
+    expect(File(p.join(bin, "esbmc.exe")).existsSync(), isTrue);
+    expect(File(p.join(bin, "libz3.dll")).existsSync(), isTrue);
+  });
+
+  test("a platform the releases have no zip for refuses", () async {
+    await stubReal("mkdir");
+    await stubTool("uname", 'echo "FreeBSD"');
+
+    final result = await runScript({"ENV_INSTALL_DIR": bin});
+
+    expect(result.exitCode, isNot(0));
+    expect(result.stderr, contains("unsupported platform for ESBMC: FreeBSD"));
   });
 
   test("the store passes its install dir as ENV_INSTALL_DIR, install only",

@@ -510,12 +510,13 @@ void main() {
     String deleteMessage(WidgetTester tester) =>
         tester.widget<Text>(find.textContaining("This deletes")).data!;
 
-    /// The desktop target, named per test like `androidTest` does: a
-    /// `testWidgets` body is Android by default, and the section is built
-    /// per target platform.
-    void desktopTest(String description, Future<void> Function(WidgetTester) body) {
+    /// A target platform named per test, the way `chat_page_test.dart`'s
+    /// `androidTest` does: a `testWidgets` body is Android by default, and
+    /// this section is built per target platform.
+    void targetTest(String description, TargetPlatform platform,
+        Future<void> Function(WidgetTester) body) {
       testWidgets(description, (tester) async {
-        debugDefaultTargetPlatformOverride = TargetPlatform.macOS;
+        debugDefaultTargetPlatformOverride = platform;
         try {
           await body(tester);
         } finally {
@@ -524,10 +525,12 @@ void main() {
       });
     }
 
-    // macOS is the bare desktop: a store with no install destination, so the
-    // buttons give way to the banner and the delete names the data alone.
-    desktopTest("with no install destination it says so and keeps the delete",
-        (tester) async {
+    // iOS is the platform left with no install destination — the releases
+    // name nothing its iSH guest could run — so the store composes no bin
+    // directory: the banner says so and the buttons are not drawn, the
+    // delete staying behind a message that names only the data.
+    targetTest("with no install destination it says so and keeps the delete",
+        TargetPlatform.iOS, (tester) async {
       app.dispose();
       app = TestApp.create(byteRepairInstallDir: null);
       await pumpSettings(tester, app, SettingsCategory.byteRepair);
@@ -549,8 +552,8 @@ void main() {
       await settleIo(tester);
     });
 
-    desktopTest("the fetched tools a setup left are named, the rootfs never",
-        (tester) async {
+    targetTest("the fetched tools a setup left are named, the rootfs never",
+        TargetPlatform.macOS, (tester) async {
       app.dispose();
       final bin = p.join(app.config.dataDir, "byte-repair", "bin");
       app = TestApp.create(byteRepairInstallDir: bin);
@@ -567,67 +570,58 @@ void main() {
       expect(message,
           contains("the tools the setup fetched into the app's cache directory"));
       expect(message, contains("Run Setup to use Byte Repair again"));
+      expect(message, isNot(contains("rootfs")));
 
       await tester.tap(find.text("Cancel"));
       await settleIo(tester);
     });
 
     // The env check passes where a rootfs is picked, so the buttons come
-    // back and the message names the copy the setup would have made.
-    testWidgets("an Android rootfs env puts the buttons back, with the rootfs named",
-        (tester) async {
-      debugDefaultTargetPlatformOverride = TargetPlatform.android;
-      try {
-        app.dispose();
-        app = TestApp.create(proot: true, linuxes: const {"alpine"});
-        Directory(p.join(app.config.projectDir(project: project), "rootfs"))
-            .createSync(recursive: true);
-        await io(tester, () => app.container
-            .read(appSettingsProvider.notifier).setRootfs("alpine"));
-        await pumpSettings(tester, app, SettingsCategory.byteRepair);
+    // back and the message names the copy the setup made.
+    targetTest("an Android rootfs env puts the buttons back, with the rootfs named",
+        TargetPlatform.android, (tester) async {
+      app.dispose();
+      app = TestApp.create(proot: true, linuxes: const {"alpine"});
+      Directory(p.join(app.config.projectDir(project: project), "rootfs"))
+          .createSync(recursive: true);
+      await io(tester, () => app.container
+          .read(appSettingsProvider.notifier).setRootfs("alpine"));
+      await pumpSettings(tester, app, SettingsCategory.byteRepair);
 
-        expect(find.text("Run Setup"), findsOneWidget);
+      expect(find.text("Run Setup"), findsOneWidget);
 
-        await scrollTo(tester, find.text("Delete Byte Repair Data"));
-        await tester.tap(find.text("Delete Byte Repair Data"));
-        await settleIo(tester);
-        expect(deleteMessage(tester), contains("the Byte Repair rootfs"));
+      await scrollTo(tester, find.text("Delete Byte Repair Data"));
+      await tester.tap(find.text("Delete Byte Repair Data"));
+      await settleIo(tester);
+      expect(deleteMessage(tester), contains("the Byte Repair rootfs"));
 
-        await tester.tap(find.text("Cancel"));
-        await settleIo(tester);
-      } finally {
-        debugDefaultTargetPlatformOverride = null;
-      }
+      await tester.tap(find.text("Cancel"));
+      await settleIo(tester);
     });
 
-    // The Host env cannot run a setup, the same banner as no destination —
-    // and the delete stays, naming the workspace and the chats alone once
-    // the copy it could have made is not there.
-    testWidgets("Android's Host env draws the env banner and keeps the delete",
-        (tester) async {
-      debugDefaultTargetPlatformOverride = TargetPlatform.android;
-      try {
-        // No install dir, as a desktop with no destination carries: the
-        // guest const would have the message ask the host filesystem.
-        app.dispose();
-        app = TestApp.create(byteRepairInstallDir: null);
-        await pumpSettings(tester, app, SettingsCategory.byteRepair);
+    // The Host env cannot run a setup, the same banner Android's Host has
+    // always drawn — and the delete stays, naming the workspace and the
+    // chats alone where the copy is not there.
+    targetTest("Android's Host env draws the env banner and keeps the delete",
+        TargetPlatform.android, (tester) async {
+      // No install dir, as an iOS build composes none: the guest const the
+      // harness defaults to would have the message ask the host filesystem.
+      app.dispose();
+      app = TestApp.create(byteRepairInstallDir: null);
+      await pumpSettings(tester, app, SettingsCategory.byteRepair);
 
-        expect(find.text("Run Setup"), findsNothing);
-        expect(
-            find.textContaining('when using the "Host" terminal environment'),
-            findsOneWidget);
+      expect(find.text("Run Setup"), findsNothing);
+      expect(
+          find.textContaining('when using the "Host" terminal environment'),
+          findsOneWidget);
 
-        await scrollTo(tester, find.text("Delete Byte Repair Data"));
-        await tester.tap(find.text("Delete Byte Repair Data"));
-        await settleIo(tester);
-        expect(deleteMessage(tester), isNot(contains("rootfs")));
+      await scrollTo(tester, find.text("Delete Byte Repair Data"));
+      await tester.tap(find.text("Delete Byte Repair Data"));
+      await settleIo(tester);
+      expect(deleteMessage(tester), isNot(contains("rootfs")));
 
-        await tester.tap(find.text("Cancel"));
-        await settleIo(tester);
-      } finally {
-        debugDefaultTargetPlatformOverride = null;
-      }
+      await tester.tap(find.text("Cancel"));
+      await settleIo(tester);
     });
   });
 }

@@ -9,9 +9,9 @@ import "../../domain/shell.dart";
 /// Installs and queries the Byte Repair tooling — make, github-cli and ESBMC —
 /// so they are on PATH for every agent turn in the project. The install runs
 /// through the configured terminal env (proot rootfs on Android, the host
-/// shell on the desktops, with a bin directory to inject on Linux alone) with
-/// [project], so it reaches the project's own rootfs instance or the injected
-/// bin directory.
+/// shell on the desktops, with a bin directory to inject on every desktop)
+/// with [project], so it reaches the project's own rootfs instance or the
+/// injected bin directory.
 ///
 /// The script's environment is declared by the caller, never probed by the
 /// script: [installDir] is where tools land (`/usr/local/bin` inside a guest,
@@ -48,13 +48,12 @@ abstract class ByteRepairStore {
   final String workspace;
 
   /// Where the install script puts the tools it fetches: the rootfs's own
-  /// `/usr/local/bin` inside a guest, the app's bin directory on the Linux
-  /// host. Always set where an install can run — the script refuses to guess
-  /// a destination itself. Null where there is nothing to point at — a guest
-  /// reaches its own `/usr/local/bin` without help, and platforms with no
-  /// host install — macOS among the desktops, and the web — have none — so a
-  /// null here is "no host install", never a path the script may guess
-  /// around.
+  /// `/usr/local/bin` inside a guest, the app's bin directory on the
+  /// desktops. Always set where an install can run — the script refuses to
+  /// guess a destination itself. Null where there is nothing to point at — a
+  /// guest reaches its own `/usr/local/bin` without help, iOS's iSH guest
+  /// has no release to match, and the web has no shell — so a null here is
+  /// "no host install", never a path the script may guess around.
   final String? installDir;
 
   /// How long the install script may run. Thirty minutes on the host, where
@@ -124,7 +123,7 @@ abstract class ByteRepairStore {
 
   /// Deletes the Byte Repair environment: the per-project rootfs (the Alpine
   /// copy and everything installed into it) on Android, the fetched tools'
-  /// cache directory on the Linux host, the workspace (cloned repos, scratch
+  /// cache directory on every desktop, the workspace (cloned repos, scratch
   /// files), and the `.setup-complete` marker. Chats are the settings page's
   /// to delete, through the repository. Null on success, an error message on
   /// failure.

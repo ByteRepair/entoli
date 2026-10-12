@@ -8,6 +8,12 @@ import "../../domain/app_settings.dart";
 import "byte_repair_store.dart";
 import "tree_ops.dart";
 
+/// The name ESBMC lands under wherever this store keeps a bin directory:
+/// `.exe` where Windows needs the extension for anything to exec it, bare
+/// where POSIX names the file outright. The setup script installs under it
+/// and the platform's setup gate checks for it, so both agree by asking here.
+final String esbmcFileName = Platform.isWindows ? "esbmc.exe" : "esbmc";
+
 /// The io side of [ByteRepairStore]: the rootfs copy, the ESBMC import, the
 /// environment delete, and the markers both read and written. `dart:io` for
 /// the same reason `FileRootfsStore` is: this side of the conditional import
@@ -64,9 +70,11 @@ class FileByteRepairStore extends ByteRepairStore {
     try {
       final destDir = Directory(destDirPath);
       await destDir.create(recursive: true);
-      final dest = p.join(destDir.path, "esbmc");
+      final dest = p.join(destDir.path, esbmcFileName);
       await File(dest).writeAsBytes(await file.readAsBytes());
-      await Process.run("chmod", ["+x", dest]);
+      // Windows reports no mode bits, so there is nothing for a chmod to do
+      // — and no chmod to run.
+      if (!Platform.isWindows) await Process.run("chmod", ["+x", dest]);
       return null;
     } catch (e) {
       logFailure("byte-repair", "import ESBMC failed", e);

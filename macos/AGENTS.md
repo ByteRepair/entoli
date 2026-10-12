@@ -263,11 +263,11 @@ deprecation notice is swallowed, everything else it says comes through.
 ## Tests on this host
 
 The suite runs real processes through the host's real shell, so a macOS host
-fails eighteen tests before this branch does anything: the recorder
-registration (`LinuxRecorder` is Linux's registration), the Byte Repair bin
-directory and setup gate (`Platform.isLinux` gates the store behind them), the
-skills install's chmod acquire-and-release (the guard is off for macOS
-deliberately), and the whole persistent-shell session contract. They are the
-host's answer, not regressions, and CI on Linux is what gates the branch —
-verified by the same five files failing with the same eighteen on master.
-Everything else, and everything the harness fakes, passes here.
+fails fifteen tests before this branch does anything: the recorder
+registration (`LinuxRecorder` is Linux's registration), the skills install's
+chmod acquire-and-release (the guard is off for macOS deliberately), and the
+whole persistent-shell session contract. They are the host's answer, not
+regressions, and CI on Linux is what gates the branch. Everything else, and
+everything the harness fakes, passes here — the Byte Repair bin directory
+and setup gate included: the bin directory is every desktop's now, where
+`Platform.isLinux` gated it before.
