@@ -74,7 +74,10 @@ exe's icon and the window's, `Runner.rc` binding the ico by name.
 `llama-server` for Windows is native work not started. **The shell is the
 machine's own.** No rootfs, no proot, no bundled git: commands run with what
 the machine has, and where a Linux command would be parsed, Windows commands
-are escalated, not parsed. **The data directory is
+are escalated, not parsed. Byte Repair's setup rides the bash that exists —
+Git-for-Windows' — and fetches `esbmc-windows.zip` into the app's cache
+there, its exec carried by `.exe` and the Expand-Archive fallback its
+extraction chain reaches for. **The data directory is
 `%USERPROFILE%\.config\agent-chat`**, the desktop default's shape — the
 cache's `%LOCALAPPDATA%\agent-chat\Cache`, and `$AGENT_CHAT_CONFIG` over
 both. **Nothing signs it.** Like the DMG, the first run of both the installer

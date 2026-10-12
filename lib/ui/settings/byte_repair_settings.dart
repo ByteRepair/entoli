@@ -1,5 +1,4 @@
 import "package:file_selector/file_selector.dart";
-import "package:flutter/foundation.dart" show defaultTargetPlatform, TargetPlatform;
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
@@ -15,10 +14,15 @@ import "../widgets/settings_warning_banner.dart";
 /// binary, a button to delete the whole environment, and the versions found
 /// afterwards.
 ///
-/// On Android the "Host" terminal env has no package manager, so the category
-/// says so and hides the rest — nothing here can run until a rootfs is picked
-/// from the Terminal settings. On every other platform the host shell is the
-/// only env and is capable.
+/// The setup runs only where it can: a rootfs env picked from the Terminal
+/// settings on Android, the host shell with a bin directory to install into
+/// on the desktops — the store's [ByteRepairStore.capabilityBanner] answers
+/// where the platform's facts live, so this page neither guesses at a
+/// platform nor names a store's internals. Where it cannot run, the category
+/// says so and hides the buttons, which could only report their own refusal;
+/// the delete stays, the data being real wherever the tooling is not, with
+/// its confirm message the store's
+/// [ByteRepairStore.deleteConfirmMessage].
 class ByteRepairSection extends ConsumerStatefulWidget {
   const ByteRepairSection({super.key});
 
@@ -33,9 +37,8 @@ class _ByteRepairSectionState extends ConsumerState<ByteRepairSection> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final rootfsId = ref.watch(appSettingsProvider.select((s) => s.rootfsId));
-    final isAndroid = defaultTargetPlatform == TargetPlatform.android;
-    final incompatible = isAndroid && rootfsId == null;
+    final store = ref.watch(byteRepairStoreProvider);
+    final banner = store.capabilityBanner;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -46,13 +49,11 @@ class _ByteRepairSectionState extends ConsumerState<ByteRepairSection> {
               "verification of C code. Runs through the configured terminal "
               "environment, so it needs one with a package manager.",
         ),
-        if (incompatible)
+        if (banner != null)
           SettingsWarningBanner(
             icon: Icons.warning_amber_rounded,
             color: theme.colorScheme.error,
-            text: 'Byte Repair does not work when using the "Host" terminal '
-                "environment on this device. Please choose another terminal "
-                "environment.",
+            text: banner,
           )
         else ...[
           const SizedBox(height: 8),
@@ -88,52 +89,48 @@ class _ByteRepairSectionState extends ConsumerState<ByteRepairSection> {
               child: LinearProgressIndicator(),
             ),
           ],
-          if (_error != null) ...[
-            const SizedBox(height: 8),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Text(
-                _error!,
-                style: theme.textTheme.bodySmall
-                    ?.copyWith(color: theme.colorScheme.error),
-              ),
-            ),
-          ],
           const SizedBox(height: 16),
           _ToolStatusList(),
+        ],
+        if (_error != null) ...[
           const SizedBox(height: 8),
-          DestructiveButton(
-            icon: Icons.delete_outline,
-            label: "Delete Byte Repair Data",
-            confirmTitle: "Delete Byte Repair environment?",
-            confirmMessage: "This deletes the Byte Repair rootfs (the Linux "
-                "copy and everything installed into it), its workspace "
-                "(cloned repos, scratch files), and all chats in the "
-                "project. Run Setup to use Byte Repair again.",
-            onConfirmed: () async {
-              // The environment first: it is the half that can fail, and
-              // failing before the chats are gone leaves the user something
-              // to retry with.
-              final store = ref.read(byteRepairStoreProvider);
-              final error = await store.deleteEnvironment();
-              if (!mounted) return;
-              if (error != null) {
-                setState(() => _error = error);
-                return;
-              }
-              final repo = ref.read(chatRepositoryProvider);
-              final project = ByteRepairProject().dir;
-              final chats = await repo.listChats();
-              await Future.wait(
-                chats.where((c) => c.project == project).map((c) => repo.deleteChat(c.id)),
-              );
-              if (!mounted) return;
-              ref.invalidate(byteRepairToolVersionsProvider);
-              ref.invalidate(setupCompleteProvider(project));
-              ref.invalidate(chatListProvider);
-            },
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Text(
+              _error!,
+              style: theme.textTheme.bodySmall
+                  ?.copyWith(color: theme.colorScheme.error),
+            ),
           ),
         ],
+        const SizedBox(height: 8),
+        DestructiveButton(
+          icon: Icons.delete_outline,
+          label: "Delete Byte Repair Data",
+          confirmTitle: "Delete Byte Repair environment?",
+          confirmMessage: store.deleteConfirmMessage,
+          onConfirmed: () async {
+            // The environment first: it is the half that can fail, and
+            // failing before the chats are gone leaves the user something
+            // to retry with.
+            final error = await ref.read(byteRepairStoreProvider).deleteEnvironment();
+            if (!mounted) return;
+            if (error != null) {
+              setState(() => _error = error);
+              return;
+            }
+            final repo = ref.read(chatRepositoryProvider);
+            final project = ByteRepairProject().dir;
+            final chats = await repo.listChats();
+            await Future.wait(
+              chats.where((c) => c.project == project).map((c) => repo.deleteChat(c.id)),
+            );
+            if (!mounted) return;
+            ref.invalidate(byteRepairToolVersionsProvider);
+            ref.invalidate(setupCompleteProvider(project));
+            ref.invalidate(chatListProvider);
+          },
+        ),
       ],
     );
   }

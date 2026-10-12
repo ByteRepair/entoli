@@ -83,10 +83,9 @@ void main() {
         what: "the download to be under way");
 
     await subscription.cancel();
-    // The half-written download goes with the cancellation, in cleanup that
-    // is asynchronous on its own; gone is gone.
-    await waitFor(() => !Directory(p.join(root.path, "test-model")).existsSync(),
-        what: "the half-written download to be cleaned out");
+    // Cancel's future is the teardown's: the half-written download went
+    // with the cancellation once its discard had run. Nothing to poll.
+    expect(Directory(p.join(root.path, "test-model")).existsSync(), isFalse);
 
     expect(await store().installed(), isEmpty);
   });

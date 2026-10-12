@@ -170,8 +170,11 @@ ShellDriver? platformDriver({
       projectHome: Platform.isAndroid,
       environment: isolated && byteRepairBinDir != null
           ? {
-              "PATH":
-                  "$byteRepairBinDir:${Platform.environment["PATH"] ?? ""}"
+              // `;` separates PATH on Windows, `:` everywhere else — the
+              // shell inheriting the composed PATH is the machine's own on
+              // both, Git-for-Windows' bash translating its shape away.
+              "PATH": "$byteRepairBinDir${Platform.isWindows ? ";" : ":"}"
+                  "${Platform.environment["PATH"] ?? ""}",
             }
           : null,
       sandboxHelper: Platform.isLinux && config != null
@@ -248,14 +251,15 @@ RootfsStore platformRootfsStore(String cacheDir) =>
         : FileRootfsStore(p.join(cacheDir, "rootfs"));
 
 /// The Byte Repair store, which installs the tooling — into the project's
-/// rootfs copy on Android, the app's own bin directory on the desktop —
+/// rootfs copy on Android, the app's own bin directory on the desktops —
 /// and reports on it. [project] and [workspace] are named by the caller so
 /// both sides of the conditional import agree on what the store is for.
 ///
 /// Where the fetched tools land follows the shell they will run under: a
 /// guest's `/usr/local/bin` where a rootfs can run (Android), the bin
-/// directory [platformByteRepairBinDir] names elsewhere — Linux being the
-/// desktop this app targets, and the only one whose host shell runs setup.
+/// directory [platformByteRepairBinDir] names elsewhere — the three
+/// desktops, whose host shells are each capable; iOS and the web compose
+/// none and are told so at the settings page.
 ByteRepairStore platformByteRepairStore(
   AppConfig config,
   String project,
@@ -279,12 +283,19 @@ ByteRepairStore platformByteRepairStore(
 
 /// The bin directory a rootfs-isolated project's turns find the fetched tools
 /// on, or null where there is nothing to inject — a guest reaches its own
-/// `/usr/local/bin` without help, and every platform but Linux has no host
-/// install to point at. The one composition of the path: the store's
-/// `installDir` is derived from this, so the store that fills the directory
-/// and the driver that injects it cannot disagree.
+/// `/usr/local/bin` without help, iOS's iSH guest has an Alpine the releases
+/// have no match for, and the web has no shell at all. This is the one
+/// platform gate: the store's host install and the settings page's
+/// capability banner both ride `byteRepairBinDir`'s answer, so a desktop
+/// that composes one here can also run a setup into it. The one composition
+/// of the path: the store's `installDir` is derived from this, so the store
+/// that fills the directory and the driver that injects it cannot disagree.
+/// Note `esbmcFileName` beside the store: the file asked for here follows
+/// the platform too.
 String? platformByteRepairBinDir(String cacheDir) =>
-    Platform.isLinux ? p.join(cacheDir, "byte-repair", "bin") : null;
+    Platform.isLinux || Platform.isMacOS || Platform.isWindows
+        ? p.join(cacheDir, "byte-repair", "bin")
+        : null;
 
 /// Whether a project's `.setup-complete` marker is there. Synchronous because
 /// the chat page asks it in a build.
@@ -301,7 +312,7 @@ bool platformSetupComplete(AppConfig config, String? project,
     return false;
   }
   if (byteRepairBinDir == null) return true;
-  return File(p.join(byteRepairBinDir, "esbmc")).existsSync();
+  return File(p.join(byteRepairBinDir, esbmcFileName)).existsSync();
 }
 
 /// Lay out whatever this build ships for the device's ABI, under [cacheDir]

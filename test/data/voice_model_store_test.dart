@@ -73,10 +73,10 @@ void main() {
     await waitFor(() => File(p.join(store.directoryFor(model), "model.onnx")).existsSync(),
         what: "the download to be under way");
     await sub.cancel();
-    // The half-written download goes with the cancellation, in cleanup that
-    // is asynchronous on its own; gone is gone.
-    await waitFor(() => !Directory(store.directoryFor(model)).existsSync(),
-        what: "the half-written download to be cleaned out");
+    // Cancel's future is the teardown's: the half-written download went with
+    // the cancellation, once the run had walked to its exit — the response
+    // the cancel's close ended — and its discard had run. Nothing to poll.
+    expect(Directory(store.directoryFor(model)).existsSync(), isFalse);
 
     expect(await store.installed(), isEmpty);
   });

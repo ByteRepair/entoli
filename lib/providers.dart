@@ -176,7 +176,8 @@ final byteRepairToolVersionsProvider =
 /// A setup marker alone is not enough on Android: Byte Repair needs a rootfs
 /// with a package manager, and the "Host" env has none. The marker may still
 /// be on disk from an earlier setup run under a rootfs, so the env is checked
-/// alongside it — the same `incompatible` check the settings page makes. On
+/// alongside it — the same env check `ByteRepairStore.capabilityBanner`
+/// answers for the settings page's banner. On
 /// the host the platform asks after the binary itself as well, since the
 /// cache it lives in can be cleared between setups.
 final setupCompleteProvider =

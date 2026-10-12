@@ -91,11 +91,11 @@ us, so a CVE in a bundled tool is a version bump in `versions.sh` and a release
 every user has to install. That is the cost that took git out of this list, and
 it is worth weighing before anything is added back to it.
 
-## Byte Repair's environment, in two variables
+## Byte Repair's environment, in three variables
 
 `byte-repair-setup.sh` answers to what it is told and probes nothing. Where to
 install is the store's `ENV_INSTALL_DIR` — `/usr/local/bin` inside a guest, the
-app's own `<cacheDir>/byte-repair/bin` on the host — and the script exits
+app's own `<cacheDir>/byte-repair/bin` on every desktop — and the script exits
 rather than guess a destination. What installs packages is the driver's
 `ENV_PACKAGE_MANAGER` — `apk` in a guest, from the same `Rootfs.packageManager`
 the system prompt names, and nothing on the host, whose package manager is not
@@ -104,16 +104,42 @@ the run carries on, so a host with make already on it pays nothing and one
 without it sees the honest "Not installed" row. A named manager that fails is
 a failure, so a guest install that did not happen never reads as done.
 
+The one thing the script does probe is the platform it is on — `uname -s`,
+which picks the ESBMC release the fetch lands, with `uname -m` splitting it on
+Linux alone: esbmc-macos, esbmc-windows and esbmc-linux or its armv8 brother.
+The machine it runs on is the machine the binary runs on, so this probe is
+honest; a platform whose name it does not know refuses at that case rather
+than fetching a zip that cannot run. The name the release's binary carries
+in is not probed at all — it is told (`ENV_ESBMC_BINARY`, the same
+`esbmcFileName` the gate asks for and the import writes under, one encoding
+of the name, Dart's), and the script's own default is the bare POSIX one.
+Windows is the one of the three with no unzip of its own, where PowerShell's
+Expand-Archive is the fallback the chain reaches. The binary's own `bin/`
+lands whole, not one file out of it: the windows release carries `libz3.dll`
+where its `esbmc.exe` is, and a single-binary move would leave an install
+that cannot load its z3. What a release cannot ship is the verification's
+to refuse rather than the script's to hide: the mac zip is linked against
+homebrew's absolute paths and carries none of them, so on a mac without its
+z3, mpfr, gmp, boost and llvm the run ends on the tail's exit 1 naming the
+loader's missing library — the same honest refusal an unstartable binary has
+given all along.
+
 "Already installed" means *on PATH and runs* (`works`, a `--version` probe),
 not merely found: a binary present but unstartable — a local build missing its
 libraries — once read as installed, was skipped, and setup exited 0 having
-done nothing. The run ends on a verification of the binary that stands at the
-end (the fetched one, else whatever PATH answers); if that will not run,
-setup exits 1 and the settings page shows the loader's error.
+done nothing. The PATH binary that probe found is copied into the bin
+directory, so a setup that fetched nothing leaves the gate the file it asks
+for. The run's tail verifies that file outright, not whatever PATH answers:
+a bin directory holding an unstartable leftover behind a working machine
+binary is the setup's failure to report — exit 1 and the settings page
+showing the loader's error — where a fallback to PATH would have blessed
+the stale install.
 
-On the host the fetched tools reach their turns through the driver: `platformDriver`
+On every desktop the fetched tools reach their turns through the driver:
+`platformDriver`
 prefixes the bin directory onto `PATH` for rootfs-isolated projects alone, the
-way the project's rootfs copy is its own. A user-set `PATH` in the command
+way the project's rootfs copy is its own — separated by `:` except on Windows,
+whose is `;`. A user-set `PATH` in the command
 environment still wins over it. The chat page's setup gate asks after the
 binary itself on the host, since `<cacheDir>` can be emptied between setups —
 the marker alone said a thing the cache may have since taken away. Two
