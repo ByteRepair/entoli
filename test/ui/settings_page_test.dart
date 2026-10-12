@@ -1,9 +1,12 @@
 import "dart:io";
 
+import "package:flutter/foundation.dart" show debugDefaultTargetPlatformOverride, TargetPlatform;
 import "package:flutter/material.dart";
 import "package:flutter_test/flutter_test.dart";
+import "package:path/path.dart" as p;
 
 import "package:agent_chat/domain/app_settings.dart";
+import "package:agent_chat/domain/builtin_project.dart";
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/providers.dart";
 import "package:agent_chat/ui/settings/settings_page.dart";
@@ -496,6 +499,119 @@ void main() {
       final settings = app.container.read(appSettingsProvider);
       expect(settings.defaultProviderId, otherProvider);
       expect(settings.defaultModelId, "qwen-2.5");
+    });
+  });
+
+  group("byte repair", () {
+    final project = ByteRepairProject().dir;
+
+    /// The confirm dialog's message, which is the whole of what the store's
+    /// [ByteRepairStore.deleteConfirmMessage] buys.
+    String deleteMessage(WidgetTester tester) =>
+        tester.widget<Text>(find.textContaining("This deletes")).data!;
+
+    /// Opens the delete confirm, answers its message, and closes it again —
+    /// the run every message assert here is made of.
+    Future<String> deleteDialogMessage(WidgetTester tester) async {
+      await scrollTo(tester, find.text("Delete Byte Repair Data"));
+      await tester.tap(find.text("Delete Byte Repair Data"));
+      await settleIo(tester);
+      final message = deleteMessage(tester);
+      await tester.tap(find.text("Cancel"));
+      await settleIo(tester);
+      return message;
+    }
+
+    /// A target platform named per test, the way `chat_page_test.dart`'s
+    /// `androidTest` does: a `testWidgets` body is Android by default, and
+    /// this section is built per target platform.
+    void targetTest(String description, TargetPlatform platform,
+        Future<void> Function(WidgetTester) body) {
+      testWidgets(description, (tester) async {
+        debugDefaultTargetPlatformOverride = platform;
+        try {
+          await body(tester);
+        } finally {
+          debugDefaultTargetPlatformOverride = null;
+        }
+      });
+    }
+
+    // iOS is the platform left with no install destination — the releases
+    // name nothing its iSH guest could run — so the store composes no bin
+    // directory: the banner says so and the buttons are not drawn, the
+    // delete staying behind a message that names only the data.
+    targetTest("with no install destination it says so and keeps the delete",
+        TargetPlatform.iOS, (tester) async {
+      app.dispose();
+      app = TestApp.create(byteRepairInstallDir: null);
+      await pumpSettings(tester, app, SettingsCategory.byteRepair);
+
+      expect(find.text("Run Setup"), findsNothing);
+      expect(find.text("Import ESBMC"), findsNothing);
+      expect(find.textContaining("nowhere to install the tools it sets up"),
+          findsOneWidget);
+
+      expect(
+          await deleteDialogMessage(tester),
+          "This deletes the Byte Repair workspace (cloned repos, scratch "
+          "files) and all chats in the project.");
+    });
+
+    targetTest("the fetched tools a setup left are named, the rootfs never",
+        TargetPlatform.macOS, (tester) async {
+      app.dispose();
+      final bin = p.join(app.config.dataDir, "byte-repair", "bin");
+      app = TestApp.create(byteRepairInstallDir: bin);
+      Directory(bin).createSync(recursive: true);
+      await pumpSettings(tester, app, SettingsCategory.byteRepair);
+
+      expect(find.text("Run Setup"), findsOneWidget);
+      expect(find.text("Import ESBMC"), findsOneWidget);
+
+      final message = await deleteDialogMessage(tester);
+      expect(message,
+          contains("the tools the setup fetched into the app's cache directory"));
+      expect(message, contains("Run Setup to use Byte Repair again"));
+      expect(message, isNot(contains("rootfs")));
+    });
+
+    // The env check passes where a rootfs is picked, so the buttons come
+    // back and the message names the copy the setup made.
+    targetTest(
+        "an Android rootfs env puts the buttons back, with the rootfs named",
+        TargetPlatform.android, (tester) async {
+      app.dispose();
+      app = TestApp.create(proot: true, linuxes: const {"alpine"});
+      Directory(p.join(app.config.projectDir(project: project), "rootfs"))
+          .createSync(recursive: true);
+      await io(tester, () => app.container
+          .read(appSettingsProvider.notifier).setRootfs("alpine"));
+      await pumpSettings(tester, app, SettingsCategory.byteRepair);
+
+      expect(find.text("Run Setup"), findsOneWidget);
+
+      expect(
+          await deleteDialogMessage(tester), contains("the Byte Repair rootfs"));
+    });
+
+    // The Host env cannot run a setup, the same banner Android's Host has
+    // always drawn — and the delete stays, naming the workspace and the
+    // chats alone where the copy is not there.
+    targetTest("Android's Host env draws the env banner and keeps the delete",
+        TargetPlatform.android, (tester) async {
+      // No install dir, as an iOS build composes none: the guest const the
+      // harness defaults to would have the message ask the host filesystem.
+      app.dispose();
+      app = TestApp.create(byteRepairInstallDir: null);
+      await pumpSettings(tester, app, SettingsCategory.byteRepair);
+
+      expect(find.text("Run Setup"), findsNothing);
+      expect(
+          find.textContaining('when using the "Host" terminal environment'),
+          findsOneWidget);
+
+      expect(await deleteDialogMessage(tester), isNot(contains("rootfs")));
     });
   });
 }

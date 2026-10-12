@@ -15,7 +15,8 @@ import "../domain/download.dart";
 /// The part worth sharing is not the fetching, which is a loop, but the
 /// **cancellation**: a listener that goes away has to take the half-written
 /// directory with it, and nothing is left to tell. Two copies of that is one
-/// copy that gets fixed.
+/// copy that gets fixed. Cancel's own future is the teardown's — awaiting it
+/// joins the discard instead of watching the disk for it.
 class DownloadRun {
   DownloadRun({required this.run, required this.discard, http.Client? client})
       : _client = client ?? tlsClient() {
@@ -24,13 +25,27 @@ class DownloadRun {
         (_) async {
           _client.close();
           // Cancelling closes the stream from the other end, so there is
-          // nobody left to tell — only the half-written directory to remove.
-          if (_cancelled) return discard();
-          await _out.close();
+          // nobody left to tell — only the half-written directory to
+          // remove, and its removal is what cancel's own future waits on.
+          if (_cancelled) {
+            await discard();
+            _tornDown.complete();
+          } else {
+            // Completed before the controller's own close: a full drain
+            // auto-cancels once the done event lands, the cancel's future
+            // is this teardown's, and close's future would wait on that
+            // cancel — the two waits cycle unless the completion runs
+            // first.
+            _tornDown.complete();
+            await _out.close();
+          }
         },
         onError: (Object e) async {
           await discard();
           _client.close();
+          // Same order as the value arm: the completion is the one future
+          // a cancelling listener's cancel waits on.
+          _tornDown.complete();
           if (!_out.isClosed) {
             _out.addError(e);
             await _out.close();
@@ -40,6 +55,11 @@ class DownloadRun {
       onCancel: () {
         _cancelled = true;
         _client.close();
+        // The close unblocks whatever the run wrote toward — the response it
+        // was reading is over — so the discard after it is a bounded chain
+        // of the run's own steps, and this is the one event a caller can
+        // await rather than poll the filesystem for.
+        return _tornDown.future;
       },
     );
   }
@@ -52,6 +72,11 @@ class DownloadRun {
   /// Undo a half-done install. Called when the listener leaves and when the
   /// run throws, which are the two ways this ends badly.
   final Future<void> Function() discard;
+
+  /// The run's own ending, one step past [discard]: a subscription's cancel
+  /// answers this, so whoever awaits the cancellation is awaited past the
+  /// half-written directory being gone rather than left to poll for it.
+  final _tornDown = Completer<void>();
 
   final http.Client _client;
   late final StreamController<DownloadProgress> _out;

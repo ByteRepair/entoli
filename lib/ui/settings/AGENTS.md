@@ -119,11 +119,18 @@ inside a rootfs they go to the guest's own `/usr/local/bin`; on Linux they go
 to `<cacheDir>/byte-repair/bin`, which the project's turns are given on PATH —
 so Byte Repair works on the host env with no root and nothing installed into
 the machine, and a tool already on the machine is used rather than fetched.
-See "Byte Repair's environment, in two variables" in `lib/data/local/AGENTS.md`.
+See "Byte Repair's environment, in three variables" in `lib/data/local/AGENTS.md`.
 On
 Android the "Host" terminal env has no package manager, so the category says
-so and hides the rest until a rootfs is picked from Terminal; on every other
-platform the host shell is the only env and is capable. **Sync** is paired devices — this device's name,
+so and hides the rest until a rootfs is picked from Terminal; the desktops'
+host shells are each given an install destination and so are capable, the
+banner over the buttons being drawn where there is none — iOS and the web.
+The delete sits below the banner everywhere the
+category is drawn, since the workspace and the chats are data wherever the
+tooling is not: its confirm message's environment clause is worded by the
+store's `environmentDeletion`, asked off the disk rather than assumed off
+the platform, so a delete over a project whose setup left nothing behind
+names the workspace and the chats alone. **Sync** is paired devices — this device's name,
 the paired-device list, and the
 pairing controls. A pairing never renders inline: window, invite and pasted
 code all move to a screen of their own that ends on a paired screen naming
