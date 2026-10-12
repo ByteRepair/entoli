@@ -73,6 +73,7 @@ class AppSettings {
     this.autoCompactPercent = defaultAutoCompactPercent,
     this.totalContext = defaultTotalContext,
     this.welcomeSeen = false,
+    this.autoUpdate = true,
   });
 
   String? defaultModelId;
@@ -344,6 +345,13 @@ class AppSettings {
   /// to decide whether to push the tour, and what its Done writes.
   bool welcomeSeen;
 
+  /// Whether the app checks the latest release at startup and puts the newer
+  /// build in place of this one, where the platform can do that — the three
+  /// desktops are, and each sees the row. Default on, and written only when
+  /// off, so a settings file from before it existed says nothing and gets the
+  /// on default. See `app_update.dart` for what the check does.
+  bool autoUpdate;
+
   /// The default when nothing is set: five carry-ons per failure. A named
   /// constant so the settings page's switch — which turns the feature on at
   /// the default — and the load and save answers are one number.
@@ -466,6 +474,10 @@ class AppSettings {
         totalContext: (json["totalContext"] as int? ?? defaultTotalContext)
             .clamp(minTotalContext, maxTotalContext),
         welcomeSeen: json["welcomeSeen"] as bool? ?? false,
+        // Written only when on is the default, so a file that predates it
+        // says nothing and gets the on default — the same bargain the memory
+        // gates are held to.
+        autoUpdate: json["autoUpdate"] as bool? ?? true,
       );
     } catch (_) {
       return AppSettings();
@@ -558,6 +570,7 @@ class AppSettings {
         autoCompactPercent: autoCompactPercent,
         totalContext: totalContext,
         welcomeSeen: welcomeSeen,
+        autoUpdate: autoUpdate,
       );
 
   Future<void> save(AppConfig config) async {
@@ -628,6 +641,7 @@ class AppSettings {
         "autoCompactPercent": autoCompactPercent,
       if (totalContext != defaultTotalContext) "totalContext": totalContext,
       if (welcomeSeen) "welcomeSeen": welcomeSeen,
+      if (!autoUpdate) "autoUpdate": autoUpdate,
     }));
   }
 }

@@ -210,6 +210,9 @@ List<Widget> _sectionsOf(SettingsCategory category) => switch (category) {
           _EnvironmentSection(),
           Divider(),
           _DeleteAllChats(),
+          // Draws its own divider, since a platform that updates itself by
+          // other means has nothing to put under one.
+          _UpdatesSection(),
         ],
       // Its own category for the reason Voice is one: the picker is a line and
       // the catalog under it is the rest of the page.
@@ -1080,6 +1083,44 @@ class _DeleteAllChats extends ConsumerWidget {
         label: const Text("Delete all chats"),
         onPressed: () => _confirmAndDelete(context, ref),
       ),
+    );
+  }
+}
+
+/// The app keeping itself current, where the platform it runs on is one this
+/// feature serves — the three desktops. Drawn nowhere else and saying nothing
+/// where it is not drawn: a phone and a browser already reach their newest
+/// build by means of their own, which a row here would only stand in front of.
+class _UpdatesSection extends ConsumerWidget {
+  const _UpdatesSection();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    if (!ref.watch(appUpdateHostProvider).available) {
+      return const SizedBox.shrink();
+    }
+    final settings = ref.watch(appSettingsProvider);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Divider(),
+        const SectionHeader(
+          "Update",
+          description: "Checked when the app starts: if the latest release is "
+              "newer than this build, that one is downloaded and put in its "
+              "place.",
+        ),
+        SwitchListTile(
+          title: const Text("Automatically update"),
+          subtitle: const Text(
+              "Look for a newer release on startup and replace this build. "
+              "Linux and macOS run it on the next launch; Windows installs "
+              "it when the app quits, with the installer's usual prompt."),
+          value: settings.autoUpdate,
+          onChanged: (value) =>
+              ref.read(appSettingsProvider.notifier).setAutoUpdate(value),
+        ),
+      ],
     );
   }
 }

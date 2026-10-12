@@ -40,6 +40,7 @@ import "../../../data/builtin/local_shell.dart";
 import "../../../data/voice/android_voice.dart";
 import "../../../data/voice/file_voice_model_store.dart";
 import "../../../data/voice/sherpa_voice.dart";
+import "../../../domain/app_update.dart";
 import "../../../domain/assistant_launch.dart";
 import "../../../domain/backup_handoff.dart";
 import "../../../domain/builtin_project.dart";
@@ -60,6 +61,7 @@ import "../../config.dart";
 import "keyring_secret_store.dart";
 import "linux_recorder.dart";
 import "signaling_server.dart";
+import "update.dart";
 
 Shell platformShell({
   required Map<String, String> Function() environment,
@@ -209,6 +211,23 @@ String? _projectRootfsDir(AppConfig config, String project, String rootfsId) {
 /// one absence here that is a build fault, and that banner names the commands.
 Future<String?> platformAbi() =>
     Platform.isIOS ? Future.value("ios") : BundledTools.abi();
+
+/// The whole of the automatic update's platform half: which build this one
+/// replaces itself as, and the check over the release tag. The unavailable
+/// answer where this build cannot update itself at all. See
+/// `domain/app_update.dart`.
+AppUpdateHost platformUpdateHost(String cacheDir) {
+  if (Platform.isLinux) {
+    return DesktopUpdater(flavour: UpdateFlavour.linux, cacheDir: cacheDir);
+  }
+  if (Platform.isMacOS) {
+    return DesktopUpdater(flavour: UpdateFlavour.macos, cacheDir: cacheDir);
+  }
+  if (Platform.isWindows) {
+    return DesktopUpdater(flavour: UpdateFlavour.windows, cacheDir: cacheDir);
+  }
+  return const UnavailableAppUpdateHost();
+}
 
 /// `assets/version.json` is a declared asset; the `assets/` prefix is part of
 /// the key, not just the on-disk path.

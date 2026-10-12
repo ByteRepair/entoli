@@ -23,6 +23,7 @@ import "package:agent_chat/domain/sync/relay_signaling.dart";
 import "package:agent_chat/domain/agent_backend.dart";
 import "package:agent_chat/domain/app_secrets.dart";
 import "package:agent_chat/domain/app_settings.dart";
+import "package:agent_chat/domain/app_update.dart";
 import "package:agent_chat/domain/builtin_project.dart";
 import "package:agent_chat/domain/chat_log.dart";
 import "package:agent_chat/domain/chat_meta.dart";
@@ -146,6 +147,7 @@ class TestApp {
   factory TestApp.create({
     PromptLibrary? library,
     bool launcherIcons = true,
+    AppUpdateHost updateHost = const UnavailableAppUpdateHost(),
     ChatStore? store,
     Shell? shell,
     FakeFileHandoff? handoff,
@@ -238,6 +240,7 @@ class TestApp {
           promptLibraryProvider.overrideWith2(
               (project) => PromptLibraryNotifier(project, library ?? testLibrary())),
           launcherIconsProvider.overrideWithValue(launcher),
+          appUpdateHostProvider.overrideWithValue(updateHost),
           systemAccentProvider.overrideWithValue(systemAccent),
           fileHandoffProvider.overrideWithValue(files),
           assistantLaunchProvider.overrideWithValue(assist),

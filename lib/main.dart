@@ -52,6 +52,12 @@ void main() async {
   runApp(AppRoot(session: await AppSession.start(relaunch), relaunch: relaunch));
 }
 
+/// Whether the automatic update check has run. It belongs to the process, not
+/// to a session: a restart a restore builds is this process still running, and
+/// running the check again there would download the same release twice and —
+/// on Windows — arm a second exit-waiter over the first's.
+var _updateChecked = false;
+
 /// Everything the app reads out of the data directory, and the container it is
 /// all reached through. One per run of the app — and a second one when a backup
 /// is restored, which is what makes the restore land: see [AppRoot].
@@ -243,6 +249,8 @@ class AppSession {
         deviceAbiProvider.overrideWithValue(await abi),
         appVersionProvider.overrideWithValue(await version),
         prootAvailableProvider.overrideWithValue(toolset?.proot != null),
+        appUpdateHostProvider
+            .overrideWithValue(platform.createAppUpdateHost(cache)),
         localModelStoreProvider.overrideWithValue(localModels),
         localLlmProvider.overrideWithValue(server),
         localPrefillProvider.overrideWithValue(prefill),
@@ -278,6 +286,18 @@ class AppSession {
     // invalidates the sidebar's list on a deletion, so a stale row cannot
     // outlive the chat it points at.
     container.read(chatDeletionRefreshProvider);
+    // The automatic update check, started and not awaited: the release tag is
+    // a network round trip and a newer build a download, and startup must not
+    // wait on either. Once per process — see [_updateChecked]. Nothing the
+    // check does disturbs this process — see "The automatic update" in the
+    // root notes — so its timing is the network's to decide.
+    if (!_updateChecked) {
+      _updateChecked = true;
+      unawaited(container.read(appUpdateHostProvider).check(
+            version: container.read(appVersionProvider),
+            enabled: container.read(appSettingsProvider).autoUpdate,
+          ));
+    }
     // Sweep expired temporary chats on startup, then every 30 minutes. The
     // timer is in-process and dies with the session: a chat expiring while the
     // app is closed is caught at the next launch. Skips the currently-open

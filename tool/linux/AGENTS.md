@@ -49,3 +49,10 @@ The debug build is uploaded beside the bundle, as
 nothing, and no version in either: it is dispatched from a branch rather
 than cut from a tag, so pubspec's version would name a build nobody
 released.
+
+The updater knows this asset by name and updates itself through it: the
+download is renamed over the file `$APPIMAGE` names, so the release artifact
+and the thing a running Entoli executes are one file and the update is one
+rename — the next launch runs what was downloaded. A Linux not running from an
+AppImage has nothing under `$APPIMAGE` to point the rename at; the check says
+so in a line and moves on. See "The automatic update" in the root notes.

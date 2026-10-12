@@ -85,3 +85,13 @@ repo's `LICENSE` — the Install button that follows it is where the user
 commits — then the progress and the finish; what is absent from it is
 WixUI_InstallDir's directory-choosing page, the install being to Program
 Files and nowhere else a person sets.
+
+## Self-update
+
+A running exe cannot be renamed under itself, so the update is the MSI run:
+at startup the app downloads `entoli-installer.msi` into the cache and arms a
+detached PowerShell that waits for this process to exit, then runs
+`msiexec /i <that msi> /qn /norestart`. The installer's own elevation prompt
+is what the user answers on the way out; the next start is the upgraded
+install, reached through the same UpgradeCode and so this installer replacing
+its own prior work. See "The automatic update" in the root notes.

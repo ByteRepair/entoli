@@ -11,6 +11,7 @@ import "package:agent_chat/data/builtin/llm/local_prefill.dart";
 import "package:agent_chat/data/sync/channel.dart";
 import "package:agent_chat/data/sync/sync_hub.dart" show RemoteChatEntry;
 import "package:agent_chat/domain/app_icon.dart";
+import "package:agent_chat/domain/app_update.dart";
 import "package:agent_chat/domain/app_settings.dart";
 import "package:agent_chat/domain/app_restart.dart";
 import "package:agent_chat/domain/agent_backend.dart";
@@ -137,6 +138,19 @@ class FakeLauncherIcons implements LauncherIcons {
 
   @override
   Future<void> use(AppIcon icon) async => used.add(icon);
+}
+
+/// The automatic update's platform half, as a test sees it: whether the
+/// settings page draws its row. The harness default is the unavailable one,
+/// which is every non-desktop answer.
+class FakeAppUpdateHost implements AppUpdateHost {
+  FakeAppUpdateHost({this.available = false});
+
+  @override
+  final bool available;
+
+  @override
+  Future<void> check({required String? version, required bool enabled}) async {}
 }
 
 /// The platform's hold on the process, which a test has none of. Records what
