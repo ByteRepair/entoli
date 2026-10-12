@@ -116,8 +116,15 @@ the machine, and a tool already on the machine is used rather than fetched.
 See "Byte Repair's environment, in two variables" in `lib/data/local/AGENTS.md`.
 On
 Android the "Host" terminal env has no package manager, so the category says
-so and hides the rest until a rootfs is picked from Terminal; on every other
-platform the host shell is the only env and is capable. **Sync** is paired devices — this device's identity and
+so and hides the rest until a rootfs is picked from Terminal; the desktops'
+host shell runs the setup where it has an install destination — Linux — and
+macOS and the web draw the same banner over the buttons, which could only
+report their own refusal. The delete sits below the banner everywhere the
+category is drawn, since the workspace and the chats are data wherever the
+tooling is not: its confirm message's environment clause is worded by the
+store's `environmentDeletion`, asked off the disk rather than assumed off
+the platform, so a delete over a project whose setup left nothing behind
+names the workspace and the chats alone. **Sync** is paired devices — this device's identity and
 name, the relay and TURN settings for internet pairing, the paired-device list,
 and the pairing window. See `lib/data/sync/AGENTS.md` for the threat model and
 handshake. **Providers** is the endpoints — and the keys, which are not in

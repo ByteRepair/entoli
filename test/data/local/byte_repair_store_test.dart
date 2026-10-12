@@ -220,4 +220,75 @@ void main() {
     await s.runToolVersion(shell, "esbmc");
     expect(shell.environments.last, isNull);
   });
+
+  group("environmentDeletion", () {
+    FileByteRepairStore storeAt(String? installDir) => FileByteRepairStore(
+          config: config,
+          project: ByteRepairProject().dir,
+          workspace: config.projectWorkspaceDir(project: ByteRepairProject().dir),
+          installDir: installDir,
+        );
+
+    test("nothing set up leaves the dialog the workspace and chats alone", () {
+      expect(storeAt(bin).environmentDeletion, isNull);
+    });
+
+    test("a host install dir names the tools the setup fetched", () {
+      Directory(bin).createSync(recursive: true);
+      expect(storeAt(bin).environmentDeletion,
+          "the tools the setup fetched into the app's cache directory");
+    });
+
+    test("the project's rootfs copy names the rootfs", () {
+      Directory(p.join(config.projectDir(project: ByteRepairProject().dir), "rootfs"))
+          .createSync(recursive: true);
+      expect(
+          storeAt(bin).environmentDeletion,
+          "the Byte Repair rootfs (the Linux copy and everything "
+          "installed into it)");
+    });
+
+    test("an unset install dir has nothing to name whatever is in the temp",
+        () {
+      // The bin directory alone is not the environment: a desktop whose
+      // store was built with no destination — macOS — reads the null
+      // whatever else sits beside the temp.
+      Directory(bin).createSync(recursive: true);
+      expect(storeAt(null).environmentDeletion, isNull);
+    });
+  });
+
+  test("deleteEnvironment takes the trees the setup made, and the marker",
+      () async {
+    final project = ByteRepairProject().dir;
+    final binDir = p.join(config.dataDir, "byte-repair", "bin");
+    final store = FileByteRepairStore(
+      config: config,
+      project: project,
+      workspace: config.projectWorkspaceDir(project: project),
+      installDir: binDir,
+    );
+    Directory(p.join(config.projectDir(project: project), "rootfs"))
+        .createSync(recursive: true);
+    Directory(config.projectWorkspaceDir(project: project)).createSync();
+    File(p.join(config.projectWorkspaceDir(project: project), "cloned.txt"))
+        .writeAsStringSync("hello");
+    Directory(binDir).createSync(recursive: true);
+    File(config.setupCompleteFile(project: project))
+      ..createSync(recursive: true)
+      ..writeAsStringSync("done");
+
+    expect(await store.deleteEnvironment(), isNull);
+
+    expect(Directory(p.join(config.projectDir(project: project), "rootfs"))
+        .existsSync(), isFalse);
+    expect(Directory(config.projectWorkspaceDir(project: project)).existsSync(),
+        isFalse);
+    // The whole cache directory, `bin` being its last member — the same
+    // `p.dirname(installDir)` the real store composes from the cache.
+    expect(Directory(p.join(config.dataDir, "byte-repair")).existsSync(),
+        isFalse);
+    expect(File(config.setupCompleteFile(project: project)).existsSync(),
+        isFalse);
+  });
 }
