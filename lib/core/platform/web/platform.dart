@@ -12,6 +12,7 @@ import "../../../data/local/byte_repair_store.dart"
     show ByteRepairStore, UnavailableByteRepairStore;
 import "../../../data/local/file_secret_store.dart";
 import "../../../data/web/web_file_handoff.dart";
+import "../../../domain/app_update.dart";
 import "../../../domain/assistant_launch.dart";
 import "../../../domain/backup_handoff.dart";
 import "../../../domain/file_handoff.dart";
@@ -60,6 +61,12 @@ ShellDriver? platformDriver({
   String? loginPath,
 }) =>
     null;
+
+/// The app replacing itself from the latest release. A browser is not one of
+/// the platforms that can: the site carries the newest build already, and a
+/// reload of it is the whole of what an update means here.
+AppUpdateHost platformUpdateHost(String cacheDir) =>
+    const UnavailableAppUpdateHost();
 
 Future<String?> platformAbi() async => null;
 

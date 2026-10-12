@@ -15,6 +15,7 @@ import "../../data/local/byte_repair_store.dart" show ByteRepairStore;
 import "../../data/prompts/prompt_sources.dart";
 import "../../domain/app_settings.dart";
 import "../../domain/app_secrets.dart";
+import "../../domain/app_update.dart";
 import "../../domain/background_work.dart";
 import "../../domain/assistant_launch.dart";
 import "../../domain/backup_handoff.dart";
@@ -261,6 +262,12 @@ bool setupComplete(AppConfig config, String? project, String? binDir) =>
     platformSetupComplete(config, project, byteRepairBinDir: binDir);
 
 Future<String?> deviceAbi() => platformAbi();
+
+/// The automatic update's platform half: which build this one replaces itself
+/// as and the check that sits over the release tag. The unavailable answer on
+/// the platforms that reach releases through a store or the site itself.
+AppUpdateHost createAppUpdateHost(String cacheDir) =>
+    platformUpdateHost(cacheDir);
 
 /// The version this build was made from, out of the `version.json` asset.
 /// `tool/prepare.sh` writes it from pubspec's `version:`, and it is declared
