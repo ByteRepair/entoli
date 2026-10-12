@@ -2080,6 +2080,71 @@ void main() {
       expect(app.backend.prompts.single.settings.omadaMember, isNull);
     });
 
+    test("the say the room routed to one member records who it addressed",
+        () async {
+      await _inTeam(app);
+      await chatWithOneTurn("hello @explore", project: "team");
+
+      // The routing record rides the say: the room's own answer to who a say
+      // was for, worded for every other participant by the projection.
+      expect(app.backend.prompts.single.prompt.addressees, ["@explore"]);
+    });
+
+    test("the house's mail words nobody", () async {
+      await _inTeam(app);
+      await chatWithOneTurn("plain hello", project: "team");
+
+      expect(app.backend.prompts.single.prompt.addressees, isEmpty);
+      // Omada off routes to the house whatever is said: an `@mention` there
+      // is instruction material, not addressing.
+    });
+
+    test("a direct chat never records an addressee", () async {
+      final (id, _) = await chatWithOneTurn("hello @explore");
+      await waitIdle(id);
+
+      expect(app.backend.prompts.single.prompt.addressees, isEmpty);
+    });
+
+    test("the room's settle bookkeeping never worded anything twice",
+        () async {
+      await _inTeam(app);
+      final (id, _) = await chatWithOneTurn("hello @explore", project: "team");
+
+      // The room's own exchange: the say records who it addressed; the reply
+      // carries the author stamp; the turn's records are what the sync's
+      // covered ids read — the session's wordings come from them.
+      final say = messagesOf(id).first;
+      expect(say.addressees, ["@explore"]);
+      final reply = messagesOf(id).last;
+      expect(reply.author, "@explore");
+      expect(app.backend.prompts.single.prompt.addressees, ["@explore"]);
+    });
+
+    test("a queued say records who it is for, at say time", () async {
+      await _inTeam(app);
+      app.backend.hold = Completer<void>();
+      app.backend.scriptedRounds = [
+        const [TextDelta("hello from explore")],
+        const [TextDelta("on it"), DoneEvent()],
+      ];
+      final (id, controller) =
+          await startTurn("hello @explore", project: "team");
+      await waitFor(() => app.backend.prompts.isNotEmpty, what: "the turn");
+      await controller.send("now look at the tests, @build");
+      app.backend.hold?.complete();
+      app.backend.hold = null;
+      await waitIdle(id, limit: const Duration(seconds: 5));
+
+      // The stamp rode the say when it landed, and every later reader — the
+      // build turn the room dispatched among its replies — words it from the
+      // log's record.
+      final buildSay = messagesOf(id)[2];
+      expect(buildSay.addressees, ["@build"]);
+      expect(app.backend.prompts.last.prompt.addressees, ["@build"]);
+      expect(app.backend.prompts.last.settings.omadaMember, "build");
+    });
+
     test("a trigger fire naming a member is a say the room routes to them",
         () async {
       await _inTeam(app);

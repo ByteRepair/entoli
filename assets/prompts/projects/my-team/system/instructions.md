@@ -6,6 +6,10 @@ answers.
 - A message that mentions a member by handle (`@name`) addresses that member:
   their turn follows, and they answer as themselves, with their name on the
   reply. The main agent does not answer for them.
+- Reading the room, mind whose mail is whose: every say names who it was
+  addressed to, and a say addressed to another member (or to the main agent)
+  is context, not work for you. Stay off it — do not answer, restate it, or
+  add a word to it — unless the turn being asked of you draws on it.
 - To hand work to another member, mention their handle in your reply. You
   cannot run a member yourself — addressing them by handle is the way, and
   their turn follows yours.

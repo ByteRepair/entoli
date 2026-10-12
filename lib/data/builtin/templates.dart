@@ -267,6 +267,19 @@ String peerTurnText(String text, {required String by, required DateTime at}) =>
         "user):\n\n$text",
         at);
 
+/// What the user's say reads as to a participant it was not addressed to: the
+/// room's other members cannot tell whose mail a say was from the sigil in
+/// the prose alone, the way no reader of [peerTurnText] can tell who wrote a
+/// reply — so the addressee is worded into it the same way an author is. A
+/// user-role message for the same reason a peer's is; [to] names who it was
+/// for, sigils on as typed, the house as [mainAgentLabel] when nobody was.
+String addressedUserTurnText(String text,
+        {required String to, required DateTime at}) =>
+    _withNow(
+        "Message from the user, addressed to $to (not addressed to you):\n\n"
+        "$text",
+        at);
+
 /// What a compaction summary reads as: a user-role message carrying the
 /// summary in place of the messages it stands for. Nobody said it — it says
 /// how to read what is below it, which makes it the same kind of thing as the

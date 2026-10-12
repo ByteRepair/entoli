@@ -68,7 +68,26 @@ for a tool that does not exist. A provider that sees a
 `BuiltinSession` holds the conversation as the model sees it, per chat, for as
 long as the app runs — which is the whole of its lifetime, so `resetSession` and
 an empty one at the head of a turn are filled from the log through
-`projectionOf`. See "The projection".
+`projectionOf`. In a room, a warm session no longer means a caught-up one:
+**`BuiltinBackend._syncSession` is the one rule every participant catches up
+by.** A dispatch's history is the room's thread ending before the prompt; the
+span the log gained since the session's covered ids (`BuiltinSession.covered`,
+the ids the conversation words) is worded onto the covered end, one wording per
+message, and the wordings the session already holds — the live tail says and
+replies are — are confirmed against the log's wordings first, so nothing words
+twice and the warm prefix stays a prefix. What the log no longer explains — a
+rewind the explicit reset missed, a tail richer than the log (a checkpoint
+that failed, an aborted turn's last second) — is re-worded **from the log
+itself**: the store's records, replayed, never the caller's history, whose
+stale copy is what a held session is there to win over. A held-warm session
+with no history and a held one a wordless log cannot resolve against are both
+left as they stand; the next dispatch syncs over whatever the log says then.
+A rewind, a thread move and a compaction land on `resetSession`, which
+refills the house and clears the member sessions — their next dispatch
+refills from the full thread, the room's catch-up of last resort. The
+projection words a message out of its own records (the cwd note included), so
+a per-message wording is one a projection of a whole span also builds, which
+is what makes the confirm-then-append parity-honest.
 
 ## Running the commands
 

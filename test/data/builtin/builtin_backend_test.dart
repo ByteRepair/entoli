@@ -103,6 +103,7 @@ void main() {
     bool includesUserInstructions = false,
     ApproveMode approveMode = ApproveMode.never,
     List<PermissionRule> permissions = const [],
+    String? omadaMember,
   }) =>
       backend
           .sendPrompt(
@@ -120,7 +121,8 @@ void main() {
                   sharedWorkspace: sharedWorkspace,
                   disabled: disabled,
                   bundledInstructions: bundledInstructions,
-                  includesUserInstructions: includesUserInstructions))
+                  includesUserInstructions: includesUserInstructions,
+                  omadaMember: omadaMember))
           .toList();
 
   /// Carrying on the turn [history] ends in, under the same settings [send]
@@ -1523,6 +1525,167 @@ void main() {
 
       expect(client.sent.last.map((m) => m.text).join(), isNot(contains("first")));
       expect(shell.closedSessions, [config.workspaceDir(chatId)]);
+    });
+  });
+
+  group("the room's sessions", () {
+    // The room's turns: the house answering first, then a say addressed to
+    // @explore with their reply - the shape everything below syncs through.
+    // The constructed messages are what a turn's settle left on the log, so a
+    // reply's text is the one its script said; its id comes off the text,
+    // unique inside each test, which is all a conversation needs.
+    Message sayFor(String text, List<String> addressees) => Message(
+            id: "m-$text",
+            role: MessageRole.user,
+            createdAt: sentAt,
+            parts: [MessagePart.text(text: text)],
+            addressees: addressees);
+    Message replyBy(String text, {String? author}) => Message(
+            id: "m-$text",
+            role: MessageRole.assistant,
+            createdAt: sentAt,
+            parts: [MessagePart.text(text: text)],
+            author: author);
+    String transcript() => client.sent.last.map((m) => m.text).join("\n");
+
+    test("a warm session is synced with the room's history before a turn",
+        () async {
+      final backend = backendOver([
+        [saidOnly("done one")],
+        [saidOnly("done two")],
+      ]);
+      final m1 = sayFor("hello", const []);
+      final r1 = replyBy("done one");
+      await send(backend, "hello");
+      expect(client.sent, hasLength(1));
+
+      // What the room said since: a say addressed to @explore, and their
+      // reply, neither an exchange this backend ran. The house's next
+      // dispatch words them into its session before the turn opens.
+      final m2 = sayFor("explore the logs, @explore", const ["@explore"]);
+      final r2 = replyBy("done two", author: "@explore");
+      await send(backend, "thanks both",
+          history: [m1, r1, m2, r2], omadaMember: null);
+
+      expect(transcript(), contains("Message from the user, addressed to "
+          "@explore (not addressed to you):\n\nexplore the logs"));
+      expect(transcript(), contains("Message from explore"));
+      expect(transcript(), contains("thanks both"));
+      // The say that opened the chat is dressed once; the later one never.
+      expect(transcript(), contains("The user asks:\n\nhello"));
+      expect(transcript(), isNot(contains("The user asks:\n\nthanks both")));
+    });
+
+    test("a participant's session words what it already holds once",
+        () async {
+      // Three dispatches; the session's own last turn is in the next
+      // dispatch's history too, and must not word twice.
+      final backend = backendOver([
+        [saidOnly("done one")],
+        [saidOnly("done two")],
+        [saidOnly("done three")],
+      ]);
+      final m1 = sayFor("hello", const []);
+      final r1 = replyBy("done one");
+      await send(backend, "hello");
+      final m2 = sayFor("and how are you", const []);
+      final r2 = replyBy("done two");
+      await send(backend, "and how are you", history: [m1, r1]);
+      await send(backend, "goodbye", history: [m1, r1, m2, r2]);
+
+      final words = transcript();
+      for (final text in [
+        "hello",
+        "done one",
+        "and how are you",
+        "done two",
+        "goodbye",
+      ]) {
+        expect(words, contains(text));
+      }
+      // [system, system, m1, r1, m2, r2, and the say this turn answered].
+      expect(client.sent.last, hasLength(7));
+    });
+
+    test("a member's first turn is filled from the room whole", () async {
+      final backend = backendOver([
+        [saidOnly("done one")],
+        [saidOnly("done two")],
+      ]);
+      final m1 = sayFor("anyone home?", const []);
+      final r1 = replyBy("done one");
+      final m2 = sayFor("explore the logs, @explore", const ["@explore"]);
+      final r2 = replyBy("done two", author: "@explore");
+      await send(backend, "house filler", history: [m1, r1]);
+
+      // The member's own first dispatch fills from the room whole: the say
+      // it was addressed with is its mail, verbatim and dressed.
+      await send(backend, "warm-up filler",
+          history: [m1, r1, m2, r2], omadaMember: "explore");
+      expect(transcript(), contains("The user asks:\n\nexplore the logs"));
+      // The house's reply is the house's words, labeled; the house's own
+      // greeting - the say above it - rides in the same wording.
+      expect(transcript(), contains("Message from (main agent)"));
+      expect(transcript(), contains("addressed to (main agent)"));
+    });
+
+    test("a member's warm session catches up with the room's turns", () async {
+      // One member turn, then the room runs (a house exchange and another
+      // member's turn), then their say: the sync words the room's turns on
+      // the covered end, in log order.
+      final backend = backendOver([
+        [saidOnly("done one")],
+        [saidOnly("done two")],
+        [saidOnly("done three")],
+      ]);
+      final m1 = sayFor("explore the logs, @explore", const ["@explore"]);
+      final r1 = replyBy("done one", author: "@explore");
+      await send(backend, "explore the logs, @explore");
+      expect(client.sent, hasLength(1));
+
+      final m2 = sayFor("anyone home?", const []);
+      final r2 = replyBy("done two");
+      final m3 = sayFor("room talk about the diff", const ["@reviewer"]);
+      final r3 = replyBy("done three", author: "@reviewer");
+      await send(backend, "room filler", history: [m1, r1, m2, r2]);
+
+      // @explore's next dispatch syncs what the room said since.
+      await send(backend, "carry on, @explore",
+          history: [m1, r1, m2, r2, m3, r3], omadaMember: "explore");
+      expect(transcript(), contains("room talk about the diff"));
+      expect(transcript(), contains("Message from (main agent)"));
+      expect(transcript(), contains("Message from reviewer"));
+      // And the turn's own prompt is the say, never worded twice.
+      expect(transcript().split("carry on, @explore"), hasLength(2));
+    });
+
+    test("a caller whose thread diverges from the log is not trusted",
+        () async {
+      // The session holds an exchange this backend filled; the next dispatch
+      // brings a history that words something else in the covered ids'
+      // place. The sync re-words from the log itself, never from a caller's
+      // copy.
+      final backend = backendOver([
+        [saidOnly("done one")],
+      ]);
+      final m1 = sayFor("explore the logs, @explore", const ["@explore"]);
+      final log = replyBy("what the log actually says", author: "@explore");
+      await backend.store.saveState(makeState(chatId));
+      await backend.store.append(chatId, recordsOf([m1, log]));
+
+      await send(backend, "warm-up filler",
+          history: [m1, log], omadaMember: "explore");
+
+      final bogus = sayFor("somebody else's conversation", const []);
+      final bogusReply = replyBy("the fake exchange");
+      await send(backend, "carry on, @explore",
+          history: [bogus, bogusReply, m1, log], omadaMember: "explore");
+
+      expect(transcript(), contains("explore the logs"));
+      expect(transcript(), contains("what the log actually says"));
+      expect(transcript(), contains("carry on, @explore"));
+      expect(transcript(), isNot(contains("somebody else's")));
+      expect(transcript(), isNot(contains("the fake exchange")));
     });
   });
 

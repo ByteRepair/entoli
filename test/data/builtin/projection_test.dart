@@ -424,6 +424,120 @@ void main() {
       expect(projected.last.toolCalls, isEmpty);
       expect(projected.last.text, contains("found it"));
     });
+
+    test("the room's says word who they were addressed to, per viewer",
+        () async {
+      Message addressed(String text, List<String> addressees) => Message(
+            id: "m${next++}",
+            role: MessageRole.user,
+            createdAt: at,
+            parts: [MessagePart.text(text: text)],
+            addressees: addressees,
+          );
+
+      // A say addressed to the researcher, read by the reviewer: the
+      // addressee is on the face of it, and the reviewer's model is not told
+      // the user was talking to them.
+      final forReviewer = await project([
+        addressed("check the logs for @researcher", ["@researcher"]),
+        authoredReply("@researcher"),
+      ], viewer: "reviewer");
+      expect(forReviewer.map((m) => m.role), [LlmRole.user, LlmRole.user]);
+      expect(forReviewer.first.text, contains("addressed to @researcher"));
+      expect(forReviewer.first.text, isNot(contains("(main agent)")));
+
+      // The addressee's own view: the say is theirs, verbatim.
+      final forResearcher = await project([
+        addressed("check the logs for @researcher", ["@researcher"]),
+      ], viewer: "researcher");
+      expect(forResearcher.single.text, contains("check the logs"));
+      expect(
+          forResearcher.single.text,
+          userTurnText("check the logs for @researcher",
+              at: at, first: true));
+
+      // The house reads the same say labeled: not its mail.
+      final forHouse = await project([
+        addressed("check the logs for @researcher", ["@researcher"]),
+      ]);
+      expect(forHouse.single.text, contains("addressed to @researcher"));
+      expect(forHouse.single.text, isNot(userTurnText("check the logs for @researcher", at: at, first: true)));
+
+      // A say the room routed to nobody is the house's mail; a member reading
+      // it knows so from the label without a list to name.
+      final houseMail = await project([asked("anyone home?")],
+          viewer: "researcher");
+      expect(houseMail.single.text, contains("addressed to (main agent)"));
+    });
+
+    test("the group a say addressed words whole, for a member it left out",
+        () async {
+      final projected = await project([
+        Message(
+            id: "m${next++}",
+            role: MessageRole.user,
+            createdAt: at,
+            parts: const [MessagePart.text(text: "look into it")],
+            addressees: const ["@researcher", "@reviewer"]),
+      ], viewer: "planner");
+
+      expect(projected.single.text, contains("addressed to @researcher, @reviewer"));
+    });
+
+    test("the dress is the viewer's first own mail, not the room's opener",
+        () async {
+      Message addressed(String text, List<String> to) => Message(
+            id: "m${next++}",
+            role: MessageRole.user,
+            createdAt: at,
+            parts: [MessagePart.text(text: text)],
+            addressees: to,
+          );
+
+      // The room opened on the house's mail; the reviewer's first own mail
+      // came later, and is what their session dresses.
+      final forReviewer = await project([
+        asked("anyone home?"),
+        said(MessageRole.assistant,
+            const [MessagePart.text(text: "the house says yes")]),
+        addressed("review the diff", ["@reviewer"]),
+      ], viewer: "reviewer");
+
+      expect(forReviewer[0].text, contains("addressed to (main agent)"));
+      expect(forReviewer[0].text, isNot(contains("The user asks:")));
+      expect(forReviewer.last.text,
+          userTurnText("review the diff", at: at, first: true));
+
+      // The house's own view dresses the room's opener, its first mail.
+      final forHouse = await project([
+        asked("anyone home?"),
+        said(MessageRole.assistant,
+            const [MessagePart.text(text: "the house says yes")]),
+        addressed("review the diff", ["@reviewer"]),
+      ]);
+      expect(forHouse.first.text, userTurnText("anyone home?", at: at, first: true));
+      expect(
+          forHouse.last.text, contains("addressed to @reviewer"));
+      expect(forHouse.last.text, isNot(contains("The user asks:")));
+
+      // And once dressed, a viewer's later mail does not dress again — the
+      // dress is once per conversation, per viewer.
+      final later = [
+        ...[
+          asked("anyone home?"),
+          said(MessageRole.assistant,
+              const [MessagePart.text(text: "yes")]),
+          addressed("review the diff", ["@reviewer"]),
+          authoredReply("@reviewer"),
+          addressed("review it again", ["@reviewer"]),
+        ],
+      ];
+      final dressedOnce = await project(later, viewer: "reviewer");
+      expect(dressedOnce[2].text,
+          userTurnText("review the diff", at: at, first: true));
+      expect(dressedOnce[4].text,
+          userTurnText("review it again", at: at, first: false));
+    });
   });
 
   group("compactions", () {
