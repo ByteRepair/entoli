@@ -166,6 +166,15 @@ class SyncPeers {
     setStatus(deviceId, name: existing.name, status: PeerStatus.offline);
   }
 
+  /// What [deviceId] is filed under from now on. Only the name moves: a
+  /// rename is the address book's, not the connection's, and a status a
+  /// connection earned is not the rename's to touch.
+  void renamed(String deviceId, String name) {
+    final existing = states.value[deviceId];
+    if (existing == null) return;
+    setStatus(deviceId, name: name, status: existing.status, error: existing.error);
+  }
+
   void forget(String deviceId) =>
       states.value = {...states.value}..remove(deviceId);
 

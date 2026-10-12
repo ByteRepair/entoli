@@ -79,6 +79,22 @@ class FileDeviceRegistry implements DeviceRegistry {
   }
 
   @override
+  Future<void> rename(String id, String name) async {
+    final device = await byId(id);
+    if (device == null) return;
+    // The name is final on the record, so a rename is a replacement: the
+    // facts a rename is not about are carried over whole.
+    await add(PairedDevice(
+      id: device.id,
+      name: name,
+      publicKey: device.publicKey,
+      addedAt: device.addedAt,
+      lastSeenAt: device.lastSeenAt,
+      lastAddress: device.lastAddress,
+    ));
+  }
+
+  @override
   Future<String?> pairingSecret(String id) async {
     final raw = await _secrets.read(pairingSecretsKey);
     if (raw == null) return null;

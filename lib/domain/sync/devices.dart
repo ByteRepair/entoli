@@ -60,6 +60,11 @@ abstract interface class DeviceRegistry {
 
   Future<void> markSeen(String id, {String? address});
 
+  /// What this device addresses [id] by, from now on. A name in this
+  /// registry is the one this device files the peer under, for its own rows —
+  /// the other device keeps its own, the way it keeps this device's.
+  Future<void> rename(String id, String name);
+
   /// The shared secret this pair authenticated with, or null.
   Future<String?> pairingSecret(String id);
 

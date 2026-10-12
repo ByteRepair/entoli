@@ -29,6 +29,7 @@ class PairingActivity {
     this.code,
     this.stage = PairingStage.connecting,
     this.sas,
+    this.peerName,
     this.error,
   });
 
@@ -38,6 +39,11 @@ class PairingActivity {
   final String? code;
   final PairingStage stage;
   final String? sas;
+
+  /// The name the other device gave, where its handshake has arrived — what
+  /// the paired screen and the codes-matched view say when they name it.
+  /// Null before that.
+  final String? peerName;
   final String? error;
 }
 
@@ -219,8 +225,9 @@ class SyncPairing {
   /// can only ever join — which makes the relay the one thing missing rather
   /// than one of two.
   static String get noRoute => kIsWeb
-      ? "A browser cannot listen for a pairing. Set a relay URL above, or "
-          "use Manual invite and paste the reply back."
+      ? "A browser cannot listen for a pairing. Set a relay URL in Sync's "
+          "Internet relay settings, or use Manual invite and paste the "
+          "reply back."
       : "No way to be found: this build has no local network signaling and "
           "no relay URL is set.";
 
@@ -303,6 +310,10 @@ class SyncPairing {
   Future<String> _acceptManualInvite(PairingOffer invite) async {
     final link = await RtcLink.create(iceServers: iceServers());
     final answerSdp = await link.answer(invite.sdp);
+    // The pairing card opens here: the answered handshake runs under no
+    // window, so the codes-matched gate has this card to ask on and the
+    // paired or failed screen somewhere to end up.
+    activity.value = const PairingActivity();
     unawaited(_establish(
       link: await link.open(),
       weOffered: false,
@@ -329,6 +340,9 @@ class SyncPairing {
       throw const SignalingException("that answer belongs to another invite");
     }
     _pendingManual = null;
+    // The card is open while the pair completes: on this end the handshake
+    // also runs with no window open, and the gate asks on it.
+    activity.value = const PairingActivity();
     try {
       await pending.link.acceptAnswer(answer.sdp);
       await _establish(
@@ -413,12 +427,19 @@ class SyncPairing {
   String get deviceName => _settings().deviceName ?? defaultDeviceName;
 
   /// What it would be called with nothing set — the machine's own name where
-  /// there is one, since that is what its owner already calls it, and the
-  /// key's first characters otherwise, which at least cannot collide. Its own
-  /// getter because the Sync page's field wants exactly this: the hint has to
-  /// go on saying what the default is after a name has been typed over it.
+  /// there is one, since that is what its owner already calls it, and four
+  /// characters of the key's fingerprint otherwise, which at least cannot
+  /// collide. Its own getter because the Sync page's field wants exactly
+  /// this: the hint has to go on saying what the default is after a name has
+  /// been typed over it.
+  ///
+  /// Four, not five: the fingerprint is grouped in fours of hex, so a fifth
+  /// character is the group's separating space and the name trailed by one.
+  /// This slice is the one place the key shows a user anything at all — the
+  /// fingerprint itself is nowhere in the interface, nothing on screen asks
+  /// anyone to compare one.
   String get defaultDeviceName =>
-      _hostname ?? "Entoli ${identity.fingerprint.substring(0, 5)}";
+      _hostname ?? "Entoli ${identity.fingerprint.substring(0, 4)}";
 
   /// Where a peer could dial this device back, or null where it is not
   /// listening — a browser never is.
@@ -704,7 +725,11 @@ class SyncPairing {
       // before ours has — and what it sends is held by the channel until the
       // reader below attaches, so there is nothing to be careful about here.
       // It cost four bugs to stop needing that care; see the framing.
-      if (await _sasGate(handshake.sas!, isNew: knownDeviceId == null) ==
+      if (await _sasGate(
+            handshake.sas!,
+            peer.name,
+            isNew: knownDeviceId == null,
+          ) ==
           false) {
         throw const HandshakeException("the codes did not match");
       }
@@ -797,7 +822,7 @@ class SyncPairing {
       // reason to be doing.
       _allowReconnect(deviceId, psk);
       unawaited(ensureReady());
-      _note(PairingStage.done);
+      _note(PairingStage.done, peerName: live.deviceName);
     } catch (error) {
       logFailure("sync", "could not establish a channel", error);
       await channel?.close();
@@ -808,15 +833,17 @@ class SyncPairing {
   }
 
   /// First pairings pause here for two humans to compare codes; reconnects
-  /// are pinned-key authenticated and walk straight through.
-  Future<bool> _sasGate(String sas, {required bool isNew}) async {
+  /// are pinned-key authenticated and walk straight through. The peer's name
+  /// rides with the SAS, so the confirm says who it is asking about.
+  Future<bool> _sasGate(
+      String sas, String peerName, {required bool isNew}) async {
     if (!isNew) return true;
-    _note(PairingStage.confirming, sas: sas);
+    _note(PairingStage.confirming, sas: sas, peerName: peerName);
     final confirmation = _confirmation = Completer<bool>();
     return confirmation.future;
   }
 
-  void _note(PairingStage stage, {String? sas}) {
+  void _note(PairingStage stage, {String? sas, String? peerName}) {
     final current = activity.value;
     if (current == null) return;
     activity.value = PairingActivity(
@@ -824,6 +851,7 @@ class SyncPairing {
       code: current.code,
       stage: stage,
       sas: sas ?? current.sas,
+      peerName: peerName ?? current.peerName,
     );
   }
   void _fail(Object error) {
@@ -835,6 +863,7 @@ class SyncPairing {
       code: current.code,
       stage: PairingStage.failed,
       sas: current.sas,
+      peerName: current.peerName,
       error: error.toString(),
     );
   }

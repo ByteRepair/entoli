@@ -891,6 +891,14 @@ class SyncHub implements ArtifactBytes {
     await _signaling.dispose();
   }
 
+  /// What [deviceId] is filed under here, from now on. A rename is local to
+  /// this device's address book, like every name in it: the other device
+  /// keeps what it calls this one until renamed there too.
+  Future<void> rename(String deviceId, String name) async {
+    await registry.rename(deviceId, name);
+    _peers.renamed(deviceId, name);
+  }
+
   /// Unpairs: drops the record, its secret, and any live connection. The
   /// other device keeps ours until someone revokes there too.
   Future<void> revoke(String deviceId) async {
