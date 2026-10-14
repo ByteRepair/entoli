@@ -118,10 +118,10 @@ still pending at the second, and nothing else.
 The session and one-shot logic over this seam is pinned by
 `test/data/local/ish_session_test.dart` over a fake transport; that a real
 guest honours the 130, that a hangup unblocks the loop, and that output
-arrives live is the simulator's hand-run, like the wire. The wake pipe and
-the streaming split are C that hand-run has not seen yet — one on the
-simulator (stop, escalation with a backgrounded child, recovery, output
-appearing while a command runs) is the remaining step after it. The
+arrives live is the simulator's hand-run, like the wire — witnessed on this
+build: the stop ends a running command at once, the escalation answers a
+SIGINT-ignoring one on its second, and output reaches the chat while the
+command still runs. The
 worker itself is spawned
 single-flighted (`IshWorker._ensure`), which is also where the review's
 spawn race died, and it fails every pending reply when it dies so a crashed
