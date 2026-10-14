@@ -252,6 +252,8 @@ void main() {
 
         shell.closeSession(cwd);
         expect(fake.destroys, [session]);
+        // The queued body is answered, not booted: one init, one guest.
+        expect(fake.inits.length, 1);
         final one = await first.result;
         final two = await second.result;
         expect(one.exceptionInfo, contains("restarted"));
@@ -410,15 +412,63 @@ void main() {
     });
   });
 
-  group("the worker isolate", () {
-    tearDown(IshWorker.instance.reset);
+  group("two sessions", () {
+    test("another chat's command answers while a run holds the first",
+        () async {
+      final fake = FakeIshTransport();
+      final shell = ishShell(fake);
+      final a = shell.start("sleep 30",
+          cwd: "$home/chats/a",
+          home: home,
+          timeout: const Duration(minutes: 5));
+      final b = shell.start("echo hi",
+          cwd: "$home/chats/b",
+          home: home,
+          timeout: const Duration(minutes: 5));
+      await Future<void>.delayed(Duration.zero);
+      // Both sessions were served: two guests, two inits, two pending runs.
+      expect(fake.pendingSessions.length, 2);
+      final bId = fake.pendingSessions.last;
+      fake._settle(bId, const ShellResult(returnCode: 0, output: "hi"));
+      expect((await b.result).returnCode, 0);
+      // A's run was never touched by B's answer.
+      expect(fake.pendingSessions.length, 1);
+      fake._settle(fake.pendingSessions.single,
+          const ShellResult(returnCode: 130, output: ""));
+      expect((await a.result).returnCode, 130);
+    });
 
+    test("closing one session destroys its guest and not the other's",
+        () async {
+      final fake = FakeIshTransport();
+      final shell = ishShell(fake);
+      shell.start("sleep 30",
+          cwd: "$home/chats/a",
+          home: home,
+          timeout: const Duration(minutes: 5));
+      final b = shell.start("echo hi",
+          cwd: "$home/chats/b",
+          home: home,
+          timeout: const Duration(minutes: 5));
+      await Future<void>.delayed(Duration.zero);
+      final bId = fake.pendingSessions.last;
+
+      shell.closeSession("$home/chats/a");
+      expect(fake.destroys, isNot(contains(bId)));
+      expect(fake.pendingSessions, [bId]);
+      fake._settle(bId, const ShellResult(returnCode: 0, output: ""));
+      expect((await b.result).returnCode, 0);
+    });
+  });
+
+  group("a worker isolate", () {
     test("one spawn answers two concurrent first users", () async {
+      final worker = IshWorker();
       await Future.wait([
-        IshWorker.instance.ensureStarted(),
-        IshWorker.instance.ensureStarted(),
+        worker.ensureStarted(),
+        worker.ensureStarted(),
       ]);
-      expect(IshWorker.instance.spawnCount, 1);
+      expect(worker.spawnCount, 1);
     });
   });
 }
@@ -528,4 +578,7 @@ class FakeIshTransport implements IshTransport {
     pending.remove(sessionId);
     sinks.remove(sessionId);
   }
+
+  @override
+  void stop() {}
 }

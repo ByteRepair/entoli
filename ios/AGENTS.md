@@ -121,13 +121,17 @@ guest honours the 130, that a hangup unblocks the loop, and that output
 arrives live is the simulator's hand-run, like the wire — witnessed on this
 build: the stop ends a running command at once, the escalation answers a
 SIGINT-ignoring one on its second, and output reaches the chat while the
-command still runs. The
-worker itself is spawned
-single-flighted (`IshWorker._ensure`), which is also where the review's
-spawn race died, and it fails every pending reply when it dies so a crashed
-FFI call cannot leave a turn hanging. Every session still shares the one
-worker and so runs serially, which is the shape for a phone, not a claim
-about parallelism.
+command still runs.
+
+The worker itself is spawned single-flighted (`IshWorker._ensure`), which is
+also where the review's spawn race died, and it fails every pending reply
+when it dies so a crashed FFI call cannot leave a turn hanging. Every
+session and every one-shot run
+owns a worker of its own, so one chat's command does not wait on another
+chat's — what the emulator serializes for them is only the boot itself
+(`IshWorker._ops`), since the bridge's boot and one-time binds are the C
+state two isolates could reach at once; the runs stay parallel, each
+interpreter being its own task.
 
 ## The rootfs
 

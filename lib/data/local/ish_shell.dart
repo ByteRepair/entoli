@@ -22,12 +22,14 @@ import "ish_ffi.dart";
 /// It does not extend `LocalShell`: `LocalShell`'s persistent session is a
 /// single child process whose stdin is fed base64 lines and whose stdout is
 /// read for a marker, and iOS has no child process to be. This carries its own
-/// session map, each entry an iSH handle driven through `ish_ffi.dart` on a
-/// long-lived background isolate, so a guest command does not block the UI.
-/// A stop does not ride that isolate — it is parked in its run's poll/read
+/// session map, each entry an iSH handle driven through `ish_ffi.dart` on that
+/// session's own long-lived background isolate, so a guest command does not
+/// block the UI and one chat's command does not wait on another chat's. A
+/// stop does not ride that isolate — it is parked in its run's poll/read
 /// loop for the run's whole life, so a message would queue behind the run it
 /// is meant to end — so interrupt and its escalation go straight to the
 /// bridge from the calling isolate, which the bridge is built for. See
+/// [IshTransport].
 /// [IshTransport].
 ///
 /// The dispatcher script (`dispatcherScript` in `domain/shell.dart`) is passed
@@ -44,7 +46,7 @@ class IshShell extends Shell {
     required String Function() platformDescription,
     IshTransport? transport,
   })  : _describe = platformDescription,
-        transport = transport ?? IshWorker.instance;
+        _transportFor = transport != null ? (() => transport) : IshWorker.new;
 
   /// Where the guest's rootfs is mounted from, asked per command: a Linux
   /// installed from the settings page reaches the next command, and one
@@ -72,10 +74,12 @@ class IshShell extends Shell {
   @override
   String get platformDescription => _describe();
 
-  /// The seam under [start]: the real worker isolate, or a test's fake. The
-  /// suite runs where `ishLinked` is false, so without it the session logic
-  /// would be reachable only from a device.
-  final IshTransport transport;
+  /// The seam under [start]: one worker per session and one per one-shot run,
+  /// or a test's fake for every owner. The suite runs where `ishLinked` is
+  /// false, so without it the session logic would be reachable only from a
+  /// device. One owner one isolate is what lets two chats' commands run at
+  /// once — a run parks the worker thread that drives it.
+  final IshTransport Function() _transportFor;
 
   final Map<String, _IshSession> _sessions = {};
   final Map<String, ValueNotifier<String?>> _cwds = {};
@@ -141,7 +145,7 @@ class IshShell extends Shell {
         script: command,
         timeout: timeout,
         environment: _compose(extra: environment),
-        transport: transport,
+        transport: _transportFor(),
       );
     }
     return _sessions
@@ -199,7 +203,13 @@ class IshShell extends Shell {
 }
 
 class _IshSession {
-  _IshSession(this._shell, this._cwdPath, this._guestCwd, this._workspaceHome);
+  _IshSession(this._shell, this._cwdPath, this._guestCwd, this._workspaceHome)
+      : _transport = _shell._transportFor();
+
+  /// The session's own worker: the guest's run parks this isolate's thread,
+  /// which is why it is shared with no other session. [close] ends it after
+  /// the guest's destroy is queued.
+  final IshTransport _transport;
 
   final IshShell _shell;
   final String _cwdPath;
@@ -229,6 +239,10 @@ class _IshSession {
   _IshRun? _current;
   final List<_IshRun> _runs = [];
 
+  /// Set by [close]: a queued `_execute` body reads it and boots nothing,
+  /// its own run among the ones close answered.
+  bool _closed = false;
+
   ShellRun start(String command, Duration timeout,
       {Map<String, String>? environment, bool restart = false}) {
     final run = _IshRun(timeout, this);
@@ -245,6 +259,9 @@ class _IshSession {
     Map<String, String>? environment,
     bool restart = false,
   }) async {
+    // close() answered every run, this body's among them; nothing here may
+    // boot the guest it dropped.
+    if (_closed) return;
     if (restart || _sessionId == null) {
       // A restart is asked of a session that may still be running: destroy
       // the old guest before making a new one, or the emulator keeps the
@@ -252,9 +269,9 @@ class _IshSession {
       final old = _sessionId;
       _sessionId = null;
       _handle = 0;
-      if (old != null) _shell.transport.destroy(old);
+      if (old != null) _transport.destroy(old);
       try {
-        final (:sessionId, :handle) = await _shell.transport.init(
+        final (:sessionId, :handle) = await _transport.init(
           rootfsDir: _shell.rootfsPath,
           dataDir: _shell.dataDir,
           home: _workspaceHome,
@@ -286,7 +303,7 @@ class _IshSession {
     _current = run;
 
     try {
-      final result = await _shell.transport.run(
+      final result = await _transport.run(
         sessionId: _sessionId!,
         scriptB64: scriptB64,
         timeout: timeout,
@@ -307,7 +324,7 @@ class _IshSession {
       // The run's own handle is gone with the failure; destroy it so the
       // guest does not outlive the command that lost it, and the next
       // command starts a session cold.
-      if (id != null) _shell.transport.destroy(id);
+      if (id != null) _transport.destroy(id);
       run.state.complete(ShellResult.failed(
           "An error occurred while executing the command: $e"));
     }
@@ -322,7 +339,7 @@ class _IshSession {
     // the run it is meant to end. The bridge's interrupt is a send_signal the
     // guest's interpreter thread honours at its next scheduling point — it is
     // built to be poked from another thread, and this is a third one.
-    if (_handle != 0) _shell.transport.interrupt(_handle);
+    if (_handle != 0) _transport.interrupt(_handle);
     run.state.escalateTimer = Timer(const Duration(seconds: 1), () {
       // What the escalation is for: a run still on the worker a second after
       // its SIGINT. An answered run is left alone — its session keeps the cd
@@ -342,8 +359,8 @@ class _IshSession {
     // The hangup is what unblocks the worker's own read — the destroy queued
     // beside it is applied the moment the run returns, which is now seconds
     // away rather than never. The handle's freeing stays the destroy's.
-    if (handle != 0) _shell.transport.hangup(handle);
-    if (id != null) _shell.transport.destroy(id);
+    if (handle != 0) _transport.hangup(handle);
+    if (id != null) _transport.destroy(id);
   }
 
   /// Where the session stands, in the host's own words: the guest path its
@@ -363,14 +380,16 @@ class _IshSession {
   Future<void> close() {
     // Every run this session still holds is answered, not just the current
     // one: a queued run whose result nobody would complete is a turn that
-    // never ends. The queued `_execute` bodies read `_sessionId` after this,
-    // so nulling it first is what sends each of them to the failed-complete
-    // path rather than into a fresh session nothing will ever close.
+    // never ends. A queued `_execute` body reading `_closed` boots nothing:
+    // the guest it would have started is one this close would never see
+    // again.
     final id = _sessionId;
     _sessionId = null;
     _handle = 0;
     _current = null;
-    if (id != null) _shell.transport.destroy(id);
+    _closed = true;
+    if (id != null) _transport.destroy(id);
+    _transport.stop();
     for (final run in _runs) {
       if (!run.state.done.isCompleted) {
         run.state.timeoutTimer?.cancel();
@@ -469,7 +488,9 @@ class _IshOneShotRun implements ShellRun {
     required this.environment,
     required this.transport,
   }) {
-    result = _run();
+    // The run owns its worker (sub-agent fan-out can overlap): it dies with
+    // the run, after the tear-down's destroy, one order.
+    result = _run().whenComplete(() => transport.stop());
   }
 
   final String rootfsDir;
@@ -622,6 +643,10 @@ abstract class IshTransport {
 
   /// Free the guest and its handle on the worker.
   void destroy(int sessionId);
+
+  /// End the transport's own isolate, after every destroy posted before it
+  /// will have been applied.
+  void stop();
 }
 
 /// The worker-side accumulator for one command's output: the bridge now reads
@@ -847,20 +872,20 @@ class IshRunBuffer {
   }
 }
 
-/// The long-lived background isolate that owns every iSH FFI handle. The
-/// guest's execution blocks the calling thread, so commands are posted here and
-/// the result comes back on the UI isolate.
+/// The long-lived background isolate that owns one iSH session's FFI handles —
+/// every chat's persistent shell carries one, and so does every one-shot run.
+/// The guest's execution blocks the calling thread, so commands are posted
+/// here and the result comes back on the UI isolate.
 ///
-/// An FFI pointer is only valid in the isolate that created it, so the isolate
-/// is long-lived rather than one per command, and init and run are the only
-/// calls that cross. Interrupt and hangup never do — the worker is parked in
-/// its read while they matter — they are FFI calls made on the calling
+/// An FFI pointer is only valid in the isolate that created it, so this
+/// isolate is long-lived rather than one per command, and init and run are the
+/// only calls that cross. Interrupt and hangup never do — the worker is parked
+/// in its read while they matter — they are FFI calls made on the calling
 /// isolate, over the handle's address, which the C heap makes valid there.
 /// The protocol is Lists over a SendPort: `[tag, replyId, ...args]` for a
 /// request, `[replyId, result]` for a reply.
 class IshWorker implements IshTransport {
-  IshWorker._();
-  static final IshWorker instance = IshWorker._();
+  IshWorker();
 
   SendPort? _sendPort;
   Future<void>? _starting;
@@ -875,11 +900,22 @@ class IshWorker implements IshTransport {
   static const _kDestroy = 2;
   static const _kReply = 3;
   static const _kOutput = 4;
+  static const _kStop = 5;
 
   /// The watcher each run's chunks route to, keyed by reply id. Registered by
   /// [run] before the request goes, dropped when the reply lands or the
   /// worker dies.
   final Map<int, void Function(String)> _outputSinks = {};
+
+  /// One order for init across every worker's isolate. The bridge's boot
+  /// and one-time binds (`ish_booted`, the static `bound`s in
+  /// ish_bridge.c) are the C state two isolates could touch at once, and
+  /// nothing locks them. The runs it orders stay parallel: each touches
+  /// only its own task, whose mm, fds and signals the bridge gives the
+  /// guest outright, and no destroy is here — teardown touches none of
+  /// that state. A link that throws keeps the chain for the ones behind
+  /// it and says so to its own caller.
+  static Future<void> _ops = Future.value();
 
   /// How many workers have been spawned — test-visible, so the single flight
   /// of [_ensure] is pinned: two concurrent first users answer one spawn.
@@ -899,7 +935,6 @@ class IshWorker implements IshTransport {
   /// Forget the worker and every pending reply. A worker that died (an FFI
   /// crash inside it) otherwise leaves its completers open and every run on
   /// them hanging past the end of its turn.
-  @visibleForTesting
   void reset() {
     _sendPort = null;
     _starting = null;
@@ -942,6 +977,24 @@ class IshWorker implements IshTransport {
 
   @override
   Future<({int sessionId, int handle})> init({
+    required String rootfsDir,
+    required String dataDir,
+    required String home,
+    required String cwd,
+    required Map<String, String> env,
+  }) {
+    final task = _ops.then((_) => _init(
+          rootfsDir: rootfsDir,
+          dataDir: dataDir,
+          home: home,
+          cwd: cwd,
+          env: env,
+        ));
+    _ops = task.then((_) {}, onError: (_) {});
+    return task;
+  }
+
+  Future<({int sessionId, int handle})> _init({
     required String rootfsDir,
     required String dataDir,
     required String home,
@@ -1014,7 +1067,17 @@ class IshWorker implements IshTransport {
 
   @override
   void destroy(int sessionId) {
+    // Immediate, not chained: teardown touches no boot state. A stop
+    // posted after it lands behind it on this same port.
     _sendPort?.send([_kDestroy, 0, sessionId]);
+  }
+
+  /// End the isolate once the messages queued before it have applied — the
+  /// destroy it follows, this port's own order. Pending replies are the
+  /// exitPort's to fail, as for a crashed worker.
+  @override
+  void stop() {
+    _sendPort?.send([_kStop, 0]);
   }
 
   void _handle(dynamic msg) {
@@ -1162,6 +1225,9 @@ class IshWorker implements IshTransport {
           if (destroyFn != null && sess != null) {
             destroyFn(sess.handle);
           }
+
+        case _kStop:
+          Isolate.exit();
       }
     });
   }
