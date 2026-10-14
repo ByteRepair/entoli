@@ -10,6 +10,7 @@ import "package:agent_chat/domain/builtin_project.dart";
 import "package:agent_chat/domain/models.dart" show CompletionKind;
 import "package:agent_chat/domain/shell.dart";
 
+import "../fakes.dart";
 import "../harness.dart";
 
 /// What a turn runs under on the machine itself, where the tools a built-in
@@ -53,6 +54,70 @@ void main() {
     expect(driverOf(bin: null, project: "byte-repair")?.environment["PATH"],
         isNull);
     expect(driverOf(bin: null, project: null)?.environment["PATH"], isNull);
+  });
+
+  test("the guest binds a project's skill directories only where they exist "
+      "on disk", () {
+    final project = ByteRepairProject().dir;
+    const proot = Proot(
+      binary: "/data/app/pkg/lib/arm/libproot.so",
+      loader: "/data/app/pkg/lib/arm/libproot-loader.so",
+      tmpDir: "/cache/agent-chat/tools/tmp",
+      resolvConf: "/cache/agent-chat/tools/etc/resolv.conf",
+    );
+    final home = config.projectWorkspaceDir(project: project);
+    final cwd = p.join(home, "chats", "abc-123");
+    // The value of the argument after [flag], as in `proot_test.dart`.
+    List<String> bindsOf(ShellDriver driver) {
+      final command = driver.commandFor(cwd, home);
+      return [
+        for (var i = 0; i < command.length - 1; i++)
+          if (command[i] == "-b") command[i + 1],
+      ];
+    }
+
+    // Neither directory is written yet: byte-repair ships agents alone, and
+    // a turn has not run to make the rest. proot refuses a binding to a
+    // path that is not there, so the driver binds none of byte-repair's.
+    ShellDriver? guest() => platformDriver(
+          defaultSkillsBundledDir: config.bundledSkillsDir(),
+          defaultUserSkillsDir: config.promptsDir(CompletionKind.skill),
+          projectSkillsBundledDir: config.bundledSkillsDir(project: project),
+          projectUserSkillsDir:
+              config.promptsDir(CompletionKind.skill, project: project),
+          proot: proot,
+          store: FakeRootfsStore(installed: {"alpine"}),
+          rootfsId: "alpine",
+          abi: "x86_64",
+          project: project,
+          config: config,
+        );
+
+    expect(
+        guest()!.hostToGuestPaths.keys.any((k) => k.contains("byte-repair")),
+        isFalse);
+
+    // The directories existing is the only difference: the setup or a first
+    // turn made them, and the next command binds and maps them.
+    Directory(config.bundledSkillsDir(project: project))
+        .createSync(recursive: true);
+    Directory(config.promptsDir(CompletionKind.skill, project: project))
+        .createSync(recursive: true);
+
+    final driver = guest()!;
+    final mapped = driver.hostToGuestPaths;
+    expect(mapped[config.bundledSkillsDir(project: project)],
+        "/opt/skills-bundled-project");
+    expect(mapped[config.promptsDir(CompletionKind.skill, project: project)],
+        "/opt/skills-project");
+    expect(
+        bindsOf(driver).where((b) => b.contains("/skills")),
+        containsAll([
+          "${config.bundledSkillsDir(project: project)}:"
+              "/opt/skills-bundled-project",
+          "${config.promptsDir(CompletionKind.skill, project: project)}:"
+              "/opt/skills-project",
+        ]));
   });
 
   test("the bin directory is composed from the cache directory, and the "
