@@ -362,13 +362,7 @@ class VoiceChannel: NSObject {
     let utterance = AVSpeechUtterance(string: text)
     utterance.voice = voice
     pendingUtterances[ObjectIdentifier(utterance)] = generation
-    // The one per-utterance failure the API reports: refused at the queue, it
-    // would never fire a delegate callback and the Dart side's pending count
-    // would wait for it forever.
-    if !synthesizer.speak(utterance) {
-      pendingUtterances[ObjectIdentifier(utterance)] = nil
-      send("speechUtteranceError", generation)
-    }
+    synthesizer.speak(utterance)
   }
 }
 
