@@ -26,6 +26,10 @@
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Entoli listens only while a voice conversation is open, and everything it hears stays on this device.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Entoli uses on-device speech recognition to hear a voice conversation. Nothing is sent anywhere.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

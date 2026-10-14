@@ -9,6 +9,23 @@ import "package:agent_chat/domain/shell.dart";
 
 List<String> _hostCommand(String _, String _) => const ["/bin/sh"];
 
+/// Whether the shell here can own a process group, which is what the stop and
+/// timeout contract is a signal to — the shell is spawned under `setsid` where
+/// that exists (`_spawnInGroup`), and macOS ships none. There the interrupt
+/// degrades to the grace's kill, so the 130-a-stop tests below stand on a
+/// fixture this host cannot supply rather than on a contract that moved.
+final _skipWithoutGroup = () {
+  try {
+    return Process.runSync("setsid", ["true"]).exitCode == 0
+        ? null
+        : "no `setsid` on PATH: the shell owns no process group here, and the "
+            "interrupt-and-kill contract cannot be exercised";
+  } catch (_) {
+    return "no `setsid` on PATH: the shell owns no process group here, and the "
+        "interrupt-and-kill contract cannot be exercised";
+  }
+}();
+
 /// Wait for [piece] to appear in what [run] has printed so far, with a bound
 /// past which the test fails rather than hangs. Reads the run's own live
 /// view — polling it, since a `ValueListenable` carries no future — so a
@@ -33,6 +50,11 @@ void main() {
   setUp(() {
     home = Directory.systemTemp.createTempSync("agent_chat_shell_");
     workspace = Directory(p.join(home.path, "chats", "c1"))..createSync(recursive: true);
+    // The shell's cwd answers come back through getcwd, which resolves
+    // /var/folders' symlink — so on macOS the physical path is what the shell
+    // reports, and physical is what these expectations must be built from.
+    home = Directory(home.resolveSymbolicLinksSync());
+    workspace = Directory(workspace.resolveSymbolicLinksSync());
   });
   tearDown(() {
     if (home.existsSync()) home.deleteSync(recursive: true);
@@ -88,7 +110,7 @@ void main() {
     expect(result.returnCode, 130);
     expect(result.output, "starting\n");
     expect(result.exceptionInfo, contains("timed out"));
-  });
+  }, skip: _skipWithoutGroup);
 
   test("what the command spawned is killed with it", () async {
     final marker = p.join(workspace.path, "survivor");
@@ -105,7 +127,7 @@ void main() {
     // the interrupt and dead the moment the kill lands.
     await Future<void>.delayed(const Duration(seconds: 5));
     expect(File(marker).existsSync(), isFalse);
-  });
+  }, skip: _skipWithoutGroup);
 
   test("a child that escaped the group does not hold the result open", () async {
     final result = await run(
@@ -115,7 +137,7 @@ void main() {
 
     expect(result.exceptionInfo, contains("timed out"));
     expect(result.output, "started\n");
-  });
+  }, skip: _skipWithoutGroup);
 
   test("nor does a daemon a command that exited left behind", () async {
     final result =
@@ -123,7 +145,7 @@ void main() {
 
     expect(result.returnCode, 0);
     expect(result.output, "started\n");
-  });
+  }, skip: _skipWithoutGroup);
 
   test("killing it early reports the interruption rather than an exit code",
       () async {
@@ -139,7 +161,7 @@ void main() {
     final result = await run.result;
     expect(result.returnCode, 130);
     expect(result.exceptionInfo, contains("interrupted"));
-  });
+  }, skip: _skipWithoutGroup);
 
   test("a command that cannot start is a failed result, not a thrown one", () async {
     final result = await run("definitely-not-a-command");
@@ -204,7 +226,7 @@ void main() {
       final after = await start("pwd").result;
       expect(after.returnCode, 0);
       expect(after.cwd, sub.path);
-    });
+    }, skip: _skipWithoutGroup);
 
     test("a restart puts the shell back where it started", () async {
       await start("cd sub").result;

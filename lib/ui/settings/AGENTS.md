@@ -88,7 +88,10 @@ language, for the device's own — see "Which language it is asked in". Where
 Android's assistant gesture lands is a section under the same category rather
 than a category of its own: what the gesture opens is voice mode, so it is the
 same feature approached from the other end, and its two questions were a
-category with two lines in it. It keeps a file of its own all the same, since
+category with two lines in it. Both the pickers and the downloads and that
+section are drawn only where the ports say there is something to configure or
+to fetch — `Voice.hasModelCatalog` and `AssistantLaunch.hasGesture` — which is
+why iOS draws the mode and the language and nothing else. It keeps a file of its own all the same, since
 every other file here is one subject; see "Being the assistant". **Triggers**
 is drawn where the port is available — Android fires a schedule with the app
 closed, macOS wakes it through launchd (both answer `schedules` yes; see

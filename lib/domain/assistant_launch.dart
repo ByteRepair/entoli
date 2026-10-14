@@ -19,6 +19,11 @@ abstract interface class AssistantLaunch {
   /// A launch arriving while the app is already up — including into an activity
   /// whose engine was cached and whose `main` therefore does not run again.
   Stream<void> get launched;
+
+  /// Whether this platform has the gesture at all, which is what takes the
+  /// Assistant section off the settings page where there is nothing to be
+  /// the assistant of. True wherever a launch can arrive.
+  bool get hasGesture;
 }
 
 /// The assistant gesture on a platform that has none. Nothing ever arrives,
@@ -27,6 +32,9 @@ abstract interface class AssistantLaunch {
 /// its port the way those are.
 class UnavailableAssistantLaunch implements AssistantLaunch {
   const UnavailableAssistantLaunch();
+
+  @override
+  bool get hasGesture => false;
 
   @override
   Future<bool> take() async => false;

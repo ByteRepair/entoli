@@ -56,6 +56,8 @@ enum VoiceEngine {
   kitten,
   androidRecognition,
   androidSpeech,
+  iosRecognition,
+  iosSpeech,
 }
 
 /// A model in the catalog, installed or not.
@@ -98,7 +100,9 @@ sealed class VoiceModel {
   /// which is already the one thing about a model that decides what runs it.
   bool get isNative =>
       engine == VoiceEngine.androidRecognition ||
-      engine == VoiceEngine.androidSpeech;
+      engine == VoiceEngine.androidSpeech ||
+      engine == VoiceEngine.iosRecognition ||
+      engine == VoiceEngine.iosSpeech;
 
   /// Which half of the model directory it installs into: one of [voiceFolders].
   String get folder;
@@ -371,6 +375,31 @@ const nativeSpeech = SpeechModel(
   downloads: [],
 );
 
+/// iOS's, the same idea over Apple's engines: recognition is the Speech
+/// framework asked on-device and synthesis is the system's own voice, both
+/// probed at startup and defaulted the same way. Nothing here is downloaded,
+/// which is why iOS draws neither list.
+const iosRecognition = RecognitionModel(
+  id: "ios-recognition",
+  name: "iOS system",
+  engine: VoiceEngine.iosRecognition,
+  languages: "System languages",
+  multilingual: false,
+  tokens: "",
+  downloads: [],
+);
+
+const iosSpeech = SpeechModel(
+  id: "ios-speech",
+  name: "iOS system",
+  engine: VoiceEngine.iosSpeech,
+  languages: "System languages",
+  multilingual: false,
+  model: "",
+  tokens: "",
+  downloads: [],
+);
+
 /// Every model, either kind. The settings page draws each kind's own list; this
 /// is for looking one up by the id a setting holds, which is why the sentinels
 /// are in here.
@@ -379,6 +408,8 @@ const voiceCatalog = <VoiceModel>[
   ...speechModels,
   nativeRecognition,
   nativeSpeech,
+  iosRecognition,
+  iosSpeech,
 ];
 
 /// The catalog model [id] names, if it is the kind asked for. Null where it

@@ -23,7 +23,6 @@ import "domain/trigger_manager.dart" show TriggerRegistryFactory;
 import "domain/project.dart" show everyProject;
 import "domain/prompt_library.dart";
 import "domain/sync/identity.dart";
-import "domain/voice_model.dart" show nativeRecognition, nativeSpeech;
 import "providers.dart";
 import "ui/chat/remote_turns.dart";
 import "ui/app_shell.dart";
@@ -169,9 +168,12 @@ class AppSession {
     final engines = await voice.systemEngines();
     // A sentinel the device can honour is usable on exactly the same terms as
     // a downloaded model, so it goes in the same set — see [InstalledVoiceModels].
+    final picks = voice.nativePicks;
     final system = {
-      if (engines.recognition) nativeRecognition.id,
-      if (engines.speech) nativeSpeech.id,
+      if (picks case (:final recognition, :final speech)) ...[
+        if (engines.recognition) recognition,
+        if (engines.speech) speech,
+      ],
     };
     final installed = {...await scan, ...system};
     // Read here for the reason the voice models are: the Terminal and On-device

@@ -39,7 +39,6 @@ import "package:agent_chat/domain/trigger.dart";
 import "package:agent_chat/domain/shell.dart";
 import "package:agent_chat/domain/temp_chat_ttl.dart";
 import "package:agent_chat/domain/voice.dart";
-import "package:agent_chat/domain/voice_model.dart";
 import "package:agent_chat/providers.dart";
 import "package:agent_chat/ui/chat/chat_controller.dart";
 import "package:agent_chat/ui/chat/chat_page.dart";
@@ -117,7 +116,9 @@ class TestApp {
   /// [nativeVoice] is which of the device's own engines it has, the thing an
   /// Android phone answers and nothing else does. It joins [voiceModels] in the
   /// usable set the way `main` builds it, so a test says which engines exist
-  /// rather than which sentinel ids to pretend are installed. The default has
+  /// rather than which sentinel ids to pretend are installed — the ids come
+  /// from the fake voice's own `nativePicks`, so a fake made an iPhone's
+  /// seeds Apple's. The default has
   /// neither, which is every platform a VM test would otherwise be pretending
   /// to be.
   /// [localModels] is which on-device models are downloaded, and [localLlm] the
@@ -163,6 +164,7 @@ class TestApp {
     List<Trigger> triggers = const [],
     Set<String> voiceModels = const {},
     NativeVoiceEngines nativeVoice = NativeVoiceEngines.none,
+    bool assistantGesture = true,
     Set<String> linuxes = const {},
     bool proot = false,
     String? byteRepairInstallDir = guestEsbmcInstallDir,
@@ -186,7 +188,7 @@ class TestApp {
     final picker = FakeAttachmentPicker();
     final launcher = FakeLauncherIcons(available: launcherIcons);
     final files = handoff ?? FakeFileHandoff();
-    final assist = FakeAssistantLaunch();
+    final assist = FakeAssistantLaunch(hasGesture: assistantGesture);
     final alarms = reminderAlarms ?? FakeReminderAlarms(available: false);
     // Pinned so a trigger's fire time is not judged against the wall clock
     // the suite happens to run on. A test that needs a different now passes
@@ -208,8 +210,8 @@ class TestApp {
         ? LocalPrefill(llm: server, background: work, warmup: testWarmup())
         : null;
     final system = {
-      if (nativeVoice.recognition) nativeRecognition.id,
-      if (nativeVoice.speech) nativeSpeech.id,
+      if (nativeVoice.recognition) speech.nativePicks.recognition,
+      if (nativeVoice.speech) speech.nativePicks.speech,
     };
     // The real one over an in-memory store: what a settings page reads back
     // after it writes is [AppSecrets]'s own, so faking it would only prove

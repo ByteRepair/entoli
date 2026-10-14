@@ -45,9 +45,9 @@ void main() {
 
   /// A listener that has started, and everything it has said since. The four
   /// lines were at the head of every test here.
-  Future<(AndroidSpeechRecognizer, List<VoiceEvent>)> listening(
+  Future<(NativeSpeechRecognizer, List<VoiceEvent>)> listening(
       WidgetTester tester) async {
-    final recognizer = AndroidSpeechRecognizer();
+    final recognizer = NativeSpeechRecognizer();
     addTearDown(recognizer.dispose);
     final events = <VoiceEvent>[];
     recognizer.events.listen(events.add);
@@ -83,7 +83,7 @@ void main() {
 
   testWidgets("loudness is measured against the room, not against a scale",
       (tester) async {
-    final recognizer = AndroidSpeechRecognizer();
+    final recognizer = NativeSpeechRecognizer();
     addTearDown(recognizer.dispose);
     await recognizer.setListening(true);
     await tester.pump();
@@ -130,7 +130,7 @@ void main() {
   });
 
   testWidgets("a session opens shut, and something has to ask", (tester) async {
-    final recognizer = AndroidSpeechRecognizer();
+    final recognizer = NativeSpeechRecognizer();
     addTearDown(recognizer.dispose);
     await tester.pump();
 
@@ -146,7 +146,7 @@ void main() {
 
   testWidgets("the language rides on every open: each one is a new request",
       (tester) async {
-    final recognizer = AndroidSpeechRecognizer(language: "el-GR");
+    final recognizer = NativeSpeechRecognizer(language: "el-GR");
     addTearDown(recognizer.dispose);
 
     await recognizer.setListening(true);
@@ -190,7 +190,7 @@ void main() {
 
   testWidgets("speech waits until the engine says it can speak",
       (tester) async {
-    final tts = AndroidTextToSpeech();
+    final tts = NativeTextToSpeech();
     addTearDown(tts.dispose);
     await tester.pump();
 
@@ -207,7 +207,7 @@ void main() {
 
   testWidgets("every done counts its utterance down to silence",
       (tester) async {
-    final tts = AndroidTextToSpeech();
+    final tts = NativeTextToSpeech();
     addTearDown(tts.dispose);
     final signals = <SpeechSignal>[];
     tts.signals.listen(signals.add);
@@ -227,7 +227,7 @@ void main() {
   });
 
   testWidgets("a done naming a stopped batch is not counted", (tester) async {
-    final tts = AndroidTextToSpeech();
+    final tts = NativeTextToSpeech();
     addTearDown(tts.dispose);
     final signals = <SpeechSignal>[];
     tts.signals.listen(signals.add);
@@ -249,7 +249,7 @@ void main() {
   });
 
   testWidgets("one dropped utterance is not a broken engine", (tester) async {
-    final tts = AndroidTextToSpeech();
+    final tts = NativeTextToSpeech();
     addTearDown(tts.dispose);
     final signals = <SpeechSignal>[];
     tts.signals.listen(signals.add);
@@ -285,7 +285,7 @@ void main() {
 
   testWidgets("an engine that never starts is said, not waited for",
       (tester) async {
-    final tts = AndroidTextToSpeech();
+    final tts = NativeTextToSpeech();
     addTearDown(tts.dispose);
     final signals = <SpeechSignal>[];
     tts.signals.listen(signals.add);

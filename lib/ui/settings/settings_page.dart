@@ -235,12 +235,12 @@ List<Widget> _sectionsOf(SettingsCategory category) => switch (category) {
         ],
       // Its own category rather than a section under General: the two pickers
       // are two lines and the catalog under them is the rest of the page.
+      // Neither the assistant section nor the catalog draws at all where the
+      // platform has no gesture / nothing to download, and each opens its own
+      // divider, so a page of two rows is not left hairlines around nothing.
       SettingsCategory.voice => const [
           VoiceSection(),
-          Divider(),
           AssistantSection(),
-          // Draws its own dividers, so a platform drawing no catalog is not
-          // left a line across the bottom of the page.
           VoiceCatalogSections(),
         ],
       // Says so and offers nothing where there is no clock to schedule with —

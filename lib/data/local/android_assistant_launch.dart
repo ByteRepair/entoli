@@ -23,6 +23,9 @@ class AndroidAssistantLaunch implements AssistantLaunch {
   final _arrived = StreamController<void>.broadcast();
 
   @override
+  bool get hasGesture => true;
+
+  @override
   Stream<void> get launched => _arrived.stream;
 
   @override

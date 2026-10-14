@@ -40,6 +40,7 @@ import "../../../data/builtin/duckduckgo_search.dart";
 import "../../../data/builtin/local_shell.dart";
 import "../../../data/voice/android_voice.dart";
 import "../../../data/voice/file_voice_model_store.dart";
+import "../../../data/voice/ios_voice.dart";
 import "../../../data/voice/sherpa_voice.dart";
 import "../../../domain/app_update.dart";
 import "../../../domain/assistant_launch.dart";
@@ -528,9 +529,14 @@ void platformRegisterRecorder() {
 
 /// The desktops run sherpa-onnx, which is the only engine they have. Android
 /// runs its own where their sentinel is picked and sherpa where a downloaded
-/// model is, so it wants the store either way — see [AndroidVoice].
-Voice platformVoice(VoiceModelStore store, String cacheDir) =>
-    Platform.isAndroid ? AndroidVoice(store, cacheDir) : SherpaVoice(store, cacheDir);
+/// model is, so it wants the store either way — see [AndroidVoice]. iOS has
+/// Apple's own engines only and nothing to download — see [IosVoice] — so it
+/// wants neither.
+Voice platformVoice(VoiceModelStore store, String cacheDir) {
+  if (Platform.isAndroid) return AndroidVoice(store, cacheDir);
+  if (Platform.isIOS) return const IosVoice();
+  return SherpaVoice(store, cacheDir);
+}
 
 /// Nothing to ask for: a directory on this machine is already as durable as
 /// the app is.

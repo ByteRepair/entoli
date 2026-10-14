@@ -268,6 +268,8 @@ class FakeBackupHandoff implements BackupHandoff {
 /// Kotlin noticed before Dart was listening — the gesture that started the app
 /// — and [launch] is one arriving while it is already up.
 class FakeAssistantLaunch implements AssistantLaunch {
+  FakeAssistantLaunch({this.hasGesture = true});
+
   /// A launch waiting to be claimed. Taken once, the way the real one is.
   bool pending = false;
 
@@ -275,6 +277,11 @@ class FakeAssistantLaunch implements AssistantLaunch {
 
   @override
   Stream<void> get launched => _arrived.stream;
+
+  /// False is where no gesture exists — an iOS — and the settings section
+  /// hides; true, every existing test's default, is an Android.
+  @override
+  final bool hasGesture;
 
   @override
   Future<bool> take() async {
@@ -822,15 +829,30 @@ class FakeChatStore implements ChatStore {
 /// and [spoken] is what the reply came out as, which is the pair every voice
 /// test is written against.
 class FakeVoice extends Voice {
-  FakeVoice({this.available = true, this.hasSystemEngines = true});
+  FakeVoice({
+    this.available = true,
+    this.hasEngineInstalls = true,
+    this.hasModelCatalog = true,
+  });
 
   @override
   final bool available;
 
-  /// False is a browser: no engines to be missing, so no missing-engine block.
-  /// True is Android, where the catalog draws beside them.
+  /// False is a browser: no engine installs to offer, so no missing-engine
+  /// block. True is Android, the one platform the block is drawn for.
   @override
-  final bool hasSystemEngines;
+  final bool hasEngineInstalls;
+
+  /// False is an iPhone: the engines are the whole of what can listen and
+  /// speak, so the settings page draws neither list.
+  @override
+  final bool hasModelCatalog;
+
+  /// The native picks the usable set is seeded with. Android's, unless a
+  /// test makes this fake an iPhone's.
+  @override
+  ({String recognition, String speech}) nativePicks =
+      (recognition: nativeRecognition.id, speech: nativeSpeech.id);
 
   /// Set to make [start] throw, which is a model that will not load or a
   /// microphone the user said no to.
