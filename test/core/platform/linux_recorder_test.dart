@@ -94,5 +94,8 @@ void main() {
     // Not left standing over the suite: another test in this file spawns
     // through the stock instance.
     RecordPlatform.instance = before;
-  });
+  }, skip: Platform.isLinux
+      ? null
+      : "platformRegisterRecorder answers Linux alone, and leaves the stock "
+          "platform implementation standing everywhere else");
 }

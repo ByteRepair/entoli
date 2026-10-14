@@ -18,6 +18,15 @@ import "package:agent_chat/domain/project_settings.dart";
 
 import "../../harness.dart";
 
+/// The chmod lock is a deliberate no-op where there is no bash for a model to
+/// write through — `platformChmodReadOnly` runs on Linux and Android alone —
+/// so the two assertions about the release and the write-through have nothing
+/// to assert on macOS and Windows.
+final _skipWithoutChmodLock = Platform.isLinux || Platform.isAndroid
+    ? null
+    : "the chmod lock is a no-op on this platform, so the read-only release "
+        "cannot be asserted";
+
 /// The install without the lock: a temp directory is never chmod'd 555.
 Future<void> install(AppConfig config) => installBundledSkills(
     config,
@@ -126,7 +135,7 @@ void main() {
         isTrue);
     expect(root.statSync().modeString(), "r-xr-xr-x",
         reason: "the release leaves the root read-only, as the launch does");
-  });
+  }, skip: _skipWithoutChmodLock);
 
   test("the install writes through a root the previous launch left read-only",
       () async {
@@ -152,7 +161,7 @@ void main() {
     expect(File(marker).readAsStringSync(), original,
         reason: "the acquire let the self-heal reach its repair");
     expect(root.statSync().modeString(), "r-xr-xr-x");
-  });
+  }, skip: _skipWithoutChmodLock);
 
   test("every skill dir in the source tree has entries in the embedded data",
       () async {
