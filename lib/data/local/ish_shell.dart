@@ -2,6 +2,7 @@ import "dart:async";
 import "dart:convert";
 import "dart:ffi";
 import "dart:isolate" show Isolate, ReceivePort, SendPort;
+import "dart:typed_data" show Uint8List;
 
 import "package:ffi/ffi.dart";
 import "package:flutter/foundation.dart"
@@ -23,9 +24,10 @@ import "ish_ffi.dart";
 /// read for a marker, and iOS has no child process to be. This carries its own
 /// session map, each entry an iSH handle driven through `ish_ffi.dart` on a
 /// long-lived background isolate, so a guest command does not block the UI.
-/// A stop does not ride that isolate — it is stuck in its read for the run's
-/// whole life — so interrupt and its escalation go straight to the bridge
-/// from the calling isolate, which the bridge is built for. See
+/// A stop does not ride that isolate — it is parked in its run's poll/read
+/// loop for the run's whole life, so a message would queue behind the run it
+/// is meant to end — so interrupt and its escalation go straight to the
+/// bridge from the calling isolate, which the bridge is built for. See
 /// [IshTransport].
 ///
 /// The dispatcher script (`dispatcherScript` in `domain/shell.dart`) is passed
@@ -288,6 +290,7 @@ class _IshSession {
         sessionId: _sessionId!,
         scriptB64: scriptB64,
         timeout: timeout,
+        onOutput: run.state.pushOutput,
       );
       _current = null;
       run.state.timeoutTimer?.cancel();
@@ -390,6 +393,25 @@ class _IshRunState {
   final Duration timeout;
   bool interrupted = false;
   bool byTimeout = false;
+
+  /// What the command has printed so far, whole — the worker pushes every
+  /// resolved chunk here as the bridge surfaces it. Published only where
+  /// someone asks ([watched], the gate LocalShell's own run keeps), so a
+  /// sub-agent's run nobody reads pays nothing for its chunks.
+  final ValueNotifier<String?> output = ValueNotifier(null);
+  bool watched = false;
+
+  /// The bridge's old reply cap: the head is kept, the rest is the watch's
+  /// anyway and the reply never grew past it.
+  static const _outputCap = 65536;
+
+  void pushOutput(String delta) {
+    if (!watched) return;
+    var next = (output.value ?? "") + delta;
+    if (next.length > _outputCap) next = next.substring(0, _outputCap);
+    output.value = next;
+  }
+
   final Completer<ShellResult> done = Completer();
   void complete(ShellResult result) {
     if (!done.isCompleted) done.complete(result);
@@ -426,7 +448,12 @@ class _IshRun implements ShellRun {
   @override
   Future<ShellResult> get result => state.done.future;
   @override
-  ValueListenable<String?>? get output => null;
+  ValueListenable<String?>? get output {
+    // Asking is the watch: before this the session's chunks pay nothing for a
+    // view nobody reads.
+    state.watched = true;
+    return state.output;
+  }
   @override
   Future<void> kill() async => _session._interrupt(this, byTimeout: false);
 }
@@ -463,10 +490,28 @@ class _IshOneShotRun implements ShellRun {
   bool _interrupted = false;
   Timer? _escalateTimer;
 
+  /// What the command has printed so far — same shape and cap as the
+  /// session's, published from [_pushOutput] to whoever asks.
+  final ValueNotifier<String?> _output = ValueNotifier(null);
+  bool _watched = false;
+
+  static const _outputCap = 65536;
+
+  void _pushOutput(String delta) {
+    if (!_watched) return;
+    var next = (_output.value ?? "") + delta;
+    if (next.length > _outputCap) next = next.substring(0, _outputCap);
+    _output.value = next;
+  }
+
   @override
   late final Future<ShellResult> result;
   @override
-  ValueListenable<String?>? get output => null;
+  ValueListenable<String?>? get output {
+    // Asking is the watch, as the session's run has it.
+    _watched = true;
+    return _output;
+  }
 
   @override
   Future<void> kill() async => _stop();
@@ -517,6 +562,7 @@ class _IshOneShotRun implements ShellRun {
         sessionId: _sessionId!,
         scriptB64: scriptB64,
         timeout: timeout,
+        onOutput: _pushOutput,
       );
       if (!timer.isActive) {
         return ShellResult(
@@ -552,13 +598,16 @@ abstract class IshTransport {
     required Map<String, String> env,
   });
 
-  /// Run one command in the session's persistent guest shell. Blocking on the
-  /// worker for the command's whole life; interrupted and hung up from the
-  /// outside.
+  /// Run one command in the session's persistent guest shell. Parking on the
+  /// worker between output chunks; interrupted and hung up from the outside.
+  /// The command's output lands in [onOutput] the moment the bridge surfaces
+  /// it — the run's watcher asks for it before the run starts — and null
+  /// means nobody watches, so the chunks stop at the route.
   Future<ShellResult> run({
     required int sessionId,
     required String scriptB64,
     required Duration timeout,
+    void Function(String)? onOutput,
   });
 
   /// SIGINT into the guest shell — the dispatcher's trap turns it into a 130
@@ -573,6 +622,229 @@ abstract class IshTransport {
 
   /// Free the guest and its handle on the worker.
   void destroy(int sessionId);
+}
+
+/// The worker-side accumulator for one command's output: the bridge now reads
+/// chunks for the worker's own loop (see [IshWorker]), and this separates what
+/// the guest has said from the marker that ends the command — domain/shell's
+/// [dispatcherMarker], which the C bridge used to match itself in
+/// `parse_marker` — streaming what is settled through [onDelta] the moment it
+/// cannot be marker text, and answering the command's result from [finish].
+///
+/// The bridge's own rules are kept: only a marker whose token is this
+/// session's ends the run, rc first digit-run and a ` cwd=` up to `@@` (an
+/// unterminated one waits for the next chunk); any other `@@E` line is
+/// dropped with the line it ends on, the output before it kept and streamed;
+/// and the reply keeps everything before the first marker, capped at its old
+/// 64 KiB head. One honest divergence: a foreign-marker line may have already
+/// reached the watch before the drop resolves, where the parked C call kept
+/// every byte in its own buffer until the end.
+class IshRunBuffer {
+  IshRunBuffer({required this.token, this.onDelta})
+      : _lead = "\n${dispatcherMarker(token)}".codeUnits;
+
+  /// This session's dispatcher token — the only marker that ends the command.
+  final String token;
+
+  /// The full marker lead as bytes: `\n@@E<token> rc=`.
+  final List<int> _lead;
+
+  final void Function(String delta)? onDelta;
+
+  void _emit(List<int> bytes) {
+    if (bytes.isEmpty) return;
+    final text = utf8.decode(bytes, allowMalformed: true);
+    _reply += text;
+    if (_reply.length > _replyCap) _reply = _reply.substring(0, _replyCap);
+    onDelta?.call(text);
+  }
+
+  /// The bytes read but not yet classified: output still streaming, a marker
+  /// that may be mid-arrival at the tail, or a foreign line being dropped.
+  Uint8List _held = Uint8List(0);
+
+  /// The marker has landed whole — [finish] answers from it and nothing that
+  /// follows feeds anyone.
+  bool done = false;
+
+  int? _rc;
+  String? _cwd;
+  String _reply = "";
+  String? _exception;
+
+  /// The reply cap, in characters: the bridge's 64 KiB byte cap kept as the
+  /// head, the model watching its own tail anyway.
+  static const _replyCap = 65536;
+
+  /// One bridge read. Bytes that can no longer be marker text are streamed
+  /// once they are safe to split (whole UTF-8, past any marker prefix that
+  /// the next chunk could still complete); the rest waits.
+  void add(Uint8List chunk) {
+    if (done || chunk.isEmpty) return;
+    _held = _concat(_held, chunk);
+    for (;;) {
+      final m = _findMarkerStart(0);
+      if (m < 0) {
+        _streamAndHold();
+        return;
+      }
+      final classify = _classify(m);
+      if (!classify.known) {
+        // The shape at [m] could still become this session's marker, but the
+        // bytes have not arrived far enough to say: hold everything and wait.
+        return;
+      }
+      if (classify.ours) {
+        final parsed = _parseRcAndCwd(m + _lead.length);
+        if (parsed == null) {
+          // Ours so far, but the rc/cwd has not arrived whole: hold from the
+          // marker and wait for the next chunk.
+          _emit(_held.sublist(0, m));
+          _held = _held.sublist(m);
+          return;
+        }
+        _emit(_held.sublist(0, m));
+        _rc = parsed.rc;
+        _cwd = parsed.cwd;
+        done = true;
+        return;
+      }
+      // Not ours — another token's, or text on the marker's shape that does
+      // not parse. The output before it is kept (the newline that opens the
+      // shape with it, as the prior line's end) and the line itself is
+      // dropped, the way the bridge dropped `stale` lines, so the scanner
+      // does not trip over the same text again. Where the line has not ended
+      // yet everything is held: dropping now would leak its remainder, which
+      // arrives as an unrecognizable chunk later.
+      final newline = _findByte(m + 1, 0x0A);
+      if (newline < 0) return;
+      _emit(_held.sublist(0, m + 1));
+      _held = _held.sublist(newline + 1);
+    }
+  }
+
+  /// The run is over however it is over: what is still held becomes the tail
+  /// of the output up to the first marker shape, and a run whose marker never
+  /// landed answers as the bridge's did — rc -1, "did not complete".
+  ShellResult finish() {
+    if (!done) {
+      final cut = _findMarkerStart(0);
+      final end = cut < 0 ? _held.length : cut;
+      if (end > 0) _emit(_held.sublist(0, end));
+      _exception = "The command did not complete.";
+    }
+    return ShellResult(
+      returnCode: _rc ?? -1,
+      output: _reply,
+      cwd: _cwd,
+      exceptionInfo: _exception,
+    );
+  }
+
+  /// No marker found in what is held: stream everything except the longest
+  /// tail that could still complete a marker, and keep that tail.
+  void _streamAndHold() {
+    var hold = 0;
+    for (var n = _held.length; n > 0; n--) {
+      if (_startsWith(_lead, 0, n, from: _held.length - n)) {
+        hold = n;
+        break;
+      }
+    }
+    var cut = _held.length - hold;
+    // A chunk can split a UTF-8 sequence: hold its bytes until the rest
+    // arrives, or the persistent output shows a broken character forever.
+    while (cut > 0 && (_held[cut - 1] & 0xC0) == 0x80) { cut--; }
+    if (cut > 0 && (_held[cut - 1] & 0x80) != 0) {
+      final leadByte = _held[cut - 1];
+      final need =
+          (leadByte & 0xF8) == 0xF0 ? 4 : (leadByte & 0xF0) == 0xE0 ? 3 : 2;
+      if (_held.length - (cut - 1) < need) cut--;
+    }
+    _emit(_held.sublist(0, cut));
+    _held = _held.sublist(cut);
+  }
+
+  /// How the `\n@@E` shape at [m] resolves. `known` false where the bytes
+  /// have not arrived far enough to tell — the shape may still complete into
+  /// this session's marker; `ours` false with `known` true where a byte has
+  /// disproved it, which is the bridge's `stale` line.
+  ({bool ours, bool known}) _classify(int m) {
+    for (var i = 0; i < _lead.length; i++) {
+      if (m + i >= _held.length) return (ours: false, known: false);
+      if (_held[m + i] != _lead[i]) return (ours: false, known: true);
+    }
+    if (m + _lead.length >= _held.length) return (ours: false, known: false);
+    final first = _held[m + _lead.length];
+    final digit = first >= 0x30 && first <= 0x39;
+    return (ours: digit, known: true);
+  }
+  /// The rc's digits and the ` cwd=<path>` up to `@@`, whole. Null where the
+  /// bytes have not arrived far enough yet.
+  ({int rc, String cwd})? _parseRcAndCwd(int start) {
+    var i = start;
+    while (i < _held.length && _held[i] >= 0x30 && _held[i] <= 0x39) {
+      i++;
+    }
+    if (i == start) return null;
+    const cwdEquals = [0x20, 0x63, 0x77, 0x64, 0x3D]; // " cwd="
+    if (i + cwdEquals.length > _held.length) return null;
+    for (var j = 0; j < cwdEquals.length; j++) {
+      if (_held[i + j] != cwdEquals[j]) return null;
+    }
+    final cwdAt = i + cwdEquals.length;
+    for (var k = cwdAt; k + 1 < _held.length; k++) {
+      if (_held[k] == 0x40 && _held[k + 1] == 0x40) {
+        return (
+          rc: int.parse(
+              utf8.decode(_held.sublist(start, i), allowMalformed: true)),
+          cwd: utf8.decode(_held.sublist(cwdAt, k), allowMalformed: true),
+        );
+      }
+    }
+    return null;
+  }
+
+  /// The first index from [from] that begins the bare `\n@@E` shape the C
+  /// bridge scanned for, or -1.
+  int _findMarkerStart(int from) {
+    const markerStart = [0x0A, 0x40, 0x40, 0x45];
+    for (var i = from; i + markerStart.length <= _held.length; i++) {
+      var matched = true;
+      for (var j = 0; j < markerStart.length; j++) {
+        if (_held[i + j] != markerStart[j]) {
+          matched = false;
+          break;
+        }
+      }
+      if (matched) return i;
+    }
+    return -1;
+  }
+
+  /// The first index from [from] holding [byte] — the newline that ends a
+  /// foreign marker line — or -1.
+  int _findByte(int from, int byte) {
+    for (var i = from; i < _held.length; i++) {
+      if (_held[i] == byte) return i;
+    }
+    return -1;
+  }
+
+  bool _startsWith(List<int> lead, int leadFrom, int leadTo, {required int from}) {
+    if (from + leadTo - leadFrom > _held.length) return false;
+    for (var i = leadFrom; i < leadTo; i++) {
+      if (_held[from + i - leadFrom] != lead[i]) return false;
+    }
+    return true;
+  }
+
+  Uint8List _concat(Uint8List a, Uint8List b) {
+    final merged = Uint8List(a.length + b.length);
+    merged.setAll(0, a);
+    merged.setAll(a.length, b);
+    return merged;
+  }
 }
 
 /// The long-lived background isolate that owns every iSH FFI handle. The
@@ -595,11 +867,19 @@ class IshWorker implements IshTransport {
   int _nextReplyId = 1;
   final Map<int, Completer<dynamic>> _pending = {};
 
-  // Message tags, as the first element of the List a SendPort carries.
+  // Message tags, as the first element of the List a SendPort carries. The
+  // kOutput ones ride between a run's request and its reply: the worker sends
+  // one per resolved output chunk while the command is under way.
   static const _kInit = 0;
   static const _kRun = 1;
   static const _kDestroy = 2;
   static const _kReply = 3;
+  static const _kOutput = 4;
+
+  /// The watcher each run's chunks route to, keyed by reply id. Registered by
+  /// [run] before the request goes, dropped when the reply lands or the
+  /// worker dies.
+  final Map<int, void Function(String)> _outputSinks = {};
 
   /// How many workers have been spawned — test-visible, so the single flight
   /// of [_ensure] is pinned: two concurrent first users answer one spawn.
@@ -628,6 +908,7 @@ class IshWorker implements IshTransport {
       c.completeError(_deadWorker());
     }
     _pending.clear();
+    _outputSinks.clear();
   }
 
   Future<void> _spawn() async {
@@ -689,6 +970,7 @@ class IshWorker implements IshTransport {
     required int sessionId,
     required String scriptB64,
     required Duration timeout,
+    void Function(String)? onOutput,
   }) async {
     if (!ishLinked) {
       return const ShellResult.failed("iSH is not linked into this build.");
@@ -697,6 +979,7 @@ class IshWorker implements IshTransport {
     final replyId = _nextReplyId++;
     final reply = Completer<dynamic>();
     _pending[replyId] = reply;
+    if (onOutput != null) _outputSinks[replyId] = onOutput;
     _post(replyId, [_kRun, replyId, sessionId, scriptB64, timeout.inMilliseconds]);
     return await reply.future as ShellResult;
   }
@@ -737,9 +1020,15 @@ class IshWorker implements IshTransport {
   void _handle(dynamic msg) {
     if (msg is! List) return;
     final tag = msg[0] as int;
+    if (tag == _kOutput) {
+      final sink = _outputSinks[msg[1] as int];
+      if (sink != null) sink(msg[2] as String);
+      return;
+    }
     if (tag != _kReply) return;
     final replyId = msg[1] as int;
     final c = _pending.remove(replyId);
+    _outputSinks.remove(replyId);
     if (c == null) return;
     final error = msg[2] as String?;
     if (error != null) {
@@ -752,7 +1041,11 @@ class IshWorker implements IshTransport {
   static void _entry(SendPort main) {
     final receive = ReceivePort();
     main.send(receive.sendPort);
-    final sessions = <int, IshSessionPtr>{};
+    // The worker's own session table: the handle every FFI step goes through
+    // and the session's dispatcher token, which is what its marker feed
+    // matches the command's end by.
+    final sessions =
+        <int, ({IshSessionPtr handle, String token})>{};
 
     receive.listen((msg) {
       if (msg is! List) return;
@@ -811,7 +1104,7 @@ class IshWorker implements IshTransport {
             calloc.free(p);
           }
           if (error == null && handle.address != 0) {
-            sessions[sessionId] = handle;
+            sessions[sessionId] = (handle: handle, token: token);
           }
           main.send([_kReply, replyId, error, handle.address]);
 
@@ -819,36 +1112,55 @@ class IshWorker implements IshTransport {
           final replyId = msg[1] as int;
           final sessionId = msg[2] as int;
           final scriptB64 = msg[3] as String;
-          final timeoutMs = msg[4] as int;
-          final runFn = ishRunFn;
-          final handle = sessions[sessionId];
-          if (runFn == null || handle == null) {
+          final sess = sessions[sessionId];
+          final drainFn = ishDrainWakeFn;
+          final writeFn = ishWriteStdinFn;
+          final pollFn = ishPollFn;
+          final readFn = ishReadFn;
+          if (sess == null || drainFn == null || pollFn == null ||
+              readFn == null || writeFn == null) {
             main.send([_kReply, replyId, "session not found", null]);
             return;
           }
-          final scriptPtr = scriptB64.toNativeUtf8();
-          final result = calloc<IshResult>();
-          runFn(handle, scriptPtr, timeoutMs, result);
-          final shellResult = result.ref.toShellResult();
-          if (result.ref.output.address != 0) {
-            calloc.free(result.ref.output);
+          // The command is the worker's own loop now, not one parked call:
+          // poll wakes per output chunk or on the stop's byte, and every read
+          // goes straight to the run's watch as it is resolved. Parking
+          // between chunks on the bridge's poll is what keeps a stop reachable
+          // while the command lives — the loop's bytes stream from here down
+          // to [_handle], and the marker is Dart's from [IshRunBuffer]'s take
+          // on it, so the feed never shows command work as guest output.
+          final buf = calloc<Uint8>(65536);
+          final feed = IshRunBuffer(token: sess.token,
+              onDelta: (delta) => main.send([_kOutput, replyId, delta]));
+          try {
+            drainFn(sess.handle);
+            final scriptPtr = scriptB64.toNativeUtf8();
+            writeFn(sess.handle, scriptPtr);
+            calloc.free(scriptPtr);
+            while (!feed.done) {
+              final flags = pollFn(sess.handle);
+              if (flags < 0) break;  // a poll we cannot trust
+              if (flags & 2 != 0) break;  // the hangup's byte
+              if (flags & 1 == 0) continue;  // nothing yet (cannot stand)
+              final n = readFn(sess.handle, buf, 65536);
+              if (n < 0) {
+                if (n == -2) continue;  // transient
+                break;
+              }
+              if (n == 0) break;  // EOF: the guest shell is gone
+              feed.add(Uint8List.fromList(buf.asTypedList(n)));
+            }
+          } finally {
+            calloc.free(buf);
           }
-          if (result.ref.cwd.address != 0) {
-            calloc.free(result.ref.cwd);
-          }
-          if (result.ref.exception.address != 0) {
-            calloc.free(result.ref.exception);
-          }
-          calloc.free(scriptPtr);
-          calloc.free(result);
-          main.send([_kReply, replyId, null, shellResult]);
+          main.send([_kReply, replyId, null, feed.finish()]);
 
         case _kDestroy:
           final sessionId = msg[2] as int;
           final destroyFn = ishDestroyFn;
-          final handle = sessions.remove(sessionId);
-          if (destroyFn != null && handle != null) {
-            destroyFn(handle);
+          final sess = sessions.remove(sessionId);
+          if (destroyFn != null && sess != null) {
+            destroyFn(sess.handle);
           }
       }
     });

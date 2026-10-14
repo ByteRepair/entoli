@@ -54,19 +54,6 @@ typedef struct {
     char token[37];
 } ish_session;
 
-// The result of one command, written into the ish_result the caller
-// allocates. All three strings are heap-allocated (malloc/strdup) and owned
-// by the caller: Dart frees each non-null one with calloc.free after copying
-// it out. Null where there is nothing to say.
-typedef struct {
-    int32_t return_code;
-    const char *output;     // NUL-terminated, malloc'd. Caller frees.
-    const char *cwd;        // NUL-terminated, malloc'd. Caller frees; null
-                            // where the shell left no directory to report.
-    const char *exception;  // NUL-terminated, strdup'd, or null where the
-                            // command completed.
-} ish_result;
-
 // ---- lifecycle ----
 
 // Boot iSH's kernel once. Idempotent: the second call is a no-op. Called from
@@ -99,16 +86,27 @@ ish_session *ish_session_init(
     int32_t env_count,
     const char **error);
 
-// Run one command in the session's persistent guest shell. The script is
-// already base64-encoded — the bridge writes it as one line to the guest's
-// stdin, the dispatcher decodes and evals it, and writes a marker line back.
-// Blocks until the session's own marker lands. The result is written into
-// *out, which the caller allocates; its strings are the caller's to free.
-void ish_session_run(
-    ish_session *session,
-    const char *script_b64,
-    int32_t timeout_ms,
-    ish_result *out);
+// Begin a command: first drain the wake pipe, then write the base64 command
+// line to the guest's stdin followed by a newline — the dispatcher reads one
+// line at a time, so the newline is what makes the read return. Under the
+// session contract the drain finds nothing: hangup applies to a run still
+// pending, whose own poll takes the byte, and destroy closes the pair before
+// any command could reuse the handle — the drain is the guard a contract
+// change would want, and is a no-op today.
+void ish_session_drain_wake(ish_session *session);
+void ish_session_write_stdin(ish_session *session, const char *script_b64);
+
+// Block on the session's stdout read end and its wake pipe — this is what the
+// worker parks in between a command's output chunks — and answer what woke
+// it: 1 the stdout end has bytes to read (or the guest is gone; the read
+// tells which), 2 the wake byte, 3 both. EINTR is waited out; a fatal poll
+// error answers -1. The byte is what returns a hung-up run promptly, since a
+// close does not wake a reader parked on the same fd.
+int32_t ish_session_poll(ish_session *session);
+
+// Read from the session's stdout read end into [buf]: >0 bytes read, 0 the
+// guest is gone, -2 worth retrying (EINTR/EAGAIN), -1 fatal.
+int32_t ish_session_read(ish_session *session, char *buf, int32_t cap);
 
 // Deliver SIGINT to the guest shell. A no-op where the shell has died, which
 // is what the task pointer being null says.

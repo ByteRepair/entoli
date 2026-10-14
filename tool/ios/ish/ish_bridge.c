@@ -42,35 +42,6 @@ static bool ish_booted = false;
 
 // ---- helpers ----
 
-// Parse the dispatcher's marker line: "@@E<token> rc=<int> cwd=<path>@@".
-// Returns true and fills rc/cwd on a match, false where the line is not one.
-static bool parse_marker(const char *line, const char *token,
-                         int32_t *rc, const char **cwd) {
-    char prefix[64];
-    snprintf(prefix, sizeof(prefix), "\n@@E%s rc=", token);
-    const char *start = strstr(line, prefix);
-    if (!start) return false;
-    start += strlen(prefix);
-    char *end = NULL;
-    long val = strtol(start, &end, 10);
-    if (!end || strncmp(end, " cwd=", 5) != 0) return false;
-    const char *cwd_start = end + 5;
-    const char *cwd_end = strstr(cwd_start, "@@");
-    if (!cwd_end) return false;
-    *rc = (int32_t)val;
-    *cwd = cwd_start;  // not NUL-terminated; the caller copies it
-    return true;
-}
-
-// The output of a run, allocated for the caller: Dart frees it.
-static char *dup_range(const char *buf, size_t len) {
-    char *copy = malloc(len + 1);
-    if (!copy) return NULL;
-    memcpy(copy, buf, len);
-    copy[len] = '\0';
-    return copy;
-}
-
 // A host fd as a guest fd on the current task: the same three lines
 // open_fd_from_actual_fd (kernel/init.c) runs, over the realfs fd ops — the
 // guest reads and writes it through the host file it names. The fd lands in
@@ -320,24 +291,21 @@ ish_session *ish_session_init(
     return s;
 }
 
-void ish_session_run(
-    ish_session *session,
-    const char *script_b64,
-    int32_t timeout_ms,
-    ish_result *out)
-{
-    (void) timeout_ms;  // the poll blocks on the guest; escalation is Dart's
-                        // destroy — see the isolate's contract in
-                        // ish_shell.dart.
+void ish_session_drain_wake(ish_session *session) {
+    if (!session) return;
     // Consume what a hung-up handle might owe the next command. Under the
     // session contract it is empty: hangup applies to a run still pending,
     // whose own poll takes the byte, and destroy closes the pair before any
     // command could reuse the handle. The drain is the guard a contract
-    // change would want — a stale byte would end its run before the guest
-    // has spoken — and O_NONBLOCK is what keeps the drain from doing so.
+    // change would want — a stale byte would end the next run before the
+    // guest has spoken — and O_NONBLOCK is what keeps the drain from doing
+    // so.
     char discarded;
     while (read(session->wake_read, &discarded, 1) == 1) {}
+}
 
+void ish_session_write_stdin(ish_session *session, const char *script_b64) {
+    if (!session) return;
     // Write the base64 line to the guest's stdin, followed by a newline. The
     // dispatcher reads one line at a time, so the newline is what makes the
     // read return.
@@ -346,14 +314,10 @@ void ish_session_run(
     (void) unused;
     unused = write(session->stdin_write, "\n", 1);
     (void) unused;
+}
 
-    // Read from the guest's stdout until this command's own marker lands.
-    // The token in the prefix is what says it is ours: the marker of a
-    // previous command left unread in the pipe — a capped or interrupted run
-    // leaves one — carries the same session token, and reading it back would
-    // report the previous command's exit code for this one. A stale marker is
-    // dropped with the line it ends on; the output before it is kept.
-    //
+int32_t ish_session_poll(ish_session *session) {
+    if (!session) return -1;
     // Polled on both ends rather than read plainly: a close of stdout_read
     // does not wake a reader parked on the same fd, and a child the
     // escalation's SIGKILL did not reach can hold the guest's write end for
@@ -361,69 +325,33 @@ void ish_session_run(
     // thread can deliver: once hangup has -1'd stdout, poll passes that
     // entry over (fd < 0 answers nothing), and the read that races the
     // close still EBADFs out the same way.
-    char buf[65536];
-    size_t total = 0;
-    bool done = false;
-    bool stale = false;
-    int32_t rc = -1;
-    char *cwd = NULL;
-    while (!done && total < sizeof(buf) - 1) {
-        struct pollfd fds[2];
-        fds[0].fd = session->stdout_read;
-        fds[0].events = POLLIN;
-        fds[1].fd = session->wake_read;
-        fds[1].events = POLLIN;
+    struct pollfd fds[2];
+    fds[0].fd = session->stdout_read;
+    fds[0].events = POLLIN;
+    fds[1].fd = session->wake_read;
+    fds[1].events = POLLIN;
+    for (;;) {
         int nready = poll(fds, 2, -1);
         if (nready < 0) {
             if (errno == EINTR) continue;
-            break;  // "did not complete"
+            return -1;
         }
-        if (fds[1].revents & POLLIN) break;  // the hangup's byte.
-        ssize_t n = read(session->stdout_read, buf + total,
-                         sizeof(buf) - 1 - total);
-        if (n < 0 && (errno == EINTR || errno == EAGAIN)) continue;
-        if (n <= 0) break;  // EOF: the guest shell is gone.
-        total += (size_t) n;
-        buf[total] = '\0';
-        int32_t parsed_rc;
-        const char *parsed_cwd;
-        if (parse_marker(buf, session->token, &parsed_rc, &parsed_cwd)) {
-            rc = parsed_rc;
-            size_t cwd_len = strstr(parsed_cwd, "@@") - parsed_cwd;
-            cwd = malloc(cwd_len + 1);
-            if (cwd) {
-                memcpy(cwd, parsed_cwd, cwd_len);
-                cwd[cwd_len] = '\0';
-            }
-            done = true;
-        } else if (strstr(buf, "\n@@E") != NULL) {
-            // A marker line that is not ours: drop everything before the end
-            // of it, so the search does not find the same stale text again.
-            char *after = strstr(buf, "\n@@E");
-            const char *nl = strchr(after + 1, '\n');
-            size_t consumed = nl ? (size_t)(nl - buf + 1) : total;
-            memmove(buf, buf + consumed, total - consumed);
-            total -= consumed;
-            buf[total] = '\0';
-            stale = true;
-        }
+        // HUP/ERR on stdout still answers the read (zero bytes, or the
+        // error), so it is worth reading rather than a poll fault.
+        int32_t flags =
+            (fds[0].revents & (POLLIN | POLLHUP | POLLERR)) != 0 ? 1 : 0;
+        if ((fds[1].revents & POLLIN) != 0) flags |= 2;
+        return flags;
     }
+}
 
-    // The command's output is everything before the first marker line, ours
-    // or a stale one's — the marker itself is not this command's words.
-    const char *cut = strstr(buf, "\n@@E");
-    size_t out_len = done || stale || cut
-        ? (size_t)(cut - buf)
-        : total;
-    if (!done) rc = -1;
-    char *output = dup_range(buf, out_len);
-
-    *out = (ish_result){
-        .return_code = rc,
-        .output = output,
-        .cwd = cwd,
-        .exception = done ? NULL : strdup("The command did not complete."),
-    };
+int32_t ish_session_read(ish_session *session, char *buf, int32_t cap) {
+    if (!session || cap < 0) return -1;
+    ssize_t n = read(session->stdout_read, buf, (size_t) cap);
+    if (n > 0) return (int32_t) n;
+    if (n == 0) return 0;
+    if (errno == EINTR || errno == EAGAIN) return -2;
+    return -1;
 }
 
 void ish_session_interrupt(ish_session *session) {

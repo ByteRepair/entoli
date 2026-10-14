@@ -78,13 +78,22 @@ in the running app over the VM service.
 ## The interrupt, and its escalation
 
 `IshShell` delivers a stop on the calling isolate, not through the worker:
-the worker is parked in its own `read` for the whole of a run, so a message
-to it would queue behind the run it is meant to end. The bridge's
+the worker parks in a run's poll/read loop for the whole of the command, so
+a message to it would queue behind the run it is meant to end. The bridge's
 `ish_session_interrupt` is a `send_signal` — marked under iSH's own locks
 (`kernel/signal.c`) and honoured by the guest's interpreter thread at its
 next scheduling point — so a direct FFI call over the session handle's
 address (which `init`'s answer carries to the caller) is the same call,
 delivered on time.
+
+Output rides the loop as it happens: every read the worker makes is resolved
+by [IshRunBuffer] — the marker parse, the bridge's own C until now — and
+what cannot be marker text goes to the run's watch at once, so a command's
+output appears in the chat while it runs, the contract the host shell keeps.
+The marker's parse is the suite's now (`ish_session_test.dart` pins it over
+a fake transport at byte level, splits included), and the reply keeps the
+bridge's 64 KiB head cap for what the model sees. The loop still parks
+between chunks, which is what makes a message-queued stop wrong.
 
 A guest that ignores the SIGINT is answered a second later by its
 escalation, `ish_session_hangup`: SIGKILL into the guest first (the kill
@@ -108,9 +117,11 @@ still pending at the second, and nothing else.
 
 The session and one-shot logic over this seam is pinned by
 `test/data/local/ish_session_test.dart` over a fake transport; that a real
-guest honours the 130 and that a hangup unblocks a parked worker is the
-simulator's hand-run, like the wire. The wake pipe is C that hand-run has
-not seen yet — one on the simulator is the remaining step after it. The
+guest honours the 130, that a hangup unblocks the loop, and that output
+arrives live is the simulator's hand-run, like the wire. The wake pipe and
+the streaming split are C that hand-run has not seen yet — one on the
+simulator (stop, escalation with a backgrounded child, recovery, output
+appearing while a command runs) is the remaining step after it. The
 worker itself is spawned
 single-flighted (`IshWorker._ensure`), which is also where the review's
 spawn race died, and it fails every pending reply when it dies so a crashed
