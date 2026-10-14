@@ -56,12 +56,17 @@ class VoiceChannel: NSObject {
     }
     interruptionObserver = NotificationCenter.default.addObserver(
       forName: AVAudioSession.interruptionNotification, object: nil, queue: .main
-    ) { [weak self] _ in
-      // An interruption leaves the engine dead either way, and silence on a
-      // listening session reads as a broken microphone — the session fails
-      // loudly instead. Speech still queued was cancelled by the system, and
-      // the cancellations drain the pending count on their own.
-      guard let self, self.wantListening else { return }
+    ) { [weak self] notification in
+      // Only the beginning is the event; the ended phase answers it. An
+      // interruption leaves the engine idle either way, so what was queued is
+      // cancelled here to drain the pending count rather than held for a
+      // microphone state that is no longer coming.
+      guard let self,
+            let raw = notification.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt,
+            AVAudioSession.InterruptionType(rawValue: raw) == .began
+      else { return }
+      self.synthesizer.stopSpeaking(at: .immediate)
+      guard self.wantListening else { return }
       self.send("recognitionError", "The microphone was interrupted.")
     }
   }
@@ -196,10 +201,11 @@ class VoiceChannel: NSObject {
     let newRequest = SFSpeechAudioBufferRecognitionRequest()
     newRequest.shouldReportPartialResults = true
 #if targetEnvironment(simulator)
-    // The simulator ships no on-device voice model packs, and a required
-    // on-device task there sits silent forever — never a partial, never an
-    // error. Its network answer is what keeps the hand-run possible; devices
-    // keep the on-device invariant below.
+    // The simulator ships no dictation assets, and the recognizer will not
+    // initialize without them in any mode — network included — so this flag
+    // is inert there and the task fails with kLSRErrorDomain 300 either way.
+    // It is kept explicit so the device-side invariant below reads as the
+    // deliberate one it is; the voice hand-run is a real device's.
     newRequest.requiresOnDeviceRecognition = false
 #else
     // On-device only: the network rung Android walks is deliberately absent,
@@ -362,6 +368,11 @@ class VoiceChannel: NSObject {
     let utterance = AVSpeechUtterance(string: text)
     utterance.voice = voice
     pendingUtterances[ObjectIdentifier(utterance)] = generation
+    // The reply can begin seconds after the microphone was shut, which
+    // deactivated the session; whether the synthesiser re-activates one that
+    // was explicitly released is version-dependent, and this is a no-op when
+    // it was never down.
+    try? AVAudioSession.sharedInstance().setActive(true)
     synthesizer.speak(utterance)
   }
 }
