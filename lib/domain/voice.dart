@@ -41,13 +41,26 @@ abstract class Voice {
 
   bool get available => true;
 
-  /// Whether this platform has device engines for the system sentinels to
-  /// stand for, which is what the settings page's missing-engine block is
-  /// drawn from: on a platform without them there is nothing to be missing,
-  /// and the block would be a lie. Asked of the platform rather than of the
-  /// probe — the block is about a phone the probe's own answer may say
-  /// nothing for.
-  bool get hasSystemEngines => false;
+  /// Whether this platform has engine installs the settings page's
+  /// missing-engine block can point at, which is what the block is drawn
+  /// from: the block is Android's store engines alone, and on a platform
+  /// without any the block would be a lie. Asked of the platform rather than
+  /// of the probe — the block is about a phone the probe's own answer may
+  /// say nothing for.
+  bool get hasEngineInstalls => false;
+
+  /// Whether this platform has the downloadable catalog beside the device's
+  /// own engines. False where the engines are the whole of what can listen
+  /// and speak, which is what takes the pickers and the download lists off
+  /// the settings page: a picker of one says nothing, and a catalogue with
+  /// nothing to fetch is a lie.
+  bool get hasModelCatalog => true;
+
+  /// The native picks this platform's engines stand for — what a true answer
+  /// from [systemEngines] puts in the installed set, and what a null setting
+  /// defaults to. Null where there are none: the browser, and the desktops
+  /// whose engines are all downloaded.
+  ({String recognition, String speech})? get nativePicks => null;
 
   /// Which of the device's own engines are there, for the platforms that have
   /// any. Asked once at startup, where the answer joins the installed models —
@@ -188,6 +201,9 @@ class UnavailableVoice extends Voice {
 
   @override
   bool get available => false;
+
+  @override
+  bool get hasModelCatalog => false;
 
   @override
   Future<VoiceSession> start({
