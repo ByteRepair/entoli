@@ -326,7 +326,7 @@ void ish_session_run(
     int32_t timeout_ms,
     ish_result *out)
 {
-    (void) timeout_ms;  // the read blocks on the guest; escalation is Dart's
+    (void) timeout_ms;  // the poll blocks on the guest; escalation is Dart's
                         // destroy — see the isolate's contract in
                         // ish_shell.dart.
     // Consume whatever a previous command's escalation left in the wake pipe:
@@ -355,8 +355,10 @@ void ish_session_run(
     // Polled on both ends rather than read plainly: a close of stdout_read
     // does not wake a reader parked on the same fd, and a child the
     // escalation's SIGKILL did not reach can hold the guest's write end for
-    // its own life. The wake pipe's byte is the ending another thread can
-    // deliver, and POLLNVAL on a hangup-closed stdout is the other.
+    // its own life. The wake pipe's byte is the whole of the ending another
+    // thread can deliver: once hangup has -1'd stdout, poll passes that
+    // entry over (fd < 0 answers nothing), and the read that races the
+    // close still EBADFs out the same way.
     char buf[65536];
     size_t total = 0;
     bool done = false;
