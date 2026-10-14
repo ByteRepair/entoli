@@ -84,17 +84,30 @@ to it would queue behind the run it is meant to end. The bridge's
 (`kernel/signal.c`) and honoured by the guest's interpreter thread at its
 next scheduling point — so a direct FFI call over the session handle's
 address (which `init`'s answer carries to the caller) is the same call,
-delivered on time. A guest that ignores the SIGINT is answered a second
-later by its escalation, `ish_session_hangup`: SIGKILL into the guest first
-(the kill leads, or a dying guest writes into the closing pipe end and the
-interpreter dies of SIGPIPE), then the read end closed, which returns the
-worker's blocked `read` at once and hands teardown back to the queued
-destroy.
+delivered on time.
+
+A guest that ignores the SIGINT is answered a second later by its
+escalation, `ish_session_hangup`: SIGKILL into the guest first (the kill
+leads, or a dying guest writes into the closing pipe end and the
+interpreter dies of SIGPIPE), the read end closed, and one byte dropped
+into a wake pipe the run polls beside its stdout. The byte, not the close,
+is what returns the worker: a close does not wake a reader parked on the
+same fd, and a child the kill did not reach can hold the guest's write end
+for its own life — without the byte, a hung-up run would wait on the child
+rather than on the second. The run returns "did not complete" and hands
+teardown back to the queued destroy.
+
+A run the guest answers within the second — the SIGINT honoured, rc 130 —
+leaves the session standing, cd and exports with it, the same contract
+LocalShell keeps: the escalation answers a run still pending at the second,
+and nothing else.
 
 The session and one-shot logic over this seam is pinned by
 `test/data/local/ish_session_test.dart` over a fake transport; that a real
 guest honours the 130 and that a hangup unblocks a parked worker is the
-simulator's hand-run, like the wire. The worker itself is spawned
+simulator's hand-run, like the wire. The wake pipe is C that hand-run has
+not seen yet — one on the simulator is the remaining step after it. The
+worker itself is spawned
 single-flighted (`IshWorker._ensure`), which is also where the review's
 spawn race died, and it fails every pending reply when it dies so a crashed
 FFI call cannot leave a turn hanging. Every session still shares the one

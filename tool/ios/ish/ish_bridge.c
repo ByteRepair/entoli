@@ -27,6 +27,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <limits.h>
+#include <poll.h>
 #include <sys/stat.h>
 
 #include "tools/fakefs.h"
@@ -202,6 +203,12 @@ ish_session *ish_session_init(
         *error = "out of memory";
         return NULL;
     }
+    // -1, not calloc's zero: fd 0 is a real fd here, and destroy closes only
+    // what is still open.
+    s->stdin_write = -1;
+    s->stdout_read = -1;
+    s->wake_read = -1;
+    s->wake_write = -1;
     strncpy(s->token, token, sizeof(s->token) - 1);
 
     // Two real host pipes; the guest gets the other ends as fds 0, 1 and 2.
@@ -217,6 +224,24 @@ ish_session *ish_session_init(
     }
     s->stdin_write = stdin_pipe[1];
     s->stdout_read = stdout_pipe[0];
+    // The wake pipe the hangup's byte lands in. Its read end is non-blocking,
+    // which is what makes each run's drain of a previous command's byte safe.
+    int wake_pipe[2];
+    if (pipe(wake_pipe) < 0) {
+        *error = "failed to create the session pipes";
+        close(stdin_pipe[0]);
+        close(stdin_pipe[1]);
+        close(stdout_pipe[0]);
+        close(stdout_pipe[1]);
+        free(s);
+        return NULL;
+    }
+    s->wake_read = wake_pipe[0];
+    s->wake_write = wake_pipe[1];
+    int wake_flags = fcntl(s->wake_read, F_GETFL, 0);
+    if (wake_flags >= 0) {
+        fcntl(s->wake_read, F_SETFL, wake_flags | O_NONBLOCK);
+    }
     // A fresh init child's table is empty, so the three installs land on
     // fds 0, 1 and 2 in this order.
     fd_t in = guest_fd_from_host(stdin_pipe[0]);
@@ -228,6 +253,8 @@ ish_session *ish_session_init(
         close(stdin_pipe[1]);
         close(stdout_pipe[0]);
         close(stdout_pipe[1]);
+        close(s->wake_read);
+        close(s->wake_write);
         free(s);
         return NULL;
     }
@@ -243,6 +270,8 @@ ish_session *ish_session_init(
         close(stdin_pipe[1]);
         close(stdout_pipe[0]);
         close(stdout_pipe[1]);
+        close(s->wake_read);
+        close(s->wake_write);
         free(s);
         return NULL;
     }
@@ -279,6 +308,8 @@ ish_session *ish_session_init(
         close(stdin_pipe[1]);
         close(stdout_pipe[0]);
         close(stdout_pipe[1]);
+        close(s->wake_read);
+        close(s->wake_write);
         free(s);
         return NULL;
     }
@@ -298,6 +329,13 @@ void ish_session_run(
     (void) timeout_ms;  // the read blocks on the guest; escalation is Dart's
                         // destroy — see the isolate's contract in
                         // ish_shell.dart.
+    // Consume whatever a previous command's escalation left in the wake pipe:
+    // the byte is this command's to mind, or the next one would take it as
+    // its own and end before the guest has spoken. Safe because the read end
+    // is O_NONBLOCK.
+    char discarded;
+    while (read(session->wake_read, &discarded, 1) == 1) {}
+
     // Write the base64 line to the guest's stdin, followed by a newline. The
     // dispatcher reads one line at a time, so the newline is what makes the
     // read return.
@@ -313,6 +351,12 @@ void ish_session_run(
     // leaves one — carries the same session token, and reading it back would
     // report the previous command's exit code for this one. A stale marker is
     // dropped with the line it ends on; the output before it is kept.
+    //
+    // Polled on both ends rather than read plainly: a close of stdout_read
+    // does not wake a reader parked on the same fd, and a child the
+    // escalation's SIGKILL did not reach can hold the guest's write end for
+    // its own life. The wake pipe's byte is the ending another thread can
+    // deliver, and POLLNVAL on a hangup-closed stdout is the other.
     char buf[65536];
     size_t total = 0;
     bool done = false;
@@ -320,6 +364,17 @@ void ish_session_run(
     int32_t rc = -1;
     char *cwd = NULL;
     while (!done && total < sizeof(buf) - 1) {
+        struct pollfd fds[2];
+        fds[0].fd = session->stdout_read;
+        fds[0].events = POLLIN;
+        fds[1].fd = session->wake_read;
+        fds[1].events = POLLIN;
+        int nready = poll(fds, 2, -1);
+        if (nready < 0) {
+            if (errno == EINTR) continue;
+            break;  // "did not complete"
+        }
+        if (fds[1].revents & POLLIN) break;  // the hangup's byte.
         ssize_t n = read(session->stdout_read, buf + total,
                          sizeof(buf) - 1 - total);
         if (n < 0 && (errno == EINTR || errno == EAGAIN)) continue;
@@ -385,9 +440,16 @@ void ish_session_hangup(ish_session *session) {
         close(session->stdout_read);
         session->stdout_read = -1;
     }
-    // The session stays valid — stdin and the struct itself stay destroy's
-    // work, which owns every close after this. The worker's blocked read
-    // returns EBADF here and run ends "did not complete".
+    // The byte, not the close, is what the run's poll answers: the byte can
+    // be sent from this thread, the close cannot wake anything.
+    if (session->wake_write >= 0) {
+        char wake = 0;
+        ssize_t unused = write(session->wake_write, &wake, 1);
+        (void) unused;
+    }
+    // The session stays valid — stdin, the wake pipe and the struct itself
+    // stay destroy's work, which owns every close after this. The run ends
+    // "did not complete" the moment its poll answers.
 }
 
 void ish_session_destroy(ish_session *session) {
@@ -400,6 +462,12 @@ void ish_session_destroy(ish_session *session) {
     }
     if (session->stdout_read >= 0) {
         close(session->stdout_read);
+    }
+    if (session->wake_read >= 0) {
+        close(session->wake_read);
+    }
+    if (session->wake_write >= 0) {
+        close(session->wake_write);
     }
     free(session);
 }

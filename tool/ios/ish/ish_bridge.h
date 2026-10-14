@@ -40,6 +40,15 @@ typedef struct {
     // and -1s the read end; destroy closes only what is still open.
     int stdin_write;
     int stdout_read;
+    // A pipe the hangup's byte lands in, whose read end a run polls beside
+    // stdout. A close does not wake a reader parked on the same fd, and a
+    // child the hangup's SIGKILL did not reach can hold the guest's write
+    // end for its own life — the byte is what ends the run from another
+    // thread. The read end is O_NONBLOCK: each run starts by draining what
+    // a previous command's escalation left, and would hold itself doing so
+    // on a blocking fd.
+    int wake_read;
+    int wake_write;
     // The token the dispatcher's markers carry, unique to the shell's life so
     // a command's output cannot forge the end of a run.
     char token[37];
@@ -105,16 +114,18 @@ void ish_session_run(
 // is what the task pointer being null says.
 void ish_session_interrupt(ish_session *session);
 
-// The escalation for a command that ignored the interrupt: SIGKILL the guest
-// and close the read end only, so a run blocked reading the guest's stdout
-// returns at once ("did not complete") and the handle's own teardown stays
-// destroy's. The kill comes first, or a dying guest writes into the closing
-// pipe end and the interpreter dies of SIGPIPE. Non-blocking; safe from another
-// thread while ish_session_run is pending on the session.
+// The escalation for a command that ignored the interrupt: SIGKILL the guest,
+// close the read end, and drop one byte into the wake pipe a run polls beside
+// its stdout — the byte, not the close, is what returns it, since a close
+// does not wake a reader parked on the same fd and a child the kill did not
+// reach can hold the guest's write end for its own life. The kill leads, or
+// a dying guest writes into the closing pipe end and the interpreter dies of
+// SIGPIPE. Non-blocking; safe from another thread while ish_session_run is
+// pending on the session.
 void ish_session_hangup(ish_session *session);
 
-// Tear down: kill the guest and close the host pipe ends. The session handle
-// is invalid after this.
+// Tear down: kill the guest and close every host pipe end the session still
+// holds. The session handle is invalid after this.
 void ish_session_destroy(ish_session *session);
 
 // Convert a tarball into iSH's fakefs layout, in-process. The iOS analog of
