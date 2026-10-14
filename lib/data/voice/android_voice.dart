@@ -137,7 +137,15 @@ const voiceChannel = MethodChannel("agent_chat/voice");
 /// registration was not undone by its predecessor.
 class NativeVoiceBridge {
   NativeVoiceBridge._() {
-    voiceChannel.setMethodCallHandler((call) async => _calls.add(call));
+    voiceChannel.setMethodCallHandler((call) async {
+      // The engine side's chatter on the one subject none of the strategies
+      // owns: said through the module's own volume rule, which is debug-only.
+      if (call.method == "voiceDebug") {
+        voiceLog(() => "channel: ${call.arguments}");
+        return;
+      }
+      _calls.add(call);
+    });
   }
 
   static final NativeVoiceBridge instance = NativeVoiceBridge._();

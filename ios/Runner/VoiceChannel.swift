@@ -175,7 +175,7 @@ class VoiceChannel: NSObject {
       send("recognitionError", "Speech recognition is not available.")
       return
     }
-    log("recognizing in \(locale?.identifier ?? recognizer.locale?.identifier ?? "?"), "
+    log("recognizing in \(locale?.identifier ?? recognizer.locale.identifier), "
         + "on-device supported: \(recognizer.supportsOnDeviceRecognition)")
 #if !targetEnvironment(simulator)
     guard recognizer.supportsOnDeviceRecognition else {
@@ -295,10 +295,12 @@ class VoiceChannel: NSObject {
     }
   }
 
-  /// The voice module's own volume rule: failures always, chatter debug-only.
+  /// The voice module's volume rule: chatter rides the channel to Dart's
+  /// voiceLog in debug builds, and never prints here — the flutter console
+  /// does not carry os_log.
   private func log(_ what: String) {
 #if DEBUG
-    NSLog("voice: %@", what)
+    send("voiceDebug", what)
 #endif
   }
 
