@@ -175,10 +175,14 @@ class VoiceChannel: NSObject {
       send("recognitionError", "Speech recognition is not available.")
       return
     }
+    log("recognizing in \(locale?.identifier ?? recognizer.locale?.identifier ?? "?"), "
+        + "on-device supported: \(recognizer.supportsOnDeviceRecognition)")
+#if !targetEnvironment(simulator)
     guard recognizer.supportsOnDeviceRecognition else {
       send("recognitionError", "This device cannot hear that language on-device.")
       return
     }
+#endif
 
     do {
       let session = AVAudioSession.sharedInstance()
@@ -191,9 +195,17 @@ class VoiceChannel: NSObject {
 
     let newRequest = SFSpeechAudioBufferRecognitionRequest()
     newRequest.shouldReportPartialResults = true
+#if targetEnvironment(simulator)
+    // The simulator ships no on-device voice model packs, and a required
+    // on-device task there sits silent forever — never a partial, never an
+    // error. Its network answer is what keeps the hand-run possible; devices
+    // keep the on-device invariant below.
+    newRequest.requiresOnDeviceRecognition = false
+#else
     // On-device only: the network rung Android walks is deliberately absent,
     // and the languages answer is what keeps an unsupported locale from here.
     newRequest.requiresOnDeviceRecognition = true
+#endif
     request = newRequest
     self.recognizer = recognizer
     hasPartial = false
@@ -232,6 +244,8 @@ class VoiceChannel: NSObject {
     guard !stopping else { return }
     if let result {
       hasPartial = true
+      log("transcription \(result.isFinal ? "final" : "partial"): "
+          + "\(result.bestTranscription.formattedString.count) chars")
       if result.isFinal {
         hear(result.bestTranscription.formattedString)
         if wantListening {
@@ -243,6 +257,7 @@ class VoiceChannel: NSObject {
       return
     }
     guard let error else { return }
+    log("recognition task failed: \(error.localizedDescription)")
     stopRecognizing()
     send("recognitionError", error.localizedDescription)
   }
@@ -273,10 +288,18 @@ class VoiceChannel: NSObject {
     endpointTimer = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { [weak self] _ in
       guard let self, self.wantListening, self.hasPartial, let quiet = self.quietSince else { return }
       if CACurrentMediaTime() - quiet > 0.9 {
+        log("ending the utterance: \(CACurrentMediaTime() - quiet)s of level quiet")
         self.quietSince = nil
         self.request?.endAudio()
       }
     }
+  }
+
+  /// The voice module's own volume rule: failures always, chatter debug-only.
+  private func log(_ what: String) {
+#if DEBUG
+    NSLog("voice: %@", what)
+#endif
   }
 
   private func hear(_ text: String) {
