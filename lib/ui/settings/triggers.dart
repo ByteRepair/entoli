@@ -21,12 +21,13 @@ import "../widgets/section_header.dart";
 import "../widgets/temp_chat_ttl_field.dart";
 
 /// The Triggers category: a prompt a schedule, a countdown or a file change
-/// sends. Android, macOS and Linux all have a platform half: on Android and
-/// macOS the system clock fires a schedule with the app closed (AlarmManager;
-/// launchd), on Linux the session bus's notifications announce what one did —
-/// scheduling there still rides the app's own timer, so where the port is
-/// unavailable the page says so and offers nothing, the way a row for a
-/// missing device would.
+/// sends. Android, macOS, iOS and Linux all have a platform half: on Android
+/// and macOS the system clock fires a schedule with the app closed
+/// (AlarmManager; launchd), on iOS it delivers the moment a notification the
+/// turn is run by catching up at the next open, on Linux the session bus's
+/// notifications announce what one did — scheduling there still rides the
+/// app's own timer, so where the port is unavailable the page says so and
+/// offers nothing, the way a row for a missing device would.
 class TriggersSection extends ConsumerStatefulWidget {
   const TriggersSection({super.key});
 

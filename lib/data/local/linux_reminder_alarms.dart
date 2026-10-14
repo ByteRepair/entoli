@@ -168,7 +168,8 @@ class LinuxReminderAlarms implements ReminderAlarms {
   Future<void> requestNotifications() async {}
 
   @override
-  Future<void> schedule(int requestCode, DateTime at, {String? calendar}) async {}
+  Future<void> schedule(int requestCode, DateTime at,
+      {String? calendar, String? label, String? chatId}) async {}
 
   @override
   Future<void> cancel(int requestCode) async {}

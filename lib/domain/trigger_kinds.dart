@@ -226,6 +226,13 @@ class ClockKind extends TriggerKind {
             _ => null,
           },
     };
+    // The arm's name and tap route, for the platform that shows the moment
+    // rather than wakes for it.
+    final named = <int, (String, String?)>{
+      for (final t in triggers)
+        if (t.nextFireAt != null && t.requestCode != null)
+          t.requestCode!: (_labelOf(t), t.chatId),
+    };
     for (final code in _armed.keys) {
       if (!wanted.containsKey(code)) await alarms.cancel(code);
     }
@@ -233,8 +240,9 @@ class ClockKind extends TriggerKind {
     // unchanged fire time is a no-op skipped here rather than a round trip.
     for (final entry in wanted.entries) {
       if (_armed[entry.key] != entry.value) {
+        final (label, chatId) = named[entry.key]!;
         await alarms.schedule(entry.key, entry.value,
-            calendar: calendars[entry.key]);
+            calendar: calendars[entry.key], label: label, chatId: chatId);
       }
     }
     _armed
@@ -249,10 +257,18 @@ class ClockKind extends TriggerKind {
     if (await alarms.canHoldTurn()) return false;
     _deferred.add(trigger.id);
     final at = trigger.nextFireAt;
-    if (at != null) await alarms.schedule(trigger.requestCode!, at);
+    if (at != null) {
+      await alarms.schedule(trigger.requestCode!, at,
+          label: _labelOf(trigger), chatId: trigger.chatId);
+    }
     return true;
   }
 }
+
+/// What a fire is called where one line of it is shown: the name a trigger
+/// has, else the prompt it sends — the tile's title rule.
+String _labelOf(Trigger trigger) =>
+    trigger.name.isEmpty ? trigger.prompt : trigger.name;
 
 /// The file source's kind: watchers over resolved roots, debounced. A file
 /// trigger is never on the clock — nothing is handed to a system scheduler,
