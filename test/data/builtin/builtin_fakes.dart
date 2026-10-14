@@ -149,7 +149,8 @@ class FakeShell extends Shell {
   ValueNotifier<String?>? sessionCwdValue;
 
   @override
-  ValueListenable<String?>? sessionCwd(String cwd) => sessionCwdValue;
+  ValueListenable<String?>? sessionCwd(String cwd, {String? home}) =>
+      sessionCwdValue;
 
   @override
   void closeSession(String cwd) => closedSessions.add(cwd);

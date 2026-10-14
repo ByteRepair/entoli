@@ -27,7 +27,9 @@ void main() {
   tearDownAll(controller.dispose);
 
   Future<void> pump(WidgetTester tester,
-          {EdgeInsets bars = EdgeInsets.zero, String? workspace}) =>
+          {EdgeInsets bars = EdgeInsets.zero,
+          String? workspace,
+          String? workspaceHome}) =>
       app.pump(
         tester,
         underSystemBars(
@@ -42,6 +44,7 @@ void main() {
               },
               onAbort: () {},
               workspace: workspace,
+              workspaceHome: workspaceHome,
             ),
           ),
         ),
@@ -460,6 +463,20 @@ void main() {
 
       expect(copied, [workspace]);
     });
+
+    testWidgets("a chat whose session the shell has not heard from is worded in the guest's vocabulary",
+        (tester) async {
+      app.dispose();
+      app = TestApp.create(shell: _MaskedShell());
+      await pump(
+        tester,
+        workspace: "$workspace/chats/x",
+        workspaceHome: workspace,
+      );
+      await type(tester, "!");
+
+      expect(find.text("/root/chats/x"), findsOneWidget);
+    });
   });
 
   group("the keyboard", () {
@@ -501,5 +518,14 @@ class _ShellWithCwd extends FakeShell {
   final cwd = ValueNotifier<String?>(starting);
 
   @override
-  ValueListenable<String?>? sessionCwd(String cwd) => this.cwd;
+  ValueListenable<String?>? sessionCwd(String cwd, {String? home}) => this.cwd;
+}
+
+/// The same, masked: a guest the shell has said nothing of yet — what a
+/// reopened chat is, until the shell's first report of its own.
+class _MaskedShell extends FakeShell {
+  _MaskedShell() : super((_) => ok(""));
+
+  @override
+  String? get guestRoot => "/root";
 }

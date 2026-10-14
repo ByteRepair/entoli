@@ -357,9 +357,12 @@ abstract class Shell {
 
   /// Where [cwd]'s persistent shell is standing, live: the directory a `cd`
   /// in it leaves it in. Null where this shell runs nothing persistent or has
-  /// no session for [cwd] yet, which the caller falls back to [cwd] itself
-  /// for. The composer's bar is what asks.
-  ValueListenable<String?>? sessionCwd(String cwd) => null;
+  /// no session for [cwd] yet, which the caller falls back to the guest's own
+  /// words for [cwd] where one masks this shell. [home] is the project
+  /// workspace the shell's own starts are handed, only for that fallback —
+  /// a shell that shows nothing in the guest for [cwd] before the guest has
+  /// spoken seeds nothing. The composer's bar is what asks.
+  ValueListenable<String?>? sessionCwd(String cwd, {String? home}) => null;
 
   /// End [cwd]'s persistent shell, where this one runs them. A no-op where it
   /// does not. Called when the chat the shell belongs to is deleted or leaves

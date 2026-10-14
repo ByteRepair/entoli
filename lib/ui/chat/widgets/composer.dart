@@ -4,6 +4,7 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../../domain/models.dart";
 import "../../../domain/shell.dart";
+import "../../../domain/file_tools.dart" show guestWorkspacePath;
 import "../../../domain/wired_skill.dart";
 import "../../../providers.dart";
 import "../../fonts.dart";
@@ -38,6 +39,7 @@ class Composer extends ConsumerStatefulWidget {
     this.project,
     this.onVoice,
     this.workspace,
+    this.workspaceHome,
   });
 
   final TextEditingController controller;
@@ -60,6 +62,11 @@ class Composer extends ConsumerStatefulWidget {
   /// does not exist yet, which draws no bar at all. Drawn in shell mode, live
   /// as a `cd` moves it, and copied whole on a tap.
   final String? workspace;
+
+  /// The project workspace the shell's turns call home — what words the bar's
+  /// fallback in the guest's vocabulary where this shell has one. Null beside
+  /// a null [workspace] only: they travel together from the page.
+  final String? workspaceHome;
 
   @override
   ConsumerState<Composer> createState() => _ComposerState();
@@ -312,7 +319,19 @@ class _ComposerState extends ConsumerState<Composer> {
   Widget _cwdBar(ThemeData theme) {
     final workspace = widget.workspace;
     if (workspace == null) return const SizedBox.shrink();
-    final notifier = ref.watch(chatShellCwdProvider(workspace));
+    final notifier = ref.watch(chatShellCwdProvider(
+        (workspace: workspace, workspaceHome: widget.workspaceHome)));
+    // What stands in for the shell having said nothing yet, in the row's own
+    // words: the guest's vocabulary where this shell has one, so a chat
+    // reopened before its next command says where the command will run and
+    // not the host path it is keyed by.
+    final fallback = () {
+      final root = ref.watch(shellProvider).guestRoot;
+      final home = widget.workspaceHome;
+      return root != null && home != null
+          ? guestWorkspacePath(root, home, workspace)
+          : workspace;
+    }();
     Widget row(String? live) => Container(
           margin: const EdgeInsets.only(bottom: 8),
           constraints: const BoxConstraints(minHeight: 32),
@@ -323,7 +342,7 @@ class _ComposerState extends ConsumerState<Composer> {
           ),
           clipBehavior: Clip.antiAlias,
           child: InkWell(
-            onTap: () => copyToClipboard(context, live ?? workspace,
+            onTap: () => copyToClipboard(context, live ?? fallback,
                 said: "Copied working directory"),
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -334,7 +353,7 @@ class _ComposerState extends ConsumerState<Composer> {
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      live ?? workspace,
+                      live ?? fallback,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: theme.textTheme.bodySmall?.copyWith(

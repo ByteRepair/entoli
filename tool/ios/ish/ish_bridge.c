@@ -376,13 +376,31 @@ void ish_session_interrupt(ish_session *session) {
     send_signal(session->task, SIGINT_, SIGINFO_NIL);
 }
 
+void ish_session_hangup(ish_session *session) {
+    if (!session) return;
+    if (session->task) {
+        send_signal(session->task, SIGKILL_, SIGINFO_NIL);
+    }
+    if (session->stdout_read >= 0) {
+        close(session->stdout_read);
+        session->stdout_read = -1;
+    }
+    // The session stays valid — stdin and the struct itself stay destroy's
+    // work, which owns every close after this. The worker's blocked read
+    // returns EBADF here and run ends "did not complete".
+}
+
 void ish_session_destroy(ish_session *session) {
     if (!session) return;
     if (session->task) {
         send_signal(session->task, SIGKILL_, SIGINFO_NIL);
     }
-    close(session->stdin_write);
-    close(session->stdout_read);
+    if (session->stdin_write >= 0) {
+        close(session->stdin_write);
+    }
+    if (session->stdout_read >= 0) {
+        close(session->stdout_read);
+    }
     free(session);
 }
 
