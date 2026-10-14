@@ -127,6 +127,24 @@ void main() {
         expect(result.exceptionInfo, contains("no rootfs"));
       });
     });
+
+    test("a session command says so where no iSH is linked, and stays cold",
+        () async {
+      final fake = FakeIshTransport()..answersNotLinked = true;
+      final shell = ishShell(fake);
+      final run = shell.start("echo hi",
+          cwd: cwd, home: home, timeout: const Duration(minutes: 5));
+      final result = await run.result;
+      expect(result.exceptionInfo, contains("not available"));
+      expect(fake.runs, isEmpty);
+      expect(fake.destroys, isEmpty);
+      // Nothing was taken for an id, so a next command inits again rather
+      // than reusing one the worker never had.
+      shell.start("echo hi",
+          cwd: cwd, home: home, timeout: const Duration(minutes: 5));
+      await Future<void>.delayed(Duration.zero);
+      expect(fake.inits.length, 2);
+    });
   });
 
   group("close", () {

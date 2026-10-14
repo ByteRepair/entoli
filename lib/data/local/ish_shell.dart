@@ -243,6 +243,15 @@ class _IshSession {
           cwd: _guestCwd,
           env: _shell._compose(extra: environment),
         );
+        // The transport's answer where iSH is not linked, which is a build
+        // fault the user sees: taking the id would hang the session's whole
+        // life on runs that can only fail it and on a bar dressed as if the
+        // guest had come up.
+        if (sessionId == -1) {
+          run.state.complete(const ShellResult.failed(
+              "The iSH shell is not available on this platform."));
+          return;
+        }
         _sessionId = sessionId;
         _handle = handle;
         _shell._cwds[_cwdPath]?.value = _guestCwd;
@@ -578,7 +587,7 @@ class IshWorker implements IshTransport {
     _starting = null;
     spawnCount = 0;
     for (final c in _pending.values) {
-      c.completeError(StateError("The iSH driver stopped."));
+      c.completeError(_deadWorker());
     }
     _pending.clear();
   }
@@ -603,6 +612,10 @@ class IshWorker implements IshTransport {
     exitPort.listen((_) {
       repliesSub.cancel();
       exitPort.close();
+      // Death before the hello is the one death whose caller is not in
+      // [_pending] yet — the spawn future is what it waits on, so it is that
+      // future's job to say the driver stopped.
+      if (!ready.isCompleted) ready.completeError(_deadWorker());
       reset();
     });
     _sendPort = await ready.future;
@@ -624,7 +637,7 @@ class IshWorker implements IshTransport {
     final reply = Completer<dynamic>();
     _pending[replyId] = reply;
     final sessionId = _nextReplyId++;
-    _sendPort!.send([
+    _post(replyId, [
       _kInit, replyId, sessionId, rootfsDir, dataDir, home, cwd,
       dispatcher, token,
       env.entries.map((e) => "${e.key}=${e.value}").toList(),
@@ -646,7 +659,7 @@ class IshWorker implements IshTransport {
     final replyId = _nextReplyId++;
     final reply = Completer<dynamic>();
     _pending[replyId] = reply;
-    _sendPort!.send([_kRun, replyId, sessionId, scriptB64, timeout.inMilliseconds]);
+    _post(replyId, [_kRun, replyId, sessionId, scriptB64, timeout.inMilliseconds]);
     return await reply.future as ShellResult;
   }
 
@@ -662,6 +675,21 @@ class IshWorker implements IshTransport {
   void _poke(void Function(IshSessionPtr)? fn, int address) {
     if (fn != null) fn(Pointer.fromAddress(address));
   }
+
+  /// Post a request whose reply will come to [replyId]. Throws when the
+  /// worker is gone, taking its own registration with it — the reset that
+  /// fires on death answers completers it knows, and none of its business is
+  /// the completer a caller registered between its own `_ensure` and here.
+  void _post(int replyId, List<dynamic> request) {
+    final port = _sendPort;
+    if (port == null) {
+      _pending.remove(replyId);
+      throw _deadWorker();
+    }
+    port.send(request);
+  }
+
+  static StateError _deadWorker() => StateError("The iSH driver stopped.");
 
   @override
   void destroy(int sessionId) {
