@@ -242,11 +242,14 @@ class RemindersPlugin: NSObject, UNUserNotificationCenterDelegate {
     open(chatId: chatId)
   }
 
-  /// The frontmost app is shown the banner it would otherwise swallow, the
-  /// way Android's always-posted notification reads.
+  /// The frontmost app is shown the completion banner it would otherwise
+  /// swallow, the way Android's always-posted notification reads — but not
+  /// a due arm's: when the process is here, its own clock runs that fire a
+  /// moment behind the system's, so the banner would arrive beside the run
+  /// it came with.
   func userNotificationCenter(
     _ center: UNUserNotificationCenter, willPresent notification: UNNotification
   ) async -> UNNotificationPresentationOptions {
-    [.banner, .sound]
+    notification.request.identifier.hasPrefix("trigger.") ? [] : [.banner, .sound]
   }
 }

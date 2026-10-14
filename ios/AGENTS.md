@@ -211,6 +211,8 @@ completion's.
 
 Coverage is the simulator hand-run — the suite holds no Swift tests, like
 voice's receipt elsewhere here was the device's. The recipe: create a trigger
-a minute out, foreground to see `willPresent`'s banner, background or kill
-the app and wait for the delivery, then tap it and watch the catch-up run
-with the completion notification following.
+a minute out, background or kill the app and wait for the delivery, then tap
+it and watch the catch-up run with the completion notification following.
+With the app foreground instead the arm stays quiet — `willPresent` shows
+none of it, the app's own clock running that fire a moment behind the
+system's — and the completion banner answers.
