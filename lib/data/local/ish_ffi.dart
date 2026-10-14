@@ -4,7 +4,6 @@ import "dart:io" show Platform;
 // Utf8 moved out of dart:ffi; package:ffi's is the one Dart 3.13 keeps.
 import "package:ffi/ffi.dart";
 
-import "../../domain/shell.dart";
 // The dart:ffi bindings to the iSH bridge (tool/ios/ish/ish_bridge.c). The
 // bridge runs the iSH emulator core in-process — see ios/AGENTS.md for why a
 // child-process shell cannot work on iOS.
@@ -17,32 +16,7 @@ import "../../domain/shell.dart";
 // The opaque pointer Dart holds for a session.
 typedef IshSessionPtr = Pointer<Void>;
 
-// The result struct the bridge writes into. Matches ish_bridge.h's ish_result,
-// which is naturally aligned (int, then three pointers) — the C side has no
-// #pragma pack, so neither does this. Packing it would move every pointer
-// field and read garbage into the strings.
-final class IshResult extends Struct {
-  @Int32()
-  external int returnCode;
-
-  external Pointer<Utf8> output;
-
-  external Pointer<Utf8> cwd;
-
-  external Pointer<Utf8> exception;
-
-  ShellResult toShellResult() {
-    final out = output.address == 0 ? "" : output.cast<Utf8>().toDartString();
-    final cwdStr = cwd.address == 0 ? null : cwd.cast<Utf8>().toDartString();
-    final exc = exception.address == 0 ? null : exception.cast<Utf8>().toDartString();
-    if (exc != null && returnCode == -1) {
-      return ShellResult.failed(exc, output: out);
-    }
-    return ShellResult(returnCode: returnCode, output: out, cwd: cwdStr);
-  }
-}
-
-// Function pointer types for the four bridge entry points.
+// Function pointer types for the bridge entry points.
 typedef IshInitC = Pointer<Void> Function(
     Pointer<Utf8> rootfsDir,
     Pointer<Utf8> dataDir,
@@ -64,16 +38,21 @@ typedef IshInitDart = IshSessionPtr Function(
     int envCount,
     Pointer<Pointer<Utf8>> error);
 
-typedef IshRunC = Void Function(
-    IshSessionPtr session,
-    Pointer<Utf8> scriptB64,
-    Int32 timeoutMs,
-    Pointer<IshResult> out);
-typedef IshRunDart = void Function(
-    IshSessionPtr session,
-    Pointer<Utf8> scriptB64,
-    int timeoutMs,
-    Pointer<IshResult> out);
+typedef IshDrainWakeC = Void Function(IshSessionPtr session);
+typedef IshDrainWakeDart = void Function(IshSessionPtr session);
+
+typedef IshWriteStdinC = Void Function(
+    IshSessionPtr session, Pointer<Utf8> scriptB64);
+typedef IshWriteStdinDart = void Function(
+    IshSessionPtr session, Pointer<Utf8> scriptB64);
+
+typedef IshPollC = Int32 Function(IshSessionPtr session);
+typedef IshPollDart = int Function(IshSessionPtr session);
+
+typedef IshReadC = Int32 Function(
+    IshSessionPtr session, Pointer<Uint8> buf, Int32 cap);
+typedef IshReadDart = int Function(
+    IshSessionPtr session, Pointer<Uint8> buf, int cap);
 
 typedef IshInterruptC = Void Function(IshSessionPtr session);
 typedef IshInterruptDart = void Function(IshSessionPtr session);
@@ -89,7 +68,10 @@ typedef IshFakefsifyDart = int Function(Pointer<Utf8> archive, Pointer<Utf8> int
 
 // The lazy lookups. Null until first use, and only ever resolved on iOS.
 IshInitDart? _initFn;
-IshRunDart? _runFn;
+IshDrainWakeDart? _drainWakeFn;
+IshWriteStdinDart? _writeStdinFn;
+IshPollDart? _pollFn;
+IshReadDart? _readFn;
 IshInterruptDart? _interruptFn;
 IshHangupDart? _hangupFn;
 IshDestroyDart? _destroyFn;
@@ -103,7 +85,12 @@ void _resolve() {
   if (!ishLinked) return;
   final lib = DynamicLibrary.process();
   _initFn = lib.lookupFunction<IshInitC, IshInitDart>("ish_session_init");
-  _runFn = lib.lookupFunction<IshRunC, IshRunDart>("ish_session_run");
+  _drainWakeFn = lib.lookupFunction<IshDrainWakeC, IshDrainWakeDart>(
+      "ish_session_drain_wake");
+  _writeStdinFn = lib.lookupFunction<IshWriteStdinC, IshWriteStdinDart>(
+      "ish_session_write_stdin");
+  _pollFn = lib.lookupFunction<IshPollC, IshPollDart>("ish_session_poll");
+  _readFn = lib.lookupFunction<IshReadC, IshReadDart>("ish_session_read");
   _interruptFn =
       lib.lookupFunction<IshInterruptC, IshInterruptDart>("ish_session_interrupt");
   _hangupFn =
@@ -126,10 +113,29 @@ IshInitDart? get ishInitFn {
   return _initFn;
 }
 
-/// The resolved run function, or null.
-IshRunDart? get ishRunFn {
+/// The resolved run-side functions, or null. Each is one step the worker's
+/// own loop takes — drain, write the command, poll between chunks, read —
+/// where the bridge's `ish_session_run` was one parked call for the whole
+/// command; splitting it is what lets the command's output reach the run's
+/// watch while it runs. Called from the background isolate.
+IshDrainWakeDart? get ishDrainWakeFn {
   _resolve();
-  return _runFn;
+  return _drainWakeFn;
+}
+
+IshWriteStdinDart? get ishWriteStdinFn {
+  _resolve();
+  return _writeStdinFn;
+}
+
+IshPollDart? get ishPollFn {
+  _resolve();
+  return _pollFn;
+}
+
+IshReadDart? get ishReadFn {
+  _resolve();
+  return _readFn;
 }
 
 /// The resolved interrupt function, or null.

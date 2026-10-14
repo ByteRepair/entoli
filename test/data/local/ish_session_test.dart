@@ -1,5 +1,6 @@
 import "dart:async" show Completer;
 import "dart:convert" show base64, utf8;
+import "dart:typed_data" show Uint8List;
 
 import "package:fake_async/fake_async.dart";
 import "package:flutter_test/flutter_test.dart";
@@ -99,6 +100,33 @@ void main() {
       });
     });
 
+    test("a timeout the guest honours leaves the session standing", () {
+      fakeAsync((async) async {
+        final fake = FakeIshTransport();
+        final shell = ishShell(fake);
+        final run = shell.start("sleep 60",
+            cwd: cwd, home: home, timeout: const Duration(seconds: 2));
+        async.flushMicrotasks();
+        // The guest answered within the escalation's second: rc 130, the
+        // trap's doing, the interrupt honoured.
+        async.elapse(const Duration(seconds: 2));
+        expect((await run.result).returnCode, 130);
+        // The escalation's second runs out against an answered run, and the
+        // session keeps its life, cd and exports with it — a stop and a
+        // timeout agree here, unlike LocalShell, whose timeout kills the
+        // group at the command's own sentinel.
+        async.elapse(const Duration(seconds: 1));
+        expect(fake.hangups, isEmpty);
+        expect(fake.destroys, isEmpty);
+        // The next command is served by that same session, not a cold start.
+        shell.start("echo hi",
+            cwd: cwd, home: home, timeout: const Duration(minutes: 5));
+        async.flushMicrotasks();
+        expect(fake.inits.length, 1);
+        expect(fake.runs.length, 2);
+      });
+    });
+
     test("a command after a hung-up run starts a session cold", () {
       fakeAsync((async) async {
         final fake = FakeIshTransport()..interruptEnds = false;
@@ -114,6 +142,69 @@ void main() {
         async.flushMicrotasks();
         expect(fake.inits.length, 2);
         expect(fake.runs.length, 2);
+      });
+    });
+
+    test("the gate's ask is answered in the host's words, not the guest's",
+        () async {
+      final fake = FakeIshTransport();
+      final shell = ishShell(fake);
+      Future<void> settle(String command, ShellResult result) async {
+        final run = shell.start(command,
+            cwd: cwd, home: home, timeout: const Duration(minutes: 5));
+        await Future<void>.delayed(Duration.zero);
+        fake._settle(fake.pendingSessions.single, result);
+        await run.result;
+      }
+
+      // No session yet: nothing of the shell's to map, and the gate falls
+      // back to the workspace it was handed.
+      expect(shell.sessionCwdInHostWords(cwd), isNull);
+
+      await settle("pwd",
+          const ShellResult(returnCode: 0, output: "", cwd: "/root/chats/cb764c2a"));
+      expect(shell.sessionCwdInHostWords(cwd), "/ws/chats/cb764c2a");
+
+      // A `cd` outside the binding names no place on the host to walk from.
+      await settle("cd /tmp; pwd",
+          const ShellResult(returnCode: 0, output: "", cwd: "/tmp"));
+      expect(shell.sessionCwdInHostWords(cwd), isNull);
+    });
+
+    test("a command's output is streamed while it runs", () {
+      fakeAsync((async) async {
+        final fake = FakeIshTransport();
+        final shell = ishShell(fake);
+        final run = shell.start("echo hello",
+            cwd: cwd, home: home, timeout: const Duration(minutes: 5));
+        async.flushMicrotasks();
+        final output = run.output;
+        expect(output, isNotNull);
+        fake.emit(fake.lastSession!, "hello");
+        async.flushMicrotasks();
+        expect(output!.value, "hello");
+        expect(fake.destroys, isEmpty);
+        await run.kill();
+        // The command's words already shown keep their place through the
+        // stop, as the host shell's do.
+        expect(output.value, "hello");
+        expect((await run.result).returnCode, 130);
+      });
+    });
+
+    test("a run nobody watches keeps its output off", () {
+      fakeAsync((async) async {
+        final fake = FakeIshTransport();
+        final shell = ishShell(fake);
+        final run = shell.start("echo hello",
+            cwd: cwd, home: home, timeout: const Duration(minutes: 5));
+        async.flushMicrotasks();
+        fake.emit(fake.lastSession!, "hello");
+        async.flushMicrotasks();
+        // The ask that follows does not backfill what nobody was there to
+        // see — the same gate LocalShell's runs keep.
+        expect(run.output!.value, isNull);
+        expect(fake.hangups, isEmpty);
       });
     });
 
@@ -208,6 +299,116 @@ void main() {
         expect(fake.runs, isEmpty);
         expect(fake.destroys, isEmpty);
       });
+    });
+  });
+
+  group("the marker feed", () {
+    const token = "TOK";
+    // The dispatcher's shape, domain/shell's, with this feed's token.
+    marker(int rc, String cwd) => "\n@@E$token rc=$rc cwd=$cwd@@\n";
+    IshRunBuffer feed(void Function(String) onDelta) =>
+        IshRunBuffer(token: token, onDelta: onDelta);
+    late List<String> deltas;
+    late IshRunBuffer buf;
+
+    setUp(() {
+      deltas = [];
+      buf = feed((d) => deltas.add(d));
+    });
+
+    test("the output before the marker streams, and only it", () {
+      buf.add(Uint8List.fromList(utf8.encode("hello\n${marker(0, "/ws")}")));
+      buf.finish();
+      // The command's own newline belongs to the output; only the marker's
+      // shape stops it, as the bridge's cut did.
+      expect(deltas, ["hello\n"]);
+      expect(buf.done, isTrue);
+      final result = buf.finish();
+      expect(result.returnCode, 0);
+      expect(result.cwd, "/ws");
+      expect(result.output, "hello\n");
+      expect(result.exceptionInfo, isNull);
+    });
+
+    test("a marker split across reads waits, then answers", () {
+      buf.add(Uint8List.fromList(utf8.encode("out\n@@E")));
+      buf.add(Uint8List.fromList(utf8.encode("TOK rc=2 cwd=")));
+      // The shape is open but the bytes cannot tell whose it is yet.
+      expect(deltas, ["out"]);
+      buf.add(Uint8List.fromList(utf8.encode("/r@@\n")));
+      expect(buf.done, isTrue);
+      final result = buf.finish();
+      expect(result.returnCode, 2);
+      expect(result.cwd, "/r");
+      expect(result.output, "out");
+      // No marker byte ever reached the watch.
+      expect(deltas.where((d) => d.contains("@@E")), isEmpty);
+    });
+
+    test("a foreign token's line is dropped with the line it ends on", () {
+      buf.add(Uint8List.fromList(
+          utf8.encode("keep\n@@EFOREIGN rc=1 cwd=/x@@\nafter")));
+      buf.finish();
+      // The output before the line and after the line both streamed; the
+      // foreign marker's own words did not.
+      expect(deltas.join(), "keep\nafter");
+      final result = buf.finish();
+      expect(result.exceptionInfo, contains("did not complete"));
+      expect(result.output, "keep\nafter");
+    });
+
+    test("an unterminated foreign line waits for its newline, then drops", () {
+      buf.add(Uint8List.fromList(utf8.encode("keep\n@@EFOREIGN rc=1")));
+      // Held whole: the line may yet complete, and dropping now would leak
+      // its remainder when the rest arrives as an unrecognizable chunk.
+      expect(deltas, isEmpty);
+      buf.add(Uint8List.fromList(utf8.encode(" cwd=/x@@\nafter")));
+      expect(deltas.join(), "keep\nafter");
+    });
+
+    test("a marker prefix held from one read is completed by the next", () {
+      buf.add(Uint8List.fromList(utf8.encode("hello\n")));
+      // The trailing newline could still open the marker, so it waits.
+      expect(deltas, ["hello"]);
+      buf.add(Uint8List.fromList(utf8.encode("@@ETOK rc=0 cwd=/ws@@\n")));
+      expect(deltas.join(), "hello");
+      final result = buf.finish();
+      expect(result.returnCode, 0);
+      expect(result.output, "hello");
+    });
+
+    test("a UTF-8 sequence split across reads never shows broken", () {
+      // "héllo" with the é split mid-sequence between the two reads.
+      final bytes = utf8.encode("héllo");
+      buf.add(Uint8List.fromList(bytes.sublist(0, 2)));
+      buf.add(Uint8List.fromList(bytes.sublist(2)));
+      buf.add(Uint8List.fromList(utf8.encode(marker(0, "/ws"))));
+      buf.finish();
+      expect(deltas.join(), "héllo");
+      expect(deltas.join().contains("\u{FFFD}"), isFalse);
+      expect(buf.finish().output, "héllo");
+    });
+
+    test("the reply caps at its head while the marker still lands", () {
+      final big = Uint8List.fromList(utf8.encode("a" * 70000));
+      buf.add(big);
+      buf.add(Uint8List.fromList(utf8.encode(marker(3, "/ws"))));
+      buf.finish();
+      final result = buf.finish();
+      expect(result.returnCode, 3);
+      expect(result.cwd, "/ws");
+      expect(result.output.length, lessThanOrEqualTo(65536));
+      // The watch kept streaming every byte; only the reply is capped.
+      expect(deltas.join().length, greaterThanOrEqualTo(70000));
+    });
+
+    test("a run the marker never reaches answers did-not-complete", () {
+      buf.add(Uint8List.fromList(utf8.encode("partial\n")));
+      final result = buf.finish();
+      expect(result.returnCode, -1);
+      expect(result.exceptionInfo, contains("did not complete"));
+      expect(result.output, "partial\n");
+      expect(deltas.join(), "partial\n");
     });
   });
 
@@ -341,11 +542,20 @@ class FakeIshTransport implements IshTransport {
     required int sessionId,
     required String scriptB64,
     required Duration timeout,
+    void Function(String)? onOutput,
   }) {
     runs.add(scriptB64);
+    if (onOutput != null) sinks[sessionId] = onOutput;
     final c = pending.putIfAbsent(sessionId, Completer.new);
     return c.future;
   }
+
+  /// What the test feeds a pending command as live output, the way the
+  /// worker's chunks would land: nothing unless a watch exists, which is the
+  /// run's own ask.
+  void emit(int sessionId, String text) => sinks[sessionId]?.call(text);
+
+  final Map<int, void Function(String)> sinks = {};
 
   @override
   void interrupt(int handle) {
@@ -366,6 +576,7 @@ class FakeIshTransport implements IshTransport {
   void destroy(int sessionId) {
     destroys.add(sessionId);
     pending.remove(sessionId);
+    sinks.remove(sessionId);
   }
 
   @override
