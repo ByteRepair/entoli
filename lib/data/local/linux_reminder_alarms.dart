@@ -6,10 +6,8 @@ import "../../core/log.dart";
 import "../../domain/reminder_alarms.dart";
 
 /// What a session-bus round trip may take before it is said to have failed:
-/// the probe one shot at launch, a post one pass on the scheduler's fire path.
+/// the probe one shot at launch; a post's patience is the port's.
 const _probeTimeout = Duration(seconds: 5);
-const _notifyTimeout = Duration(seconds: 10);
-
 /// What the notifications half of the session bus does, as far as the alarms
 /// care: post one, and hear when one of its actions was taken. The port keeps
 /// the rest of `org.freedesktop.Notifications` behind this seam, which is what
@@ -168,7 +166,8 @@ class LinuxReminderAlarms implements ReminderAlarms {
   Future<void> requestNotifications() async {}
 
   @override
-  Future<void> schedule(int requestCode, DateTime at, {String? calendar}) async {}
+  Future<void> schedule(int requestCode, DateTime at,
+      {String? calendar, String? label, String? chatId}) async {}
 
   @override
   Future<void> cancel(int requestCode) async {}
@@ -201,7 +200,7 @@ class LinuxReminderAlarms implements ReminderAlarms {
       final id = await _bus.notify(title, body, actions, replacesId: replacesId)
           // A bus that accepts and never answers would hold the scheduler's
           // fire path forever; said rather than waited for.
-          .timeout(_notifyTimeout);
+          .timeout(ReminderAlarms.notifyTimeout);
       if (chatId != null) {
         _chats[id] = chatId;
         _ids[chatId] = id;

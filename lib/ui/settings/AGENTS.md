@@ -95,7 +95,9 @@ why iOS draws the mode and the language and nothing else. It keeps a file of its
 every other file here is one subject; see "Being the assistant". **Triggers**
 is drawn where the port is available — Android fires a schedule with the app
 closed, macOS wakes it through launchd (both answer `schedules` yes; see
-"Waking for a trigger" in `macos/AGENTS.md`), Linux notifies what a trigger
+"Waking for a trigger" in `macos/AGENTS.md`), iOS delivers the moment a
+notification whose turn runs at the next open (`schedules` yes too; see
+"Triggers" in `ios/AGENTS.md`), Linux notifies what a trigger
 did but cannot wake the process, and the page's description says which
 (`ReminderAlarms.schedules` is the question) — and where the port is
 unavailable it says so and offers nothing, the way a row

@@ -192,3 +192,47 @@ not used here: the agent's workspace is the app's own data dir, which needs none
 of that. It is reserved for a future optional feature, and reusing it would mean
 substituting Entoli's own view controller for the `currentTerminalViewController`
 iSH's shell expects as the picker's presenter.
+
+## Triggers
+
+iOS refuses the process wake every other scheduling clock is — AlarmManager,
+launchd — and a scheduled local notification runs no code. What the platform
+does have is the due-moment notification, and that is what the clock is:
+`IosReminderAlarms` (`lib/data/local/ios_reminder_alarms.dart`) behind
+`agent_chat/reminders` and `RemindersPlugin.swift`. A one shot or a timer arms
+a `UNTimeIntervalNotificationTrigger`; a repeating schedule arms a
+`UNCalendarNotificationTrigger` on the repeat's components — wall-clock
+anchored and coalescing what a sleep swallows, the property the `calendar`
+parameter of `ReminderAlarms.schedule` exists for launchd's sake. The arm
+carries the trigger's label and chat id, because the notification's title and
+tap route are fixed at arm time: nothing composes them later, there being no
+process to compose them in.
+
+`schedules` answers true — the system clock does deliver the moment with the
+process dead — which is also what arms `ClockKind`'s diff. The turn itself
+runs at the next open: the launch catch-up every missed fire already lands
+in, worded "Ran late" where the wait was long. A tap of either notification
+is a launch: `didReceive` stashes the chat id the pendingOpen split holds
+until Dart's first `takeOpenChat` drain, the macOS plugin's shape. There is
+no fire half — `fired` is empty, `takeFired` answers nothing, `doneFiring`
+was holding nothing. `exactAllowed` answers true (there is no exact-alarm
+permission to deny; authorization is the one gate and `notificationsAllowed`
+asks it), and `canHoldTurn` answers the foreground state: a fire claimed in
+the brief window after backgrounding is handed back and re-armed a
+notification rather than half-run.
+
+The prune is `getPendingNotificationRequests`: the centre enumerates its own
+requests, so `staleCodes` answers the arm codes nothing wants, and `cancel`
+clears the code's delivered notification beside the pending one — leaving a
+delivered one behind says a trigger is there when its tap runs catch-up to
+nothing. Identifiers are namespaced, `trigger.<code>` for an arm and
+`chat.<id>` for a completion post, so the stale parse never sees a
+completion's.
+
+Coverage is the simulator hand-run — the suite holds no Swift tests, like
+voice's receipt elsewhere here was the device's. The recipe: create a trigger
+a minute out, background or kill the app and wait for the delivery, then tap
+it and watch the catch-up run with the completion notification following.
+With the app foreground instead the arm stays quiet — `willPresent` shows
+none of it, the app's own clock running that fire a moment behind the
+system's — and the completion banner answers.
