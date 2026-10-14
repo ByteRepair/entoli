@@ -117,6 +117,32 @@ void main() {
       });
     });
 
+    test("the gate's ask is answered in the host's words, not the guest's",
+        () async {
+      final fake = FakeIshTransport();
+      final shell = ishShell(fake);
+      // No session yet: nothing of the shell's to map, and the gate falls
+      // back to the workspace it was handed.
+      expect(shell.sessionCwdInHostWords(cwd), isNull);
+
+      final run = shell.start("pwd",
+          cwd: cwd, home: home, timeout: const Duration(minutes: 5));
+      await Future<void>.delayed(Duration.zero);
+      fake._settle(fake.pendingSessions.single, const ShellResult(
+          returnCode: 0, output: "", cwd: "/root/chats/cb764c2a"));
+      await run.result;
+      expect(shell.sessionCwdInHostWords(cwd), "/ws/chats/cb764c2a");
+
+      // A `cd` outside the binding names no place on the host to walk from.
+      final again = shell.start("cd /tmp; pwd",
+          cwd: cwd, home: home, timeout: const Duration(minutes: 5));
+      await Future<void>.delayed(Duration.zero);
+      fake._settle(fake.pendingSessions.single,
+          const ShellResult(returnCode: 0, output: "", cwd: "/tmp"));
+      await again.result;
+      expect(shell.sessionCwdInHostWords(cwd), isNull);
+    });
+
     test("an init that fails completes the run failed", () {
       fakeAsync((async) async {
         final fake = FakeIshTransport()..initError = "no rootfs";

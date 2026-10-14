@@ -364,6 +364,15 @@ abstract class Shell {
   /// spoken seeds nothing. The composer's bar is what asks.
   ValueListenable<String?>? sessionCwd(String cwd, {String? home}) => null;
 
+  /// Where the session for [cwd] stands, in the host's own words: what a walk
+  /// of the machine's filesystem — the command gate's repo discovery among
+  /// them — starts from. [sessionCwd]'s notifier carries the shell's own
+  /// words for where it stands, and a guest's words name nothing on the
+  /// host, so the two answers part company where this shell runs a guest.
+  /// Null where the session has not reported yet, which the caller falls
+  /// back to [cwd] itself for.
+  String? sessionCwdInHostWords(String cwd) => sessionCwd(cwd)?.value;
+
   /// End [cwd]'s persistent shell, where this one runs them. A no-op where it
   /// does not. Called when the chat the shell belongs to is deleted or leaves
   /// its project: a shell standing in a directory that is gone — or moving —

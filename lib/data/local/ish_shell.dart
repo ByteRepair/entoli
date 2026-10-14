@@ -171,6 +171,15 @@ class IshShell extends Shell {
     _sessions.remove(cwd)?.close();
   }
 
+  /// Where the session's own report names, mapped back through the binding:
+  /// the gate's repo discovery walks the host, not the guest, and the shell's
+  /// live words for where it stands are the guest's.
+  @override
+  String? sessionCwdInHostWords(String cwd) {
+    final session = _sessions[cwd];
+    return session?._hostWords();
+  }
+
   Map<String, String> _compose({
     Map<String, String>? extra,
   }) =>
@@ -207,6 +216,12 @@ class _IshSession {
   /// interrupt and hangup below are delivered from this isolate over it — the
   /// worker cannot deliver either while it is parked in its read.
   int _handle = 0;
+
+  /// Where the guest says the shell is standing, in the guest's own words —
+  /// the session's start until a run's marker moves it. What
+  /// [IshShell.sessionCwdInHostWords] maps back, and what a guest-path
+  /// report falls back to when it carries no directory of its own.
+  String? _standing;
   Future<void> _queue = Future.value();
   _IshRun? _current;
   final List<_IshRun> _runs = [];
@@ -254,6 +269,7 @@ class _IshSession {
         }
         _sessionId = sessionId;
         _handle = handle;
+        _standing = _guestCwd;
         _shell._cwds[_cwdPath]?.value = _guestCwd;
       } catch (e) {
         run.state.complete(ShellResult.failed(
@@ -275,6 +291,7 @@ class _IshSession {
       _current = null;
       run.state.timeoutTimer?.cancel();
       if (!run.state.byTimeout) run.state.escalateTimer?.cancel();
+      _standing = result.cwd ?? _guestCwd;
       _shell._cwds[_cwdPath]?.value = result.cwd ?? _guestCwd;
       run.state.complete(result);
     } catch (e) {
@@ -317,6 +334,23 @@ class _IshSession {
     // away rather than never. The handle's freeing stays the destroy's.
     if (handle != 0) _shell.transport.hangup(handle);
     if (id != null) _shell.transport.destroy(id);
+  }
+
+  /// Where the session stands, in the host's own words: the guest path its
+  /// report names, mapped back through the binding the bridge makes — /root
+  /// at the project workspace, [guestWorkspacePath]'s other direction. Null
+  /// where the report is not under the root at all, which a `cd` outside the
+  /// workspace is: the machine has no path to name there.
+  String? _hostWords() {
+    final standing = _standing;
+    if (standing == null) return null;
+    final root = _shell.guestRoot;
+    if (root == null) return null;
+    if (standing != root && !standing.startsWith("$root/")) return null;
+    final suffix = standing.length > root.length
+        ? standing.substring(root.length)
+        : "";
+    return "$_workspaceHome$suffix";
   }
 
   Future<void> close() {

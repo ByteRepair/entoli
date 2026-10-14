@@ -2435,7 +2435,8 @@ class BuiltinAgent {
                         CommandGrantsInput(
                           fs: fs,
                           start:
-                              shell.sessionCwd(workspace)?.value ?? workspace,
+                              shell.sessionCwdInHostWords(workspace) ??
+                              workspace,
                           home: shell.machineHome,
                           segments: analysis!.modelableSegments ?? const [],
                         )))
@@ -2483,7 +2484,10 @@ class BuiltinAgent {
   ) async {
     final segments = analysis.modelableSegments;
     if (segments == null || segments.isEmpty) return null;
-    final cwd = shell.sessionCwd(workspace)?.value ?? workspace;
+    // The host's own words for where the command runs: a guest's are the
+    // only ones the shell's live report carries, and a walk of the machine
+    // has no directory at that name to start from.
+    final cwd = shell.sessionCwdInHostWords(workspace) ?? workspace;
     final grants = await commandGrantsFor(CommandGrantsInput(
         fs: fs, start: cwd, home: shell.machineHome, segments: segments));
     final tiers = <PermissionTier>{};
