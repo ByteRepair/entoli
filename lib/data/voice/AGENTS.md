@@ -174,7 +174,7 @@ below.
 page offers either way: an install — RHVoice or eSpeak NG for speaking, FUTO
 VoiceInput for hearing — or a downloaded model from the catalog, which every
 platform sherpa runs on draws beside the engines; iOS offers no install, which
-is why its `hasSystemEngines` stays false and the block is Android's alone.
+is why its `hasEngineInstalls` stays false and the block is Android's alone.
 `_MissingEngines` in `voice_settings.dart` is the engines' half said on the
 page, with the links, drawn from whether the device has them — and, for the
 recognizer, from whether the system's pick has been made. Nothing has to be
@@ -193,7 +193,7 @@ of those had to consult, and the one that forgot would be wrong silently.
 `VoiceModel.isNative` is the whole of the routing, and it reads `engine` — the
 field that already decides what runs a model, rather than a second id constant
 beside it. `AndroidVoice.start` routes on it **per half**: a sentinel
-recognition pick builds `AndroidSpeechRecognizer`, a downloaded one builds the
+recognition pick builds `NativeSpeechRecognizer`, a downloaded one builds the
 same `SherpaListener` the desktops use (the `SherpaVoice` it holds, whose
 `sherpaListener`/`sherpaSpeaker` are what both platforms compose their halves
 through), and the speech half answers the same way — so the four pairings all
@@ -594,7 +594,7 @@ touched from the main one. Everything Dart hears goes through `send`, which
 posts. Invoked where it happened it would be a crash in the one path nothing on
 a desktop exercises.
 
-`AndroidVoiceBridge` is the Dart mirror of the same constraint from the other
+`NativeVoiceBridge` is the Dart mirror of the same constraint from the other
 end: `setMethodCallHandler` takes one handler and two strategies each setting
 one would leave the second overwriting the first, so the bridge owns the handler
 and the strategies register callbacks on it.

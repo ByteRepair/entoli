@@ -64,7 +64,7 @@ class VoiceSection extends ConsumerWidget {
         _SpeakerField(settings: settings),
         _LanguageField(settings: settings),
         if (canListen) const _TouchToSpeak(),
-        if (voice.hasSystemEngines) _MissingEngines(installed: installed),
+        if (voice.hasEngineInstalls) _MissingEngines(installed: installed),
       ],
     );
   }

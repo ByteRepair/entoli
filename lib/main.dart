@@ -170,8 +170,10 @@ class AppSession {
     // a downloaded model, so it goes in the same set — see [InstalledVoiceModels].
     final picks = voice.nativePicks;
     final system = {
-      if (picks != null && engines.recognition) picks.recognition,
-      if (picks != null && engines.speech) picks.speech,
+      if (picks case (:final recognition, :final speech)) ...[
+        if (engines.recognition) recognition,
+        if (engines.speech) speech,
+      ],
     };
     final installed = {...await scan, ...system};
     // Read here for the reason the voice models are: the Terminal and On-device

@@ -80,8 +80,7 @@ class VoiceChannel: NSObject {
         "speech": !AVSpeechSynthesisVoice.speechVoices().isEmpty,
       ])
     case "languages":
-      computeLanguages()
-      result(languages)
+      computeLanguages { result($0) }
     case "setRecognitionListening":
       let args = call.arguments as? [String: Any] ?? [:]
       setListening(on: args["on"] as? Bool ?? false,
@@ -112,28 +111,46 @@ class VoiceChannel: NSObject {
     }
   }
 
+  /// Everything Dart hears goes through here: a `MethodChannel` may be
+  /// touched from the platform thread only, and callers — the audio tap, the
+  /// speech delegate — are not always on it. Where one already is, no hop.
   private func send(_ method: String, _ arguments: Any? = nil) {
-    DispatchQueue.main.async { [weak self] in
-      self?.channel.invokeMethod(method, arguments: arguments)
+    guard Thread.isMainThread else {
+      DispatchQueue.main.async { [weak self] in
+        self?.channel.invokeMethod(method, arguments: arguments)
+      }
+      return
     }
+    channel.invokeMethod(method, arguments: arguments)
   }
 
-  // What both halves can hear and say on-device, which is the intersection of
-  // what the Speech framework can do without a server and what the system can
-  // speak. Computed once: the answer moves with OS model packs, and the next
-  // launch asks again.
-  private func computeLanguages() {
-    if languages != nil { return }
-    var heard: Set<String> = []
-    for locale in SFSpeechRecognizer.supportedLocales() {
-      if let recognizer = SFSpeechRecognizer(locale: locale),
-         recognizer.supportsOnDeviceRecognition {
-        heard.insert(locale.identifier)
-      }
+  /// What both halves can hear and say on-device, which is the intersection of
+  /// what the Speech framework can do without a server and what the system can
+  /// speak. Asked off the platform thread — the sweep is one recognizer
+  /// construction per supported locale and this thread is the settings
+  /// page's — answered once; the next launch asks again, the answer moving
+  /// with OS model packs.
+  private func computeLanguages(_ answer: @escaping ([[String: String]]) -> Void) {
+    if let languages {
+      answer(languages)
+      return
     }
-    let spoken = Set(AVSpeechSynthesisVoice.speechVoices().map(\.language))
-    languages = heard.intersection(spoken).sorted().map {
-      ["tag": $0, "name": Locale.current.localizedString(forIdentifier: $0) ?? $0]
+    DispatchQueue.global().async { [weak self] in
+      var heard: Set<String> = []
+      for locale in SFSpeechRecognizer.supportedLocales() {
+        if let recognizer = SFSpeechRecognizer(locale: locale),
+           recognizer.supportsOnDeviceRecognition {
+          heard.insert(locale.identifier)
+        }
+      }
+      let spoken = Set(AVSpeechSynthesisVoice.speechVoices().map(\.language))
+      let computed = heard.intersection(spoken).sorted().map {
+        ["tag": $0, "name": Locale.current.localizedString(forIdentifier: $0) ?? $0]
+      }
+      DispatchQueue.main.async {
+        self?.languages = computed
+        answer(computed)
+      }
     }
   }
 
@@ -200,18 +217,13 @@ class VoiceChannel: NSObject {
 
     let newRequest = SFSpeechAudioBufferRecognitionRequest()
     newRequest.shouldReportPartialResults = true
-#if targetEnvironment(simulator)
-    // The simulator ships no dictation assets, and the recognizer will not
-    // initialize without them in any mode — network included — so this flag
-    // is inert there and the task fails with kLSRErrorDomain 300 either way.
-    // It is kept explicit so the device-side invariant below reads as the
-    // deliberate one it is; the voice hand-run is a real device's.
-    newRequest.requiresOnDeviceRecognition = false
-#else
-    // On-device only: the network rung Android walks is deliberately absent,
-    // and the languages answer is what keeps an unsupported locale from here.
+    // On-device only, in every build: the network rung Android walks is
+    // deliberately absent, and the languages answer is what keeps an
+    // unsupported locale from here. The simulator has no carve-out for this
+    // flag — it ships no dictation assets at all, so the recognizer fails to
+    // initialize there in any mode (`kLSRErrorDomain` 300); the voice hand-run
+    // is a real device's.
     newRequest.requiresOnDeviceRecognition = true
-#endif
     request = newRequest
     self.recognizer = recognizer
     hasPartial = false

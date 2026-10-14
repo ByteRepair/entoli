@@ -268,6 +268,8 @@ class FakeBackupHandoff implements BackupHandoff {
 /// Kotlin noticed before Dart was listening — the gesture that started the app
 /// — and [launch] is one arriving while it is already up.
 class FakeAssistantLaunch implements AssistantLaunch {
+  FakeAssistantLaunch({this.hasGesture = true});
+
   /// A launch waiting to be claimed. Taken once, the way the real one is.
   bool pending = false;
 
@@ -276,10 +278,10 @@ class FakeAssistantLaunch implements AssistantLaunch {
   @override
   Stream<void> get launched => _arrived.stream;
 
-  /// The fake is an Android: the gesture exists, so the settings section
-  /// draws, which is what every existing test expects of the default.
+  /// False is where no gesture exists — an iOS — and the settings section
+  /// hides; true, every existing test's default, is an Android.
   @override
-  bool get hasGesture => true;
+  final bool hasGesture;
 
   @override
   Future<bool> take() async {
@@ -828,17 +830,17 @@ class FakeChatStore implements ChatStore {
 class FakeVoice extends Voice {
   FakeVoice({
     this.available = true,
-    this.hasSystemEngines = true,
+    this.hasEngineInstalls = true,
     this.hasModelCatalog = true,
   });
 
   @override
   final bool available;
 
-  /// False is a browser: no engines to be missing, so no missing-engine block.
-  /// True is Android, where the catalog draws beside them.
+  /// False is a browser: no engine installs to offer, so no missing-engine
+  /// block. True is Android, the one platform the block is drawn for.
   @override
-  final bool hasSystemEngines;
+  final bool hasEngineInstalls;
 
   /// False is an iPhone: the engines are the whole of what can listen and
   /// speak, so the settings page draws neither list.

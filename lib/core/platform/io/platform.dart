@@ -530,12 +530,11 @@ void platformRegisterRecorder() {
 /// model is, so it wants the store either way — see [AndroidVoice]. iOS has
 /// Apple's own engines only and nothing to download — see [IosVoice] — so it
 /// wants neither.
-Voice platformVoice(VoiceModelStore store, String cacheDir) =>
-    Platform.isAndroid
-        ? AndroidVoice(store, cacheDir)
-        : Platform.isIOS
-            ? const IosVoice()
-            : SherpaVoice(store, cacheDir);
+Voice platformVoice(VoiceModelStore store, String cacheDir) {
+  if (Platform.isAndroid) return AndroidVoice(store, cacheDir);
+  if (Platform.isIOS) return const IosVoice();
+  return SherpaVoice(store, cacheDir);
+}
 
 /// Nothing to ask for: a directory on this machine is already as durable as
 /// the app is.

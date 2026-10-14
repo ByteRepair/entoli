@@ -20,13 +20,6 @@ import "voice_strategies.dart";
 class IosVoice extends Voice {
   const IosVoice();
 
-  /// Nothing installable is what the missing-engine block offers, which is
-  /// why it is Android's: a denied permission here surfaces where it
-  /// happened, as the start's own failure on the voice screen, and the next
-  /// launch re-probes.
-  @override
-  bool get hasSystemEngines => false;
-
   @override
   bool get hasModelCatalog => false;
 
@@ -35,38 +28,18 @@ class IosVoice extends Voice {
       (recognition: iosRecognition.id, speech: iosSpeech.id);
 
   @override
-  Future<NativeVoiceEngines> systemEngines() async {
-    try {
-      final answer = await voiceChannel.invokeMapMethod<String, bool>("engines");
-      if (answer == null) return NativeVoiceEngines.none;
-      return NativeVoiceEngines(
-        recognition: answer["recognition"] ?? false,
-        speech: answer["speech"] ?? false,
-      );
-    } catch (_) {
-      return NativeVoiceEngines.none;
-    }
-  }
+  Future<NativeVoiceEngines> systemEngines() => probeNativeEngines();
 
   /// What Apple's engines can hear and speak **on-device**, which is the
-  /// narrower answer than Android's synthesiser-only list: a locale either
-  /// half cannot do without the network does not reach the picker.
+  /// narrower answer than Android's synthesiser-only list — the slower one
+  /// too, hence the longer wait: the sweep is a recognizer per supported
+  /// locale. A locale either half cannot do without the network does not
+  /// reach the picker.
   @override
-  Future<List<VoiceLanguage>> systemLanguages() async {
-    try {
-      final answer = await voiceChannel
-          .invokeListMethod<Map<Object?, Object?>>("languages")
-          .timeout(const Duration(seconds: 10));
-      return [
-        for (final language in answer ?? const <Map<Object?, Object?>>[])
-          if (language["tag"] case final String tag when tag.isNotEmpty)
-            VoiceLanguage(tag: tag, name: language["name"] as String? ?? tag),
-      ];
-    } catch (e) {
-      voiceFailed("the device would not say what it can hear and speak: $e");
-      return const [];
-    }
-  }
+  Future<List<VoiceLanguage>> systemLanguages() => nativeLanguages(
+        timeout: const Duration(seconds: 10),
+        failure: "the device would not say what it can hear and speak",
+      );
 
   @override
   Future<VoiceSession> start({
@@ -75,7 +48,6 @@ class IosVoice extends Voice {
     int speaker = 0,
     String? language,
   }) async {
-    // one that fails loudly.
     if (recognition?.isNative == false || !speech.isNative) {
       throw StateError("iOS has no downloaded voice models.");
     }

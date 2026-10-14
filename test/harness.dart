@@ -38,7 +38,6 @@ import "package:agent_chat/domain/prompt_library.dart";
 import "package:agent_chat/domain/trigger.dart";
 import "package:agent_chat/domain/shell.dart";
 import "package:agent_chat/domain/temp_chat_ttl.dart";
-import "package:agent_chat/domain/assistant_launch.dart";
 import "package:agent_chat/domain/voice.dart";
 import "package:agent_chat/providers.dart";
 import "package:agent_chat/ui/chat/chat_controller.dart";
@@ -189,9 +188,7 @@ class TestApp {
     final picker = FakeAttachmentPicker();
     final launcher = FakeLauncherIcons(available: launcherIcons);
     final files = handoff ?? FakeFileHandoff();
-    final assist = FakeAssistantLaunch();
-    final assistLaunch =
-        assistantGesture ? assist : const UnavailableAssistantLaunch();
+    final assist = FakeAssistantLaunch(hasGesture: assistantGesture);
     final alarms = reminderAlarms ?? FakeReminderAlarms(available: false);
     // Pinned so a trigger's fire time is not judged against the wall clock
     // the suite happens to run on. A test that needs a different now passes
@@ -256,7 +253,7 @@ class TestApp {
           appUpdateHostProvider.overrideWithValue(updateHost),
           systemAccentProvider.overrideWithValue(systemAccent),
           fileHandoffProvider.overrideWithValue(files),
-          assistantLaunchProvider.overrideWithValue(assistLaunch),
+          assistantLaunchProvider.overrideWithValue(assist),
           reminderAlarmsProvider.overrideWithValue(alarms),
           appHiddenProvider.overrideWith(() => _AppHidden(appHidden)),
           triggersProvider.overrideWith(() => Triggers(triggers)),

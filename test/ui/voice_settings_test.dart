@@ -298,7 +298,7 @@ void main() {
       List<VoiceLanguage> speaks = const [],
     }) async {
       app = TestApp.create(
-        voice: FakeVoice(hasSystemEngines: false, hasModelCatalog: false)
+        voice: FakeVoice(hasEngineInstalls: false, hasModelCatalog: false)
           ..nativePicks = (recognition: iosRecognition.id, speech: iosSpeech.id)
           ..languages = speaks,
         nativeVoice: const NativeVoiceEngines(recognition: true, speech: true),

@@ -37,23 +37,10 @@ class AndroidVoice extends Voice {
   final SherpaVoice _sherpa;
 
   @override
-  bool get hasSystemEngines => true;
+  bool get hasEngineInstalls => true;
 
   @override
-  Future<NativeVoiceEngines> systemEngines() async {
-    try {
-      final answer = await voiceChannel.invokeMapMethod<String, bool>("engines");
-      if (answer == null) return NativeVoiceEngines.none;
-      return NativeVoiceEngines(
-        recognition: answer["recognition"] ?? false,
-        speech: answer["speech"] ?? false,
-      );
-    } catch (_) {
-      // Nothing on the other end of the channel has neither engine, which is
-      // what the answer would have said.
-      return NativeVoiceEngines.none;
-    }
-  }
+  Future<NativeVoiceEngines> systemEngines() => probeNativeEngines();
 
   /// What the synthesiser says it can speak. The recogniser is not asked:
   /// naming its languages means a service bound and, before Android 13, an
@@ -62,23 +49,10 @@ class AndroidVoice extends Voice {
   /// tag the recogniser cannot do is no dead end either: it descends the ladder
   /// in `VoiceChannel.kt` like the device's own would.
   @override
-  Future<List<VoiceLanguage>> systemLanguages() async {
-    try {
-      final answer = await voiceChannel
-          .invokeListMethod<Map<Object?, Object?>>("languages")
-          // An engine that never finishes starting would leave the picker
-          // spinning. Empty is the device's own language and nothing else.
-          .timeout(const Duration(seconds: 5));
-      return [
-        for (final language in answer ?? const <Map<Object?, Object?>>[])
-          if (language["tag"] case final String tag when tag.isNotEmpty)
-            VoiceLanguage(tag: tag, name: language["name"] as String? ?? tag),
-      ];
-    } catch (e) {
-      voiceFailed("the device would not say what it can speak: $e");
-      return const [];
-    }
-  }
+  Future<List<VoiceLanguage>> systemLanguages() => nativeLanguages(
+        timeout: const Duration(seconds: 5),
+        failure: "the device would not say what it can speak",
+      );
 
   @override
   Future<VoiceSession> start({
@@ -127,6 +101,49 @@ class AndroidVoice extends Voice {
 /// with nothing answering throws, which the strategies surface as
 /// [VoiceFailed] the way any other engine fault is surfaced.
 const voiceChannel = MethodChannel("agent_chat/voice");
+
+/// What the device's own engines are, by the probe both `VoiceChannel.kt` and
+/// `VoiceChannel.swift` answer, or none where nothing is on the other end —
+/// one body for both platforms, the strategies being shared for the same
+/// reason.
+Future<NativeVoiceEngines> probeNativeEngines() async {
+  try {
+    final answer = await voiceChannel.invokeMapMethod<String, bool>("engines");
+    if (answer == null) return NativeVoiceEngines.none;
+    return NativeVoiceEngines(
+      recognition: answer["recognition"] ?? false,
+      speech: answer["speech"] ?? false,
+    );
+  } catch (_) {
+    // Nothing on the other end of the channel has neither engine, which is
+    // what the answer would have said.
+    return NativeVoiceEngines.none;
+  }
+}
+
+/// The probe's languages, decoded — the same `[{tag, name}]` maps both native
+/// channels answer, so the platforms differ only in how long the answer may
+/// take and how a failure is blamed.
+Future<List<VoiceLanguage>> nativeLanguages({
+  required Duration timeout,
+  required String failure,
+}) async {
+  try {
+    // An engine that never finishes answering would leave the picker
+    // spinning. Empty is the device's own language and nothing else.
+    final answer = await voiceChannel
+        .invokeListMethod<Map<Object?, Object?>>("languages")
+        .timeout(timeout);
+    return [
+      for (final language in answer ?? const <Map<Object?, Object?>>[])
+        if (language["tag"] case final String tag when tag.isNotEmpty)
+          VoiceLanguage(tag: tag, name: language["name"] as String? ?? tag),
+    ];
+  } catch (e) {
+    voiceFailed("$failure: $e");
+    return const [];
+  }
+}
 
 /// Everything the channel says, as a stream. `setMethodCallHandler` takes one
 /// handler and both strategies listen on the one channel, so the handler is
