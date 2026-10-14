@@ -329,10 +329,12 @@ void ish_session_run(
     (void) timeout_ms;  // the poll blocks on the guest; escalation is Dart's
                         // destroy — see the isolate's contract in
                         // ish_shell.dart.
-    // Consume whatever a previous command's escalation left in the wake pipe:
-    // the byte is this command's to mind, or the next one would take it as
-    // its own and end before the guest has spoken. Safe because the read end
-    // is O_NONBLOCK.
+    // Consume what a hung-up handle might owe the next command. Under the
+    // session contract it is empty: hangup applies to a run still pending,
+    // whose own poll takes the byte, and destroy closes the pair before any
+    // command could reuse the handle. The drain is the guard a contract
+    // change would want — a stale byte would end its run before the guest
+    // has spoken — and O_NONBLOCK is what keeps the drain from doing so.
     char discarded;
     while (read(session->wake_read, &discarded, 1) == 1) {}
 

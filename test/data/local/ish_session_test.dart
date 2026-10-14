@@ -111,8 +111,9 @@ void main() {
         async.elapse(const Duration(seconds: 2));
         expect((await run.result).returnCode, 130);
         // The escalation's second runs out against an answered run, and the
-        // session keeps its life: the shell LocalShell keeps is the same one
-        // here, cd and exports with it.
+        // session keeps its life, cd and exports with it — a stop and a
+        // timeout agree here, unlike LocalShell, whose timeout kills the
+        // group at the command's own sentinel.
         async.elapse(const Duration(seconds: 1));
         expect(fake.hangups, isEmpty);
         expect(fake.destroys, isEmpty);
@@ -147,25 +148,25 @@ void main() {
         () async {
       final fake = FakeIshTransport();
       final shell = ishShell(fake);
+      Future<void> settle(String command, ShellResult result) async {
+        final run = shell.start(command,
+            cwd: cwd, home: home, timeout: const Duration(minutes: 5));
+        await Future<void>.delayed(Duration.zero);
+        fake._settle(fake.pendingSessions.single, result);
+        await run.result;
+      }
+
       // No session yet: nothing of the shell's to map, and the gate falls
       // back to the workspace it was handed.
       expect(shell.sessionCwdInHostWords(cwd), isNull);
 
-      final run = shell.start("pwd",
-          cwd: cwd, home: home, timeout: const Duration(minutes: 5));
-      await Future<void>.delayed(Duration.zero);
-      fake._settle(fake.pendingSessions.single, const ShellResult(
-          returnCode: 0, output: "", cwd: "/root/chats/cb764c2a"));
-      await run.result;
+      await settle("pwd",
+          const ShellResult(returnCode: 0, output: "", cwd: "/root/chats/cb764c2a"));
       expect(shell.sessionCwdInHostWords(cwd), "/ws/chats/cb764c2a");
 
       // A `cd` outside the binding names no place on the host to walk from.
-      final again = shell.start("cd /tmp; pwd",
-          cwd: cwd, home: home, timeout: const Duration(minutes: 5));
-      await Future<void>.delayed(Duration.zero);
-      fake._settle(fake.pendingSessions.single,
+      await settle("cd /tmp; pwd",
           const ShellResult(returnCode: 0, output: "", cwd: "/tmp"));
-      await again.result;
       expect(shell.sessionCwdInHostWords(cwd), isNull);
     });
 

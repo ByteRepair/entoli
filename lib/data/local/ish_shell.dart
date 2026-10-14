@@ -217,10 +217,11 @@ class _IshSession {
   /// worker cannot deliver either while it is parked in its read.
   int _handle = 0;
 
-  /// Where the guest says the shell is standing, in the guest's own words —
-  /// the session's start until a run's marker moves it. What
-  /// [IshShell.sessionCwdInHostWords] maps back, and what a guest-path
-  /// report falls back to when it carries no directory of its own.
+  /// Where the guest says the shell is standing, in the guest's own words:
+  /// the session's record, not [IshShell.sessionCwd]'s — that notifier
+  /// exists only where something (the composer) asked, and this session's
+  /// writes to it are no-ops where nobody did. Started at init, moved by
+  /// each run's marker; what [sessionCwdInHostWords] maps back.
   String? _standing;
   Future<void> _queue = Future.value();
   _IshRun? _current;
@@ -290,7 +291,7 @@ class _IshSession {
       );
       _current = null;
       run.state.timeoutTimer?.cancel();
-      if (!run.state.byTimeout) run.state.escalateTimer?.cancel();
+      run.state.escalateTimer?.cancel();
       _standing = result.cwd ?? _guestCwd;
       _shell._cwds[_cwdPath]?.value = result.cwd ?? _guestCwd;
       run.state.complete(result);
@@ -321,9 +322,11 @@ class _IshSession {
     if (_handle != 0) _shell.transport.interrupt(_handle);
     run.state.escalateTimer = Timer(const Duration(seconds: 1), () {
       // What the escalation is for: a run still on the worker a second after
-      // its SIGINT. A guest that honoured it already has its result and the
-      // session its cd and its exports, the contract LocalShell keeps — an
-      // answered run is left alone whatever the exit it reported was.
+      // its SIGINT. An answered run is left alone — its session keeps the cd
+      // and exports a hangup would take. On a timeout that is a deliberate
+      // split from LocalShell, which kills the group at the command's own
+      // sentinel to reach what ignored the interrupt; the one-shot takes
+      // LocalShell's side, having no session state to keep.
       if (!run.state.done.isCompleted) _kill();
     });
   }
@@ -341,19 +344,16 @@ class _IshSession {
   }
 
   /// Where the session stands, in the host's own words: the guest path its
-  /// report names, mapped back through the binding the bridge makes — /root
-  /// at the project workspace, [guestWorkspacePath]'s other direction. Null
-  /// where the report is not under the root at all, which a `cd` outside the
-  /// workspace is: the machine has no path to name there.
+  /// own record names, mapped back through the binding the bridge makes,
+  /// /root at this session's home, [guestWorkspacePath]'s other direction.
+  /// [pathInside] because the record can name a `cd` outside the workspace,
+  /// which the machine has no host path to name either.
   String? _hostWords() {
     final standing = _standing;
     if (standing == null) return null;
     final root = _shell.guestRoot;
-    if (root == null) return null;
-    if (standing != root && !standing.startsWith("$root/")) return null;
-    final suffix = standing.length > root.length
-        ? standing.substring(root.length)
-        : "";
+    if (root == null || !pathInside(standing, root)) return null;
+    final suffix = standing == root ? "" : standing.substring(root.length);
     return "$_workspaceHome$suffix";
   }
 

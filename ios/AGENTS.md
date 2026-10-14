@@ -98,9 +98,13 @@ rather than on the second. The run returns "did not complete" and hands
 teardown back to the queued destroy.
 
 A run the guest answers within the second — the SIGINT honoured, rc 130 —
-leaves the session standing, cd and exports with it, the same contract
-LocalShell keeps: the escalation answers a run still pending at the second,
-and nothing else.
+leaves the session standing, cd and exports with it. On a timeout that is a
+deliberate split from LocalShell, whose escalation kills the group at the
+command's own sentinel to reach what ignored the interrupt; the guest's
+session state is worth the survivors here, and the one-shot (no session
+state to keep) escalates whichever way, LocalShell's side. For a stop the
+contract is the same one LocalShell keeps: the escalation answers a run
+still pending at the second, and nothing else.
 
 The session and one-shot logic over this seam is pinned by
 `test/data/local/ish_session_test.dart` over a fake transport; that a real

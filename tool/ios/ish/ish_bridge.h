@@ -44,9 +44,9 @@ typedef struct {
     // stdout. A close does not wake a reader parked on the same fd, and a
     // child the hangup's SIGKILL did not reach can hold the guest's write
     // end for its own life — the byte is what ends the run from another
-    // thread. The read end is O_NONBLOCK: each run starts by draining what
-    // a previous command's escalation left, and would hold itself doing so
-    // on a blocking fd.
+    // thread. Each run drains the pipe before waiting, the guard a reused
+    // hung-up handle would want; the read end is O_NONBLOCK, which is what
+    // keeps that drain from holding the run.
     int wake_read;
     int wake_write;
     // The token the dispatcher's markers carry, unique to the shell's life so
