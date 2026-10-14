@@ -17,7 +17,9 @@ class VoiceChannel: NSObject {
   private static var instance: VoiceChannel?
 
   static func register(with bridge: FlutterImplicitEngineBridge) {
-    let registrar = bridge.pluginRegistry.registrar(forPlugin: "VoiceChannel")
+    guard let registrar = bridge.pluginRegistry.registrar(forPlugin: "VoiceChannel") else {
+      return
+    }
     instance = VoiceChannel(messenger: registrar.messenger())
   }
 
@@ -68,7 +70,7 @@ class VoiceChannel: NSObject {
   private func handle(call: FlutterMethodCall, result: @escaping FlutterResult) {
     switch call.method {
     case "engines":
-      let status = SFSpeechRecognizer.authorizationStatus
+      let status = SFSpeechRecognizer.authorizationStatus()
       result([
         "recognition": status != .denied && status != .restricted,
         "speech": !AVSpeechSynthesisVoice.speechVoices().isEmpty,
@@ -177,7 +179,6 @@ class VoiceChannel: NSObject {
       send("recognitionError", "This device cannot hear that language on-device.")
       return
     }
-    recognizer.requiresOnDeviceRecognition = true
 
     do {
       let session = AVAudioSession.sharedInstance()
@@ -190,6 +191,9 @@ class VoiceChannel: NSObject {
 
     let newRequest = SFSpeechAudioBufferRecognitionRequest()
     newRequest.shouldReportPartialResults = true
+    // On-device only: the network rung Android walks is deliberately absent,
+    // and the languages answer is what keeps an unsupported locale from here.
+    newRequest.requiresOnDeviceRecognition = true
     request = newRequest
     self.recognizer = recognizer
     hasPartial = false
@@ -286,12 +290,12 @@ class VoiceChannel: NSObject {
         AVAudioSession.sharedInstance().requestRecordPermission { mic in done(mic) }
       }
     }
-    if SFSpeechRecognizer.authorizationStatus == .notDetermined {
+    if SFSpeechRecognizer.authorizationStatus() == .notDetermined {
       SFSpeechRecognizer.requestAuthorization { status in
         DispatchQueue.main.async { afterSpeech(status == .authorized) }
       }
     } else {
-      afterSpeech(SFSpeechRecognizer.authorizationStatus == .authorized)
+      afterSpeech(SFSpeechRecognizer.authorizationStatus() == .authorized)
     }
   }
 
