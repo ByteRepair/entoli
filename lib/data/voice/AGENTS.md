@@ -128,7 +128,10 @@ re-probes. Endpointing is the level rather than the transcription, a shortcut
 the Touch-to-speak toggle covers the way it does on Android.
 `Voice.hasModelCatalog` is false here, which takes the pickers and the
 downloads off the settings page: the engines are the whole of what this
-platform can listen and speak with.
+platform can listen and speak with. The simulator cannot exercise any of it —
+iOS 26's Speech framework will not initialize without the dictation assets
+simulators do not ship (`kLSRErrorDomain 300`) — so iOS voice is hand-run on
+a real device by construction.
 
 A phone already has a speech recognizer and a speech synthesiser, and until this
 landed voice mode ignored both and asked for a download first. So on Android

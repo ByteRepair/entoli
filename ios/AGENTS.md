@@ -147,8 +147,11 @@ and a refusal is the session's failure to show, not a state anything
 remembers. Endpointing is level-based (the shortcut the Touch-to-speak toggle
 covers), there is no sherpa here, and `Voice.hasModelCatalog` is what takes
 the catalog and the Assistant section off this platform's settings. The
-simulator hand-run of the grants and a spoken turn is the standing step, with
-the device run after.
+simulator cannot run the recognizer on the iOS 26 line at all — no dictation
+"Assistant" assets exist there in any mode, and the task dies with
+`kLSRErrorDomain Code=300 "Failed to initialize recognizer"` — so voice's
+hand-run was always a real device's, the same hardware run the commands want;
+the grants, a spoken turn, push-to-talk and read-aloud are its recipe.
 
 ## The rootfs
 
