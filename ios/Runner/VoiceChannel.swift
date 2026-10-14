@@ -31,7 +31,6 @@ class VoiceChannel: NSObject {
   private var request: SFSpeechAudioBufferRecognitionRequest?
   private var task: SFSpeechRecognitionTask?
   private var wantListening = false
-  private var stopping = false
 
   // Endpointing: what says the person has stopped is the level. The Android
   // channel learns it from the transcription stilling; the level is the
@@ -140,10 +139,12 @@ class VoiceChannel: NSObject {
     } else {
       wantListening = false
       endpointTimer?.invalidate()
-      if finish, hasPartial {
+      if finish {
         // The user saying they have finished talking: end the request and let
-        // the final result deliver what was said; recognizing then tears
-        // itself down, wantListening being false.
+        // the final deliver what was said — with no partial arrived yet,
+        // ending still answers the nothing it heard where a cancellation
+        // carries it away. recognizing then tears itself down, wantListening
+        // being false.
         request?.endAudio()
       } else {
         stopRecognizing()
@@ -166,7 +167,6 @@ class VoiceChannel: NSObject {
   }
 
   private func recognize(language: String?) {
-    stopping = false
     teardownRecognition()
 
     let locale = (language?.isEmpty ?? true) ? nil : Locale(identifier: language!)
@@ -234,14 +234,21 @@ class VoiceChannel: NSObject {
       return
     }
 
-    task = recognizer.recognitionTask(with: newRequest) { [weak self] result, error in
-      DispatchQueue.main.async { self?.taskCallback(result, error) }
+    var live: SFSpeechRecognitionTask?
+    live = recognizer.recognitionTask(with: newRequest) { [weak self] result, error in
+      DispatchQueue.main.async { self?.taskCallback(live, result, error) }
     }
+    task = live
     armEndpointTimer()
   }
 
-  private func taskCallback(_ result: SFSpeechRecognitionResult?, _ error: Error?) {
-    guard !stopping else { return }
+  private func taskCallback(
+    _ live: SFSpeechRecognitionTask?, _ result: SFSpeechRecognitionResult?, _ error: Error?
+  ) {
+    // Identity, not a flag: the task whose callback this is must still be the
+    // live one — the same check the tap puts its buffer through — since a
+    // cancelled task's last callback can land after the next request started.
+    guard let live, live === task else { return }
     if let result {
       hasPartial = true
       log("transcription \(result.isFinal ? "final" : "partial"): "
@@ -249,7 +256,11 @@ class VoiceChannel: NSObject {
       if result.isFinal {
         hear(result.bestTranscription.formattedString)
         if wantListening {
-          recognize(language: recognizer?.locale.identifier)
+          // Posted rather than called where it happens: tearing the task down
+          // inside its own callback is the shape Android's
+          // ERROR_RECOGNIZER_BUSY came from.
+          let language = recognizer?.locale.identifier
+          DispatchQueue.main.async { self.recognize(language: language) }
         } else {
           stopRecognizing()
         }
@@ -330,7 +341,6 @@ class VoiceChannel: NSObject {
 
   private func teardownRecognition() {
     endpointTimer?.invalidate()
-    stopping = true
     task?.cancel()
     task = nil
     request = nil
@@ -352,7 +362,13 @@ class VoiceChannel: NSObject {
     let utterance = AVSpeechUtterance(string: text)
     utterance.voice = voice
     pendingUtterances[ObjectIdentifier(utterance)] = generation
-    synthesizer.speak(utterance)
+    // The one per-utterance failure the API reports: refused at the queue, it
+    // would never fire a delegate callback and the Dart side's pending count
+    // would wait for it forever.
+    if !synthesizer.speak(utterance) {
+      pendingUtterances[ObjectIdentifier(utterance)] = nil
+      send("speechUtteranceError", generation)
+    }
   }
 }
 
