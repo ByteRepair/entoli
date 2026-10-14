@@ -99,6 +99,32 @@ void main() {
       });
     });
 
+    test("a timeout the guest honours leaves the session standing", () {
+      fakeAsync((async) async {
+        final fake = FakeIshTransport();
+        final shell = ishShell(fake);
+        final run = shell.start("sleep 60",
+            cwd: cwd, home: home, timeout: const Duration(seconds: 2));
+        async.flushMicrotasks();
+        // The guest answered within the escalation's second: rc 130, the
+        // trap's doing, the interrupt honoured.
+        async.elapse(const Duration(seconds: 2));
+        expect((await run.result).returnCode, 130);
+        // The escalation's second runs out against an answered run, and the
+        // session keeps its life: the shell LocalShell keeps is the same one
+        // here, cd and exports with it.
+        async.elapse(const Duration(seconds: 1));
+        expect(fake.hangups, isEmpty);
+        expect(fake.destroys, isEmpty);
+        // The next command is served by that same session, not a cold start.
+        shell.start("echo hi",
+            cwd: cwd, home: home, timeout: const Duration(minutes: 5));
+        async.flushMicrotasks();
+        expect(fake.inits.length, 1);
+        expect(fake.runs.length, 2);
+      });
+    });
+
     test("a command after a hung-up run starts a session cold", () {
       fakeAsync((async) async {
         final fake = FakeIshTransport()..interruptEnds = false;

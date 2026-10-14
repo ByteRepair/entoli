@@ -320,7 +320,11 @@ class _IshSession {
     // built to be poked from another thread, and this is a third one.
     if (_handle != 0) _shell.transport.interrupt(_handle);
     run.state.escalateTimer = Timer(const Duration(seconds: 1), () {
-      if (run.state.byTimeout || _current == run) _kill();
+      // What the escalation is for: a run still on the worker a second after
+      // its SIGINT. A guest that honoured it already has its result and the
+      // session its cd and its exports, the contract LocalShell keeps — an
+      // answered run is left alone whatever the exit it reported was.
+      if (!run.state.done.isCompleted) _kill();
     });
   }
 
