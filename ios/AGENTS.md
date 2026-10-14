@@ -133,6 +133,23 @@ chat's — what the emulator serializes for them is only the boot itself
 state two isolates could reach at once; the runs stay parallel, each
 interpreter being its own task.
 
+## Voice mode
+
+Voice mode is Apple's engines, behind the same `agent_chat/voice` contract
+`VoiceChannel.kt` answers on Android — `VoiceChannel.swift` beside the
+delegate, and the Dart `Native*` strategies shared with `android_voice.dart`.
+Recognition is on-device `SFSpeechRecognizer` only and synthesis is
+`AVSpeechSynthesizer`, so nothing said leaves the device and the languages the
+settings offer are the on-device intersection.
+`NSMicrophoneUsageDescription` and `NSSpeechRecognitionUsageDescription` are
+the two keys this rides on; both grants are asked at the first listening turn
+and a refusal is the session's failure to show, not a state anything
+remembers. Endpointing is level-based (the shortcut the Touch-to-speak toggle
+covers), there is no sherpa here, and `Voice.hasModelCatalog` is what takes
+the catalog and the Assistant section off this platform's settings. The
+simulator hand-run of the grants and a spoken turn is the standing step, with
+the device run after.
+
 ## The rootfs
 
 The Alpine a device downloads is an **i386** minirootfs, a separate entry in

@@ -5,8 +5,11 @@ been said, over a chat that was already open. Everything runs on the device,
 and which device decides how: **the desktops run `sherpa_onnx`** — speech
 recognition, speech synthesis and voice activity detection from one dependency,
 with the models downloaded from the settings page rather than shipped — while
-**Android runs the system's own engines** and has no models at all. See "The
-Android system engines", which is also where the reasoning for that split is.
+**Android and iOS run the system's own engines** and have no models at all,
+Android's `TextToSpeech` and `SpeechRecognizer`, iOS's `AVSpeechSynthesizer`
+and on-device `SFSpeechRecognizer`, both behind the one native channel contract
+and the same shared Dart strategies. See "The system engines", which is also
+where the reasoning for that split is.
 
 **A voice turn is an ordinary turn, and that is the constraint the rest is
 written to keep.** `VoiceController` hands what it heard to
@@ -110,7 +113,22 @@ thing that is invisible until it is a problem. Upstream is removing espeak in
 2.0, which will want lexicon-based models instead; the constraint is pinned at
 `^1.13.6` until then.
 
-## The Android system engines
+## The system engines
+
+**iOS is the same story over Apple's engines, and simpler.** `VoiceChannel.swift`
+answers the contract `VoiceChannel.kt` does — the Dart `Native*` strategies in
+`android_voice.dart` are shared, which is why they are named Native — with
+`SFSpeechRecognizer` asked on-device only (`requiresOnDeviceRecognition`, no
+network rung) and `AVSpeechSynthesizer` for the voice. The languages answer is
+the on-device intersection, so a locale the device cannot hear without a
+server is never offered rather than fallen back. The grants — microphone and
+speech recognition — are asked at the first listening turn, and a refusal is
+the session's failure to show, not a state anything remembers; the next launch
+re-probes. Endpointing is the level rather than the transcription, a shortcut
+the Touch-to-speak toggle covers the way it does on Android.
+`Voice.hasModelCatalog` is false here, which takes the pickers and the
+downloads off the settings page: the engines are the whole of what this
+platform can listen and speak with.
 
 A phone already has a speech recognizer and a speech synthesiser, and until this
 landed voice mode ignored both and asked for a download first. So on Android
@@ -151,8 +169,9 @@ below.
 
 **What that costs on a phone with neither system engine** is a choice the
 page offers either way: an install — RHVoice or eSpeak NG for speaking, FUTO
-Voice Input for hearing — or a downloaded model from the catalog, which every
-platform sherpa runs on draws beside the engines.
+VoiceInput for hearing — or a downloaded model from the catalog, which every
+platform sherpa runs on draws beside the engines; iOS offers no install, which
+is why its `hasSystemEngines` stays false and the block is Android's alone.
 `_MissingEngines` in `voice_settings.dart` is the engines' half said on the
 page, with the links, drawn from whether the device has them — and, for the
 recognizer, from whether the system's pick has been made. Nothing has to be
@@ -177,7 +196,8 @@ same `SherpaListener` the desktops use (the `SherpaVoice` it holds, whose
 through), and the speech half answers the same way — so the four pairings all
 work, including a system recognizer with a downloaded voice or the reverse.
 The catalog is the other half: it draws wherever sherpa runs, which is every
-platform but the web.
+platform but the web — and iOS, `hasModelCatalog` false being what takes it
+off the page where the engines are everything.
 
 **What decides is whether the engine is there, not whether this is Android**,
 and the answer goes into the set that already existed for the question.
@@ -532,8 +552,8 @@ are `Listener` and `Speaker` in `voice_strategies.dart`, and
 knows which the other is.
 
 The split was built to let the two kinds mix per side, which no platform now
-does — Android is native on both and the desktops are sherpa on both. It earns
-its keep anyway, twice: `AndroidVoice` is a dozen lines because the session, the
+does — Android and iOS are native on both and the desktops are sherpa on both.
+It earns its keep anyway, twice: `AndroidVoice` is a dozen lines because the session, the
 shut-microphone rule and the silence reporting were already somewhere neither
 engine owned, and `read_aloud` gets a speak-only session by passing a null
 `Listener` rather than by either engine knowing what reading one message out is.
@@ -587,7 +607,6 @@ app that can, and the native branch throws the recorder away again.
 voice mode is listening; only the engine behind it changed.
 
 ## Where the models live
-
 `<cacheDir>/models/{stt,tts}/<id>/`, and **outside the data directory** for a
 reason bigger than tidiness: `backup.dart` zips that directory whole, so a
 Kokoro and a Whisper base in it would put three hundred megabytes of
