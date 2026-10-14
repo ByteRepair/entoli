@@ -117,8 +117,9 @@ class ClockKind extends TriggerKind {
 
   /// What is currently registered with the system, by request code — the
   /// diff between this and the watch's snapshot is what _diffAlarms
-  /// cancels.
-  final Map<int, DateTime> _armed = {};
+  /// cancels. The whole arm is the record, so a renamed trigger re-arms its
+  /// words rather than a moment nothing changed about.
+  final Map<int, (DateTime, String?, String, String?)> _armed = {};
 
   /// Triggers handed back to the alarm once already, without a run in
   /// between. Coming back still unable to hold means the broadcast is not
@@ -209,40 +210,38 @@ class ClockKind extends TriggerKind {
   /// no-ops.
   Future<void> _diffAlarms(List<Trigger> triggers) async {
     if (!alarms.available || !alarms.schedules) return;
-    final wanted = <int, DateTime>{
+    // One arm per request code: the moment, the repeat's calendar name so
+    // the platforms with a calendar form arm that instead of a count (a one
+    // shot and a timer have none and carry null), and the words the platform
+    // that shows the arm composes from. The diff is the whole record, so an
+    // unchanged time a rename no longer disguises is a re-arm; a repeating
+    // schedule's calendar arm is wall-clock anchored and coalesces what a
+    // sleep swallows, where an interval arm can be missed outright and
+    // measures awake time.
+    final wanted = <int, (DateTime, String?, String, String?)>{
       for (final t in triggers)
         if (t.nextFireAt != null && t.requestCode != null)
-          t.requestCode!: t.nextFireAt!,
-    };
-    // A repeating schedule's arm names its calendar, so the platforms with a
-    // calendar form can arm that instead of a count; a one shot and a timer
-    // have no calendar shape and carry null.
-    final calendars = <int, String?>{
-      for (final t in triggers)
-        if (t.nextFireAt != null && t.requestCode != null)
-          t.requestCode!: switch (t.source) {
-            final ScheduleSource s when s.repeat != ScheduleRepeat.off =>
-              s.repeat.name,
-            _ => null,
-          },
-    };
-    // The arm's name and tap route, for the platform that shows the moment
-    // rather than wakes for it.
-    final named = <int, (String, String?)>{
-      for (final t in triggers)
-        if (t.nextFireAt != null && t.requestCode != null)
-          t.requestCode!: (_labelOf(t), t.chatId),
+          t.requestCode!: (
+            t.nextFireAt!,
+            switch (t.source) {
+              final ScheduleSource s when s.repeat != ScheduleRepeat.off =>
+                s.repeat.name,
+              _ => null,
+            },
+            t.label,
+            t.chatId,
+          ),
     };
     for (final code in _armed.keys) {
       if (!wanted.containsKey(code)) await alarms.cancel(code);
     }
     // _armed is the diff against what is already registered, so an
-    // unchanged fire time is a no-op skipped here rather than a round trip.
+    // unchanged arm is a no-op skipped here rather than a round trip.
     for (final entry in wanted.entries) {
       if (_armed[entry.key] != entry.value) {
-        final (label, chatId) = named[entry.key]!;
-        await alarms.schedule(entry.key, entry.value,
-            calendar: calendars[entry.key], label: label, chatId: chatId);
+        final (at, calendar, label, chatId) = entry.value;
+        await alarms.schedule(entry.key, at,
+            calendar: calendar, label: label, chatId: chatId);
       }
     }
     _armed
@@ -259,16 +258,11 @@ class ClockKind extends TriggerKind {
     final at = trigger.nextFireAt;
     if (at != null) {
       await alarms.schedule(trigger.requestCode!, at,
-          label: _labelOf(trigger), chatId: trigger.chatId);
+          label: trigger.label, chatId: trigger.chatId);
     }
     return true;
   }
 }
-
-/// What a fire is called where one line of it is shown: the name a trigger
-/// has, else the prompt it sends — the tile's title rule.
-String _labelOf(Trigger trigger) =>
-    trigger.name.isEmpty ? trigger.prompt : trigger.name;
 
 /// The file source's kind: watchers over resolved roots, debounced. A file
 /// trigger is never on the clock — nothing is handed to a system scheduler,

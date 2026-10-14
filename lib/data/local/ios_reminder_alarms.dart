@@ -5,11 +5,6 @@ import "package:flutter/services.dart";
 import "../../core/log.dart";
 import "../../domain/reminder_alarms.dart";
 
-/// How long a notification post may take before it is said to have failed —
-/// the fire path's only unbounded round trip otherwise, the same bargain
-/// macOS's notification post makes.
-const _notifyTimeout = Duration(seconds: 10);
-
 /// iOS's local notifications, behind `agent_chat/reminders` and
 /// `RemindersPlugin.swift`.
 ///
@@ -128,7 +123,7 @@ class IosReminderAlarms implements ReminderAlarms {
             "notify",
             {"title": title, "body": body, "chatId": ?chatId},
           )
-          .timeout(_notifyTimeout);
+          .timeout(ReminderAlarms.notifyTimeout);
     } catch (error) {
       logFailure("reminders", "notification not posted", error);
     }

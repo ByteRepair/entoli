@@ -79,7 +79,11 @@ class RemindersPlugin: NSObject, UNUserNotificationCenterDelegate {
     }
     let at = Date(timeIntervalSince1970: Double(millis) / 1000)
     let content = UNMutableNotificationContent()
-    content.title = arguments["label"] as? String ?? "Entoli"
+    // The label is the arm's own name; its nil is the bundle's word for the
+    // app rather than a name this file holds.
+    content.title = (arguments["label"] as? String)
+      ?? (Bundle.main.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String)
+      ?? ""
     content.body = "Due now — open to run it."
     content.sound = .default
     // The tap route rides the content the way a completion notification's
@@ -97,14 +101,8 @@ class RemindersPlugin: NSObject, UNUserNotificationCenterDelegate {
         timeInterval: max(1, at.timeIntervalSinceNow.rounded(.up)), repeats: false)
     }
     let request = UNNotificationRequest(
-      identifier: "trigger.\(code)", content: content, trigger: trigger)
-    UNUserNotificationCenter.current().add(request) { error in
-      DispatchQueue.main.async {
-        result(error.map {
-          FlutterError(code: "schedule", message: String(describing: $0), details: nil)
-        })
-      }
-    }
+      identifier: Self.triggerIdentifier(code), content: content, trigger: trigger)
+    add(request, errorName: "schedule", then: result)
   }
 
   /// The `UNCalendarNotificationTrigger` components of a repeating schedule's
@@ -134,7 +132,7 @@ class RemindersPlugin: NSObject, UNUserNotificationCenterDelegate {
       result(FlutterError(code: "arguments", message: "code required", details: nil))
       return
     }
-    let identifier = "trigger.\(code)"
+    let identifier = Self.triggerIdentifier(code)
     UNUserNotificationCenter.current()
       .removePendingNotificationRequests(withIdentifiers: [identifier])
     // A trigger cancelled after its notification was delivered — the prune's
@@ -161,8 +159,8 @@ class RemindersPlugin: NSObject, UNUserNotificationCenterDelegate {
     UNUserNotificationCenter.current().getPendingNotificationRequests { requests in
       let stale = requests.compactMap { request -> Int? in
         let name = request.identifier
-        guard name.hasPrefix("trigger."),
-              let code = Int(name.dropFirst("trigger.".count))
+        guard name.hasPrefix(Self.triggerPrefix),
+              let code = Int(name.dropFirst(Self.triggerPrefix.count))
         else { return nil }
         return wanted.contains(code) ? nil : code
       }
@@ -194,13 +192,7 @@ class RemindersPlugin: NSObject, UNUserNotificationCenterDelegate {
     }
     // Trigger nil is delivered immediately; nothing here waits.
     let request = UNNotificationRequest(identifier: identifier, content: content, trigger: nil)
-    UNUserNotificationCenter.current().add(request) { error in
-      DispatchQueue.main.async {
-        result(error.map {
-          FlutterError(code: "notify", message: String(describing: $0), details: nil)
-        })
-      }
-    }
+    add(request, errorName: "notify", then: result)
   }
 
   private func notificationsAllowed(_ result: @escaping FlutterResult) {
@@ -225,6 +217,30 @@ class RemindersPlugin: NSObject, UNUserNotificationCenterDelegate {
   func open(chatId: String) {
     pendingOpen = chatId
     channel?.invokeMethod("open", arguments: chatId)
+  }
+
+  /// The arms' namespace: the request code is the identifier, and the arm
+  /// write, the cancel, the prune and the present policy all spell it
+  /// through this pair — the macOS plugin's jobLabel, minus the store
+  /// namespacing the notification centre wants none of. A completion post
+  /// wears `chat.<id>` and nothing parses it for a code.
+  static let triggerPrefix = "trigger."
+
+  static func triggerIdentifier(_ code: Int) -> String {
+    triggerPrefix + "\(code)"
+  }
+
+  /// One completion hop for both posts: the error stays on this side as a
+  /// `FlutterError` for Dart to log.
+  private func add(_ request: UNNotificationRequest, errorName: String,
+                   then result: @escaping FlutterResult) {
+    UNUserNotificationCenter.current().add(request) { error in
+      DispatchQueue.main.async {
+        result(error.map {
+          FlutterError(code: errorName, message: String(describing: $0), details: nil)
+        })
+      }
+    }
   }
 
   func userNotificationCenter(

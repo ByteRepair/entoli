@@ -186,7 +186,7 @@ class _TriggerTile extends ConsumerWidget {
             : "Last fired ${shortDate(trigger.lastFiredAt!)}";
 
     return ListTile(
-      title: Text(trigger.name.isEmpty ? trigger.prompt : trigger.name),
+      title: Text(trigger.label),
       subtitle: Text(subtitle, maxLines: 1, overflow: TextOverflow.ellipsis),
       trailing: Switch(
         value: trigger.enabled,

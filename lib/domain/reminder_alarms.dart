@@ -16,6 +16,12 @@ abstract interface class ReminderAlarms {
   static const defaultChannel = "reminders";
   static const turnFailureChannel = "turns";
 
+  /// How long a notification post may take before it is said to have failed —
+  /// the fire path's only unbounded round trip otherwise, one patience for
+  /// every platform that posts through a system it does not size: a rename or
+  /// a retune here is one grep, not three spellings.
+  static const notifyTimeout = Duration(seconds: 10);
+
   bool get available;
 
   /// Whether the system clock fires a reminder with the process dead —
