@@ -67,13 +67,18 @@ final agentBackendProvider = Provider<AgentBackend>((ref) => throw Unimplemented
 final shellProvider = Provider<Shell>((ref) => throw UnimplementedError());
 
 /// Where the shell for [workspace] is standing, live: what the composer's bar
-/// draws while a `!` command is being typed. Null where there is no workspace
-/// to ask about, or the shell holds no session for one — which the caller falls
-/// back to the workspace itself for.
-final chatShellCwdProvider =
-    Provider.family<ValueListenable<String?>?, String?>((ref, workspace) {
+/// draws while a `!` command is being typed. [workspaceHome] is the project
+/// workspace the turns are handed as their home, only what the shell needs to
+/// word the guest's own fallback for it. Null where there is no workspace to
+/// ask about, or the shell holds no session for one — which the composer
+/// falls back to the guest's view of the workspace itself for.
+final chatShellCwdProvider = Provider.family<ValueListenable<String?>?,
+    ({String? workspace, String? workspaceHome})>((ref, key) {
+  final workspace = key.workspace;
   if (workspace == null) return null;
-  return ref.watch(shellProvider).sessionCwd(workspace);
+  return ref
+      .watch(shellProvider)
+      .sessionCwd(workspace, home: key.workspaceHome);
 });
 final appConfigProvider = Provider<AppConfig>((ref) => throw UnimplementedError());
 

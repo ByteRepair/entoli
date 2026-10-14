@@ -723,6 +723,9 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
               workspace: ref
                   .watch(appConfigProvider)
                   .workspaceDir(widget.chatId, project: chat.state.project),
+              workspaceHome: ref
+                  .watch(appConfigProvider)
+                  .projectWorkspaceDir(project: chat.state.project),
             )
           : NeedsSetupBar(
               onOpenSettings: () => openSetupSettings(context),
@@ -870,13 +873,15 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
   ///
   /// [workspace] is where this chat's shell stands, for the composer's bar —
   /// null on a mirrored chat, whose commands run on the device they are
-  /// driven to rather than this one.
+  /// driven to rather than this one. [workspaceHome] is the project workspace
+  /// beside it, what the bar's fallback words in the guest's vocabulary.
   Widget _turnBar({
     required ChatViewState view,
     required TurnDriver driver,
     required String? project,
     VoidCallback? onVoice,
     String? workspace,
+    String? workspaceHome,
   }) =>
       Column(
         mainAxisSize: MainAxisSize.min,
@@ -893,6 +898,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
                 project: project,
                 onVoice: onVoice,
                 workspace: workspace,
+                workspaceHome: workspaceHome,
               ),
           },
         ],

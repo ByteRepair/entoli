@@ -233,8 +233,12 @@ class LocalShell extends Shell {
   bool get platformIsWindows => Platform.isWindows;
 
   @override
-  ValueListenable<String?>? sessionCwd(String cwd) {
+  ValueListenable<String?>? sessionCwd(String cwd, {String? home}) {
     if (!canRunCommands) return null;
+    // Seeding as the host path is deliberate: this shell's own report is the
+    // machine's directory, and the session replaces it from its birth. A
+    // guest driver's would mask here, but the driver is resolved per project
+    // and this ask carries none — the guest's first marker corrects it.
     return _cwds.putIfAbsent(cwd, () => ValueNotifier<String?>(cwd));
   }
 

@@ -558,9 +558,12 @@ there.
 
 Where the command will run is drawn too: the shell is the chat's own and a
 `cd` in an earlier command moved it, so a row over the field shows the
-directory the shell is standing in, live off the shell's own report. A tap
-copies the path out, since a path is one of the things the user types at the
-command rather than one to re-derive.
+directory the shell is standing in, live off the shell's own report — and
+where the shell has said nothing yet, worded in the guest's own vocabulary
+where it has one (IshShell seeds and falls back through `guestRoot`; the
+host path the session is keyed by is not where anything stands in the
+guest). A tap copies the path out, since a path is one of the things the
+user types at the command rather than one to re-derive.
 
 The prompt is drawn as the command it is: no markdown, the mono face, and the
 surface a code block sits on rather than the colour the things the user said are
