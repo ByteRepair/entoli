@@ -201,7 +201,11 @@ restore *replaces* it. A `.complete` marker written last is the whole of what
 directory at its own Android path.** The model sees `~` for the project
 workspace and `~/chats/<id>` for the chat's own, not the full
 `/data/user/0/...` path. The rest of the device is not there. Skills are bound
-at `/opt/skills-bundled` and `/opt/skills` so their scripts are reachable. The
+at `/opt/skills-bundled` and `/opt/skills` so their scripts are reachable, with
+a project's own two skills dirs beside them at `/opt/skills-bundled-project`
+and `/opt/skills-project` — and only where each directory exists on disk, proot
+refusing a binding to a path that is not there (`platformDriver` drops one at
+resolution, which is asked per command). The
 file tools translate `~` and guest paths back to the host's, since they use the
 host filesystem. `ShellDriver.commandFor` builds the proot invocation per chat,
 because the bind mounts and `-w` need the chat's own `cwd` and `home`. The
@@ -211,8 +215,8 @@ guest root, not the host's working directory.
 
 **proot creates mode-0000 stubs at its bind targets, and they are why
 `tree_ops.dart` exists.** Where a bind's guest path does not exist in the
-rootfs — `/opt/skills`, `/opt/skills-bundled`, `/etc/resolv.conf` are the three
-this app's binds produce, since the Alpine tarball has none of them — proot
+rootfs — the four `/opt/skills*` paths and `/etc/resolv.conf` are what this
+app's binds produce, since the Alpine tarball has none of them — proot
 creates an inaccessible placeholder to mount over. In the guest the stub is
 invisible; on the host it is poison, because `dart:io` cannot list a mode-0000
 directory, so a recursive delete over a rootfs that hosted a session dies on

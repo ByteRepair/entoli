@@ -22,11 +22,19 @@ void main() {
   });
 
   /// The shape that broke the real thing: an Alpine-ish tree with proot's
-  /// mode-0000 bind stubs in it, and beside them a symlink, an execute bit
+  /// mode-0000 bind stubs in it — the default project's two and a project's
+  /// own two beside them — and beside them a symlink, an execute bit
   /// and a read-only directory — what a rootfs is made of.
   Future<String> seededRootfs() async {
     final base = p.join(scratch.path, "base");
-    for (final dir in const ["bin", "etc", "opt/skills", "opt/skills-bundled"]) {
+    for (final dir in const [
+      "bin",
+      "etc",
+      "opt/skills",
+      "opt/skills-bundled",
+      "opt/skills-project",
+      "opt/skills-bundled-project",
+    ]) {
       await Directory(p.join(base, dir)).create(recursive: true);
     }
     await File(p.join(base, "bin", "busybox")).writeAsString("#!/bin/sh\n");
@@ -35,8 +43,14 @@ void main() {
     final ro = p.join(base, "etc", "dir");
     await Directory(ro).create();
     await Process.run("chmod", ["555", ro]);
-    await Process.run("chmod", ["000", p.join(base, "opt", "skills")]);
-    await Process.run("chmod", ["000", p.join(base, "opt", "skills-bundled")]);
+    for (final stub in const [
+      "opt/skills",
+      "opt/skills-bundled",
+      "opt/skills-project",
+      "opt/skills-bundled-project",
+    ]) {
+      await Process.run("chmod", ["000", p.join(base, stub)]);
+    }
     final resolv = p.join(base, "etc", "resolv.conf");
     await File(resolv).writeAsString("");
     await Process.run("chmod", ["000", resolv]);
@@ -52,10 +66,18 @@ void main() {
 
     expect(err, isNull);
     // The stubs are excluded: nothing at those paths is reachable in the
-    // guest, because the binds shadow them.
+    // guest, because the binds shadow them — a project's own two included,
+    // since the stub lands wherever its project's command ran, the shared
+    // base rootfs included, which is what a setup copies from.
     expect(FileSystemEntity.typeSync(p.join(target, "opt", "skills")),
         FileSystemEntityType.notFound);
     expect(FileSystemEntity.typeSync(p.join(target, "opt", "skills-bundled")),
+        FileSystemEntityType.notFound);
+    expect(FileSystemEntity.typeSync(p.join(target, "opt", "skills-project")),
+        FileSystemEntityType.notFound);
+    expect(
+        FileSystemEntity.typeSync(
+            p.join(target, "opt", "skills-bundled-project")),
         FileSystemEntityType.notFound);
     expect(FileSystemEntity.typeSync(p.join(target, "etc", "resolv.conf")),
         FileSystemEntityType.notFound);

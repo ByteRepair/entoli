@@ -154,14 +154,24 @@ ShellDriver? platformDriver({
     final dir = (isolated && config != null)
         ? _projectRootfsDir(config, project, rootfs.id) ?? baseDir
         : baseDir;
+    // proot refuses a binding whose host path is not there — "can't sanitize
+    // binding" — so a project's skill directories are bound only where they
+    // are on disk: a project has bundled skill files, or a first turn has
+    // made its `skills/` — neither true before a setup. The default
+    // project's two are always there (written and self-healed at startup)
+    // and stay required in `prootDriver`. Asked per command, the same one
+    // stat the completed-marker check below is, so what a setup or a first
+    // turn later lands in the directories is bound from the next command on.
+    String? bindIfThere(String? path) =>
+        path != null && Directory(path).existsSync() ? path : null;
     return prootDriver(
       proot: proot,
       rootfs: rootfs,
       rootfsDir: dir,
       defaultSkillsBundledDir: defaultSkillsBundledDir,
       defaultUserSkillsDir: defaultUserSkillsDir,
-      projectSkillsBundledDir: projectSkillsBundledDir,
-      projectUserSkillsDir: projectUserSkillsDir,
+      projectSkillsBundledDir: bindIfThere(projectSkillsBundledDir),
+      projectUserSkillsDir: bindIfThere(projectUserSkillsDir),
       abi: abi,
     );
   }

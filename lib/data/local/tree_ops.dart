@@ -7,25 +7,33 @@ import "package:path/path.dart" as p;
 /// list.
 ///
 /// **proot's bind stubs.** Where a bind's guest path does not exist in the
-/// rootfs, proot creates it as a mode-0000 placeholder — `/opt/skills`,
-/// `/opt/skills-bundled` and `/etc/resolv.conf` are the three this app's
-/// binds produce (`proot.dart`). In the guest they are invisible: the bind
-/// shadows the stub, which exists only to be mounted over. On the host they
-/// are poison: a mode-0000 directory cannot be listed, so a recursive delete
-/// over a rootfs that hosted a session dies on one, and a copy that has to
-/// read one does too. The backup walker hits the same wall, since a
-/// per-project `rootfs/` lives under the data directory — `writeBackup` skips
-/// it and `restoreBackup` clears it through `removeTree`. All three failures
-/// were live on a device before this comment was written.
+/// rootfs, proot creates it as a mode-0000 placeholder — the four `/opt/skills*`
+/// paths and `/etc/resolv.conf` are what this app's binds produce (`proot.dart`:
+/// the default project's two skills dirs, a project's own two beside them, and
+/// the resolver). In the guest they are invisible: the bind shadows the stub,
+/// which exists only to be mounted over. On the host they are poison: a
+/// mode-0000 directory cannot be listed, so a recursive delete over a rootfs
+/// that hosted a session dies on one, and a copy that has to read one does too.
+/// The backup walker hits the same wall, since a per-project `rootfs/` lives
+/// under the data directory — `writeBackup` skips it and `restoreBackup` clears
+/// it through `removeTree`. All three failures were live on a device before
+/// this comment was written.
 
 /// The bind-stub guest paths, as `--exclude` patterns in both the `./`-prefixed
 /// form tar archives them under and the bare one, so whichever form the
-/// platform's tar stores, one matches.
+/// platform's tar stores, one matches. The project's two are bound only on
+/// commands of the project that has them, but the stub is written wherever its
+/// project's command ran — the shared base rootfs included, which is what a
+/// setup copies from — so every rootfs copy excludes the lot.
 const _bindStubExcludes = [
   "--exclude=./opt/skills",
   "--exclude=opt/skills",
   "--exclude=./opt/skills-bundled",
   "--exclude=opt/skills-bundled",
+  "--exclude=./opt/skills-project",
+  "--exclude=opt/skills-project",
+  "--exclude=./opt/skills-bundled-project",
+  "--exclude=opt/skills-bundled-project",
   "--exclude=./etc/resolv.conf",
   "--exclude=etc/resolv.conf",
 ];

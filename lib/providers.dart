@@ -161,8 +161,17 @@ final byteRepairStoreProvider =
 
 /// The version of each tool the setup installs (ESBMC, make, gh), or null
 /// where one is not installed. Refreshed by the settings page after a setup run.
+///
+/// Gated on setup being complete: before it there is no environment to probe
+/// — the poll would run inside the shared base rootfs, the wrong instance for
+/// a project that isolates its own, and write proot's stubs into it where the
+/// next setup's copy died on them. "Not installed" with no shell run is the
+/// honest row.
 final byteRepairToolVersionsProvider =
     FutureProvider<Map<String, String?>>((ref) async {
+  if (!ref.watch(setupCompleteProvider(ByteRepairProject().dir))) {
+    return {for (final tool in ByteRepairStore.tools.keys) tool: null};
+  }
   final store = ref.watch(byteRepairStoreProvider);
   final shell = ref.watch(shellProvider);
   return store.runToolVersions(shell);
