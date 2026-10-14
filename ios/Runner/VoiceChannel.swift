@@ -208,6 +208,10 @@ class VoiceChannel: NSObject {
     input.removeTap(onBus: 0)
     input.installTap(onBus: 0, bufferSize: 1024, format: input.outputFormat(forBus: 0)) {
       [weak self] buffer, _ in
+      // The local, not the field: the tap runs on the engine's queue while
+      // main may already be starting the next request's, and a request alive
+      // beyond its own tap dies with the tap's removal.
+      newRequest.append(buffer)
       self?.tapped(buffer)
     }
     do {
