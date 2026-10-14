@@ -36,7 +36,8 @@ typedef struct {
     // The host ends of the two pipes the session's stdio is plumbed through.
     // The guest holds the other ends as its fds 0, 1 and 2; the bridge reads
     // and writes these with the host's own read(2) and write(2), which is
-    // what iSH's adhoc-fd plumbing puts behind the guest fds.
+    // what iSH's adhoc-fd plumbing puts behind the guest fds. hangup closes
+    // and -1s the read end; destroy closes only what is still open.
     int stdin_write;
     int stdout_read;
     // The token the dispatcher's markers carry, unique to the shell's life so
@@ -103,6 +104,14 @@ void ish_session_run(
 // Deliver SIGINT to the guest shell. A no-op where the shell has died, which
 // is what the task pointer being null says.
 void ish_session_interrupt(ish_session *session);
+
+// The escalation for a command that ignored the interrupt: SIGKILL the guest
+// and close the read end only, so a run blocked reading the guest's stdout
+// returns at once ("did not complete") and the handle's own teardown stays
+// destroy's. The kill comes first, or a dying guest writes into the closing
+// pipe end and the interpreter dies of SIGPIPE. Non-blocking; safe from another
+// thread while ish_session_run is pending on the session.
+void ish_session_hangup(ish_session *session);
 
 // Tear down: kill the guest and close the host pipe ends. The session handle
 // is invalid after this.

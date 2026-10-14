@@ -52,24 +52,16 @@ The app launches and runs on an iOS simulator, with the emulator linked: the
 startup chain (data directory, secrets, the bundled skills' self-heal) runs
 end to end, the UI renders, and the FFI entry points resolve at runtime —
 `ishLinked` true, `ishInitFn`/`ishRunFn`/`ishFakefsifyFn` non-null, evaluated
-in the running app over the VM service. What is left:
+in the running app over the VM service.
 
-1. **Install a rootfs and run a command.** The rootfs half is done: the
-   Terminal page's Alpine download ran end to end on the simulator —
-   fetch, SHA-256 check, the in-process unpack, tarball deleted, `.complete`
-   marker written, row installed. The unpack survives all three directory
-   states the store can produce — the target absent, an empty one created
-   for the download, and the store's real layout where the tarball sits
-   *inside* the target it names — all rc 0 through the shipped archive. The
-   bridge moves the tarball beside the target before the import (upstream's
-   `fakefs_import` begins with `mkdir`, which dies on the pre-created
-   target) and restores it to where the caller left it in both outcomes: on
-   failure so a retry does not re-download, on success so the store finds
-   the tarball it deletes. Download failures are now logged through
-   `logFailure` from the shared `Downloads` notifier, where they used to
-   reach only the failing row. What remains is the first command: a `bash`
-   run exercises `ish_boot`/`ish_session_init`/`ish_session_run` — the
-   first real run of the emulator itself.
+1. **Install a rootfs and run a command — done, on the simulator.** The
+   rootfs half ran end to end (fetch, SHA-256 check, in-process unpack,
+   `.complete` marker), and the first command through the guest has since
+   run: a `!uname -a` bypass turn and a full agent turn through the `bash`
+   tool both came back rc 0 with iSH's own uname string, cwd
+   `/root/chats/<id>` — `ish_boot`/`ish_session_init`/`ish_session_run`
+   exercised end to end, on record in the chat's `conv.jsonl`. What the
+   simulator cannot answer is the device half of it, which is the next item.
 2. **The link wiring is xcconfig, not CocoaPods.** `ios/Flutter/Debug.xcconfig`
    and `Release.xcconfig` force-load the right `IshCore.xcframework` slice per
    SDK and name the system libraries (`-lz -lbz2 -lxml2 -lsqlite3 -liconv`)
@@ -79,16 +71,35 @@ in the running app over the VM service. What is left:
    `tools/fakefsify.c` is deliberately not compiled — its `main()` collides
    with the app's; `tools/fakefs.c`'s `fakefs_import` is what
    `ish_fakefsify` wraps.
-3. **Then the runtime path is testable for real**: the IshShell/FFI/dispatcher
-   chain against a real guest on a device, which a simulator can only begin
-   to answer.
+3. **The runtime path on a real device.** The IshShell/FFI/dispatcher chain
+   has only answered on the simulator so far; a device run is the step left
+   before a store build.
 
-Known from the review, still open: the interrupt/timeout path is structurally
-dead — one isolate serves every session and blocks inside the synchronous FFI
-`runFn`, so an interrupt message queues behind the run it is meant to end —
-and `_ensure()` has a spawn race (two concurrent first inits orphan one
-isolate). Both are acceptable for a first bring-up; both need the
-architecture rework before real use.
+## The interrupt, and its escalation
+
+`IshShell` delivers a stop on the calling isolate, not through the worker:
+the worker is parked in its own `read` for the whole of a run, so a message
+to it would queue behind the run it is meant to end. The bridge's
+`ish_session_interrupt` is a `send_signal` — marked under iSH's own locks
+(`kernel/signal.c`) and honoured by the guest's interpreter thread at its
+next scheduling point — so a direct FFI call over the session handle's
+address (which `init`'s answer carries to the caller) is the same call,
+delivered on time. A guest that ignores the SIGINT is answered a second
+later by its escalation, `ish_session_hangup`: SIGKILL into the guest first
+(the kill leads, or a dying guest writes into the closing pipe end and the
+interpreter dies of SIGPIPE), then the read end closed, which returns the
+worker's blocked `read` at once and hands teardown back to the queued
+destroy.
+
+The session and one-shot logic over this seam is pinned by
+`test/data/local/ish_session_test.dart` over a fake transport; that a real
+guest honours the 130 and that a hangup unblocks a parked worker is the
+simulator's hand-run, like the wire. The worker itself is spawned
+single-flighted (`IshWorker._ensure`), which is also where the review's
+spawn race died, and it fails every pending reply when it dies so a crashed
+FFI call cannot leave a turn hanging. Every session still shares the one
+worker and so runs serially, which is the shape for a phone, not a claim
+about parallelism.
 
 ## The rootfs
 

@@ -78,6 +78,9 @@ typedef IshRunDart = void Function(
 typedef IshInterruptC = Void Function(IshSessionPtr session);
 typedef IshInterruptDart = void Function(IshSessionPtr session);
 
+typedef IshHangupC = Void Function(IshSessionPtr session);
+typedef IshHangupDart = void Function(IshSessionPtr session);
+
 typedef IshDestroyC = Void Function(IshSessionPtr session);
 typedef IshDestroyDart = void Function(IshSessionPtr session);
 
@@ -88,6 +91,7 @@ typedef IshFakefsifyDart = int Function(Pointer<Utf8> archive, Pointer<Utf8> int
 IshInitDart? _initFn;
 IshRunDart? _runFn;
 IshInterruptDart? _interruptFn;
+IshHangupDart? _hangupFn;
 IshDestroyDart? _destroyFn;
 IshFakefsifyDart? _fakefsifyFn;
 
@@ -102,6 +106,8 @@ void _resolve() {
   _runFn = lib.lookupFunction<IshRunC, IshRunDart>("ish_session_run");
   _interruptFn =
       lib.lookupFunction<IshInterruptC, IshInterruptDart>("ish_session_interrupt");
+  _hangupFn =
+      lib.lookupFunction<IshHangupC, IshHangupDart>("ish_session_hangup");
   _destroyFn =
       lib.lookupFunction<IshDestroyC, IshDestroyDart>("ish_session_destroy");
   _fakefsifyFn =
@@ -130,6 +136,14 @@ IshRunDart? get ishRunFn {
 IshInterruptDart? get ishInterruptFn {
   _resolve();
   return _interruptFn;
+}
+
+/// The resolved hangup function, or null. Delivered from whatever isolate is
+/// stopping a run — see [IshShell]'s interrupt path, which bypasses the
+/// worker isolate so a stop does not queue behind the run it ends.
+IshHangupDart? get ishHangupFn {
+  _resolve();
+  return _hangupFn;
 }
 
 /// The resolved destroy function, or null.
