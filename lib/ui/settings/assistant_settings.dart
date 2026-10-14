@@ -11,9 +11,11 @@ import "../widgets/section_header.dart";
 /// which project the new chat belongs to, and which of the two views opens on
 /// it. Both are the app's rather than a chat's — the gesture makes the chat.
 ///
-/// Android's only, and drawn everywhere all the same: the settings are the
-/// app's whatever it is running on, the way the voice category is drawn where
-/// `Voice.available` is false.
+/// Android's only, and taken off the page by the port's own answer where the
+/// platform has no gesture to configure — iOS, the desktops, the web: the
+/// settings are the app's whatever it is running on, but "which project does
+/// the gesture open" is a question only a platform that can be the assistant
+/// has an answer to.
 ///
 /// It sits under Voice rather than in a category of its own, which is why this
 /// is a file rather than a private section of the page — see the Voice
@@ -23,11 +25,15 @@ class AssistantSection extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    if (!ref.watch(assistantLaunchProvider).hasGesture) {
+      return const SizedBox.shrink();
+    }
     final settings = ref.watch(appSettingsProvider);
     final named = ref.watch(projectListProvider).value ?? const <String>[];
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        const Divider(),
         const SectionHeader(
           "Assistant",
           description: "Android's assistant gesture opens Entoli on a new chat, "

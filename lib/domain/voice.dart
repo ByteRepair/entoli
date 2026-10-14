@@ -49,6 +49,19 @@ abstract class Voice {
   /// nothing for.
   bool get hasSystemEngines => false;
 
+  /// Whether this platform has the downloadable catalog beside the device's
+  /// own engines. False where the engines are the whole of what can listen
+  /// and speak, which is what takes the pickers and the download lists off
+  /// the settings page: a picker of one says nothing, and a catalogue with
+  /// nothing to fetch is a lie.
+  bool get hasModelCatalog => true;
+
+  /// The native picks this platform's engines stand for — what a true answer
+  /// from [systemEngines] puts in the installed set, and what a null setting
+  /// defaults to. Null where there are none: the browser, and the desktops
+  /// whose engines are all downloaded.
+  ({String recognition, String speech})? get nativePicks => null;
+
   /// Which of the device's own engines are there, for the platforms that have
   /// any. Asked once at startup, where the answer joins the installed models —
   /// a sentinel pick is usable on exactly the same terms as a downloaded one,
@@ -188,6 +201,9 @@ class UnavailableVoice extends Voice {
 
   @override
   bool get available => false;
+
+  @override
+  bool get hasModelCatalog => false;
 
   @override
   Future<VoiceSession> start({

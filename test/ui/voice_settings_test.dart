@@ -288,6 +288,48 @@ void main() {
     });
   });
 
+  group("on iOS", () {
+    /// An iPhone: Apple's engines are the whole of what can listen and speak,
+    /// so the sentinels default into the picks and the page draws the mode and
+    /// the language and nothing else. `assistantGesture: false` is what takes
+    /// the Assistant section away where there is no gesture to configure.
+    Future<void> pumpIos(
+      WidgetTester tester, {
+      List<VoiceLanguage> speaks = const [],
+    }) async {
+      app = TestApp.create(
+        voice: FakeVoice(hasSystemEngines: false, hasModelCatalog: false)
+          ..nativePicks = (recognition: iosRecognition.id, speech: iosSpeech.id)
+          ..languages = speaks,
+        nativeVoice: const NativeVoiceEngines(recognition: true, speech: true),
+        assistantGesture: false,
+      );
+      await pumpVoice(tester);
+    }
+
+    testWidgets("the page is the mode and the language and nothing else",
+        (tester) async {
+      await pumpIos(tester,
+          speaks: const [VoiceLanguage(tag: "en-GB", name: "English")]);
+
+      expect(find.text("Recognition model"), findsNothing);
+      expect(find.text("Speech model"), findsNothing);
+      expect(find.text("Whisper tiny"), findsNothing);
+      expect(find.text("Android system"), findsNothing);
+      expect(find.text("Assistant"), findsNothing);
+      expect(find.text("Touch to speak"), findsOneWidget);
+      expect(find.text("Language"), findsOneWidget);
+      expect(find.text("Device language"), findsOneWidget);
+    });
+
+    testWidgets("no language both engines can do is no field", (tester) async {
+      await pumpIos(tester);
+
+      expect(find.text("Language"), findsNothing);
+      expect(find.text("Touch to speak"), findsOneWidget);
+    });
+  });
+
   testWidgets("a downloaded model has no language to pick: it is one already",
       (tester) async {
     app = TestApp.create(voiceModels: const {"piper-en_US-amy"})

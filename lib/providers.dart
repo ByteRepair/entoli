@@ -59,7 +59,7 @@ import "domain/tone.dart";
 import "domain/turn_keep_alive.dart";
 import "domain/voice.dart";
 import "domain/voice_model.dart"
-    show nativeRecognition, nativeSpeech, RecognitionModel, SpeechModel, voiceModelOf;
+    show RecognitionModel, SpeechModel, voiceModelOf;
 import "domain/voice_model_store.dart";
 
 final chatStoreProvider = Provider<ChatStore>((ref) => throw UnimplementedError());
@@ -455,13 +455,14 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
     // settings every time a model was fetched or deleted — and this `build`
     // may only run once, since `_config` is initialised in it.
     final system = ref.read(installedVoiceModelsProvider.notifier).system;
-    if (system.isEmpty) return loaded;
+    final picks = ref.read(voiceProvider).nativePicks;
+    if (system.isEmpty || picks == null) return loaded;
     final defaulted = loaded.copy();
-    if (system.contains(nativeRecognition.id)) {
-      defaulted.voiceRecognitionModelId ??= nativeRecognition.id;
+    if (system.contains(picks.recognition)) {
+      defaulted.voiceRecognitionModelId ??= picks.recognition;
     }
-    if (system.contains(nativeSpeech.id)) {
-      defaulted.voiceSpeechModelId ??= nativeSpeech.id;
+    if (system.contains(picks.speech)) {
+      defaulted.voiceSpeechModelId ??= picks.speech;
     }
     return defaulted;
   }

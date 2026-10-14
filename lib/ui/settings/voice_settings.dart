@@ -40,19 +40,27 @@ class VoiceSection extends ConsumerWidget {
         // The sentinel is in the list like any other model and filtered by the
         // same `installed` set, which holds it only where the device has the
         // engine — so nothing here knows which platform it is drawing on.
-        InstalledPicker(
-          label: "Recognition model",
-          options: _offer(const [nativeRecognition, ...recognitionModels], installed),
-          value: settings.voiceRecognitionModelId,
-          onPick: (id) =>
-              ref.read(appSettingsProvider.notifier).setVoiceRecognitionModel(id),
-        ),
-        InstalledPicker(
-          label: "Speech model",
-          options: _offer(const [nativeSpeech, ...speechModels], installed),
-          value: settings.voiceSpeechModelId,
-          onPick: (id) => ref.read(appSettingsProvider.notifier).setVoiceSpeechModel(id),
-        ),
+        // The pickers offer only what is downloaded, so the list below is not a
+        // menu of things that might work — it is what the app has. Hidden
+        // whole where the device's own engines are everything: a picker of one
+        // is a control that says nothing.
+        if (voice.hasModelCatalog) ...[
+          InstalledPicker(
+            label: "Recognition model",
+            options:
+                _offer(const [nativeRecognition, ...recognitionModels], installed),
+            value: settings.voiceRecognitionModelId,
+            onPick: (id) =>
+                ref.read(appSettingsProvider.notifier).setVoiceRecognitionModel(id),
+          ),
+          InstalledPicker(
+            label: "Speech model",
+            options: _offer(const [nativeSpeech, ...speechModels], installed),
+            value: settings.voiceSpeechModelId,
+            onPick: (id) =>
+                ref.read(appSettingsProvider.notifier).setVoiceSpeechModel(id),
+          ),
+        ],
         _SpeakerField(settings: settings),
         _LanguageField(settings: settings),
         if (canListen) const _TouchToSpeak(),
@@ -88,14 +96,17 @@ class _TouchToSpeak extends ConsumerWidget {
   }
 }
 
-/// Both catalogs. The dividers belong here rather than around this at the
-/// call site, so a caller that draws nothing under one is not left a line
-/// across the bottom of the page.
-class VoiceCatalogSections extends StatelessWidget {
+/// Both catalogs, where there is one to draw. iOS has no sherpa and no
+/// downloads, so the port's own answer takes the whole thing off the page
+/// rather than leaving lists with nothing to fetch in them.
+class VoiceCatalogSections extends ConsumerWidget {
   const VoiceCatalogSections({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    if (!ref.watch(voiceProvider).hasModelCatalog) {
+      return const SizedBox.shrink();
+    }
     return const Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [

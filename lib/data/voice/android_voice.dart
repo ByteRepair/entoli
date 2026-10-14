@@ -25,7 +25,9 @@ import "voice_strategies.dart";
 ///
 /// Each half routes on its own pick, so the four pairings all work: system
 /// listening and speaking, a downloaded recognizer over the system's voice,
-/// and the reverse.
+/// and the reverse. The [NativeVoiceBridge], [NativeSpeechRecognizer] and
+/// [NativeTextToSpeech] classes here are the shared native contract, and
+/// `ios_voice.dart` composes the same shapes over Apple's engines.
 class AndroidVoice extends Voice {
   AndroidVoice(VoiceModelStore store, String cacheDir)
       : _sherpa = SherpaVoice(store, cacheDir);
@@ -92,7 +94,7 @@ class AndroidVoice extends Voice {
         // makes the Talk button work, and a permission sheet on the first press
         // is one nobody expected.
         (await openMicrophone()).dispose();
-        listener = AndroidSpeechRecognizer(language: language);
+        listener = NativeSpeechRecognizer(language: language);
       } else {
         listener = await _sherpa.sherpaListener(recognition);
       }
@@ -106,46 +108,54 @@ class AndroidVoice extends Voice {
     return composeSession(
       listener,
       speech.isNative
-          ? Future.value(AndroidTextToSpeech(language: language))
+          ? Future.value(NativeTextToSpeech(language: language))
           : _sherpa.sherpaSpeaker(speech, speaker),
     );
   }
+
+  @override
+  ({String recognition, String speech}) get nativePicks =>
+      (recognition: nativeRecognition.id, speech: nativeSpeech.id);
 }
 
-/// The platform channel bridging the Android `TextToSpeech` and
-/// `SpeechRecognizer` to the [Listener]/[Speaker] strategies. One channel for
+/// The platform channel bridging the systems' engines — Android's
+/// `TextToSpeech` and `SpeechRecognizer`, iOS's on-device pair — to the
+/// [Listener]/[Speaker] strategies. One channel for
 /// both, registered on the cached engine against the application context like
-/// the other channels — see `VoiceChannel.kt`. Compiles everywhere; a platform
+/// the other channels — see `VoiceChannel.kt` and `VoiceChannel.swift`.
+/// Compiles everywhere; a platform
 /// with nothing answering throws, which the strategies surface as
 /// [VoiceFailed] the way any other engine fault is surfaced.
 const voiceChannel = MethodChannel("agent_chat/voice");
 
-/// Everything Kotlin says, as a stream. `setMethodCallHandler` takes one
+/// Everything the channel says, as a stream. `setMethodCallHandler` takes one
 /// handler and both strategies listen on the one channel, so the handler is
 /// owned here once and what arrives is broadcast; each strategy subscribes and
 /// reads the methods that are its own. A subscription is also its own
 /// bookkeeping — cancelling on dispose is the whole of it, where a slot per
 /// callback needed clearing under an identity check so a successor's
 /// registration was not undone by its predecessor.
-class AndroidVoiceBridge {
-  AndroidVoiceBridge._() {
+class NativeVoiceBridge {
+  NativeVoiceBridge._() {
     voiceChannel.setMethodCallHandler((call) async => _calls.add(call));
   }
 
-  static final AndroidVoiceBridge instance = AndroidVoiceBridge._();
+  static final NativeVoiceBridge instance = NativeVoiceBridge._();
 
   final _calls = StreamController<MethodCall>.broadcast();
 
   Stream<MethodCall> get calls => _calls.stream;
 }
 
-/// Listening through Android's `SpeechRecognizer`. No model to load, no VAD:
+/// Listening through the platform's own recognizer behind the shared native
+/// contract: Android's `SpeechRecognizer`, iOS's on-device `SFSpeechRecognizer`.
+/// No model to load, and no VAD on Android:
 /// the OS delivers `onBeginningOfSpeech`, `onRmsChanged` and `onResults`, and
 /// this hands all three to [MicrophoneListener], which is where the gate, the
 /// level and the event stream are. What is left here is the channel.
-class AndroidSpeechRecognizer extends MicrophoneListener {
-  AndroidSpeechRecognizer({this.language}) : super(LoudnessGate()) {
-    _calls = AndroidVoiceBridge.instance.calls.listen(_onCall);
+class NativeSpeechRecognizer extends MicrophoneListener {
+  NativeSpeechRecognizer({this.language}) : super(LoudnessGate()) {
+    _calls = NativeVoiceBridge.instance.calls.listen(_onCall);
   }
 
   /// The BCP-47 tag to hear in, or null for the device's own.
@@ -192,15 +202,17 @@ class AndroidSpeechRecognizer extends MicrophoneListener {
   }
 }
 
-/// Speaking through Android's `TextToSpeech`. One utterance per [speak] call,
+/// Speaking through the platform's synthesiser — Android's `TextToSpeech`,
+/// iOS's `AVSpeechSynthesizer` — behind the shared contract. One utterance per
+/// [speak] call,
 /// queued behind the last; [stop] flushes the queue. Speech is held until the
 /// engine says it is ready — a `speak` that lands before init completes returns
 /// an error code and no callback, which would count an utterance that never
 /// happened and leave a queue that never drains. One utterance failing is not a
 /// failed engine: it is dropped, and only repeated failures are reported up.
-class AndroidTextToSpeech implements Speaker {
-  AndroidTextToSpeech({this.language}) {
-    _calls = AndroidVoiceBridge.instance.calls.listen(_onCall);
+class NativeTextToSpeech implements Speaker {
+  NativeTextToSpeech({this.language}) {
+    _calls = NativeVoiceBridge.instance.calls.listen(_onCall);
     unawaited(_init());
   }
 
