@@ -398,11 +398,15 @@ Future<AppleFm?> platformCreateAppleFm() async {
     final answer = await appleChannel
         .invokeMethod<Object?>("handshake")
         .timeout(const Duration(seconds: 3));
-    final reason =
-        (answer as Map<Object?, Object?>?)?["reason"] as String? ?? "other";
+    final handshake = answer as Map<Object?, Object?>? ?? const {};
+    final reason = handshake["reason"] as String? ?? "other";
     return switch (reason) {
       "device-not-eligible" || "os" => null,
-      _ => AppleFm(AppleFmProbe(reason)),
+      _ => AppleFm(AppleFmProbe(
+          reason,
+          // What the build links is its own to answer: the picker's MLX
+          // rows ride this, not a probe of the hardware.
+          mlx: handshake["mlx"] as bool? ?? false)),
     };
   } catch (e) {
     // No runner half in this build, or a channel that never answered: the

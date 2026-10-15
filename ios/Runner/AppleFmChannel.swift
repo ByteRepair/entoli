@@ -3,6 +3,12 @@ import UIKit
 #if canImport(FoundationModels)
 import FoundationModels
 #endif
+// The MLX models ride the same `LanguageModelSession` the system model does;
+// what builds with them is the package's presence, not this file's
+// structure — see `mlxAvailable` and the catalog in `apple_fm.dart`.
+#if canImport(MLXFoundationModels)
+import MLXFoundationModels
+#endif
 
 /// The iOS half of the `agent_chat/apple_fm` channel — `AppleFm` and its
 /// client are the Dart half. The model is the OS's own: the availability the
@@ -65,10 +71,20 @@ class AppleFmChannel: NSObject {
     }
   }
 
+  /// The picker's MLX rows ride the handshake, so a build whose Runner
+  /// links `MLXFoundationModels` offers them and one that does not does not
+  /// — the same build-carries-it answer the llama backends give.
+  private func mlxAvailable() -> Bool {
+    #if canImport(MLXFoundationModels)
+    if #available(iOS 27.0, *) { return true }
+    #endif
+    return false
+  }
+
   private func handle(call: FlutterMethodCall, result: @escaping FlutterResult) {
     switch call.method {
     case "handshake":
-      result(["reason": availabilityReason()])
+      result(["reason": availabilityReason(), "mlx": mlxAvailable()])
     case "generate":
       let args = call.arguments as? [String: Any] ?? [:]
       let id = args["id"] as? String ?? ""
@@ -127,6 +143,7 @@ class AppleFmChannel: NSObject {
 
   @available(iOS 26.0, *)
   private func runGeneration(_ id: String, _ args: [String: Any]) async throws {
+    let model = args["model"] as? String ?? ""
     let instructions = args["instructions"] as? String ?? ""
     let prompt = args["prompt"] as? String ?? ""
     let temperature = args["temperature"] as? Double
@@ -165,10 +182,7 @@ class AppleFmChannel: NSObject {
           : .prompt(Transcript.Prompt(segments: [segment])))
     }
 
-    let session = LanguageModelSession(
-      model: .default,
-      tools: tools,
-      transcript: Transcript(entries: entries))
+    let session = try sessionFor(model, tools, Transcript(entries: entries))
     let stream = session.streamResponse(
       to: prompt,
       options: GenerationOptions(temperature: temperature))
@@ -201,6 +215,33 @@ class AppleFmChannel: NSObject {
     send("done", done)
   }
 
+  /// The Dart side names the system model `apple-foundation-model` and the
+  /// two halves spell it twice: the contract is one channel, not one shared
+  /// symbol. An MLX id is the package's business — it constructs from the id
+  /// and caches the fetch and the weights itself.
+  /// shortcut: no resident-instance cache of the channel's own, when the
+  /// hand-run shows the package re-mapping weights per session.
+  @available(iOS 26.0, *)
+  private func sessionFor(
+    _ model: String, _ tools: [any Tool], _ transcript: Transcript
+  ) throws -> LanguageModelSession {
+    if model == "apple-foundation-model" {
+      return LanguageModelSession(
+        model: .default, tools: tools, transcript: transcript)
+    }
+    guard #available(iOS 27.0, *) else {
+      throw GenerationFailure("This OS does not carry MLX models.")
+    }
+    #if canImport(MLXFoundationModels)
+    return LanguageModelSession(
+      model: MLXLanguageModel(modelID: model),
+      tools: tools,
+      transcript: transcript)
+    #else
+    throw GenerationFailure("This build does not link MLX.")
+    #endif
+  }
+
   private func toolCall(_ id: String, _ name: String, _ arguments: String) {
     send("toolCall", ["id": id, "name": name, "arguments": arguments])
     // The generation stops here even where the framework would have carried
@@ -228,6 +269,16 @@ class AppleFmChannel: NSObject {
 
 /// What `BridgeTool` throws the moment it has forwarded its call.
 struct BridgeHandoff: Error {}
+
+/// A generation that cannot start because this OS or this build carries no
+/// model for the id it was asked for. The wording rides out as it is; the
+/// Dart side's error map says the rest.
+struct GenerationFailure: Error {
+  let message: String
+  init(_ message: String) {
+    self.message = message
+  }
+}
 
 /// One of the agent's tools, as the framework sees it. The arguments are the
 /// `schema` the Dart side sent, converted below into the framework's dynamic

@@ -143,6 +143,7 @@ void main() {
     await breathe();
 
     final request = outgoing("generate");
+    expect(request["model"], appleModelId);
     expect(request["instructions"], "sys one\n\nsys two");
     expect(request["prompt"], "and now?");
     final history = (request["history"] as List)
@@ -186,6 +187,18 @@ void main() {
     final id = outgoing("generate")["id"];
     await incoming("error", {"id": id, "code": "context", "message": ""});
     await expectation;
+  });
+
+  test("the picker's rows are what the handshake announced", () {
+    final base =
+        AppleFm(const AppleFmProbe("available")).provider.models;
+    expect(base, contains(appleModelId));
+    expect(base, isNot(contains(mlxModels.first)),
+        reason: "a build that links no MLX offers no MLX rows");
+
+    final both =
+        AppleFm(const AppleFmProbe("available", mlx: true)).provider.models;
+    expect(both, containsAll([appleModelId, mlxModels.single]));
   });
 
   test("a model the device has not turned on says where the setting is",

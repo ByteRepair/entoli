@@ -53,9 +53,14 @@ const appleChannel = MethodChannel("agent_chat/apple_fm");
 /// offers it — the wording below is then the one place that says why
 /// nothing came back.
 class AppleFmProbe {
-  const AppleFmProbe(this.reason);
+  const AppleFmProbe(this.reason, {this.mlx = false});
 
   final String reason;
+
+  /// Whether the build carries the MLX models' package and the OS can run
+  /// one. The handshake says so, because what a build links is the build's
+  /// answer, the same way the llama backends are the server's.
+  final bool mlx;
 
   LlmException get unavailable => switch (reason) {
         "not-enabled" => const LlmException(
@@ -69,6 +74,18 @@ class AppleFmProbe {
         _ => const LlmException("The Apple on-device model is unavailable."),
       };
 }
+
+/// The MLX models the channel offers beside the system model, when this
+/// build links mlx-swift-lm's `MLXFoundationModels` (the one-tap Xcode
+/// addition `ios/AGENTS.md` carries) and the OS is 27. The rows stop well
+/// inside the 6B an 8GB iPhone can hold beside the rest of the app; the
+/// framework fetches what a row names from Hugging Face at first turn and
+/// caches it, which is why nothing here pins a checksum.
+/// shortcut: weights arrive unpinned from mlx-community, and the list is
+/// the Apple-verified example alone — rows are one edited line each;
+/// owning the fetch the way the GGUF catalog does is the upgrade the
+/// supply chain may demand.
+const mlxModels = <String>["mlx-community/Qwen3.5-4B-4bit"];
 
 /// The port: what the handshake said, and the provider composed from it.
 class AppleFm {
@@ -85,7 +102,10 @@ class AppleFm {
         // registry's cache signature still. The shape rides out of habit
         // rather than need.
         baseUrl: "",
-        models: const [appleModelId],
+        models: [
+          appleModelId,
+          if (probe.mlx) ...mlxModels,
+        ],
         defaultModelId: appleModelId,
       );
 
@@ -127,7 +147,8 @@ class AppleFmClient implements LlmClient {
   void close() {}
 
   @override
-  Future<List<String>> listModels() async => const [appleModelId];
+  Future<List<String>> listModels() async =>
+      [appleModelId, if (probe.mlx) ...mlxModels];
 
   @override
   Stream<LlmChunk> stream(
@@ -156,6 +177,9 @@ class AppleFmClient implements LlmClient {
     try {
       await appleChannel.invokeMethod("generate", {
         "id": generation,
+        // The model id is the route: the system model by name, and every
+        // MLX row by its package's own id.
+        "model": model,
         "instructions": _instructions(messages),
         "history": _transcript(messages, withoutLast: true),
         "prompt": _promptText(messages.last),

@@ -202,6 +202,35 @@ multi-step against the error map. What the VM does pin is the client's own
 protocol over a mock channel — `test/data/local/apple_fm_client_test.dart`:
 the streaming, the handoff ending, the history wording, the error map.
 
+## The MLX models beside it
+
+The MLX rows ride the same channel and the same client. The handshake
+carries a second answer, `mlx` — whether this build links Apple's
+`MLXLanguageModel` at all — and the picker draws the catalog (`mlxModels`
+in `apple_fm.dart`: one const row for now, `mlx-community/Qwen3.5-4B-4bit`,
+the id Apple's own sample names) only where it does. What turns it on is
+the package, not more code:
+
+- Xcode, `Runner` target, File > Add Package Dependencies:
+  `https://github.com/ml-explore/mlx-swift-lm`, product
+  `MLXFoundationModels`, iOS 27. The Swift half compiles either way — the
+  branch is `#if canImport`, so a build without the package answers
+  nothing in the handshake and offers no rows, rather than failing; and
+  this checkout's Swift was typechecked without it for exactly that
+  reason.
+- The weights are the package's fetch: from Hugging Face at first turn,
+  cached by the package, unpinned — a supply-chain hole next to the
+  checksum culture every other catalog here keeps, accepted because the
+  alternative is owning a downloader for a day-two feature. A row is one
+  edited line; nothing else grows with it.
+- The session is built per ask from the id (`sessionFor` in the Swift
+  half); whether `MLXLanguageModel` re-maps weight memory per session is
+  the hand-run's to see, tokens-per-second collapsing between steps of one
+  turn being the symptom, and a resident-instance cache being the
+  one-paragraph fix with the eviction question the llama pool already
+  answered. The licences the toggle owes the About page come with the
+  package (MLX's own).
+
 ## The rootfs
 
 The Alpine a device downloads is an **i386** minirootfs, a separate entry in
