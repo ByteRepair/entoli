@@ -8,6 +8,16 @@ macOS, its layers generated from `assets/icons/cookie.svg`, the launcher
 switching being Android's `activity-alias` alone so only the default has a
 copy here.
 
+## Export compliance
+
+`ITSAppUsesNonExemptEncryption` is `false` in `Runner/Info.plist`, and it is
+the right answer even though the app encrypts: what it does is standard TLS,
+which is exempt (5A992 / 5A993), so there is nothing to declare. The key being
+there at all is what stops App Store Connect asking the export question on
+every upload. Turning it `true` would bring the compliance paperwork for
+nothing. The note lives here rather than as a comment beside the key because
+Xcode rewrites `Info.plist` without its comments.
+
 ## Why no host shell
 
 iOS refuses an app a child process. `fork`, `exec` and `posix_spawn` are denied
