@@ -158,7 +158,12 @@ class AppleFmClient implements LlmClient {
     double? temperature,
     String? reasoningEffort,
   }) async* {
-    if (probe.reason != "available") throw probe.unavailable;
+    // The system model's gate is its own availability. An MLX row's is not:
+    // it runs on the GPU whether Apple Intelligence is on at all or not —
+    // the handshake's `mlx` is the whole of that gate.
+    if (model == appleModelId && probe.reason != "available") {
+      throw probe.unavailable;
+    }
     final generation = "fm${++_generations}";
 
     // The state the completion's message is assembled from — locals, not

@@ -186,11 +186,17 @@ class AppleFmChannel: NSObject {
     let stream = session.streamResponse(
       to: prompt,
       options: GenerationOptions(temperature: temperature))
+    // The snapshots arrive cumulative — `content` is the generation so far,
+    // not the increment — and the client appends frames as deltas, so only
+    // the suffix past what was last said crosses the channel. A snapshot
+    // that rewrote rather than extended cannot be said as a delta and is
+    // skipped; the framework's content only grows.
+    var sent = ""
     for try await part in stream {
       let text: String = part.content
-      if !text.isEmpty {
-        send("text", ["id": id, "text": text])
-      }
+      guard text.hasPrefix(sent), text != sent else { continue }
+      send("text", ["id": id, "text": String(text.dropFirst(sent.count))])
+      sent = text
     }
 
     // The session keeps the request's counts after it has streamed (iOS 27

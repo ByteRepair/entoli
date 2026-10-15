@@ -208,8 +208,10 @@ The MLX rows ride the same channel and the same client. The handshake
 carries a second answer, `mlx` — whether this build links Apple's
 `MLXLanguageModel` at all — and the picker draws the catalog (`mlxModels`
 in `apple_fm.dart`: one const row for now, `mlx-community/Qwen3.5-4B-4bit`,
-the id Apple's own sample names) only where it does. What turns it on is
-the package, not more code:
+the id Apple's own sample names) only where it does. The registry answers
+their context windows with nothing — the global `totalContext` guess, not
+the system model's 8k — the same fall-through every unknown model takes.
+What turns it on is the package, not more code:
 
 - Xcode, `Runner` target, File > Add Package Dependencies:
   `https://github.com/ml-explore/mlx-swift-lm`, product

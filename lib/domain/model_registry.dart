@@ -14,6 +14,12 @@ import "local_model.dart";
 /// The Apple on-device model: `SystemLanguageModel.contextSize` reads 8,192
 /// on the OS today, and the framework only exposes it from 26.4 on — one
 /// constant here is what that is while the reader is the compaction
-/// machinery, which cannot wait on a channel round trip.
-int? contextWindowOf(String? providerId, String? modelId) =>
-    providerId == appleProviderId ? 8192 : null;
+/// machinery, which cannot wait on a channel round trip. The provider's MLX
+/// rows are other models whose windows are their own: they answer null, the
+/// global guess, and a null model id is the provider's default — the system
+/// model.
+int? contextWindowOf(String? providerId, String? modelId) {
+  if (providerId != appleProviderId) return null;
+  if (modelId != null && modelId != appleModelId) return null;
+  return 8192;
+}

@@ -201,6 +201,22 @@ void main() {
     expect(both, containsAll([appleModelId, mlxModels.single]));
   });
 
+  test("an MLX row runs whether Apple Intelligence is on or not", () async {
+    final reply = AppleFmClient(
+            const AppleFmProbe("not-enabled", mlx: true))
+        .stream(const [LlmMessage(role: LlmRole.user, text: "hi")],
+            model: mlxModels.single)
+        .toList();
+    await breathe();
+
+    // The request went out: the availability wording that stands in front
+    // of the system model's first turn does not stand in front of this one.
+    expect(outgoing("generate")["model"], mlxModels.single);
+    await incoming("done", {"id": outgoing("generate")["id"]});
+    final completion = (await reply).whereType<LlmCompletion>().single;
+    expect(completion.finishReason, "stop");
+  });
+
   test("a model the device has not turned on says where the setting is",
       () async {
     await expectLater(
