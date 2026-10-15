@@ -6,9 +6,9 @@ import "safe_command.dart";
 /// writes are the repo's own metadata — refs, objects, the index, worktree
 /// bookkeeping — and nothing a user would want a banner about. Anything not
 /// listed stands down to the banner path in every mode: pushes and resets
-/// and stashes, the config and remote writes that would land in the
-/// protected half of the grant, and everything else the sandbox is the only
-/// boundary behind.
+/// and stashes — and the `config`, `remote` and `submodule` writes, whose
+/// edits reach `.git/config`, where a planted hook or fsmonitor would run
+/// under the user's own git outside this sandbox.
 const vouchedGitSubcommands = {
   "add",
   "commit",
@@ -23,35 +23,28 @@ const vouchedGitSubcommands = {
   "init",
 };
 
-/// The children of a git dir a grant names, taken out of the grant. Landlock
-/// is additive-only — there is no deny to carve a path out of an allowed
-/// directory — so protection is by enumeration: every child of `.git` is
-/// granted except these two, which are what turn a repo grant into an
-/// escape that runs outside the sandbox later. A hook the user's own next
-/// git command executes runs unconfined, and `core.fsmonitor` and
-/// `core.pager` are programs the same config edit can have a command run.
-const protectedGitChildren = {"config", "hooks"};
-
-final _separator = RegExp(r"[/\\]");
 final _worktreeBoundary = RegExp(r"/\.git/worktrees(?:/|$)");
 final _gitdirLine = RegExp(r"^gitdir:\s*(.+)$", multiLine: true);
 final _spaces = RegExp(r"\s+");
 
 /// What the grant layer answers for one command: the profile of each
-/// segment and, for the segments the git policy vouches for, the grant the
-/// vouch is backed by. One computation, read by both the approval gate and
-/// the sandbox composer — the invariant that makes the pair honest is that
-/// nothing is vouched for here without a grant under it, and nothing
-/// granted that was not vouched.
+/// segment and, for every git segment warranted by the policy — the plain
+/// mutations and the read-only ones alike, git's reads being writes at the
+/// kernel — the grant the answer is backed by. One computation, read by
+/// both the approval gate and the sandbox composer — the invariant that
+/// makes the pair honest is that no grant reaches the sandbox that the gate
+/// did not read as coverage, and no coverage claims a grant that is not
+/// here.
 class CommandGrants {
   const CommandGrants({required this.profiles, required this.gitGrants});
 
   /// One [SegmentProfile] per segment, in order.
   final List<SegmentProfile> profiles;
 
-  /// The git grant for each vouched segment that had one. A vouched segment
-  /// with none — the command runs somewhere with no repo above it — is not
-  /// covered, for the grant being the thing the vouch is honest about.
+  /// The git grant for each warranted segment that found a repository. A
+  /// warranted segment with none — the command runs somewhere with no repo
+  /// above it — is not covered, for the grant being the thing the answer is
+  /// honest about.
   final Map<int, GitGrant> gitGrants;
 }
 
@@ -73,6 +66,24 @@ class CommandGrantsInput {
   final String? home;
 
   final List<String> segments;
+}
+
+/// Whether the policy answers a grant beside a git segment at all: any git
+/// command the classification lets past the banner needs its repository's
+/// git dir — the mutating ones because writing refs is the work, the
+/// read-only ones because git's reads are not read-only at the kernel (a
+/// `git status` refreshes the index; `git diff` reads it; a fetch takes
+/// locks). What is left out are the command shapes that should not run
+/// unasked at all: pushes and resets and the config/remote writes that
+/// carry hooks and fsmonitor in them, none of which get a grant, because
+/// the banner asks first.
+bool grantWarranted(SegmentProfile profile) {
+  if (profile.reach == SegmentReach.nonModifying &&
+      profile.modelable &&
+      profile.program == "git") {
+    return true;
+  }
+  return segmentVouched(profile);
 }
 
 /// Assesses one command. The expensive parts are directory reads — walking
@@ -139,10 +150,7 @@ Future<CommandGrants> commandGrantsFor(CommandGrantsInput input) async {
   final walked = <String, GitGrant?>{};
   for (var i = 0; i < profiles.length; i++) {
     final profile = profiles[i];
-    // A proven non-modifying segment writes nothing worth granting and is
-    // covered by its reach; only the grant-backed half is discovered here.
-    if (profile.reach == SegmentReach.nonModifying) continue;
-    if (!segmentVouched(profile)) continue;
+    if (!grantWarranted(profile)) continue;
     final dir = workDirs[i];
     if (dir == null) continue;
     // The same repo asked for twice in one compound — `git add x && git
@@ -192,8 +200,17 @@ bool segmentVouched(SegmentProfile profile) {
 /// A vouched git segment's grant. [gitDir] is the repository the command
 /// works against — the walk-up's finding, or the main repository's `.git`
 /// where the cwd is a linked worktree, the answer a
-/// `git rev-parse --absolute-git-dir` prints for both — and [paths] is the
-/// expandable half: every child of that directory but the protected ones.
+/// `git rev-parse --absolute-git-dir` prints for both — and [paths] names
+/// that directory itself, granted wholesale: git's working writes are not
+/// just the children a listing would find, they are new files made in the
+/// directory's own root — `.git/index.lock` under every ref-refresh,
+/// `COMMIT_EDITMSG` under a commit — and creating one needs make-rights on
+/// the parent. Landlock has no deny to carve a child back out of a granted
+/// parent, so the protection of `.git/config` and `.git/hooks` — where a
+/// planted hook or fsmonitor would run under the user's own unconfined git
+/// later — cannot be the sandbox's work here: it is the vouch list
+/// (config/remote/submodule commands never carry a grant, the banner asks
+/// for them) and the approval mode's own gate over every other write.
 class GitGrant {
   const GitGrant({required this.gitDir, required this.paths});
 
@@ -202,9 +219,9 @@ class GitGrant {
   final List<String> paths;
 }
 
-/// Discovers the git dir one vouched `git` segment ([words]) writes into,
-/// from [cwd], and expands it. Null where there is nothing to grant — no
-/// repo above [cwd], a pointer that makes no sense, an explicit gitdir that
+/// Discovers the git dir one git segment ([words]) writes into, from
+/// [cwd], and grants it. Null where there is nothing to grant — no repo
+/// above [cwd], a pointer that makes no sense, an explicit gitdir that
 /// names nothing — which is the caller's signal that the segment stands
 /// down to the banner path.
 Future<GitGrant?> gitGrantFor(
@@ -227,18 +244,12 @@ Future<GitGrant?> gitGrantFor(
   if (gitDir == null) {
     return null;
   }
-  final paths = <String>[];
   // The worktree's own checkout directory is deliberately outside this
   // grant: a worktree add checks out into where its argument names, and
   // whether that is inside an already-granted root — the workspace,
   // usually — is the sandbox's ordinary answer, with the re-prompt behind
   // it.
-  await for (final entity in fs.directory(gitDir).list()) {
-    final name = entity.path.split(_separator).last;
-    if (protectedGitChildren.contains(name)) continue;
-    paths.add(entity.path);
-  }
-  return GitGrant(gitDir: gitDir, paths: paths);
+  return GitGrant(gitDir: gitDir, paths: [gitDir]);
 }
 
 /// `--git-dir=<path>` or `--git-dir <path>` on the segment, or null.
