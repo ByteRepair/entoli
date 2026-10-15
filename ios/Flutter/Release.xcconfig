@@ -7,4 +7,5 @@
 // (the AppleFm channel answers "os"), where a plain link would not.
 OTHER_LDFLAGS[sdk=iphoneos*] = $(inherited) -lz -lbz2 -lxml2 -lsqlite3 -liconv -weak_framework FoundationModels -Wl,-force_load,"$(SRCROOT)/../tool/ios/ish/dist/IshCore.xcframework/ios-arm64/libishcore_device.a"
 OTHER_LDFLAGS[sdk=iphonesimulator*] = $(inherited) -lz -lbz2 -lxml2 -lsqlite3 -liconv -weak_framework FoundationModels -Wl,-force_load,"$(SRCROOT)/../tool/ios/ish/dist/IshCore.xcframework/ios-arm64-simulator/libishcore_sim-arm64.a"
+#include "Signing.xcconfig"
 #include "Generated.xcconfig"

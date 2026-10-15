@@ -1,11 +1,13 @@
 name: Release
 
 # Attaches the binaries a published release is downloaded from — a signed App
-# Bundle for Google Play, a Linux AppImage, a macOS DMG and a Windows MSI — to
-# the tag they were built from, each with a provenance attestation beside it,
-# and uploads the bundle to Play. There is no release APK; `debug-build.yml`
-# builds an APK by hand. `release-build.yml` is what builds them and can be run
-# on its own; `pages.yml` answers the same event for the web app.
+# Bundle for Google Play, a Linux AppImage, a macOS DMG, an iOS App Store ipa
+# and a Windows MSI — to the tag they were built from, each with a provenance
+# attestation beside it, and uploads the bundle to Play. The ipa goes to
+# TestFlight in a job of its own, Apple's wall clock not holding the other
+# assets' publishing back. There is no release APK; `debug-build.yml` builds
+# an APK by hand. `release-build.yml` is what builds them and can be run on
+# its own; `pages.yml` answers the same event for the web app.
 # See "Releasing" in AGENTS.md.
 on:
   release:
@@ -37,6 +39,9 @@ jobs:
       ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
       ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
       ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+      APPLE_DISTRIBUTION_CERT_P12: ${{ secrets.APPLE_DISTRIBUTION_CERT_P12 }}
+      APPLE_DISTRIBUTION_CERT_PASSWORD: ${{ secrets.APPLE_DISTRIBUTION_CERT_PASSWORD }}
+      APPLE_APPSTORE_PROFILE: ${{ secrets.APPLE_APPSTORE_PROFILE }}
 
   # A job of its own so the keystore and `contents: write` are never held by
   # the same one, and one run of it per file so a bundle on the release is
@@ -87,6 +92,49 @@ jobs:
             # echo
             echo "$FILE attached."
           } >> "$GITHUB_STEP_SUMMARY"
+
+  # The Google Play and App Store Connect channels run beside the publish
+  # matrix, both holding Apple's/Google's wall clock off it: a build, then
+  # two upload jobs and the attachments, each failable without the others.
+  # See "Google Play" below and the ipa notes in AGENTS.md.
+  testflight:
+    needs: build
+    runs-on: macos-latest
+    env:
+      IPA: ${{ needs.build.outputs.ipa }}
+    steps:
+      - uses: actions/download-artifact@v8.0.1
+        with:
+          name: ipa
+          path: dist
+
+      - name: Upload to TestFlight
+        env:
+          API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
+        run: |
+          set -euo pipefail
+          if [ -z "$API_ISSUER" ] || [ -z "$API_KEY_ID" ] || [ -z "$API_KEY_P8" ]; then
+            echo "::notice::No App Store Connect API key secrets; skipping the TestFlight upload"
+            echo "TestFlight: skipped, no API key secrets." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          keys="$RUNNER_TEMP/api-keys"
+          mkdir -p "$keys"
+          printf '%s' "$API_KEY_P8" | base64 -D -o "$keys/AuthKey_$API_KEY_ID.p8"
+          export API_PRIVATE_KEYS_DIR="$keys"
+          # altool is deprecated on Apple's road map; when a runner's Xcode
+          # no longer ships it the step says so in the summary as well as the
+          # log, and the artifact goes up by hand.
+          if xcrun --find altool >/dev/null 2>&1; then
+            xcrun altool --upload-package "dist/$IPA" --type ios \
+              --apiKey "$API_KEY_ID" --apiIssuer "$API_ISSUER"
+            echo "TestFlight: uploaded $(basename "dist/$IPA")." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "::notice::altool is not in this Xcode; upload dist/$IPA by hand"
+            echo "TestFlight: altool absent; upload dist/$IPA by hand." >> "$GITHUB_STEP_SUMMARY"
+          fi
 
   # Upload the App Bundle to Google Play. Separate from the publish matrix,
   # which attaches binaries to the GitHub release: this is the one path that

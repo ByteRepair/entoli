@@ -26,6 +26,10 @@
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<!-- Standard TLS only: the app is exempt (5A992 / 5A993), which the
+	     answer here is, so builds stop being asked once per upload. -->
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Entoli listens only while a voice conversation is open, and everything it hears stays on this device.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>

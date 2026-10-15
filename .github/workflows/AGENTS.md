@@ -23,6 +23,11 @@ A fourth, `entoli-installer.msi`, attaches the same way: the version job's
 `assets` list carries it and the publish matrix uploads every entry alike;
 see `windows/AGENTS.md`.
 
+A fifth, `entoli.ipa`, attaches the same way and is also the file that went
+up to TestFlight; the store redistributes what Apple resigns, so the
+attestation is about the build as uploaded rather than the artifact users
+get.
+
 **There is no release APK.** Play is the Android channel a release serves;
 Google builds the per-device APKs from the bundle itself, and anyone who
 wants a hand install builds one with `flutter build apk`, locally or
@@ -31,8 +36,8 @@ assets.** The builds are `release-build.yml`'s, which it calls with the tag
 and which is dispatchable on its own, so whether a tag builds can be found
 out without publishing a release to ask. The two Linux builds share the
 composite `.github/actions/linux-appimage` and differ in the mode they pass
-it; the four signing secrets are named at the call site rather than
-`inherit`ed, since only the Android job signs anything.
+it; the ten signing secrets are named at the call site rather than
+`inherit`ed, two jobs signing.
 
 ## The jobs
 
@@ -79,6 +84,34 @@ download. It also rewrites the workstation JVM figures in
 build, it loses the runner mid-build — the v2.2.0 App Bundle job died at 58
 minutes, no logs.
 
+**The ipa job is one runner where Android needed two.** The iSH core is a
+minutes-long clang of one static library, not a toolchain with gigabytes of
+its own, so `ios` checks the submodule out itself (recursive; `build.sh`'s
+own init is the fallback for a bare checkout), brews LLVM and lld for the
+i386 vdso, runs `tool/ios/ish/build.sh`, and then the app build. The
+xcframework is cached on the submodule gitlink plus the two repo files under
+it, so a release whose iSH pin has not moved restores it and skips the brew
+and the compile. Signing is read out of the profile rather than stored
+anywhere: the profile's `TeamIdentifier` and `Name` go into an appended
+`ios/Flutter/Signing.xcconfig` (the team, the exact identity and the profile
+specifier, over the stub's placeholders) and a generated
+`ExportOptions.plist` on runner temp, the stub in the tree carrying the
+manual style and an export whose settings drift from the profile the
+certificate rides failing anyway. The keychain is created in runner temp
+under a per-run generated password and dies with the runner. Empty signing
+secrets fail the job on the first step, before the runner fetches anything —
+the decode-before-build rule `android-build-setup` runs on, at its whole
+width.
+
+**The TestFlight upload is release.yml's `testflight` job, not the
+build's.** Apple's upload-and-processing wall clock belongs beside Play's,
+in parallel with the publish matrix: a build whose Apple side is slow still
+attaches its five assets. The job downloads the `ipa` artifact and uploads
+it with `altool`, skipping with a notice when the API trio is absent and
+saying so in the step summary as well as the log when a runner's Xcode has
+stopped shipping altool. A bare dispatch of `release-build.yml` therefore
+builds and uploads nothing to any store, matching its contract.
+
 **Every job that touches Dart starts with `.github/actions/flutter-setup`**
 — the SDK pin, packages and codegen. The generated sources are not
 committed, so build_runner runs on every job; the action caches the asset
@@ -100,7 +133,7 @@ subject by name.
 
 **The Android version code is derived from the version rather than
 stored**, as `major * 10000 + minor * 100 + patch` (1.0.0 is 10000, 1.2.3
-is 10203); the AppImage gets the same code. Pubspec carries no `+build`
+is 10203); the AppImage and the ipa get the same code. Pubspec carries no `+build`
 suffix: a second number to bump is a second number to forget, and
 forgetting it is a release that will not install over the one before.
 **Minor and patch must stay below 100** — 1.0.100 and 1.1.0 would compute
@@ -145,6 +178,17 @@ gh secret set ANDROID_KEYSTORE_PASSWORD
 gh secret set ANDROID_KEY_ALIAS
 gh secret set ANDROID_KEY_PASSWORD
 ```
+
+Apple's six are optional where the Android four are required: the first
+three sign, the last three are the TestFlight uploader alone, read by
+`release.yml`'s `testflight` job rather than passed through the build. A
+caller without Apple material ships every build but the store channel. The
+P12 carries the private key, unrecoverable the way the keystore is; its
+vault copy sits beside the export password. Cert and profile go stale about
+a year out: a renewed profile is generated against the same cert and
+re-uploaded as the secret, and a renewed cert is a new P12, a new password
+and a push of both. The P12's name on disk does not travel: GitHub holds
+base64 of its bytes, not its file name.
 
 ## The publisher
 

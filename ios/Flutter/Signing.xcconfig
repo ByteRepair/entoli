@@ -1,0 +1,9 @@
+// Signing policy for a store build: manual, with the values
+// release-build.yml's ios job fills from the distribution profile — the
+// DEVELOPMENT_TEAM, CODE_SIGN_IDENTITY and PROVISIONING_PROFILE_SPECIFIER
+// lines appended on the runner, last-wins over the empties here. Fill them
+// in by hand for a local `flutter build ipa`.
+CODE_SIGN_STYLE = Manual
+DEVELOPMENT_TEAM =
+CODE_SIGN_IDENTITY =
+PROVISIONING_PROFILE_SPECIFIER =
