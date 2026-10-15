@@ -366,12 +366,14 @@ makes new files in `.git`'s own root (`index.lock` under every ref refresh,
 parent no enumeration of the children gives. Landlock has no deny to carve
 a child back out of a granted parent, so `config` and `hooks` are not the
 sandbox's to protect inside it: the commands that write them (`config`,
-`remote`, `submodule`) are kept off the vouch list, and what slips past
-both layers stands into the mode's own gate. The vouch and the grant are
-one computation read twice, so
-nothing is vouched without a grant under it and nothing granted that was
-not vouched; a `cd` the command carries moves the repo the vouch answers
-for, and a `cd` the tracker cannot name loses the vouch. What the tiers do
+`remote`, `submodule`, and `init` with `--template`) are kept off the vouch
+list, and what slips past both layers stands into the mode's own gate. The
+vouch and the grant are one
+computation read twice, so nothing the sandbox carries a grant for is
+without the gate having read it as coverage, and no coverage claims a grant
+the grant layer does not have; a `cd` the command carries moves the repo
+the grant answers for, and a `cd` the tracker cannot name loses the cover.
+What the tiers do
 not cover asks, in every mode: pushes, resets, config and remote writes,
 and everything else the sandbox is the only boundary behind.
 

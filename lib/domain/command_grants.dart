@@ -8,7 +8,9 @@ import "safe_command.dart";
 /// listed stands down to the banner path in every mode: pushes and resets
 /// and stashes — and the `config`, `remote` and `submodule` writes, whose
 /// edits reach `.git/config`, where a planted hook or fsmonitor would run
-/// under the user's own git outside this sandbox.
+/// under the user's own git outside this sandbox, and an `init` rerun with
+/// `--template`, which copies the template's files into `.git/hooks` the
+/// same way.
 const vouchedGitSubcommands = {
   "add",
   "commit",
@@ -73,21 +75,15 @@ class CommandGrantsInput {
 /// git dir — the mutating ones because writing refs is the work, the
 /// read-only ones because git's reads are not read-only at the kernel (a
 /// `git status` refreshes the index; `git diff` reads it; a fetch takes
-/// locks). What is left out are the command shapes that should not run
-/// unasked at all: pushes and resets and the config/remote writes that
-/// carry hooks and fsmonitor in them, none of which get a grant, because
-/// the banner asks first.
-bool grantWarranted(SegmentProfile profile) {
-  if (profile.reach == SegmentReach.nonModifying &&
-      profile.modelable &&
-      profile.program == "git") {
-    return true;
-  }
-  return segmentVouched(profile);
-}
+/// locks). What is left out — pushes, resets, the config/remote writes the
+/// vouch list's doc names — stands down to the banner path first.
+bool grantWarranted(SegmentProfile profile) =>
+    (profile.reach == SegmentReach.nonModifying &&
+        profile.program == "git") ||
+    segmentVouched(profile);
 
-/// Assesses one command. The expensive parts are directory reads — walking
-/// up for the repo and listing its `.git` — so the answer is a value both
+/// Assesses one command. The expensive part is the directory read walking
+/// up for the repo, so the answer is a value both
 /// the gate and the composer recompute for the same inputs; nothing is held
 /// between calls to drift. The walk within one call is memoised by
 /// directory, which answers the same question once for a compound that
@@ -154,7 +150,7 @@ Future<CommandGrants> commandGrantsFor(CommandGrantsInput input) async {
     final dir = workDirs[i];
     if (dir == null) continue;
     // The same repo asked for twice in one compound — `git add x && git
-    // commit -m y` — is one walk and one listing. Only the walk-up is
+    // commit -m y` — is one walk. Only the walk-up is
     // memoised: an explicit `--git-dir` resolves against the segment's own
     // directory, so its answer is not portable between segments.
     GitGrant? grant;
@@ -178,8 +174,8 @@ Future<CommandGrants> commandGrantsFor(CommandGrantsInput input) async {
 
 /// Whether the git grant policy vouches for [profile]: a `git` mutation in
 /// one of the plain shapes, not the guarded deletions and renames and never
-/// a `-c`. Non-modifying segments arrive already covered by their reach and
-/// never reach this.
+/// a `-c`. Reached through [grantWarranted]'s fallthrough — a non-git or
+/// non-vouched profile arriving is the answer false.
 bool segmentVouched(SegmentProfile profile) {
   if (!profile.modelable) return false;
   final words = profile.words;
@@ -197,7 +193,7 @@ bool segmentVouched(SegmentProfile profile) {
   return true;
 }
 
-/// A vouched git segment's grant. [gitDir] is the repository the command
+/// A warranted git segment's grant. [gitDir] is the repository the command
 /// works against — the walk-up's finding, or the main repository's `.git`
 /// where the cwd is a linked worktree, the answer a
 /// `git rev-parse --absolute-git-dir` prints for both — and [paths] names
@@ -206,11 +202,9 @@ bool segmentVouched(SegmentProfile profile) {
 /// directory's own root — `.git/index.lock` under every ref-refresh,
 /// `COMMIT_EDITMSG` under a commit — and creating one needs make-rights on
 /// the parent. Landlock has no deny to carve a child back out of a granted
-/// parent, so the protection of `.git/config` and `.git/hooks` — where a
-/// planted hook or fsmonitor would run under the user's own unconfined git
-/// later — cannot be the sandbox's work here: it is the vouch list
-/// (config/remote/submodule commands never carry a grant, the banner asks
-/// for them) and the approval mode's own gate over every other write.
+/// parent, so the protection of `.git/config` and `.git/hooks` is not the
+/// sandbox's work here — it is the vouch list's and the mode gate's, as the
+/// vouch list's own doc tells it.
 class GitGrant {
   const GitGrant({required this.gitDir, required this.paths});
 

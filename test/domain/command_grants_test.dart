@@ -19,9 +19,8 @@ void main() {
   });
 
   /// A minimal repository at [path]: a `.git` directory with the children a
-  /// checkout carries, so the enumeration has something honest to answer
-  /// with.
-  String makeRepo(String path, {bool hooks = true}) {
+  /// checkout carries — the shape the walk-up finds a wholesale grant over.
+  String makeRepo(String path) {
     Directory(p.join(path, ".git", "objects")).createSync(recursive: true);
     Directory(p.join(path, ".git", "refs")).createSync(recursive: true);
     File(
@@ -29,9 +28,7 @@ void main() {
     ).writeAsStringSync("ref: refs/heads/master\n");
     File(p.join(path, ".git", "index")).writeAsStringSync("");
     File(p.join(path, ".git", "config")).writeAsStringSync("[core]\n");
-    if (hooks) {
-      Directory(p.join(path, ".git", "hooks")).createSync();
-    }
+    Directory(p.join(path, ".git", "hooks")).createSync();
     return path;
   }
 
@@ -93,8 +90,8 @@ void main() {
   });
 
   test("a read-only non-git command carries no grant", () async {
-    makeRepo(p.join(root.path, "repo"));
-    final grants = await assess("ls -la", cwd: makeRepo(p.join(root.path, "repo")));
+    final repo = makeRepo(p.join(root.path, "repo"));
+    final grants = await assess("ls -la", cwd: repo);
     expect(grants.gitGrants, isEmpty);
     expect(covered(grants), isTrue);
   });
@@ -122,6 +119,11 @@ void main() {
         "git checkout master",
         "git config user.email a@b",
         "git -c core.fsmonitor=x commit -m x",
+        "git remote add origin x",
+        "git submodule update",
+        // Re-running init copies the template's hooks into the granted git
+        // dir — the vouch does not carry a banner-free way to plant them.
+        "git init --template=${p.join(root.path, 'evil-template')}",
         "git tag v1.0",
         "git branch feature",
       ]) {
