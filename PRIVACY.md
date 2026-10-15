@@ -116,4 +116,4 @@ or guardian supervise any use by a minor.
 ## Contact
 
 For privacy inquiries, open a GitHub discussion at
-<https://github.com/Yiannis128/agent-chat/discussions>.
+<https://github.com/ByteRepair/entoli/discussions>.

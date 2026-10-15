@@ -545,7 +545,7 @@ class _Choice extends StatelessWidget {
 class _AboutSection extends ConsumerWidget {
   const _AboutSection();
 
-  static final _repository = Uri.parse("https://github.com/Yiannis128/agent-chat");
+  static final _repository = Uri.parse("https://github.com/ByteRepair/entoli");
   static const _madeBy = "Made by Yiannis Charalambous";
 
   @override
