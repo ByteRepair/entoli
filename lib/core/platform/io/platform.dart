@@ -42,6 +42,7 @@ import "../../../data/voice/android_voice.dart";
 import "../../../data/voice/file_voice_model_store.dart";
 import "../../../data/voice/ios_voice.dart";
 import "../../../data/voice/sherpa_voice.dart";
+import "../../../domain/app_settings.dart";
 import "../../../domain/app_update.dart";
 import "../../../domain/assistant_launch.dart";
 import "../../../domain/backup_handoff.dart";
@@ -262,41 +263,42 @@ RootfsStore platformRootfsStore(String cacheDir) =>
         ? FileRootfsStore(p.join(cacheDir, "rootfs"), tar: _ishFakefsify)
         : FileRootfsStore(p.join(cacheDir, "rootfs"));
 
-/// The Byte Repair store, which installs the tooling — into the project's
-/// rootfs copy on Android, the app's own bin directory on the desktops —
-/// and reports on it. [project] and [workspace] are named by the caller so
-/// both sides of the conditional import agree on what the store is for.
+/// The Byte Repair store, which installs the tooling — into the guest's own
+/// `/usr/local/bin` where an install runs inside one (the proot rootfs on
+/// Android, the iSH Alpine on iOS), the app's own bin directory on the
+/// desktops — and reports on it. [project] and [workspace] are named by the
+/// caller so both sides of the conditional import agree on what the store is
+/// for.
 ///
-/// Where the fetched tools land follows the shell they will run under: a
-/// guest's `/usr/local/bin` where a rootfs can run (Android), the bin
-/// directory [platformByteRepairBinDir] names elsewhere — the three
-/// desktops, whose host shells are each capable; iOS and the web compose
-/// none and are told so at the settings page.
+/// The timeout follows the same guest/host fact as the destination: a
+/// guest's `apk` makes its installs in minutes, where a host install
+/// fetches a 240 MB ESBMC release zip and wants the half hour.
 ByteRepairStore platformByteRepairStore(
   AppConfig config,
   String project,
   String workspace,
   String cacheDir,
   RootfsStore? rootfs,
-) =>
-    FileByteRepairStore(
-      config: config,
-      project: project,
-      workspace: workspace,
-      installDir:
-          Platform.isAndroid ? guestEsbmcInstallDir : platformByteRepairBinDir(cacheDir),
-      // A guest's apk is a local package manager; the host fetches a 240 MB
-      // ESBMC release zip over the network.
-      installTimeout: Platform.isAndroid
-          ? const Duration(minutes: 10)
-          : const Duration(minutes: 30),
-      rootfsStore: rootfs,
-    );
+) {
+  final guest = Platform.isAndroid || Platform.isIOS;
+  return FileByteRepairStore(
+    config: config,
+    project: project,
+    workspace: workspace,
+    installDir:
+        guest ? guestEsbmcInstallDir : platformByteRepairBinDir(cacheDir),
+    installTimeout: guest ? guestInstallTimeout : hostInstallTimeout,
+    rootfsStore: rootfs,
+  );
+}
 
 /// The bin directory a rootfs-isolated project's turns find the fetched tools
-/// on, or null where there is nothing to inject — a guest reaches its own
-/// `/usr/local/bin` without help, iOS's iSH guest has an Alpine the releases
-/// have no match for, and the web has no shell at all. This is the one
+/// on, or null where there is nothing to inject. It is the *host* answer
+/// only: the guests run the setup inside their own Linux and reach its
+/// `/usr/local/bin` without a host one — Android's proot, and iOS's iSH,
+/// whose Alpine keeps what the setup installs in the emulator's fakefs —
+/// and iOS's null is the web's shape anyway, iOS denying a child process
+/// out of a host shell at all. On the desktops this is then the one
 /// platform gate: the store's host install and the settings page's
 /// capability banner both ride `byteRepairBinDir`'s answer, so a desktop
 /// that composes one here can also run a setup into it. The one composition
@@ -316,10 +318,20 @@ String? platformByteRepairBinDir(String cacheDir) =>
 /// directory the OS may empty, so the binary the gate stands for has to be
 /// there too. A cache clear between setups then leaves the chat page gated —
 /// honestly, since nothing is on PATH — and Run Setup repairs it. Inside a
-/// guest the marker is enough, since the rootfs copy it was written after is
-/// under the data directory a backup carries.
+/// guest the marker alone is enough for the same pick: the rootfs copy it
+/// was written after is under the data directory a backup carries — but
+/// which env commands run in is still asked, through the same env check the
+/// settings banner makes: a setup run under a rootfs leaves the marker, and
+/// Android's "Host" env has no package manager (iOS's no shell at all) to
+/// stand it up again. The web side of the seam answers true for its whole
+/// body, so no browser ask reaches here.
 bool platformSetupComplete(AppConfig config, String? project,
     {String? byteRepairBinDir}) {
+  if ((defaultTargetPlatform == TargetPlatform.android ||
+          defaultTargetPlatform == TargetPlatform.iOS) &&
+      AppSettings.load(config).rootfsId == null) {
+    return false;
+  }
   if (!File(config.setupCompleteFile(project: project)).existsSync()) {
     return false;
   }

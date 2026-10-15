@@ -98,7 +98,8 @@ ByteRepairStore platformByteRepairStore(
 String? platformByteRepairBinDir(String cacheDir) => null;
 
 /// True: there is no marker to read and nothing that could write one, so a
-/// project that requires setup never gates a chat here.
+/// project that requires setup never gates a chat here — and no guest env
+/// to require anything of, the io side's env clause having no answer here.
 bool platformSetupComplete(AppConfig config, String? project,
         {String? byteRepairBinDir}) =>
     true;

@@ -129,11 +129,11 @@ class TestApp {
   /// build could run one at all — the two halves the Terminal page turns on.
   /// The default is a build with no proot in it, which is every platform but
   /// Android and so what most of the suite should be pretending to be.
-  /// [byteRepairInstallDir] is where a host setup would land its tools, which
-  /// decides whether the Byte Repair section can run one at all. The default
-  /// is the guest's `/usr/local/bin`, the Android answer, which keeps the
-  /// section capable in every other fixture; null is a desktop with no
-  /// install destination, macOS's shape.
+  /// [byteRepairInstallDir] is the install destination the store is built
+  /// with: the guest's `/usr/local/bin` by default, the Android and iOS
+  /// answer, which is the one the gate excludes from every host read. A host
+  /// path — a desktop's — gates on that instead; null is a desktop with no
+  /// install destination.
   /// [abi] is what the device answers with, and only Android answers at all —
   /// so it is named by a test that is about one, and left alone by the rest.
   /// [systemAccent] is the colour the system is themed to, which is the other

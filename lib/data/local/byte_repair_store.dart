@@ -3,23 +3,26 @@ import "package:flutter/services.dart" show rootBundle;
 
 import "../../core/config.dart";
 import "../../core/log.dart";
+import "../../domain/app_settings.dart";
+import "../../domain/rootfs.dart";
 import "../../domain/rootfs_store.dart";
 import "../../domain/shell.dart";
 
 /// Installs and queries the Byte Repair tooling — make, github-cli and ESBMC —
 /// so they are on PATH for every agent turn in the project. The install runs
-/// through the configured terminal env (proot rootfs on Android, the host
-/// shell on the desktops, with a bin directory to inject on every desktop)
-/// with [project], so it reaches the project's own rootfs instance or the
-/// injected bin directory.
+/// through the configured terminal env (a guest's rootfs on Android and iOS —
+/// proot and iSH — the host shell on the desktops, with a bin directory to
+/// inject there) with [project], so it reaches the project's own rootfs
+/// instance or the injected bin directory.
 ///
 /// The script's environment is declared by the caller, never probed by the
 /// script: [installDir] is where tools land (`/usr/local/bin` inside a guest,
 /// `<cacheDir>/byte-repair/bin` on the host), sent as `ENV_INSTALL_DIR` by
-/// [installEnvironment]; the driver's environment carries
-/// `ENV_PACKAGE_MANAGER` (`apk` in a guest, nothing on the host, where the
+/// [installEnvironment]; the install environment names
+/// [packageManagerEnvVar] where the install is a guest's — `apk`, the picked
+/// rootfs's own word from the catalog — and nothing on the host, where the
 /// machine's package manager is not ours to touch and static binaries are
-/// fetched instead), and the io side's [installEnvironment] adds the binary's
+/// fetched instead; and the io side's [installEnvironment] adds the binary's
 /// name, which the script does not probe — the one encoding of it lives with
 /// the gate that asks for the file it names. A binary already on PATH *and
 /// runnable* is never re-fetched — the script copies it into the bin
@@ -43,7 +46,7 @@ abstract class ByteRepairStore {
     required this.project,
     required this.workspace,
     this.installDir,
-    this.installTimeout = _guestInstallTimeout,
+    this.installTimeout = guestInstallTimeout,
     this.rootfsStore,
   });
 
@@ -51,13 +54,15 @@ abstract class ByteRepairStore {
   final String project;
   final String workspace;
 
-  /// Where the install script puts the tools it fetches: the rootfs's own
-  /// `/usr/local/bin` inside a guest, the app's bin directory on the
-  /// desktops. Always set where an install can run — the script refuses to
-  /// guess a destination itself. Null where there is nothing to point at — a
-  /// guest reaches its own `/usr/local/bin` without help, iOS's iSH guest
-  /// has no release to match, and the web has no shell — so a null here is
-  /// "no host install", never a path the script may guess around.
+  /// Where the install script puts the tools it fetches: the guest's own
+  /// `/usr/local/bin` where an install runs inside one — Android's proot
+  /// rootfs and iOS's iSH Alpine, declared as `ENV_INSTALL_DIR` rather than
+  /// composed since the script refuses to guess — and the app's bin
+  /// directory on the desktops. Always set where an install can run; null
+  /// only where no shell could run the script at all (the web), so a null
+  /// here is "no install", never a path the script may guess around. A
+  /// guest path is also the sign the host-side readers go by: nothing on
+  /// the host's disk carries what a guest installs.
   final String? installDir;
 
   /// How long the install script may run. Thirty minutes on the host, where
@@ -119,41 +124,58 @@ abstract class ByteRepairStore {
   }
 
   /// The environment the install run carries, layered over its driver's. The
-  /// base is the destination, as `ENV_INSTALL_DIR`; the concrete store can
-  /// add what its side of the platform owns — the binary's name, where the
-  /// gate asking for the file it names lives beside the const that answers.
-  Map<String, String> installEnvironment() =>
-      {"ENV_INSTALL_DIR": installDir ?? ""};
+  /// base is the destination, as `ENV_INSTALL_DIR`; the package manager is
+  /// the picked rootfs's own word (`Rootfs.packageManager`, what the proot
+  /// guest driver declares for every command in it) declared where the
+  /// install is a guest's — the destination being the guest const is that
+  /// fact, and unset is the host's, which has none of ours. The concrete
+  /// store adds what its side of the platform owns — the binary's name,
+  /// where the gate asking for the file it names lives beside the const
+  /// that answers.
+  Map<String, String> installEnvironment() {
+    final rootfs = rootfsById(AppSettings.load(config).rootfsId);
+    return {
+      "ENV_INSTALL_DIR": installDir ?? "",
+      if (installDir == guestEsbmcInstallDir && rootfs != null)
+        packageManagerEnvVar: rootfs.packageManager,
+    };
+  }
 
   /// Copies a user-picked ESBMC binary next to the tools the setup fetched,
   /// making it executable. The rootfs must already exist — run [install]
   /// first. Null on success, an error message on failure.
   Future<String?> importEsbmc(XFile file);
 
-  /// Deletes the Byte Repair environment: the per-project rootfs (the Alpine
-  /// copy and everything installed into it) on Android, the fetched tools'
-  /// cache directory on every desktop, the workspace (cloned repos, scratch
-  /// files), and the `.setup-complete` marker. Chats are the settings page's
-  /// to delete, through the repository. Null on success, an error message on
-  /// failure.
+  /// Deletes the Byte Repair environment: on Android the per-project rootfs
+  /// (the Alpine copy and everything installed into it), on the desktops the
+  /// fetched tools' cache directory, and everywhere the workspace (cloned
+  /// repos, scratch files) and the `.setup-complete` marker. An iSH guest's
+  /// installs are a guest of the base Alpine, which iOS takes down no tree
+  /// of this store's own for — they go where Terminal settings' rootfs
+  /// delete takes everything, its confirm message saying so. Chats are the
+  /// settings page's to delete, through the repository. Null on success, an
+  /// error message on failure.
   Future<String?> deleteEnvironment();
 
   /// One line naming what [deleteEnvironment] clears of the environment, for
   /// the settings page's confirm dialog: the setup's own tree, whatever state
-  /// it left behind. null where nothing setup made is on disk — the dialog
-  /// then names the workspace and the chats alone, which is what a platform
-  /// with no install destination (iOS, the web) has, and a desktop that has
-  /// not run a setup yet is the same by the state, not the platform. Reading
-  /// the disk is the state: a Host env on Android copies nothing either.
+  /// it left behind. null where none of that is a tree of the host's disk —
+  /// the dialog then names the workspace and the chats alone. A guest's
+  /// installs are inside its Linux: a proot rootfs copy names the rootfs
+  /// clause, and iSH's fakefs is no host tree at all, which is the same null
+  /// a desktop that has not run a setup yet reads — by the state, not the
+  /// platform. Reading the disk is the state: a Host env on Android copies
+  /// nothing either.
   String? get environmentDeletion;
 
   /// What the settings page draws where this store's environment cannot run
   /// a setup — the env capability the section hides its buttons behind — or
   /// null where the buttons can run: a guest with a package manager on
-  /// Android, an install destination on the desktops. The web's unavailable
-  /// store is never capable. Answering here keeps the platform's own facts
-  /// with what reads them (`defaultTargetPlatform`'s idea of a browser is
-  /// the phone it runs on, which is why the widget must not ask).
+  /// Android and iOS, an install destination on the desktops. The web's
+  /// unavailable store is never capable. Answering here keeps the
+  /// platform's own facts with what reads them (`defaultTargetPlatform`'s
+  /// idea of a browser is the phone it runs on, which is why the widget
+  /// must not ask).
   String? get capabilityBanner;
 
   /// The delete confirm's message, composed from the two facts this class
@@ -200,7 +222,17 @@ abstract class ByteRepairStore {
   }
 }
 
-const _guestInstallTimeout = Duration(minutes: 10);
+/// How long a guest's setup may run: ten minutes, where `apk` is the local
+/// package manager of the Linux the setup runs inside (Android's proot,
+/// iOS's iSH) — against the host's thirty, where ESBMC is a 240 MB release
+/// zip over the network. Chosen by the platform factory beside
+/// [guestEsbmcInstallDir], which is where the guest/host fact lives.
+const guestInstallTimeout = Duration(minutes: 10);
+
+/// The host's half of the same question, named so the factory's two halves
+/// read symmetrically: a host install fetches the release zip over the
+/// network and wants the half hour.
+const hostInstallTimeout = Duration(minutes: 30);
 
 /// Where a guest's install script lands its tools: the rootfs's own
 /// `/usr/local/bin`, now declared rather than implied. The host's answer is
