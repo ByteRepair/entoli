@@ -4,6 +4,7 @@ import "dart:typed_data";
 import "package:uuid/uuid.dart";
 
 import "../core/config.dart";
+import "../core/log.dart";
 import "../domain/agent_backend.dart";
 import "../domain/app_settings.dart";
 import "../domain/builtin_project.dart";
@@ -619,8 +620,12 @@ class ChatRepository {
   /// the fetch's host — writes it to the tier the answer names, and forwards
   /// the answer whole: the waiting turn derives the same rule for itself, so
   /// the rest of it is covered before the persisted file is read again. The
-  /// project is the chat's own, read from the store — a UI snapshot may be
-  /// from before a move.
+  /// `add_directory` banner rides the re-prompt's route instead: its approval
+  /// carries the directory in `deniedDirs`, so an "always" answer below
+  /// extends the tier's `writableDirs` and no rule is written — the tool asks
+  /// for the workspace's own permissions, which are not a rule on calls at
+  /// all. The project is the chat's own, read from the store — a UI snapshot
+  /// may be from before a move.
   Future<void> respondApproval(
     String chatId,
     String approvalId,
@@ -631,15 +636,30 @@ class ChatRepository {
     if (r == ApprovalResponse.alwaysAllowChat ||
         r == ApprovalResponse.alwaysAllowProject) {
       if (deniedDirs.isNotEmpty) {
-        // A re-prompt's "always" is the paths: they become the tier's
-        // writable directories, and every later confined command — this
-        // chat's or the project's — writes there without a banner. The
-        // command's own prose is not recorded: it varies every turn and
-        // would claim to allow what it cannot name.
-        if (r == ApprovalResponse.alwaysAllowChat) {
-          await _saveChatDirs(chatId, deniedDirs);
-        } else {
-          await _saveProjectDirs(await projectOf(chatId), deniedDirs);
+        // Over the app's own data either way — beneath the tree it names the
+        // data itself, above it carries those writes. The tool's banner
+        // refuses these first; this is the re-prompt's door, which the
+        // answer could outlive the turn.
+        final grantable = [
+          for (final d in deniedDirs)
+            if (!pathInside(_config.dataDir, d) &&
+                !pathInside(d, _config.dataDir))
+              d,
+        ];
+        if (grantable.length < deniedDirs.length) {
+          logFailure("perms", "refused a persisted grant over the app's data");
+        }
+        if (grantable.isNotEmpty) {
+          // A re-prompt's "always" is the paths: they become the tier's
+          // writable directories, and every later confined command — this
+          // chat's or the project's — writes there without a banner. The
+          // command's own prose is not recorded: it varies every turn and
+          // would claim to allow what it cannot name.
+          if (r == ApprovalResponse.alwaysAllowChat) {
+            await _saveChatDirs(chatId, grantable);
+          } else {
+            await _saveProjectDirs(await projectOf(chatId), grantable);
+          }
         }
       } else {
         final rule = ruleFromApproval(approval);

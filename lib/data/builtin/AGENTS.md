@@ -313,6 +313,25 @@ the derived rule: `ruleFromApproval` reads the command's leading words, the
 file's directory or the fetch's host, and the repository persists it to the
 tier the answer named.
 
+The directory grant is the re-prompt's route carrying a tool's name:
+`add_directory` (`lib/data/builtin/directory_tools.dart`) is the model's ask
+for write access to a directory outside the workspaces, and its banner — the
+ordinary one, four answers — is the whole grant. A plain allow joins the
+directory to the turn's runtime grant; an always answer reaches the repository
+with the directory in `deniedDirs`, so it lands in the named tier's
+`writableDirs` and no rule is written. `writable_directories` lists the
+workspaces and what was granted beside them. The file tools read the same
+store — `outsideWorkspaces` carries the turn's writable set — so a granted
+directory behaves the same by command or by file tool: one store, two readers.
+The app's data directory refuses in both directions — anything beneath it, or
+anything containing it, would make the app's own settings, secrets and chats
+writable from inside its own permit. The tool's door refuses before any
+banner; the repository's persistence route drops the same paths where a
+re-prompt's answer would have persisted them. The tool rides `ask` and runs
+top-level only, having
+nobody to answer the banner otherwise; the description is the only thing that
+tells the model it exists.
+
 In `auto` mode, a `PermissionClassifier` (the `LlmClassifier` impl, or
 `NoClassifier` when no classifier model is configured) is asked before each
 `bash` and `webfetch` call. `allow` runs silently, `deny` refuses with a
@@ -387,8 +406,9 @@ is asking about.
 
 What it shows is `ToolApproval.argumentsText`, which is the field `ToolCall`
 already carried and is now on both. The banner does not parse: `_bash` has the
-command in a local and `_webfetch` has the URL, both one line above the
-`_runGated` call that raises the approval, so the wording rides with it. Digging
+command in a local, `_webfetch` has the URL, and `_addDirectory` the resolved
+directory — each one line above the gate call that raises the approval, so the
+wording rides with it. Digging
 it back out of the JSON in the widget was the first version, and it meant a list
 of argument names — `command`, `url` — kept in a widget file, describing tools
 it is nowhere near. The raw JSON stays as the fallback for a tool that words

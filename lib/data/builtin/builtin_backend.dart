@@ -429,6 +429,7 @@ class BuiltinBackend implements AgentBackend {
         permissions: settings.permissions,
         writableDirs: settings.writableDirs,
         sandboxReprompt: settings.sandboxReprompt ?? true,
+        dataDir: config.dataDir,
         project: project,
         saveArtifact: (path, entryFile, {artifactId}) async {
           final resolved = resolvePath(path);

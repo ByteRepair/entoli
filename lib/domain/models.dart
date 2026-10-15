@@ -519,7 +519,12 @@ enum ApprovalResponse {
   alwaysAllowChat,
 
   /// Allow, and write the rule on the project's `project.json`.
-  alwaysAllowProject,
+  alwaysAllowProject;
+
+  /// Whether the answer grants the call at all, however it persists — the
+  /// three are the banner's yes forms, [deny] its only no.
+  bool get isAllow =>
+      this == allow || this == alwaysAllowChat || this == alwaysAllowProject;
 }
 
 /// A model the user can pick in settings.

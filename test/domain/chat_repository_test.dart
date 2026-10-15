@@ -710,6 +710,42 @@ void main() {
       expect(meta.writableDirs, hasLength(1));
     });
 
+    test("add_directory's always answer lands in the tier's writableDirs",
+        () async {
+      // The grant request carries its directory in `deniedDirs`, so the
+      // always answers ride the re-prompt's route: dirs, never a rule.
+      final repo = repoWith(AppSettings());
+      final chat = await savedChat(repo);
+      await repo.respondApproval(chat.state.id, "ad-1",
+          ApprovalResponse.alwaysAllowChat,
+          approval: ToolApproval(
+              id: "ad-1",
+              toolName: "add_directory",
+              argumentsText: "/home/yiannis",
+              deniedDirs: const ["/home/yiannis"]));
+      final meta = await repo.loadMeta(chat.state.id);
+      expect(meta.writableDirs, ["/home/yiannis"]);
+      expect(meta.permissions, isEmpty);
+    });
+
+    test("a re-prompt naming the app's own data persists nothing", () async {
+      // The tool's door refuses the data tree before any banner; this is the
+      // re-prompt's door, filtered where the answer would outlive the turn.
+      final repo = repoWith(AppSettings());
+      final chat = await savedChat(repo);
+      final inside = "${config.dataDir}/projects";
+      await repo.respondApproval(chat.state.id, "ad-2",
+          ApprovalResponse.alwaysAllowChat,
+          approval: ToolApproval(
+              id: "ad-2",
+              toolName: "add_directory",
+              argumentsText: inside,
+              deniedDirs: [inside]));
+      final meta = await repo.loadMeta(chat.state.id);
+      expect(meta.writableDirs, isEmpty);
+      expect(meta.permissions, isEmpty);
+    });
+
     test("a plain allow writes nothing anywhere", () async {
       final repo = repoWith(AppSettings());
       final chat = await savedChat(repo);
