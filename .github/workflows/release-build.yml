@@ -36,12 +36,6 @@ on:
         required: false
       APPLE_APPSTORE_PROFILE:
         required: false
-      APPLE_API_ISSUER:
-        required: false
-      APPLE_API_KEY_ID:
-        required: false
-      APPLE_API_KEY_P8:
-        required: false
     outputs:
       version:
         description: The pubspec version, for the Play publisher's release name.
@@ -49,6 +43,9 @@ on:
       code:
         description: The version code, for the Play publisher's summary.
         value: ${{ jobs.version.outputs.code }}
+      ipa:
+        description: The ipa's file name, for the TestFlight uploader.
+        value: ${{ jobs.version.outputs.ipa }}
       assets:
         description: >
           Every file to attach, as `{file, artifact}` objects naming the
@@ -289,17 +286,10 @@ jobs:
           # Long enough to re-run the publisher by hand after a failure.
           retention-days: 7
 
-      - name: Report what was built
-        run: |
-          set -euo pipefail
-          {
-            echo "### $(basename "dist/$AAB")"
-            echo
-            echo '```'
-            (cd dist && sha256sum "$AAB")
-            echo "version code         $VERSION_CODE"
-            echo '```'
-          } >> "$GITHUB_STEP_SUMMARY"
+      - uses: ./.github/actions/report-built
+        with:
+          file: dist/${{ env.AAB }}
+          version-code: ${{ env.VERSION_CODE }}
 
   # The desktop model server and the app run on separate runners, the way the
   # Android tools and bundle do: the server build is a native cmake of
@@ -345,19 +335,11 @@ jobs:
       IPA: ${{ needs.version.outputs.ipa }}
       VERSION_CODE: ${{ needs.version.outputs.code }}
     steps:
-      - uses: actions/checkout@v7.0.1
-        with:
-          ref: ${{ inputs.tag }}
-          submodules: recursive
-
-      - uses: ./.github/actions/flutter-setup
-
-      # The decode before the build, so an empty or wrong secret costs
-      # seconds rather than a toolchain — the rule android-build-setup runs
-      # on. The keychain is created in the runner's temp directory and dies
-      # with the runner; the password is for unlocking it once, not to be
-      # kept.
-      - name: Set up the signing keychain and the profile
+      # The Apple material is checked before the runner fetches anything:
+      # a wrong or empty secret is a seconds-long failure on the cheapest
+      # possible step, ahead of the checkout's submodule fetch and the
+      # Flutter setup.
+      - name: Check the Apple signing secrets
         env:
           CERT_P12: ${{ secrets.APPLE_DISTRIBUTION_CERT_P12 }}
           CERT_PASSWORD: ${{ secrets.APPLE_DISTRIBUTION_CERT_PASSWORD }}
@@ -368,6 +350,23 @@ jobs:
             echo "::error::APPLE_DISTRIBUTION_CERT_P12, APPLE_DISTRIBUTION_CERT_PASSWORD or APPLE_APPSTORE_PROFILE is empty"
             exit 1
           fi
+
+      - uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ inputs.tag }}
+          submodules: recursive
+
+      - uses: ./.github/actions/flutter-setup
+
+      # The keychain is created in the runner's temp directory and dies with
+      # the runner; the password is for unlocking it once, not to be kept.
+      - name: Set up the signing keychain and the profile
+        env:
+          CERT_P12: ${{ secrets.APPLE_DISTRIBUTION_CERT_P12 }}
+          CERT_PASSWORD: ${{ secrets.APPLE_DISTRIBUTION_CERT_PASSWORD }}
+          PROFILE_B64: ${{ secrets.APPLE_APPSTORE_PROFILE }}
+        run: |
+          set -euo pipefail
           keychain="$RUNNER_TEMP/build.keychain"
           keychain_password="$(openssl rand -hex 24)"
           printf '%s' "$CERT_P12" | base64 -D -o "$RUNNER_TEMP/apple-distribution.p12"
@@ -384,7 +383,7 @@ jobs:
           security cms -D -i "$RUNNER_TEMP/profile.mobileprovision" -o "$profile_plist"
           profile_name="$(plutil -extract Name raw -o - "$profile_plist")"
           uuid="$(plutil -extract UUID raw -o - "$profile_plist")"
-          team="$(plutil -extract TeamIdentifier.1 raw -o - "$profile_plist")"
+          team="$(plutil -extract TeamIdentifier.0 raw -o - "$profile_plist")"
           identity="$(security find-identity -v -p codesigning "$keychain" |
             awk -F'"' '/Apple Distribution/{print $2; exit}')"
           if [ -z "$profile_name" ] || [ -z "$uuid" ] || [ -z "$team" ] || [ -z "$identity" ]; then
@@ -401,34 +400,57 @@ jobs:
             echo "APPLE_PROFILE_NAME=$profile_name"
           } >> "$GITHUB_ENV"
 
-      # Appended to the runner's copy only: the team, the manual style and the
-      # profile specifier are signing state, not repository state. Manual is
-      # what makes the archive sign with the distribution certificate instead
-      # of whatever the machine's default would offer it.
-      - name: Point Release.xcconfig at the profile
+      # Appended into the committed stub's runner copy: the values are
+      # signing state, the file naming where signing policy lives is
+      # repository state.
+      - name: Fill Signing.xcconfig from the profile
         run: |
           set -euo pipefail
-          cat >> ios/Flutter/Release.xcconfig <<EOF
+          cat >> ios/Flutter/Signing.xcconfig <<EOF
           DEVELOPMENT_TEAM = $APPLE_TEAM
-          CODE_SIGN_STYLE = Manual
           CODE_SIGN_IDENTITY = $APPLE_IDENTITY
           PROVISIONING_PROFILE_SPECIFIER = $APPLE_PROFILE_NAME
           EOF
 
+      # Cached on the submodule gitlink and the repo's own inputs to the
+      # build, so a release whose iSH pin has not moved restores the
+      # xcframework and skips both the brew bottles and the compile.
+      - id: ishkey
+        run: |
+          set -euo pipefail
+          echo "key=ish-$(git rev-parse HEAD:tool/ios/ish/src)-$( \
+            shasum -a 256 tool/ios/ish/build.sh tool/ios/ish/ish_bridge.c | \
+            shasum -a 256 | cut -c1-12)" >> "$GITHUB_OUTPUT"
+
+      - name: Restore the IshCore xcframework
+        id: ishcache
+        uses: actions/cache@v6.1.0
+        with:
+          path: tool/ios/ish/dist/
+          key: ${{ steps.ishkey.outputs.key }}
+
       - name: Build the IshCore xcframework
+        if: steps.ishcache.outputs.cache-hit != 'true'
         env:
           HOMEBREW_NO_AUTO_UPDATE: 1
         run: |
           brew install --quiet llvm lld
           tool/ios/ish/build.sh
 
-      - name: Generate the export options
+      # The export options carry nothing the profile did not say, so they
+      # are generated beside the build that consumes them; the bundle id is
+      # parsed from the committed project to match what it is built with,
+      # asserted to one distinct value so a new target cannot quietly
+      # change which id keys the profile map.
+      - name: Build the ipa
         run: |
           set -euo pipefail
-          bundle="$(sed -n 's/^ *PRODUCT_BUNDLE_IDENTIFIER = \(.*\);/\1/p' \
-            ios/Runner.xcodeproj/project.pbxproj | head -1)"
-          if [ -z "$bundle" ]; then
-            echo "::error::No PRODUCT_BUNDLE_IDENTIFIER found in project.pbxproj"
+          bundle="$(sed -n 's/.*PRODUCT_BUNDLE_IDENTIFIER = \(.*\);/\1/p' \
+            ios/Runner.xcodeproj/project.pbxproj |
+            grep -v '\.RunnerTests' | sort -u)"
+          count="$(echo "$bundle" | wc -l | tr -d ' ')"
+          if [ "$count" != 1 ]; then
+            echo "::error::Expected one PRODUCT_BUNDLE_IDENTIFIER, got $count: $bundle"
             exit 1
           fi
           options="$RUNNER_TEMP/ExportOptions.plist"
@@ -455,12 +477,8 @@ jobs:
           </dict>
           </plist>
           EOF
-          echo "export_options=$options" >> "$GITHUB_ENV"
-
-      - name: Build the ipa
-        run: |
           flutter build ipa --release --build-number="$VERSION_CODE" \
-            --export-options-plist="$export_options"
+            --export-options-plist="$options"
 
       - name: Name the ipa after the release
         run: |
@@ -482,44 +500,10 @@ jobs:
           compression-level: 0
           retention-days: 7
 
-      # The store channel goes through App Store Connect rather than the
-      # GitHub release, so the ipa's publisher is this step, gated on the API
-      # key trio. altool is deprecated on Apple's road map; when a runner's
-      # Xcode no longer ships it the step says so and the artifact is
-      # uploaded by hand, which a notice is for.
-      - name: Upload to TestFlight
-        env:
-          API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
-          API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
-          API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
-        run: |
-          set -euo pipefail
-          if [ -z "$API_ISSUER" ] || [ -z "$API_KEY_ID" ] || [ -z "$API_KEY_P8" ]; then
-            echo "::notice::No App Store Connect API key secrets; skipping the TestFlight upload"
-            exit 0
-          fi
-          keys="$RUNNER_TEMP/api-keys"
-          mkdir -p "$keys"
-          printf '%s' "$API_KEY_P8" | base64 -D -o "$keys/AuthKey_$API_KEY_ID.p8"
-          export API_PRIVATE_KEYS_DIR="$keys"
-          if xcrun --find altool >/dev/null 2>&1; then
-            xcrun altool --upload-package "dist/$IPA" --type ios \
-              --apiKey "$API_KEY_ID" --apiIssuer "$API_ISSUER"
-          else
-            echo "::notice::altool is not in this Xcode; upload dist/$IPA by hand"
-          fi
-
-      - name: Report what was built
-        run: |
-          set -euo pipefail
-          {
-            echo "### $(basename "dist/$IPA")"
-            echo
-            echo '```'
-            (cd dist && shasum -a 256 "$IPA")
-            echo "version code         $VERSION_CODE"
-            echo '```'
-          } >> "$GITHUB_STEP_SUMMARY"
+      - uses: ./.github/actions/report-built
+        with:
+          file: dist/${{ env.IPA }}
+          version-code: ${{ env.VERSION_CODE }}
 
   # The desktop model server and the app run on separate runners, the way the
   # Android tools and bundle do: the server build is a native cmake of
@@ -614,16 +598,9 @@ jobs:
           compression-level: 0
           retention-days: 7
 
-      - name: Report what was built
-        run: |
-          set -euo pipefail
-          {
-            echo "### $(basename "dist/$DMG")"
-            echo
-            echo '```'
-            (cd dist && shasum -a 256 "$DMG")
-            echo '```'
-          } >> "$GITHUB_STEP_SUMMARY"
+      - uses: ./.github/actions/report-built
+        with:
+          file: dist/${{ env.DMG }}
 
   # The Windows MSI, built on the Windows runner nothing on this host can stand
   # in for. Like the macos job it builds the app alone — no model server is
