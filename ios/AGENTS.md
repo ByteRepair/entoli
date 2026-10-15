@@ -179,8 +179,9 @@ Voice mode is Apple's engines, behind the same `agent_chat/voice` contract
 `VoiceChannel.kt` answers on Android — `VoiceChannel.swift` beside the
 delegate, and the Dart `Native*` strategies shared with `android_voice.dart`.
 Recognition is on-device `SFSpeechRecognizer` only and synthesis is
-`AVSpeechSynthesizer`, so nothing said leaves the device and the languages the
-settings offer are the on-device intersection.
+`AVSpeechSynthesizer`, so no audio leaves the device — the transcript does, to
+the chat's model like any typed message, which is what both usage strings say —
+and the languages the settings offer are the on-device intersection.
 `NSMicrophoneUsageDescription` and `NSSpeechRecognitionUsageDescription` are
 the two keys this rides on; both grants are asked at the first listening turn
 and a refusal is the session's failure to show, not a state anything
