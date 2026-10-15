@@ -13,5 +13,6 @@ import UIKit
   func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
     GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
     VoiceChannel.register(with: engineBridge)
+    AppleFmChannel.register(with: engineBridge)
   }
 }

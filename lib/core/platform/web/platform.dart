@@ -8,6 +8,7 @@ import "package:web/web.dart" as web;
 
 import "../../../data/backup_handoff.dart";
 import "../../../data/builtin/llm/local_kv_cache.dart";
+import "../../../data/local/apple_fm.dart";
 import "../../../data/local/byte_repair_store.dart"
     show ByteRepairStore, UnavailableByteRepairStore;
 import "../../../data/local/file_secret_store.dart";
@@ -111,6 +112,10 @@ LocalModelStore platformLocalModelStore(String cacheDir) =>
 
 Future<LocalLlm> platformLocalLlm(LocalModelStore store, String cacheDir) async =>
     const UnavailableLocalLlm();
+
+/// No native framework behind this build, so no Apple model either — the
+/// browser reaches its providers over the wire, as it always has.
+Future<AppleFm?> platformCreateAppleFm() async => null;
 
 /// No server, so nothing to persist a KV cache for.
 LocalKvCache? platformLocalKvCache(String cacheDir, LocalLlm localLlm) => null;

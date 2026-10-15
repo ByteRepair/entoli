@@ -223,3 +223,9 @@ LocalModel? localModelById(String? id) {
 /// configurable: it is written into a chat's `meta.json` beside the model, and
 /// a chat that pinned one has to find it again on the next launch.
 const localProviderId = "on-device";
+
+/// The identifiers the Apple on-device model is offered under, in every
+/// picker and in a chat's `meta.json` — for the same reason [localProviderId]
+/// is fixed rather than configurable.
+const appleProviderId = "apple-foundation";
+const appleModelId = "apple-foundation-model";

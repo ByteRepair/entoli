@@ -153,6 +153,55 @@ simulator cannot run the recognizer on the iOS 26 line at all — no dictation
 hand-run was always a real device's, the same hardware run the commands want;
 the grants, a spoken turn, push-to-talk and read-aloud are its recipe.
 
+## The Apple model
+
+`AppleFmChannel.swift` answers the `agent_chat/apple_fm` channel — `AppleFm`
+and its client are the Dart half, in `lib/data/local/apple_fm.dart`. The model
+is the OS's own `SystemLanguageModel`, composed as an ordinary provider
+beside the llama pool in `llmEndpoints` (`appleProviderId`, an endpoint
+carrying its own client), so the registry, the pickers and a chat's pinned
+model see a provider like any other. No server: iOS has no exec, and the
+framework *is* the model — the llama pool this build never carried is not a
+gap here, for once; this entry is.
+
+Three decisions worth knowing before touching it:
+
+- **A tool call is reported and ended, not run.** `BridgeTool` forwards the
+  decoded arguments over the channel and throws, and the generation is
+  cancelled at the report: the agent in Dart owns the loop, because
+  approvals, the recorder and the projections hang off that ownership. What
+  the framework would have done with the report — feed it back to the model
+  and carry on — is what the cancellation stops; that a thrown tool error
+  also ends a `.allowed` generation is the hand-run's to confirm.
+- **The history is seeded as text** — prompt and response entries, tool
+  calls worded inline — a fresh `LanguageModelSession` per call, nothing
+  held between asks. That is the parity the projection enforces for every
+  other provider; what it hands over is Apple's own KV reuse, unmissed at
+  the 3B-model scale this is for.
+- **The context window is the model registry's constant**
+  (`contextWindowOf`, 8,192), not a handshake field: the compaction budget
+  and the auto-compact threshold both read it there, and the app-wide
+  `totalContext` guess is what everything else answers. Where the session
+  reports its own counts (iOS 27 and later) they ride the done frame, and
+  those are the threshold's real numbers.
+
+The availability is asked once at launch (`platformCreateAppleFm`). The
+endpoint exists where the OS *could* run the model — so a device where
+Apple Intelligence is off, or its assets still fetching, sees the model and
+reads the wording at first turn — and does not exist where the hardware
+never will, the same honesty a build with no llama server answers with.
+`SystemLanguageModel.contextSize` was not wired through: the registry
+constant stands in until a reader wants a channel round trip. The framework
+is weak-linked in both xcconfigs; an OS below 26 starts, and the handshake
+answers `os`.
+
+The simulator cannot run the model (device eligibility fails there, like
+the recognizer), so the bring-up is a real device's: the handshake, one
+no-tools turn, a tool handoff read back through `conv.jsonl`, then
+multi-step against the error map. What the VM does pin is the client's own
+protocol over a mock channel — `test/data/local/apple_fm_client_test.dart`:
+the streaming, the handoff ending, the history wording, the error map.
+
 ## The rootfs
 
 The Alpine a device downloads is an **i386** minirootfs, a separate entry in
