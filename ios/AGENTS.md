@@ -35,8 +35,10 @@ whatever is linked, offered or not. `NSCameraUsageDescription` is the
 prompt the pairing scanner raises, and would be owed even without it, since
 `mobile_scanner` and WebRTC link `AVCaptureDevice`; an upload without it is
 refused.
-`NSLocalNetworkUsageDescription` is the wording of the prompt the same-LAN
-pairing raises, since `SignalingServer` listens on `0.0.0.0` here too.
+`NSLocalNetworkUsageDescription` is the wording of the prompt the first
+local-network connection raises: the same-LAN pairing (`SignalingServer`
+listens on `0.0.0.0` here too), sync over the LAN after it, or a provider the
+user runs on their own network (an Ollama or LM Studio at a LAN address).
 
 `Runner/PrivacyInfo.xcprivacy` declares the required-reason APIs the Runner
 binary itself calls — the force-loaded iSH core above all — which the plugins'
