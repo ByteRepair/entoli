@@ -1,11 +1,12 @@
 name: Release
 
 # Attaches the binaries a published release is downloaded from — a signed App
-# Bundle for Google Play, a Linux AppImage, a macOS DMG and a Windows MSI — to
-# the tag they were built from, each with a provenance attestation beside it,
-# and uploads the bundle to Play. There is no release APK; `debug-build.yml`
-# builds an APK by hand. `release-build.yml` is what builds them and can be run
-# on its own; `pages.yml` answers the same event for the web app.
+# Bundle for Google Play, a Linux AppImage, a macOS DMG, an iOS App Store ipa
+# and a Windows MSI — to the tag they were built from, each with a provenance
+# attestation beside it, and uploads the bundle to Play. There is no release
+# APK; `debug-build.yml` builds an APK by hand. `release-build.yml` is what
+# builds them and can be run on its own; `pages.yml` answers the same event
+# for the web app.
 # See "Releasing" in AGENTS.md.
 on:
   release:
@@ -37,6 +38,12 @@ jobs:
       ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
       ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
       ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+      APPLE_DISTRIBUTION_CERT_P12: ${{ secrets.APPLE_DISTRIBUTION_CERT_P12 }}
+      APPLE_DISTRIBUTION_CERT_PASSWORD: ${{ secrets.APPLE_DISTRIBUTION_CERT_PASSWORD }}
+      APPLE_APPSTORE_PROFILE: ${{ secrets.APPLE_APPSTORE_PROFILE }}
+      APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+      APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+      APPLE_API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
 
   # A job of its own so the keystore and `contents: write` are never held by
   # the same one, and one run of it per file so a bundle on the release is
