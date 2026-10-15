@@ -10,13 +10,23 @@ copy here.
 
 ## Export compliance
 
-`ITSAppUsesNonExemptEncryption` is `false` in `Runner/Info.plist`, and it is
-the right answer even though the app encrypts: what it does is standard TLS,
-which is exempt (5A992 / 5A993), so there is nothing to declare. The key being
-there at all is what stops App Store Connect asking the export question on
-every upload. Turning it `true` would bring the compliance paperwork for
-nothing. The note lives here rather than as a comment beside the key because
-Xcode rewrites `Info.plist` without its comments.
+The app is in the middle row of Apple's table: **industry-standard algorithms
+not provided by the OS**. Sync's own layer is ChaCha20-Poly1305 with X25519
+and Ed25519 from the `cryptography` package, WebRTC brings its own DTLS and
+SRTP, and Dart's HTTPS is the engine's BoringSSL rather than `URLSession`. None
+of it is proprietary, so there is no CCATS; the one document that row asks for
+is a **French encryption declaration** (ANSSI), and only for distribution on
+the App Store in France.
+
+So `ITSAppUsesNonExemptEncryption` is `false` in `Runner/Info.plist` **on the
+condition that France is excluded from the app's availability** in App Store
+Connect; with France out there is no documentation to provide, and the key is
+what stops App Store Connect asking on every upload. Adding France means filing
+the ANSSI declaration first, uploading it under App Information → App
+Encryption Documentation, and then setting the key `true` beside the
+`ITSEncryptionExportComplianceCode` Apple issues on approval. The note lives
+here rather than as a comment beside the key because Xcode rewrites
+`Info.plist` without its comments.
 
 ## Privacy declarations
 
@@ -32,8 +42,8 @@ binary itself calls — the force-loaded iSH core above all — which the plugin
 and frameworks' own manifests do not cover: `stat`/`fstat`/`lstat`/`fstatat`
 as file timestamps (C617.1, inside the container), `fstatfs`/`fstatvfs` as
 disk space (85F4.1, the guest's `df`), and `mach_absolute_time` as boot time
-(35F9.1, elapsed time). No tracking and no collected data: everything goes to
-endpoints the user configures. A new native library or plugin wants its
+(35F9.1, elapsed time). Its tracking and collected-data entries are empty
+because `PRIVACY.md` says so, and they follow it rather than this file. A new native library or plugin wants its
 undefined symbols checked against Apple's list (`nm -u` on the built
 binary) and a reason added here for any new category.
 
