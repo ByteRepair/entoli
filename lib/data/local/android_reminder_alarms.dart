@@ -60,7 +60,8 @@ class AndroidReminderAlarms implements ReminderAlarms {
       _channel.invokeMethod("requestNotifications");
 
   @override
-  Future<void> schedule(int requestCode, DateTime at, {String? calendar}) =>
+  Future<void> schedule(int requestCode, DateTime at,
+          {String? calendar, String? label, String? chatId}) =>
       _channel.invokeMethod(
           "schedule", {"code": requestCode, "at": at.millisecondsSinceEpoch});
 

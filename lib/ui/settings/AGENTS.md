@@ -95,7 +95,9 @@ why iOS draws the mode and the language and nothing else. It keeps a file of its
 every other file here is one subject; see "Being the assistant". **Triggers**
 is drawn where the port is available — Android fires a schedule with the app
 closed, macOS wakes it through launchd (both answer `schedules` yes; see
-"Waking for a trigger" in `macos/AGENTS.md`), Linux notifies what a trigger
+"Waking for a trigger" in `macos/AGENTS.md`), iOS delivers the moment a
+notification whose turn runs at the next open (`schedules` yes too; see
+"Triggers" in `ios/AGENTS.md`), Linux notifies what a trigger
 did but cannot wake the process, and the page's description says which
 (`ReminderAlarms.schedules` is the question) — and where the port is
 unavailable it says so and offers nothing, the way a row
@@ -123,11 +125,14 @@ to `<cacheDir>/byte-repair/bin`, which the project's turns are given on PATH —
 so Byte Repair works on the host env with no root and nothing installed into
 the machine, and a tool already on the machine is used rather than fetched.
 See "Byte Repair's environment, in three variables" in `lib/data/local/AGENTS.md`.
-On
-Android the "Host" terminal env has no package manager, so the category says
-so and hides the rest until a rootfs is picked from Terminal; the desktops'
-host shells are each given an install destination and so are capable, the
-banner over the buttons being drawn where there is none — iOS and the web.
+The
+banner asks the same env question everywhere, the store naming the platform's
+own answer: a "Host" env on Android has no package manager, while iOS's has
+no shell at all — so both hide the rest until a rootfs is picked from
+Terminal, and a setup run by either guest installs through its own `apk`.
+The desktops'
+host shells are each given an install destination and so are capable; the
+web's unavailable store is the one never capable.
 The delete sits below the banner everywhere the
 category is drawn, since the workspace and the chats are data wherever the
 tooling is not: its confirm message's environment clause is worded by the

@@ -122,6 +122,13 @@ const alpine = Rootfs(
 
 const rootfsCatalog = [alpine];
 
+/// The wire name the guest drivers and the install environment name the
+/// distribution's installer by — what `byte-repair-setup.sh` reads. One
+/// spelling, shared by `proot.dart` and the Byte Repair store: two wire
+/// names kept level by hand is how a setup silently reads "no package
+/// manager".
+const packageManagerEnvVar = "ENV_PACKAGE_MANAGER";
+
 Rootfs? rootfsById(String? id) {
   for (final entry in rootfsCatalog) {
     if (entry.id == id) return entry;

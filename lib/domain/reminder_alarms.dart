@@ -1,7 +1,7 @@
 /// The system clock a reminder is set against: AlarmManager on Android,
-/// launchd's user launch agents on macOS, nothing anywhere else. The scheduler
-/// drives this port; it never runs a prompt itself — Kotlin only ever nudges,
-/// and Dart decides what is due.
+/// launchd's user launch agents on macOS, scheduled local notifications on
+/// iOS. The scheduler drives this port; it never runs a prompt itself —
+/// Kotlin only ever nudges, and Dart decides what is due.
 ///
 /// Two routes in, the shape [AssistantLaunch] has for the assistant gesture:
 /// an alarm can be what starts the process, in which case the platform
@@ -15,6 +15,12 @@ abstract interface class ReminderAlarms {
   /// is one grep, not three spellings.
   static const defaultChannel = "reminders";
   static const turnFailureChannel = "turns";
+
+  /// How long a notification post may take before it is said to have failed —
+  /// the fire path's only unbounded round trip otherwise, one patience for
+  /// every platform that posts through a system it does not size: a rename or
+  /// a retune here is one grep, not three spellings.
+  static const notifyTimeout = Duration(seconds: 10);
 
   bool get available;
 
@@ -48,7 +54,14 @@ abstract interface class ReminderAlarms {
   /// and coalesce what a sleep swallows, where an interval arm can be missed
   /// outright and measures awake time. One shots and timers have no calendar
   /// shape and leave it null everywhere.
-  Future<void> schedule(int requestCode, DateTime at, {String? calendar});
+  ///
+  /// [label] and [chatId] name the arm where the platform tells the user the
+  /// moment without waking for it: iOS's notification is posted by the system
+  /// exactly when due, process dead included, so its words and tap route are
+  /// fixed at arm time. The wake platforms compose nothing until the turn
+  /// runs and ignore both.
+  Future<void> schedule(int requestCode, DateTime at,
+      {String? calendar, String? label, String? chatId});
 
   Future<void> cancel(int requestCode);
 
@@ -122,7 +135,8 @@ class UnavailableReminderAlarms implements ReminderAlarms {
   Future<void> requestNotifications() async {}
 
   @override
-  Future<void> schedule(int requestCode, DateTime at, {String? calendar}) async {}
+  Future<void> schedule(int requestCode, DateTime at,
+      {String? calendar, String? label, String? chatId}) async {}
 
   @override
   Future<void> cancel(int requestCode) async {}

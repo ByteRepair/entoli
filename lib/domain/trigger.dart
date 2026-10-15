@@ -351,6 +351,11 @@ class Trigger {
   /// agrees wherever it is said.
   String get title => name.isEmpty ? "Reminder" : name;
 
+  /// What a fire names itself where one line of it is shown — the arms'
+  /// notification, the settings tile. One copy of the rule, so what a
+  /// nameless trigger reads as agrees wherever it is said.
+  String get label => name.isEmpty ? prompt : name;
+
   Trigger copyWith({
     String? name,
     String? prompt,

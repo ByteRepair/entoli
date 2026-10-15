@@ -1,5 +1,7 @@
 import "dart:io";
 
+import "package:flutter/foundation.dart"
+    show TargetPlatform, debugDefaultTargetPlatformOverride;
 import "package:flutter_test/flutter_test.dart";
 import "package:path/path.dart" as p;
 
@@ -128,24 +130,49 @@ void main() {
 
   test("setup reads as done only where the marker names a binary that is "
       "there, since the cache can be cleared between setups", () {
-    final project = ByteRepairProject().dir;
-    final real = platformByteRepairBinDir(config.dataDir);
-    // No marker: gated whatever else is true.
-    expect(platformSetupComplete(config, project, byteRepairBinDir: real),
-        isFalse);
-    // Marker without the binary: the gate stays up, honestly.
-    File(config.setupCompleteFile(project: project))
-      ..createSync(recursive: true)
-      ..writeAsStringSync("done");
-    expect(platformSetupComplete(config, project, byteRepairBinDir: real),
-        isFalse);
-    // Both: through.
-    Directory(real!).createSync(recursive: true);
-    File(p.join(real, "esbmc")).writeAsStringSync("");
-    expect(platformSetupComplete(config, project, byteRepairBinDir: real),
-        isTrue);
-    // The binary alone is nothing without the marker.
-    expect(platformSetupComplete(unmarked, project, byteRepairBinDir: real),
-        isFalse);
+    // The env clause the guests' answer carries is skipped here: this host
+    // is a desktop's, and the test's target is named so the check reads so
+    // — the flutter-test target default would have it guest-gate.
+    debugDefaultTargetPlatformOverride = TargetPlatform.macOS;
+    try {
+      final project = ByteRepairProject().dir;
+      final real = platformByteRepairBinDir(config.dataDir);
+      // No marker: gated whatever else is true.
+      expect(platformSetupComplete(config, project, byteRepairBinDir: real),
+          isFalse);
+      // Marker without the binary: the gate stays up, honestly.
+      File(config.setupCompleteFile(project: project))
+        ..createSync(recursive: true)
+        ..writeAsStringSync("done");
+      expect(platformSetupComplete(config, project, byteRepairBinDir: real),
+          isFalse);
+      // Both: through.
+      Directory(real!).createSync(recursive: true);
+      File(p.join(real, "esbmc")).writeAsStringSync("");
+      expect(platformSetupComplete(config, project, byteRepairBinDir: real),
+          isTrue);
+      // The binary alone is nothing without the marker.
+      expect(platformSetupComplete(unmarked, project, byteRepairBinDir: real),
+          isFalse);
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+    }
+  });
+
+  test("a guest env with no rootfs picked gates the marker alone too", () {
+    // The env half of the same gate, at the seam it lives on: Android's
+    // and iOS's "Host" env cannot run a setup, so a marker left from an
+    // earlier one under a rootfs is not "done".
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    try {
+      final project = ByteRepairProject().dir;
+      File(config.setupCompleteFile(project: project))
+        ..createSync(recursive: true)
+        ..writeAsStringSync("done");
+      expect(platformSetupComplete(config, project, byteRepairBinDir: null),
+          isFalse);
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+    }
   });
 }
