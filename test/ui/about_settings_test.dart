@@ -30,7 +30,7 @@ void main() {
     await settleIo(tester);
 
     expect(app.linkOpener.opened.single.toString(),
-        "https://github.com/Yiannis128/agent-chat");
+        "https://github.com/ByteRepair/entoli");
   });
 
   testWidgets("the libraries are the licence page", (tester) async {

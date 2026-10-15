@@ -156,7 +156,7 @@ about the file it sits beside. Each run attests its file and attaches the
 pair — the App Bundle included, so the same check covers both channels:
 
 ```sh
-gh attestation verify entoli-x86_64.AppImage --repo Yiannis128/agent-chat
+gh attestation verify entoli-x86_64.AppImage --repo ByteRepair/entoli
 ```
 
 `fail-fast: false`, since one entry failing should leave the others

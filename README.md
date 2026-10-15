@@ -14,18 +14,18 @@ to the viewer](docs/screenshot.png)
 Entoli ships for Windows, Linux, macOS, Android, and the web.
 
 **Windows**: download `entoli-installer.msi` from the
-[GitHub releases](https://github.com/Yiannis128/agent-chat/releases) and run
+[GitHub releases](https://github.com/ByteRepair/entoli/releases) and run
 it; its welcome page carries the licence and the Install button commits.
 It installs to Program Files and puts Entoli in the Start menu. The build
 is unsigned for now, so Smartscreen's More info, then Run anyway, is how the
 installer's first run goes.
 
 **Linux**: download `entoli-x86_64.AppImage` from the
-[GitHub releases](https://github.com/Yiannis128/agent-chat/releases), make it
+[GitHub releases](https://github.com/ByteRepair/entoli/releases), make it
 executable, and run it.
 
 **macOS**: download `entoli-universal.dmg` from the
-[GitHub releases](https://github.com/Yiannis128/agent-chat/releases), open it,
+[GitHub releases](https://github.com/ByteRepair/entoli/releases), open it,
 and drag the app to `/Applications`. The build is unsigned for now, so the
 first open is Finder's right-click Open rather than a double-click.
 
