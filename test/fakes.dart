@@ -618,8 +618,8 @@ class FakeBackend implements AgentBackend {
   /// What `usageFor` answers, keyed by chat id, in context tokens.
   final Map<String, int> usageHolder = {};
 
-  /// What `contextWindowFor` answers: the window the chat's model runs in,
-  /// where the registry names one and the test does.
+  /// The window that same request stood in, mirroring the pair the real
+  /// backend keeps.
   final Map<String, int> windowHolder = {};
 
   @override
