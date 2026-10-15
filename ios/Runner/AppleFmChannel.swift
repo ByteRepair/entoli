@@ -353,7 +353,7 @@ extension AppleFmChannel {
       if let items = json["items"] as? [String: Any], let element = schema(items) {
         return DynamicGenerationSchema(arrayOf: element)
       }
-      return DynamicGenerationSchema(arrayOf: schema(["type": "string"])!)
+      return DynamicGenerationSchema(arrayOf: DynamicGenerationSchema(type: String.self))
     case "integer":
       return DynamicGenerationSchema(type: Int.self)
     case "number":

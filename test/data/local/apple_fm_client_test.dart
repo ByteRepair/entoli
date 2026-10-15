@@ -14,7 +14,8 @@ import "package:agent_chat/data/local/apple_fm.dart";
 // Plain `test`s, not `testWidgets`: the client is protocol machinery driven
 // by real futures, and a suspended generator under the fake clock is the
 // hang that made the first of these need rewriting.
-const channel = MethodChannel("agent_chat/apple_fm");
+// The channel under the mock is the export `appleChannel` itself, so a name
+// drift on the port is a compile error here rather than a hung test.
 
 const sampleSchema = {
   "type": "object",
@@ -32,7 +33,7 @@ void main() {
 
   setUp(() {
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-        .setMockMethodCallHandler(channel, (call) async {
+        .setMockMethodCallHandler(appleChannel, (call) async {
       asked.add(call);
       return null;
     });
@@ -40,15 +41,15 @@ void main() {
 
   tearDown(() {
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-        .setMockMethodCallHandler(channel, null);
+        .setMockMethodCallHandler(appleChannel, null);
     asked.clear();
   });
 
   Future<void> incoming(String method, [Object? arguments]) async {
     await TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .handlePlatformMessage(
-      channel.name,
-      channel.codec.encodeMethodCall(MethodCall(method, arguments)),
+      appleChannel.name,
+      appleChannel.codec.encodeMethodCall(MethodCall(method, arguments)),
       (_) {},
     );
     // The delivery's chain is microtasks through the broadcast; one zero

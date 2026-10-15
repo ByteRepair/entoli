@@ -61,11 +61,7 @@ class AnthropicClient implements LlmClient {
     String? reasoningEffort,
   }) async* {
     final budget = reasoningEffort == null ? null : _thinkingBudget[reasoningEffort] ?? 8192;
-    final system = messages
-        .where((m) => m.role == LlmRole.system)
-        .map((m) => m.text)
-        .where((t) => t.isNotEmpty)
-        .join("\n\n");
+    final system = joinedSystemText(messages);
 
     final response = await postStream(
       _http,

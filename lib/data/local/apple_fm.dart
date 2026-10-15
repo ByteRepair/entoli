@@ -185,8 +185,8 @@ class AppleFmClient implements LlmClient {
         // The model id is the route: the system model by name, and every
         // MLX row by its package's own id.
         "model": model,
-        "instructions": _instructions(messages),
-        "history": _transcript(messages, withoutLast: true),
+        "instructions": joinedSystemText(messages),
+        "history": _transcript(messages),
         "prompt": _promptText(messages.last),
         "tools": [
           for (final tool in tools)
@@ -282,15 +282,6 @@ class AppleFmClient implements LlmClient {
   }
 }
 
-/// The system messages, joined into one instructions string — the whole of
-/// what the framework takes as its standing prompt, the same join
-/// `AnthropicClient` makes into its `system` parameter. A model that wanted
-/// them split has no way to say so here.
-String _instructions(List<LlmMessage> messages) => [
-      for (final message in messages)
-        if (message.role == LlmRole.system && message.text.isNotEmpty) message.text,
-    ].join("\n\n");
-
 /// The user's words, with what rode with them. Text attachments are inlined;
 /// anything else is named, because a model that cannot read it is better
 /// told it exists than handed bytes — the same rule the wire shape carries.
@@ -306,20 +297,17 @@ String _promptText(LlmMessage message) {
   return text.toString().trim();
 }
 
-/// The conversation before the prompt, as dialogue entries. A tool call is
-/// worded onto its own assistant message and its answer as the reader's —
-/// a two-party transcript has no third role, and the pairing is the model's
-/// to read out of adjacency, which is where the loop left it.
-List<Map<String, String>> _transcript(
-  List<LlmMessage> messages, {
-  required bool withoutLast,
-}) {
+/// The conversation before the prompt, as dialogue entries — everything but
+/// the last message, which the caller composes as the prompt itself. A tool
+/// call is worded onto its own assistant message and its answer as the
+/// reader's — a two-party transcript has no third role, and the pairing is
+/// the model's to read out of adjacency, which is where the loop left it.
+List<Map<String, String>> _transcript(List<LlmMessage> messages) {
   final names = {
     for (final message in messages)
       for (final call in message.toolCalls) call.id: call.name,
   };
-  final rest =
-      withoutLast ? messages.sublist(0, messages.length - 1) : messages;
+  final rest = messages.sublist(0, messages.length - 1);
   return [
     for (final message in rest)
       if (message.role != LlmRole.system)

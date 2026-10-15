@@ -135,13 +135,13 @@ class AppSession {
     // provider list composed without it would leave the on-device model out of
     // the first turn after a launch.
     final localLlm = platform.createLocalLlm(localModels, cache);
-    final toolset = await tools;
-    final server = await localLlm;
-    // The Apple on-device model's handshake: one channel round trip at
-    // launch, so the pickers are honest for the whole session rather than
+    // Started here and awaited below with the pool: one channel round trip
+    // at launch, so the pickers are honest for the whole session rather than
     // after the first turn. Null wherever the model is not this device's to
     // answer with.
-    final appleFm = await platform.createAppleFm();
+    final appleFm = platform.createAppleFm();
+    final toolset = await tools;
+    final server = await localLlm;
     // Beside the pool, so the two agree on where the server's slot dumps go.
     final kvCache = platform.createLocalKvCache(cache, server);
     // Where Byte Repair's fetched tools land on the host, and the one
@@ -158,7 +158,7 @@ class AppSession {
     late final TriggerRegistryFactory triggerRegistry;
     final backend = platform.createBackend(config, libraries, store,
         tools: toolset, rootfs: rootfs, abi: await abi, localLlm: server, kvCache: kvCache,
-        appleFm: appleFm, byteRepairBinDir: byteRepairBin, secrets: secrets,
+        appleFm: await appleFm, byteRepairBinDir: byteRepairBin, secrets: secrets,
         loginPath: await loginPath,
         triggerRegistry: (chatId, project) => triggerRegistry(chatId, project));
     // One instance, shared: the prefill's notification and every other
