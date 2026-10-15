@@ -86,6 +86,13 @@ class SyncSection extends ConsumerWidget {
 /// setting has nothing to switch, so the row is not drawn.
 bool get _android => !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
 
+/// Where the paste-a-code field gets a camera button: the phones, the devices
+/// that are pointed at a code another screen shows.
+bool get _canScan =>
+    !kIsWeb &&
+    (defaultTargetPlatform == TargetPlatform.android ||
+        defaultTargetPlatform == TargetPlatform.iOS);
+
 /// The Internet relay, on its own screen — reached from the row on the Sync
 /// page. One field: the `wss://` URL both devices dial to pair across the
 /// internet, where the local network cannot reach them.
@@ -387,7 +394,7 @@ class _PairingControlsState extends ConsumerState<_PairingControls> {
                   onFieldSubmitted: (_) => _join(),
                 ),
               ),
-              if (defaultTargetPlatform == TargetPlatform.android) ...[
+              if (_canScan) ...[
                 const SizedBox(width: 8),
                 IconButton(
                   tooltip: "Scan QR code",
@@ -924,8 +931,8 @@ Widget _pairingFailed(BuildContext context, String? error) => Padding(
       ),
     );
 
-/// The camera scanner for a pairing code, Android-only by the button that
-/// opens it. Pops with the scanned text on a successful detect.
+/// The camera scanner for a pairing code, on the phones alone by the button
+/// that opens it ([_canScan]). Pops with the scanned text on a successful detect.
 class _ScanQrPage extends StatefulWidget {
   const _ScanQrPage();
 

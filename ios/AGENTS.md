@@ -31,9 +31,10 @@ here rather than as a comment beside the key because Xcode rewrites
 ## Privacy declarations
 
 App Store processing reads the binary, not the UI, so a key is owed for
-whatever is linked, offered or not. `NSCameraUsageDescription` is there
-because `mobile_scanner` and WebRTC link `AVCaptureDevice`, though the
-pairing scanner is Android's alone; an upload without it is refused.
+whatever is linked, offered or not. `NSCameraUsageDescription` is the
+prompt the pairing scanner raises, and would be owed even without it, since
+`mobile_scanner` and WebRTC link `AVCaptureDevice`; an upload without it is
+refused.
 `NSLocalNetworkUsageDescription` is the wording of the prompt the same-LAN
 pairing raises, since `SignalingServer` listens on `0.0.0.0` here too.
 
