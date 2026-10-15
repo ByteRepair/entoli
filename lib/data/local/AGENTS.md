@@ -94,11 +94,14 @@ it is worth weighing before anything is added back to it.
 ## Byte Repair's environment, in three variables
 
 `byte-repair-setup.sh` answers to what it is told and probes nothing. Where to
-install is the store's `ENV_INSTALL_DIR` — `/usr/local/bin` inside a guest, the
-app's own `<cacheDir>/byte-repair/bin` on every desktop — and the script exits
-rather than guess a destination. What installs packages is the driver's
+install is the store's `ENV_INSTALL_DIR` — `/usr/local/bin` inside a guest
+(both of them: Android's proot rootfs and iOS's iSH Alpine), the app's own
+`<cacheDir>/byte-repair/bin` on every desktop — and the script exits
+rather than guess a destination. What installs packages is
 `ENV_PACKAGE_MANAGER` — `apk` in a guest, from the same `Rootfs.packageManager`
-the system prompt names, and nothing on the host, whose package manager is not
+the proot guest driver declares for every command in it, and what the install
+environment names for the setup run — and nothing on the host, whose package
+manager is not
 ours to touch. Unset does not mean unavailable: a skipped install is a note and
 the run carries on, so a host with make already on it pays nothing and one
 without it sees the honest "Not installed" row. A named manager that fails is
@@ -142,13 +145,20 @@ way the project's rootfs copy is its own — separated by `:` except on Windows,
 whose is `;`. A user-set `PATH` in the command
 environment still wins over it. The chat page's setup gate asks after the
 binary itself on the host, since `<cacheDir>` can be emptied between setups —
-the marker alone said a thing the cache may have since taken away. Two
+the marker alone said a thing the cache may have since taken away. Inside a
+guest the marker alone is enough, and on every guest platform the pick of a
+rootfs is the gate itself — Android because the "Host" env has no package
+manager, iOS because its "Host" is no shell at all. Two
 consequences worth knowing: the script's in-script fetches (`releases/latest`
 for gh and ESBMC) are the one deliberate exception to the checksum pinning
 everywhere else in this app, because "Run Setup" is a button the user pressed
 rather than a download the app decided on; and `ensureRootfs` is a no-op off
-Android, where there is no guest for a per-project rootfs copy to serve — so a
-`rootfsId` left over from another device does not pay for a copy nothing reads.
+Android, where there is no guest for a per-project rootfs copy to serve — iOS's
+iSH guest runs the base Alpine, so a setup's installs land in what every chat
+on the device shares — so a `rootfsId` left over from another device does not
+pay for a copy nothing reads. That iSH install is also no host tree of the
+store's: import and the environment delete go by `installDir` naming the
+guest const, never a host path to reach the fakefs with.
 
 ## A whole Linux under proot
 

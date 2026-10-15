@@ -537,25 +537,50 @@ void main() {
       });
     }
 
-    // iOS is the platform left with no install destination — the releases
-    // name nothing its iSH guest could run — so the store composes no bin
-    // directory: the banner says so and the buttons are not drawn, the
-    // delete staying behind a message that names only the data.
-    targetTest("with no install destination it says so and keeps the delete",
+    // iOS carries the guest-shaped store: the install destination is the
+    // guest's own /usr/local/bin and the gate is the rootfs pick, the way
+    // Android's is — its "Host" env being no shell at all. With nothing
+    // picked the banner asks for the Linux, the buttons are not drawn, and
+    // the delete stays behind a message that names only the data.
+    targetTest(
+        'iOS with the "Host" env drawn the guest gate and keeps the delete',
         TargetPlatform.iOS, (tester) async {
-      app.dispose();
-      app = TestApp.create(byteRepairInstallDir: null);
+      // The install dir stays the guest const the harness defaults to; the
+      // pick is what gates.
       await pumpSettings(tester, app, SettingsCategory.byteRepair);
 
       expect(find.text("Run Setup"), findsNothing);
       expect(find.text("Import ESBMC"), findsNothing);
-      expect(find.textContaining("nowhere to install the tools it sets up"),
+      expect(find.textContaining('using the "Host" terminal environment'),
           findsOneWidget);
 
       expect(
           await deleteDialogMessage(tester),
           "This deletes the Byte Repair workspace (cloned repos, scratch "
           "files) and all chats in the project.");
+    });
+
+    // The same platform with the Alpine from the Terminal settings picked:
+    // the guest's destination is where the setup installs, so the buttons
+    // come back — the pick, not the platform, is the gate. No per-project
+    // copy is made on iOS — the iSH shell runs the base Alpine — so the
+    // dialog names nothing the setup left on the host's disk.
+    targetTest("an installed Alpine puts the buttons back on iOS",
+        TargetPlatform.iOS, (tester) async {
+      app.dispose();
+      app = TestApp.create(linuxes: const {"alpine"});
+      await io(tester, () => app.container
+          .read(appSettingsProvider.notifier).setRootfs("alpine"));
+      await pumpSettings(tester, app, SettingsCategory.byteRepair);
+
+      expect(find.text("Run Setup"), findsOneWidget);
+      expect(find.text("Import ESBMC"), findsOneWidget);
+
+      expect(
+          await deleteDialogMessage(tester),
+          "This deletes the Byte Repair workspace (cloned repos, scratch "
+          "files) and all chats in the project. Run Setup to use Byte "
+          "Repair again.");
     });
 
     targetTest("the fetched tools a setup left are named, the rootfs never",
@@ -597,13 +622,12 @@ void main() {
 
     // The Host env cannot run a setup, the same banner Android's Host has
     // always drawn — and the delete stays, naming the workspace and the
-    // chats alone where the copy is not there.
+    // chats alone where the copy is not there. The store is built as the
+    // factory builds it on Android — the guest's /usr/local/bin as the
+    // install dir — which is exactly why the banner asks about the pick and
+    // the dialog names no host tree.
     targetTest("Android's Host env draws the env banner and keeps the delete",
         TargetPlatform.android, (tester) async {
-      // No install dir, as an iOS build composes none: the guest const the
-      // harness defaults to would have the message ask the host filesystem.
-      app.dispose();
-      app = TestApp.create(byteRepairInstallDir: null);
       await pumpSettings(tester, app, SettingsCategory.byteRepair);
 
       expect(find.text("Run Setup"), findsNothing);

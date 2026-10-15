@@ -622,7 +622,9 @@ button, the empty-chat starter and the running-turn spinner.
 
 **A project that requires setup hides the composer until setup is run.**
 `BuiltinProject.requiresSetup` is a general flag; `setupCompleteProvider`
-checks a `.setup-complete` marker in the project's directory. Where it is
+checks a `.setup-complete` marker in the project's directory — and, on the
+guests (Android and iOS), that a rootfs is picked, the same env check the
+settings page's banner asks. Where it is
 false, `_NewChat` and `_local` swap the composer for a `NeedsSetupBar` —
 the same full-swap pattern `ViewOnlyBar` uses for a mirrored chat — with a
 button that opens Settings at the project's category. The turn path no

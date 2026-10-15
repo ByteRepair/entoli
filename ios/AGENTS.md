@@ -236,3 +236,17 @@ it and watch the catch-up run with the completion notification following.
 With the app foreground instead the arm stays quiet — `willPresent` shows
 none of it, the app's own clock running that fire a moment behind the
 system's — and the completion banner answers.
+
+## Byte Repair in the guest
+
+What a setup can run in here is the guest alone — the "Host" env is no shell
+at all, which is the gate iOS's banner asks for — and it installs into the
+base Alpine the shell already runs: IshShell builds no per-project rootfs
+copy, so `apk`'s installs land in what every chat on the device shares, and
+the environment delete takes the workspace and marker but no host tree for
+the tools. Import is the one that has no answer at all: the guest's
+filesystem is the fakefs, which no host path reaches. ESBMC is the remaining
+gap on this platform: the releases publish no i386 asset, so the script
+picks the x86_64 zip for an i686 guest and the tail's verification refuses
+what lands — a setup still reports it did not succeed even after make and
+github-cli installed.

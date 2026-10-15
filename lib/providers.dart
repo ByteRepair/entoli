@@ -187,21 +187,15 @@ final byteRepairToolVersionsProvider =
 /// about the `.setup-complete` marker in the project's directory. Invalidated
 /// by the settings page after Run Setup or Delete.
 ///
-/// A setup marker alone is not enough on Android: Byte Repair needs a rootfs
-/// with a package manager, and the "Host" env has none. The marker may still
-/// be on disk from an earlier setup run under a rootfs, so the env is checked
-/// alongside it — the same env check `ByteRepairStore.capabilityBanner`
-/// answers for the settings page's banner. On
-/// the host the platform asks after the binary itself as well, since the
-/// cache it lives in can be cleared between setups.
+/// The marker, the host's binary check and the guests' env question are the
+/// platform side's (`platformSetupComplete`) — this watch is only for
+/// *rebuilds* on an env change, so switching the Terminal settings' pick
+/// moves the bar without a marker write.
 final setupCompleteProvider =
     Provider.family<bool, String?>((ref, project) {
   final spec = builtinProjectOf(project);
   if (spec?.requiresSetup != true) return true;
-  if (defaultTargetPlatform == TargetPlatform.android &&
-      ref.watch(appSettingsProvider.select((s) => s.rootfsId)) == null) {
-    return false;
-  }
+  ref.watch(appSettingsProvider.select((s) => s.rootfsId));
   return setupComplete(ref.watch(appConfigProvider), project,
       ref.watch(byteRepairBinDirProvider));
 });

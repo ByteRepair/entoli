@@ -1,11 +1,17 @@
 import "dart:io";
 
+import "package:flutter/foundation.dart"
+    show TargetPlatform, debugDefaultTargetPlatformOverride;
 import "package:flutter_test/flutter_test.dart";
 import "package:path/path.dart" as p;
 
 import "package:agent_chat/core/config.dart";
+import "package:agent_chat/data/local/byte_repair_store.dart"
+    show guestEsbmcInstallDir;
 import "package:agent_chat/data/local/file_byte_repair_store.dart";
+import "package:agent_chat/domain/app_settings.dart";
 import "package:agent_chat/domain/builtin_project.dart";
+import "package:agent_chat/domain/rootfs.dart" show alpine;
 import "package:agent_chat/domain/shell.dart" show ShellResult;
 
 import "../../data/builtin/builtin_fakes.dart" show FakeShell;
@@ -318,14 +324,72 @@ void main() {
     expect(shell.environments.last, isNull);
   });
 
-  group("environmentDeletion", () {
-    FileByteRepairStore storeAt(String? installDir) => FileByteRepairStore(
-          config: config,
-          project: ByteRepairProject().dir,
-          workspace: config.projectWorkspaceDir(project: ByteRepairProject().dir),
-          installDir: installDir,
-        );
+  /// The env gate asked per platform, the way the store answers it for the
+  /// settings page: the target overridden for the one test — a test body is
+  /// the host's platform otherwise — and undone inside it, flutter_test
+  /// checking the override before a tear-down runs.
+  void withTarget(TargetPlatform platform, void Function() body) {
+    debugDefaultTargetPlatformOverride = platform;
+    try {
+      body();
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+    }
+  }
 
+  FileByteRepairStore storeAt(String? installDir) => FileByteRepairStore(
+        config: config,
+        project: ByteRepairProject().dir,
+        workspace: config.projectWorkspaceDir(project: ByteRepairProject().dir),
+        installDir: installDir,
+      );
+
+  test('iOS: the "Host" env is gated, an installed Alpine is not', () async {
+    withTarget(TargetPlatform.iOS, () {
+      expect(
+          storeAt(guestEsbmcInstallDir).capabilityBanner,
+          'Byte Repair does not work when using the "Host" terminal '
+          "environment on this platform, which has no shell to run "
+          "anything in. Please install a Linux from the Terminal "
+          "settings.");
+    });
+    // Picked is installed on iOS: the picker offers only what is on disk,
+    // and a delete unpicks what it takes away.
+    await AppSettings(rootfsId: alpine.id).save(config);
+    withTarget(TargetPlatform.iOS, () {
+      expect(storeAt(guestEsbmcInstallDir).capabilityBanner, isNull);
+    });
+  });
+
+  test("the Android arm is unchanged, and the desktops answer by the "
+      "destination they were built with", () {
+    withTarget(TargetPlatform.android, () {
+      expect(storeAt(guestEsbmcInstallDir).capabilityBanner,
+          contains('"Host" terminal environment on this device'));
+    });
+    withTarget(TargetPlatform.macOS, () {
+      expect(storeAt(bin).capabilityBanner, isNull);
+      expect(storeAt(null).capabilityBanner,
+          contains("nowhere to install the tools it sets up"));
+    });
+  });
+
+  test("the install environment names the guest's package manager, and only "
+      "where the install is a guest's", () async {
+    // A host bin — the desktops' destination — declares nothing: their
+    // package manager is not the app's to touch, static fetches instead.
+    expect(storeAt(bin).installEnvironment(),
+        isNot(contains("ENV_PACKAGE_MANAGER")));
+
+    final guest = storeAt(guestEsbmcInstallDir);
+    expect(guest.installEnvironment().keys,
+        unorderedEquals(["ENV_INSTALL_DIR", "ENV_ESBMC_BINARY"]));
+    await AppSettings(rootfsId: alpine.id).save(config);
+    expect(guest.installEnvironment(),
+        containsPair("ENV_PACKAGE_MANAGER", "apk"));
+  });
+
+  group("environmentDeletion", () {
     test("nothing set up leaves the dialog the workspace and chats alone", () {
       expect(storeAt(bin).environmentDeletion, isNull);
     });
@@ -353,6 +417,38 @@ void main() {
       Directory(bin).createSync(recursive: true);
       expect(storeAt(null).environmentDeletion, isNull);
     });
+
+    test("the guest's install dir is no host tree to name", () async {
+      // The store the guests build names `/usr/local/bin` — inside the
+      // Linux — which on this host is a real directory. The compare
+      // against the guest const is what keeps it out of a delete's host
+      // reads, and the dialog the workspace-and-chats answer.
+      Directory(bin).createSync(recursive: true);
+      expect(storeAt(guestEsbmcInstallDir).environmentDeletion, isNull);
+    });
+  });
+
+  test("the guest's install dir deletes the guest's own state, not the "
+      "host's paths", () async {
+    final project = ByteRepairProject().dir;
+    final store = storeAt(guestEsbmcInstallDir);
+    Directory(config.projectWorkspaceDir(project: project))
+        .createSync(recursive: true);
+    File(p.join(config.projectWorkspaceDir(project: project), "cloned.txt"))
+        .writeAsStringSync("hello");
+    File(config.setupCompleteFile(project: project))
+      ..createSync(recursive: true)
+      ..writeAsStringSync("done");
+
+    expect(await store.deleteEnvironment(), isNull);
+
+    expect(Directory(config.projectWorkspaceDir(project: project)).existsSync(),
+        isFalse);
+    expect(File(config.setupCompleteFile(project: project)).existsSync(),
+        isFalse);
+    // The host tree the guests build is a path inside the Linux; nothing
+    // host-side of the delete follows it.
+    expect(Directory("/usr/local/bin").existsSync(), isTrue);
   });
 
   test("deleteEnvironment takes the trees the setup made, and the marker",
