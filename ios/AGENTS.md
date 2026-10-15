@@ -18,6 +18,25 @@ every upload. Turning it `true` would bring the compliance paperwork for
 nothing. The note lives here rather than as a comment beside the key because
 Xcode rewrites `Info.plist` without its comments.
 
+## Privacy declarations
+
+App Store processing reads the binary, not the UI, so a key is owed for
+whatever is linked, offered or not. `NSCameraUsageDescription` is there
+because `mobile_scanner` and WebRTC link `AVCaptureDevice`, though the
+pairing scanner is Android's alone; an upload without it is refused.
+`NSLocalNetworkUsageDescription` is the wording of the prompt the same-LAN
+pairing raises, since `SignalingServer` listens on `0.0.0.0` here too.
+
+`Runner/PrivacyInfo.xcprivacy` declares the required-reason APIs the Runner
+binary itself calls — the force-loaded iSH core above all — which the plugins'
+and frameworks' own manifests do not cover: `stat`/`fstat`/`lstat`/`fstatat`
+as file timestamps (C617.1, inside the container), `fstatfs`/`fstatvfs` as
+disk space (85F4.1, the guest's `df`), and `mach_absolute_time` as boot time
+(35F9.1, elapsed time). No tracking and no collected data: everything goes to
+endpoints the user configures. A new native library or plugin wants its
+undefined symbols checked against Apple's list (`nm -u` on the built
+binary) and a reason added here for any new category.
+
 ## Why no host shell
 
 iOS refuses an app a child process. `fork`, `exec` and `posix_spawn` are denied

@@ -28,6 +28,10 @@
 	<false/>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>Entoli uses the camera only to scan a pairing QR code when you link another device.</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Entoli connects to your other devices on this network when you pair them to sync your chats.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Entoli listens only while a voice conversation is open, and everything it hears stays on this device.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>

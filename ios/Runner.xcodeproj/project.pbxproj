@@ -17,6 +17,7 @@
 		97C146FE1CF9000F007C117D /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FD1CF9000F007C117D /* Assets.xcassets */; };
 		97C147011CF9000F007C117D /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FF1CF9000F007C117D /* LaunchScreen.storyboard */; };
 		E00000001AAAAAAAAAAAAAAAA /* entoli.icon in Resources */ = {isa = PBXBuildFile; fileRef = E00000002AAAAAAAAAAAAAAAA /* entoli.icon */; };
+		E00000003AAAAAAAAAAAAAAAA /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = E00000004AAAAAAAAAAAAAAAA /* PrivacyInfo.xcprivacy */; };
 		E1D2B33B4C5D6E7F8A90B1C2 /* RemindersPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1D2B33A4C5D6E7F8A90B1C2 /* RemindersPlugin.swift */; };
 		F01CE00000000000000000C1 /* VoiceChannel.swift in Sources */ = {isa = PBXBuildFile; fileRef = F01CE00000000000000000C0 /* VoiceChannel.swift */; };
 		F01CE00000000000000000D1 /* AppleFmChannel.swift in Sources */ = {isa = PBXBuildFile; fileRef = F01CE00000000000000000D0 /* AppleFmChannel.swift */; };
@@ -65,6 +66,7 @@
 		97C147001CF9000F007C117D /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/LaunchScreen.storyboard; sourceTree = "<group>"; };
 		97C147021CF9000F007C117D /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		E00000002AAAAAAAAAAAAAAAA /* entoli.icon */ = {isa = PBXFileReference; lastKnownFileType = folder.iconcomposer.icon; path = entoli.icon; sourceTree = "<group>"; };
+		E00000004AAAAAAAAAAAAAAAA /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		E1D2B33A4C5D6E7F8A90B1C2 /* RemindersPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemindersPlugin.swift; sourceTree = "<group>"; };
 		E2AD518B0A99A053D1A7C29F /* IshCore.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = IshCore.xcframework; path = ../tool/ios/ish/dist/IshCore.xcframework; sourceTree = SOURCE_ROOT; };
 		F01CE00000000000000000C0 /* VoiceChannel.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = VoiceChannel.swift; sourceTree = "<group>"; };
@@ -130,6 +132,7 @@
 				97C146FA1CF9000F007C117D /* Main.storyboard */,
 				97C146FD1CF9000F007C117D /* Assets.xcassets */,
 				E00000002AAAAAAAAAAAAAAAA /* entoli.icon */,
+				E00000004AAAAAAAAAAAAAAAA /* PrivacyInfo.xcprivacy */,
 				97C146FF1CF9000F007C117D /* LaunchScreen.storyboard */,
 				97C147021CF9000F007C117D /* Info.plist */,
 				1498D2321E8E86230040F4C2 /* GeneratedPluginRegistrant.h */,
@@ -246,6 +249,7 @@
 				97C146FE1CF9000F007C117D /* Assets.xcassets in Resources */,
 				97C146FC1CF9000F007C117D /* Main.storyboard in Resources */,
 				E00000001AAAAAAAAAAAAAAAA /* entoli.icon in Resources */,
+				E00000003AAAAAAAAAAAAAAAA /* PrivacyInfo.xcprivacy in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
