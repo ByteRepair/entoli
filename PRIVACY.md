@@ -94,15 +94,18 @@ server binds to localhost and makes no network calls.
 
 ## Permissions
 
-The app requests the following Android permissions, each used only for its
-feature:
+The app requests the following permissions, each used only for its feature:
 
 - **Microphone** — voice mode listening.
+- **Speech recognition** (iOS) — hearing voice mode, on the device only.
 - **Camera** — scanning a sync pairing QR code.
-- **Exact alarms** — firing reminders on time.
-- **Boot-completed** — re-arming reminders after device restart.
-- **Foreground service** — keeping the process alive while a turn runs, while
-  voice mode is active, or while a model downloads.
+- **Local network** (iOS) — reaching your other device when sync pairs over
+  the same network.
+- **Notifications** (iOS) — announcing reminders and finished turns.
+- **Exact alarms** (Android) — firing reminders on time.
+- **Boot-completed** (Android) — re-arming reminders after device restart.
+- **Foreground service** (Android) — keeping the process alive while a turn
+  runs, while voice mode is active, or while a model downloads.
 - **Internet** — calling your configured LLM provider, web search, the
   marketplace, and sync.
 

@@ -36,7 +36,7 @@ assets.** The builds are `release-build.yml`'s, which it calls with the tag
 and which is dispatchable on its own, so whether a tag builds can be found
 out without publishing a release to ask. The two Linux builds share the
 composite `.github/actions/linux-appimage` and differ in the mode they pass
-it; the ten signing secrets are named at the call site rather than
+it; the eight signing secrets are named at the call site rather than
 `inherit`ed, two jobs signing.
 
 ## The jobs
@@ -91,14 +91,16 @@ own init is the fallback for a bare checkout), brews LLVM and lld for the
 i386 vdso, runs `tool/ios/ish/build.sh`, and then the app build. The
 xcframework is cached on the submodule gitlink plus the two repo files under
 it, so a release whose iSH pin has not moved restores it and skips the brew
-and the compile. Signing is read out of the profile rather than stored
-anywhere: the profile's `TeamIdentifier` and `Name` go into an appended
-`ios/Flutter/Signing.xcconfig` (the team, the exact identity and the profile
-specifier, over the stub's placeholders) and a generated
-`ExportOptions.plist` on runner temp, the stub in the tree carrying the
-manual style and an export whose settings drift from the profile the
-certificate rides failing anyway. The keychain is created in runner temp
-under a per-run generated password and dies with the runner. Empty signing
+and the compile. Signing is Xcode's automatic signing, and no certificate
+or profile is stored anywhere: `flutter build ipa --no-codesign` archives
+unsigned, then `xcodebuild -exportArchive -allowProvisioningUpdates` signs
+the export with the App Store Connect API key, Apple handing back (or
+creating) a cloud-managed distribution certificate and an App Store profile.
+Unsigned is deliberate: an archive signed on a fresh runner would mint an
+Apple Development certificate every run, and the team caps those. It holds
+because the Runner target carries no entitlements file; one added later
+wants checking that the export still applies it. The key is decoded into
+runner temp and dies with the runner. Empty signing
 secrets fail the job on the first step, before the runner fetches anything —
 the decode-before-build rule `android-build-setup` runs on, at its whole
 width.
@@ -179,16 +181,16 @@ gh secret set ANDROID_KEY_ALIAS
 gh secret set ANDROID_KEY_PASSWORD
 ```
 
-Apple's six are optional where the Android four are required: the first
-three sign, the last three are the TestFlight uploader alone, read by
-`release.yml`'s `testflight` job rather than passed through the build. A
-caller without Apple material ships every build but the store channel. The
-P12 carries the private key, unrecoverable the way the keystore is; its
-vault copy sits beside the export password. Cert and profile go stale about
-a year out: a renewed profile is generated against the same cert and
-re-uploaded as the secret, and a renewed cert is a new P12, a new password
-and a push of both. The P12's name on disk does not travel: GitHub holds
-base64 of its bytes, not its file name.
+Apple's four are optional where the Android four are required:
+`APPLE_API_ISSUER`, `APPLE_API_KEY_ID` and `APPLE_API_KEY_P8` (base64 of
+the `.p8`) are one App Store Connect API key, which both signs the export in
+`release-build.yml` and uploads in `release.yml`'s `testflight` job, and
+`APPLE_TEAM_ID` names the team the export signs for. A caller without them
+ships every build but the store channel. The key needs the **Admin** role:
+App Manager uploads but cannot create the certificate or profile the export
+asks for. Nothing goes stale yearly — Apple renews the cloud-managed
+certificate and regenerates the profile itself — and a leaked key is revoked
+in App Store Connect and replaced by a new trio, nothing else changing.
 
 ## The publisher
 

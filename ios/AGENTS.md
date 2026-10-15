@@ -8,6 +8,46 @@ macOS, its layers generated from `assets/icons/cookie.svg`, the launcher
 switching being Android's `activity-alias` alone so only the default has a
 copy here.
 
+## Export compliance
+
+The app is in the middle row of Apple's table: **industry-standard algorithms
+not provided by the OS**. Sync's own layer is ChaCha20-Poly1305 with X25519
+and Ed25519 from the `cryptography` package, WebRTC brings its own DTLS and
+SRTP, and Dart's HTTPS is the engine's BoringSSL rather than `URLSession`. None
+of it is proprietary, so there is no CCATS; the one document that row asks for
+is a **French encryption declaration** (ANSSI), and only for distribution on
+the App Store in France.
+
+So `ITSAppUsesNonExemptEncryption` is `false` in `Runner/Info.plist` **on the
+condition that France is excluded from the app's availability** in App Store
+Connect; with France out there is no documentation to provide, and the key is
+what stops App Store Connect asking on every upload. Adding France means filing
+the ANSSI declaration first, uploading it under App Information → App
+Encryption Documentation, and then setting the key `true` beside the
+`ITSEncryptionExportComplianceCode` Apple issues on approval. The note lives
+here rather than as a comment beside the key because Xcode rewrites
+`Info.plist` without its comments.
+
+## Privacy declarations
+
+App Store processing reads the binary, not the UI, so a key is owed for
+whatever is linked, offered or not. `NSCameraUsageDescription` is the
+prompt the pairing scanner raises, and would be owed even without it, since
+`mobile_scanner` and WebRTC link `AVCaptureDevice`; an upload without it is
+refused.
+`NSLocalNetworkUsageDescription` is the wording of the prompt the same-LAN
+pairing raises, since `SignalingServer` listens on `0.0.0.0` here too.
+
+`Runner/PrivacyInfo.xcprivacy` declares the required-reason APIs the Runner
+binary itself calls — the force-loaded iSH core above all — which the plugins'
+and frameworks' own manifests do not cover: `stat`/`fstat`/`lstat`/`fstatat`
+as file timestamps (C617.1, inside the container), `fstatfs`/`fstatvfs` as
+disk space (85F4.1, the guest's `df`), and `mach_absolute_time` as boot time
+(35F9.1, elapsed time). Its tracking and collected-data entries are empty
+because `PRIVACY.md` says so, and they follow it rather than this file. A new native library or plugin wants its
+undefined symbols checked against Apple's list (`nm -u` on the built
+binary) and a reason added here for any new category.
+
 ## Why no host shell
 
 iOS refuses an app a child process. `fork`, `exec` and `posix_spawn` are denied

@@ -630,8 +630,10 @@ pairing action completed the complement.
 Going back cancels through a `PopScope` rather than `dispose`: `dispose` runs
 with the widget tree locked, and the activity notifier's
 `ValueListenableBuilder` would otherwise be told to rebuild mid-unmount. The
-paste-a-code field has a camera-scan button on Android only (`mobile_scanner`);
-the manifest carries `CAMERA` and a non-required camera feature for it.
+paste-a-code field has a camera-scan button on the phones, Android and iOS
+(`mobile_scanner`, `_canScan`): the Android manifest carries `CAMERA` and a
+non-required camera feature for it, and iOS's `Info.plist` the
+`NSCameraUsageDescription` the permission prompt shows.
 
 ## Secrets at rest
 
