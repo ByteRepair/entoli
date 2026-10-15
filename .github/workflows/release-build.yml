@@ -30,11 +30,15 @@ on:
         required: true
       # Apple's are optional: a caller without them gets every build but the
       # ipa, whose job fails fast on the empties instead of signing nothing.
-      APPLE_DISTRIBUTION_CERT_P12:
+      # The App Store Connect API key signs as well as uploads: the export
+      # asks Apple for the distribution certificate and profile with it.
+      APPLE_API_ISSUER:
         required: false
-      APPLE_DISTRIBUTION_CERT_PASSWORD:
+      APPLE_API_KEY_ID:
         required: false
-      APPLE_APPSTORE_PROFILE:
+      APPLE_API_KEY_P8:
+        required: false
+      APPLE_TEAM_ID:
         required: false
     outputs:
       version:
@@ -324,10 +328,12 @@ jobs:
   # split: the iSH core is a minutes-long clang build of one library, not a
   # toolchain the app build never needs, and the app build wants the
   # xcframework in tool/ios/ish/dist/ already in the tree — the xcconfig
-  # force-loads it from there. The team id and the profile name are read out
-  # of the profile rather than stored anywhere: the committed project names
-  # no team, and an export whose settings drift from the profile the
-  # certificate rides fails anyway.
+  # force-loads it from there. Signing is Xcode's automatic signing, driven
+  # by the App Store Connect API key: the archive is built unsigned and the
+  # export signs it, asking Apple for a cloud-managed distribution
+  # certificate and a profile as it goes. No certificate or profile is
+  # stored anywhere, and an unsigned archive means no fresh runner mints an
+  # Apple Development certificate of its own.
   ios:
     needs: version
     runs-on: macos-latest
@@ -341,13 +347,14 @@ jobs:
       # Flutter setup.
       - name: Check the Apple signing secrets
         env:
-          CERT_P12: ${{ secrets.APPLE_DISTRIBUTION_CERT_P12 }}
-          CERT_PASSWORD: ${{ secrets.APPLE_DISTRIBUTION_CERT_PASSWORD }}
-          PROFILE_B64: ${{ secrets.APPLE_APPSTORE_PROFILE }}
+          API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
+          TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
           set -euo pipefail
-          if [ -z "$CERT_P12" ] || [ -z "$CERT_PASSWORD" ] || [ -z "$PROFILE_B64" ]; then
-            echo "::error::APPLE_DISTRIBUTION_CERT_P12, APPLE_DISTRIBUTION_CERT_PASSWORD or APPLE_APPSTORE_PROFILE is empty"
+          if [ -z "$API_ISSUER" ] || [ -z "$API_KEY_ID" ] || [ -z "$API_KEY_P8" ] || [ -z "$TEAM_ID" ]; then
+            echo "::error::APPLE_API_ISSUER, APPLE_API_KEY_ID, APPLE_API_KEY_P8 or APPLE_TEAM_ID is empty"
             exit 1
           fi
 
@@ -357,60 +364,6 @@ jobs:
           submodules: recursive
 
       - uses: ./.github/actions/flutter-setup
-
-      # The keychain is created in the runner's temp directory and dies with
-      # the runner; the password is for unlocking it once, not to be kept.
-      - name: Set up the signing keychain and the profile
-        env:
-          CERT_P12: ${{ secrets.APPLE_DISTRIBUTION_CERT_P12 }}
-          CERT_PASSWORD: ${{ secrets.APPLE_DISTRIBUTION_CERT_PASSWORD }}
-          PROFILE_B64: ${{ secrets.APPLE_APPSTORE_PROFILE }}
-        run: |
-          set -euo pipefail
-          keychain="$RUNNER_TEMP/build.keychain"
-          keychain_password="$(openssl rand -hex 24)"
-          printf '%s' "$CERT_P12" | base64 -D -o "$RUNNER_TEMP/apple-distribution.p12"
-          printf '%s' "$PROFILE_B64" | base64 -D -o "$RUNNER_TEMP/profile.mobileprovision"
-          security create-keychain -p "$keychain_password" "$keychain"
-          security set-keychain-settings -lut 21600 "$keychain"
-          security unlock-keychain -p "$keychain_password" "$keychain"
-          security import "$RUNNER_TEMP/apple-distribution.p12" -k "$keychain" \
-            -P "$CERT_PASSWORD" -T /usr/bin/codesign -T /usr/bin/security
-          security set-key-partition-list -S apple-tool:,apple: -s -k "$keychain_password" "$keychain"
-          security list-keychain -d user -s "$keychain"
-
-          profile_plist="$RUNNER_TEMP/profile.plist"
-          security cms -D -i "$RUNNER_TEMP/profile.mobileprovision" -o "$profile_plist"
-          profile_name="$(plutil -extract Name raw -o - "$profile_plist")"
-          uuid="$(plutil -extract UUID raw -o - "$profile_plist")"
-          team="$(plutil -extract TeamIdentifier.0 raw -o - "$profile_plist")"
-          identity="$(security find-identity -v -p codesigning "$keychain" |
-            awk -F'"' '/Apple Distribution/{print $2; exit}')"
-          if [ -z "$profile_name" ] || [ -z "$uuid" ] || [ -z "$team" ] || [ -z "$identity" ]; then
-            echo "::error::The certificate or the profile decoded to nothing usable"
-            exit 1
-          fi
-          profiles="$HOME/Library/MobileDevice/Provisioning Profiles"
-          mkdir -p "$profiles"
-          cp "$RUNNER_TEMP/profile.mobileprovision" "$profiles/$uuid.mobileprovision"
-
-          {
-            echo "APPLE_TEAM=$team"
-            echo "APPLE_IDENTITY=$identity"
-            echo "APPLE_PROFILE_NAME=$profile_name"
-          } >> "$GITHUB_ENV"
-
-      # Appended into the committed stub's runner copy: the values are
-      # signing state, the file naming where signing policy lives is
-      # repository state.
-      - name: Fill Signing.xcconfig from the profile
-        run: |
-          set -euo pipefail
-          cat >> ios/Flutter/Signing.xcconfig <<EOF
-          DEVELOPMENT_TEAM = $APPLE_TEAM
-          CODE_SIGN_IDENTITY = $APPLE_IDENTITY
-          PROVISIONING_PROFILE_SPECIFIER = $APPLE_PROFILE_NAME
-          EOF
 
       # Cached on the submodule gitlink and the repo's own inputs to the
       # build, so a release whose iSH pin has not moved restores the
@@ -437,22 +390,29 @@ jobs:
           brew install --quiet llvm lld
           tool/ios/ish/build.sh
 
-      # The export options carry nothing the profile did not say, so they
-      # are generated beside the build that consumes them; the bundle id is
-      # parsed from the committed project to match what it is built with,
-      # asserted to one distinct value so a new target cannot quietly
-      # change which id keys the profile map.
-      - name: Build the ipa
+      # Archived unsigned, then exported with automatic signing. The key is
+      # decoded into runner temp and dies with the runner; it needs the
+      # Admin role, since the export creates the distribution certificate
+      # and the profile when Apple has none to hand back.
+      - name: Archive the app unsigned
         run: |
           set -euo pipefail
-          bundle="$(sed -n 's/.*PRODUCT_BUNDLE_IDENTIFIER = \(.*\);/\1/p' \
-            ios/Runner.xcodeproj/project.pbxproj |
-            grep -v '\.RunnerTests' | sort -u)"
-          count="$(echo "$bundle" | wc -l | tr -d ' ')"
-          if [ "$count" != 1 ]; then
-            echo "::error::Expected one PRODUCT_BUNDLE_IDENTIFIER, got $count: $bundle"
+          flutter build ipa --release --build-number="$VERSION_CODE" --no-codesign
+          if [ ! -d build/ios/archive/Runner.xcarchive ]; then
+            echo "::error::flutter build ipa produced no archive"
             exit 1
           fi
+
+      - name: Sign and export the ipa
+        env:
+          API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
+          TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          set -euo pipefail
+          key="$RUNNER_TEMP/AuthKey_$API_KEY_ID.p8"
+          printf '%s' "$API_KEY_P8" | base64 -D -o "$key"
           options="$RUNNER_TEMP/ExportOptions.plist"
           cat > "$options" <<EOF
           <?xml version="1.0" encoding="UTF-8"?>
@@ -460,32 +420,31 @@ jobs:
           <plist version="1.0">
           <dict>
           	<key>method</key>
-          	<string>app-store</string>
+          	<string>app-store-connect</string>
           	<key>teamID</key>
-          	<string>$APPLE_TEAM</string>
+          	<string>$TEAM_ID</string>
           	<key>signingStyle</key>
-          	<string>manual</string>
-          	<key>signingCertificate</key>
-          	<string>$APPLE_IDENTITY</string>
+          	<string>automatic</string>
           	<key>stripSwiftSymbols</key>
           	<true/>
-          	<key>provisioningProfiles</key>
-          	<dict>
-          		<key>$bundle</key>
-          		<string>$APPLE_PROFILE_NAME</string>
-          	</dict>
           </dict>
           </plist>
           EOF
-          flutter build ipa --release --build-number="$VERSION_CODE" \
-            --export-options-plist="$options"
+          xcodebuild -exportArchive \
+            -archivePath build/ios/archive/Runner.xcarchive \
+            -exportPath build/ios/ipa \
+            -exportOptionsPlist "$options" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$key" \
+            -authenticationKeyID "$API_KEY_ID" \
+            -authenticationKeyIssuerID "$API_ISSUER"
 
       - name: Name the ipa after the release
         run: |
           set -euo pipefail
           built="$(ls build/ios/ipa/*.ipa 2>/dev/null | head -1 || true)"
           if [ -z "$built" ]; then
-            echo "::error::flutter build ipa produced no ipa"
+            echo "::error::The export produced no ipa"
             exit 1
           fi
           mkdir -p dist
