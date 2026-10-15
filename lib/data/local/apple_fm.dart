@@ -57,20 +57,16 @@ class AppleFmProbe {
 
   final String reason;
 
-  LlmException get unavailable =>
-      switch (reason) {
+  LlmException get unavailable => switch (reason) {
         "not-enabled" => const LlmException(
             "Apple Intelligence is not enabled. It is a system setting, not "
             "this app's: set it in Settings, and the next turn reaches this "
-            "model.",
-            statusCode: 503),
+            "model."),
         "not-ready" => const LlmException(
             "The Apple on-device model is not ready yet; the system is still "
             "fetching it.",
-            statusCode: 503,
             retryable: true),
-        _ => const LlmException("The Apple on-device model is unavailable.",
-            statusCode: 503),
+        _ => const LlmException("The Apple on-device model is unavailable."),
       };
 }
 
@@ -93,10 +89,8 @@ class AppleFm {
         defaultModelId: appleModelId,
       );
 
-  LlmEndpoint get endpoint => LlmEndpoint(
-        provider,
-        build: (config, apiKey) => AppleFmClient(probe, apiKey: apiKey),
-      );
+  LlmEndpoint get endpoint =>
+      LlmEndpoint(provider, build: (config, apiKey) => AppleFmClient(probe));
 }
 
 /// Everything the channel says, broadcast — the `NativeVoiceBridge` shape:
@@ -121,10 +115,9 @@ class AppleFmBridge {
 /// [close] is nothing and a rebuilt client costs nothing — the registry can
 /// cache or drop this as it likes.
 class AppleFmClient implements LlmClient {
-  AppleFmClient(this.probe, {this.apiKey});
+  AppleFmClient(this.probe);
 
   final AppleFmProbe probe;
-  final String? apiKey;
 
   /// One counter for the whole process, across every client the registry
   /// ever built: a generation id must not mean two things to one bridge.
@@ -329,28 +322,26 @@ List<Map<String, String>> _transcript(
 /// — the compaction ladder, which bounds its own asks and halves on any
 /// error, is what recovers the session.
 LlmException _errorOf(String code, String message) => switch (code) {
-      "context" => LlmException(
+      "context" => const LlmException(
           "The conversation has outgrown the Apple on-device model's context "
           "window. Compact the chat, or lower Total Context under "
           "Settings > LLMs."),
-      "guardrail" => LlmException(
-          "The Apple on-device model's guardrails refused this request.",
-          statusCode: 400),
-      "rate-limit" => LlmException(
-          "The Apple on-device model is rate limited.", retryable: true),
+      "guardrail" => const LlmException(
+          "The Apple on-device model's guardrails refused this request."),
+      "rate-limit" => const LlmException(
+          "The Apple on-device model is rate limited.",
+          retryable: true),
       "assets" => const LlmException(
           "The Apple on-device model's assets are not ready; the system is "
           "still fetching them.",
           retryable: true),
       "language" => const LlmException(
           "The on-device model does not support this conversation's "
-          "language.", statusCode: 400),
+          "language."),
       "resources" => const LlmException(
-          "The Apple on-device model ran short of device resources.",
-          statusCode: 503),
+          "The Apple on-device model ran short of device resources."),
       _ => LlmException(
           message.isEmpty
               ? "The Apple on-device model failed."
-              : "The Apple on-device model failed: $message",
-          statusCode: 500),
+              : "The Apple on-device model failed: $message"),
     };
