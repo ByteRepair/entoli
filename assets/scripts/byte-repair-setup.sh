@@ -52,6 +52,7 @@ if [ -n "$PKGS" ]; then
       echo "No package manager was provided; skipping: $PKGS" >&2
       ;;
     apk)
+      apk update && apk upgrade
       apk add --no-cache $PKGS
       ;;
     apt-get)
