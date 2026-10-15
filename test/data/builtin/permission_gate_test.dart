@@ -655,10 +655,10 @@ void main() {
       expect(events.whereType<ApprovalRequestEvent>(), isEmpty);
       final sandbox = shell.sandboxes.last!;
       final repo = p.normalize(p.join(workspaceDir, "..", "repo"));
-      expect(sandbox.extraWrites, contains(p.join(repo, ".git", "objects")));
-      expect(sandbox.extraWrites, contains(p.join(repo, ".git", "index")));
-      expect(sandbox.extraWrites.map(p.basename),
-          isNot(contains(anyOf("config", "hooks"))));
+      // The directory itself: git's transient writes (`index.lock` under a
+      // ref-refresh) are new files made in `.git`'s root, and a child-only
+      // enumeration cannot cover them.
+      expect(sandbox.extraWrites, contains(p.join(repo, ".git")));
       // The decision the result records says what covered it.
       final result = events.whereType<ToolResultEvent>().single.result;
       expect(result.decided, PermissionDecision.allow);
@@ -675,6 +675,22 @@ void main() {
       // The harness's default answers the banner; what the test pins is that
       // the banner is where the answer comes from, not the parse's vouch.
       expect(shell.ran, hasLength(1));
+    });
+
+    test("a read-only git command runs silently and carries the grant too",
+        () async {
+      // The chat's shape: `git status` refreshes the index (writing
+      // `.git/index.lock`), which the sandbox denies unless the grant rides
+      // with the read-only tier's allow. Banner-free is the whole point.
+      final client = FakeLlmClient([[bashCall("git status && git diff --stat")], [finish]]);
+      final agent = agentOver(client, approveMode: ApproveMode.never);
+      makeRepo();
+      final events = await agent.run(userMessage("go")).toList();
+      expect(shell.ran, hasLength(1));
+      expect(events.whereType<ApprovalRequestEvent>(), isEmpty);
+      final sandbox = shell.sandboxes.last!;
+      final repo = p.normalize(p.join(workspaceDir, "..", "repo"));
+      expect(sandbox.extraWrites, contains(p.join(repo, ".git")));
     });
 
     test("a compound is covered when each of its parts is", () async {

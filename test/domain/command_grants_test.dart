@@ -19,9 +19,8 @@ void main() {
   });
 
   /// A minimal repository at [path]: a `.git` directory with the children a
-  /// checkout carries, so the enumeration has something honest to answer
-  /// with.
-  String makeRepo(String path, {bool hooks = true}) {
+  /// checkout carries — the shape the walk-up finds a wholesale grant over.
+  String makeRepo(String path) {
     Directory(p.join(path, ".git", "objects")).createSync(recursive: true);
     Directory(p.join(path, ".git", "refs")).createSync(recursive: true);
     File(
@@ -29,9 +28,7 @@ void main() {
     ).writeAsStringSync("ref: refs/heads/master\n");
     File(p.join(path, ".git", "index")).writeAsStringSync("");
     File(p.join(path, ".git", "config")).writeAsStringSync("[core]\n");
-    if (hooks) {
-      Directory(p.join(path, ".git", "hooks")).createSync();
-    }
+    Directory(p.join(path, ".git", "hooks")).createSync();
     return path;
   }
 
@@ -67,14 +64,37 @@ void main() {
       expect(grants.gitGrants, hasLength(1));
       final grant = grants.gitGrants.values.single;
       expect(grant.gitDir, p.join(repo, ".git"));
-      // The children are the grant; the config and hooks are not.
-      expect(grant.paths, contains(p.join(repo, ".git", "objects")));
-      expect(grant.paths, contains(p.join(repo, ".git", "index")));
-      expect(grant.paths.map(p.basename), isNot(contains("config")));
-      expect(grant.paths.map(p.basename), isNot(contains("hooks")));
+      // The directory itself is the grant: git's transient writes
+      // (`index.lock`, `COMMIT_EDITMSG`) are new files made in `.git`'s
+      // root, and a child-only enumeration cannot cover them.
+      expect(grant.paths, [p.join(repo, ".git")]);
       expect(covered(grants), isTrue);
     },
   );
+
+  test("a read-only git command carries the same grant", () async {
+    // git's reads are not read-only at the kernel: `git status` refreshes
+    // the index, writing `.git/index.lock` on the way. Without the grant it
+    // is a sandbox denial and one re-prompt banner after another — the
+    // shape the chat hit.
+    final repo = makeRepo(p.join(root.path, "repo"));
+    for (final command in [
+      "git status --short",
+      "git rev-parse HEAD",
+    ]) {
+      final grants = await assess(command, cwd: repo);
+      expect(grants.gitGrants.values.single.paths, [p.join(repo, ".git")],
+          reason: command);
+      expect(covered(grants), isTrue, reason: command);
+    }
+  });
+
+  test("a read-only non-git command carries no grant", () async {
+    final repo = makeRepo(p.join(root.path, "repo"));
+    final grants = await assess("ls -la", cwd: repo);
+    expect(grants.gitGrants, isEmpty);
+    expect(covered(grants), isTrue);
+  });
 
   test("vouch runs from a subdirectory by walking up", () async {
     final repo = makeRepo(p.join(root.path, "repo"));
@@ -99,6 +119,11 @@ void main() {
         "git checkout master",
         "git config user.email a@b",
         "git -c core.fsmonitor=x commit -m x",
+        "git remote add origin x",
+        "git submodule update",
+        // Re-running init copies the template's hooks into the granted git
+        // dir — the vouch does not carry a banner-free way to plant them.
+        "git init --template=${p.join(root.path, 'evil-template')}",
         "git tag v1.0",
         "git branch feature",
       ]) {
@@ -125,7 +150,7 @@ void main() {
       final grants = await assess("git commit -m x", cwd: wt);
       final grant = grants.gitGrants.values.single;
       expect(grant.gitDir, p.join(main, ".git"));
-      expect(grant.paths, contains(p.join(main, ".git", "refs")));
+      expect(grant.paths, [p.join(main, ".git")]);
       expect(covered(grants), isTrue);
     },
   );
@@ -164,10 +189,12 @@ void main() {
     () async {
       final repo = makeRepo(p.join(root.path, "repo"));
       final grants = await assess("git status && git commit -m x", cwd: repo);
+      // Both git segments warrant the grant now — the read-only status and
+      // the mutating commit name the same repo, one walk.
+      expect(grants.gitGrants, hasLength(2));
       expect(
-        grants.gitGrants,
-        hasLength(1),
-        reason: "only the mutating segment is vouched",
+        grants.gitGrants.values.map((g) => g.gitDir).toSet(),
+        {p.join(repo, ".git")},
       );
       expect(covered(grants), isTrue);
     },

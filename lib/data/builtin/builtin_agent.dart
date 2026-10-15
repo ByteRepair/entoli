@@ -2199,7 +2199,7 @@ class BuiltinAgent {
         );
         if (tiered.decided == PermissionDecision.allow) {
           // Consumed by this command's run, where the sandbox carries the
-          // grant the vouch was honest about; the re-run path and the
+          // grant the policy warranted; the re-run path and the
           // rule-covered ones recompute their own.
           _pendingGrantPaths = tiered.grantPaths;
           _commandResult = await run();
@@ -2370,7 +2370,8 @@ class BuiltinAgent {
   /// person approved is the machine overriding its keeper.
   bool _humanDecided = false;
 
-  /// Directories the grant policy vouched for this call's command, read and
+  /// Directories the grant policy warranted for this call's command, read
+  /// and
   /// cleared by the run — the sandbox carries them beside the workspaces,
   /// the fallback to recompute covering every path that reaches [_execute]
   /// without a tier decision ahead of it (rule allows, `never` mode, the

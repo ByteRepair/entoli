@@ -356,14 +356,24 @@ vouch answers with. The network half is one family: a `webfetch` call and a
 `curl` or `wget` segment share one decision, and the webfetch banner's
 standing answer writes a `webfetch *` rule covering both carriers, the
 per-domain rules being the settings page's to write. The git half is the
-grant: a vouched git mutation (`add`, `commit`, `fetch`, `merge`, ...) runs
-with its repository's `.git` joined to the sandbox — every child of that
-directory granted but `config` and `hooks`, the two that turn a repo grant
-into an execution the sandbox cannot see, a hook the user's own next git
-command runs. The vouch and the grant are one computation read twice, so
-nothing is vouched without a grant under it and nothing granted that was
-not vouched; a `cd` the command carries moves the repo the vouch answers
-for, and a `cd` the tracker cannot name loses the vouch. What the tiers do
+grant: a git segment the classification lets past the banner — the vouched
+mutations (`add`, `commit`, `fetch`, `merge`, ...) and the plain read-only
+ones alike, git's reads being writes at the kernel (a `status` refreshes the
+index; a fetch takes locks) — runs with its repository's git dir joined to
+the sandbox **wholesale**. The directory itself, not a child listing: git
+makes new files in `.git`'s own root (`index.lock` under every ref refresh,
+`COMMIT_EDITMSG` under a commit), and creating one needs rights on the
+parent no enumeration of the children gives. Landlock has no deny to carve
+a child back out of a granted parent, so `config` and `hooks` are not the
+sandbox's to protect inside it: the commands that write them (`config`,
+`remote`, `submodule`, and `init` with `--template`) are kept off the vouch
+list, and what slips past both layers stands into the mode's own gate. The
+vouch and the grant are one
+computation read twice, so nothing the sandbox carries a grant for is
+without the gate having read it as coverage, and no coverage claims a grant
+the grant layer does not have; a `cd` the command carries moves the repo
+the grant answers for, and a `cd` the tracker cannot name loses the cover.
+What the tiers do
 not cover asks, in every mode: pushes, resets, config and remote writes,
 and everything else the sandbox is the only boundary behind.
 

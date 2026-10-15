@@ -129,6 +129,10 @@ const gitGuardedArgs = {
   "diff": {"--output"},
   "log": {"--output"},
   "reflog": {"delete", "-delete", "expire"},
+  // Re-running `git init` on an existing repository copies the template's
+  // files — the hooks the wholesale grant covers — and a vouch would do it
+  // without a banner.
+  "init": {"--template"},
   "remote": {
     "add",
     "remove",
