@@ -619,8 +619,12 @@ class ChatRepository {
   /// the fetch's host — writes it to the tier the answer names, and forwards
   /// the answer whole: the waiting turn derives the same rule for itself, so
   /// the rest of it is covered before the persisted file is read again. The
-  /// project is the chat's own, read from the store — a UI snapshot may be
-  /// from before a move.
+  /// `add_directory` banner rides the re-prompt's route instead: its approval
+  /// carries the directory in `deniedDirs`, so an "always" answer below
+  /// extends the tier's `writableDirs` and no rule is written — the tool asks
+  /// for the workspace's own permissions, which are not a rule on calls at
+  /// all. The project is the chat's own, read from the store — a UI snapshot
+  /// may be from before a move.
   Future<void> respondApproval(
     String chatId,
     String approvalId,

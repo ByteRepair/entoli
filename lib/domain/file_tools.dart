@@ -154,11 +154,23 @@ String resolveWorkspacePath(
 /// it was told, and is not outside. The file tools are gated on this: a path
 /// the workspaces hold runs without asking, one they do not is offered to the
 /// user first.
+///
+/// [granted] is the turn's writable set beside the workspaces — the sandbox's
+/// own extras. A directory granted there has the chat workspace's own
+/// permissions ("add_directory" agreed to it on a banner), so a file tool
+/// reading or writing under it is not asked again behind a decision the user
+/// already made: one store of granted directories, read by the command
+/// confinement and by this gate alike.
 bool outsideWorkspaces(
   FileSystem fs,
   String path,
   String workspace,
-  String projectWorkspace,
-) =>
-    !isUnder(fs, path, workspace) && !isUnder(fs, path, projectWorkspace);
+  String projectWorkspace, {
+  List<String> granted = const [],
+}) {
+  if (isUnder(fs, path, workspace) || isUnder(fs, path, projectWorkspace)) {
+    return false;
+  }
+  return !granted.any((dir) => isUnder(fs, path, dir));
+}
 

@@ -39,6 +39,7 @@ import "projection.dart";
 import "templates.dart";
 import "memory/instructions.dart";
 import "memory/store.dart";
+import "directory_tools.dart";
 import "memory_tools.dart";
 import "plan_tools.dart";
 import "websearch_tool.dart";
@@ -354,6 +355,13 @@ List<LlmTool> agentTools({
           memoryUpdateTool,
           memoryDeleteTool,
         ],
+      // The directory grant: rides `ask` — a banner somebody answers — and
+      // only a top-level turn is its own chat's to cover; a headless or
+      // one-shot turn has neither. Listing what is granted is a read of
+      // the turn's own state, offered wherever a command list is. At the
+      // end of the list, both, so the list's older adjacencies stand.
+      if (caps.ask && !oneShot) addDirectoryTool,
+      writableDirectoriesTool,
     ];
 
 /// The agent loop: ask the model, run the command it asked for, show it the
@@ -407,6 +415,7 @@ class BuiltinAgent {
     this.permissions = const [],
     this.writableDirs = const [],
     this.sandboxReprompt = true,
+    this.dataDir,
     this.claimInstruction,
   });
 
@@ -447,6 +456,13 @@ class BuiltinAgent {
   /// reports the denial and moves on.
   final bool sandboxReprompt;
 
+  /// The app's own data directory — settings, secrets, chats. The one shape
+  /// [addDirectoryTool] refuses outright: the data directory itself, or
+  /// anything that contains it, would make the app's own data writable from
+  /// inside the grant. Null only where the answer has nothing to name —
+  /// a test that does not exercise the refusal — and nothing is held back then.
+  final String? dataDir;
+
   /// Rules granted mid-turn by a banner answer. They sit in front of the
   /// standing list — the user answered while watching this exact call — and
   /// die with the turn, the standing copies being persisted by the backend.
@@ -474,6 +490,14 @@ class BuiltinAgent {
 
   /// Grants [dirs] for the rest of this turn.
   void grantRuntimeDirs(Iterable<String> dirs) => _runtimeDirs.addAll(dirs);
+
+  /// The writable set this turn covers beside the workspaces — the standing
+  /// grants the repository composed plus what a banner answer added mid-turn.
+  /// One store, two readers: [sandboxFor] composes it into every command's
+  /// confinement and the file tools' workspace gate reads the same list, so a
+  /// granted directory carries the chat workspace's own permissions by
+  /// command or by file tool alike.
+  List<String> get _grantedDirs => [...writableDirs, ..._runtimeDirs];
 
   /// The confinement a command runs under, from the shell's driver. Read per
   /// turn rather than held: the driver is resolved per command in the shell,
@@ -1052,6 +1076,16 @@ class BuiltinAgent {
 
       if (call.name == triggerListName && registerTrigger != null) {
         yield* _triggerList(call);
+        continue;
+      }
+
+      if (call.name == addDirectoryName && caps.ask && !oneShot) {
+        yield* _addDirectory(call);
+        continue;
+      }
+
+      if (call.name == writableDirectoriesName) {
+        yield* _writableDirectories(call);
         continue;
       }
 
@@ -1639,6 +1673,159 @@ class BuiltinAgent {
           returnCode: 0,
           output: lines.join("\n"),
         ));
+  }
+
+  /// The directory grant request. The banner is the whole grant: the model
+  /// names a directory, the user answers on the ordinary approval banner,
+  /// and the answer rides the plumbing the sandbox re-prompt already rides —
+  /// [ToolApproval.deniedDirs] carries the directory, so an "always" answer
+  /// lands in the named tier's `writableDirs` in `ChatRepository
+  /// .respondApproval` with no branch of its own, and the rest of this turn
+  /// is covered by [grantRuntimeDirs].
+  ///
+  /// Three shapes refuse before any banner: the app's own data tree — the
+  /// data directory itself or anything containing it, which would make the
+  /// app's settings, secrets and chats writable from inside its own permit —
+  /// a path that names nothing, and a file where a directory was asked for.
+  Stream<AgentEvent> _addDirectory(LlmToolCall call) async* {
+    final path = stringArg(call.argumentsJson, "path");
+    if (path == null) {
+      yield* _reject(
+          call,
+          'The $addDirectoryName tool takes {"path": "..."}; that argument '
+          "was missing.");
+      return;
+    }
+    yield ToolCallEvent(ToolCall(
+      id: call.id,
+      name: call.name,
+      argumentsJson: call.argumentsJson,
+      argumentsText: path,
+    ));
+    final resolved = _resolvePath(path);
+    // Compared by components, so a sibling of the data directory (`/home/x`
+    // against `/home/x/.config/agent-chat`) does not match and the home does.
+    if (dataDir != null && pathInside(dataDir!, resolved)) {
+      yield ToolResultEvent(_ran(
+          call,
+          ShellResult.failed(
+              "$resolved, or a directory that contains it, holds this app's "
+              "own data, which is not grantable. Choose a directory outside "
+              "it.")));
+      return;
+    }
+    final type = await fs.type(resolved);
+    if (type == FileSystemEntityType.notFound) {
+      yield ToolResultEvent(
+          _ran(call, ShellResult.failed("Directory not found: $resolved. "
+              "Create it first, then ask again.")));
+      return;
+    }
+    if (type != FileSystemEntityType.directory) {
+      yield ToolResultEvent(_ran(
+          call,
+          ShellResult.failed(
+              "$resolved is not a directory. The grant covers a directory "
+              "and everything under it; ask again with the directory the "
+              "work belongs in.")));
+      return;
+    }
+    if (!outsideWorkspaces(fs, resolved, workspace, projectWorkspace)) {
+      yield ToolResultEvent(_ran(
+          call,
+          ShellResult(
+              returnCode: 0,
+              output: "$resolved is inside the workspaces, and writes there "
+                  "are already allowed. Nothing was granted.")));
+      return;
+    }
+    // The banner names the resolved path — the real directory is what a yes
+    // agrees to — and carries it in `deniedDirs`, the field the repository's
+    // approval answer already persists on.
+    final approval = ToolApproval(
+      id: call.id,
+      toolName: addDirectoryName,
+      argumentsJson: call.argumentsJson,
+      argumentsText: resolved,
+      deniedDirs: [resolved],
+    );
+    yield ApprovalRequestEvent(approval);
+    final answer = await approve(approval);
+    final allowed = answer == ApprovalResponse.allow ||
+        answer == ApprovalResponse.alwaysAllowChat ||
+        answer == ApprovalResponse.alwaysAllowProject;
+    if (!allowed) {
+      _decision = (
+        source: PermissionSource.human,
+        tiers: const [PermissionTier.once],
+        decided: PermissionDecision.deny,
+      );
+      yield ToolResultEvent(_ran(
+          call,
+          ShellResult.failed(
+              "Denied. Write access to $resolved was not granted; carry on "
+              "with the task — writes in that folder keep raising the "
+              "ordinary per-write approval. Do not call $addDirectoryName "
+              "again this turn.")));
+      return;
+    }
+    grantRuntimeDirs([resolved]);
+    final tiers = switch (answer) {
+      ApprovalResponse.alwaysAllowChat => const [PermissionTier.chat],
+      ApprovalResponse.alwaysAllowProject => const [PermissionTier.project],
+      _ => const <PermissionTier>[],
+    };
+    _decision = (
+      source: PermissionSource.human,
+      tiers: tiers,
+      decided: PermissionDecision.allow,
+    );
+    final wording = switch (answer) {
+      ApprovalResponse.alwaysAllowChat =>
+        "Allowed in this chat: the grant is saved with the conversation, so "
+            "writes in $resolved run without asking here.",
+      ApprovalResponse.alwaysAllowProject =>
+        "Allowed for this project: the grant is saved with the project, so "
+            "writes in $resolved run without asking in the project's chats.",
+      _ =>
+        "Allowed for the rest of this turn: writes in $resolved run without "
+            "asking until the turn ends.",
+    };
+    yield ToolResultEvent(_ran(
+        call,
+        ShellResult(returnCode: 0, output: wording)));
+  }
+
+  /// `writable_directories` — the turn's writable set, named. The workspaces
+  /// stand first, every write in them being free; what [addDirectoryName]
+  /// granted, standing or mid-turn, after them — anything the workspaces
+  /// already hold is left out of that half, for being no grant at all; and
+  /// `~` is spelled out, since the tools and commands take that shorthand and
+  /// the grants are recorded absolute.
+  Stream<AgentEvent> _writableDirectories(LlmToolCall call) async* {
+    yield ToolCallEvent(
+        ToolCall(id: call.id, name: call.name, argumentsJson: call.argumentsJson));
+    final dirs = [
+      for (final dir in _grantedDirs.toSet())
+        if (outsideWorkspaces(fs, dir, workspace, projectWorkspace)) dir,
+    ]..sort();
+    final home = shell.homeFor(projectWorkspace);
+    final lines = [
+      "Workspace: $workspace",
+      "Project workspace: $projectWorkspace",
+      if (dirs.isEmpty)
+        "No directories beside the workspaces have been granted write access."
+      else ...[
+        "Also writable, granted beside the workspaces:",
+        for (final dir in dirs) "- $dir",
+      ],
+      if (home != null) "~ is $home.",
+    ];
+    yield ToolResultEvent(ToolResult(
+      callId: call.id,
+      returnCode: 0,
+      output: lines.join("\n"),
+    ));
   }
 
   /// The stored fire time, worded for the answer — what is armed now, not
@@ -2243,7 +2430,8 @@ class BuiltinAgent {
     String toolName,
     Future<ShellResult> Function() run,
   ) async* {
-    if (outsideWorkspaces(fs, path, workspace, projectWorkspace)) {
+    if (outsideWorkspaces(fs, path, workspace, projectWorkspace,
+        granted: _grantedDirs)) {
       yield* _runGated(call, call.argumentsJson, toolName,
           () => _guarded(run), argumentsText: path);
     } else {
