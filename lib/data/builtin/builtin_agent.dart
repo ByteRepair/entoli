@@ -512,7 +512,7 @@ class BuiltinAgent {
       workspace: workspace,
       tmp: tmp,
       home: shell.machineHome,
-      extraWrites: [...writableDirs, ..._runtimeDirs],
+      extraWrites: _grantedDirs,
     );
   }
 
@@ -1751,9 +1751,7 @@ class BuiltinAgent {
     );
     yield ApprovalRequestEvent(approval);
     final answer = await approve(approval);
-    final allowed = answer == ApprovalResponse.allow ||
-        answer == ApprovalResponse.alwaysAllowChat ||
-        answer == ApprovalResponse.alwaysAllowProject;
+    final allowed = answer.isAllow;
     if (!allowed) {
       _decision = (
         source: PermissionSource.human,
@@ -2483,9 +2481,7 @@ class BuiltinAgent {
       final rule = ruleFromApproval(approval);
       if (rule != null) grantRuntimeRule(rule);
     }
-    final allowed = answer == ApprovalResponse.allow ||
-        answer == ApprovalResponse.alwaysAllowChat ||
-        answer == ApprovalResponse.alwaysAllowProject;
+    final allowed = answer.isAllow;
     _decision = (
       source: PermissionSource.human,
       tiers: [
@@ -2799,9 +2795,7 @@ class BuiltinAgent {
         answer == ApprovalResponse.alwaysAllowProject) {
       grantRuntimeDirs(deniedDirs);
     }
-    final allowed = answer == ApprovalResponse.allow ||
-        answer == ApprovalResponse.alwaysAllowChat ||
-        answer == ApprovalResponse.alwaysAllowProject;
+    final allowed = answer.isAllow;
     _decision = (
       source: allowed ? PermissionSource.rerun : PermissionSource.human,
       tiers: allowed ? const [] : [PermissionTier.once],

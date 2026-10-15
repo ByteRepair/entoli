@@ -43,5 +43,3 @@ const writableDirectoriesTool = LlmTool(
       "themselves.",
   schema: {"type": "object", "properties": {}},
 );
-
-const directoryToolDefs = <LlmTool>[addDirectoryTool, writableDirectoriesTool];
