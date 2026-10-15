@@ -83,15 +83,20 @@ void main() {
   }
 
   group("add_directory refusals", () {
-    test("the data directory and everything containing it refuses", () async {
+    test(
+        "the data directory, everything containing and inside it refuses",
+        () async {
       makeRooms();
       final dir = Directory.systemTemp.createTempSync("agent-dir-house");
       final dataDir = p.join(dir.path, "agent-data");
       Directory(dataDir).createSync();
+      final beneath = p.join(dataDir, "projects");
+      Directory(beneath).createSync();
       addTearDown(() => dir.deleteSync(recursive: true));
       final client = FakeLlmClient([
         [fileCall(addDirectoryName, {"path": dataDir})],
         [fileCall(addDirectoryName, {"path": dir.path})],
+        [fileCall(addDirectoryName, {"path": beneath})],
         [fileCall(addDirectoryName, {"path": outside})],
         [finish],
       ]);
@@ -105,12 +110,13 @@ void main() {
           .whereType<ApprovalRequestEvent>()
           .where((e) => e.approval.toolName == addDirectoryName)
           .toList();
-      // The first two never reached a banner; the one beside the data tree
+      // The first three never reached a banner; the one beside the data tree
       // did, and the scripted allow answered it.
       expect(banners, hasLength(1));
       expect(textOf(results(events, which: 0)), contains("not grantable"));
       expect(textOf(results(events, which: 1)), contains("not grantable"));
-      expect(textOf(results(events, which: 2)),
+      expect(textOf(results(events, which: 2)), contains("not grantable"));
+      expect(textOf(results(events, which: 3)),
           contains(outside));
     });
 

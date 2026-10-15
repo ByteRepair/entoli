@@ -1684,9 +1684,10 @@ class BuiltinAgent {
   /// is covered by [grantRuntimeDirs].
   ///
   /// Three shapes refuse before any banner: the app's own data tree — the
-  /// data directory itself or anything containing it, which would make the
-  /// app's settings, secrets and chats writable from inside its own permit —
-  /// a path that names nothing, and a file where a directory was asked for.
+  /// data directory, anything beneath it, or anything containing it, which
+  /// would make the app's settings, secrets and chats writable from inside
+  /// its own permit — a path that names nothing, and a file where a
+  /// directory was asked for.
   Stream<AgentEvent> _addDirectory(LlmToolCall call) async* {
     final path = stringArg(call.argumentsJson, "path");
     if (path == null) {
@@ -1703,17 +1704,6 @@ class BuiltinAgent {
       argumentsText: path,
     ));
     final resolved = _resolvePath(path);
-    // Compared by components, so a sibling of the data directory (`/home/x`
-    // against `/home/x/.config/agent-chat`) does not match and the home does.
-    if (dataDir != null && pathInside(dataDir!, resolved)) {
-      yield ToolResultEvent(_ran(
-          call,
-          ShellResult.failed(
-              "$resolved, or a directory that contains it, holds this app's "
-              "own data, which is not grantable. Choose a directory outside "
-              "it.")));
-      return;
-    }
     final type = await fs.type(resolved);
     if (type == FileSystemEntityType.notFound) {
       yield ToolResultEvent(
@@ -1737,6 +1727,20 @@ class BuiltinAgent {
               returnCode: 0,
               output: "$resolved is inside the workspaces, and writes there "
                   "are already allowed. Nothing was granted.")));
+      return;
+    }
+    // The tree either way — beneath it is the app's own data, containing it
+    // hands those writes to the sandbox — answered after the workspaces,
+    // whose directories live beneath this tree and need no grant.
+    // shortcut: a symlink aliasing the data dir passes as its own name,
+    // until fs_shim grows link resolution to chase one with.
+    if (dataDir != null &&
+        (pathInside(dataDir!, resolved) || pathInside(resolved, dataDir!))) {
+      yield ToolResultEvent(_ran(
+          call,
+          ShellResult.failed(
+              "$resolved holds this app's own data, or lies inside it, which "
+              "is not grantable. Choose a directory outside it.")));
       return;
     }
     // The banner names the resolved path — the real directory is what a yes
@@ -2475,6 +2479,9 @@ class BuiltinAgent {
             answer == ApprovalResponse.alwaysAllowProject)) {
       // The paths, not the prose: grant them for the turn; the repository
       // persists them to the tier the answer named.
+      // shortcut: an over-data answer rides this turn even though the
+      // repository will not persist it, until the banner can refuse before
+      // asking.
       grantRuntimeDirs(approval.deniedDirs);
     } else if (answer == ApprovalResponse.alwaysAllowChat ||
         answer == ApprovalResponse.alwaysAllowProject) {

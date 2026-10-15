@@ -323,9 +323,12 @@ with the directory in `deniedDirs`, so it lands in the named tier's
 workspaces and what was granted beside them. The file tools read the same
 store — `outsideWorkspaces` carries the turn's writable set — so a granted
 directory behaves the same by command or by file tool: one store, two readers.
-The app's data directory and everything containing it refuses outright — a
-grant over it makes the app's own settings, secrets and chats writable from
-inside its own permit. The tool rides `ask` and runs top-level only, having
+The app's data directory refuses in both directions — anything beneath it, or
+anything containing it, would make the app's own settings, secrets and chats
+writable from inside its own permit. The tool's door refuses before any
+banner; the repository's persistence route drops the same paths where a
+re-prompt's answer would have persisted them. The tool rides `ask` and runs
+top-level only, having
 nobody to answer the banner otherwise; the description is the only thing that
 tells the model it exists.
 

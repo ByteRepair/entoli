@@ -4,6 +4,7 @@ import "dart:typed_data";
 import "package:uuid/uuid.dart";
 
 import "../core/config.dart";
+import "../core/log.dart";
 import "../domain/agent_backend.dart";
 import "../domain/app_settings.dart";
 import "../domain/builtin_project.dart";
@@ -635,15 +636,30 @@ class ChatRepository {
     if (r == ApprovalResponse.alwaysAllowChat ||
         r == ApprovalResponse.alwaysAllowProject) {
       if (deniedDirs.isNotEmpty) {
-        // A re-prompt's "always" is the paths: they become the tier's
-        // writable directories, and every later confined command — this
-        // chat's or the project's — writes there without a banner. The
-        // command's own prose is not recorded: it varies every turn and
-        // would claim to allow what it cannot name.
-        if (r == ApprovalResponse.alwaysAllowChat) {
-          await _saveChatDirs(chatId, deniedDirs);
-        } else {
-          await _saveProjectDirs(await projectOf(chatId), deniedDirs);
+        // Over the app's own data either way — beneath the tree it names the
+        // data itself, above it carries those writes. The tool's banner
+        // refuses these first; this is the re-prompt's door, which the
+        // answer could outlive the turn.
+        final grantable = [
+          for (final d in deniedDirs)
+            if (!pathInside(_config.dataDir, d) &&
+                !pathInside(d, _config.dataDir))
+              d,
+        ];
+        if (grantable.length < deniedDirs.length) {
+          logFailure("perms", "refused a persisted grant over the app's data");
+        }
+        if (grantable.isNotEmpty) {
+          // A re-prompt's "always" is the paths: they become the tier's
+          // writable directories, and every later confined command — this
+          // chat's or the project's — writes there without a banner. The
+          // command's own prose is not recorded: it varies every turn and
+          // would claim to allow what it cannot name.
+          if (r == ApprovalResponse.alwaysAllowChat) {
+            await _saveChatDirs(chatId, grantable);
+          } else {
+            await _saveProjectDirs(await projectOf(chatId), grantable);
+          }
         }
       } else {
         final rule = ruleFromApproval(approval);
