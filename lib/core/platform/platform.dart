@@ -13,6 +13,7 @@ import "../../data/builtin/llm/local_prefill.dart";
 import "../../data/local/file_chat_store.dart";
 import "../../data/local/byte_repair_store.dart" show ByteRepairStore;
 import "../../data/prompts/prompt_sources.dart";
+import "../../data/local/apple_fm.dart";
 import "../../domain/app_settings.dart";
 import "../../domain/app_secrets.dart";
 import "../../domain/app_update.dart";
@@ -62,6 +63,7 @@ BuiltinBackend createBackend(
   String? abi,
   required LocalLlm localLlm,
   LocalKvCache? kvCache,
+  AppleFm? appleFm,
   String? byteRepairBinDir,
   required AppSecrets secrets,
   String? loginPath,
@@ -104,7 +106,7 @@ BuiltinBackend createBackend(
     store: store,
     triggerRegistry: triggerRegistry,
     registry: LlmRegistry(
-      endpoints: () => llmEndpoints(settings, localLlm, kvCache),
+      endpoints: () => llmEndpoints(settings, localLlm, kvCache, appleFm),
       // Settings wins, but a key already exported is found without having to
       // be pasted in.
       lookupEnv: (name) => settings().environment[name] ?? processEnv(name),
@@ -194,22 +196,28 @@ LocalPrefill? createLocalPrefill(
 /// Every endpoint the app can reach: what the user configured, and the models
 /// on this device where there are any.
 ///
-/// The local one is composed here rather than written into `settings.json`
-/// because it has no address to write — each model is its own process on a port
-/// asked of the OS when it loads. So it carries its own client, which is what
-/// routes a request to the right one and loads it on the way. Null while
-/// nothing is downloaded, which is what keeps it out of every picker on the
-/// platforms that have no server.
+/// The local ones are composed here rather than written into `settings.json`
+/// because they have no address to write. The llama pool's endpoint carries
+/// the client that routes a request to the right one of its processes and
+/// loads it on the way; Apple's carries the client that speaks the
+/// framework's channel. Null while nothing is there for them, which is what
+/// keeps them out of every picker on the platforms that have neither.
 ///
 /// **First in the list, and that decides a collision**: `localProviderId` is
-/// the app's name, and a `settings.json` that happens to use it is shadowed
-/// rather than allowed to take the models' own endpoint away from them.
+/// the app's name, and so is `appleProviderId` — a `settings.json` that
+/// happens to use either is shadowed rather than allowed to take the
+/// models' own endpoint away from them.
 List<LlmEndpoint> llmEndpoints(
   AppSettings Function() settings,
   LocalLlm localLlm,
   LocalKvCache? kvCache,
+  AppleFm? appleFm,
 ) {
   final local = localLlm.provider;
+  // The Apple model composes the same way the pool does: an entry the user
+  // never configures, carrying its own client — first in the list, beside the
+  // pool, so a `settings.json` that claims one of these ids is shadowed
+  // rather than allowed to take the models' own endpoint away.
   return [
     if (local != null)
       LlmEndpoint(local, build: (config, apiKey) => LocalPoolClient(localLlm, () {
@@ -217,6 +225,7 @@ List<LlmEndpoint> llmEndpoints(
             // and the settings page edits these between them.
             return poolOptions(settings());
           }, kvCache: kvCache)),
+    if (appleFm != null) appleFm.endpoint,
     for (final config in settings().llmProviders) LlmEndpoint(config),
   ];
 }
@@ -254,6 +263,14 @@ ByteRepairStore createByteRepairStore(
 /// projects, or null where there is none. Resolved from the same cache
 /// directory the store was, so the two cannot disagree.
 String? byteRepairBinDir(String cacheDir) => platformByteRepairBinDir(cacheDir);
+
+/// The Apple on-device model this launch can reach, asked once: a
+/// `SystemLanguageModel` is the OS's own, so what the handshake found is
+/// what launch has. Null on every platform that is not iOS — and on an iOS
+/// whose hardware could never carry the model — which is what keeps the row
+/// out of every picker, the way the llama pool is absent from the builds
+/// that ship no server.
+Future<AppleFm?> createAppleFm() => platformCreateAppleFm();
 
 /// Whether a project that requires setup has its `.setup-complete` marker.
 /// Synchronous because the chat page asks it in a build; true on the web,

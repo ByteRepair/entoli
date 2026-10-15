@@ -15,5 +15,6 @@ import UIKit
     VoiceChannel.register(with: engineBridge)
     RemindersPlugin.register(
       with: engineBridge.pluginRegistry.registrar(forPlugin: "RemindersPlugin")!)
+    AppleFmChannel.register(with: engineBridge)
   }
 }

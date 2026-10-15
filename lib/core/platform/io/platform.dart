@@ -29,6 +29,7 @@ import "../../../data/local/ish_ffi.dart";
 import "../../../data/local/ish_shell.dart";
 import "../../../data/local/llama_server.dart";
 import "../../../data/local/proot.dart";
+import "../../../data/local/apple_fm.dart";
 import "../../../data/local/landlock.dart";
 import "../../../data/local/shared_backup.dart";
 import "../../../data/local/tree_ops.dart";
@@ -44,6 +45,7 @@ import "../../../data/voice/ios_voice.dart";
 import "../../../data/voice/sherpa_voice.dart";
 import "../../../domain/app_settings.dart";
 import "../../../domain/app_update.dart";
+import "../../../core/log.dart";
 import "../../../domain/assistant_launch.dart";
 import "../../../domain/backup_handoff.dart";
 import "../../../domain/builtin_project.dart";
@@ -392,6 +394,39 @@ Future<LocalLlm> platformLocalLlm(LocalModelStore store, String cacheDir) async 
     store,
     slotSaveDir: _kvCacheDir(cacheDir),
   );
+}
+
+/// [AppleFm] where this device can reach the Apple on-device model: iOS 26
+/// and a device Apple Intelligence runs on, handshake answered. Null on
+/// every other platform — and on iOS, where the hardware could never carry
+/// the model, so the row is out of every picker rather than worded at every
+/// turn. Where the OS *could* have the model and does not have it running
+/// (not enabled, still being fetched), the endpoint exists and a turn's own
+/// failure words why: the availability can flip mid-session, and a picker
+/// that hid the model would never say that a settings toggle is the way
+/// back to it.
+Future<AppleFm?> platformCreateAppleFm() async {
+  if (!Platform.isIOS) return null;
+  try {
+    final answer = await appleChannel
+        .invokeMethod<Object?>("handshake")
+        .timeout(const Duration(seconds: 3));
+    final handshake = answer as Map<Object?, Object?>? ?? const {};
+    final reason = handshake["reason"] as String? ?? "other";
+    return switch (reason) {
+      "device-not-eligible" || "os" => null,
+      _ => AppleFm(AppleFmProbe(
+          reason,
+          // What the build links is its own to answer: the picker's MLX
+          // rows ride this, not a probe of the hardware.
+          mlx: handshake["mlx"] as bool? ?? false)),
+    };
+  } catch (e) {
+    // No runner half in this build, or a channel that never answered: the
+    // honest null rather than a picker row that dies on its first turn.
+    logFailure("apple-fm", "handshake failed", e);
+    return null;
+  }
 }
 
 /// The directory beside the running executable that a Linux bundle holds its

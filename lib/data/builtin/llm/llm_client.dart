@@ -92,6 +92,14 @@ class LlmMessage {
   final List<LlmAttachment> attachments;
 }
 
+/// The system messages as one standing prompt, the join Anthropic's `system`
+/// parameter and the Apple bridge's instructions both make: the system roles
+/// in order, empty texts dropped, blank lines between.
+String joinedSystemText(List<LlmMessage> messages) => [
+      for (final message in messages)
+        if (message.role == LlmRole.system && message.text.isNotEmpty) message.text,
+    ].join("\n\n");
+
 class LlmTool {
   const LlmTool({required this.name, required this.description, required this.schema});
 

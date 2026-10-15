@@ -619,6 +619,13 @@ class FakeBackend implements AgentBackend {
   /// What `usageFor` answers, keyed by chat id, in context tokens.
   final Map<String, int> usageHolder = {};
 
+  /// The window that same request stood in, mirroring the pair the real
+  /// backend keeps.
+  final Map<String, int> windowHolder = {};
+
+  @override
+  int? contextWindowFor(String chatId) => windowHolder[chatId];
+
   var didShutdown = false;
 
   @override

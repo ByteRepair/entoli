@@ -16,6 +16,7 @@ import "../../domain/chat_store.dart";
 import "../../domain/file_tools.dart";
 import "../../domain/llm_provider.dart";
 import "../../domain/models.dart";
+import "../../domain/model_registry.dart";
 import "../../domain/permission.dart";
 import "../../domain/prompt_library.dart";
 import "../../domain/shell.dart";
@@ -115,9 +116,16 @@ class BuiltinBackend implements AgentBackend {
   /// on dispose must not keep. Not a session: it is the newest request's
   /// fact, not the conversation's, and the controller reads it the way the
   /// controller reads everything else of the backend — through the callback
-  /// that reported it. The window it is judged against is the settings
-  /// object's, not this map's.
+  /// that reported it.
   final Map<String, int> _usage = {};
+
+  /// The context window the chat's model stands in, as `contextWindowOf`
+  /// named it when the request beside this entry ran — written where the
+  /// usage is written, so the threshold answers both halves of itself from
+  /// one pair of maps with no `meta.json` read on the settle path. Null
+  /// where the registry knows nothing, which the caller reads as the
+  /// settings' global guess.
+  final Map<String, int?> _windows = {};
   final _RunningTurns _running = _RunningTurns();
   final Map<String, StreamController<AgentEvent>> _controllers = {};
   final Map<String, List<ToolApproval>> _approvals = {};
@@ -446,7 +454,10 @@ class BuiltinBackend implements AgentBackend {
         },
         onShellOutput: (callId, text) =>
             controller.add(ShellOutputEvent(callId: callId, text: text)),
-        onUsage: (usage) => _usage[chatId] = usage.contextTokens,
+        onUsage: (usage) {
+          _usage[chatId] = usage.contextTokens;
+          _windows[chatId] = contextWindowOf(settings.provider, settings.model);
+        },
       );
       // The real kill replaces the placeholder.
       _running.replace(stopKey, agent.cancel);
@@ -882,8 +893,12 @@ class BuiltinBackend implements AgentBackend {
     if (history.isEmpty) return null;
     // The ask has to fit the window with room for the summary it produces; a
     // budget that would fill the whole window is how the last attempt got
-    // here in the first place. The same app number the threshold reads.
-    final budget = AppSettings.load(config).totalContext ~/ 2;
+    // here in the first place. The window is the model's own where the
+    // registry knows it, the settings' global guess where it does not — and
+    // where the model still refuses a span, the ladder below is the answer.
+    final window = contextWindowOf(settings.provider, settings.model) ??
+        AppSettings.load(config).totalContext;
+    final budget = window ~/ 2;
     // The retry ladder: a span too big to summarize is not a failure to give
     // up on but a span to summarize less of. Each attempt drops the oldest
     // half of what it was asked to read, so a conversation that will not fit
@@ -1323,11 +1338,15 @@ class BuiltinBackend implements AgentBackend {
     await abort(chatId);
     _sessions.remove(chatId);
     _usage.remove(chatId);
+    _windows.remove(chatId);
     _forgetMemberSessions(chatId);
   }
 
   @override
   int? usageFor(String chatId) => _usage[chatId];
+
+  @override
+  int? contextWindowFor(String chatId) => _windows[chatId];
 
   @override
   void closeChatShell(String chatId, {required String? project}) =>

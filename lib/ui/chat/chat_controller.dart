@@ -1063,11 +1063,14 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
     final settings = ref.read(appSettingsProvider);
     if (!settings.autoCompact) return;
     // The usage is the backend's one per-chat fact — the newest request's
-    // reading of the session. The window is the settings object already in
-    // hand: one app number, live, so an edit between turns is seen at once.
-    final used = ref.read(agentBackendProvider).usageFor(chatId);
+    // reading of the session — and the window is answered from the same
+    // maps: the chat's model's own where the registry knows it, the
+    // app-wide guess where it does not. One read, no meta on the settle path.
+    final backend = ref.read(agentBackendProvider);
+    final used = backend.usageFor(chatId);
     if (used == null) return;
-    if (used < settings.autoCompactPercent * settings.totalContext ~/ 100) {
+    final window = backend.contextWindowFor(chatId) ?? settings.totalContext;
+    if (used < settings.autoCompactPercent * window ~/ 100) {
       return;
     }
     // Not twice without a turn below the threshold between: the log is the
