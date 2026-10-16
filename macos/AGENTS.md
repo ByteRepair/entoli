@@ -21,12 +21,12 @@ Linux's Landlock helper.
 ## The entitlements
 
 Both `DebugProfile.entitlements` and `Release.entitlements` are generated files
-reduced to almost nothing: Release keeps only
-`com.apple.security.device.audio-input`, the microphone hardened runtime
-otherwise denies (see "The DMG"), and DebugProfile only
+reduced to almost nothing: Release keeps only the microphone and Apple
+Events, which hardened runtime otherwise denies (see "The DMG"), and
+DebugProfile only
 `com.apple.security.cs.allow-jit`, since a debug build runs the VM with a JIT
 and a future hardened-runtime debug signing would want it. Signing under
-hardened runtime with that one entitlement is the release story: `make-dmg.sh
+hardened runtime with those two entitlements is the release story: `make-dmg.sh
 --sign` does it and the sandbox never re-enters through the signature by
 accident. The Mac App Store — which requires the sandbox — is planned for
 when enrollment happens, as a second entitlements file (`app-sandbox`,
@@ -186,7 +186,7 @@ plugins, and `record` ships a macOS recorder — so there is no recorder
 registration and nothing to swap: `registerRecorder` is a no-op here the way
 it would be on any platform without a fallback to install. What the mic costs
 is one prompt: `NSMicrophoneUsageDescription` in `Info.plist` is the text TCC
-reads, the only permission a macOS build asks for.
+reads, and with Apple Events the only permissions a macOS build asks for.
 
 ## The icon
 
@@ -226,12 +226,16 @@ secret replaced, since the job finds the identity in the keychain rather than
 by name. Notarizing uses the App Store Connect API key the ipa does
 (`APPLE_API_*`). A rejection prints notarytool's log, which names the file.
 
-Hardened runtime takes the microphone away unless the signature asks for it,
-and that is the one entitlement the release carries:
-`com.apple.security.device.audio-input`. Without it TCC is never asked and
-voice mode hears silence; nothing else the app does — `Process.start`, the
-network, files outside a sandbox it does not have — is one hardened runtime
-gates.
+Hardened runtime takes away what the signature does not ask for, and the
+release asks for two things. `com.apple.security.device.audio-input` is the
+microphone: without it TCC is never asked and voice mode hears silence.
+`com.apple.security.automation.apple-events`, with
+`NSAppleEventsUsageDescription` in `Info.plist`, is Apple Events: a command
+such as `osascript` that drives another app is attributed to Entoli as the
+responsible process, and without the entitlement the send fails instead of
+prompting. That one is precaution rather than something seen failing — no
+notarized build had run when it went in. `Process.start`, the network and
+files outside a sandbox the app does not have are not gated.
 
 The window a user's mount opens with comes from committed data, not from any
 styling run at package time. One styling session on this Mac — a throwaway

@@ -29,7 +29,8 @@ on:
       ANDROID_KEY_PASSWORD:
         required: true
       # Apple's are optional: a caller without them gets every build but the
-      # ipa, whose job fails fast on the empties instead of signing nothing.
+      # ipa and the DMG, whose jobs fail fast on the empties instead of
+      # shipping something unsigned.
       # The App Store Connect API key signs as well as uploads: the export
       # asks Apple for the distribution certificate and profile with it.
       APPLE_API_ISSUER:
@@ -542,6 +543,52 @@ jobs:
             exit 1
           fi
 
+      # Also before the build, for the same reason: a wrong password, a .p12
+      # that is not a Developer ID one or a revoked API key would otherwise
+      # surface minutes of macOS runner time later. The keychain is the job's
+      # own, with a random password nobody needs to know, put on the search
+      # list so codesign finds the identity; the partition list is what lets
+      # codesign use the key without the prompt a runner cannot answer. The
+      # identity is found by its hash rather than spelled out, so a renewed
+      # certificate is a changed secret and nothing else. The keychain path is
+      # an output the moment it exists, so the removal step runs even when the
+      # import fails.
+      - name: Import the Developer ID certificate and the API key
+        id: cert
+        env:
+          CERT_P12: ${{ secrets.MACOS_CERT_P12 }}
+          CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
+          API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
+        run: |
+          set -euo pipefail
+          keychain="$RUNNER_TEMP/signing.keychain-db"
+          kpass="$(openssl rand -hex 24)"
+          p12="$RUNNER_TEMP/cert.p12"
+          trap 'rm -f "$p12"' EXIT
+          printf '%s' "$CERT_P12" | base64 -D -o "$p12"
+          security create-keychain -p "$kpass" "$keychain"
+          echo "keychain=$keychain" >> "$GITHUB_OUTPUT"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$kpass" "$keychain"
+          security import "$p12" -k "$keychain" -P "$CERT_PASSWORD" -f pkcs12 -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$kpass" "$keychain" >/dev/null
+          security list-keychains -d user -s "$keychain" $(security list-keychains -d user | tr -d '"')
+          identity="$(security find-identity -v -p codesigning "$keychain" \
+            | awk '/Developer ID Application/ {print $2; exit}')"
+          if [ -z "$identity" ]; then
+            echo "::error::MACOS_CERT_P12 holds no valid Developer ID Application identity (a wrong certificate, or a chain this runner cannot verify)"
+            exit 1
+          fi
+          echo "identity=$identity" >> "$GITHUB_OUTPUT"
+          key="$RUNNER_TEMP/AuthKey_$API_KEY_ID.p8"
+          printf '%s' "$API_KEY_P8" | base64 -D -o "$key"
+          # A listing is the cheapest call the key can be refused on.
+          xcrun notarytool history --key "$key" --key-id "$API_KEY_ID" \
+            --issuer "$API_ISSUER" >/dev/null
+          echo "key=$key" >> "$GITHUB_OUTPUT"
+
       - uses: actions/checkout@v7.0.1
         with:
           ref: ${{ inputs.tag }}
@@ -550,39 +597,6 @@ jobs:
 
       - name: Build the app bundle
         run: flutter build macos --release --build-number="${{ needs.version.outputs.code }}"
-
-      # A keychain of the job's own, with a random password nobody needs to
-      # know, put on the search list so codesign finds the identity. The
-      # partition list is what lets codesign use the key without the prompt a
-      # runner cannot answer. The identity is found by its hash in that
-      # keychain rather than spelled out, so a renewed certificate is a
-      # changed secret and nothing else.
-      - name: Import the Developer ID certificate
-        id: cert
-        env:
-          CERT_P12: ${{ secrets.MACOS_CERT_P12 }}
-          CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
-        run: |
-          set -euo pipefail
-          keychain="$RUNNER_TEMP/signing.keychain-db"
-          kpass="$(openssl rand -hex 24)"
-          p12="$RUNNER_TEMP/cert.p12"
-          printf '%s' "$CERT_P12" | base64 -D -o "$p12"
-          security create-keychain -p "$kpass" "$keychain"
-          security set-keychain-settings -lut 21600 "$keychain"
-          security unlock-keychain -p "$kpass" "$keychain"
-          security import "$p12" -k "$keychain" -P "$CERT_PASSWORD" -f pkcs12 -T /usr/bin/codesign
-          rm -f "$p12"
-          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$kpass" "$keychain" >/dev/null
-          security list-keychains -d user -s "$keychain" $(security list-keychains -d user | tr -d '"')
-          identity="$(security find-identity -v -p codesigning "$keychain" \
-            | awk '/Developer ID Application/ {print $2; exit}')"
-          if [ -z "$identity" ]; then
-            echo "::error::MACOS_CERT_P12 holds no Developer ID Application identity"
-            exit 1
-          fi
-          echo "identity=$identity" >> "$GITHUB_OUTPUT"
-          echo "keychain=$keychain" >> "$GITHUB_OUTPUT"
 
       # make-dmg.sh fails when the app is not there, and codesign's verify step
       # refuses to pass an image whose signature does not check out — there is
@@ -601,19 +615,19 @@ jobs:
 
       # One submission for the image, which notarizes everything inside it;
       # the ticket is stapled into the DMG so a first open needs no network.
-      # A rejection prints Apple's log, which names the file that failed.
+      # notarytool's own exit is not trusted to stop the step: the status
+      # decides, so a rejection or a timeout still prints Apple's log, which
+      # names the file that failed.
       - name: Notarize the DMG
         env:
+          KEY: ${{ steps.cert.outputs.key }}
           API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
           API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
-          API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
         run: |
           set -euo pipefail
-          key="$RUNNER_TEMP/AuthKey_$API_KEY_ID.p8"
-          printf '%s' "$API_KEY_P8" | base64 -D -o "$key"
-          auth=(--key "$key" --key-id "$API_KEY_ID" --issuer "$API_ISSUER")
+          auth=(--key "$KEY" --key-id "$API_KEY_ID" --issuer "$API_ISSUER")
           result="$(xcrun notarytool submit "dist/$DMG" "${auth[@]}" \
-            --wait --timeout 1h --output-format json)"
+            --wait --timeout 1h --output-format json)" || true
           id="$(printf '%s' "$result" | plutil -extract id raw -o - - 2>/dev/null || true)"
           status="$(printf '%s' "$result" | plutil -extract status raw -o - - 2>/dev/null || true)"
           if [ "$status" != Accepted ]; then

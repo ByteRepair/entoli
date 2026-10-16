@@ -37,8 +37,8 @@ assets.** The builds are `release-build.yml`'s, which it calls with the tag
 and which is dispatchable on its own, so whether a tag builds can be found
 out without publishing a release to ask. The two Linux builds share the
 composite `.github/actions/linux-appimage` and differ in the mode they pass
-it; the seven signing secrets are named at the call site rather than
-`inherit`ed, two jobs signing.
+it; the nine signing secrets are named at the call site rather than
+`inherit`ed, three jobs signing.
 
 ## The jobs
 
@@ -197,12 +197,30 @@ Apple's three are optional where the Android four are required:
 the `.p8`) are one App Store Connect API key, which both signs the export in
 `release-build.yml` and uploads in `release.yml`'s `testflight` job. The team
 is not a secret: it is the project's `DEVELOPMENT_TEAM` and the `teamID` of
-`tool/ios/ExportOptions.plist`, both committed. A caller without them
-ships every build but the store channel. The key needs the **Admin** role:
-App Manager uploads but cannot create the certificate or profile the export
-asks for. Nothing goes stale yearly — Apple renews the cloud-managed
-certificate and regenerates the profile itself — and a leaked key is revoked
-in App Store Connect and replaced by a new trio, nothing else changing.
+`tool/ios/ExportOptions.plist`, both committed. The same key notarizes the
+DMG in the macos job. A caller without them ships every build but the ipa
+and the DMG. The key needs the **Admin** role: App Manager uploads but
+cannot create the certificate or profile the export asks for. Nothing about
+the ipa goes stale yearly — Apple renews the cloud-managed certificate and
+regenerates the profile itself — and a leaked key is revoked in App Store
+Connect and replaced by a new trio, nothing else changing.
+
+The DMG's certificate is the exception: `MACOS_CERT_P12` (base64 of a
+`.p12`) and `MACOS_CERT_PASSWORD` are the Developer ID Application
+certificate and its key, a stored file because `flutter build macos` is not
+an Xcode export and nothing in it asks Apple for one. Only the Account
+Holder can create it — Xcode > Settings > Accounts > Manage Certificates,
+`+`, Developer ID Application — and it expires on its own date, after which
+a new one is made and exported the same way:
+
+```sh
+# Keychain Access > My Certificates > the Developer ID Application one >
+# Export, as a .p12 with a password; then
+base64 -i entoli.p12 | gh secret set MACOS_CERT_P12
+gh secret set MACOS_CERT_PASSWORD
+```
+
+A DMG notarized before the expiry keeps opening after it.
 
 ## The publisher
 
