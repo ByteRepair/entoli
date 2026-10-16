@@ -38,8 +38,6 @@ on:
         required: false
       APPLE_API_KEY_P8:
         required: false
-      APPLE_TEAM_ID:
-        required: false
     outputs:
       version:
         description: The pubspec version, for the Play publisher's release name.
@@ -350,11 +348,10 @@ jobs:
           API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
           API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
           API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
-          TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
           set -euo pipefail
-          if [ -z "$API_ISSUER" ] || [ -z "$API_KEY_ID" ] || [ -z "$API_KEY_P8" ] || [ -z "$TEAM_ID" ]; then
-            echo "::error::APPLE_API_ISSUER, APPLE_API_KEY_ID, APPLE_API_KEY_P8 or APPLE_TEAM_ID is empty"
+          if [ -z "$API_ISSUER" ] || [ -z "$API_KEY_ID" ] || [ -z "$API_KEY_P8" ]; then
+            echo "::error::APPLE_API_ISSUER, APPLE_API_KEY_ID or APPLE_API_KEY_P8 is empty"
             exit 1
           fi
 
@@ -403,33 +400,23 @@ jobs:
             exit 1
           fi
 
+      # The export options are tool/ios/ExportOptions.plist, the file an
+      # upload from a Mac uses, so the two cannot drift; the team is the one
+      # it names. Its destination is the one difference: that file uploads
+      # as it exports, and here the ipa is written to disk for the release
+      # and the testflight job uploads it.
       - name: Sign and export the ipa
         env:
           API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
           API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
           API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
-          TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
           set -euo pipefail
           key="$RUNNER_TEMP/AuthKey_$API_KEY_ID.p8"
           printf '%s' "$API_KEY_P8" | base64 -D -o "$key"
           options="$RUNNER_TEMP/ExportOptions.plist"
-          cat > "$options" <<EOF
-          <?xml version="1.0" encoding="UTF-8"?>
-          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-          <plist version="1.0">
-          <dict>
-          	<key>method</key>
-          	<string>app-store-connect</string>
-          	<key>teamID</key>
-          	<string>$TEAM_ID</string>
-          	<key>signingStyle</key>
-          	<string>automatic</string>
-          	<key>stripSwiftSymbols</key>
-          	<true/>
-          </dict>
-          </plist>
-          EOF
+          cp tool/ios/ExportOptions.plist "$options"
+          plutil -replace destination -string export "$options"
           xcodebuild -exportArchive \
             -archivePath build/ios/archive/Runner.xcarchive \
             -exportPath build/ios/ipa \

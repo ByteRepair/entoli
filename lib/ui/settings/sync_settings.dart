@@ -5,7 +5,9 @@ import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:mobile_scanner/mobile_scanner.dart";
 import "package:qr_flutter/qr_flutter.dart";
+import "package:url_launcher/url_launcher.dart";
 
+import "../../core/log.dart";
 import "../../data/sync/sync_hub.dart";
 import "../../domain/app_settings.dart";
 import "../../providers.dart";
@@ -933,6 +935,11 @@ Widget _pairingFailed(BuildContext context, String? error) => Padding(
 
 /// The camera scanner for a pairing code, on the phones alone by the button
 /// that opens it ([_canScan]). Pops with the scanned text on a successful detect.
+///
+/// A refused camera is a page of its own rather than the scanner's raw error:
+/// iOS asks once and never again, so the only way back is the app's page in
+/// Settings, which the page opens there. Android asks again on the next open
+/// until the user ticks never, so it says the same and offers nothing to tap.
 class _ScanQrPage extends StatefulWidget {
   const _ScanQrPage();
 
@@ -956,6 +963,11 @@ class _ScanQrPageState extends State<_ScanQrPage> {
       appBar: AppBar(title: const Text("Scan QR code")),
       body: MobileScanner(
         controller: _controller,
+        errorBuilder: (context, error) =>
+            error.errorCode == MobileScannerErrorCode.permissionDenied
+                ? const _CameraRefused()
+                : _pairingFailed(context, error.errorDetails?.message ??
+                    error.errorCode.message),
         onDetect: (capture) {
           if (_done) return;
           for (final barcode in capture.barcodes) {
@@ -1017,5 +1029,51 @@ class _SasConfirm extends StatelessWidget {
         ),
       ],
     );
+  }
+}
+
+class _CameraRefused extends StatelessWidget {
+  const _CameraRefused();
+
+  static bool get _iOS => defaultTargetPlatform == TargetPlatform.iOS;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text("Entoli can't use the camera."),
+            const SizedBox(height: 8),
+            mutedParagraph(
+                context,
+                _iOS
+                    ? "Allow it under Settings, Entoli, Camera, or go back and "
+                        "paste the pairing code instead."
+                    : "Allow it when Entoli asks, or under the app's "
+                        "permissions in Settings, or go back and paste the "
+                        "pairing code instead."),
+            if (_iOS) ...[
+              const SizedBox(height: 16),
+              FilledButton(
+                onPressed: () => unawaited(_openSettings()),
+                child: const Text("Open Settings"),
+              ),
+            ],
+          ],
+        ),
+      );
+
+  // UIApplication.openSettingsURLString, which url_launcher opens like any
+  // other URL; it lands on this app's own page.
+  static Future<void> _openSettings() async {
+    try {
+      if (!await launchUrl(Uri.parse("app-settings:"))) {
+        logFailure("sync", "the Settings app did not open");
+      }
+    } catch (e) {
+      logFailure("sync", "the Settings app did not open", e);
+    }
   }
 }

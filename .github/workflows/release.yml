@@ -42,7 +42,6 @@ jobs:
       APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
       APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
       APPLE_API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
-      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
 
   # A job of its own so the keystore and `contents: write` are never held by
   # the same one, and one run of it per file so a bundle on the release is
@@ -132,6 +131,10 @@ jobs:
             xcrun altool --upload-package "dist/$IPA" --type ios \
               --apiKey "$API_KEY_ID" --apiIssuer "$API_ISSUER"
             echo "TestFlight: uploaded $(basename "dist/$IPA")." >> "$GITHUB_STEP_SUMMARY"
+            # The ipa says ITSAppUsesNonExemptEncryption=false, which holds
+            # only with France out of the availability; see "Export
+            # compliance" in ios/AGENTS.md.
+            echo "Check: France is excluded from App Store availability, or the ANSSI declaration is filed (ios/AGENTS.md, Export compliance)." >> "$GITHUB_STEP_SUMMARY"
           else
             echo "::notice::altool is not in this Xcode; upload dist/$IPA by hand"
             echo "TestFlight: altool absent; upload dist/$IPA by hand." >> "$GITHUB_STEP_SUMMARY"

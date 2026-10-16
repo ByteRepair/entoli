@@ -1,3 +1,5 @@
+import "dart:io";
+
 import "package:flutter_test/flutter_test.dart";
 
 import "package:agent_chat/domain/rootfs.dart";
@@ -75,6 +77,38 @@ void main() {
       expect(ishLinked, isFalse,
           reason: "iSH is only linked on iOS; on every other platform the "
               "FFI lookups are never made and the build carries no iSH.");
+    });
+
+    // A release link dead-strips any bridge function nothing calls, and Dart
+    // calls them by name only, so each looked-up name has to be on
+    // Ish.xcconfig's ISH_KEEP_NAMES. A name missing there links in debug and throws
+    // on the first shell of a TestFlight build, which no simulator run shows.
+    test("keeps every name ish_ffi.dart looks up, and only those", () {
+      final looked = RegExp(r'"(ish_[a-z_]+)"')
+          .allMatches(File("lib/data/local/ish_ffi.dart").readAsStringSync())
+          .map((m) => m[1]!)
+          .toSet();
+      final keepLine = File("ios/Flutter/Ish.xcconfig")
+          .readAsLinesSync()
+          .singleWhere((l) => l.startsWith("ISH_KEEP_NAMES ="));
+      final kept = RegExp(r"-Wl,-u,_(ish_[a-z_]+)")
+          .allMatches(keepLine)
+          .map((m) => m[1]!)
+          .toSet();
+      expect(looked, isNotEmpty);
+      expect(kept, looked);
+    });
+
+    test("every kept name is a function the bridge defines", () {
+      final bridge = File("tool/ios/ish/ish_bridge.c").readAsStringSync();
+      final looked = RegExp(r'"(ish_[a-z_]+)"')
+          .allMatches(File("lib/data/local/ish_ffi.dart").readAsStringSync())
+          .map((m) => m[1]!)
+          .toSet();
+      for (final name in looked) {
+        expect(bridge, matches(RegExp("\\b$name\\s*\\(")),
+            reason: "$name is looked up but ish_bridge.c defines no such function");
+      }
     });
   });
 }
