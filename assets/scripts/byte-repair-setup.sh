@@ -1,4 +1,3 @@
-#!/bin/sh
 # Byte Repair setup: installs make, github-cli, and ESBMC so they are on PATH
 # for every agent turn in the project. Runs inside the configured terminal env
 # (proot rootfs on Android, host shell on the desktops), so uname -s picks the
