@@ -112,7 +112,13 @@ in the running app over the VM service.
    vdso; `brew install llvm lld`, both keg-only and not on PATH by default).
    `tools/fakefsify.c` is deliberately not compiled — its `main()` collides
    with the app's; `tools/fakefs.c`'s `fakefs_import` is what
-   `ish_fakefsify` wraps.
+   `ish_fakefsify` wraps. The app build never runs `build.sh`, so a local
+   `dist/` is whatever was built last: after `ish_bridge.c` changes, run it
+   again, or the app links a bridge without the new entry points and the
+   lookup throws (CI's cache is keyed on the bridge, so a release rebuilds).
+   A release build also needs each looked-up name kept by hand —
+   `Release.xcconfig`'s `ISH_KEEP` and `STRIP_STYLE`, which say why;
+   `nm -gU` on the archived `Runner` is how to see that every name is there.
 3. **The runtime path on a real device.** The IshShell/FFI/dispatcher chain
    has only answered on the simulator so far; a device run is the step left
    before a store build.
