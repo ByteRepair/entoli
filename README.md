@@ -24,7 +24,7 @@ installer's first run goes.
 [GitHub releases](https://github.com/ByteRepair/entoli/releases), make it
 executable, and run it.
 
-**macOS**: download `entoli-universal.dmg` from the
+**macOS**: download `entoli-arm64.dmg` from the
 [GitHub releases](https://github.com/ByteRepair/entoli/releases), open it,
 and drag the app to `/Applications`.
 

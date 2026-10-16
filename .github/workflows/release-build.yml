@@ -128,7 +128,7 @@ jobs:
           # release is one name for a downloader to know.
           aab="entoli.aab"
           appimage="entoli-x86_64.AppImage"
-          dmg="entoli-universal.dmg"
+          dmg="entoli-arm64.dmg"
           msi="entoli-installer.msi"
           ipa="entoli.ipa"
 
@@ -510,9 +510,9 @@ jobs:
           compression-level: 0
           retention-days: 7
 
-  # The macOS DMG, built from the same tree the AppImage is, on this host's
-  # architecture family and Intel both — Flutter's macOS build is universal
-  # unless the Xcode target narrows it, and one image covers both. It ships
+  # The macOS DMG, built from the same tree the AppImage is, for Apple
+  # silicon alone: `flutter build macos` thins its engine and the app to
+  # arm64, and the asset says so as the AppImage's names x86_64. It ships
   # signed with the Developer ID Application certificate (MACOS_CERT_P12) and
   # notarized with the App Store Connect API key the ios job signs with, the
   # ticket stapled into the image, so Gatekeeper opens it without a prompt;
