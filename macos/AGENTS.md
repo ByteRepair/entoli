@@ -21,10 +21,12 @@ Linux's Landlock helper.
 ## The entitlements
 
 Both `DebugProfile.entitlements` and `Release.entitlements` are generated files
-reduced to nothing: Release is an empty dict, DebugProfile keeps only
+reduced to almost nothing: Release keeps only the microphone and Apple
+Events, which hardened runtime otherwise denies (see "The DMG"), and
+DebugProfile only
 `com.apple.security.cs.allow-jit`, since a debug build runs the VM with a JIT
 and a future hardened-runtime debug signing would want it. Signing under
-hardened runtime with no entitlements is the release story: `make-dmg.sh
+hardened runtime with those two entitlements is the release story: `make-dmg.sh
 --sign` does it and the sandbox never re-enters through the signature by
 accident. The Mac App Store — which requires the sandbox — is planned for
 when enrollment happens, as a second entitlements file (`app-sandbox`,
@@ -184,7 +186,7 @@ plugins, and `record` ships a macOS recorder — so there is no recorder
 registration and nothing to swap: `registerRecorder` is a no-op here the way
 it would be on any platform without a fallback to install. What the mic costs
 is one prompt: `NSMicrophoneUsageDescription` in `Info.plist` is the text TCC
-reads, the only permission a macOS build asks for.
+reads, and with Apple Events the only permissions a macOS build asks for.
 
 ## The icon
 
@@ -205,15 +207,35 @@ artifact out. The volume takes the app's name plus Installer — "Entoli
 Installer" — so what a user sees mounted reads as the thing being installed,
 not the app itself; the staged item inside stays `<Name>.app`. The build
 produces a universal binary, ad-hoc signed. An ad-hoc build runs on the
-machine that made it and on another Mac through Finder's right-click Open,
-which is what an unsigned DMG asks of whoever downloads one; `--sign` adds
-the Developer ID identity under hardened runtime (`--deep` re-signs the
-engine and plugin frameworks Flutter left ad-hoc), and notarization is the
-distribution step after: `xcrun
-notarytool submit` on the DMG, `xcrun stapler staple` the same file, the
-image being notarizable whole so the ticket travels inside it. CI builds the
-unsigned DMG until enrollment; the job grows the signing identity and the
-notarytool profile when it happens.
+machine that made it; another Mac's Gatekeeper refuses it until Privacy &
+Security's Open Anyway is clicked. `--sign` adds the Developer ID identity
+under hardened runtime — `--deep` re-signs the engine and plugin frameworks
+Flutter left ad-hoc, then the outer bundle is signed again with
+`Release.entitlements`, so only the app carries them — and signs the image
+itself. Notarization is the distribution step after: `xcrun notarytool
+submit` on the DMG, `xcrun stapler staple` the same file, the image being
+notarizable whole so the ticket travels inside it.
+
+CI does all of it. The certificate is the Developer ID Application one, a
+stored `.p12` (`MACOS_CERT_P12`, `MACOS_CERT_PASSWORD`) imported into a
+keychain the job makes and deletes, which is unlike the ipa's automatic
+signing: the macOS build is `flutter build macos`, not an archive exported
+by Xcode, and nothing there asks Apple for a certificate. Only the Account
+Holder can create one, and it expires on its own date — a renewal is the
+secret replaced, since the job finds the identity in the keychain rather than
+by name. Notarizing uses the App Store Connect API key the ipa does
+(`APPLE_API_*`). A rejection prints notarytool's log, which names the file.
+
+Hardened runtime takes away what the signature does not ask for, and the
+release asks for two things. `com.apple.security.device.audio-input` is the
+microphone: without it TCC is never asked and voice mode hears silence.
+`com.apple.security.automation.apple-events`, with
+`NSAppleEventsUsageDescription` in `Info.plist`, is Apple Events: a command
+such as `osascript` that drives another app is attributed to Entoli as the
+responsible process, and without the entitlement the send fails instead of
+prompting. That one is precaution rather than something seen failing — no
+notarized build had run when it went in. `Process.start`, the network and
+files outside a sandbox the app does not have are not gated.
 
 The window a user's mount opens with comes from committed data, not from any
 styling run at package time. One styling session on this Mac — a throwaway

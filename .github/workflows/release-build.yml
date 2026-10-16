@@ -29,7 +29,8 @@ on:
       ANDROID_KEY_PASSWORD:
         required: true
       # Apple's are optional: a caller without them gets every build but the
-      # ipa, whose job fails fast on the empties instead of signing nothing.
+      # ipa and the DMG, whose jobs fail fast on the empties instead of
+      # shipping something unsigned.
       # The App Store Connect API key signs as well as uploads: the export
       # asks Apple for the distribution certificate and profile with it.
       APPLE_API_ISSUER:
@@ -37,6 +38,14 @@ on:
       APPLE_API_KEY_ID:
         required: false
       APPLE_API_KEY_P8:
+        required: false
+      # The Developer ID Application certificate and its key, a base64 .p12,
+      # which the macos job signs the app and the DMG with; the API key above
+      # is what notarizes them. Optional the same way: a caller without them
+      # gets a macos job that fails fast.
+      MACOS_CERT_P12:
+        required: false
+      MACOS_CERT_PASSWORD:
         required: false
     outputs:
       version:
@@ -503,10 +512,10 @@ jobs:
 
   # The macOS DMG, built from the same tree the AppImage is, on this host's
   # architecture family and Intel both — Flutter's macOS build is universal
-  # unless the Xcode target narrows it, and one image covers both. Nothing
-  # signs it yet: enrollment is what brings the Developer ID identity and the
-  # notarytool profile, and `make-dmg.sh --sign` is where the former goes. What
-  # ships until then is ad-hoc signed, which Finder's right-click Open runs;
+  # unless the Xcode target narrows it, and one image covers both. It ships
+  # signed with the Developer ID Application certificate (MACOS_CERT_P12) and
+  # notarized with the App Store Connect API key the ios job signs with, the
+  # ticket stapled into the image, so Gatekeeper opens it without a prompt;
   # see "The DMG" in macos/AGENTS.md.
   macos:
     needs: version
@@ -514,6 +523,72 @@ jobs:
     env:
       DMG: ${{ needs.version.outputs.dmg }}
     steps:
+      # Checked before anything is fetched, as the ios job does: an empty
+      # secret is a seconds-long failure, not one after the build.
+      - name: Check the signing secrets
+        env:
+          CERT_P12: ${{ secrets.MACOS_CERT_P12 }}
+          CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
+          API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
+        run: |
+          set -euo pipefail
+          if [ -z "$CERT_P12" ] || [ -z "$CERT_PASSWORD" ]; then
+            echo "::error::MACOS_CERT_P12 or MACOS_CERT_PASSWORD is empty"
+            exit 1
+          fi
+          if [ -z "$API_ISSUER" ] || [ -z "$API_KEY_ID" ] || [ -z "$API_KEY_P8" ]; then
+            echo "::error::APPLE_API_ISSUER, APPLE_API_KEY_ID or APPLE_API_KEY_P8 is empty"
+            exit 1
+          fi
+
+      # Also before the build, for the same reason: a wrong password, a .p12
+      # that is not a Developer ID one or a revoked API key would otherwise
+      # surface minutes of macOS runner time later. The keychain is the job's
+      # own, with a random password nobody needs to know, put on the search
+      # list so codesign finds the identity; the partition list is what lets
+      # codesign use the key without the prompt a runner cannot answer. The
+      # identity is found by its hash rather than spelled out, so a renewed
+      # certificate is a changed secret and nothing else. The keychain path is
+      # an output the moment it exists, so the removal step runs even when the
+      # import fails.
+      - name: Import the Developer ID certificate and the API key
+        id: cert
+        env:
+          CERT_P12: ${{ secrets.MACOS_CERT_P12 }}
+          CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
+          API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
+        run: |
+          set -euo pipefail
+          keychain="$RUNNER_TEMP/signing.keychain-db"
+          kpass="$(openssl rand -hex 24)"
+          p12="$RUNNER_TEMP/cert.p12"
+          trap 'rm -f "$p12"' EXIT
+          printf '%s' "$CERT_P12" | base64 -D -o "$p12"
+          security create-keychain -p "$kpass" "$keychain"
+          echo "keychain=$keychain" >> "$GITHUB_OUTPUT"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$kpass" "$keychain"
+          security import "$p12" -k "$keychain" -P "$CERT_PASSWORD" -f pkcs12 -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$kpass" "$keychain" >/dev/null
+          security list-keychains -d user -s "$keychain" $(security list-keychains -d user | tr -d '"')
+          identity="$(security find-identity -v -p codesigning "$keychain" \
+            | awk '/Developer ID Application/ {print $2; exit}')"
+          if [ -z "$identity" ]; then
+            echo "::error::MACOS_CERT_P12 holds no valid Developer ID Application identity (a wrong certificate, or a chain this runner cannot verify)"
+            exit 1
+          fi
+          echo "identity=$identity" >> "$GITHUB_OUTPUT"
+          key="$RUNNER_TEMP/AuthKey_$API_KEY_ID.p8"
+          printf '%s' "$API_KEY_P8" | base64 -D -o "$key"
+          # A listing is the cheapest call the key can be refused on.
+          xcrun notarytool history --key "$key" --key-id "$API_KEY_ID" \
+            --issuer "$API_ISSUER" >/dev/null
+          echo "key=$key" >> "$GITHUB_OUTPUT"
+
       - uses: actions/checkout@v7.0.1
         with:
           ref: ${{ inputs.tag }}
@@ -526,7 +601,9 @@ jobs:
       # make-dmg.sh fails when the app is not there, and codesign's verify step
       # refuses to pass an image whose signature does not check out — there is
       # no second place to catch a half-built one.
-      - name: Package the DMG
+      - name: Package and sign the DMG
+        env:
+          IDENTITY: ${{ steps.cert.outputs.identity }}
         run: |
           set -euo pipefail
           app="build/macos/Build/Products/Release/Entoli.app"
@@ -534,7 +611,37 @@ jobs:
             echo "::error::flutter build macos produced no $app"
             exit 1
           }
-          tool/macos/make-dmg.sh "$app" "dist/$DMG"
+          tool/macos/make-dmg.sh "$app" "dist/$DMG" --sign "$IDENTITY"
+
+      # One submission for the image, which notarizes everything inside it;
+      # the ticket is stapled into the DMG so a first open needs no network.
+      # notarytool's own exit is not trusted to stop the step: the status
+      # decides, so a rejection or a timeout still prints Apple's log, which
+      # names the file that failed.
+      - name: Notarize the DMG
+        env:
+          KEY: ${{ steps.cert.outputs.key }}
+          API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+        run: |
+          set -euo pipefail
+          auth=(--key "$KEY" --key-id "$API_KEY_ID" --issuer "$API_ISSUER")
+          result="$(xcrun notarytool submit "dist/$DMG" "${auth[@]}" \
+            --wait --timeout 1h --output-format json)" || true
+          id="$(printf '%s' "$result" | plutil -extract id raw -o - - 2>/dev/null || true)"
+          status="$(printf '%s' "$result" | plutil -extract status raw -o - - 2>/dev/null || true)"
+          if [ "$status" != Accepted ]; then
+            echo "::error::Notarization ended ${status:-without a status}"
+            [ -n "$id" ] && xcrun notarytool log "$id" "${auth[@]}" || true
+            exit 1
+          fi
+          xcrun stapler staple "dist/$DMG"
+          xcrun stapler validate "dist/$DMG"
+          spctl -a -t open --context context:primary-signature -vv "dist/$DMG"
+
+      - name: Remove the signing keychain
+        if: always() && steps.cert.outputs.keychain != ''
+        run: security delete-keychain "${{ steps.cert.outputs.keychain }}"
 
       - uses: actions/upload-artifact@v7.0.1
         with:
@@ -551,7 +658,7 @@ jobs:
   # The Windows MSI, built on the Windows runner nothing on this host can stand
   # in for. Like the macos job it builds the app alone — no model server is
   # cross-compiled for it, and what a Release build without one produces is
-  # what the installer packages — and like the DMG nothing signs it yet,
+  # what the installer packages — and unlike the DMG nothing signs it yet,
   # SmartScreen's Run anyway being how the first run goes until a certificate
   # exists; see windows/AGENTS.md.
   windows:
