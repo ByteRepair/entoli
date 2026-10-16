@@ -392,6 +392,10 @@ class ChatRepository {
       disabled: disabled,
       bundledInstructions: instructions.note,
       includesUserInstructions: instructions.includesUser,
+      // The room fact beside the note it words — also what puts the roster
+      // tool on the turn's list, [bundledInstructions] being wording, not a
+      // gate.
+      omada: omada,
       // The project's own command variables, beside the app-level ones.
       environment: projectSettings.environment ?? const {},
       // Chat rules first, then the project's, then the default project's:

@@ -15,6 +15,7 @@ import "package:agent_chat/data/builtin/llm/llm_registry.dart";
 import "package:agent_chat/data/builtin/memory/instructions.dart"
     show InstructionFile, renderInstructions;
 import "package:agent_chat/data/builtin/memory/store.dart";
+import "package:agent_chat/data/builtin/participants_tool.dart";
 import "package:agent_chat/data/local/file_chat_store.dart";
 import "package:agent_chat/data/local/file_sub_agent_log.dart";
 import "package:agent_chat/domain/agent_backend.dart";
@@ -104,6 +105,7 @@ void main() {
     ApproveMode approveMode = ApproveMode.never,
     List<PermissionRule> permissions = const [],
     String? omadaMember,
+    bool omada = false,
   }) =>
       backend
           .sendPrompt(
@@ -122,7 +124,8 @@ void main() {
                   disabled: disabled,
                   bundledInstructions: bundledInstructions,
                   includesUserInstructions: includesUserInstructions,
-                  omadaMember: omadaMember))
+                  omadaMember: omadaMember,
+                  omada: omada))
           .toList();
 
   /// Carrying on the turn [history] ends in, under the same settings [send]
@@ -169,6 +172,34 @@ void main() {
       expect(tools, isNot(contains("task")));
       final turnMessage = client.sent.first[1].text;
       expect(turnMessage, contains(myTeamNote!));
+    });
+
+    test("an omada turn offers the roster from the project's library, and a "
+        "direct one offers nothing", () async {
+      final library = PromptLibrary([
+        PromptDocument.parse(CompletionKind.agent, "explore",
+            "---\ndescription: Fast explorer\n---\nYou explore."),
+      ]);
+      final room = backendOver([
+        [fileCall(listParticipantsToolName, {})],
+        [finish],
+      ], library: library);
+      final events = await send(room, "hi", omada: true, project: "Team");
+
+      expect(
+          client.calls.first.tools.map((t) => t.name), contains(listParticipantsToolName));
+      // The roster is the project's agent library, resolved where the turn
+      // is composed to run.
+      expect(events.whereType<ToolResultEvent>().single.result.output,
+          contains("@explore — Fast explorer"));
+      expect(events.whereType<ToolResultEvent>().single.result.output,
+          isNot(contains("@general")));
+
+      final direct = backendOver([[finish]], library: library);
+      await send(direct, "hi");
+      expect(
+          client.calls.first.tools.map((t) => t.name),
+          isNot(contains(listParticipantsToolName)));
     });
 
     test("a turn outside Omada still offers the task tool", () async {

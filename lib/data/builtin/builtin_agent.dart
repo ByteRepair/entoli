@@ -28,6 +28,7 @@ import "file_tools.dart" as file_tool_defs;
 import "llm/llm_client.dart";
 import "llm/rate_limit_gate.dart";
 import "../prompts/skill_import.dart" show SkillImportException;
+import "participants_tool.dart";
 import "skill_create_tool.dart";
 import "skill_tool.dart";
 import "sub_agent.dart";
@@ -327,6 +328,7 @@ List<LlmTool> agentTools({
   List<PromptDocument> skills = const [],
   required bool offerMemory,
   bool oneShot = false,
+  List<PromptDocument>? participants,
 }) =>
     [
       file_tool_defs.readTool,
@@ -337,6 +339,10 @@ List<LlmTool> agentTools({
       if (caps.task) taskTool,
       if (caps.webSearch) ...[websearchTool, webfetchTool],
       if (skills.any((s) => s.modelInvocable && !s.isCallback)) skillTool,
+      // The room's roster: an omada turn only, non-null being the one gate
+      // the tool list and the dispatch share — a call where the turn holds
+      // no room finds only `unknownTool`.
+      if (participants != null) listParticipantsTool,
       if (caps.artifact) artifactTool,
       if (!oneShot) ...[planAddTool, planNextTool, planDoneTool],
       // Presenting parks the turn on the panel's answer, so it rides `ask`
@@ -394,6 +400,7 @@ class BuiltinAgent {
     this.sharedWorkspace = true,
     this.project,
     this.skills = const [],
+    this.roomParticipants,
     this.webSearch,
     this.profile,
     this.tone = Tone.none,
@@ -661,6 +668,13 @@ class BuiltinAgent {
   /// job as the parent's.
   final List<PromptDocument> skills;
 
+  /// The room's participants, as the project's library holds them — the
+  /// members an omada room's say routes to. Non-null only on an omada turn:
+  /// the room contract is what names handles, and non-null is the one gate
+  /// the tool list and the dispatch share. A sub-agent gets none — workers
+  /// do not address the room, and no omada turn fans out.
+  final List<PromptDocument>? roomParticipants;
+
   /// Web search and fetch. Null where neither is reachable — a browser sees
   /// `UnavailableWebSearch` and the tools are dropped the way `bash` is when
   /// there is no shell.
@@ -741,6 +755,7 @@ class BuiltinAgent {
         skills: skills,
         offerMemory: memoryStore != null,
         oneShot: oneShot,
+        participants: roomParticipants,
       );
 
   bool _cancelled = false;
@@ -1001,6 +1016,11 @@ class BuiltinAgent {
 
       if (call.name == skillToolName) {
         yield* _skill(call);
+        continue;
+      }
+
+      if (call.name == listParticipantsToolName && roomParticipants != null) {
+        yield* _listParticipants(call);
         continue;
       }
 
@@ -1338,6 +1358,18 @@ class BuiltinAgent {
       body = body.replaceAll(key, value);
     }
     return body;
+  }
+
+  /// The room's roster. Read-only and instant, like `skill` — the answer is
+  /// what the project's library holds, and the tool takes no arguments.
+  Stream<AgentEvent> _listParticipants(LlmToolCall call) async* {
+    yield ToolCallEvent(
+        ToolCall(id: call.id, name: call.name, argumentsJson: call.argumentsJson));
+    yield ToolResultEvent(ToolResult(
+      callId: call.id,
+      returnCode: 0,
+      output: participantsListing(roomParticipants!),
+    ));
   }
 
   /// Search the web. Read-only, so no approval — the result is worded the same

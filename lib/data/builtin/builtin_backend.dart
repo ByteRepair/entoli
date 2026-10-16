@@ -400,6 +400,13 @@ class BuiltinBackend implements AgentBackend {
         options: options.parent
             .copyWithStepLimit(settings.turnMaxSteps),
         skills: libraryFor(settings.project)?.entries(CompletionKind.skill) ?? const [],
+        // The room's participants, an omada turn's data alone: the library's
+        // agents, already tier-walked (the default set under My Team's under
+        // the project's own). Null keeps the tool off the list where there
+        // is no room.
+        roomParticipants: settings.omada
+            ? libraryFor(settings.project)?.entries(CompletionKind.agent)
+            : null,
         approveMode: settings.approveMode,
         classifier: classifier,
         approve: _awaitApproval,
