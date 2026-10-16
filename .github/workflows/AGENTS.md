@@ -36,7 +36,7 @@ assets.** The builds are `release-build.yml`'s, which it calls with the tag
 and which is dispatchable on its own, so whether a tag builds can be found
 out without publishing a release to ask. The two Linux builds share the
 composite `.github/actions/linux-appimage` and differ in the mode they pass
-it; the eight signing secrets are named at the call site rather than
+it; the seven signing secrets are named at the call site rather than
 `inherit`ed, two jobs signing.
 
 ## The jobs
@@ -99,8 +99,11 @@ creating) a cloud-managed distribution certificate and an App Store profile.
 Unsigned is deliberate: an archive signed on a fresh runner would mint an
 Apple Development certificate every run, and the team caps those. It holds
 because the Runner target carries no entitlements file; one added later
-wants checking that the export still applies it. The key is decoded into
-runner temp and dies with the runner. Empty signing
+wants checking that the export still applies it. The export options are
+`tool/ios/ExportOptions.plist` — the file an upload from a Mac uses, so the
+two cannot drift — with its `destination` switched from `upload` to
+`export`, since here the ipa goes to disk and the `testflight` job uploads
+it. The key is decoded into runner temp and dies with the runner. Empty signing
 secrets fail the job on the first step, before the runner fetches anything —
 the decode-before-build rule `android-build-setup` runs on, at its whole
 width.
@@ -113,6 +116,13 @@ it with `altool`, skipping with a notice when the API trio is absent and
 saying so in the step summary as well as the log when a runner's Xcode has
 stopped shipping altool. A bare dispatch of `release-build.yml` therefore
 builds and uploads nothing to any store, matching its contract.
+
+**The ipa declares itself exempt from export documentation, and that holds
+only while France is out of the app's availability** — the condition is
+App Store Connect's setting, not anything in the tree; see "Export
+compliance" in `ios/AGENTS.md`. Nothing here can read that setting, so the
+`testflight` job says it in the step summary of every upload instead, where
+the person cutting the release reads it.
 
 **Every job that touches Dart starts with `.github/actions/flutter-setup`**
 — the SDK pin, packages and codegen. The generated sources are not
@@ -181,11 +191,12 @@ gh secret set ANDROID_KEY_ALIAS
 gh secret set ANDROID_KEY_PASSWORD
 ```
 
-Apple's four are optional where the Android four are required:
+Apple's three are optional where the Android four are required:
 `APPLE_API_ISSUER`, `APPLE_API_KEY_ID` and `APPLE_API_KEY_P8` (base64 of
 the `.p8`) are one App Store Connect API key, which both signs the export in
-`release-build.yml` and uploads in `release.yml`'s `testflight` job, and
-`APPLE_TEAM_ID` names the team the export signs for. A caller without them
+`release-build.yml` and uploads in `release.yml`'s `testflight` job. The team
+is not a secret: it is the project's `DEVELOPMENT_TEAM` and the `teamID` of
+`tool/ios/ExportOptions.plist`, both committed. A caller without them
 ships every build but the store channel. The key needs the **Admin** role:
 App Manager uploads but cannot create the certificate or profile the export
 asks for. Nothing goes stale yearly — Apple renews the cloud-managed

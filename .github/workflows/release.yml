@@ -42,7 +42,6 @@ jobs:
       APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
       APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
       APPLE_API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
-      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
 
   # A job of its own so the keystore and `contents: write` are never held by
   # the same one, and one run of it per file so a bundle on the release is
@@ -116,6 +115,11 @@ jobs:
           API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
         run: |
           set -euo pipefail
+          # First, so every arm says it: uploaded here, skipped, or left to an
+          # upload by hand. The ipa says ITSAppUsesNonExemptEncryption=false,
+          # which holds only with France out of the availability; see "Export
+          # compliance" in ios/AGENTS.md.
+          echo "Check: France is excluded from App Store availability, or the ANSSI declaration is filed (ios/AGENTS.md, Export compliance)." >> "$GITHUB_STEP_SUMMARY"
           if [ -z "$API_ISSUER" ] || [ -z "$API_KEY_ID" ] || [ -z "$API_KEY_P8" ]; then
             echo "::notice::No App Store Connect API key secrets; skipping the TestFlight upload"
             echo "TestFlight: skipped, no API key secrets." >> "$GITHUB_STEP_SUMMARY"

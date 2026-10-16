@@ -104,8 +104,8 @@ in the running app over the VM service.
    `/root/chats/<id>` — `ish_boot`/`ish_session_init`/`ish_session_run`
    exercised end to end, on record in the chat's `conv.jsonl`. What the
    simulator cannot answer is the device half of it, which is the next item.
-2. **The link wiring is xcconfig, not CocoaPods.** `ios/Flutter/Debug.xcconfig`
-   and `Release.xcconfig` force-load the right `IshCore.xcframework` slice per
+2. **The link wiring is xcconfig, not CocoaPods.** `ios/Flutter/Ish.xcconfig`,
+   which Debug and Release both include, force-loads the right `IshCore.xcframework` slice per
    SDK and name the system libraries (`-lz -lbz2 -lxml2 -lsqlite3 -liconv`)
    the podspec would have carried; there is no Podfile. The framework itself
    is built by `tool/ios/ish/build.sh` (LLVM's clang and lld wanted for the
@@ -116,9 +116,12 @@ in the running app over the VM service.
    `dist/` is whatever was built last: after `ish_bridge.c` changes, run it
    again, or the app links a bridge without the new entry points and the
    lookup throws (CI's cache is keyed on the bridge, so a release rebuilds).
-   A release build also needs each looked-up name kept by hand —
-   `Release.xcconfig`'s `ISH_KEEP` and `STRIP_STYLE`, which say why;
-   `nm -gU` on the archived `Runner` is how to see that every name is there.
+   Each looked-up name is kept by hand — `Ish.xcconfig`'s `ISH_KEEP_NAMES`
+   against the dead-strip, on for arm64 alone since the x86_64 simulator slice
+   links no iSH, and `Release.xcconfig`'s `STRIP_STYLE` against the archive's
+   strip, both saying why — and `test/data/local/ish_test.dart`
+   fails when the list and `ish_ffi.dart`'s lookups disagree; `nm -gU` on
+   the archived `Runner` is how to see that every name is there.
 3. **The runtime path on a real device.** The IshShell/FFI/dispatcher chain
    has only answered on the simulator so far; a device run is the step left
    before a store build.
