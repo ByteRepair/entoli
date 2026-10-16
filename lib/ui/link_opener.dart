@@ -57,6 +57,15 @@ class PlatformLinkOpener implements LinkOpener {
   static bool get _isAndroid =>
       !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
 
+  /// Where an artifact opens in the app's own webview, served from loopback,
+  /// rather than as a `file://` page handed to another app. The phones: iOS
+  /// has no app that will open a file inside Entoli's container, so the
+  /// desktop route's launch did nothing there at all.
+  static bool get _inAppArtifacts =>
+      !kIsWeb &&
+      (defaultTargetPlatform == TargetPlatform.android ||
+          defaultTargetPlatform == TargetPlatform.iOS);
+
   @override
   Future<void> open(BuildContext context, Uri url) async {
     if (_isAndroid && (url.scheme == "http" || url.scheme == "https")) {
@@ -87,7 +96,7 @@ class PlatformLinkOpener implements LinkOpener {
       return;
     }
     final dir = await _store.artifactPath(chatId, artifactId);
-    if (!_isAndroid) {
+    if (!_inAppArtifacts) {
       await _openDesktopArtifact(chatId, artifactId, dir, entryFile);
       return;
     }
@@ -117,7 +126,7 @@ class PlatformLinkOpener implements LinkOpener {
       if (!context.mounted) return true;
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
           content: Text("Opening a mirrored artifact needs the app on "
-              "desktop or Android.")));
+              "a desktop or a phone.")));
       return true;
     }
     final dir = await remote.fetch(chatId, artifactId, entryFile: entryFile);
@@ -128,7 +137,7 @@ class PlatformLinkOpener implements LinkOpener {
               "made on is away, or it is no longer there.")));
       return true;
     }
-    if (!_isAndroid) {
+    if (!_inAppArtifacts) {
       await launchUrl(Uri.file("$dir/$entryFile"),
           mode: LaunchMode.externalApplication);
       return true;

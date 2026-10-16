@@ -244,8 +244,9 @@ base stylesheet (`lib/domain/artifact_style.dart`) injected into the entry file
 opener serves the directory itself over `file://`, so the entry file on disk
 must already be the whole page — the model's `read` tool and every future
 reader see the same styled file, and a temp copy at open time would break every
-relative reference to the files beside it. Android and the web still layer
-their runtime paths (an HTTP server, blob URLs) over the same injected copy,
+relative reference to the files beside it. The phones and the web still layer
+their runtime paths (an HTTP server on loopback under an in-app webview, blob
+URLs) over the same injected copy,
 where the marker makes the second injection a no-op. Artifacts published before
 the injection moved open unstyled on desktop until the model re-publishes them.
 
