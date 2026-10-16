@@ -99,8 +99,8 @@ The app requests the following permissions, each used only for its feature:
 - **Microphone** — voice mode listening.
 - **Speech recognition** (iOS) — hearing voice mode, on the device only.
 - **Camera** — scanning a sync pairing QR code.
-- **Local network** (iOS) — reaching your other device when sync pairs over
-  the same network.
+- **Local network** (iOS) — syncing with your other devices on the same
+  network, and reaching a model or service you run on it.
 - **Notifications** (iOS) — announcing reminders and finished turns.
 - **Exact alarms** (Android) — firing reminders on time.
 - **Boot-completed** (Android) — re-arming reminders after device restart.

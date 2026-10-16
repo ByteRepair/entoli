@@ -31,7 +31,7 @@
 	<key>NSCameraUsageDescription</key>
 	<string>Entoli uses the camera only to scan a pairing QR code when you link another device.</string>
 	<key>NSLocalNetworkUsageDescription</key>
-	<string>Entoli connects to your other devices on this network when you pair them to sync your chats.</string>
+	<string>Entoli connects to devices on your local network when you sync with your other devices, or when you use a model or service you run on this network.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Entoli listens only during a voice conversation. Your speech is turned into text on this device, and that text is sent to the model you've chosen, like a typed message.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
