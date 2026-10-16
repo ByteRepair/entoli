@@ -16,7 +16,7 @@ Uri latestReleaseUrl() => Uri.https("github.com", "/$updateRepo/releases/latest"
 /// for, and a release that renames one is a release the updater skips with
 /// an error saying so.
 const appImageAsset = "entoli-x86_64.AppImage";
-const dmgAsset = "entoli-universal.dmg";
+const dmgAsset = "entoli-arm64.dmg";
 const msiAsset = "entoli-installer.msi";
 
 /// Which of the three desktops this build replaces itself as. The asset name

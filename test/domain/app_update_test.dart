@@ -59,7 +59,7 @@ void main() {
 
   test("the assets are named after the app, one name per platform", () {
     expect(assetFor(UpdateFlavour.linux), "entoli-x86_64.AppImage");
-    expect(assetFor(UpdateFlavour.macos), "entoli-universal.dmg");
+    expect(assetFor(UpdateFlavour.macos), "entoli-arm64.dmg");
     expect(assetFor(UpdateFlavour.windows), "entoli-installer.msi");
   });
 

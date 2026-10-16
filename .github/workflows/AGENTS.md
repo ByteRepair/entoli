@@ -14,7 +14,7 @@ release:
 - `entoli.aab`, signed, for Google Play — an input to Play, which resigns
   it into per-device APKs of its own
 - `entoli-x86_64.AppImage`
-- `entoli-universal.dmg`, signed with the Developer ID Application
+- `entoli-arm64.dmg`, for Apple silicon, signed with the Developer ID Application
   certificate (`MACOS_CERT_P12` and `MACOS_CERT_PASSWORD`, a base64 `.p12`
   and its password) and notarized with the App Store Connect API key the ipa
   is signed with, the ticket stapled into the image — see "The DMG" in

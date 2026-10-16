@@ -2,7 +2,7 @@
 # Packages a `flutter build macos` app as a DMG, e.g.
 #   tool/macos/make-dmg.sh build/macos/Build/Products/Release/Entoli.app dist/entoli.dmg
 #
-# The app is what Flutter built: universal, ad-hoc signed. `--sign` re-signs it
+# The app is what Flutter built: arm64, ad-hoc signed. `--sign` re-signs it
 # with a Developer ID under hardened runtime, which is what notarization demands,
 # and signs the image too; an ad-hoc build skips this, and Gatekeeper then
 # refuses it on another Mac until Privacy & Security's Open Anyway is clicked.
