@@ -19,6 +19,10 @@ const listParticipantsTool = LlmTool(
 /// its sigil on and the description as written. A member with no description
 /// is the handle alone. An empty roster answers rather than failing — the
 /// room is in force however few members it defines.
+///
+/// The set is what a mention can reach — every agent in the library, the
+/// `user-invocable: false` ones included, mention resolution ignoring the
+/// flag the way the @ menu does not.
 String participantsListing(Iterable<PromptDocument> members) {
   final lines = [
     for (final member in members)
