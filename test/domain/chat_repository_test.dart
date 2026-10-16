@@ -257,6 +257,7 @@ void main() {
       final onSettings = backend.prompts.last.settings;
       expect(onSettings.bundledInstructions, myTeamNote);
       expect(onSettings.disabled, contains(AgentCapability.task));
+      expect(onSettings.omada, isTrue);
 
       final off = await repo.createChat();
       await writeChatVia(repo, off);
@@ -264,6 +265,7 @@ void main() {
       final offSettings = backend.prompts.last.settings;
       expect(offSettings.bundledInstructions, isNull);
       expect(offSettings.disabled, isEmpty);
+      expect(offSettings.omada, isFalse);
     });
 
     test("an Omada-on user project runs under My Team's note, files read on top",

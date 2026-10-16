@@ -2,6 +2,7 @@
 // The room contract names handles (`@name`); this is the model's way of
 // reading the roster, from the project's agent library rather than the room
 // contract's prose.
+import "../../domain/models.dart" show CompletionKind;
 import "../../domain/prompt_library.dart";
 import "llm/llm_client.dart";
 
@@ -24,11 +25,12 @@ const listParticipantsTool = LlmTool(
 /// `user-invocable: false` ones included, mention resolution ignoring the
 /// flag the way the @ menu does not.
 String participantsListing(Iterable<PromptDocument> members) {
+  final sigil = CompletionKind.agent.trigger;
   final lines = [
     for (final member in members)
       switch (member.description?.trim()) {
-        null || "" => "@${member.name}",
-        final description => "@${member.name} — $description",
+        null || "" => "$sigil${member.name}",
+        final description => "$sigil${member.name} — $description",
       },
   ];
   return lines.isEmpty
