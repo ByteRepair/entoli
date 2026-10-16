@@ -939,7 +939,9 @@ Widget _pairingFailed(BuildContext context, String? error) => Padding(
 /// A refused camera is a page of its own rather than the scanner's raw error:
 /// iOS asks once and never again, so the only way back is the app's page in
 /// Settings, which the page opens there. Android asks again on the next open
-/// until the user ticks never, so it says the same and offers nothing to tap.
+/// until a second refusal, after which it is as silent as iOS; the page names
+/// the path to its permission screen instead, since url_launcher has no URL
+/// that opens one.
 class _ScanQrPage extends StatefulWidget {
   const _ScanQrPage();
 
@@ -1051,9 +1053,10 @@ class _CameraRefused extends StatelessWidget {
                 _iOS
                     ? "Allow it under Settings, Entoli, Camera, or go back and "
                         "paste the pairing code instead."
-                    : "Allow it when Entoli asks, or under the app's "
-                        "permissions in Settings, or go back and paste the "
-                        "pairing code instead."),
+                    : "Allow it when Entoli asks. If it no longer asks, "
+                        "allow it under Settings, Apps, Entoli, Permissions, "
+                        "Camera, or go back and paste the pairing code "
+                        "instead."),
             if (_iOS) ...[
               const SizedBox(height: 16),
               FilledButton(

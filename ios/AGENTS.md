@@ -116,10 +116,10 @@ in the running app over the VM service.
    `dist/` is whatever was built last: after `ish_bridge.c` changes, run it
    again, or the app links a bridge without the new entry points and the
    lookup throws (CI's cache is keyed on the bridge, so a release rebuilds).
-   A release keeps each looked-up name by hand — `Ish.xcconfig`'s
-   `ISH_KEEP_NAMES` against the dead-strip, turned on by `Release.xcconfig`
-   beside its `STRIP_STYLE` against the archive's strip, both saying why, and
-   off in Debug, whose link it breaks — and `test/data/local/ish_test.dart`
+   Each looked-up name is kept by hand — `Ish.xcconfig`'s `ISH_KEEP_NAMES`
+   against the dead-strip, on for arm64 alone since the x86_64 simulator slice
+   links no iSH, and `Release.xcconfig`'s `STRIP_STYLE` against the archive's
+   strip, both saying why — and `test/data/local/ish_test.dart`
    fails when the list and `ish_ffi.dart`'s lookups disagree; `nm -gU` on
    the archived `Runner` is how to see that every name is there.
 3. **The runtime path on a real device.** The IshShell/FFI/dispatcher chain

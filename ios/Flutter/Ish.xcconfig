@@ -11,10 +11,12 @@
 // linker's dead-strip drops a function nothing in the binary calls, which is
 // every one of them, so each name Dart looks up is marked required
 // (ISH_KEEP_NAMES' -u). The list is lib/data/local/ish_ffi.dart's lookups;
-// test/data/local/ish_test.dart fails when the two disagree. Only
-// Release.xcconfig turns it on, as ISH_KEEP: a debug build links the app as a
-// dylib whose exports survive the strip, beside a stub executable the -u would
-// reach with no iSH in it, and that link then fails on every name.
+// test/data/local/ish_test.dart fails when the two disagree. It is on for arm64
+// alone, in every configuration: both slices of the library are arm64, so a
+// simulator build's x86_64 link skips the library ("ignoring file ... found
+// architecture arm64") and a -u there has nothing to resolve against, failing
+// the link on every name. That slice has no iSH at all, -u or not.
+ISH_KEEP[arch=arm64] = $(ISH_KEEP_NAMES)
 ISH_KEEP_NAMES = -Wl,-u,_ish_fakefsify -Wl,-u,_ish_session_destroy -Wl,-u,_ish_session_drain_wake -Wl,-u,_ish_session_hangup -Wl,-u,_ish_session_init -Wl,-u,_ish_session_interrupt -Wl,-u,_ish_session_poll -Wl,-u,_ish_session_read -Wl,-u,_ish_session_write_stdin
 OTHER_LDFLAGS[sdk=iphoneos*] = $(inherited) -lz -lbz2 -lxml2 -lsqlite3 -liconv -weak_framework FoundationModels -Wl,-force_load,"$(SRCROOT)/../tool/ios/ish/dist/IshCore.xcframework/ios-arm64/libishcore_device.a" $(ISH_KEEP)
 OTHER_LDFLAGS[sdk=iphonesimulator*] = $(inherited) -lz -lbz2 -lxml2 -lsqlite3 -liconv -weak_framework FoundationModels -Wl,-force_load,"$(SRCROOT)/../tool/ios/ish/dist/IshCore.xcframework/ios-arm64-simulator/libishcore_sim-arm64.a" $(ISH_KEEP)

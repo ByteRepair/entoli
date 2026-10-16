@@ -1,9 +1,8 @@
-// The iSH entry points are found by name at runtime, so a release keeps them
-// twice over: ISH_KEEP turns on Ish.xcconfig's -u list against the dead-strip,
-// and an archive strips the local symbols only, the default, all, taking the
-// global names as well. A debug build does neither and needs neither.
+// The iSH entry points are found by name at runtime: Ish.xcconfig keeps them
+// through the dead-strip, and an archive strips the local symbols only, the
+// default, all, taking the global names as well. A debug build is never
+// stripped.
 STRIP_STYLE = non-global
-ISH_KEEP = $(ISH_KEEP_NAMES)
 #include "Ish.xcconfig"
 #include "Signing.xcconfig"
 #include "Generated.xcconfig"

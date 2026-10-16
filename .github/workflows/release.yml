@@ -115,6 +115,11 @@ jobs:
           API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
         run: |
           set -euo pipefail
+          # First, so every arm says it: uploaded here, skipped, or left to an
+          # upload by hand. The ipa says ITSAppUsesNonExemptEncryption=false,
+          # which holds only with France out of the availability; see "Export
+          # compliance" in ios/AGENTS.md.
+          echo "Check: France is excluded from App Store availability, or the ANSSI declaration is filed (ios/AGENTS.md, Export compliance)." >> "$GITHUB_STEP_SUMMARY"
           if [ -z "$API_ISSUER" ] || [ -z "$API_KEY_ID" ] || [ -z "$API_KEY_P8" ]; then
             echo "::notice::No App Store Connect API key secrets; skipping the TestFlight upload"
             echo "TestFlight: skipped, no API key secrets." >> "$GITHUB_STEP_SUMMARY"
@@ -131,10 +136,6 @@ jobs:
             xcrun altool --upload-package "dist/$IPA" --type ios \
               --apiKey "$API_KEY_ID" --apiIssuer "$API_ISSUER"
             echo "TestFlight: uploaded $(basename "dist/$IPA")." >> "$GITHUB_STEP_SUMMARY"
-            # The ipa says ITSAppUsesNonExemptEncryption=false, which holds
-            # only with France out of the availability; see "Export
-            # compliance" in ios/AGENTS.md.
-            echo "Check: France is excluded from App Store availability, or the ANSSI declaration is filed (ios/AGENTS.md, Export compliance)." >> "$GITHUB_STEP_SUMMARY"
           else
             echo "::notice::altool is not in this Xcode; upload dist/$IPA by hand"
             echo "TestFlight: altool absent; upload dist/$IPA by hand." >> "$GITHUB_STEP_SUMMARY"
