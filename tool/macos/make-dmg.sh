@@ -3,9 +3,10 @@
 #   tool/macos/make-dmg.sh build/macos/Build/Products/Release/Entoli.app dist/entoli.dmg
 #
 # The app is what Flutter built: universal, ad-hoc signed. `--sign` re-signs it
-# with a Developer ID under hardened runtime, which is what notarization demands;
-# an ad-hoc build skips this and a Finder "right-click, Open" is what runs it on
-# another Mac. Notarization is a distribution step rather than a packaging one:
+# with a Developer ID under hardened runtime, which is what notarization demands,
+# and signs the image too; an ad-hoc build skips this, and Gatekeeper then
+# refuses it on another Mac until Privacy & Security's Open Anyway is clicked.
+# Notarization is a distribution step rather than a packaging one:
 # `xcrun notarytool submit <dmg>`, then `xcrun stapler staple <dmg>`, the image
 # being notarizable whole so the ticket travels inside it.
 #
@@ -32,17 +33,26 @@ volname="$name Installer"
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 
+script_dir="$(cd "$(dirname "$0")" && pwd)"
+
+identity=""
 if [ "${3:-}" = "--sign" ]; then
   identity="${4:?"$usage"}"
   # Signing comes before the staging copy: the clone is APFS copy-on-write, so
   # a staged-then-signed order leaves the volume holding the unsignatured
-  # bytes. Hardened runtime without entitlements: the app is unsandboxed and
-  # runs commands through dart:io, so the Release entitlements file stays
-  # empty while ever it does. --deep re-signs the frameworks Flutter produced
-  # ad-hoc (the engine and the plugins) with the same identity.
+  # bytes. Two passes: --deep re-signs the frameworks Flutter produced ad-hoc
+  # (the engine and the plugins) with the same identity and no entitlements,
+  # then the outer bundle alone is signed again with Release.entitlements —
+  # passing those to the --deep pass would hand them to every framework too.
+  # The force drops whatever the ad-hoc signature carried, so the file is
+  # named here rather than inherited from the Xcode build.
+  entitlements="$script_dir/../../macos/Runner/Release.entitlements"
+  [ -f "$entitlements" ] || { echo "[dmg] $entitlements is missing" >&2; exit 1; }
   codesign --force --deep --options runtime --timestamp \
     --sign "$identity" "$app"
-  codesign --verify --strict "$app"
+  codesign --force --options runtime --timestamp \
+    --entitlements "$entitlements" --sign "$identity" "$app"
+  codesign --verify --deep --strict "$app"
 fi
 
 # stderr of an hdiutil call — nothing while the call succeeds, everything but
@@ -63,7 +73,6 @@ fail() {
   exit 1
 }
 
-script_dir="$(cd "$(dirname "$0")" && pwd)"
 dsstore="$script_dir/dmg-window.dsstore"
 background="$script_dir/dmg-background.tiff"
 [ -f "$dsstore" ] || fail "the committed window layout (dmg-window.dsstore) is missing"
@@ -129,3 +138,10 @@ fi
 
 hdiutil_run hdiutil convert "$work/intermediate.dmg" -format UDZO -ov -o "$output" \
   || fail "the image did not compress for shipping"
+
+# The image is signed as well as the app inside it, so Gatekeeper's check on
+# the download itself names the developer; notarization is still the caller's.
+if [ -n "$identity" ]; then
+  codesign --force --timestamp --sign "$identity" "$output"
+  codesign --verify --strict "$output"
+fi

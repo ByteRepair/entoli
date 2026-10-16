@@ -26,8 +26,7 @@ executable, and run it.
 
 **macOS**: download `entoli-universal.dmg` from the
 [GitHub releases](https://github.com/ByteRepair/entoli/releases), open it,
-and drag the app to `/Applications`. The build is unsigned for now, so the
-first open is Finder's right-click Open rather than a double-click.
+and drag the app to `/Applications`.
 
 **Android**: the app is distributed through Google Play closed testing.
 

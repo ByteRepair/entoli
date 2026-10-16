@@ -14,10 +14,11 @@ release:
 - `entoli.aab`, signed, for Google Play — an input to Play, which resigns
   it into per-device APKs of its own
 - `entoli-x86_64.AppImage`
-- `entoli-universal.dmg`, unsigned until enrollment brings a Developer ID
-  identity and a notarytool profile; until then it is ad-hoc signed, run
-  through Finder's right-click Open, and `release-build.yml`'s macos job
-  grows the signing at the same time — see "The DMG" in `macos/AGENTS.md`
+- `entoli-universal.dmg`, signed with the Developer ID Application
+  certificate (`MACOS_CERT_P12` and `MACOS_CERT_PASSWORD`, a base64 `.p12`
+  and its password) and notarized with the App Store Connect API key the ipa
+  is signed with, the ticket stapled into the image — see "The DMG" in
+  `macos/AGENTS.md`
 
 A fourth, `entoli-installer.msi`, attaches the same way: the version job's
 `assets` list carries it and the publish matrix uploads every entry alike;
