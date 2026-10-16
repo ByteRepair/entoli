@@ -1,3 +1,4 @@
+import "dart:ffi";
 import "dart:io";
 import "dart:isolate";
 
@@ -503,7 +504,7 @@ FileWatches platformFileWatches() => IoFileWatches();
 /// `~/.config/agent-chat-debug`, so developing against an installed copy's
 /// data is not possible by accident.
 Future<String> platformDataDir() async {
-  final override = Platform.environment["AGENT_CHAT_CONFIG"];
+  final override = processEnv("AGENT_CHAT_CONFIG");
   return override ?? p.join(await _resolveBase(), _dirLeaf);
 }
 
@@ -535,7 +536,7 @@ String get _home => LocalShell.machineHomeDir()!;
 /// support directory instead — still a sibling of the data directory, so a
 /// backup does not carry it, but not something Android throws away.
 Future<String> platformCacheDir() async {
-  final override = Platform.environment["AGENT_CHAT_CACHE"];
+  final override = processEnv("AGENT_CHAT_CACHE");
   if (override != null) return override;
   if (Platform.isLinux) {
     final xdg = Platform.environment["XDG_CACHE_HOME"];
@@ -589,7 +590,27 @@ Voice platformVoice(VoiceModelStore store, String cacheDir) {
 /// the app is.
 Future<void> platformPersist() async {}
 
-String? processEnv(String name) => Platform.environment[name];
+/// The process's own environment. On iOS that is not `Platform.environment`,
+/// which the Dart VM's iOS build leaves empty rather than reading — so a
+/// variable the app was launched with (an Xcode scheme's, `simctl launch`'s
+/// `SIMCTL_CHILD_`) never reached a provider's `apiKeyEnv` there, and the
+/// request went out with no key. libc's `getenv` reads the real one.
+String? processEnv(String name) =>
+    Platform.isIOS ? _getenv(name) : Platform.environment[name];
+
+final _libcGetenv = DynamicLibrary.process().lookupFunction<
+    Pointer<Utf8> Function(Pointer<Utf8>),
+    Pointer<Utf8> Function(Pointer<Utf8>)>("getenv");
+
+String? _getenv(String name) {
+  final key = name.toNativeUtf8();
+  try {
+    final value = _libcGetenv(key);
+    return value == nullptr ? null : value.toDartString();
+  } finally {
+    malloc.free(key);
+  }
+}
 
 /// This device's sync secrets: the desktop keyring where a Secret Service
 /// answers, the plain file where none does. Android lands on the file too —
