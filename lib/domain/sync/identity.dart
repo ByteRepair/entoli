@@ -64,11 +64,10 @@ class SyncIdentity {
   static Future<SyncIdentity> _fromSeed(List<int> seed) async {
     final pair = await Ed25519().newKeyPairFromSeed(seed);
     final pub = (await pair.extractPublicKey()).bytes;
-    final digest = slow.sha256.convert(pub).bytes;
-    return SyncIdentity._(
-      pair,
-      Uint8List.fromList(pub),
-      base64Url.encode(digest.sublist(0, 12)).replaceAll("=", ""),
-    );
+    return SyncIdentity._(pair, Uint8List.fromList(pub), idOf(pub));
   }
+
+  /// The device id [publicKey] stands for.
+  static String idOf(List<int> publicKey) =>
+      base64Url.encode(slow.sha256.convert(publicKey).bytes.sublist(0, 12));
 }
