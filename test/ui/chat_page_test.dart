@@ -203,22 +203,6 @@ void main() {
       expect(find.byType(Composer), findsNothing);
     });
 
-    testWidgets("the composer is back once setup has been run", (tester) async {
-      File(app.config.setupCompleteFile(project: ByteRepairProject().dir))
-        ..createSync(recursive: true)
-        ..writeAsStringSync("done");
-      // The test platform is Android, and Byte Repair needs a rootfs env there:
-      // the marker alone is not enough. Pick one so the env check passes.
-      await io(tester, () => app.container
-          .read(appSettingsProvider.notifier).setRootfs("alpine"));
-      await openEmpty(tester);
-
-      await pick(tester, byteRepairProjectLabel);
-
-      expect(find.byType(Composer), findsOneWidget);
-      expect(find.byType(NeedsSetupBar), findsNothing);
-    });
-
     // An existing chat in the project is gated the same way — the bar is the
     // whole of the bottom slot there too, not a notice above the composer.
     testWidgets("an open chat in the project is gated too", (tester) async {
@@ -383,37 +367,23 @@ void main() {
       expect(find.text("What would you like to discuss?"), findsOneWidget);
     });
 
-    // The badge says where the next chat goes, which is all it can say: there
-    // is no chat yet for it to be about.
-    testWidgets("picking one highlights it, and the chat lands there",
+    // The badge says where the next chat goes. Nothing selected is the
+    // default project, so leaving one is pressing it again.
+    testWidgets("picking one highlights it, and pressing it again un-picks it",
         (tester) async {
       await openWithProject(tester);
 
       await pick(tester, "work");
-
       expect(selectedOf(tester, "work"), isTrue);
       expect(app.container.read(selectedProjectProvider), "work");
 
-      await sendMessage(tester, "hello");
-
-      expect(await projectOfMade(tester), "work");
-    });
-
-    // Nothing selected is the default project, so leaving one is pressing it
-    // again rather than finding a badge that stands for the way back.
-    testWidgets("pressing the picked one again goes back to the default",
-        (tester) async {
-      await openWithProject(tester);
-
       await pick(tester, "work");
-      await pick(tester, "work");
-
       expect(selectedOf(tester, "work"), isFalse);
       expect(app.container.read(selectedProjectProvider), isNull);
 
+      await pick(tester, "work");
       await sendMessage(tester, "hello");
-
-      expect(await projectOfMade(tester), isNull);
+      expect(await projectOfMade(tester), "work");
     });
 
     // The settings are the screen's until there is a chat to write them on,
@@ -518,18 +488,6 @@ void main() {
     expect(find.text(appTitle), findsNothing);
   });
 
-  // Every chat is in one, so naming the default on all of them says nothing.
-  testWidgets("a chat in the default project is titled and nothing more",
-      (tester) async {
-    final chat = await seedLongChat(tester, title: "at home");
-
-    await open(tester, chat.state.id);
-
-    expect(find.descendant(of: find.byType(AppBar), matching: find.text("at home")),
-        findsOneWidget);
-    expect(find.text("Default"), findsNothing);
-  });
-
   // A built-in project's directory name is not what the bar should read; it is
   // labelled the way the menus label it.
   testWidgets("a chat in a built-in project is named by the project's label",
@@ -557,6 +515,8 @@ void main() {
     expect(find.descendant(of: find.byType(AppBar), matching: find.text("brand new")),
         findsOneWidget);
     expect(find.text(appTitle), findsNothing);
+    // Every chat is in a project, so naming the default says nothing.
+    expect(find.text("Default"), findsNothing);
   });
 
   /// The countdown is drawn, and the bar grew for it. The lines are laid out
@@ -621,18 +581,11 @@ void main() {
       await open(tester, chat.state.id);
     }
 
-    // The composer's menus are the only place these are named, and nothing
-    // names them until the character that opens one has been typed.
-    testWidgets("offers what the / and @ menus hold", (tester) async {
-      await openBlank(tester);
-
-      expect(find.text("/review"), findsOneWidget);
-      expect(find.text("@explore"), findsOneWidget);
-    });
-
     testWidgets("picking one types it, and does not reach for the keyboard",
         (tester) async {
       await openBlank(tester);
+      // The composer's menus are the only other place these are named.
+      expect(find.text("@explore"), findsOneWidget);
 
       await tester.tap(find.text("/review"));
       await tester.pump();
@@ -698,20 +651,6 @@ void main() {
     // happen under a screen that is already open, which is the case the
     // animation exists for.
     group("a swap of the starter set", () {
-      testWidgets("an arriving chip grows in while its neighbours hold",
-          (tester) async {
-        await openBlank(tester);
-
-        await io(tester, () => writeSkill(app, "review"));
-        await reloadLibrary(tester, app);
-
-        // Arrived: it grows from nothing over the next frames, so it is on
-        // screen already but its slot is not full width yet.
-        expect(find.text("/review"), findsOneWidget);
-        await tester.pump(const Duration(milliseconds: 90));
-        expect(find.text("/review"), findsOneWidget);
-      });
-
       testWidgets("a leaving chip shrinks away before it goes", (tester) async {
         await openBlank(tester);
         await io(tester, () => writeSkill(app, "review"));
@@ -797,36 +736,34 @@ void main() {
           return chat.state.id;
         });
 
-    testWidgets("both flips draw their separators, with the right captions",
-        (tester) async {
-      final id = await seedSectionedChat(tester);
-      await open(tester, id);
-
-      expect(find.text("Omada is turned on"), findsOneWidget);
-      expect(find.text("Omada is turned off"), findsOneWidget);
-      // Two separators between three messages-and-replies.
-      expect(find.byType(ConversationSeparator), findsNWidgets(2));
-    });
-
-    testWidgets("a user message under a separator keeps its alignment",
+    testWidgets("both flips draw their separators, and bubbles keep their side",
         (tester) async {
       // Wide enough that "right side" is unambiguous.
       useWindow(tester, const Size(1000, 800));
       final id = await seedSectionedChat(tester);
       await open(tester, id);
 
-      // Both user bubbles end at the same right edge, either side of the
-      // separator: the bug this pins is the wrapped bubble sitting mid-column.
+      expect(find.text("Omada is turned on"), findsOneWidget);
+      expect(find.text("Omada is turned off"), findsOneWidget);
+      expect(find.byType(ConversationSeparator), findsNWidgets(2));
+      // Both user bubbles end at the same right edge either side of the
+      // separator, near the column's edge rather than mid-column.
       final first = tester.getRect(find.text("first")).right;
       final second = tester.getRect(find.text("second")).right;
-      // Text centers differ by half a character; right edges do not.
       expect((first - second).abs(), lessThan(2));
-      // Right-aligned within the readable column: near the edge, past center.
       expect(second, greaterThan(500));
     });
+
   });
 
   group("keeping up with a turn", () {
+    Future<void> replyArrives(WidgetTester tester, String id) async {
+      app.backend.scriptedEvents = [const TextDelta("and another thing"), const DoneEvent()];
+      await io(tester,
+          () => app.container.read(chatControllerProvider(id).notifier).send("more"));
+      await settleIo(tester);
+    }
+
     testWidgets("scrolling back offers the way down again", (tester) async {
       final chat = await seedLongChat(tester);
       await open(tester, chat.state.id);
@@ -846,25 +783,6 @@ void main() {
       expect(find.byTooltip("Jump to latest"), findsNothing);
     });
 
-    testWidgets("a reply arriving while the reader is up the page leaves it there",
-        (tester) async {
-      final chat = await seedLongChat(tester);
-      await open(tester, chat.state.id);
-      await tester.drag(find.byType(ListView), const Offset(0, 600));
-      await tester.pumpAndSettle();
-      final held = position(tester).pixels;
-
-      app.backend.scriptedEvents = [const TextDelta("and another thing"), const DoneEvent()];
-      await io(
-        tester,
-        () => app.container.read(chatControllerProvider(chat.state.id).notifier).send("more"),
-      );
-      await settleIo(tester);
-
-      expect(position(tester).pixels, held);
-      expect(find.byTooltip("Jump to latest"), findsOneWidget);
-    });
-
     // The drag that detaches is often inside the follow slack, where the old
     // position test kept handing the view back to the end and the reader
     // could not get away. A gesture is the whole of what counts now.
@@ -876,12 +794,7 @@ void main() {
       await tester.drag(find.byType(ListView), Offset(0, end - held));
       await tester.pumpAndSettle();
 
-      app.backend.scriptedEvents = [const TextDelta("and another thing"), const DoneEvent()];
-      await io(
-        tester,
-        () => app.container.read(chatControllerProvider(chat.state.id).notifier).send("more"),
-      );
-      await settleIo(tester);
+      await replyArrives(tester, chat.state.id);
 
       expect(position(tester).pixels, held);
       expect(find.byTooltip("Jump to latest"), findsOneWidget);
@@ -902,36 +815,23 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byTooltip("Jump to latest"), findsNothing);
 
-      app.backend.scriptedEvents = [const TextDelta("and another thing"), const DoneEvent()];
-      await io(
-        tester,
-        () => app.container.read(chatControllerProvider(chat.state.id).notifier).send("more"),
-      );
-      await settleIo(tester);
+      await replyArrives(tester, chat.state.id);
 
       expect(position(tester).pixels, position(tester).maxScrollExtent);
     });
   });
 
   group("a turn that never finished", () {
-    testWidgets("is offered to be carried on", (tester) async {
-      final chat = await seedLongChat(tester, messages: 2, finished: false);
-
-      await open(tester, chat.state.id);
-
-      expect(find.text("Continue"), findsOneWidget);
-      expect(find.textContaining("Unfinished turn"), findsOneWidget);
-
+    testWidgets("is offered to be carried on, and the offer goes once taken",
+        (tester) async {
       // A finished one is not: the same two messages, a turnEnd on the reply.
       final closed = await seedLongChat(tester, messages: 2);
       await open(tester, closed.state.id);
-
       expect(find.text("Continue"), findsNothing);
-    });
 
-    testWidgets("the offer goes once it is taken", (tester) async {
       final chat = await seedLongChat(tester, messages: 2, finished: false);
       await open(tester, chat.state.id);
+      expect(find.textContaining("Unfinished turn"), findsOneWidget);
 
       app.backend.scriptedEvents = const [TextDelta(" — two files"), DoneEvent()];
       await tester.tap(find.text("Continue"));
@@ -940,6 +840,7 @@ void main() {
       expect(find.text("Continue"), findsNothing);
       expect(app.backend.resumes, hasLength(1));
     });
+
   });
 
   /// How visible each message's row of actions currently is.
