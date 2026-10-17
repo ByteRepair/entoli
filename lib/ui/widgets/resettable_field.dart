@@ -201,8 +201,6 @@ class InheritableDropdown<T> extends StatelessWidget {
 ///
 /// The stops are the slider's own: a value no stop carries — whatever a file
 /// left there — reads as the stop nearest it, so the slider never asserts.
-/// [snap] and [stopIndex] are exposed because a page showing the resolved
-/// value beside the control snaps the same way.
 class InheritableSlider extends StatelessWidget {
   const InheritableSlider({
     super.key,
@@ -244,7 +242,7 @@ class InheritableSlider extends StatelessWidget {
       label: label,
       child: ResettableField(
         onReset: () => onChanged(null),
-        resetLabel: "the default ($_snap(stops, inherited))",
+        resetLabel: "the default (${_snap(stops, inherited)})",
         child: Slider(
           value: _index(stops, shown).toDouble(),
           min: 0,

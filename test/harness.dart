@@ -92,11 +92,8 @@ class TestApp {
     required this.localLlm,
     required this.prefill,
     required this.work,
-    required this.clock,
     required this.container,
   });
-
-  final Clock clock;
 
   /// The secrets the app's notifier writes into — exposed so a test can assert
   /// on what a settings save put in the store, the way `config` is for the
@@ -179,8 +176,6 @@ class TestApp {
     MirrorControl control = const MirrorControl(),
     SyncHub? hub,
     Clock? clock,
-    bool appHidden = false,
-    FakeSecretStore? secrets,
     http.Client? marketplaceClient,
   }) {
     final config = tempConfig();
@@ -190,10 +185,6 @@ class TestApp {
     final files = handoff ?? FakeFileHandoff();
     final assist = FakeAssistantLaunch(hasGesture: assistantGesture);
     final alarms = reminderAlarms ?? FakeReminderAlarms(available: false);
-    // Pinned so a trigger's fire time is not judged against the wall clock
-    // the suite happens to run on. A test that needs a different now passes
-    // its own [Clock.fixed].
-    final testClock = clock ?? Clock.fixed(_testNow);
     final backups = FakeBackupHandoff();
     final restart = FakeAppRestart();
     final chats = store ?? FileChatStore(config);
@@ -215,8 +206,8 @@ class TestApp {
     };
     // The real one over an in-memory store: what a settings page reads back
     // after it writes is [AppSecrets]'s own, so faking it would only prove
-    // the fake. A test that wants keys pre-stored passes its own store.
-    final appSecrets = AppSecrets(secrets ?? FakeSecretStore());
+    // the fake.
+    final appSecrets = AppSecrets(FakeSecretStore());
     return TestApp._(
       config: config,
       secrets: appSecrets,
@@ -237,7 +228,6 @@ class TestApp {
       localLlm: server,
       prefill: warmUp,
       work: work,
-      clock: testClock,
       container: ProviderContainer(
         overrides: [
           chatStoreProvider.overrideWithValue(chats),
@@ -255,10 +245,11 @@ class TestApp {
           fileHandoffProvider.overrideWithValue(files),
           assistantLaunchProvider.overrideWithValue(assist),
           reminderAlarmsProvider.overrideWithValue(alarms),
-          appHiddenProvider.overrideWith(() => _AppHidden(appHidden)),
           triggersProvider.overrideWith(() => Triggers(triggers)),
           triggerTurnDriverProvider.overrideWithValue(FakeTriggerTurnDriver()),
-          clockProvider.overrideWithValue(testClock),
+          // Pinned so a trigger's fire time is not judged against the wall
+          // clock the suite happens to run on.
+          clockProvider.overrideWithValue(clock ?? Clock.fixed(_testNow)),
           backupHandoffProvider.overrideWithValue(backups),
           appRestartProvider.overrideWithValue(restart),
           linkOpenerProvider.overrideWithValue(linkOpener),
@@ -323,11 +314,7 @@ class TestApp {
   final FakeLocalModelStore localModels;
   final FakeLocalLlm localLlm;
 
-  /// What the lifecycle listener would have reported. Overridden before the
-  /// container is built; a test that flips it mid-test does it through the
-  /// notifier.
-  bool get appHidden => container.read(appHiddenProvider);
-
+  /// What the lifecycle listener would have reported.
   set appHidden(bool hidden) =>
       container.read(appHiddenProvider.notifier).set(hidden);
 
@@ -643,12 +630,6 @@ Future<void> dragCopy(
   await tester.pump();
   await gesture.up();
   await tester.pumpAndSettle();
-  await copyViaKeyboard(tester);
-}
-
-/// Ctrl+C, the way the framework's copy action reads it. The gesture that
-/// made a selection is the test's own; this is the copy half of it.
-Future<void> copyViaKeyboard(WidgetTester tester) async {
   await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
   await tester.sendKeyEvent(LogicalKeyboardKey.keyC);
   await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
@@ -846,16 +827,6 @@ AppConfig tempConfig([String prefix = "agent_chat_test_"]) {
     tmp.deleteSync(recursive: true);
   });
   return config;
-}
-
-/// The lifecycle as a test wants it: whatever [appHidden] was created saying,
-/// changeable mid-test through [TestApp.appHidden].
-class _AppHidden extends AppHidden {
-  _AppHidden(this.initial);
-  final bool initial;
-
-  @override
-  bool build() => initial;
 }
 
 /// Reload a project's prompt library and settle, so what a page draws reflects

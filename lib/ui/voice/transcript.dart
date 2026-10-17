@@ -104,14 +104,12 @@ List<VoiceLine> linesOf(MessageRole role, MessagePart part, [SpeakableText? grow
   }
 }
 
-/// What a tool call reads as. The four spelled out are the agent's own, whose
-/// names live in `data/builtin` and are not `ui`'s to import; the rest are in
-/// `domain/`, which `file_tools.dart` says in so many words is where they are
-/// *because* the UI draws labels from them.
 /// Read out for a command whoever ran it — the model through `bash`, or the
 /// user through `!`.
 const _ranACommand = "Ran a command";
 
+/// What a tool call reads as. The four spelled out are the agent's own, whose
+/// names live in `data/builtin` and are not `ui`'s to import.
 String? _doing(String tool) => switch (tool) {
       "bash" => _ranACommand,
       "websearch" => "Searched the web",

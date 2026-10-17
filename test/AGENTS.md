@@ -14,8 +14,7 @@ actually offer: since skills are held to the Agent Skills spec (see
 `name:` matching the folder and a `description`, and its `metadata:` argument
 is the way a test writes the client keys — `{"invocation": "callback"}` makes
 it one the controller dispatches. `test/fakes.dart` holds `FakeBackend`, whose
-`scriptedEvents` and `hold` drive a turn and whose `scriptedTitle` names a chat,
-beside `FakeAttachmentPicker`, `FakeLauncherIcons`, `FakeBackgroundWork`,
+`scriptedEvents` and `hold` drive a turn, beside `FakeAttachmentPicker`, `FakeLauncherIcons`, `FakeBackgroundWork`,
 `FakeFileHandoff`, `FakeBackupHandoff`, `FakeAppRestart`, `FakeVoice`,
 `FakeAssistantLaunch` and `testLibrary`.
 
@@ -169,8 +168,7 @@ restore happens inside it, and that a refused one does neither.
 
 `app.secrets` is the `AppSecrets` the settings notifiers write into — the real
 one over an in-memory `FakeSecretStore`, so what a page reads back after it
-saves is the class's own behaviour rather than a fake's. A test that wants keys
-pre-stored passes its own store to `TestApp.create(secrets: …)`. Assert on
+saves is the class's own behaviour rather than a fake's. Assert on
 `app.secrets.providerKey(id)` rather than on `settings.json`, which no longer
 carries the keys.
 

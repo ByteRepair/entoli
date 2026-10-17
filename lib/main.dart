@@ -148,13 +148,9 @@ class AppSession {
     // directory both the store that fills it and the turns' driver that
     // injects it on PATH are built from.
     final byteRepairBin = platform.byteRepairBinDir(cache);
-    // The backend captures the closure; nothing reads the mirror until the
-    // container does, so the load only has to be in before that.
-    // The registry the trigger tools run against — an adapter over the
-    // provider notifier, assigned like [settingsHome] is: read only from a
-    // running app, which is after the container exists. The lookup is the
-    // whole of the deferral; there is no wrapper class for a closure that
-    // reads a late field.
+    // The registry the trigger tools run against, assigned like
+    // [settingsHome] is: read only from a running app, after the container
+    // exists.
     late final TriggerRegistryFactory triggerRegistry;
     final backend = platform.createBackend(config, libraries, store,
         tools: toolset, rootfs: rootfs, abi: await abi, localLlm: server, kvCache: kvCache,
@@ -193,14 +189,8 @@ class AppSession {
     // connect on Linux overlaps it rather than serialising behind it; nothing
     // between depends on the answer.
     final alarms = platform.createReminderAlarms();
-    // Sync: identity from the keyring (or file fallback), registry on disk.
-    // The hub reads settings from the container; the closures below defer
-    // those reads until after the container exists — the same pattern the
-    // repository uses with `() => ref.read(appSettingsProvider)`.
-    // Started alongside the identity load: on Android the hostname is a
-    // method-channel round-trip and the identity is keyring/file I/O, so the
-    // two are independent and overlap rather than serialise on the startup
-    // path.
+    // Started alongside the identity load: on Android it is a channel round
+    // trip, and the two overlap rather than serialise.
     final hostname = platform.deviceHostname();
     // The one await of the store's own I/O: the identity is the next reader,
     // and the keyring probe must not be raced by a second first read.
@@ -267,8 +257,6 @@ class AppSession {
         syncHubProvider.overrideWithValue(syncHub),
       ],
     );
-    // Arming reconnects for paired devices, so a desktop that has paired once
-    // can be dialed again after a restart without opening a window first.
     settingsHome = container;
     triggerRegistry = (chatId, project) =>
         ProviderTriggerOwner(container).registryFor(chatId, project);
@@ -279,20 +267,10 @@ class AppSession {
     await syncHub.ensureReady();
     container.read(availableModelsProvider);
     container.read(turnKeepAliveProvider);
-    // And for sync, behind the keep-alive setting: it holds the process open
-    // while a paired device is connected, which is what keeps the channel
-    // through the screen going dark.
+    // Each read once to set going: they listen for the container's life.
     container.read(syncKeepAliveProvider);
-    // The same again for sync: it holds a controller open per chat a paired
-    // device is watching, so a turn is visible there, and runs a teleported
-    // prompt here.
     container.read(remoteTurnDriverProvider);
-    // Read once to set going, like the keep-alive above: it wires itself to the
-    // settings and drives the prefill from there.
     container.read(localPrefillTriggerProvider);
-    // Read once to set going: it subscribes to the repo's change stream and
-    // invalidates the sidebar's list on a deletion, so a stale row cannot
-    // outlive the chat it points at.
     container.read(chatDeletionRefreshProvider);
     // The automatic update check, started and not awaited: the release tag is
     // a network round trip and a newer build a download, and startup must not
@@ -377,22 +355,31 @@ class _AppRootState extends State<AppRoot> {
 
   Future<void> _restart({Future<void> Function()? whileStopped}) async {
     final old = _session!;
-    if (whileStopped != null) {
-      // Down to nothing first: what runs here replaces the files the session
-      // was built from, so a check that nothing is writing would be a check
-      // against writers it does not know about.
-      setState(() => _session = null);
-      await SchedulerBinding.instance.endOfFrame;
-      await old.dispose();
-      await whileStopped();
-    }
-    final next = await AppSession.start(widget.relaunch);
-    if (!mounted) return next.dispose();
-    setState(() => _session = next);
-    // After the frame that takes the old tree down: disposing a container the
-    // widgets reading it are still mounted against is disposing it under them.
-    if (whileStopped == null) {
-      WidgetsBinding.instance.addPostFrameCallback((_) => old.dispose());
+    try {
+      if (whileStopped != null) {
+        // Down to nothing first: what runs here replaces the files the session
+        // was built from, so a check that nothing is writing would be a check
+        // against writers it does not know about.
+        setState(() => _session = null);
+        await SchedulerBinding.instance.endOfFrame;
+        await old.dispose();
+        await whileStopped();
+      }
+    } finally {
+      // Even after a failed restore: with no session the app is a spinner
+      // until it is killed.
+      final next = await AppSession.start(widget.relaunch);
+      if (!mounted) {
+        await next.dispose();
+      } else {
+        setState(() => _session = next);
+        // After the frame that takes the old tree down: disposing a container
+        // the widgets reading it are still mounted against is disposing it
+        // under them.
+        if (whileStopped == null) {
+          WidgetsBinding.instance.addPostFrameCallback((_) => old.dispose());
+        }
+      }
     }
   }
 

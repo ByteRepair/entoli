@@ -82,14 +82,14 @@ class ModelPicker extends StatelessWidget {
   /// first provider that names one — or the null entry when there is nothing
   /// to have a default.
   ModelChoice _resetTarget(List<LlmProviderConfig> providers) {
-    final provider = _defaultEntry(providers);
+    final provider = _defaultEntry(providers, defaultOf);
     return provider == null
         ? (providerId: null, modelId: null)
         : (providerId: provider.id, modelId: null);
   }
 
   String _defaultLabel(List<LlmProviderConfig> providers) {
-    final provider = _defaultEntry(providers);
+    final provider = _defaultEntry(providers, defaultOf);
     if (provider == null) return nullLabel;
     return "${provider.displayName} - Default (${defaultOf(provider)})";
   }
@@ -110,8 +110,9 @@ String _inheritedName(List<ModelOption> models, ModelChoice? inherited) {
 /// The first provider whose Default entry the dropdown shows, or null when
 /// none of them names one. Reset anchors here rather than on the first
 /// provider, since only providers naming one have an entry to land on.
-LlmProviderConfig? _defaultEntry(List<LlmProviderConfig> providers) =>
-    providers.firstWhereOrNull((p) => p.defaultModelId != null);
+LlmProviderConfig? _defaultEntry(List<LlmProviderConfig> providers,
+        String? Function(LlmProviderConfig) defaultOf) =>
+    providers.firstWhereOrNull((p) => defaultOf(p) != null);
 
 /// What a picker's dropdown shows, built over the configured providers and the
 /// models they offer. The two things arrive together: a provider with no models

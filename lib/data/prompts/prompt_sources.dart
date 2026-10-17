@@ -62,10 +62,7 @@ class BundledPrompts implements PromptSource {
   /// is the default project, the way it is everywhere else a project is named.
   final String? project;
 
-  /// The tiers this source serves, resolved once per source — the sources are
-  /// built once per library build, so one resolution per source is one per
-  /// build. False where there is no config to ask: `BundledPrompts`'s test
-  /// shape, which loads no skills either.
+  /// The tiers this source serves, resolved once per source.
   late final List<String> _tiers = promptTiers(project: project, config: config);
 
   @override
@@ -98,9 +95,8 @@ class BundledPrompts implements PromptSource {
   /// parsed — the other files (scripts, references) are for bash to reach by
   /// path, not for the library.
   ///
-  /// The base directory is the one the skill's files live under on disk:
-  /// the default project's `skills-bundled/` for a default entry, or the
-  /// project's own for an override. The self-heal writes each to its own dir.
+  /// The base directory is the tier's own `skills-bundled/`, where the
+  /// self-heal writes it.
   List<PromptDocument> _loadBundledSkills(AppConfig config) {
     final documents = <PromptDocument>[];
     void emitFor(String tag) {
@@ -109,9 +105,7 @@ class BundledPrompts implements PromptSource {
         if (file.project != tag) continue;
         bySkill.putIfAbsent(file.name, () => []).add(file);
       }
-      final baseDir = tag == defaultProjectDir
-          ? config.bundledSkillsDir()
-          : config.bundledSkillsDir(project: tag);
+      final baseDir = config.bundledSkillsDir(project: tag);
       for (final entry in bySkill.entries) {
         final skillName = entry.key;
         final skillMd = entry.value.firstWhere(
@@ -203,13 +197,9 @@ class DirectoryPrompts implements PromptSource {
 /// base directory is, and the spec requires the two to match, which
 /// [skillProblems] checks.
 ///
-/// The body carries the base directory above the template, because that is
-/// the one thing every reader needs and none of them can work out: the
-/// composer's expansion, the `skill` tool, and a replayed log all read the
-/// same string. A folder whose `SKILL.md` cannot be read, or whose frontmatter
-/// does not conform, is skipped with a line in the log — one broken skill
-/// does not take the menu with it, and the skills settings page shows the
-/// reason on the skill's view page.
+/// A folder whose `SKILL.md` cannot be read, or whose frontmatter does not
+/// conform, is skipped with a line in the log — one broken skill does not take
+/// the menu with it, and the skills settings page shows the reason.
 Future<List<PromptDocument>> loadSkillDirectories(FileSystem fs, String directory) async {
   final path = fs.path;
   final root = fs.directory(directory);
@@ -239,7 +229,9 @@ Future<List<PromptDocument>> loadSkillDirectories(FileSystem fs, String director
 /// The one way a skill becomes a [PromptDocument], whether it was read from
 /// disk or from the embedded const. The name is the frontmatter's where it has
 /// one, the folder's otherwise, and the body carries the base directory above
-/// the template — the one thing every reader needs and none can work out.
+/// the template — the one thing every reader (the composer's expansion, the
+/// `skill` tool, a replayed log) needs and none can work out. The directory is
+/// a path in the virtual filesystem on the web.
 PromptDocument _skillDocument(String folderName, String skillMd, String baseDir) {
   final parsed = PromptDocument.parse(CompletionKind.skill, folderName, skillMd);
   return PromptDocument(
@@ -247,12 +239,6 @@ PromptDocument _skillDocument(String folderName, String skillMd, String baseDir)
     name: parsed.frontmatter["name"] ?? folderName,
     frontmatter: parsed.frontmatter,
     metadata: parsed.metadata,
-    body: _withBaseDir(baseDir, parsed.body),
+    body: "Base directory for this skill: $baseDir\n\n${parsed.body}",
   );
 }
-
-/// The skill as the model is given it: where its files are, then the
-/// template. The directory is absolute on a disk and a path in the virtual
-/// filesystem on the web, which is the same thing to the reader that matters.
-String _withBaseDir(String baseDir, String body) =>
-    "Base directory for this skill: $baseDir\n\n$body";

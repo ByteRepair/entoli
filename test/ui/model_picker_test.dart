@@ -29,11 +29,12 @@ void main() {
     String nullLabel = noneOptionLabel,
     String? helperOffText,
     List<ModelOption>? models,
+    List<LlmProviderConfig> providers = const [testProvider],
   }) async {
     final modelList = models ?? testProviderModels;
     reported = null;
     app.backend.modelList = modelList;
-    await io(tester, () => app.seedProviders([testProvider]));
+    await io(tester, () => app.seedProviders(providers));
     await app.pump(
       tester,
       Scaffold(
@@ -191,6 +192,18 @@ void main() {
     final tooltip = "Reset to Test - Default (glm-5.3-flash)";
     await tester.tap(find.byTooltip(tooltip));
     await settleIo(tester);
+    expect(reported, (providerId: testProviderId, modelId: null));
+  });
+
+  testWidgets("a light picker resets to the first provider naming a light default",
+      (tester) async {
+    const chatOnly = LlmProviderConfig(
+        id: "chat", label: "Chat", api: LlmApi.openai, baseUrl: "https://c.example/v1",
+        defaultModelId: "big");
+    await pump(tester,
+        providers: [chatOnly, testProvider],
+        defaultOf: LlmProviderConfig.lightDefaultOf);
+    await tester.tap(find.byTooltip("Reset to Test - Default (nemotron-3-nano:30b)"));
     expect(reported, (providerId: testProviderId, modelId: null));
   });
 
