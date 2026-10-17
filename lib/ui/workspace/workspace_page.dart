@@ -108,8 +108,8 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage> {
 
   bool get _atRoot => _dir == widget.root;
 
-  /// Back goes up a folder before it leaves the page, so a system back gesture
-  /// unwinds the way the taps that got here wound it up.
+  /// Back — the bar's arrow and the system gesture alike — goes up a folder
+  /// before it leaves the page, unwinding the way the taps wound it up.
   void _back() {
     if (_atRoot) return Navigator.of(context).pop();
     _goTo(ref.read(appConfigProvider).fs.path.dirname(_dir));
@@ -189,7 +189,12 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage> {
     final handoff = ref.watch(fileHandoffProvider);
     final fs = ref.watch(appConfigProvider).fs;
     final export = handoff.exportKind;
-    return Scaffold(
+    return PopScope(
+      canPop: _atRoot,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) _back();
+      },
+      child: Scaffold(
       appBar: AppBar(
         leading: BackButton(onPressed: _back),
         title: _Title(
@@ -249,6 +254,7 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage> {
             ),
           ),
         ],
+      ),
       ),
     );
   }

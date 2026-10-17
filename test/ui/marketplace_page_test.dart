@@ -348,6 +348,8 @@ Frame it, from upstream.
     await settleIo(tester);
 
     expect(find.text("Could not reach the marketplace."), findsOneWidget);
+    // The detail is the status, not a JSON parse of an error page.
+    expect(find.textContaining("HTTP 404"), findsOneWidget);
 
     // The retry re-fetches, now answered: an empty index is a working page
     // with nothing in it yet. The fetch is real time again, so the settle
