@@ -108,9 +108,14 @@ sealed class ChatRecord with _$ChatRecord {
 
   /// The turn writing [messageId] is over. See [TurnEnd] for why the record
   /// matters more when it is missing.
+  ///
+  /// [addressees] is who an Omada reply handed to, sigils on: a reply's
+  /// routing is only known once its text is, so it rides the close rather
+  /// than the [MessageRecord] that opened it. Sets [Message.addressees].
   const factory ChatRecord.turnEnd({
     required String messageId,
     required TurnEnd reason,
+    @Default([]) List<String> addressees,
   }) = TurnEndRecord;
 
   /// Read [messageId] rather than whichever of its siblings was being read.
@@ -275,10 +280,12 @@ Replayed replayTree(Iterable<ChatRecord> records) {
         parts[index] = withMoreText(parts[index], text);
         nodes[messageId] = into.copyWith(parts: parts);
 
-      case TurnEndRecord():
-        // Read by the tail classifier, which decides whether to offer to
-        // continue. It says nothing about what the conversation holds.
-        break;
+      case TurnEndRecord(:final messageId, :final addressees):
+        // Otherwise read by the tail classifier alone. A resumed turn closes
+        // again, and the last close's routing is the reply's.
+        final into = nodes[messageId];
+        if (into == null || into.role != MessageRole.assistant) continue;
+        nodes[messageId] = into.copyWith(addressees: addressees);
 
       case RewindRecord(:final messageId):
         if (nodes.containsKey(messageId)) forget(messageId);

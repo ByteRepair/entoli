@@ -40,7 +40,8 @@ import "templates.dart";
 /// [viewer] is whose session this projection words the conversation for — null
 /// for the main agent, a member's `@name` for their own. A reply authored by
 /// another participant is worded as a user-role message labeled with who wrote
-/// it, so the viewer's model never reads another agent's words as its own; the
+/// it and who it handed to, so the viewer's model never reads another agent's
+/// words as its own, nor a handoff to someone else as work of its own; the
 /// mail the user sent somewhere else is worded the same way, labeled with who
 /// it was for ([addressedUserTurnText], off `Message.addressees`, the room's
 /// routing record) — so no reader of a room mistakes someone else's mail for
@@ -140,7 +141,15 @@ Future<List<LlmMessage>> projectionOf(
           if (said != null) {
             projected.add(LlmMessage(
               role: LlmRole.user,
-              text: peerTurnText(said, by: theirs, at: message.createdAt),
+              text: peerTurnText(said,
+                  by: theirs,
+                  at: message.createdAt,
+                  to: [
+                    for (final a in message.addressees)
+                      if (nameOf(a) != viewer) a,
+                  ],
+                  toYou: viewer != null &&
+                      message.addressees.map(nameOf).contains(viewer)),
             ));
           }
           // A peer reply's tool calls are its own session's business: the
