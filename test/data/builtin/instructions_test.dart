@@ -223,8 +223,10 @@ void main() {
       expect(text,
           contains("Contents of /ws/AGENTS.md (project workspace instructions):"));
       expect(text,
-          contains("Contents of anonymous "
-              "(the app's own note on this kind of chat):"));
+          contains("From the app, about this kind of chat:\n\n"
+              "this is an anonymous chat"));
+      expect(text, isNot(contains("Contents of anonymous")));
+      expect(text, isNot(contains("IMPORTANT")));
       expect(text, contains("global rules"));
       expect(text, contains("project rules"));
       expect(text, contains("this is an anonymous chat"));

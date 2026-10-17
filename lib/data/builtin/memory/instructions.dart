@@ -152,16 +152,24 @@ RegExp _globToRegExp(String pattern) {
 /// One block of prompt text carrying everything loaded, worded so the model
 /// treats it as binding. Empty when nothing was loaded — the caller sends no
 /// section then.
+///
+/// The header opens with [instructionBlockHeader] because the read drawer cuts
+/// the block out of a result at that string, old logs included. No capitals:
+/// they make a model over-apply whatever follows them.
 String renderInstructions(List<InstructionFile> files) {
   if (files.isEmpty) return "";
-  const header = "$instructionBlockHeader. Be sure to adhere "
-      "to these instructions. IMPORTANT: These instructions OVERRIDE any "
-      "default behavior and you MUST follow them exactly as written.";
+  const header = "$instructionBlockHeader. They come from this app and from "
+      "the user. Follow them: where they disagree with anything earlier in "
+      "this prompt, they take precedence, and where two of them disagree, "
+      "the later one wins.";
   return [
     header,
     for (final file in files)
-      "Contents of ${file.path} (${instructionKindPhrase(file.kind)}):\n\n"
-          "${file.content.trim()}",
+      // A bundled note has no file, so it is not dressed as one.
+      file.kind == InstructionKind.bundled
+          ? "From the app, about this kind of chat:\n\n${file.content.trim()}"
+          : "Contents of ${file.path} (${instructionKindPhrase(file.kind)}):"
+              "\n\n${file.content.trim()}",
   ].join("\n\n");
 }
 
