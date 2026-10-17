@@ -55,6 +55,7 @@ void main() {
     int? picked;
     await pump(tester, value: 40, inherited: 20, onChanged: (v) => picked = v);
 
+    expect(find.byTooltip("Reset to the default (20)"), findsOneWidget);
     await tester.tap(find.byType(IconButton));
     await tester.pump();
     expect(picked, isNull);
