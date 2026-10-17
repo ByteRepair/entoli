@@ -75,9 +75,11 @@ with the room's member turns, and each member with the others.
 
 **The room contract is My Team's note, not a per-turn overlay.** Every Omada
 turn runs under `MyTeamProject`'s bundled note (`assets/prompts/projects/
-my-team/system/instructions.md`): the room, the handles, `pass`, the one
-handle per reply — worded once for any participant, main agent or member,
-since both run under it. The project's own note comes first where it ships
+my-team/system/instructions.md`): the room, the handles, `pass`, and that
+every other member's handle in a reply is handed a turn — worded once for
+any participant, main agent or member, since both run under it. A member
+tells which one it is by the `You are @name` line `memberPrompt` opens its
+prompt with. The project's own note comes first where it ships
 one, and the user's instruction files are read on top, the way they always
 are for a user project. A project's Omada answer decides whether the note is
 there at all — a built-in's spec (`my-team` on, everything else off), a user

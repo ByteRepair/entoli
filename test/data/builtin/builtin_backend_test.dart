@@ -202,6 +202,19 @@ void main() {
           isNot(contains(listParticipantsToolName)));
     });
 
+    test("a member's turn is told its own handle", () async {
+      final library = PromptLibrary([
+        PromptDocument.parse(CompletionKind.agent, "explore",
+            "---\ndescription: Fast explorer\n---\nYou explore."),
+      ]);
+      final room = backendOver([[finish]], library: library);
+      await send(room, "hi",
+          omada: true, project: "Team", omadaMember: "explore");
+
+      expect(client.sent.first[1].text,
+          contains("You are @explore, a member of this team.\n\nYou explore."));
+    });
+
     test("a turn outside Omada still offers the task tool", () async {
       final backend = backendOver([
         [finish],

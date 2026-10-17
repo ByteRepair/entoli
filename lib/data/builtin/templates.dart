@@ -311,8 +311,15 @@ String summarizedTurnText(String summary) =>
 /// member. Null where the name is no longer in the library — the controller
 /// has already routed such a turn to the main agent, so this is unreachable
 /// from a member turn.
-String? memberPrompt(PromptLibrary? library, String member) =>
-    library?.find(CompletionKind.agent, member)?.body;
+///
+/// The first line is the member's handle: the room contract tells a member
+/// not to write its own, and nothing else in the prompt says what it is.
+String? memberPrompt(PromptLibrary? library, String member) {
+  final body = library?.find(CompletionKind.agent, member)?.body;
+  if (body == null) return null;
+  return "You are ${CompletionKind.agent.trigger}$member, a member of this "
+      "team.\n\n$body";
+}
 
 /// What a member replies when it declines the turn it was addressed with:
 /// word for word, so a longer reply is a reply. The controller reads it off
