@@ -13,21 +13,10 @@ import "voice_strategies.dart";
 /// `SpeechRecognizer` where their sentinel is what was picked, and sherpa-onnx
 /// where a downloaded model was — the same halves the desktops use, composed
 /// through a [SherpaVoice] this holds, since sherpa's native code ships in the
-/// APK.
+/// APK. Each half routes on its own pick. See "The system engines" in
+/// AGENTS.md for why sherpa is the fallback here.
 ///
-/// The system engines stay the default where they exist: nothing to download,
-/// and they run on whatever silicon the phone has. The fallback exists because
-/// a recognizer the user never made the system default binds with no
-/// microphone capability — the session opens and no audio ever arrives — and a
-/// phone whose only recognizer is in that position (a de-Googled one, or
-/// Google's under GrapheneOS's sandbox) hears nothing, whatever the app does.
-/// See "The Android system engines" in AGENTS.md.
-///
-/// Each half routes on its own pick, so the four pairings all work: system
-/// listening and speaking, a downloaded recognizer over the system's voice,
-/// and the reverse. The [NativeVoiceBridge], [NativeSpeechRecognizer] and
-/// [NativeTextToSpeech] classes here are the shared native contract, and
-/// `ios_voice.dart` composes the same shapes over Apple's engines.
+/// The `Native*` classes below are the native contract `ios_voice.dart` shares.
 class AndroidVoice extends Voice {
   AndroidVoice(VoiceModelStore store, String cacheDir)
       : _sherpa = SherpaVoice(store, cacheDir);
@@ -145,13 +134,8 @@ Future<List<VoiceLanguage>> nativeLanguages({
   }
 }
 
-/// Everything the channel says, as a stream. `setMethodCallHandler` takes one
-/// handler and both strategies listen on the one channel, so the handler is
-/// owned here once and what arrives is broadcast; each strategy subscribes and
-/// reads the methods that are its own. A subscription is also its own
-/// bookkeeping — cancelling on dispose is the whole of it, where a slot per
-/// callback needed clearing under an identity check so a successor's
-/// registration was not undone by its predecessor.
+/// Everything the channel says, as a broadcast stream: `setMethodCallHandler`
+/// takes one handler, and both strategies listen on the one channel.
 class NativeVoiceBridge {
   NativeVoiceBridge._() {
     voiceChannel.setMethodCallHandler((call) async {
@@ -302,8 +286,6 @@ class NativeTextToSpeech implements Speaker {
           _signals.add(const SpeechSilent());
         }
       case "speechUtteranceError":
-        // Named by the generation it was queued under, so one arriving after a
-        // `stop` is not counted against the batch that replaced it.
         if ((call.arguments as int? ?? -1) != _generation) return;
         _utteranceDropped();
       case "speechError":

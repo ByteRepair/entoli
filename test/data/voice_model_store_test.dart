@@ -72,10 +72,8 @@ void main() {
     // progress stream never says at this size (it reports per megabyte).
     await waitFor(() => File(p.join(store.directoryFor(model), "model.onnx")).existsSync(),
         what: "the download to be under way");
+    // Cancel's future waits for the discard, so there is nothing to poll.
     await sub.cancel();
-    // Cancel's future is the teardown's: the half-written download went with
-    // the cancellation, once the run had walked to its exit — the response
-    // the cancel's close ended — and its discard had run. Nothing to poll.
     expect(Directory(store.directoryFor(model)).existsSync(), isFalse);
 
     expect(await store.installed(), isEmpty);
@@ -117,16 +115,8 @@ void main() {
     expect(p.split(dir), containsAllInOrder(["models", "tts", "test-tts"]));
   });
 
-  test("deleting takes the directory and the marker with it", () async {
-    final model = plainModel();
-    await store.install(model).drain<void>();
-    await store.delete(model);
-
-    expect(await store.installed(), isEmpty);
-    expect(await store.directoryOf(model), isNull);
-  });
-
-  test("installing over a half-finished attempt starts clean", () async {
+  test("installing over a half-finished attempt starts clean; delete takes it all",
+      () async {
     final model = plainModel();
     final leftover = Directory(store.directoryFor(model))..createSync(recursive: true);
     File(p.join(leftover.path, "junk.onnx")).writeAsStringSync("half a download");
@@ -135,6 +125,10 @@ void main() {
 
     expect(File(p.join(leftover.path, "junk.onnx")).existsSync(), isFalse);
     expect(await store.installed(), {"test-stt"});
+
+    await store.delete(model);
+    expect(await store.installed(), isEmpty);
+    expect(await store.directoryOf(model), isNull);
   });
 }
 

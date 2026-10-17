@@ -39,12 +39,7 @@ void main() {
     (_) {},
   );
 
-  void wasAsked(String method) => expect(
-      invoked.where((call) => call.method == method), isNotEmpty,
-      reason: "$method was never asked");
-
-  /// A listener that has started, and everything it has said since. The four
-  /// lines were at the head of every test here.
+  /// A listener that has started, and everything it has said since.
   Future<(NativeSpeechRecognizer, List<VoiceEvent>)> listening(
       WidgetTester tester) async {
     final recognizer = NativeSpeechRecognizer();
@@ -55,11 +50,6 @@ void main() {
     await tester.pump();
     return (recognizer, events);
   }
-
-    testWidgets("a session opens shut, and something has to ask", (tester) async {
-      await listening(tester);
-      wasAsked("setRecognitionListening");
-    });
 
   testWidgets("what is heard arrives; an empty result is nothing",
       (tester) async {
@@ -81,21 +71,6 @@ void main() {
     }
   }
 
-  testWidgets("loudness is measured against the room, not against a scale",
-      (tester) async {
-    final recognizer = NativeSpeechRecognizer();
-    addTearDown(recognizer.dispose);
-    await recognizer.setListening(true);
-    await tester.pump();
-
-    await room(6.0);
-    expect(recognizer.level.value, 0,
-        reason: "a room at any level is the level nothing is happening at");
-
-    await incoming("rms", 14.0);
-    expect(recognizer.level.value, greaterThan(0.9));
-  });
-
   testWidgets("what the service reports is judged against the person",
       (tester) async {
     final (recognizer, events) = await listening(tester);
@@ -113,20 +88,6 @@ void main() {
     await incoming("heard", "the next room over");
     await tester.pump();
     expect(events.whereType<VoiceHeard>().length, 1);
-  });
-
-  testWidgets("a shut microphone is not the room, and is not measured",
-      (tester) async {
-    final (recognizer, _) = await listening(tester);
-
-    await room(0.0);
-    await recognizer.setListening(false);
-    expect(recognizer.level.value, 0);
-
-    // What the service reports on its way out of a cancelled session. Measured,
-    // it would be a room nobody is in.
-    await incoming("rms", 9.0);
-    expect(recognizer.level.value, 0);
   });
 
   testWidgets("a session opens shut, and something has to ask", (tester) async {

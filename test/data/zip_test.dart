@@ -48,14 +48,9 @@ void main() {
     expect(archive.files, isNotEmpty);
   });
 
-  group("zipNameFor", () {
-    test("a single folder names the archive after itself", () {
-      expect(zipNameFor(fileSystemIo, ["$dir/notes"]), "notes.zip");
-    });
-
-    test("several are named after the folder they sit in", () {
-      expect(zipNameFor(fileSystemIo, ["$dir/a.txt", "$dir/sub"]), "workspace.zip");
-    });
+  test("zipNameFor: one folder names itself, several their parent", () {
+    expect(zipNameFor(fileSystemIo, ["$dir/notes"]), "notes.zip");
+    expect(zipNameFor(fileSystemIo, ["$dir/a.txt", "$dir/sub"]), "workspace.zip");
   });
 
   test("a selection of several goes in as several", () async {

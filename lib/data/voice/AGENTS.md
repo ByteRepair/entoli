@@ -597,7 +597,7 @@ a desktop exercises.
 `NativeVoiceBridge` is the Dart mirror of the same constraint from the other
 end: `setMethodCallHandler` takes one handler and two strategies each setting
 one would leave the second overwriting the first, so the bridge owns the handler
-and the strategies register callbacks on it.
+and the strategies subscribe to its broadcast stream.
 
 No new permissions — `RECORD_AUDIO` was already declared and the synthesiser and
 recognizer need none. The **grant** is a different matter: `SpeechRecognizer`
