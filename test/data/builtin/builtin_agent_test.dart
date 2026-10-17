@@ -186,18 +186,8 @@ void main() {
   });
 
   group("finishing", () {
-    test("a reply with no tool calls ends the turn", () async {
-      final client = FakeLlmClient([
-        [finish],
-      ]);
-      final events = await agentOver(client).run(userMessage("hi")).toList();
-
-      expect(events.last, isA<DoneEvent>());
-      expect(events.whereType<ErrorEvent>(), isEmpty);
-      expect(client.sent, hasLength(1));
-    });
-
-    test("the reply text is what the user sees", () async {
+    test("a reply with no tool calls ends the turn, and is what the user sees",
+        () async {
       final client = FakeLlmClient([
         [saidOnly("The answer is 42.")],
       ]);
@@ -205,6 +195,8 @@ void main() {
 
       expect(events.whereType<TextDelta>().map((e) => e.text), ["The answer is 42."]);
       expect(events.last, isA<DoneEvent>());
+      expect(events.whereType<ErrorEvent>(), isEmpty);
+      expect(client.sent, hasLength(1));
     });
 
     test("a command followed by a text reply runs both", () async {
@@ -570,7 +562,7 @@ void main() {
       final client = FakeLlmClient([[], []]);
       client.failures[0] = const LlmException("busy", statusCode: 503, retryable: true);
       final events = await agentOver(client,
-              options: const BuiltinOptions().parent)
+              options: const BuiltinOptions().copyWith(maxAttempts: 1))
           .run(userMessage("hi"))
           .toList();
 
@@ -600,43 +592,37 @@ void main() {
   });
 
   group("every call is answered", () {
-    test("a tool that does not exist", () async {
-      final client = FakeLlmClient([
-        [
-          const LlmCompletion(
-            message: LlmMessage(
-              role: LlmRole.assistant,
-              toolCalls: [LlmToolCall(id: "x", name: "python", argumentsJson: "{}")],
+    for (final (what, name, arguments, answer) in [
+      ("a tool that does not exist", "python", "{}",
+          "no tool called 'python'. The tools you have are `read`"),
+      ("arguments that are not the ones the tool takes", "bash", "{oops",
+          "was missing"),
+      // No sub-agent runner: `task` is not offered, so it is unknown here.
+      ("a tool that is not offered", "task",
+          '{"agent": "general", "prompt": "go"}', "no tool called 'task'"),
+    ]) {
+      test(what, () async {
+        final client = FakeLlmClient([
+          [
+            LlmCompletion(
+              message: LlmMessage(
+                role: LlmRole.assistant,
+                toolCalls: [
+                  LlmToolCall(id: "x", name: name, argumentsJson: arguments),
+                ],
+              ),
             ),
-          ),
-        ],
-        [finish],
-      ]);
-      final events = await agentOver(client).run(userMessage("hi")).toList();
+          ],
+          [finish],
+        ]);
+        final events = await agentOver(client).run(userMessage("hi")).toList();
 
-      expect(events.whereType<ToolResultEvent>().first.result.exceptionInfo,
-          contains("no tool called 'python'"));
-      expect(session.messages.firstWhere((m) => m.toolCallId == "x").text,
-          contains("`bash` and `$askToolName`"));
-    });
-
-    test("arguments that are not the ones the tool takes", () async {
-      final client = FakeLlmClient([
-        [
-          const LlmCompletion(
-            message: LlmMessage(
-              role: LlmRole.assistant,
-              toolCalls: [LlmToolCall(id: "x", name: "bash", argumentsJson: "{oops")],
-            ),
-          ),
-        ],
-        [finish],
-      ]);
-      await agentOver(client).run(userMessage("hi")).toList();
-
-      expect(session.messages.firstWhere((m) => m.toolCallId == "x").text,
-          contains("was missing"));
-    });
+        expect(events.whereType<ToolResultEvent>().single.result.exceptionInfo,
+            contains(answer));
+        expect(session.messages.firstWhere((m) => m.toolCallId == "x").text,
+            contains(answer));
+      });
+    }
   });
 
   group("stopping", () {
