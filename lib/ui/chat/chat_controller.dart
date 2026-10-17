@@ -1013,6 +1013,7 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
       runningSubAgents: _withoutTurn(state.runningSubAgents, turn.replyId),
       clearRetry: _turns.isEmpty,
       clearStatus: _turns.isEmpty,
+      clearShellOutput: _turns.isEmpty,
       unfinishedNotice: reason == TurnEnd.stepLimit
           ? "Step limit reached"
           : null,
