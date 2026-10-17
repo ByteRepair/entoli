@@ -74,155 +74,89 @@ void main() {
       expect(tools, isNot(contains("webfetch")));
     });
 
-    test("a websearch call runs and returns results", () async {
+    LlmCompletion calls(List<(String, String, Map<String, String>)> each) =>
+        LlmCompletion(
+          message: LlmMessage(
+            role: LlmRole.assistant,
+            toolCalls: [
+              for (final (id, name, args) in each)
+                LlmToolCall(id: id, name: name, argumentsJson: jsonEncode(args)),
+            ],
+          ),
+        );
+
+    Future<Map<String, ToolResult>> resultsOf(FakeLlmClient client) async {
+      final events = await agentWith(client).run(userMessage("go")).toList();
+      return {
+        for (final e in events.whereType<ToolResultEvent>()) e.result.callId: e.result,
+      };
+    }
+
+    test("websearch and webfetch run in one step, answered in order", () async {
       final client = FakeLlmClient([
-        [searchCall("flutter dart", id: "s1")],
+        [
+          calls([
+            ("s1", "websearch", {"query": "flutter dart"}),
+            ("f1", "webfetch", {"url": "https://example.com"}),
+          ])
+        ],
         [finish],
       ]);
       web.searchResult = (q) => const ShellResult(
           returnCode: 0,
           output: "1. Flutter\n   https://flutter.dev\n   A framework.");
-      final events = await agentWith(client).run(userMessage("search")).toList();
-
-      expect(web.searched, ["flutter dart"]);
-
-      final result = events.whereType<ToolResultEvent>().firstWhere(
-          (e) => e.result.callId == "s1").result;
-      expect(result.returnCode, 0);
-      expect(result.output, contains("Flutter"));
-      expect(result.output, contains("https://flutter.dev"));
-    });
-
-    test("a webfetch call runs and returns content", () async {
-      final client = FakeLlmClient([
-        [fetchCall("https://example.com", id: "f1")],
-        [finish],
-      ]);
       web.fetchResult = (url) => const ShellResult(
           returnCode: 0, output: "Example Domain");
-      final events = await agentWith(client).run(userMessage("fetch")).toList();
+      final results = await resultsOf(client);
 
+      expect(web.searched, ["flutter dart"]);
       expect(web.fetched, ["https://example.com"]);
-
-      final result = events.whereType<ToolResultEvent>().firstWhere(
-          (e) => e.result.callId == "f1").result;
-      expect(result.returnCode, 0);
-      expect(result.output, contains("Example Domain"));
-    });
-
-    test("a websearch call with bad arguments is rejected", () async {
-      final client = FakeLlmClient([
-        [
-          LlmCompletion(
-            message: LlmMessage(
-              role: LlmRole.assistant,
-              toolCalls: [
-                LlmToolCall(id: "s1", name: "websearch", argumentsJson: '{"query": ""}'),
-              ],
-            ),
-          ),
-        ],
-        [finish],
-      ]);
-      final events = await agentWith(client).run(userMessage("search")).toList();
-
-      final result = events.whereType<ToolResultEvent>().firstWhere(
-          (e) => e.result.callId == "s1").result;
-      expect(result.returnCode, -1);
-      expect(result.exceptionInfo, contains("websearch"));
-      expect(web.searched, isEmpty);
-    });
-
-    test("a webfetch call with bad arguments is rejected", () async {
-      final client = FakeLlmClient([
-        [
-          LlmCompletion(
-            message: LlmMessage(
-              role: LlmRole.assistant,
-              toolCalls: [
-                LlmToolCall(id: "f1", name: "webfetch", argumentsJson: '{}'),
-              ],
-            ),
-          ),
-        ],
-        [finish],
-      ]);
-      final events = await agentWith(client).run(userMessage("fetch")).toList();
-
-      final result = events.whereType<ToolResultEvent>().firstWhere(
-          (e) => e.result.callId == "f1").result;
-      expect(result.returnCode, -1);
-      expect(result.exceptionInfo, contains("webfetch"));
-      expect(web.fetched, isEmpty);
-    });
-
-    test("the call and result are persisted in the session", () async {
-      final client = FakeLlmClient([
-        [searchCall("test", id: "s1")],
-        [finish],
-      ]);
-      await agentWith(client).run(userMessage("search")).toList();
-
-      final toolMessages = session.messages.where((m) => m.role == LlmRole.tool);
-      expect(toolMessages.map((m) => m.toolCallId), contains("s1"));
-    });
-
-    test("a search error is reported, not thrown", () async {
-      final client = FakeLlmClient([
-        [searchCall("fail", id: "s1")],
-        [finish],
-      ]);
-      web.searchResult = (_) => const ShellResult.failed("Network error.");
-      final events = await agentWith(client).run(userMessage("search")).toList();
-
-      final result = events.whereType<ToolResultEvent>().firstWhere(
-          (e) => e.result.callId == "s1").result;
-      expect(result.returnCode, -1);
-      expect(result.exceptionInfo, contains("Network error"));
-    });
-
-    test("websearch and webfetch run in the same step", () async {
-      final client = FakeLlmClient([
-        [
-          LlmCompletion(
-            message: LlmMessage(
-              role: LlmRole.assistant,
-              toolCalls: [
-                LlmToolCall(id: "s1", name: "websearch",
-                    argumentsJson: jsonEncode({"query": "rust"})),
-                LlmToolCall(id: "f1", name: "webfetch",
-                    argumentsJson: jsonEncode({"url": "https://rust-lang.org"})),
-              ],
-            ),
-          ),
-        ],
-        [finish],
-      ]);
-      web.searchResult = (q) => const ShellResult(returnCode: 0, output: "1. Rust\n   https://rust-lang.org");
-      web.fetchResult = (url) => const ShellResult(returnCode: 0, output: "Rust programming language");
-      final events = await agentWith(client).run(userMessage("both")).toList();
-
-      final results = events.whereType<ToolResultEvent>().where((e) =>
-          e.result.callId != "done").toList();
-      expect(results.map((r) => r.result.callId).toSet(), {"s1", "f1"});
-
-      // The session has both tool messages in order.
+      expect(results["s1"]!.returnCode, 0);
+      expect(results["s1"]!.output, contains("https://flutter.dev"));
+      expect(results["f1"]!.returnCode, 0);
+      expect(results["f1"]!.output, contains("Example Domain"));
       final toolMessages = session.messages.where((m) => m.role == LlmRole.tool);
       expect(toolMessages.map((m) => m.toolCallId).toList(), ["s1", "f1"]);
     });
 
-    test("a fetch error is reported, not thrown", () async {
+    test("bad arguments are rejected without reaching the web", () async {
       final client = FakeLlmClient([
-        [fetchCall("https://broken.example", id: "f1")],
+        [
+          calls([
+            ("s1", "websearch", {"query": ""}),
+            ("f1", "webfetch", {}),
+          ])
+        ],
         [finish],
       ]);
-      web.fetchResult = (_) => const ShellResult.failed("HTTP 404.");
-      final events = await agentWith(client).run(userMessage("fetch")).toList();
+      final results = await resultsOf(client);
 
-      final result = events.whereType<ToolResultEvent>().firstWhere(
-          (e) => e.result.callId == "f1").result;
-      expect(result.returnCode, -1);
-      expect(result.exceptionInfo, contains("HTTP 404"));
+      expect(results["s1"]!.returnCode, -1);
+      expect(results["s1"]!.exceptionInfo, contains("websearch"));
+      expect(results["f1"]!.returnCode, -1);
+      expect(results["f1"]!.exceptionInfo, contains("webfetch"));
+      expect(web.searched, isEmpty);
+      expect(web.fetched, isEmpty);
+    });
+
+    test("a search or fetch error is reported, not thrown", () async {
+      final client = FakeLlmClient([
+        [
+          calls([
+            ("s1", "websearch", {"query": "fail"}),
+            ("f1", "webfetch", {"url": "https://broken.example"}),
+          ])
+        ],
+        [finish],
+      ]);
+      web.searchResult = (_) => const ShellResult.failed("Network error.");
+      web.fetchResult = (_) => const ShellResult.failed("HTTP 404.");
+      final results = await resultsOf(client);
+
+      expect(results["s1"]!.returnCode, -1);
+      expect(results["s1"]!.exceptionInfo, contains("Network error"));
+      expect(results["f1"]!.returnCode, -1);
+      expect(results["f1"]!.exceptionInfo, contains("HTTP 404"));
     });
   });
 }
