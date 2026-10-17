@@ -202,6 +202,19 @@ void main() {
           isNot(contains(listParticipantsToolName)));
     });
 
+    test("a member's turn is told its own handle", () async {
+      final library = PromptLibrary([
+        PromptDocument.parse(CompletionKind.agent, "explore",
+            "---\ndescription: Fast explorer\n---\nYou explore."),
+      ]);
+      final room = backendOver([[finish]], library: library);
+      await send(room, "hi",
+          omada: true, project: "Team", omadaMember: "explore");
+
+      expect(client.sent.first[1].text,
+          contains("You are @explore, a member of this team.\n\nYou explore."));
+    });
+
     test("a turn outside Omada still offers the task tool", () async {
       final backend = backendOver([
         [finish],
@@ -698,15 +711,18 @@ void main() {
 
     // Scratch work a later turn may want is the workspace's, not the machine
     // temp directory's — /tmp was where the crops that a chat lost came from.
-    test("the workspace prompt keeps scratch work out of /tmp", () async {
+    test("the workspace prompt keeps work in the chat until the user moves it",
+        () async {
       final backend = backendOver([
         [finish],
       ]);
       await send(backend, "hi");
 
       final system = client.sent.first[1].text;
-      expect(system, contains("Intermediate work"));
-      expect(system, contains("not in the machine's /tmp"));
+      expect(system, contains("Everything you make in this conversation goes here."));
+      expect(system, contains("Move work there only when the user wants"));
+      // /tmp is mapped to the chat's own scratch, so nothing steers away from it.
+      expect(system, isNot(contains("machine's /tmp")));
     });
 
     // A project that does not share a workspace is the answer to "a chat that

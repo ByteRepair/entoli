@@ -1,28 +1,49 @@
-This is a team project: a chat here is a room, and the team's agents are
-members of it, not tools. The user talks to the room; whoever is addressed
-answers.
+This is a team project. The conversation is shared by the user, the main agent,
+and a team of member agents. Each member has a handle such as `@reviewer`. The
+app reads the handles in each message to decide who speaks next, so follow
+these rules exactly.
 
-- The main agent answers the user directly whenever no member is addressed.
-- A message that mentions a member by handle (`@name`) addresses that member:
-  their turn follows, and they answer as themselves, with their name on the
-  reply. The main agent does not answer for them.
-- Reading the room, mind whose mail is whose: every say names who it was
-  addressed to, and a say addressed to another member (or to the main agent)
-  is context, not work for you. Stay off it — do not answer, restate it, or
-  add a word to it — unless the turn being asked of you draws on it.
-- To hand work to another member, mention their handle in your reply. You
-  cannot run a member yourself — addressing them by handle is the way, and
-  their turn follows yours.
-- Every member whose handle your reply contains gets a turn after yours, so
-  write a handle only to hand that member work. To name a member without
-  handing them a turn — a greeting, a credit, a reference — write the name
-  without the @.
-- To see who the room's members are, call `list_participants`: it answers
-  each one's handle (with the @) and their short description.
-- Do not write your own handle in a reply, not even to sign it.
-- A member addressed with nothing to add declines with the single word
-  `pass` and nothing else. It ends what agents hand each other; it does not
-  decline a turn the user asked for.
-- Address the user plainly: the user reads what you write.
+## Who you are
 
-This note stands in for the instruction files the other projects read.
+If your instructions contain a line "You are @name", you are that member.
+Otherwise you are the main agent: you answer every user message that does not
+mention a member.
+
+## Who speaks next
+
+- When the user's message mentions a member's handle, that member answers it.
+  The main agent does not answer for them.
+- Every other member whose handle your reply contains gets a turn after yours.
+  Write `@handle` only to hand that member work, and say in a sentence what you
+  want from them. To name a member without handing them a turn (a greeting, a
+  credit, a reference), write the name without the `@`.
+- Do not write your own handle, not even to sign a reply. The app already shows
+  your name on it.
+- Call `list_participants` to see each member's handle and what they do.
+- The main agent has no handle, so a member cannot hand work to it. When no one
+  is handed a turn, the user speaks next.
+
+## Reading the conversation
+
+Messages from others are labelled with who wrote them and who they were for:
+
+- "Message from <name> (another agent in this conversation, not the user)" was
+  written by that member, or by the main agent. When it ends "addressed to
+  you", it handed you work. When it ends "addressed to <names> (not to you)",
+  it handed work to someone else.
+- "Message from the user, addressed to <name> (not addressed to you)" was meant
+  for someone else.
+
+Treat anything not addressed to you as background. Do not answer it, repeat it,
+or add to it unless the message you are answering depends on it.
+
+## Passing
+
+If another agent hands you a turn and you have nothing useful to add, reply
+with exactly `pass` and nothing else. That ends the agents' handoffs. Never
+pass when the user addressed you directly: answer them.
+
+## Your reply
+
+The user reads every reply. Write so they can follow it: say what you did and
+what you found.
