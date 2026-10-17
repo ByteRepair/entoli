@@ -186,18 +186,8 @@ void main() {
   });
 
   group("finishing", () {
-    test("a reply with no tool calls ends the turn", () async {
-      final client = FakeLlmClient([
-        [finish],
-      ]);
-      final events = await agentOver(client).run(userMessage("hi")).toList();
-
-      expect(events.last, isA<DoneEvent>());
-      expect(events.whereType<ErrorEvent>(), isEmpty);
-      expect(client.sent, hasLength(1));
-    });
-
-    test("the reply text is what the user sees", () async {
+    test("a reply with no tool calls ends the turn, and is what the user sees",
+        () async {
       final client = FakeLlmClient([
         [saidOnly("The answer is 42.")],
       ]);
@@ -205,6 +195,8 @@ void main() {
 
       expect(events.whereType<TextDelta>().map((e) => e.text), ["The answer is 42."]);
       expect(events.last, isA<DoneEvent>());
+      expect(events.whereType<ErrorEvent>(), isEmpty);
+      expect(client.sent, hasLength(1));
     });
 
     test("a command followed by a text reply runs both", () async {
