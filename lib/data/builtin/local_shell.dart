@@ -10,41 +10,14 @@ import "../../core/log.dart";
 import "../../domain/file_tools.dart";
 import "../../domain/shell.dart";
 
-/// Runs commands where the [ShellDriver] it is given says they run: the
-/// machine's own shell by default, a downloaded Linux under proot where the
-/// user has picked one, or — when one is built — an emulator or a container.
-/// To the session machinery below every one of them is the same thing, a
-/// command that ends in a shell, and that is the whole of what a new driver
-/// owes it.
-///
-/// The chat's commands run in a **persistent shell, one per chat**: a single
-/// non-interactive process whose state — the directory a `cd` moved it to, the
-/// variables an export gave it — carries over from one command to the next,
-/// and which the agent's `bash` calls and the user's `!` commands share. The
-/// agent is told the contract in its prompt, and a command that moves the
-/// directory leaves a note in its own result.
-///
-/// Each command crosses the wire as one base64 line — the raw script never
-/// touches the session's stdin, so a multi-line command, a quote, or a
-/// `read` in it cannot steal the next line of the queue. The line is evaluated
-/// in the session's own shell, which is what makes a `cd` in it stick.
-///
-/// Stopping a command is a `SIGINT` to the group — a Ctrl-C, not a murder:
-/// the session's shell traps the signal and keeps its state, the command dies
-/// with a 130, and a command that ignores the interrupt is killed for real
-/// after a grace, with the shell respawning cold on the next command. A
-/// timeout's kill lands earlier still — the moment the command's own sentinel
-/// comes, since what survives the interrupt ignores it and the grace cannot
-/// reach any sooner.
-///
-/// Sub-agents run under [Shell.start]'s [Shell.start.oneShot] instead: a
-/// fresh subshell per command, no state, no sharing — a fan-out of workers
-/// that needs concurrency rather than a terminal.
+/// Runs commands under the [ShellDriver] it is given, in one persistent shell
+/// per chat; a sandboxed or `oneShot` command gets a fresh subshell. See
+/// "Running the commands" in `lib/data/builtin/AGENTS.md`.
 class LocalShell extends Shell {
   LocalShell({
     Map<String, String> Function()? environment,
     ShellDriver? Function({String? project})? driver,
-  })  : _environment = environment ?? _none,
+  })  : _environment = environment ?? (() => const {}),
         _driver = driver ?? _hostDriver;
 
   /// What the commands run under, read at each command for the reason
@@ -60,8 +33,6 @@ class LocalShell extends Shell {
   /// Applied over the process's own environment. Read at each command rather
   /// than captured, so a variable added in settings reaches the next one.
   final Map<String, String> Function() _environment;
-
-  static Map<String, String> _none() => const {};
 
   /// Set once we know whether `setsid` is on this machine. Without it a
   /// timeout can only kill the shell, leaving whatever it spawned running.
@@ -189,45 +160,27 @@ class LocalShell extends Shell {
     final where = "${Platform.operatingSystem} ${Platform.operatingSystemVersion}, "
         "commands run under $path";
     final bundled = tools?.names;
-    if (bundled != null) {
-      return _host(path, tools, "$where, with $bundled bundled with the app",
-          projectHome: projectHome, environment: environment0,
-          sandboxHelper: sandboxHelper);
-    }
-    final description = Platform.isAndroid && tools?.proot != null
-        ? "$where. There is no git and no package manager here; installing "
-            "a Linux from the Terminal settings gives you both"
-        : where;
-    return _host(path, tools, description,
-        projectHome: projectHome, environment: environment0,
-        sandboxHelper: sandboxHelper);
-  }
-
-  static ShellDriver _host(String path, Toolset? tools, String description,
-          {bool projectHome = false, Map<String, String>? environment,
-          SandboxHelper? sandboxHelper}) =>
-      ShellDriver(
-        commandFor: (_, _) => [path],
-        environment: {...?environment, ...?tools?.environment},
-        projectHome: projectHome,
-        description: description,
-        sandboxHelper: sandboxHelper,
-      );
-
-  @override
-  SandboxHelper? get driverSandboxHelper {
-    final helper = _driver()?.sandboxHelper;
-    return helper;
+    final description = bundled != null
+        ? "$where, with $bundled bundled with the app"
+        : Platform.isAndroid && tools?.proot != null
+            ? "$where. There is no git and no package manager here; installing "
+                "a Linux from the Terminal settings gives you both"
+            : where;
+    return ShellDriver(
+      commandFor: (_, _) => [path],
+      environment: {...?environment0, ...?tools?.environment},
+      projectHome: projectHome,
+      description: description,
+      sandboxHelper: sandboxHelper,
+    );
   }
 
   @override
-  String? tmpDirFor(String workspace) {
-    // The chat workspace's own scratch directory: inside the granted set a
-    // sandbox names, beside the files the command is there to touch. A
-    // directory per chat rather than one shared tmp, so two chats' scratch
-    // never meet.
-    return Directory("$workspace/.entoli-tmp").path;
-  }
+  SandboxHelper? get driverSandboxHelper => _driver()?.sandboxHelper;
+
+  /// Per chat, inside the sandbox's grant, so two chats' scratch never meet.
+  @override
+  String? tmpDirFor(String workspace) => "$workspace/.entoli-tmp";
 
   @override
   bool get platformIsWindows => Platform.isWindows;
@@ -316,7 +269,7 @@ class LocalShell extends Shell {
     Map<String, String>? environment,
   }) =>
       composeEnvironment(
-        defaults: _defaults,
+        defaults: defaultShellEnvironment,
         driver: driver,
         home: home,
         app: _environment(),
@@ -360,16 +313,11 @@ class LocalShell extends Shell {
   /// `0o111`: executable by anyone at all, which is as much as this can ask
   /// without knowing which of the three the app is running as.
   static const _anyExecuteBit = 0x49;
-
-  static const _defaults = defaultShellEnvironment;
 }
 
-/// The dispatcher the persistent shell runs under lives in `domain/shell.dart`
-/// now, shared with `IshShell`: the contract — a Ctrl-C the shell traps into a
-/// 130 while keeping its state, an `EXIT` trap that reports where the shell
-/// died, and a base64 line that keeps a multi-line command from stealing the
-/// queue — is the same whether the shell is a child process or an emulated
-/// guest. See `dispatcherScript` there.
+/// How a timeout is worded in an answer.
+String _word(Duration d) =>
+    d.inMilliseconds < 1000 ? "${d.inMilliseconds}ms" : "${d.inSeconds}s";
 
 /// What the flush of a pipe whose writers have gone is worth waiting for. A
 /// command that left one holding it pays this in full, once.
@@ -586,16 +534,14 @@ class _Session {
     if (start == -1) return;
     final end = buf.indexOf("@@\n", start);
     if (end == -1) return;
-    // The full sentinel is present — safe to consume the buffer now. Calling
-    // takeAll before this would lose data if the sentinel was split across two
-    // _onData calls.
-    run.chunks.clear();
     final line = buf.substring(start + 1, end);
     final rcAt = line.indexOf(" rc=") + " rc=".length;
     final cwdAt = line.indexOf(" cwd=", rcAt);
     if (cwdAt == -1) return;
     final rc = int.tryParse(line.substring(rcAt, cwdAt));
     if (rc == null) return;
+    // Only once the whole sentinel parsed, so a partial one loses nothing.
+    run.chunks.clear();
     final output = buf.substring(0, start);
     final cwd = line.substring(cwdAt + " cwd=".length);
     _current = null;
@@ -607,7 +553,7 @@ class _Session {
       cwd: cwd,
       exceptionInfo: run.interrupted
           ? run.byTimeout
-              ? "The command timed out after ${run.timeout.inSeconds}s and was "
+              ? "The command timed out after ${_word(run.timeout)} and was "
                   "interrupted. Anything it printed before that is above."
               : "The command was interrupted."
           : null,
@@ -646,10 +592,6 @@ class _Session {
     }
     _shell._cwds[_cwdPath]?.value = _displayCwd;
   }
-
-  /// How the timeout is worded in an answer.
-  static String _word(Duration d) =>
-      d.inMilliseconds < 1000 ? "${d.inMilliseconds}ms" : "${d.inSeconds}s";
 
   /// A stop, or a timeout: a `SIGINT` to the group, which is the Ctrl-C the
   /// session's trap turns into "the command is gone, the shell is not". A
@@ -740,13 +682,6 @@ class _RunState {
     return out;
   }
 
-  /// The whole, joined and emptied — called once, when the run is over.
-  String takeAll() {
-    final out = chunks.join("");
-    chunks.clear();
-    return out;
-  }
-
   String get output => chunks.join("");
 
   /// What the live view of this run says now: the tail of the output, with
@@ -825,24 +760,6 @@ class ShellUnavailable implements Exception {
   @override
   String toString() => message;
 }
-
-/// The line a refused write prints: either the shell's own (`sh: /path:
-/// Permission denied`), the tool's (`tool: cannot open '/path' for
-/// writing: Permission denied`), or Python's (`PermissionError: [Errno 13]
-/// Permission denied: '/path'`). A build's errors are the model's only
-/// report of what the sandbox took away, so all three wordings are matched.
-/// The path may be relative (`config.json`) — a command working inside its
-/// cwd — and is joined against it by the caller before the granted set is
-/// asked. Both straight and curly quote marks are accepted around the path:
-/// coreutils picks by locale, and `mkdir` on this machine prints the curly
-/// pair. The `writeWords` group is the tool's own name for a write —
-/// `cannot touch`, `cannot create` — and is what says a match may be worded
-/// `writing` rather than neutrally; the shell's redirect shape carries no
-/// such words, so it reads `denied` and a read refused by the file's own
-/// Unix perms is not misreported as a write.
-final RegExp deniedPathPattern = RegExp(
-    r"""(?<write>cannot (?:open|touch|create regular file|create(?: directory)?) )['\u2018]?(?<path>(?:/|[\w.@+-])[\w.@+/ -]*?)['\u2019]?(?<forwriting>\s*for writing)?(?:\s*in)?\s*: (?:Permission denied|Read-only file system)|(?:^|[\s:"'(\u2018\u2019])(?!cannot )['\u2018]?(?<path2>(?:/|[\w.@+-])[\w.@+/ -]*?)['\u2019]?(?:\s*in)?\s*: (?:Permission denied|Read-only file system)|PermissionError: \[Errno 13\] Permission denied: ['\u2018]?(?<pypath>[^'?\u2019:]*)['\u2019]?:?""",
-    multiLine: true);
 
 /// What a `oneShot` command is: today's contract, a fresh subshell per
 /// command, kept for sub-agents and for the platforms a persistent shell
@@ -944,24 +861,19 @@ class _OneShotRun implements ShellRun {
       // is killed, so waiting for the rest of it has to be bounded.
       await drained.timeout(_drainGrace, onTimeout: () {});
       await reading.cancel();
-      if (_killed) {
-        return ShellResult(
-          returnCode: -1,
-          output: output.toString(),
-          exceptionInfo: "The command was interrupted and killed.",
-          violations: await _violations(output.toString()),
-        );
-      }
-      if (timer.isActive) {
-        return ShellResult(returnCode: code, output: output.toString(),
-            violations: await _violations(output.toString()));
+      final text = output.toString();
+      final violations = await _violations(text);
+      if (!_killed && timer.isActive) {
+        return ShellResult(returnCode: code, output: text, violations: violations);
       }
       return ShellResult(
         returnCode: -1,
-        output: output.toString(),
-        exceptionInfo: "The command timed out after ${timeout.inSeconds}s and was killed. "
-            "Anything it printed before that is above.",
-        violations: await _violations(output.toString()),
+        output: text,
+        exceptionInfo: _killed
+            ? "The command was interrupted and killed."
+            : "The command timed out after ${_word(timeout)} and was killed. "
+                "Anything it printed before that is above.",
+        violations: violations,
       );
     } on ShellUnavailable catch (e) {
       // Fail-closed has its own words: a confinement that did not happen is
@@ -992,11 +904,9 @@ class _OneShotRun implements ShellRun {
         : await _readReport(reportPath);
     final verdict =
         sandboxViolations(report, text, cwd, sandbox);
-    // The mismatch is the scanner's own health signal: the report saw
-    // nothing while the output screamed, so the channel did not cover this
-    // process. One line, no path — a log is read by whoever it is sent to.
-    if (verdict.unreported &&
-        !verdict.violations.any((v) => v.startsWith("unreported"))) {
+    // The output named a denial the report did not: the shim missed this
+    // process. No path in the line.
+    if (verdict.unreported) {
       logFailure("sandbox",
           "denial in command output the report did not name; "
           "the process bypassed the report shim");

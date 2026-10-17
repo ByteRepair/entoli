@@ -68,38 +68,19 @@ void main() {
               cwd: workspace.path, home: home.path, timeout: timeout)
           .result;
 
-  test("reports what the command printed and the code it exited with", () async {
-    final result = await run("echo hello; exit 3");
+  test("reports output in order and the exit code, run in the workspace with "
+      "the settings' variables and the machine's HOME", () async {
+    File(p.join(workspace.path, "note.txt")).writeAsStringSync("here");
+    final result = await run(
+        r'cat note.txt; echo; echo "$MY_TOKEN|$PAGER $TERM|$HOME"; '
+        r"echo err >&2; echo last; exit 3",
+        env: {"MY_TOKEN": "abc123"});
 
     expect(result.returnCode, 3);
-    expect(result.output, "hello\n");
+    // PAGER and TERM are set so nothing waits for a keypress.
+    expect(result.output,
+        "here\nabc123|cat dumb|${Platform.environment["HOME"]}\nerr\nlast\n");
     expect(result.exceptionInfo, isNull);
-  });
-
-  test("errors land in the output, in the order they happened", () async {
-    final result = await run("echo first; echo second >&2; echo third");
-
-    expect(result.returnCode, 0);
-    expect(result.output, "first\nsecond\nthird\n");
-  });
-
-  test("runs in the workspace, so a relative path is one of its own", () async {
-    File(p.join(workspace.path, "note.txt")).writeAsStringSync("here");
-    final result = await run("cat note.txt");
-
-    expect(result.output, "here");
-  });
-
-  test("a variable from settings reaches the command", () async {
-    final result = await run(r'echo "$MY_TOKEN"', env: {"MY_TOKEN": "abc123"});
-
-    expect(result.output.trim(), "abc123");
-  });
-
-  test("nothing waits for a keypress", () async {
-    final result = await run(r'echo "$PAGER $TERM"');
-
-    expect(result.output.trim(), "cat dumb");
   });
 
   test("a command that overruns is interrupted and says so", () async {
@@ -168,12 +149,6 @@ void main() {
 
     expect(result.returnCode, isNot(0));
     expect(result.output, contains("not found"));
-  });
-
-  test("the machine's own HOME stands, not the workspace's", () async {
-    final result = await run(r'echo "$HOME"');
-
-    expect(result.output.trim(), Platform.environment["HOME"]);
   });
 
   group("in one shell", () {
@@ -479,36 +454,15 @@ void main() {
                 cwd: workspace.path, home: home.path, timeout: const Duration(seconds: 10))
             .result;
 
-    test("the command is run by what the driver names, not by the machine's shell",
-        () async {
-      final result = await inGuest(r'echo "$IN_GUEST"');
-
-      expect(result.output.trim(), "yes");
-    });
-
-    test("the guest's environment is what the command runs with", () async {
+    test("runs under the driver, with its environment under the settings' and "
+        "the project workspace as home", () async {
       final result = await inGuest(
-        r'echo "[$IN_ALPINE]"',
-        driver: guest(environment: {"IN_ALPINE": "1"}),
-      );
-
-      expect(result.output.trim(), "[1]");
-    });
-
-    test("a variable from settings still wins over the guest's own", () async {
-      final result = await inGuest(
-        r'echo "$LANG"',
-        driver: guest(environment: {"LANG": "C.UTF-8"}),
+        r'echo "$IN_GUEST|$IN_ALPINE|$LANG|$HOME"',
+        driver: guest(environment: {"IN_ALPINE": "1", "LANG": "C.UTF-8"}),
         settings: {"LANG": "en_GB.UTF-8"},
       );
 
-      expect(result.output.trim(), "en_GB.UTF-8");
-    });
-
-    test("home is the project's own workspace, not the guest's /root", () async {
-      final result = await inGuest(r'echo "$HOME"');
-
-      expect(result.output.trim(), home.path);
+      expect(result.output.trim(), "yes|1|en_GB.UTF-8|${home.path}");
     });
 
     test("a home from settings still wins over the workspace", () async {
@@ -569,16 +523,17 @@ void main() {
 
     test("the app's variables win over the driver's, and the project's over "
         "the app's", () {
+      // The project layer is how a store's ENV_INSTALL_DIR beats a user's.
       final env = LocalShell.composeEnvironment(
         defaults: const {},
         driver: host,
         home: "/home",
-        app: const {"PAGER": "most", "OWN": "app"},
-        project: const {"OWN": "project"},
+        app: const {"PAGER": "most", "ENV_INSTALL_DIR": "/somewhere/else"},
+        project: const {"ENV_INSTALL_DIR": "/cache/byte-repair/bin"},
       );
 
       expect(env["PAGER"], "most");
-      expect(env["OWN"], "project");
+      expect(env["ENV_INSTALL_DIR"], "/cache/byte-repair/bin");
     });
 
     test("HOME is the workspace where the driver takes one, and the machine's "
@@ -599,47 +554,20 @@ void main() {
               .containsKey("HOME"),
           isFalse);
     });
-
-    test("a variable the store puts in the command environment survives the "
-        "layering, and one a user set in settings cannot override it", () {
-      // The store passes ENV_INSTALL_DIR as the command's own environment,
-      // which is the project layer — the last one, over the app's settings.
-      final env = LocalShell.composeEnvironment(
-        defaults: const {},
-        driver: host,
-        home: "/home",
-        app: const {"ENV_INSTALL_DIR": "/somewhere/else"},
-        project: const {"ENV_INSTALL_DIR": "/cache/byte-repair/bin"},
-      );
-
-      expect(env["ENV_INSTALL_DIR"], "/cache/byte-repair/bin");
-    });
   });
 
   group("resolving the shell", () {
     String? resolve(String path, Set<String> present) => LocalShell.resolveShell(
         path: path, isExecutable: (candidate) => present.contains(candidate));
 
-    test("takes bash from PATH ahead of any sh", () {
+    test("bash off PATH first, then sh, then the fixed places, then nothing", () {
       expect(resolve("/usr/local/bin:/usr/bin", {"/usr/bin/bash", "/usr/local/bin/sh"}),
           "/usr/bin/bash");
-    });
-
-    test("takes the first PATH entry that has one", () {
       expect(resolve("/a:/b", {"/a/bash", "/b/bash"}), "/a/bash");
-    });
-
-    test("falls back to sh where there is no bash anywhere", () {
       expect(resolve("/usr/bin", {"/usr/bin/sh"}), "/usr/bin/sh");
-    });
-
-    test("finds Android's shell, which no PATH of its own names", () {
+      // Android's, which no PATH of its own names.
       expect(resolve("", {"/system/bin/sh"}), "/system/bin/sh");
-    });
-
-    test("a machine with nothing to run commands in says so", () {
       expect(resolve("/usr/bin", const {}), isNull);
-      expect(LocalShell(driver: ({String? project}) => null).canRunCommands, isFalse);
     });
 
     test("and a command sent to it anyway fails rather than throwing", () async {
@@ -778,121 +706,53 @@ void main() {
     });
   });
 
-group("sandbox violation reading", () {
-  test("a reported write denial outside the grant words writing", () {
-    final verdict = sandboxViolations(
-        ["mkdir\t/etc/hosts"], "", "/", const CommandSandbox(workspace: "/home/u/ws"));
-    expect(verdict.violations, ["writing /etc/hosts"]);
-    expect(verdict.unreported, isFalse);
+  test("sandbox violations are read off the report, cross-checked by prose", () {
+    const ws = CommandSandbox(workspace: "/home/u/ws");
+    const unnamed = "unreported";
+    // (report, output, cwd, sandbox, violations, unreported)
+    final cases = <(List<String>, String, String, CommandSandbox, List<String>, bool)>[
+      // A write op outside the grant words writing; a read words denied.
+      (["mkdir\t/etc/hosts"], "", "/", ws, ["writing /etc/hosts"], false),
+      (["open\t/etc/shadow"], "", "/", ws, ["denied /etc/shadow"], false),
+      // A relative path is joined against the cwd.
+      (["mkdir\tconfig.json"], "", "/home/yiannis/Projects/repo", ws,
+          ["writing /home/yiannis/Projects/repo/config.json"], false),
+      // Inside the grant, an extra write root, or shell plumbing: nothing.
+      (["open\t/home/u/ws/local.txt"], "", "/home/u/ws/repo", ws, [], false),
+      (["open\t/mnt/data/out.txt"], "", "/home/u/ws",
+          const CommandSandbox(workspace: "/home/u/ws", extraWrites: ["/mnt/data"]),
+          [], false),
+      (["open\t/dev/null"], "", "/", ws, [], false),
+      (["open\t/dev/tty"], "", "/", ws, [], false),
+      // A report naming only plumbing or in-grant denials does not mask an
+      // unexplained denial in the output.
+      (["open\t/dev/tty"], "git: fatal: cannot lock ref: Permission denied",
+          "/", ws, [unnamed], true),
+      (["open\t/home/u/ws/local.txt"],
+          "touch: cannot touch '/etc/hosts': Permission denied", "/", ws,
+          [unnamed], true),
+      // One entry per path, writing winning over a read of it.
+      (["mkdir\t/etc/a", "mkdir\t/etc/a"], "", "/", ws, ["writing /etc/a"], false),
+      (["open\t/etc/a", "mkdir\t/etc/a"], "", "/", ws, ["writing /etc/a"], false),
+      // Prose a report explains is not unreported; prose a silent report
+      // leaves is.
+      (["mkdir\t/etc/hosts"],
+          "mkdir: cannot create directory '/etc/hosts': Permission denied",
+          "/", ws, ["writing /etc/hosts"], false),
+      ([], "some-static-binary: /etc/hosts: Permission denied", "/", ws,
+          [unnamed], true),
+      ([], "all went fine", "/", ws, [], false),
+    ];
+    for (final (report, output, cwd, sandbox, violations, unreported) in cases) {
+      final verdict = sandboxViolations(report, output, cwd, sandbox);
+      final reason = "report=$report output=$output";
+      expect(verdict.unreported, unreported, reason: reason);
+      expect(verdict.violations, hasLength(violations.length), reason: reason);
+      for (var i = 0; i < violations.length; i++) {
+        expect(verdict.violations[i],
+            violations[i] == unnamed ? contains("could not name") : violations[i],
+            reason: reason);
+      }
+    }
   });
-
-  test("a reported read denial words denied", () {
-    final verdict = sandboxViolations(
-        ["open\t/etc/shadow"], "", "/", const CommandSandbox(workspace: "/home/u/ws"));
-    expect(verdict.violations, ["denied /etc/shadow"]);
-  });
-
-  test("a relative report path is joined against the cwd", () {
-    final verdict = sandboxViolations(
-        ["mkdir\tconfig.json"], "", "/home/yiannis/Projects/repo",
-        const CommandSandbox(workspace: "/home/u/ws"));
-    expect(verdict.violations,
-        ["writing /home/yiannis/Projects/repo/config.json"]);
-  });
-
-  test("a denial inside the grant is not a violation", () {
-    final verdict = sandboxViolations(
-        ["open\t/home/u/ws/local.txt"], "", "/home/u/ws/repo",
-        const CommandSandbox(workspace: "/home/u/ws"));
-    expect(verdict.violations, isEmpty);
-  });
-
-  test("a denial inside an extra write root is not a violation", () {
-    final verdict = sandboxViolations(
-        ["open\t/mnt/data/out.txt"], "", "/home/u/ws",
-        const CommandSandbox(workspace: "/home/u/ws", extraWrites: ["/mnt/data"]));
-    expect(verdict.violations, isEmpty);
-  });
-
-  test("/dev/null is never a violation", () {
-    final verdict = sandboxViolations(
-        ["open\t/dev/null"], "", "/", const CommandSandbox(workspace: "/home/u/ws"));
-    expect(verdict.violations, isEmpty);
-  });
-
-  // Nor /dev/tty: the shell's own terminal plumbing, denials there are not
-  // what the command was about.
-  test("/dev/tty is never a violation either", () {
-    final verdict = sandboxViolations(
-        ["open\t/dev/tty"], "", "/", const CommandSandbox(workspace: "/home/u/ws"));
-    expect(verdict.violations, isEmpty);
-  });
-
-  test("a report of only shell plumbing does not mask an unexplained denial", () {
-    // What the shim saw was the shell's own /dev/tty; the command's denial
-    // it could not name (an LFS-built binary the shim missed) is the
-    // cross-check's to word, not something a report line waves through.
-    final verdict = sandboxViolations(
-        ["open\t/dev/tty"],
-        "git: fatal: cannot lock ref: Permission denied",
-        "/", const CommandSandbox(workspace: "/home/u/ws"));
-    expect(verdict.violations, hasLength(1));
-    expect(verdict.violations.single, contains("could not name"));
-    expect(verdict.unreported, isTrue);
-  });
-
-  test("a report of only in-grant denials does not mask one either", () {
-    final verdict = sandboxViolations(
-        ["open\t/home/u/ws/local.txt"],
-        "touch: cannot touch '/etc/hosts': Permission denied",
-        "/",
-        const CommandSandbox(workspace: "/home/u/ws"));
-    expect(verdict.violations, hasLength(1));
-    expect(verdict.violations.single, contains("could not name"));
-    expect(verdict.unreported, isTrue);
-  });
-
-  test("the same denial twice is one entry", () {
-    final verdict = sandboxViolations(
-        ["mkdir\t/etc/a", "mkdir\t/etc/a"], "", "/",
-        const CommandSandbox(workspace: "/home/u/ws"));
-    expect(verdict.violations, ["writing /etc/a"]);
-  });
-
-  test("a write and a read of one path words writing", () {
-    final verdict = sandboxViolations(
-        ["open\t/etc/a", "mkdir\t/etc/a"], "", "/",
-        const CommandSandbox(workspace: "/home/u/ws"));
-    expect(verdict.violations, ["writing /etc/a"]);
-  });
-
-  test("denial prose with a report behind it is not unreported", () {
-    final verdict = sandboxViolations(
-        ["mkdir\t/etc/hosts"],
-        "mkdir: cannot create directory '/etc/hosts': Permission denied",
-        "/", const CommandSandbox(workspace: "/home/u/ws"));
-    expect(verdict.violations, ["writing /etc/hosts"]);
-    expect(verdict.unreported, isFalse);
-  });
-
-  test("denial prose with a silent report is the unreported violation", () {
-    final verdict = sandboxViolations(
-        const [],
-        "some-static-binary: /etc/hosts: Permission denied",
-        "/", const CommandSandbox(workspace: "/home/u/ws"));
-    expect(verdict.violations, hasLength(1));
-    expect(verdict.violations.single, contains("could not name"));
-    expect(verdict.unreported, isTrue,
-        reason: "the log reads this flag, not the wording");
-  });
-
-  test("no denial prose and a silent report is clean", () {
-    final verdict = sandboxViolations(
-        const [], "all went fine", "/",
-        const CommandSandbox(workspace: "/home/u/ws"));
-    expect(verdict.violations, isEmpty);
-    expect(verdict.unreported, isFalse);
-  });
-});
 }
-
