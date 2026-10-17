@@ -1,3 +1,4 @@
+import "../../../core/log.dart";
 import "../../../domain/llm_provider.dart";
 import "../../../domain/models.dart";
 import "anthropic_client.dart";
@@ -118,7 +119,8 @@ class LlmRegistry {
       return await clientOf(endpoint)
           .listModels()
           .timeout(const Duration(seconds: 10), onTimeout: () => const []);
-    } catch (_) {
+    } catch (e) {
+      logFailure("llm", "listing ${endpoint.config.id}'s models failed", e);
       return const [];
     }
   }

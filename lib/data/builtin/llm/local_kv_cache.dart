@@ -74,9 +74,7 @@ String kvNamespace({
 /// whole conversation — an exact reopen — and the shortest is the system+tools
 /// body the prefill warms; anything between is a continuation caught mid-history.
 List<String> kvPrefixKeys(List<LlmMessage> messages, List<LlmTool> tools) {
-  final head = _encodeTools(tools);
-  final keys = <String>[];
-  final buffer = StringBuffer(head);
+  final buffer = StringBuffer(_encodeTools(tools));
   final atBoundary = <String>[];
   for (final message in messages) {
     buffer.write(_encodeMessage(message));
@@ -84,10 +82,7 @@ List<String> kvPrefixKeys(List<LlmMessage> messages, List<LlmTool> tools) {
   }
   // Longest first, and never the empty prefix — restoring the bare tools head
   // would evict a warmer slot to load almost nothing.
-  for (var i = atBoundary.length - 1; i >= 0; i--) {
-    keys.add(atBoundary[i]);
-  }
-  return keys;
+  return atBoundary.reversed.toList();
 }
 
 /// What a request needs to reach the cache with: where its dumps live and which

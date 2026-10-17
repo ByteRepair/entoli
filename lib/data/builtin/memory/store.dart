@@ -105,29 +105,13 @@ class MemoryStore {
 
   /// Adds a memory. [chat] names the one that wrote it, or null for a manual
   /// one from the explorer. Throws on empty text.
-  Future<MemoryEntry> add(String text, {String? chat}) async {
-    if (text.trim().isEmpty) {
-      throw ArgumentError.value(text, "text", "must not be empty");
-    }
-    final entry = MemoryEntry(
-      id: const Uuid().v4(),
-      text: text.trim(),
-      at: DateTime.now().toUtc(),
-      chat: chat,
-    );
-    await _append(_memoryRecord(entry.id, entry.text, entry.at, chat));
-    await _rebuildIndex();
-    return entry;
-  }
+  Future<MemoryEntry> add(String text, {String? chat}) =>
+      update(const Uuid().v4(), text, chat: chat);
 
   /// A tombstone for [id]. One for a memory that is not there is a line the
   /// replay ignores.
   Future<void> delete(String id) async {
-    await _append(_encode({
-      "t": "d",
-      "id": id,
-      "at": DateTime.now().toUtc().toIso8601String(),
-    }));
+    await _append(_marker("d", id));
     await _rebuildIndex();
   }
 
@@ -157,13 +141,15 @@ class MemoryStore {
   /// The undo of [pin]: the last pin or unpin for an id stands.
   Future<void> unpin(String id) => _pinRecord(id, false);
 
-  Future<void> _pinRecord(String id, bool pinned) async {
-    await _append(_encode({
-      "t": pinned ? "p" : "u",
-      "id": id,
-      "at": DateTime.now().toUtc().toIso8601String(),
-    }));
-  }
+  Future<void> _pinRecord(String id, bool pinned) =>
+      _append(_marker(pinned ? "p" : "u", id));
+
+  /// A tombstone (`d`), pin (`p`) or unpin (`u`) line for [id].
+  static String _marker(String type, String id) => jsonEncode({
+        "t": type,
+        "id": id,
+        "at": DateTime.now().toUtc().toIso8601String(),
+      });
 
   /// When the store was last tidied by a consolidation pass, for the interval
   /// between passes. Nothing stamped, and a stamp that will not parse — a torn
@@ -203,11 +189,7 @@ class MemoryStore {
     var deleted = 0;
     for (final id in delete ?? const <String>[]) {
       if (!live.containsKey(id)) continue;
-      await _append(_encode({
-        "t": "d",
-        "id": id,
-        "at": DateTime.now().toUtc().toIso8601String(),
-      }));
+      await _append(_marker("d", id));
       deleted++;
     }
     for (final entry in (replaces ?? const <String, String>{}).entries) {
@@ -234,7 +216,7 @@ class MemoryStore {
   }
 
   String _memoryRecord(String id, String text, DateTime at, String? chat) =>
-      _encode({
+      jsonEncode({
         "t": "m",
         "id": id,
         "text": text,
@@ -243,11 +225,10 @@ class MemoryStore {
       });
 
   /// The memories [query] is about: the ones that clear [recallMinScore],
-  /// best first, at most [limit]. [entries] spares the log a second read where
-  /// the caller has it in hand already.
+  /// best first, at most [recallLimit]. [entries] spares the log a second read
+  /// where the caller has it in hand already.
   Future<List<MemoryEntry>> search(
     String query, {
-    int limit = recallLimit,
     List<MemoryEntry>? entries,
   }) async {
     final all = entries ?? await this.entries();
@@ -273,7 +254,7 @@ class MemoryStore {
     for (final hit in hits) {
       if (hit.$2 < recallMinScore) break;
       kept.add(hit.$1);
-      if (kept.length == limit) break;
+      if (kept.length == recallLimit) break;
     }
     return kept;
   }
@@ -288,8 +269,6 @@ class MemoryStore {
     if (!await directory.exists()) await directory.create(recursive: true);
     await fs.file(_logPath).writeAsString("$line\n", mode: FileMode.append);
   }
-
-  String _encode(Object? value) => jsonEncode(value);
 
   /// The replay: the last record for an id stands, a tombstone after a memory
   /// removes it, and the first line that will not parse ends the read —
@@ -307,8 +286,8 @@ class MemoryStore {
       } else if (record.pin != null) {
         pinned[record.id] = record.pin!;
       } else {
+        // A reassigned key keeps its first place: an update stays put.
         final memory = record.entry!;
-        latest.putIfAbsent(memory.id, () => memory);
         latest[memory.id] = memory;
       }
     }
