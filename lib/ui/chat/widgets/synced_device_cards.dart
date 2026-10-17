@@ -76,9 +76,7 @@ List<_DeviceGroup> _deviceGroups(List<RemoteChatEntry> entries) {
       _DeviceGroup(
         deviceId: id,
         deviceName: names[id]!,
-        projects: [
-          for (final project in projects[id]!) project,
-        ]..sort((a, b) => projectLabel(a)
+        projects: projects[id]!.toList()..sort((a, b) => projectLabel(a)
             .toLowerCase()
             .compareTo(projectLabel(b).toLowerCase())),
       ),
@@ -156,24 +154,7 @@ class _DeviceCardState extends ConsumerState<_DeviceCard> {
                     ChipRowEntry(
                       key: ValueKey(project),
                       child: ActionChip(
-                        // The icon rides in the label rather than the avatar
-                        // slot, the way the empty-chat badges keep the label
-                        // and any mark beside it one piece.
-                        label: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            if (projectIcon(project) case final icon?)
-                              Padding(
-                                padding: const EdgeInsets.only(right: 6),
-                                child: Icon(icon, size: 18),
-                              ),
-                            Text(
-                              projectLabel(project),
-                              style:
-                                  projectLabelStyle(ref.watch(omadaOnProvider(project))),
-                            ),
-                          ],
-                        ),
+                        label: ProjectChipLabel(project),
                         onPressed: () => selectRemote(
                           ref,
                           (deviceId: group.deviceId, project: project),
@@ -187,4 +168,28 @@ class _DeviceCardState extends ConsumerState<_DeviceCard> {
       ),
     );
   }
+}
+/// A project badge's label: its built-in icon where it has one, then its name.
+/// In the label rather than the chip's avatar slot, since a `ChoiceChip`
+/// paints its selected check over the avatar.
+class ProjectChipLabel extends ConsumerWidget {
+  const ProjectChipLabel(this.project, {super.key});
+
+  final String? project;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) => Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (projectIcon(project) case final icon?)
+            Padding(
+              padding: const EdgeInsets.only(right: 6),
+              child: Icon(icon, size: 18),
+            ),
+          Text(
+            projectLabel(project),
+            style: projectLabelStyle(ref.watch(omadaOnProvider(project))),
+          ),
+        ],
+      );
 }

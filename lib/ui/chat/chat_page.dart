@@ -163,9 +163,7 @@ class _NewChatState extends ConsumerState<_NewChat> {
         workspace: null,
       );
     }
-    return NeedsSetupBar(
-      onOpenSettings: () => openSetupSettings(context),
-    );
+    return const NeedsSetupBar();
   }
 
   @override
@@ -231,28 +229,7 @@ class _ProjectBadges extends ConsumerWidget {
                 duration: const Duration(milliseconds: 180),
                 curve: Curves.easeOut,
                 child: ChoiceChip(
-                  // The icon rides in the label rather than the avatar slot:
-                  // Material's ChoiceChip paints the selected check over the
-                  // avatar, so an icon there disappears under the tick when
-                  // picked. In the label it sits beside the text, and the check
-                  // keeps the leading slot to itself the way it had before the
-                  // icon was added.
-                  label: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      if (projectIcon(project) case final icon?)
-                        Padding(
-                          padding: const EdgeInsets.only(right: 6),
-                          child: Icon(icon, size: 18),
-                        ),
-                       Text(
-                         projectLabel(project),
-                         style: projectLabelStyle(
-                           ref.watch(omadaOnProvider(project)),
-                         ),
-                       ),
-                    ],
-                  ),
+                  label: ProjectChipLabel(project),
                   selected: project == selected,
                   onSelected: (on) => selectProject(ref, on ? project : null),
                 ),
@@ -611,10 +588,6 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
     });
   }
 
-  /// Streaming fires this every frame, so it jumps rather than starting a new
-  /// 100ms animation each time.
-  void _scrollToBottom() => _follow.jumpIfFollowing();
-
   /// Land at the end, and keep landing until the end stops moving. A builder
   /// lays out only what shows, so the extent any one frame reports is an
   /// estimate, and a single jump lands short of the last message.
@@ -627,11 +600,6 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
         _scroll.jumpTo(position.maxScrollExtent);
         if (tries > 0) _settleAtBottom(tries - 1);
       });
-
-  /// What the list does on the way past, and what [ScrollFollow] answers for:
-  /// a gesture away from the end stops the turn following the reader down, and
-  /// arriving at the end starts it again.
-  bool _onScroll(ScrollNotification n) => _follow.onNotification(n);
 
   /// Ask whether to keep an expired temporary chat (turning its TTL off) or
   /// delete it. The sweep handles non-open chats silently; this is the one
@@ -685,7 +653,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
   Widget _local(BuildContext context) {
     final view = ref.watch(chatControllerProvider(widget.chatId));
     final notifier = ref.read(chatControllerProvider(widget.chatId).notifier);
-    ref.listen(chatControllerProvider(widget.chatId), (_, _) => _scrollToBottom());
+    ref.listen(chatControllerProvider(widget.chatId), (_, _) => _follow.jumpIfFollowing());
     final chat = view.chat;
     if (chat == null) return _waiting();
     _opening(chat);
@@ -727,9 +695,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
                   .watch(appConfigProvider)
                   .projectWorkspaceDir(project: chat.state.project),
             )
-          : NeedsSetupBar(
-              onOpenSettings: () => openSetupSettings(context),
-            ),
+          : const NeedsSetupBar(),
     );
   }
 
@@ -742,7 +708,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
     final view = ref.watch(mirrorChatControllerProvider(widget.chatId));
     final driver = ref.read(mirrorChatControllerProvider(widget.chatId).notifier);
     final control = ref.watch(mirrorControlProvider(widget.chatId));
-    ref.listen(mirrorChatControllerProvider(widget.chatId), (_, _) => _scrollToBottom());
+    ref.listen(mirrorChatControllerProvider(widget.chatId), (_, _) => _follow.jumpIfFollowing());
     // One pass over the Remotes list for the two things drawn from it, so the
     // page rebuilds when they change rather than whenever anything does.
     final (:online, :deviceName) = ref.watch(remoteChatsProvider.select((chats) {
@@ -931,10 +897,13 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
     final reading = ref.watch(readAloudProvider);
     if (chat.messages.isEmpty) return whenEmpty;
     final entries = entriesOf(chat);
+    // A mirror has no editing controller: its log is the home device's. And
+    // while a turn runs, the controller refuses every edit.
+    final mutable = editing != null && !view.isRunning;
     return Stack(
       children: [
         NotificationListener<ScrollNotification>(
-          onNotification: _onScroll,
+          onNotification: _follow.onNotification,
           child: ListView.builder(
               controller: _scroll,
               itemCount: entries.length,
@@ -951,19 +920,9 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
                       onTapLink: (href) => _openLink(context, href),
                     )),
                 MessageEntry(:final message, :final inOmadaSection, :final last) =>
-                  Builder(builder: (context) {
-                    // A mirror has no editing controller: the log belongs to
-                    // the home device, so the whole row of things to do to a
-                    // message is out — and while a turn runs, the controller
-                    // refuses them all.
-                    final mutable = editing != null && !view.isRunning;
-                    return MessageBubble(
+                  MessageBubble(
                       chatId: widget.chatId,
                       message: message,
-                      author: message.author,
-                      // The member's picture, only where a member speaks —
-                      // the label's own condition. Read per message: one
-                      // provider entry per addressed member.
                       avatar: _avatarOf(chat, message),
                       entoli: inOmadaSection,
                       isWaiting: view.isRunning && last,
@@ -983,8 +942,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
                           ? () => readAloud(context, ref, message.id, message.plainText)
                           : null,
                       isSpeaking: reading == message.id,
-                    );
-                  }),
+                    ),
               }),
         ),
         // Only once the reader has left the end: up there a turn no longer

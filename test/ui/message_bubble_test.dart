@@ -49,8 +49,7 @@ void main() {
         Scaffold(
           body: MessageBubble(
             chatId: chatId,
-            message: message,
-            author: author,
+            message: author == null ? message : message.copyWith(author: author),
             avatar: avatar,
             isWaiting: isWaiting,
             waitingNotice: waitingNotice,

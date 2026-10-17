@@ -6,9 +6,7 @@ import "../../settings/settings_page.dart";
 /// has not been set up yet: why there is nothing to type into, and the way
 /// to change that. Follows `ViewOnlyBar`'s shape.
 class NeedsSetupBar extends StatelessWidget {
-  const NeedsSetupBar({super.key, this.onOpenSettings});
-
-  final VoidCallback? onOpenSettings;
+  const NeedsSetupBar({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -36,7 +34,7 @@ class NeedsSetupBar extends StatelessWidget {
             ),
             const SizedBox(width: 12),
             TextButton.icon(
-              onPressed: onOpenSettings,
+              onPressed: () => _openSetupSettings(context),
               icon: const Icon(Icons.settings_outlined, size: 16),
               label: const Text("Open Settings"),
             ),
@@ -47,9 +45,8 @@ class NeedsSetupBar extends StatelessWidget {
   }
 }
 
-/// Pushes the settings page at the Byte Repair category, the target of
-/// `NeedsSetupBar.onOpenSettings`.
-Future<void> openSetupSettings(BuildContext context) =>
+/// The settings page at the Byte Repair category, where setup is run.
+Future<void> _openSetupSettings(BuildContext context) =>
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => const SettingsPage(

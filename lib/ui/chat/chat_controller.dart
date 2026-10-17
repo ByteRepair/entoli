@@ -178,7 +178,7 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
 
   /// Open a turn: its recorder, its completer, and its place in the table.
   _RunningTurn _openTurnEntry(String replyId) {
-    final turn = _RunningTurn._(replyId: replyId, done: Completer<TurnEnd?>());
+    final turn = _RunningTurn(replyId: replyId, done: Completer<TurnEnd?>());
     turn.recorder = TurnRecorder(
         append: _append, onParts: (parts) => _writeReply(turn, parts));
     turn.recorder.open(replyId);
@@ -411,7 +411,7 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
       await _say(userMsg, replacing: replacing);
       return;
     }
-    _schedule(chat, mentioned(chat, userMsg), userPrompt: userMsg);
+    _schedule(chat, _mentioned(chat, userMsg), userPrompt: userMsg);
     await _dispatch();
   }
 
@@ -433,7 +433,7 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
     await _say(userMsg);
   }
 
-  /// The compact turn's body, driven from [openTurn] by the wired check on
+  /// The compact turn's body, driven from [_openTurn] by the wired check on
   /// the prompt. The turn is already open — the entry seated, the prompt and
   /// its empty reply logged — so this runs the summarizer, writes the marker,
   /// and ends the turn the way any event stream would have. Shaped like the
@@ -510,8 +510,8 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
     // reads the address off what composing wrote into the message.
     final author = member != null
         ? "${CompletionKind.agent.trigger}$member"
-        : authorFor(chat, userMsg);
-    await openTurn(
+        : _authorFor(chat, userMsg);
+    await _openTurn(
       chat: chat,
       prompt: userMsg,
       history: chat.messages.take(at).toList(),
@@ -537,7 +537,7 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
   /// decided ahead of the prompt — a dispatched item — rather than from it.
   /// [generation] is the dispatch wave the turn belongs to, on the entry for
   /// the handoff that reads it.
-  Future<void> openTurn({
+  Future<void> _openTurn({
     required Chat chat,
     required Message prompt,
     required List<Message> history,
@@ -636,10 +636,9 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
   /// participants" in `lib/ui/chat/AGENTS.md`.
   String? _memberAnswering(Chat chat, Message prompt) {
     if (!ref.read(omadaOnProvider(chat.state.project))) return null;
-    final named = prompt.role == MessageRole.assistant
+    return prompt.role == MessageRole.assistant
         ? _mentionIn(chat, prompt)
-        : _memberIfKnown(chat, nameOf(authorFor(chat, prompt)));
-    return named;
+        : _memberIfKnown(chat, nameOf(_authorFor(chat, prompt)));
   }
 
   /// The member [name] answers for, where the library still knows them — an
@@ -662,7 +661,7 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
   /// floor over. Omada off never stamps: the reply is the main agent's, and a
   /// label on it would claim a member authored what is the house's voice.
   /// See "The contract between direct and Omada chats" in `lib/ui/chat/AGENTS.md`.
-  String? authorFor(Chat chat, Message prompt) =>
+  String? _authorFor(Chat chat, Message prompt) =>
       !ref.read(omadaOnProvider(chat.state.project)) ||
               shellBypassCommand(prompt.plainText) != null ||
               wiredSkillFromText(prompt.plainText) != null
@@ -721,22 +720,20 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
     turn.finishing = false;
     // The fresh entry has no lane of its own: the Continue path is what runs
     // a member's turn again, and the field is what relay's busy lane reads.
-    turn.omadaMember ??= _memberIfKnown(chat, nameOf(reply.author));
+    final member = _memberIfKnown(chat, nameOf(reply.author));
+    turn.omadaMember ??= member;
     turn.recorder.open(reply.id, existing: reply.parts);
 
     _listen(turn, ref.read(chatRepositoryProvider).resumeTurn(chatId,
         history: chat.messages,
         compactions: chat.compactions,
-        omadaMember: _memberIfKnown(chat, nameOf(reply.author))));
+        omadaMember: member));
   }
 
-  /// What a turn can be carried on from: an assistant's reply, never a
-  /// command's — see "Carrying on an interrupted turn" for why a command is
-  /// left out.
-  static bool _resumableReply(Message m) =>
-      m.role == MessageRole.assistant &&
-      shellBypassCommand(m.plainText) == null &&
-      wiredSkillFromText(m.plainText) == null;
+  /// What a turn can be carried on from: an assistant's reply. A command's
+  /// turn is ruled out by its prompt, in `endsUnfinished` — not by the reply's
+  /// own text, which a model may well start with `!` (a markdown image).
+  static bool _resumableReply(Message m) => m.role == MessageRole.assistant;
 
   void _listen(_RunningTurn turn, Stream<AgentEvent> stream) {
     turn.sub = stream.listen(
@@ -786,11 +783,11 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
     if (chat == null || state.isRunning) return;
     final prompt = _promptFor(chat, messageId);
     if (prompt == null) return;
-    await openTurn(
+    await _openTurn(
       chat: chat,
       prompt: prompt,
       history: chat.messages.take(chat.messages.indexOf(prompt)).toList(),
-      opening: [_newReply(author: authorFor(chat, prompt))],
+      opening: [_newReply(author: _authorFor(chat, prompt))],
       replacing: _replyFor(chat, messageId),
     );
   }
@@ -857,8 +854,7 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
         // turn-scoped view state: the error part is what the conversation
         // keeps, and neither field outlives the turn.
         turn.retryable = retryable;
-        final lineAt = message.indexOf("\n");
-        turn.errorLine = lineAt < 0 ? message : message.substring(0, lineAt);
+        turn.errorLine = message.split("\n").first;
         break;
       case StepLimitEvent():
       case InfoEvent():
@@ -1201,7 +1197,7 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
   /// the room as it always was, the house answering whatever is said. The
   /// sigil is off what comes back: a schedule is keyed by the library's
   /// name for the member.
-  List<String> mentioned(Chat chat, Message message) {
+  List<String> _mentioned(Chat chat, Message message) {
     if (!ref.read(omadaOnProvider(chat.state.project)) ||
         shellBypassCommand(message.plainText) != null ||
         wiredSkillFromText(message.plainText) != null) {
@@ -1221,7 +1217,7 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
             .toList();
   }
 
-  /// The routing [turn]'s reply closes with: [mentioned] over the parts it
+  /// The routing [turn]'s reply closes with: [_mentioned] over the parts it
   /// ends on, sigils on.
   List<String> _routeOf(_RunningTurn turn) {
     final chat = state.chat;
@@ -1242,11 +1238,11 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
     ]));
   }
 
-  /// The routing record a say carries: [mentioned]'s answer, sigils on — the
+  /// The routing record a say carries: [_mentioned]'s answer, sigils on — the
   /// as-typed dialect the author stamp and the mention documents keep, and
   /// the one the projection words addresses and identities in.
   List<String> _stampedMentions(Chat chat, Message message) => [
-        for (final member in mentioned(chat, message))
+        for (final member in _mentioned(chat, message))
           "${CompletionKind.agent.trigger}$member",
       ];
 
@@ -1260,7 +1256,7 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
   /// one past the reply that names it.
   final Map<String?, List<_Scheduled>> _schedules = {};
 
-  /// One dispatch at a time; a second arriving mid-[openTurn] asks for a
+  /// One dispatch at a time; a second arriving mid-[_openTurn] asks for a
   /// pass rather than running one beside it.
   bool _dispatching = false;
 
@@ -1318,7 +1314,7 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
   ///
   /// A dispatched item is gone from its FIFO before the turn opens, so a
   /// settle re-entering while the turn runs finds the schedule behind it and
-  /// not the item running. Re-entering is real — a say landing mid-[openTurn]
+  /// not the item running. Re-entering is real — a say landing mid-[_openTurn]
   /// reads the same queue — so a second call asks for a pass rather than
   /// running two sequential items at once.
   Future<void> _dispatch() async {
@@ -1386,7 +1382,7 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
     }
     final chat = state.chat;
     if (chat == null || reply == null) return;
-    await openTurn(
+    await _openTurn(
       chat: chat,
       prompt: reply,
       // The conversation the member answers ends before the reply that hands
@@ -1464,8 +1460,7 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
   void _onError(_RunningTurn turn, Object e) {
     turn.retryable = false;
     final message = e.toString();
-    final lineAt = message.indexOf("\n");
-    turn.errorLine = lineAt < 0 ? message : message.substring(0, lineAt);
+    turn.errorLine = message.split("\n").first;
     turn.recorder.handle(ErrorEvent(message));
     _finishTurn(turn);
   }
@@ -1475,19 +1470,8 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
   /// without the event would let `onDone` reach [_finishTurn] first and record
   /// the turn as having finished.
   @override
-  Future<void> abort() async {
-    final turns = List.of(_turns.values);
-    if (turns.isEmpty) return;
-    // The round stops whole: every running turn goes, and what was said while
-    // they ran is dropped by the endings they record.
-    for (final turn in turns) {
-      turn.retryGen++;
-      turn.recorder.outcome = TurnEnd.aborted;
-    }
-    await ref.read(chatRepositoryProvider).abort(chatId);
-    await Future.wait(
-        [for (final turn in turns) _finishTurn(turn)]);
-  }
+  Future<void> abort() =>
+      _stopAll((turn) => turn.recorder.outcome = TurnEnd.aborted);
 
   /// Stop a turn without ending it: the agent is cancelled and the log is left
   /// **open**, so the chat offers to carry it on. See "Carrying on an
@@ -1497,17 +1481,19 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
   /// cancelling closes the stream, so [_finishTurn] can run from the `onDone`
   /// rather than from the line below, and it has to make the same decision
   /// whichever gets there first.
-  Future<void> interrupt() async {
-    if (!state.isRunning) return;
+  Future<void> interrupt() => _stopAll((turn) => turn.interrupted = true);
+
+  /// The round stops whole: every running turn is marked, then the agent is
+  /// cancelled and each turn finished.
+  Future<void> _stopAll(void Function(_RunningTurn) mark) async {
     final turns = List.of(_turns.values);
     if (turns.isEmpty) return;
     for (final turn in turns) {
       turn.retryGen++;
-      turn.interrupted = true;
+      mark(turn);
     }
     await ref.read(chatRepositoryProvider).abort(chatId);
-    await Future.wait(
-        [for (final turn in turns) _finishTurn(turn)]);
+    await Future.wait([for (final turn in turns) _finishTurn(turn)]);
   }
 
   @override
@@ -1531,7 +1517,7 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
       _turns[replyId]?.recorder.recordApprovalAnswer(approvalId, r.name);
     }
     state = state.copyWith(
-        approvals: _withoutApproval(state.approvals, approvalId));
+        approvals: _dropItem(state.approvals, approvalId, (a) => a.id));
     // A project-tier answer (always in project) wrote `project.json` behind
     // the settings page's back: the provider loaded once at startup and its
     // state is stale until told. Same for the chat's `meta.json`, whose
@@ -1547,7 +1533,7 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
     final repo = ref.read(chatRepositoryProvider);
     await repo.respondQuestions(chatId, requestId, answers);
     state = state.copyWith(
-        questions: _withoutQuestion(state.questions, requestId));
+        questions: _dropItem(state.questions, requestId, (q) => q.id));
   }
 
   /// The map without the turn's own list — what a finished turn leaves of the
@@ -1556,16 +1542,7 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
           Map<String, List<T>> map, String replyId) =>
       Map<String, List<T>>.from(map)..remove(replyId);
 
-  /// The map without [id] from any turn's list. Both lists hold items with
-  /// an `id` field, read for the removal.
-  static Map<String, List<ToolApproval>> _withoutApproval(
-          Map<String, List<ToolApproval>> map, String id) =>
-      _dropItem(map, id, (item) => item.id);
-
-  static Map<String, List<AskRequest>> _withoutQuestion(
-          Map<String, List<AskRequest>> map, String id) =>
-      _dropItem(map, id, (item) => item.id);
-
+  /// The map without [id] from any turn's list.
   static Map<String, List<T>> _dropItem<T>(
           Map<String, List<T>> map, String id, Object? Function(T) keyOf) =>
       {
@@ -1584,20 +1561,7 @@ final chatControllerProvider =
 /// [TurnRecorder] unchanged under parallel turns — and the fields below it
 /// are the retry machinery, scoped to the turn they carry.
 class _RunningTurn {
-  /// [onParts] is wired late, from [attach]: the recorder wants the turn it
-  /// belongs to, and the turn does not exist until its constructor returns.
-  factory _RunningTurn(
-      {required String replyId,
-      required Completer<TurnEnd?> done,
-      required Future<void> Function(List<ChatRecord>) append}) {
-    final turn = _RunningTurn._(replyId: replyId, done: done);
-    turn.recorder = TurnRecorder(append: append, onParts: (parts) {
-      if (turn.onParts != null) turn.onParts!(turn, parts);
-    });
-    return turn;
-  }
-
-  _RunningTurn._({required this.replyId, required this.done});
+  _RunningTurn({required this.replyId, required this.done});
 
   /// The reply this turn writes, and the table's key.
   final String replyId;
@@ -1605,10 +1569,6 @@ class _RunningTurn {
   /// Everything the turn's events become: the reply's parts, and the records
   /// that persist them.
   late final TurnRecorder recorder;
-
-  /// The controller's own fold of the parts into the conversation — wired at
-  /// open, so a recorder built for one chat's log cannot outlive it.
-  void Function(_RunningTurn turn, List<MessagePart> parts)? onParts;
 
   /// Completes at the turn's true end — across retry rounds, one completion.
   final Completer<TurnEnd?> done;
