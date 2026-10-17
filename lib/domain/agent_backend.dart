@@ -365,6 +365,14 @@ class TurnSettings {
   /// is the main agent — the house — answering as it always has.
   final String? omadaMember;
 
+  /// Whether Omada runs in this turn's project at all: the room is in force
+  /// whatever the say was addressed. The roster tool's gate, beside
+  /// [omadaMember] — that one says who answers, this says the room exists at
+  /// all. A say in the room that names a member who has since left the
+  /// library still answers through the house, so the room fact and the
+  /// member fact stay separate.
+  final bool omada;
+
   /// How many model calls this turn may make before it stops. The app's own
   /// answer for the level that resolved the turn — a project's own, else the
   /// app default, else the backend's. The backend's [BuiltinOptions.stepLimit]
@@ -399,6 +407,7 @@ class TurnSettings {
     this.includesUserInstructions = false,
     this.environment = const {},
     this.omadaMember,
+    this.omada = false,
     this.turnMaxSteps,
     this.tone = Tone.none,
     this.citations = false,

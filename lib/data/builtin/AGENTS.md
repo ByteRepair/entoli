@@ -645,6 +645,19 @@ carries` rule. The install and the settings page's import and delete write
 through `withWritableDir`, because the skills directories are read-only — see
 the root notes, "On-disk layout".
 
+## The room's roster (the `list_participants` tool)
+
+An omada turn carries the room's roster: `list_participants` answers each
+member's handle (sigil on) and their description, from the project's agent
+library — the same tier walk the composer's `@` menu serves. The turn's
+Omada answer travels as `TurnSettings.omada`; the backend turns it into the
+agent's `roomParticipants`, and non-null there is the one gate the tool
+list and the dispatch share: a call where the turn holds no room finds
+`unknownTool`. Read-only and instant, like `skill` — no approval, no
+running label. An empty roster answers rather than failing: the room is in
+force however few members it defines, and "no members" is a fact worth the
+model knowing.
+
 ## Compaction (the `compact` callback)
 
 `AgentBackend.compact` is the summarizer: the conversation projected the way

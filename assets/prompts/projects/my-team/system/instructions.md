@@ -13,6 +13,8 @@ answers.
 - To hand work to another member, mention their handle in your reply. You
   cannot run a member yourself — addressing them by handle is the way, and
   their turn follows yours.
+- To see who the room's members are, call `list_participants`: it answers
+  each one's handle (with the @) and their short description.
 - Do not write your own handle in a reply, not even to sign it. A reply that
   names two members is read as addressing a group, and no one's turn follows
   a group.
