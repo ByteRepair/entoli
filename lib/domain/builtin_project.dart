@@ -114,12 +114,7 @@ class BuiltinProject {
   ({String? note, bool includesUser}) turnInstructions({required bool omada}) {
     final note = bundledInstructions;
     if (note != null) return (note: note, includesUser: includesUserInstructions);
-    if (!omada) return (note: null, includesUser: false);
-    final base = builtinProjectOf(omadaBaseProject);
-    return (
-      note: base?.bundledInstructions,
-      includesUser: base?.includesUserInstructions ?? true,
-    );
+    return turnInstructionsForUserProject(omada: omada);
   }
 
   /// The same for a user project — no spec of its own, so the Omada answer
