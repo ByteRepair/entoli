@@ -65,19 +65,21 @@ void main() {
     expect(driver.environment["PROOT_LOADER_32"], "/lib/libproot-loader32.so");
   });
 
-  test("the project workspace is bound at /root, not the data dir at its own path",
-      () {
-    final command = build().commandFor(cwd, home);
+  test("the binds: the project workspace at /root, the skills and the "
+      "resolver at clean guest paths, and nothing of the data dir", () {
+    final driver = build();
+    final binds = valuesOf(driver.commandFor(cwd, home), "-b");
 
-    expect(valuesOf(command, "-b"), contains("$home:/root"));
-    expect(valuesOf(command, "-b"), isNot(contains("$dataDir:$dataDir")));
-  });
-
-  test("skills are bound at clean guest paths", () {
-    final command = build().commandFor(cwd, home);
-
-    expect(valuesOf(command, "-b"), contains("$defaultSkillsBundled:/opt/skills-bundled"));
-    expect(valuesOf(command, "-b"), contains("$defaultUserSkills:/opt/skills"));
+    expect(binds, containsAll([
+      "$home:/root",
+      "$defaultSkillsBundled:/opt/skills-bundled",
+      "$defaultUserSkills:/opt/skills",
+      // Android keeps no resolv.conf of its own.
+      "${proot.resolvConf}:/etc/resolv.conf",
+    ]));
+    expect(binds, isNot(contains("$dataDir:$dataDir")));
+    expect(driver.hostToGuestPaths[defaultSkillsBundled], "/opt/skills-bundled");
+    expect(driver.hostToGuestPaths[defaultUserSkills], "/opt/skills");
   });
 
   test("a project's own skills dirs are bound beside the default's", () {
@@ -97,71 +99,31 @@ void main() {
     expect(driver.hostToGuestPaths[projectUserSkills], "/opt/skills-project");
   });
 
-  test("the guest is given a resolver, since Android keeps no such file", () {
-    final command = build().commandFor(cwd, home);
-
-    expect(valuesOf(command, "-b"),
-        contains("${proot.resolvConf}:/etc/resolv.conf"));
-  });
-
-  test("it runs proot, ends in the guest's shell, and chroots into the rootfs",
-      () {
+  test("it runs proot as root in the rootfs, kills tracees with the tracer, "
+      "survives hard links, and ends in the guest's shell", () {
     final command = build().commandFor(cwd, home);
 
     expect(command.first, proot.binary);
     expect(command.last, "/bin/sh");
-    expect(valuesOf(command, "-r"),
-        ["/data/user/0/pkg/cache/rootfs/alpine"]);
-  });
-
-  test("the tracees are killed with the tracer, and hard links are survivable",
-      () {
-    final command = build().commandFor(cwd, home);
-
-    expect(command, contains("--kill-on-exit"));
-    expect(command, contains("--link2symlink"));
-    expect(command, contains("-0"));
+    expect(valuesOf(command, "-r"), ["/data/user/0/pkg/cache/rootfs/alpine"]);
+    expect(command, containsAll(["--kill-on-exit", "--link2symlink", "-0"]));
   });
 
   test("the working directory is the guest path of the chat workspace, not /", () {
-    final command = build().commandFor(cwd, home);
-
-    final w = valuesOf(command, "-w");
-    expect(w, isNotEmpty);
-    expect(w.first, isNot(contains(".")));
-    expect(w.first, startsWith("/root"));
-    expect(w.first, contains("chats/abc-123"));
+    expect(valuesOf(build().commandFor(cwd, home), "-w"), ["/root/chats/abc-123"]);
   });
 
-  test("the guest's own PATH, not the host's, and no HOME", () {
+  test("the guest's own environment: its PATH and package manager, no HOME "
+      "(the shell sets the project's), nothing of the parent's", () {
     final driver = build();
 
     expect(driver.environment["PATH"], contains("/usr/bin"));
     expect(driver.environment["PATH"], isNot(contains("/system/bin")));
     expect(driver.environment.containsKey("HOME"), isFalse);
-  });
-
-  test("the guest declares its own package manager, since the catalog knows it",
-      () {
-    expect(build().environment["ENV_PACKAGE_MANAGER"], "apk");
-  });
-
-  test("the parent's environment does not leak into the guest", () {
-    expect(build().includeParentEnvironment, isFalse);
-  });
-
-  test("a guest's HOME is the project's workspace, so the shell sets it", () {
-    expect(build().projectHome, isTrue);
-  });
-
-  test("the guest root is /root", () {
-    expect(build().guestRoot, "/root");
-  });
-
-  test("host-to-guest path mappings include skills", () {
-    final mappings = build().hostToGuestPaths;
-    expect(mappings[defaultSkillsBundled], "/opt/skills-bundled");
-    expect(mappings[defaultUserSkills], "/opt/skills");
+    expect(driver.environment["ENV_PACKAGE_MANAGER"], "apk");
+    expect(driver.includeParentEnvironment, isFalse);
+    expect(driver.projectHome, isTrue);
+    expect(driver.guestRoot, "/root");
   });
 
   test("what the model is told is the distribution, the architecture it is "
