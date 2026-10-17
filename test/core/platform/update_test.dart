@@ -47,7 +47,8 @@ void main() {
       );
 
   group("the check", () {
-    test("puts a newer AppImage over the file the build runs from", () async {
+    test("puts a newer, executable AppImage over the file the build runs from",
+        () async {
       final image = File("${tmp.path}/entoli-x86_64.AppImage")
         ..writeAsStringSync("old");
       final network = release("v1.3.0", appImageAsset, "new".codeUnits);
@@ -57,68 +58,40 @@ void main() {
 
       expect(image.readAsStringSync(), "new");
       expect(network.asked, 2, reason: "the redirect and the download");
-    }, skip: Platform.isWindows ? "POSIX only" : null);
-
-    test("stages nothing beside it once the rename is done", () async {
-      final image = File("${tmp.path}/entoli-x86_64.AppImage")
-        ..writeAsStringSync("old");
-      final network = release("v1.3.0", appImageAsset, "new".codeUnits);
-
-      await linuxUpdater(image.path, network).check(
-          version: "1.2.3", enabled: true);
-
-      expect(tmp.listSync().where((e) => e.path.contains(".entoli-")),
-          isEmpty, reason: "the staged file was renamed in, not copied");
-    }, skip: Platform.isWindows ? "POSIX only" : null);
-
-    test("what it names as the build is executable, or nothing would launch",
-        () async {
-      final image = File("${tmp.path}/entoli-x86_64.AppImage")
-        ..writeAsStringSync("old");
-      final network = release("v1.3.0", appImageAsset, "new".codeUnits);
-
-      await linuxUpdater(image.path, network).check(
-          version: "1.2.3", enabled: true);
-
       expect(image.statSync().mode & 0x40 != 0, isTrue,
           reason: "chmod ran before the rename");
+      expect(tmp.listSync().where((e) => e.path.contains(".entoli-")),
+          isEmpty, reason: "the staged file was renamed in, not copied");
     }, skip: Platform.isWindows ? "POSIX only" : null);
 
     test("stops at the redirect when the tag is not newer", () async {
       final image = File("${tmp.path}/entoli-x86_64.AppImage")
         ..writeAsStringSync("old");
-      final network = release("v1.3.0", appImageAsset, "new".codeUnits);
+      for (final running in ["2.0.0", "1.3.0"]) {
+        final network = release("v1.3.0", appImageAsset, "new".codeUnits);
 
-      await linuxUpdater(image.path, network)
-          .check(version: "2.0.0", enabled: true);
+        await linuxUpdater(image.path, network)
+            .check(version: running, enabled: true);
 
-      expect(network.asked, 1, reason: "the redirect, and not the asset");
+        expect(network.asked, 1, reason: "the redirect, and not the asset");
+      }
       expect(image.readAsStringSync(), "old");
     });
 
-    test("stops at the redirect when the tag names the running build", () async {
-      final network = release("v1.2.3", appImageAsset, "new".codeUnits);
-
-      await linuxUpdater("${tmp.path}/entoli-x86_64.AppImage", network)
-          .check(version: "1.2.3", enabled: true);
-
-      expect(network.asked, 1);
-    });
-
-    test("a setting that is off asks nothing at all", () async {
+    test("off, an unknown version, or a debug run asks nothing at all",
+        () async {
       final network = release("v1.3.0", appImageAsset, "new".codeUnits);
+      final image = "${tmp.path}/entoli-x86_64.AppImage";
 
-      await linuxUpdater("${tmp.path}/entoli-x86_64.AppImage", network)
-          .check(version: "1.2.3", enabled: false);
-
-      expect(network.asked, 0);
-    });
-
-    test("a version the bundle will not answer for asks nothing", () async {
-      final network = release("v1.3.0", appImageAsset, "new".codeUnits);
-
-      await linuxUpdater("${tmp.path}/entoli-x86_64.AppImage", network)
-          .check(version: null, enabled: true);
+      await linuxUpdater(image, network).check(version: "1.2.3", enabled: false);
+      await linuxUpdater(image, network).check(version: null, enabled: true);
+      await DesktopUpdater(
+        flavour: UpdateFlavour.linux,
+        cacheDir: tmp.path,
+        appImage: image,
+        debug: true,
+        httpClient: network,
+      ).check(version: "1.2.3", enabled: true);
 
       expect(network.asked, 0);
     });
@@ -149,19 +122,6 @@ void main() {
           .check(version: "1.2.3", enabled: true);
 
       expect(image.readAsStringSync(), "old");
-    });
-
-    test("a debug or profile run asks nothing at all", () async {
-      final network = release("v1.3.0", appImageAsset, "new".codeUnits);
-      await DesktopUpdater(
-        flavour: UpdateFlavour.linux,
-        cacheDir: tmp.path,
-        appImage: "${tmp.path}/entoli-x86_64.AppImage",
-        debug: true,
-        httpClient: network,
-      ).check(version: "1.2.3", enabled: true);
-
-      expect(network.asked, 0);
     });
 
     test("a body that arrives short of its declared length is refused",
@@ -210,7 +170,8 @@ void main() {
       expect(scripts.single, contains("'${msi.path}'"));
     });
 
-    test("the waiter waits for the app and installs silently", () {
+    test("the waiter waits for the app and installs the quoted path silently",
+        () {
       final script = windowsUpdateCommand(4242, r"C:\Users\a b\entoli.msi");
       expect(script, startsWith("Wait-Process -Id 4242 "));
       expect(script, contains("-Verb RunAs"),
@@ -219,17 +180,10 @@ void main() {
       expect(script, contains("'/i'"));
       expect(script, contains("'/qn'"));
       expect(script, contains("'/norestart'"));
-    });
-
-    test("the waiter quotes the installer path it was given", () {
-      final script = windowsUpdateCommand(4242, r"C:\Users\a b\entoli.msi");
       expect(script, contains(r"'C:\Users\a b\entoli.msi'"),
           reason: "an unquoted path with a space is two arguments");
-    });
-
-    test("the waiter survives a quote in the path", () {
-      final script = windowsUpdateCommand(1, r"C:\Users\a'b\entoli.msi");
-      expect(script, contains(r"'C:\Users\a''b\entoli.msi'"));
+      expect(windowsUpdateCommand(1, r"C:\Users\a'b\entoli.msi"),
+          contains(r"'C:\Users\a''b\entoli.msi'"));
     });
   });
 
