@@ -331,18 +331,14 @@ class SyncHub implements ArtifactBytes {
 
   /// Every arm of [SyncMessage] lands here, in arrival order per peer.
   /// Serving arms read the repository; mirror arms update [_mirrors] and
-  /// notify whoever is watching. The control arms are Phase 3: declared on
-  /// the wire, unimplemented here — a peer sending one gets nothing back,
-  /// which a view-only mirror is the honest answer to for now.
+  /// notify whoever is watching.
   Future<void> _dispatch(LivePeer peer, SyncMessage message) async {
     switch (message) {
       case SyncPing():
         await peer.send(const SyncMessage.pong());
       case SyncPong():
         peer.lastPong = DateTime.now();
-      case SyncWelcome(:final chats):
-        await _applyWelcome(peer, chats);
-      case SyncChatsChanged(:final chats):
+      case SyncWelcome(:final chats) || SyncChatsChanged(:final chats):
         await _applyWelcome(peer, chats);
       case SyncChatOpen(:final chatId, :final fromLine):
         await _serveOpen(peer, chatId, fromLine);
@@ -735,16 +731,10 @@ class SyncHub implements ArtifactBytes {
   Future<void> sendForTest(String chatId, SyncMessage message) async =>
       _peerHosting(chatId)?.send(message);
 
-  /// Records in pages small enough for one message. A data channel refuses a
-  /// message past its negotiated maximum, and a conversation of any length is
-  /// far past it — half a megabyte of `conv.jsonl` is an ordinary size, and
-  /// sending that whole was a mirror that opened empty and said nothing about
-  /// why. Measured rather than counted: one record can be a whole file.
-  /// What one message may carry. A data channel refuses more, and both the
-  /// things that can exceed it — a chat's log, an attachment — are paged
-  /// against it. Records are measured as encoded JSON; resource chunks are
-  /// measured as source bytes, which base64 expands by a third, so they get
-  /// their own smaller bound rather than sharing this one and overshooting.
+  /// What one message may carry: a data channel refuses more, and a chat's
+  /// log or an attachment is far past it. Records are measured as encoded
+  /// JSON (one record can be a whole file); resource chunks as source bytes,
+  /// which base64 expands by a third, hence their smaller bound.
   static const _messageBytes = 48 * 1024;
   static const _chunkBytes = 32 * 1024;
 
@@ -821,12 +811,8 @@ class SyncHub implements ArtifactBytes {
   void _collectResourceChunk(String id, String bytesB64, bool done) {
     final transfer = _pendingResources[id];
     if (transfer == null || transfer.completer.isCompleted) return;
-    if (!done) {
-      transfer.buffer.add(base64Decode(bytesB64));
-      return;
-    }
     transfer.buffer.add(base64Decode(bytesB64));
-    // `takeBytes` already hands back a Uint8List of exactly the right length.
+    if (!done) return;
     final bytes = transfer.buffer.takeBytes();
     transfer.completer.complete(bytes.isEmpty ? null : bytes);
     _pendingResources.remove(id);
