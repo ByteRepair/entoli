@@ -65,6 +65,7 @@ const nonModifyingPrograms = {
 /// tools. A listed flag present means the segment is not proven read-only.
 const guardedFlags = <String, Set<String>>{
   "sort": {"-o", "--output"},
+  "tree": {"-o"},
   "file": {"-m", "--magic-file", "-f", "--files-from", "-C", "--compile"},
   "find": {
     "-delete",
@@ -83,7 +84,7 @@ const guardedFlags = <String, Set<String>>{
 /// The read-only subcommands of `git`. The command carries its own guards:
 /// flags and sub-sub-commands of these that write are in [gitGuardedArgs],
 /// and the two whose bare positional argument creates a thing — `git branch
-/// feature`, `git tag v1` — take the positional rule in [_gitProfile].
+/// feature`, `git tag v1` — take the positional rule in [plainGitUse].
 const _gitNonModifyingSubcommands = {
   "status",
   "log",
@@ -124,10 +125,13 @@ const gitGuardedArgs = {
     "--edit-description",
     "--force",
     "--delete",
+    "--set-upstream-to",
+    "--unset-upstream",
   },
   "tag": {"-a", "-s", "-d", "-f", "-m", "-F", "--force"},
   "diff": {"--output"},
   "log": {"--output"},
+  "show": {"--output"},
   "reflog": {"delete", "-delete", "expire"},
   // Re-running `git init` on an existing repository copies the template's
   // files — the hooks the wholesale grant covers — and a vouch would do it
@@ -244,6 +248,11 @@ SegmentProfile profileSegment(String segment) {
   if (program == "git") {
     return _gitProfile(program, words);
   }
+  // `uniq IN OUT` writes OUT; with one file or none it only reads.
+  if (program == "uniq" &&
+      words.skip(1).where((w) => !w.startsWith("-")).length > 1) {
+    return SegmentProfile._(true, SegmentReach.other, program, words, null);
+  }
   if (nonModifyingPrograms.contains(program) &&
       !anyGuardedArg(guardedFlags[program], words.skip(1))) {
     return SegmentProfile._(
@@ -257,28 +266,28 @@ SegmentProfile profileSegment(String segment) {
   return SegmentProfile._(true, SegmentReach.other, program, words, null);
 }
 
+/// Whether `git` [words] are a plain use of one of [subcommands]: no `-c`
+/// (configuration in the command decides what later git tools run), no
+/// guarded argument, and no bare name after `branch` or `tag` — `git branch
+/// feature` writes a ref as surely as `-d` deletes one, and the guard table
+/// cannot name a shape a flag never carries. The read-only tier and the
+/// grant policy's vouch both hold git to this.
+bool plainGitUse(List<String> words, Set<String> subcommands) {
+  if (words.length < 2 || words[1] == "-c") return false;
+  final sub = words[1].toLowerCase();
+  if (!subcommands.contains(sub)) return false;
+  final tail = words.skip(2);
+  if (anyGuardedArg(gitGuardedArgs[sub], tail)) return false;
+  return !((sub == "branch" || sub == "tag") &&
+      tail.any((w) => !w.startsWith("-")));
+}
+
 SegmentProfile _gitProfile(String program, List<String> words) {
-  if (words.length >= 2 && words[1] == "-c") {
-    // `git -c core.fsmonitor=<program> ...`: configuration in the command
-    // decides what later git tools run, and the parse's whole-command veto
-    // catches the assignment on top of this.
+  if (!plainGitUse(words, _gitNonModifyingSubcommands)) {
     return SegmentProfile._(true, SegmentReach.other, program, words, null);
   }
-  final sub = words.length >= 2 ? words[1].toLowerCase() : "";
-  if (sub.isEmpty || !_gitNonModifyingSubcommands.contains(sub)) {
-    return SegmentProfile._(true, SegmentReach.other, program, words, null);
-  }
+  final sub = words[1].toLowerCase();
   final tail = words.sublist(2);
-  if (anyGuardedArg(gitGuardedArgs[sub], tail)) {
-    return SegmentProfile._(true, SegmentReach.other, program, words, null);
-  }
-  // The two subcommands whose plain positional argument creates a thing:
-  // `git branch feature` writes refs/heads/feature as surely as -d deletes
-  // one, and the guard table cannot name a shape a flag never carries.
-  if ((sub == "branch" || sub == "tag") &&
-      tail.any((w) => !w.startsWith("-"))) {
-    return SegmentProfile._(true, SegmentReach.other, program, words, null);
-  }
   // A second-level subcommand reads: `remote add`, `worktree remove`, and
   // `symbolic-ref` with a target all write through the guard list; the read
   // shapes name nothing to write to.
@@ -297,30 +306,30 @@ SegmentProfile _gitProfile(String program, List<String> words) {
   );
 }
 
-/// The redirect targets that are not writes: the files every command throws
-/// output away through, and the fd-duplication forms — whose marker is the
-/// `&` the tokenizer keeps as its own word, so `2>&1` reads as `>` with the
-/// target `&`. A bare `> 2` stays a write: in the shell that is a file
-/// named `2`, not a descriptor.
-final _fdTarget = RegExp(r"^&\d*$");
-
-bool _isExemptRedirectWord(String word) {
-  final w = word.toLowerCase();
-  return w == "/dev/null" ||
-      w == "/dev/stdout" ||
-      w == "/dev/stderr" ||
-      _fdTarget.hasMatch(w);
-}
-
 /// Whether the segment's words carry a redirect whose target names a file:
 /// the ops the words keep — `>` and `>>` — are checked against the word
-/// that follows them and against the exemption forms.
+/// that follows them. Not writes: the files every command throws output
+/// away through, and fd duplication — the tokenizer keeps the `&` as its
+/// own word, so `2>&1` reads `>`, `&`, `1`. Only a descriptor (or `-`)
+/// after the `&` is one: `>&file` writes the file. A bare `> 2` stays a
+/// write too: in the shell that is a file named `2`.
 bool _diskRedirect(List<String> words) {
   for (var i = 0; i < words.length; i++) {
     final w = words[i];
     if (!(w == ">" || w == ">>")) continue;
-    final target = i + 1 < words.length ? words[i + 1] : "";
-    if (target.isEmpty || _isExemptRedirectWord(target)) continue;
+    var target = i + 1 < words.length ? words[i + 1].toLowerCase() : "";
+    if (target == "&") {
+      target = i + 2 < words.length ? words[i + 2] : "";
+      if (target == "-" || RegExp(r"^\d+$").hasMatch(target)) continue;
+    } else if (RegExp(r"^&\d+$").hasMatch(target)) {
+      continue;
+    }
+    if (target.isEmpty ||
+        target == "/dev/null" ||
+        target == "/dev/stdout" ||
+        target == "/dev/stderr") {
+      continue;
+    }
     return true;
   }
   return false;

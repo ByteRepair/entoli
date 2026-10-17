@@ -97,12 +97,8 @@ Future<CommandGrants> commandGrantsFor(CommandGrantsInput input) async {
   var lost = false;
   for (var i = 0; i < profiles.length; i++) {
     final profile = profiles[i];
-    if (lost) {
-      workDirs[i] = null;
-      continue;
-    }
+    if (lost) continue;
     if (!profile.modelable) {
-      workDirs[i] = null;
       // A segment the words cannot name may still have moved the shell: a
       // `cd` or `pushd` with an expansion inside it sends the directory
       // somewhere unnameable, and no vouch survives standing on a directory
@@ -113,15 +109,11 @@ Future<CommandGrants> commandGrantsFor(CommandGrantsInput input) async {
       }
       continue;
     }
-    if (profile.words.isEmpty) {
-      workDirs[i] = null;
-      continue;
-    }
+    if (profile.words.isEmpty) continue;
     final lead = profile.words.first.toLowerCase();
     if (lead == "popd" || (lead == "pushd" && profile.words.length == 1)) {
       // A bare `pushd` swaps the tracker's stack, which this reads nothing
       // of, and `popd`'s destination is the same unknown.
-      workDirs[i] = null;
       lost = true;
       continue;
     }
@@ -132,7 +124,6 @@ Future<CommandGrants> commandGrantsFor(CommandGrantsInput input) async {
         // A cd that fails short-circuits the rest under `&&`, but a `;`
         // compound runs on in the old directory — so the tracker only
         // stands where the target exists, and loses otherwise.
-        workDirs[i] = null;
         lost = true;
         continue;
       }
@@ -176,22 +167,10 @@ Future<CommandGrants> commandGrantsFor(CommandGrantsInput input) async {
 /// one of the plain shapes, not the guarded deletions and renames and never
 /// a `-c`. Reached through [grantWarranted]'s fallthrough — a non-git or
 /// non-vouched profile arriving is the answer false.
-bool segmentVouched(SegmentProfile profile) {
-  if (!profile.modelable) return false;
-  final words = profile.words;
-  if (words.length < 2 || words[0].toLowerCase() != "git") return false;
-  if (words[1] == "-c") return false;
-  final sub = words[1].toLowerCase();
-  if (!vouchedGitSubcommands.contains(sub)) return false;
-  if (anyGuardedArg(gitGuardedArgs[sub], words.skip(2))) return false;
-  // The same positional rule the read-only tier holds branch and tag to: a
-  // bare name in `git tag v1` is a ref being created, the banner's to see.
-  if ((sub == "branch" || sub == "tag") &&
-      words.skip(2).any((w) => !w.startsWith("-"))) {
-    return false;
-  }
-  return true;
-}
+bool segmentVouched(SegmentProfile profile) =>
+    profile.modelable &&
+    profile.program == "git" &&
+    plainGitUse(profile.words, vouchedGitSubcommands);
 
 /// A warranted git segment's grant. [gitDir] is the repository the command
 /// works against — the walk-up's finding, or the main repository's `.git`
