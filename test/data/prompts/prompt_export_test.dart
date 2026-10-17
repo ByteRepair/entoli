@@ -5,8 +5,6 @@ import "package:archive/archive.dart";
 import "package:flutter_test/flutter_test.dart";
 
 import "package:agent_chat/core/config.dart";
-import "package:agent_chat/data/prompts/bundled_skill_data.dart"
-    show bundledSkillFiles;
 import "package:agent_chat/data/prompts/prompt_export.dart";
 import "package:agent_chat/data/prompts/skill_import.dart";
 import "package:agent_chat/domain/models.dart";
@@ -68,23 +66,6 @@ void main() {
       // The parser takes the folder off again — it is the folder it named
       // the skill by.
       expect(package.entries.map((e) => e.$1), contains("SKILL.md"));
-    }, timeout: testTimeout);
-
-    test("a bundled skill with binary files exports them whole", () async {
-      final bytes =
-          await exportPromptBytes(config, CompletionKind.skill, "web-artifacts-builder");
-      expect(bytes, isNotNull);
-
-      final package = parseSkillPackage(bytes!);
-      expect(package.name, "web-artifacts-builder");
-      final archive = package.entries
-          .firstWhere((e) => e.$1 == "scripts/shadcn-components.tar.gz");
-      final embedded = bundledSkillFiles
-          .firstWhere((f) =>
-              f.name == "web-artifacts-builder" &&
-              f.relativePath == "scripts/shadcn-components.tar.gz");
-      expect(archive.$2, embedded.bytes,
-          reason: "a binary file must survive the zip round-trip");
     }, timeout: testTimeout);
 
     test("a project's inherited entry exports from the default project's "

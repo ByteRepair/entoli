@@ -8,9 +8,6 @@ flutter pub get
 # reaches models.dart through skill_validate), whose freezed and json parts do
 # not exist until this has run — a cold checkout cannot compile them first.
 dart run build_runner build
-# The fetched skills the bundled presets are completed with; before the
-# generator that walks them.
-tool/fetch-skills.sh
 dart run tool/gen_bundled_skills.dart
 dart run tool/gen_prompts.dart
 dart run tool/gen_privacy_policy.dart

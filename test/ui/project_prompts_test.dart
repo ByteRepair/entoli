@@ -76,7 +76,7 @@ void main() {
       await settleIo(tester);
       await reloadLibrary(tester, app, project: "work");
 
-      // The fetched presets sort ahead of the user's entries, and the list
+      // The bundled presets sort ahead of the user's entries, and the list
       // scrolls one way: `local-note` is brought up from below `review`
       // first, and `review` is then below it, still a forward scroll away.
       await scrollTo(tester, find.text("local-note"));
@@ -206,8 +206,8 @@ void main() {
       await settleIo(tester);
       await reloadLibrary(tester, app, project: "byte-repair");
 
-      // The bundled presets the library serves every project — the local
-      // three and the fetched ones together, one badge each.
+      // The bundled presets the library serves every project — the
+      // locally written skills, one badge each.
       await scrollTo(tester, find.text("artifact"));
       expect(find.text("artifact"), findsOneWidget);
       expect(find.text("Bundled"), findsWidgets);
