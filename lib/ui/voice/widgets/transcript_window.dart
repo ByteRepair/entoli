@@ -37,7 +37,8 @@ class _TranscriptWindowState extends State<TranscriptWindow> {
   @override
   void didUpdateWidget(TranscriptWindow old) {
     super.didUpdateWidget(old);
-    if (widget.lines.length != old.lines.length) _keepUp();
+    // Identity, not length: a reply growing in place wraps onto more rows.
+    if (!identical(widget.lines, old.lines)) _keepUp();
   }
 
   /// A line the user has scrolled away from does not pull them back; see
