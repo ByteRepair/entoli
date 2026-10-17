@@ -2,6 +2,7 @@ import "dart:async";
 
 import "package:clock/clock.dart";
 
+import "../core/log.dart";
 import "file_watches.dart";
 import "reminder_alarms.dart";
 import "trigger.dart";
@@ -192,7 +193,10 @@ class ClockKind extends TriggerKind {
     final done = Completer<void>();
     controller = StreamController<TriggerFire>(
       onListen: () {
-        unawaited(start().then((_) => done.complete()));
+        // A start that throws still settles [TriggerWatch.started].
+        unawaited(start()
+            .catchError((Object e) => logFailure("trigger", "watch did not start", e))
+            .whenComplete(done.complete));
       },
       onPause: () => timer?.cancel(),
       onResume: aim,
@@ -342,10 +346,8 @@ class FileKind extends TriggerKind {
                   if (fire != null) controller.add(fire);
                 }
               },
-              onError: (Object _) {
-                // A watcher over a removed directory is silence; the next
-                // registration rebuilds what the list still asks for.
-              },
+              // The next registration rebuilds what the list still asks for.
+              onError: (Object e) => logFailure("trigger", "file watch failed", e),
             );
         subscriptions.add(sub);
       }
@@ -354,7 +356,10 @@ class FileKind extends TriggerKind {
     final done = Completer<void>();
     controller = StreamController<TriggerFire>(
       onListen: () {
-        unawaited(start().then((_) => done.complete()));
+        // A start that throws still settles [TriggerWatch.started].
+        unawaited(start()
+            .catchError((Object e) => logFailure("trigger", "watch did not start", e))
+            .whenComplete(done.complete));
       },
       onCancel: () async {
         for (final sub in subscriptions) {
