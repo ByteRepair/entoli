@@ -212,7 +212,7 @@ class BuiltinBackend implements AgentBackend {
       // Before the model is resolved, because a `!` turn never needs one: a
       // chat with no provider configured can still run a command.
       if (prompt != null && shellBypassCommand(prompt.plainText) != null) {
-        await _runBypass(chatId, prompt, controller,
+        await _runBypass(chatId, prompt, controller, stopKey,
             history: history,
             project: project,
             sharedWorkspace: settings.sharedWorkspace,
@@ -507,24 +507,25 @@ class BuiltinBackend implements AgentBackend {
         }
         controller.add(event);
       }
-      if (endedDone &&
-          settings.memory.extract &&
-          memoryStore != null &&
-          settings.memory.bgProvider != null) {
+      final writer = endedDone && settings.memory.extract
+          ? _resolveModel(settings.memory.bgModel, settings.memory.bgProvider,
+              defaultOf: LlmProviderConfig.lightDefaultOf)
+          : null;
+      if (memoryStore != null && writer != null) {
         // Unwatched on purpose: the turn is over, and the background memory
         // work must neither slow anything down nor be able to fail. The
         // consolidation rides behind the extraction rather than beside it —
         // the two would race over the store, and the call order is the
         // script's in a test.
         unawaited(_extractMemories(
+          target: writer,
           store: memoryStore,
           chatId: chatId,
           prompt: prompt,
           history: history,
           reply: reply,
-          settings: settings,
         ).then((_) => _consolidateMemories(
-            store: memoryStore, chatId: chatId, settings: settings)));
+            target: writer, store: memoryStore, chatId: chatId)));
       }
     } catch (e) {
       _fail(controller, "$e");
@@ -556,7 +557,8 @@ class BuiltinBackend implements AgentBackend {
   Future<void> _runBypass(
     String chatId,
     Message prompt,
-    StreamController<AgentEvent> controller, {
+    StreamController<AgentEvent> controller,
+    String stopKey, {
     required List<Message> history,
     required String? project,
     required bool sharedWorkspace,
@@ -576,7 +578,7 @@ class BuiltinBackend implements AgentBackend {
         project: project);
     // Before the wait, so Stop kills the command rather than only closing the
     // stream over it.
-    final stopKey = _running.add(chatId, run.kill);
+    _running.replace(stopKey, run.kill);
     controller.add(StatusEvent(runningTool(bashToolName)));
     _reportOutput(controller, run);
 
@@ -586,7 +588,6 @@ class BuiltinBackend implements AgentBackend {
     final filling = _sessionOf(chatId, history);
     final result = await run.result;
     final session = await filling;
-    _running.removeKey(stopKey);
     // An aborted turn writes no part, so the session must not hold one either.
     if (controller.isClosed) return;
     // The directory the shell was left in rides on the part as a fact; the
@@ -715,8 +716,7 @@ class BuiltinBackend implements AgentBackend {
             first: mine && !ownBefore,
             viewer: viewer,
             load: _resourcesOf(chatId));
-        if (entries.length + confirmed <= tail.length &&
-            _sameSlice(tail, confirmed, entries)) {
+        if (_sameSlice(tail, confirmed, entries)) {
           confirmed += entries.length;
           confirmedIds.add(message.id);
           ownBefore = ownBefore || mine;
@@ -963,19 +963,13 @@ class BuiltinBackend implements AgentBackend {
   /// fails by writing nothing and leaving a line in the log — a turn is over
   /// when its last event is out, whatever this is still doing.
   Future<void> _extractMemories({
+    required ({LlmClient client, String modelId}) target,
     required MemoryStore store,
     required String chatId,
     required Message? prompt,
     required List<Message> history,
     required String reply,
-    required TurnSettings settings,
   }) async {
-    final target = _resolveModel(
-      settings.memory.bgModel,
-      settings.memory.bgProvider,
-      defaultOf: LlmProviderConfig.lightDefaultOf,
-    );
-    if (target == null) return;
     final said = (prompt ??
             history.lastWhereOrNull((m) => m.role == MessageRole.user))
         ?.plainText ??
@@ -1039,19 +1033,13 @@ class BuiltinBackend implements AgentBackend {
   /// [consolidationMinInterval], one at a time. A tidy store says nothing on
   /// success, and a failure is a log line like any other background failure.
   Future<void> _consolidateMemories({
+    required ({LlmClient client, String modelId}) target,
     required MemoryStore store,
     required String chatId,
-    required TurnSettings settings,
   }) async {
     if (_consolidating) return;
     _consolidating = true;
     try {
-      final target = _resolveModel(
-        settings.memory.bgModel,
-        settings.memory.bgProvider,
-        defaultOf: LlmProviderConfig.lightDefaultOf,
-      );
-      if (target == null) return;
       final all = await store.entries();
       // Pinned memories are the user's standing orders rather than store
       // growth: the pass neither sees them nor may spend them.
@@ -1105,9 +1093,6 @@ class BuiltinBackend implements AgentBackend {
     }
   }
 
-  /// The background answer: the last completion the model streams within the
-  /// window, trimmed, and nothing where it streamed no completion at all. The
-  /// window is what keeps a stuck provider from holding a pass forever.
   /// The one-shot read, in the three shapes that ask it: the last completion
   /// the model streams within the window, trimmed, and null where it streamed
   /// nothing. The three call sites differ only in the timeout and in what an
@@ -1169,9 +1154,11 @@ class BuiltinBackend implements AgentBackend {
     return (
       add: memories is List ? _factsFrom(memories) : const [],
       replaces: replaces,
-      delete: decoded["delete"] is List
-          ? _stringsFrom(decoded["delete"] as List)
-          : const [],
+      delete: [
+        if (decoded["delete"] case final List delete)
+          for (final entry in delete)
+            if (entry is String) entry,
+      ],
     );
   }
 
@@ -1197,11 +1184,6 @@ class BuiltinBackend implements AgentBackend {
     }
     return facts;
   }
-
-  List<String> _stringsFrom(Object? value) => [
-        for (final entry in (value as List))
-          if (entry is String) entry,
-      ];
 
   /// The config is read once and reused: going back through the registry by id
   /// would re-read and re-parse `settings.json` for each question asked of it.

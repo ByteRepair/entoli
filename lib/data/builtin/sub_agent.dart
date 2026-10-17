@@ -112,10 +112,7 @@ class SubAgentRunner {
   /// with no overlay. The [prompt] is the sub-agent's whole task — it sees
   /// nothing else of the parent's conversation.
   Future<ShellResult> run(String agentName, String prompt, {String? callId}) async {
-    final document = library?.find(CompletionKind.agent, agentName) ??
-        library?.find(CompletionKind.agent, "general");
-    final agentPrompt = document?.body;
-
+    final agentPrompt = _agentPrompt(agentName);
     final session = BuiltinSession();
     // The task as a message, because that is what opens a turn now. A
     // sub-agent's transcript opens on the assistant's message, so this one is
@@ -132,14 +129,16 @@ class SubAgentRunner {
   /// its own transcript. The same thing the user's Continue does one level up,
   /// and the same three steps: project the log back, nudge, run the loop.
   Future<ShellResult> resume(String agentName, String callId) async {
-    final document = library?.find(CompletionKind.agent, agentName) ??
-        library?.find(CompletionKind.agent, "general");
-    final agentPrompt = document?.body;
-
+    final agentPrompt = _agentPrompt(agentName);
     final session = BuiltinSession()
       ..replaceWith(await projectionOf(await log.read(callId), load: noResources));
     return _drive(session, agentPrompt, callId, (agent) => agent.resume(agentPrompt: agentPrompt));
   }
+
+  String? _agentPrompt(String name) =>
+      (library?.find(CompletionKind.agent, name) ??
+              library?.find(CompletionKind.agent, "general"))
+          ?.body;
 
   /// What running and carrying on have in common: the agent, its transcript,
   /// and reading a final answer out of what it said.
