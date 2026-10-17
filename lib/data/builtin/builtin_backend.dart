@@ -397,8 +397,8 @@ class BuiltinBackend implements AgentBackend {
         // keep the default — see the parent runner below. The step limit is
         // the turn's own, resolved per turn from the settings levels; null
         // leaves the backend's.
-        options: options.parent
-            .copyWithStepLimit(settings.turnMaxSteps),
+        options: options.copyWith(
+            maxAttempts: 1, stepLimit: settings.turnMaxSteps),
         skills: libraryFor(settings.project)?.entries(CompletionKind.skill) ?? const [],
         // The room's participants, an omada turn's data alone: the library's
         // agents, already tier-walked (the default set under My Team's under

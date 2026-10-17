@@ -175,33 +175,15 @@ class BuiltinOptions {
   /// [maxAttempts].
   final Duration rateLimitRetryBudget;
 
-  /// What the parent agent runs with: one attempt per request, since the
-  /// controller retries a failed turn itself. Everything else unchanged — the
-  /// [stepLimit], the timeouts, the concurrency caps.
-  BuiltinOptions get parent => BuiltinOptions(
-        stepLimit: stepLimit,
+  BuiltinOptions copyWith({int? stepLimit, int? maxAttempts}) => BuiltinOptions(
+        stepLimit: stepLimit ?? this.stepLimit,
         commandTimeout: commandTimeout,
-        maxAttempts: 1,
+        maxAttempts: maxAttempts ?? this.maxAttempts,
         retryBackoff: retryBackoff,
         maxConcurrentSubAgents: maxConcurrentSubAgents,
         maxConcurrentLlmRequests: maxConcurrentLlmRequests,
         rateLimitRetryBudget: rateLimitRetryBudget,
       );
-
-  /// The same options under a turn's own step limit. Null leaves what this
-  /// holds — the backend's answer, which the turn can only name a value for,
-  /// not widen past.
-  BuiltinOptions copyWithStepLimit(int? stepLimit) => stepLimit == null
-      ? this
-      : BuiltinOptions(
-          stepLimit: stepLimit,
-          commandTimeout: commandTimeout,
-          maxAttempts: maxAttempts,
-          retryBackoff: retryBackoff,
-          maxConcurrentSubAgents: maxConcurrentSubAgents,
-          maxConcurrentLlmRequests: maxConcurrentLlmRequests,
-          rateLimitRetryBudget: rateLimitRetryBudget,
-        );
 }
 
 /// A chat's conversation as the model sees it. Held per chat and outliving a
@@ -739,7 +721,8 @@ class BuiltinAgent {
         commands: caps.commands && shell.canRunCommands,
         webSearch: caps.webSearch && (webSearch?.available ?? false),
         ask: caps.ask,
-        task: caps.task && subAgentRunner != null,
+        // A sub-agent's work is commands; with no shell it has none to do.
+        task: caps.task && subAgentRunner != null && shell.canRunCommands,
         artifact: caps.artifact && saveArtifact != null,
         createSkill: caps.createSkill && packageSkill != null,
         trigger: caps.trigger && registerTrigger != null,
@@ -817,11 +800,10 @@ class BuiltinAgent {
             const LlmMessage(role: LlmRole.user, text: continueTask), turn);
   }
 
-  /// Every event the turn emits, through [_said] on its way out. A `yield`
-  /// suspends the loop until its consumer takes the event, so everything a step
-  /// produced is a part before the next step builds its request.
   /// [turn]'s events, through a recorder on their way out, with the session's
-  /// turn half rebuilt from them as they land.
+  /// turn half rebuilt from them as they land. A `yield` suspends the loop
+  /// until its consumer takes the event, so everything a step produced is a
+  /// part before the next step builds its request.
   ///
   /// Both pieces of state are the closure's rather than the agent's: a turn is
   /// what has one, and holding them on the agent would have two turns on one
@@ -964,195 +946,67 @@ class BuiltinAgent {
   /// a `bash` after waits for the fan-out. The session messages are answered
   /// in the calls' original order regardless, so the tool results pair up.
   Stream<AgentEvent> _executeAll(List<LlmToolCall> calls) async* {
-    if (calls.isEmpty) return;
-
-    final taskCalls = calls
-        .where((c) => c.name == taskToolName && subAgentRunner != null && shell.canRunCommands)
-        .toList();
+    // Where `task` is not offered, a call to it is answered as an unknown tool.
+    final fanOut = _offered.task;
+    final taskCalls = [
+      if (fanOut)
+        for (final call in calls)
+          if (call.name == taskToolName) call,
+    ];
 
     // Run every non-`task` call in order first. A command before a fan-out
     // has to be done before the fan-out starts, and one after has to wait for
     // it — the alternative, interleaving, would race a sub-agent against a
     // command it might depend on.
     for (final call in calls) {
+      if (fanOut && call.name == taskToolName) continue;
+      // What decided an earlier call is that call's, read or not.
+      _decision = null;
       if (_cancelled) {
-        // Task calls are answered at the end; a task call that was never
-        // collected (no sub-agent runner) is answered here instead.
-        if (call.name != taskToolName || taskCalls.isEmpty) {
-          // The call as well as the answer: a result whose call is not in the
-          // parts is a result the projection has nothing to pair it to, and
-          // drops. The model did ask for this one — it just never ran.
-          yield ToolCallEvent(ToolCall(
-              id: call.id, name: call.name, argumentsJson: call.argumentsJson));
-          yield ToolResultEvent(_ran(call, const ShellResult.failed(notExecuted)));
-        }
+        // The call as well as the answer: a result whose call is not in the
+        // parts is a result the projection has nothing to pair it to.
+        yield* _reject(call, notExecuted);
         continue;
       }
-
-      if (call.name == taskToolName) continue;
 
       final doing = runningTool(call.name);
       if (doing != null) yield StatusEvent(doing);
 
-      if (call.name == readToolName) {
-        yield* _read(call);
-        continue;
-      }
-
-      if (call.name == writeToolName) {
-        yield* _write(call);
-        continue;
-      }
-
-      if (call.name == editToolName) {
-        yield* _edit(call);
-        continue;
-      }
-
-      if (call.name == askToolName) {
-        yield* _ask(call);
-        continue;
-      }
-
-      if (call.name == skillToolName) {
-        yield* _skill(call);
-        continue;
-      }
-
-      if (call.name == listParticipantsToolName && roomParticipants != null) {
-        yield* _listParticipants(call);
-        continue;
-      }
-
-      if (call.name == websearchToolName) {
-        yield* _webSearch(call);
-        continue;
-      }
-
-      if (call.name == webfetchToolName) {
-        yield* _webFetch(call);
-        continue;
-      }
-
-      if (call.name == memorySaveToolName) {
-        yield* _memorySave(call);
-        continue;
-      }
-
-      if (call.name == memorySearchToolName) {
-        yield* _memorySearch(call);
-        continue;
-      }
-
-      if (call.name == memoryUpdateToolName) {
-        yield* _memoryUpdate(call);
-        continue;
-      }
-
-      if (call.name == memoryDeleteToolName) {
-        yield* _memoryDelete(call);
-        continue;
-      }
-
-      if (call.name == artifactToolName && saveArtifact != null) {
-        yield* _artifact(call);
-        continue;
-      }
-
-      if (call.name == planAddToolName && !oneShot) {
-        yield* _planAdd(call);
-        continue;
-      }
-
-      if (call.name == planNextToolName && !oneShot) {
-        yield* _planNext(call);
-        continue;
-      }
-
-      if (call.name == planDoneToolName && !oneShot) {
-        yield* _planDone(call);
-        continue;
-      }
-
-      if (call.name == presentPlanToolName && _offered.presentPlan) {
-        yield* _presentPlan(call);
-        continue;
-      }
-
-      if (call.name == createSkillToolName && packageSkill != null) {
-        yield* _createSkill(call);
-        continue;
-      }
-
-      if (call.name == triggerSetName && registerTrigger != null) {
-        yield* _triggerSet(call);
-        continue;
-      }
-
-      if (call.name == triggerRemoveName && registerTrigger != null) {
-        yield* _triggerRemove(call);
-        continue;
-      }
-
-      if (call.name == triggerListName && registerTrigger != null) {
-        yield* _triggerList(call);
-        continue;
-      }
-
-      if (call.name == addDirectoryName && caps.ask && !oneShot) {
-        yield* _addDirectory(call);
-        continue;
-      }
-
-      if (call.name == writableDirectoriesName) {
-        yield* _writableDirectories(call);
-        continue;
-      }
-
-      if (call.name != "bash") {
-        yield* _reject(call, unknownTool(call.name, _tools.map((t) => t.name)));
-        continue;
-      }
-
-      final command = _commandOf(call);
-      if (command == null) {
-        yield* _reject(
-            call,
-            "The bash tool takes {\"command\": \"...\"}; that argument was missing "
-            "or was not valid JSON.");
-        continue;
-      }
-
-      // The command's parse, made once and carried the whole way: the rule
-      // gate reads its segments, the deterministic tier reads its answer for
-      // the segments, and the run's confinement reads the grant the tier
-      // vouched with — one parse and one assessment behind a command rather
-      // than three.
-      final analysis = ShellCommandAnalysis.parse(command,
-          isWindows: platformIsWindows);
-
-      yield ToolCallEvent(ToolCall(
-        id: call.id,
-        name: "bash",
-        argumentsJson: call.argumentsJson,
-        argumentsText: command,
-      ));
-
-      yield* _runGated(call, call.argumentsJson, "bash",
-          () => _execute(call, command, analysis: analysis),
-          argumentsText: command, analysis: analysis);
-      var result = _commandResult!;
-      // The sandbox's answer rides between the result and its report: a
-      // denied write is offered back once, the rerun's outcome replacing
-      // the denial as what the model and the conversation read. The re-prompt
-      // streams its own banner through, the turn recording it like the first.
-      yield* sandboxRepromptIfNeeded(call, command, result);
-      result = _commandResult!;
-
-      yield ToolResultEvent(_ran(call, result));
+      final Stream<AgentEvent> Function(LlmToolCall)? tool = switch (call.name) {
+        readToolName => _read,
+        writeToolName => _write,
+        editToolName => _edit,
+        askToolName => _ask,
+        skillToolName => _skill,
+        listParticipantsToolName when roomParticipants != null =>
+          _listParticipants,
+        websearchToolName => _webSearch,
+        webfetchToolName => _webFetch,
+        memorySaveToolName => _memorySave,
+        memorySearchToolName => _memorySearch,
+        memoryUpdateToolName => _memoryUpdate,
+        memoryDeleteToolName => _memoryDelete,
+        artifactToolName when saveArtifact != null => _artifact,
+        planAddToolName when !oneShot => _planAdd,
+        planNextToolName when !oneShot => _planNext,
+        planDoneToolName when !oneShot => _planDone,
+        presentPlanToolName when _offered.presentPlan => _presentPlan,
+        createSkillToolName when packageSkill != null => _createSkill,
+        triggerSetName when registerTrigger != null => _triggerSet,
+        triggerRemoveName when registerTrigger != null => _triggerRemove,
+        triggerListName when registerTrigger != null => _triggerList,
+        addDirectoryName when caps.ask && !oneShot => _addDirectory,
+        writableDirectoriesName => _writableDirectories,
+        bashToolName => _bash,
+        _ => null,
+      };
+      yield* tool == null
+          ? _reject(call, unknownTool(call.name, _tools.map((t) => t.name)))
+          : tool(call);
     }
 
-    if (taskCalls.isEmpty || _cancelled) {
+    if (taskCalls.isEmpty) return;
+    if (_cancelled) {
       // Answer the task calls that never ran, so the next turn is not rejected
       // for missing results.
       for (final call in taskCalls) {
@@ -1160,8 +1014,31 @@ class BuiltinAgent {
       }
       return;
     }
-
     yield* _executeTasks(taskCalls);
+  }
+
+  Stream<AgentEvent> _bash(LlmToolCall call) async* {
+    final command = stringArg(call.argumentsJson, "command");
+    if (command == null) {
+      yield* _reject(
+          call,
+          "The bash tool takes {\"command\": \"...\"}; that argument was missing "
+          "or was not valid JSON.");
+      return;
+    }
+    // One parse carried the whole way: the rule gate reads its segments, the
+    // deterministic tier its answer, and the run's confinement the grant the
+    // tier vouched with.
+    final analysis = ShellCommandAnalysis.parse(command,
+        isWindows: platformIsWindows);
+    yield _called(call, command);
+    yield* _runGated(call, bashToolName,
+        () => _execute(call, command, analysis: analysis),
+        argumentsText: command, analysis: analysis);
+    // A denied write is offered back once between the result and its report,
+    // the rerun's outcome replacing the denial.
+    yield* sandboxRepromptIfNeeded(call, command, _commandResult!);
+    yield ToolResultEvent(_ran(call, _commandResult!));
   }
 
   /// Run a batch of `task` calls concurrently, capped to
@@ -1294,8 +1171,7 @@ class BuiltinAgent {
       return;
     }
 
-    yield ToolCallEvent(
-        ToolCall(id: call.id, name: call.name, argumentsJson: call.argumentsJson));
+    yield _called(call);
     final request = AskRequest(
         id: call.id,
         questions: questions,
@@ -1305,7 +1181,7 @@ class BuiltinAgent {
     yield QuestionRequestEvent(request);
     final answers = askAnswers(questions, await answer(request));
 
-    yield ToolResultEvent(ToolResult(callId: call.id, returnCode: 0, output: answers));
+    yield _ok(call, answers);
   }
 
   /// Load a skill. Read-only and instant, so no approval and no running label:
@@ -1322,12 +1198,7 @@ class BuiltinAgent {
       return;
     }
     final arguments = stringArg(call.argumentsJson, "args") ?? "";
-    yield ToolCallEvent(ToolCall(
-      id: call.id,
-      name: call.name,
-      argumentsJson: call.argumentsJson,
-      argumentsText: arguments.isEmpty ? name : "$name $arguments",
-    ));
+    yield _called(call, arguments.isEmpty ? name : "$name $arguments");
 
     final document = skills.where((s) => s.name == name).firstOrNull;
     if (document == null) {
@@ -1345,8 +1216,7 @@ class BuiltinAgent {
       yield ToolResultEvent(_ran(call, ShellResult.failed(skillReserved(name))));
       return;
     }
-    yield ToolResultEvent(
-        ToolResult(callId: call.id, returnCode: 0, output: _skillOutput(document, arguments)));
+    yield _ok(call, _skillOutput(document, arguments));
   }
 
   /// The skill body with its base directory translated to the guest's paths,
@@ -1363,13 +1233,8 @@ class BuiltinAgent {
   /// The room's roster. Read-only and instant, like `skill` — the answer is
   /// what the project's library holds, and the tool takes no arguments.
   Stream<AgentEvent> _listParticipants(LlmToolCall call) async* {
-    yield ToolCallEvent(
-        ToolCall(id: call.id, name: call.name, argumentsJson: call.argumentsJson));
-    yield ToolResultEvent(ToolResult(
-      callId: call.id,
-      returnCode: 0,
-      output: participantsListing(roomParticipants!),
-    ));
+    yield _called(call);
+    yield _ok(call, participantsListing(roomParticipants!));
   }
 
   /// Search the web. Read-only, so no approval — the result is worded the same
@@ -1381,12 +1246,7 @@ class BuiltinAgent {
           'The $websearchToolName tool takes {"query": "..."}.');
       return;
     }
-    yield ToolCallEvent(ToolCall(
-      id: call.id,
-      name: call.name,
-      argumentsJson: call.argumentsJson,
-      argumentsText: query,
-    ));
+    yield _called(call, query);
     final result = await webSearch!.search(query);
     yield ToolResultEvent(_ran(call, result));
   }
@@ -1401,13 +1261,8 @@ class BuiltinAgent {
           'The $webfetchToolName tool takes {"url": "..."}.');
       return;
     }
-    yield ToolCallEvent(ToolCall(
-      id: call.id,
-      name: call.name,
-      argumentsJson: call.argumentsJson,
-      argumentsText: url,
-    ));
-    yield* _runGated(call, call.argumentsJson, webfetchToolName,
+    yield _called(call, url);
+    yield* _runGated(call, webfetchToolName,
         () => webSearch!.fetch(url),
         argumentsText: url);
     final result = _commandResult!;
@@ -1432,12 +1287,7 @@ class BuiltinAgent {
       return;
     }
     final path = _resolvePath(args.path);
-    yield ToolCallEvent(ToolCall(
-      id: call.id,
-      name: call.name,
-      argumentsJson: call.argumentsJson,
-      argumentsText: args.path,
-    ));
+    yield _called(call, args.path);
     // Held beside the run rather than in it, for the event below: what the
     // read pulled in, if anything. Empty is the honest "nothing" — a denied
     // or gated read never ran, so it pulled nothing in — and it stands in
@@ -1505,12 +1355,7 @@ class BuiltinAgent {
       return;
     }
     final path = _resolvePath(args.path);
-    yield ToolCallEvent(ToolCall(
-      id: call.id,
-      name: call.name,
-      argumentsJson: call.argumentsJson,
-      argumentsText: args.path,
-    ));
+    yield _called(call, args.path);
     Future<ShellResult> run() async {
       await fs.directory(fs.path.dirname(path)).create(recursive: true);
       await fs.file(path).writeAsString(args.content);
@@ -1530,12 +1375,7 @@ class BuiltinAgent {
       return;
     }
     final path = _resolvePath(args.path);
-    yield ToolCallEvent(ToolCall(
-      id: call.id,
-      name: call.name,
-      argumentsJson: call.argumentsJson,
-      argumentsText: args.path,
-    ));
+    yield _called(call, args.path);
     Future<ShellResult> run() async {
       final file = fs.file(path);
       if (!await file.exists()) {
@@ -1570,7 +1410,6 @@ class BuiltinAgent {
   /// the conversation that registered it — and the registration is watched
   /// the moment the list lands. The model is told what it armed and when.
   Stream<AgentEvent> _triggerSet(LlmToolCall call) async* {
-    final registry = registerTrigger;
     final args = decodeArgs(call.argumentsJson);
     if (args == null) {
       yield* _reject(call, triggerSetProblem(null));
@@ -1605,30 +1444,16 @@ class BuiltinAgent {
       if (draft.name.isNotEmpty) draft.name,
       draft.source.describe(),
     ].join(" — ");
-    yield ToolCallEvent(ToolCall(
-      id: call.id,
-      name: call.name,
-      argumentsJson: call.argumentsJson,
-      argumentsText: label,
-    ));
+    yield _called(call, label);
     try {
-      final stored = await registry!.register(
+      final stored = await registerTrigger!.register(
           source: draft.source,
           prompt: draft.prompt,
           name: draft.name,
           member: draft.member);
-      yield ToolResultEvent(ToolResult(
-            callId: call.id,
-            returnCode: 0,
-            output: _triggerSetAnswer(stored),
-          ));
+      yield _ok(call, _triggerSetAnswer(stored));
     } catch (e) {
-      yield ToolResultEvent(ToolResult(
-            callId: call.id,
-            returnCode: -1,
-            output: "",
-            exceptionInfo: "The trigger could not be set: $e",
-          ));
+      yield _failed(call, "The trigger could not be set: $e");
     }
   }
 
@@ -1645,52 +1470,31 @@ class BuiltinAgent {
   /// remove, and neither is a user-set one: the tools speak for the chat
   /// that registered their targets.
   Stream<AgentEvent> _triggerRemove(LlmToolCall call) async* {
-    final registry = registerTrigger;
+    final registry = registerTrigger!;
     final id = stringArg(call.argumentsJson, "id");
-    if (id == null || registry == null) {
+    if (id == null) {
       yield* _reject(call,
           'The $triggerRemoveName tool takes {"id": "<trigger id>"}; that '
           "argument was missing.");
       return;
     }
-    yield ToolCallEvent(ToolCall(
-      id: call.id,
-      name: call.name,
-      argumentsJson: call.argumentsJson,
-      argumentsText: id,
-    ));
+    yield _called(call, id);
     final own = (await registry.own()).where((t) => t.id == id).toList();
     if (own.isEmpty) {
-      yield ToolResultEvent(ToolResult(
-            callId: call.id,
-            returnCode: -1,
-            output: "",
-            exceptionInfo:
-                "No trigger with that id was registered by this chat. "
-                "$triggerListName lists what may be removed.",
-          ));
+      yield _failed(call, "No trigger with that id was registered by this chat. "
+                "$triggerListName lists what may be removed.");
       return;
     }
     await registry.remove(id);
-    yield ToolResultEvent(ToolResult(
-          callId: call.id,
-          returnCode: 0,
-          output: "Trigger $id removed.",
-        ));
+    yield _ok(call, "Trigger $id removed.");
   }
 
   /// This chat's own triggers, with what each is waiting for.
   Stream<AgentEvent> _triggerList(LlmToolCall call) async* {
-    final registry = registerTrigger;
-    yield ToolCallEvent(
-        ToolCall(id: call.id, name: call.name, argumentsJson: call.argumentsJson));
-    final own = (await registry?.own() ?? []) ;
+    yield _called(call);
+    final own = await registerTrigger!.own();
     if (own.isEmpty) {
-      yield ToolResultEvent(ToolResult(
-            callId: call.id,
-            returnCode: 0,
-            output: "No triggers registered for this chat.",
-          ));
+      yield _ok(call, "No triggers registered for this chat.");
       return;
     }
     final lines = [
@@ -1700,11 +1504,7 @@ class BuiltinAgent {
             " — ${trigger.source.describe()}"
             "${_whenLine(trigger)}",
     ];
-    yield ToolResultEvent(ToolResult(
-          callId: call.id,
-          returnCode: 0,
-          output: lines.join("\n"),
-        ));
+    yield _ok(call, lines.join("\n"));
   }
 
   /// The directory grant request. The banner is the whole grant: the model
@@ -1729,12 +1529,7 @@ class BuiltinAgent {
           "was missing.");
       return;
     }
-    yield ToolCallEvent(ToolCall(
-      id: call.id,
-      name: call.name,
-      argumentsJson: call.argumentsJson,
-      argumentsText: path,
-    ));
+    yield _called(call, path);
     final resolved = _resolvePath(path);
     final type = await fs.type(resolved);
     if (type == FileSystemEntityType.notFound) {
@@ -1837,8 +1632,7 @@ class BuiltinAgent {
   /// `~` is spelled out, since the tools and commands take that shorthand and
   /// the grants are recorded absolute.
   Stream<AgentEvent> _writableDirectories(LlmToolCall call) async* {
-    yield ToolCallEvent(
-        ToolCall(id: call.id, name: call.name, argumentsJson: call.argumentsJson));
+    yield _called(call);
     final dirs = [
       for (final dir in _grantedDirs.toSet())
         if (outsideWorkspaces(fs, dir, workspace, projectWorkspace)) dir,
@@ -1855,11 +1649,7 @@ class BuiltinAgent {
       ],
       if (home != null) "~ is $home.",
     ];
-    yield ToolResultEvent(ToolResult(
-      callId: call.id,
-      returnCode: 0,
-      output: lines.join("\n"),
-    ));
+    yield _ok(call, lines.join("\n"));
   }
 
   /// The stored fire time, worded for the answer — what is armed now, not
@@ -1896,29 +1686,15 @@ class BuiltinAgent {
           "that argument was missing.");
       return;
     }
-    yield ToolCallEvent(ToolCall(
-      id: call.id,
-      name: call.name,
-      argumentsJson: call.argumentsJson,
-      argumentsText: text,
-    ));
+    yield _called(call, text);
     try {
       await store.add(text, chat: memoryChat);
     } catch (e) {
-      yield ToolResultEvent(ToolResult(
-            callId: call.id,
-            returnCode: -1,
-            output: "",
-            exceptionInfo: "The memory could not be saved: $e",
-          ));
+      yield _failed(call, "The memory could not be saved: $e");
       return;
     }
-    yield ToolResultEvent(ToolResult(
-          callId: call.id,
-          returnCode: 0,
-          output: "Memory saved. Later conversations are offered it when it "
-              "looks relevant.",
-        ));
+    yield _ok(call, "Memory saved. Later conversations are offered it when it "
+              "looks relevant.");
   }
 
   /// Read-only over the app's own store, so no approval: it runs nothing and
@@ -1931,21 +1707,12 @@ class BuiltinAgent {
           "that argument was missing.");
       return;
     }
-    yield ToolCallEvent(ToolCall(
-      id: call.id,
-      name: call.name,
-      argumentsJson: call.argumentsJson,
-      argumentsText: query,
-    ));
+    yield _called(call, query);
     final hits = await store.search(query);
-    yield ToolResultEvent(ToolResult(
-          callId: call.id,
-          returnCode: 0,
-          // The ids ride with the hits: they are the update and delete
-          // tools' handles, and this is the only place the model sees them.
-          output:
-              hits.isEmpty ? "No memories match." : renderRecall(hits, withIds: true),
-        ));
+    // The ids ride with the hits: they are the update and delete tools'
+    // handles, and this is the only place the model sees them.
+    yield _ok(call,
+        hits.isEmpty ? "No memories match." : renderRecall(hits, withIds: true));
   }
 
   /// The correction half of the in-turn writing: the replacement stands where
@@ -1961,29 +1728,15 @@ class BuiltinAgent {
           "that argument was missing.");
       return;
     }
-    yield ToolCallEvent(ToolCall(
-      id: call.id,
-      name: call.name,
-      argumentsJson: call.argumentsJson,
-      argumentsText: text,
-    ));
+    yield _called(call, text);
     try {
       await store.update(id, text, chat: memoryChat);
     } catch (e) {
-      yield ToolResultEvent(ToolResult(
-            callId: call.id,
-            returnCode: -1,
-            output: "",
-            exceptionInfo: "The memory could not be updated: $e",
-          ));
+      yield _failed(call, "The memory could not be updated: $e");
       return;
     }
-    yield ToolResultEvent(ToolResult(
-          callId: call.id,
-          returnCode: 0,
-          output: "Memory updated. The replacement stands where the old fact "
-              "was.",
-        ));
+    yield _ok(call, "Memory updated. The replacement stands where the old fact "
+              "was.");
   }
 
   /// The half that costs a line in the log, not a new one: a fact the model
@@ -1997,27 +1750,14 @@ class BuiltinAgent {
           "was missing.");
       return;
     }
-    yield ToolCallEvent(ToolCall(
-      id: call.id,
-      name: call.name,
-      argumentsJson: call.argumentsJson,
-    ));
+    yield _called(call);
     try {
       await store.delete(id);
     } catch (e) {
-      yield ToolResultEvent(ToolResult(
-            callId: call.id,
-            returnCode: -1,
-            output: "",
-            exceptionInfo: "The memory could not be deleted: $e",
-          ));
+      yield _failed(call, "The memory could not be deleted: $e");
       return;
     }
-    yield ToolResultEvent(ToolResult(
-          callId: call.id,
-          returnCode: 0,
-          output: "Memory deleted, where it named an existing one.",
-        ));
+    yield _ok(call, "Memory deleted, where it named an existing one.");
   }
 
   /// Publish an artifact from a workspace path. Copies the dir (or the file's
@@ -2032,25 +1772,13 @@ class BuiltinAgent {
       return;
     }
     final path = _resolvePath(parsed.path);
-    yield ToolCallEvent(ToolCall(
-      id: call.id,
-      name: call.name,
-      argumentsJson: call.argumentsJson,
-      argumentsText: parsed.title.isEmpty ? parsed.path : parsed.title,
-    ));
+    yield _called(call, parsed.title.isEmpty ? parsed.path : parsed.title);
     String? artifactId;
-    Future<ShellResult> run() => _guarded(() async {
-          artifactId = await saveArtifact!(
-              parsed.path, parsed.entryFile,
-              artifactId: parsed.artifactId);
-          return const ShellResult(returnCode: 0, output: "");
-        });
-    if (outsideWorkspaces(fs, path, workspace, projectWorkspace)) {
-      yield* _runGated(call, call.argumentsJson, artifactToolName, run,
-          argumentsText: path);
-    } else {
-      _commandResult = await run();
-    }
+    yield* _gatedPath(call, path, artifactToolName, () async {
+      artifactId = await saveArtifact!(parsed.path, parsed.entryFile,
+          artifactId: parsed.artifactId);
+      return const ShellResult(returnCode: 0, output: "");
+    });
     final id = artifactId;
     if (_commandResult!.returnCode != 0 || id == null) {
       yield ToolResultEvent(_ran(call, _commandResult!));
@@ -2063,10 +1791,11 @@ class BuiltinAgent {
     // session.
     yield ToolResultEvent(_ran(
         call,
-        const ShellResult(returnCode: 0, output: "")).copyWith(
-        output: "Artifact $label published. The user can view it in the app. "
-            "It is saved with the chat. To update it, edit the files and call "
-            "artifact again with artifact_id: \"$artifactId\"."));
+        ShellResult(
+            returnCode: 0,
+            output: "Artifact $label published. The user can view it in the "
+                "app. It is saved with the chat. To update it, edit the files "
+                "and call artifact again with artifact_id: \"$id\".")));
   }
 
   /// Package a skill the model drafted in its workspace and offer it to the
@@ -2080,43 +1809,30 @@ class BuiltinAgent {
       return;
     }
     final path = _resolvePath(args.path);
-    yield ToolCallEvent(ToolCall(
-      id: call.id,
-      name: call.name,
-      argumentsJson: call.argumentsJson,
-      argumentsText: args.path,
-    ));
+    yield _called(call, args.path);
     String? installId;
     String? skillName;
-    Future<ShellResult> run() => _guarded(() async {
-          final skillDir = fs.directory(path);
-          if (!await skillDir.exists()) {
-            return ShellResult.failed(
-                "The directory '$path' does not exist. Write the skill there first "
-                "with write/edit, then call $createSkillToolName.");
-          }
-          final skillMdPath = fs.path.join(path, "SKILL.md");
-          if (!await fs.file(skillMdPath).exists()) {
-            return ShellResult.failed(
-                "The directory '$path' has no SKILL.md. A skill needs one.");
-          }
-          try {
-            final result = await packageSkill!(args.path, args.name);
-            installId = result.installId;
-            skillName = result.name;
-          } on SkillImportException catch (e) {
-            return ShellResult.failed(
-                "SKILL.md does not conform to the Agent Skills spec: $e. "
-                "Fix the frontmatter and call $createSkillToolName again.");
-          }
-          return const ShellResult(returnCode: 0, output: "");
-        });
-    if (outsideWorkspaces(fs, path, workspace, projectWorkspace)) {
-      yield* _runGated(call, call.argumentsJson, createSkillToolName, run,
-          argumentsText: path);
-    } else {
-      _commandResult = await run();
-    }
+    yield* _gatedPath(call, path, createSkillToolName, () async {
+      if (!await fs.directory(path).exists()) {
+        return ShellResult.failed(
+            "The directory '$path' does not exist. Write the skill there first "
+            "with write/edit, then call $createSkillToolName.");
+      }
+      if (!await fs.file(fs.path.join(path, "SKILL.md")).exists()) {
+        return ShellResult.failed(
+            "The directory '$path' has no SKILL.md. A skill needs one.");
+      }
+      try {
+        final result = await packageSkill!(args.path, args.name);
+        installId = result.installId;
+        skillName = result.name;
+      } on SkillImportException catch (e) {
+        return ShellResult.failed(
+            "SKILL.md does not conform to the Agent Skills spec: $e. "
+            "Fix the frontmatter and call $createSkillToolName again.");
+      }
+      return const ShellResult(returnCode: 0, output: "");
+    });
     final id = installId;
     if (_commandResult!.returnCode != 0 || id == null) {
       yield ToolResultEvent(_ran(call, _commandResult!));
@@ -2124,12 +1840,8 @@ class BuiltinAgent {
     }
     final name = skillName ?? args.name ?? args.path;
     yield SkillInstallEvent(installId: id, title: name);
-    yield ToolResultEvent(ToolResult(
-          callId: call.id,
-          returnCode: 0,
-          output: "Skill '$name' packaged. "
-              "The user can review and install it from the card below.",
-        ));
+    yield _ok(call, "Skill '$name' packaged. "
+              "The user can review and install it from the card below.");
   }
 
   /// The plan file: where the model works, so the model can read it and edit
@@ -2167,12 +1879,7 @@ class BuiltinAgent {
       return;
     }
     final section = stringArg(call.argumentsJson, "section");
-    yield ToolCallEvent(ToolCall(
-      id: call.id,
-      name: call.name,
-      argumentsJson: call.argumentsJson,
-      argumentsText: task,
-    ));
+    yield _called(call, task);
     Future<ShellResult> run() async {
       final updated = planAddTask(await _readPlan(), task, section: section);
       await fs.file(_planPath).writeAsString(updated);
@@ -2184,30 +1891,18 @@ class BuiltinAgent {
   /// Take the next task. Nothing to take is the answer, not a failure: the
   /// plan being finished is exactly the moment the model calls present_plan.
   Stream<AgentEvent> _planNext(LlmToolCall call) async* {
-    yield ToolCallEvent(ToolCall(
-      id: call.id,
-      name: call.name,
-      argumentsJson: call.argumentsJson,
-    ));
+    yield _called(call);
     final plan = await _readPlan();
     final missing = _planMissing(plan);
     final next = planNext(plan);
     if (next == null) {
-      yield ToolResultEvent(ToolResult(
-            callId: call.id,
-            returnCode: 0,
-            output: missing ?? "All tasks done.",
-          ));
+      yield _ok(call, missing ?? "All tasks done.");
       return;
     }
     // The index came from the text just read, so the mark cannot miss.
     final marked = planMark(plan, next.index, PlanTaskStatus.inProgress)!;
     await fs.file(_planPath).writeAsString(marked);
-    yield ToolResultEvent(ToolResult(
-          callId: call.id,
-          returnCode: 0,
-          output: planNextResult(next, planProgress(marked)),
-        ));
+    yield _ok(call, planNextResult(next, planProgress(marked)));
   }
 
   /// Finish a task: by number or by enough of its text to identify it.
@@ -2220,12 +1915,7 @@ class BuiltinAgent {
           "argument was missing.");
       return;
     }
-    yield ToolCallEvent(ToolCall(
-      id: call.id,
-      name: call.name,
-      argumentsJson: call.argumentsJson,
-      argumentsText: task,
-    ));
+    yield _called(call, task);
     final plan = await _readPlan();
     final missing = _planMissing(plan);
     if (missing != null) {
@@ -2249,11 +1939,7 @@ class BuiltinAgent {
     // The index came from the text just read, so the mark cannot miss.
     final marked = planMark(plan, found.index, PlanTaskStatus.done)!;
     await fs.file(_planPath).writeAsString(marked);
-    yield ToolResultEvent(ToolResult(
-          callId: call.id,
-          returnCode: 0,
-          output: planDoneResult(found, planProgress(marked)),
-        ));
+    yield _ok(call, planDoneResult(found, planProgress(marked)));
   }
 
   /// The plan, put to the user: the plan's page published through the same
@@ -2268,12 +1954,7 @@ class BuiltinAgent {
           'and "artifact_id" are optional strings.');
       return;
     }
-    yield ToolCallEvent(ToolCall(
-      id: call.id,
-      name: call.name,
-      argumentsJson: call.argumentsJson,
-      argumentsText: args.title ?? planFileName,
-    ));
+    yield _called(call, args.title ?? planFileName);
     final plan = await _readPlan();
     final missing = _planMissing(plan);
     if (missing != null) {
@@ -2293,8 +1974,7 @@ class BuiltinAgent {
       id = await saveArtifact!(planHtmlPath, entryFile,
           artifactId: args.artifactId);
     } catch (e) {
-      yield ToolResultEvent(
-          ToolResult(callId: call.id, returnCode: -1, output: "", exceptionInfo: "$e"));
+      yield _failed(call, "$e");
       return;
     }
     yield ArtifactEvent(artifactId: id, entryFile: entryFile, title: args.title ?? "Plan");
@@ -2311,20 +1991,31 @@ class BuiltinAgent {
     );
     yield QuestionRequestEvent(request);
     final answers = await answer(request);
-    yield ToolResultEvent(ToolResult(
-          callId: call.id,
-          returnCode: 0,
-          output: planVerdict(answers.firstOrNull),
-        ));
+    yield _ok(call, planVerdict(answers.firstOrNull));
   }
 
   /// A call that could not be run at all: the UI still sees the pair, and the
   /// model still gets told why.
   Stream<AgentEvent> _reject(LlmToolCall call, String problem) async* {
-    yield ToolCallEvent(
-        ToolCall(id: call.id, name: call.name, argumentsJson: call.argumentsJson));
-    yield ToolResultEvent(ToolResult(callId: call.id, returnCode: -1, output: "", exceptionInfo: problem));
+    yield _called(call);
+    yield _failed(call, problem);
   }
+
+  /// [call] as reported, with [text] as what the label shows of it.
+  static ToolCallEvent _called(LlmToolCall call, [String? text]) =>
+      ToolCallEvent(ToolCall(
+        id: call.id,
+        name: call.name,
+        argumentsJson: call.argumentsJson,
+        argumentsText: text,
+      ));
+
+  static ToolResultEvent _ok(LlmToolCall call, String output) =>
+      ToolResultEvent(ToolResult(callId: call.id, returnCode: 0, output: output));
+
+  static ToolResultEvent _failed(LlmToolCall call, String problem) =>
+      ToolResultEvent(ToolResult(
+          callId: call.id, returnCode: -1, output: "", exceptionInfo: problem));
 
   /// Run [run] gated by the rules, then [approveMode]. Rules are the standing
   /// decision, so they are consulted first in every mode: an allow runs, a
@@ -2339,22 +2030,16 @@ class BuiltinAgent {
   /// [argumentsText] is what the banner shows: what this call does, worded
   /// here where it is already in hand rather than parsed back out of the JSON
   /// by whoever draws it.
+  ///
+  /// [analysis] is a bash command's parse, judged segment by segment: an allow
+  /// that covers the head but not the tail escalates the whole.
   Stream<AgentEvent> _runGated(
     LlmToolCall call,
-    String arguments,
     String toolName,
     Future<ShellResult> Function() run, {
     String? argumentsText,
     ShellCommandAnalysis? analysis,
   }) async* {
-    // A bash command is judged segment by segment: an allow that covers the
-    // head but not the tail escalates the whole, so a compound command's
-    // uncovered piece never rides a rule through. The parse is the one the
-    // veto runs too — computed once here and handed down.
-    analysis ??= toolName == "bash"
-        ? ShellCommandAnalysis.parse(argumentsText ?? "",
-            isWindows: platformIsWindows)
-        : null;
     final rules = [..._runtimeRules, ...permissions];
     final verdict = rulesDecideTraced(
       rules,
@@ -2375,9 +2060,7 @@ class BuiltinAgent {
           tiers: verdict!.tiers,
           decided: PermissionDecision.deny,
         );
-        _commandResult = const ShellResult.failed(
-            "Denied by a permission rule you set. Do not retry this command; "
-            "tell the user what you were trying to do and let them decide.");
+        _commandResult = const ShellResult.failed(_deniedByRule);
         return;
       case PermissionDecision.allow:
         // An allow rule is a standing decision, but only for commands the
@@ -2390,7 +2073,7 @@ class BuiltinAgent {
             _commandResult = ShellResult.failed(note);
             return;
           }
-          yield* _askAndExecute(call, arguments, toolName, run, argumentsText);
+          yield* _askAndExecute(call, toolName, run, argumentsText);
           return;
         }
         _decision = (
@@ -2425,19 +2108,16 @@ class BuiltinAgent {
           _pendingGrantPaths = tiered.grantPaths;
           _commandResult = await run();
         } else {
-          _commandResult = const ShellResult.failed(
-              "Denied by a permission rule you set. Do not retry this "
-              "command; tell the user what you were trying to do and let "
-              "them decide.");
+          _commandResult = const ShellResult.failed(_deniedByRule);
         }
         return;
       }
     }
     switch (approveMode) {
       case ApproveMode.ask:
-        yield* _askAndExecute(call, arguments, toolName, run, argumentsText);
+        yield* _askAndExecute(call, toolName, run, argumentsText);
       case ApproveMode.auto:
-        yield* _autoClassifyAndExecute(call, arguments, toolName, run, argumentsText);
+        yield* _autoClassifyAndExecute(call, toolName, run, argumentsText);
       case ApproveMode.never:
         _decision = (
           source: PermissionSource.mode,
@@ -2448,30 +2128,37 @@ class BuiltinAgent {
     }
   }
 
-  /// Run a file-touching tool behind the workspace gate: a path the workspaces
-  /// hold runs straight, one that reaches past them is offered first. The
-  /// three file tools share this tail — read, write and edit — differing only
-  /// in their `run`; the artifact tool has its own, since it emits a second
-  /// event on success.
-  ///
-  /// A throw inside [run] is the tool failing, not the turn: it is answered as
-  /// a failed result the model reads, in the same shape every other tool
-  /// failure takes, rather than escaping the stream as an error the turn dies
-  /// on — a decode failure on a binary file used to end the turn.
+  /// Run a file tool behind the workspace gate and report its result.
   Stream<AgentEvent> _runFileTool(
     LlmToolCall call,
     String path,
     String toolName,
     Future<ShellResult> Function() run,
   ) async* {
+    yield* _gatedPath(call, path, toolName, run, granted: _grantedDirs);
+    yield ToolResultEvent(_ran(call, _commandResult!));
+  }
+
+  /// Run [run] behind the workspace gate, into [_commandResult]: a path the
+  /// workspaces (or [granted]) hold runs straight, one past them is gated.
+  ///
+  /// A throw inside [run] is the tool failing, not the turn: it is answered as
+  /// a failed result the model reads — a decode failure on a binary file used
+  /// to end the turn.
+  Stream<AgentEvent> _gatedPath(
+    LlmToolCall call,
+    String path,
+    String toolName,
+    Future<ShellResult> Function() run, {
+    List<String> granted = const [],
+  }) async* {
     if (outsideWorkspaces(fs, path, workspace, projectWorkspace,
-        granted: _grantedDirs)) {
-      yield* _runGated(call, call.argumentsJson, toolName,
-          () => _guarded(run), argumentsText: path);
+        granted: granted)) {
+      yield* _runGated(call, toolName, () => _guarded(run),
+          argumentsText: path);
     } else {
       _commandResult = await _guarded(run);
     }
-    yield ToolResultEvent(_ran(call, _commandResult!));
   }
 
   /// Answer what [run] throws as a failed result, so an unexpected failure —
@@ -2489,7 +2176,6 @@ class BuiltinAgent {
   /// Sets [_commandResult] to the outcome.
   Stream<AgentEvent> _askAndExecute(
     LlmToolCall call,
-    String arguments,
     String toolName,
     Future<ShellResult> Function() run,
     String? argumentsText,
@@ -2497,25 +2183,15 @@ class BuiltinAgent {
     final approval = ToolApproval(
       id: call.id,
       toolName: toolName,
-      argumentsJson: arguments,
+      argumentsJson: call.argumentsJson,
       argumentsText: argumentsText,
     );
     yield ApprovalRequestEvent(approval);
     final answer = await approve(approval);
     // An "always" answer is the standing rule arriving: it applies to the
     // rest of this turn at once, ahead of the persisted copy the next turn
-    // reads. The approval is in hand, so the derivation costs nothing here.
-    // A re-prompt's approval carries what it agreed to: the denied dirs.
-    if (approval.deniedDirs.isNotEmpty &&
-        (answer == ApprovalResponse.alwaysAllowChat ||
-            answer == ApprovalResponse.alwaysAllowProject)) {
-      // The paths, not the prose: grant them for the turn; the repository
-      // persists them to the tier the answer named.
-      // shortcut: an over-data answer rides this turn even though the
-      // repository will not persist it, until the banner can refuse before
-      // asking.
-      grantRuntimeDirs(approval.deniedDirs);
-    } else if (answer == ApprovalResponse.alwaysAllowChat ||
+    // reads.
+    if (answer == ApprovalResponse.alwaysAllowChat ||
         answer == ApprovalResponse.alwaysAllowProject) {
       final rule = ruleFromApproval(approval);
       if (rule != null) grantRuntimeRule(rule);
@@ -2533,29 +2209,33 @@ class BuiltinAgent {
       decided: allowed ? PermissionDecision.allow : PermissionDecision.deny,
     );
     _humanDecided = true;
-    _commandResult = allowed
-        ? await run()
-        : const ShellResult.failed("The user denied this command. Ask them what to do "
-            "instead, or try something else.");
+    _commandResult =
+        allowed ? await run() : const ShellResult.failed(_deniedByUser);
     _humanDecided = false;
   }
+
+  static const _deniedByUser = "The user denied this command. Ask them what "
+      "to do instead, or try something else.";
+
+  static const _deniedByRule = "Denied by a permission rule you set. Do not "
+      "retry this command; tell the user what you were trying to do and let "
+      "them decide.";
 
   /// Classify the call, then allow (run), deny (refuse), or ask (escalate to
   /// the banner). Sets [_commandResult] to the outcome.
   Stream<AgentEvent> _autoClassifyAndExecute(
     LlmToolCall call,
-    String arguments,
     String toolName,
     Future<ShellResult> Function() run,
     String? argumentsText,
   ) async* {
     if (_autoPaused) {
-      yield* _askAndExecute(call, arguments, toolName, run, argumentsText);
+      yield* _askAndExecute(call, toolName, run, argumentsText);
       return;
     }
 
     final decision = await (classifier ?? const NoClassifier())
-        .classify(toolName, arguments, workspace: workspace);
+        .classify(toolName, call.argumentsJson, workspace: workspace);
 
     if (decision != PermissionDecision.ask) {
       _consecutiveAsks = 0;
@@ -2567,10 +2247,8 @@ class BuiltinAgent {
     }
     switch (decision) {
       case PermissionDecision.allow:
-        _consecutiveAsks = 0;
         _commandResult = await run();
       case PermissionDecision.deny:
-        _consecutiveAsks = 0;
         _commandResult = const ShellResult.failed(
             "Denied by auto mode as dangerous. Do not retry this command; "
             "tell the user what you were trying to do and let them decide.");
@@ -2582,7 +2260,7 @@ class BuiltinAgent {
           yield InfoEvent("Auto mode paused: too many uncertain commands. "
               "Asking for every command for the rest of this turn.");
         }
-        yield* _askAndExecute(call, arguments, toolName, run, argumentsText);
+        yield* _askAndExecute(call, toolName, run, argumentsText);
     }
   }
 
@@ -2662,7 +2340,7 @@ class BuiltinAgent {
                               shell.sessionCwdInHostWords(workspace) ??
                               workspace,
                           home: shell.machineHome,
-                          segments: analysis!.modelableSegments ?? const [],
+                          segments: parsed!.modelableSegments ?? const [],
                         )))
                   .gitGrants
                   .values) ...grant.paths,
@@ -3048,6 +2726,4 @@ class BuiltinAgent {
       }
     }
   }
-
-  String? _commandOf(LlmToolCall call) => stringArg(call.argumentsJson, "command");
 }
