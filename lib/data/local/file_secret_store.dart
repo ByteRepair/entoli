@@ -5,6 +5,7 @@ import "dart:typed_data";
 import "package:fs_shim/fs.dart";
 
 import "../../core/config.dart";
+import "../../core/log.dart";
 import "../../domain/documents.dart" show RenameWriter;
 import "../../domain/secret_store.dart";
 
@@ -23,30 +24,29 @@ class FileSecretStore implements SecretStore {
   final File _file;
   final RenameWriter _writer;
 
-  Future<Map<String, String>> _values() async {
-    final loaded = _loaded;
-    if (loaded != null) return loaded;
+  /// Loaded once and shared: two first calls racing each other would each
+  /// load a map of their own, and the later write would drop the earlier key.
+  late final Future<Map<String, String>> _values = _load();
+
+  Future<Map<String, String>> _load() async {
     final values = <String, String>{};
     try {
       if (await _file.exists()) {
         values.addAll((jsonDecode(await _file.readAsString()) as Map).cast<String, String>());
       }
-    } catch (_) {
+    } catch (e) {
       // Unreadable is unpaired: start over rather than fail the app.
+      logFailure("secrets", "secrets.json could not be read; starting empty", e);
     }
-    return _loaded = values;
+    return values;
   }
 
-  Map<String, String>? _loaded;
-
-  Future<void> _write(Map<String, String> values) async {
-    _loaded = values;
-    await _writer.write(_file.path, jsonEncode(values));
-  }
+  Future<void> _write(Map<String, String> values) =>
+      _writer.write(_file.path, jsonEncode(values));
 
   @override
   Future<Uint8List?> read(String key) async {
-    final value = (await _values())[key];
+    final value = (await _values)[key];
     if (value == null) return null;
     try {
       return Uint8List.fromList(base64Decode(value));
@@ -57,14 +57,14 @@ class FileSecretStore implements SecretStore {
 
   @override
   Future<void> write(String key, Uint8List value) async {
-    final values = await _values();
+    final values = await _values;
     values[key] = base64Encode(value);
     await _write(values);
   }
 
   @override
   Future<void> delete(String key) async {
-    final values = await _values();
+    final values = await _values;
     if (values.remove(key) != null) await _write(values);
   }
 
