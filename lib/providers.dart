@@ -109,10 +109,8 @@ final voiceModelStoreProvider =
 /// it would be drawn wrong for those frames, and a button's callback, which
 /// reads rather than watches, would be wrong on the first press however long
 /// the app had been open.
-class InstalledVoiceModels extends Notifier<Set<String>> {
-  InstalledVoiceModels(this._seed, {this.system = const {}});
-
-  final Set<String> _seed;
+class InstalledVoiceModels extends InstalledIds {
+  InstalledVoiceModels(super.seed, {this.system = const {}});
 
   /// The sentinels this device can honour. Held rather than folded into the
   /// seed, because a re-scan reads the store and would otherwise drop them.
@@ -122,13 +120,27 @@ class InstalledVoiceModels extends Notifier<Set<String>> {
   final Set<String> system;
 
   @override
+  Future<Set<String>> scan() async =>
+      {...await ref.read(voiceModelStoreProvider).installed(), ...system};
+}
+
+/// Which of a catalog's ids are installed and whole: seeded before the app is
+/// built, and [refresh]ed by whatever installs or deletes one — the only thing
+/// that changes the answer. A lazy scan would draw every row "not installed"
+/// first.
+abstract class InstalledIds extends Notifier<Set<String>> {
+  InstalledIds(this._seed);
+
+  final Set<String> _seed;
+
+  @override
   Set<String> build() => _seed;
 
-  /// Read the store again. Whatever installs or deletes a model calls this,
-  /// which is the only thing that changes the answer.
+  Future<Set<String>> scan();
+
   Future<void> refresh() async {
-    final installed = await ref.read(voiceModelStoreProvider).installed();
-    if (ref.mounted) state = {...installed, ...system};
+    final installed = await scan();
+    if (ref.mounted) state = installed;
   }
 }
 
@@ -138,22 +150,12 @@ final installedVoiceModelsProvider =
 
 final rootfsStoreProvider = Provider<RootfsStore>((ref) => throw UnimplementedError());
 
-/// Which distributions are installed and whole. Seeded before the app is built
-/// and refreshed by whatever installs or deletes one, for the reason
-/// [InstalledVoiceModels] is: the Terminal page's rows are drawn from it, and a
-/// lazy scan would draw every one of them as "not installed" first.
-class InstalledRootfs extends Notifier<Set<String>> {
-  InstalledRootfs(this._seed);
-
-  final Set<String> _seed;
+/// Which distributions are installed, for the Terminal page's rows.
+class InstalledRootfs extends InstalledIds {
+  InstalledRootfs(super.seed);
 
   @override
-  Set<String> build() => _seed;
-
-  Future<void> refresh() async {
-    final installed = await ref.read(rootfsStoreProvider).installed();
-    if (ref.mounted) state = installed;
-  }
+  Future<Set<String>> scan() => ref.read(rootfsStoreProvider).installed();
 }
 
 final installedRootfsProvider =
@@ -213,22 +215,12 @@ final localModelStoreProvider =
 /// round trip and every reader of this is synchronous.
 final localLlmProvider = Provider<LocalLlm>((ref) => const UnavailableLocalLlm());
 
-/// Which models are downloaded and whole. Seeded before the app is built and
-/// refreshed by whatever installs or deletes one, for the reason
-/// [InstalledRootfs] is: the rows are drawn from it, and a lazy scan would draw
-/// every one of them as "not installed" first.
-class InstalledLocalModels extends Notifier<Set<String>> {
-  InstalledLocalModels(this._seed);
-
-  final Set<String> _seed;
+/// Which on-device models are downloaded.
+class InstalledLocalModels extends InstalledIds {
+  InstalledLocalModels(super.seed);
 
   @override
-  Set<String> build() => _seed;
-
-  Future<void> refresh() async {
-    final installed = await ref.read(localModelStoreProvider).installed();
-    if (ref.mounted) state = installed;
-  }
+  Future<Set<String>> scan() => ref.read(localModelStoreProvider).installed();
 }
 
 final installedLocalModelsProvider =
@@ -239,25 +231,14 @@ final installedLocalModelsProvider =
 /// the port's own [ValueListenable] rather than a second copy of the state:
 /// what starts a model is a turn asking for one, so the settings page is
 /// watching something it did not start.
-class LocalLlmStatus extends Notifier<List<LocalLlmState>> {
+class LocalLlmStatus extends Notifier<List<LocalLlmState>>
+    with ListenableValue {
   @override
-  List<LocalLlmState> build() {
-    final llm = ref.watch(localLlmProvider);
-    void update() => state = llm.running.value;
-    llm.running.addListener(update);
-    ref.onDispose(() => llm.running.removeListener(update));
-    return llm.running.value;
-  }
+  List<LocalLlmState> build() => bridge(ref.watch(localLlmProvider).running);
 }
 
 final localLlmStateProvider =
     NotifierProvider<LocalLlmStatus, List<LocalLlmState>>(LocalLlmStatus.new);
-
-/// The most cores worth offering the cores slider, or null where there is no
-/// server. Read off the port so the web UI needs no `dart:io` to know the
-/// machine's core count.
-final localMaxThreadsProvider =
-    Provider<int?>((ref) => ref.watch(localLlmProvider).maxThreads);
 
 /// The on-device prompt warm-up, or null where there is no server to warm
 /// against — every platform but Android, and an Android whose build shipped no
@@ -267,15 +248,12 @@ final localPrefillProvider = Provider<LocalPrefill?>((ref) => null);
 
 /// What the warm-up is doing, for the settings page to draw. A notifier over
 /// the port's own [ValueListenable], like [localLlmStateProvider] beside it.
-class LocalPrefillStatus extends Notifier<LocalPrefillState?> {
+class LocalPrefillStatus extends Notifier<LocalPrefillState?>
+    with ListenableValue {
   @override
   LocalPrefillState? build() {
     final prefill = ref.watch(localPrefillProvider);
-    if (prefill == null) return null;
-    void update() => state = prefill.state.value;
-    prefill.state.addListener(update);
-    ref.onDispose(() => prefill.state.removeListener(update));
-    return prefill.state.value;
+    return prefill == null ? null : bridge(prefill.state);
   }
 }
 
@@ -370,8 +348,6 @@ final voiceReadyProvider = Provider<bool>((ref) {
 final systemVoiceLanguagesProvider =
     FutureProvider<List<VoiceLanguage>>((ref) => ref.watch(voiceProvider).systemLanguages());
 
-/// Loaded once, before the app is built, because assets are read
-/// asynchronously and nothing downstream should have to wait on that.
 /// The prompt library, per project: the default's is the base set every other
 /// project inherits, and a project's own overrides a same-named default entry
 /// for that project alone. Built once at startup and rebuilt only where
@@ -516,7 +492,7 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
   Future<void> setTotalContext(int value) =>
       _update((s) => s.totalContext = value);
 
-  /// Whether `@path` references inside an AGENTS.md pull in more files. The
+  /// Whether `@path` references inside an AGENTS.md pull in more files.
   Future<void> setInstructionImports(bool value) =>
       _update((s) => s.instructionImports = value);
 
@@ -551,20 +527,9 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
     ..memoryProviderId = choice.providerId
     ..memoryModelId = choice.modelId);
 
-  /// The user's profile, injected into the system prompt. Null clears it.
-  Future<void> setProfile(Profile? profile) =>
-      _update((s) => s.profile = profile);
-
-  /// How the agent words its replies, app-wide.
-  Future<void> setTone(Tone value) => _update((s) => s.tone = value);
-
-  /// Whether replies number the web pages they drew on, app-wide.
-  Future<void> setCitations(bool value) => _update((s) => s.citations = value);
-
-  /// Profile, tone and citations in one write: the profile page saves all
-  /// three at once, and three `_update`s would be three full re-encodes and
-  /// three renames of the one `settings.json` where the first two are
-  /// superseded before they land.
+  /// The user's profile (null clears it), how replies are worded, and whether
+  /// they number the web pages they drew on: one write, since the profile
+  /// page saves all three at once.
   Future<void> setReplyStyle({
     Profile? profile,
     Tone? tone,
@@ -710,20 +675,6 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
   /// The model list is rebuilt from them, so it is invalidated here rather
   /// than left showing the old one.
   ///
-  /// [setKey] is what happens to the stored key: null leaves it as it is (the
-  /// keep-empty-field case in the dialog), `""` clears it, a string stores it.
-  /// The config written here never carries one — `apiKey` on it is the dialog's
-  /// in-memory copy, and the store is where the material goes.
-  ///
-  /// The first provider ever configured becomes what every still-unset role
-  /// resolves to — the same `_update` as the save, so it cannot land half
-  /// done — until the user picks something themselves. A role the user has
-  /// already picked is left where it is; importing a backup and other bulk
-  /// writes stay on [setProviders], which adopts nothing.
-  /// The endpoints the agent can call, replacing any entry that shares an id.
-  /// The model list is rebuilt from them, so it is invalidated here rather
-  /// than left showing the old one.
-  ///
   /// [setKey] is the key decision in the dialog's own encoding — null leaves
   /// the stored key, `""` clears it, a string stores it — and [fromId] names
   /// the entry this replaces where a rename moved its id: the stored key
@@ -827,21 +778,24 @@ final backgroundWorkProvider =
 
 final syncHubProvider = Provider<SyncHub>((ref) => throw UnimplementedError());
 
-/// One of the hub's `ValueNotifier`s, watchable. Riverpod has nothing that
-/// watches a listenable, so a listener bridges it; the subclasses below name
-/// which notifier and nothing else, which is also what lets a test override
-/// one without a hub to read.
-abstract class HubValue<T> extends Notifier<T> {
-  ValueListenable<T> of(SyncHub hub);
-
-  @override
-  T build() {
-    final source = of(ref.watch(syncHubProvider));
+/// A [ValueListenable] made watchable: Riverpod has nothing that watches one.
+mixin ListenableValue<T> on Notifier<T> {
+  T bridge(ValueListenable<T> source) {
     void changed() => state = source.value;
     source.addListener(changed);
     ref.onDispose(() => source.removeListener(changed));
     return source.value;
   }
+}
+
+/// One of the hub's `ValueNotifier`s, watchable. The subclasses below name
+/// which notifier and nothing else, which is also what lets a test override
+/// one without a hub to read.
+abstract class HubValue<T> extends Notifier<T> with ListenableValue<T> {
+  ValueListenable<T> of(SyncHub hub);
+
+  @override
+  T build() => bridge(of(ref.watch(syncHubProvider)));
 }
 
 /// The Remotes half of the sidebar: every mirrored chat with who owns it and
@@ -885,15 +839,14 @@ final isMirroredChatProvider = Provider.family<bool, String>((ref, chatId) {
       .watch(remoteChatsProvider.select((chats) => chats.any((c) => c.chatId == chatId)));
 });
 
-/// Read once in `main` for its effect: it listens to the backend from the
-/// moment it exists, and nothing ever asks it anything. Here rather than a bare
-/// object in `main` so that its lifetime is the container's and `dispose` has a
-/// caller.
 /// The single owner of the platform's download slot — see [DownloadHold]. Every
 /// catalog's notifier reports through it rather than to [BackgroundWork].
 final downloadHoldProvider =
     Provider<DownloadHold>((ref) => DownloadHold(ref.watch(backgroundWorkProvider)));
 
+/// Read once in `main` for its effect: it listens to the backend from the
+/// moment it exists, and nothing ever asks it anything. A provider so that its
+/// lifetime is the container's and `dispose` has a caller.
 final turnKeepAliveProvider = Provider<TurnKeepAlive>((ref) {
   final keepAlive = TurnKeepAlive(
       ref.watch(agentBackendProvider), ref.watch(backgroundWorkProvider));
@@ -921,10 +874,9 @@ final syncKeepAliveProvider = Provider<SyncKeepAlive>((ref) {
 final reminderAlarmsProvider =
     Provider<ReminderAlarms>((ref) => const UnavailableReminderAlarms());
 
-/// Whether the app is somewhere the user can see it, in the [ValueNotifier]
-/// shape a turn's tail reads from outside the widget tree. An
-/// `AppLifecycleListener` writes it from the app root; tests override it the
-/// way they override every platform half.
+/// Whether the app is out of the user's sight, which a turn's tail reads from
+/// outside the widget tree. An `AppLifecycleListener` writes it from the app
+/// root.
 final appHiddenProvider =
     NotifierProvider<AppHidden, bool>(AppHidden.new);
 
@@ -979,17 +931,12 @@ class Triggers extends Notifier<List<Trigger>> implements TriggerList {
   Future<void> remove(String id) =>
       write([for (final t in state) if (t.id != id) t]);
 
-  /// The chat-scoped registry the trigger tools' turn is handed: what it
-  /// registers carries this chat as its target, and what it may list and
-  /// remove is this chat's own. The reload the list change causes is what
-  /// puts a registration under watch the moment it lands.
+  /// A trigger the tools registered for [chatId], which is its target. The
+  /// reload the list change causes puts it under watch the moment it lands.
   ///
   /// A timer is anchored here, where the clock is: the parse carried a
-  /// placeholder, and re-anchoring is what makes a countdown thirty
-  /// seconds from *this* rather than from somebody else's midnight.
-  /// Anchors a timer against the clock and adds with a request code
-  /// assigned: the one place codes are handed out, so they stay unique for
-  /// the trigger's life.
+  /// placeholder, and re-anchoring is what makes a countdown thirty seconds
+  /// from *this* rather than from somebody else's midnight.
   Future<Trigger> registerFor(String chatId,
       {required TriggerSource source, required String prompt, String? name, String? member}) async {
     final project = await ref.read(chatRepositoryProvider).projectOf(chatId);
@@ -1076,18 +1023,6 @@ String _resolveTriggerPath(
 final triggerTurnDriverProvider =
     Provider<TriggerTurnDriver>((ref) => throw UnimplementedError());
 
-final triggerRunnerProvider = Provider<TriggerRunner>((ref) {
-  return TriggerRunner(
-    repo: ref.watch(chatRepositoryProvider),
-    driver: ref.watch(triggerTurnDriverProvider),
-    alarms: ref.watch(reminderAlarmsProvider),
-    onListChanged: (_) => ref.invalidate(chatListProvider),
-    onTriggerFired: (trigger) =>
-        ref.read(triggersProvider.notifier).replace(trigger),
-    clock: ref.watch(clockProvider),
-  );
-});
-
 /// Started once beside the sweep timer. It listens to the list from here, so
 /// an edit anywhere rebuilds every kind's watch without the editor having to
 /// know the kinds exist. The registry — the kinds that exist, in the order
@@ -1111,7 +1046,15 @@ final triggerManagerProvider = Provider<TriggerManager>((ref) {
       ),
     ],
     alarmPort: alarms,
-    runner: ref.watch(triggerRunnerProvider),
+    runner: TriggerRunner(
+      repo: ref.watch(chatRepositoryProvider),
+      driver: ref.watch(triggerTurnDriverProvider),
+      alarms: alarms,
+      onListChanged: (_) => ref.invalidate(chatListProvider),
+      onTriggerFired: (trigger) =>
+          ref.read(triggersProvider.notifier).replace(trigger),
+      clock: ref.watch(clockProvider),
+    ),
     list: ref.watch(triggersProvider.notifier),
     projects: () => ref.read(chatRepositoryProvider).listProjects(),
     clock: ref.watch(clockProvider),
@@ -1143,10 +1086,8 @@ final chatRepositoryProvider = Provider<ChatRepository>((ref) {
 /// The sidebar's list: the chats on disk, in every project — each says which
 /// one it is in. A new chat joins when its first message is saved, and whoever
 /// changes what the list shows invalidates it.
-final chatListProvider = FutureProvider<List<ChatState>>((ref) async {
-  final repo = ref.watch(chatRepositoryProvider);
-  return repo.listChats();
-});
+final chatListProvider = FutureProvider<List<ChatState>>(
+    (ref) => ref.watch(chatRepositoryProvider).listChats());
 
 /// Keeps the sidebar's list in step with local deletions. The widget that
 /// asked for a delete invalidates [chatListProvider] too, but its ref may be
@@ -1163,15 +1104,11 @@ final chatDeletionRefreshProvider = Provider<void>((ref) {
 
 /// The projects that exist, for the sidebar's switcher. The default project is
 /// not in it: it is null, and it is always there.
-final projectListProvider = FutureProvider((ref) async {
-  final repo = ref.watch(chatRepositoryProvider);
-  return repo.listProjects();
-});
+final projectListProvider =
+    FutureProvider((ref) => ref.watch(chatRepositoryProvider).listProjects());
 
-final availableModelsProvider = FutureProvider<List<ModelOption>>((ref) async {
-  final backend = ref.watch(agentBackendProvider);
-  return backend.models();
-});
+final availableModelsProvider = FutureProvider<List<ModelOption>>(
+    (ref) => ref.watch(agentBackendProvider).models());
 
 /// The same models in the one order every picker lists them in. Sorted here
 /// rather than in `build`, since an endpoint that offers hundreds is sorted
@@ -1282,102 +1219,72 @@ class ProjectSettingsNotifier extends Notifier<ProjectSettings> {
 
   /// Whether this project keeps an auto-memory store of its own rather than
   /// sharing the default project's.
-  Future<void> setUseProjectMemory(bool value) async {
-    final next = state.copy()..useProjectMemory = value;
-    state = next;
-    await next.save(_config, project: project);
-  }
+  Future<void> setUseProjectMemory(bool value) =>
+      _update((s) => s.useProjectMemory = value);
 
   /// Whether this project's chats can carry several agents in one round.
-  Future<void> setOmada(bool value) async {
-    final next = state.copy()..omada = value;
-    state = next;
-    await next.save(_config, project: project);
-  }
+  Future<void> setOmada(bool value) => _update((s) => s.omada = value);
 
   /// The project's default for how its rounds run. Null is sequential.
-  Future<void> setOmadaOrdering(OmadaOrdering? value) async {
-    final next = state.copy()..omadaOrdering = value;
-    state = next;
-    await next.save(_config, project: project);
-  }
+  Future<void> setOmadaOrdering(OmadaOrdering? value) =>
+      _update((s) => s.omadaOrdering = value);
 
   /// How many handoff generations a round may run here. Null means the app
   /// default stands.
-  Future<void> setOmadaMaxGenerations(int? value) async {
-    final next = state.copy()..omadaMaxGenerations = value;
-    state = next;
-    await next.save(_config, project: project);
-  }
+  Future<void> setOmadaMaxGenerations(int? value) =>
+      _update((s) => s.omadaMaxGenerations = value);
 
   /// How many model calls a direct turn may make here. Null means the app
   /// default stands.
-  Future<void> setTurnMaxSteps(int? value) async {
-    final next = state.copy()..turnMaxSteps = value;
-    state = next;
-    await next.save(_config, project: project);
-  }
+  Future<void> setTurnMaxSteps(int? value) =>
+      _update((s) => s.turnMaxSteps = value);
 
   /// How this project's turns are worded, and whether they number the web
   /// pages they used. Null means the app default stands. One write: the
   /// profile page saves both at once, and two writes of the one
   /// `project.json` would supersede each other.
-  Future<void> setReplyStyle({Tone? tone, bool? citations}) async {
-    final next = state.copy()
-      ..tone = tone
-      ..citations = citations;
-    state = next;
-    await next.save(_config, project: project);
-  }
+  Future<void> setReplyStyle({Tone? tone, bool? citations}) => _update((s) => s
+    ..tone = tone
+    ..citations = citations);
 
   /// The project's own command variables. Null means none, and the app-level
   /// ones stand alone.
-  Future<void> setEnvironment(Map<String, String>? environment) async {
-    final next = state.copy()..environment = environment;
-    state = next;
-    await next.save(_config, project: project);
-  }
+  Future<void> setEnvironment(Map<String, String>? environment) =>
+      _update((s) => s.environment = environment);
 
   /// The project's standing permission rules, saved whole.
-  Future<void> setProjectPermissions(List<PermissionRule> value) async {
-    final next = state.copy()..permissions = value;
-    state = next;
-    await next.save(_config, project: project);
-  }
+  Future<void> setProjectPermissions(List<PermissionRule> value) =>
+      _update((s) => s.permissions = value);
 
   /// The machine directories this project's commands may write to, beside
   /// the workspace the sandbox grants.
-  Future<void> setWritableDirs(List<String> value) async {
-    final next = state.copy()..writableDirs = value;
-    state = next;
-    await next.save(_config, project: project);
-  }
+  Future<void> setWritableDirs(List<String> value) =>
+      _update((s) => s.writableDirs = value);
 
   /// Whether a sandbox-denied write is offered back as an approval. Null
   /// inherits the app default.
-  Future<void> setProjectSandboxReprompt(bool? value) async {
-    final next = state.copy()..sandboxReprompt = value;
-    state = next;
-    await next.save(_config, project: project);
-  }
+  Future<void> setProjectSandboxReprompt(bool? value) =>
+      _update((s) => s.sandboxReprompt = value);
 
   /// What the new-chat screen asks over this project's badge. Null is the
   /// app default; empty is the screen asking nothing.
-  Future<void> setDescription(String? value) async {
-    final next = state.copy()..description = value;
-    state = next;
-    await next.save(_config, project: project);
-  }
+  Future<void> setDescription(String? value) =>
+      _update((s) => s.description = value);
 
   /// Override the app-level temporary-chat TTL for this project. Null means
   /// inherit the app default. Re-anchors the project's chats to now so the
   /// badges appear immediately.
   Future<void> setTempChatTtl(TempChatTtl? ttl) async {
-    final next = state.copy()..tempChatTtl = ttl;
-    state = next;
-    await next.save(_config, project: project);
+    await _update((s) => s.tempChatTtl = ttl);
     await ref.read(chatRepositoryProvider).reanchorProjectTtl(project);
     ref.invalidate(chatListProvider);
+  }
+
+  Future<void> _update(void Function(ProjectSettings) change) async {
+    final next = state.copy();
+    change(next);
+    state = next;
+    await next.save(_config, project: project);
   }
 }
 
