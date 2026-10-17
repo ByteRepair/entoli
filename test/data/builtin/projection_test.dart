@@ -419,6 +419,22 @@ void main() {
           forHouse.map((m) => m.text));
     });
 
+    test("a peer reply words who it handed to, per viewer", () async {
+      final reply = authoredReply("@researcher").copyWith(
+          addressees: ["@reviewer", "@writer"]);
+      final messages = [asked("check the logs"), reply];
+
+      final forReviewer = await project(messages, viewer: "reviewer");
+      expect(forReviewer.last.text, contains("addressed to you and @writer"));
+      final forHouse = await project(messages);
+      expect(forHouse.last.text,
+          contains("addressed to @reviewer, @writer (not to you)"));
+      final unrouted = await project(
+          [asked("check the logs"), authoredReply("@researcher")],
+          viewer: "reviewer");
+      expect(unrouted.last.text, isNot(contains("addressed")));
+    });
+
     test("a peer reply's tool calls do not reach the other viewer", () async {
       final projected = await project([
         asked("check the logs"),

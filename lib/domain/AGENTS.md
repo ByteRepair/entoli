@@ -221,6 +221,11 @@ sigil in someone else's prose and know whose mail it is. What the addressee
 reads is verbatim, and the task dress (`_firstTask`) is the message that
 opened the *viewer's* work — the first own mail — which in a direct chat is
 the conversation's opener, so the rule reduces there to today's bytes.
+A peer reply is worded the same way off its own stamped addressees —
+"addressed to you", or "addressed to @x (not to you)" — so a handoff to
+someone else does not read as work for the viewer; an unrouted reply (old
+logs, a reply naming nobody) words as it did. Only user messages are mail
+for the dress: `addressedTo` is false for a reply.
 
 ### One accumulation
 

@@ -292,8 +292,9 @@ abstract class Message with _$Message {
     /// The members the room routed this say to, sigils on as typed, in the
     /// order mentioned — the room's own record of who was being spoken to,
     /// not a re-parse of the text. Empty is the house's mail, and every
-    /// message written before the field existed. A member's reply carries
-    /// none: who it addresses is the mention in its text.
+    /// message written before the field existed. A reply's is stamped when
+    /// it closes `done` (`TurnEndRecord.addressees`): the members its text
+    /// names, its own author never among them.
     @Default([]) List<String> addressees,
 
     /// The room's Omada state when this turn was opened, written on the

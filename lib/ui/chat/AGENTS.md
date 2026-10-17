@@ -57,7 +57,11 @@ voice.
 **The routing record rides the say.** `Message.addressees` is stamped where
 the say is written — a fresh send in `openTurn`, a say queued while the room
 ran in `_sayLater` — with who the room resolved it to, sigils on as typed,
-empty for the house's mail; old logs read empty. It is room data, not text:
+empty for the house's mail; old logs read empty. A reply's is stamped on its
+`turnEnd` record when it closes `done` — its routing is only known once its
+text is — and the handoff schedules off that stamp, not a re-read of the
+text. A reply never addresses its own author: "hello @a, @b and @me" was
+every member rescheduling itself. It is room data, not text:
 `documents` say what the references *meant*, this says who the room sent it
 to, and a member deleted from the library after the fact does not rewrite
 the room's past. The wording half of it is the projection's, per viewer —
@@ -87,7 +91,13 @@ handoff — the reply that names them, one generation past the turn that wrote
 it. The null key is the main agent, who answers what no member was addressed
 for. `_dispatch` runs what the schedule holds: **sequential** order
 dispatches one item at a time — the mention list is the schedule, and what
-follows dispatches at the settle it causes; **parallel** order dispatches
+follows dispatches at the settle it causes. **A member holds at most one
+waiting handoff**: a later reply naming them replaces it — the later in the
+thread kept, so the earlier is in the turn's history — rather than queueing
+a second turn. Without that a room whose members all name each other fanned
+out by the member count every wave, and the generation cap bounds depth, not
+breadth (a three-member chat ran 85 turns under a cap of ten). **parallel**
+order dispatches
 one item per member at once, each FIFO's head, one turn per member still
 standing, and the rest at the settles they cause; **relay** order keeps the
 per-member rule and drops the wave barrier — the head of every FIFO whose

@@ -239,7 +239,12 @@ String? nameOf(String? author) =>
 /// both is somebody else's mail — the fact [Message.addressees] records and
 /// the projection words per viewer. Names are compared bare: the sigil is
 /// spelling, not identity, the same dialect [nameOf] reads in.
+///
+/// Only a user message is mail: what decides the task dress, which the
+/// projection's walk reads off user messages alone. A reply's routing is
+/// [Message.addressees] read directly.
 bool addressedTo(Message message, String? viewer) {
+  if (message.role != MessageRole.user) return false;
   final to = message.addressees;
   if (viewer == null) return to.isEmpty;
   return to.map(nameOf).contains(viewer);

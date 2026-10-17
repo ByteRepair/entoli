@@ -179,9 +179,11 @@ class TurnRecorder {
   /// The terminal record is the point of this: a log whose last message has no
   /// [TurnEndRecord] was being written when the process died, and that absence
   /// is the only thing that can tell a reload the difference.
-  Future<TurnEnd> close() async {
+  ///
+  /// [addressees] is the reply's routing, see [TurnEndRecord.addressees].
+  Future<TurnEnd> close({List<String> addressees = const []}) async {
     final reason = outcome ?? TurnEnd.done;
-    await _stop(reason);
+    await _stop(reason, addressees: addressees);
     return reason;
   }
 
@@ -194,7 +196,8 @@ class TurnRecorder {
   /// Stop recording, with [reason] closing the log or null leaving it open.
   /// The last of the reply goes in the same write, since every append is an
   /// open and a close of the file.
-  Future<void> _stop(TurnEnd? reason) async {
+  Future<void> _stop(TurnEnd? reason,
+      {List<String> addressees = const []}) async {
     flushDeltas();
     _checkpoint?.cancel();
     _checkpoint = null;
@@ -202,7 +205,9 @@ class TurnRecorder {
     if (ending == null) return;
     _messageId = null;
     await _enqueue(() => _appendChanged(ending, then: [
-          if (reason != null) ChatRecord.turnEnd(messageId: ending, reason: reason),
+          if (reason != null)
+            ChatRecord.turnEnd(
+                messageId: ending, reason: reason, addressees: addressees),
         ]));
   }
 

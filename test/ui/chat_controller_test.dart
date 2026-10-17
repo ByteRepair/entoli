@@ -15,6 +15,8 @@ import "package:agent_chat/domain/temp_chat_ttl.dart";
 import "package:agent_chat/domain/permission.dart";
 import "package:agent_chat/domain/project_settings.dart"
     show OmadaOrdering, ProjectSettings;
+import "package:agent_chat/domain/prompt_library.dart"
+    show PromptDocument, PromptLibrary;
 import "package:agent_chat/providers.dart"
     show
         appSettingsProvider,
@@ -1427,12 +1429,12 @@ void main() {
     test("a reply naming another member hands the next turn to them", () async {
       await _inTeam(app);
       app.backend.scriptedRounds = [
-        // Researcher's reply hands off to explore.
+        // Build's reply hands off to explore.
         const [TextDelta("let me get @explore to confirm"), DoneEvent()],
         const [TextDelta("found them"), DoneEvent()],
       ];
       final (id, controller) =
-          await startTurn("hello @explore, look at the tests", project: "team");
+          await startTurn("hello @build, look at the tests", project: "team");
 
       await waitFor(() => app.backend.prompts.length >= 2, what: "the handoff");
       await waitIdle(id);
@@ -1448,6 +1450,72 @@ void main() {
       expect(messages.last.author, "@explore");
     });
 
+    test("a reply naming its own author hands off to nobody", () async {
+      await _inTeam(app);
+      app.backend.scriptedRounds = [
+        const [TextDelta("hello @explore and @build"), DoneEvent()],
+        const [TextDelta("hi"), DoneEvent()],
+        const [TextDelta("never asked"), DoneEvent()],
+      ];
+      final (id, _) = await startTurn("@explore greet the room", project: "team");
+      await waitIdle(id, limit: const Duration(seconds: 5));
+
+      expect([for (final p in app.backend.prompts) p.settings.omadaMember],
+          ["explore", "build"]);
+      expect(messagesOf(id)[1].addressees, ["@build"]);
+    });
+
+    test("a reply's routing is stamped on its close and survives a reload",
+        () async {
+      await _inTeam(app);
+      app.backend.scriptedRounds = [
+        const [TextDelta("over to @explore"), DoneEvent()],
+        const [TextDelta("done"), DoneEvent()],
+      ];
+      final (id, _) = await startTurn("@build look", project: "team");
+      await waitIdle(id, limit: const Duration(seconds: 5));
+
+      expect(messagesOf(id)[1].addressees, ["@explore"]);
+      expect(messagesOf(id)[2].addressees, isEmpty);
+      final reloaded = await app.repo.openChat(id);
+      expect(reloaded.messages[1].addressees, ["@explore"]);
+    });
+
+    test("a member named by several replies runs once", () async {
+      app.dispose();
+      app = TestApp.create(
+          library: PromptLibrary([
+        for (final name in ["explore", "build", "general"])
+          PromptDocument.parse(CompletionKind.agent, name,
+              "---\ndescription: $name\n---\n\nDo $name.\n"),
+      ]));
+      await _inTeam(app);
+      await app.container
+          .read(projectSettingsProvider("team").notifier)
+          .setOmadaOrdering(OmadaOrdering.parallel);
+      app.backend.scriptedRounds = [
+        const [TextDelta("ask @general"), DoneEvent()],
+        const [TextDelta("ask @general too"), DoneEvent()],
+        const [TextDelta("answered both"), DoneEvent()],
+        const [TextDelta("never asked"), DoneEvent()],
+      ];
+      final (id, _) =
+          await startTurn("@explore and @build, look", project: "team");
+      await waitIdle(id, limit: const Duration(seconds: 5));
+
+      final members = [
+        for (final p in app.backend.prompts) p.settings.omadaMember
+      ];
+      expect(members.where((m) => m == "general"), hasLength(1));
+      // The one turn answers the newest reply, the older one in its history.
+      final messages = messagesOf(id);
+      final fromExplore = messages.firstWhere((m) => m.author == "@explore");
+      final fromBuild = messages.firstWhere((m) => m.author == "@build");
+      final general = app.backend.prompts.last;
+      expect(general.prompt.id, fromBuild.id);
+      expect(general.history.map((m) => m.id), contains(fromExplore.id));
+    });
+
     test("the chain stops at the cap and the user resets it", () async {
       await _inTeam(app);
       // A cap of its own: the app default is ten, and three rounds is the
@@ -1455,9 +1523,11 @@ void main() {
       await app.container
           .read(projectSettingsProvider("team").notifier)
           .setOmadaMaxGenerations(3);
+      // Each reply hands to the other member: its own handle is not an
+      // address.
       app.backend.scriptedRounds = [
-        for (var i = 0; i < 5; i++) ...[
-          const [TextDelta("see @explore"), DoneEvent()],
+        for (var i = 0; i < 10; i++) ...[
+          const [TextDelta("see @explore and @build"), DoneEvent()],
         ],
       ];
       final (id, controller) =

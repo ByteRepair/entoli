@@ -261,11 +261,27 @@ String userTurnText(String text, {required DateTime at, required bool first}) =>
 /// cannot be mistaken for the human user speaking. A user-role message — the
 /// viewer is being told something, not speaking — but the label keeps it
 /// nobody's own.
-String peerTurnText(String text, {required String by, required DateTime at}) =>
-    _withNow(
-        "Message from $by (another agent in this conversation, not the "
-        "user):\n\n$text",
-        at);
+///
+/// [toYou] says the reply handed to the viewer, and [to] who else it handed
+/// to, sigils on: a reply naming only others is context for this viewer, not
+/// work. Neither words what it did before replies were routed.
+String peerTurnText(String text,
+    {required String by,
+    required DateTime at,
+    List<String> to = const [],
+    bool toYou = false}) {
+  final others = to.join(", ");
+  final addressed = switch ((toYou, to.isEmpty)) {
+    (true, true) => ", addressed to you",
+    (true, false) => ", addressed to you and $others",
+    (false, false) => ", addressed to $others (not to you)",
+    (false, true) => "",
+  };
+  return _withNow(
+      "Message from $by (another agent in this conversation, not the "
+      "user)$addressed:\n\n$text",
+      at);
+}
 
 /// What the user's say reads as to a participant it was not addressed to: the
 /// room's other members cannot tell whose mail a say was from the sigil in

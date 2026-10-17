@@ -948,7 +948,10 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
       _schedules.clear();
       reason = null;
     } else {
-      reason = await turn.recorder.close();
+      turn.recorder.flushDeltas();
+      final to = turn.recorder.outcome == null ? _routeOf(turn) : const <String>[];
+      reason = await turn.recorder.close(addressees: to);
+      if (to.isNotEmpty) _stampAddressees(turn.replyId, to);
     }
     // A retryable failure is a blip the turn is carried on from, not an
     // outcome to report: the round waits out its backoff and re-enters the
@@ -1177,8 +1180,9 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
       // The wave lands one past the turn that named it: the round's depth is
       // the finished turn's own, and the cap reads it at dispatch. The entry
       // is out of the table by now — the finished turn's own is what counts.
+      // The routing is the stamp the close wrote, as a say's is.
       final finished = _finishedGenerations[reply.id] ?? 0;
-      _schedule(chat, mentioned(chat, reply),
+      _schedule(chat, [for (final a in reply.addressees) ?nameOf(a)],
           reply: reply, generation: finished);
     }
   }
@@ -1209,8 +1213,33 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
             .whereType<String>()
             .where((name) => _memberIfKnown(chat, name) != null)
             .toList()
+        // A member naming themselves is not handing off: left in, every
+        // "hello @a, @b and @me" reschedules its own author.
         : mentionsIn(message.plainText,
-            ref.read(promptLibraryProvider(chat.state.project)));
+                ref.read(promptLibraryProvider(chat.state.project)))
+            .where((name) => name != nameOf(message.author))
+            .toList();
+  }
+
+  /// The routing [turn]'s reply closes with: [mentioned] over the parts it
+  /// ends on, sigils on.
+  List<String> _routeOf(_RunningTurn turn) {
+    final chat = state.chat;
+    final reply = chat?.messages.firstWhereOrNull((m) => m.id == turn.replyId);
+    if (chat == null || reply == null) return const [];
+    return _stampedMentions(chat, reply.copyWith(parts: turn.recorder.parts));
+  }
+
+  /// Puts the routing the close wrote on the reply in memory too, so the next
+  /// dispatch's history words it the way a reload would.
+  void _stampAddressees(String replyId, List<String> to) {
+    final chat = state.chat;
+    if (chat == null) return;
+    state = state.copyWith(
+        chat: chat.copyWith(messages: [
+      for (final m in chat.messages)
+        m.id == replyId ? m.copyWith(addressees: to) : m,
+    ]));
   }
 
   /// The routing record a say carries: [mentioned]'s answer, sigils on — the
@@ -1251,10 +1280,33 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
       return;
     }
     for (final member in members) {
-      (_schedules[member] ??= []).add(_Scheduled(
-          userPrompt: userPrompt,
-          reply: reply,
-          generation: reply == null ? generation : generation + 1));
+      final queue = _schedules[member] ??= [];
+      if (reply == null) {
+        queue.add(_Scheduled(userPrompt: userPrompt, generation: generation));
+        continue;
+      }
+      // One handoff waiting per member: a later reply naming them takes the
+      // waiting one's place rather than queueing a second turn, since the
+      // turn reads the whole room up to the newest. Without this every
+      // reply that names a member is a turn of theirs, and a room whose
+      // members all name each other fans out by the member count per wave.
+      final waiting = queue.indexWhere((item) => item.reply != null);
+      final deeper = waiting < 0 ? 0 : queue[waiting].generation;
+      // The later of the two in the thread is the one kept: the turn's
+      // history stops before its prompt, so the earlier must be inside it.
+      final held = waiting < 0 ? null : queue[waiting].reply!;
+      final later = held != null &&
+              chat.messages.indexOf(held) > chat.messages.indexOf(reply)
+          ? held
+          : reply;
+      final next = _Scheduled(
+          reply: later,
+          generation: deeper > generation + 1 ? deeper : generation + 1);
+      if (waiting < 0) {
+        queue.add(next);
+      } else {
+        queue[waiting] = next;
+      }
     }
   }
 
