@@ -33,7 +33,7 @@ class AppSettings {
     this.memoryModelId,
     this.memoryProviderId,
     this.environment = const {},
-    this.approveMode = ApproveMode.ask,
+    this.approveMode = ApproveMode.auto,
     this.llmProviders = const [],
     this.profile,
     this.tone = Tone.none,
@@ -138,6 +138,7 @@ class AppSettings {
   Map<String, String> environment;
 
   /// How the agent handles a command before it runs. A chat can override it.
+  /// Default [ApproveMode.auto].
   ApproveMode approveMode;
 
   /// The endpoints the agent can call. Empty until the user adds one, which is
@@ -312,8 +313,9 @@ class AppSettings {
   /// one turn per member at once, and relay answers what a reply names the
   /// moment it is written — per member still one turn at a time, but with no
   /// wave barrier between the waves. `ProjectSettings.omadaOrdering` overrides
-  /// it per project; the enum lives with the project settings, which is
-  /// where a per-project answer was first written.
+  /// it per project; when neither names one the round runs relay. The enum
+  /// lives with the project settings, where a per-project answer was first
+  /// written.
   OmadaOrdering? omadaOrdering;
 
   /// How many model calls one turn may make before it stops for the user —
@@ -486,9 +488,9 @@ class AppSettings {
 
   /// `approveMode` is the current key. An older file has `approveCommands` as
   /// a bool, migrated by [approveModeFromJson]. A file with neither is the
-  /// default, [ApproveMode.ask].
+  /// default, [ApproveMode.auto].
   static ApproveMode _approveMode(Map<String, dynamic> json) =>
-      approveModeFromJson(json) ?? ApproveMode.ask;
+      approveModeFromJson(json) ?? ApproveMode.auto;
 
   // Builds before the /provider flattening fix wrote empty ids here.
   static String? _orNull(String? v) => (v == null || v.isEmpty) ? null : v;
@@ -594,7 +596,9 @@ class AppSettings {
       if (memoryModelId != null) "memoryModelId": memoryModelId,
       if (memoryProviderId != null) "memoryProviderId": memoryProviderId,
       if (environment.isNotEmpty) "environment": environment,
-      "approveMode": approveMode.name,
+      // Written only when not auto, so a file that predates the default
+      // says nothing and gets it.
+      if (approveMode != ApproveMode.auto) "approveMode": approveMode.name,
       if (llmProviders.isNotEmpty)
         "llmProviders": [for (final provider in llmProviders) provider.toJson()],
       if (profile != null && !profile!.isEmpty) "profile": profile!.toJson(),

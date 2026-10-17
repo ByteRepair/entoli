@@ -10,7 +10,8 @@ import "../../core/platform/platform.dart" as platform;
 import "../../domain/llm_provider.dart";
 import "../../domain/permission.dart";
 import "../../domain/project_settings.dart"
-    show OmadaOrdering, omadaOrderingLabels, omadaOrderingDescriptions;
+    show OmadaOrdering, defaultOmadaOrdering, omadaOrderingLabels,
+        omadaOrderingDescriptions;
 import "../../domain/temp_chat_ttl.dart";
 import "../../domain/app_settings.dart";
 import "../../providers.dart";
@@ -769,7 +770,7 @@ class _OmadaSection extends ConsumerWidget {
         InheritableDropdown<OmadaOrdering>(
           label: "Default round order",
           value: settings.omadaOrdering,
-          inherited: omadaOrderingLabels[OmadaOrdering.sequential],
+          inherited: omadaOrderingLabels[defaultOmadaOrdering],
           options: omadaOrderingLabels,
           onChanged: (v) =>
               ref.read(appSettingsProvider.notifier).setOmadaOrdering(v),
@@ -778,7 +779,7 @@ class _OmadaSection extends ConsumerWidget {
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           child: Text(
               omadaOrderingDescriptions[
-                  settings.omadaOrdering ?? OmadaOrdering.sequential]!,
+                  settings.omadaOrdering ?? defaultOmadaOrdering]!,
               style: Theme.of(context).textTheme.bodySmall),
         ),
         InheritableSlider(

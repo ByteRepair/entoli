@@ -147,8 +147,9 @@ void main() {
 
       expect(loaded.defaultModelId, "gpt-x");
       expect(loaded.llmProviders, isEmpty);
-      // The default for a fresh file is ask.
-      expect(loaded.approveMode, ApproveMode.ask);
+      // The default for a fresh file is auto, which with no classifier
+      // configured amounts to ask.
+      expect(loaded.approveMode, ApproveMode.auto);
     });
 
     test("an environment under its old name is still found, and is rewritten", () async {
