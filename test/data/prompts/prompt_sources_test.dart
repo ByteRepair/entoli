@@ -9,6 +9,7 @@ import "package:agent_chat/core/config.dart";
 import "package:agent_chat/core/platform/io/platform.dart"
     show platformChmodReadOnly, platformChmodWritable;
 import "package:agent_chat/data/prompts/agent_pictures.dart";
+import "package:agent_chat/domain/bundled_prompt_file.dart";
 import "package:agent_chat/data/prompts/bundled_skill_data.dart";
 import "package:agent_chat/data/prompts/bundled_skills.dart";
 import "package:agent_chat/data/prompts/prompt_sources.dart";
@@ -288,17 +289,14 @@ void main() {
     }
   });
 
-  test("a binary file survives the embed byte-identical", () async {
-    final config = tempConfig();
-    await install(config);
-    final binary = bundledSkillFiles.firstWhere((f) => f.binary);
-    final onDisk = File(p.join(
-        config.bundledSkillsDir(), binary.name, binary.relativePath));
-    expect(binary.binary, isTrue);
-    expect(binary.bytes, isNot(utf8.encode(binary.content)),
-        reason: "a base64 entry decodes to bytes other than its own text");
-    expect(await onDisk.readAsBytes(), binary.bytes,
-        reason: "${binary.name}/${binary.relativePath} does not round-trip");
+  test("a binary entry decodes to its own bytes, not its own text", () {
+    const bytes = [0x89, 0x50, 0x4e, 0x47, 0x00, 0xff];
+    final entry = BundledPromptFile("default", "picture", "image.png",
+        sha256.convert(bytes).toString(), base64Encode(bytes),
+        binary: true);
+    expect(entry.bytes, bytes);
+    expect(entry.bytes, isNot(utf8.encode(entry.content)),
+        reason: "a base64 entry's bytes are not the base64 itself");
   });
 
   test("every skill with a LICENSE.txt registers a licence entry", () async {
@@ -307,9 +305,7 @@ void main() {
         .map((f) => f.name)
         .toSet();
     expect(withLicence, contains("skill-creator"),
-        reason: "the local skill-creator carries its own licence");
-    expect(withLicence, contains("mcp-builder"),
-        reason: "the fetched skills carry theirs");
+        reason: "skill-creator carries its own licence");
     // The registry is write-only from here; the page reads it back through
     // the framework. What is testable is that every name it should carry is
     // derivable, and the decoder behind it does not throw.
@@ -320,55 +316,28 @@ void main() {
     }
   });
 
-  test("every fetched skill carries its own Apache licence", () {
-    // What the fork's release ships is copied wholesale; the one rule this
-    // side of the pond keeps is that a skill it embeds must say what
-    // redistribution it allows. A release that forgets fails here, loudly,
-    // rather than shipping a licence it does not have.
-    final localSkills = Directory("assets/prompts/projects")
-        .listSync(recursive: true)
-        .whereType<Directory>()
-        .where((d) => d.parent.path.endsWith("skills"))
-        .map((d) => p.basename(d.path))
-        .toSet();
-    final fetched = bundledSkillFiles
-        .map((f) => f.name)
-        .toSet()
-        .where((n) => !localSkills.contains(n))
-        .toSet();
-    expect(fetched, isNotEmpty);
-    final withLicence = bundledSkillFiles
-        .where((f) => f.relativePath == "LICENSE.txt")
-        .map((f) => f.name)
-        .toSet();
-    for (final name in fetched) {
-      expect(withLicence.contains(name), isTrue,
-          reason: "$name is fetched but carries no LICENSE.txt");
-      final licence = bundledSkillFiles
-          .firstWhere((f) => f.name == name && f.relativePath == "LICENSE.txt");
-      expect(utf8.decode(licence.bytes), contains("Apache License"),
-          reason: "$name is not Apache-licensed");
-    }
-  });
-
   group("project scoping", () {
-    // The local three are pinned by name; the fetched set moves with the
-    // fork's releases and is asserted structurally above. Every skill is
-    // unscoped, so every project inherits the whole lot.
+    // The presets are the locally written skills, pinned by name in
+    // full: nothing the marketplace serves ships built in. Every local
+    // skill is unscoped, so every project inherits the whole lot.
     const localSkills = {
       "artifact",
+      "code-review",
       "coding",
+      "compact",
       "deep-research",
+      "refactor",
+      "simplify",
       "skill-creator",
     };
 
-    test("the default project offers the local skills and agents, no others "
-        "missing", () async {
+    test("the default project offers the local skills and agents, no others",
+        () async {
       final skills =
           await BundledPrompts(config: tempConfig()).load(CompletionKind.skill);
       final agents = await BundledPrompts().load(CompletionKind.agent);
 
-      expect(skills.map((s) => s.name).toSet(), containsAll(localSkills));
+      expect(skills.map((s) => s.name).toSet(), equals(localSkills));
       expect(agents.map((a) => a.name).toSet(), {"explore", "general"});
     });
 
@@ -381,7 +350,7 @@ void main() {
       final agents = await BundledPrompts(project: "byte-repair")
           .load(CompletionKind.agent);
 
-      expect(skills.map((s) => s.name).toSet(), containsAll(localSkills));
+      expect(skills.map((s) => s.name).toSet(), equals(localSkills));
       expect(agents.map((a) => a.name).toSet(),
           {"explore", "general", "esbmc-verifier"});
     });

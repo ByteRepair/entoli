@@ -1,6 +1,5 @@
 // Generates lib/data/prompts/bundled_skill_data.dart from the source tree
-// under assets/prompts/ and from the fetched tree under
-// build/skills-upstream/. Run by tool/prepare.sh before build_runner.
+// under assets/prompts/. Run by tool/prepare.sh before build_runner.
 //
 // The bundled skills and agents are embedded in code rather than shipped as
 // Flutter assets: the app is the source of truth for the presets, and the
@@ -8,16 +7,13 @@
 // Agents are code-only — never written to disk — since nothing reads them
 // by path.
 //
-// The fetched skills are tool/fetch-skills.sh's latest release of
-// ByteRepair/skills, copied wholesale: what a release ships is the fork's
-// decision, made by its RELEASE_EXCLUDED and release script, and not ours to
-// second-guess here. They are embedded unscoped — tagged with the default
-// project, inherited by every other — and land only where the source tree
-// has no skill of the same name, which keeps the locally adapted files the
-// source of truth for the skills we carry ourselves. Every skill's SKILL.md
-// is still validated against the Agent Skills spec before it is embedded:
-// the loader skips a non-conformant skill with a log line, so a preset that
-// did not conform would silently ship broken.
+// The presets are the locally written skills alone. The skills the fork
+// ships are in the marketplace, and the app does not bundle them; the
+// user installs what they want from there.
+//
+// Every skill's SKILL.md is validated against the Agent Skills spec before
+// it is embedded: the loader skips a non-conformant skill with a log line,
+// so a preset that did not conform would silently ship broken.
 //
 // Each entry is tagged with the project it belongs to. `default` is the base
 // set every project inherits; another project's entries override a
@@ -31,10 +27,6 @@ import "package:agent_chat/domain/bundled_prompt_file.dart";
 import "package:agent_chat/domain/frontmatter.dart";
 
 import "gen_common.dart";
-
-/// Where the fetched tree lands; the same path tool/fetch-skills.sh extracts
-/// to. Under `build/`, so it is gitignored and never reviewed as a diff.
-const skillsUpstreamDir = "build/skills-upstream/skills";
 
 void main() {
   final skills = <BundledPromptFile>[];
@@ -55,27 +47,6 @@ void main() {
         agents.add(e);
       }
     }
-  }
-
-  final local = skills.map((e) => e.name).toSet();
-  final upstream = Directory(skillsUpstreamDir);
-  if (upstream.existsSync()) {
-    for (final skillDir in upstream.listSync().whereType<Directory>()) {
-      final name = basename(skillDir.path);
-      if (local.contains(name)) continue;
-      final entries = _collectSkill(skillDir, "default");
-      skills.addAll(entries);
-      // A skill that cannot say what redistribution it allows is not one to
-      // ship silently. The release is supposed to have filtered that out.
-      if (entries.every((e) => e.relativePath != "LICENSE.txt")) {
-        stderr.writeln("gen_bundled_skills: fetched skill $name carries no "
-            "LICENSE.txt — the release should have excluded it.");
-      }
-    }
-  } else {
-    stderr.writeln("gen_bundled_skills: no fetched skills at "
-        "$skillsUpstreamDir — run tool/fetch-skills.sh. Bundling the local "
-        "skills alone.");
   }
 
   sortByProject(skills);
@@ -141,8 +112,8 @@ List<BundledPromptFile> _collectSkill(
 }
 
 /// Whether a file is binary rather than text: a NUL byte anywhere, or a
-/// sequence the UTF-8 decoder refuses. Everything the fetched tree carries
-/// as text — SKILL.md, scripts, the licences — decodes cleanly, so the sniff
+/// sequence the UTF-8 decoder refuses. Everything the skill tree carries as
+/// text — SKILL.md, scripts, the licences — decodes cleanly, so the sniff
 /// is for the fonts and archives, where those are the only two tells there
 /// are.
 bool _isBinary(File file) {

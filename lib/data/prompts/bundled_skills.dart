@@ -104,10 +104,9 @@ Future<void> _deleteStrays(
 }
 
 /// One licence entry per bundled skill that carries its own `LICENSE.txt` —
-/// the fetched ones are Anthropic's and Apache-2.0, and the notice has to
-/// travel with the skill wherever it is redistributed. Read from the
-/// embedded data rather than the asset bundle, and rendered by the licence
-/// page About opens.
+/// the notice has to travel with the skill wherever it is redistributed.
+/// Read from the embedded data rather than the asset bundle, and rendered by
+/// the licence page About opens.
 void registerBundledSkillLicences() {
   final groups = <String, String>{};
   for (final file in bundledSkillFiles) {

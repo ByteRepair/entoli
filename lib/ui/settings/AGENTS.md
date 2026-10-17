@@ -256,8 +256,8 @@ what speaks", both of which were written against a licence page that did not
 exist yet. The bundled skills join them one entry per skill that carries its
 own `LICENSE.txt`, named after the skill and read from the embedded data —
 `registerBundledSkillLicences` — so the notice travels with the skill wherever
-the skill is redistributed, which is what the fetched ones' Apache licence
-asks.
+the skill is redistributed, which is what a licence like skill-creator's
+Apache asks.
 
 **Narrow, the categories are the page rather than its drawer**, and each one is
 pushed over the list. That is the one place this and the chat page differ about

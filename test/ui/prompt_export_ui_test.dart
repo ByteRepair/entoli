@@ -35,7 +35,7 @@ void main() {
       await reloadLibrary(tester, app, project: "work");
 
       // The bundled presets plus the project's own review — every row
-      // exports. The fetched skills lengthen the list, so what is counted is
+      // exports. The bundled skills lengthen the list, so what is counted is
       // that the row exists and exports, not how many rows there are.
       expect(_exportButtons, findsWidgets);
       await scrollTo(tester, find.byTooltip("Export review"));
@@ -67,7 +67,7 @@ void main() {
       await reloadLibrary(tester, app);
 
       // No directory scan needed — export is on every row, scan or not.
-      // The fetched presets lengthen the list; the point here is that a
+      // The bundled presets lengthen the list; the point here is that a
       // bundled row's export reads the embedded preset, wherever it sits.
       expect(_exportButtons, findsWidgets);
       await scrollTo(tester, find.byTooltip("Export artifact"));
@@ -115,7 +115,7 @@ void main() {
       await pumpSettings(tester, app, SettingsCategory.skills);
       await reloadLibrary(tester, app);
 
-      // The fetched presets sort ahead of the user's entries, so both rows
+      // The bundled presets sort ahead of the user's entries, so both rows
       // are below the fold and brought up in turn — asserting on both while
       // they are together on screen would be asserting on a list's window,
       // not on its contents.
