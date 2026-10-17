@@ -1201,8 +1201,7 @@ class _BackupSectionState extends ConsumerState<_BackupSection> {
       whileBusy(context, _busy, work);
 
   void _say(String message) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    if (mounted) say(context, message);
   }
 
   String _describe(Backup backup) {

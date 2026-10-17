@@ -14,6 +14,7 @@ import "../../domain/project.dart" show promptsDirUserWritable;
 import "../../domain/prompt_library.dart";
 import "../../providers.dart";
 import "../skills/skill_view.dart";
+import "../widgets/add_button_row.dart";
 import "../widgets/busy.dart";
 import "../widgets/dialogs.dart";
 import "../widgets/install_destination.dart";
@@ -132,8 +133,14 @@ class _SkillsSectionState extends ConsumerState<SkillsSection> {
     final bytes = await file.readAsBytes();
     if (!mounted) return;
 
-    final package = _guardSync(() => parseSkillPackage(bytes));
-    if (package == null) return;
+    // The parse throws rather than awaits, so a refused file is a snack bar
+    // rather than a busy bar.
+    final SkillPackage package;
+    try {
+      package = parseSkillPackage(bytes);
+    } on SkillImportException catch (e) {
+      return _say("That file cannot be imported: $e.");
+    }
 
     // The destination dropdown's pick on the global page, the page's own
     // project on a project page. The global page's scan reads only the
@@ -215,27 +222,15 @@ class _SkillsSectionState extends ConsumerState<SkillsSection> {
         builder: (_) => SkillViewPage(
           name: name,
           project: widget.project,
-          origin: origin ?? _originLabel(CompletionKind.skill, name),
+          origin: origin ?? _originLabel(name),
         ),
       ));
 
   Future<void> _guard(Future<void> Function() work) =>
       whileBusy(context, _busy, work);
 
-  /// The parse is fast and throws rather than awaits, so it goes through the
-  /// busy bar by hand: a refused file is a snack bar, not a half-open bar.
-  SkillPackage? _guardSync(SkillPackage Function() work) {
-    try {
-      return work();
-    } on SkillImportException catch (e) {
-      _say("That file cannot be imported: $e.");
-      return null;
-    }
-  }
-
   void _say(String message) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    if (mounted) say(context, message);
   }
 
   @override
@@ -268,7 +263,7 @@ class _SkillsSectionState extends ConsumerState<SkillsSection> {
             children: [
               SectionHeader("Skills", description: description),
               for (final skill in skills) _row(skill, userSkills),
-              for (final name in notLoaded) _notLoadedRow(name, userSkills!),
+              for (final name in notLoaded) _notLoadedRow(name),
             ],
           ),
         ),
@@ -281,8 +276,7 @@ class _SkillsSectionState extends ConsumerState<SkillsSection> {
                 onChanged: (value) => setState(() => _destination = value),
               ),
             ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+          AddButtonRow(
             child: ValueListenableBuilder(
               valueListenable: _busy,
               builder: (context, busy, _) => OutlinedButton.icon(
@@ -329,7 +323,7 @@ class _SkillsSectionState extends ConsumerState<SkillsSection> {
               ),
             false => Padding(
                 padding: const EdgeInsets.only(right: 12),
-                child: Text(_originLabel(CompletionKind.skill, skill.name)),
+                child: Text(_originLabel(skill.name)),
               ),
             true => const SizedBox.shrink(),
           },
@@ -353,7 +347,7 @@ class _SkillsSectionState extends ConsumerState<SkillsSection> {
   /// rows above, and a row here is the only place it is anything but an
   /// absence. The view page says the problems; remove takes the folder away
   /// where the directory is the user's.
-  Widget _notLoadedRow(String name, Map<String, List<String>> userSkills) =>
+  Widget _notLoadedRow(String name) =>
       ListTile(
         dense: true,
         title: Text(name),
@@ -383,8 +377,8 @@ class _SkillsSectionState extends ConsumerState<SkillsSection> {
 
   /// Where an entry the project's directory does not hold came from: a preset
   /// the binary embeds, or a default-project entry this project inherits.
-  String _originLabel(CompletionKind kind, String name) =>
-      isBundledPromptName(kind, name, project: widget.project)
+  String _originLabel(String name) =>
+      isBundledPromptName(CompletionKind.skill, name, project: widget.project)
           ? "Bundled"
           : "Inherited";
 }

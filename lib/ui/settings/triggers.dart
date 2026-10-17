@@ -167,12 +167,12 @@ class _TriggerTile extends ConsumerWidget {
     final named = ref.watch(projectListProvider).value ?? const <String>[];
     final project = projectOrDefault(trigger.project, named);
     final clock = ref.watch(clockProvider);
-    final source = _sourceLine(trigger.source, exact: exact, clock: clock);
     final summary = [
       if (trigger.enabled && trigger.nextFireAt != null)
         "${exact ? "" : "approx. "}${describeFire(trigger.nextFireAt!, clock.now())}",
-      if (trigger.enabled && trigger.nextFireAt == null && trigger.source is FileSource)
-        source,
+      if (trigger.enabled && trigger.nextFireAt == null)
+        if (trigger.source case FileSource(:final paths))
+          "File: ${paths.join(", ")}",
       if (trigger.source is ScheduleSource)
         (trigger.source as ScheduleSource).repeat.label,
       if (trigger.member != null) "@${trigger.member}",
@@ -196,21 +196,6 @@ class _TriggerTile extends ConsumerWidget {
       onTap: onEdit,
     );
   }
-}
-
-/// What a source is, one line, for the row and the editor: the kind's own
-/// description, the moment where it is on the clock.
-String _sourceLine(TriggerSource source,
-    {required bool exact, required Clock clock}) {
-  final approximate = exact ? "" : "approx. ";
-  final line = switch (source) {
-    ScheduleSource(:final at, :final repeat) => repeat == ScheduleRepeat.off
-        ? approximate + describeFire(at, clock.now())
-        : repeat.label,
-    TimerSource() => source.describe(),
-    FileSource(:final paths) => "File: ${paths.join(", ")}",
-  };
-  return line;
 }
 
 /// The add/edit page, pushed over whatever listed the triggers. What the
@@ -252,7 +237,7 @@ class _TriggerEditorPageState extends ConsumerState<TriggerEditorPage> {
     _clock = ref.read(clockProvider);
     _name = TextEditingController(text: trigger?.name ?? "");
     _prompt = trigger?.prompt ?? "";
-    _source = trigger?.source ?? _defaultSource();
+    _source = trigger?.source ?? ScheduleSource(at: _defaultAt());
     _project = trigger?.project;
     _member = trigger?.member;
     _tempChatTtl = trigger?.tempChatTtl;
@@ -266,8 +251,6 @@ class _TriggerEditorPageState extends ConsumerState<TriggerEditorPage> {
 
   /// A new schedule defaults to the next whole hour, so picking a time is one
   /// spin rather than starting from now-and-a-few-minutes.
-  TriggerSource _defaultSource() => ScheduleSource(at: _defaultAt());
-
   DateTime _defaultAt() {
     final now = _clock.now();
     return DateTime(now.year, now.month, now.day, now.hour + 1);
@@ -500,7 +483,7 @@ class _TriggerEditorPageState extends ConsumerState<TriggerEditorPage> {
             ),
           ],
         _SourceKind.file => [
-            FileSourceField(
+            _FileSourceField(
               source: _source as FileSource,
               onChanged:
                   editable ? (source) => setState(() => _source = source) : null,
@@ -563,49 +546,31 @@ class _TriggerEditorPageState extends ConsumerState<TriggerEditorPage> {
   }
 
   Future<void> _save() async {
-    final prompt = _prompt.trim();
-    if (prompt.isEmpty) {
-      ScaffoldMessenger.of(context)
-        ..hideCurrentSnackBar()
-        ..showSnackBar(const SnackBar(content: Text("Write the prompt first.")));
-      return;
-    }
     final isNew = widget.trigger == null;
+    final prompt = _prompt.trim();
     // A one-shot set in the past would be born already fired; a repeating one
     // in the past is fine, since it has occurrences ahead of it.
-    final schedule = _source is ScheduleSource ? _source as ScheduleSource : null;
-    final timer = _source is TimerSource ? _source as TimerSource : null;
-    if (schedule != null &&
-        isNew &&
-        !schedule.at.isAfter(_clock.now()) &&
-        schedule.repeat == ScheduleRepeat.off) {
+    final refusal = prompt.isEmpty
+        ? "Write the prompt first."
+        : switch (_source) {
+            ScheduleSource(:final at, repeat: ScheduleRepeat.off)
+                when isNew && !at.isAfter(_clock.now()) =>
+              "Pick a time in the future.",
+            FileSource(:final paths) when paths.isEmpty =>
+              "Name at least one path to watch.",
+            FileSource(:final events) when events.isEmpty =>
+              "Pick what a change is — with nothing picked it would never fire.",
+            _ => null,
+          };
+    if (refusal != null) {
       ScaffoldMessenger.of(context)
         ..hideCurrentSnackBar()
-        ..showSnackBar(const SnackBar(content: Text("Pick a time in the future.")));
+        ..showSnackBar(SnackBar(content: Text(refusal)));
       return;
     }
-    if (timer != null) {
+    if (_source case TimerSource(:final duration)) {
       // A countdown fires once from being set; re-saving re-sets it.
-      _source = TimerSource(
-          duration: timer.duration, registeredAt: _clock.now());
-    }
-    if (_source is FileSource) {
-      final file = _source as FileSource;
-      if (file.paths.isEmpty) {
-        ScaffoldMessenger.of(context)
-          ..hideCurrentSnackBar()
-          ..showSnackBar(
-              const SnackBar(content: Text("Name at least one path to watch.")));
-        return;
-      }
-      if (file.events.isEmpty) {
-        ScaffoldMessenger.of(context)
-          ..hideCurrentSnackBar()
-          ..showSnackBar(const SnackBar(
-              content: Text(
-                  "Pick what a change is — with nothing picked it would never fire.")));
-        return;
-      }
+      _source = TimerSource(duration: duration, registeredAt: _clock.now());
     }
     // Recomputed on save rather than carried over: an edit into the past means
     // the next occurrence after now, never a fire in the past.
@@ -661,13 +626,11 @@ class _TriggerEditorPageState extends ConsumerState<TriggerEditorPage> {
 
 enum _SourceKind { schedule, timer, file }
 
-/// The file source's rows: one path at a time, the kinds of change to fire
-/// on, and how long a trigger stays quiet after it has fired. The paths are
-/// typed the way the file tools read them — workspace-relative, or
-/// `project:`-prefixed — since the watch resolves them exactly there.
-class FileSourceField extends ConsumerStatefulWidget {
-  const FileSourceField(
-      {super.key, required this.source, required this.onChanged});
+/// The file source's rows: one path at a time and the kinds of change to fire
+/// on. The paths are typed the way the file tools read them — workspace-relative,
+/// or `project:`-prefixed — since the watch resolves them exactly there.
+class _FileSourceField extends StatefulWidget {
+  const _FileSourceField({required this.source, required this.onChanged});
 
   final FileSource source;
 
@@ -675,10 +638,10 @@ class FileSourceField extends ConsumerStatefulWidget {
   final void Function(FileSource)? onChanged;
 
   @override
-  ConsumerState<FileSourceField> createState() => _FileSourceFieldState();
+  State<_FileSourceField> createState() => _FileSourceFieldState();
 }
 
-class _FileSourceFieldState extends ConsumerState<FileSourceField> {
+class _FileSourceFieldState extends State<_FileSourceField> {
   final _path = TextEditingController();
 
   @override
@@ -725,13 +688,8 @@ class _FileSourceFieldState extends ConsumerState<FileSourceField> {
                 : IconButton(
                     icon: const Icon(Icons.close),
                     tooltip: "Remove path",
-                    onPressed: () => widget.onChanged!(FileSource(
-                        paths: [
-                          for (final p in source.paths)
-                            if (p != path) p,
-                        ],
-                        events: source.events,
-                        cooldown: source.cooldown)),
+                    onPressed: () => _emit(
+                        paths: [...source.paths]..remove(path)),
                   ),
           ),
         LabelledField(
@@ -745,12 +703,10 @@ class _FileSourceFieldState extends ConsumerState<FileSourceField> {
                   selected: source.events.contains(event),
                   onSelected: widget.onChanged == null
                       ? null
-                      : (on) => widget.onChanged!(FileSource(
-                          paths: source.paths,
+                      : (on) => _emit(
                           events: on
                               ? {...source.events, event}
-                              : source.events.where((e) => e != event).toSet(),
-                          cooldown: source.cooldown)),
+                              : ({...source.events}..remove(event))),
                 ),
             ],
           ),
@@ -762,11 +718,16 @@ class _FileSourceFieldState extends ConsumerState<FileSourceField> {
   void _add(String text) {
     final path = text.trim();
     if (path.isEmpty || widget.source.paths.contains(path)) return;
-    widget.onChanged?.call(FileSource(
-        paths: [...widget.source.paths, path],
-        events: widget.source.events,
-        cooldown: widget.source.cooldown));
+    _emit(paths: [...widget.source.paths, path]);
     _path.clear();
+  }
+
+  void _emit({List<String>? paths, Set<FileEvent>? events}) {
+    final source = widget.source;
+    widget.onChanged?.call(FileSource(
+        paths: paths ?? source.paths,
+        events: events ?? source.events,
+        cooldown: source.cooldown));
   }
 }
 
