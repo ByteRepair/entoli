@@ -30,7 +30,7 @@ const omadaOrderingLabels = {
 
 /// One line each, under the ordering dropdown: what the round does under
 /// that ordering. The description shown is the effective one — the
-/// project's pick, else the app default, else sequential.
+/// project's pick, else the app default, else relay.
 const omadaOrderingDescriptions = {
   OmadaOrdering.sequential: "Members run one after another, in the order "
       "the message names them.",
@@ -39,6 +39,9 @@ const omadaOrderingDescriptions = {
   OmadaOrdering.relay: "Members start as soon as they are named, without "
       "waiting for the room to settle.",
 };
+
+/// The default when nothing is set anywhere: relay.
+const defaultOmadaOrdering = OmadaOrdering.relay;
 
 /// Project-scoped overrides. A project can override the app-level
 /// [TempChatTtl] with one of its own, keep an auto-memory store of its own,

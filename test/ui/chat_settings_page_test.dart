@@ -161,7 +161,10 @@ void main() {
       await openPage(tester);
       await scrollTo(tester, find.text("Running commands"));
 
-      expect(find.text("$defaultOptionLabel (Ask before every command)"), findsOneWidget);
+      expect(
+          find.text(
+              "$defaultOptionLabel (Auto: run what the classifier rates safe, ask on the rest)"),
+          findsOneWidget);
       expect((await io(tester, () => app.savedMeta(_chatId))).approveMode, isNull);
 
       // And it follows the app setting as it changes: the app's mode is the

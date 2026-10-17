@@ -14,7 +14,8 @@ import "../../domain/turn_recorder.dart";
 import "../../domain/models.dart";
 import "../../domain/prompt_library.dart"
     show authorFrom, authorKeys, nameOf, singleAgentMention, mentionsIn;
-import "../../domain/project_settings.dart" show OmadaOrdering;
+import "../../domain/project_settings.dart"
+    show OmadaOrdering, defaultOmadaOrdering;
 import "../../domain/shell.dart" show shellBypassCommand;
 import "../../domain/wired_skill.dart";
 import "../../data/builtin/templates.dart" show passWord;
@@ -1349,13 +1350,12 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
   }
 
   /// The room's scheduling order: the project's pick, else the app default,
-  /// else sequential — the answer a room that never heard of the setting
-  /// runs under.
+  /// else relay.
   OmadaOrdering get _ordering {
     final project = state.chat?.state.project;
     return ref.read(projectSettingsProvider(project)).omadaOrdering ??
         ref.read(appSettingsProvider).omadaOrdering ??
-        OmadaOrdering.sequential;
+        defaultOmadaOrdering;
   }
 
   /// The one member [reply] names by handle, as the composer's own

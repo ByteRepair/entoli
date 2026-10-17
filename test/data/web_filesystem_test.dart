@@ -167,7 +167,7 @@ void main() {
   group("settings", () {
     test("a filesystem with nothing written to it is the defaults", () {
       expect(AppSettings.load(config).llmProviders, isEmpty);
-      expect(AppSettings.load(config).approveMode, ApproveMode.ask);
+      expect(AppSettings.load(config).approveMode, ApproveMode.auto);
       expect(ProjectSettings.load(config).useProjectMemory, isFalse);
     });
 

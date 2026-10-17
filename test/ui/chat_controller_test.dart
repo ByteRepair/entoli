@@ -1347,6 +1347,11 @@ void main() {
     test("a mention list schedules the members' turns in mention order",
         () async {
       await _inTeam(app);
+      // Pinned sequential, the settle rule's test: under relay the second
+      // prompt goes out while the first still runs.
+      await app.container
+          .read(projectSettingsProvider("team").notifier)
+          .setOmadaOrdering(OmadaOrdering.sequential);
       app.backend.scriptedRounds = [
         for (var i = 0; i < 4; i++) ...[
           const [TextDelta("done"), DoneEvent()],
@@ -1624,6 +1629,26 @@ void main() {
       // the third prompt, dispatched at the settle the wave caused.
       expect(app.backend.prompts, hasLength(3));
       expect(app.backend.prompts[2].settings.omadaMember, "build");
+    });
+
+    test("the default round order is relay: a fan-out without any picked",
+        () async {
+      await _inTeam(app);
+      // Project and app picked none of their own: the room still answers
+      // with both members in flight at once.
+      app.backend.hold = Completer<void>();
+      addTearDown(() => app.backend.hold?.complete());
+      final (id, _) = await startTurn(
+          "@explore and @build, have a look", project: "team");
+
+      await waitFor(() => app.backend.prompts.length >= 2,
+          what: "the fan-out", limit: const Duration(seconds: 5));
+      expect(app.backend.prompts[0].settings.omadaMember, "explore");
+      expect(app.backend.prompts[1].settings.omadaMember, "build");
+
+      app.backend.hold?.complete();
+      app.backend.hold = null;
+      await waitIdle(id, limit: const Duration(seconds: 5));
     });
 
     test("relay hands off while a sibling still holds the floor", () async {
@@ -2007,6 +2032,9 @@ void main() {
       // handoff from being parked for the wave's settle. The guard it
       // replaced returned before the settle and dropped the handoff.
       await _inTeam(app);
+      await app.container
+          .read(projectSettingsProvider("team").notifier)
+          .setOmadaOrdering(OmadaOrdering.sequential);
       app.backend.hold = Completer<void>();
       addTearDown(() => app.backend.hold?.complete());
       app.backend.scriptedRounds = [

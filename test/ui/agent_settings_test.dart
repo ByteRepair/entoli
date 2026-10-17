@@ -213,11 +213,14 @@ void main() {
       await settleIo(tester);
     }
 
-    testWidgets("defaults to ask, the safe mode", (tester) async {
+    testWidgets("defaults to auto, degraded to asking without a classifier",
+        (tester) async {
       await pumpSettings(tester, app, SettingsCategory.general);
       await scrollTo(tester, find.text("Running commands"));
 
-      expect(app.container.read(appSettingsProvider).approveMode, ApproveMode.ask);
+      expect(app.container.read(appSettingsProvider).approveMode,
+          ApproveMode.auto);
+      expect(find.textContaining("No classifier model set"), findsOneWidget);
     });
 
     testWidgets("can be switched to run without asking", (tester) async {
@@ -232,6 +235,9 @@ void main() {
 
     testWidgets("auto is disabled when no classifier model is set", (tester) async {
       await pumpSettings(tester, app, SettingsCategory.general);
+      await openModeDropdown(tester);
+      await tester.tap(find.textContaining("Ask before every command").last);
+      await settleIo(tester);
       await openModeDropdown(tester);
 
       // The item is there but greyed out — tapping it does nothing.

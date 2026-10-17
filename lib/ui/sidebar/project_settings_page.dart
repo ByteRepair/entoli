@@ -352,8 +352,7 @@ class _OmadaRow extends ConsumerWidget {
 }
 
 /// The project's default for how its rounds run, shown only while the
-/// project's Omada toggle is on. Null is sequential, the same answer the
-/// section's labels name.
+/// project's Omada toggle is on. Null is the app default.
 class _OmadaOrderingRow extends ConsumerWidget {
   const _OmadaOrderingRow({required this.project});
 
@@ -364,7 +363,7 @@ class _OmadaOrderingRow extends ConsumerWidget {
     final value = ref
         .watch(projectSettingsProvider(project).select((s) => s.omadaOrdering));
     final app = ref.watch(appSettingsProvider).omadaOrdering;
-    final effective = value ?? app ?? OmadaOrdering.sequential;
+    final effective = value ?? app ?? defaultOmadaOrdering;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -372,7 +371,7 @@ class _OmadaOrderingRow extends ConsumerWidget {
           label: "Round order",
           value: value,
           // Null here resolves to the app's default, not the enum's own.
-          inherited: omadaOrderingLabels[app ?? OmadaOrdering.sequential],
+          inherited: omadaOrderingLabels[app ?? defaultOmadaOrdering],
           options: omadaOrderingLabels,
           onChanged: (v) =>
               ref.read(projectSettingsProvider(project).notifier).setOmadaOrdering(v),
