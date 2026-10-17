@@ -45,11 +45,10 @@ class LlmClassifier implements PermissionClassifier {
     }
   }
 
-  /// The first word that matches a decision, case-insensitive. Anything the
-  /// model says that does not start with allow/ask/deny is treated as ask.
+  /// The first word, case-insensitive and without punctuation ("Allow." is
+  /// allow). Anything that does not start with allow/deny is ask.
   static PermissionDecision _parse(String? answer) {
-    if (answer == null || answer.isEmpty) return PermissionDecision.ask;
-    final first = answer.split(RegExp(r"\s+")).first;
+    final first = RegExp(r"[a-z]+").firstMatch(answer ?? "")?.group(0);
     return switch (first) {
       "allow" => PermissionDecision.allow,
       "deny" => PermissionDecision.deny,
