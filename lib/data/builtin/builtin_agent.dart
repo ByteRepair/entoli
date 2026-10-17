@@ -1054,13 +1054,8 @@ class BuiltinAgent {
     // the log in finishing order, which is not an order the model ever chose.
     for (var i = 0; i < calls.length; i++) {
       final args = parsed[i];
-      yield ToolCallEvent(ToolCall(
-        id: calls[i].id,
-        name: calls[i].name,
-        argumentsJson: calls[i].argumentsJson,
-        argumentsText:
-            args == null ? null : "@${args.agent}: ${_truncate(args.prompt, 200)}",
-      ));
+      yield _called(calls[i],
+          args == null ? null : "@${args.agent}: ${_truncate(args.prompt, 200)}");
     }
 
     final controller = StreamController<AgentEvent>();
@@ -1068,10 +1063,13 @@ class BuiltinAgent {
     Future<void> runOne(int index) async {
       final call = calls[index];
       final args = parsed[index];
+      if (_cancelled) {
+        controller.add(_failed(call, turnStopped));
+        return;
+      }
       if (args == null) {
-        controller.add(ToolResultEvent(_ran(call,
-            ShellResult.failed(
-                'The $taskToolName tool takes {"agent": "...", "prompt": "..."}.'))));
+        controller.add(_failed(call,
+            'The $taskToolName tool takes {"agent": "...", "prompt": "..."}.'));
         return;
       }
       final (:agent, :prompt) = args;
@@ -1082,47 +1080,20 @@ class BuiltinAgent {
       controller.add(ToolResultEvent(_ran(call, result)));
     }
 
-    // A bounded fan-out: run maxConcurrentSubAgents at a time, starting the
-    // next as each finishes. A simple slot pool rather than a package dep.
-    final slots = <Completer<void>>[];
-    Future<void> acquire() async {
-      if (slots.length >= options.maxConcurrentSubAgents) {
-        final done = Completer<void>();
-        slots.add(done);
-        await done.future;
+    // A bounded fan-out: maxConcurrentSubAgents workers, each taking the next
+    // call as it finishes one.
+    var next = 0;
+    Future<void> worker() async {
+      while (next < calls.length) {
+        await runOne(next++);
       }
     }
 
-    void release() {
-      if (slots.isNotEmpty) {
-        slots.removeAt(0).complete();
-      }
-    }
-
-    final futures = <Future<void>>[];
-    for (var i = 0; i < calls.length; i++) {
-      futures.add(() async {
-        await acquire();
-        if (_cancelled) {
-          controller.add(ToolResultEvent(_ran(calls[i], const ShellResult.failed(turnStopped))));
-          return;
-        }
-        try {
-          await runOne(i);
-        } finally {
-          release();
-        }
-      }());
-    }
-
-    // Close the controller once every sub-agent has finished, so the
-    // `await for` below unblocks and the loop continues.
-    final allDone = Future.wait(futures).whenComplete(controller.close);
-
-    // Stream the concurrent sub-agent events out as they resolve.
-    await for (final event in controller.stream) {
-      yield event;
-    }
+    final allDone = Future.wait([
+      for (var w = 0; w < options.maxConcurrentSubAgents && w < calls.length; w++)
+        worker(),
+    ]).whenComplete(controller.close);
+    yield* controller.stream;
     await allDone;
   }
 
@@ -1202,18 +1173,16 @@ class BuiltinAgent {
 
     final document = skills.where((s) => s.name == name).firstOrNull;
     if (document == null) {
-      yield ToolResultEvent(_ran(
-          call,
-          ShellResult.failed(skillUnknown(name, [
-            for (final skill in skills)
-              if (skill.modelInvocable && !skill.isCallback) skill.name,
-          ]))));
+      yield _failed(call, skillUnknown(name, [
+        for (final skill in skills)
+          if (skill.modelInvocable && !skill.isCallback) skill.name,
+      ]));
       return;
     }
     // A callback's body is the user-facing note, never a procedure for the
     // model to read — the same reason composition refuses to expand it.
     if (!document.modelInvocable || document.isCallback) {
-      yield ToolResultEvent(_ran(call, ShellResult.failed(skillReserved(name))));
+      yield _failed(call, skillReserved(name));
       return;
     }
     yield _ok(call, _skillOutput(document, arguments));
@@ -1533,27 +1502,19 @@ class BuiltinAgent {
     final resolved = _resolvePath(path);
     final type = await fs.type(resolved);
     if (type == FileSystemEntityType.notFound) {
-      yield ToolResultEvent(
-          _ran(call, ShellResult.failed("Directory not found: $resolved. "
-              "Create it first, then ask again.")));
+      yield _failed(call, "Directory not found: $resolved. "
+          "Create it first, then ask again.");
       return;
     }
     if (type != FileSystemEntityType.directory) {
-      yield ToolResultEvent(_ran(
-          call,
-          ShellResult.failed(
-              "$resolved is not a directory. The grant covers a directory "
-              "and everything under it; ask again with the directory the "
-              "work belongs in.")));
+      yield _failed(call, "$resolved is not a directory. The grant covers a "
+          "directory and everything under it; ask again with the directory "
+          "the work belongs in.");
       return;
     }
     if (!outsideWorkspaces(fs, resolved, workspace, projectWorkspace)) {
-      yield ToolResultEvent(_ran(
-          call,
-          ShellResult(
-              returnCode: 0,
-              output: "$resolved is inside the workspaces, and writes there "
-                  "are already allowed. Nothing was granted.")));
+      yield _ok(call, "$resolved is inside the workspaces, and writes there "
+          "are already allowed. Nothing was granted.");
       return;
     }
     // The tree either way — beneath it is the app's own data, containing it
@@ -1563,11 +1524,8 @@ class BuiltinAgent {
     // until fs_shim grows link resolution to chase one with.
     if (dataDir != null &&
         (pathInside(dataDir!, resolved) || pathInside(resolved, dataDir!))) {
-      yield ToolResultEvent(_ran(
-          call,
-          ShellResult.failed(
-              "$resolved holds this app's own data, or lies inside it, which "
-              "is not grantable. Choose a directory outside it.")));
+      yield _failed(call, "$resolved holds this app's own data, or lies "
+          "inside it, which is not grantable. Choose a directory outside it.");
       return;
     }
     // The banner names the resolved path — the real directory is what a yes
@@ -1582,8 +1540,7 @@ class BuiltinAgent {
     );
     yield ApprovalRequestEvent(approval);
     final answer = await approve(approval);
-    final allowed = answer.isAllow;
-    if (!allowed) {
+    if (!answer.isAllow) {
       _decision = (
         source: PermissionSource.human,
         tiers: const [PermissionTier.once],
@@ -1599,30 +1556,29 @@ class BuiltinAgent {
       return;
     }
     grantRuntimeDirs([resolved]);
-    final tiers = switch (answer) {
-      ApprovalResponse.alwaysAllowChat => const [PermissionTier.chat],
-      ApprovalResponse.alwaysAllowProject => const [PermissionTier.project],
-      _ => const <PermissionTier>[],
+    final (tiers, wording) = switch (answer) {
+      ApprovalResponse.alwaysAllowChat => (
+          const [PermissionTier.chat],
+          "Allowed in this chat: the grant is saved with the conversation, so "
+              "writes in $resolved run without asking here.",
+        ),
+      ApprovalResponse.alwaysAllowProject => (
+          const [PermissionTier.project],
+          "Allowed for this project: the grant is saved with the project, so "
+              "writes in $resolved run without asking in the project's chats.",
+        ),
+      _ => (
+          const <PermissionTier>[],
+          "Allowed for the rest of this turn: writes in $resolved run without "
+              "asking until the turn ends.",
+        ),
     };
     _decision = (
       source: PermissionSource.human,
       tiers: tiers,
       decided: PermissionDecision.allow,
     );
-    final wording = switch (answer) {
-      ApprovalResponse.alwaysAllowChat =>
-        "Allowed in this chat: the grant is saved with the conversation, so "
-            "writes in $resolved run without asking here.",
-      ApprovalResponse.alwaysAllowProject =>
-        "Allowed for this project: the grant is saved with the project, so "
-            "writes in $resolved run without asking in the project's chats.",
-      _ =>
-        "Allowed for the rest of this turn: writes in $resolved run without "
-            "asking until the turn ends.",
-    };
-    yield ToolResultEvent(_ran(
-        call,
-        ShellResult(returnCode: 0, output: wording)));
+    yield ToolResultEvent(_ran(call, ShellResult(returnCode: 0, output: wording)));
   }
 
   /// `writable_directories` — the turn's writable set, named. The workspaces
@@ -1919,7 +1875,7 @@ class BuiltinAgent {
     final plan = await _readPlan();
     final missing = _planMissing(plan);
     if (missing != null) {
-      yield ToolResultEvent(_ran(call, ShellResult.failed(missing)));
+      yield _failed(call, missing);
       return;
     }
     final found = planFind(plan, task);
@@ -1927,13 +1883,13 @@ class BuiltinAgent {
       final candidates = planCandidates(plan, task)
           .map((t) => "${t.index}. ${t.text}")
           .toList();
-      yield ToolResultEvent(_ran(
+      yield _failed(
           call,
-          ShellResult.failed(candidates.isEmpty
+          candidates.isEmpty
               ? "No task matches \"$task\". Call $planNextToolName to take "
                   "the next one, or read $planFileName."
               : "\"$task\" matches more than one task: ${candidates.join("; ")}. "
-                  "Name it by number, or by more of its text.")));
+                  "Name it by number, or by more of its text.");
       return;
     }
     // The index came from the text just read, so the mark cannot miss.
@@ -1958,7 +1914,7 @@ class BuiltinAgent {
     final plan = await _readPlan();
     final missing = _planMissing(plan);
     if (missing != null) {
-      yield ToolResultEvent(_ran(call, ShellResult.failed(missing)));
+      yield _failed(call, missing);
       return;
     }
     final html = planHtml(plan!, title: args.title);
