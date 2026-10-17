@@ -29,96 +29,16 @@ class ShellCommandAnalysis {
     }
 
     final reasons = <String>[];
+    final escalations = <String>[];
     final tokens = _tokenize(command, reasons);
-    if (reasons.isNotEmpty) {
+    if (reasons.isNotEmpty ||
+        !_escalate(_Pipeline._of(tokens), escalations, reasons, "")) {
       return ShellCommandAnalysis._(
         modelable: false,
         unmodelableReasons: List.unmodifiable(reasons),
         escalationReasons: const [],
         command: command,
       );
-    }
-    final parsed = _Pipeline._of(tokens);
-    final escalations = <String>[];
-
-    // Assignments in the command position — `VAR=value command` or a plain
-    // `VAR=value` line. One to a write-deciding name rewrites the
-    // environment the parse answered for, so it escalates; one to a git
-    // include redirects git's configuration, which is the same thing by
-    // another door.
-    for (final assignment in parsed.assignments.entries) {
-      if (writeTargetVars.contains(assignment.key)) {
-        escalations.add("sets ${assignment.key}, which changes where writes "
-            "and tools land");
-      }
-    }
-    for (final redirect in parsed.redirects) {
-      // An input redirect is a read; a here-document's "target" is a
-      // delimiter word, not a path. Both are answered for by the sandbox
-      // itself, not by this layer.
-      if (redirect.fromInput) continue;
-      final target = redirect.target;
-      if (target == null) {
-        // `>&1`, `&>` with no file, or a target the parse could not resolve.
-        if (!redirect.fdOnly) {
-          escalations.add("cannot tell where the redirect writes");
-        }
-        continue;
-      }
-      if (target.any((piece) => piece is _Substitution)) {
-        escalations.add("redirects through a substitution, so the parse "
-            "cannot name the file");
-        continue;
-      }
-      if (target.any((piece) => piece is _Expansion)) {
-        // An expansion carried as its name is not resolved to a value: where
-        // the file ends up depends on the environment, which is the
-        // sandbox's answer to make, not the parse's guess.
-        final named = target.whereType<_Expansion>().first.name;
-        escalations.add("redirects through \$$named, so the parse cannot "
-            "name the file");
-        continue;
-      }
-    }
-    for (final word in parsed.words) {
-      for (final piece in word) {
-        if (piece is _Substitution) {
-          // The inside of a substitution is walked as its own command: its
-          // assignments and redirects count here too, and the substitution
-          // itself is what makes `echo $(cat ~/.ssh/id_ed25519)` a read the
-          // parse can name.
-          final inner = _tokenize(piece.source, reasons);
-          if (reasons.isNotEmpty) {
-            return ShellCommandAnalysis._(
-              modelable: false,
-              unmodelableReasons: List.unmodifiable(reasons),
-              escalationReasons: const [],
-              command: command,
-            );
-          }
-          final inside = _Pipeline._of(inner);
-          parsed.assignments.addAll(inside.assignments);
-          for (final assignment in inside.assignments.entries) {
-            if (writeTargetVars.contains(assignment.key)) {
-              escalations.add("sets ${assignment.key} inside a substitution");
-            }
-          }
-          for (final redirect in inside.redirects) {
-            if (redirect.fromInput) continue;
-            if (redirect.target == null) {
-              if (!redirect.fdOnly) {
-                escalations.add("a redirect inside a "
-                    "substitution the parse cannot name");
-              }
-              continue;
-            }
-            if (redirect.target!.any((piece) => piece is _Substitution)) {
-              escalations.add("a redirect inside a substitution whose file "
-                  "the parse cannot name");
-            }
-          }
-        }
-      }
     }
     return ShellCommandAnalysis._(
       modelable: true,
@@ -171,12 +91,56 @@ class ShellCommandAnalysis {
   /// and by per-segment rule matching, never by a command that parsed clean.
   List<String>? get modelableSegments {
     if (unmodelableReasons.isNotEmpty) return null;
-    return _segments ??= _segmentsOf(command!);
+    return _segments ??= _segmentsOf(command);
   }
 
   /// The command the parse ran over, kept for the lazy split above.
-  final String? command;
+  final String command;
   List<String>? _segments;
+}
+
+/// Adds to [out] what in [parsed] an automatic decision cannot stand on, and
+/// walks every substitution in its words as a command of its own — so `echo
+/// $(cat ~/.ssh/id_ed25519)` is a read the parse can name, and a redirect or
+/// assignment inside one counts too. [where] says where it was found. False
+/// where a substitution does not tokenize; [reasons] then says why.
+bool _escalate(
+    _Pipeline parsed, List<String> out, List<String> reasons, String where) {
+  // An assignment to a write-deciding name rewrites the environment the
+  // parse answered for; one to a git include redirects git's configuration.
+  for (final name in parsed.assignments.keys) {
+    if (writeTargetVars.contains(name)) {
+      out.add("sets $name$where, which changes where writes and tools land");
+    }
+  }
+  for (final redirect in parsed.redirects) {
+    // An input redirect is a read; a here-document's "target" is a delimiter
+    // word, not a path. Both are the sandbox's to answer for.
+    if (redirect.fromInput) continue;
+    final target = redirect.target;
+    if (target == null) {
+      // `&>` with no file, or a target the parse could not resolve.
+      if (!redirect.fdOnly) out.add("cannot tell where the redirect$where writes");
+    } else if (target.any((piece) => piece is _Substitution)) {
+      out.add("redirects$where through a substitution, so the parse cannot "
+          "name the file");
+    } else if (target.whereType<_Expansion>().firstOrNull case final e?) {
+      // Where the file lands depends on the environment: the sandbox's
+      // answer to make, not the parse's guess.
+      out.add("redirects$where through \$${e.name}, so the parse cannot "
+          "name the file");
+    }
+  }
+  for (final word in parsed.words) {
+    for (final piece in word.whereType<_Substitution>()) {
+      final inner = _tokenize(piece.source, reasons);
+      if (reasons.isNotEmpty ||
+          !_escalate(_Pipeline._of(inner), out, reasons, " inside a substitution")) {
+        return false;
+      }
+    }
+  }
+  return true;
 }
 
 /// The top-level pieces [command] parses to, split on the operators the
@@ -415,17 +379,11 @@ List<_Tok> _tokenize(String source, List<String> reasons) {
         if ((c == ";" || c == "&" || c == "|") && two == c) {
           tokens.add(_Tok.op(c + c));
           i += 2;
-        } else if (c == ";" && two == ";" || c == ";;") {
-          tokens.add(_Tok.op(";;"));
-          i += 2;
         } else if (c == "&" && two == ">") {
           tokens.add(_Tok.op(i + 2 < source.length && source[i + 2] == ">"
               ? "&>>"
               : "&>"));
           i += i + 2 < source.length && source[i + 2] == ">" ? 3 : 2;
-        } else if (c == ">" && two == "&") {
-          tokens.add(_Tok.op(">&"));
-          i += 2;
         } else {
           tokens.add(_Tok.op(c));
           i++;
