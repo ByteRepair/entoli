@@ -80,8 +80,11 @@ void main() {
 
   testWidgets("picking a chat writes into that chat's own workspace", (tester) async {
     final chat = await io(tester, () => app.seedChat(title: "Refactor the parser"));
+    await io(tester, () => app.seedChat(title: ""));
     app.handoff.pendingShare = [incomingFile("trace.log", "stack")];
     await start(tester);
+    // A chat the title model never named is a row with a name, not a blank.
+    expect(find.text("(untitled)"), findsOneWidget);
 
     await tester.tap(find.text("Refactor the parser"));
     await settleIo(tester);

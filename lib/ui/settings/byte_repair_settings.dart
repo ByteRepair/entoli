@@ -135,60 +135,45 @@ class _ByteRepairSectionState extends ConsumerState<ByteRepairSection> {
     );
   }
 
-  Future<void> _runSetup() async {
+  /// Runs [work] with the buttons dead; what it returns is the error to show.
+  Future<void> _run(Future<String?> Function() work) async {
     setState(() {
       _running = true;
       _error = null;
     });
     try {
-      final store = ref.read(byteRepairStoreProvider);
-      final shell = ref.read(shellProvider);
-      final result = await store.install(shell);
-      if (!mounted) return;
-      if (result.returnCode == 0) {
-        ref.invalidate(byteRepairToolVersionsProvider);
-        ref.invalidate(setupCompleteProvider(ByteRepairProject().dir));
-      } else {
-        setState(() {
-          _error = result.exceptionInfo ?? result.output.trim();
-        });
-      }
+      final error = await work();
+      if (mounted && error != null) setState(() => _error = error);
     } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _error = e.toString();
-      });
+      if (mounted) setState(() => _error = "$e");
     } finally {
       if (mounted) setState(() => _running = false);
     }
   }
 
-  Future<void> _importEsbmc() async {
-    setState(() {
-      _running = true;
-      _error = null;
-    });
-    try {
-      const type = XTypeGroup(label: "ESBMC binary");
-      final file = await openFile(acceptedTypeGroups: const [type]);
-      if (file == null) return;
-      final store = ref.read(byteRepairStoreProvider);
-      final error = await store.importEsbmc(file);
-      if (!mounted) return;
-      if (error != null) {
-        setState(() => _error = error);
-      } else {
+  Future<void> _runSetup() => _run(() async {
+        final result = await ref
+            .read(byteRepairStoreProvider)
+            .install(ref.read(shellProvider));
+        if (result.returnCode != 0) {
+          return result.exceptionInfo ?? result.output.trim();
+        }
+        if (!mounted) return null;
         ref.invalidate(byteRepairToolVersionsProvider);
-      }
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _error = e.toString();
+        ref.invalidate(setupCompleteProvider(ByteRepairProject().dir));
+        return null;
       });
-    } finally {
-      if (mounted) setState(() => _running = false);
-    }
-  }
+
+  Future<void> _importEsbmc() => _run(() async {
+        const type = XTypeGroup(label: "ESBMC binary");
+        final file = await openFile(acceptedTypeGroups: const [type]);
+        if (file == null) return null;
+        final error = await ref.read(byteRepairStoreProvider).importEsbmc(file);
+        if (error == null && mounted) {
+          ref.invalidate(byteRepairToolVersionsProvider);
+        }
+        return error;
+      });
 }
 
 class _ToolStatusList extends ConsumerWidget {
@@ -204,11 +189,7 @@ class _ToolStatusList extends ConsumerWidget {
           width: 20,
           child: CircularProgressIndicator(strokeWidth: 2),
         ),
-        error: (e, st) => Text(
-          "Not installed",
-          style: theme.textTheme.bodySmall
-              ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-        ),
+        error: (e, st) => mutedParagraph(context, "Not installed"),
         data: (map) => Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [

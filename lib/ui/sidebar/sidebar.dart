@@ -319,7 +319,6 @@ class _SidebarState extends ConsumerState<Sidebar> {
       ),
     );
   }
-
 }
 
 const _noMatch = "No chat's title matches that.";
@@ -691,8 +690,6 @@ class _ChatTile extends ConsumerWidget {
   }
 }
 
-/// The project being shown, and everything that changes it. Its name is what
-/// the chats and the shared workspace sit under on disk.
 /// How a project on a paired device is read out. Its default project is the
 /// device's name alone — the local default has no name either, and inventing
 /// one here would be the only place in the app that gives it one.
@@ -731,6 +728,7 @@ String _scopeLabel(
   return projectLabel(project);
 }
 
+/// The project being shown, and everything that changes it.
 class _ProjectMenu extends ConsumerWidget {
   const _ProjectMenu();
 
@@ -747,9 +745,6 @@ class _ProjectMenu extends ConsumerWidget {
     ref.invalidate(projectListProvider);
     selectProject(ref, name.name);
   }
-
-  Future<void> _delete(BuildContext context, WidgetRef ref, String project) =>
-      deleteProject(context, ref, project);
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -854,7 +849,7 @@ class _ProjectMenu extends ConsumerWidget {
       // A built-in project cannot be deleted, so it is not offered one.
       if (selected != null && isProjectName(selected))
         PopupMenuItem(
-          value: () => _delete(context, ref, selected),
+          value: () => deleteProject(context, ref, selected),
           child: const Text("Delete project…"),
         ),
     ]);
