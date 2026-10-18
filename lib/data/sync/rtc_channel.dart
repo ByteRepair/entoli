@@ -3,7 +3,6 @@ import "dart:typed_data";
 
 import "package:flutter_webrtc/flutter_webrtc.dart" as webrtc;
 
-import "../../core/log.dart";
 import "channel.dart";
 
 /// A WebRTC peer connection reduced to what a data channel needs: negotiate
@@ -18,8 +17,6 @@ class RtcLink {
 
   final webrtc.RTCPeerConnection _pc;
   final _ready = Completer<ByteRtcChannel>();
-  ByteRtcChannel? _channel;
-  Timer? _grace;
   var _closed = false;
 
   static const defaultStun = [
@@ -37,39 +34,7 @@ class RtcLink {
       ],
       "sdpSemantics": "unified-plan",
     });
-    final link = RtcLink._(pc);
-    pc.onConnectionState = link._onState;
-    return link;
-  }
-
-  /// A peer that dies sends no close, so the data channel never ends on its
-  /// own: ICE goes on probing every path it had, and only the heartbeat
-  /// would notice, a minute or more later. ICE says it within seconds.
-  /// Disconnected can recover by itself — a phone changing networks — so it
-  /// gets a moment first; failed is final.
-  void _onState(webrtc.RTCPeerConnectionState state) {
-    switch (state) {
-      case webrtc.RTCPeerConnectionState.RTCPeerConnectionStateConnected:
-        _grace?.cancel();
-        _grace = null;
-      case webrtc.RTCPeerConnectionState.RTCPeerConnectionStateDisconnected:
-        _grace ??= Timer(const Duration(seconds: 5), () => _lost(state));
-      case webrtc.RTCPeerConnectionState.RTCPeerConnectionStateFailed:
-        _lost(state);
-      default:
-    }
-  }
-
-  void _lost(webrtc.RTCPeerConnectionState state) {
-    if (_closed) return;
-    logFailure("sync", "peer connection ${state.name}, closing it");
-    if (!_ready.isCompleted) {
-      // Nobody may be waiting on [open] yet; whoever does still gets it.
-      _ready.future.ignore();
-      _ready.completeError(const ChannelClosedException());
-    }
-    _channel?.lost();
-    unawaited(_dispose());
+    return RtcLink._(pc);
   }
 
   /// The initiator's half: owns the data channel, produces the offer to send
@@ -124,7 +89,7 @@ class RtcLink {
 
   void _watch(webrtc.RTCDataChannel channel) {
     if (!_ready.isCompleted) {
-      _ready.complete(_channel = ByteRtcChannel(channel, _dispose));
+      _ready.complete(ByteRtcChannel(channel, _dispose));
     }
   }
 
@@ -137,7 +102,6 @@ class RtcLink {
   Future<void> _dispose() async {
     if (_closed) return;
     _closed = true;
-    _grace?.cancel();
     try {
       await _pc.close();
     } catch (_) {}
@@ -169,11 +133,6 @@ class ByteRtcChannel implements ByteChannel {
 
   @override
   Stream<Uint8List> get incoming => _controller.stream;
-
-  /// The connection under it has gone: end what readers are waiting on.
-  void lost() {
-    if (!_controller.isClosed) _controller.close();
-  }
 
   @override
   Future<void> send(Uint8List bytes) =>

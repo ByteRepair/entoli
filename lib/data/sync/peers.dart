@@ -223,12 +223,15 @@ class SyncPeers {
     if (!setEquals(projects, servedProjects.value)) servedProjects.value = projects;
   }
 
-  /// Thirty seconds of silence gets a ping; seventy-five without an answer is
-  /// a connection that has gone whether or not the socket says so.
+  /// A ping every five seconds; fifteen without an answer is a connection
+  /// that has gone whether or not the transport says so. The one check for
+  /// both ways a peer goes: its process killed, which sends no close, and its
+  /// app stuck while WebRTC's own threads still answer ICE. Closing it is what
+  /// stops ICE probing the dead paths.
   void watchLiveness() {
     _pingTimer?.cancel();
-    _pingTimer = Timer.periodic(const Duration(seconds: 30), (_) {
-      final cutoff = DateTime.now().subtract(const Duration(seconds: 75));
+    _pingTimer = Timer.periodic(const Duration(seconds: 5), (_) {
+      final cutoff = DateTime.now().subtract(const Duration(seconds: 15));
       for (final peer in _live.values.toList()) {
         if (peer.lastPong.isBefore(cutoff)) {
           unawaited(peer.close());

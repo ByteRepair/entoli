@@ -616,16 +616,15 @@ reason to be doing.
 did" in the root `AGENTS.md` for the rule. Nothing logged here may carry a
 pairing secret, an SDP blob, or anything out of a conversation.
 
-**A device that dies is gone in seconds, not a minute.** A peer killed or cut
-off sends no close, so its data channel never ends by itself: ICE goes on
-probing every candidate path — a wall of STUN lines in the native log — and
-the heartbeat in `watchLiveness` (a ping every 30s, dead at 75s unanswered)
-would be the first to notice. `RtcLink` listens to the connection state
-instead: `failed` closes it at once, `disconnected` after 5s unless it comes
-back (a phone changing networks does), and closing it ends the channel, which
-takes the peer offline through the ordinary `_peerGone`. The heartbeat stays
-as the backstop for a link ICE still thinks is up.
-
+**A device that dies is gone in seconds.** A peer killed or cut off sends no
+close, so its data channel never ends by itself and ICE goes on probing every
+candidate path — a wall of STUN lines in the native log. The heartbeat in
+`watchLiveness` is the one check: a ping every 5s, and 15s unanswered closes
+the peer, which stops the probing and takes it offline through `_peerGone`.
+It was 30s and 75s, which left a dead peer listed and probed for up to a
+minute and three quarters. Watching ICE's connection state would see a dead
+transport sooner, but not an app stuck while WebRTC's threads still answer,
+and the heartbeat sees both.
 ## What the Sync page can do about a peer
 
 Connect, disconnect, revoke, and one line saying why the last dial failed.
