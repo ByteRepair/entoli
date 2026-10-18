@@ -25,13 +25,19 @@ sealed class SyncMessage with _$SyncMessage {
   /// The home device's chat list, sent right after `hello` and again
   /// whenever it changes. Whole-list replacement: lists are small, deltas
   /// would be a second truth about what a mirror holds.
+  ///
+  /// [omadaProjects] names those of the chats' projects with Omada on at the
+  /// home device. The default project never is, so a name is enough; a peer
+  /// that predates the field sends none, which reads as none on.
   const factory SyncMessage.welcome({
     required List<ChatState> chats,
+    @Default(<String>[]) List<String> omadaProjects,
     @Default(SyncIdentity.protocolVersion) int proto,
   }) = SyncWelcome;
 
   const factory SyncMessage.chatsChanged({
     required List<ChatState> chats,
+    @Default(<String>[]) List<String> omadaProjects,
   }) = SyncChatsChanged;
 
   /// Subscribe to one of the peer's chats from record [fromLine] on — the

@@ -884,6 +884,7 @@ void main() {
       String deviceName,
       ChatState state, {
       bool online = true,
+      bool omada = false,
     }) =>
         RemoteChatEntry(
           chatId: state.id,
@@ -891,6 +892,7 @@ void main() {
           deviceName: deviceName,
           state: state,
           online: online,
+          omada: omada,
         );
 
     Future<void> openNew(WidgetTester tester) async {
@@ -933,6 +935,22 @@ void main() {
       expect(cardChips(), findsNWidgets(3));
       expect(find.text("Default"), findsNWidgets(2));
       expect(find.text("work"), findsOneWidget);
+    });
+
+    testWidgets("a badge is styled by Omada on the device, not here",
+        (tester) async {
+      await openEmpty(tester, [
+        mirrorOf("d1", "Desktop", makeState("r1", project: "work"),
+            omada: true),
+        mirrorOf("d1", "Desktop", makeState("r2", project: "play")),
+      ]);
+      await tester.tap(find.text("Desktop"));
+      await tester.pumpAndSettle();
+
+      FontStyle? style(String label) =>
+          tester.widget<Text>(find.text(label)).style?.fontStyle;
+      expect(style("work"), FontStyle.italic);
+      expect(style("play"), isNot(FontStyle.italic));
     });
 
     testWidgets("a chat that exists with nothing said in it draws none",
