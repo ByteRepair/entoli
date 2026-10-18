@@ -8,6 +8,7 @@ import "../../domain/builtin_project.dart";
 import "../../domain/chat_meta.dart";
 import "../../domain/models.dart";
 import "../../domain/project.dart";
+import "../../data/sync/peers.dart" show PeerState;
 import "../../data/sync/sync_hub.dart" show RemoteChatEntry;
 import "../../providers.dart";
 import "../chat/chat_controller.dart";
@@ -229,7 +230,16 @@ class _SidebarState extends ConsumerState<Sidebar> {
                 children: [
                   const Expanded(child: _ProjectMenu()),
                   if (selected.device == null)
-                    ..._projectButtons(context, ref, selected.project),
+                    ..._projectButtons(context, ref, selected.project)
+                  else if (projectHasSettingsPage(selected.project))
+                    IconButton(
+                      icon: const Icon(Icons.settings),
+                      tooltip: "Project settings",
+                      onPressed: () => Navigator.of(context).push(MaterialPageRoute(
+                        builder: (_) => ProjectSettingsPage(
+                            project: selected.project!, device: selected.device),
+                      )),
+                    ),
                 ],
               ),
             ),
@@ -684,40 +694,30 @@ String _remoteLabel(String deviceName, String? project) =>
 /// A project on a paired device, as the switcher lists it.
 typedef RemoteEntry = ({ProjectRef scope, String label, bool omada, int count});
 
-/// Every project that has a mirrored chat in it, one entry each, device
-/// first. A device with nothing mirrored has no projects to offer — the
-/// welcome is what says a project exists at all.
-List<RemoteEntry> remoteEntries(List<RemoteChatEntry> remotes) {
-  final byScope = <ProjectRef, RemoteChatEntry>{};
+/// Every project of every paired device, one entry each, device first: what
+/// the device last listed, whether or not anything of it is mirrored here.
+List<RemoteEntry> remoteEntries(List<RemoteChatEntry> remotes,
+    Map<String, List<String>> projects, Map<String, PeerState> peers) {
   final counts = <ProjectRef, int>{};
+  final omada = <ProjectRef>{};
   for (final entry in remotes) {
     final ProjectRef scope = (device: entry.deviceId, project: entry.state.project);
-    byScope[scope] ??= entry;
     counts[scope] = (counts[scope] ?? 0) + 1;
+    if (entry.omada) omada.add(scope);
   }
   final entries = [
-    for (final MapEntry(key: scope, value: entry) in byScope.entries)
-      (
-        scope: scope,
-        label: _remoteLabel(entry.deviceName, scope.project),
-        omada: entry.omada,
-        count: counts[scope]!,
-      ),
+    for (final MapEntry(key: device, value: named) in projects.entries)
+      for (final project in everyProject(named))
+        if ((device: device, project: project) case final ProjectRef scope)
+          (
+            scope: scope,
+            label: _remoteLabel(peers[device]?.name ?? device, project),
+            omada: omada.contains(scope),
+            count: counts[scope] ?? 0,
+          ),
   ];
   entries.sort((a, b) => a.label.toLowerCase().compareTo(b.label.toLowerCase()));
   return entries;
-}
-
-/// The button's own text: the scope being read, named. A `String`, so
-/// `select` suppresses the rebuild when a mirrored chat merely changed.
-String _scopeLabel(List<RemoteChatEntry> remotes, ProjectRef remote) {
-  for (final entry in remotes) {
-    if (entry.deviceId == remote.device &&
-        entry.state.project == remote.project) {
-      return _remoteLabel(entry.deviceName, remote.project);
-    }
-  }
-  return projectLabel(remote.project);
 }
 
 /// The project being shown, and the way to the palette that changes it.
@@ -734,8 +734,10 @@ class _ProjectMenu extends ConsumerWidget {
     // back, so `select` compares it.
     final label = !remote
         ? projectLabel(selected.project)
-        : ref.watch(remoteChatsProvider
-            .select((chats) => _scopeLabel(chats, selected)));
+        : _remoteLabel(
+            ref.watch(syncPeersProvider.select((peers) => peers[selected.device]?.name)) ??
+                selected.device!,
+            selected.project);
     final omada = !remote
         ? ref.watch(omadaOnProvider(selected.project))
         : ref.watch(remoteChatsProvider.select((chats) => chats.any((e) =>

@@ -7,6 +7,7 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 import "../../core/log.dart";
 import "../../domain/models.dart";
 import "../../domain/project.dart";
+import "../../domain/project_settings.dart";
 import "../../providers.dart";
 import "../widgets/nav_drawer.dart";
 import "chat_groups.dart";
@@ -53,8 +54,25 @@ const remoteGlyph = Icons.devices_outlined;
 /// which is the default question rather than none at all.
 typedef _NewProjectAnswer = ({String name, String description, bool omada});
 
-PaletteAction _createProject(_NewProjectAnswer answer) =>
+/// Made on the device the sidebar is showing, which may be a paired one.
+PaletteAction _createProject(_NewProjectAnswer answer, String? device) =>
     (context, ref) async {
+      if (device != null) {
+        final hub = ref.read(syncHubProvider);
+        await hub.createRemoteProject(device, answer.name);
+        final ProjectRef made = (device: device, project: answer.name);
+        if (answer.omada || answer.description.trim().isNotEmpty) {
+          await hub.writeRemoteProject(
+              made,
+              ProjectSettings(
+                  omada: answer.omada,
+                  description: answer.description.trim().isEmpty
+                      ? null
+                      : answer.description.trim()));
+        }
+        selectProject(ref, made);
+        return;
+      }
       await ref.read(chatRepositoryProvider).createProject(answer.name);
       final settings = ref.read(projectSettingsProvider(answer.name).notifier);
       if (answer.omada) await settings.setOmada(true);
@@ -178,7 +196,8 @@ class _ProjectPaletteState extends ConsumerState<ProjectPalette> {
                   key: const ValueKey(_newPage),
                   omadaByDefault: ref.watch(appSettingsProvider).omadaByDefault,
                   onBack: () => setState(() => _creating = false),
-                  onCreate: (answer) => _pick(_createProject(answer)),
+                  onCreate: (answer) => _pick(_createProject(
+                      answer, ref.read(selectedProjectProvider).device)),
                 )
               : KeyedSubtree(key: const ValueKey(_listPage), child: _list(context)),
         ),
@@ -193,7 +212,8 @@ class _ProjectPaletteState extends ConsumerState<ProjectPalette> {
     final chats = (ref.watch(chatListProvider).value ?? const <ChatState>[])
         .where((c) => !c.isExpired())
         .toList();
-    final remotes = remoteEntries(ref.watch(remoteChatsProvider));
+    final remotes = remoteEntries(ref.watch(remoteChatsProvider),
+        ref.watch(deviceProjectsProvider), ref.watch(syncPeersProvider));
     final running = ref.watch(agentBackendProvider).runningTurns;
 
     return ValueListenableBuilder<Set<String>>(

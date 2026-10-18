@@ -52,7 +52,6 @@ import "domain/trigger_runner.dart";
 import "domain/trigger_manager.dart";
 import "domain/rootfs_store.dart";
 import "domain/shell.dart";
-import "data/sync/peers.dart" show PeerStatus;
 import "data/sync/sync_hub.dart";
 import "data/sync/sync_keep_alive.dart";
 import "domain/temp_chat_ttl.dart";

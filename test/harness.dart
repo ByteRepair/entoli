@@ -18,7 +18,9 @@ import "package:agent_chat/data/local/file_chat_store.dart";
 import "package:agent_chat/data/local/byte_repair_store.dart"
     show guestEsbmcInstallDir;
 import "package:agent_chat/data/local/file_byte_repair_store.dart";
-import "package:agent_chat/data/sync/sync_hub.dart" show RemoteChatEntry, SyncHub;
+import "package:agent_chat/data/sync/peers.dart" show PeerState, PeerStatus;
+import "package:agent_chat/data/sync/sync_hub.dart"
+    show RemoteChatEntry, RemoteProject, SyncHub;
 import "package:agent_chat/domain/sync/devices.dart";
 import "package:agent_chat/domain/sync/identity.dart";
 import "package:agent_chat/domain/sync/relay_signaling.dart";
@@ -39,6 +41,7 @@ import "package:agent_chat/domain/trigger.dart";
 import "package:agent_chat/domain/shell.dart";
 import "package:agent_chat/domain/temp_chat_ttl.dart";
 import "package:agent_chat/domain/voice.dart";
+import "package:agent_chat/domain/project.dart" show ProjectRef;
 import "package:agent_chat/providers.dart";
 import "package:agent_chat/ui/chat/chat_controller.dart";
 import "package:agent_chat/ui/chat/chat_page.dart";
@@ -174,6 +177,7 @@ class TestApp {
     Map<String, ChatViewState> mirrors = const {},
     Map<String, String> drivenBy = const {},
     MirrorControl control = const MirrorControl(),
+    Map<ProjectRef, RemoteProject> remoteProjects = const {},
     SyncHub? hub,
     Clock? clock,
     http.Client? marketplaceClient,
@@ -283,11 +287,34 @@ class TestApp {
           backgroundWorkProvider.overrideWithValue(work),
           if (hub != null) syncHubProvider.overrideWithValue(hub),
           remoteChatsProvider.overrideWith(() => FakeRemoteChats(remotes)),
+          // What the hub would say of the devices [remotes] are from: named
+          // as they are there, online as they are, with the projects their
+          // chats are in.
+          if (hub == null) ...[
+            syncPeersProvider.overrideWith(() => FakePairedDevices({
+                  for (final r in remotes)
+                    r.deviceId: PeerState(
+                        deviceId: r.deviceId,
+                        name: r.deviceName,
+                        status: r.online ? PeerStatus.online : PeerStatus.offline),
+                })),
+            deviceProjectsProvider.overrideWith(() => FakeDeviceProjects({
+                  for (final r in remotes)
+                    r.deviceId: [
+                      for (final o in remotes)
+                        if (o.deviceId == r.deviceId && o.state.project != null)
+                          o.state.project!,
+                    ],
+                })),
+          ],
           drivenChatsProvider.overrideWith(() => FakeDrivenChats(drivenBy)),
           mirrorChatControllerProvider
               .overrideWith2((id) => FakeMirrorChat(id, mirrors)),
           mirrorControlProvider
               .overrideWith2((id) => FakeMirrorControl(id, control)),
+          if (hub == null)
+            remoteProjectProvider.overrideWith2(
+                (project) => FakeRemoteProject(project, remoteProjects)),
         ],
       ),
     );

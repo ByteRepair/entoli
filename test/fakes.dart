@@ -9,7 +9,8 @@ import "package:agent_chat/data/builtin/llm/llm_client.dart";
 import "package:agent_chat/data/builtin/llm/local_pool_client.dart";
 import "package:agent_chat/data/builtin/llm/local_prefill.dart";
 import "package:agent_chat/data/sync/channel.dart";
-import "package:agent_chat/data/sync/sync_hub.dart" show RemoteChatEntry;
+import "package:agent_chat/data/sync/peers.dart" show PeerState;
+import "package:agent_chat/data/sync/sync_hub.dart" show RemoteChatEntry, RemoteProject;
 import "package:agent_chat/domain/app_icon.dart";
 import "package:agent_chat/domain/app_update.dart";
 import "package:agent_chat/domain/app_settings.dart";
@@ -43,7 +44,9 @@ import "package:agent_chat/domain/secret_store.dart";
 import "package:agent_chat/domain/sync/devices.dart";
 import "package:agent_chat/domain/sync/relay_signaling.dart";
 import "package:agent_chat/domain/voice_model_store.dart";
-import "package:agent_chat/providers.dart" show DrivenChats, RemoteChats;
+import "package:agent_chat/domain/project.dart" show ProjectRef;
+import "package:agent_chat/providers.dart"
+    show DeviceProjects, DrivenChats, PairedDevices, RemoteChats, RemoteProjectNotifier;
 import "package:agent_chat/ui/chat/chat_controller.dart" show ChatViewState;
 import "package:agent_chat/ui/chat/mirror_controller.dart";
 import "package:uuid/uuid.dart";
@@ -1176,6 +1179,34 @@ class FakeVoiceModelStore extends VoiceModelStore {
 
 /// The Remotes half of the sidebar with no hub under it. Every test that is
 /// not about sync gets an empty list; a sync one seeds the rows it wants.
+class FakePairedDevices extends PairedDevices {
+  FakePairedDevices(this.peers);
+
+  final Map<String, PeerState> peers;
+
+  @override
+  Map<String, PeerState> build() => peers;
+}
+
+class FakeDeviceProjects extends DeviceProjects {
+  FakeDeviceProjects(this.projects);
+
+  final Map<String, List<String>> projects;
+
+  @override
+  Map<String, List<String>> build() => projects;
+}
+
+/// A paired device's project as it answered, or not yet where it is absent.
+class FakeRemoteProject extends RemoteProjectNotifier {
+  FakeRemoteProject(super.project, this.answers);
+
+  final Map<ProjectRef, RemoteProject> answers;
+
+  @override
+  RemoteProject? build() => answers[project];
+}
+
 class FakeRemoteChats extends RemoteChats {
   FakeRemoteChats(this.entries);
 
