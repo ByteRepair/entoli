@@ -16,6 +16,12 @@ import "../../core/log.dart";
 /// the type byte as associated data. Counters are per direction and monotonic
 /// — a replayed, reordered or spliced frame fails its MAC — and the keys came
 /// out of a [Handshake], so nothing readable touches the wire after it.
+///
+/// A message past [pieceBytes] goes as consecutive frames, [continued] set in
+/// the type byte of every one but the last: a data channel refuses a message
+/// past its negotiated maximum, and nothing above this should have to know
+/// what that is. The type byte is the associated data, so the bit cannot be
+/// flipped, and the counter keeps the pieces in order.
 final class SecureChannel implements ByteChannel {
   SecureChannel._(this._raw, this._sendKey, this._recvKey, this._reader) {
     _cipher = Chacha20.poly1305Aead();
@@ -23,6 +29,11 @@ final class SecureChannel implements ByteChannel {
 
   static const typeControl = 0;
   static const typeBinary = 1;
+  static const continued = 0x80;
+
+  /// Under the smallest maximum a peer negotiates (64KB), header and MAC
+  /// included.
+  static const pieceBytes = 48 * 1024;
 
   final ByteChannel _raw;
   final ChannelReader _reader;
@@ -112,8 +123,17 @@ final class SecureChannel implements ByteChannel {
   /// which the receiving counter check refuses.
   Future<void> _dispatch(int type, Uint8List payload) {
     if (_closed) throw StateError("secure channel closed");
+    // One link of the chain for every piece, so no other message lands
+    // between them.
     final sent = _sending.then((_) async {
-      await _raw.send(await _seal(type, payload));
+      var at = 0;
+      do {
+        final end = payload.length - at > pieceBytes ? at + pieceBytes : payload.length;
+        final more = end < payload.length;
+        await _raw.send(await _seal(
+            more ? type | continued : type, Uint8List.sublistView(payload, at, end)));
+        at = end;
+      } while (at < payload.length);
     });
     // The chain carries on after a failure; the caller still sees its own.
     _sending = sent.catchError((_) {});
@@ -140,7 +160,8 @@ final class SecureChannel implements ByteChannel {
         }
         try {
           final plain = await _open(frame);
-          if (!_closed) _controller.add(plain);
+          _pieces.add(plain);
+          if (frame[0] & continued == 0 && !_closed) _controller.add(_pieces.takeBytes());
         } on SecretBoxAuthenticationError {
           logFailure("sync", "a frame failed authentication");
           _fail(const FrameAuthenticationException());
@@ -154,6 +175,9 @@ final class SecureChannel implements ByteChannel {
       if (!_closed) _controller.close();
     }();
   }
+
+  /// The message being put back together.
+  final _pieces = BytesBuilder(copy: false);
 
   Future<Uint8List> _open(Uint8List frame) async {
     if (frame.length < 5 + 16) {

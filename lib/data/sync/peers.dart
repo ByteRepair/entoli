@@ -97,8 +97,8 @@ class LivePeer {
     try {
       await channel.sendJson(message.toJson());
     } catch (error) {
-      // Almost always a message the transport refused as too large, which is
-      // silent otherwise: the peer simply goes away.
+      // A transport that refused the frame, which is silent otherwise: the
+      // peer simply goes away.
       logFailure("sync", "send to $deviceId failed", error);
       await close();
     }

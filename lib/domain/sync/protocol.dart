@@ -51,9 +51,8 @@ sealed class SyncMessage with _$SyncMessage {
   }) = SyncChatOpen;
 
   /// The reply to [SyncChatOpen]: the chat's head, and nothing else. The
-  /// records follow as [SyncRecordAppend]s — a whole conversation is far past
-  /// what one data channel message may carry, and half a megabyte is an
-  /// ordinary size for one. What a mirror holds is what it has been sent, so
+  /// records follow as one [SyncRecordAppend]. What a mirror holds is what it
+  /// has been sent, so
   /// a resume counts from its own record count and needs no total to compare
   /// against.
   const factory SyncMessage.chatSnapshot({
@@ -62,7 +61,7 @@ sealed class SyncMessage with _$SyncMessage {
     required ChatMeta meta,
   }) = SyncChatSnapshot;
 
-  /// Records for a subscribed chat, in order: the pages of a snapshot, and
+  /// Records for a subscribed chat, in order: the rest of a snapshot, and
   /// then whatever the turn appends as it happens. A snapshot plus these
   /// rebuilds the log exactly.
   const factory SyncMessage.recordAppend({
@@ -231,11 +230,10 @@ sealed class SyncMessage with _$SyncMessage {
   }) = SyncProjectSnapshot;
 
   /// [project]'s skills and agents, after each snapshot: [PromptDocument]
-  /// JSON, paged by size while [more].
+  /// JSON.
   const factory SyncMessage.projectPrompts({
     String? project,
     required List<Map<String, dynamic>> documents,
-    @Default(false) bool more,
   }) = SyncProjectPrompts;
 
   /// Read or change [project]'s memories: [op] is `list`, `search` (by
@@ -249,12 +247,10 @@ sealed class SyncMessage with _$SyncMessage {
     String? text,
   }) = SyncMemoryCall;
 
-  /// [MemoryEntry] JSON, paged by size while [more]; [failed] where the call
-  /// did not go through.
+  /// [MemoryEntry] JSON; [failed] where the call did not go through.
   const factory SyncMessage.memories({
     required String requestId,
     @Default(<Map<String, dynamic>>[]) List<Map<String, dynamic>> entries,
-    @Default(false) bool more,
     @Default(false) bool failed,
   }) = SyncMemories;
 

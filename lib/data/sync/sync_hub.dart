@@ -313,7 +313,6 @@ class SyncHub implements ArtifactBytes, RemoteChats {
   final deviceProjects = ValueNotifier<Map<String, List<String>>>(const {});
 
   final _projects = <ProjectRef, RemoteProject>{};
-  final _promptPages = <ProjectRef, List<PromptDocument>>{};
   final _followedProjects = <ProjectRef>{};
   final _projectUpdates = StreamController<ProjectRef>.broadcast();
 
@@ -338,7 +337,6 @@ class SyncHub implements ArtifactBytes, RemoteChats {
   void unfollowProject(ProjectRef project) {
     _followedProjects.remove(project);
     _projects.remove(project);
-    _promptPages.remove(project);
     unawaited(_peers[project.device!]
         ?.send(SyncMessage.projectClose(project: project.project)));
   }
@@ -398,7 +396,7 @@ class SyncHub implements ArtifactBytes, RemoteChats {
   }
 
   final _memoryCalls = <String,
-      ({String peerId, List<MemoryEntry> got, Completer<List<MemoryEntry>?> done})>{};
+      ({String peerId, Completer<List<MemoryEntry>?> done})>{};
 
   /// [op] on a paired device's [project]'s memories, and what they read after
   /// it — the search's answer for a search. Throws where the device is away
@@ -409,7 +407,7 @@ class SyncHub implements ArtifactBytes, RemoteChats {
     if (peer == null) throw StateError("memories of ${project.device}: device is offline");
     final requestId = "m${_resourceSeq++}";
     final call = _memoryCalls[requestId] =
-        (peerId: peer.deviceId, got: <MemoryEntry>[], done: Completer<List<MemoryEntry>?>());
+        (peerId: peer.deviceId, done: Completer<List<MemoryEntry>?>());
     try {
       await peer.send(SyncMessage.memoryCall(
           requestId: requestId, project: project.project, op: op, id: id, text: text));
@@ -449,28 +447,8 @@ class SyncHub implements ArtifactBytes, RemoteChats {
       await peer.send(SyncMessage.memories(requestId: call.requestId, failed: true));
       return;
     }
-    final pages = _pages(read.map((e) => e.toJson()));
-    for (var i = 0; i < pages.length; i++) {
-      await peer.send(SyncMessage.memories(
-          requestId: call.requestId, entries: pages[i], more: i < pages.length - 1));
-    }
-  }
-
-  /// JSON [items] in pages that each fit one message; one page at least, so
-  /// an empty list is still answered.
-  static List<List<Map<String, dynamic>>> _pages(Iterable<Map<String, dynamic>> items) {
-    final pages = [<Map<String, dynamic>>[]];
-    var bytes = 0;
-    for (final item in items) {
-      final size = jsonEncode(item).length;
-      if (bytes + size > _messageBytes && pages.last.isNotEmpty) {
-        pages.add([]);
-        bytes = 0;
-      }
-      pages.last.add(item);
-      bytes += size;
-    }
-    return pages;
+    await peer.send(SyncMessage.memories(
+        requestId: call.requestId, entries: [for (final e in read) e.toJson()]));
   }
 
   Future<bool> _isProject(String? project) async {
@@ -603,15 +581,10 @@ class SyncHub implements ArtifactBytes, RemoteChats {
         _collectResourceChunk(peer, id, bytesB64, done);
       case final SyncMemoryCall call:
         await _serveMemories(peer, call);
-      case SyncMemories(:final requestId, :final entries, :final more, :final failed):
+      case SyncMemories(:final requestId, :final entries, :final failed):
         final call = _memoryCalls[requestId];
         if (call != null && call.peerId == peer.deviceId && !call.done.isCompleted) {
-          call.got.addAll(entries.map(MemoryEntry.fromJson));
-          if (failed) {
-            call.done.complete(null);
-          } else if (!more) {
-            call.done.complete(call.got);
-          }
+          call.done.complete(failed ? null : entries.map(MemoryEntry.fromJson).toList());
         }
 
       // -- serving: a paired device driving one of this device's chats
@@ -719,17 +692,13 @@ class SyncHub implements ArtifactBytes, RemoteChats {
           _projects[ref] = RemoteProject(settings, app, _projects[ref]?.library);
           _projectUpdates.add(ref);
         }
-      case SyncProjectPrompts(:final project, :final documents, :final more):
+      case SyncProjectPrompts(:final project, :final documents):
         final ProjectRef ref = (device: peer.deviceId, project: project);
-        final got = _promptPages.putIfAbsent(ref, () => [])
-          ..addAll(documents.map(PromptDocument.fromJson));
         final held = _projects[ref];
-        if (!more) {
-          _promptPages.remove(ref);
-          if (held != null && _followedProjects.contains(ref)) {
-            _projects[ref] = RemoteProject(held.settings, held.app, PromptLibrary(got));
-            _projectUpdates.add(ref);
-          }
+        if (held != null && _followedProjects.contains(ref)) {
+          _projects[ref] = RemoteProject(held.settings, held.app,
+              PromptLibrary(documents.map(PromptDocument.fromJson)));
+          _projectUpdates.add(ref);
         }
 
       // -- mirroring: what the home device says about a chat we follow
@@ -767,11 +736,9 @@ class SyncHub implements ArtifactBytes, RemoteChats {
         project: project,
         settings: turns.projectSettings(project),
         app: turns.appSettings));
-    final pages = _pages(turns.library(project).all.map((d) => d.toJson()));
-    for (var i = 0; i < pages.length; i++) {
-      await peer.send(SyncMessage.projectPrompts(
-          project: project, documents: pages[i], more: i < pages.length - 1));
-    }
+    await peer.send(SyncMessage.projectPrompts(
+        project: project,
+        documents: [for (final d in turns.library(project).all) d.toJson()]));
   }
 
   /// [chatId]'s head where it is one of this device's chats: a write naming
@@ -1148,35 +1115,14 @@ class SyncHub implements ArtifactBytes, RemoteChats {
   Future<void> sendForTest(String chatId, SyncMessage message) async =>
       _peerHosting(chatId)?.send(message);
 
-  /// What one message may carry: a data channel refuses more, and a chat's
-  /// log or an attachment is far past it. Records are measured as encoded
-  /// JSON (one record can be a whole file); resource chunks as source bytes,
-  /// which base64 expands by a third, hence their smaller bound.
-  static const _messageBytes = 48 * 1024;
+  /// An attachment's chunk, in source bytes: the framing would carry it
+  /// whole, but a file is not held as one base64 string at either end.
   static const _chunkBytes = 32 * 1024;
 
   Future<void> _sendRecords(
       LivePeer peer, String chatId, List<ChatRecord> records) async {
-    var page = <ChatRecord>[];
-    var bytes = 0;
-    Future<void> flush() async {
-      if (page.isEmpty) return;
-      await peer.send(SyncMessage.recordAppend(chatId: chatId, records: page));
-      page = [];
-      bytes = 0;
-    }
-
-    for (final record in records) {
-      // Encoded to be measured and then thrown away: `sendJson` encodes the
-      // page again below. Reusing it would mean carrying the strings through
-      // `SyncMessage`, or the store handing back the line lengths it already
-      // split on — neither worth it for one extra encode per chat opened.
-      final size = jsonEncode(record.toJson()).length;
-      if (bytes + size > _messageBytes) await flush();
-      page.add(record);
-      bytes += size;
-    }
-    await flush();
+    if (records.isEmpty) return;
+    await peer.send(SyncMessage.recordAppend(chatId: chatId, records: records));
   }
 
   // ------------------------------------------------------------ resources

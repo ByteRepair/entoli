@@ -37,6 +37,15 @@ bits) is derived beside the keys for human confirmation — regrouped five bits
 at a time rather than through one 40-bit integer, since a shift past 32 bits is
 truncated on the web.
 
+**`v` is the protocol version, and a mismatch is refused before anything
+else.** `SyncIdentity.protocolVersion` is bumped by any change an older build
+could not read. `parse` reads `v` before any other field, so a newer build's
+differently-shaped hello still reads as a mismatch; the side that finds it
+sends back a bare `{"v","role"}` before giving up, so the other side refuses
+too instead of timing out. Both throw `ProtocolMismatchException`, whose
+message — "Protocol version mismatch, please update Entoli on both devices" —
+is what the pairing page and the device's row show.
+
 That HKDF is asked for `DartHmac` by name. `cryptography_flutter` declares a
 `dartPluginClass`, so on Android it installs itself as `Cryptography.instance`
 with nothing in this app calling it, and a plain `Hmac.sha256()` then runs over
@@ -75,6 +84,9 @@ who speaks first.
 `framing.dart` wraps a `ByteChannel` in ChaCha20-Poly1305 AEAD. Every frame:
 
     [type: 1 byte][counter: 4 bytes BE][AEAD(cleartext)]
+
+A message past 48KB is several frames, the type's high bit set on all but the
+last — see "A conversation does not fit in one frame".
 
 Counters are per-direction and monotonic — a replayed, reordered or spliced
 frame fails its MAC.
@@ -215,24 +227,28 @@ freezed object left to `toJson`'s default comes out as a live instance rather
 than a map, and a raw `_ChatState` in the payload is a cast failure on the far
 side.
 
-### A conversation does not fit in one message
+### A conversation does not fit in one frame
 
-A data channel refuses a message past its negotiated maximum, and a
-`conv.jsonl` of any age is far past it — the chats this was first run against
-were 74KB, 256KB and 485KB, and every one of them mirrored as an empty chat.
-So `chatSnapshot` is the *head* only: state, meta, and how long the log is.
-The records follow as a run of `recordAppend`s, paged by measured encoded size
-rather than by a count, since one record can be a whole file.
-
-`totalLines` is then the greater of what a mirror holds and what the peer last
-said — pages of a snapshot climb towards a total already known, while a live
-append is what makes the total bigger.
+A data channel refuses a message past its negotiated maximum — 64KB on the
+smallest peers — and a `conv.jsonl` of any age is far past it: the chats this
+was first run against were 74KB, 256KB and 485KB, and every one of them
+mirrored as an empty chat. `SecureChannel` answers that once, for every
+message: one past `pieceBytes` (48KB) goes as consecutive frames with the
+`continued` bit (0x80) in the type byte of all but the last, and the far end
+joins them before handing the message up. The type byte is the AEAD's
+associated data, so the bit cannot be flipped, and the counter keeps the
+pieces in order; one message's pieces are one link of the send chain, so
+nothing lands between them. Nothing above the framing pages anything: a
+snapshot's records are one `recordAppend`, a project's library one
+`projectPrompts`, a memory answer one `memories`.
 
 ### Attachments
 
 An attachment's bytes are requested by `resourceRequest{id}` and answered by a
 run of `resourceChunk{id, bytesB64, done}` — base64 inside ordinary control
-frames, 48KB of source bytes each. Correlation stays trivial and every frame
+frames, 32KB of source bytes each — not for the frame limit, which the
+framing takes care of, but so a file is never one base64 string at either end.
+Correlation stays trivial and every frame
 rides the same AEAD as the rest of the traffic; binary framing can come later
 with no protocol change, since the type byte already separates the streams. A
 resource that is not there answers with an empty final chunk, so the asking
@@ -369,8 +385,7 @@ are left off a paired device's page: they are files there, and nothing here
 reads them.
 
 **Its skills and agents come with it.** Each snapshot is followed by the
-project's resolved library as `projectPrompts`, paged by size like records, so
-one page is one document at most where a document is large.
+project's resolved library as `projectPrompts`, bodies included.
 `promptLibraryOf(ref)` is
 `promptLibraryProvider` here and the followed project's library there, so the
 composer's `/` and `@` offer the paired device's set and only that; the field
