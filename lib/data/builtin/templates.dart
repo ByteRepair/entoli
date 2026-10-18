@@ -323,11 +323,6 @@ String? memberPrompt(PromptLibrary? library, String member) {
       "team.\n\n$body";
 }
 
-/// What a member replies when it declines the turn it was addressed with:
-/// word for word, so a longer reply is a reply. The controller reads it off
-/// the record, and the room's round stops there.
-const passWord = "pass";
-
 /// What the conversation calls the main agent wherever a viewer is named and
 /// the reply carries no author — the label, not a member handle.
 const mainAgentLabel = "(main agent)";

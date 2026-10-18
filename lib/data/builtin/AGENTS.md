@@ -658,6 +658,12 @@ running label. An empty roster answers rather than failing: the room is in
 force however few members it defines, and "no members" is a fact worth the
 model knowing.
 
+`end_turn` rides the same gate plus a member viewer: offered on a member's
+omada turn, never the house's. Its call sets `_ended`, and the loop stops
+after that batch rather than asking the model again — the follow-up step
+would be the reply the call declined to write. See "The room and its
+participants" in `lib/ui/chat/AGENTS.md` for what a silent reply is.
+
 ## Compaction (the `compact` callback)
 
 `AgentBackend.compact` is the summarizer: the conversation projected the way

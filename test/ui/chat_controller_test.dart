@@ -4,8 +4,8 @@ import "dart:async";
 
 import "package:flutter_test/flutter_test.dart";
 
-import "package:agent_chat/data/builtin/templates.dart" show passWord;
 import "package:agent_chat/domain/agent_backend.dart";
+import "package:agent_chat/domain/end_turn.dart";
 import "package:agent_chat/domain/app_settings.dart";
 import "package:agent_chat/domain/ask.dart";
 import "package:agent_chat/domain/chat_meta.dart";
@@ -1623,33 +1623,40 @@ void main() {
       expect(modes, [true, false, true]);
     });
 
-    test("a member's pass ends the round", () async {
+    test("a silent reply is on the log, not the page, and hands to no one",
+        () async {
       await _inTeam(app);
-      app.backend.scriptedRounds = [
-        const [TextDelta(passWord), DoneEvent()],
-      ];
-      final (id, controller) =
+      app.backend.scriptedRounds = [_silent];
+      final (id, _) =
           await startTurn("hello @explore, want this?", project: "team");
       await waitIdle(id, limit: const Duration(seconds: 5));
 
-      // The pass is on the record, and nothing followed it.
-      expect(textOf(messagesOf(id).last), passWord);
+      final reply = messagesOf(id).last;
+      expect(endedSilently(reply), isTrue);
+      expect(reply.addressees, isEmpty);
       expect(app.backend.prompts, hasLength(1));
+      // The reason is kept for the record.
+      final reloaded = await app.repo.openChat(id);
+      expect(
+          reloaded.messages.last.parts
+              .whereType<ToolCallPart>()
+              .single
+              .toolCall
+              .argumentsJson,
+          contains("Not for me."));
+      expect(entriesOf(chatOf(id)).whereType<MessageEntry>(), hasLength(1));
     });
 
-    test("a pass does not cancel what the user scheduled", () async {
+    test("a silent reply does not cancel what the user scheduled", () async {
       await _inTeam(app);
       app.backend.scriptedRounds = [
-        const [TextDelta(passWord), DoneEvent()],
+        _silent,
         const [TextDelta("on it"), DoneEvent()],
       ];
       final (id, _) = await startTurn(
           "@explore and @build, have a look", project: "team");
       await waitIdle(id, limit: const Duration(seconds: 5));
 
-      // Explore passed, and build's turn still ran: the user addressed
-      // build directly, and a pass ends what agents hand each other, not
-      // what the user asked for.
       expect(app.backend.prompts, hasLength(2));
       expect(app.backend.prompts[1].settings.omadaMember, "build");
     });
@@ -1879,16 +1886,14 @@ void main() {
       expect(app.backend.prompts[1].settings.omadaMember, "build");
     });
 
-    test("a pass under relay ends the agents' round, not the user's",
+    test("a silent reply under relay leaves the user's round running",
         () async {
       await _inTeam(app);
       await app.container
           .read(projectSettingsProvider("team").notifier)
           .setOmadaOrdering(OmadaOrdering.relay);
-      // Explore passes right away; build's turn — the user's own schedule —
-      // still runs.
       app.backend.scriptedRounds = [
-        const [TextDelta(passWord), DoneEvent()],
+        _silent,
         const [TextDelta("on it"), DoneEvent()],
       ];
       final (id, _) = await startTurn(
@@ -2553,3 +2558,13 @@ Future<void> _inTeam(TestApp app) async {
       .read(projectSettingsProvider("team").notifier)
       .setOmada(true);
 }
+
+/// A member's turn that ends with `end_turn` and says nothing.
+const _silent = <AgentEvent>[
+  ToolCallEvent(ToolCall(
+      id: "end",
+      name: endTurnToolName,
+      argumentsJson: '{"reason":"Not for me."}')),
+  ToolResultEvent(ToolResult(callId: "end", returnCode: 0, output: "Turn ended.")),
+  DoneEvent(),
+];

@@ -6,6 +6,7 @@ import "package:agent_chat/data/builtin/llm/llm_client.dart";
 import "package:agent_chat/data/builtin/projection.dart";
 import "package:agent_chat/data/builtin/templates.dart";
 import "package:agent_chat/domain/ask.dart";
+import "package:agent_chat/domain/end_turn.dart";
 import "package:agent_chat/domain/models.dart";
 
 void main() {
@@ -433,6 +434,20 @@ void main() {
           [asked("check the logs"), authoredReply("@researcher")],
           viewer: "reviewer");
       expect(unrouted.last.text, isNot(contains("addressed")));
+    });
+
+    test("a silent reply reaches no other viewer, and stays its author's",
+        () async {
+      final silent = authoredReply("@researcher", [
+        call("e1", endTurnToolName, '{"reason":"Not for me."}'),
+        ran("e1", "Turn ended."),
+      ]);
+      final messages = [asked("check the logs"), silent];
+
+      expect(await project(messages, viewer: "reviewer"), hasLength(1));
+      expect(await project(messages), hasLength(1));
+      final own = await project(messages, viewer: "researcher");
+      expect(own.last.role, LlmRole.tool);
     });
 
     test("a peer reply's tool calls do not reach the other viewer", () async {
