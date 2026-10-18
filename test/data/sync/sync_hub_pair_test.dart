@@ -974,6 +974,34 @@ void main() {
           away.hub.remoteProject(base)!.settings.description == "while away");
     });
 
+    test("a chat started from here is made there, held by this device, and "
+        "listed before it is answered", () async {
+      await home.repo.createProject("work");
+      await mirrored();
+
+      final id = await away.hub
+          .startRemoteChat((device: home.identity.id, project: "work"), "hello");
+
+      expect(id, isNotNull);
+      expect((await home.store.loadState(id!))!.project, "work");
+      expect(away.hub.mirror(id), isNotNull);
+      expect(home.hub.heldBy(id), away.identity.id);
+      expect(turns.prompts.last, (id, "hello"));
+      away.hub.followChat(id);
+      await waitForSync(() => away.hub.holdsControl(id));
+    });
+
+    test("a chat asked for in a project that is not there is not made",
+        () async {
+      await mirrored();
+
+      final id = await away.hub
+          .startRemoteChat((device: home.identity.id, project: "nowhere"), "hi");
+
+      expect(id, isNull);
+      expect(turns.prompts, isEmpty);
+    });
+
     test("a prompt from a device holding nothing is dropped", () async {
       final state = await mirrored();
 
@@ -1149,6 +1177,10 @@ class _Turns implements RemoteTurns {
     projects[project] = settings;
     hub?.publishProject(project);
   }
+
+  @override
+  Future<String> startChat(String? project) async =>
+      (await repo.createChat(project: project)).state.id;
 
   @override
   Future<void> createProject(String name) => repo.createProject(name);

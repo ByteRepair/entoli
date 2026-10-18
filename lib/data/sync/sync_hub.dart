@@ -91,6 +91,8 @@ abstract interface class RemoteTurns {
   Future<void> saveMeta(String chatId, ChatMeta meta);
   Future<void> retitle(String chatId, String title);
   Future<void> delete(String chatId);
+  /// A chat made in [project] for a paired device to say the first thing in.
+  Future<String> startChat(String? project);
   ProjectSettings projectSettings(String? project);
   AppSettings get appSettings;
   Future<void> writeProject(String? project, ProjectSettings settings);
@@ -329,6 +331,30 @@ class SyncHub implements ArtifactBytes, RemoteChats {
         ?.send(SyncMessage.projectClose(project: project.project)));
   }
 
+  final _starts = <String, ({String peerId, Completer<String?> done})>{};
+
+  /// A chat in a paired device's [project], started there with [text] and
+  /// held by this device: its id once that device has listed it, or null.
+  Future<String?> startRemoteChat(ProjectRef project, String text) async {
+    final peer = _peers[project.device!];
+    if (peer == null) {
+      logFailure("sync", "a chat for ${project.device}: device is offline");
+      return null;
+    }
+    final id = "s${_resourceSeq++}";
+    final start = _starts[id] = (peerId: peer.deviceId, done: Completer<String?>());
+    try {
+      await peer.send(
+          SyncMessage.chatStart(requestId: id, project: project.project, text: text));
+      return await start.done.future.timeout(const Duration(seconds: 30), onTimeout: () {
+        logFailure("sync", "a chat for ${project.device}: no answer");
+        return null;
+      });
+    } finally {
+      _starts.remove(id);
+    }
+  }
+
   Future<void> writeRemoteProject(ProjectRef project, ProjectSettings settings) =>
       _send(
           _peers[project.device!],
@@ -549,6 +575,24 @@ class SyncHub implements ArtifactBytes, RemoteChats {
         }
       case SyncChatDelete(:final chatId):
         if (await _ours(chatId) != null) await remoteTurns?.delete(chatId);
+
+      case SyncChatStart(:final requestId, :final project, :final text):
+        final turns = remoteTurns;
+        String? chatId;
+        if (turns != null && await _isProject(project)) {
+          chatId = await turns.startChat(project);
+          _control[chatId] = peer.deviceId;
+          _refreshDriven();
+          // Listed before it is answered, so the asker has the mirror to open.
+          await _announceChats();
+          turns.prompt(chatId, text);
+        }
+        await peer.send(SyncMessage.chatStarted(requestId: requestId, chatId: chatId));
+      case SyncChatStarted(:final requestId, :final chatId):
+        final start = _starts[requestId];
+        if (start != null && start.peerId == peer.deviceId && !start.done.isCompleted) {
+          start.done.complete(chatId);
+        }
 
       // -- serving: a project of this device
       case SyncProjectOpen(:final project):
@@ -1141,6 +1185,9 @@ class SyncHub implements ArtifactBytes, RemoteChats {
     final live = _peers.remove(deviceId);
     for (final echo in _echoes) {
       if (echo.peerId == deviceId && !echo.done.isCompleted) echo.done.complete();
+    }
+    for (final start in _starts.values) {
+      if (start.peerId == deviceId && !start.done.isCompleted) start.done.complete(null);
     }
     // A lock outliving the connection that took it would leave the chat
     // unusable at both ends until one side restarted.

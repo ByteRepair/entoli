@@ -707,7 +707,9 @@ Open Chat is the drawer the bar already opens.
 **And it is only a screen.** Nothing is created to stand behind it: no chat, no
 `ChatController`, nothing on disk. The project is `selectedProjectProvider`'s
 and the settings are `_NewChat`'s own, and `startChatWith` spends both on a
-`createChat` at the moment the first message is sent. So a screen
+`createChat` at the moment the first message is sent — or, for a paired
+device's project, asks that device to make it (see "A paired device's project,
+while it is open" in `lib/data/sync/AGENTS.md`). So a screen
 nobody typed into leaves nothing, which is the property this has to have, and
 it gets it by choosing *when* to create rather than by holding something unsaved
 — see "Starting a chat, and naming it" for the eleven branches that bought.

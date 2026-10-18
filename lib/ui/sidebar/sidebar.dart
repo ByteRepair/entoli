@@ -46,7 +46,9 @@ class SelectedChatId extends Notifier<String?> {
   Future<String?> create({ChatMeta? meta}) async {
     try {
       final at = ref.read(selectedProjectProvider);
-      if (at.device != null) return null;
+      // A paired device's project is not a directory here; [startChatWith]
+      // starts a chat there.
+      if (at.device != null) throw StateError("${at.project} is on ${at.device}");
       final chat = await ref.read(chatRepositoryProvider).createChat(
             project: at.project,
             meta: meta,
@@ -114,6 +116,14 @@ Future<bool> startChatWith(
   List<Attachment> attachments = const [],
   ChatMeta? meta,
 }) async {
+  final at = ref.read(selectedProjectProvider);
+  if (at.device != null) {
+    // Made there, which runs the turn: this device follows it, holding it.
+    final id = await ref.read(syncHubProvider).startRemoteChat(at, text);
+    if (id == null) return false;
+    ref.read(selectedChatIdProvider.notifier).select(id);
+    return true;
+  }
   final id = await ref.read(selectedChatIdProvider.notifier).create(meta: meta);
   if (id == null) return false;
   unawaited(ref

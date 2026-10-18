@@ -19,6 +19,7 @@ import "package:agent_chat/ui/widgets/agent_picture.dart" show AgentPictureImage
 import "package:agent_chat/ui/chat/chat_controller.dart";
 import "package:agent_chat/ui/chat/chat_page.dart";
 import "package:agent_chat/ui/chat/widgets/composer.dart";
+import "package:agent_chat/ui/chat/widgets/view_only_bar.dart";
 import "package:agent_chat/ui/chat/widgets/message_bubble.dart";
 import "package:agent_chat/ui/chat/widgets/needs_setup_bar.dart";
 import "package:agent_chat/ui/chat/widgets/synced_device_cards.dart";
@@ -123,17 +124,45 @@ void main() {
       expect(find.text("hello"), findsOneWidget);
     });
 
-    // A paired device's list is the one place nothing selected is not a new
-    // chat: making one is this device's and would take the sidebar home.
-    testWidgets("reading a paired device makes no chat", (tester) async {
+    // A paired device's project is a new chat there: the composer, and none
+    // of what names this device's own models, projects or library.
+    testWidgets("a paired device's project offers a chat there", (tester) async {
+      app.dispose();
+      app = TestApp.create(remotes: [
+        RemoteChatEntry(
+          chatId: "r1",
+          deviceId: "phone",
+          deviceName: "Phone",
+          state: ChatState(
+              id: "r1",
+              title: "On the phone",
+              createdAt: DateTime.utc(2026, 1, 1),
+              updatedAt: DateTime.utc(2026, 1, 1)),
+          online: true,
+        ),
+      ]);
       app.container
           .read(selectedProjectProvider.notifier)
           .select((device: "phone", project: null));
 
       await app.pump(tester, const ChatPage(withDrawer: true));
 
-      expect(find.text("Pick a chat to follow."), findsOneWidget);
+      expect(find.byType(Composer), findsOneWidget);
+      expect(find.byTooltip("Chat settings"), findsNothing);
+      expect(find.byType(ChoiceChip), findsNothing);
       expect(app.container.read(selectedChatIdProvider), isNull);
+    });
+
+    testWidgets("with that device away there is nothing to send to",
+        (tester) async {
+      app.container
+          .read(selectedProjectProvider.notifier)
+          .select((device: "phone", project: null));
+
+      await app.pump(tester, const ChatPage(withDrawer: true));
+
+      expect(find.byType(Composer), findsNothing);
+      expect(find.byType(ViewOnlyBar), findsOneWidget);
     });
 
     Future<void> openWithProject(WidgetTester tester) async {
@@ -1022,7 +1051,8 @@ void main() {
       await tester.pumpAndSettle();
 
       await tester.tap(find.text("work"));
-      await tester.pump();
+      // The new-chat screen stays, now that device's, and sweeps its question.
+      await tester.pumpAndSettle();
 
       expect(app.container.read(selectedProjectProvider),
           (device: "d1", project: "work"));

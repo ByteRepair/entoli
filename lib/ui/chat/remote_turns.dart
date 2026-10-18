@@ -192,6 +192,13 @@ class RemoteTurnDriver implements RemoteTurns {
   }
 
   @override
+  Future<String> startChat(String? project) async {
+    final chat = await _repo.createChat(project: project);
+    _ref.invalidate(chatListProvider);
+    return chat.state.id;
+  }
+
+  @override
   ProjectSettings projectSettings(String? project) =>
       _ref.read(projectSettingsProvider(project));
 

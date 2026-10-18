@@ -21,7 +21,6 @@ import "../widgets/app_mark.dart";
 import "../widgets/chip_row.dart";
 import "../widgets/completion_field.dart";
 import "../widgets/nav_drawer.dart";
-import "../widgets/nothing.dart";
 import "../widgets/scrolling.dart";
 import "chat_settings_page.dart";
 import "chat_controller.dart";
@@ -46,15 +45,6 @@ class ChatPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final chatId = ref.watch(selectedChatIdProvider);
     if (chatId != null) return _ChatBody(chatId: chatId, withDrawer: withDrawer);
-    // Reading a paired device's list is the one place nothing selected does not
-    // mean a new chat: making one is this device's, and would take the sidebar
-    // home from whatever it was showing.
-    if (ref.watch(selectedProjectProvider).device != null) {
-      return _Waiting(
-        withDrawer: withDrawer,
-        child: const Nothing("Pick a chat to follow."),
-      );
-    }
     return _NewChat(withDrawer: withDrawer);
   }
 }
@@ -113,6 +103,9 @@ class _NewChatState extends ConsumerState<_NewChat> {
   /// including one started from somewhere else entirely.
   ChatMeta _meta = ChatMeta();
 
+  /// A chat being made on a paired device, until it has answered.
+  bool _starting = false;
+
   @override
   void dispose() {
     _controller.dispose();
@@ -136,10 +129,11 @@ class _NewChatState extends ConsumerState<_NewChat> {
   /// would take the message with it silently. Put it back instead — the reason
   /// is logged, and this is the only thing left on screen to say so.
   Future<void> _send(String text, List<Attachment> attachments) async {
-    if (await startChatWith(ref, text, attachments: attachments, meta: _meta)) {
-      return;
-    }
-    if (!mounted) return;
+    setState(() => _starting = true);
+    final started =
+        await startChatWith(ref, text, attachments: attachments, meta: _meta);
+    if (mounted) setState(() => _starting = false);
+    if (started || !mounted) return;
     _controller.text = text;
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text("Could not start a chat.")),
@@ -150,7 +144,21 @@ class _NewChatState extends ConsumerState<_NewChat> {
   /// and has not been set up yet. The bar replaces the composer entirely,
   /// the way `ViewOnlyBar` does for a mirrored chat.
   Widget _bottomBar() {
-    final project = ref.watch(selectedProjectProvider).project;
+    final at = ref.watch(selectedProjectProvider);
+    final project = at.project;
+    if (_starting) return const SizedBox.shrink();
+    // A paired device's project: its setup and its voice are that device's.
+    if (at.device != null) {
+      if (ref.watch(projectFrozenProvider(at))) return const ViewOnlyBar(online: false);
+      return Composer(
+        controller: _controller,
+        agentSpeaking: false,
+        onSend: _send,
+        onAbort: () {},
+        project: project,
+        workspace: null,
+      );
+    }
     if (ref.watch(setupCompleteProvider(project))) {
       return Composer(
         controller: _controller,
@@ -168,22 +176,30 @@ class _NewChatState extends ConsumerState<_NewChat> {
   }
 
   @override
-  Widget build(BuildContext context) => Scaffold(
+  Widget build(BuildContext context) {
+    final at = ref.watch(selectedProjectProvider);
+    return Scaffold(
         drawer: widget.withDrawer ? const NavDrawer(child: Sidebar()) : null,
         appBar: AppBar(
           title: const _AppBrand(),
           actions: [
-            IconButton(
-              icon: const Icon(Icons.tune),
-              tooltip: "Chat settings",
-              onPressed: _openSettings,
-            ),
+            // A paired device's chat takes its settings once it is there:
+            // these name this device's models.
+            if (at.device == null)
+              IconButton(
+                icon: const Icon(Icons.tune),
+                tooltip: "Chat settings",
+                onPressed: _openSettings,
+              ),
           ],
         ),
         body: _ReadableColumn(
           bottom: _bottomBar(),
-          child: _EmptyChat(
-            project: ref.watch(selectedProjectProvider).project,
+          child: _starting
+              ? const Center(child: CircularProgressIndicator())
+              : _EmptyChat(
+            project: at.project,
+            device: at.device,
             controller: _controller,
             // The paired devices' cards are the new-chat screen's own — a
             // chat that exists with nothing said in it yet is mid-turn at
@@ -193,6 +209,7 @@ class _NewChatState extends ConsumerState<_NewChat> {
           ),
         ),
       );
+  }
 }
 
 /// The projects a new chat could happen in, as badges, with the one picked out.
@@ -253,8 +270,14 @@ class _EmptyChat extends ConsumerWidget {
   const _EmptyChat({
     required this.project,
     required this.controller,
+    this.device,
     this.showSyncedCards = false,
   });
+
+  /// The paired device [project] is on, or null for this one. Its question
+  /// is that device's; the badges and the starters, which name this
+  /// device's projects and library, are left off.
+  final String? device;
 
   /// The project this chat is in, or on the new-chat screen the one the next
   /// chat goes to. Either way it is the badge picked out.
@@ -271,11 +294,21 @@ class _EmptyChat extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
+    final remote = device != null;
     final starters = [
-      for (final kind in CompletionKind.values)
-        for (final option in ref.watch(completionsProvider((project: project, kind: kind))))
-          (kind: kind, option: option),
+      if (!remote)
+        for (final kind in CompletionKind.values)
+          for (final option in ref.watch(completionsProvider((project: project, kind: kind))))
+            (kind: kind, option: option),
     ];
+    final question = remote
+        ? emptyChatQuestionFor(project,
+                description: ref
+                    .watch(remoteProjectProvider((device: device, project: project)))
+                    ?.settings
+                    .description) ??
+            ""
+        : ref.watch(emptyChatQuestionProvider(project));
 
     return Center(
       child: SingleChildScrollView(
@@ -289,11 +322,8 @@ class _EmptyChat extends ConsumerWidget {
             // the sweep is handed the empty string and eats its own tail
             // away, rather than the widget leaving the tree and the next
             // question's arrival being a mount instead of a change.
-            _QuestionSweep(
-              text: ref.watch(emptyChatQuestionProvider(project)),
-              style: theme.textTheme.titleMedium,
-            ),
-            _ProjectBadges(selected: project, settled: true),
+            _QuestionSweep(text: question, style: theme.textTheme.titleMedium),
+            if (!remote) _ProjectBadges(selected: project, settled: true),
             const SizedBox(height: 20),
             ChipRow(
               settled: true,
@@ -431,24 +461,19 @@ class _AppBrand extends StatelessWidget {
       );
 }
 
-/// The page with no conversation on it yet — one still being read off disk, or
-/// a paired device's list with nothing picked out of it. Carries the drawer and
-/// bar the real page would. The default child is the spinner, which is what
-/// reading one off disk wants.
+/// The page with no conversation on it yet — one still being read off disk,
+/// or still on its way from a paired device. Carries the drawer and bar the
+/// real page would.
 class _Waiting extends StatelessWidget {
-  const _Waiting({
-    required this.withDrawer,
-    this.child = const CircularProgressIndicator(),
-  });
+  const _Waiting({required this.withDrawer});
 
   final bool withDrawer;
-  final Widget child;
 
   @override
   Widget build(BuildContext context) => Scaffold(
         drawer: withDrawer ? const NavDrawer(child: Sidebar()) : null,
         appBar: withDrawer ? AppBar(title: const _AppBrand()) : null,
-        body: Center(child: child),
+        body: const Center(child: CircularProgressIndicator()),
       );
 }
 

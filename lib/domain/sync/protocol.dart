@@ -217,6 +217,20 @@ sealed class SyncMessage with _$SyncMessage {
   const factory SyncMessage.chatDelete({required String chatId}) =
       SyncChatDelete;
 
+  /// Make a chat in [project] and say [text] in it, the asker holding it.
+  /// Answered by [SyncChatStarted], after the chat list that names it.
+  const factory SyncMessage.chatStart({
+    required String requestId,
+    String? project,
+    required String text,
+  }) = SyncChatStart;
+
+  /// [chatId] is null where no chat was made.
+  const factory SyncMessage.chatStarted({
+    required String requestId,
+    String? chatId,
+  }) = SyncChatStarted;
+
   // ---- A project on the home device, read only while it is open. --------
 
   /// Follow [project]'s settings until [SyncProjectClose]. Null is the home

@@ -99,7 +99,8 @@ The shortcut is a `HardwareKeyboard` handler in `AppShell` rather than a
 `Shortcuts` widget, which hears nothing once focus has fallen back to the
 route's scope above it. Deleting a project is on its settings page alone.
 
-New Project swaps the list for a page in the same panel — name, description,
+New Project makes the project on the device the sidebar is showing, a paired
+one included, and swaps the list for a page in the same panel — name, description,
 the Omada switch — and back, Esc or the system back key return to the list
 rather than out of the palette (`PopScope` while the page is up). A blank
 description is left unset, which is the default question; an empty string

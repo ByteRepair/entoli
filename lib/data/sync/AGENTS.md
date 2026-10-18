@@ -314,23 +314,61 @@ front with a version error instead. Both devices update together.
 `Device · project` — and a device's default project is the device's name
 alone, since the local default has no name either and this would be the one
 place in the app that invented one. Picking one lists that device's chats in
-that project, read-only, with no date grouping: a mirror answers to no date
-this sidebar could place it under.
+that project, with no date grouping: a mirror answers to no date this sidebar
+could place it under.
 
-Device *and* project together is the whole point of `RemoteScope`. `work` on a
-laptop and `work` on a phone are different directories that happen to share a
-name; folding them into one entry would put two conversations under a heading
-that is true of neither. It also means a device offers only the projects it
-has something mirrored in — the welcome is what says a project exists at all.
-The welcome and `chatsChanged` also name which of those projects run Omada
-there (`omadaProjects`), so a paired device's badge is styled by its own answer
-rather than by a local project that shares the name. Additive, so `proto`
-stayed: a peer that sends none reads as none on.
+**A project is a `ProjectRef`: a device and a name, the device null for this
+one.** `work` on a laptop and `work` on a phone are different directories that
+happen to share a name; folding them into one entry would put two
+conversations under a heading that is true of neither. `selectedProjectProvider`
+holds one, so there is one selection rather than a local one and a remote one
+beside it, and it is where a new chat goes on whichever device that is. Paths
+are still built from the name alone, and only for this device's: `AppConfig`
+and the other `String? project` parameters are about this disk, and nothing
+remote ever becomes one.
 
-`selectedRemoteProvider` is what is being *read*; `selectedProjectProvider`
-stays what it was, where new work goes — and new work never goes on somebody
-else's device, so `startChat` clears the remote scope rather than asking what
-a new chat in a mirror would mean.
+The welcome and `chatsChanged` name the home device's projects (`projects`,
+the user's; the default and the built-ins are on every device), so a device
+offers all of them whether or not anything of it is mirrored, and which run
+Omada there (`omadaProjects`), so a paired device's badge is styled by its own
+answer rather than by a local project that shares the name. A project made or
+deleted is a `ProjectsChanged` from the repository, which sends the list again;
+a deletion's chats leave in that list rather than as a `chatDeleted` each.
+
+### A paired device's project, while it is open
+
+**Streamed, not cached.** `remoteProjectProvider(ref)` follows a project
+(`projectOpen`) while something watches it and closes it when the last watcher
+goes, taking what it read with it; the home device answers with a
+`projectSnapshot` — the project's `ProjectSettings` and the `AppSettings` they
+inherit from, whole — and sends another on every change while it is followed
+(`RemoteTurnDriver` listens to both providers for `servedProjects`, the way it
+listens to controllers for `servedChats`). A page waits on
+`projectLoadedProvider` and draws a spinner until the first one lands.
+
+**The same page, either device.** `projectSettingsOf(ref)` is
+`projectSettingsProvider` for this device's and
+`RemoteProjectSettingsNotifier` for a paired one's — the same setters, each
+sent as a `projectWrite` and waited on until the snapshot comes back — and
+`appSettingsOf(ref)` is the inherited values the rows name, that device's.
+`ProjectSettingsNotifier.replace` is the home end of a write, re-anchoring the
+project's TTLs when that changed. What a paired device keeps as files — the
+path, the workspace, the instructions, skills, agents and memories — is left
+off its page until those are routed too.
+
+**Away is frozen, back is read again.** With the device gone the page keeps
+what it last had under an offline strip, its rows absorbed; a reconnect's
+welcome opens every followed project again rather than trusting what is held.
+A project gone from the device's list is dropped.
+
+**Starting a chat there.** `chatStart` asks the home device to make one in the
+project, take the first prompt and hand this device the lock; it lists the new
+chat before answering `chatStarted`, and messages from one peer arrive in
+order, so the mirror is there to open by the time the id is. The new-chat
+screen shows a spinner until then and the chat page its own until the
+snapshot lands. Its badges, starters, settings and voice are left off for a
+paired device's project, since they name this device's projects, library and
+models.
 
 `remoteChatsProvider` bridges the hub's `ValueNotifier` into Riverpod, and is
 deliberately separate from `chatListProvider`, which reads the local store and
