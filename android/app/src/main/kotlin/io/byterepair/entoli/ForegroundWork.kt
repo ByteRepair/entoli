@@ -89,6 +89,7 @@ abstract class ForegroundWork : Service() {
             return START_NOT_STICKY
         }
         lastIntent = intent
+        live[javaClass] = this
         acquireWakeLock()
         if (rePostOnSwipe) startSwipeWatch()
         // Not START_STICKY: a restart would have no work to keep alive, since
@@ -118,7 +119,15 @@ abstract class ForegroundWork : Service() {
         }
     }
 
+    // What a running service's progress is: its notification redrawn in place,
+    // without another startForegroundService round through the system.
+    private fun update(intent: Intent) {
+        lastIntent = intent
+        getSystemService(NotificationManager::class.java).notify(notificationId, notification(intent))
+    }
+
     override fun onDestroy() {
+        if (live[javaClass] === this) live.remove(javaClass)
         mainHandler.removeCallbacksAndMessages(null)
         wakeLock?.takeIf { it.isHeld }?.release()
         super.onDestroy()
@@ -227,6 +236,10 @@ abstract class ForegroundWork : Service() {
         // through `doneFiring` once the fire has been dealt with.
         private var alarmHold = false
 
+        // The services in the foreground now, so a progress tick updates one
+        // rather than starting it again.
+        private val live = mutableMapOf<Class<out ForegroundWork>, ForegroundWork>()
+
         // Whether the isolate has work the process must not be killed for.
         // MainActivity reads it to decide whether to keep the engine — voice
         // mode counts, since the session it holds is in that isolate too.
@@ -308,6 +321,9 @@ abstract class ForegroundWork : Service() {
         ) {
             val intent = Intent(context, service)
             if (!wanted) {
+                // Forgotten now, not at onDestroy: a hold arriving before the
+                // stop lands must start the service again, not redraw it.
+                live.remove(service)
                 context.stopService(intent)
                 // The last piece of work just ended. If no activity ever
                 // attached — the process was woken by an alarm and nobody came
@@ -319,6 +335,7 @@ abstract class ForegroundWork : Service() {
                 return
             }
             describe(intent)
+            live[service]?.let { return it.update(intent) }
             context.startForegroundService(intent)
         }
     }

@@ -52,7 +52,8 @@ object RemindersChannel {
         when (call.method) {
             "schedule" -> {
                 val code = call.argument<Number>("code")!!.toInt()
-                result.success(schedule(context, code, call.argument<Number>("at")!!.toLong()))
+                schedule(context, code, call.argument<Number>("at")!!.toLong())
+                result.success(null)
             }
             "cancel" -> {
                 cancel(context, call.argument<Number>("code")!!.toInt())
@@ -87,24 +88,17 @@ object RemindersChannel {
         }
     }
 
-    /// Whether the alarm could be exact; false means it was set inexact and
-    /// may fire minutes late under Doze. Asked per schedule rather than cached:
-    /// the user grants the permission while we are up.
-    private fun schedule(context: Context, code: Int, atMs: Long): Boolean {
+    /// Exact where permitted, else inexact, which may fire minutes late under
+    /// Doze. Asked per schedule rather than cached: the user grants the
+    /// permission while we are up. The boot receiver re-arms through this too.
+    internal fun schedule(context: Context, code: Int, atMs: Long) {
         val alarms = context.getSystemService(AlarmManager::class.java)
         val pending = fireIntent(context, code)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !alarms.canScheduleExactAlarms()) {
             alarms.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, atMs, pending)
-            return false
+        } else {
+            alarms.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, atMs, pending)
         }
-        alarms.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, atMs, pending)
-        return true
-    }
-
-    /// Re-arm without asking anything — the boot receiver's half, which has no
-    /// engine to answer and only repeats what Dart worked out.
-    internal fun scheduleAt(context: Context, code: Int, atMs: Long) {
-        schedule(context, code, atMs)
     }
 
     private fun cancel(context: Context, code: Int) {
@@ -114,13 +108,16 @@ object RemindersChannel {
 
     // The same intent shape every time for one code, or cancel would miss what
     // schedule armed. FLAG_IMMUTABLE because Android 12 insists, UPDATE_CURRENT
-    // because re-arming replaces rather than piles up.
+    // because re-arming replaces rather than piles up. The code rides as an
+    // extra too, since the request code itself never reaches the receiver;
+    // extras are not part of a PendingIntent's identity.
     private fun fireIntent(context: Context, code: Int): PendingIntent =
         PendingIntent.getBroadcast(
             context,
             code,
             Intent(context, ReminderReceiver::class.java)
-                .setAction(ReminderReceiver.ACTION_FIRE),
+                .setAction(ReminderReceiver.ACTION_FIRE)
+                .putExtra(ReminderReceiver.EXTRA_CODE, code),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
 
@@ -191,9 +188,10 @@ object RemindersChannel {
             .setSmallIcon(R.drawable.ic_cookie_monochrome)
             .setAutoCancel(true)
         if (chatId != null) {
-            // An explicit intent for MainActivity: getLaunchIntentForPackage
-            // cannot carry an extra through reliably across launcher entries.
-            val open = Intent(context, MainActivity::class.java).putExtra(EXTRA_CHAT_ID, chatId)
+            // Explicit, at whichever launcher entry is enabled: the other is
+            // disabled and cannot be started. See IconChannel.
+            val open = Intent().setComponent(IconChannel.enabledEntry(context))
+                .putExtra(EXTRA_CHAT_ID, chatId)
             builder.setContentIntent(
                 PendingIntent.getActivity(
                     context,
@@ -203,7 +201,8 @@ object RemindersChannel {
                 ),
             )
         }
-        manager.notify(chatId?.hashCode() ?: 1, builder.build())
+        // Clear of the foreground services' ids (1-5), which a post would replace.
+        manager.notify(chatId?.hashCode() ?: NO_CHAT_NOTIFICATION_ID, builder.build())
     }
 
     /// A completion notification was tapped. Called from MainActivity onCreate
@@ -222,4 +221,5 @@ object RemindersChannel {
     }
 
     private const val EXTRA_CHAT_ID = "reminder_open_chat"
+    private const val NO_CHAT_NOTIFICATION_ID = 1000
 }

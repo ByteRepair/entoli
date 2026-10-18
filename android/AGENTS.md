@@ -402,11 +402,18 @@ A trigger set while the app was closed fires through AlarmManager, and the
 process may have been dead since it was set. Schedules and timers ride this;
 a file trigger has nothing here to hand to — it fires while the process runs,
 which is what a watcher is. `ReminderReceiver` is the entry
-point: it stashes the reminder id in `RemindersChannel`'s held-pending list
+point: it stashes the trigger id in `RemindersChannel`'s held-pending list
 (the same shape `AssistantChannel` has for the assistant gesture), starts
 `AgentService` synchronously inside the alarm's temporary allowlist window, and
 calls `AppEngine.runIfIdle` to cold-start the Flutter isolate if nothing was
 running.
+
+**The alarm carries only its request code**, as an extra beside the
+PendingIntent's own (which the receiver never sees; extras are not part of a
+PendingIntent's identity, so cancel still matches). The receiver maps it to the
+trigger id through `reminders.json`, the list the boot receiver reads, so Dart
+is handed ids and nothing on its side knows codes reach the receiver at all. A
+code no record holds is a trigger deleted since it was armed, and is dropped.
 
 **The service starts in Kotlin, not Dart.** `TurnKeepAlive`'s
 `BackgroundWork.running(1)` goes through a MethodChannel round trip that may
@@ -453,14 +460,18 @@ piece of work ends and `!everAttached && !busy`, calls `AppEngine.releaseIfUnwan
 to destroy the cached engine. Without this, a sticky isolate nobody opened is a
 restart that never comes — `main` would not re-run, so a settings file or prompt
 edited behind its back would go on being ignored. An engine an activity did
-attach to belongs to `MainActivity.onDestroy`'s rules instead.
+attach to belongs to `MainActivity.onDestroy`'s rules instead. Both end in
+`AppEngine.release`, which resets `everAttached` — the process outlives the
+engine — and first SIGKILLs this process's direct children (found by ppid in
+`/proc`): what Dart started with `Process.start`, a llama-server or a
+persistent shell, survives the isolate, and nothing else on Android stops it.
 
 **The boot receiver re-arms from `reminders.json`**, reading `nextFireAt` (the
 epoch millis Dart precomputed) rather than doing recurrence math of its own —
 a second copy of that math in Kotlin would drift across DST and month ends.
 `TIME_SET` and `TIMEZONE_CHANGED` trigger the same resync. The file is read
-through `PathUtils.getDataDirectory` + `"agent-chat"`, the same path
-`WorkspaceProvider` uses with no engine running.
+through `appDataDir` (`DataDir.kt`), the one path `WorkspaceProvider` uses too
+with no engine running.
 
 **`POST_NOTIFICATIONS` cannot be requested from a receiver**, which is why the
 Reminders settings page asks for it when the first reminder is scheduled — an
@@ -469,9 +480,10 @@ gets no notifications from a cold-started reminder; the service still runs, the
 turn still completes, and the chat is on disk for the next open.
 
 **The completion notification's tap deep-links to the chat.** `RemindersChannel`
-builds an explicit `Intent` to `MainActivity` carrying the chat id (using the
-runtime `packageName`, not the namespace — the debug-suffix lesson from
-`IconChannel`); `MainActivity.onCreate` and `onNewIntent` hand it to
+builds an explicit `Intent` carrying the chat id to whichever launcher entry
+is enabled (`IconChannel.enabledEntry`: `MainActivity` is disabled while the
+Prompt icon is picked, and an intent naming it then starts nothing);
+`MainActivity.onCreate` and `onNewIntent` hand it to
 `RemindersChannel.receive`, which stashes it held-pending and nudges Dart.
 `IncomingReminderOpen` (`lib/ui/reminders/incoming_open.dart`) drains it on the
 first frame and on each nudge, validates the chat still exists (a temporary

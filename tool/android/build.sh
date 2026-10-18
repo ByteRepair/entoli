@@ -91,7 +91,8 @@ fi
 echo "==> talloc $TALLOC_VERSION"
 (
   cd "$src/talloc-$TALLOC_VERSION"
-  [ -f "$src/libtalloc.a" ] && exit 0
+  # Inside the versioned tree, so a version bump never links the old archive.
+  [ -f libtalloc.a ] && exit 0
   IFS=. read -r major minor release <<<"$TALLOC_VERSION"
   # talloc.c on its own, against the answers in talloc-config.h rather than
   # against waf's — see that file. The version has to be passed in because
@@ -102,7 +103,7 @@ echo "==> talloc $TALLOC_VERSION"
     "-DTALLOC_BUILD_VERSION_MINOR=$minor" \
     "-DTALLOC_BUILD_VERSION_RELEASE=$release" \
     -O2 -fPIC
-  "$AR" rcs "$src/libtalloc.a" talloc.o
+  "$AR" rcs libtalloc.a talloc.o
 )
 
 echo "==> proot $PROOT_VERSION"
@@ -119,7 +120,7 @@ echo "==> proot $PROOT_VERSION"
   export OBJCOPY=$bin/llvm-objcopy OBJDUMP=$bin/llvm-objdump
   export CPPFLAGS="-I$src/talloc-$TALLOC_VERSION -DARG_MAX=131072 -DVERSION=\\\"$PROOT_VERSION\\\""
   export CFLAGS="-O2 -fPIC"
-  export LDFLAGS="-L$src -Wl,-z,max-page-size=16384"
+  export LDFLAGS="-L$src/talloc-$TALLOC_VERSION -Wl,-z,max-page-size=16384"
   # Named rather than embedded: an embedded loader is written to a temp file and
   # exec'd, and on Android that file would land where nothing may be executed.
   # The path below is never the one used — the app sets PROOT_LOADER — so it is

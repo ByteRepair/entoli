@@ -36,13 +36,25 @@ object IconChannel {
         }
     }
 
+    /// The launcher entry that is enabled now — the only one an explicit intent
+    /// can start. MainActivity is enabled by the manifest, so it is the answer
+    /// until an alias has been switched on.
+    fun enabledEntry(context: Context): ComponentName =
+        entries.map { component(context, it) }.firstOrNull {
+            context.packageManager.getComponentEnabledSetting(it) ==
+                PackageManager.COMPONENT_ENABLED_STATE_ENABLED
+        } ?: component(context, entries.first())
+
     // The class half is namespace-relative, since that is what the manifest
     // merger expanded `.PromptIcon` against; the package half has to be
     // packageName, the id the app is installed under, which a debug
     // applicationIdSuffix makes a different string.
+    private fun component(context: Context, entry: String) =
+        ComponentName(context.packageName, "$declaredIn.$entry")
+
     private fun setState(context: Context, entry: String, enabled: Boolean) =
         context.packageManager.setComponentEnabledSetting(
-            ComponentName(context.packageName, "$declaredIn.$entry"),
+            component(context, entry),
             if (enabled) PackageManager.COMPONENT_ENABLED_STATE_ENABLED
             else PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
             PackageManager.DONT_KILL_APP,
