@@ -106,7 +106,7 @@ class MemoryStore {
   /// Adds a memory. [chat] names the one that wrote it, or null for a manual
   /// one from the explorer. Throws on empty text.
   Future<MemoryEntry> add(String text, {String? chat}) =>
-      update(const Uuid().v4(), text, chat: chat);
+      _write(const Uuid().v4(), text, chat);
 
   /// A tombstone for [id]. One for a memory that is not there is a line the
   /// replay ignores.
@@ -117,8 +117,18 @@ class MemoryStore {
 
   /// Replaces the text of [id]. The log stays append-only: a new record with
   /// the same id, and the replay's last-record-stands makes it a replacement
-  /// rather than a duplicate. Throws on empty text.
-  Future<MemoryEntry> update(String id, String text, {String? chat}) async {
+  /// rather than a duplicate. Null, and nothing written, where [id] is not a
+  /// live memory: a record after a tombstone would never be read. Throws on
+  /// empty text.
+  Future<MemoryEntry?> update(String id, String text, {String? chat}) async {
+    if (text.trim().isEmpty) {
+      throw ArgumentError.value(text, "text", "must not be empty");
+    }
+    if (!(await entries()).any((e) => e.id == id)) return null;
+    return _write(id, text, chat);
+  }
+
+  Future<MemoryEntry> _write(String id, String text, String? chat) async {
     if (text.trim().isEmpty) {
       throw ArgumentError.value(text, "text", "must not be empty");
     }

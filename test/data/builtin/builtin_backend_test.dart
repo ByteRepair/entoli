@@ -1278,6 +1278,38 @@ void main() {
       expect(backend.runningTurns.value, isEmpty);
     });
 
+    test("aborting a parallel round ends every turn's stream", () async {
+      final backend = backendOver([
+        [bashCall("rm -rf a")],
+        [bashCall("rm -rf b")],
+      ]);
+      final first = asking(backend, "one").toList();
+      final second = asking(backend, "two").toList();
+      await untilPending("Both approvals", () async {
+        final pending = await backend.pendingApprovals(chatId);
+        return pending.length == 2 ? pending : const <ToolApproval>[];
+      });
+
+      await backend.abort(chatId);
+      final ended = await Future.wait([first, second])
+          .timeout(const Duration(seconds: 5));
+
+      for (final events in ended) {
+        expect(events.whereType<DoneEvent>().last.aborted, isTrue);
+      }
+      expect(backend.openTurnStreams, 0);
+    });
+
+    test("a finished turn drops its stream", () async {
+      final backend = backendOver([
+        [finish],
+      ]);
+      await asking(backend, "hi", approveMode: ApproveMode.never).toList();
+      await pumpEvents();
+
+      expect(backend.openTurnStreams, 0);
+    });
+
     test("a chat with nothing running is not published again", () async {
       final backend = backendOver([]);
       var notified = 0;

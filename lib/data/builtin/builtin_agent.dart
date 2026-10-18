@@ -1686,7 +1686,11 @@ class BuiltinAgent {
     }
     yield _called(call, text);
     try {
-      await store.update(id, text, chat: memoryChat);
+      if (await store.update(id, text, chat: memoryChat) == null) {
+        yield _failed(call, "The memory could not be updated: no memory with "
+            "id $id. Search again for its current id.");
+        return;
+      }
     } catch (e) {
       yield _failed(call, "The memory could not be updated: $e");
       return;

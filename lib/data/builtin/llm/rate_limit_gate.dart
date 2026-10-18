@@ -40,18 +40,24 @@ class RateLimitGate {
   /// Acquire a concurrency slot, waiting first for any active cooldown.
   Future<void> acquire() async {
     await awaitReady();
-    if (_inFlight >= maxConcurrent) {
-      final completer = Completer<void>();
-      _slots.add(completer);
-      await completer.future;
+    if (_inFlight < maxConcurrent) {
+      _inFlight++;
+      return;
     }
-    _inFlight++;
+    final completer = Completer<void>();
+    _slots.add(completer);
+    // The releaser's slot is handed over, count and all.
+    await completer.future;
   }
 
-  /// Release a concurrency slot, waking one queued acquirer if any.
+  /// Release a concurrency slot: straight to the first queued acquirer if
+  /// any, so a fresh acquire cannot take it before the waiter wakes.
   void release() {
-    if (_inFlight > 0) _inFlight--;
-    if (_slots.isNotEmpty) _slots.removeAt(0).complete();
+    if (_slots.isNotEmpty) {
+      _slots.removeAt(0).complete();
+    } else if (_inFlight > 0) {
+      _inFlight--;
+    }
   }
 
   /// Block until the cooldown has expired. Returns immediately when not paused.
