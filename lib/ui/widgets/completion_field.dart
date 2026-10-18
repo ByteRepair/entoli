@@ -358,22 +358,41 @@ class CompletionFieldState extends ConsumerState<CompletionField> {
               : null,
           padding: const EdgeInsets.symmetric(horizontal: 12),
           alignment: Alignment.centerLeft,
-          child: Row(
+          // The name and hint keep their width up to most of the row and are
+          // cut past it; the description has what is left.
+          child: LayoutBuilder(builder: (context, box) => Row(
             children: [
-              Text(
-                "${kind.trigger}${option.name}",
-                style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
-              ),
-              if (option.argumentHint != null) ...[
-                const SizedBox(width: 8),
-                Text(
-                  option.argumentHint!,
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                    fontStyle: FontStyle.italic,
-                  ),
+              ConstrainedBox(
+                constraints: BoxConstraints(maxWidth: box.maxWidth * 0.7),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Flexible(
+                      child: Text(
+                        "${kind.trigger}${option.name}",
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.bodyMedium
+                            ?.copyWith(fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                    if (option.argumentHint != null) ...[
+                      const SizedBox(width: 8),
+                      Flexible(
+                        child: Text(
+                          option.argumentHint!,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: theme.colorScheme.onSurfaceVariant,
+                            fontStyle: FontStyle.italic,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
-              ],
+              ),
               if (option.description != null) ...[
                 const SizedBox(width: 12),
                 Expanded(
@@ -388,7 +407,7 @@ class CompletionFieldState extends ConsumerState<CompletionField> {
                 ),
               ],
             ],
-          ),
+          )),
         ),
       );
     },
