@@ -7,6 +7,7 @@ import "package:flutter_test/flutter_test.dart";
 import "package:path/path.dart" as p;
 
 import "package:agent_chat/core/config.dart";
+import "package:agent_chat/core/platform/io/platform.dart" show chmodReadOnly, deleteTree;
 import "package:agent_chat/data/local/file_chat_store.dart";
 import "package:agent_chat/domain/chat_log.dart";
 import "package:agent_chat/domain/models.dart";
@@ -217,6 +218,18 @@ void main() {
       expect(Directory(config.projectDir(project: "work")).existsSync(), isFalse);
       expect(await store.list(), isEmpty);
       expect(await store.listProjects(), isEmpty);
+    });
+
+    test("deleting one gets past its read-only skills", () async {
+      await store.createProject("work");
+      final skill = Directory(p.join(config.projectDir(project: "work"), "skills", "s"))
+        ..createSync(recursive: true);
+      File(p.join(skill.path, "SKILL.md")).writeAsStringSync("x");
+      await chmodReadOnly([p.dirname(skill.path)]);
+
+      await FileChatStore(config, deleteTree: deleteTree).deleteProject("work");
+
+      expect(Directory(config.projectDir(project: "work")).existsSync(), isFalse);
     });
 
     test("moving a chat takes its files and its own workspace", () async {
