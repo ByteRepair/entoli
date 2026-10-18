@@ -978,14 +978,25 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
   /// What the bar says about the chat under its title, a line each. The
   /// conditions are here and nowhere else: [_barHeight] counts what this
   /// returns, so a line added here is one the bar makes room for.
-  List<Widget> _details(ChatState state) => [
-        // Every chat is in a project, so naming the default one says nothing.
-        // A built-in's directory name is read as its label, not its path.
-        if (state.project != null) _TitleLine(text: projectLabel(state.project)),
-        if (state.pinned) _TitleLine(icon: Icons.push_pin, text: "Pinned"),
-        if (state.tempTtlExpiresAt != null)
-          _TtlLine(expiresAt: state.tempTtlExpiresAt!),
-      ];
+  List<Widget> _details(ChatState state) {
+    // Every chat is in a project, so naming the default one says nothing.
+    // A built-in's directory name is read as its label, not its path.
+    final project =
+        state.project != null ? _TitleLine(text: projectLabel(state.project)) : null;
+    final expiresAt = state.tempTtlExpiresAt;
+    return [
+      // The countdown shares the project's line, held to the bar's right edge.
+      if (expiresAt != null)
+        Row(children: [
+          ?project,
+          const Spacer(),
+          _TtlLine(expiresAt: expiresAt),
+        ])
+      else
+        ?project,
+      if (state.pinned) _TitleLine(icon: Icons.push_pin, text: "Pinned"),
+    ];
+  }
 
   /// What the title takes, and what the row drawing it is held to.
   static const _titleHeight = 28.0;

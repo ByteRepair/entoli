@@ -529,18 +529,26 @@ void main() {
     expect(tester.getSize(bar).height, greaterThan(kToolbarHeight));
   }
 
-  // Three lines — a title, a project and a countdown — do not fit the 56dp bar
-  // every other chat gets, and the last of them was being clipped.
-  testWidgets("a chat that is both in a project and temporary fits its bar",
+  // The project and the countdown share a line: the project at its left, the
+  // countdown held to the right edge.
+  testWidgets("a chat that is both in a project and temporary has one detail line",
       (tester) async {
     final chat = await io(tester, () => app.seedChat(title: "at work", project: "work"));
     await io(tester, () => app.makeTemporary(chat.state));
 
     await open(tester, chat.state.id);
 
-    expect(find.descendant(of: find.byType(AppBar), matching: find.text("work")),
-        findsOneWidget);
-    expectCountdownFits(tester);
+    final bar = find.byType(AppBar);
+    final project = find.descendant(of: bar, matching: find.text("work"));
+    final hourglass =
+        find.descendant(of: bar, matching: find.byIcon(Icons.hourglass_empty));
+    expect(project, findsOneWidget);
+    expect(hourglass, findsOneWidget);
+    expect(tester.getCenter(project).dy,
+        moreOrLessEquals(tester.getCenter(hourglass).dy, epsilon: 1));
+    final middle = tester.getCenter(bar).dx;
+    expect(tester.getCenter(project).dx, lessThan(middle));
+    expect(tester.getCenter(hourglass).dx, greaterThan(middle));
   });
 
   // A phone set to a large font, which is where this was found: two lines fit
