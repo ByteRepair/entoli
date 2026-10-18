@@ -396,7 +396,6 @@ class BuiltinAgent {
     this.registerTrigger,
     this.onShellOutput,
     this.onUsage,
-    this.onContext,
     this.loadResource = noResources,
     this.memory = MemorySettings.off,
     this.instructions = const [],
@@ -718,10 +717,6 @@ class BuiltinAgent {
   /// Null where the provider reports nothing, which is every completion a
   /// test fakes unless it says otherwise.
   final void Function(LlmUsage usage)? onUsage;
-
-  /// What each request is about to send, by segment. Null for a sub-agent,
-  /// whose context is its own and not the chat's.
-  final void Function(ContextUsage usage)? onContext;
 
   /// What the trigger tools run against — a registry over the app's own
   /// trigger list — or null, which withholds the trio the way a missing
@@ -2552,6 +2547,25 @@ class BuiltinAgent {
     watchShellOutput(run, (text) => onShellOutput!(call.id, text));
   }
 
+  /// What the request [completion] answered held, its reply counted in the
+  /// chat so the estimate covers what the provider's count does.
+  ContextUsage _contextOf(LlmCompletion completion) {
+    final system =
+        session.messages.takeWhile((m) => m.role == LlmRole.system).toList();
+    final profileTokens = profileSection(profile).length ~/ 4;
+    final tools = [
+      for (final t in _tools)
+        {"name": t.name, "description": t.description, "schema": t.schema},
+    ];
+    return ContextUsage(
+      system: estimateTokens(system) - profileTokens,
+      tools: jsonEncode(tools).length ~/ 4,
+      profile: profileTokens,
+      chat: estimateTokens([...session.conversation, completion.message]),
+      reported: completion.usage?.contextTokens,
+    );
+  }
+
   /// Stream one model call, turning its chunks into events and leaving what it
   /// produced in [_completion] or [_queryError].
   ///
@@ -2565,21 +2579,6 @@ class BuiltinAgent {
   /// the gate's wall-clock budget, not [BuiltinOptions.maxAttempts]; other
   /// retryables (503, connection drops) keep the per-agent path.
   Stream<AgentEvent> _query() async* {
-    if (onContext != null) {
-      final system =
-          session.messages.takeWhile((m) => m.role == LlmRole.system).toList();
-      final profileTokens = profileSection(profile).length ~/ 4;
-      final tools = [
-        for (final t in _tools)
-          {"name": t.name, "description": t.description, "schema": t.schema},
-      ];
-      onContext!((
-        system: estimateTokens(system) - profileTokens,
-        tools: jsonEncode(tools).length ~/ 4,
-        profile: profileTokens,
-        chat: estimateTokens(session.conversation),
-      ));
-    }
     var attempt = 1;
     while (true) {
       var produced = false;
@@ -2672,6 +2671,7 @@ class BuiltinAgent {
               if (chunk.usage != null && onUsage != null) {
                 onUsage!(chunk.usage!);
               }
+              yield ContextEvent(_contextOf(chunk));
               return;
           }
         }

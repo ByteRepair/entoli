@@ -207,6 +207,20 @@ void main() {
         3000);
   });
 
+  test("the turn's newest context is on the reply, and on the log", () async {
+    app.backend.scriptedEvents = const [
+      ContextEvent(ContextUsage(system: 1, tools: 2, profile: 0, chat: 3)),
+      ContextEvent(ContextUsage(system: 1, tools: 2, profile: 0, chat: 9, reported: 20)),
+      TextDelta("hi"),
+      DoneEvent(),
+    ];
+    final (id, _) = await chatWithOneTurn("hello");
+
+    expect(messagesOf(id).last.context?.chat, 9);
+    final stored = await app.repo.openChat(id);
+    expect(stored.messages.last.context?.reported, 20);
+  });
+
   test("a block the backend only reports whole still lands", () async {
     // A provider that streams no reasoning deltas: the closing event carries
     // the lot.

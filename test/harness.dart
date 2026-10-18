@@ -457,7 +457,8 @@ List<ChatRecord> _asWritten(List<Message> messages, bool finished) => [
       ...recordsOf(messages),
       if (finished)
         for (final m in messages.where((m) => m.role == MessageRole.assistant))
-          ChatRecord.turnEnd(messageId: m.id, reason: TurnEnd.done),
+          ChatRecord.turnEnd(
+              messageId: m.id, reason: TurnEnd.done, context: m.context),
     ];
 
 /// A chat's state as a store test hands it in, dated so [day] orders one

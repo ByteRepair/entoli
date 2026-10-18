@@ -3,6 +3,7 @@ import "package:flutter_test/flutter_test.dart";
 import "package:fs_shim/fs_io.dart" show fileSystemIo;
 
 import "package:agent_chat/data/builtin/builtin_agent.dart";
+import "package:agent_chat/data/builtin/llm/llm_client.dart";
 import "package:agent_chat/data/builtin/templates.dart";
 import "package:agent_chat/domain/agent_backend.dart";
 import "package:agent_chat/domain/models.dart";
@@ -13,15 +14,19 @@ import "../../fakes.dart";
 import "builtin_fakes.dart";
 
 void main() {
-  test("every request reports its segments, the profile apart from the system",
+  test("every request reports its segments, and the provider's count beside them",
       () async {
     const profile = Profile(name: "Ada", profession: "Engineer");
-    final reports = <ContextUsage>[];
     final client = FakeLlmClient([
       [fileCall("read", {"path": "notes.txt"})],
-      [saidOnly("done")],
+      [
+        LlmCompletion(
+          message: const LlmMessage(role: LlmRole.assistant, text: "done"),
+          usage: const LlmUsage(inputTokens: 900, outputTokens: 100),
+        ),
+      ],
     ]);
-    await BuiltinAgent(
+    final events = await BuiltinAgent(
       session: BuiltinSession(),
       client: client,
       shell: FakeShell((_) => ok("")),
@@ -34,16 +39,18 @@ void main() {
       approve: (_) async => ApprovalResponse.allow,
       answer: (request) async => request.unanswered,
       profile: profile,
-      onContext: reports.add,
     ).run(userMessage("hi")).toList();
 
+    final reports = events.whereType<ContextEvent>().map((e) => e.usage).toList();
     expect(reports, hasLength(2));
     final first = reports.first;
     expect(first.profile, profileSection(profile).length ~/ 4);
     expect(first.profile, greaterThan(0));
     expect(first.system, greaterThan(first.profile));
     expect(first.tools, greaterThan(0));
-    // The second request carries the call and its result.
+    expect(first.reported, isNull);
+    // The second request carries the call and its result, and was counted.
     expect(reports.last.chat, greaterThan(first.chat));
+    expect(reports.last.reported, 1000);
   });
 }

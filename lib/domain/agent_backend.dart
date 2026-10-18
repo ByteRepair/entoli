@@ -10,10 +10,6 @@ import "../domain/permission.dart";
 import "../domain/profile.dart";
 import "../domain/tone.dart";
 
-/// One request's context by segment, in estimated tokens. [profile] is the
-/// "About the user" block, counted apart from the [system] prompt it sits in.
-typedef ContextUsage = ({int system, int tools, int profile, int chat});
-
 /// Streamed events from an agent turn. The UI renders these as they arrive.
 sealed class AgentEvent {
   const AgentEvent();
@@ -97,6 +93,13 @@ class ShellOutputEvent extends AgentEvent {
   const ShellOutputEvent({this.callId, required this.text});
   final String? callId;
   final String text;
+}
+
+/// What a request held, once its reply is in. The newest of a turn is the one
+/// its close writes; see [Message.context].
+class ContextEvent extends AgentEvent {
+  const ContextEvent(this.usage);
+  final ContextUsage usage;
 }
 
 /// An HTML artifact was rendered and saved. Persisted as a [MessagePart] rather
@@ -454,11 +457,6 @@ abstract class AgentBackend {
   /// halves of itself from the backend with no `meta.json` read on the
   /// settle path. Null is the app-wide guess's business at the caller.
   int? contextWindowFor(String chatId) => null;
-
-  /// What each participant's newest request held, estimated by segment and
-  /// keyed by member name, null the house. Empty until a turn runs in this
-  /// process, and after a rewind or a compaction until the next one.
-  Map<String?, ContextUsage> contextFor(String chatId) => const {};
 
   /// One question, answered in one call: no tools, no session, nothing kept.
   /// A model of null resolves to the provider's light default — the title

@@ -164,6 +164,8 @@ void main() {
           log("step limit: $limit");
         case InstructionsReadEvent(:final files):
           log("instructions: ${files.map((f) => f.path).join(", ")}");
+        case ContextEvent(:final usage):
+          log("context: ${usage.total} tokens");
         case DoneEvent():
           log("done");
       }

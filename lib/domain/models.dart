@@ -158,10 +158,67 @@ sealed class ConversationCompaction with _$ConversationCompaction {
   const factory ConversationCompaction({
     required String upToMessageId,
     required String summary,
+
+    /// The conversation's estimated size with the summary standing in, so the
+    /// context page can say what compacting left before the next request
+    /// measures it. Null on markers written before it existed.
+    int? chatTokens,
   }) = _ConversationCompaction;
 
   factory ConversationCompaction.fromJson(Map<String, dynamic> json) =>
       _$ConversationCompactionFromJson(json);
+}
+
+/// What a reply's last request held, by segment, estimated at four characters
+/// a token. [reported] is the provider's count for the whole, where it gave
+/// one; the segments are always ours, the split being what no provider says.
+@freezed
+abstract class ContextUsage with _$ContextUsage {
+  const ContextUsage._();
+
+  const factory ContextUsage({
+    required int system,
+    required int tools,
+
+    /// The "About the user" block, counted apart from the [system] prompt it
+    /// sits in.
+    required int profile,
+    required int chat,
+    int? reported,
+  }) = _ContextUsage;
+
+  factory ContextUsage.fromJson(Map<String, dynamic> json) =>
+      _$ContextUsageFromJson(json);
+
+  int get estimated => system + tools + profile + chat;
+
+  int get total => reported ?? estimated;
+
+  /// [segment] as a share of [total], so the parts sum to the provider's count.
+  int share(int segment) =>
+      estimated == 0 ? 0 : (segment * total / estimated).round();
+}
+
+extension Contexts on Chat {
+  /// Each participant's context as the thread being read stands, keyed by
+  /// author, null the house: their newest reply that has one, its chat taken
+  /// from a compaction that came after it.
+  Map<String?, ContextUsage> get contexts {
+    final marker = compactions.lastOrNull;
+    final boundary = marker?.chatTokens == null
+        ? -1
+        : messages.indexWhere((m) => m.id == marker!.upToMessageId);
+    final out = <String?, ContextUsage>{};
+    for (var i = messages.length - 1; i >= 0; i--) {
+      final m = messages[i];
+      final context = m.context;
+      if (context == null || out.containsKey(m.author)) continue;
+      out[m.author] = i <= boundary
+          ? context.copyWith(chat: marker!.chatTokens!, reported: null)
+          : context;
+    }
+    return out;
+  }
 }
 
 /// A full chat: state + message tree. Persisted across `state.json` + `conv.jsonl`.
@@ -302,6 +359,11 @@ abstract class Message with _$Message {
     /// holds derives from these stamps. Null on every message that is not a
     /// turn opener, and on every message written before sections existed.
     bool? omadaOn,
+
+    /// A reply's context as its last request held it, written on the turn's
+    /// close (`TurnEndRecord.context`). Null on a turn that never closed, and
+    /// on every reply written before the field existed.
+    ContextUsage? context,
   }) = _Message;
 
   factory Message.fromJson(Map<String, dynamic> json) => _$MessageFromJson(json);

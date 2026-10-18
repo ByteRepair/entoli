@@ -1,9 +1,11 @@
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
-import "../../domain/agent_backend.dart";
+import "../../domain/models.dart";
+import "../../domain/prompt_library.dart" show nameOf;
 import "../../providers.dart";
 import "../widgets/agent_picture.dart";
+import "chat_controller.dart";
 
 /// What fills each participant's context window, out of the model's whole,
 /// with the auto-compact threshold marked on it.
@@ -17,57 +19,55 @@ class ContextPage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final backend = ref.watch(agentBackendProvider);
+    final contexts =
+        ref.watch(chatControllerProvider(chatId).select((s) => s.chat))?.contexts ??
+            const {};
     final settings = ref.watch(appSettingsProvider);
-    final window = backend.contextWindowFor(chatId) ?? settings.totalContext;
+    final window = ref.watch(agentBackendProvider).contextWindowFor(chatId) ??
+        settings.totalContext;
     final threshold = settings.autoCompact ? settings.autoCompactPercent : null;
+    // The house first, the members by name.
+    final authors = contexts.keys.toList()
+      ..sort((a, b) => a == null ? -1 : b == null ? 1 : a.compareTo(b));
     return Scaffold(
       appBar: AppBar(title: const Text("Context")),
-      // Re-read when a turn starts or ends, which is when the numbers move.
-      body: ValueListenableBuilder(
-        valueListenable: backend.runningTurns,
-        builder: (context, _, _) {
-          final contexts = backend.contextFor(chatId);
-          if (contexts.isEmpty) return const _Empty();
-          // The house first, the members by name.
-          final names = contexts.keys.toList()
-            ..sort((a, b) => a == null ? -1 : b == null ? 1 : a.compareTo(b));
-          return ListView(
-            padding: const EdgeInsets.all(16),
-            children: [
-              for (final name in names) ...[
-                _ParticipantCard(
-                  name: name,
-                  project: project,
-                  usage: contexts[name]!,
-                  window: window,
-                  threshold: threshold,
+      body: contexts.isEmpty
+          ? const _Empty()
+          : ListView(
+              padding: const EdgeInsets.all(16),
+              children: [
+                for (final author in authors) ...[
+                  _ParticipantCard(
+                    author: author,
+                    project: project,
+                    usage: contexts[author]!,
+                    window: window,
+                    threshold: threshold,
+                  ),
+                  const SizedBox(height: 12),
+                ],
+                const SizedBox(height: 4),
+                Text(
+                  "The total is the provider's count where it reports one. "
+                  "The split is estimated at four characters a token.",
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant),
                 ),
-                const SizedBox(height: 12),
               ],
-              const SizedBox(height: 4),
-              Text(
-                "Estimated at four characters a token, from each "
-                "participant's latest request in this session.",
-                textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant),
-              ),
-            ],
-          );
-        },
-      ),
+            ),
     );
   }
 }
 
 typedef _Segment = ({String label, Color colour, int Function(ContextUsage) of});
 
+/// Each segment's share of the total, so they sum to the provider's count.
 final List<_Segment> _segments = [
-  (label: "System prompt", colour: Colors.grey.shade500, of: (u) => u.system),
-  (label: "Tool definitions", colour: Colors.orange.shade400, of: (u) => u.tools),
-  (label: "Profile", colour: Colors.green.shade500, of: (u) => u.profile),
-  (label: "Chat", colour: Colors.blue.shade500, of: (u) => u.chat),
+  (label: "System prompt", colour: Colors.grey.shade500, of: (u) => u.share(u.system)),
+  (label: "Tool definitions", colour: Colors.orange.shade400, of: (u) => u.share(u.tools)),
+  (label: "Profile", colour: Colors.green.shade500, of: (u) => u.share(u.profile)),
+  (label: "Chat", colour: Colors.blue.shade500, of: (u) => u.share(u.chat)),
 ];
 
 String _k(int tokens) => tokens < 1000
@@ -78,15 +78,15 @@ String _k(int tokens) => tokens < 1000
 
 class _ParticipantCard extends StatelessWidget {
   const _ParticipantCard({
-    required this.name,
+    required this.author,
     required this.project,
     required this.usage,
     required this.window,
     required this.threshold,
   });
 
-  /// Null is the house.
-  final String? name;
+  /// The reply's author stamp, sigil on; null is the house.
+  final String? author;
   final String? project;
   final ContextUsage usage;
   final int window;
@@ -96,7 +96,7 @@ class _ParticipantCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final muted = theme.colorScheme.onSurfaceVariant;
-    final used = _segments.fold(0, (sum, s) => sum + s.of(usage));
+    final used = usage.total;
     final percent = (used * 100 / window).round();
     return Card(
       margin: EdgeInsets.zero,
@@ -107,7 +107,7 @@ class _ParticipantCard extends StatelessWidget {
           children: [
             Row(
               children: [
-                if (name == null)
+                if (author == null)
                   CircleAvatar(
                     radius: 18,
                     backgroundColor: theme.colorScheme.primaryContainer,
@@ -115,10 +115,10 @@ class _ParticipantCard extends StatelessWidget {
                         size: 18, color: theme.colorScheme.onPrimaryContainer),
                   )
                 else
-                  AgentPicture(name: name!, project: project),
+                  AgentPicture(name: nameOf(author) ?? author!, project: project),
                 const SizedBox(width: 12),
                 Expanded(
-                  child: Text(name == null ? "Entoli Agent" : "@$name",
+                  child: Text(author ?? "Entoli Agent",
                       style: theme.textTheme.titleMedium),
                 ),
                 Column(

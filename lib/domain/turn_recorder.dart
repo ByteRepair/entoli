@@ -93,11 +93,16 @@ class TurnRecorder {
   /// killing a turn is a good way to make it fail.
   TurnEnd? outcome;
 
+  /// The newest request's context, which the close writes. See
+  /// [TurnEndRecord.context].
+  ContextUsage? _context;
+
   /// Begin recording [messageId]. [existing] is what the log already holds of
   /// it — nothing for a new turn, its parts so far for one being carried on, so
   /// a checkpoint writes only what this turn adds.
   void open(String messageId, {List<MessagePart> existing = const []}) {
     outcome = null;
+    _context = null;
     _responseId = null;
     _messageId = messageId;
     _logged = existing;
@@ -155,6 +160,8 @@ class TurnRecorder {
             argumentsText: approval.argumentsText,
             deniedDirs: approval.deniedDirs,
             answer: "asked"));
+      case ContextEvent(:final usage):
+        _context = usage;
       case QuestionRequestEvent():
       case SubAgentStartEvent():
       case SubAgentEndEvent():
@@ -207,7 +214,10 @@ class TurnRecorder {
     await _enqueue(() => _appendChanged(ending, then: [
           if (reason != null)
             ChatRecord.turnEnd(
-                messageId: ending, reason: reason, addressees: addressees),
+                messageId: ending,
+                reason: reason,
+                addressees: addressees,
+                context: _context),
         ]));
   }
 
