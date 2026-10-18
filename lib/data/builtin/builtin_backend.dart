@@ -26,6 +26,7 @@ import "../../domain/web_search.dart";
 import "../local/file_sub_agent_log.dart";
 import "../prompts/skill_package.dart";
 import "builtin_agent.dart";
+import "customization_tools.dart" show SettingsEditor;
 import "compact_prompt.dart";
 import "memory/instructions.dart";
 import "memory/store.dart";
@@ -52,6 +53,7 @@ class BuiltinBackend implements AgentBackend {
     required this.webSearch,
     required this.store,
     this.triggerRegistry,
+    this.editSettings,
     this.options = const BuiltinOptions(),
   });
 
@@ -67,6 +69,10 @@ class BuiltinBackend implements AgentBackend {
   /// where the app runs no trigger manager — every turn is then offered the
   /// trio nowhere, the same answer a missing artifact store is.
   final TriggerRegistryFactory? triggerRegistry;
+
+  /// What the customization tools write the app's settings through. Null
+  /// withholds them.
+  final SettingsEditor? editSettings;
 
   /// Entoli's own skills and agents, per project. A turn's own references
   /// travel on the message, resolved where it was composed against the
@@ -459,6 +465,7 @@ class BuiltinBackend implements AgentBackend {
           return store.createArtifact(chatId, resolved, entryFile, project: project);
         },
         registerTrigger: triggerRegistry?.call(chatId, project),
+        editSettings: editSettings,
         packageSkill: (path, name) async {
           final resolved = resolvePath(path);
           final pkg = await packageSkillDirectory(config.fs, resolved, name);

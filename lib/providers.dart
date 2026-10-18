@@ -737,6 +737,10 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
 
   /// Change a copy and publish it: the notifier compares by identity, so
   /// editing in place would save the file and update nothing on screen.
+  /// [_update] for a writer outside the UI — the customization tools — so
+  /// what it writes lands in the state this process holds.
+  Future<void> edit(void Function(AppSettings) change) => _update(change);
+
   Future<void> _update(void Function(AppSettings) change) async {
     final next = state.copy();
     change(next);

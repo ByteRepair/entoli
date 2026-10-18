@@ -326,6 +326,8 @@ void main() {
       "coding",
       "compact",
       "deep-research",
+      "entoli-customization",
+      "entoli-welcome-party",
       "refactor",
       "simplify",
       "skill-creator",

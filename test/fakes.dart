@@ -944,6 +944,9 @@ class FakeRootfsStore extends RootfsStore {
   /// mid-flight. Without it an install lands at once.
   Completer<void>? installing;
 
+  /// Fails the next install with this, then clears itself.
+  Object? failNext;
+
   @override
   Future<Set<String>> installed() async => {..._installed};
 
@@ -958,6 +961,10 @@ class FakeRootfsStore extends RootfsStore {
   Stream<DownloadProgress> install(Rootfs rootfs, {required String abi}) async* {
     final image = rootfs.imageFor(abi)!;
     yield DownloadProgress(received: 0, total: image.bytes);
+    if (failNext case final error?) {
+      failNext = null;
+      throw error;
+    }
     if (installing != null) await installing!.future;
     yield DownloadProgress(received: image.bytes, total: image.bytes);
     _installed.add(rootfs.id);
@@ -982,6 +989,9 @@ class FakeLocalModelStore extends LocalModelStore {
   /// Holds a download open, so a test can see a row and a notification
   /// mid-flight. Without it an install lands at once.
   Completer<void>? installing;
+
+  /// Fails the next install with this, then clears itself.
+  Object? failNext;
 
   @override
   Future<Set<String>> installed() async => {..._installed};

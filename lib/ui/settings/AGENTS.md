@@ -53,12 +53,22 @@ the tour) shows `WelcomePage` instead of the shell while `welcomeSeen` in
 `settings.json` is still false, and the tour's Done writes the flag through the
 notifier, which swaps the shell in. The tour is the home content, not a route
 over it, so the back key cannot skip it and there is no back arrow; the tour
-also runs embedded here and has nothing of its own to leave. Its second and
-third pages embed
-`DefaultsSection`, `InstructionsSection` and `AutoMemorySection`, which live in
-`llm_settings.dart` and `memory_settings.dart` because two hosts share them —
-the same one-subject-per-file rule the other categories follow. A row added to
-one is on the tour the moment it is here. **General** is the app itself:
+also runs embedded here and has nothing of its own to leave. Ahead of it, where
+a Linux can run (proot on Android, the emulator on iOS), `InitialSetupGate`
+shows a setup screen that downloads Alpine through `rootfsDownloadsProvider`
+and picks it as the terminal, so a phone user never has to find the Terminal
+page; it shows only while the tour is unseen and no rootfs is picked, and a
+failure offers Retry or a Skip that lasts the launch. A tour page says
+one thing in a line or two; a page with two points is two pages. Two pages
+hold Next: the provider page until some model is reachable, the model page —
+which embeds `DefaultsSection` from `llm_settings.dart`, so a row added there is
+on the tour too — until a default is picked. The memory page is one switch,
+the Memory category's "Keep memories", the rest left at their defaults. Done, on
+the first run or a replay, opens a "Welcome to Entoli" chat in the default
+project and leaves settings for it: its log is seeded with a
+`/entoli-welcome-party` message, composed like any `/skill` message so the
+skill's instructions ride every later turn without a system record, and the
+skill's greeting as a finished assistant turn under it. **General** is the app itself:
 **Appearance** — the theme, the two colours the palette is seeded from, how
 round a corner is, and the app icon, which are what the app looks like; where
 the system has a palette of its own a Material 3 Expressive switch takes the

@@ -36,6 +36,7 @@ import "skill_tool.dart";
 import "sub_agent.dart";
 import "task_tool.dart";
 import "trigger_tool.dart";
+import "customization_tools.dart";
 import "../../domain/trigger.dart";
 import "../../domain/trigger_manager.dart" show TriggerRegistry;
 import "projection.dart";
@@ -314,6 +315,7 @@ List<LlmTool> agentTools({
   bool oneShot = false,
   List<PromptDocument>? participants,
   bool member = false,
+  bool customizing = false,
 }) =>
     [
       file_tool_defs.readTool,
@@ -340,6 +342,7 @@ List<LlmTool> agentTools({
       // Triggers ride the turn itself: only a top-level turn is its own
       // chat's, so only it may register.
       if (caps.trigger && !oneShot) ...triggerToolDefs,
+      if (customizing) ...[setProfileTool, setToneTool],
       if (offerMemory)
         ...[
           memorySaveTool,
@@ -394,6 +397,7 @@ class BuiltinAgent {
     this.saveArtifact,
     this.packageSkill,
     this.registerTrigger,
+    this.editSettings,
     this.onShellOutput,
     this.onUsage,
     this.loadResource = noResources,
@@ -724,6 +728,18 @@ class BuiltinAgent {
   /// fire sends into *this* chat, which is one a worker is not.
   final TriggerRegistry? registerTrigger;
 
+  /// What the customization tools write through, or null, which withholds
+  /// them — as it does on a sub-agent.
+  final SettingsEditor? editSettings;
+
+  /// Whether this session has loaded [customizationSkill], the one gate the
+  /// tool list and the dispatch share.
+  bool get _customizing =>
+      editSettings != null &&
+      session.messages.any((m) => m.toolCalls.any((c) =>
+          c.name == skillToolName &&
+          stringArg(c.argumentsJson, "skill") == customizationSkill));
+
   /// [caps] with the platform's facts applied where [caps] cannot know them:
   /// a tool the device cannot run is not offered even if the turn was, and a
   /// sub-agent's missing [subAgentRunner] or [saveArtifact] withholds `task`
@@ -751,6 +767,7 @@ class BuiltinAgent {
         oneShot: oneShot,
         participants: roomParticipants,
         member: viewer != null,
+        customizing: _customizing,
       );
 
   bool _cancelled = false;
@@ -1012,6 +1029,8 @@ class BuiltinAgent {
         triggerSetName when registerTrigger != null => _triggerSet,
         triggerRemoveName when registerTrigger != null => _triggerRemove,
         triggerListName when registerTrigger != null => _triggerList,
+        setProfileName when _customizing => _setProfile,
+        setToneName when _customizing => _setTone,
         addDirectoryName when caps.ask && !oneShot => _addDirectory,
         writableDirectoriesName => _writableDirectories,
         bashToolName => _bash,
@@ -1482,6 +1501,29 @@ class BuiltinAgent {
     }
     await registry.remove(id);
     yield _ok(call, "Trigger $id removed.");
+  }
+
+  Stream<AgentEvent> _setProfile(LlmToolCall call) async* {
+    yield _called(call);
+    String? error;
+    await editSettings!((s) {
+      final edited = editedProfile(s.profile, call.argumentsJson);
+      error = edited.error;
+      if (error == null) s.profile = edited.profile;
+    });
+    yield error == null ? _ok(call, "Profile saved.") : _failed(call, error!);
+  }
+
+  Stream<AgentEvent> _setTone(LlmToolCall call) async* {
+    final tone = toneArg(call.argumentsJson);
+    if (tone == null) {
+      yield* _reject(call, 'The $setToneName tool takes {"tone": '
+          '"default" | "direct" | "kind" | "formal"}.');
+      return;
+    }
+    yield _called(call, tone.label);
+    await editSettings!((s) => s.tone = tone);
+    yield _ok(call, "Tone set to ${tone.label}.");
   }
 
   /// This chat's own triggers, with what each is waiting for.

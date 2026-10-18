@@ -2,11 +2,16 @@ import "dart:async";
 
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
+import "package:uuid/uuid.dart";
 
+import "../../core/log.dart";
+import "../../domain/chat_log.dart";
+import "../../domain/models.dart";
 import "../../providers.dart";
+import "../marketplace/marketplace_page.dart";
+import "../sidebar/sidebar.dart";
 import "../widgets/app_mark.dart";
 import "llm_settings.dart";
-import "memory_settings.dart";
 import "settings_page.dart";
 
 /// The welcome tour as the home content on first launch. It is the root route,
@@ -16,13 +21,8 @@ class WelcomePage extends StatelessWidget {
   const WelcomePage({super.key});
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-        appBar: AppBar(
-          title: const Text("Welcome"),
-          automaticallyImplyLeading: false,
-        ),
-        body: const SafeArea(child: WelcomeTour()),
-      );
+  Widget build(BuildContext context) =>
+      const Scaffold(body: SafeArea(child: WelcomeTour()));
 }
 
 /// The tour itself, without the page around it — what the settings page embeds
@@ -41,11 +41,44 @@ class _WelcomeTourState extends ConsumerState<WelcomeTour> {
   int _page = 0;
 
   static const _pageWidgets = [
-    _WelcomeIntroPage(),
-    _SetupModelPage(),
+    _IntroPage(),
+    _Slide(
+      icon: Icons.key,
+      title: "Bring your own model",
+      body: "Connect a provider you choose, or run a model right on this "
+          "device. Your chats stay private.",
+    ),
+    _Slide(
+      icon: Icons.terminal,
+      title: "It works on your machine",
+      body: "The agent runs commands in a workspace here, with your approval.",
+    ),
+    _Slide(
+      icon: Icons.folder_outlined,
+      title: "Made of your files",
+      body: "Skills, agents and memories are plain files you own.",
+    ),
+    _Slide(
+      icon: Icons.alarm,
+      title: "Works on schedule",
+      body: "Have it run a task at a time you pick, or when a file changes.",
+    ),
+    _Slide(
+      icon: Icons.sync,
+      title: "On all your devices",
+      body: "Pair your devices and pick up a chat where you left it.",
+    ),
+    _ProviderPage(),
+    _ModelPage(),
     _MemoryPage(),
     _ExtrasPage(),
-    _ClosingPage(),
+    _IdeasPage(),
+    _Slide(
+      icon: Icons.lock_outline,
+      title: "Yours alone",
+      body: "Nothing leaves your model without your say-so, and no service "
+          "stamps its watermark on what Entoli writes for you.",
+    ),
   ];
 
   @override
@@ -60,29 +93,70 @@ class _WelcomeTourState extends ConsumerState<WelcomeTour> {
         curve: Curves.easeInOutCubic,
       );
 
+  /// Opens the welcome chat: the `/entoli-welcome-party` skill as its first
+  /// message, so the skill's instructions reach every turn the way any skill
+  /// message's do, and its greeting under that. Always the default project,
+  /// whose library holds the skill.
   Future<void> _done() async {
+    final navigator = Navigator.of(context);
+    final repo = ref.read(chatRepositoryProvider);
+    try {
+      final chat = await repo.createChat(title: "Welcome to Entoli");
+      final greeting = Message(
+        id: const Uuid().v4(),
+        role: MessageRole.assistant,
+        createdAt: DateTime.now(),
+        parts: const [MessagePart.text(text: _greeting)],
+      );
+      await repo.append(chat.state.id, [
+        ...recordsOf([repo.composeUserPrompt("/entoli-welcome-party"), greeting]),
+        ChatRecord.turnEnd(messageId: greeting.id, reason: TurnEnd.done),
+      ]);
+      ref.read(selectedRemoteProvider.notifier).select(null);
+      ref.read(selectedProjectProvider.notifier).select(null);
+      ref.read(selectedChatIdProvider.notifier).select(chat.state.id);
+      ref.invalidate(chatListProvider);
+    } catch (e) {
+      logFailure("welcome", "could not start the welcome chat", e);
+    }
     await ref.read(appSettingsProvider.notifier).setWelcomeSeen(true);
+    // Replayed from settings, Done leaves them for the chat.
+    navigator.popUntil((route) => route.isFirst);
   }
+
+  static const _greeting = "Hello! Welcome to Entoli. I'm here to welcome you "
+      "and help you customize the experience.\n\n"
+      "By the way, if you ever want to talk to me again, just type "
+      "/entoli-welcome-party and I'll respond.\n\n"
+      "I have a few brief questions for you. What's your name?";
 
   @override
   Widget build(BuildContext context) {
-    // The setup page asks for a model before the tour moves on: Next is dead
-    // there until a provider is picked (its Default then answers), and the
-    // swipe cannot go around the button.
+    // The two setup pages hold the tour: the provider page until some model is
+    // reachable, the model page until a default is picked. The swipe cannot go
+    // around the button. Named off the page list, so reordering or inserting a
+    // page cannot move a gate to the wrong one.
+    final reachable = ref.watch(
+        availableModelsProvider.select((m) => m.value?.isNotEmpty ?? false));
     final chosen = ref.watch(
       appSettingsProvider.select((s) => s.defaultProviderId != null),
     );
-    // Named off the page list, so reordering or inserting a page cannot move
-    // the gate to the wrong one.
-    final gate = _pageWidgets[_page] is _SetupModelPage && !chosen;
+    final current = _pageWidgets[_page];
+    final gate = (current is _ProviderPage && !reachable) ||
+        (current is _ModelPage && !chosen);
     return Column(
       children: [
         Expanded(
-          child: PageView(
+          child: PageView.builder(
             controller: _controller,
             physics: gate ? const NeverScrollableScrollPhysics() : null,
             onPageChanged: (page) => setState(() => _page = page),
-            children: _pageWidgets,
+            itemCount: _pageWidgets.length,
+            itemBuilder: (context, i) => _Fade(
+              controller: _controller,
+              index: i,
+              child: _pageWidgets[i],
+            ),
           ),
         ),
         _TourBar(
@@ -98,7 +172,35 @@ class _WelcomeTourState extends ConsumerState<WelcomeTour> {
   }
 }
 
-/// Previous and Done/Next at the bottom right, dots between.
+/// Fades a page out as it slides away, so only one slide reads at a time.
+class _Fade extends StatelessWidget {
+  const _Fade({
+    required this.controller,
+    required this.index,
+    required this.child,
+  });
+
+  final PageController controller;
+  final int index;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => AnimatedBuilder(
+        animation: controller,
+        child: child,
+        builder: (context, child) {
+          // No position before the first layout.
+          final position = controller.hasClients &&
+                  controller.position.haveDimensions
+              ? controller.page ?? 0
+              : controller.initialPage.toDouble();
+          final distance = (position - index).abs().clamp(0.0, 1.0);
+          return Opacity(opacity: 1 - distance * 0.8, child: child);
+        },
+      );
+}
+
+/// Back on the left, Next or Done on the right, the progress above them.
 class _TourBar extends StatelessWidget {
   const _TourBar({
     required this.page,
@@ -115,298 +217,388 @@ class _TourBar extends StatelessWidget {
   final VoidCallback onNext;
   final Future<void> Function() onDone;
 
-  /// False is the setup page's gate, which holds the tour until a model is
-  /// picked; every other page moves on freely.
+  /// False is a setup page's gate; every other page moves on freely.
   final bool nextEnabled;
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     final last = page == pages - 1;
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-      child: Row(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          const Spacer(),
-          if (page > 0) ...[
-            OutlinedButton(onPressed: onPrevious, child: const Text("Previous")),
-            const SizedBox(width: 12),
-          ],
-          for (var i = 0; i < pages; i++)
-            Container(
-              width: 8,
-              height: 8,
-              margin: const EdgeInsets.symmetric(horizontal: 3),
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: i == page
-                    ? Theme.of(context).colorScheme.primary
-                    : Theme.of(context).colorScheme.outlineVariant,
-              ),
-            ),
-          const SizedBox(width: 12),
-          last
-              ? FilledButton(onPressed: onDone, child: const Text("Done"))
-              : FilledButton(
-                  onPressed: nextEnabled ? onNext : null,
-                  child: const Text("Next"),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              for (var i = 0; i < pages; i++)
+                AnimatedContainer(
+                  duration: const Duration(milliseconds: 250),
+                  curve: Curves.easeOutCubic,
+                  width: i == page ? 20 : 6,
+                  height: 6,
+                  margin: const EdgeInsets.symmetric(horizontal: 3),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(3),
+                    color: i == page ? scheme.primary : scheme.outlineVariant,
+                  ),
                 ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              if (page > 0)
+                TextButton(onPressed: onPrevious, child: const Text("Back")),
+              const Spacer(),
+              last
+                  ? FilledButton(onPressed: onDone, child: const Text("Done"))
+                  : FilledButton(
+                      onPressed: nextEnabled ? onNext : null,
+                      child: const Text("Next"),
+                    ),
+            ],
+          ),
         ],
       ),
     );
   }
 }
 
-/// Page 1: what this is over the hosted assistants.
-class _WelcomeIntroPage extends StatelessWidget {
-  const _WelcomeIntroPage();
+/// A page's frame: centred in the space it has, never wider than reads well,
+/// and scrolling only when a short window cannot hold it.
+class _Frame extends StatelessWidget {
+  const _Frame({required this.children});
+
+  final List<Widget> children;
 
   @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return ListView(
-      padding: const EdgeInsets.all(24),
-      children: [
-        const SizedBox(height: 16),
-        const Center(child: AppMark(size: 72)),
-        const SizedBox(height: 16),
-        Center(
-          child: Text(
-            "Welcome to Entoli",
-            style: theme.textTheme.headlineMedium,
-          ),
-        ),
-        const SizedBox(height: 24),
-        const Text(
-          "Entoli is an assistant that runs on your machine. Where other "
-          "assistants run on someone else's servers, here you bring your own "
-          "model and everything happens locally. You use private LLMs, so "
-          "your conversations stay private.",
-        ),
-        const SizedBox(height: 16),
-        const _FeatureList([
-          (Icons.key, "Choose a private LLM provider (OpenAI, Anthropic, "
-              "OpenRouter or your own server), or host a model locally on "
-              "your device."),
-          (Icons.terminal, "The agent runs commands in a workspace on this "
-              "machine, with your approval."),
-          (Icons.psychology, "Skills, agents and per-project memories, all "
-              "read from your own files."),
-          (Icons.alarm, "Schedule the assistant to work at a time you pick, "
-              "or let it wake itself to run a task with your approval."),
-          (Icons.sync, "Pair your devices and carry a conversation between "
-              "them."),
-        ]),
-      ],
-    );
-  }
-}
-
-class _FeatureList extends StatelessWidget {
-  const _FeatureList(this.features);
-
-  final List<(IconData, String)> features;
-
-  @override
-  Widget build(BuildContext context) {
-    final color = Theme.of(context).colorScheme.primary;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        for (final (icon, text) in features)
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 6),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Icon(icon, size: 20, color: color),
-                const SizedBox(width: 12),
-                Expanded(child: Text(text)),
-              ],
+  Widget build(BuildContext context) => LayoutBuilder(
+        builder: (context, constraints) => SingleChildScrollView(
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+          child: ConstrainedBox(
+            constraints: BoxConstraints(minHeight: constraints.maxHeight - 32),
+            child: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 480),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: children,
+                ),
+              ),
             ),
           ),
-      ],
-    );
-  }
+        ),
+      );
 }
 
-/// Page 2: where the model comes from, and which one answers a new chat.
-class _SetupModelPage extends StatelessWidget {
-  const _SetupModelPage();
+/// The icon in its tinted disc that heads every slide.
+class _Badge extends StatelessWidget {
+  const _Badge(this.icon);
+
+  final IconData icon;
 
   @override
   Widget build(BuildContext context) {
-    return ListView(
-      padding: const EdgeInsets.all(24),
-      children: [
-        Text("Provider and Model Setup", style: Theme.of(context).textTheme.headlineSmall),
-        const SizedBox(height: 8),
-        const Text(
-          "Pick where the model runs: locally on this device, or at a "
-          "provider over the network.",
+    final scheme = Theme.of(context).colorScheme;
+    return Center(
+      child: Container(
+        width: 88,
+        height: 88,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: scheme.primaryContainer,
         ),
-        const SizedBox(height: 16),
-        _SetupRow(
-          title: "Use a local LLM",
-          detail:
-              "Download a model from the catalog and run it on this device. "
-              "No key, no network.",
-          category: SettingsCategory.onDevice,
-        ),
-        _SetupRow(
-          title: "Pick a provider",
-          detail:
-              "Add an endpoint (Anthropic, OpenAI, OpenRouter and more) "
-              "with your own API key.",
-          category: SettingsCategory.providers,
-        ),
-        const Divider(height: 32),
-        const DefaultsSection(),
-      ],
-    );
-  }
-}
-
-/// One of page 2's two choices, which push the settings category they set up.
-/// The icon is the category's own — one place an icon is named per category.
-class _SetupRow extends StatelessWidget {
-  const _SetupRow({
-    required this.title,
-    required this.detail,
-    required this.category,
-  });
-
-  final String title;
-  final String detail;
-  final SettingsCategory category;
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      margin: const EdgeInsets.symmetric(vertical: 6),
-      child: ListTile(
-        leading: Icon(category.icon),
-        title: Text(title),
-        subtitle: Text(detail),
-        trailing: const Icon(Icons.chevron_right),
-        onTap: () => Navigator.of(context).push(
-          MaterialPageRoute(
-            builder: (_) =>
-                SettingsPage(initialCategory: category, focus: true),
-          ),
-        ),
+        child: Icon(icon, size: 40, color: scheme.onPrimaryContainer),
       ),
     );
   }
 }
 
-/// Page 3: the Memory category's own sections, embedded as they are there.
-class _MemoryPage extends StatelessWidget {
-  const _MemoryPage();
+/// Icon, title, one line, and whatever the page adds under them.
+class _Slide extends StatelessWidget {
+  const _Slide({
+    required this.icon,
+    required this.title,
+    this.body,
+    this.children = const [],
+  });
+
+  final IconData icon;
+  final String title;
+  final String? body;
+  final List<Widget> children;
 
   @override
   Widget build(BuildContext context) {
-    return ListView(
-      padding: const EdgeInsets.all(24),
+    final theme = Theme.of(context);
+    return _Frame(
       children: [
-        Text("Agent Memory", style: Theme.of(context).textTheme.headlineSmall),
-        const SizedBox(height: 8),
-        const Text(
-          "The agent can keep what it learns between chats, so it knows you "
-          "a little better each time. Everything here can be changed later "
-          "under Settings > Memory.",
+        _Badge(icon),
+        const SizedBox(height: 28),
+        Text(
+          title,
+          textAlign: TextAlign.center,
+          style: theme.textTheme.headlineMedium,
         ),
-        const SizedBox(height: 16),
-        const AutoMemorySection(),
+        if (body != null) ...[
+          const SizedBox(height: 12),
+          Text(
+            body!,
+            textAlign: TextAlign.center,
+            style: theme.textTheme.bodyLarge
+                ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+          ),
+        ],
+        if (children.isNotEmpty) const SizedBox(height: 28),
+        ...children,
       ],
     );
   }
 }
 
-/// Page 4: the optional extras, each a line and a button into settings.
+/// The opening page: the mark on a soft glow, the name, one line.
+class _IntroPage extends StatelessWidget {
+  const _IntroPage();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    return _Frame(
+      children: [
+        Center(
+          child: Container(
+            width: 200,
+            height: 200,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: RadialGradient(colors: [
+                scheme.primaryContainer,
+                scheme.primaryContainer.withValues(alpha: 0),
+              ]),
+            ),
+            child: const AppMark(size: 104),
+          ),
+        ),
+        const SizedBox(height: 16),
+        Text(
+          "Welcome to Entoli",
+          textAlign: TextAlign.center,
+          style: theme.textTheme.displaySmall,
+        ),
+        const SizedBox(height: 12),
+        Text(
+          "An assistant that runs on your machine and answers to you.",
+          textAlign: TextAlign.center,
+          style: theme.textTheme.bodyLarge
+              ?.copyWith(color: scheme.onSurfaceVariant),
+        ),
+      ],
+    );
+  }
+}
+
+/// Where the model runs. Next waits here until some model is reachable.
+class _ProviderPage extends ConsumerWidget {
+  const _ProviderPage();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final count = ref.watch(availableModelsProvider).value?.length ?? 0;
+    final scheme = Theme.of(context).colorScheme;
+    return _Slide(
+      icon: Icons.hub_outlined,
+      title: "Connect a model",
+      body: "Run one on this device, or reach one over the network.",
+      children: [
+        _SetupRow.category(
+          title: "On this device",
+          detail: "Download a model. No key, no network.",
+          category: SettingsCategory.onDevice,
+        ),
+        _SetupRow.category(
+          title: "A provider",
+          detail: "Anthropic, OpenAI, OpenRouter and more, with your key.",
+          category: SettingsCategory.providers,
+        ),
+        const SizedBox(height: 16),
+        AnimatedSwitcher(
+          duration: const Duration(milliseconds: 250),
+          child: count > 0
+              ? Row(
+                  key: const ValueKey(true),
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.check_circle, size: 18, color: scheme.primary),
+                    const SizedBox(width: 8),
+                    Text(count == 1 ? "1 model ready" : "$count models ready"),
+                  ],
+                )
+              : Text(
+                  key: const ValueKey(false),
+                  "Set one up to continue.",
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: scheme.onSurfaceVariant),
+                ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Which model answers a new chat. Next waits here until one is picked.
+class _ModelPage extends StatelessWidget {
+  const _ModelPage();
+
+  @override
+  Widget build(BuildContext context) => const _Slide(
+        icon: Icons.auto_awesome_outlined,
+        title: "Pick a model",
+        body: "The one that answers a new chat, and the one that names it.",
+        children: [DefaultsSection()],
+      );
+}
+
+/// One switch: the Memory category's "Keep memories", every other memory
+/// setting left at its default.
+class _MemoryPage extends ConsumerWidget {
+  const _MemoryPage();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final on = ref.watch(appSettingsProvider.select((s) => s.autoMemory));
+    return _Slide(
+      icon: Icons.psychology,
+      title: "Remember things",
+      body: "The agent can keep what it learns between chats.",
+      children: [
+        Card(
+          child: SwitchListTile(
+            title: const Text("Enable memories"),
+            value: on,
+            onChanged: (value) =>
+                ref.read(appSettingsProvider.notifier).setAutoMemory(value),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// The optional extras, each a line and a way in.
 class _ExtrasPage extends StatelessWidget {
   const _ExtrasPage();
 
   @override
-  Widget build(BuildContext context) {
-    return ListView(
-      padding: const EdgeInsets.all(24),
-      children: [
-        Text("More to set up", style: Theme.of(context).textTheme.headlineSmall),
-        const SizedBox(height: 8),
-        const Text(
-          "Optional, and all reachable later from Settings. The button takes "
-          "you to each one's page.",
-        ),
-        const SizedBox(height: 16),
-        _SetupRow(
-          title: "Byte Repair",
-          detail:
-              "Formally verified coding: the code it writes is checked "
-              "against a mathematical model, so it is guaranteed correct "
-              "rather than merely plausible. Ordinary assistants cannot do "
-              "this.",
-          category: SettingsCategory.byteRepair,
-        ),
-        _SetupRow(
-          title: "Triggers",
-          detail:
-              "A prompt sent to a chat at a time you pick, a countdown, or a "
-              "file changing. A schedule fires even when the app is closed.",
-          category: SettingsCategory.triggers,
-        ),
-        _SetupRow(
-          title: "Voice",
-          detail:
-              "Talk to the agent and be answered out loud, with a model that "
-              "listens and one that speaks.",
-          category: SettingsCategory.voice,
-        ),
-        _SetupRow(
-          title: "Terminal",
-          detail:
-              "Where the agent's commands run: this machine, or a Linux "
-              "downloaded and isolated from the rest of it. Environment "
-              "variables for commands live under General.",
-          category: SettingsCategory.terminal,
-        ),
-      ],
-    );
-  }
+  Widget build(BuildContext context) => _Slide(
+        icon: Icons.tune,
+        title: "More to set up",
+        body: "Optional, and all here later.",
+        children: [
+          _SetupRow(
+            icon: Icons.storefront_outlined,
+            title: "Marketplace",
+            detail: "Install skills and agents others have shared.",
+            open: (_) => const MarketplacePage(),
+          ),
+          _SetupRow.category(
+            title: "Byte Repair",
+            detail: "Code proved correct, not merely plausible.",
+            category: SettingsCategory.byteRepair,
+          ),
+          _SetupRow.category(
+            title: "Triggers",
+            detail: "A prompt sent on a schedule or when a file changes.",
+            category: SettingsCategory.triggers,
+          ),
+          _SetupRow.category(
+            title: "Voice",
+            detail: "Talk to the agent and hear it answer.",
+            category: SettingsCategory.voice,
+          ),
+          _SetupRow.category(
+            title: "Terminal",
+            detail: "Run commands here, or in an isolated Linux.",
+            category: SettingsCategory.terminal,
+          ),
+        ],
+      );
 }
 
-/// Page 5: what the app is for, and the one argument for it — an assistant
-/// that answers to you rather than to someone else's service.
-class _ClosingPage extends StatelessWidget {
-  const _ClosingPage();
+/// A few things to ask for, as chips rather than a paragraph.
+class _IdeasPage extends StatelessWidget {
+  const _IdeasPage();
+
+  static const _ideas = [
+    (Icons.newspaper, "Summarise the news"),
+    (Icons.mail_outline, "Draft that email"),
+    (Icons.code, "Write and test code"),
+    (Icons.web, "Publish a page"),
+  ];
+
+  @override
+  Widget build(BuildContext context) => _Slide(
+        icon: Icons.lightbulb_outline,
+        title: "Ask it anything",
+        children: [
+          Wrap(
+            alignment: WrapAlignment.center,
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final (icon, label) in _ideas)
+                Chip(avatar: Icon(icon, size: 18), label: Text(label)),
+            ],
+          ),
+        ],
+      );
+}
+
+/// A way into something set up elsewhere: a settings category pushed on its
+/// own, or a page of its own.
+class _SetupRow extends StatelessWidget {
+  const _SetupRow({
+    required this.icon,
+    required this.title,
+    required this.detail,
+    required this.open,
+  });
+
+  /// The icon is the category's own — one place an icon is named per category.
+  _SetupRow.category({
+    required String title,
+    required String detail,
+    required SettingsCategory category,
+  }) : this(
+          icon: category.icon,
+          title: title,
+          detail: detail,
+          open: (_) => SettingsPage(initialCategory: category, focus: true),
+        );
+
+  final IconData icon;
+  final String title;
+  final String detail;
+  final WidgetBuilder open;
 
   @override
   Widget build(BuildContext context) {
-    return ListView(
-      padding: const EdgeInsets.all(24),
-      children: [
-        Text("What you can do with Entoli",
-            style: Theme.of(context).textTheme.headlineSmall),
-        const SizedBox(height: 16),
-        const Text(
-          "Summarize the day's news while you drink your coffee, draft the "
-          "email you have been putting off, write and run code that compiles "
-          "and tests clean, build a page and publish it as an artifact — "
-          "anything you would ask of an assistant that works on your machine "
-          "and answers to you.",
-        ),
-        const SizedBox(height: 16),
-        const Text(
-          "Because the model is yours, nothing you say leaves it without your "
-          "say-so: your conversations are not training data, and no service "
-          "stamps its own watermark into what Entoli writes for you. What "
-          "your assistant produces is yours alone — the same words, with "
-          "nobody else's fingerprint on them.",
-        ),
-        const SizedBox(height: 16),
-        const Text(
-          "Done below, and the app is yours.",
-        ),
-      ],
+    final scheme = Theme.of(context).colorScheme;
+    return Card(
+      margin: const EdgeInsets.symmetric(vertical: 4),
+      clipBehavior: Clip.antiAlias,
+      child: ListTile(
+        leading: Icon(icon, color: scheme.primary),
+        title: Text(title),
+        subtitle: Text(detail),
+        trailing: const Icon(Icons.chevron_right),
+        onTap: () =>
+            Navigator.of(context).push(MaterialPageRoute(builder: open)),
+      ),
     );
   }
 }
