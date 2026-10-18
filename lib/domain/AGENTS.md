@@ -45,6 +45,13 @@ one. `aborted` is kept distinct from `error` for the same reason — a turn
 someone chose to stop is not one to offer to resume. See "Carrying on an
 interrupted turn" for what reads all this.
 
+`turnEnd` also carries the reply's `context`: what its last request held, the
+segments estimated at four characters a token and the provider's own count
+beside them where it gave one. On the close because that is when it is known,
+and on the log so a rewind or a thread change takes the chat page's Context
+bars with it. A `compaction` carries `chatTokens`, the conversation's estimate
+with the summary standing in, which the bars read until the next reply measures.
+
 Rewinding is a record rather than a truncation because shortening a log means
 rewriting it, which is the one thing the format exists to avoid. It is also the
 one record whose meaning did not have to change when the log became a tree: in a

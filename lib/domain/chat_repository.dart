@@ -340,10 +340,13 @@ class ChatRepository {
   /// change takes, session rebuild included. One caller cannot forget the
   /// reset: the repository is the one place a session is told what the
   /// conversation is.
-  Future<Chat> appendCompaction(String chatId,
-      {required String upToMessageId, required String summary}) {
+  Future<Chat> appendCompaction(String chatId, ConversationCompaction marker) {
     return _rethread(
-        chatId, ChatRecord.compaction(upToMessageId: upToMessageId, summary: summary));
+        chatId,
+        ChatRecord.compaction(
+            upToMessageId: marker.upToMessageId,
+            summary: marker.summary,
+            chatTokens: marker.chatTokens));
   }
 
   /// The chat's own choice wins, else the app default, else whatever the

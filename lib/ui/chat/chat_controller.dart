@@ -236,13 +236,16 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
   /// position: the last message is the running turn's only while it is the
   /// only turn, and a second reply growing beside it is not patched by
   /// coincidence.
-  void _writeReply(_RunningTurn turn, List<MessagePart> parts) {
+  void _writeReply(_RunningTurn turn, List<MessagePart> parts) =>
+      _updateReply(turn, (m) => m.copyWith(parts: parts));
+
+  void _updateReply(_RunningTurn turn, Message Function(Message) change) {
     final chat = state.chat;
     if (chat == null) return;
     final at = chat.messages.indexWhere((m) => m.id == turn.replyId);
     if (at < 0) return;
     final messages = List<Message>.from(chat.messages);
-    messages[at] = messages[at].copyWith(parts: parts);
+    messages[at] = change(messages[at]);
     state = state.copyWith(chat: chat.copyWith(messages: messages));
   }
 
@@ -479,10 +482,7 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
     if (!ref.mounted || result == null || (recheck && state.isRunning)) return;
     // The wrapper's own guard is the reentrancy flag, and it sets the chat on
     // the way through — so nothing to hand back here.
-    await _rethread((repo) {
-      return repo.appendCompaction(chatId,
-          upToMessageId: result.upToMessageId, summary: result.summary);
-    });
+    await _rethread((repo) => repo.appendCompaction(chatId, result));
   }
 
   /// Open the turn [userMsg] starts, whether it is being composed now or was
@@ -858,6 +858,9 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
       case StepLimitEvent():
       case InfoEvent():
         break;
+      case ContextEvent(:final usage):
+        // What the close will write, on screen before it does.
+        _updateReply(turn, (m) => m.copyWith(context: usage));
       case ApprovalRequestEvent(:final approval):
         state = state.copyWith(
             approvals: {

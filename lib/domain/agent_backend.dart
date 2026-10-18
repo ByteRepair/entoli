@@ -95,6 +95,13 @@ class ShellOutputEvent extends AgentEvent {
   final String text;
 }
 
+/// What a request held, once its reply is in. The newest of a turn is the one
+/// its close writes; see [Message.context].
+class ContextEvent extends AgentEvent {
+  const ContextEvent(this.usage);
+  final ContextUsage usage;
+}
+
 /// An HTML artifact was rendered and saved. Persisted as a [MessagePart] rather
 /// than turn-scoped view state: the artifact is durable, and a reloaded chat
 /// has to redraw the label and re-open it. The tool call/result pair that

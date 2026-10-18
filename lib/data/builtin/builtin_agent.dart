@@ -1,4 +1,5 @@
 import "dart:async";
+import "dart:convert";
 
 import "package:fs_shim/fs.dart";
 import "package:flutter/foundation.dart" show visibleForTesting;
@@ -24,6 +25,7 @@ import "../../domain/turn_recorder.dart";
 import "../../domain/web_search.dart";
 import "ask_tool.dart";
 import "artifact_tool.dart";
+import "compact_prompt.dart" show estimateTokens;
 import "file_tools.dart" as file_tool_defs;
 import "llm/llm_client.dart";
 import "llm/rate_limit_gate.dart";
@@ -2545,6 +2547,25 @@ class BuiltinAgent {
     watchShellOutput(run, (text) => onShellOutput!(call.id, text));
   }
 
+  /// What the request [completion] answered held, its reply counted in the
+  /// chat so the estimate covers what the provider's count does.
+  ContextUsage _contextOf(LlmCompletion completion) {
+    final system =
+        session.messages.takeWhile((m) => m.role == LlmRole.system).toList();
+    final profileTokens = profileSection(profile).length ~/ 4;
+    final tools = [
+      for (final t in _tools)
+        {"name": t.name, "description": t.description, "schema": t.schema},
+    ];
+    return ContextUsage(
+      system: estimateTokens(system) - profileTokens,
+      tools: jsonEncode(tools).length ~/ 4,
+      profile: profileTokens,
+      chat: estimateTokens([...session.conversation, completion.message]),
+      reported: completion.usage?.contextTokens,
+    );
+  }
+
   /// Stream one model call, turning its chunks into events and leaving what it
   /// produced in [_completion] or [_queryError].
   ///
@@ -2650,6 +2671,7 @@ class BuiltinAgent {
               if (chunk.usage != null && onUsage != null) {
                 onUsage!(chunk.usage!);
               }
+              yield ContextEvent(_contextOf(chunk));
               return;
           }
         }

@@ -112,10 +112,14 @@ sealed class ChatRecord with _$ChatRecord {
   /// [addressees] is who an Omada reply handed to, sigils on: a reply's
   /// routing is only known once its text is, so it rides the close rather
   /// than the [MessageRecord] that opened it. Sets [Message.addressees].
+  ///
+  /// [context] is what the turn's last request held, likewise only known at
+  /// the end. Sets [Message.context].
   const factory ChatRecord.turnEnd({
     required String messageId,
     required TurnEnd reason,
     @Default([]) List<String> addressees,
+    ContextUsage? context,
   }) = TurnEndRecord;
 
   /// Read [messageId] rather than whichever of its siblings was being read.
@@ -148,6 +152,8 @@ sealed class ChatRecord with _$ChatRecord {
   const factory ChatRecord.compaction({
     required String upToMessageId,
     required String summary,
+    /// See [ConversationCompaction.chatTokens].
+    int? chatTokens,
   }) = CompactionRecord;
 
   factory ChatRecord.fromJson(Map<String, dynamic> json) => _$ChatRecordFromJson(json);
@@ -280,24 +286,27 @@ Replayed replayTree(Iterable<ChatRecord> records) {
         parts[index] = withMoreText(parts[index], text);
         nodes[messageId] = into.copyWith(parts: parts);
 
-      case TurnEndRecord(:final messageId, :final addressees):
+      case TurnEndRecord(:final messageId, :final addressees, :final context):
         // Otherwise read by the tail classifier alone. A resumed turn closes
         // again, and the last close's routing is the reply's.
         final into = nodes[messageId];
         if (into == null || into.role != MessageRole.assistant) continue;
-        nodes[messageId] = into.copyWith(addressees: addressees);
+        nodes[messageId] = into.copyWith(
+            addressees: addressees, context: context ?? into.context);
 
       case RewindRecord(:final messageId):
         if (nodes.containsKey(messageId)) forget(messageId);
 
-      case CompactionRecord(:final upToMessageId, :final summary):
+      case CompactionRecord(:final upToMessageId, :final summary, :final chatTokens):
         // Applied where the boundary is still live; dropped as a record the
         // moment the rewind takes it away, like any other marker of what was
         // there. Keyed by the boundary, so a marker written twice for the
         // same message is the last one — the way a superseded part is.
         if (nodes.containsKey(upToMessageId)) {
           compactions[upToMessageId] = ConversationCompaction(
-              upToMessageId: upToMessageId, summary: summary);
+              upToMessageId: upToMessageId,
+              summary: summary,
+              chatTokens: chatTokens);
         }
     }
   }

@@ -968,8 +968,11 @@ class BuiltinBackend implements AgentBackend {
             timeout: const Duration(minutes: 3));
         final summary = reply == null ? null : CompactPrompt.summaryFrom(reply);
         if (summary != null) {
-          return ConversationCompaction(
+          final marker = ConversationCompaction(
               upToMessageId: span.last.id, summary: summary);
+          final after = await projectionOf(history,
+              load: loader, compactions: [...compactions, marker]);
+          return marker.copyWith(chatTokens: estimateTokens(after));
         }
         logFailure("compact", "empty summary for $chatId");
       } catch (e) {
