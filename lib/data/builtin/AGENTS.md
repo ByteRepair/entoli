@@ -647,6 +647,15 @@ an empty list produces nothing at all: a device with no skills keeps the prompt
 and the warmed prefix over it exactly as it was, which is why the section is
 absent rather than empty.
 
+### Changing Entoli's own settings (`entoli-customization`)
+
+`set_profile` and `set_tone` write the app-wide profile and reply tone through
+the settings notifier (`SettingsEditor`, late-bound in `main` like the trigger
+registry), so the Profile page sees the change. They are offered only once the
+session holds a `skill` call that loaded `entoli-customization` — read off
+`session.messages`, so it holds after a restart — which keeps them out of every
+other turn's tool list and warmed prefix. A sub-agent has no editor, so never.
+
 ### Drafting one (the `create_skill` tool)
 
 `create_skill` is `skill` run backwards: the model drafts a skill and offers it

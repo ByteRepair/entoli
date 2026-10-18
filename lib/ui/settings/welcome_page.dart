@@ -2,9 +2,14 @@ import "dart:async";
 
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
+import "package:uuid/uuid.dart";
 
+import "../../core/log.dart";
+import "../../domain/chat_log.dart";
+import "../../domain/models.dart";
 import "../../providers.dart";
 import "../marketplace/marketplace_page.dart";
+import "../sidebar/sidebar.dart";
 import "../widgets/app_mark.dart";
 import "llm_settings.dart";
 import "settings_page.dart";
@@ -88,9 +93,42 @@ class _WelcomeTourState extends ConsumerState<WelcomeTour> {
         curve: Curves.easeInOutCubic,
       );
 
+  /// Opens the welcome chat: the `/entoli-welcome-party` skill as its first
+  /// message, so the skill's instructions reach every turn the way any skill
+  /// message's do, and its greeting under that. Always the default project,
+  /// whose library holds the skill.
   Future<void> _done() async {
+    final navigator = Navigator.of(context);
+    final repo = ref.read(chatRepositoryProvider);
+    try {
+      final chat = await repo.createChat(title: "Welcome to Entoli");
+      final greeting = Message(
+        id: const Uuid().v4(),
+        role: MessageRole.assistant,
+        createdAt: DateTime.now(),
+        parts: const [MessagePart.text(text: _greeting)],
+      );
+      await repo.append(chat.state.id, [
+        ...recordsOf([repo.composeUserPrompt("/entoli-welcome-party"), greeting]),
+        ChatRecord.turnEnd(messageId: greeting.id, reason: TurnEnd.done),
+      ]);
+      ref.read(selectedRemoteProvider.notifier).select(null);
+      ref.read(selectedProjectProvider.notifier).select(null);
+      ref.read(selectedChatIdProvider.notifier).select(chat.state.id);
+      ref.invalidate(chatListProvider);
+    } catch (e) {
+      logFailure("welcome", "could not start the welcome chat", e);
+    }
     await ref.read(appSettingsProvider.notifier).setWelcomeSeen(true);
+    // Replayed from settings, Done leaves them for the chat.
+    navigator.popUntil((route) => route.isFirst);
   }
+
+  static const _greeting = "Hello! Welcome to Entoli. I'm here to welcome you "
+      "and help you customize the experience.\n\n"
+      "By the way, if you ever want to talk to me again, just type "
+      "/entoli-welcome-party and I'll respond.\n\n"
+      "I have a few brief questions for you. What's your name?";
 
   @override
   Widget build(BuildContext context) {

@@ -1,8 +1,11 @@
+import "dart:async";
+
 import "package:flutter/material.dart";
 import "package:flutter_test/flutter_test.dart";
 
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/providers.dart";
+import "package:agent_chat/ui/sidebar/sidebar.dart";
 import "package:agent_chat/ui/settings/settings_page.dart";
 import "package:agent_chat/ui/settings/welcome_page.dart";
 import "package:agent_chat/ui/welcome_gate.dart";
@@ -141,16 +144,31 @@ void main() {
       expect(find.text("Connect a model"), findsNothing);
     });
 
-    // Done in a settings pane has nothing of its own to leave, so it must not
-    // pop the page holding it.
-    testWidgets("Done there writes the flag and keeps the page", (tester) async {
-      await pumpSettings(tester, app, SettingsCategory.welcome);
+    // Replayed from settings, Done still opens the welcome chat, and leaves
+    // settings for it.
+    testWidgets("Done there opens the welcome chat and leaves", (tester) async {
+      await app.pump(tester, const SizedBox());
+      unawaited(Navigator.of(tester.element(find.byType(SizedBox))).push(
+          MaterialPageRoute(
+              builder: (_) => const SettingsPage(
+                  initialCategory: SettingsCategory.welcome, focus: true))));
+      await tester.pumpAndSettle();
       await walkToLast(tester);
       await tester.tap(button("Done"));
       await settleIo(tester, least: 3);
 
-      expect(find.byType(WelcomeTour), findsOneWidget);
+      expect(find.byType(WelcomeTour), findsNothing);
       expect(app.container.read(appSettingsProvider).welcomeSeen, isTrue);
+      final id = app.container.read(selectedChatIdProvider);
+      expect(id, isNotNull);
+      final chat = await io(tester, () => app.repo.openChat(id!));
+      expect(chat.state.title, "Welcome to Entoli");
+      // The skill is the first message, so its instructions ride every turn;
+      // its greeting answers it.
+      expect([for (final m in chat.messages) m.role],
+          [MessageRole.user, MessageRole.assistant]);
+      expect(chat.messages.first.plainText, "/entoli-welcome-party");
+      expect(chat.messages.last.plainText, contains("What's your name?"));
     });
   });
 

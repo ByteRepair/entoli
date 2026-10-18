@@ -18,6 +18,7 @@ import "data/sync/file_devices.dart";
 import "data/sync/sync_hub.dart";
 import "domain/app_restart.dart";
 import "domain/app_secrets.dart";
+import "domain/app_settings.dart" show AppSettings;
 import "domain/models.dart" show CompletionKind;
 import "domain/trigger_manager.dart" show TriggerRegistryFactory;
 import "domain/project.dart" show everyProject;
@@ -153,11 +154,13 @@ class AppSession {
     // [settingsHome] is: read only from a running app, after the container
     // exists.
     late final TriggerRegistryFactory triggerRegistry;
+    late final Future<void> Function(void Function(AppSettings)) editSettings;
     final backend = platform.createBackend(config, libraries, store,
         tools: toolset, rootfs: rootfs, abi: await abi, localLlm: server, kvCache: kvCache,
         appleFm: await appleFm, byteRepairBinDir: byteRepairBin, secrets: secrets,
         loginPath: await loginPath,
-        triggerRegistry: (chatId, project) => triggerRegistry(chatId, project));
+        triggerRegistry: (chatId, project) => triggerRegistry(chatId, project),
+        editSettings: (change) => editSettings(change));
     // One instance, shared: the prefill's notification and every other
     // foreground hold go through the same service.
     final foreground = ForegroundService();
@@ -261,6 +264,7 @@ class AppSession {
     settingsHome = container;
     triggerRegistry = (chatId, project) =>
         ProviderTriggerOwner(container).registryFor(chatId, project);
+    editSettings = container.read(appSettingsProvider.notifier).edit;
     // Before `ensureReady`, which starts listening: a peer that lands during
     // it would otherwise run the whole handshake against a hub with no
     // repository and be sent no welcome.

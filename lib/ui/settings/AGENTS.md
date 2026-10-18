@@ -63,7 +63,12 @@ one thing in a line or two; a page with two points is two pages. Two pages
 hold Next: the provider page until some model is reachable, the model page —
 which embeds `DefaultsSection` from `llm_settings.dart`, so a row added there is
 on the tour too — until a default is picked. The memory page is one switch,
-the Memory category's "Keep memories", the rest left at their defaults. **General** is the app itself:
+the Memory category's "Keep memories", the rest left at their defaults. Done, on
+the first run or a replay, opens a "Welcome to Entoli" chat in the default
+project and leaves settings for it: its log is seeded with a
+`/entoli-welcome-party` message, composed like any `/skill` message so the
+skill's instructions ride every later turn without a system record, and the
+skill's greeting as a finished assistant turn under it. **General** is the app itself:
 **Appearance** — the theme, the two colours the palette is seeded from, how
 round a corner is, and the app icon, which are what the app looks like; where
 the system has a palette of its own a Material 3 Expressive switch takes the

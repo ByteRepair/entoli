@@ -3,6 +3,7 @@ import "dart:convert";
 
 import "../../data/builtin/builtin_agent.dart";
 import "../../data/builtin/builtin_backend.dart";
+import "../../data/builtin/customization_tools.dart" show SettingsEditor;
 import "../../data/builtin/templates.dart";
 import "../../data/builtin/llm/llm_client.dart";
 import "../../data/builtin/llm/llm_registry.dart";
@@ -84,6 +85,7 @@ BuiltinBackend createBackend(
   required AppSecrets secrets,
   String? loginPath,
   TriggerRegistryFactory? triggerRegistry,
+  SettingsEditor? editSettings,
 }) {
   AppSettings settings() => AppSettings.load(config);
   final backend = BuiltinBackend(
@@ -121,6 +123,7 @@ BuiltinBackend createBackend(
     webSearch: platformWebSearch(),
     store: store,
     triggerRegistry: triggerRegistry,
+    editSettings: editSettings,
     registry: LlmRegistry(
       endpoints: () => llmEndpoints(settings, localLlm, kvCache, appleFm),
       // Settings wins, but a key already exported is found without having to
