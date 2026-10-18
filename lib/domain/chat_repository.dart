@@ -32,6 +32,22 @@ sealed class RepoEvent {
   const RepoEvent();
 }
 
+/// The chats this device mirrors from a paired one, as [ChatRepository] routes
+/// them: reads answer from what the mirror holds, writes go to the chat's home
+/// device and complete once it has echoed them back. The sync hub's, set on
+/// attach; everything above the repository reads a mirrored chat the way it
+/// reads a local one.
+abstract interface class RemoteChats {
+  /// The mirror's head, or null where [chatId] is not a mirror.
+  ChatState? stateOf(String chatId);
+  Chat? chatOf(String chatId);
+  ChatMeta? metaOf(String chatId);
+  Future<ChatState> saveState(ChatState state, {required bool reanchor});
+  Future<void> saveMeta(String chatId, ChatMeta meta);
+  Future<void> retitle(String chatId, String title);
+  Future<void> delete(String chatId);
+}
+
 class Appended extends RepoEvent {
   const Appended(this.chatId, this.records);
 
@@ -91,6 +107,10 @@ class ChatRepository {
   final PromptLibrary Function(String? project) _libraryFor;
 
   final _changes = StreamController<RepoEvent>.broadcast();
+
+  RemoteChats? remote;
+
+  bool _mirrored(String chatId) => remote?.stateOf(chatId) != null;
 
   /// Everything written through this repository, as it lands.
   Stream<RepoEvent> get changes => _changes.stream;
@@ -172,7 +192,7 @@ class ChatRepository {
     _changes.add(Moved(chatId, project));
   }
 
-  Future<Chat> openChat(String id) => _store.load(id);
+  Future<Chat> openChat(String id) async => remote?.chatOf(id) ?? await _store.load(id);
 
   /// Write `state.json` and the directories under it. Called at the head of
   /// every turn, not only the first, and from the TTL propagation helpers when
@@ -194,6 +214,7 @@ class ChatRepository {
   /// Returns what was written, anchor and all, since it is not what was passed
   /// in and a caller showing the chat has to draw the difference.
   Future<ChatState> saveState(ChatState state, {bool reanchor = false}) async {
+    if (_mirrored(state.id)) return remote!.saveState(state, reanchor: reanchor);
     final ttl = await _resolveTempTtl(state.id, project: state.project);
     final dur = tempChatTtlDuration(ttl);
     DateTime? since = state.tempTtlSince;
@@ -237,6 +258,7 @@ class ChatRepository {
   /// A title change on its own — the title and nothing else. The conversation
   /// is deliberately not written: a turn may still be adding to it.
   Future<void> retitle(String chatId, String title) async {
+    if (_mirrored(chatId)) return remote!.retitle(chatId, title);
     await _store.retitle(chatId, title);
     // A mirror is sent the whole state, and only the store knows the rest of
     // it: the caller's copy is older than the turn writing beside it.
@@ -265,9 +287,11 @@ class ChatRepository {
     return answer == null ? null : cleanTitle(answer);
   }
 
-  Future<ChatMeta> loadMeta(String chatId) => _store.loadMeta(chatId);
+  Future<ChatMeta> loadMeta(String chatId) async =>
+      remote?.metaOf(chatId) ?? await _store.loadMeta(chatId);
 
   Future<void> saveMeta(String chatId, ChatMeta meta) async {
+    if (_mirrored(chatId)) return remote!.saveMeta(chatId, meta);
     await _store.saveMeta(chatId, meta);
     _changes.add(MetaChanged(chatId, meta));
   }
@@ -502,7 +526,8 @@ class ChatRepository {
   }
 
   /// Which project a chat's files are in.
-  Future<String?> projectOf(String chatId) => _store.projectOf(chatId);
+  Future<String?> projectOf(String chatId) async =>
+      _mirrored(chatId) ? remote!.stateOf(chatId)!.project : await _store.projectOf(chatId);
 
   /// **The one place a user's message is made.** What they typed, the files it
   /// carries, and what its `/command` and `@agent` references meant when they
@@ -571,6 +596,7 @@ class ChatRepository {
   Future<void> abort(String chatId) => _backend.abort(chatId);
 
   Future<void> deleteChat(String id) async {
+    if (_mirrored(id)) return remote!.delete(id);
     await _backend.disposeChat(id);
     await _store.delete(id);
     _changes.add(Deleted(id));

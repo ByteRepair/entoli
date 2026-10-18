@@ -7,7 +7,8 @@ import "../../domain/ask.dart";
 import "../../domain/chat_log.dart";
 import "../../domain/models.dart";
 import "../../providers.dart";
-import "chat_controller.dart" show ChatViewState, TurnDriver;
+import "chat_controller.dart"
+    show ChatViewState, TurnDriver, chatControllerProvider;
 
 /// The controller a mirrored chat is read through — the counterpart
 /// [ChatController] would have been if it read from the wire instead of the
@@ -109,10 +110,31 @@ class MirrorChatController extends Notifier<ChatViewState>
   @override
   Future<void> answerQuestions(String requestId, List<String?> answers) =>
       _hub.answerRemoteQuestions(chatId, requestId, answers);
+
+  @override
+  Future<void> editAndResend(String messageId, String text) =>
+      _hub.editRemote(chatId, messageId, text);
+
+  @override
+  Future<void> regenerate(String messageId) => _hub.regenerateRemote(chatId, messageId);
+
+  @override
+  Future<void> stepThread(String messageId, int step) =>
+      _hub.stepThreadRemote(chatId, messageId, step);
+
+  @override
+  Future<void> deleteThread(String messageId) => _hub.deleteThreadRemote(chatId, messageId);
 }
 
 final mirrorChatControllerProvider = NotifierProvider.family<
     MirrorChatController, ChatViewState, String>(MirrorChatController.new);
+
+/// A chat's view from whichever controller reads it, for a page that draws a
+/// mirrored chat and a local one alike. Only the one it is gets built.
+final chatViewProvider = Provider.family<ChatViewState, String>((ref, chatId) =>
+    ref.watch(isMirroredChatProvider(chatId))
+        ? ref.watch(mirrorChatControllerProvider(chatId))
+        : ref.watch(chatControllerProvider(chatId)));
 
 /// Who may type into a mirrored chat. Its own state rather than a field on
 /// [ChatViewState] because it is not about the turn — a chat with nothing

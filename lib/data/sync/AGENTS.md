@@ -266,10 +266,49 @@ home device is elsewhere. Records replay through the same pure
 `chatFrom`/`replayTree` a reload uses, so the page draws the log rather than a
 second rendering of it.
 
-`ChatPage` branches on `isMirroredChatProvider` and draws a read-only page:
-`ViewOnlyBar` where the composer goes, a `MirrorStrip` over the conversation
-when the home device is away, no expiry check and no chat settings — nothing on
-that page may touch the repository.
+`ChatPage` branches on `isMirroredChatProvider`: `ViewOnlyBar` where the
+composer goes until this device holds the chat, a `MirrorStrip` over the
+conversation when the home device is away, and no expiry check.
+
+### Writing to a mirrored chat
+
+**The repository routes by chat id.** `ChatRepository.remote` is the hub, set
+in `attach`, and every read and write the UI makes about one chat — open,
+state, meta, project, retitle, pin, delete — answers from the mirror or goes to
+the home device when the id is one. So the chat settings page and the
+sidebar's menu are the local ones, unchanged, and a mirror is never a branch in
+them. The home device runs each write through its own repository, which is the
+one place TTLs are anchored and files written.
+
+**A write waits for its echo.** `_write` sends it and returns when the
+`stateDiff`, `metaPatch` or `chatDeleted` it causes comes back, so a caller
+awaiting a save draws what the home device wrote rather than what was asked
+for — and the save button's spinner is the loading state. The home device
+answers a writer that does not follow the chat directly (`_answerWriter`),
+since those messages go to subscribers only. A home device gone ends the wait
+with nothing written, and a page reading a mirror whose device is away offers
+no writes at all.
+
+**No lock for these.** A paired device is the user's own; the lock is about two
+devices driving one turn, not about who may rename a chat. What the home end
+does check is that the id is one of its chats (`_ours`) — a write naming any
+other would create one — and it keeps the chat's id and project from its own
+copy, since a move is not a state write. Moving is not routed: where to is a
+project on the home device, which this device cannot list yet.
+
+**Editing the conversation is a turn verb.** Edit, regenerate and the thread
+arrows go through `TurnDriver` to the home device's `ChatController`, held to
+the lock like a prompt, so the editing row shows only while this device holds
+the chat. A thread change is computed from the conversation the controller
+holds, which is the home device's.
+
+The model picker and the workspace are left off a mirror's settings: the
+picker offers this device's providers, and the workspace's files are the
+home device's.
+
+These messages are why the protocol is 2: a build before them drops the link on
+the first frame it cannot parse, mid-session, so the handshake refuses it up
+front with a version error instead. Both devices update together.
 
 **A paired device's projects are in the project switcher**, named
 `Device · project` — and a device's default project is the device's name
@@ -346,7 +385,8 @@ themselves cross as records.
 both ends. `ChatController` implements it by running the turn;
 `MirrorChatController` implements it by sending. Attachments are the one verb
 missing: their bytes would have to cross to be saved under a chat on the other
-side.
+side. `chatViewProvider` is the view from whichever controller a chat has, for
+a page — the Context page — that only reads it.
 
 Offline outranks everything a mirror last heard. A status line from before the
 connection dropped is a turn claiming to still be alive, and an approval
