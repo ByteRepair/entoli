@@ -318,9 +318,11 @@ The model picker and the workspace are left off a mirror's settings: the
 picker offers this device's providers, and the workspace's files are the
 home device's.
 
-These messages are why the protocol is 2: a build before them drops the link on
+These messages are why the protocol went to 2, and the project messages with
+the control lock's removal why it is 3: a build before them drops the link on
 the first frame it cannot parse, mid-session, so the handshake refuses it up
-front with a version error instead. Both devices update together.
+front with a version error instead. Both devices update together. **Adding,
+removing or renaming a `SyncMessage` arm bumps `protocolVersion`.**
 
 **A paired device's projects are in the project switcher**, named
 `Device · project` — and a device's default project is the device's name
@@ -621,6 +623,9 @@ close, so its data channel never ends by itself and ICE goes on probing every
 candidate path — a wall of STUN lines in the native log. The heartbeat in
 `watchLiveness` is the one check: a ping every 5s, and 15s unanswered closes
 the peer, which stops the probing and takes it offline through `_peerGone`.
+Any frame counts as the answer, stamped on arrival rather than in the handler
+queue: a handler streaming a large resource holds that queue past 15s, and a
+pong behind it would drop a link that is working.
 It was 30s and 75s, which left a dead peer listed and probed for up to a
 minute and three quarters. Watching ICE's connection state would see a dead
 transport sooner, but not an app stuck while WebRTC's threads still answer,

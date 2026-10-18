@@ -81,6 +81,9 @@ class LivePeer {
 
   void enqueue(SyncMessage message) {
     if (_closed) return;
+    // Any frame is an answer: a pong queued behind a handler sending a large
+    // resource would otherwise land past the cutoff and drop a working link.
+    lastPong = DateTime.now();
     _queue = _queue.then((_) => handle?.call(message)).catchError((Object error) =>
         logFailure("sync", "handling a message from $deviceId", error));
   }
