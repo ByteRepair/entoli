@@ -31,7 +31,7 @@ class ChatViewState {
     this.retry,
     this.status,
     this.unfinishedNotice,
-    this.shellOutput,
+    this.shellOutput = const {},
   });
   final Chat? chat;
   final bool isRunning;
@@ -65,10 +65,11 @@ class ChatViewState {
   /// a reload shows the default "Unfinished turn" text.
   final String? unfinishedNotice;
 
-  /// The tail of what a running command has printed. Transient like
-  /// [retry]: the call/result pair is what the conversation keeps, so the
-  /// block is gone the moment the pair completes.
-  final String? shellOutput;
+  /// The tail of what a running command has printed, keyed by the reply it
+  /// belongs to — a message landing after that reply must not take it over.
+  /// Transient like [retry]: the call/result pair is what the conversation
+  /// keeps, so the block is gone the moment the pair completes.
+  final Map<String, String> shellOutput;
 
   /// Who may speak now — see [RoomPhase], whose facts "The room's phase is
   /// one answer" in `lib/ui/chat/AGENTS.md` owns.
@@ -90,8 +91,7 @@ class ChatViewState {
     bool clearStatus = false,
     String? unfinishedNotice,
     bool clearUnfinishedNotice = false,
-    String? shellOutput,
-    bool clearShellOutput = false,
+    Map<String, String>? shellOutput,
   }) =>
       ChatViewState(
         chat: chat ?? this.chat,
@@ -104,8 +104,7 @@ class ChatViewState {
         unfinishedNotice: clearUnfinishedNotice
             ? null
             : (unfinishedNotice ?? this.unfinishedNotice),
-        shellOutput:
-            clearShellOutput ? null : (shellOutput ?? this.shellOutput),
+        shellOutput: shellOutput ?? this.shellOutput,
       );
 }
 
@@ -845,7 +844,8 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
       case ShellRunEvent():
         // The pair completing is the live block's end: the result and the
         // run part are what the conversation keeps of the output from here.
-        state = state.copyWith(clearShellOutput: true);
+        state = state.copyWith(
+            shellOutput: _withoutTurn(state.shellOutput, turn.replyId));
         break;
       case ErrorEvent(:final message, :final retryable):
         // Whether the round can carry the turn on from this, and the first
@@ -887,14 +887,16 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
       case ShellOutputEvent(:final text):
         // The live view of a command's output, for the block under the label.
         // Cleared where the pair completes, in the cases above.
-        state = state.copyWith(shellOutput: text);
+        state = state.copyWith(
+            shellOutput: {...state.shellOutput, turn.replyId: text});
       case StatusEvent(:final label):
         state = label == null
             ? state.copyWith(clearStatus: true)
             : state.copyWith(status: label);
       case DoneEvent(:final aborted):
         if (aborted) turn.recorder.outcome ??= TurnEnd.aborted;
-        state = state.copyWith(clearShellOutput: true);
+        state = state.copyWith(
+            shellOutput: _withoutTurn(state.shellOutput, turn.replyId));
         _finishTurn(turn);
     }
   }
@@ -1012,7 +1014,7 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
       runningSubAgents: _withoutTurn(state.runningSubAgents, turn.replyId),
       clearRetry: _turns.isEmpty,
       clearStatus: _turns.isEmpty,
-      clearShellOutput: _turns.isEmpty,
+      shellOutput: _withoutTurn(state.shellOutput, turn.replyId),
       unfinishedNotice: reason == TurnEnd.stepLimit
           ? "Step limit reached"
           : null,
@@ -1519,11 +1521,10 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
         questions: _dropItem(state.questions, requestId, (q) => q.id));
   }
 
-  /// The map without the turn's own list — what a finished turn leaves of the
+  /// The map without the turn's own entry — what a finished turn leaves of the
   /// view state it was holding, a sibling's kept.
-  static Map<String, List<T>> _withoutTurn<T>(
-          Map<String, List<T>> map, String replyId) =>
-      Map<String, List<T>>.from(map)..remove(replyId);
+  static Map<String, V> _withoutTurn<V>(Map<String, V> map, String replyId) =>
+      Map<String, V>.from(map)..remove(replyId);
 
   /// The map without [id] from any turn's list.
   static Map<String, List<T>> _dropItem<T>(

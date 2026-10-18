@@ -143,6 +143,9 @@ class FakeShell extends Shell {
   /// Commands that never finish on their own, so a test can drive an abort.
   final Set<String> hang = {};
 
+  /// What a hung command had printed by the time it was killed.
+  String killedOutput = "";
+
   /// What a persistent shell's standing directory reads as, where a test
   /// names one — the grant policy's cwd discovery reads it per command.
   /// Null is the base's answer: no session, the caller falls back to cwd.
@@ -202,7 +205,8 @@ class _FakeRun implements ShellRun {
   Future<void> kill() async {
     shell.killed.add(command);
     if (!_done.isCompleted) {
-      _done.complete(const ShellResult.failed("The command was interrupted and killed."));
+      _done.complete(ShellResult.failed("The command was interrupted and killed.",
+          output: shell.killedOutput));
     }
   }
 }

@@ -579,7 +579,20 @@ class _ChatTile extends ConsumerWidget {
         shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.all(Radius.circular(20)),
         ),
-        contentPadding: const EdgeInsets.only(left: 16, right: 4),
+        contentPadding: const EdgeInsets.only(left: 12, right: 4),
+        minLeadingWidth: 16,
+        horizontalTitleGap: 8,
+        // The slot is there whether or not a turn is, so the title does not
+        // move each time one starts or ends.
+        leading: SizedBox.square(
+          dimension: 16,
+          child: ValueListenableBuilder<Set<String>>(
+            valueListenable: ref.watch(agentBackendProvider).runningTurns,
+            builder: (context, running, _) => running.contains(chat.id)
+                ? const CircularProgressIndicator(strokeWidth: 2)
+                : const SizedBox.shrink(),
+          ),
+        ),
         // The heading above says when, so the row is the title and nothing else.
         title: Text(chat.title.orUntitled, overflow: TextOverflow.ellipsis),
         subtitle: subtitle,
@@ -595,17 +608,6 @@ class _ChatTile extends ConsumerWidget {
                 size: 14,
                 color: theme.colorScheme.onSurfaceVariant,
               ),
-            // The slot is there whether or not a turn is, so the title does
-            // not reflow each time one starts or ends.
-            SizedBox.square(
-              dimension: 16,
-              child: ValueListenableBuilder<Set<String>>(
-                valueListenable: ref.watch(agentBackendProvider).runningTurns,
-                builder: (context, running, _) => running.contains(chat.id)
-                    ? const CircularProgressIndicator(strokeWidth: 2)
-                    : const SizedBox.shrink(),
-              ),
-            ),
             PopupMenuButton<String>(
           icon: const Icon(Icons.more_vert),
           onSelected: (value) async {

@@ -323,7 +323,7 @@ void main() {
     final (id, _) = await chatWithOneTurn("run it");
 
     final view = app.container.read(chatControllerProvider(id));
-    expect(view.shellOutput, isNull);
+    expect(view.shellOutput, isEmpty);
     // What the conversation keeps is the pair, and the pair's output.
     final stored = await app.repo.openChat(id);
     expect(stored.messages.last.parts.whereType<ToolCallPart>(), hasLength(1));
@@ -356,7 +356,7 @@ void main() {
         ShellOutputEvent(callId: "c1", text: "line one\n"),
         ShellOutputEvent(callId: "c1", text: "line one\nline two\n"),
       ],
-      (v) => v.shellOutput,
+      (v) => v.shellOutput[v.chat?.messages.last.id],
       "line one\nline two\n",
     ),
   ];

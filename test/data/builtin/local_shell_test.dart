@@ -277,7 +277,8 @@ void main() {
       expect(early, isNot(contains("three")));
 
       final result = await run.result;
-      expect((output.value ?? ""), contains("three"));
+      // Line by line, as it printed.
+      expect(output.value, "one\ntwo\nthree\n");
       expect(result.output, "one\ntwo\nthree\n");
       shell.closeSession(workspace.path);
     });

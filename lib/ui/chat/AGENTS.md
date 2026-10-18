@@ -333,7 +333,9 @@ in `conv.jsonl` (they arrive at different times) and the UI pairs them by
 is a block in the trailing state, under the spinner row — the block is only
 the output, the spinner the turn already carries being the whole of the
 running indication, two of them being one too many. It is `ShellOutputEvent`
-turn-scoped view state like the spinner: gone the moment the pair completes
+turn-scoped view state like the spinner, keyed by the reply rather than drawn
+on the last message, since a message said while the command runs becomes the
+last one: gone the moment the pair completes
 (the label's drawer is what a finished command's output is behind) or the turn
 ends, and never written to `conv.jsonl`. What a `!` bubble draws once its turn
 is over is the ordinary `ShellRunBubble`, which is why the block does not

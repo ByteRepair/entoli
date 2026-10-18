@@ -32,7 +32,8 @@ class LiveShellOutput extends StatelessWidget {
       child: SingleChildScrollView(
         reverse: true,
         padding: const EdgeInsets.all(12),
-        child: Text(code, style: codeBlockStyle(theme)),
+        // The newline a line ends on would draw as a blank line under it.
+        child: Text(code.trimRight(), style: codeBlockStyle(theme)),
       ),
     );
   }
