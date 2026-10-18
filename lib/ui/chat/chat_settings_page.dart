@@ -8,6 +8,7 @@ import "../../domain/permission.dart";
 import "../../providers.dart";
 import "../sidebar/sidebar.dart";
 import "chat_controller.dart";
+import "context_page.dart";
 import "../widgets/destructive_button.dart";
 import "../widgets/model_picker.dart";
 import "../widgets/resettable_field.dart";
@@ -187,6 +188,14 @@ class _ChatSettingsPageState extends ConsumerState<ChatSettingsPage> {
                     said: "Copied chat ID",
                   ),
                   WorkspaceTile(root: _workspace!, title: "Chat workspace"),
+                  SettingsCard(
+                    icon: Icons.data_usage,
+                    title: "Context",
+                    subtitle: "What fills the model's window",
+                    onTap: () => Navigator.of(context).push(MaterialPageRoute(
+                        builder: (_) =>
+                            ContextPage(chatId: widget.chatId, project: _project))),
+                  ),
                 ]),
                 const Divider(),
                 _LlmField(

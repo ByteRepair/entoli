@@ -126,6 +126,10 @@ class BuiltinBackend implements AgentBackend {
   /// where the registry knows nothing, which the caller reads as the
   /// settings' global guess.
   final Map<String, int?> _windows = {};
+
+  /// Each chat's newest request by segment, per participant — see
+  /// [contextFor].
+  final Map<String, Map<String?, ContextUsage>> _contexts = {};
   final _RunningTurns _running = _RunningTurns();
   /// Every open turn stream per chat: a parallel round runs several at once.
   final Map<String, Set<StreamController<AgentEvent>>> _controllers = {};
@@ -477,6 +481,8 @@ class BuiltinBackend implements AgentBackend {
           _usage[chatId] = usage.contextTokens;
           _windows[chatId] = contextWindowOf(settings.provider, settings.model);
         },
+        onContext: (usage) =>
+            (_contexts[chatId] ??= {})[settings.omadaMember] = usage,
       );
       // The real kill replaces the placeholder.
       _running.replace(stopKey, agent.cancel);
@@ -1342,6 +1348,8 @@ class BuiltinBackend implements AgentBackend {
     house.replaceWith(await projectionOf(history,
         load: _resourcesOf(chatId), compactions: compactions));
     house.coveredBy(history);
+    // Measured over the conversation just replaced.
+    _contexts.remove(chatId);
     // The room's other participants read on their own dispatches, which the
     // sync fills from wherever the log now is: a session worded for them
     // before the rewind holds a conversation the log no longer describes.
@@ -1368,11 +1376,15 @@ class BuiltinBackend implements AgentBackend {
     _sessions.remove(chatId);
     _usage.remove(chatId);
     _windows.remove(chatId);
+    _contexts.remove(chatId);
     _forgetMemberSessions(chatId);
   }
 
   @override
   int? usageFor(String chatId) => _usage[chatId];
+
+  @override
+  Map<String?, ContextUsage> contextFor(String chatId) => {...?_contexts[chatId]};
 
   @override
   int? contextWindowFor(String chatId) => _windows[chatId];

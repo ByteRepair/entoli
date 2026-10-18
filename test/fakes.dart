@@ -612,6 +612,13 @@ class FakeBackend implements AgentBackend {
   int? contextWindowFor(String chatId) => null;
 
   @override
+  Map<String?, ContextUsage> contextFor(String chatId) =>
+      contextHolder[chatId] ?? const {};
+
+  /// What `contextFor` answers, keyed by chat id.
+  final Map<String, Map<String?, ContextUsage>> contextHolder = {};
+
+  @override
   Future<void> shutdown() async {}
 
   final List<String> aborted = [];

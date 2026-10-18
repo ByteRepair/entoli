@@ -1,4 +1,5 @@
 import "dart:async";
+import "dart:convert";
 
 import "package:fs_shim/fs.dart";
 import "package:flutter/foundation.dart" show visibleForTesting;
@@ -24,6 +25,7 @@ import "../../domain/turn_recorder.dart";
 import "../../domain/web_search.dart";
 import "ask_tool.dart";
 import "artifact_tool.dart";
+import "compact_prompt.dart" show estimateTokens;
 import "file_tools.dart" as file_tool_defs;
 import "llm/llm_client.dart";
 import "llm/rate_limit_gate.dart";
@@ -394,6 +396,7 @@ class BuiltinAgent {
     this.registerTrigger,
     this.onShellOutput,
     this.onUsage,
+    this.onContext,
     this.loadResource = noResources,
     this.memory = MemorySettings.off,
     this.instructions = const [],
@@ -715,6 +718,10 @@ class BuiltinAgent {
   /// Null where the provider reports nothing, which is every completion a
   /// test fakes unless it says otherwise.
   final void Function(LlmUsage usage)? onUsage;
+
+  /// What each request is about to send, by segment. Null for a sub-agent,
+  /// whose context is its own and not the chat's.
+  final void Function(ContextUsage usage)? onContext;
 
   /// What the trigger tools run against — a registry over the app's own
   /// trigger list — or null, which withholds the trio the way a missing
@@ -2558,6 +2565,21 @@ class BuiltinAgent {
   /// the gate's wall-clock budget, not [BuiltinOptions.maxAttempts]; other
   /// retryables (503, connection drops) keep the per-agent path.
   Stream<AgentEvent> _query() async* {
+    if (onContext != null) {
+      final system =
+          session.messages.takeWhile((m) => m.role == LlmRole.system).toList();
+      final profileTokens = profileSection(profile).length ~/ 4;
+      final tools = [
+        for (final t in _tools)
+          {"name": t.name, "description": t.description, "schema": t.schema},
+      ];
+      onContext!((
+        system: estimateTokens(system) - profileTokens,
+        tools: jsonEncode(tools).length ~/ 4,
+        profile: profileTokens,
+        chat: estimateTokens(session.conversation),
+      ));
+    }
     var attempt = 1;
     while (true) {
       var produced = false;
