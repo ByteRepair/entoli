@@ -1,9 +1,9 @@
-# Sync: paired devices, live mirrors, remote control
+# Sync: paired devices, live mirrors, driving a chat from the other end
 
 Two Entoli devices pair over a QR or typed code, open a WebRTC data channel
 between them, and one mirrors the other's chats or drives them remotely.
-Commands always run on the chat's home device; control moves only who
-types/prompts/approves.
+Commands always run on the chat's home device; a mirror only types, prompts
+and approves.
 
 ## The threat model and how it is answered
 
@@ -36,6 +36,15 @@ secret never crossed the network. The SAS (eight base32 characters, forty
 bits) is derived beside the keys for human confirmation — regrouped five bits
 at a time rather than through one 40-bit integer, since a shift past 32 bits is
 truncated on the web.
+
+**`v` is the protocol version, and a mismatch is refused before anything
+else.** `SyncIdentity.protocolVersion` is bumped by any change an older build
+could not read. `parse` reads `v` before any other field, so a newer build's
+differently-shaped hello still reads as a mismatch; the side that finds it
+sends back a bare `{"v","role"}` before giving up, so the other side refuses
+too instead of timing out. Both throw `ProtocolMismatchException`, whose
+message — "Protocol version mismatch, please update Entoli on both devices" —
+is what the pairing page and the device's row show.
 
 That HKDF is asked for `DartHmac` by name. `cryptography_flutter` declares a
 `dartPluginClass`, so on Android it installs itself as `Cryptography.instance`
@@ -75,6 +84,9 @@ who speaks first.
 `framing.dart` wraps a `ByteChannel` in ChaCha20-Poly1305 AEAD. Every frame:
 
     [type: 1 byte][counter: 4 bytes BE][AEAD(cleartext)]
+
+A message past 48KB is several frames, the type's high bit set on all but the
+last — see "A conversation does not fit in one frame".
 
 Counters are per-direction and monotonic — a replayed, reordered or spliced
 frame fails its MAC.
@@ -138,7 +150,7 @@ the code has a seam rather than by subject:
   here together, on purpose: they are two ends of one conversation, every
   message the serving side sends is one the mirror side receives, and a
   protocol change is never one without the other. Separating them by which
-  end you are looking from would put the control lock, resource transfer and
+  end you are looking from would put driving, resource transfer and
   chat-following each in two files.
 
 `pairing.dart` owns the three decisions above the wire:
@@ -215,28 +227,40 @@ freezed object left to `toJson`'s default comes out as a live instance rather
 than a map, and a raw `_ChatState` in the payload is a cast failure on the far
 side.
 
-### A conversation does not fit in one message
+### A conversation does not fit in one frame
 
-A data channel refuses a message past its negotiated maximum, and a
-`conv.jsonl` of any age is far past it — the chats this was first run against
-were 74KB, 256KB and 485KB, and every one of them mirrored as an empty chat.
-So `chatSnapshot` is the *head* only: state, meta, and how long the log is.
-The records follow as a run of `recordAppend`s, paged by measured encoded size
-rather than by a count, since one record can be a whole file.
-
-`totalLines` is then the greater of what a mirror holds and what the peer last
-said — pages of a snapshot climb towards a total already known, while a live
-append is what makes the total bigger.
+A data channel refuses a message past its negotiated maximum — 64KB on the
+smallest peers — and a `conv.jsonl` of any age is far past it: the chats this
+was first run against were 74KB, 256KB and 485KB, and every one of them
+mirrored as an empty chat. `SecureChannel` answers that once, for every
+message: one past `pieceBytes` (48KB) goes as consecutive frames with the
+`continued` bit (0x80) in the type byte of all but the last, and the far end
+joins them before handing the message up. The type byte is the AEAD's
+associated data, so the bit cannot be flipped, and the counter keeps the
+pieces in order; one message's pieces are one link of the send chain, so
+nothing lands between them. Nothing above the framing pages anything: a
+snapshot's records are one `recordAppend`, a project's library one
+`projectPrompts`, a prompt's attachments ride inside it.
 
 ### Attachments
 
 An attachment's bytes are requested by `resourceRequest{id}` and answered by a
 run of `resourceChunk{id, bytesB64, done}` — base64 inside ordinary control
-frames, 48KB of source bytes each. Correlation stays trivial and every frame
+frames, 32KB of source bytes each — not for the frame limit, which the
+framing takes care of, but so a file is never one base64 string at either end.
+Correlation stays trivial and every frame
 rides the same AEAD as the rest of the traffic; binary framing can come later
 with no protocol change, since the type byte already separates the streams. A
 resource that is not there answers with an empty final chunk, so the asking
 side gets a null rather than a hang.
+
+**The other way, an attachment rides inside its prompt.** A mirror's `send`
+puts each attachment's bytes in `promptSend`'s (or `chatStart`'s) `files`,
+base64; the home device hands them to its own `ChatController.send`, which
+saves them under the chat as a local attachment would be. It used to send them
+ahead as unrequested chunks, which needed a per-peer holding area, a way to
+say some never came, and a cleanup for those never claimed — all for a case an
+ordered, reliable channel does not have.
 
 `SyncByteCache` holds what came back, bounded at 64MB of bytes rather than a
 count of entries — an image-heavy conversation is where the megabytes are. It
@@ -266,9 +290,13 @@ home device is elsewhere. Records replay through the same pure
 `chatFrom`/`replayTree` a reload uses, so the page draws the log rather than a
 second rendering of it.
 
-`ChatPage` branches on `isMirroredChatProvider`: `ViewOnlyBar` where the
-composer goes until this device holds the chat, a `MirrorStrip` over the
-conversation when the home device is away, and no expiry check.
+`ChatPage` branches on `isMirroredChatProvider`: online, a composer and the
+editing row like a local chat, under a `MirrorStrip` naming the device ("On
+<device>") — the one place the page names it, the title bar no longer does;
+offline, the strip says so and `ViewOnlyBar` takes the composer's place over a
+snapshot that has stopped moving. No expiry check. The same strip heads every page whose data is a paired
+device's: a mirror's chat settings, a paired project's settings and its
+memories, as `MirrorStrip.remote` ("On <device>") or offline while it is away.
 
 ### Writing to a mirrored chat
 
@@ -289,54 +317,131 @@ since those messages go to subscribers only. A home device gone ends the wait
 with nothing written, and a page reading a mirror whose device is away offers
 no writes at all.
 
-**No lock for these.** A paired device is the user's own; the lock is about two
-devices driving one turn, not about who may rename a chat. What the home end
-does check is that the id is one of its chats (`_ours`) — a write naming any
+**Nothing to hold for these.** A paired device is the user's own. What the home
+end does check is that the id is one of its chats (`_ours`) — a write naming any
 other would create one — and it keeps the chat's id and project from its own
 copy, since a move is not a state write. Moving is not routed: where to is a
 project on the home device, which this device cannot list yet.
 
 **Editing the conversation is a turn verb.** Edit, regenerate and the thread
-arrows go through `TurnDriver` to the home device's `ChatController`, held to
-the lock like a prompt, so the editing row shows only while this device holds
-the chat. A thread change is computed from the conversation the controller
+arrows go through `TurnDriver` to the home device's `ChatController`, taken
+from a following device like a prompt, and the editing row shows while the
+device is online. A thread change is computed from the conversation the controller
 holds, which is the home device's.
 
 The model picker and the workspace are left off a mirror's settings: the
 picker offers this device's providers, and the workspace's files are the
 home device's.
 
-These messages are why the protocol is 2: a build before them drops the link on
-the first frame it cannot parse, mid-session, so the handshake refuses it up
-front with a version error instead. Both devices update together.
+These messages made the protocol 2; the project messages, the control lock's
+removal and splitting a message across frames made it 3. A build before them
+drops the link on the first frame it cannot parse, or reads the first piece of
+a large message as a whole one, so the handshake refuses it up front with a
+version mismatch instead. Both devices update together. **Adding, removing or
+renaming a `SyncMessage` arm bumps `protocolVersion`.**
 
 **A paired device's projects are in the project switcher**, named
 `Device · project` — and a device's default project is the device's name
 alone, since the local default has no name either and this would be the one
 place in the app that invented one. Picking one lists that device's chats in
-that project, read-only, with no date grouping: a mirror answers to no date
-this sidebar could place it under.
+that project, with no date grouping: a mirror answers to no date this sidebar
+could place it under.
 
-Device *and* project together is the whole point of `RemoteScope`. `work` on a
-laptop and `work` on a phone are different directories that happen to share a
-name; folding them into one entry would put two conversations under a heading
-that is true of neither. It also means a device offers only the projects it
-has something mirrored in — the welcome is what says a project exists at all.
-The welcome and `chatsChanged` also name which of those projects run Omada
-there (`omadaProjects`), so a paired device's badge is styled by its own answer
-rather than by a local project that shares the name. Additive, so `proto`
-stayed: a peer that sends none reads as none on.
+**A project is a `ProjectRef`: a device and a name, the device null for this
+one.** `work` on a laptop and `work` on a phone are different directories that
+happen to share a name; folding them into one entry would put two
+conversations under a heading that is true of neither. `selectedProjectProvider`
+holds one, so there is one selection rather than a local one and a remote one
+beside it, and it is where a new chat goes on whichever device that is. Paths
+are still built from the name alone, and only for this device's: `AppConfig`
+and the other `String? project` parameters are about this disk, and nothing
+remote ever becomes one.
 
-`selectedRemoteProvider` is what is being *read*; `selectedProjectProvider`
-stays what it was, where new work goes — and new work never goes on somebody
-else's device, so `startChat` clears the remote scope rather than asking what
-a new chat in a mirror would mean.
+The welcome and `chatsChanged` name the home device's projects (`projects`,
+the user's; the default and the built-ins are on every device), so a device
+offers all of them whether or not anything of it is mirrored, and which run
+Omada there (`omadaProjects`), so a paired device's badge is styled by its own
+answer rather than by a local project that shares the name. A project made or
+deleted is a `ProjectsChanged` from the repository, which sends the list again;
+a deletion's chats leave in that list rather than as a `chatDeleted` each.
+
+### A paired device's project, while it is open
+
+**Streamed, not cached.** `remoteProjectProvider(ref)` follows a project
+(`projectOpen`) while something watches it and closes it when the last watcher
+goes, taking what it read with it; the home device answers with a
+`projectSnapshot` — the project's `ProjectSettings` and the `AppSettings` they
+inherit from, whole — and sends another on every change to either while it is
+followed (`RemoteTurnDriver` listens to the providers for `servedProjects`,
+the way it listens to controllers for `servedChats`). A page waits on
+`projectLoadedProvider` and draws a spinner until the first one lands, unless
+`projectGoneProvider` says the device's listing no longer names the project:
+the listing is what answers for a project deleted there, open or not, so a
+refused `projectOpen` needs no reply of its own.
+
+**The same page, either device.** `projectSettingsOf(ref)` is
+`projectSettingsProvider` for this device's and
+`RemoteProjectSettingsNotifier` for a paired one's — the same setters, each
+sent as a `projectWrite` and waited on for its reply, the value put back where
+it was refused — and
+`appSettingsOf(ref)` is the inherited values the rows name, that device's.
+`ProjectSettingsNotifier.replace` is the home end of a write, re-anchoring the
+project's TTLs when that changed. The path, the workspace and the instructions
+are left off a paired device's page: they are files there, and nothing here
+reads them.
+
+**Its skills and agents come with it, apart.** The project's resolved library,
+bodies included, follows the first snapshot as one `projectPrompts`, and is
+sent again only when the library changes: a settings write is a few hundred
+bytes, not the default project's hundred-odd kilobytes of skills. A peer's
+project sends go through one queue (`_inOrder`), so a write's reply goes out
+behind the snapshot it set off.
+`promptLibraryOf(ref)` is
+`promptLibraryProvider` here and the followed project's library there, so the
+composer's `/` and `@` offer the paired device's set and only that; the field
+holds the project followed while it is up, so the menu is there when `/` is
+typed. What a message names is still resolved where the turn runs, on the home
+device, from its own copy. The pages list a paired device's entries and stop:
+the view page and Export read the files, and importing or editing one is not
+routed.
+
+**Its memories are asked for, not held.** `memoriesProvider(ref)` is a
+`MemoryStore` here and a `RemoteMemories` there, which sends each read or
+change as a `memoryCall` and returns the entries of the `reply` that answers
+it — the list after a change, the matches for a search. Nothing is kept between calls; the
+page keeps what it last drew while the device is away, frozen, and reads again
+when it is back.
+
+**Away is frozen, back is read again.** With the device gone the page keeps
+what it last had under an offline strip, its rows absorbed; a reconnect's
+welcome opens every followed project again rather than trusting what is held.
+A project gone from the device's list is dropped.
+
+**Starting a chat there.** `chatStart` asks the home device to make one in the
+project and take the first prompt; it lists the new
+chat before its `reply`, and messages from one peer arrive in
+order, so the mirror is there to open by the time the id is. The new-chat
+screen shows a spinner until then and the chat page its own until the
+snapshot lands. Its badges, settings and voice are left off for a paired
+device's project, since they name this device's projects and models; its
+starters are that device's library.
 
 `remoteChatsProvider` bridges the hub's `ValueNotifier` into Riverpod, and is
 deliberately separate from `chatListProvider`, which reads the local store and
 stays sync-unaware. Two sources of truth, never merged.
 
-## Control, and driving a turn from the other end
+### Requests and their reply
+
+`promptSend`, `chatStart`, `memoryCall`, `projectWrite`, `projectCreate`
+and `projectDelete` carry a `requestId` and are answered by one `reply`: `ok`,
+the chat a start made, and the entries a memory call read. The asker waits through the same echo list the chat writes use
+(`_ask` over `_send`), so a device away or silent is a null after 30s and a
+refusal is an answer at once rather than that wait. A home device's create
+and delete list the projects again before replying, so the asker can select
+what it made. A prompt that did not land says so in a snack bar
+(`Undelivered`).
+
+## Driving a turn from the other end
 
 **Nothing about a turn ever moves.** A prompt typed on a mirror is *run* on the
 chat's home device, by the same `ChatController` a locally typed one goes
@@ -345,21 +450,15 @@ ordinary record stream that was already mirroring. What crosses the wire is the
 asking and the answering. The commands stay where the files are, which is the
 whole reason the chat has a home device at all.
 
-**The lock is the home device's answer.** `controlRequest` is a request:
-`_control` maps a chat to the one device id holding it, first asker wins, and
-`controlGrant` plus a `controlState` to every subscriber says what happened. A
-mirror never decides it has control — `holdsControl` compares the holder the
-home end sent against this device's own id — which is what makes a race between
-two phones resolve rather than double up. Re-asking while already holding it is
-granted, since a mirror that reconnected does not know it never lost the lock.
-
-Every arm that drives a turn — `promptSend`, `turnResume`, `turnAbort`,
-`approvalRespond`, `questionsRespond` — is refused at the home device unless
-the sender holds the chat. **A page drawing a composer is not what permits a
-turn**; the guard on the mirror side only exists so it does not shout into the
-void. A lock is released by `controlRelease`, by the chat being deleted, or by
-the connection carrying it going away — one that outlived its connection would
-leave the chat unusable at both ends until somebody restarted.
+**There is no lock.** A paired device is the user's own, so any device
+following a chat may drive it: every arm that drives a turn — `promptSend`,
+`turnResume`, `turnAbort`, `approvalRespond`, `questionsRespond`, and the
+edit verbs — is taken at the home device from a peer that has the chat open
+(`_follows`, its subscription) and dropped from one that does not, since an id
+it was never shown names nothing to drive. There was a control lock, one
+holder at a time with Take control and Hand back; it guarded nothing a paired
+device is not already trusted with, and only made a mirror press a button
+before typing.
 
 **The turn-scoped state is its own message.** Whether a turn is running, what
 it is waiting to be allowed, what it is waiting to be told, the line the
@@ -372,9 +471,9 @@ rather than a second encoding of them. `AskRequest.argumentsJson` exists for
 that and nothing else reads it.
 
 `RemoteTurnDriver` is the home end, read once in `main` for its effect the way
-`TurnKeepAlive` is. It holds one `ChatController` open per **watched** chat —
-not per held one — because a mirror that is only reading still has to see a
-turn happening; that is what `SyncHub.servedChats` is for. Publishing is the
+`TurnKeepAlive` is. It holds one `ChatController` open per **watched** chat,
+because a mirror has to see a turn happening; that is what
+`SyncHub.servedChats` is for. Publishing is the
 same subscription's other half, and it is deduplicated: `ChatViewState` has no
 `==` and is replaced on every flush of a streaming reply, tens of times a
 second, while none of what `turnState` carries changes between them. The words
@@ -383,19 +482,14 @@ themselves cross as records.
 `TurnDriver` is the interface the two controllers meet on, so `TurnSurface`,
 `TurnQuestions`, `Composer` and the approval banner are the same widgets at
 both ends. `ChatController` implements it by running the turn;
-`MirrorChatController` implements it by sending. Attachments are the one verb
-missing: their bytes would have to cross to be saved under a chat on the other
-side. `chatViewProvider` is the view from whichever controller a chat has, for
+`MirrorChatController` implements it by sending, attachments inside the
+prompt (see "Attachments"). `chatViewProvider` is the view from whichever controller a chat has, for
 a page — the Context page — that only reads it.
 
 Offline outranks everything a mirror last heard. A status line from before the
 connection dropped is a turn claiming to still be alive, and an approval
 nothing can carry the answer to is worse than no approval — so `_viewOf` blanks
 them all.
-
-The home device says so too: `drivenChats` is chat id to the name of the device
-driving it, and the local chat page draws it as a title line. Prompts arriving
-that nobody here typed are otherwise unexplained.
 
 ### The pairing secret is not a valid base64 length
 
@@ -558,6 +652,21 @@ reason to be doing.
 did" in the root `AGENTS.md` for the rule. Nothing logged here may carry a
 pairing secret, an SDP blob, or anything out of a conversation.
 
+**A device that dies is gone in seconds.** A peer killed or cut off sends no
+close, so its data channel never ends by itself and ICE goes on probing every
+candidate path — a wall of STUN lines in the native log. The heartbeat in
+`watchLiveness` is the one check: a ping every 5s, and 15s unanswered closes
+the peer, which stops the probing and takes it offline through `_peerGone`.
+Any frame counts as the answer — `SecureChannel.lastFrame`, stamped as each
+frame is read, a piece of a message included. Counting whole messages was not
+enough: a pong waits behind whatever the other side is sending, and a
+snapshot of a long conversation over a slow relay takes more than 15s to
+arrive whole, so the link dropped, reconnected, asked for the same snapshot
+and dropped again.
+It was 30s and 75s, which left a dead peer listed and probed for up to a
+minute and three quarters. Watching ICE's connection state would see a dead
+transport sooner, but not an app stuck while WebRTC's threads still answer,
+and the heartbeat sees both.
 ## What the Sync page can do about a peer
 
 Connect, disconnect, revoke, and one line saying why the last dial failed.

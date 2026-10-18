@@ -3,6 +3,7 @@ import "dart:async";
 import "package:clock/clock.dart";
 import "package:flutter/foundation.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
+import "package:flutter_riverpod/misc.dart" show ProviderListenable;
 import "package:http/http.dart" as http;
 import "package:uuid/uuid.dart";
 
@@ -42,7 +43,7 @@ import "data/prompts/prompt_sources.dart" show promptTiers;
 import "domain/permission.dart";
 import "domain/profile.dart";
 import "domain/project_settings.dart";
-import "domain/project.dart" show emptyChatQuestionFor, everyProject;
+import "domain/project.dart" show ProjectRef, emptyChatQuestionFor, everyProject;
 import "domain/prompt_library.dart";
 import "domain/reminder_alarms.dart";
 import "domain/trigger.dart";
@@ -51,6 +52,7 @@ import "domain/trigger_runner.dart";
 import "domain/trigger_manager.dart";
 import "domain/rootfs_store.dart";
 import "domain/shell.dart";
+import "data/builtin/memory/store.dart" show Memories, MemoryStore;
 import "data/sync/sync_hub.dart";
 import "data/sync/sync_keep_alive.dart";
 import "domain/temp_chat_ttl.dart";
@@ -816,16 +818,6 @@ class RemoteChats extends HubValue<List<RemoteChatEntry>> {
 final remoteChatsProvider =
     NotifierProvider<RemoteChats, List<RemoteChatEntry>>(RemoteChats.new);
 
-/// The other direction: chats of *this* device a paired one is driving, by
-/// the name of the device driving them.
-class DrivenChats extends HubValue<Map<String, String>> {
-  @override
-  ValueListenable<Map<String, String>> of(SyncHub hub) => hub.drivenChats;
-}
-
-final drivenChatsProvider =
-    NotifierProvider<DrivenChats, Map<String, String>>(DrivenChats.new);
-
 /// Every device this one has paired with, online or not. One list rather than
 /// the registry for membership and the hub for status: a device paired while
 /// the Sync page was open landed in the hub and not in the registry read the
@@ -838,6 +830,61 @@ class PairedDevices extends HubValue<Map<String, PeerState>> {
 
 final syncPeersProvider =
     NotifierProvider<PairedDevices, Map<String, PeerState>>(PairedDevices.new);
+
+/// What each paired device last said its projects are, by device id.
+class DeviceProjects extends HubValue<Map<String, List<String>>> {
+  @override
+  ValueListenable<Map<String, List<String>>> of(SyncHub hub) => hub.deviceProjects;
+}
+
+final deviceProjectsProvider =
+    NotifierProvider<DeviceProjects, Map<String, List<String>>>(DeviceProjects.new);
+
+/// A paired device's project while something is showing it, and only then:
+/// the follow goes with the last watcher, and what was read with it. Null
+/// until the device has answered.
+class RemoteProjectNotifier extends Notifier<RemoteProject?> {
+  RemoteProjectNotifier(this.project);
+
+  final ProjectRef project;
+
+  @override
+  RemoteProject? build() {
+    final hub = ref.watch(syncHubProvider);
+    hub.followProject(project);
+    final sub = hub.projectUpdates.where((p) => p == project).listen((_) {
+      if (ref.mounted) state = hub.remoteProject(project);
+    });
+    ref.onDispose(() {
+      sub.cancel();
+      hub.unfollowProject(project);
+    });
+    return hub.remoteProject(project);
+  }
+}
+
+final remoteProjectProvider = NotifierProvider.autoDispose
+    .family<RemoteProjectNotifier, RemoteProject?, ProjectRef>(RemoteProjectNotifier.new);
+
+/// Whether [ProjectRef]'s settings are here to show: always for this
+/// device's, once its device has answered for a paired one's.
+final projectLoadedProvider = Provider.autoDispose.family<bool, ProjectRef>((ref, project) =>
+    project.device == null || ref.watch(remoteProjectProvider(project)) != null);
+
+/// A paired device's project its device's listing no longer names: deleted
+/// there, so nothing will answer for it. Unknown until a listing has come.
+final projectGoneProvider = Provider.autoDispose.family<bool, ProjectRef>((ref, project) {
+  if (project.device == null) return false;
+  final listed = ref.watch(deviceProjectsProvider.select((d) => d[project.device]));
+  return listed != null && !everyProject(listed).contains(project.project);
+});
+
+/// A paired device's project whose device is away: what it last said stays
+/// readable, and nothing is written until it is back.
+final projectFrozenProvider = Provider.family<bool, ProjectRef>((ref, project) =>
+    project.device != null &&
+    ref.watch(syncPeersProvider.select((peers) => peers[project.device]?.status)) !=
+        PeerStatus.online);
 
 final isMirroredChatProvider = Provider.family<bool, String>((ref, chatId) {
   return ref
@@ -1142,10 +1189,12 @@ final attachmentBytesProvider =
 /// knows. The library is per project — `null` is the default, the way it is
 /// everywhere a project is named — so a menu offers what the project it is in
 /// offers, including an override the project ships.
-final completionsProvider =
-    Provider.family<List<CompletionOption>, ({String? project, CompletionKind kind})>(
-        (ref, spec) =>
-            ref.watch(promptLibraryProvider(spec.project)).options(spec.kind));
+///
+/// A paired device's project offers that device's: auto-disposed, so the
+/// follow it holds goes with the menu.
+final completionsProvider = Provider.autoDispose
+    .family<List<CompletionOption>, ({ProjectRef project, CompletionKind kind})>(
+        (ref, spec) => ref.watch(promptLibraryOf(spec.project)).options(spec.kind));
 
 /// An agent's profile picture, or null where none is set. Named like the
 /// `.md` — `<agents dir>/<name>.png` — and resolved over the same tier walk
@@ -1184,6 +1233,39 @@ void invalidateAgentPicture(WidgetRef ref, String name, {String? project}) {
 final projectSettingsProvider =
     NotifierProvider.family<ProjectSettingsNotifier, ProjectSettings, String?>(
         ProjectSettingsNotifier.new);
+
+/// A paired device's project's settings, written there. Until it answers,
+/// the defaults; a page waits on [projectLoadedProvider] rather than draw them.
+final remoteProjectSettingsProvider = NotifierProvider.autoDispose
+    .family<ProjectSettingsNotifier, ProjectSettings, ProjectRef>(
+        RemoteProjectSettingsNotifier.new);
+
+/// [project]'s settings, on whichever device it is: what a page that shows a
+/// project of either watches, and writes through.
+NotifierProvider<ProjectSettingsNotifier, ProjectSettings> projectSettingsOf(
+        ProjectRef project) =>
+    project.device == null
+        ? projectSettingsProvider(project.project)
+        : remoteProjectSettingsProvider(project);
+
+/// The app settings [project] inherits from: its own device's.
+ProviderListenable<AppSettings> appSettingsOf(ProjectRef project) => project.device == null
+    ? appSettingsProvider
+    : remoteProjectProvider(project).select((p) => p?.app ?? AppSettings());
+
+/// [project]'s skills and agents, on whichever device it is.
+ProviderListenable<PromptLibrary> promptLibraryOf(ProjectRef project) =>
+    project.device == null
+        ? promptLibraryProvider(project.project)
+        : remoteProjectProvider(project).select((p) => p?.library ?? PromptLibrary.empty);
+
+/// [project]'s memories, on whichever device it is. A paired device's are
+/// asked for on every read.
+final memoriesProvider = Provider.family<Memories, ProjectRef>((ref, project) {
+  if (project.device != null) return RemoteMemories(ref.watch(syncHubProvider), project);
+  final config = ref.watch(appConfigProvider);
+  return MemoryStore(config.fs, config.memoryDir(project: project.project));
+});
 
 /// Whether Omada runs in [project]: the one rule [omadaFor] resolves — a
 /// built-in's spec, a user project's toggle, the default project false —
@@ -1283,11 +1365,50 @@ class ProjectSettingsNotifier extends Notifier<ProjectSettings> {
     ref.invalidate(chatListProvider);
   }
 
+  /// The whole of it at once, as a paired device sends it. A TTL change
+  /// re-anchors the way [setTempChatTtl] does.
+  Future<void> replace(ProjectSettings next) async {
+    final ttlChanged = next.tempChatTtl != state.tempChatTtl;
+    state = next.copy();
+    await state.save(_config, project: project);
+    if (ttlChanged) {
+      await ref.read(chatRepositoryProvider).reanchorProjectTtl(project);
+      ref.invalidate(chatListProvider);
+    }
+  }
+
   Future<void> _update(void Function(ProjectSettings) change) async {
     final next = state.copy();
     change(next);
     state = next;
     await next.save(_config, project: project);
+  }
+}
+
+/// The same setters over a paired device's project: each change is sent there
+/// and lands back as what the device wrote.
+class RemoteProjectSettingsNotifier extends ProjectSettingsNotifier {
+  RemoteProjectSettingsNotifier(this.at) : super(at.project);
+
+  final ProjectRef at;
+
+  @override
+  ProjectSettings build() =>
+      ref.watch(remoteProjectProvider(at))?.settings.copy() ?? ProjectSettings();
+
+  // The home device re-anchors its own chats.
+  @override
+  Future<void> setTempChatTtl(TempChatTtl? ttl) => _update((s) => s.tempChatTtl = ttl);
+
+  @override
+  Future<void> _update(void Function(ProjectSettings) change) async {
+    final next = state.copy();
+    change(next);
+    state = next;
+    // Refused or unanswered: back to what the device last said.
+    if (!await ref.read(syncHubProvider).writeRemoteProject(at, next) && ref.mounted) {
+      state = ref.read(remoteProjectProvider(at))?.settings.copy() ?? state;
+    }
   }
 }
 

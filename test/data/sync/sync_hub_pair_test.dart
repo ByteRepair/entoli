@@ -4,6 +4,7 @@ import "dart:io" show Directory;
 import "dart:typed_data";
 
 import "package:agent_chat/core/config.dart";
+import "package:agent_chat/data/builtin/memory/store.dart";
 import "package:agent_chat/data/local/file_chat_store.dart";
 import "package:agent_chat/data/sync/channel.dart";
 import "package:agent_chat/data/sync/handshake.dart" show HandshakeException;
@@ -14,7 +15,9 @@ import "package:agent_chat/domain/chat_meta.dart";
 import "package:agent_chat/domain/chat_repository.dart";
 import "package:agent_chat/domain/chat_store.dart";
 import "package:agent_chat/domain/models.dart";
+import "package:agent_chat/domain/project.dart" show ProjectRef;
 import "package:agent_chat/domain/project_settings.dart";
+import "package:agent_chat/domain/prompt_library.dart";
 import "package:agent_chat/domain/sync/devices.dart";
 import "package:agent_chat/domain/sync/identity.dart";
 import "package:agent_chat/domain/sync/protocol.dart";
@@ -130,7 +133,7 @@ void main() {
   /// against were 74KB, 256KB and 485KB of `conv.jsonl`, and every one of
   /// them mirrored as an empty chat. A loopback carries any size, so what is
   /// asserted is the size of what goes over it.
-  test("a log too big for one message crosses in pages", () async {
+  test("a log too big for one message crosses in pieces", () async {
     final now = DateTime.now();
     final state = ChatState(
         id: "big", title: "Long chat", createdAt: now, updatedAt: now);
@@ -703,39 +706,19 @@ void main() {
     expect(await away.registry.list(), isEmpty);
   });
 
-  /// Control and teleport, over the same two real hubs. What is being proven
-  /// is that the lock is the *home* device's answer and that nothing runs
-  /// without it — a mirror drawing a composer is a consequence, not a
-  /// permission.
-  group("control", () {
+  /// Driving a chat from the other end, over the same two real hubs: what a
+  /// following device sends runs on the home device, and nothing else does.
+  group("driving", () {
     late _Turns turns;
 
-    setUp(() => home.hub.remoteTurns = turns = _Turns(home.repo));
-
-    test("asking for a free chat is granted and told to everyone", () async {
-      final state = await mirrored();
-
-      await away.hub.requestControl(state.id);
-      await waitForSync(() => away.hub.holdsControl(state.id));
-
-      expect(home.hub.heldBy(state.id), away.identity.id);
-      expect(home.hub.drivenChats.value[state.id], away.hub.deviceName);
-      expect(away.hub.mirror(state.id)!.controlHolder, away.identity.id);
-    });
+    setUp(() => home.hub.remoteTurns = turns = _Turns(home.repo, home.config)..hub = home.hub);
 
     test("a rename of a connected device lands on every name it is said",
         () async {
       final state = await mirrored();
-      await away.hub.requestControl(state.id);
-      await waitForSync(() => away.hub.holdsControl(state.id));
-      expect(home.hub.drivenChats.value[state.id], away.hub.deviceName);
 
-      // The home end's row and its driven line read one book.
       await home.hub.rename(away.identity.id, "Renamed Away");
-      expect(home.hub.drivenChats.value[state.id], "Renamed Away");
       expect(home.hub.peers.value[away.identity.id]!.name, "Renamed Away");
-      // A lock, a status, a subscription: none of that moved.
-      expect(away.hub.holdsControl(state.id), isTrue);
 
       // The mirror side: its Remotes rows derive their name from the book,
       // which is what shows on screen — the mirror's own field stays the
@@ -749,30 +732,8 @@ void main() {
           "Renamed Home");
     });
 
-    test("a second device is refused, and hears who has it", () async {
+    test("a following device's prompt runs on the home device", () async {
       final state = await mirrored();
-      final other = await _Device.create("${tempDir.path}/other");
-      addTearDown(other.hub.dispose);
-      final links = loopbackPair();
-      await pairing(home, other, links.$1, links.$2, psk: generatePsk());
-      other.hub.followChat(state.id);
-      await waitForSync(() => other.hub.mirror(state.id) != null);
-
-      await away.hub.requestControl(state.id);
-      await waitForSync(() => away.hub.holdsControl(state.id));
-      await other.hub.requestControl(state.id);
-      await waitForSync(
-          () => other.hub.mirror(state.id)!.controlHolder != null);
-
-      expect(other.hub.holdsControl(state.id), isFalse);
-      expect(other.hub.mirror(state.id)!.controlHolder, away.identity.id);
-      expect(home.hub.heldBy(state.id), away.identity.id);
-    });
-
-    test("the holder's prompt runs on the home device", () async {
-      final state = await mirrored();
-      await away.hub.requestControl(state.id);
-      await waitForSync(() => away.hub.holdsControl(state.id));
 
       await away.hub.sendRemotePrompt(state.id, "do the thing");
       await waitForSync(() => turns.prompts.isNotEmpty);
@@ -780,10 +741,24 @@ void main() {
       expect(turns.prompts.single, (state.id, "do the thing"));
     });
 
+    test("its attachments travel with its prompt and arrive whole",
+        () async {
+      final state = await mirrored();
+      // Past one frame, so the pieces have to be put back together.
+      final bytes = Uint8List.fromList(List.generate(70000, (i) => i % 251));
+
+      await away.hub.sendRemotePrompt(state.id, "look", attachments: [
+        Attachment(filename: "a.bin", mimeType: "application/octet-stream", bytes: bytes),
+      ]);
+      await waitForSync(() => turns.prompts.isNotEmpty);
+
+      final sent = turns.attached.single.single;
+      expect((sent.filename, sent.mimeType), ("a.bin", "application/octet-stream"));
+      expect(sent.bytes, bytes);
+    });
+
     test("every verb reaches the home device's own controller", () async {
       final state = await mirrored();
-      await away.hub.requestControl(state.id);
-      await waitForSync(() => away.hub.holdsControl(state.id));
 
       await away.hub.resumeRemote(state.id);
       await away.hub.respondRemoteApproval(state.id, "a1", true);
@@ -801,10 +776,8 @@ void main() {
       expect(turns.answered.single.$3, ["yes"]);
     });
 
-    test("the holder's edits reach the home device's controller", () async {
+    test("its edits reach the home device's controller", () async {
       final state = await mirrored();
-      await away.hub.requestControl(state.id);
-      await waitForSync(() => away.hub.holdsControl(state.id));
 
       await away.hub.editRemote(state.id, "m1", "again");
       await away.hub.regenerateRemote(state.id, "r1");
@@ -820,17 +793,23 @@ void main() {
       ]);
     });
 
-    test("an edit from a device holding nothing is dropped", () async {
+    test("an edit from a device not following the chat is dropped", () async {
       final state = await mirrored();
+      final other = await _Device.create("${tempDir.path}/other");
+      addTearDown(other.hub.dispose);
+      final links = loopbackPair();
+      await pairing(home, other, links.$1, links.$2, psk: generatePsk());
+      // Listed there, never opened.
+      await waitForSync(() => other.hub.mirror(state.id) != null);
 
-      await away.hub.sendForTest(state.id,
+      await other.hub.sendForTest(state.id,
           SyncMessage.regenerate(chatId: state.id, messageId: "r1"));
       await Future<void>.delayed(Duration.zero);
 
       expect(turns.edits, isEmpty);
     });
 
-    test("the mirror's repository writes land at home, with no lock, and wait "
+    test("the mirror's repository writes land at home, and wait "
         "for the echo", () async {
       final state = await mirrored();
 
@@ -890,47 +869,180 @@ void main() {
       expect((await home.store.loadMeta(state.id)).model, isNull);
     });
 
-    test("a prompt from a device holding nothing is dropped", () async {
-      final state = await mirrored();
+    test("a paired device's projects are named in its listing", () async {
+      await home.repo.createProject("work");
+      await mirrored();
 
-      // Past the local guard, which is about not shouting into the void
-      // rather than about permission: the home device is what refuses. The
-      // frame was enqueued by the send already; one drain delivers and
-      // handles it.
-      await away.hub.sendForTest(
-          state.id, SyncMessage.promptSend(chatId: state.id, text: "hi"));
-      await Future<void>.delayed(Duration.zero);
-
-      expect(turns.prompts, isEmpty);
+      expect(away.hub.deviceProjects.value[home.identity.id], ["work"]);
     });
 
-    test("releasing hands it back", () async {
-      final state = await mirrored();
-      await away.hub.requestControl(state.id);
-      await waitForSync(() => away.hub.holdsControl(state.id));
+    test("a project made or deleted there is listed here, and waited on",
+        () async {
+      await mirrored();
 
-      await away.hub.releaseControl(state.id);
-      await waitForSync(() => home.hub.heldBy(state.id) == null);
+      expect(
+          await away.hub.createRemoteProject(home.identity.id, "notes",
+              settings: ProjectSettings(description: "jottings")),
+          isTrue);
+      expect(await home.repo.listProjects(), contains("notes"));
+      expect(turns.projects["notes"]!.description, "jottings");
+      expect(away.hub.deviceProjects.value[home.identity.id], contains("notes"));
+      // Refused rather than left to time out.
+      expect(await away.hub.createRemoteProject(home.identity.id, "notes"), isFalse);
 
+      expect(await away.hub.deleteRemoteProject(home.identity.id, "notes"), isTrue);
+      expect(await home.repo.listProjects(), isNot(contains("notes")));
+      expect(await away.hub.deleteRemoteProject(home.identity.id, "notes"), isFalse);
+      expect(away.hub.deviceProjects.value[home.identity.id],
+          isNot(contains("notes")));
+    });
+
+    test("a project is read while open, written there, and forgotten after",
+        () async {
+      await home.repo.createProject("work");
+      await mirrored();
+      final ProjectRef work = (device: home.identity.id, project: "work");
+
+      away.hub.followProject(work);
+      await waitForSync(() => away.hub.remoteProject(work) != null);
+      expect(home.hub.servedProjects.value, {"work"});
+      expect(away.hub.remoteProject(work)!.settings.omada, isFalse);
+
+      await away.hub.writeRemoteProject(work, ProjectSettings(omada: true));
+      expect(turns.projects["work"]!.omada, isTrue);
+      expect(away.hub.remoteProject(work)!.settings.omada, isTrue);
+
+      // A change at home reaches whoever has it open.
+      turns.projects["work"] = ProjectSettings(description: "at home");
+      home.hub.publishProject("work");
       await waitForSync(
-          () => away.hub.mirror(state.id)!.controlHolder == null);
-      expect(home.hub.drivenChats.value, isEmpty);
+          () => away.hub.remoteProject(work)!.settings.description == "at home");
+
+      away.hub.unfollowProject(work);
+      expect(away.hub.remoteProject(work), isNull);
+      await waitForSync(() => home.hub.servedProjects.value.isEmpty);
     });
 
-    test("a lock does not outlive the connection that took it", () async {
-      final state = _seedChat(home);
-      final links = loopbackPair();
+    test("a project's skills and agents come with it, past one message",
+        () async {
+      await home.repo.createProject("work");
+      await mirrored();
+      final ProjectRef work = (device: home.identity.id, project: "work");
+      turns.libraries["work"] = PromptLibrary([
+        for (var i = 0; i < 80; i++)
+          PromptDocument(
+              kind: i.isEven ? CompletionKind.skill : CompletionKind.agent,
+              name: "entry-$i",
+              frontmatter: {"description": "d" * 1000},
+              body: "b" * 1000),
+      ]);
+
+      away.hub.followProject(work);
+      await waitForSync(
+          () => away.hub.remoteProject(work)?.library.all.length == 80);
+      final skill = away.hub.remoteProject(work)!.library.find(CompletionKind.skill, "entry-0")!;
+      expect(skill.description, "d" * 1000);
+      expect(skill.body, "b" * 1000);
+
+      // A settings write leaves the library as it was.
+      await away.hub.writeRemoteProject(work, ProjectSettings(omada: true));
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      expect(away.hub.remoteProject(work)!.library.all.length, 80);
+
+      // A change at home reaches whoever has it open.
+      turns.libraries["work"] = PromptLibrary.empty;
+      home.hub.publishPrompts("work");
+      await waitForSync(() => away.hub.remoteProject(work)!.library.all.isEmpty);
+    });
+
+    test("a project's memories are read and changed there", () async {
+      await home.repo.createProject("work");
+      await mirrored();
+      final memories = RemoteMemories(away.hub, (device: home.identity.id, project: "work"));
+      final store = turns.memories("work");
+
+      await memories.add("the build uses pnpm");
+      final [added] = await store.entries();
+      expect(added.text, "the build uses pnpm");
+      await memories.pin(added.id);
+      expect((await memories.entries()).single.pinned, isTrue);
+      expect((await memories.search("pnpm")).single.id, added.id);
+      await memories.delete(added.id);
+      expect(await store.entries(), isEmpty);
+    });
+
+    test("a project not on the home device is neither read nor written",
+        () async {
+      await mirrored();
+      final ProjectRef nowhere = (device: home.identity.id, project: "nowhere");
+
+      away.hub.followProject(nowhere);
+      expect(await away.hub.writeRemoteProject(nowhere, ProjectSettings()), isFalse);
+
+      expect(away.hub.remoteProject(nowhere), isNull);
+      expect(turns.projects, isEmpty);
+    });
+
+    test("an open project stays readable while its device is away, and is "
+        "read again when it is back", () async {
+      _seedChat(home);
+      var links = loopbackPair();
       await pair(links.$1, links.$2);
-      away.hub.followChat(state.id);
-      await waitForSync(() => away.hub.mirror(state.id) != null);
-      await away.hub.requestControl(state.id);
-      await waitForSync(() => away.hub.holdsControl(state.id));
+      final ProjectRef base = (device: home.identity.id, project: null);
+      away.hub.followProject(base);
+      await waitForSync(() => away.hub.remoteProject(base) != null);
 
       await links.$1.close();
       await links.$2.close();
+      await waitForSync(() => !away.hub.isDeviceOnline(home.identity.id));
+      expect(away.hub.remoteProject(base), isNotNull);
 
-      await waitForSync(() => home.hub.heldBy(state.id) == null);
-      expect(home.hub.drivenChats.value, isEmpty);
+      turns.projects[null] = ProjectSettings(description: "while away");
+      links = loopbackPair();
+      await pair(links.$1, links.$2,
+          knownToHome: away.identity.id, knownToAway: home.identity.id);
+      await waitForSync(() =>
+          away.hub.remoteProject(base)!.settings.description == "while away");
+    });
+
+    test("a chat started from here is made there and listed before it is "
+        "answered", () async {
+      await home.repo.createProject("work");
+      await mirrored();
+
+      final id = (await away.hub
+              .startRemoteChat((device: home.identity.id, project: "work"), "hello"))
+          ?.chatId;
+
+      expect(id, isNotNull);
+      expect((await home.store.loadState(id!))!.project, "work");
+      expect(away.hub.mirror(id), isNotNull);
+      expect(turns.prompts.last, (id, "hello"));
+    });
+
+    test("a chat asked for in a project that is not there is not made",
+        () async {
+      await mirrored();
+
+      final reply = await away.hub
+          .startRemoteChat((device: home.identity.id, project: "nowhere"), "hi");
+
+      expect(reply!.ok, isFalse);
+      expect(reply.chatId, isNull);
+      expect(turns.prompts, isEmpty);
+    });
+
+    test("a prompt from a device not following the chat is dropped", () async {
+      final state = await mirrored();
+      final other = await _Device.create("${tempDir.path}/other");
+      addTearDown(other.hub.dispose);
+      final links = loopbackPair();
+      await pairing(home, other, links.$1, links.$2, psk: generatePsk());
+      // Listed there, never opened.
+      await waitForSync(() => other.hub.mirror(state.id) != null);
+
+      expect((await other.hub.sendRemotePrompt(state.id, "hi"))!.ok, isFalse);
+      expect(turns.prompts, isEmpty);
     });
 
     test("the turn the home device is running reaches the mirror", () async {
@@ -991,10 +1103,13 @@ void main() {
 /// What the real one does with these is `RemoteTurnDriver`'s; what is being
 /// checked here is that they arrive at all, and only from the holder.
 class _Turns implements RemoteTurns {
-  _Turns(this.repo);
+  _Turns(this.repo, this.config);
 
   /// The writes are the repository's, run for real so their echo comes back.
   final ChatRepository repo;
+  final AppConfig config;
+  final attached = <List<Attachment>>[];
+  final libraries = <String?, PromptLibrary>{};
   final edits = <(String, String, String, Object?)>[];
   final prompts = <(String, String)>[];
   final resumed = <String>[];
@@ -1003,7 +1118,10 @@ class _Turns implements RemoteTurns {
   final answered = <(String, String, List<String?>)>[];
 
   @override
-  void prompt(String chatId, String text) => prompts.add((chatId, text));
+  void prompt(String chatId, String text, {List<Attachment> attachments = const []}) {
+    prompts.add((chatId, text));
+    attached.add(attachments);
+  }
 
   @override
   void resume(String chatId) => resumed.add(chatId);
@@ -1047,6 +1165,41 @@ class _Turns implements RemoteTurns {
 
   @override
   Future<void> delete(String chatId) => repo.deleteChat(chatId);
+
+  /// Set once the hub exists, so a write is published the way the real
+  /// one's listener does.
+  SyncHub? hub;
+  final projects = <String?, ProjectSettings>{};
+
+  @override
+  AppSettings appSettings = AppSettings();
+
+  @override
+  ProjectSettings projectSettings(String? project) =>
+      projects[project] ?? ProjectSettings();
+
+  @override
+  Future<void> writeProject(String? project, ProjectSettings settings) async {
+    projects[project] = settings;
+    hub?.publishProject(project);
+  }
+
+  @override
+  Future<String> startChat(String? project) async =>
+      (await repo.createChat(project: project)).state.id;
+
+  @override
+  Future<void> createProject(String name) => repo.createProject(name);
+
+  @override
+  Future<void> deleteProject(String name) => repo.deleteProject(name);
+
+  @override
+  PromptLibrary library(String? project) => libraries[project] ?? PromptLibrary.empty;
+
+  @override
+  Memories memories(String? project) =>
+      MemoryStore(config.fs, config.memoryDir(project: project));
 }
 
 class _Device {

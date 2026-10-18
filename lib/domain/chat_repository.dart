@@ -81,6 +81,12 @@ class Moved extends RepoEvent {
   final String? project;
 }
 
+/// A project made or deleted. The chats a deletion took with it are in the
+/// list this sends a mirror again, not a [Deleted] each.
+class ProjectsChanged extends RepoEvent {
+  const ProjectsChanged();
+}
+
 /// The UI's door to storage and the agent. Resolves which model a chat runs
 /// on, and owns which thread of a conversation is being read. The turn itself
 /// is accumulated and saved by `ChatController` as events arrive.
@@ -156,11 +162,12 @@ class ChatRepository {
 
   /// A name the user may create: [isProjectName] is the gate, and the app's
   /// own projects — the default's and the built-ins' — are not among them.
-  Future<void> createProject(String name) {
+  Future<void> createProject(String name) async {
     if (!isProjectName(name)) {
       throw ArgumentError.value(name, "name", "not a project name");
     }
-    return _store.createProject(name);
+    await _store.createProject(name);
+    _changes.add(const ProjectsChanged());
   }
 
   /// The chats go with it, so their sessions are dropped the way deleting one
@@ -174,6 +181,7 @@ class ChatRepository {
       if (chat.project == name) await _backend.disposeChat(chat.id);
     }
     await _store.deleteProject(name);
+    _changes.add(const ProjectsChanged());
   }
 
   /// File a chat under another project. Its own workspace travels with it; the

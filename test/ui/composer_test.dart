@@ -244,6 +244,26 @@ void main() {
     expect(menuItems(tester), ["/init", "/revert", "/review"]);
   });
 
+  // A paired device's library is anybody's: a long name and hint are cut
+  // rather than run the row past the menu's edge.
+  testWidgets("a long entry fits its row", (tester) async {
+    app.dispose();
+    app = TestApp.create(library: PromptLibrary([
+      PromptDocument(
+        kind: CompletionKind.skill,
+        name: "a-very-long-skill-name-that-goes-on-and-on-past-any-menu",
+        frontmatter: {"description": "d" * 200},
+        metadata: {"argument-hint": "<an argument hint just as long as the name>"},
+        body: "",
+      ),
+    ]));
+    await pump(tester);
+    await type(tester, "/");
+
+    expect(tester.takeException(), isNull);
+    expect(menuItems(tester), hasLength(1));
+  });
+
   testWidgets("an empty library opens no menu", (tester) async {
     app.dispose();
     app = TestApp.create(library: PromptLibrary.empty);

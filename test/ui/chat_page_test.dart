@@ -6,11 +6,13 @@ import "package:flutter_test/flutter_test.dart";
 
 import "package:agent_chat/data/sync/sync_hub.dart";
 import "package:agent_chat/domain/agent_backend.dart";
+import "package:agent_chat/domain/app_settings.dart";
 import "package:agent_chat/domain/builtin_project.dart";
 import "package:agent_chat/domain/chat_log.dart";
 import "package:agent_chat/domain/chat_meta.dart";
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/domain/permission.dart";
+import "package:agent_chat/domain/project_settings.dart";
 import "package:agent_chat/domain/project.dart";
 import "package:agent_chat/domain/prompt_library.dart";
 import "package:agent_chat/providers.dart";
@@ -19,9 +21,10 @@ import "package:agent_chat/ui/widgets/agent_picture.dart" show AgentPictureImage
 import "package:agent_chat/ui/chat/chat_controller.dart";
 import "package:agent_chat/ui/chat/chat_page.dart";
 import "package:agent_chat/ui/chat/widgets/composer.dart";
+import "package:agent_chat/ui/chat/widgets/view_only_bar.dart";
 import "package:agent_chat/ui/chat/widgets/message_bubble.dart";
 import "package:agent_chat/ui/chat/widgets/needs_setup_bar.dart";
-import "package:agent_chat/ui/chat/widgets/synced_device_cards.dart";
+import "package:agent_chat/ui/chat/widgets/paired_project_badges.dart";
 import "package:agent_chat/ui/sidebar/sidebar.dart";
 import "package:agent_chat/ui/theme.dart";
 
@@ -123,17 +126,63 @@ void main() {
       expect(find.text("hello"), findsOneWidget);
     });
 
-    // A paired device's list is the one place nothing selected is not a new
-    // chat: making one is this device's and would take the sidebar home.
-    testWidgets("reading a paired device makes no chat", (tester) async {
+    // A paired device's project is a new chat there: the composer and that
+    // device's library, and none of what names this device's own models.
+    testWidgets("a paired device's project offers a chat there", (tester) async {
+      app.dispose();
+      app = TestApp.create(remotes: [
+        RemoteChatEntry(
+          chatId: "r1",
+          deviceId: "phone",
+          deviceName: "Phone",
+          state: ChatState(
+              id: "r1",
+              title: "On the phone",
+              createdAt: DateTime.utc(2026, 1, 1),
+              updatedAt: DateTime.utc(2026, 1, 1)),
+          online: true,
+        ),
+      ], remoteProjects: {
+        (device: "phone", project: null): RemoteProject(
+            ProjectSettings(),
+            AppSettings(),
+            PromptLibrary([
+              PromptDocument(
+                  kind: CompletionKind.skill,
+                  name: "deploy",
+                  frontmatter: const {},
+                  body: ""),
+            ])),
+      });
       app.container
-          .read(selectedRemoteProvider.notifier)
-          .select((deviceId: "phone", project: null));
+          .read(selectedProjectProvider.notifier)
+          .select((device: "phone", project: null));
 
       await app.pump(tester, const ChatPage(withDrawer: true));
 
-      expect(find.text("Pick a chat to follow."), findsOneWidget);
+      expect(find.byType(Composer), findsOneWidget);
+      expect(find.byTooltip("Chat settings"), findsNothing);
+      // This device's badges stay, none ticked, as the way back.
+      expect(find.widgetWithText(ChoiceChip, anonProjectLabel), findsWidgets);
+      expect(
+          tester
+              .widgetList<ChoiceChip>(find.byType(ChoiceChip))
+              .where((chip) => chip.selected),
+          hasLength(1));
+      expect(find.widgetWithText(ActionChip, "/deploy"), findsOneWidget);
       expect(app.container.read(selectedChatIdProvider), isNull);
+    });
+
+    testWidgets("with that device away there is nothing to send to",
+        (tester) async {
+      app.container
+          .read(selectedProjectProvider.notifier)
+          .select((device: "phone", project: null));
+
+      await app.pump(tester, const ChatPage(withDrawer: true));
+
+      expect(find.byType(Composer), findsNothing);
+      expect(find.byType(ViewOnlyBar), findsOneWidget);
     });
 
     Future<void> openWithProject(WidgetTester tester) async {
@@ -183,7 +232,7 @@ void main() {
 
       await pick(tester, anonProjectLabel);
 
-      expect(app.container.read(selectedProjectProvider), "anonymous");
+      expect(app.container.read(selectedProjectProvider).project, "anonymous");
 
       await sendMessage(tester, "hello");
 
@@ -375,11 +424,11 @@ void main() {
 
       await pick(tester, "work");
       expect(selectedOf(tester, "work"), isTrue);
-      expect(app.container.read(selectedProjectProvider), "work");
+      expect(app.container.read(selectedProjectProvider).project, "work");
 
       await pick(tester, "work");
       expect(selectedOf(tester, "work"), isFalse);
-      expect(app.container.read(selectedProjectProvider), isNull);
+      expect(app.container.read(selectedProjectProvider).project, isNull);
 
       await pick(tester, "work");
       await sendMessage(tester, "hello");
@@ -885,7 +934,7 @@ void main() {
     expect(revealed(tester).where((o) => o == 1), isEmpty);
   });
 
-  group("the paired devices' cards", () {
+  group("the paired devices' badges", () {
     // What the welcome of a paired device named, as the hub would hold it.
     RemoteChatEntry mirrorOf(
       String deviceId,
@@ -915,34 +964,31 @@ void main() {
       return openNew(tester);
     }
 
-    // The badges a device's card holds, as against the page's own `/`-`@`
-    // chips, which are ActionChips too.
-    Finder cardChips() => find.descendant(
-        of: find.byType(SyncedDeviceCards), matching: find.byType(ActionChip));
+    // A device's badges, as against this device's own and the page's
+    // `/`-`@` chips.
+    Finder deviceChip(String label) => find.descendant(
+        of: find.byType(PairedProjectBadges),
+        matching: find.widgetWithText(ChoiceChip, label));
 
-    testWidgets("the new-chat screen draws one card per paired device",
+    List<String> lines(WidgetTester tester) => [
+          for (final line in tester.widgetList<ConversationSeparator>(
+              find.byType(ConversationSeparator)))
+            line.text,
+        ];
+
+    testWidgets("each paired device is a line naming it over its projects",
         (tester) async {
-      // Seeded so arrival order differs from name order: the cards are
-      // device-name sorted, so what lands first is not what draws first.
+      // Seeded so arrival order differs from name order.
       await openEmpty(tester, [
-        mirrorOf("d2", "Phone", makeState("r3")),
+        mirrorOf("d2", "Phone", makeState("r3"), online: false),
         mirrorOf("d1", "Desktop", makeState("r1")),
         mirrorOf("d1", "Desktop", makeState("r2", project: "work")),
       ]);
 
-      expect(find.byType(SyncedDeviceCards), findsOneWidget);
-      expect(find.text("Desktop"), findsOneWidget);
-      expect(find.text("Phone"), findsOneWidget);
-
-      // The projects are the folded badges: unfolded, each card names the
-      // projects its mirrors sit in and nothing else about them.
-      await tester.tap(find.text("Desktop"));
-      await tester.tap(find.text("Phone"));
-      await tester.pumpAndSettle();
-
-      expect(cardChips(), findsNWidgets(3));
-      expect(find.text("Default"), findsNWidgets(2));
-      expect(find.text("work"), findsOneWidget);
+      expect(lines(tester), ["Desktop", "Phone · offline"]);
+      expect(deviceChip("work"), findsOneWidget);
+      // A device's default is a project there, not nothing selected.
+      expect(deviceChip("Default"), findsNWidgets(2));
     });
 
     testWidgets("a badge is styled by Omada on the device, not here",
@@ -952,8 +998,6 @@ void main() {
             omada: true),
         mirrorOf("d1", "Desktop", makeState("r2", project: "play")),
       ]);
-      await tester.tap(find.text("Desktop"));
-      await tester.pumpAndSettle();
 
       FontStyle? style(String label) =>
           tester.widget<Text>(find.text(label)).style?.fontStyle;
@@ -965,9 +1009,7 @@ void main() {
         (tester) async {
       // The second caller of `_EmptyChat`: an existing chat, mid-turn at
       // worst. A list of other devices under its question would say nothing
-      // true about it, which is why the cards are the new-chat screen's own.
-      // The mirrors are there, so what this asserts is the screen asking for
-      // them, not their absence.
+      // true about it, which is why the badges are the new-chat screen's own.
       app.dispose();
       app = TestApp.create(remotes: [
         mirrorOf("d1", "Desktop", makeState("r1")),
@@ -980,53 +1022,43 @@ void main() {
       await pumpUntil(tester, find.byType(Composer));
       await settleIo(tester);
 
-      expect(find.byType(SyncedDeviceCards), findsNothing);
+      expect(find.byType(PairedProjectBadges), findsNothing);
       expect(find.text("Desktop"), findsNothing);
     });
 
-    testWidgets("a device with nothing mirrored has no card", (tester) async {
+    testWidgets("with no device paired there is no line", (tester) async {
       await openEmpty(tester, []);
 
-      // The widget is mounted and draws nothing: what this asserts is that
-      // no card is drawn, not that the widget left the tree.
-      expect(find.byType(Card), findsNothing);
+      expect(find.byType(ConversationSeparator), findsNothing);
     });
 
-    testWidgets("the cards start collapsed and the button folds each device",
-        (tester) async {
-      await openEmpty(tester, [
-        mirrorOf("d1", "Desktop", makeState("r1")),
-        mirrorOf("d1", "Desktop", makeState("r2", project: "work")),
-      ]);
-
-      expect(find.text("work"), findsNothing);
-      expect(cardChips(), findsNothing);
-      await tester.tap(find.text("Desktop"));
-      await tester.pumpAndSettle();
-
-      expect(find.text("work"), findsOneWidget);
-      expect(cardChips(), findsNWidgets(2));
-      await tester.tap(find.text("Desktop"));
-      await tester.pumpAndSettle();
-
-      expect(find.text("work"), findsNothing);
-      expect(cardChips(), findsNothing);
-    });
-
-    testWidgets("a project badge opens that device's project in the sidebar",
-        (tester) async {
+    testWidgets("ticking a device's project picks it, and this device's badges "
+        "stay to go back with", (tester) async {
       await openEmpty(tester, [
         mirrorOf("d1", "Desktop", makeState("r1", project: "work")),
       ]);
-      await tester.tap(find.text("Desktop"));
+
+      await tester.tap(deviceChip("work"));
       await tester.pumpAndSettle();
-
-      await tester.tap(find.text("work"));
-      await tester.pump();
-
-      expect(app.container.read(selectedRemoteProvider),
-          (deviceId: "d1", project: "work"));
+      expect(app.container.read(selectedProjectProvider),
+          (device: "d1", project: "work"));
+      expect(tester.widget<ChoiceChip>(deviceChip("work")).selected, isTrue);
       expect(app.container.read(selectedChatIdProvider), isNull);
+
+      // Unticked, it is this device's default again.
+      await tester.tap(deviceChip("work"));
+      await tester.pumpAndSettle();
+      expect(app.container.read(selectedProjectProvider), localProject(null));
+
+      // And from a device's project, this device's own badge brings it back.
+      await tester.tap(deviceChip("work"));
+      await tester.pumpAndSettle();
+      final local = find.widgetWithText(ChoiceChip, anonProjectLabel).first;
+      expect(tester.widget<ChoiceChip>(local).selected, isFalse);
+      await tester.tap(local);
+      await tester.pumpAndSettle();
+      expect(app.container.read(selectedProjectProvider).device, isNull);
+      expect(tester.widget<ChoiceChip>(deviceChip("work")).selected, isFalse);
     });
   });
 

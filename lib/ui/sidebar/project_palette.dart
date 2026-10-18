@@ -7,6 +7,7 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 import "../../core/log.dart";
 import "../../domain/models.dart";
 import "../../domain/project.dart";
+import "../../domain/project_settings.dart";
 import "../../providers.dart";
 import "../widgets/nav_drawer.dart";
 import "chat_groups.dart";
@@ -53,8 +54,22 @@ const remoteGlyph = Icons.devices_outlined;
 /// which is the default question rather than none at all.
 typedef _NewProjectAnswer = ({String name, String description, bool omada});
 
-PaletteAction _createProject(_NewProjectAnswer answer) =>
+/// Made on the device the sidebar is showing, which may be a paired one.
+PaletteAction _createProject(_NewProjectAnswer answer, String? device) =>
     (context, ref) async {
+      if (device != null) {
+        final description = answer.description.trim();
+        if (!await ref.read(syncHubProvider).createRemoteProject(device, answer.name,
+            settings: answer.omada || description.isNotEmpty
+                ? ProjectSettings(
+                    omada: answer.omada,
+                    description: description.isEmpty ? null : description)
+                : null)) {
+          throw StateError("${answer.name} was not made on $device");
+        }
+        selectProject(ref, (device: device, project: answer.name));
+        return;
+      }
       await ref.read(chatRepositoryProvider).createProject(answer.name);
       final settings = ref.read(projectSettingsProvider(answer.name).notifier);
       if (answer.omada) await settings.setOmada(true);
@@ -62,7 +77,7 @@ PaletteAction _createProject(_NewProjectAnswer answer) =>
         await settings.setDescription(answer.description.trim());
       }
       ref.invalidate(projectListProvider);
-      selectProject(ref, answer.name);
+      selectProject(ref, localProject(answer.name));
     };
 
 const _listPage = "list";
@@ -178,7 +193,13 @@ class _ProjectPaletteState extends ConsumerState<ProjectPalette> {
                   key: const ValueKey(_newPage),
                   omadaByDefault: ref.watch(appSettingsProvider).omadaByDefault,
                   onBack: () => setState(() => _creating = false),
-                  onCreate: (answer) => _pick(_createProject(answer)),
+                  // Made before the palette goes, so the page can say it is
+                  // waiting on a paired device.
+                  onCreate: (answer) async {
+                    await _createProject(
+                        answer, ref.read(selectedProjectProvider).device)(context, ref);
+                    if (context.mounted) Navigator.of(context).pop();
+                  },
                 )
               : KeyedSubtree(key: const ValueKey(_listPage), child: _list(context)),
         ),
@@ -187,14 +208,14 @@ class _ProjectPaletteState extends ConsumerState<ProjectPalette> {
   }
 
   Widget _list(BuildContext context) {
-    final project = ref.watch(selectedProjectProvider);
-    final remote = ref.watch(selectedRemoteProvider);
+    final selected = ref.watch(selectedProjectProvider);
     final selectedChat = ref.watch(selectedChatIdProvider);
     final named = ref.watch(projectListProvider).value ?? const <String>[];
     final chats = (ref.watch(chatListProvider).value ?? const <ChatState>[])
         .where((c) => !c.isExpired())
         .toList();
-    final remotes = remoteEntries(ref.watch(remoteChatsProvider));
+    final remotes = remoteEntries(ref.watch(remoteChatsProvider),
+        ref.watch(deviceProjectsProvider), ref.watch(syncPeersProvider));
     final running = ref.watch(agentBackendProvider).runningTurns;
 
     return ValueListenableBuilder<Set<String>>(
@@ -210,26 +231,26 @@ class _ProjectPaletteState extends ConsumerState<ProjectPalette> {
         _Choice local(String? p) => _Choice(
               build: (active) => _Row(
                 active: active,
-                current: remote == null && p == project,
+                current: selected == localProject(p),
                 running: busy.contains(p),
                 icon: projectGlyph(p),
                 label: projectLabel(p),
                 omada: ref.watch(omadaOnProvider(p)),
                 trailing: _Count(counts[p] ?? 0),
               ),
-              action: (_, ref) => selectProject(ref, p),
+              action: (_, ref) => selectProject(ref, localProject(p)),
             );
         _Choice mirrored(RemoteEntry e) => _Choice(
               build: (active) => _Row(
                 active: active,
-                current: e.scope == remote,
+                current: e.scope == selected,
                 running: false,
                 icon: remoteGlyph,
                 label: e.label,
                 omada: e.omada,
                 trailing: _Count(e.count),
               ),
-              action: (_, ref) => selectRemote(ref, e.scope),
+              action: (_, ref) => selectProject(ref, e.scope),
             );
 
         final needle = searchNeedle(_query);
@@ -241,20 +262,20 @@ class _ProjectPaletteState extends ConsumerState<ProjectPalette> {
           final mine = every.where(isUserProject);
           var index = 0;
           for (final p in builtIn) {
-            if (remote == null && p == project) current = index;
+            if (selected == localProject(p)) current = index;
             items.add(local(p));
             index++;
           }
           items.add(const _Rule());
           for (final p in mine) {
-            if (remote == null && p == project) current = index;
+            if (selected == localProject(p)) current = index;
             items.add(local(p));
             index++;
           }
           if (remotes.isNotEmpty) {
             items.add(const _Heading("Other devices"));
             for (final e in remotes) {
-              if (e.scope == remote) current = index;
+              if (e.scope == selected) current = index;
               items.add(mirrored(e));
               index++;
             }
@@ -286,7 +307,7 @@ class _ProjectPaletteState extends ConsumerState<ProjectPalette> {
                 // Into its project first: the sidebar lists one project, and
                 // a chat it does not list would be open with nothing saying so.
                 action: (context, ref) {
-                  selectProject(ref, chat.project);
+                  selectProject(ref, localProject(chat.project));
                   openChat(context, ref, chat.id);
                 },
               ));
@@ -531,7 +552,7 @@ class _NewProject extends StatefulWidget {
 
   final bool omadaByDefault;
   final VoidCallback onBack;
-  final ValueChanged<_NewProjectAnswer> onCreate;
+  final Future<void> Function(_NewProjectAnswer) onCreate;
 
   @override
   State<_NewProject> createState() => _NewProjectState();
@@ -558,11 +579,22 @@ class _NewProjectState extends State<_NewProject> {
     super.dispose();
   }
 
-  void _submit() {
+  bool _making = false;
+
+  Future<void> _submit() async {
     final dir = _dir;
-    if (dir == null) return;
-    widget.onCreate(
-        (name: dir, description: _description.text, omada: _omada));
+    if (dir == null || _making) return;
+    setState(() => _making = true);
+    try {
+      await widget.onCreate(
+          (name: dir, description: _description.text, omada: _omada));
+    } catch (e) {
+      logFailure("palette", "could not create $dir", e);
+      if (!mounted) return;
+      setState(() => _making = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("The project could not be created.")));
+    }
   }
 
   @override
@@ -638,8 +670,11 @@ class _NewProjectState extends State<_NewProject> {
           child: Align(
             alignment: Alignment.centerRight,
             child: FilledButton(
-              onPressed: dir == null ? null : _submit,
-              child: const Text("Create"),
+              onPressed: dir == null || _making ? null : _submit,
+              child: _making
+                  ? const SizedBox.square(
+                      dimension: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                  : const Text("Create"),
             ),
           ),
         ),

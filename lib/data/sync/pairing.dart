@@ -772,8 +772,9 @@ class SyncPairing {
       live.handle = (message) => onMessage(live, message);
       live.pump = channel.jsonIncoming.listen(
         (json) {
-          // The hello is not a [SyncMessage]: it is the version check either
-          // side runs before agreeing to speak the protocol at all.
+          // The hello is not a [SyncMessage]: it is the name and dial-back
+          // address either side sends before speaking the protocol at all.
+          // The version was checked by the handshake.
           if (!hello.isCompleted) {
             if (json["t"] == "hello") hello.complete(json);
             return;
@@ -791,6 +792,7 @@ class SyncPairing {
         // this side waits out the timeout below for an answer that can no
         // longer come.
         onError: (Object error) {
+          logFailure("sync", "link to $deviceId failed", error);
           if (!hello.isCompleted) hello.completeError(error);
           unawaited(live.close());
         },
@@ -804,7 +806,6 @@ class SyncPairing {
 
       await channel.sendJson({
         "t": "hello",
-        "proto": SyncIdentity.protocolVersion,
         "id": identity.id,
         "name": deviceName,
         // Where this device can be dialled back, if it listens at all. Only
@@ -814,10 +815,6 @@ class SyncPairing {
         "addr": ?await _dialbackAddress(),
       });
       final reply = await hello.future.timeout(const Duration(seconds: 15));
-      if (reply["proto"] != SyncIdentity.protocolVersion) {
-        throw HandshakeException(
-            "the other device runs protocol ${reply["proto"]}");
-      }
 
       var device = peerDevice;
       if (device == null) {

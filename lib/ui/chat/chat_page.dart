@@ -21,14 +21,13 @@ import "../widgets/app_mark.dart";
 import "../widgets/chip_row.dart";
 import "../widgets/completion_field.dart";
 import "../widgets/nav_drawer.dart";
-import "../widgets/nothing.dart";
 import "../widgets/scrolling.dart";
 import "chat_settings_page.dart";
 import "chat_controller.dart";
 import "mirror_controller.dart";
 import "widgets/activity_label.dart" show formatRemaining;
 import "widgets/composer.dart";
-import "widgets/synced_device_cards.dart";
+import "widgets/paired_project_badges.dart";
 import "widgets/message_bubble.dart";
 import "widgets/omada_separator.dart" show ConversationSeparator;
 import "widgets/needs_setup_bar.dart";
@@ -46,15 +45,6 @@ class ChatPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final chatId = ref.watch(selectedChatIdProvider);
     if (chatId != null) return _ChatBody(chatId: chatId, withDrawer: withDrawer);
-    // Reading a paired device's list is the one place nothing selected does not
-    // mean a new chat: making one is this device's, and would take the sidebar
-    // home from whatever it was showing.
-    if (ref.watch(selectedRemoteProvider) != null) {
-      return _Waiting(
-        withDrawer: withDrawer,
-        child: const Nothing("Pick a chat to follow."),
-      );
-    }
     return _NewChat(withDrawer: withDrawer);
   }
 }
@@ -67,8 +57,8 @@ const double _readableWidth = 760;
 /// [_readableWidth] — a phone gets the whole screen, a monitor gets a line it
 /// can read back to the start of. The composer goes inside that width rather
 /// than under it, or the conversation sits over a field twice its own width.
-/// Both pages with something to type in are this. [banner] floats over the top
-/// of it.
+/// Both pages with something to type in are this. [banner] is a full-width row
+/// above it, under the title bar, and stays while the conversation scrolls.
 class _ReadableColumn extends StatelessWidget {
   const _ReadableColumn({required this.child, required this.bottom, this.banner});
 
@@ -77,17 +67,18 @@ class _ReadableColumn extends StatelessWidget {
   final Widget? banner;
 
   @override
-  Widget build(BuildContext context) => Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: _readableWidth),
-          child: Stack(
-            children: [
-              Column(children: [Expanded(child: child), bottom]),
-              if (banner != null)
-                Positioned(left: 0, right: 0, top: 0, child: banner!),
-            ],
+  Widget build(BuildContext context) => Column(
+        children: [
+          ?banner,
+          Expanded(
+            child: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: _readableWidth),
+                child: Column(children: [Expanded(child: child), bottom]),
+              ),
+            ),
           ),
-        ),
+        ],
       );
 }
 
@@ -113,6 +104,9 @@ class _NewChatState extends ConsumerState<_NewChat> {
   /// including one started from somewhere else entirely.
   ChatMeta _meta = ChatMeta();
 
+  /// A chat being made on a paired device, until it has answered.
+  bool _starting = false;
+
   @override
   void dispose() {
     _controller.dispose();
@@ -124,7 +118,7 @@ class _NewChatState extends ConsumerState<_NewChat> {
       MaterialPageRoute(
         builder: (_) => NewChatSettingsPage(
           initial: _meta,
-          project: ref.read(selectedProjectProvider),
+          project: ref.read(selectedProjectProvider).project,
         ),
       ),
     );
@@ -136,21 +130,39 @@ class _NewChatState extends ConsumerState<_NewChat> {
   /// would take the message with it silently. Put it back instead — the reason
   /// is logged, and this is the only thing left on screen to say so.
   Future<void> _send(String text, List<Attachment> attachments) async {
-    if (await startChatWith(ref, text, attachments: attachments, meta: _meta)) {
-      return;
-    }
+    setState(() => _starting = true);
+    final made =
+        await startChatWith(ref, text, attachments: attachments, meta: _meta);
     if (!mounted) return;
-    _controller.text = text;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text("Could not start a chat.")),
-    );
+    setState(() => _starting = false);
+    if (!made) {
+      _controller.text = text;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Could not start a chat.")),
+      );
+    }
   }
 
   /// The composer, or a "setup required" bar where the project needs setup
   /// and has not been set up yet. The bar replaces the composer entirely,
   /// the way `ViewOnlyBar` does for a mirrored chat.
   Widget _bottomBar() {
-    final project = ref.watch(selectedProjectProvider);
+    final at = ref.watch(selectedProjectProvider);
+    final project = at.project;
+    if (_starting) return const SizedBox.shrink();
+    // A paired device's project: its setup and its voice are that device's.
+    if (at.device != null) {
+      if (ref.watch(projectFrozenProvider(at))) return const ViewOnlyBar();
+      return Composer(
+        controller: _controller,
+        agentSpeaking: false,
+        onSend: _send,
+        onAbort: () {},
+        project: project,
+        device: at.device,
+        workspace: null,
+      );
+    }
     if (ref.watch(setupCompleteProvider(project))) {
       return Composer(
         controller: _controller,
@@ -168,24 +180,32 @@ class _NewChatState extends ConsumerState<_NewChat> {
   }
 
   @override
-  Widget build(BuildContext context) => Scaffold(
+  Widget build(BuildContext context) {
+    final at = ref.watch(selectedProjectProvider);
+    return Scaffold(
         drawer: widget.withDrawer ? const NavDrawer(child: Sidebar()) : null,
         appBar: AppBar(
           title: const _AppBrand(),
           actions: [
-            IconButton(
-              icon: const Icon(Icons.tune),
-              tooltip: "Chat settings",
-              onPressed: _openSettings,
-            ),
+            // A paired device's chat takes its settings once it is there:
+            // these name this device's models.
+            if (at.device == null)
+              IconButton(
+                icon: const Icon(Icons.tune),
+                tooltip: "Chat settings",
+                onPressed: _openSettings,
+              ),
           ],
         ),
         body: _ReadableColumn(
           bottom: _bottomBar(),
-          child: _EmptyChat(
-            project: ref.watch(selectedProjectProvider),
+          child: _starting
+              ? const Center(child: CircularProgressIndicator())
+              : _EmptyChat(
+            project: at.project,
+            device: at.device,
             controller: _controller,
-            // The paired devices' cards are the new-chat screen's own — a
+            // The paired devices' badges are the new-chat screen's own — a
             // chat that exists with nothing said in it yet is mid-turn at
             // worst, and a list of other devices under its question would
             // say nothing true about it.
@@ -193,6 +213,7 @@ class _NewChatState extends ConsumerState<_NewChat> {
           ),
         ),
       );
+  }
 }
 
 /// The projects a new chat could happen in, as badges, with the one picked out.
@@ -209,7 +230,7 @@ class _NewChatState extends ConsumerState<_NewChat> {
 class _ProjectBadges extends ConsumerWidget {
   const _ProjectBadges({required this.selected, required this.settled});
 
-  final String? selected;
+  final ProjectRef selected;
   final bool settled;
 
   @override
@@ -231,8 +252,8 @@ class _ProjectBadges extends ConsumerWidget {
                 curve: Curves.easeOut,
                 child: ChoiceChip(
                   label: ProjectChipLabel(project),
-                  selected: project == selected,
-                  onSelected: (on) => selectProject(ref, on ? project : null),
+                  selected: localProject(project) == selected,
+                  onSelected: (on) => selectProject(ref, localProject(on ? project : null)),
                 ),
               ),
             ),
@@ -253,8 +274,13 @@ class _EmptyChat extends ConsumerWidget {
   const _EmptyChat({
     required this.project,
     required this.controller,
+    this.device,
     this.showSyncedCards = false,
   });
+
+  /// The paired device [project] is on, or null for this one. Its question
+  /// and starters are that device's.
+  final String? device;
 
   /// The project this chat is in, or on the new-chat screen the one the next
   /// chat goes to. Either way it is the badge picked out.
@@ -264,18 +290,28 @@ class _EmptyChat extends ConsumerWidget {
   /// where a trigger lands and why it does not ask for the focus.
   final TextEditingController controller;
 
-  /// The paired devices' cards, which only the new-chat screen asks for —
+  /// The paired devices' badges, which only the new-chat screen asks for —
   /// see its own call for why.
   final bool showSyncedCards;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
+    final remote = device != null;
     final starters = [
       for (final kind in CompletionKind.values)
-        for (final option in ref.watch(completionsProvider((project: project, kind: kind))))
+        for (final option in ref.watch(completionsProvider(
+            (project: (device: device, project: project), kind: kind))))
           (kind: kind, option: option),
     ];
+    final question = remote
+        ? emptyChatQuestionFor(project,
+                description: ref
+                    .watch(remoteProjectProvider((device: device, project: project)))
+                    ?.settings
+                    .description) ??
+            ""
+        : ref.watch(emptyChatQuestionProvider(project));
 
     return Center(
       child: SingleChildScrollView(
@@ -289,11 +325,12 @@ class _EmptyChat extends ConsumerWidget {
             // the sweep is handed the empty string and eats its own tail
             // away, rather than the widget leaving the tree and the next
             // question's arrival being a mount instead of a change.
-            _QuestionSweep(
-              text: ref.watch(emptyChatQuestionProvider(project)),
-              style: theme.textTheme.titleMedium,
-            ),
-            _ProjectBadges(selected: project, settled: true),
+            _QuestionSweep(text: question, style: theme.textTheme.titleMedium),
+            // On the new-chat screen this device's badges stay whichever
+            // device is picked, so there is always a way back to them.
+            if (!remote || showSyncedCards)
+              _ProjectBadges(selected: (device: device, project: project), settled: true),
+            if (showSyncedCards) const PairedProjectBadges(),
             const SizedBox(height: 20),
             ChipRow(
               settled: true,
@@ -331,10 +368,6 @@ class _EmptyChat extends ConsumerWidget {
                         ),
                     ],
             ),
-            if (showSyncedCards) ...[
-              const SizedBox(height: 20),
-              const SyncedDeviceCards(),
-            ],
           ],
         ),
       ),
@@ -431,24 +464,19 @@ class _AppBrand extends StatelessWidget {
       );
 }
 
-/// The page with no conversation on it yet — one still being read off disk, or
-/// a paired device's list with nothing picked out of it. Carries the drawer and
-/// bar the real page would. The default child is the spinner, which is what
-/// reading one off disk wants.
+/// The page with no conversation on it yet — one still being read off disk,
+/// or still on its way from a paired device. Carries the drawer and bar the
+/// real page would.
 class _Waiting extends StatelessWidget {
-  const _Waiting({
-    required this.withDrawer,
-    this.child = const CircularProgressIndicator(),
-  });
+  const _Waiting({required this.withDrawer});
 
   final bool withDrawer;
-  final Widget child;
 
   @override
   Widget build(BuildContext context) => Scaffold(
         drawer: withDrawer ? const NavDrawer(child: Sidebar()) : null,
         appBar: withDrawer ? AppBar(title: const _AppBrand()) : null,
-        body: Center(child: child),
+        body: const Center(child: CircularProgressIndicator()),
       );
 }
 
@@ -668,18 +696,12 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
       _checkExpiry(context, chat.state);
     }
 
-    // A chat being typed into from a paired device says so: the prompts
-    // arriving are somebody else's, and nothing else on the page would tell.
-    final drivenBy = ref.watch(drivenChatsProvider)[widget.chatId];
     return _page(
       context,
       chat: chat,
       view: view,
       editing: notifier,
-      details: [
-        if (drivenBy != null)
-          _TitleLine(icon: Icons.edit_outlined, text: "Driven from $drivenBy"),
-      ],
+      details: const [],
       whenEmpty: _EmptyChat(project: chat.state.project, controller: _controller),
       bottom: ref.watch(setupCompleteProvider(chat.state.project))
           ? _turnBar(
@@ -702,55 +724,45 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
 
   /// A mirrored chat's page. Every byte came over the wire and stays in RAM,
   /// and every write goes back to the home device — the repository routes the
-  /// settings there, and the controller the edits. Control decides the
-  /// composer and the editing row; the turn runs on the home device either way.
+  /// settings there, and the controller the turns and edits. Offline, it is a
+  /// snapshot: read, and nothing to type into.
   Widget _mirrored(BuildContext context) {
     final view = ref.watch(mirrorChatControllerProvider(widget.chatId));
     final driver = ref.read(mirrorChatControllerProvider(widget.chatId).notifier);
-    final control = ref.watch(mirrorControlProvider(widget.chatId));
     ref.listen(mirrorChatControllerProvider(widget.chatId), (_, _) => _follow.jumpIfFollowing());
     // One pass over the Remotes list for the two things drawn from it, so the
     // page rebuilds when they change rather than whenever anything does.
-    final (:online, :deviceName) = ref.watch(remoteChatsProvider.select((chats) {
+    final (:online, :deviceName, :deviceId) = ref.watch(remoteChatsProvider.select((chats) {
       for (final entry in chats) {
         if (entry.chatId == widget.chatId) {
-          return (online: entry.online, deviceName: entry.deviceName);
+          return (online: entry.online, deviceName: entry.deviceName, deviceId: entry.deviceId);
         }
       }
-      return (online: false, deviceName: "the home device");
+      return (online: false, deviceName: "the home device", deviceId: null);
     }));
     final chat = view.chat;
     if (chat == null) return _waiting();
     _opening(chat);
 
-    final held = control.held && online;
-    final controls = ref.read(mirrorControlProvider(widget.chatId).notifier);
     return _page(
       context,
       chat: chat,
       view: view,
-      details: [_TitleLine(icon: Icons.devices_other, text: deviceName)],
-      // The conversation is the holder's to change, the way the composer is.
-      editing: held ? driver : null,
+      // The device is the strip's to say.
+      details: const [],
+      editing: online ? driver : null,
       whenEmpty: const Center(child: Text("No messages yet")),
-      banner: !online
-          ? MirrorStrip.offline(deviceName: deviceName)
-          : held
-              ? MirrorStrip.inControl(
-                  deviceName: deviceName, onRelease: controls.release)
-              : null,
-      bottom: held
+      banner: online
+          ? MirrorStrip.remote(deviceName: deviceName)
+          : MirrorStrip.offline(deviceName: deviceName),
+      bottom: online
           ? _turnBar(
               view: view,
               driver: driver,
               project: chat.state.project,
+              device: deviceId,
               workspace: null)
-          : ViewOnlyBar(
-              online: online,
-              asking: control.asking,
-              takenByAnother: control.takenByAnother,
-              onTakeControl: controls.take,
-            ),
+          : const ViewOnlyBar(),
     );
   }
 
@@ -766,7 +778,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
   /// The chat, however it is being read. [editing] is the controller the
   /// message row acts through, and null for a mirror this device does not
   /// hold.
-  /// [banner] floats over the conversation, and [bottom] is whatever answers
+  /// [banner] sits above the conversation, and [bottom] is whatever answers
   /// the turn — a composer, or a bar saying why there is none.
   Widget _page(
     BuildContext context, {
@@ -846,6 +858,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
     required ChatViewState view,
     required TurnDriver driver,
     required String? project,
+    String? device,
     VoidCallback? onVoice,
     String? workspace,
     String? workspaceHome,
@@ -859,10 +872,19 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
             _ => Composer(
                 controller: _controller,
                 agentSpeaking: view.roomPhase == RoomPhase.agentSpeaking,
-                onSend: (text, attachments) =>
-                    driver.send(text, attachments: attachments),
+                onSend: (text, attachments) async {
+                  try {
+                    await driver.send(text, attachments: attachments);
+                  } on Undelivered catch (e) {
+                    if (mounted) {
+                      ScaffoldMessenger.of(context)
+                          .showSnackBar(SnackBar(content: Text(e.message)));
+                    }
+                  }
+                },
                 onAbort: driver.abort,
                 project: project,
+                device: device,
                 onVoice: onVoice,
                 workspace: workspace,
                 workspaceHome: workspaceHome,

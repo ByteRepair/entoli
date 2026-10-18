@@ -31,8 +31,8 @@ named in a cross-reference is findable from this list.
 - `lib/data/builtin/llm/AGENTS.md` — Reaching a provider, Errors, and how long
   the UI waits
 - `lib/data/sync/AGENTS.md` — The threat model, the handshake, the framing
-  layer, three rendezvous transports, the SyncHub, mirroring a chat, control
-  and driving a turn from the other end, what the Sync page can do about a
+  layer, three rendezvous transports, the SyncHub, mirroring a chat, driving a
+  turn from the other end, what the Sync page can do about a
   peer, secrets at rest
 - `lib/data/local/AGENTS.md` — Bundled tools, A whole Linux under proot,
   Running a model on the device

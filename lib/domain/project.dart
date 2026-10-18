@@ -20,6 +20,17 @@ const defaultProjectLabel = "Default";
 /// The default project's directory, and so a name no other project may have.
 const defaultProjectDir = "default";
 
+/// A project and the device it is on: [device] null is this one, else a
+/// paired device's id. `work` on a laptop and `work` on a phone are different
+/// directories that share a name, so this pair is what the UI selects and
+/// reads a project by. A record, for the value equality a selection and a
+/// provider key both want. Paths are built from the name alone, and only for
+/// this device's.
+typedef ProjectRef = ({String? device, String? project});
+
+/// This device's [project].
+ProjectRef localProject(String? project) => (device: null, project: project);
+
 String projectLabel(String? project) =>
     project == null ? defaultProjectLabel : builtinProjectOf(project)?.label ?? project;
 

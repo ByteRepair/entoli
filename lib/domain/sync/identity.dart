@@ -15,7 +15,9 @@ import "../secret_store.dart";
 class SyncIdentity {
   SyncIdentity._(this.keyPair, this.publicKey, this.id);
 
-  static const protocolVersion = 2;
+  /// Bumped by any change a build before it could not read: devices on
+  /// different numbers refuse each other at the handshake and say why.
+  static const protocolVersion = 3;
 
   final SimpleKeyPair keyPair;
   final Uint8List publicKey;

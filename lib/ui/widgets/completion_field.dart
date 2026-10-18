@@ -3,6 +3,7 @@ import "package:flutter/services.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../domain/models.dart";
+import "../../domain/project.dart" show ProjectRef;
 import "../../domain/shell.dart";
 import "../../providers.dart";
 import "text_input.dart";
@@ -129,6 +130,7 @@ class CompletionField extends ConsumerStatefulWidget {
     super.key,
     required this.controller,
     this.project,
+    this.device,
     this.decoration,
     this.style,
     this.minLines,
@@ -147,6 +149,9 @@ class CompletionField extends ConsumerStatefulWidget {
   /// default project, the way it is everywhere a project is named. The
   /// composer passes the chat's own; a trigger editor passes the trigger's.
   final String? project;
+
+  /// The paired device [project] is on, null for this one.
+  final String? device;
   final InputDecoration? decoration;
   final TextStyle? style;
   final int? minLines;
@@ -253,9 +258,13 @@ class CompletionFieldState extends ConsumerState<CompletionField> {
   @override
   Widget build(BuildContext context) {
     final token = _token;
+    final ProjectRef project = (device: widget.device, project: widget.project);
+    // Held while the field is up, so a paired device's menu is there by the
+    // time a `/` is typed.
+    if (widget.device != null) ref.watch(promptLibraryOf(project));
     final options = token == null
         ? const <CompletionOption>[]
-        : ref.watch(completionsProvider((project: widget.project, kind: token.kind)));
+        : ref.watch(completionsProvider((project: project, kind: token.kind)));
     final matches = _matching(options, token?.query ?? "");
 
     final field = Shortcuts(
@@ -349,22 +358,41 @@ class CompletionFieldState extends ConsumerState<CompletionField> {
               : null,
           padding: const EdgeInsets.symmetric(horizontal: 12),
           alignment: Alignment.centerLeft,
-          child: Row(
+          // The name and hint keep their width up to most of the row and are
+          // cut past it; the description has what is left.
+          child: LayoutBuilder(builder: (context, box) => Row(
             children: [
-              Text(
-                "${kind.trigger}${option.name}",
-                style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
-              ),
-              if (option.argumentHint != null) ...[
-                const SizedBox(width: 8),
-                Text(
-                  option.argumentHint!,
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                    fontStyle: FontStyle.italic,
-                  ),
+              ConstrainedBox(
+                constraints: BoxConstraints(maxWidth: box.maxWidth * 0.7),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Flexible(
+                      child: Text(
+                        "${kind.trigger}${option.name}",
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.bodyMedium
+                            ?.copyWith(fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                    if (option.argumentHint != null) ...[
+                      const SizedBox(width: 8),
+                      Flexible(
+                        child: Text(
+                          option.argumentHint!,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: theme.colorScheme.onSurfaceVariant,
+                            fontStyle: FontStyle.italic,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
-              ],
+              ),
               if (option.description != null) ...[
                 const SizedBox(width: 12),
                 Expanded(
@@ -379,7 +407,7 @@ class CompletionFieldState extends ConsumerState<CompletionField> {
                 ),
               ],
             ],
-          ),
+          )),
         ),
       );
     },

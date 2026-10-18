@@ -1,8 +1,11 @@
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
+import "../../core/log.dart";
 import "../../data/builtin/memory/store.dart";
+import "../../domain/project.dart" show ProjectRef;
 import "../../providers.dart";
+import "../chat/widgets/view_only_bar.dart" show MirrorStrip;
 import "../widgets/dialogs.dart";
 import "../widgets/empty_pane.dart";
 
@@ -10,9 +13,9 @@ import "../widgets/empty_pane.dart";
 /// project has no settings page, so its store is a button in the sidebar
 /// rather than a row.
 class MemoryTile extends StatelessWidget {
-  const MemoryTile({super.key, required this.dir, required this.title});
+  const MemoryTile({super.key, required this.project, required this.title});
 
-  final String dir;
+  final ProjectRef project;
   final String title;
 
   @override
@@ -23,7 +26,7 @@ class MemoryTile extends StatelessWidget {
       subtitle: const Text("Browse, add, pin, delete"),
       trailing: const Icon(Icons.chevron_right),
       onTap: () => Navigator.of(context).push(
-        MaterialPageRoute(builder: (_) => MemoryPage(dir: dir, title: title)),
+        MaterialPageRoute(builder: (_) => MemoryPage(project: project, title: title)),
       ),
     );
   }
@@ -44,9 +47,11 @@ String _when(DateTime at) => at.year == DateTime.now().year
 /// A project's memories: what they are, and what can be done with them — add
 /// one, delete one, and a search that matches the way a turn's recall does.
 class MemoryPage extends ConsumerStatefulWidget {
-  const MemoryPage({super.key, required this.dir, required this.title});
+  const MemoryPage({super.key, required this.project, required this.title});
 
-  final String dir;
+  /// Whose store: a paired device's is read there, and frozen while it is
+  /// away.
+  final ProjectRef project;
 
   /// What the app bar says: whose memories these are.
   final String title;
@@ -60,8 +65,7 @@ class _MemoryPageState extends ConsumerState<MemoryPage> {
   List<MemoryEntry>? _entries;
   int _generation = 0;
 
-  MemoryStore get _store =>
-      MemoryStore(ref.read(appConfigProvider).fs, widget.dir);
+  Memories get _store => ref.read(memoriesProvider(widget.project));
 
   @override
   void initState() {
@@ -80,7 +84,14 @@ class _MemoryPageState extends ConsumerState<MemoryPage> {
   /// land under a newer query.
   Future<void> _reload() async {
     final generation = ++_generation;
-    final entries = await _query(_search.text.trim());
+    List<MemoryEntry> entries;
+    try {
+      entries = await _query(_search.text.trim());
+    } catch (e) {
+      // A paired device gone: what was drawn stays.
+      logFailure("memory", "could not read memories", e);
+      entries = _entries ?? const [];
+    }
     if (!mounted || generation != _generation) return;
     setState(() => _entries = entries);
   }
@@ -201,6 +212,11 @@ class _MemoryPageState extends ConsumerState<MemoryPage> {
   Widget build(BuildContext context) {
     final query = _search.text.trim();
     final entries = _entries;
+    final frozen = ref.watch(projectFrozenProvider(widget.project));
+    // Back is read again rather than trusted.
+    ref.listen(projectFrozenProvider(widget.project), (was, now) {
+      if (was == true && !now) _reload();
+    });
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.title),
@@ -208,12 +224,18 @@ class _MemoryPageState extends ConsumerState<MemoryPage> {
           IconButton(
             icon: const Icon(Icons.add),
             tooltip: "Add a memory",
-            onPressed: _add,
+            onPressed: frozen ? null : _add,
           ),
         ],
       ),
-      body: Column(
+      body: AbsorbPointer(
+        absorbing: frozen,
+        child: Column(
         children: [
+          if (widget.project.device != null)
+            if (ref.watch(syncPeersProvider)[widget.project.device]?.name ?? "The device"
+                case final name)
+              frozen ? MirrorStrip.offline(deviceName: name) : MirrorStrip.remote(deviceName: name),
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
             child: TextField(
@@ -284,6 +306,7 @@ class _MemoryPageState extends ConsumerState<MemoryPage> {
                       ),
           ),
         ],
+        ),
       ),
     );
   }

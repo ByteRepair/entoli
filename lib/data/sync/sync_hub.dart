@@ -6,12 +6,16 @@ import "package:flutter/foundation.dart";
 import "package:http/http.dart" as http;
 
 import "../../core/log.dart";
+import "../builtin/memory/store.dart" show Memories, MemoryEntry;
 import "../../domain/app_settings.dart";
+import "../../domain/project.dart" show ProjectRef, everyProject, isProjectName;
+import "../../domain/project_settings.dart";
 import "../../domain/chat_log.dart" show ChatRecord, PartRecord, chatFrom;
 import "../../domain/chat_meta.dart";
 import "../../domain/chat_repository.dart";
 import "../../domain/models.dart"
-    show ArtifactPart, Chat, ChatState, ToolApproval;
+    show ArtifactPart, Attachment, Chat, ChatState, ToolApproval;
+import "../../domain/prompt_library.dart";
 import "../../domain/sync/devices.dart";
 import "../../domain/sync/identity.dart";
 import "../../domain/sync/lan_signaling.dart";
@@ -52,12 +56,6 @@ class MirrorChat {
   ChatMeta meta;
   final List<ChatRecord> records = [];
 
-  /// Which device the home end says holds the chat, or null for nobody.
-  /// Never assumed locally: taking control is the home device's answer, so
-  /// a request that lost a race reads as somebody else's id rather than as
-  /// this device's own.
-  String? controlHolder;
-
   /// The turn, as the home device last reported it. None of this is in the
   /// log — a running turn, a command waiting to be allowed, a question
   /// waiting to be answered — so it arrives as its own message.
@@ -76,7 +74,7 @@ class MirrorChat {
 /// `ChatController`'s and the hub has no way to reach one — the same reason
 /// the repository arrives through [SyncHub.attach].
 abstract interface class RemoteTurns {
-  void prompt(String chatId, String text);
+  void prompt(String chatId, String text, {List<Attachment> attachments});
   void resume(String chatId);
   void abort(String chatId);
   void approve(String chatId, String approvalId, bool allow);
@@ -89,6 +87,56 @@ abstract interface class RemoteTurns {
   Future<void> saveMeta(String chatId, ChatMeta meta);
   Future<void> retitle(String chatId, String title);
   Future<void> delete(String chatId);
+  /// A chat made in [project] for a paired device to say the first thing in.
+  Future<String> startChat(String? project);
+  ProjectSettings projectSettings(String? project);
+  AppSettings get appSettings;
+  Future<void> writeProject(String? project, ProjectSettings settings);
+  Future<void> createProject(String name);
+  Future<void> deleteProject(String name);
+  PromptLibrary library(String? project);
+  Memories memories(String? project);
+}
+
+/// A paired device's project, while something here is showing it: its
+/// settings, the app settings they inherit from, and its skills and agents.
+/// RAM-only like a mirror, and only while followed.
+class RemoteProject {
+  RemoteProject(this.settings, this.app, [PromptLibrary? library])
+      : library = library ?? PromptLibrary.empty;
+
+  final ProjectSettings settings;
+  final AppSettings app;
+  final PromptLibrary library;
+}
+
+/// A paired device's project's memories, asked for on every call and held
+/// nowhere: a call throws where the device is away, so a page keeps what it
+/// last drew.
+class RemoteMemories implements Memories {
+  RemoteMemories(this._hub, this.project);
+
+  final SyncHub _hub;
+  final ProjectRef project;
+
+  @override
+  Future<List<MemoryEntry>> entries() => _hub.callMemories(project, "list");
+
+  @override
+  Future<List<MemoryEntry>> search(String query) =>
+      _hub.callMemories(project, "search", text: query);
+
+  @override
+  Future<void> add(String text) => _hub.callMemories(project, "add", text: text);
+
+  @override
+  Future<void> pin(String id) => _hub.callMemories(project, "pin", id: id);
+
+  @override
+  Future<void> unpin(String id) => _hub.callMemories(project, "unpin", id: id);
+
+  @override
+  Future<void> delete(String id) => _hub.callMemories(project, "delete", id: id);
 }
 
 /// What the sidebar's Remotes section draws: one remote chat with who owns
@@ -230,11 +278,6 @@ class SyncHub implements ArtifactBytes, RemoteChats {
   /// from where the mirror already is.
   final _desired = <String>{};
 
-  /// Chats of this device somebody else is driving: chat id to the device id
-  /// holding it. One holder at a time, and the home device is never in it —
-  /// this device typing is not a lock, it is the absence of one.
-  final _control = <String, String>{};
-
   /// Set by the container once there is a way to run a turn. Null until then,
   /// which is every test that is only about the wire.
   RemoteTurns? remoteTurns;
@@ -252,23 +295,9 @@ class SyncHub implements ArtifactBytes, RemoteChats {
   /// rebuilt whenever anything under it moves.
   final remotes = ValueNotifier<List<RemoteChatEntry>>(const []);
 
-  /// Chats of this device somebody else is driving, by the name of the device
-  /// driving them — what the local chat page says over a conversation being
-  /// typed into from elsewhere. Names rather than ids: it is read out.
-  final drivenChats = ValueNotifier<Map<String, String>>(const {});
-
   ValueNotifier<Set<String>> get servedChats => _peers.servedChats;
 
   MirrorChat? mirror(String chatId) => _mirrors[chatId];
-
-  /// Which device is driving one of *this* device's chats, or null. What the
-  /// local chat page reads to say it is being typed in from elsewhere.
-  String? heldBy(String chatId) => _control[chatId];
-
-  /// Whether this device holds a mirrored chat — the home device's answer,
-  /// never a local guess.
-  bool holdsControl(String chatId) =>
-      _mirrors[chatId]?.controlHolder == identity.id;
 
   /// Whether the connection to [chatId]'s home device is up. False for a
   /// stale snapshot: the page disables the composer and shows its banner.
@@ -277,6 +306,148 @@ class SyncHub implements ArtifactBytes, RemoteChats {
 
   /// Per peer, its projects with Omada on, as its last listing named them.
   final _omadaProjects = <String, Set<String>>{};
+
+  /// Per paired device, the projects it named last: its own, the default and
+  /// the built-ins being on every device. Kept while it is away, so its
+  /// projects stay listed, read-only, until it is back.
+  final deviceProjects = ValueNotifier<Map<String, List<String>>>(const {});
+
+  final _projects = <ProjectRef, RemoteProject>{};
+  final _followedProjects = <ProjectRef>{};
+  final _projectUpdates = StreamController<ProjectRef>.broadcast();
+
+  Stream<ProjectRef> get projectUpdates => _projectUpdates.stream;
+
+  ValueNotifier<Set<String?>> get servedProjects => _peers.servedProjects;
+
+  /// [project] as its device last said, or null until it has.
+  RemoteProject? remoteProject(ProjectRef project) => _projects[project];
+
+  bool isDeviceOnline(String deviceId) => _peers.hasLive(deviceId);
+
+  /// Read a paired device's project from now until [unfollowProject]. A
+  /// device away now is asked when it is back.
+  void followProject(ProjectRef project) {
+    _followedProjects.add(project);
+    unawaited(_peers[project.device!]
+        ?.send(SyncMessage.projectOpen(project: project.project)));
+  }
+
+  /// Not cached past being shown: what was read goes with the follow.
+  void unfollowProject(ProjectRef project) {
+    _followedProjects.remove(project);
+    _projects.remove(project);
+    unawaited(_peers[project.device!]
+        ?.send(SyncMessage.projectClose(project: project.project)));
+  }
+
+  /// A chat in a paired device's [project], started there with [text] and
+  /// held by this device. The reply carries its id once that device has
+  /// listed it; null where the device is away or did not answer.
+  Future<SyncReply?> startRemoteChat(ProjectRef project, String text,
+      {List<Attachment> attachments = const []}) async {
+    return _ask(
+        _peers[project.device!],
+        "a chat in ${project.project}",
+        (id) => SyncMessage.chatStart(
+            requestId: id, project: project.project, text: text, files: _files(attachments)));
+  }
+
+  /// Whether [settings] landed. A follower has the snapshot of them first.
+  Future<bool> writeRemoteProject(ProjectRef project, ProjectSettings settings) async =>
+      (await _ask(
+              _peers[project.device!],
+              "${project.project}",
+              (id) => SyncMessage.projectWrite(
+                  requestId: id, project: project.project, settings: settings)))
+          ?.ok ??
+      false;
+
+  /// Whether [name] was made, with [settings] where given. Its listing has
+  /// arrived by the time this answers.
+  Future<bool> createRemoteProject(String deviceId, String name,
+          {ProjectSettings? settings}) async =>
+      (await _ask(
+              _peers[deviceId],
+              name,
+              (id) => SyncMessage.projectCreate(
+                  requestId: id, name: name, settings: settings)))
+          ?.ok ??
+      false;
+
+  Future<bool> deleteRemoteProject(String deviceId, String name) async =>
+      (await _ask(_peers[deviceId], name,
+              (id) => SyncMessage.projectDelete(requestId: id, name: name)))
+          ?.ok ??
+      false;
+
+  /// Home side: tell whoever follows [project] what its settings are now.
+  void publishProject(String? project) => _publish(project, prompts: false);
+
+  /// Home side: the same for its skills and agents.
+  void publishPrompts(String? project) => _publish(project, settings: false);
+
+  void _publish(String? project, {bool settings = true, bool prompts = true}) {
+    for (final peer in _peers.live) {
+      if (peer.projectSubscriptions.contains(project)) {
+        unawaited(_sendProject(peer, project, settings: settings, prompts: prompts));
+      }
+    }
+  }
+
+  /// [op] on a paired device's [project]'s memories, and what they read after
+  /// it — the search's answer for a search. Throws where the device is away
+  /// or did not go through with it.
+  Future<List<MemoryEntry>> callMemories(ProjectRef project, String op,
+      {String? id, String? text}) async {
+    final reply = await _ask(
+        _peers[project.device!],
+        "memory $op in ${project.project}",
+        (requestId) => SyncMessage.memoryCall(
+            requestId: requestId, project: project.project, op: op, id: id, text: text));
+    if (reply == null || !reply.ok) throw StateError("memories of ${project.device}: $op failed");
+    return reply.entries.map(MemoryEntry.fromJson).toList();
+  }
+
+  Future<void> _serveMemories(LivePeer peer, SyncMemoryCall call) async {
+    final turns = remoteTurns;
+    List<MemoryEntry>? read;
+    if (turns != null && await _isProject(call.project)) {
+      final store = turns.memories(call.project);
+      try {
+        switch ((call.op, call.id, call.text)) {
+          case ("add", _, final String text):
+            await store.add(text);
+          case ("pin", final String id, _):
+            await store.pin(id);
+          case ("unpin", final String id, _):
+            await store.unpin(id);
+          case ("delete", final String id, _):
+            await store.delete(id);
+          case ("list" || "search", _, _):
+            break;
+          default:
+            // An unknown op, or one missing what it needs, must not read as
+            // done.
+            throw ArgumentError.value(call.op, "op", "not a memory call");
+        }
+        read = call.op == "search"
+            ? await store.search(call.text ?? "")
+            : await store.entries();
+      } catch (e) {
+        logFailure("sync", "memory ${call.op} for ${peer.deviceId}", e);
+      }
+    }
+    await peer.send(SyncMessage.reply(
+        requestId: call.requestId,
+        ok: read != null,
+        entries: [for (final e in read ?? const <MemoryEntry>[]) e.toJson()]));
+  }
+
+  Future<bool> _isProject(String? project) async {
+    final repo = _repo;
+    return repo != null && everyProject(await repo.listProjects()).contains(project);
+  }
 
   int _resourceSeq = 0;
   final _pendingResources = <String, _ResourceTransfer>{};
@@ -354,11 +525,25 @@ class SyncHub implements ArtifactBytes, RemoteChats {
       case SyncPing():
         await peer.send(const SyncMessage.pong());
       case SyncPong():
-        peer.lastPong = DateTime.now();
-      case SyncWelcome(:final chats, :final omadaProjects) ||
-            SyncChatsChanged(:final chats, :final omadaProjects):
+        break; // its frame was counted on arrival, in [SecureChannel.lastFrame]
+      case SyncReply():
+        break; // the asker's echo, matched below
+      case SyncWelcome(:final chats, :final omadaProjects, :final projects) ||
+            SyncChatsChanged(:final chats, :final omadaProjects, :final projects):
         _omadaProjects[peer.deviceId] = omadaProjects.toSet();
-        await _applyWelcome(peer, chats);
+        deviceProjects.value = {...deviceProjects.value, peer.deviceId: projects};
+        await _applyWelcome(peer, chats, reconnect: message is SyncWelcome);
+        // A reconnect reads what is open again rather than trusting what it
+        // last had; a project gone at home goes here too.
+        final every = everyProject(projects);
+        for (final followed in _followedProjects) {
+          if (followed.device != peer.deviceId) continue;
+          if (!every.contains(followed.project)) {
+            if (_projects.remove(followed) != null) _projectUpdates.add(followed);
+          } else if (message is SyncWelcome) {
+            unawaited(peer.send(SyncMessage.projectOpen(project: followed.project)));
+          }
+        }
       case SyncChatOpen(:final chatId, :final fromLine):
         await _serveOpen(peer, chatId, fromLine);
       case SyncChatSnapshot(:final chatId, :final state, :final meta):
@@ -389,20 +574,21 @@ class SyncHub implements ArtifactBytes, RemoteChats {
         await _serveResource(peer, id, chatId, resource);
       case SyncResourceChunk(:final id, :final bytesB64, :final done):
         _collectResourceChunk(peer, id, bytesB64, done);
+      case final SyncMemoryCall call:
+        await _serveMemories(peer, call);
 
-      // -- serving: somebody else driving one of this device's chats
-      case SyncControlRequest(:final chatId):
-        await _serveControlRequest(peer, chatId);
-      case SyncControlRelease(:final chatId):
-        await _serveControlRelease(peer, chatId);
-      case SyncPromptSend(:final chatId, :final text):
-        if (_holds(peer, chatId)) remoteTurns?.prompt(chatId, text);
+      // -- serving: a paired device driving one of this device's chats
+      case SyncPromptSend(:final requestId, :final chatId, :final text, :final files):
+        final turns = remoteTurns;
+        final ok = turns != null && _follows(peer, chatId);
+        if (ok) turns.prompt(chatId, text, attachments: _attachments(files));
+        await peer.send(SyncMessage.reply(requestId: requestId, ok: ok));
       case SyncTurnResume(:final chatId):
-        if (_holds(peer, chatId)) remoteTurns?.resume(chatId);
+        if (_follows(peer, chatId)) remoteTurns?.resume(chatId);
       case SyncTurnAbort(:final chatId):
-        if (_holds(peer, chatId)) remoteTurns?.abort(chatId);
+        if (_follows(peer, chatId)) remoteTurns?.abort(chatId);
       case SyncApprovalRespond(:final chatId, :final approvalId, :final allow):
-        if (_holds(peer, chatId)) {
+        if (_follows(peer, chatId)) {
           remoteTurns?.approve(chatId, approvalId, allow);
         }
       case SyncQuestionsRespond(
@@ -410,21 +596,21 @@ class SyncHub implements ArtifactBytes, RemoteChats {
           :final requestId,
           :final answers
         ):
-        if (_holds(peer, chatId)) {
+        if (_follows(peer, chatId)) {
           remoteTurns?.answer(chatId, requestId, answers);
         }
       case SyncEditResend(:final chatId, :final messageId, :final text):
-        if (_holds(peer, chatId)) {
+        if (_follows(peer, chatId)) {
           remoteTurns?.editResend(chatId, messageId, text);
         }
       case SyncRegenerate(:final chatId, :final messageId):
-        if (_holds(peer, chatId)) remoteTurns?.regenerate(chatId, messageId);
+        if (_follows(peer, chatId)) remoteTurns?.regenerate(chatId, messageId);
       case SyncThreadStep(:final chatId, :final messageId, :final step):
-        if (_holds(peer, chatId)) {
+        if (_follows(peer, chatId)) {
           remoteTurns?.stepThread(chatId, messageId, step);
         }
       case SyncThreadDelete(:final chatId, :final messageId):
-        if (_holds(peer, chatId)) remoteTurns?.deleteThread(chatId, messageId);
+        if (_follows(peer, chatId)) remoteTurns?.deleteThread(chatId, messageId);
 
       // -- serving: a paired device is the user's own, so no lock for these
       case SyncStateWrite(:final chatId, :final state, :final reanchor):
@@ -450,14 +636,68 @@ class SyncHub implements ArtifactBytes, RemoteChats {
       case SyncChatDelete(:final chatId):
         if (await _ours(chatId) != null) await remoteTurns?.delete(chatId);
 
+      case SyncChatStart(:final requestId, :final project, :final text, :final files):
+        final turns = remoteTurns;
+        String? chatId;
+        if (turns != null && await _isProject(project)) {
+          chatId = await turns.startChat(project);
+          // Listed before it is answered, so the asker has the mirror to open.
+          await _announceChats();
+          turns.prompt(chatId, text, attachments: _attachments(files));
+        }
+        await peer.send(
+            SyncMessage.reply(requestId: requestId, ok: chatId != null, chatId: chatId));
+
+      // -- serving: a project of this device
+      case SyncProjectOpen(:final project):
+        if (await _isProject(project)) {
+          peer.projectSubscriptions.add(project);
+          _peers.refreshServed();
+          await _sendProject(peer, project);
+        }
+      case SyncProjectClose(:final project):
+        peer.projectSubscriptions.remove(project);
+        _peers.refreshServed();
+      case SyncProjectWrite(:final requestId, :final project, :final settings):
+        await _answer(peer, requestId, "write to $project", () async {
+          if (!await _isProject(project)) return false;
+          await remoteTurns!.writeProject(project, settings);
+          return true;
+        });
+      case SyncProjectCreate(:final requestId, :final name, :final settings):
+        await _answer(peer, requestId, "create $name", () async {
+          if (!isProjectName(name) || await _isProject(name)) return false;
+          await remoteTurns!.createProject(name);
+          if (settings != null) await remoteTurns!.writeProject(name, settings);
+          // Listed before it is answered, so the asker can select it.
+          await _announceChats();
+          return true;
+        });
+      case SyncProjectDelete(:final requestId, :final name):
+        await _answer(peer, requestId, "delete $name", () async {
+          if (!isProjectName(name) || !await _isProject(name)) return false;
+          await remoteTurns!.deleteProject(name);
+          await _announceChats();
+          return true;
+        });
+
+      // -- mirroring: a project of the peer's this device has open
+      case SyncProjectSnapshot(:final project, :final settings, :final app):
+        final ProjectRef ref = (device: peer.deviceId, project: project);
+        if (_followedProjects.contains(ref)) {
+          _projects[ref] = RemoteProject(settings, app, _projects[ref]?.library);
+          _projectUpdates.add(ref);
+        }
+      case SyncProjectPrompts(:final project, :final documents):
+        final ProjectRef ref = (device: peer.deviceId, project: project);
+        final held = _projects[ref];
+        if (held != null && _followedProjects.contains(ref)) {
+          _projects[ref] = RemoteProject(held.settings, held.app,
+              PromptLibrary(documents.map(PromptDocument.fromJson)));
+          _projectUpdates.add(ref);
+        }
+
       // -- mirroring: what the home device says about a chat we follow
-      case SyncControlState(:final chatId, :final holder):
-        _onMirror(peer, chatId, (mirror) => mirror.controlHolder = holder);
-      case SyncControlGrant(:final chatId, :final granted):
-        // The state message that follows is what actually moves the holder;
-        // a refusal is worth nothing more than dropping the asking flag.
-        if (!granted) _requesting.remove(chatId);
-        _touch(chatId);
       case SyncTurnState(
           :final chatId,
           :final running,
@@ -480,10 +720,53 @@ class SyncHub implements ArtifactBytes, RemoteChats {
       if (echo.peerId == peer.deviceId &&
           !echo.done.isCompleted &&
           echo.matches(message)) {
-        echo.done.complete();
+        echo.done.complete(message);
       }
     }
   }
+
+  /// Run [act] and tell [peer] whether it went through. Queued behind the
+  /// project sends, so the snapshot a write set off reaches a follower first.
+  Future<void> _answer(LivePeer peer, String requestId, String what,
+      Future<bool> Function() act) async {
+    var ok = false;
+    if (remoteTurns != null) {
+      try {
+        ok = await act();
+      } catch (e) {
+        logFailure("sync", "$what for ${peer.deviceId}", e);
+      }
+    }
+    await _inOrder(peer, () => peer.send(SyncMessage.reply(requestId: requestId, ok: ok)));
+  }
+
+  /// Per peer, the last project send, so a write's reply goes out behind the
+  /// snapshot it set off.
+  final _projectSends = Expando<Future<void>>();
+
+  Future<void> _inOrder(LivePeer peer, Future<void> Function() send) =>
+      _projectSends[peer] = (_projectSends[peer] ?? Future.value())
+          .catchError((Object _) {})
+          .then((_) => send());
+
+  /// [project]'s settings, its skills and agents, or both.
+  Future<void> _sendProject(LivePeer peer, String? project,
+          {bool settings = true, bool prompts = true}) =>
+      _inOrder(peer, () async {
+        final turns = remoteTurns;
+        if (turns == null) return;
+        if (settings) {
+          await peer.send(SyncMessage.projectSnapshot(
+              project: project,
+              settings: turns.projectSettings(project),
+              app: turns.appSettings));
+        }
+        if (prompts) {
+          await peer.send(SyncMessage.projectPrompts(
+              project: project,
+              documents: [for (final d in turns.library(project).all) d.toJson()]));
+        }
+      });
 
   /// [chatId]'s head where it is one of this device's chats: a write naming
   /// any other id would otherwise create one.
@@ -506,28 +789,43 @@ class SyncHub implements ArtifactBytes, RemoteChats {
   }
 
   final _echoes =
-      <({String peerId, bool Function(SyncMessage) matches, Completer<void> done})>[];
+      <({String peerId, bool Function(SyncMessage) matches, Completer<SyncMessage?> done})>[];
 
   /// Send a write to [chatId]'s home device and wait for the message that
   /// says it landed, so whoever awaits it draws the result rather than what
   /// was asked for. A home device gone or silent ends the wait unwritten.
   Future<void> _write(String chatId, SyncMessage message,
+          bool Function(SyncMessage) echo) =>
+      _send(_peerHosting(chatId), chatId, message, echo);
+
+  /// The message [echo] matched, or null where none came.
+  Future<SyncMessage?> _send(LivePeer? peer, String about, SyncMessage message,
       bool Function(SyncMessage) echo) async {
-    final peer = _peerHosting(chatId);
     if (peer == null) {
-      logFailure("sync", "${message.runtimeType} for $chatId: home device is offline");
-      return;
+      logFailure("sync", "${message.runtimeType} for $about: home device is offline");
+      return null;
     }
-    final waiter = (peerId: peer.deviceId, matches: echo, done: Completer<void>());
+    final waiter = (peerId: peer.deviceId, matches: echo, done: Completer<SyncMessage?>());
     _echoes.add(waiter);
     try {
       await peer.send(message);
-      await waiter.done.future.timeout(const Duration(seconds: 30),
-          onTimeout: () => logFailure(
-              "sync", "${message.runtimeType} for $chatId: no answer"));
+      return await waiter.done.future.timeout(const Duration(seconds: 30), onTimeout: () {
+        logFailure("sync", "${message.runtimeType} for $about: no answer");
+        return null;
+      });
     } finally {
       _echoes.remove(waiter);
     }
+  }
+
+  /// A request built with its id, and the [SyncReply] that answers it.
+  Future<SyncReply?> _ask(LivePeer? peer, String about,
+      SyncMessage Function(String requestId) request) async {
+    final id = "q${_resourceSeq++}";
+    final reply = await _send(
+        peer, about, request(id), (m) => m is SyncReply && m.requestId == id);
+    if (reply case SyncReply(ok: false)) logFailure("sync", "$about: refused");
+    return reply as SyncReply?;
   }
 
   @override
@@ -598,17 +896,21 @@ class SyncHub implements ArtifactBytes, RemoteChats {
     });
   }
 
-  /// Whether [peer] is the device this chat's control was granted to. Every
-  /// arm that drives a turn goes through it: a peer that never asked, or that
-  /// lost the race, must not be able to type into somebody's conversation.
-  bool _holds(LivePeer peer, String chatId) =>
-      _control[chatId] == peer.deviceId;
+  /// Whether [peer] has [chatId] open. Every arm that drives a turn goes
+  /// through it: a paired device is the user's own, so following the chat is
+  /// all it takes, and an id it was never shown names nothing to drive.
+  bool _follows(LivePeer peer, String chatId) => peer.subscriptions.contains(chatId);
 
   /// A fresh listing from the peer. Mirrors of this peer not in it go; those
   /// in it are added or refreshed — keeping records already held, so the
-  /// re-opens below resume rather than restart. Then everything this device
-  /// follows and still sees is asked for again, from where it got to.
-  Future<void> _applyWelcome(LivePeer peer, List<ChatState> chats) async {
+  /// re-opens below resume rather than restart. Then, on a [reconnect],
+  /// everything this device follows and still sees is asked for again, from
+  /// where it got to; otherwise only what it follows and has just seen. A
+  /// chat open already is not re-opened: the records a turn appends while the
+  /// home device reads its log would arrive twice.
+  Future<void> _applyWelcome(LivePeer peer, List<ChatState> chats,
+      {required bool reconnect}) async {
+    final added = <String>{};
     final listed = {for (final c in chats) c.id: c};
     for (final id in _mirrors.keys.toList()) {
       if (_mirrors[id]!.peerId == peer.deviceId && !listed.containsKey(id)) {
@@ -618,6 +920,7 @@ class SyncHub implements ArtifactBytes, RemoteChats {
     for (final state in chats) {
       final existing = _mirrors[state.id];
       if (existing != null && existing.peerId != peer.deviceId) continue;
+      if (existing == null) added.add(state.id);
       _mirrors[state.id] ??= MirrorChat(
         peerId: peer.deviceId,
         deviceName: peer.deviceName,
@@ -630,7 +933,7 @@ class SyncHub implements ArtifactBytes, RemoteChats {
       }
     }
     for (final id in _desired) {
-      if (listed.containsKey(id)) _openOnPeer(peer, id);
+      if (reconnect ? listed.containsKey(id) : added.contains(id)) _openOnPeer(peer, id);
     }
     _rebuildRemotes();
   }
@@ -647,7 +950,6 @@ class SyncHub implements ArtifactBytes, RemoteChats {
     if (mirror == null || mirror.peerId != peerId) return;
     _mirrors.remove(chatId);
     byteCache.drop(chatId);
-    _requesting.remove(chatId);
     _rebuildRemotes();
     _touch(chatId);
   }
@@ -672,10 +974,6 @@ class SyncHub implements ArtifactBytes, RemoteChats {
     try {
       if (state == null) throw StateError("no chat $chatId");
       peer.subscriptions.add(chatId);
-      // Who holds it goes with the snapshot: a mirror that reconnects mid-
-      // turn must not draw a Take control button for a chat it already has.
-      await peer.send(
-          SyncMessage.controlState(chatId: chatId, holder: _control[chatId]));
       await peer.send(SyncMessage.chatSnapshot(
         chatId: chatId,
         state: state,
@@ -727,10 +1025,10 @@ class SyncHub implements ArtifactBytes, RemoteChats {
           peer.subscriptions.remove(chatId);
           unawaited(peer.send(SyncMessage.chatDeleted(chatId: chatId)));
         }
-        _control.remove(chatId);
         _announced.remove(chatId);
-        _refreshDriven();
         _peers.refreshServed();
+      case ProjectsChanged():
+        unawaited(_announceChats());
     }
   }
 
@@ -747,7 +1045,9 @@ class SyncHub implements ArtifactBytes, RemoteChats {
     final chats = await repo.listChats();
     _announced = {for (final chat in chats) chat.id};
     await peer.send(SyncMessage.welcome(
-        chats: chats, omadaProjects: repo.omadaProjects(chats)));
+        chats: chats,
+        omadaProjects: repo.omadaProjects(chats),
+        projects: await repo.listProjects()));
   }
 
   Future<void> _announceChats() async {
@@ -756,47 +1056,13 @@ class SyncHub implements ArtifactBytes, RemoteChats {
     final chats = await repo.listChats();
     _announced = {for (final chat in chats) chat.id};
     final message = SyncMessage.chatsChanged(
-        chats: chats, omadaProjects: repo.omadaProjects(chats));
+        chats: chats,
+        omadaProjects: repo.omadaProjects(chats),
+        projects: await repo.listProjects());
     for (final peer in _peers.live) {
       unawaited(peer.send(message));
     }
   }
-
-  // -------------------------------------------------------------- control
-
-  /// One holder at a time, first asker wins. Re-asking while already holding
-  /// it is granted rather than refused: a mirror that reconnected does not
-  /// know it never lost the lock.
-  Future<void> _serveControlRequest(LivePeer peer, String chatId) async {
-    final held = _control[chatId];
-    final granted = held == null || held == peer.deviceId;
-    if (granted) {
-      _control[chatId] = peer.deviceId;
-    }
-    await peer.send(
-        SyncMessage.controlGrant(chatId: chatId, granted: granted));
-    _announceControl(chatId);
-  }
-
-  Future<void> _serveControlRelease(LivePeer peer, String chatId) async {
-    if (_control[chatId] != peer.deviceId) return;
-    _control.remove(chatId);
-    _announceControl(chatId);
-  }
-
-  /// Everyone watching the chat hears who holds it, not only the asker — a
-  /// second mirror has to see that the first one took it.
-  void _announceControl(String chatId) {
-    _refreshDriven();
-    _peers.toSubscribers(chatId,
-        SyncMessage.controlState(chatId: chatId, holder: _control[chatId]));
-  }
-
-  void _refreshDriven() => drivenChats.value = {
-        for (final entry in _control.entries)
-          entry.key:
-              _peers.states.value[entry.value]?.name ?? entry.value,
-      };
 
   /// The turn as this device's own controller has it, on its way to whoever
   /// is watching. Called by the container on every change: none of this is in
@@ -821,32 +1087,26 @@ class SyncHub implements ArtifactBytes, RemoteChats {
         ));
   }
 
-  /// Chats this device holds on a peer, asked for and not yet answered. Only
-  /// so a button can say "asking"; the holder itself is the home device's.
-  final _requesting = <String>{};
-
-  bool isRequestingControl(String chatId) => _requesting.contains(chatId);
-
-  Future<void> requestControl(String chatId) async {
-    final peer = _peerHosting(chatId);
-    if (peer == null) return;
-    _requesting.add(chatId);
-    _touch(chatId);
-    await peer.send(SyncMessage.controlRequest(chatId: chatId));
+  /// Drive a turn on the chat's home device, which runs it. Null where the
+  /// device is away or did not answer.
+  Future<SyncReply?> sendRemotePrompt(String chatId, String text,
+      {List<Attachment> attachments = const []}) async {
+    return _ask(
+        _peerHosting(chatId),
+        "a prompt in $chatId",
+        (id) => SyncMessage.promptSend(
+            requestId: id, chatId: chatId, text: text, files: _files(attachments)));
   }
 
-  Future<void> releaseControl(String chatId) async {
-    _requesting.remove(chatId);
-    final peer = _peerHosting(chatId);
-    if (peer == null) return;
-    await peer.send(SyncMessage.controlRelease(chatId: chatId));
-  }
+  static List<SyncFile> _files(List<Attachment> attachments) => [
+        for (final a in attachments)
+          SyncFile(bytesB64: base64Encode(a.bytes), filename: a.filename, mimeType: a.mimeType),
+      ];
 
-  /// Drive a turn on the chat's home device. Every one of these is refused
-  /// there unless this device holds the chat, so the check here is about not
-  /// sending into the void rather than about permission.
-  Future<void> sendRemotePrompt(String chatId, String text) =>
-      _drive(chatId, SyncMessage.promptSend(chatId: chatId, text: text));
+  static List<Attachment> _attachments(List<SyncFile> files) => [
+        for (final f in files)
+          Attachment(filename: f.filename, mimeType: f.mimeType, bytes: base64Decode(f.bytesB64)),
+      ];
 
   Future<void> resumeRemote(String chatId) =>
       _drive(chatId, SyncMessage.turnResume(chatId: chatId));
@@ -880,47 +1140,23 @@ class SyncHub implements ArtifactBytes, RemoteChats {
   Future<void> deleteThreadRemote(String chatId, String messageId) =>
       _drive(chatId, SyncMessage.threadDelete(chatId: chatId, messageId: messageId));
 
-  Future<void> _drive(String chatId, SyncMessage message) async {
-    if (!holdsControl(chatId)) return;
-    await _peerHosting(chatId)?.send(message);
-  }
+  Future<void> _drive(String chatId, SyncMessage message) async =>
+      _peerHosting(chatId)?.send(message);
 
-  /// Straight to the chat's home device, past the guard in [_drive]. That
-  /// guard is about not shouting into the void; what refuses a peer holding
-  /// nothing is the home device, and this is how a test reaches it.
+  /// Any message straight to the chat's home device, for a test of what that
+  /// device refuses.
   @visibleForTesting
   Future<void> sendForTest(String chatId, SyncMessage message) async =>
       _peerHosting(chatId)?.send(message);
 
-  /// What one message may carry: a data channel refuses more, and a chat's
-  /// log or an attachment is far past it. Records are measured as encoded
-  /// JSON (one record can be a whole file); resource chunks as source bytes,
-  /// which base64 expands by a third, hence their smaller bound.
-  static const _messageBytes = 48 * 1024;
+  /// An attachment's chunk, in source bytes: the framing would carry it
+  /// whole, but a file is not held as one base64 string at either end.
   static const _chunkBytes = 32 * 1024;
 
   Future<void> _sendRecords(
       LivePeer peer, String chatId, List<ChatRecord> records) async {
-    var page = <ChatRecord>[];
-    var bytes = 0;
-    Future<void> flush() async {
-      if (page.isEmpty) return;
-      await peer.send(SyncMessage.recordAppend(chatId: chatId, records: page));
-      page = [];
-      bytes = 0;
-    }
-
-    for (final record in records) {
-      // Encoded to be measured and then thrown away: `sendJson` encodes the
-      // page again below. Reusing it would mean carrying the strings through
-      // `SyncMessage`, or the store handing back the line lengths it already
-      // split on — neither worth it for one extra encode per chat opened.
-      final size = jsonEncode(record.toJson()).length;
-      if (bytes + size > _messageBytes) await flush();
-      page.add(record);
-      bytes += size;
-    }
-    await flush();
+    if (records.isEmpty) return;
+    await peer.send(SyncMessage.recordAppend(chatId: chatId, records: records));
   }
 
   // ------------------------------------------------------------ resources
@@ -953,6 +1189,11 @@ class SyncHub implements ArtifactBytes, RemoteChats {
               chatId, resource.substring(_artifactPrefix.length))
           : await _repo?.readResource(chatId, resource);
     }
+    await _sendChunks(peer, id, bytes);
+  }
+
+  /// [bytes] as a run of chunks under [id]; none is one empty final chunk.
+  Future<void> _sendChunks(LivePeer peer, String id, Uint8List? bytes) async {
     if (bytes == null || bytes.isEmpty) {
       await peer.send(SyncMessage.resourceChunk(id: id, bytesB64: "", done: true));
       return;
@@ -992,14 +1233,7 @@ class SyncHub implements ArtifactBytes, RemoteChats {
   void _peerGone(String deviceId) {
     final live = _peers.remove(deviceId);
     for (final echo in _echoes) {
-      if (echo.peerId == deviceId && !echo.done.isCompleted) echo.done.complete();
-    }
-    // A lock outliving the connection that took it would leave the chat
-    // unusable at both ends until one side restarted.
-    for (final entry in _control.entries.toList()) {
-      if (entry.value != deviceId) continue;
-      _control.remove(entry.key);
-      _announceControl(entry.key);
+      if (echo.peerId == deviceId && !echo.done.isCompleted) echo.done.complete(null);
     }
     // Both directions: the chats this device served them, and the ones it
     // mirrors from them — a mirror's page has a banner to raise, and nothing
@@ -1062,9 +1296,6 @@ class SyncHub implements ArtifactBytes, RemoteChats {
     await _peers.dispose();
     _mirrors.clear();
     byteCache.dispose();
-    _control.clear();
-    _requesting.clear();
-    drivenChats.value = const {};
     _desired.clear();
     remotes.value = const [];
     await _mirrorUpdates.close();
@@ -1080,11 +1311,9 @@ class SyncHub implements ArtifactBytes, RemoteChats {
   /// keeps what it calls this one until renamed there too.
   Future<void> rename(String deviceId, String name) async {
     await registry.rename(deviceId, name);
-    // The row and the driven line are the book's; the mirrors' Remotes rows
-    // derive theirs from that same PeerState at rebuild. One write, then the
-    // two rebuilds, is every surface the name is said on.
+    // The row is the book's; the mirrors' Remotes rows derive theirs from
+    // that same PeerState at rebuild.
     _peers.renamed(deviceId, name);
-    _refreshDriven();
     _rebuildRemotes();
   }
 
@@ -1099,6 +1328,7 @@ class SyncHub implements ArtifactBytes, RemoteChats {
       _dropMirror(deviceId, chatId);
     }
     _peers.forget(deviceId);
+    deviceProjects.value = {...deviceProjects.value}..remove(deviceId);
     _rebuildRemotes();
     unawaited(_peers.refresh());
   }

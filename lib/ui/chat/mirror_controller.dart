@@ -23,8 +23,8 @@ import "chat_controller.dart"
 ///
 /// It is a [TurnDriver] as well, and none of that runs anything here. Every
 /// verb goes over the wire to the chat's home device, which runs it through
-/// its own [ChatController] — and that device refuses the lot unless this one
-/// holds the chat, so a page drawing a composer is not what permits a turn.
+/// its own [ChatController]. A paired device is the user's own, so any one
+/// following the chat may drive it.
 class MirrorChatController extends Notifier<ChatViewState>
     implements TurnDriver {
   MirrorChatController(this.chatId);
@@ -82,11 +82,14 @@ class MirrorChatController extends Notifier<ChatViewState>
 
   SyncHub get _hub => ref.read(syncHubProvider);
 
-  /// Attachments are not sent from a mirror: their bytes would have to cross
-  /// to be saved under a chat on the other side, which is a phase of its own.
+  /// Attachments go with the prompt, and are saved under the chat there.
+  /// Throws [Undelivered] where it did not arrive: the composer has already
+  /// cleared, so the page says so.
   @override
-  Future<void> send(String text, {List<Attachment> attachments = const []}) =>
-      _hub.sendRemotePrompt(chatId, text);
+  Future<void> send(String text, {List<Attachment> attachments = const []}) async {
+    final reply = await _hub.sendRemotePrompt(chatId, text, attachments: attachments);
+    if (reply == null || !reply.ok) throw const Undelivered("The message did not reach the other device.");
+  }
 
   @override
   Future<void> resume() => _hub.resumeRemote(chatId);
@@ -136,52 +139,12 @@ final chatViewProvider = Provider.family<ChatViewState, String>((ref, chatId) =>
         ? ref.watch(mirrorChatControllerProvider(chatId))
         : ref.watch(chatControllerProvider(chatId)));
 
-/// Who may type into a mirrored chat. Its own state rather than a field on
-/// [ChatViewState] because it is not about the turn — a chat with nothing
-/// running still has a holder, and a local chat has no such question.
-class MirrorControl {
-  const MirrorControl({this.holder, this.held = false, this.asking = false});
+/// A message a paired device did not take. [message] is said to the user.
+class Undelivered implements Exception {
+  const Undelivered(this.message);
 
-  /// The device id the home end says has it, or null for nobody. Always the
-  /// home device's answer: taking control is a request, not a decision.
-  final String? holder;
-
-  /// Whether that is this device.
-  final bool held;
-
-  /// Asked for and not yet answered — what the button says while it waits.
-  final bool asking;
-
-  /// Somebody else has it, which is the one case with nothing to offer.
-  bool get takenByAnother => holder != null && !held;
-}
-
-class MirrorControlNotifier extends Notifier<MirrorControl> {
-  MirrorControlNotifier(this.chatId);
-
-  final String chatId;
-  StreamSubscription<String>? _sub;
+  final String message;
 
   @override
-  MirrorControl build() {
-    final hub = ref.watch(syncHubProvider);
-    _sub = hub.mirrorUpdates.where((id) => id == chatId).listen((_) {
-      if (ref.mounted) state = _of(hub);
-    });
-    ref.onDispose(() => _sub?.cancel());
-    return _of(hub);
-  }
-
-  MirrorControl _of(SyncHub hub) => MirrorControl(
-        holder: hub.mirror(chatId)?.controlHolder,
-        held: hub.holdsControl(chatId),
-        asking: hub.isRequestingControl(chatId),
-      );
-
-  Future<void> take() => ref.read(syncHubProvider).requestControl(chatId);
-
-  Future<void> release() => ref.read(syncHubProvider).releaseControl(chatId);
+  String toString() => message;
 }
-
-final mirrorControlProvider = NotifierProvider.family<MirrorControlNotifier,
-    MirrorControl, String>(MirrorControlNotifier.new);

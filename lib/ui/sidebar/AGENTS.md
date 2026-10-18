@@ -102,8 +102,12 @@ the table that handler answers and Settings > Shortcuts lists, so a shortcut
 added there is on the page without anyone remembering to put it there. The
 page is on every platform, phones too, for the keyboard a tablet can have. Deleting a project is on its settings page alone.
 
-New Project swaps the list for a page in the same panel — name, description,
+New Project makes the project on the device the sidebar is showing, a paired
+one included, and swaps the list for a page in the same panel — name, description,
 the Omada switch — and back, Esc or the system back key return to the list
 rather than out of the palette (`PopScope` while the page is up). A blank
 description is left unset, which is the default question; an empty string
-would be a project that asks nothing.
+would be a project that asks nothing. Create is the one pick run in the
+palette: it waits there, spinning, until the project is made — on a paired
+device, until that device lists it — and the palette closes after, or says it
+could not be made.

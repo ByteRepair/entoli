@@ -9,7 +9,8 @@ import "package:agent_chat/data/builtin/llm/llm_client.dart";
 import "package:agent_chat/data/builtin/llm/local_pool_client.dart";
 import "package:agent_chat/data/builtin/llm/local_prefill.dart";
 import "package:agent_chat/data/sync/channel.dart";
-import "package:agent_chat/data/sync/sync_hub.dart" show RemoteChatEntry;
+import "package:agent_chat/data/sync/peers.dart" show PeerState;
+import "package:agent_chat/data/sync/sync_hub.dart" show RemoteChatEntry, RemoteProject;
 import "package:agent_chat/domain/app_icon.dart";
 import "package:agent_chat/domain/app_update.dart";
 import "package:agent_chat/domain/app_settings.dart";
@@ -43,7 +44,9 @@ import "package:agent_chat/domain/secret_store.dart";
 import "package:agent_chat/domain/sync/devices.dart";
 import "package:agent_chat/domain/sync/relay_signaling.dart";
 import "package:agent_chat/domain/voice_model_store.dart";
-import "package:agent_chat/providers.dart" show DrivenChats, RemoteChats;
+import "package:agent_chat/domain/project.dart" show ProjectRef;
+import "package:agent_chat/providers.dart"
+    show DeviceProjects, PairedDevices, RemoteChats, RemoteProjectNotifier;
 import "package:agent_chat/ui/chat/chat_controller.dart" show ChatViewState;
 import "package:agent_chat/ui/chat/mirror_controller.dart";
 import "package:uuid/uuid.dart";
@@ -1186,6 +1189,34 @@ class FakeVoiceModelStore extends VoiceModelStore {
 
 /// The Remotes half of the sidebar with no hub under it. Every test that is
 /// not about sync gets an empty list; a sync one seeds the rows it wants.
+class FakePairedDevices extends PairedDevices {
+  FakePairedDevices(this.peers);
+
+  final Map<String, PeerState> peers;
+
+  @override
+  Map<String, PeerState> build() => peers;
+}
+
+class FakeDeviceProjects extends DeviceProjects {
+  FakeDeviceProjects(this.projects);
+
+  final Map<String, List<String>> projects;
+
+  @override
+  Map<String, List<String>> build() => projects;
+}
+
+/// A paired device's project as it answered, or not yet where it is absent.
+class FakeRemoteProject extends RemoteProjectNotifier {
+  FakeRemoteProject(super.project, this.answers);
+
+  final Map<ProjectRef, RemoteProject> answers;
+
+  @override
+  RemoteProject? build() => answers[project];
+}
+
 class FakeRemoteChats extends RemoteChats {
   FakeRemoteChats(this.entries);
 
@@ -1311,36 +1342,6 @@ PairedDevice testPairedDevice(String id, {String name = "Desktop"}) =>
       publicKey: "cHVibGlj",
       addedAt: DateTime.utc(2026),
     );
-
-/// Chats of this device a paired one is driving, by the name of the device
-/// driving them. Empty for every test that is not about sync.
-class FakeDrivenChats extends DrivenChats {
-  FakeDrivenChats(this.driven);
-
-  final Map<String, String> driven;
-
-  @override
-  Map<String, String> build() => driven;
-}
-
-/// Who holds a mirrored chat, with no hub to ask. `take` and `release` record
-/// rather than send: what the wire does with them is `sync_hub_pair_test`'s.
-class FakeMirrorControl extends MirrorControlNotifier {
-  FakeMirrorControl(super.chatId, this.control);
-
-  final MirrorControl control;
-  final List<String> taken = [];
-  final List<String> released = [];
-
-  @override
-  MirrorControl build() => control;
-
-  @override
-  Future<void> take() async => taken.add(chatId);
-
-  @override
-  Future<void> release() async => released.add(chatId);
-}
 
 /// A mirrored chat's view, already resolved. What the real controller derives
 /// from a live mirror — and the offline status line it puts there — is pinned

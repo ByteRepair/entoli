@@ -628,16 +628,17 @@ the divider its only evidence, the way the memory extraction's note is.
 mirrored from a paired device, and `TurnDriver` is what both implement so that
 every widget between them — the composer, the turn surface, the question panel,
 the approval banner — is the same widget at either end. One runs the turn; the
-other sends it to the device that will. See "Control, and driving a turn from
-the other end" for the lock and what refuses what.
+other sends it to the device that will. See "Driving a turn from the other
+end" for what the home device takes and from whom.
 
 `ChatPage` branches on `isMirroredChatProvider` before anything else, and the
 two arms meet again at `_page`: same bar, same centred column, same
 conversation. What differs is stated as arguments rather than as a second copy
 — `editing` is the controller the message row acts through and is null for a
 mirror this device does not hold, which takes the whole edit/regenerate/thread
-row out with it; `banner` is the strip a mirror
-floats over the conversation, and `bottom` is a composer or a bar saying why
+row out with it; `banner` is a mirror's strip, a
+full-width row under the title bar that the conversation scrolls beneath
+rather than one laid over it, and `bottom` is a composer or a bar saying why
 there is none. Written out twice, the mirrored copy had already lost the jump
 button, the empty-chat starter and the running-turn spinner.
 
@@ -707,7 +708,9 @@ Open Chat is the drawer the bar already opens.
 **And it is only a screen.** Nothing is created to stand behind it: no chat, no
 `ChatController`, nothing on disk. The project is `selectedProjectProvider`'s
 and the settings are `_NewChat`'s own, and `startChatWith` spends both on a
-`createChat` at the moment the first message is sent. So a screen
+`createChat` at the moment the first message is sent — or, for a paired
+device's project, asks that device to make it (see "A paired device's project,
+while it is open" in `lib/data/sync/AGENTS.md`). So a screen
 nobody typed into leaves nothing, which is the property this has to have, and
 it gets it by choosing *when* to create rather than by holding something unsaved
 — see "Starting a chat, and naming it" for the eleven branches that bought.
@@ -768,7 +771,9 @@ composer's menus are the only place those are named, and nothing names them
 until the character that opens one has been typed, so a user who does not know
 they exist never finds out. Six at most, because everything the user has
 written is a menu and `/` is what opens the menu; with nothing at all in the
-library it says how to reach them instead.
+library it says how to reach them instead. A paired device's project offers
+that device's library, through `promptLibraryOf` like its menus; its badges
+are left off, since they name this device's projects.
 
 **Both rows are `ChipRow`s** (see "Shared UI" in `lib/ui/widgets/AGENTS.md`),
 which is why nothing here snaps when the set changes: picking a badge grows
@@ -799,27 +804,19 @@ row's first build, so content that is not on screen at that moment — a cold
 start whose project list resolves a frame later — arrives the way any change
 does: animated.
 
-Below the chips, and only on the new-chat screen, sit **the paired devices'
-cards** (`synced_device_cards.dart`). The data is the Remotes list — chats
-mirrored from a paired device, whose welcome named it — and that is also the
-limit of what is honest to draw: a project exists at this end only where one
-of its chats has been mirrored, there being no message that asks a paired
-device for a listing of its own. So a device with nothing mirrored has no
-card, and the list is watched rather than a second source invented. Each card
-is a device with the projects
-its mirrors sit in, folded behind the device's own name — the header is the
-toggle, per device and in-memory, the same shape `ActivityGroup` is, and
-carries the name and nothing else: no dot for the connection, no count of
-what is folded behind it, what is there being one tap away either way. A
-project unfolds as a badge, the same `ActionChip` in a `ChipRow` the
-`/`-`@` chips are — an unfold grows them out of nothing through the row's
-own motion rather than a list appearing under the header — and a badge opens
-that device's project through `selectRemote`, the switcher's own action, so
-the two ways into a paired device's project cannot come to disagree about
-what picking it means. The cards are `_EmptyChat`'s
-only under `showSyncedCards`, which `_NewChat` alone passes: the same body
-serving a chat that exists with nothing said in it yet has no business
-listing other devices under its question.
+Under this device's badges, and only on the new-chat screen, sit **the paired
+devices' badges** (`paired_project_badges.dart`): for each device that has
+listed its projects, a `ConversationSeparator` line naming it (with
+"· offline" while it is away), then every project it listed as a `ChoiceChip`
+— its default included, a project there rather than nothing selected. They
+come from `remoteEntries`, the sidebar switcher's own list. Ticking one is
+`selectProject`; unticking it is this device's default. This device's badges
+stay on screen whichever device is picked, unticked, so there is always a way
+back. All of the projects sit above the `/`-`@` chips, so a pick changes only
+what is below it and nothing above moves. They are `_EmptyChat`'s only under
+`showSyncedCards`, which `_NewChat` alone passes: a chat that exists with
+nothing said in it yet has no business listing other devices under its
+question.
 
 What the headline says is `emptyChatQuestionProvider`: a built-in's shipped
 question, else the project's `description` (the settings page's Description

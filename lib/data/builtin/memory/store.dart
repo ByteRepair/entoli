@@ -84,9 +84,37 @@ class MemoryEntry {
         chat: chat,
         pinned: pinned,
       );
+
+  /// The wire's shape, for a paired device's memory page.
+  Map<String, dynamic> toJson() => {
+        "id": id,
+        "text": text,
+        "at": at.toIso8601String(),
+        "chat": ?chat,
+        "pinned": pinned,
+      };
+
+  factory MemoryEntry.fromJson(Map<String, dynamic> json) => MemoryEntry(
+        id: json["id"] as String,
+        text: json["text"] as String,
+        at: DateTime.parse(json["at"] as String),
+        chat: json["chat"] as String?,
+        pinned: json["pinned"] as bool? ?? false,
+      );
 }
 
-class MemoryStore {
+/// What the memory page reads and changes: this device's [MemoryStore], or a
+/// paired device's over the wire.
+abstract interface class Memories {
+  Future<List<MemoryEntry>> entries();
+  Future<List<MemoryEntry>> search(String query);
+  Future<void> add(String text);
+  Future<void> pin(String id);
+  Future<void> unpin(String id);
+  Future<void> delete(String id);
+}
+
+class MemoryStore implements Memories {
   MemoryStore(this.fs, this.dir) : _writer = RenameWriter.fs(fs);
 
   final FileSystem fs;
@@ -101,15 +129,18 @@ class MemoryStore {
   String get _consolidatedPath => fs.path.join(dir, _consolidatedName);
 
   /// Every live memory, oldest first.
+  @override
   Future<List<MemoryEntry>> entries() async => _replay(await _readLog());
 
   /// Adds a memory. [chat] names the one that wrote it, or null for a manual
   /// one from the explorer. Throws on empty text.
+  @override
   Future<MemoryEntry> add(String text, {String? chat}) =>
       _write(const Uuid().v4(), text, chat);
 
   /// A tombstone for [id]. One for a memory that is not there is a line the
   /// replay ignores.
+  @override
   Future<void> delete(String id) async {
     await _append(_marker("d", id));
     await _rebuildIndex();
@@ -146,9 +177,11 @@ class MemoryStore {
   /// Marks [id] as pinned, so it reaches every turn in full rather than
   /// waiting on a recall. Pinning an id that is not there is a line the
   /// replay ignores, the way a stray tombstone is.
+  @override
   Future<void> pin(String id) => _pinRecord(id, true);
 
   /// The undo of [pin]: the last pin or unpin for an id stands.
+  @override
   Future<void> unpin(String id) => _pinRecord(id, false);
 
   Future<void> _pinRecord(String id, bool pinned) =>
@@ -237,6 +270,7 @@ class MemoryStore {
   /// The memories [query] is about: the ones that clear [recallMinScore],
   /// best first, at most [recallLimit]. [entries] spares the log a second read
   /// where the caller has it in hand already.
+  @override
   Future<List<MemoryEntry>> search(
     String query, {
     List<MemoryEntry>? entries,

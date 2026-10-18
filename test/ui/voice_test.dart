@@ -9,6 +9,7 @@ import "package:agent_chat/domain/agent_backend.dart";
 import "package:agent_chat/domain/background_work.dart";
 
 import "package:agent_chat/domain/models.dart";
+import "package:agent_chat/domain/project.dart" show localProject;
 import "package:agent_chat/providers.dart";
 import "package:agent_chat/ui/chat/chat_controller.dart";
 import "package:agent_chat/ui/chat/widgets/composer.dart";
@@ -186,7 +187,7 @@ void main() {
 
     test("what it hears is spoken into the project being shown", () async {
       await app.repo.createProject("work");
-      app.container.read(selectedProjectProvider.notifier).select("work");
+      app.container.read(selectedProjectProvider.notifier).select(localProject("work"));
       await startNewVoiceChat();
 
       await heard("hello");

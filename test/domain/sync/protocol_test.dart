@@ -69,13 +69,9 @@ void main() {
         equals(const SyncMessage.resourceChunk(id: "r0", bytesB64: "")));
   });
 
-  test("the control arms travel too", () {
-    roundTrips(const SyncMessage.controlState(chatId: "c1"));
-    roundTrips(const SyncMessage.controlState(chatId: "c1", holder: "d1"));
-    roundTrips(const SyncMessage.controlRequest(chatId: "c1"));
-    roundTrips(const SyncMessage.controlGrant(chatId: "c1", granted: true));
-    roundTrips(const SyncMessage.controlRelease(chatId: "c1"));
-    roundTrips(const SyncMessage.promptSend(chatId: "c1", text: "hi"));
+  test("the driving arms travel too", () {
+    roundTrips(const SyncMessage.promptSend(requestId: "q1", chatId: "c1", text: "hi"));
+    roundTrips(const SyncMessage.reply(requestId: "q1", ok: false, entries: [{"id": "m1"}]));
     roundTrips(const SyncMessage.approvalRespond(
         chatId: "c1", approvalId: "a", allow: false));
     roundTrips(const SyncMessage.questionsRespond(

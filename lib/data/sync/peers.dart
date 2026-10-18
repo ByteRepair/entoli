@@ -59,11 +59,12 @@ class LivePeer {
   /// not report the device gone, or it takes the new one down with it.
   bool _superseded = false;
 
-  DateTime lastPong = DateTime.now();
-
   /// This device's chat ids the peer is following. Only subscribers get
   /// record and state pushes.
   final subscriptions = <String>{};
+
+  /// This device's projects the peer has open, null for the default one.
+  final projectSubscriptions = <String?>{};
 
   StreamSubscription<Map<String, dynamic>>? pump;
 
@@ -90,8 +91,8 @@ class LivePeer {
     try {
       await channel.sendJson(message.toJson());
     } catch (error) {
-      // Almost always a message the transport refused as too large, which is
-      // silent otherwise: the peer simply goes away.
+      // A transport that refused the frame, which is silent otherwise: the
+      // peer simply goes away.
       logFailure("sync", "send to $deviceId failed", error);
       await close();
     }
@@ -126,6 +127,7 @@ class SyncPeers {
   /// a controller open per entry, which is what makes a turn's progress
   /// visible at the other end.
   final servedChats = ValueNotifier<Set<String>>(const {});
+  final servedProjects = ValueNotifier<Set<String?>>(const {});
 
   Timer? _pingTimer;
 
@@ -211,16 +213,21 @@ class SyncPeers {
   void refreshServed() {
     final served = {for (final peer in _live.values) ...peer.subscriptions};
     if (!setEquals(served, servedChats.value)) servedChats.value = served;
+    final projects = {for (final peer in _live.values) ...peer.projectSubscriptions};
+    if (!setEquals(projects, servedProjects.value)) servedProjects.value = projects;
   }
 
-  /// Thirty seconds of silence gets a ping; seventy-five without an answer is
-  /// a connection that has gone whether or not the socket says so.
+  /// A ping every five seconds; fifteen without an answer is a connection
+  /// that has gone whether or not the transport says so. The one check for
+  /// both ways a peer goes: its process killed, which sends no close, and its
+  /// app stuck while WebRTC's own threads still answer ICE. Closing it is what
+  /// stops ICE probing the dead paths.
   void watchLiveness() {
     _pingTimer?.cancel();
-    _pingTimer = Timer.periodic(const Duration(seconds: 30), (_) {
-      final cutoff = DateTime.now().subtract(const Duration(seconds: 75));
+    _pingTimer = Timer.periodic(const Duration(seconds: 5), (_) {
+      final cutoff = DateTime.now().subtract(const Duration(seconds: 15));
       for (final peer in _live.values.toList()) {
-        if (peer.lastPong.isBefore(cutoff)) {
+        if (peer.channel.lastFrame.isBefore(cutoff)) {
           unawaited(peer.close());
           continue;
         }
@@ -237,5 +244,6 @@ class SyncPeers {
     }
     _live.clear();
     servedChats.value = const {};
+    servedProjects.value = const {};
   }
 }

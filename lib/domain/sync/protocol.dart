@@ -1,9 +1,10 @@
 import "package:freezed_annotation/freezed_annotation.dart";
 
+import "../app_settings.dart";
 import "../chat_log.dart";
 import "../chat_meta.dart";
 import "../models.dart";
-import "identity.dart";
+import "../project_settings.dart";
 
 part "protocol.freezed.dart";
 part "protocol.g.dart";
@@ -18,8 +19,7 @@ part "protocol.g.dart";
 ///
 /// Commands never travel. A prompt sent from a mirror is *run* on the chat's
 /// home device, through the same `ChatController` a local one goes through —
-/// what comes back is the ordinary record stream. What the control arms move
-/// is who may type, not where the work happens.
+/// what comes back is the ordinary record stream.
 @freezed
 sealed class SyncMessage with _$SyncMessage {
   /// The home device's chat list, sent right after `hello` and again
@@ -32,12 +32,13 @@ sealed class SyncMessage with _$SyncMessage {
   const factory SyncMessage.welcome({
     required List<ChatState> chats,
     @Default(<String>[]) List<String> omadaProjects,
-    @Default(SyncIdentity.protocolVersion) int proto,
+    @Default(<String>[]) List<String> projects,
   }) = SyncWelcome;
 
   const factory SyncMessage.chatsChanged({
     required List<ChatState> chats,
     @Default(<String>[]) List<String> omadaProjects,
+    @Default(<String>[]) List<String> projects,
   }) = SyncChatsChanged;
 
   /// Subscribe to one of the peer's chats from record [fromLine] on — the
@@ -48,9 +49,8 @@ sealed class SyncMessage with _$SyncMessage {
   }) = SyncChatOpen;
 
   /// The reply to [SyncChatOpen]: the chat's head, and nothing else. The
-  /// records follow as [SyncRecordAppend]s — a whole conversation is far past
-  /// what one data channel message may carry, and half a megabyte is an
-  /// ordinary size for one. What a mirror holds is what it has been sent, so
+  /// records follow as one [SyncRecordAppend]. What a mirror holds is what it
+  /// has been sent, so
   /// a resume counts from its own record count and needs no total to compare
   /// against.
   const factory SyncMessage.chatSnapshot({
@@ -59,7 +59,7 @@ sealed class SyncMessage with _$SyncMessage {
     required ChatMeta meta,
   }) = SyncChatSnapshot;
 
-  /// Records for a subscribed chat, in order: the pages of a snapshot, and
+  /// Records for a subscribed chat, in order: the rest of a snapshot, and
   /// then whatever the turn appends as it happens. A snapshot plus these
   /// rebuilds the log exactly.
   const factory SyncMessage.recordAppend({
@@ -108,26 +108,7 @@ sealed class SyncMessage with _$SyncMessage {
 
   const factory SyncMessage.pong() = SyncPong;
 
-  // ---- Control, and driving a turn from the other end. ------------------
-
-  /// Who holds the chat, as the home device sees it — a device id, or null
-  /// for nobody. Pushed to every subscriber whenever it changes, so a second
-  /// mirror watching the same chat sees that someone else has it.
-  const factory SyncMessage.controlState({
-    required String chatId,
-    String? holder,
-  }) = SyncControlState;
-
-  const factory SyncMessage.controlRequest({required String chatId}) =
-      SyncControlRequest;
-
-  const factory SyncMessage.controlGrant({
-    required String chatId,
-    required bool granted,
-  }) = SyncControlGrant;
-
-  const factory SyncMessage.controlRelease({required String chatId}) =
-      SyncControlRelease;
+  // ---- Driving a turn from the other end. -------------------------------
 
   /// The turn-scoped view state a mirror cannot get from the log: whether one
   /// is running, what it is waiting to be allowed or told, and the line the
@@ -142,9 +123,12 @@ sealed class SyncMessage with _$SyncMessage {
     String? retry,
   }) = SyncTurnState;
 
+  /// Answered by a [SyncReply].
   const factory SyncMessage.promptSend({
+    required String requestId,
     required String chatId,
     required String text,
+    @Default(<SyncFile>[]) List<SyncFile> files,
   }) = SyncPromptSend;
 
   const factory SyncMessage.approvalRespond({
@@ -166,7 +150,7 @@ sealed class SyncMessage with _$SyncMessage {
   const factory SyncMessage.turnResume({required String chatId}) =
       SyncTurnResume;
 
-  // ---- Editing the conversation, from the holder alone. -----------------
+  // ---- Editing the conversation. ----------------------------------------
 
   const factory SyncMessage.editResend({
     required String chatId,
@@ -213,8 +197,95 @@ sealed class SyncMessage with _$SyncMessage {
   const factory SyncMessage.chatDelete({required String chatId}) =
       SyncChatDelete;
 
+  /// Make a chat in [project] and say [text] in it. Answered by a
+  /// [SyncReply] carrying its id, after the chat list that names it.
+  const factory SyncMessage.chatStart({
+    required String requestId,
+    String? project,
+    required String text,
+    @Default(<SyncFile>[]) List<SyncFile> files,
+  }) = SyncChatStart;
+
+  /// The answer to a request by its [requestId]: [ok] where it went through,
+  /// [chatId] the chat a [SyncChatStart] made, and [entries] the [MemoryEntry]
+  /// JSON a [SyncMemoryCall] read.
+  const factory SyncMessage.reply({
+    required String requestId,
+    @Default(true) bool ok,
+    String? chatId,
+    @Default(<Map<String, dynamic>>[]) List<Map<String, dynamic>> entries,
+  }) = SyncReply;
+
+  // ---- A project on the home device, read only while it is open. --------
+
+  /// Follow [project]'s settings until [SyncProjectClose]. Null is the home
+  /// device's default project.
+  const factory SyncMessage.projectOpen({String? project}) = SyncProjectOpen;
+
+  const factory SyncMessage.projectClose({String? project}) = SyncProjectClose;
+
+  /// [project]'s settings and the app settings they inherit from, whole, on
+  /// open and on every change to either while followed.
+  const factory SyncMessage.projectSnapshot({
+    String? project,
+    required ProjectSettings settings,
+    required AppSettings app,
+  }) = SyncProjectSnapshot;
+
+  /// [project]'s skills and agents, after the first snapshot and on every
+  /// change to them: [PromptDocument] JSON.
+  const factory SyncMessage.projectPrompts({
+    String? project,
+    required List<Map<String, dynamic>> documents,
+  }) = SyncProjectPrompts;
+
+  /// Read or change [project]'s memories: [op] is `list`, `search` (by
+  /// [text]), `add` ([text]), `pin`, `unpin` or `delete` ([id]). Answered by
+  /// a [SyncReply] with what a list or the search reads after it.
+  const factory SyncMessage.memoryCall({
+    required String requestId,
+    String? project,
+    required String op,
+    String? id,
+    String? text,
+  }) = SyncMemoryCall;
+
+  /// The three below are answered by a [SyncReply]; a follower has the
+  /// snapshot of what was written ahead of it.
+  const factory SyncMessage.projectWrite({
+    required String requestId,
+    String? project,
+    required ProjectSettings settings,
+  }) = SyncProjectWrite;
+
+  /// [settings] are the new project's, written with it.
+  const factory SyncMessage.projectCreate({
+    required String requestId,
+    required String name,
+    ProjectSettings? settings,
+  }) = SyncProjectCreate;
+
+  const factory SyncMessage.projectDelete({
+    required String requestId,
+    required String name,
+  }) = SyncProjectDelete;
+
   factory SyncMessage.fromJson(Map<String, dynamic> json) =>
       _$SyncMessageFromJson(json);
+}
+
+/// An attachment sent with a prompt. Inline: the framing splits a message of
+/// any size, and the liveness check counts its pieces.
+@freezed
+abstract class SyncFile with _$SyncFile {
+  const factory SyncFile({
+    required String bytesB64,
+    required String filename,
+    required String mimeType,
+  }) = _SyncFile;
+
+  factory SyncFile.fromJson(Map<String, dynamic> json) =>
+      _$SyncFileFromJson(json);
 }
 
 /// One `ask_user` call on the wire. The questions themselves are not sent:
