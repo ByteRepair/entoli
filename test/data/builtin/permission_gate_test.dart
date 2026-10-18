@@ -6,6 +6,7 @@ import "package:fs_shim/fs_io.dart" show fileSystemIo;
 import "package:path/path.dart" as p;
 
 import "package:agent_chat/data/builtin/builtin_agent.dart";
+import "package:agent_chat/data/builtin/local_shell.dart" show unnamedViolation;
 import "package:agent_chat/data/builtin/llm/llm_client.dart";
 import "package:agent_chat/domain/agent_backend.dart";
 import "package:agent_chat/domain/models.dart";
@@ -784,19 +785,44 @@ void main() {
       expect(approvals.first.approval.id, isNot(approvals.last.approval.id));
     });
 
-    test("a denial that is not a write is rerun confined", () async {
+    test("a denial the shim could not name is rerun unconfined, with no "
+        "path to grant", () async {
       final client = FakeLlmClient([
-        [bashCall("cat /etc/shadow")], [finish],
+        [bashCall("static-tool --out /etc/x")], [finish],
       ]);
-      await agentOver(
+      final events = await agentOver(
         client,
         approveMode: ApproveMode.ask,
         approvals: [ApprovalResponse.allow, ApprovalResponse.allow],
         respond: (_) => const ShellResult(
-            returnCode: 1, output: "", violations: ["denied /etc/shadow"]),
+            returnCode: 1,
+            output: "static-tool: /etc/x: Permission denied",
+            violations: [unnamedViolation]),
       ).run(userMessage("go")).toList();
+      // A confined rerun would only be refused again.
       expect(shell.ran, hasLength(2));
-      expect(shell.sandboxes.whereType<CommandSandbox>(), hasLength(2));
+      expect(shell.sandboxes, [isA<CommandSandbox>(), isNull]);
+      final reprompt = events.whereType<ApprovalRequestEvent>().last.approval;
+      expect(reprompt.rerun, isTrue);
+      expect(reprompt.deniedDirs, isEmpty);
+    });
+
+    test("an approved command that is then denied is still offered back",
+        () async {
+      // The banner answered the command; the denial is news to the human,
+      // and the second banner is the one asking about it.
+      final client = FakeLlmClient([
+        [bashCall("python3 build.py")], [finish],
+      ]);
+      final events = await agentOver(
+        client,
+        approveMode: ApproveMode.ask,
+        approvals: [ApprovalResponse.allow, ApprovalResponse.allow],
+        respond: (_) => const ShellResult(
+            returnCode: 1, output: "", violations: ["writing /etc"]),
+      ).run(userMessage("go")).toList();
+      expect(events.whereType<ApprovalRequestEvent>(), hasLength(2));
+      expect(shell.sandboxes, [isA<CommandSandbox>(), isNull]);
     });
 
     test("the re-prompt is gated by the setting", () async {
@@ -878,10 +904,14 @@ void main() {
         approveMode: ApproveMode.never,
         writableDirs: ["/etc/hosts", "/var/log/entoli"],
       ).run(userMessage("go")).toList();
-      // The persisted tier's grant — directories and the file paths a denial
-      // report names alike — is what the command's confinement carries.
-      expect(shell.sandboxes.single!.extraWrites,
-          ["/etc/hosts", "/var/log/entoli"]);
+      // The project's workspace, then the persisted tier's grant —
+      // directories and the file paths a denial report names alike — is
+      // what the command's confinement carries.
+      expect(shell.sandboxes.single!.extraWrites, [
+        p.dirname(p.dirname(workspaceDir)),
+        "/etc/hosts",
+        "/var/log/entoli",
+      ]);
     });
   });
 

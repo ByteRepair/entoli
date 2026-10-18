@@ -49,11 +49,14 @@ class TurnSurface extends StatelessWidget {
               onAllow: () =>
                   notifier.respondApproval(approval.id, ApprovalResponse.allow),
               onDeny: () => notifier.respondApproval(approval.id, ApprovalResponse.deny),
-              onAlwaysAllowChat: !notifier.rulesWritable
+              // A re-prompt with no path to grant has nothing to persist.
+              onAlwaysAllowChat: !notifier.rulesWritable ||
+                      approval.rerun && approval.deniedDirs.isEmpty
                   ? null
                   : () => notifier.respondApproval(approval.id,
                       ApprovalResponse.alwaysAllowChat, approval: approval),
-              onAlwaysAllowProject: !notifier.rulesWritable
+              onAlwaysAllowProject: !notifier.rulesWritable ||
+                      approval.rerun && approval.deniedDirs.isEmpty
                   ? null
                   : () => notifier.respondApproval(approval.id,
                       ApprovalResponse.alwaysAllowProject, approval: approval),

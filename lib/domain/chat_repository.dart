@@ -640,7 +640,10 @@ class ChatRepository {
       if (dirs.length < deniedDirs.length) {
         logFailure("perms", "refused a persisted grant over the app's data");
       }
-      final rule = deniedDirs.isEmpty ? ruleFromApproval(approval) : null;
+      // A re-prompt with no path to grant persists nothing.
+      final rule = deniedDirs.isEmpty && !(approval?.rerun ?? false)
+          ? ruleFromApproval(approval)
+          : null;
       if (rule != null || dirs.isNotEmpty) {
         if (r == ApprovalResponse.alwaysAllowChat) {
           // Read fresh: the running turn may have written the TTL since.

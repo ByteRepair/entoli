@@ -835,5 +835,26 @@ void main() {
       final settings = ProjectSettings.load(config, project: chat.state.project);
       expect(settings.writableDirs, ["/etc/hosts"]);
     });
+
+    test("a re-prompt with no path to grant persists nothing", () async {
+      // Its text is the denial's wording, not a command: a rule derived
+      // from it would allow a command named "denied".
+      final repo = repoWith(AppSettings());
+      final chat = await savedChat(repo);
+      await repo.respondApproval(
+        chat.state.id,
+        "d-6",
+        ApprovalResponse.alwaysAllowProject,
+        approval: const ToolApproval(
+            id: "d-6",
+            toolName: "bash",
+            argumentsText: "denied (the sandbox refused something it could "
+                "not name)",
+            rerun: true),
+      );
+      final settings = ProjectSettings.load(config, project: chat.state.project);
+      expect(settings.permissions, isEmpty);
+      expect(settings.writableDirs, isEmpty);
+    });
   });
 }
