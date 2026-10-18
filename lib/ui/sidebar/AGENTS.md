@@ -97,7 +97,10 @@ A pick is returned to the opener rather than run in the palette: the palette's
 ref is disposed by then, and the drawer a picked chat closes is the opener's.
 The shortcut is a `HardwareKeyboard` handler in `AppShell` rather than a
 `Shortcuts` widget, which hears nothing once focus has fallen back to the
-route's scope above it. Deleting a project is on its settings page alone.
+route's scope above it. It is one of `AppShortcut`'s (`lib/ui/shortcuts.dart`),
+the table that handler answers and Settings > Shortcuts lists, so a shortcut
+added there is on the page without anyone remembering to put it there. The
+page is on every platform, phones too, for the keyboard a tablet can have. Deleting a project is on its settings page alone.
 
 New Project swaps the list for a page in the same panel — name, description,
 the Omada switch — and back, Esc or the system back key return to the list

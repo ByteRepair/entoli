@@ -1,8 +1,11 @@
 import "package:flutter/material.dart";
+import "package:flutter/services.dart";
 import "package:flutter_test/flutter_test.dart";
 
 import "package:agent_chat/domain/app_settings.dart";
+import "package:agent_chat/domain/builtin_project.dart";
 import "package:agent_chat/ui/app_shell.dart";
+import "package:agent_chat/ui/sidebar/chat_groups.dart";
 import "package:agent_chat/ui/sidebar/sidebar.dart";
 import "package:agent_chat/ui/theme.dart";
 
@@ -105,6 +108,74 @@ void main() {
       await pumpAt(tester, const Size(400, 900));
 
       expect(await pressBack(tester), isFalse);
+    });
+  });
+
+  group("the shortcuts", () {
+    Future<void> chord(WidgetTester tester, LogicalKeyboardKey key,
+        {bool shift = false, bool alt = false}) async {
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+      if (shift) await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+      if (alt) await tester.sendKeyDownEvent(LogicalKeyboardKey.altLeft);
+      await tester.sendKeyEvent(key);
+      if (alt) await tester.sendKeyUpEvent(LogicalKeyboardKey.altLeft);
+      if (shift) await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+      await settleIo(tester);
+    }
+
+    testWidgets("Ctrl+N leaves the open chat for the default project's "
+        "new-chat screen", (tester) async {
+      await pumpAt(tester, const Size(1200, 800));
+      await io(tester, () => app.openSomeChat());
+      app.container
+          .read(selectedProjectProvider.notifier)
+          .select(const AnonymousProject().dir);
+      await settleIo(tester);
+
+      await chord(tester, LogicalKeyboardKey.keyN);
+
+      expect(app.container.read(selectedChatIdProvider), isNull);
+      expect(app.container.read(selectedProjectProvider), isNull);
+    });
+
+    testWidgets("Ctrl+Shift+N is a new chat in the anonymous project",
+        (tester) async {
+      await pumpAt(tester, const Size(1200, 800));
+
+      await chord(tester, LogicalKeyboardKey.keyN, shift: true);
+
+      expect(app.container.read(selectedProjectProvider),
+          const AnonymousProject().dir);
+    });
+
+    testWidgets("Ctrl+Alt+N is a new chat in My Team", (tester) async {
+      await pumpAt(tester, const Size(1200, 800));
+
+      await chord(tester, LogicalKeyboardKey.keyN, alt: true);
+
+      expect(app.container.read(selectedProjectProvider), omadaBaseProject);
+    });
+
+    testWidgets("Ctrl+P pins the open chat, and again unpins it",
+        (tester) async {
+      await pumpAt(tester, const Size(1200, 800));
+      final chat = await io(tester, () => app.openSomeChat());
+      await settleIo(tester);
+
+      Future<bool> pinned() async =>
+          (await io(tester, () => app.repo.openChat(chat.state.id))).state.pinned;
+
+      await chord(tester, LogicalKeyboardKey.keyP);
+      await pumpUntil(tester, find.text(pinnedHeading));
+      expect(await pinned(), isTrue);
+
+      await chord(tester, LogicalKeyboardKey.keyP);
+      for (var i = 0; i < 50 && find.text(pinnedHeading).evaluate().isNotEmpty; i++) {
+        await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 5)));
+        await tester.pump();
+      }
+      expect(await pinned(), isFalse);
     });
   });
 }

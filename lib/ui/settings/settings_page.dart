@@ -39,6 +39,7 @@ import "llm_settings.dart";
 import "local_model_settings.dart";
 import "memory_settings.dart";
 import "privacy_policy_page.dart";
+import "shortcuts_settings.dart";
 import "triggers.dart";
 import "skills_settings.dart";
 import "sync_settings.dart";
@@ -54,8 +55,8 @@ import "welcome_page.dart";
 /// Skills are what a message addresses by name; Terminal and Byte Repair are
 /// where commands run; Sync and Data are the device and all of it at once —
 /// the chats, the settings and the workspaces as one file to keep; and
-/// Welcome and About are the app rather than anything it does, which is why
-/// they are last.
+/// Welcome, Shortcuts and About are the app rather than anything it does,
+/// which is why they are last.
 enum SettingsCategory {
   general("General", Icons.tune),
   providers("Providers", Icons.cloud_outlined),
@@ -71,6 +72,7 @@ enum SettingsCategory {
   sync("Sync", Icons.sync, dividerAbove: true),
   data("Data", Icons.inventory_2_outlined),
   welcome("Welcome", Icons.waving_hand, dividerAbove: true),
+  shortcuts("Shortcuts", Icons.keyboard_outlined),
   about("About", Icons.info_outline);
 
   const SettingsCategory(this.label, this.icon, {this.dividerAbove = false});
@@ -267,6 +269,7 @@ List<Widget> _sectionsOf(SettingsCategory category) => switch (category) {
           AutoMemorySection(),
         ],
       SettingsCategory.data => const [_BackupSection()],
+      SettingsCategory.shortcuts => const [ShortcutsSection()],
       SettingsCategory.about => const [_AboutSection()],
       // Rendered by [_categoryBody] rather than filed here: the tour is a
       // pager with its own bar, not a list of sections.
