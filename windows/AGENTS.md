@@ -92,13 +92,22 @@ Files and nowhere else a person sets.
 ## Self-update
 
 A running exe cannot be renamed under itself, so the update is the MSI run:
-at startup the app downloads `entoli-installer.msi` into the cache and arms a
-detached PowerShell that waits for this process to exit, then starts
-`msiexec /i <that msi> /qn /norestart` under `Start-Process -Verb RunAs` —
-the UAC prompt the user answers on the way out. RunAs is load-bearing, not
+at startup the app downloads `entoli-installer.msi` into the cache, named per
+process (`updates\<pid>-entoli-installer.msi`) so two running copies never
+arm the same file, and arms a detached PowerShell that waits for this process
+to exit, then starts `msiexec /i "<that msi>" /qn /norestart /l*v
+"updates\msi.log"` under `Start-Process -Verb RunAs` — the UAC prompt the
+user answers on the way out. The paths carry their own double quotes because
+`-ArgumentList` is joined with bare spaces, and a profile path with a space
+in it is two arguments otherwise; the verbose log is the only trace an
+unattended install that failed leaves. RunAs is load-bearing, not
 decorative: silent mode suppresses the elevation prompt itself, and a
 per-machine install that cannot ask fails with "insufficient privileges" and
 nothing to say so. A declined prompt is a no-op the next launch's check
 retries. The next start is the upgraded install, reached through the same
-UpgradeCode and so this installer replacing its own prior work. See "The
+UpgradeCode and so this installer replacing its own prior work —
+`AllowSameVersionUpgrades` included, so a rebuild of one version replaces
+rather than installs beside. Only the installed exe checks: one that is not
+under `%ProgramFiles%\Entoli` (a `flutter run`, a copied Release folder)
+would install an MSI over a folder it is not running from. See "The
 automatic update" in the root notes.

@@ -375,14 +375,20 @@ about:
   keeps this process alive, and the next launch execs the new file.
 - **macOS swaps the bundle.** The image mounts for the `.app` inside it, which
   `ditto` copies beside the running bundle — the engine directory checked
-  non-empty first, since a swap is the whole of the app — and two renames put
-  it in: old moved aside, new into the old name, the old put back if the
-  second rename fails. The aside stays for the stale sweep a day later, this
-  process possibly still reading from the bundle it just left.
+  non-empty first, since a swap is the whole of the app — and one
+  `renamex_np(RENAME_SWAP)` exchanges the two, so there is no moment with no
+  app at the path. Two renames are the fallback where the swap is refused,
+  the old put back if the second fails. The aside stays for the stale sweep a
+  day later, which sweeps nothing while the bundle's own path is missing. A
+  bundle whose directory cannot be written — a mounted image, a translocated
+  copy, a non-admin `/Applications` — checks nothing, and neither does a
+  trigger's wake (`ENTOLI_WAKE`), which quits before a download could finish.
 - **Windows installs over itself.** A running exe cannot be renamed and the
   release ships an installer, so the check arms one: a detached PowerShell
-  waits for this process to exit, then starts `msiexec /i
-  entoli-installer.msi /qn /norestart` under `Start-Process -Verb RunAs` —
+  waits for this process to exit, then starts `msiexec /i "<pid>-entoli-installer.msi"
+  /qn /norestart /l*v "msi.log"` under `Start-Process -Verb RunAs` — the paths
+  quoted, since a profile path may hold a space, and only from the installed
+  exe under Program Files, so a local build never arms one —
   the UAC prompt the user sees at quit. RunAs is what raises it: silent mode
   suppresses the elevation prompt itself, and a per-machine install that
   cannot ask fails with nothing to say so. The next launch is the installed
