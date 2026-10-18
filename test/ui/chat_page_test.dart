@@ -127,8 +127,8 @@ void main() {
     // chat: making one is this device's and would take the sidebar home.
     testWidgets("reading a paired device makes no chat", (tester) async {
       app.container
-          .read(selectedRemoteProvider.notifier)
-          .select((deviceId: "phone", project: null));
+          .read(selectedProjectProvider.notifier)
+          .select((device: "phone", project: null));
 
       await app.pump(tester, const ChatPage(withDrawer: true));
 
@@ -183,7 +183,7 @@ void main() {
 
       await pick(tester, anonProjectLabel);
 
-      expect(app.container.read(selectedProjectProvider), "anonymous");
+      expect(app.container.read(selectedProjectProvider).project, "anonymous");
 
       await sendMessage(tester, "hello");
 
@@ -375,11 +375,11 @@ void main() {
 
       await pick(tester, "work");
       expect(selectedOf(tester, "work"), isTrue);
-      expect(app.container.read(selectedProjectProvider), "work");
+      expect(app.container.read(selectedProjectProvider).project, "work");
 
       await pick(tester, "work");
       expect(selectedOf(tester, "work"), isFalse);
-      expect(app.container.read(selectedProjectProvider), isNull);
+      expect(app.container.read(selectedProjectProvider).project, isNull);
 
       await pick(tester, "work");
       await sendMessage(tester, "hello");
@@ -1024,8 +1024,8 @@ void main() {
       await tester.tap(find.text("work"));
       await tester.pump();
 
-      expect(app.container.read(selectedRemoteProvider),
-          (deviceId: "d1", project: "work"));
+      expect(app.container.read(selectedProjectProvider),
+          (device: "d1", project: "work"));
       expect(app.container.read(selectedChatIdProvider), isNull);
     });
   });

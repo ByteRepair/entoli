@@ -41,7 +41,7 @@ void main() {
   }
 
   String? openedChat() => app.container.read(selectedChatIdProvider);
-  String? openedProject() => app.container.read(selectedProjectProvider);
+  String? openedProject() => app.container.read(selectedProjectProvider).project;
 
   testWidgets("nothing opens when the gesture never happened", (tester) async {
     app = TestApp.create();

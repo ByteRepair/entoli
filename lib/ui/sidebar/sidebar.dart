@@ -44,13 +44,12 @@ class SelectedChatId extends Notifier<String?> {
   /// chat that could not be made, which is already logged.
   Future<String?> create({ChatMeta? meta}) async {
     try {
+      final at = ref.read(selectedProjectProvider);
+      if (at.device != null) return null;
       final chat = await ref.read(chatRepositoryProvider).createChat(
-            project: ref.read(selectedProjectProvider),
+            project: at.project,
             meta: meta,
           );
-      // A new chat is this device's, so the sidebar comes back from whatever
-      // paired device it was reading.
-      ref.read(selectedRemoteProvider.notifier).select(null);
       state = chat.state.id;
       ref.invalidate(chatListProvider);
       return chat.state.id;
@@ -63,40 +62,17 @@ class SelectedChatId extends Notifier<String?> {
 
 final selectedChatIdProvider = NotifierProvider<SelectedChatId, String?>(SelectedChatId.new);
 
-/// Which project the sidebar is showing, and where a new chat goes. Null is
-/// the default project, which is what the app opens in.
-class SelectedProject extends Notifier<String?> {
+/// Which project the sidebar is showing, on whichever device, and where a new
+/// chat goes. This device's default project is what the app opens in.
+class SelectedProject extends Notifier<ProjectRef> {
   @override
-  String? build() => null;
+  ProjectRef build() => localProject(null);
 
-  void select(String? project) => state = project;
+  void select(ProjectRef project) => state = project;
 }
 
 final selectedProjectProvider =
-    NotifierProvider<SelectedProject, String?>(SelectedProject.new);
-
-/// A project on a paired device, as the switcher names one. Device *and*
-/// project together, because `work` on a laptop and `work` on a phone are
-/// different directories that happen to share a name — there is nothing to
-/// gain by folding them together and a conversation to lose by it.
-///
-/// A record, for the value equality a map key and a `Notifier` state both
-/// want. `project` null is that device's default one, the same as it is here.
-typedef RemoteScope = ({String deviceId, String? project});
-
-class SelectedRemote extends Notifier<RemoteScope?> {
-  @override
-  RemoteScope? build() => null;
-
-  void select(RemoteScope? scope) => state = scope;
-}
-
-/// Which paired device's project the sidebar is listing, or null for one of
-/// this device's own. Separate from [selectedProjectProvider] because they
-/// answer different questions: this one is what is being *read*, and that one
-/// is where new work goes — and new work never goes on somebody else's device.
-final selectedRemoteProvider =
-    NotifierProvider<SelectedRemote, RemoteScope?>(SelectedRemote.new);
+    NotifierProvider<SelectedProject, ProjectRef>(SelectedProject.new);
 
 void openChat(BuildContext context, WidgetRef ref, String chatId) {
   ref.read(selectedChatIdProvider.notifier).select(chatId);
@@ -108,17 +84,8 @@ void openChat(BuildContext context, WidgetRef ref, String chatId) {
 /// sidebar denies — and dropping it is also what starts a chat in the project
 /// just picked. The switcher, the empty chat's badges and deleting a project
 /// are all this.
-void selectProject(WidgetRef ref, String? project) {
+void selectProject(WidgetRef ref, ProjectRef project) {
   ref.read(selectedProjectProvider.notifier).select(project);
-  ref.read(selectedRemoteProvider.notifier).select(null);
-  ref.read(selectedChatIdProvider.notifier).select(null);
-}
-
-/// Switch to a project on a paired device. The local project is left where it
-/// was: it is where the next new chat goes, and coming back from a remote
-/// should land where the user was, not wherever they were reading.
-void selectRemote(WidgetRef ref, RemoteScope scope) {
-  ref.read(selectedRemoteProvider.notifier).select(scope);
   ref.read(selectedChatIdProvider.notifier).select(null);
 }
 
@@ -127,10 +94,6 @@ void selectRemote(WidgetRef ref, RemoteScope scope) {
 /// makes a chat when the first thing is said in it.
 void openNewChat(BuildContext context, WidgetRef ref) {
   ref.read(selectedChatIdProvider.notifier).select(null);
-  // A new chat is this device's, so the sidebar comes back from whatever
-  // paired device it was reading — the alternative is a list that denies the
-  // screen now in front of the user.
-  ref.read(selectedRemoteProvider.notifier).select(null);
   closeNavDrawer(context);
 }
 
@@ -249,8 +212,7 @@ class _SidebarState extends ConsumerState<Sidebar> {
 
   @override
   Widget build(BuildContext context) {
-    final project = ref.watch(selectedProjectProvider);
-    final remote = ref.watch(selectedRemoteProvider);
+    final selected = ref.watch(selectedProjectProvider);
     // The list the query was written against has just been replaced, the same
     // reason switching clears the selected chat. Kept, it would answer a
     // project the user has left with "nothing matches".
@@ -266,15 +228,16 @@ class _SidebarState extends ConsumerState<Sidebar> {
               child: Row(
                 children: [
                   const Expanded(child: _ProjectMenu()),
-                  ..._projectButtons(context, ref, project),
+                  if (selected.device == null)
+                    ..._projectButtons(context, ref, selected.project),
                 ],
               ),
             ),
             Expanded(
-              child: remote != null
-                  ? _RemoteChatList(scope: remote, query: _query, search: _search)
+              child: selected.device != null
+                  ? _RemoteChatList(scope: selected, query: _query, search: _search)
                   : _LocalChatList(
-                      project: project, query: _query, search: _search),
+                      project: selected.project, query: _query, search: _search),
             ),
             const Divider(height: 1),
             Stack(
@@ -382,7 +345,7 @@ class _RemoteChatList extends ConsumerWidget {
     required this.search,
   });
 
-  final RemoteScope scope;
+  final ProjectRef scope;
   final ValueNotifier<String> query;
   final TextEditingController search;
 
@@ -391,7 +354,7 @@ class _RemoteChatList extends ConsumerWidget {
     final theme = Theme.of(context);
     final chats = ref.watch(remoteChatsProvider)
         .where((entry) =>
-            entry.deviceId == scope.deviceId &&
+            entry.deviceId == scope.device &&
             entry.state.project == scope.project)
         .toList()
       ..sort((a, b) => b.state.updatedAt.compareTo(a.state.updatedAt));
@@ -693,7 +656,7 @@ class _ChatTile extends ConsumerWidget {
     // The open controller holds the chat it read when it was built — project
     // included — so it is disposed and re-read from where the chat now is.
     ref.invalidate(chatControllerProvider(chat.id));
-    ref.read(selectedProjectProvider.notifier).select(picked.project);
+    ref.read(selectedProjectProvider.notifier).select(localProject(picked.project));
     ref.invalidate(chatListProvider);
   }
 
@@ -719,16 +682,16 @@ String _remoteLabel(String deviceName, String? project) =>
     project == null ? deviceName : "$deviceName · ${projectLabel(project)}";
 
 /// A project on a paired device, as the switcher lists it.
-typedef RemoteEntry = ({RemoteScope scope, String label, bool omada, int count});
+typedef RemoteEntry = ({ProjectRef scope, String label, bool omada, int count});
 
 /// Every project that has a mirrored chat in it, one entry each, device
 /// first. A device with nothing mirrored has no projects to offer — the
 /// welcome is what says a project exists at all.
 List<RemoteEntry> remoteEntries(List<RemoteChatEntry> remotes) {
-  final byScope = <RemoteScope, RemoteChatEntry>{};
-  final counts = <RemoteScope, int>{};
+  final byScope = <ProjectRef, RemoteChatEntry>{};
+  final counts = <ProjectRef, int>{};
   for (final entry in remotes) {
-    final scope = (deviceId: entry.deviceId, project: entry.state.project);
+    final ProjectRef scope = (device: entry.deviceId, project: entry.state.project);
     byScope[scope] ??= entry;
     counts[scope] = (counts[scope] ?? 0) + 1;
   }
@@ -747,16 +710,14 @@ List<RemoteEntry> remoteEntries(List<RemoteChatEntry> remotes) {
 
 /// The button's own text: the scope being read, named. A `String`, so
 /// `select` suppresses the rebuild when a mirrored chat merely changed.
-String _scopeLabel(
-    List<RemoteChatEntry> remotes, RemoteScope? remote, String? project) {
-  if (remote == null) return projectLabel(project);
+String _scopeLabel(List<RemoteChatEntry> remotes, ProjectRef remote) {
   for (final entry in remotes) {
-    if (entry.deviceId == remote.deviceId &&
+    if (entry.deviceId == remote.device &&
         entry.state.project == remote.project) {
       return _remoteLabel(entry.deviceName, remote.project);
     }
   }
-  return projectLabel(project);
+  return projectLabel(remote.project);
 }
 
 /// The project being shown, and the way to the palette that changes it.
@@ -766,20 +727,20 @@ class _ProjectMenu extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
-    final remote = ref.watch(selectedRemoteProvider);
-    final project = ref.watch(selectedProjectProvider);
+    final selected = ref.watch(selectedProjectProvider);
+    final remote = selected.device != null;
     // The label alone, not the list behind it: watching the list redrew this
     // button on every state diff from every mirrored chat. A `String` comes
     // back, so `select` compares it.
-    final label = remote == null
-        ? projectLabel(project)
+    final label = !remote
+        ? projectLabel(selected.project)
         : ref.watch(remoteChatsProvider
-            .select((chats) => _scopeLabel(chats, remote, project)));
-    final omada = remote == null
-        ? ref.watch(omadaOnProvider(project))
+            .select((chats) => _scopeLabel(chats, selected)));
+    final omada = !remote
+        ? ref.watch(omadaOnProvider(selected.project))
         : ref.watch(remoteChatsProvider.select((chats) => chats.any((e) =>
-            e.deviceId == remote.deviceId &&
-            e.state.project == remote.project &&
+            e.deviceId == selected.device &&
+            e.state.project == selected.project &&
             e.omada)));
     return Tooltip(
       message: "Switch project",
@@ -790,7 +751,7 @@ class _ProjectMenu extends ConsumerWidget {
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
           child: Row(
             children: [
-              Icon(remote == null ? projectGlyph(project) : remoteGlyph,
+              Icon(!remote ? projectGlyph(selected.project) : remoteGlyph,
                   size: 22),
               const SizedBox(width: 10),
               Expanded(

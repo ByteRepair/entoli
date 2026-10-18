@@ -17,8 +17,8 @@ import "../../widgets/chip_row.dart";
 /// a paired device for a listing of its own — there is no such message. A
 /// device with nothing mirrored has no card.
 ///
-/// A badge is a [RemoteScope] with a label, which is what makes tapping it
-/// [selectRemote] — the sidebar switcher's own action, so the two ways into a
+/// A badge is a [ProjectRef] with a label, which is what makes tapping it
+/// [selectProject] — the sidebar switcher's own action, so the two ways into a
 /// paired device's project cannot come to disagree about what picking it
 /// means. The card carries no buttons of its own; the chat list it opens is
 /// the sidebar's, under it.
@@ -163,9 +163,9 @@ class _DeviceCardState extends ConsumerState<_DeviceCard> {
                       child: ActionChip(
                         label: ProjectChipLabel(project,
                             omada: group.omada.contains(project)),
-                        onPressed: () => selectRemote(
+                        onPressed: () => selectProject(
                           ref,
-                          (deviceId: group.deviceId, project: project),
+                          (device: group.deviceId, project: project),
                         ),
                       ),
                     ),

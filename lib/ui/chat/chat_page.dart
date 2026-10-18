@@ -49,7 +49,7 @@ class ChatPage extends ConsumerWidget {
     // Reading a paired device's list is the one place nothing selected does not
     // mean a new chat: making one is this device's, and would take the sidebar
     // home from whatever it was showing.
-    if (ref.watch(selectedRemoteProvider) != null) {
+    if (ref.watch(selectedProjectProvider).device != null) {
       return _Waiting(
         withDrawer: withDrawer,
         child: const Nothing("Pick a chat to follow."),
@@ -124,7 +124,7 @@ class _NewChatState extends ConsumerState<_NewChat> {
       MaterialPageRoute(
         builder: (_) => NewChatSettingsPage(
           initial: _meta,
-          project: ref.read(selectedProjectProvider),
+          project: ref.read(selectedProjectProvider).project,
         ),
       ),
     );
@@ -150,7 +150,7 @@ class _NewChatState extends ConsumerState<_NewChat> {
   /// and has not been set up yet. The bar replaces the composer entirely,
   /// the way `ViewOnlyBar` does for a mirrored chat.
   Widget _bottomBar() {
-    final project = ref.watch(selectedProjectProvider);
+    final project = ref.watch(selectedProjectProvider).project;
     if (ref.watch(setupCompleteProvider(project))) {
       return Composer(
         controller: _controller,
@@ -183,7 +183,7 @@ class _NewChatState extends ConsumerState<_NewChat> {
         body: _ReadableColumn(
           bottom: _bottomBar(),
           child: _EmptyChat(
-            project: ref.watch(selectedProjectProvider),
+            project: ref.watch(selectedProjectProvider).project,
             controller: _controller,
             // The paired devices' cards are the new-chat screen's own — a
             // chat that exists with nothing said in it yet is mid-turn at
@@ -232,7 +232,7 @@ class _ProjectBadges extends ConsumerWidget {
                 child: ChoiceChip(
                   label: ProjectChipLabel(project),
                   selected: project == selected,
-                  onSelected: (on) => selectProject(ref, on ? project : null),
+                  onSelected: (on) => selectProject(ref, localProject(on ? project : null)),
                 ),
               ),
             ),

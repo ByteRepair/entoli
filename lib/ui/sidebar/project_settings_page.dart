@@ -5,7 +5,7 @@ import "../../domain/app_settings.dart";
 import "../../domain/builtin_project.dart";
 import "../../domain/models.dart";
 import "../../domain/project.dart"
-    show defaultEmptyChatQuestion, emptyChatQuestionFor;
+    show defaultEmptyChatQuestion, emptyChatQuestionFor, localProject;
 import "../../domain/project_settings.dart";
 import "../../domain/temp_chat_ttl.dart";
 import "../../domain/tristate.dart";
@@ -50,7 +50,7 @@ Future<void> deleteProject(
     return;
   }
   await ref.read(chatRepositoryProvider).deleteProject(project);
-  selectProject(ref, null);
+  selectProject(ref, localProject(null));
   // The other reference to a project that no longer exists. Both ends resolve a
   // dangling name to the default project anyway, but leaving it written down
   // means the next save writes it back — and recreating a project of that name

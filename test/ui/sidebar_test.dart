@@ -228,7 +228,7 @@ void main() {
       await tester.enterText(find.byType(TextField), "shell");
       await tester.pump();
 
-      app.container.read(selectedProjectProvider.notifier).select("work");
+      app.container.read(selectedProjectProvider.notifier).select(localProject("work"));
       await settleIo(tester);
 
       expect(find.text("at work"), findsOneWidget);
@@ -276,7 +276,7 @@ void main() {
   group("projects", () {
     /// Open the switcher at the top of the sidebar, whatever it currently says.
     Future<void> openProjectMenu(WidgetTester tester) async {
-      await tester.tap(find.text(projectLabel(app.container.read(selectedProjectProvider))));
+      await tester.tap(find.text(projectLabel(app.container.read(selectedProjectProvider).project)));
       await settleIo(tester);
     }
 
@@ -289,7 +289,7 @@ void main() {
     testWidgets("the sidebar opens in the default project", (tester) async {
       await pumpBeside(tester);
 
-      expect(app.container.read(selectedProjectProvider), isNull);
+      expect(app.container.read(selectedProjectProvider).project, isNull);
       expect(find.text("Default"), findsOneWidget);
     });
 
@@ -382,7 +382,7 @@ void main() {
       await settleIo(tester);
 
       expect(find.byType(ProjectPalette), findsNothing);
-      expect(app.container.read(selectedProjectProvider), "work");
+      expect(app.container.read(selectedProjectProvider).project, "work");
       expect(app.container.read(selectedChatIdProvider), chat.state.id);
     });
 
@@ -396,7 +396,7 @@ void main() {
       await tester.testTextInput.receiveAction(TextInputAction.go);
       await settleIo(tester);
 
-      expect(app.container.read(selectedProjectProvider),
+      expect(app.container.read(selectedProjectProvider).project,
           builtinProjects.first.dir);
     });
 
@@ -407,7 +407,7 @@ void main() {
       await pumpBeside(tester);
       await switchTo(tester, anonProjectLabel);
 
-      expect(app.container.read(selectedProjectProvider), "anonymous");
+      expect(app.container.read(selectedProjectProvider).project, "anonymous");
       expect(find.byTooltip("Project settings"), findsNothing);
       expect(find.byTooltip("Default workspace"), findsNothing);
     });
@@ -417,7 +417,7 @@ void main() {
       await pumpBeside(tester);
       await switchTo(tester, byteRepairProjectLabel);
 
-      expect(app.container.read(selectedProjectProvider), "byte-repair");
+      expect(app.container.read(selectedProjectProvider).project, "byte-repair");
       expect(find.byTooltip("Project settings"), findsOneWidget);
       await tester.tap(find.byTooltip("Project settings"));
       await settleIo(tester);
@@ -490,7 +490,7 @@ void main() {
       await tester.tap(find.text("Create"));
       await settleIo(tester, least: 20);
 
-      expect(app.container.read(selectedProjectProvider), "My-Side-Project");
+      expect(app.container.read(selectedProjectProvider).project, "My-Side-Project");
       expect(Directory(app.config.projectWorkspaceDir(project: "My-Side-Project")).existsSync(), isTrue);
     });
 
@@ -508,7 +508,7 @@ void main() {
       await settleIo(tester, least: 20);
 
       await io(tester, () async {});
-      expect(app.container.read(selectedProjectProvider), "notes");
+      expect(app.container.read(selectedProjectProvider).project, "notes");
       expect(ProjectSettings.load(app.config, project: "notes").description,
           "What are we writing?");
     });
@@ -526,7 +526,7 @@ void main() {
       await settleIo(tester, least: 20);
 
       await io(tester, () async {});
-      expect(app.container.read(selectedProjectProvider), "plain");
+      expect(app.container.read(selectedProjectProvider).project, "plain");
       expect(ProjectSettings.load(app.config, project: "plain").description,
           isNull);
     });
@@ -758,7 +758,7 @@ void main() {
       await tester.tap(find.text("Delete"));
       await settleIo(tester, least: 20);
 
-      expect(app.container.read(selectedProjectProvider), isNull);
+      expect(app.container.read(selectedProjectProvider).project, isNull);
       expect(await io(tester, () => app.repo.listChats()), isEmpty);
       expect(Directory(app.config.projectDir(project: "work")).existsSync(), isFalse);
     });
@@ -804,7 +804,7 @@ void main() {
       // once the rebuild has landed rather than on a round count.
       await pumpUntil(tester, find.text("at home"));
       expect(find.text("at home"), findsOneWidget);
-      expect(app.container.read(selectedProjectProvider), "work");
+      expect(app.container.read(selectedProjectProvider).project, "work");
     });
 
     // The open controller held the chat as it was when it read it — project

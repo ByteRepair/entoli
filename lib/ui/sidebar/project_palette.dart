@@ -62,7 +62,7 @@ PaletteAction _createProject(_NewProjectAnswer answer) =>
         await settings.setDescription(answer.description.trim());
       }
       ref.invalidate(projectListProvider);
-      selectProject(ref, answer.name);
+      selectProject(ref, localProject(answer.name));
     };
 
 const _listPage = "list";
@@ -187,8 +187,7 @@ class _ProjectPaletteState extends ConsumerState<ProjectPalette> {
   }
 
   Widget _list(BuildContext context) {
-    final project = ref.watch(selectedProjectProvider);
-    final remote = ref.watch(selectedRemoteProvider);
+    final selected = ref.watch(selectedProjectProvider);
     final selectedChat = ref.watch(selectedChatIdProvider);
     final named = ref.watch(projectListProvider).value ?? const <String>[];
     final chats = (ref.watch(chatListProvider).value ?? const <ChatState>[])
@@ -210,26 +209,26 @@ class _ProjectPaletteState extends ConsumerState<ProjectPalette> {
         _Choice local(String? p) => _Choice(
               build: (active) => _Row(
                 active: active,
-                current: remote == null && p == project,
+                current: selected == localProject(p),
                 running: busy.contains(p),
                 icon: projectGlyph(p),
                 label: projectLabel(p),
                 omada: ref.watch(omadaOnProvider(p)),
                 trailing: _Count(counts[p] ?? 0),
               ),
-              action: (_, ref) => selectProject(ref, p),
+              action: (_, ref) => selectProject(ref, localProject(p)),
             );
         _Choice mirrored(RemoteEntry e) => _Choice(
               build: (active) => _Row(
                 active: active,
-                current: e.scope == remote,
+                current: e.scope == selected,
                 running: false,
                 icon: remoteGlyph,
                 label: e.label,
                 omada: e.omada,
                 trailing: _Count(e.count),
               ),
-              action: (_, ref) => selectRemote(ref, e.scope),
+              action: (_, ref) => selectProject(ref, e.scope),
             );
 
         final needle = searchNeedle(_query);
@@ -241,20 +240,20 @@ class _ProjectPaletteState extends ConsumerState<ProjectPalette> {
           final mine = every.where(isUserProject);
           var index = 0;
           for (final p in builtIn) {
-            if (remote == null && p == project) current = index;
+            if (selected == localProject(p)) current = index;
             items.add(local(p));
             index++;
           }
           items.add(const _Rule());
           for (final p in mine) {
-            if (remote == null && p == project) current = index;
+            if (selected == localProject(p)) current = index;
             items.add(local(p));
             index++;
           }
           if (remotes.isNotEmpty) {
             items.add(const _Heading("Other devices"));
             for (final e in remotes) {
-              if (e.scope == remote) current = index;
+              if (e.scope == selected) current = index;
               items.add(mirrored(e));
               index++;
             }
@@ -286,7 +285,7 @@ class _ProjectPaletteState extends ConsumerState<ProjectPalette> {
                 // Into its project first: the sidebar lists one project, and
                 // a chat it does not list would be open with nothing saying so.
                 action: (context, ref) {
-                  selectProject(ref, chat.project);
+                  selectProject(ref, localProject(chat.project));
                   openChat(context, ref, chat.id);
                 },
               ));
