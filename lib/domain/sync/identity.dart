@@ -15,7 +15,7 @@ import "../secret_store.dart";
 class SyncIdentity {
   SyncIdentity._(this.keyPair, this.publicKey, this.id);
 
-  static const protocolVersion = 2;
+  static const protocolVersion = 3;
 
   final SimpleKeyPair keyPair;
   final Uint8List publicKey;
