@@ -4,6 +4,7 @@ import "package:flutter_test/flutter_test.dart";
 
 import "package:agent_chat/domain/app_settings.dart";
 import "package:agent_chat/domain/builtin_project.dart";
+import "package:agent_chat/domain/project.dart";
 import "package:agent_chat/ui/app_shell.dart";
 import "package:agent_chat/ui/sidebar/chat_groups.dart";
 import "package:agent_chat/ui/sidebar/sidebar.dart";
@@ -130,13 +131,13 @@ void main() {
       await io(tester, () => app.openSomeChat());
       app.container
           .read(selectedProjectProvider.notifier)
-          .select(const AnonymousProject().dir);
+          .select(localProject(const AnonymousProject().dir));
       await settleIo(tester);
 
       await chord(tester, LogicalKeyboardKey.keyN);
 
       expect(app.container.read(selectedChatIdProvider), isNull);
-      expect(app.container.read(selectedProjectProvider), isNull);
+      expect(app.container.read(selectedProjectProvider), localProject(null));
     });
 
     testWidgets("Ctrl+Shift+N is a new chat in the anonymous project",
@@ -146,7 +147,7 @@ void main() {
       await chord(tester, LogicalKeyboardKey.keyN, shift: true);
 
       expect(app.container.read(selectedProjectProvider),
-          const AnonymousProject().dir);
+          localProject(const AnonymousProject().dir));
     });
 
     testWidgets("Ctrl+Alt+N is a new chat in My Team", (tester) async {
@@ -154,7 +155,7 @@ void main() {
 
       await chord(tester, LogicalKeyboardKey.keyN, alt: true);
 
-      expect(app.container.read(selectedProjectProvider), omadaBaseProject);
+      expect(app.container.read(selectedProjectProvider), localProject(omadaBaseProject));
     });
 
     testWidgets("Ctrl+P pins the open chat, and again unpins it",
