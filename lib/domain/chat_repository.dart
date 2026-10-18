@@ -96,6 +96,16 @@ class ChatRepository {
 
   Future<List<ChatState>> listChats() => _store.list();
 
+  /// Which of [chats]' projects run Omada, for a paired device to style them.
+  List<String> omadaProjects(Iterable<ChatState> chats) => [
+        for (final project in {for (final c in chats) c.project})
+          if (project != null &&
+              omadaFor(project,
+                  projectOmada:
+                      ProjectSettings.load(_config, project: project).omada))
+            project,
+      ];
+
   /// Make a chat and write it. **Callers create one only when there is
   /// something to put in it** — the new-chat screen as the first message is
   /// sent, voice mode on the way in, a reminder as it fires — so a screen

@@ -283,6 +283,10 @@ laptop and `work` on a phone are different directories that happen to share a
 name; folding them into one entry would put two conversations under a heading
 that is true of neither. It also means a device offers only the projects it
 has something mirrored in — the welcome is what says a project exists at all.
+The welcome and `chatsChanged` also name which of those projects run Omada
+there (`omadaProjects`), so a paired device's badge is styled by its own answer
+rather than by a local project that shares the name. Additive, so `proto`
+stayed: a peer that sends none reads as none on.
 
 `selectedRemoteProvider` is what is being *read*; `selectedProjectProvider`
 stays what it was, where new work goes — and new work never goes on somebody

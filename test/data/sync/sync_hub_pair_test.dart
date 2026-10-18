@@ -13,6 +13,7 @@ import "package:agent_chat/domain/chat_log.dart";
 import "package:agent_chat/domain/chat_repository.dart";
 import "package:agent_chat/domain/chat_store.dart";
 import "package:agent_chat/domain/models.dart";
+import "package:agent_chat/domain/project_settings.dart";
 import "package:agent_chat/domain/sync/devices.dart";
 import "package:agent_chat/domain/sync/identity.dart";
 import "package:agent_chat/domain/sync/protocol.dart";
@@ -405,6 +406,66 @@ void main() {
 
     final fetched = await away.hub.fetchResource(state.id, resource);
     expect(fetched, equals(bytes));
+  });
+
+  test("whether a project runs Omada is the home device's answer", () async {
+    final now = DateTime.now();
+    for (final project in ["work", "play"]) {
+      await home.store.saveState(ChatState(
+          id: project,
+          title: project,
+          project: project,
+          createdAt: now,
+          updatedAt: now));
+    }
+    Future<void> omadaOn(AppConfig config, String project) async {
+      await config.fs
+          .directory(config.projectDir(project: project))
+          .create(recursive: true);
+      await (ProjectSettings()..omada = true).save(config, project: project);
+    }
+
+    await omadaOn(home.config, "work");
+    // The same name on this end says the opposite, and must not count.
+    await omadaOn(away.config, "play");
+
+    final links = loopbackPair();
+    await pair(links.$1, links.$2);
+    await waitForSync(() => away.hub.remotes.value.length == 2);
+
+    final omada = {
+      for (final entry in away.hub.remotes.value)
+        entry.state.project: entry.omada,
+    };
+    expect(omada, {"work": true, "play": false});
+  });
+
+  test("a chunk from a peer the fetch did not ask is ignored", () async {
+    final state = await mirrored();
+    final bytes = Uint8List.fromList(
+        List.generate(120 * 1024, (i) => i % 251));
+    final resource =
+        await home.store.saveResource(state.id, "photo.bin", bytes);
+
+    // A third device mirroring one of away's chats, so it has a channel to
+    // away to speak on.
+    final rogue = await _Device.create("${tempDir.path}/rogue");
+    addTearDown(rogue.hub.dispose);
+    final now = DateTime.now();
+    await away.store.saveState(ChatState(
+        id: "away-chat", title: "Away", createdAt: now, updatedAt: now));
+    final links = loopbackPair();
+    await pairing(away, rogue, links.$1, links.$2);
+    rogue.hub.followChat("away-chat");
+    await waitForSync(() => rogue.hub.mirror("away-chat") != null);
+
+    final fetch = away.hub.fetchResource(state.id, resource);
+    await rogue.hub.sendForTest(
+        "away-chat",
+        SyncMessage.resourceChunk(
+            id: "r0", bytesB64: base64Encode([9, 9, 9]), done: false));
+
+    expect(await fetch, equals(bytes));
   });
 
   /// An artifact has no bytes of its own on the wire — the name under the
@@ -865,7 +926,8 @@ class _Turns implements RemoteTurns {
 }
 
 class _Device {
-  _Device(this.identity, this.hub, this.registry, this.store, this.repo);
+  _Device(this.identity, this.hub, this.registry, this.store, this.repo,
+      this.config);
 
   static Future<_Device> create(String dir, {ChatStore? store}) async {
     final config = await AppConfig.load(fileSystemIo, dir);
@@ -874,7 +936,7 @@ class _Device {
     final repo = ChatRepository(chats, FakeBackend(), AppSettings.new, config);
     final hub = await testSyncHub(devices: registry);
     hub.attach(repo);
-    return _Device(hub.identity, hub, registry, chats, repo);
+    return _Device(hub.identity, hub, registry, chats, repo, config);
   }
 
   final SyncIdentity identity;
@@ -882,6 +944,7 @@ class _Device {
   final DeviceRegistry registry;
   final ChatStore store;
   final ChatRepository repo;
+  final AppConfig config;
 }
 
 ChatState _seedChat(_Device device) {

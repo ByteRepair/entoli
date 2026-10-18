@@ -92,6 +92,7 @@ class RemoteChatEntry {
     required this.deviceName,
     required this.state,
     required this.online,
+    this.omada = false,
   });
 
   final String chatId;
@@ -99,6 +100,9 @@ class RemoteChatEntry {
   final String deviceName;
   final ChatState state;
   final bool online;
+
+  /// Whether the chat's project runs Omada on its home device.
+  final bool omada;
 
   /// By value, so a rebuild that produced the same rows is not a change. The
   /// list is rebuilt from every message that touches a mirror, and without
@@ -110,10 +114,12 @@ class RemoteChatEntry {
       other.deviceId == deviceId &&
       other.deviceName == deviceName &&
       other.online == online &&
+      other.omada == omada &&
       other.state == state;
 
   @override
-  int get hashCode => Object.hash(chatId, deviceId, deviceName, online, state);
+  int get hashCode =>
+      Object.hash(chatId, deviceId, deviceName, online, omada, state);
 }
 
 /// What two Entolis do with a channel once [SyncPairing] has opened one:
@@ -261,6 +267,9 @@ class SyncHub implements ArtifactBytes {
   bool isChatOnline(String chatId) =>
       _peers.hasLive(_mirrors[chatId]?.peerId);
 
+  /// Per peer, its projects with Omada on, as its last listing named them.
+  final _omadaProjects = <String, Set<String>>{};
+
   int _resourceSeq = 0;
   final _pendingResources = <String, _ResourceTransfer>{};
 
@@ -310,7 +319,7 @@ class SyncHub implements ArtifactBytes {
     final peer = _peerHosting(chatId);
     if (peer == null) return null;
     final id = "r${_resourceSeq++}";
-    final transfer = _pendingResources[id] = _ResourceTransfer();
+    final transfer = _pendingResources[id] = _ResourceTransfer(peer.deviceId);
     try {
       await peer.send(SyncMessage.resourceRequest(
           id: id, chatId: chatId, resource: resource));
@@ -338,7 +347,9 @@ class SyncHub implements ArtifactBytes {
         await peer.send(const SyncMessage.pong());
       case SyncPong():
         peer.lastPong = DateTime.now();
-      case SyncWelcome(:final chats) || SyncChatsChanged(:final chats):
+      case SyncWelcome(:final chats, :final omadaProjects) ||
+            SyncChatsChanged(:final chats, :final omadaProjects):
+        _omadaProjects[peer.deviceId] = omadaProjects.toSet();
         await _applyWelcome(peer, chats);
       case SyncChatOpen(:final chatId, :final fromLine):
         await _serveOpen(peer, chatId, fromLine);
@@ -369,7 +380,7 @@ class SyncHub implements ArtifactBytes {
       case SyncResourceRequest(:final id, :final chatId, :final resource):
         await _serveResource(peer, id, chatId, resource);
       case SyncResourceChunk(:final id, :final bytesB64, :final done):
-        _collectResourceChunk(id, bytesB64, done);
+        _collectResourceChunk(peer, id, bytesB64, done);
 
       // -- serving: somebody else driving one of this device's chats
       case SyncControlRequest(:final chatId):
@@ -599,7 +610,8 @@ class SyncHub implements ArtifactBytes {
     if (repo == null) return;
     final chats = await repo.listChats();
     _announced = {for (final chat in chats) chat.id};
-    await peer.send(SyncMessage.welcome(chats: chats));
+    await peer.send(SyncMessage.welcome(
+        chats: chats, omadaProjects: repo.omadaProjects(chats)));
   }
 
   Future<void> _announceChats() async {
@@ -607,7 +619,8 @@ class SyncHub implements ArtifactBytes {
     if (repo == null || _peers.isEmpty) return;
     final chats = await repo.listChats();
     _announced = {for (final chat in chats) chat.id};
-    final message = SyncMessage.chatsChanged(chats: chats);
+    final message = SyncMessage.chatsChanged(
+        chats: chats, omadaProjects: repo.omadaProjects(chats));
     for (final peer in _peers.live) {
       unawaited(peer.send(message));
     }
@@ -808,9 +821,14 @@ class SyncHub implements ArtifactBytes {
     }
   }
 
-  void _collectResourceChunk(String id, String bytesB64, bool done) {
+  void _collectResourceChunk(
+      LivePeer peer, String id, String bytesB64, bool done) {
     final transfer = _pendingResources[id];
     if (transfer == null || transfer.completer.isCompleted) return;
+    if (transfer.deviceId != peer.deviceId) {
+      logFailure("sync", "resource chunk $id from ${peer.deviceId}, not the peer asked");
+      return;
+    }
     transfer.buffer.add(base64Decode(bytesB64));
     if (!done) return;
     final bytes = transfer.buffer.takeBytes();
@@ -871,6 +889,9 @@ class SyncHub implements ArtifactBytes {
               _peers.states.value[mirror.peerId]?.name ?? mirror.deviceName,
           state: mirror.state,
           online: _peers.hasLive(mirror.peerId),
+          omada: _omadaProjects[mirror.peerId]
+                  ?.contains(mirror.state.project) ??
+              false,
         ),
     ];
     if (!listEquals(next, remotes.value)) remotes.value = next;
@@ -935,6 +956,10 @@ class SyncHub implements ArtifactBytes {
 
 /// One resource transfer in flight: chunks accumulate until `done`.
 class _ResourceTransfer {
+  _ResourceTransfer(this.deviceId);
+
+  /// The peer asked: ids are a counter, so any other peer could name one.
+  final String deviceId;
   final completer = Completer<Uint8List?>();
   final buffer = BytesBuilder(copy: false);
 }

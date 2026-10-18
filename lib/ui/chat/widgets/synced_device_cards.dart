@@ -50,6 +50,7 @@ class _DeviceGroup {
     required this.deviceId,
     required this.deviceName,
     required this.projects,
+    required this.omada,
   });
 
   final String deviceId;
@@ -59,6 +60,9 @@ class _DeviceGroup {
   /// device's default project, named the way [projectLabel] names it
   /// everywhere else a project is shown.
   final List<String?> projects;
+
+  /// Those of [projects] with Omada on at the device, not here.
+  final Set<String?> omada;
 }
 
 /// Every device that has a mirrored chat, with the projects its mirrors sit
@@ -67,9 +71,11 @@ class _DeviceGroup {
 List<_DeviceGroup> _deviceGroups(List<RemoteChatEntry> entries) {
   final names = <String, String>{};
   final projects = <String, Set<String?>>{};
+  final omada = <String, Set<String?>>{};
   for (final entry in entries) {
     names[entry.deviceId] ??= entry.deviceName;
     (projects[entry.deviceId] ??= {}).add(entry.state.project);
+    if (entry.omada) (omada[entry.deviceId] ??= {}).add(entry.state.project);
   }
   return [
     for (final id in names.keys)
@@ -79,6 +85,7 @@ List<_DeviceGroup> _deviceGroups(List<RemoteChatEntry> entries) {
         projects: projects[id]!.toList()..sort((a, b) => projectLabel(a)
             .toLowerCase()
             .compareTo(projectLabel(b).toLowerCase())),
+        omada: omada[id] ?? const {},
       ),
   ]..sort((a, b) =>
       a.deviceName.toLowerCase().compareTo(b.deviceName.toLowerCase()));
@@ -154,7 +161,8 @@ class _DeviceCardState extends ConsumerState<_DeviceCard> {
                     ChipRowEntry(
                       key: ValueKey(project),
                       child: ActionChip(
-                        label: ProjectChipLabel(project),
+                        label: ProjectChipLabel(project,
+                            omada: group.omada.contains(project)),
                         onPressed: () => selectRemote(
                           ref,
                           (deviceId: group.deviceId, project: project),
@@ -173,9 +181,13 @@ class _DeviceCardState extends ConsumerState<_DeviceCard> {
 /// In the label rather than the chip's avatar slot, since a `ChoiceChip`
 /// paints its selected check over the avatar.
 class ProjectChipLabel extends ConsumerWidget {
-  const ProjectChipLabel(this.project, {super.key});
+  const ProjectChipLabel(this.project, {this.omada, super.key});
 
   final String? project;
+
+  /// Whether [project] runs Omada; null asks this device, which is wrong for
+  /// a paired device's project of the same name.
+  final bool? omada;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) => Row(
@@ -188,7 +200,7 @@ class ProjectChipLabel extends ConsumerWidget {
             ),
           Text(
             projectLabel(project),
-            style: projectLabelStyle(ref.watch(omadaOnProvider(project))),
+            style: projectLabelStyle(omada ?? ref.watch(omadaOnProvider(project))),
           ),
         ],
       );
