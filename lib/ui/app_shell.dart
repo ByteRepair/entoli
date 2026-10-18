@@ -17,7 +17,7 @@ class AppShell extends StatelessWidget {
         if (wide) {
           return Row(
             children: const [
-              SizedBox(width: 280, child: Sidebar()),
+              SizedBox(width: sidebarWidth, child: Sidebar()),
               VerticalDivider(width: 1),
               Expanded(child: ChatPage()),
             ],

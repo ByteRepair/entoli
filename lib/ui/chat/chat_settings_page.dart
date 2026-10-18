@@ -8,11 +8,10 @@ import "../../domain/permission.dart";
 import "../../providers.dart";
 import "../sidebar/sidebar.dart";
 import "chat_controller.dart";
-import "../fonts.dart";
 import "../widgets/destructive_button.dart";
-import "../widgets/dialogs.dart";
 import "../widgets/model_picker.dart";
 import "../widgets/resettable_field.dart";
+import "../widgets/settings_card.dart";
 import "../widgets/temp_chat_ttl_field.dart";
 import "../workspace/workspace_page.dart";
 
@@ -180,9 +179,15 @@ class _ChatSettingsPageState extends ConsumerState<ChatSettingsPage> {
           ? const Center(child: CircularProgressIndicator())
           : ListView(
               children: [
-                _IdField(id: widget.chatId),
-                const Divider(),
-                WorkspaceTile(root: _workspace!, title: "Chat workspace"),
+                SettingsCardRow(children: [
+                  SettingsCard.copy(
+                    icon: Icons.badge_outlined,
+                    title: "Chat ID",
+                    value: widget.chatId,
+                    said: "Copied chat ID",
+                  ),
+                  WorkspaceTile(root: _workspace!, title: "Chat workspace"),
+                ]),
                 const Divider(),
                 _LlmField(
                   meta: _meta!,
@@ -220,35 +225,6 @@ class _ChatSettingsPageState extends ConsumerState<ChatSettingsPage> {
                 _DeleteButton(chatId: widget.chatId),
               ],
             ),
-    );
-  }
-}
-
-class _IdField extends StatelessWidget {
-  const _IdField({required this.id});
-
-  final String id;
-
-  @override
-  Widget build(BuildContext context) {
-    return LabelledField(
-      label: "Chat ID",
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(
-              id,
-              style: const TextStyle(fontFamily: monoFamily),
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-          IconButton(
-            icon: const Icon(Icons.copy),
-            tooltip: "Copy chat ID",
-            onPressed: () => copyToClipboard(context, id, said: "Copied chat ID"),
-          ),
-        ],
-      ),
     );
   }
 }

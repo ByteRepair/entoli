@@ -130,6 +130,11 @@ class BuiltinBackend implements AgentBackend {
   /// Every open turn stream per chat: a parallel round runs several at once.
   final Map<String, Set<StreamController<AgentEvent>>> _controllers = {};
 
+  /// Turn streams being stopped, and when each turn has forwarded its last
+  /// event — see [abort].
+  final Set<StreamController<AgentEvent>> _stopping = {};
+  final Map<StreamController<AgentEvent>, Completer<void>> _drained = {};
+
   @visibleForTesting
   int get openTurnStreams =>
       _controllers.values.fold(0, (n, set) => n + set.length);
@@ -191,6 +196,7 @@ class BuiltinBackend implements AgentBackend {
   }) {
     final controller = StreamController<AgentEvent>();
     (_controllers[chatId] ??= {}).add(controller);
+    _drained[controller] = Completer();
     unawaited(_runTurn(chatId, prompt, controller,
         history: history, compactions: compactions, settings: settings));
     return controller.stream;
@@ -498,7 +504,11 @@ class BuiltinBackend implements AgentBackend {
       await for (final event in events) {
         if (controller.isClosed) break;
         if (event is TextDelta) reply += event.text;
-        if (event is DoneEvent && !event.aborted) endedDone = true;
+        if (event is DoneEvent && !event.aborted) {
+          // A stopped turn ends aborted, said on the way out.
+          if (_stopping.contains(controller)) continue;
+          endedDone = true;
+        }
         if (event is ApprovalRequestEvent) {
           _approvals.putIfAbsent(chatId, () => []).add(event.approval);
           // Created here rather than where it is awaited: the banner is on
@@ -537,7 +547,11 @@ class BuiltinBackend implements AgentBackend {
     } finally {
       _clearApprovals(chatId);
       _clearQuestions(chatId);
+      if (_stopping.remove(controller) && !controller.isClosed) {
+        controller.add(const DoneEvent(aborted: true));
+      }
       if (!controller.isClosed) await controller.close();
+      _drained.remove(controller)?.complete();
       final open = _controllers[chatId];
       if (open != null && open.remove(controller) && open.isEmpty) {
         _controllers.remove(chatId);
@@ -597,7 +611,8 @@ class BuiltinBackend implements AgentBackend {
     final filling = _sessionOf(chatId, history);
     final result = await run.result;
     final session = await filling;
-    // An aborted turn writes no part, so the session must not hold one either.
+    // Stopped past the grace: the turn ended without its part, so the session
+    // must not hold one either.
     if (controller.isClosed) return;
     // The directory the shell was left in rides on the part as a fact; the
     // projection words the change, the way it does for the model's commands.
@@ -610,7 +625,7 @@ class BuiltinBackend implements AgentBackend {
       violations: result.violations,
     );
     controller.add(ShellRunEvent(part));
-    controller.add(const DoneEvent());
+    if (!_stopping.contains(controller)) controller.add(const DoneEvent());
     // The same two functions a turn with a model in it uses, over the same one
     // part that was just reported: the prompt through `projectionOf`, the reply
     // through `assistantMessages`. The `!` turn writes its own reply, and that
@@ -1290,13 +1305,28 @@ class BuiltinBackend implements AgentBackend {
     if (completer != null && !completer.isCompleted) completer.complete(answers);
   }
 
+  static const _stopGrace = Duration(seconds: 2);
+
   @override
   Future<void> abort(String chatId) async {
+    final open = Set.of(_controllers[chatId] ?? const <StreamController<AgentEvent>>{});
+    _stopping.addAll(open);
     // Every turn the chat has in flight, not the last one registered.
     await _running.stopAll(chatId);
     _clearApprovals(chatId);
     _clearQuestions(chatId);
-    for (final controller in _controllers.remove(chatId) ?? const {}) {
+    // A killed command's result, and what it printed, arrives after the kill:
+    // each turn gets a grace to forward it rather than being closed over it.
+    await Future.wait([
+      for (final controller in open)
+        if (_drained[controller] case final drained?) drained.future,
+    ]).timeout(_stopGrace, onTimeout: () => const []);
+    // Only the turns this stop was for: one sent during the grace is not.
+    final still = _controllers[chatId];
+    still?.removeAll(open);
+    if (still != null && still.isEmpty) _controllers.remove(chatId);
+    for (final controller in open) {
+      _stopping.remove(controller);
       if (controller.isClosed) continue;
       controller.add(const DoneEvent(aborted: true));
       await controller.close();

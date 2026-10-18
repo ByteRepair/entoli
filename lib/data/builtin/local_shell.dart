@@ -341,11 +341,10 @@ void _signalGroup(Process process, bool ownsGroup, ProcessSignal signal) {
 /// result already carries the whole.
 const _liveWindow = 8192;
 
-/// The live tail after [piece] lands on [prior]: newlines dropped, bounded to
-/// [_liveWindow]. What a running command's block shows; both run shapes keep
+/// The live tail after [piece] lands on [prior], bounded to [_liveWindow]. What a running command's block shows; both run shapes keep
 /// one.
 String _liveTail(String prior, String piece) {
-  var out = prior + piece.replaceAll("\n", "");
+  var out = prior + piece;
   if (out.length > _liveWindow) {
     out = out.substring(out.length - _liveWindow);
   }
@@ -686,10 +685,8 @@ class _RunState {
 
   /// What the live view of this run says now: the tail of the output, with
   /// any fragment at its end that could be the sentinel's head held back
-  /// until the next chunk settles what it was. Newlines are dropped here so
-  /// the hold-back can search for `"\n@@E"` on what may still have them — the
-  /// search runs before the strip, and the held fragment rides along to the
-  /// next chunk rather than being published.
+  /// until the next chunk settles what it was — newline included, so output
+  /// that only looked like the sentinel keeps its line break.
   ///
   /// Gated on [watched]: an output nobody reads pays nothing per chunk.
   /// Trimmed to [_liveWindow] from the head.
@@ -702,7 +699,7 @@ class _RunState {
     if (cut == -1) {
       remainder = joined;
     } else {
-      _held = joined.substring(cut + 1); // the sentinel head has no newline
+      _held = joined.substring(cut);
       remainder = joined.substring(0, cut);
     }
     if (remainder.isNotEmpty) {

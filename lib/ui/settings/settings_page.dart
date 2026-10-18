@@ -209,11 +209,11 @@ List<Widget> _sectionsOf(SettingsCategory category) => switch (category) {
           _TempChatSection(),
           Divider(),
           _EnvironmentSection(),
-          Divider(),
-          _DeleteAllChats(),
           // Draws its own divider, since a platform that updates itself by
           // other means has nothing to put under one.
           _UpdatesSection(),
+          Divider(),
+          _DeleteAllChats(),
         ],
       // Its own category for the reason Voice is one: the picker is a line and
       // the catalog under it is the rest of the page.
@@ -1073,17 +1073,23 @@ class _DeleteAllChats extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final colors = Theme.of(context).colorScheme;
-    return Padding(
-      padding: const EdgeInsets.all(16),
-      child: FilledButton.icon(
-        style: FilledButton.styleFrom(
-          backgroundColor: colors.error,
-          foregroundColor: colors.onError,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SectionHeader("Danger Zone"),
+        Padding(
+          padding: const EdgeInsets.all(16),
+          child: FilledButton.icon(
+            style: FilledButton.styleFrom(
+              backgroundColor: colors.error,
+              foregroundColor: colors.onError,
+            ),
+            icon: const Icon(Icons.delete_forever),
+            label: const Text("Delete all chats"),
+            onPressed: () => _confirmAndDelete(context, ref),
+          ),
         ),
-        icon: const Icon(Icons.delete_forever),
-        label: const Text("Delete all chats"),
-        onPressed: () => _confirmAndDelete(context, ref),
-      ),
+      ],
     );
   }
 }

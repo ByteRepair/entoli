@@ -160,7 +160,7 @@ void main() {
   });
 
   group("a running command's output", () {
-    testWidgets("sits under the spinner, or the label, only while the turn runs",
+    testWidgets("sits under the spinner, or the label, of the reply it is for",
         (tester) async {
       await pump(
         tester,
@@ -186,9 +186,11 @@ void main() {
       expect(find.textContaining("Using tool", findRichText: true), findsOneWidget);
       expect(find.textContaining("files here", findRichText: true), findsOneWidget);
 
-      await pump(tester, _message(MessageRole.assistant, [const TextPart(text: "Done.")]),
-          shellOutput: "leftover\n");
-      expect(find.textContaining("leftover", findRichText: true), findsNothing);
+      // A message said after the reply is the last one, and so the waiting
+      // one; the reply still running its command keeps the block.
+      await pump(tester, _message(MessageRole.assistant, [const TextPart(text: "Run.")]),
+          shellOutput: "still going\n");
+      expect(find.textContaining("still going", findRichText: true), findsOneWidget);
     });
 
   });

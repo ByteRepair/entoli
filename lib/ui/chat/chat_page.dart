@@ -932,7 +932,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
                       isWaiting: view.isRunning && last,
                       waitingNotice: view.retry,
                       waitingStatus: view.status,
-                      shellOutput: view.shellOutput,
+                      shellOutput: view.shellOutput[message.id],
                       onTapLink: (href) => _openLink(context, href),
                       threads: editing == null ? null : chat.branches[message.id],
                       onThreadStep:

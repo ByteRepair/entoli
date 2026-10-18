@@ -962,6 +962,39 @@ void main() {
       expect(shell.killed, ["sleep 100"]);
     });
 
+    test("stopping the turn keeps what the command printed", () async {
+      final backend = backendOver([]);
+      shell.hang.add("sleep 100");
+      shell.killedOutput = "hello\n";
+
+      final turn = asking(backend, "!sleep 100").toList();
+      await pumpEvents();
+      await backend.abort(chatId);
+      final events = await turn.timeout(const Duration(seconds: 5));
+
+      expect(events.whereType<ShellRunEvent>().single.run.output, "hello\n");
+      expect(events.whereType<DoneEvent>().single.aborted, isTrue);
+    });
+
+    test("stopping an agent's command keeps what it printed", () async {
+      final backend = backendOver([
+        [bashCall("sleep 100")],
+      ]);
+      shell.hang.add("sleep 100");
+      shell.killedOutput = "hello\n";
+
+      final turn =
+          asking(backend, "hi", approveMode: ApproveMode.never).toList();
+      await untilPending("the command", () async =>
+          shell.ran.contains("sleep 100") ? const [true] : const <bool>[]);
+      await backend.abort(chatId);
+      final events = await turn.timeout(const Duration(seconds: 5));
+
+      expect(events.whereType<ToolResultEvent>().single.result.output,
+          contains("hello"));
+      expect(events.whereType<DoneEvent>().single.aborted, isTrue);
+    });
+
     test("the next turn's model is told what ran and how it ended", () async {
       final backend = backendOver([
         [finish],

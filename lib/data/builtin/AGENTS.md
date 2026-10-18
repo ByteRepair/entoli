@@ -216,10 +216,10 @@ model is not told a state it cannot keep.
 it where a callback is handed to it, reporting each change at
 `watchInterval`'s pace — a hundred milliseconds, the last value inside an
 interval being the one sent, since what the block shows is the tail as it is
-now. What it reports is a tail of the output, never the sentinel: the
-dispatcher's marker can arrive split across chunks, so anything after the last
-place `@@E` could be forming is held out of the live view until the next
-chunk proves it was ordinary output. The final result is unchanged — the
+now. What it reports is a tail of the output, newlines kept, never the
+sentinel: the dispatcher's marker can arrive split across chunks, so anything
+from the last place `\n@@E` could be forming is held out of the live view until
+the next chunk proves it was ordinary output. The final result is unchanged — the
 whole output, sentinel stripped — and the block on screen is gone the moment
 the pair completes, the conversation keeping only the pair. Nothing here is
 persisted and a sub-agent's commands are not watched, the callback being null
@@ -263,8 +263,13 @@ because the projection does not read one; everything it does read — the date, 
 attachment's bytes, what a `/skill` stood for — is on the prompt, which is the
 message being logged. See "The projection".
 
-An aborted `!` turn writes nothing — no part, and nothing into the session
-either. The command was killed, so whatever it had printed is not an answer.
+**Stopping a turn keeps what its command printed.** `abort` kills, then gives
+each turn `_stopGrace` to forward the killed command's result — the `!` turn's
+`ShellRunPart`, the agent's tool result — before it ends the stream aborted;
+closing straight after the kill threw away output the user had watched arrive.
+A turn being stopped has its own `DoneEvent` swallowed, so it ends once, and
+aborted. Only one that outlasts the grace is closed over, and that `!` turn
+writes nothing, the session included.
 
 **Two things outside this file ask the same question**, and both would otherwise
 send a command to a model. `endsUnfinished` never offers a `!` turn to be
