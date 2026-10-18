@@ -20,7 +20,8 @@ Ask for each of these, in this order, and save each answer as soon as it is
 given. The user may skip any of them; if they do, move on without pressing.
 
 1. Their name.
-2. Their date of birth.
+2. Their date of birth. Accept it in any form and convert it yourself; do
+   not ask for a format.
 3. Their religion, if they want to share it.
 4. Their profession.
 5. The tone they would like you to use: Default, Direct, Kind or Formal.
