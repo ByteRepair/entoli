@@ -21,9 +21,15 @@ import "../../domain/workspace.dart";
 /// directories on desktop and Android, IndexedDB in a browser. One
 /// implementation, because the layout is the same either way.
 class FileChatStore implements ChatStore {
-  FileChatStore(this.config) : _write = RenameWriter.fs(config.fs);
+  FileChatStore(this.config, {this.deleteTree})
+      : _write = RenameWriter.fs(config.fs);
 
   final AppConfig config;
+
+  /// The platform's tree delete, which gets past the read-only skills dirs
+  /// (`chmodReadOnly`) and proot's mode-0000 stubs a plain recursive delete
+  /// dies on. Null where there are neither, such as the web.
+  final Future<void> Function(String path)? deleteTree;
 
   FileSystem get _fs => config.fs;
 
@@ -105,8 +111,12 @@ class FileChatStore implements ChatStore {
 
   @override
   Future<void> deleteProject(String name) async {
-    final dir = _fs.directory(config.projectDir(project: name));
-    if (await dir.exists()) await dir.delete(recursive: true);
+    final path = config.projectDir(project: name);
+    final dir = _fs.directory(path);
+    if (await dir.exists()) {
+      final delete = deleteTree;
+      delete != null ? await delete(path) : await dir.delete(recursive: true);
+    }
     _projects.removeWhere((_, project) => project == name);
   }
 

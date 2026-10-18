@@ -271,7 +271,8 @@ Future<String?> appVersion() async {
   }
 }
 
-ChatStore createChatStore(AppConfig config) => FileChatStore(config);
+ChatStore createChatStore(AppConfig config) =>
+    FileChatStore(config, deleteTree: deleteTree);
 
 FileHandoff createFileHandoff(AppConfig config) => platformFileHandoff(config.fs);
 
