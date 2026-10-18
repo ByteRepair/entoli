@@ -9,6 +9,7 @@ import "../../providers.dart";
 import "../sidebar/sidebar.dart";
 import "chat_controller.dart";
 import "context_page.dart";
+import "widgets/view_only_bar.dart" show MirrorStrip;
 import "../widgets/destructive_button.dart";
 import "../widgets/model_picker.dart";
 import "../widgets/resettable_field.dart";
@@ -171,6 +172,12 @@ class _ChatSettingsPageState extends ConsumerState<ChatSettingsPage> {
   @override
   Widget build(BuildContext context) {
     final mirrored = ref.watch(isMirroredChatProvider(widget.chatId));
+    final deviceName = ref.watch(remoteChatsProvider.select((chats) {
+      for (final c in chats) {
+        if (c.chatId == widget.chatId) return c.deviceName;
+      }
+      return null;
+    }));
     // A mirror whose home device is away is read, not written; it is read
     // again when the device comes back.
     final frozen = ref.watch(remoteChatsProvider.select(
@@ -191,7 +198,12 @@ class _ChatSettingsPageState extends ConsumerState<ChatSettingsPage> {
           ),
         ],
       ),
-      body: _meta == null
+      body: Column(children: [
+        if (deviceName != null)
+          frozen
+              ? MirrorStrip.offline(deviceName: deviceName)
+              : MirrorStrip.remote(deviceName: deviceName),
+        Expanded(child: _meta == null
           ? const Center(child: CircularProgressIndicator())
           : ListView(
               children: [
@@ -253,7 +265,8 @@ class _ChatSettingsPageState extends ConsumerState<ChatSettingsPage> {
                 const Divider(),
                 if (!frozen) _DeleteButton(chatId: widget.chatId),
               ],
-            ),
+            )),
+      ]),
     );
   }
 }

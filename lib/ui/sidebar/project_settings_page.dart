@@ -108,9 +108,10 @@ class ProjectSettingsPage extends ConsumerWidget {
       appBar: AppBar(title: const Text("Project settings")),
       body: Column(
         children: [
-          if (frozen)
-            MirrorStrip.offline(
-                deviceName: ref.watch(syncPeersProvider)[device]?.name ?? "The device"),
+          if (remote)
+            if (ref.watch(syncPeersProvider)[device]?.name ?? "The device"
+                case final name)
+              frozen ? MirrorStrip.offline(deviceName: name) : MirrorStrip.remote(deviceName: name),
           Expanded(
             // What the device last said, readable and not written until it
             // is back.

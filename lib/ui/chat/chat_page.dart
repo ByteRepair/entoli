@@ -57,8 +57,8 @@ const double _readableWidth = 760;
 /// [_readableWidth] — a phone gets the whole screen, a monitor gets a line it
 /// can read back to the start of. The composer goes inside that width rather
 /// than under it, or the conversation sits over a field twice its own width.
-/// Both pages with something to type in are this. [banner] floats over the top
-/// of it.
+/// Both pages with something to type in are this. [banner] is a full-width row
+/// above it, under the title bar, and stays while the conversation scrolls.
 class _ReadableColumn extends StatelessWidget {
   const _ReadableColumn({required this.child, required this.bottom, this.banner});
 
@@ -67,17 +67,18 @@ class _ReadableColumn extends StatelessWidget {
   final Widget? banner;
 
   @override
-  Widget build(BuildContext context) => Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: _readableWidth),
-          child: Stack(
-            children: [
-              Column(children: [Expanded(child: child), bottom]),
-              if (banner != null)
-                Positioned(left: 0, right: 0, top: 0, child: banner!),
-            ],
+  Widget build(BuildContext context) => Column(
+        children: [
+          ?banner,
+          Expanded(
+            child: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: _readableWidth),
+                child: Column(children: [Expanded(child: child), bottom]),
+              ),
+            ),
           ),
-        ),
+        ],
       );
 }
 
@@ -792,7 +793,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
   /// The chat, however it is being read. [editing] is the controller the
   /// message row acts through, and null for a mirror this device does not
   /// hold.
-  /// [banner] floats over the conversation, and [bottom] is whatever answers
+  /// [banner] sits above the conversation, and [bottom] is whatever answers
   /// the turn — a composer, or a bar saying why there is none.
   Widget _page(
     BuildContext context, {

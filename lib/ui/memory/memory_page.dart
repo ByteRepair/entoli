@@ -232,10 +232,10 @@ class _MemoryPageState extends ConsumerState<MemoryPage> {
         absorbing: frozen,
         child: Column(
         children: [
-          if (frozen)
-            MirrorStrip.offline(
-                deviceName:
-                    ref.watch(syncPeersProvider)[widget.project.device]?.name ?? "The device"),
+          if (widget.project.device != null)
+            if (ref.watch(syncPeersProvider)[widget.project.device]?.name ?? "The device"
+                case final name)
+              frozen ? MirrorStrip.offline(deviceName: name) : MirrorStrip.remote(deviceName: name),
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
             child: TextField(

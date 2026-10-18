@@ -276,8 +276,11 @@ home device is elsewhere. Records replay through the same pure
 second rendering of it.
 
 `ChatPage` branches on `isMirroredChatProvider`: `ViewOnlyBar` where the
-composer goes until this device holds the chat, a `MirrorStrip` over the
-conversation when the home device is away, and no expiry check.
+composer goes until this device holds the chat, a `MirrorStrip` under the
+title bar — "Running on" while held, offline while the home device is away —
+and no expiry check. The same strip heads every page whose data is a paired
+device's: a mirror's chat settings, a paired project's settings and its
+memories, as `MirrorStrip.remote` ("On <device>") or offline while it is away.
 
 ### Writing to a mirrored chat
 

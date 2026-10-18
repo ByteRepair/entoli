@@ -76,11 +76,10 @@ class ViewOnlyBar extends StatelessWidget {
   }
 }
 
-/// The strip a mirrored chat floats over its conversation: the one thing on
-/// the page that says the chat belongs somewhere else. Over rather than
-/// above, because the point of keeping a stale snapshot is that it stays
-/// readable — and the two states it has are the same shape, so they are one
-/// widget with two sets of colours.
+/// The strip under the title bar of a page whose data is a paired device's —
+/// a mirrored chat, its settings, a project there — and the one thing on it
+/// that says so. A row of its own rather than over the content, so nothing
+/// under it is hidden. Its states are the same shape, so they are one widget.
 class MirrorStrip extends StatelessWidget {
   /// This device is driving. The commands are still the home device's.
   const MirrorStrip.inControl({
@@ -88,6 +87,11 @@ class MirrorStrip extends StatelessWidget {
     required this.deviceName,
     required this.onRelease,
   })  : offline = false;
+
+  /// Read and written there, nothing to hand back: a settings page's.
+  const MirrorStrip.remote({super.key, required this.deviceName})
+      : offline = false,
+        onRelease = null;
 
   /// The home device has gone. Nothing here is moving any more.
   const MirrorStrip.offline({super.key, required this.deviceName})
@@ -112,7 +116,11 @@ class MirrorStrip extends StatelessWidget {
           child: Row(
             children: [
               Icon(
-                  offline ? Icons.wifi_off_outlined : Icons.play_circle_outline,
+                  offline
+                      ? Icons.wifi_off_outlined
+                      : onRelease != null
+                          ? Icons.play_circle_outline
+                          : Icons.devices_other,
                   size: 16,
                   color: on),
               const SizedBox(width: 8),
@@ -120,7 +128,9 @@ class MirrorStrip extends StatelessWidget {
                 child: Text(
                   offline
                       ? "$deviceName is offline"
-                      : "Running on $deviceName",
+                      : onRelease != null
+                          ? "Running on $deviceName"
+                          : "On $deviceName",
                   style: TextStyle(color: on, fontSize: 13),
                   overflow: TextOverflow.ellipsis,
                 ),

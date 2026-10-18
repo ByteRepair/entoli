@@ -636,8 +636,9 @@ two arms meet again at `_page`: same bar, same centred column, same
 conversation. What differs is stated as arguments rather than as a second copy
 — `editing` is the controller the message row acts through and is null for a
 mirror this device does not hold, which takes the whole edit/regenerate/thread
-row out with it; `banner` is the strip a mirror
-floats over the conversation, and `bottom` is a composer or a bar saying why
+row out with it; `banner` is a mirror's strip, a
+full-width row under the title bar that the conversation scrolls beneath
+rather than one laid over it, and `bottom` is a composer or a bar saying why
 there is none. Written out twice, the mirrored copy had already lost the jump
 button, the empty-chat starter and the running-turn spinner.
 

@@ -80,7 +80,8 @@ void main() {
     for (final local in ["Path", "Project workspace", "Instructions"]) {
       expect(find.text(local), findsNothing, reason: local);
     }
-    expect(find.byType(MirrorStrip), findsNothing);
+    // The strip under the title says whose it is.
+    expect(find.text("On Desktop"), findsOneWidget);
   });
 
   // Its library is the device's: listed, and nothing here to open or export.

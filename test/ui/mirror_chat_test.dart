@@ -248,6 +248,9 @@ void main() {
       await openHeld(tester);
 
       expect(find.text("Running on Desktop"), findsOneWidget);
+      // A row of its own, under the title bar: nothing it covers.
+      expect(tester.getRect(find.byType(MirrorStrip)).bottom,
+          lessThanOrEqualTo(tester.getRect(find.byType(Scrollable).first).top));
     });
 
     testWidgets("handing it back is offered", (tester) async {
