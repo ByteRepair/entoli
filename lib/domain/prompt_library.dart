@@ -69,13 +69,13 @@ class PromptDocument {
     );
   }
 
-  /// The wire's shape, body left behind: a paired device's menus and lists
-  /// read the frontmatter alone, and a body is what would not fit a message.
+  /// The wire's shape, for a paired device's library.
   Map<String, dynamic> toJson() => {
         "kind": kind.name,
         "name": name,
         "frontmatter": frontmatter,
         "metadata": metadata,
+        "body": body,
       };
 
   factory PromptDocument.fromJson(Map<String, dynamic> json) => PromptDocument(
@@ -83,7 +83,7 @@ class PromptDocument {
         name: json["name"] as String,
         frontmatter: (json["frontmatter"] as Map).cast<String, String>(),
         metadata: (json["metadata"] as Map).cast<String, String>(),
-        body: "",
+        body: json["body"] as String,
       );
 
   /// The `.md` source for a document: a `description` frontmatter where there

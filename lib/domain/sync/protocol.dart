@@ -251,7 +251,7 @@ sealed class SyncMessage with _$SyncMessage {
   }) = SyncProjectSnapshot;
 
   /// [project]'s skills and agents, after each snapshot: [PromptDocument]
-  /// JSON, bodies left behind, paged by size while [more].
+  /// JSON, paged by size while [more].
   const factory SyncMessage.projectPrompts({
     String? project,
     required List<Map<String, dynamic>> documents,

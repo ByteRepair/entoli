@@ -366,9 +366,9 @@ are left off a paired device's page: they are files there, and nothing here
 reads them.
 
 **Its skills and agents come with it.** Each snapshot is followed by the
-project's resolved library as `projectPrompts`, paged by size, bodies left
-behind: the menus, the starters and the Skills and Agents pages read
-frontmatter alone, and a body is what would not fit. `promptLibraryOf(ref)` is
+project's resolved library as `projectPrompts`, paged by size like records, so
+one page is one document at most where a document is large.
+`promptLibraryOf(ref)` is
 `promptLibraryProvider` here and the followed project's library there, so the
 composer's `/` and `@` offer the paired device's set and only that; the field
 holds the project followed while it is up, so the menu is there when `/` is

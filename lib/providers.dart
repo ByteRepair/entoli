@@ -1251,8 +1251,7 @@ ProviderListenable<AppSettings> appSettingsOf(ProjectRef project) => project.dev
     ? appSettingsProvider
     : remoteProjectProvider(project).select((p) => p?.app ?? AppSettings());
 
-/// [project]'s skills and agents, on whichever device it is. A paired
-/// device's come without their bodies, which only that device reads.
+/// [project]'s skills and agents, on whichever device it is.
 ProviderListenable<PromptLibrary> promptLibraryOf(ProjectRef project) =>
     project.device == null
         ? promptLibraryProvider(project.project)

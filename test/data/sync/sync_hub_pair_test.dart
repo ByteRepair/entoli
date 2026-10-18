@@ -969,7 +969,7 @@ void main() {
               kind: i.isEven ? CompletionKind.skill : CompletionKind.agent,
               name: "entry-$i",
               frontmatter: {"description": "d" * 1000},
-              body: "never sent"),
+              body: "b" * 1000),
       ]);
 
       away.hub.followProject(work);
@@ -977,7 +977,7 @@ void main() {
           () => away.hub.remoteProject(work)?.library.all.length == 80);
       final skill = away.hub.remoteProject(work)!.library.find(CompletionKind.skill, "entry-0")!;
       expect(skill.description, "d" * 1000);
-      expect(skill.body, isEmpty);
+      expect(skill.body, "b" * 1000);
 
       // A change at home reaches whoever has it open.
       turns.libraries["work"] = PromptLibrary.empty;
