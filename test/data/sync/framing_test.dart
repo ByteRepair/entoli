@@ -37,6 +37,23 @@ void main() {
     return (both[0], both[1]);
   }
 
+  test("a different protocol version is refused, and told so", () async {
+    final links = loopbackPair();
+    final told = ChannelReader(links.$1);
+    final joined = Handshake(await SyncIdentity.load(FakeSecretStore()),
+            pairingSecret: "cGFpcmluZy1zZWNyZXQtZm9yLWEtdGVzdA")
+        .run(links.$2, initiator: false, reader: ChannelReader(links.$2));
+    // A future build: the version, and a shape this one has never seen.
+    await links.$1.send(utf8.encode(jsonEncode({"v": 99, "role": "i"})));
+
+    await expectLater(joined, throwsA(isA<ProtocolMismatchException>()));
+    final note = jsonDecode(utf8.decode(await told.next())) as Map<String, dynamic>;
+    expect(note["v"], SyncIdentity.protocolVersion);
+    expect(() => Handshake.parse(jsonEncode(note..["v"] = 99)),
+        throwsA(isA<ProtocolMismatchException>().having(
+            (e) => e.message, "message", contains("please update"))));
+  });
+
   test("a peer claiming an id its key does not stand for is refused",
       () async {
     final links = loopbackPair();
@@ -101,6 +118,37 @@ void main() {
     final got = await read;
     expect(got.first.containsKey("big"), isTrue);
     expect(got.last.containsKey("small"), isTrue);
+  });
+
+  test("a message past one frame goes in pieces and arrives whole", () async {
+    final links = loopbackPair();
+    final sizes = <int>[];
+    links.$1.watchSends(sizes.add);
+    const psk = "cGFpcmluZy1zZWNyZXQtZm9yLWEtdGVzdA";
+    final both = await Future.wait([
+      SecureChannel.open(links.$1,
+          handshake: Handshake(await SyncIdentity.load(FakeSecretStore()),
+              pairingSecret: psk, name: "a"),
+          initiator: true),
+      SecureChannel.open(links.$2,
+          handshake: Handshake(await SyncIdentity.load(FakeSecretStore()),
+              pairingSecret: psk, name: "b"),
+          initiator: false),
+    ]);
+    final (a, b) = (both[0], both[1]);
+    addTearDown(a.close);
+    b.listen();
+    sizes.clear();
+
+    final read = b.jsonIncoming.take(2).toList();
+    unawaited(a.sendJson({"big": "x" * 200000}));
+    unawaited(a.sendJson({"small": 1}));
+
+    final got = await read;
+    expect(got.first["big"], "x" * 200000);
+    expect(got.last["small"], 1);
+    expect(sizes.length, greaterThan(4));
+    expect(sizes.every((size) => size <= 64 * 1024), isTrue);
   });
 
   test("the type byte is what a frame is authenticated against", () async {

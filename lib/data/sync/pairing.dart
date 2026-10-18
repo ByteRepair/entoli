@@ -816,8 +816,7 @@ class SyncPairing {
       });
       final reply = await hello.future.timeout(const Duration(seconds: 15));
       if (reply["proto"] != SyncIdentity.protocolVersion) {
-        throw HandshakeException(
-            "the other device runs protocol ${reply["proto"]}");
+        throw ProtocolMismatchException(reply["proto"]);
       }
 
       var device = peerDevice;

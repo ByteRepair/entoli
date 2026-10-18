@@ -133,7 +133,7 @@ void main() {
   /// against were 74KB, 256KB and 485KB of `conv.jsonl`, and every one of
   /// them mirrored as an empty chat. A loopback carries any size, so what is
   /// asserted is the size of what goes over it.
-  test("a log too big for one message crosses in pages", () async {
+  test("a log too big for one message crosses in pieces", () async {
     final now = DateTime.now();
     final state = ChatState(
         id: "big", title: "Long chat", createdAt: now, updatedAt: now);
@@ -944,8 +944,7 @@ void main() {
       expect(skill.description, "d" * 1000);
       expect(skill.body, "b" * 1000);
 
-      // A write is answered to the writer and published to followers at
-      // once: the two runs of pages must not interleave.
+      // A settings write leaves the library as it was.
       await away.hub.writeRemoteProject(work, ProjectSettings(omada: true));
       await Future<void>.delayed(const Duration(milliseconds: 50));
       expect(away.hub.remoteProject(work)!.library.all.length, 80);

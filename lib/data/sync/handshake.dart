@@ -71,20 +71,26 @@ class Handshake {
       "eph": base64Encode(ephPub),
       "name": name,
     };
-    Future<Map<String, dynamic>> receive({bool hello = true}) async => parse(
-        utf8.decode(await reader.next().timeout(timeout, onTimeout: _timedOut)),
-        hello: hello);
+    Future<Map<String, dynamic>> receive({bool hello = true}) async {
+      final line = utf8.decode(await reader.next().timeout(timeout, onTimeout: _timedOut));
+      try {
+        return parse(line, hello: hello);
+      } on ProtocolMismatchException {
+        // Said back before giving up, so the other side reads a mismatch
+        // too rather than waiting out its timeout. It may be gone already.
+        try {
+          await raw.send(utf8.encode(jsonEncode(
+              {"v": SyncIdentity.protocolVersion, "role": initiator ? "i" : "j"})));
+        } catch (_) {}
+        rethrow;
+      }
+    }
 
     if (initiator) await raw.send(utf8.encode(jsonEncode(hello)));
     final remote = await receive();
     if (remote["role"] != (initiator ? "j" : "i")) {
       throw const HandshakeException("unexpected handshake role");
     }
-    if (remote["v"] != SyncIdentity.protocolVersion) {
-      throw HandshakeException(
-          "protocol version ${remote["v"]} not supported");
-    }
-
     final remotePk = base64Decode(remote["pk"] as String);
     final remoteEph = base64Decode(remote["eph"] as String);
     // The id is what the registry pins and a reconnect is held to, so it must
@@ -186,8 +192,14 @@ class Handshake {
 
   /// [hello] is the two opening messages, which carry an identity; the
   /// initiator's closing one is a signature and nothing else.
+  ///
+  /// The version is read first, so a build whose messages have a different
+  /// shape is told it is a mismatch rather than what field it lacks.
   static Map<String, dynamic> parse(String line, {bool hello = true}) {
     final json = jsonDecode(line) as Map<String, dynamic>;
+    if (json.containsKey("v") && json["v"] != SyncIdentity.protocolVersion) {
+      throw ProtocolMismatchException(json["v"]);
+    }
     for (final field in ["v", "role", if (hello) ...["id", "pk", "eph"]]) {
       if (!json.containsKey(field)) {
         throw HandshakeException("handshake message missing $field");
@@ -246,4 +258,13 @@ class HandshakeException implements Exception {
 
   @override
   String toString() => message;
+}
+
+/// The two devices speak different versions of [SyncIdentity.protocolVersion]:
+/// neither connects until both run a build that agrees. The message is what
+/// the pairing page and the device's row show.
+class ProtocolMismatchException extends HandshakeException {
+  ProtocolMismatchException(Object? theirs)
+      : super("Protocol version mismatch, please update Entoli on both devices "
+            "(this one speaks ${SyncIdentity.protocolVersion}, the other $theirs).");
 }

@@ -37,6 +37,15 @@ bits) is derived beside the keys for human confirmation — regrouped five bits
 at a time rather than through one 40-bit integer, since a shift past 32 bits is
 truncated on the web.
 
+**`v` is the protocol version, and a mismatch is refused before anything
+else.** `SyncIdentity.protocolVersion` is bumped by any change an older build
+could not read. `parse` reads `v` before any other field, so a newer build's
+differently-shaped hello still reads as a mismatch; the side that finds it
+sends back a bare `{"v","role"}` before giving up, so the other side refuses
+too instead of timing out. Both throw `ProtocolMismatchException`, whose
+message — "Protocol version mismatch, please update Entoli on both devices" —
+is what the pairing page and the device's row show.
+
 That HKDF is asked for `DartHmac` by name. `cryptography_flutter` declares a
 `dartPluginClass`, so on Android it installs itself as `Cryptography.instance`
 with nothing in this app calling it, and a plain `Hmac.sha256()` then runs over
@@ -75,6 +84,9 @@ who speaks first.
 `framing.dart` wraps a `ByteChannel` in ChaCha20-Poly1305 AEAD. Every frame:
 
     [type: 1 byte][counter: 4 bytes BE][AEAD(cleartext)]
+
+A message past 48KB is several frames, the type's high bit set on all but the
+last — see "A conversation does not fit in one frame".
 
 Counters are per-direction and monotonic — a replayed, reordered or spliced
 frame fails its MAC.
@@ -215,24 +227,28 @@ freezed object left to `toJson`'s default comes out as a live instance rather
 than a map, and a raw `_ChatState` in the payload is a cast failure on the far
 side.
 
-### A conversation does not fit in one message
+### A conversation does not fit in one frame
 
-A data channel refuses a message past its negotiated maximum, and a
-`conv.jsonl` of any age is far past it — the chats this was first run against
-were 74KB, 256KB and 485KB, and every one of them mirrored as an empty chat.
-So `chatSnapshot` is the *head* only: state, meta, and how long the log is.
-The records follow as a run of `recordAppend`s, paged by measured encoded size
-rather than by a count, since one record can be a whole file.
-
-`totalLines` is then the greater of what a mirror holds and what the peer last
-said — pages of a snapshot climb towards a total already known, while a live
-append is what makes the total bigger.
+A data channel refuses a message past its negotiated maximum — 64KB on the
+smallest peers — and a `conv.jsonl` of any age is far past it: the chats this
+was first run against were 74KB, 256KB and 485KB, and every one of them
+mirrored as an empty chat. `SecureChannel` answers that once, for every
+message: one past `pieceBytes` (48KB) goes as consecutive frames with the
+`continued` bit (0x80) in the type byte of all but the last, and the far end
+joins them before handing the message up. The type byte is the AEAD's
+associated data, so the bit cannot be flipped, and the counter keeps the
+pieces in order; one message's pieces are one link of the send chain, so
+nothing lands between them. Nothing above the framing pages anything: a
+snapshot's records are one `recordAppend`, a project's library one
+`projectPrompts`, a memory answer one `memories`.
 
 ### Attachments
 
 An attachment's bytes are requested by `resourceRequest{id}` and answered by a
 run of `resourceChunk{id, bytesB64, done}` — base64 inside ordinary control
-frames, 48KB of source bytes each. Correlation stays trivial and every frame
+frames, 32KB of source bytes each — not for the frame limit, which the
+framing takes care of, but so a file is never one base64 string at either end.
+Correlation stays trivial and every frame
 rides the same AEAD as the rest of the traffic; binary framing can come later
 with no protocol change, since the type byte already separates the streams. A
 resource that is not there answers with an empty final chunk, so the asking
@@ -318,11 +334,12 @@ The model picker and the workspace are left off a mirror's settings: the
 picker offers this device's providers, and the workspace's files are the
 home device's.
 
-These messages are why the protocol went to 2, and the project messages with
-the control lock's removal why it is 3: a build before them drops the link on
-the first frame it cannot parse, mid-session, so the handshake refuses it up
-front with a version error instead. Both devices update together. **Adding,
-removing or renaming a `SyncMessage` arm bumps `protocolVersion`.**
+These messages made the protocol 2; the project messages, the control lock's
+removal and splitting a message across frames made it 3. A build before them
+drops the link on the first frame it cannot parse, or reads the first piece of
+a large message as a whole one, so the handshake refuses it up front with a
+version mismatch instead. Both devices update together. **Adding, removing or
+renaming a `SyncMessage` arm bumps `protocolVersion`.**
 
 **A paired device's projects are in the project switcher**, named
 `Device · project` — and a device's default project is the device's name
@@ -374,13 +391,12 @@ project's TTLs when that changed. The path, the workspace and the instructions
 are left off a paired device's page: they are files there, and nothing here
 reads them.
 
-**Its skills and agents come with it, apart.** The project's resolved library
-follows the first snapshot as `projectPrompts`, paged by size like records, so
-one page is one document at most where a document is large, and is sent again
-only when the library changes: a settings write is a few hundred bytes, not
-the default project's hundred-odd kilobytes of skills. A peer's project sends
-go through one queue (`_inOrder`), so two runs of pages never interleave, and
-a write's reply goes through it too, behind the snapshot it set off.
+**Its skills and agents come with it, apart.** The project's resolved library,
+bodies included, follows the first snapshot as one `projectPrompts`, and is
+sent again only when the library changes: a settings write is a few hundred
+bytes, not the default project's hundred-odd kilobytes of skills. A peer's
+project sends go through one queue (`_inOrder`), so a write's reply goes out
+behind the snapshot it set off.
 `promptLibraryOf(ref)` is
 `promptLibraryProvider` here and the followed project's library there, so the
 composer's `/` and `@` offer the paired device's set and only that; the field
@@ -426,7 +442,7 @@ refusal is an answer at once rather than that wait. A home device's create
 and delete list the projects again before replying, so the asker can select
 what it made. Where attachments went missing the page says which in a snack
 bar (`Undelivered`); the message went without them. Memories keep their own
-`memories` answer, since it carries pages of entries.
+`memories` answer, since it carries the entries.
 
 ## Driving a turn from the other end
 
