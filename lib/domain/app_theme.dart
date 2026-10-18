@@ -12,9 +12,4 @@ enum AppTheme {
   const AppTheme(this.label);
 
   final String label;
-
-  /// An unknown name is a file written by a later build, so it falls back
-  /// rather than failing the whole settings load.
-  static AppTheme fromName(String? name) =>
-      values.firstWhere((theme) => theme.name == name, orElse: () => system);
 }

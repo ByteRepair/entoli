@@ -12,9 +12,6 @@ enum OmadaOrdering {
   sequential,
   parallel,
   relay;
-
-  static OmadaOrdering? fromNameNullable(String? name) =>
-      name == null ? null : OmadaOrdering.values.asNameMap()[name];
 }
 
 /// Human-readable labels, shared by the project settings page so the
@@ -128,23 +125,28 @@ class ProjectSettings {
     final text = config.documents.read(config.projectSettingsFile(project: project));
     if (text == null) return ProjectSettings();
     try {
-      final json = jsonDecode(text) as Map<String, dynamic>;
-      // A decode gives a `Map<String, dynamic>`, so the value test is what
-      // keeps a number in there out of a command's environment.
-      final env = json["environment"];
-      final environment = env is Map<String, dynamic> && env.values.every((v) => v is String)
-          ? {for (final e in env.entries) e.key: e.value as String}
-          : null;
-      return ProjectSettings(
-        tempChatTtl: TempChatTtl.fromNameNullable(json["tempChatTtl"] as String?),
+      return ProjectSettings.fromJson(jsonDecode(text) as Map<String, dynamic>);
+    } catch (_) {
+      return ProjectSettings();
+    }
+  }
+
+  factory ProjectSettings.fromJson(Map<String, dynamic> json) {
+    // A decode gives a `Map<String, dynamic>`, so the value test is what
+    // keeps a number in there out of a command's environment.
+    final env = json["environment"];
+    final environment = env is Map<String, dynamic> && env.values.every((v) => v is String)
+        ? {for (final e in env.entries) e.key: e.value as String}
+        : null;
+    return ProjectSettings(
+        tempChatTtl: TempChatTtl.values.asNameMap()[json["tempChatTtl"]],
         environment: environment,
         useProjectMemory: json["useProjectMemory"] as bool? ?? false,
         omada: json["omada"] as bool? ?? false,
-        omadaOrdering: OmadaOrdering.fromNameNullable(
-            json["omadaOrdering"] as String?),
+        omadaOrdering: OmadaOrdering.values.asNameMap()[json["omadaOrdering"]],
         omadaMaxGenerations: json["omadaMaxGenerations"] as int?,
         turnMaxSteps: json["turnMaxSteps"] as int?,
-        tone: Tone.fromNameNullable(json["tone"] as String?),
+        tone: Tone.values.asNameMap()[json["tone"]],
         citations: json["citations"] as bool?,
         permissions: permissionRulesFromJson(json["permissions"] as List<dynamic>?),
         writableDirs: [
@@ -154,13 +156,12 @@ class ProjectSettings {
         sandboxReprompt: json["sandboxReprompt"] as bool?,
         description: json["description"] as String?,
       );
-    } catch (_) {
-      return ProjectSettings();
-    }
   }
 
-  Future<void> save(AppConfig config, {String? project}) async {
-    await config.documents.write(config.projectSettingsFile(project: project), jsonEncode({
+  Future<void> save(AppConfig config, {String? project}) => config.documents
+      .write(config.projectSettingsFile(project: project), jsonEncode(toJson()));
+
+  Map<String, dynamic> toJson() => {
       if (tempChatTtl != null) "tempChatTtl": tempChatTtl!.name,
       if (environment != null && environment!.isNotEmpty) "environment": environment,
       if (useProjectMemory) "useProjectMemory": useProjectMemory,
@@ -177,22 +178,7 @@ class ProjectSettings {
       // Empty is written as it stands: the screen asking nothing is a value
       // here, where an absent key is the app default.
       if (description != null) "description": description,
-    }));
-  }
+    };
 
-  ProjectSettings copy() => ProjectSettings(
-        tempChatTtl: tempChatTtl,
-        environment: environment,
-        useProjectMemory: useProjectMemory,
-        omada: omada,
-        omadaOrdering: omadaOrdering,
-        omadaMaxGenerations: omadaMaxGenerations,
-        turnMaxSteps: turnMaxSteps,
-        tone: tone,
-        citations: citations,
-        permissions: permissions,
-        writableDirs: writableDirs,
-        sandboxReprompt: sandboxReprompt,
-        description: description,
-      );
+  ProjectSettings copy() => ProjectSettings.fromJson(toJson());
 }

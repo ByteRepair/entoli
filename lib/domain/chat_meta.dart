@@ -56,7 +56,7 @@ class ChatMeta {
           for (final w in (json["writableDirs"] as List<dynamic>? ?? const []))
             if (w is String) w,
         ],
-        tempChatTtl: TempChatTtl.fromNameNullable(json["tempChatTtl"] as String?),
+        tempChatTtl: TempChatTtl.values.asNameMap()[json["tempChatTtl"]],
         memoryOff: json["memoryOff"] as bool?,
         headless: json["headless"] as bool?,
       );
@@ -82,16 +82,7 @@ class ChatMeta {
   /// fields are mutable and the settings page writes them in place, so a page
   /// backed out of has to leave what it was handed alone. `AppSettings.copy`
   /// and `ProjectSettings.copy` are the same call for the same reason.
-  ChatMeta copy() => ChatMeta(
-        model: model,
-        provider: provider,
-        approveMode: approveMode,
-        permissions: permissions,
-        writableDirs: writableDirs,
-        tempChatTtl: tempChatTtl,
-        memoryOff: memoryOff,
-        headless: headless,
-      );
+  ChatMeta copy() => ChatMeta.fromJson(toJson());
 
   /// Nothing overridden, so nothing to write down: this chat inherits the
   /// project's answers and the app's, which is what no `meta.json` means.

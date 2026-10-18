@@ -37,12 +37,7 @@ const approveModeLabels = {
 /// field reads as "inherit" and a non-null one falls back with `??`.
 ApproveMode? approveModeFromJson(Map<String, dynamic> json) {
   final mode = json["approveMode"] as String?;
-  if (mode != null) {
-    return ApproveMode.values.firstWhere(
-      (m) => m.name == mode,
-      orElse: () => ApproveMode.ask,
-    );
-  }
+  if (mode != null) return ApproveMode.values.asNameMap()[mode] ?? ApproveMode.ask;
   final legacy = json["approveCommands"] as bool?;
   return switch (legacy) {
     true => ApproveMode.ask,
@@ -133,11 +128,8 @@ class PermissionRule {
         ],
       );
 
-  static PermissionDecision _decision(String? name) => switch (name) {
-        "deny" => PermissionDecision.deny,
-        "allow" => PermissionDecision.allow,
-        _ => PermissionDecision.ask,
-      };
+  static PermissionDecision _decision(String? name) =>
+      PermissionDecision.values.asNameMap()[name] ?? PermissionDecision.ask;
 
   Map<String, dynamic> toJson() => {
         "tool": tool,
@@ -346,13 +338,9 @@ PermissionRule? ruleFromApproval(ToolApproval? approval) {
       // is what this one was allowed by. A redirecting or compound variant
       // stays command-shaped, where its own shape is what matched.
       final segments = ShellCommandAnalysis.parse(command).modelableSegments;
-      final profile =
-          segments == null ? null : profileSegment(segments.first);
       if (segments != null &&
           segments.length == 1 &&
-          profile != null &&
-          profile.modelable &&
-          profile.reach == SegmentReach.network) {
+          profileSegment(segments.single).reach == SegmentReach.network) {
         return const PermissionRule(
           tool: "webfetch",
           pattern: "*",
@@ -396,8 +384,9 @@ PermissionRule? ruleFromApproval(ToolApproval? approval) {
 /// *`; `ls -la` => `ls -la *`. The head is the parse's first segment, so a
 /// quoted operator does not cut it mid-quote.
 String _commandPrefix(String command) {
-  final head = ShellCommandAnalysis.parse(command).modelableSegments?.first ??
-      command;
+  final head =
+      ShellCommandAnalysis.parse(command).modelableSegments?.firstOrNull ??
+          command;
   final words = head.split(RegExp(r"\s+"));
   final prefix = words.length <= 2 ? head : words.take(2).join(" ");
   if (prefix.isEmpty) return command;

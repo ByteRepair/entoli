@@ -397,8 +397,15 @@ class AppSettings {
     final text = config.documents.read(config.settingsFile);
     if (text == null) return AppSettings();
     try {
-      final json = jsonDecode(text) as Map<String, dynamic>;
-      return AppSettings(
+      return AppSettings.fromJson(jsonDecode(text) as Map<String, dynamic>);
+    } catch (_) {
+      return AppSettings();
+    }
+  }
+
+  /// An enum name this build does not know is a later build's, and falls
+  /// back to the default rather than failing the whole load.
+  factory AppSettings.fromJson(Map<String, dynamic> json) => AppSettings(
         defaultModelId: _orNull(json["defaultModelId"] as String?),
         defaultProviderId: _orNull(json["defaultProviderId"] as String?),
         titleModelId: _orNull(json["titleModelId"] as String?),
@@ -427,22 +434,22 @@ class AppSettings {
         approveMode: _approveMode(json),
         llmProviders: _providers(json["llmProviders"]),
         profile: Profile.fromJson(json["profile"]),
-        tone: Tone.fromName(json["tone"] as String?),
+        tone: Tone.values.asNameMap()[json["tone"]] ?? Tone.none,
         citations: json["citations"] as bool? ?? false,
-        appIcon: AppIcon.fromName(json["appIcon"] as String?),
-        appTheme: AppTheme.fromName(json["appTheme"] as String?),
-        primaryColour: ThemeColour.fromName(json["primaryColour"] as String?),
-        secondaryColour: ThemeColour.fromName(json["secondaryColour"] as String?),
-        cornerRadius: CornerRadius.fromName(json["cornerRadius"] as String?),
+        appIcon: AppIcon.values.asNameMap()[json["appIcon"]] ?? AppIcon.cookie,
+        appTheme: AppTheme.values.asNameMap()[json["appTheme"]] ?? AppTheme.system,
+        primaryColour: ThemeColour.values.asNameMap()[json["primaryColour"]] ?? ThemeColour.indigo,
+        secondaryColour: ThemeColour.values.asNameMap()[json["secondaryColour"]] ?? ThemeColour.indigo,
+        cornerRadius: CornerRadius.values.asNameMap()[json["cornerRadius"]] ?? CornerRadius.medium,
         systemPalette: json["systemPalette"] as bool? ?? false,
-        tempChatTtl: TempChatTtl.fromName(json["tempChatTtl"] as String?),
+        tempChatTtl: TempChatTtl.values.asNameMap()[json["tempChatTtl"]] ?? TempChatTtl.off,
         voiceRecognitionModelId: _orNull(json["voiceRecognitionModelId"] as String?),
         voiceSpeechModelId: _orNull(json["voiceSpeechModelId"] as String?),
         voiceSpeaker: json["voiceSpeaker"] as int? ?? 0,
         voiceLanguage: _orNull(json["voiceLanguage"] as String?),
         voicePushToTalk: json["voicePushToTalk"] as bool? ?? false,
         assistantProject: _orNull(json["assistantProject"] as String?),
-        assistantView: AssistantView.fromName(json["assistantView"] as String?),
+        assistantView: AssistantView.values.asNameMap()[json["assistantView"]] ?? AssistantView.chat,
         rootfsId: _orNull(json["rootfsId"] as String?),
         maxLocalModels:
             (json["maxLocalModels"] as int? ?? 1).clamp(1, maxLocalModelsAllowed),
@@ -465,8 +472,7 @@ class AppSettings {
         omadaByDefault: json["omadaByDefault"] as bool? ?? false,
         omadaMaxGenerations:
             (json["omadaMaxGenerations"] as int? ?? defaultOmadaMaxGenerations),
-        omadaOrdering: OmadaOrdering.fromNameNullable(
-            json["omadaOrdering"] as String?),
+        omadaOrdering: OmadaOrdering.values.asNameMap()[json["omadaOrdering"]],
         turnMaxSteps: json["turnMaxSteps"] as int?,
         autoCompact:
             json["autoCompact"] as bool? ?? defaultAutoCompact,
@@ -481,10 +487,6 @@ class AppSettings {
         // gates are held to.
         autoUpdate: json["autoUpdate"] as bool? ?? true,
       );
-    } catch (_) {
-      return AppSettings();
-    }
-  }
 
   /// `approveMode` is the current key. An older file has `approveCommands` as
   /// a bool, migrated by [approveModeFromJson]. A file with neither is the
@@ -511,72 +513,14 @@ class AppSettings {
   }
 
   /// A fresh instance holding the same values, for a notifier that has to hand
-  /// out a new object to be noticed. The fields are mutable, so a caller
-  /// changes what it means to with a cascade — which keeps `null` meaning
-  /// "not set" rather than "leave alone", and needs no sentinel to say so.
-  AppSettings copy() => AppSettings(
-        defaultModelId: defaultModelId,
-        defaultProviderId: defaultProviderId,
-        titleModelId: titleModelId,
-        titleProviderId: titleProviderId,
-        classifierModelId: classifierModelId,
-        classifierProviderId: classifierProviderId,
+  /// out a new object to be noticed: what a save and a reload would give. The
+  /// fields are mutable, so a caller changes them with a cascade.
+  AppSettings copy() => AppSettings.fromJson(toJson());
 
-        instructionImports: instructionImports,
-        nestedInstructions: nestedInstructions,
-        instructionExcludes: instructionExcludes,
-        autoMemory: autoMemory,
-        memoryRecall: memoryRecall,
-        memoryExtraction: memoryExtraction,
-        memoryAgentTool: memoryAgentTool,
-        memoryModelId: memoryModelId,
-        memoryProviderId: memoryProviderId,
-        environment: environment,
-        approveMode: approveMode,
-        llmProviders: llmProviders,
-        profile: profile,
-        tone: tone,
-        citations: citations,
-        appIcon: appIcon,
-        appTheme: appTheme,
-        primaryColour: primaryColour,
-        secondaryColour: secondaryColour,
-        cornerRadius: cornerRadius,
-        systemPalette: systemPalette,
-        tempChatTtl: tempChatTtl,
-        voiceRecognitionModelId: voiceRecognitionModelId,
-        voiceSpeechModelId: voiceSpeechModelId,
-        voiceSpeaker: voiceSpeaker,
-        voiceLanguage: voiceLanguage,
-        voicePushToTalk: voicePushToTalk,
-        assistantProject: assistantProject,
-        assistantView: assistantView,
-        rootfsId: rootfsId,
-        maxLocalModels: maxLocalModels,
-        localModelDevice: localModelDevice,
-        localModelContext: localModelContext,
-        localModelPrefill: localModelPrefill,
-        localModelThreads: localModelThreads,
-        localModelKvCachePrompts: localModelKvCachePrompts,
-        deviceName: deviceName,
-        syncRelayUrl: syncRelayUrl,
-        syncKeepAlive: syncKeepAlive,
-        turnUrl: turnUrl,
-        turnUsername: turnUsername,
-        turnRetries: turnRetries,
-        omadaByDefault: omadaByDefault,
-        omadaMaxGenerations: omadaMaxGenerations,
-        omadaOrdering: omadaOrdering,
-        turnMaxSteps: turnMaxSteps,
-        autoCompact: autoCompact,
-        autoCompactPercent: autoCompactPercent,
-        totalContext: totalContext,
-        welcomeSeen: welcomeSeen,
-        autoUpdate: autoUpdate,
-      );
+  Future<void> save(AppConfig config) =>
+      config.documents.write(config.settingsFile, jsonEncode(toJson()));
 
-  Future<void> save(AppConfig config) async {
-    await config.documents.write(config.settingsFile, jsonEncode({
+  Map<String, dynamic> toJson() => {
       if (defaultModelId != null) "defaultModelId": defaultModelId,
       if (defaultProviderId != null) "defaultProviderId": defaultProviderId,
       if (titleModelId != null) "titleModelId": titleModelId,
@@ -646,6 +590,5 @@ class AppSettings {
       if (totalContext != defaultTotalContext) "totalContext": totalContext,
       if (welcomeSeen) "welcomeSeen": welcomeSeen,
       if (!autoUpdate) "autoUpdate": autoUpdate,
-    }));
-  }
+    };
 }
