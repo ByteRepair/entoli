@@ -26,6 +26,7 @@ import "domain/sync/identity.dart";
 import "providers.dart";
 import "ui/chat/remote_turns.dart";
 import "ui/app_shell.dart";
+import "ui/initial_setup_gate.dart";
 import "ui/welcome_gate.dart";
 import "ui/chat/chat_controller.dart";
 import "ui/chat/trigger_turn_driver.dart";
@@ -465,12 +466,15 @@ class _AgentChatAppState extends ConsumerState<AgentChatApp> {
       // shared has to be offered a workspace over whatever is on screen and the
       // assistant gesture has to open a chat over it, both of which want a
       // Navigator that only exists below here; the first run is met with the
-      // welcome tour over the same, under whatever those two arrive with; and
+      // welcome tour (a phone's initial setup ahead of it) over the same, under
+      // whatever those two arrive with; and
       // the keyboard is the app's to answer for, over whichever field had it.
       home: const FocusFollowsKeyboard(
         child: IncomingAssistant(
           child: IncomingShares(
-            child: IncomingTriggerOpen(child: WelcomeGate(child: AppShell())),
+            child: IncomingTriggerOpen(
+              child: InitialSetupGate(child: WelcomeGate(child: AppShell())),
+            ),
           ),
         ),
       ),
