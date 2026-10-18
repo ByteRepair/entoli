@@ -699,16 +699,20 @@ String _remoteLabel(String deviceName, String? project) =>
 /// Every project that has a mirrored chat in it, one entry each, device
 /// first. A device with nothing mirrored has no projects to offer — the
 /// welcome is what says a project exists at all.
-List<({RemoteScope scope, String label})> _remoteEntries(
+List<({RemoteScope scope, String label, bool omada})> _remoteEntries(
     List<RemoteChatEntry> remotes) {
-  final byScope = <RemoteScope, String>{};
+  final byScope = <RemoteScope, RemoteChatEntry>{};
   for (final entry in remotes) {
     byScope[(deviceId: entry.deviceId, project: entry.state.project)] ??=
-        entry.deviceName;
+        entry;
   }
   final entries = [
-    for (final scope in byScope.keys)
-      (scope: scope, label: _remoteLabel(byScope[scope]!, scope.project)),
+    for (final MapEntry(key: scope, value: entry) in byScope.entries)
+      (
+        scope: scope,
+        label: _remoteLabel(entry.deviceName, scope.project),
+        omada: entry.omada,
+      ),
   ];
   entries.sort((a, b) => a.label.toLowerCase().compareTo(b.label.toLowerCase()));
   return entries;
@@ -775,8 +779,13 @@ class _ProjectMenu extends ConsumerWidget {
               fontSize: 18,
               fontWeight: FontWeight.bold,
             ).merge(
-              projectLabelStyle(
-                  remote == null && ref.watch(omadaOnProvider(project))),
+              projectLabelStyle(remote == null
+                  ? ref.watch(omadaOnProvider(project))
+                  : ref.watch(remoteChatsProvider.select((chats) => chats.any(
+                      (e) =>
+                          e.deviceId == remote.deviceId &&
+                          e.state.project == remote.project &&
+                          e.omada)))),
             ),
           ),
           onPressed: () => _open(context, ref, projects),
@@ -839,6 +848,7 @@ class _ProjectMenu extends ConsumerWidget {
         _row(
           checked: entry.scope == remote,
           label: entry.label,
+          omada: entry.omada,
           pick: () => selectRemote(ref, entry.scope),
         ),
       const PopupMenuDivider(),
