@@ -4,6 +4,7 @@ import "../core/config.dart";
 import "permission.dart";
 import "temp_chat_ttl.dart";
 import "tone.dart";
+import "tristate.dart";
 
 /// How the agents of a project's rounds run. The project's Omada section
 /// names the default for its chats; a chat's own override, where Phase 2
@@ -41,7 +42,7 @@ const omadaOrderingDescriptions = {
 const defaultOmadaOrdering = OmadaOrdering.relay;
 
 /// Project-scoped overrides. A project can override the app-level
-/// [TempChatTtl] with one of its own, keep an auto-memory store of its own,
+/// [TempChatTtl] with one of its own, choose which auto-memory store it uses,
 /// and set command environment variables of its own beside the app-level
 /// ones. Null means "inherit the app default". What a project says to its
 /// turns is not here: that is the AGENTS.md at its workspace root, read with
@@ -50,7 +51,7 @@ class ProjectSettings {
   ProjectSettings(
       {this.tempChatTtl,
       this.environment,
-      this.useProjectMemory = false,
+      this.memory = Tristate.inherit,
       this.omada = false,
       this.omadaOrdering,
       this.omadaMaxGenerations,
@@ -70,10 +71,10 @@ class ProjectSettings {
   /// a name set here wins over one set there. Null means none.
   Map<String, String>? environment;
 
-  /// Whether this project keeps an auto-memory store of its own instead of
-  /// sharing the default project's. Meaningless for the default project
-  /// itself, which is the one every other falls back to.
-  bool useProjectMemory;
+  /// Which auto-memory store this project's chats use: none, the default
+  /// project's ([Tristate.inherit]), or one of its own. Meaningless for the
+  /// default project itself, which is the one every other falls back to.
+  Tristate memory;
 
   /// Whether this project's chats can carry several agents in one round. A
   /// user project's toggle; a built-in's answer is its spec, in code, and
@@ -141,7 +142,10 @@ class ProjectSettings {
     return ProjectSettings(
         tempChatTtl: TempChatTtl.values.asNameMap()[json["tempChatTtl"]],
         environment: environment,
-        useProjectMemory: json["useProjectMemory"] as bool? ?? false,
+        // `useProjectMemory` is the bool this replaced; true was a store of
+        // the project's own.
+        memory: Tristate.values.asNameMap()[json["memory"]] ??
+            (json["useProjectMemory"] == true ? Tristate.on : Tristate.inherit),
         omada: json["omada"] as bool? ?? false,
         omadaOrdering: OmadaOrdering.values.asNameMap()[json["omadaOrdering"]],
         omadaMaxGenerations: json["omadaMaxGenerations"] as int?,
@@ -164,7 +168,7 @@ class ProjectSettings {
   Map<String, dynamic> toJson() => {
       if (tempChatTtl != null) "tempChatTtl": tempChatTtl!.name,
       if (environment != null && environment!.isNotEmpty) "environment": environment,
-      if (useProjectMemory) "useProjectMemory": useProjectMemory,
+      if (memory != Tristate.inherit) "memory": memory.name,
       if (omada) "omada": omada,
       if (omadaOrdering != null) "omadaOrdering": omadaOrdering!.name,
       if (omadaMaxGenerations != null) "omadaMaxGenerations": omadaMaxGenerations,

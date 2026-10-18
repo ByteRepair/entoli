@@ -8,6 +8,7 @@ import "../../domain/project.dart"
     show defaultEmptyChatQuestion, emptyChatQuestionFor;
 import "../../domain/project_settings.dart";
 import "../../domain/temp_chat_ttl.dart";
+import "../../domain/tristate.dart";
 import "../../providers.dart";
 import "../memory/memory_page.dart";
 import "../profile/profile_page.dart";
@@ -21,6 +22,7 @@ import "../widgets/environment_section.dart";
 import "../widgets/resettable_field.dart";
 import "../widgets/section_header.dart" show mutedParagraph;
 import "../widgets/settings_card.dart";
+import "../widgets/tristate_toggle.dart";
 import "../workspace/workspace_page.dart";
 import "sidebar.dart";
 
@@ -147,7 +149,7 @@ class ProjectSettingsPage extends ConsumerWidget {
           ]),
           const Divider(),
           if (builtIn == null) ...[
-            _UseProjectMemoryRow(project: project),
+            _ProjectMemoryRow(project: project),
             MemoryTile(
               dir: ref.watch(appConfigProvider).memoryDir(project: project),
               title: "Project memories",
@@ -270,23 +272,35 @@ class _ProfileCardState extends ConsumerState<_ProfileCard> {
   }
 }
 
-/// Whether this project keeps its own memory store or shares the default
-/// project's. Off, its chats read and write the default project's memories.
-class _UseProjectMemoryRow extends ConsumerWidget {
-  const _UseProjectMemoryRow({required this.project});
+/// Which memory store this project's chats use: none, the default project's,
+/// or one of its own.
+class _ProjectMemoryRow extends ConsumerWidget {
+  const _ProjectMemoryRow({required this.project});
 
   final String project;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final on = ref.watch(projectSettingsProvider(project).select((s) => s.useProjectMemory));
-    return SwitchListTile(
+    final value = ref.watch(projectSettingsProvider(project).select((s) => s.memory));
+    return ListTile(
       title: const Text("Project memory"),
-      subtitle: const Text(
-          "Off, this project's chats share the default project's memories."),
-      value: on,
-      onChanged: (value) =>
-          ref.read(projectSettingsProvider(project).notifier).setUseProjectMemory(value),
+      subtitle: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(switch (value) {
+            Tristate.off => "This project's chats have no memory.",
+            Tristate.inherit =>
+              "This project's chats share the default project's memories.",
+            Tristate.on => "This project keeps memories of its own.",
+          }),
+          const SizedBox(height: 8),
+          TristateToggle(
+            value: value,
+            onChanged: (v) =>
+                ref.read(projectSettingsProvider(project).notifier).setMemory(v),
+          ),
+        ],
+      ),
     );
   }
 }

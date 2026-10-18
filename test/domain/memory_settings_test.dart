@@ -11,6 +11,7 @@ import "package:agent_chat/domain/app_settings.dart";
 import "package:agent_chat/domain/chat_meta.dart";
 import "package:agent_chat/domain/chat_repository.dart";
 import "package:agent_chat/domain/project_settings.dart";
+import "package:agent_chat/domain/tristate.dart";
 
 import "../fakes.dart";
 
@@ -98,11 +99,16 @@ void main() {
 
     test("a project's own-memory toggle survives save and load", () async {
       makeProject("proj");
-      await ProjectSettings(useProjectMemory: true).save(config, project: "proj");
+      await ProjectSettings(memory: Tristate.on).save(config, project: "proj");
 
-      expect(ProjectSettings.load(config, project: "proj").useProjectMemory,
-          isTrue);
-      expect(ProjectSettings.load(config).useProjectMemory, isFalse);
+      expect(ProjectSettings.load(config, project: "proj").memory, Tristate.on);
+      expect(ProjectSettings.load(config).memory, Tristate.inherit);
+    });
+
+    test("the bool it replaced still loads", () {
+      expect(ProjectSettings.fromJson({"useProjectMemory": true}).memory,
+          Tristate.on);
+      expect(ProjectSettings.fromJson({}).memory, Tristate.inherit);
     });
   });
 
@@ -158,7 +164,7 @@ void main() {
 
     test("a project with its own toggle keeps its own store", () async {
       makeProject("proj");
-      await ProjectSettings(useProjectMemory: true).save(config, project: "proj");
+      await ProjectSettings(memory: Tristate.on).save(config, project: "proj");
       final repo = repoWith(AppSettings(autoMemory: true));
       final chat = await repo.createChat(project: "proj");
 
@@ -168,9 +174,20 @@ void main() {
           config.memoryDir(project: "proj"));
     });
 
+    test("a project set to off has no memory", () async {
+      makeProject("proj");
+      await ProjectSettings(memory: Tristate.off).save(config, project: "proj");
+      final repo = repoWith(AppSettings(autoMemory: true));
+      final chat = await repo.createChat(project: "proj");
+
+      await repo.sendPrompt(chat.state.id, userMessage("hi")).toList();
+
+      expect(backend.prompts.single.settings.memory, MemorySettings.off);
+    });
+
     test("auto-memory off means no store even where the toggle is on", () async {
       makeProject("proj");
-      await ProjectSettings(useProjectMemory: true).save(config, project: "proj");
+      await ProjectSettings(memory: Tristate.on).save(config, project: "proj");
       final repo = repoWith(AppSettings());
       final chat = await repo.createChat(project: "proj");
 
@@ -239,7 +256,7 @@ void main() {
     // The chat's off cannot be argued out of by a project that has a store.
     test("the keep-out stands over a project's own store", () async {
       makeProject("proj");
-      await ProjectSettings(useProjectMemory: true).save(config, project: "proj");
+      await ProjectSettings(memory: Tristate.on).save(config, project: "proj");
       final repo = repoWith(AppSettings(autoMemory: true));
       final chat = await repo.createChat(
           project: "proj", meta: ChatMeta(memoryOff: true));

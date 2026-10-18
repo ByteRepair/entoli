@@ -11,6 +11,7 @@ import "package:agent_chat/domain/llm_provider.dart";
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/domain/permission.dart";
 import "package:agent_chat/domain/project_settings.dart";
+import "package:agent_chat/domain/tristate.dart";
 import "package:agent_chat/domain/workspace.dart";
 
 import "../harness.dart";
@@ -168,7 +169,7 @@ void main() {
     test("a filesystem with nothing written to it is the defaults", () {
       expect(AppSettings.load(config).llmProviders, isEmpty);
       expect(AppSettings.load(config).approveMode, ApproveMode.auto);
-      expect(ProjectSettings.load(config).useProjectMemory, isFalse);
+      expect(ProjectSettings.load(config).memory, Tristate.inherit);
     });
 
     test("what was saved reads back without waiting for the write", () async {
@@ -183,10 +184,10 @@ void main() {
 
     test("a project's settings are their own, and keyed by project", () async {
       await store.createProject("work");
-      await ProjectSettings(useProjectMemory: true).save(config, project: "work");
+      await ProjectSettings(memory: Tristate.on).save(config, project: "work");
 
-      expect(ProjectSettings.load(config, project: "work").useProjectMemory, isTrue);
-      expect(ProjectSettings.load(config).useProjectMemory, isFalse);
+      expect(ProjectSettings.load(config, project: "work").memory, Tristate.on);
+      expect(ProjectSettings.load(config).memory, Tristate.inherit);
     });
   });
 
@@ -216,14 +217,14 @@ void main() {
         ],
       ).save(config);
       await store.createProject("work");
-      await ProjectSettings(useProjectMemory: true).save(config, project: "work");
+      await ProjectSettings(memory: Tristate.on).save(config, project: "work");
 
       final reloaded = await AppConfig.load(fs, "/agent-chat");
 
       expect(AppSettings.load(reloaded).defaultProviderId, "ollama");
       expect(AppSettings.load(reloaded).approveMode, ApproveMode.never);
       expect(AppSettings.load(reloaded).llmProviders.single.id, "ollama");
-      expect(ProjectSettings.load(reloaded, project: "work").useProjectMemory, isTrue);
+      expect(ProjectSettings.load(reloaded, project: "work").memory, Tristate.on);
     });
   });
 }

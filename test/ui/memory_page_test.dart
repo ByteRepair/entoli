@@ -5,6 +5,7 @@ import "package:flutter_test/flutter_test.dart";
 
 import "package:agent_chat/data/builtin/memory/store.dart";
 import "package:agent_chat/domain/app_settings.dart";
+import "package:agent_chat/domain/tristate.dart";
 import "package:agent_chat/providers.dart";
 import "package:agent_chat/ui/memory/memory_page.dart";
 import "package:agent_chat/ui/settings/settings_page.dart";
@@ -323,12 +324,13 @@ void main() {
       await io(tester, () => app.repo.createProject("research"));
 
       await app.pump(tester, const ProjectSettingsPage(project: "research"));
-      await tester.tap(find.text("Project memory"));
+      await scrollTo(tester, find.text("On"));
+      await tester.tap(find.text("On"));
       await settleIo(tester);
 
       final settings =
           app.container.read(projectSettingsProvider("research"));
-      expect(settings.useProjectMemory, isTrue);
+      expect(settings.memory, Tristate.on);
     });
   });
 

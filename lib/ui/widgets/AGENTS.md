@@ -10,7 +10,7 @@ the `Default`-plus-reset pairing,
 null resolves to), the `promptForText` / `promptForPair` / `confirm` /
 `pickProject` dialogs and `copyToClipboard` beside them, `showAnchoredMenu`,
 `NavDrawer` and `navBreakpoint`, `ActionIcon`, `AttachmentChip` /
-`AttachmentStrip`, `EmptyPane`, `Nothing`, `TempChatTtlField`,
+`AttachmentStrip`, `EmptyPane`, `Nothing`, `TempChatTtlField`, `TristateToggle`,
 `CompletionField`,
 `text_input.dart` — the sections below — and `catalog.dart`.
 
