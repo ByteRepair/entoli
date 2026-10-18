@@ -421,7 +421,8 @@ class _RemoteChatList extends ConsumerWidget {
                   return Consumer(
                     builder: (context, ref, _) => _ChatTile(
                       chat: entry.state,
-                      mutable: false,
+                      mutable: entry.online,
+                      remote: true,
                       selected: ref.watch(selectedChatIdProvider
                           .select((id) => id == entry.chatId)),
                       subtitle: entry.online
@@ -554,16 +555,20 @@ class _ChatTile extends ConsumerWidget {
     required this.chat,
     required this.selected,
     this.mutable = true,
+    this.remote = false,
     this.subtitle,
   });
 
   final ChatState chat;
   final bool selected;
 
-  /// False for a mirror: the home device owns the log, so there is nothing
-  /// here that could pin, rename, move or delete it — and no local TTL for
-  /// the hourglass to be about.
+  /// False for a mirror whose home device is away: its writes have nowhere
+  /// to go until it is back.
   final bool mutable;
+
+  /// A mirror: its writes go to the home device, and its projects are that
+  /// device's, so there is nowhere here to move it to.
+  final bool remote;
 
   final Widget? subtitle;
 
@@ -630,7 +635,8 @@ class _ChatTile extends ConsumerWidget {
             else
               const PopupMenuItem(value: "pin", child: Text("Pin")),
             const PopupMenuItem(value: "rename", child: Text("Rename")),
-            const PopupMenuItem(value: "move", child: Text("Move to project…")),
+            if (!remote)
+              const PopupMenuItem(value: "move", child: Text("Move to project…")),
             const PopupMenuItem(value: "delete", child: Text("Delete")),
           ],
         ),
@@ -650,7 +656,7 @@ class _ChatTile extends ConsumerWidget {
     );
     if (title == null) return;
     await ref.read(chatRepositoryProvider).retitle(chat.id, title);
-    if (selected) {
+    if (selected && !remote) {
       ref.read(chatControllerProvider(chat.id).notifier).applyTitle(title);
     }
     ref.invalidate(chatListProvider);
@@ -665,7 +671,7 @@ class _ChatTile extends ConsumerWidget {
     final repo = ref.read(chatRepositoryProvider);
     final written =
         await (pinned ? repo.pinChat(chat.id, chat) : repo.unpinChat(chat.id, chat));
-    if (selected) {
+    if (selected && !remote) {
       ref.read(chatControllerProvider(chat.id).notifier).applyState(written);
     }
     ref.invalidate(chatListProvider);

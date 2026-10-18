@@ -635,8 +635,8 @@ the other end" for the lock and what refuses what.
 two arms meet again at `_page`: same bar, same centred column, same
 conversation. What differs is stated as arguments rather than as a second copy
 — `editing` is the controller the message row acts through and is null for a
-mirror, which takes the whole edit/regenerate/thread row out with it;
-`onOpenSettings` is null for the same reason; `banner` is the strip a mirror
+mirror this device does not hold, which takes the whole edit/regenerate/thread
+row out with it; `banner` is the strip a mirror
 floats over the conversation, and `bottom` is a composer or a bar saying why
 there is none. Written out twice, the mirrored copy had already lost the jump
 button, the empty-chat starter and the running-turn spinner.

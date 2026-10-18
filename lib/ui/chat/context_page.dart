@@ -5,7 +5,7 @@ import "../../domain/models.dart";
 import "../../domain/prompt_library.dart" show nameOf;
 import "../../providers.dart";
 import "../widgets/agent_picture.dart";
-import "chat_controller.dart";
+import "mirror_controller.dart";
 
 /// What fills each participant's context window, out of the model's whole,
 /// with the auto-compact threshold marked on it.
@@ -20,7 +20,7 @@ class ContextPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final contexts =
-        ref.watch(chatControllerProvider(chatId).select((s) => s.chat))?.contexts ??
+        ref.watch(chatViewProvider(chatId).select((s) => s.chat))?.contexts ??
             const {};
     final settings = ref.watch(appSettingsProvider);
     final window = ref.watch(agentBackendProvider).contextWindowFor(chatId) ??

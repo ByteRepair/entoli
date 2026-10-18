@@ -1,9 +1,12 @@
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../data/sync/sync_hub.dart";
+import "../../domain/chat_meta.dart";
+import "../../domain/chat_repository.dart";
 import "../../domain/models.dart";
 import "../../domain/sync/protocol.dart";
 import "../../providers.dart";
+import "../sidebar/sidebar.dart" show selectedChatIdProvider;
 import "chat_controller.dart";
 
 /// This device's end of a chat somebody else is watching or driving.
@@ -108,6 +111,57 @@ class RemoteTurnDriver implements RemoteTurns {
   @override
   void answer(String chatId, String requestId, List<String?> answers) =>
       _of(chatId).answerQuestions(requestId, answers);
+
+  @override
+  void editResend(String chatId, String messageId, String text) =>
+      _of(chatId).editAndResend(messageId, text);
+
+  @override
+  void regenerate(String chatId, String messageId) =>
+      _of(chatId).regenerate(messageId);
+
+  @override
+  void stepThread(String chatId, String messageId, int step) =>
+      _of(chatId).stepThread(messageId, step);
+
+  @override
+  void deleteThread(String chatId, String messageId) =>
+      _of(chatId).deleteThread(messageId);
+
+  ChatRepository get _repo => _ref.read(chatRepositoryProvider);
+
+  // The hub has checked each of these is one of this device's chats.
+
+  /// The controller to tell, where there is one: building it would load a
+  /// conversation nobody is looking at — a rename from a paired sidebar.
+  ChatController? _openOf(String chatId) =>
+      _ref.exists(chatControllerProvider(chatId)) ? _of(chatId) : null;
+
+  @override
+  Future<void> saveState(String chatId, ChatState state, {required bool reanchor}) async {
+    final written = await _repo.saveState(state, reanchor: reanchor);
+    _openOf(chatId)?.applyState(written);
+    _ref.invalidate(chatListProvider);
+  }
+
+  @override
+  Future<void> saveMeta(String chatId, ChatMeta meta) => _repo.saveMeta(chatId, meta);
+
+  @override
+  Future<void> retitle(String chatId, String title) async {
+    await _repo.retitle(chatId, title);
+    _openOf(chatId)?.applyTitle(title);
+    _ref.invalidate(chatListProvider);
+  }
+
+  @override
+  Future<void> delete(String chatId) async {
+    if (_ref.read(selectedChatIdProvider) == chatId) {
+      _ref.read(selectedChatIdProvider.notifier).select(null);
+    }
+    await _repo.deleteChat(chatId);
+    _ref.invalidate(chatListProvider);
+  }
 
   void dispose() {
     _hub.servedChats.removeListener(_served);

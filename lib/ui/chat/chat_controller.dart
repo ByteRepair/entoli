@@ -133,6 +133,10 @@ abstract interface class TurnDriver {
   Future<void> respondApproval(String approvalId, ApprovalResponse r,
       {ToolApproval? approval});
   Future<void> answerQuestions(String requestId, List<String?> answers);
+  Future<void> editAndResend(String messageId, String text);
+  Future<void> regenerate(String messageId);
+  Future<void> stepThread(String messageId, int step);
+  Future<void> deleteThread(String messageId);
 
   /// Whether an approval answer may write a standing rule here. False for a
   /// mirrored chat: the banner is being answered from the other device, and
@@ -762,6 +766,7 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
   /// Resend a message with new text, as another thread beside it. The file
   /// parts come across as they are: the resources are already under this chat,
   /// and branching leaves the message they belong to where it is.
+  @override
   Future<void> editAndResend(String messageId, String text) async {
     final chat = state.chat;
     if (chat == null || state.isRunning) return;
@@ -776,6 +781,7 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
   /// counter lands under the reply — which is the message the arrows move
   /// between. Works from either side of the exchange, and carries on the end
   /// where the reply it would have branched from has been deleted.
+  @override
   Future<void> regenerate(String messageId) async {
     final chat = state.chat;
     if (chat == null || state.isRunning) return;
@@ -792,6 +798,7 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
 
   /// Read the thread beside the one [messageId] is on. [step] is -1 or 1 — the
   /// arrows under the message.
+  @override
   Future<void> stepThread(String messageId, int step) async {
     final chat = _rethreadable;
     final to = chat?.threadBeside(messageId, step);
@@ -800,6 +807,7 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
   }
 
   /// Delete the thread [messageId] heads, and everything below it.
+  @override
   Future<void> deleteThread(String messageId) async {
     final chat = _rethreadable;
     if (chat == null) return;

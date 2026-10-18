@@ -15,9 +15,9 @@ import "package:agent_chat/ui/sidebar/sidebar.dart";
 import "../fakes.dart";
 import "../harness.dart";
 
-/// The read-only half of the app: a chat whose home device is somewhere else.
-/// Everything here is about what is *not* offered — the composer, the chat's
-/// settings, the menu that would write to a disk this device does not have.
+/// A chat whose home device is somewhere else: its writes go there, and what
+/// is not offered is what only that device has — its files, its providers,
+/// and anything at all while it is away.
 void main() {
   const chatId = "remote-1";
 
@@ -107,14 +107,39 @@ void main() {
       expect(find.text("Desktop"), findsOneWidget);
     });
 
-    testWidgets("the title bar does not open the chat's settings",
-        (tester) async {
+    testWidgets("the title bar opens the chat's settings, less what is the "
+        "device's own", (tester) async {
       app = appWith(online: true);
       await openMirror(tester);
 
       await tester.tap(find.text("On the desktop"));
       await settleIo(tester);
-      expect(find.byType(ChatSettingsPage), findsNothing);
+      expect(find.byType(ChatSettingsPage), findsOneWidget);
+      expect(find.text("Context"), findsOneWidget);
+      expect(find.text("Delete chat"), findsOneWidget);
+      // Its files and its providers are the home device's.
+      expect(find.text("Chat workspace"), findsNothing);
+      expect(find.text("LLM"), findsNothing);
+    });
+
+    testWidgets("offline the settings are read, not written", (tester) async {
+      app = appWith(online: false);
+      await openMirror(tester);
+
+      await tester.tap(find.text("On the desktop"));
+      await settleIo(tester);
+      final save = tester.widget<IconButton>(
+          find.widgetWithIcon(IconButton, Icons.check));
+      expect(save.onPressed, isNull);
+      expect(find.text("Delete chat"), findsNothing);
+    });
+
+    testWidgets("viewing only, the messages offer no edits", (tester) async {
+      app = appWith(online: true);
+      await openMirror(tester);
+
+      expect(find.byTooltip("Edit"), findsNothing);
+      expect(find.byTooltip("Regenerate"), findsNothing);
     });
 
     testWidgets("offline it says so twice: over the chat and where the composer was",
@@ -203,6 +228,13 @@ void main() {
       // A running turn ends in a caret, which never comes to rest.
       if (!running) await settleIo(tester);
     }
+
+    testWidgets("the messages can be edited", (tester) async {
+      await openHeld(tester);
+
+      expect(find.byTooltip("Edit"), findsWidgets);
+      expect(find.byTooltip("Regenerate"), findsWidgets);
+    });
 
     testWidgets("the composer takes the view-only bar's place", (tester) async {
       await openHeld(tester);
@@ -352,16 +384,25 @@ void main() {
       expect(find.text("offline"), findsOneWidget);
     });
 
-    testWidgets("a remote row carries none of a local chat's menu",
+    testWidgets("a remote row's menu is a local one's, less the move",
         (tester) async {
       app = appWith(online: true);
       await pickRemote(tester);
 
-      await tester.longPress(find.text("On the desktop"));
+      await tester.tap(find.byIcon(Icons.more_vert));
       await settleIo(tester);
-      for (final action in ["Pin", "Rename", "Move to", "Delete"]) {
-        expect(find.text(action), findsNothing, reason: "$action on a mirror");
+      for (final action in ["Pin", "Rename", "Delete"]) {
+        expect(find.text(action), findsOneWidget, reason: action);
       }
+      // Where to is a project on the home device.
+      expect(find.text("Move to project…"), findsNothing);
+    });
+
+    testWidgets("an offline remote row has no menu", (tester) async {
+      app = appWith(online: false);
+      await pickRemote(tester);
+
+      expect(find.byIcon(Icons.more_vert), findsNothing);
     });
 
     testWidgets("tapping one selects it", (tester) async {

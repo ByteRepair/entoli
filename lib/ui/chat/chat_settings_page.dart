@@ -131,8 +131,10 @@ class _ChatSettingsPageState extends ConsumerState<ChatSettingsPage> {
     } catch (_) {
       state = null;
     }
-    final workspace =
-        ref.read(appConfigProvider).workspaceDir(chatId, project: project);
+    // A mirror's files are on its home device, with no path here to open.
+    final workspace = ref.read(isMirroredChatProvider(chatId))
+        ? null
+        : ref.read(appConfigProvider).workspaceDir(chatId, project: project);
     if (mounted) {
       setState(() {
         _meta = meta;
@@ -156,7 +158,10 @@ class _ChatSettingsPageState extends ConsumerState<ChatSettingsPage> {
     // was written.
     if (_state != null) {
       final written = await repo.saveState(_state!, reanchor: true);
-      ref.read(chatControllerProvider(chatId).notifier).applyState(written);
+      // A mirror's controller hears it from the home device.
+      if (!ref.read(isMirroredChatProvider(chatId))) {
+        ref.read(chatControllerProvider(chatId).notifier).applyState(written);
+      }
     }
     ref.invalidate(chatListProvider);
     if (mounted) setState(() => _saving = false);
@@ -165,13 +170,23 @@ class _ChatSettingsPageState extends ConsumerState<ChatSettingsPage> {
 
   @override
   Widget build(BuildContext context) {
+    final mirrored = ref.watch(isMirroredChatProvider(widget.chatId));
+    // A mirror whose home device is away is read, not written; it is read
+    // again when the device comes back.
+    final frozen = ref.watch(remoteChatsProvider.select(
+        (chats) => chats.any((c) => c.chatId == widget.chatId && !c.online)));
+    ref.listen(remoteChatsProvider.select(
+        (chats) => chats.any((c) => c.chatId == widget.chatId && !c.online)),
+        (was, now) {
+      if (was == true && !now) _load();
+    });
     return Scaffold(
       appBar: AppBar(
         title: const Text("Chat settings"),
         actions: [
           IconButton(
             icon: const Icon(Icons.check),
-            onPressed: _saving || _meta == null ? null : _save,
+            onPressed: _saving || _meta == null || frozen ? null : _save,
             tooltip: "Save",
           ),
         ],
@@ -187,7 +202,8 @@ class _ChatSettingsPageState extends ConsumerState<ChatSettingsPage> {
                     value: widget.chatId,
                     said: "Copied chat ID",
                   ),
-                  WorkspaceTile(root: _workspace!, title: "Chat workspace"),
+                  if (_workspace != null)
+                    WorkspaceTile(root: _workspace!, title: "Chat workspace"),
                   SettingsCard(
                     icon: Icons.data_usage,
                     title: "Context",
@@ -197,11 +213,15 @@ class _ChatSettingsPageState extends ConsumerState<ChatSettingsPage> {
                             ContextPage(chatId: widget.chatId, project: _project))),
                   ),
                 ]),
-                const Divider(),
-                _LlmField(
-                  meta: _meta!,
-                  onChanged: (m) => setState(() => _meta = m),
-                ),
+                // The picker lists this device's providers, which the home
+                // device may not have.
+                if (!mirrored) ...[
+                  const Divider(),
+                  _LlmField(
+                    meta: _meta!,
+                    onChanged: (m) => setState(() => _meta = m),
+                  ),
+                ],
                 const Divider(),
                 _ApprovalField(
                   value: _meta!.approveMode,
@@ -231,7 +251,7 @@ class _ChatSettingsPageState extends ConsumerState<ChatSettingsPage> {
                     project: _project,
                   ),
                 const Divider(),
-                _DeleteButton(chatId: widget.chatId),
+                if (!frozen) _DeleteButton(chatId: widget.chatId),
               ],
             ),
     );

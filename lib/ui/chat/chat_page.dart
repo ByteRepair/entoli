@@ -680,9 +680,6 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
         if (drivenBy != null)
           _TitleLine(icon: Icons.edit_outlined, text: "Driven from $drivenBy"),
       ],
-      onOpenSettings: () => Navigator.of(context).push(
-        MaterialPageRoute(builder: (_) => ChatSettingsPage(chatId: widget.chatId)),
-      ),
       whenEmpty: _EmptyChat(project: chat.state.project, controller: _controller),
       bottom: ref.watch(setupCompleteProvider(chat.state.project))
           ? _turnBar(
@@ -703,11 +700,10 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
     );
   }
 
-  /// A mirrored chat's page. Nothing here touches the repository or the store
-  /// — every byte came over the wire and stays in RAM, so expiry, settings and
-  /// the whole message-editing row are out whether or not this device is
-  /// driving. What control changes is only whether there is a composer: the
-  /// turn itself runs on the home device either way.
+  /// A mirrored chat's page. Every byte came over the wire and stays in RAM,
+  /// and every write goes back to the home device — the repository routes the
+  /// settings there, and the controller the edits. Control decides the
+  /// composer and the editing row; the turn runs on the home device either way.
   Widget _mirrored(BuildContext context) {
     final view = ref.watch(mirrorChatControllerProvider(widget.chatId));
     final driver = ref.read(mirrorChatControllerProvider(widget.chatId).notifier);
@@ -734,6 +730,8 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
       chat: chat,
       view: view,
       details: [_TitleLine(icon: Icons.devices_other, text: deviceName)],
+      // The conversation is the holder's to change, the way the composer is.
+      editing: held ? driver : null,
       whenEmpty: const Center(child: Text("No messages yet")),
       banner: !online
           ? MirrorStrip.offline(deviceName: deviceName)
@@ -766,8 +764,8 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
   }
 
   /// The chat, however it is being read. [editing] is the controller the
-  /// message row acts through and is null for a mirror, whose messages are
-  /// the home device's to edit; [onOpenSettings] is null for the same reason.
+  /// message row acts through, and null for a mirror this device does not
+  /// hold.
   /// [banner] floats over the conversation, and [bottom] is whatever answers
   /// the turn — a composer, or a bar saying why there is none.
   Widget _page(
@@ -777,8 +775,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
     required List<Widget> details,
     required Widget whenEmpty,
     required Widget bottom,
-    ChatController? editing,
-    VoidCallback? onOpenSettings,
+    TurnDriver? editing,
     Widget? banner,
   }) {
     final lines = [..._details(chat.state), ...details];
@@ -804,18 +801,18 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
       appBar: AppBar(
         titleSpacing: 0,
         toolbarHeight: barHeight,
-        title: onOpenSettings == null
-            ? title
-            : InkWell(
-                onTap: onOpenSettings,
-                // Fills the bar between leading and actions so the whole strip
-                // opens the chat's settings, not just the text.
-                child: SizedBox(
-                  height: barHeight,
-                  width: double.infinity,
-                  child: Align(alignment: Alignment.centerLeft, child: title),
-                ),
-              ),
+        title: InkWell(
+          onTap: () => Navigator.of(context).push(
+            MaterialPageRoute(builder: (_) => ChatSettingsPage(chatId: widget.chatId)),
+          ),
+          // Fills the bar between leading and actions so the whole strip
+          // opens the chat's settings, not just the text.
+          child: SizedBox(
+            height: barHeight,
+            width: double.infinity,
+            child: Align(alignment: Alignment.centerLeft, child: title),
+          ),
+        ),
         actions: [
           if (view.isRunning)
             Padding(
@@ -896,13 +893,12 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
   }
 
   Widget _conversation(
-      Chat chat, ChatViewState view, ChatController? editing, Widget whenEmpty) {
+      Chat chat, ChatViewState view, TurnDriver? editing, Widget whenEmpty) {
     final speechReady = ref.watch(speechReadyProvider);
     final reading = ref.watch(readAloudProvider);
     if (chat.messages.isEmpty) return whenEmpty;
     final entries = entriesOf(chat);
-    // A mirror has no editing controller: its log is the home device's. And
-    // while a turn runs, the controller refuses every edit.
+    // While a turn runs, the controller refuses every edit.
     final mutable = editing != null && !view.isRunning;
     return Stack(
       children: [

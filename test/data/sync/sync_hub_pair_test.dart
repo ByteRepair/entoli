@@ -10,6 +10,7 @@ import "package:agent_chat/data/sync/handshake.dart" show HandshakeException;
 import "package:agent_chat/data/sync/sync_hub.dart";
 import "package:agent_chat/domain/app_settings.dart";
 import "package:agent_chat/domain/chat_log.dart";
+import "package:agent_chat/domain/chat_meta.dart";
 import "package:agent_chat/domain/chat_repository.dart";
 import "package:agent_chat/domain/chat_store.dart";
 import "package:agent_chat/domain/models.dart";
@@ -709,7 +710,7 @@ void main() {
   group("control", () {
     late _Turns turns;
 
-    setUp(() => home.hub.remoteTurns = turns = _Turns());
+    setUp(() => home.hub.remoteTurns = turns = _Turns(home.repo));
 
     test("asking for a free chat is granted and told to everyone", () async {
       final state = await mirrored();
@@ -798,6 +799,95 @@ void main() {
       expect(turns.answered.single.$1, state.id);
       expect(turns.answered.single.$2, "q1");
       expect(turns.answered.single.$3, ["yes"]);
+    });
+
+    test("the holder's edits reach the home device's controller", () async {
+      final state = await mirrored();
+      await away.hub.requestControl(state.id);
+      await waitForSync(() => away.hub.holdsControl(state.id));
+
+      await away.hub.editRemote(state.id, "m1", "again");
+      await away.hub.regenerateRemote(state.id, "r1");
+      await away.hub.stepThreadRemote(state.id, "r1", -1);
+      await away.hub.deleteThreadRemote(state.id, "r1");
+      await waitForSync(() => turns.edits.length == 4);
+
+      expect(turns.edits, [
+        ("edit", state.id, "m1", "again"),
+        ("regenerate", state.id, "r1", null),
+        ("step", state.id, "r1", -1),
+        ("delete", state.id, "r1", null),
+      ]);
+    });
+
+    test("an edit from a device holding nothing is dropped", () async {
+      final state = await mirrored();
+
+      await away.hub.sendForTest(state.id,
+          SyncMessage.regenerate(chatId: state.id, messageId: "r1"));
+      await Future<void>.delayed(Duration.zero);
+
+      expect(turns.edits, isEmpty);
+    });
+
+    test("the mirror's repository writes land at home, with no lock, and wait "
+        "for the echo", () async {
+      final state = await mirrored();
+
+      await away.repo.saveMeta(state.id, ChatMeta(model: "m"));
+      expect((await home.store.loadMeta(state.id)).model, "m");
+      expect((await away.repo.loadMeta(state.id)).model, "m");
+
+      await away.repo.retitle(state.id, "Renamed");
+      expect((await home.store.loadState(state.id))!.title, "Renamed");
+      expect(away.hub.mirror(state.id)!.state.title, "Renamed");
+
+      final pinned = await away.repo.pinChat(state.id, away.hub.mirror(state.id)!.state);
+      expect(pinned.pinned, isTrue);
+      expect((await home.store.loadState(state.id))!.pinned, isTrue);
+
+      await away.repo.deleteChat(state.id);
+      expect(away.hub.mirror(state.id), isNull);
+      expect(await home.store.loadState(state.id), isNull);
+    });
+
+    test("a write to a chat this device never opened is answered too",
+        () async {
+      final state = _seedChat(home);
+      final links = loopbackPair();
+      await pair(links.$1, links.$2);
+      await waitForSync(() => away.hub.mirror(state.id) != null);
+
+      await away.repo.retitle(state.id, "From the sidebar");
+
+      expect(away.hub.mirror(state.id)!.state.title, "From the sidebar");
+    });
+
+    test("a state write cannot move a chat or name another", () async {
+      final state = await mirrored();
+
+      await away.hub.sendForTest(state.id,
+          SyncMessage.stateWrite(chatId: "elsewhere", state: state));
+      await away.repo.saveState(state.copyWith(project: "work"));
+
+      expect(await home.store.loadState("elsewhere"), isNull);
+      expect((await home.store.loadState(state.id))!.project, isNull);
+    });
+
+    test("a write with the home device away gives up rather than hangs",
+        () async {
+      final state = _seedChat(home);
+      final links = loopbackPair();
+      await pair(links.$1, links.$2);
+      away.hub.followChat(state.id);
+      await waitForSync(() => away.hub.mirror(state.id) != null);
+      await links.$1.close();
+      await links.$2.close();
+      await waitForSync(() => !away.hub.isChatOnline(state.id));
+
+      await away.repo.saveMeta(state.id, ChatMeta(model: "m"));
+
+      expect((await home.store.loadMeta(state.id)).model, isNull);
     });
 
     test("a prompt from a device holding nothing is dropped", () async {
@@ -901,6 +991,11 @@ void main() {
 /// What the real one does with these is `RemoteTurnDriver`'s; what is being
 /// checked here is that they arrive at all, and only from the holder.
 class _Turns implements RemoteTurns {
+  _Turns(this.repo);
+
+  /// The writes are the repository's, run for real so their echo comes back.
+  final ChatRepository repo;
+  final edits = <(String, String, String, Object?)>[];
   final prompts = <(String, String)>[];
   final resumed = <String>[];
   final aborted = <String>[];
@@ -923,6 +1018,35 @@ class _Turns implements RemoteTurns {
   @override
   void answer(String chatId, String requestId, List<String?> answers) =>
       answered.add((chatId, requestId, answers));
+
+  @override
+  void editResend(String chatId, String messageId, String text) =>
+      edits.add(("edit", chatId, messageId, text));
+
+  @override
+  void regenerate(String chatId, String messageId) =>
+      edits.add(("regenerate", chatId, messageId, null));
+
+  @override
+  void stepThread(String chatId, String messageId, int step) =>
+      edits.add(("step", chatId, messageId, step));
+
+  @override
+  void deleteThread(String chatId, String messageId) =>
+      edits.add(("delete", chatId, messageId, null));
+
+  @override
+  Future<void> saveState(String chatId, ChatState state, {required bool reanchor}) =>
+      repo.saveState(state, reanchor: reanchor);
+
+  @override
+  Future<void> saveMeta(String chatId, ChatMeta meta) => repo.saveMeta(chatId, meta);
+
+  @override
+  Future<void> retitle(String chatId, String title) => repo.retitle(chatId, title);
+
+  @override
+  Future<void> delete(String chatId) => repo.deleteChat(chatId);
 }
 
 class _Device {

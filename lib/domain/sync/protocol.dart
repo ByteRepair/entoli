@@ -166,6 +166,53 @@ sealed class SyncMessage with _$SyncMessage {
   const factory SyncMessage.turnResume({required String chatId}) =
       SyncTurnResume;
 
+  // ---- Editing the conversation, from the holder alone. -----------------
+
+  const factory SyncMessage.editResend({
+    required String chatId,
+    required String messageId,
+    required String text,
+  }) = SyncEditResend;
+
+  const factory SyncMessage.regenerate({
+    required String chatId,
+    required String messageId,
+  }) = SyncRegenerate;
+
+  const factory SyncMessage.threadStep({
+    required String chatId,
+    required String messageId,
+    required int step,
+  }) = SyncThreadStep;
+
+  const factory SyncMessage.threadDelete({
+    required String chatId,
+    required String messageId,
+  }) = SyncThreadDelete;
+
+  // ---- Writing the chat itself, from any paired device. -----------------
+  // Answered by the ordinary state, meta or deletion message, which is what
+  // the asking side waits on.
+
+  const factory SyncMessage.stateWrite({
+    required String chatId,
+    required ChatState state,
+    @Default(false) bool reanchor,
+  }) = SyncStateWrite;
+
+  const factory SyncMessage.metaWrite({
+    required String chatId,
+    required ChatMeta meta,
+  }) = SyncMetaWrite;
+
+  const factory SyncMessage.retitle({
+    required String chatId,
+    required String title,
+  }) = SyncRetitle;
+
+  const factory SyncMessage.chatDelete({required String chatId}) =
+      SyncChatDelete;
+
   factory SyncMessage.fromJson(Map<String, dynamic> json) =>
       _$SyncMessageFromJson(json);
 }
