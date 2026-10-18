@@ -1,12 +1,15 @@
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../data/sync/sync_hub.dart";
+import "../../domain/app_settings.dart";
 import "../../domain/chat_meta.dart";
 import "../../domain/chat_repository.dart";
 import "../../domain/models.dart";
+import "../../domain/project.dart" show localProject;
+import "../../domain/project_settings.dart";
 import "../../domain/sync/protocol.dart";
 import "../../providers.dart";
-import "../sidebar/sidebar.dart" show selectedChatIdProvider;
+import "../sidebar/sidebar.dart" show selectedChatIdProvider, selectedProjectProvider;
 import "chat_controller.dart";
 
 /// This device's end of a chat somebody else is watching or driving.
@@ -28,6 +31,31 @@ class RemoteTurnDriver implements RemoteTurns {
     _hub.remoteTurns = this;
     _hub.servedChats.addListener(_served);
     _served();
+    _hub.servedProjects.addListener(_servedProjects);
+    _servedProjects();
+    // Every open project inherits from these.
+    _app = _ref.listen<AppSettings>(appSettingsProvider, (_, _) {
+      for (final project in _projects.keys) {
+        _hub.publishProject(project);
+      }
+    });
+  }
+
+  late final ProviderSubscription<AppSettings> _app;
+  final _projects = <String?, ProviderSubscription<ProjectSettings>>{};
+
+  void _servedProjects() {
+    final served = _hub.servedProjects.value;
+    for (final project in _projects.keys.toList()) {
+      if (!served.contains(project)) _projects.remove(project)?.close();
+    }
+    for (final project in served) {
+      _projects.putIfAbsent(
+        project,
+        () => _ref.listen<ProjectSettings>(projectSettingsProvider(project),
+            (_, _) => _hub.publishProject(project)),
+      );
+    }
   }
 
   final Ref _ref;
@@ -163,7 +191,46 @@ class RemoteTurnDriver implements RemoteTurns {
     _ref.invalidate(chatListProvider);
   }
 
+  @override
+  ProjectSettings projectSettings(String? project) =>
+      _ref.read(projectSettingsProvider(project));
+
+  @override
+  AppSettings get appSettings => _ref.read(appSettingsProvider);
+
+  @override
+  Future<void> writeProject(String? project, ProjectSettings settings) =>
+      _ref.read(projectSettingsProvider(project).notifier).replace(settings);
+
+  @override
+  Future<void> createProject(String name) async {
+    await _repo.createProject(name);
+    _ref.invalidate(projectListProvider);
+  }
+
+  /// What `deleteProject` on the settings page does, less asking: the user
+  /// asked on the device they deleted it from.
+  @override
+  Future<void> deleteProject(String name) async {
+    await _repo.deleteProject(name);
+    if (_ref.read(selectedProjectProvider) == localProject(name)) {
+      _ref.read(selectedProjectProvider.notifier).select(localProject(null));
+      _ref.read(selectedChatIdProvider.notifier).select(null);
+    }
+    if (_ref.read(appSettingsProvider).assistantProject == name) {
+      await _ref.read(appSettingsProvider.notifier).setAssistantProject(null);
+    }
+    _ref.invalidate(projectListProvider);
+    _ref.invalidate(chatListProvider);
+  }
+
   void dispose() {
+    _hub.servedProjects.removeListener(_servedProjects);
+    for (final subscription in _projects.values) {
+      subscription.close();
+    }
+    _projects.clear();
+    _app.close();
     _hub.servedChats.removeListener(_served);
     for (final subscription in _watching.values) {
       subscription.close();

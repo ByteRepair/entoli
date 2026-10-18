@@ -14,6 +14,7 @@ import "package:agent_chat/domain/chat_meta.dart";
 import "package:agent_chat/domain/chat_repository.dart";
 import "package:agent_chat/domain/chat_store.dart";
 import "package:agent_chat/domain/models.dart";
+import "package:agent_chat/domain/project.dart" show ProjectRef;
 import "package:agent_chat/domain/project_settings.dart";
 import "package:agent_chat/domain/sync/devices.dart";
 import "package:agent_chat/domain/sync/identity.dart";
@@ -710,7 +711,7 @@ void main() {
   group("control", () {
     late _Turns turns;
 
-    setUp(() => home.hub.remoteTurns = turns = _Turns(home.repo));
+    setUp(() => home.hub.remoteTurns = turns = _Turns(home.repo)..hub = home.hub);
 
     test("asking for a free chat is granted and told to everyone", () async {
       final state = await mirrored();
@@ -890,6 +891,89 @@ void main() {
       expect((await home.store.loadMeta(state.id)).model, isNull);
     });
 
+    test("a paired device's projects are named in its listing", () async {
+      await home.repo.createProject("work");
+      await mirrored();
+
+      expect(away.hub.deviceProjects.value[home.identity.id], ["work"]);
+    });
+
+    test("a project made or deleted there is listed here, and waited on",
+        () async {
+      await mirrored();
+
+      await away.hub.createRemoteProject(home.identity.id, "notes");
+      expect(await home.repo.listProjects(), contains("notes"));
+      expect(away.hub.deviceProjects.value[home.identity.id], contains("notes"));
+
+      await away.hub.deleteRemoteProject(home.identity.id, "notes");
+      expect(await home.repo.listProjects(), isNot(contains("notes")));
+      expect(away.hub.deviceProjects.value[home.identity.id],
+          isNot(contains("notes")));
+    });
+
+    test("a project is read while open, written there, and forgotten after",
+        () async {
+      await home.repo.createProject("work");
+      await mirrored();
+      final ProjectRef work = (device: home.identity.id, project: "work");
+
+      away.hub.followProject(work);
+      await waitForSync(() => away.hub.remoteProject(work) != null);
+      expect(home.hub.servedProjects.value, {"work"});
+      expect(away.hub.remoteProject(work)!.settings.omada, isFalse);
+
+      await away.hub.writeRemoteProject(work, ProjectSettings(omada: true));
+      expect(turns.projects["work"]!.omada, isTrue);
+      expect(away.hub.remoteProject(work)!.settings.omada, isTrue);
+
+      // A change at home reaches whoever has it open.
+      turns.projects["work"] = ProjectSettings(description: "at home");
+      home.hub.publishProject("work");
+      await waitForSync(
+          () => away.hub.remoteProject(work)!.settings.description == "at home");
+
+      away.hub.unfollowProject(work);
+      expect(away.hub.remoteProject(work), isNull);
+      await waitForSync(() => home.hub.servedProjects.value.isEmpty);
+    });
+
+    test("a project not on the home device is neither read nor written",
+        () async {
+      await mirrored();
+      final ProjectRef nowhere = (device: home.identity.id, project: "nowhere");
+
+      away.hub.followProject(nowhere);
+      await away.hub.sendForTest("chat-1",
+          SyncMessage.projectWrite(project: "nowhere", settings: ProjectSettings()));
+      await Future<void>.delayed(Duration.zero);
+
+      expect(away.hub.remoteProject(nowhere), isNull);
+      expect(turns.projects, isEmpty);
+    });
+
+    test("an open project stays readable while its device is away, and is "
+        "read again when it is back", () async {
+      _seedChat(home);
+      var links = loopbackPair();
+      await pair(links.$1, links.$2);
+      final ProjectRef base = (device: home.identity.id, project: null);
+      away.hub.followProject(base);
+      await waitForSync(() => away.hub.remoteProject(base) != null);
+
+      await links.$1.close();
+      await links.$2.close();
+      await waitForSync(() => !away.hub.isDeviceOnline(home.identity.id));
+      expect(away.hub.remoteProject(base), isNotNull);
+
+      turns.projects[null] = ProjectSettings(description: "while away");
+      links = loopbackPair();
+      await pair(links.$1, links.$2,
+          knownToHome: away.identity.id, knownToAway: home.identity.id);
+      await waitForSync(() =>
+          away.hub.remoteProject(base)!.settings.description == "while away");
+    });
+
     test("a prompt from a device holding nothing is dropped", () async {
       final state = await mirrored();
 
@@ -1047,6 +1131,30 @@ class _Turns implements RemoteTurns {
 
   @override
   Future<void> delete(String chatId) => repo.deleteChat(chatId);
+
+  /// Set once the hub exists, so a write is published the way the real
+  /// one's listener does.
+  SyncHub? hub;
+  final projects = <String?, ProjectSettings>{};
+
+  @override
+  AppSettings appSettings = AppSettings();
+
+  @override
+  ProjectSettings projectSettings(String? project) =>
+      projects[project] ?? ProjectSettings();
+
+  @override
+  Future<void> writeProject(String? project, ProjectSettings settings) async {
+    projects[project] = settings;
+    hub?.publishProject(project);
+  }
+
+  @override
+  Future<void> createProject(String name) => repo.createProject(name);
+
+  @override
+  Future<void> deleteProject(String name) => repo.deleteProject(name);
 }
 
 class _Device {

@@ -7,6 +7,8 @@ import "package:http/http.dart" as http;
 
 import "../../core/log.dart";
 import "../../domain/app_settings.dart";
+import "../../domain/project.dart" show ProjectRef, everyProject, isProjectName;
+import "../../domain/project_settings.dart";
 import "../../domain/chat_log.dart" show ChatRecord, PartRecord, chatFrom;
 import "../../domain/chat_meta.dart";
 import "../../domain/chat_repository.dart";
@@ -89,6 +91,21 @@ abstract interface class RemoteTurns {
   Future<void> saveMeta(String chatId, ChatMeta meta);
   Future<void> retitle(String chatId, String title);
   Future<void> delete(String chatId);
+  ProjectSettings projectSettings(String? project);
+  AppSettings get appSettings;
+  Future<void> writeProject(String? project, ProjectSettings settings);
+  Future<void> createProject(String name);
+  Future<void> deleteProject(String name);
+}
+
+/// A paired device's project, while something here is showing it: its
+/// settings and the app settings they inherit from. RAM-only like a mirror,
+/// and only while followed.
+class RemoteProject {
+  RemoteProject(this.settings, this.app);
+
+  final ProjectSettings settings;
+  final AppSettings app;
 }
 
 /// What the sidebar's Remotes section draws: one remote chat with who owns
@@ -278,6 +295,77 @@ class SyncHub implements ArtifactBytes, RemoteChats {
   /// Per peer, its projects with Omada on, as its last listing named them.
   final _omadaProjects = <String, Set<String>>{};
 
+  /// Per paired device, the projects it named last: its own, the default and
+  /// the built-ins being on every device. Kept while it is away, so its
+  /// projects stay listed, read-only, until it is back.
+  final deviceProjects = ValueNotifier<Map<String, List<String>>>(const {});
+
+  final _projects = <ProjectRef, RemoteProject>{};
+  final _followedProjects = <ProjectRef>{};
+  final _projectUpdates = StreamController<ProjectRef>.broadcast();
+
+  Stream<ProjectRef> get projectUpdates => _projectUpdates.stream;
+
+  ValueNotifier<Set<String?>> get servedProjects => _peers.servedProjects;
+
+  /// [project] as its device last said, or null until it has.
+  RemoteProject? remoteProject(ProjectRef project) => _projects[project];
+
+  bool isDeviceOnline(String deviceId) => _peers.hasLive(deviceId);
+
+  /// Read a paired device's project from now until [unfollowProject]. A
+  /// device away now is asked when it is back.
+  void followProject(ProjectRef project) {
+    _followedProjects.add(project);
+    unawaited(_peers[project.device!]
+        ?.send(SyncMessage.projectOpen(project: project.project)));
+  }
+
+  /// Not cached past being shown: what was read goes with the follow.
+  void unfollowProject(ProjectRef project) {
+    _followedProjects.remove(project);
+    _projects.remove(project);
+    unawaited(_peers[project.device!]
+        ?.send(SyncMessage.projectClose(project: project.project)));
+  }
+
+  Future<void> writeRemoteProject(ProjectRef project, ProjectSettings settings) =>
+      _send(
+          _peers[project.device!],
+          "${project.project}",
+          SyncMessage.projectWrite(project: project.project, settings: settings),
+          (m) => m is SyncProjectSnapshot && m.project == project.project);
+
+  Future<void> createRemoteProject(String deviceId, String name) => _send(
+      _peers[deviceId],
+      name,
+      SyncMessage.projectCreate(name: name),
+      (m) => m is SyncChatsChanged && m.projects.contains(name));
+
+  Future<void> deleteRemoteProject(String deviceId, String name) => _send(
+      _peers[deviceId],
+      name,
+      SyncMessage.projectDelete(name: name),
+      (m) => m is SyncChatsChanged && !m.projects.contains(name));
+
+  /// Home side: tell whoever follows [project] what it is now.
+  void publishProject(String? project) {
+    final turns = remoteTurns;
+    if (turns == null) return;
+    final message = SyncMessage.projectSnapshot(
+        project: project,
+        settings: turns.projectSettings(project),
+        app: turns.appSettings);
+    for (final peer in _peers.live) {
+      if (peer.projectSubscriptions.contains(project)) unawaited(peer.send(message));
+    }
+  }
+
+  Future<bool> _isProject(String? project) async {
+    final repo = _repo;
+    return repo != null && everyProject(await repo.listProjects()).contains(project);
+  }
+
   int _resourceSeq = 0;
   final _pendingResources = <String, _ResourceTransfer>{};
 
@@ -355,10 +443,22 @@ class SyncHub implements ArtifactBytes, RemoteChats {
         await peer.send(const SyncMessage.pong());
       case SyncPong():
         peer.lastPong = DateTime.now();
-      case SyncWelcome(:final chats, :final omadaProjects) ||
-            SyncChatsChanged(:final chats, :final omadaProjects):
+      case SyncWelcome(:final chats, :final omadaProjects, :final projects) ||
+            SyncChatsChanged(:final chats, :final omadaProjects, :final projects):
         _omadaProjects[peer.deviceId] = omadaProjects.toSet();
+        deviceProjects.value = {...deviceProjects.value, peer.deviceId: projects};
         await _applyWelcome(peer, chats);
+        // A reconnect reads what is open again rather than trusting what it
+        // last had; a project gone at home goes here too.
+        final every = everyProject(projects);
+        for (final followed in _followedProjects) {
+          if (followed.device != peer.deviceId) continue;
+          if (!every.contains(followed.project)) {
+            if (_projects.remove(followed) != null) _projectUpdates.add(followed);
+          } else if (message is SyncWelcome) {
+            unawaited(peer.send(SyncMessage.projectOpen(project: followed.project)));
+          }
+        }
       case SyncChatOpen(:final chatId, :final fromLine):
         await _serveOpen(peer, chatId, fromLine);
       case SyncChatSnapshot(:final chatId, :final state, :final meta):
@@ -450,6 +550,36 @@ class SyncHub implements ArtifactBytes, RemoteChats {
       case SyncChatDelete(:final chatId):
         if (await _ours(chatId) != null) await remoteTurns?.delete(chatId);
 
+      // -- serving: a project of this device
+      case SyncProjectOpen(:final project):
+        if (await _isProject(project)) {
+          peer.projectSubscriptions.add(project);
+          _peers.refreshServed();
+          await _sendProject(peer, project);
+        }
+      case SyncProjectClose(:final project):
+        peer.projectSubscriptions.remove(project);
+        _peers.refreshServed();
+      case SyncProjectWrite(:final project, :final settings):
+        if (await _isProject(project)) {
+          await remoteTurns?.writeProject(project, settings);
+          await _sendProject(peer, project);
+        }
+      case SyncProjectCreate(:final name):
+        if (isProjectName(name)) await remoteTurns?.createProject(name);
+      case SyncProjectDelete(:final name):
+        if (isProjectName(name) && await _isProject(name)) {
+          await remoteTurns?.deleteProject(name);
+        }
+
+      // -- mirroring: a project of the peer's this device has open
+      case SyncProjectSnapshot(:final project, :final settings, :final app):
+        final ProjectRef ref = (device: peer.deviceId, project: project);
+        if (_followedProjects.contains(ref)) {
+          _projects[ref] = RemoteProject(settings, app);
+          _projectUpdates.add(ref);
+        }
+
       // -- mirroring: what the home device says about a chat we follow
       case SyncControlState(:final chatId, :final holder):
         _onMirror(peer, chatId, (mirror) => mirror.controlHolder = holder);
@@ -485,6 +615,15 @@ class SyncHub implements ArtifactBytes, RemoteChats {
     }
   }
 
+  Future<void> _sendProject(LivePeer peer, String? project) async {
+    final turns = remoteTurns;
+    if (turns == null) return;
+    await peer.send(SyncMessage.projectSnapshot(
+        project: project,
+        settings: turns.projectSettings(project),
+        app: turns.appSettings));
+  }
+
   /// [chatId]'s head where it is one of this device's chats: a write naming
   /// any other id would otherwise create one.
   Future<ChatState?> _ours(String chatId) async {
@@ -512,10 +651,13 @@ class SyncHub implements ArtifactBytes, RemoteChats {
   /// says it landed, so whoever awaits it draws the result rather than what
   /// was asked for. A home device gone or silent ends the wait unwritten.
   Future<void> _write(String chatId, SyncMessage message,
+          bool Function(SyncMessage) echo) =>
+      _send(_peerHosting(chatId), chatId, message, echo);
+
+  Future<void> _send(LivePeer? peer, String about, SyncMessage message,
       bool Function(SyncMessage) echo) async {
-    final peer = _peerHosting(chatId);
     if (peer == null) {
-      logFailure("sync", "${message.runtimeType} for $chatId: home device is offline");
+      logFailure("sync", "${message.runtimeType} for $about: home device is offline");
       return;
     }
     final waiter = (peerId: peer.deviceId, matches: echo, done: Completer<void>());
@@ -524,7 +666,7 @@ class SyncHub implements ArtifactBytes, RemoteChats {
       await peer.send(message);
       await waiter.done.future.timeout(const Duration(seconds: 30),
           onTimeout: () => logFailure(
-              "sync", "${message.runtimeType} for $chatId: no answer"));
+              "sync", "${message.runtimeType} for $about: no answer"));
     } finally {
       _echoes.remove(waiter);
     }
@@ -731,6 +873,8 @@ class SyncHub implements ArtifactBytes, RemoteChats {
         _announced.remove(chatId);
         _refreshDriven();
         _peers.refreshServed();
+      case ProjectsChanged():
+        unawaited(_announceChats());
     }
   }
 
@@ -747,7 +891,9 @@ class SyncHub implements ArtifactBytes, RemoteChats {
     final chats = await repo.listChats();
     _announced = {for (final chat in chats) chat.id};
     await peer.send(SyncMessage.welcome(
-        chats: chats, omadaProjects: repo.omadaProjects(chats)));
+        chats: chats,
+        omadaProjects: repo.omadaProjects(chats),
+        projects: await repo.listProjects()));
   }
 
   Future<void> _announceChats() async {
@@ -756,7 +902,9 @@ class SyncHub implements ArtifactBytes, RemoteChats {
     final chats = await repo.listChats();
     _announced = {for (final chat in chats) chat.id};
     final message = SyncMessage.chatsChanged(
-        chats: chats, omadaProjects: repo.omadaProjects(chats));
+        chats: chats,
+        omadaProjects: repo.omadaProjects(chats),
+        projects: await repo.listProjects());
     for (final peer in _peers.live) {
       unawaited(peer.send(message));
     }
@@ -1099,6 +1247,7 @@ class SyncHub implements ArtifactBytes, RemoteChats {
       _dropMirror(deviceId, chatId);
     }
     _peers.forget(deviceId);
+    deviceProjects.value = {...deviceProjects.value}..remove(deviceId);
     _rebuildRemotes();
     unawaited(_peers.refresh());
   }

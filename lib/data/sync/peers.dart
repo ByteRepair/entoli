@@ -65,6 +65,9 @@ class LivePeer {
   /// record and state pushes.
   final subscriptions = <String>{};
 
+  /// This device's projects the peer has open, null for the default one.
+  final projectSubscriptions = <String?>{};
+
   StreamSubscription<Map<String, dynamic>>? pump;
 
   /// Handlers await disk I/O, so messages are chained through this to keep
@@ -126,6 +129,7 @@ class SyncPeers {
   /// a controller open per entry, which is what makes a turn's progress
   /// visible at the other end.
   final servedChats = ValueNotifier<Set<String>>(const {});
+  final servedProjects = ValueNotifier<Set<String?>>(const {});
 
   Timer? _pingTimer;
 
@@ -211,6 +215,8 @@ class SyncPeers {
   void refreshServed() {
     final served = {for (final peer in _live.values) ...peer.subscriptions};
     if (!setEquals(served, servedChats.value)) servedChats.value = served;
+    final projects = {for (final peer in _live.values) ...peer.projectSubscriptions};
+    if (!setEquals(projects, servedProjects.value)) servedProjects.value = projects;
   }
 
   /// Thirty seconds of silence gets a ping; seventy-five without an answer is
@@ -237,5 +243,6 @@ class SyncPeers {
     }
     _live.clear();
     servedChats.value = const {};
+    servedProjects.value = const {};
   }
 }

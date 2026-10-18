@@ -1,8 +1,10 @@
 import "package:freezed_annotation/freezed_annotation.dart";
 
+import "../app_settings.dart";
 import "../chat_log.dart";
 import "../chat_meta.dart";
 import "../models.dart";
+import "../project_settings.dart";
 import "identity.dart";
 
 part "protocol.freezed.dart";
@@ -32,12 +34,14 @@ sealed class SyncMessage with _$SyncMessage {
   const factory SyncMessage.welcome({
     required List<ChatState> chats,
     @Default(<String>[]) List<String> omadaProjects,
+    @Default(<String>[]) List<String> projects,
     @Default(SyncIdentity.protocolVersion) int proto,
   }) = SyncWelcome;
 
   const factory SyncMessage.chatsChanged({
     required List<ChatState> chats,
     @Default(<String>[]) List<String> omadaProjects,
+    @Default(<String>[]) List<String> projects,
   }) = SyncChatsChanged;
 
   /// Subscribe to one of the peer's chats from record [fromLine] on — the
@@ -212,6 +216,35 @@ sealed class SyncMessage with _$SyncMessage {
 
   const factory SyncMessage.chatDelete({required String chatId}) =
       SyncChatDelete;
+
+  // ---- A project on the home device, read only while it is open. --------
+
+  /// Follow [project]'s settings until [SyncProjectClose]. Null is the home
+  /// device's default project.
+  const factory SyncMessage.projectOpen({String? project}) = SyncProjectOpen;
+
+  const factory SyncMessage.projectClose({String? project}) = SyncProjectClose;
+
+  /// [project]'s settings and the app settings they inherit from, whole, on
+  /// open and on every change while followed.
+  const factory SyncMessage.projectSnapshot({
+    String? project,
+    required ProjectSettings settings,
+    required AppSettings app,
+  }) = SyncProjectSnapshot;
+
+  /// Answered by a [SyncProjectSnapshot].
+  const factory SyncMessage.projectWrite({
+    String? project,
+    required ProjectSettings settings,
+  }) = SyncProjectWrite;
+
+  /// Answered by the chat list, which names the projects.
+  const factory SyncMessage.projectCreate({required String name}) =
+      SyncProjectCreate;
+
+  const factory SyncMessage.projectDelete({required String name}) =
+      SyncProjectDelete;
 
   factory SyncMessage.fromJson(Map<String, dynamic> json) =>
       _$SyncMessageFromJson(json);
