@@ -18,7 +18,6 @@ import "../../domain/project_settings.dart"
     show OmadaOrdering, defaultOmadaOrdering;
 import "../../domain/shell.dart" show shellBypassCommand;
 import "../../domain/wired_skill.dart";
-import "../../data/builtin/templates.dart" show passWord;
 import "../../providers.dart";
 
 /// Per-chat state container exposed to the UI.
@@ -1161,22 +1160,9 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
     // Omada off is the room as it always was: nothing hands anything to
     // anyone, whatever a reply's text happens to name.
     if (!ref.read(omadaOnProvider(chat.state.project))) return;
-    // A decline ends what agents are handing each other: the user's own
-    // schedule is not theirs to cancel, so an item the user put there (its
-    // prompt, not a reply) survives wherever it sits in the queue.
+    // A reply that ended with `end_turn` named no one, so it hands to no
+    // one: silence is nothing said, not a veto on what siblings handed off.
     for (final reply in replies) {
-      if (_isPass(reply)) {
-        for (final member in _schedules.keys.toList()) {
-          final items = _schedules[member]!;
-          final kept = items.where((item) => item.reply == null).toList();
-          if (kept.isEmpty) {
-            _schedules.remove(member);
-          } else {
-            _schedules[member] = kept;
-          }
-        }
-        continue;
-      }
       // The wave lands one past the turn that named it: the round's depth is
       // the finished turn's own, and the cap reads it at dispatch. The entry
       // is out of the table by now — the finished turn's own is what counts.
@@ -1416,10 +1402,6 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
   String? _mentionIn(Chat chat, Message reply) =>
       singleAgentMention(reply.plainText,
           ref.read(promptLibraryProvider(chat.state.project)));
-
-  /// Whether a reply says nothing but that its author passes: word for word,
-  /// so a longer reply is a reply and the convention is unambiguous.
-  bool _isPass(Message reply) => reply.plainText.trim() == passWord;
 
   /// How deep the agent-to-agent rounds of a round may go: dispatch waves,
   /// not turns — a three-member fan-out is one generation whatever it fans
