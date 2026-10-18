@@ -12,6 +12,7 @@ import "dart:io";
 
 import "package:agent_chat/data/prompts/skill_validate.dart";
 import "package:agent_chat/domain/frontmatter.dart";
+import "package:path/path.dart" as p;
 
 final _semverRe = RegExp(
     r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)"
@@ -68,12 +69,17 @@ void main(List<String> args) {
 Map<String, Set<String>> _slugsFromDiff(String diff, String dataRoot) {
   final touched = <String, Set<String>>{};
   final kept = <String, Set<String>>{};
+  // Diff paths start at the repo root, which is where --data-root is taken
+  // from too.
+  final root = p.posix.split(p.posix.normalize(dataRoot));
   (String, String)? mapPath(String path) {
     final rest = path.split("/");
-    // data/<section>/<slug>/rest — shorter paths are not entry content.
-    return rest.length < 3 || rest[0] != "data"
-        ? null
-        : (rest[1], rest[2]);
+    // <root>/<section>/<slug>/rest — shorter paths are not entry content.
+    if (rest.length < root.length + 3) return null;
+    for (var i = 0; i < root.length; i++) {
+      if (rest[i] != root[i]) return null;
+    }
+    return (rest[root.length], rest[root.length + 1]);
   }
 
   for (final line in diff.split("\n")) {
