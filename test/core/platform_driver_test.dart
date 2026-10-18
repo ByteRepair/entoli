@@ -58,6 +58,19 @@ void main() {
     expect(driverOf(bin: null, project: null)?.environment["PATH"], isNull);
   });
 
+  test("the bin directory goes ahead of the login PATH, not the inherited one",
+      () {
+    final driver = platformDriver(
+      defaultSkillsBundledDir: config.bundledSkillsDir(),
+      defaultUserSkillsDir: config.promptsDir(CompletionKind.skill),
+      project: "byte-repair",
+      config: config,
+      byteRepairBinDir: binDir,
+      loginPath: "/home/u/.local/bin:/usr/bin",
+    );
+    expect(driver!.environment["PATH"], "$binDir:/home/u/.local/bin:/usr/bin");
+  });
+
   test("the guest binds a project's skill directories only where they exist "
       "on disk", () {
     final project = ByteRepairProject().dir;

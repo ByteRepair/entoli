@@ -565,6 +565,10 @@ usable Vulkan driver runs the CPU rather than failing. `linux/CMakeLists.txt`
 installs the staged output into the bundle's `lib/`, which is where
 `platformLocalLlm` looks for it beside the executable — so a build without the
 script still builds, and says what it is missing rather than pretending. The
+server is started under `setpriv --pdeathsig TERM` where `setpriv` is on
+`PATH`, so a crashed or killed app does not leave it holding the model's
+memory; the death signal follows the spawning thread, which is the root
+isolate's and lives as long as the app. The
 desktop judgement the first version recorded — that Ollama and LM Studio are
 the better answer there — stands for a machine that has one installed; what
 changed is that a machine with nothing on it now has the zero-setup option a

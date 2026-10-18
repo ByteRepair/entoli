@@ -208,7 +208,11 @@ class VoiceChannel: NSObject {
 
     do {
       let session = AVAudioSession.sharedInstance()
-      try session.setCategory(.playAndRecord, mode: .measurement, options: .duckOthers)
+      // playAndRecord routes output to the earpiece unless told otherwise,
+      // and the replies spoken between turns would come out there.
+      try session.setCategory(
+        .playAndRecord, mode: .measurement,
+        options: [.duckOthers, .defaultToSpeaker, .allowBluetooth])
       try session.setActive(true)
     } catch {
       send("recognitionError", "The microphone could not be opened.")
@@ -342,10 +346,15 @@ class VoiceChannel: NSObject {
   private func ensureGrants(_ done: @escaping (Bool) -> Void) {
     func afterSpeech(_ granted: Bool) {
       guard granted else { done(false); return }
+      // Both callbacks land on an arbitrary queue; `done` touches the engine.
       if #available(iOS 17.0, *) {
-        AVAudioApplication.requestRecordPermission { mic in done(mic) }
+        AVAudioApplication.requestRecordPermission { mic in
+          DispatchQueue.main.async { done(mic) }
+        }
       } else {
-        AVAudioSession.sharedInstance().requestRecordPermission { mic in done(mic) }
+        AVAudioSession.sharedInstance().requestRecordPermission { mic in
+          DispatchQueue.main.async { done(mic) }
+        }
       }
     }
     if SFSpeechRecognizer.authorizationStatus() == .notDetermined {

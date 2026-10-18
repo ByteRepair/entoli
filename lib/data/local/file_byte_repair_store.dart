@@ -1,11 +1,10 @@
 import "dart:io";
 
 import "package:file_selector/file_selector.dart";
-import "package:flutter/foundation.dart"
-    show TargetPlatform, defaultTargetPlatform;
 import "package:path/path.dart" as p;
 
 import "../../core/log.dart";
+import "../../core/platform/form_factor.dart";
 import "../../domain/app_settings.dart";
 import "byte_repair_store.dart";
 import "tree_ops.dart";
@@ -116,10 +115,9 @@ class FileByteRepairStore extends ByteRepairStore {
     // On a guest platform the rootfs pick is the gate: a "Host" env has no
     // package manager on Android and no shell at all on iOS. The target, not
     // `Platform`, so the section's fixtures can name their platform.
-    if (defaultTargetPlatform == TargetPlatform.android ||
-        defaultTargetPlatform == TargetPlatform.iOS) {
+    if (isPhone) {
       if (AppSettings.load(config).rootfsId != null) return null;
-      return defaultTargetPlatform == TargetPlatform.android
+      return isAndroid
           ? 'Byte Repair does not work when using the "Host" terminal '
               "environment on this device. Please choose another terminal "
               "environment."

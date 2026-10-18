@@ -93,8 +93,11 @@ idles on its AppKit runloop with no nib load and no Dart — and a hidden
 `-j` launch never started an engine at all on this host, while a direct
 spawn starts Dart every time. What `open` would buy is one-instance activation,
 which the Runner answers itself: a wake session that finds another instance
-of the bundle id quits before the engine is built, the running copy's own
-timer being what fires its due anyway. A repeating
+of the bundle id running the same executable quits before the engine is
+built, the running copy's own timer being what fires its due anyway; a
+different copy under the same id (a debug build) serves another store and
+does not count. The line also exports `ENTOLI_WAKE=1`, which is how the
+app's startup knows to skip the update check a wake has no business running. A repeating
 schedule arms launchd's own calendar form — `StartCalendarInterval`, the
 hourly its minute and the rest their hour, the weekly its weekday and the
 monthly its day — wall-clock anchored, surviving DST the way the source's
@@ -106,7 +109,10 @@ time, the clock a kqueue one, so a sleep inside a countdown pushes its tick
 late besides). A one shot or a timer has no calendar shape — launchd has no
 form for an arbitrary moment either — so it arms a `StartInterval` counted
 from the job's load, and what a changed interval is, is a bootout, a
-rewrite and a bootstrap. If the Mac misses the moment either way, the fire
+rewrite and a bootstrap — the bootstrap retried a few times on exits 5 and
+37, launchd's answer while the bootout it follows is still tearing the old
+service down, and every launchctl call made on a serial queue of the
+plugin's own rather than the main thread. If the Mac misses the moment either way, the fire
 lands at the next launch's catch-up, which is what the fire's "Ran late"
 wording is for, the same bargain Doze strikes.
 
@@ -236,8 +242,12 @@ microphone: without it TCC is never asked and voice mode hears silence.
 such as `osascript` that drives another app is attributed to Entoli as the
 responsible process, and without the entitlement the send fails instead of
 prompting. That one is precaution rather than something seen failing — no
-notarized build had run when it went in. `Process.start`, the network and
-files outside a sandbox the app does not have are not gated.
+notarized build had run when it went in. `Process.start` and files outside a
+sandbox the app does not have are not gated, and neither is the internet.
+The local network is, from macOS 15, by TCC rather than the signature:
+`NSLocalNetworkUsageDescription` is the prompt the first LAN connection
+raises — the same-LAN pairing, sync over the LAN, a provider at a LAN
+address — worded as iOS's is.
 
 The window a user's mount opens with comes from committed data, not from any
 styling run at package time. One styling session on this Mac — a throwaway

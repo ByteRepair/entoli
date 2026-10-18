@@ -187,7 +187,11 @@ class AppleFmClient implements LlmClient {
         "model": model,
         "instructions": joinedSystemText(messages),
         "history": _transcript(messages),
-        "prompt": _promptText(messages.last),
+        // A trailing tool result is worded the way the history words one, or
+        // the model reads it as something the user typed.
+        "prompt": messages.last.role == LlmRole.tool
+            ? _toolResultText(messages.last, _toolNames(messages))
+            : _promptText(messages.last),
         "tools": [
           for (final tool in tools)
             {
@@ -303,10 +307,7 @@ String _promptText(LlmMessage message) {
 /// reader's — a two-party transcript has no third role, and the pairing is
 /// the model's to read out of adjacency, which is where the loop left it.
 List<Map<String, String>> _transcript(List<LlmMessage> messages) {
-  final names = {
-    for (final message in messages)
-      for (final call in message.toolCalls) call.id: call.name,
-  };
+  final names = _toolNames(messages);
   final rest = messages.sublist(0, messages.length - 1);
   return [
     for (final message in rest)
@@ -325,13 +326,21 @@ List<Map<String, String>> _transcript(List<LlmMessage> messages) {
         LlmRole.user => {"role": "user", "text": _promptText(message)},
         LlmRole.tool => {
             "role": "user",
-            "text":
-                "[Result of the ${names[message.toolCallId] ?? "tool"} call:]\n"
-                "${message.text}",
+            "text": _toolResultText(message, names),
           },
       },
   ];
 }
+
+/// Each tool call's name by its id, for wording the results that answer them.
+Map<String, String> _toolNames(List<LlmMessage> messages) => {
+      for (final message in messages)
+        for (final call in message.toolCalls) call.id: call.name,
+    };
+
+String _toolResultText(LlmMessage message, Map<String, String> names) =>
+    "[Result of the ${names[message.toolCallId] ?? "tool"} call:]\n"
+    "${message.text}";
 
 /// The framework's failures, in the words the agent's retry machinery acts
 /// on. `context` is deliberately not retryable: the same oversized request

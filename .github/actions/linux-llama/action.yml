@@ -1,7 +1,8 @@
 name: Build the Linux model server
 description: >
   Builds llama.cpp's server for the desktop — `tool/linux/build-llama.sh` — and
-  stages it where `linux/CMakeLists.txt` installs the bundle's lib/ from. Cached
+  stages it where `linux/CMakeLists.txt` installs the bundle's lib/ from, then
+  uploads the stage as the `llama-linux` artifact. Cached
   on what decides the output, the way the Android tools are: the versions and
   the recipe, and the work dir the sources unpack into is the Android build's
   own, so the key carries this file — where the recipe lives is the other half
@@ -33,8 +34,26 @@ runs:
       shell: bash
       run: tool/linux/build-llama.sh
 
-    # The upload below names the directory either way; this is what fails the
+    # The upload below names the stage either way; this is what fails the
     # job with its own line where a cache hit restored nothing.
     - name: Confirm the stage holds a build
       shell: bash
-      run: test -f build/llama/llama-server
+      run: test -x build/llama/llama-server
+
+    # Tarred because upload-artifact drops the exec bit and the symlinks the
+    # sonames need; `linux-appimage` unpacks it.
+    - name: Pack the stage
+      shell: bash
+      run: |
+        mkdir -p dist
+        tar -C build/llama -cf dist/llama-linux.tar .
+
+    - uses: actions/upload-artifact@v7.0.1
+      with:
+        name: llama-linux
+        path: dist/llama-linux.tar
+        if-no-files-found: error
+        # Already stripped .so files; recompressing buys little and costs time.
+        compression-level: 0
+        # Read by the linux job right after, so one day is enough.
+        retention-days: 1

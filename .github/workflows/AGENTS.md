@@ -50,9 +50,11 @@ job downloads it onto a fresh runner with the disk free for Gradle and pays
 the Gradle setup — wrapper, plugins, SDK components — inline. So on the
 desktop: `llama-linux` builds the model server
 (`.github/actions/linux-llama`, over `tool/linux/build-llama.sh`), and
-`linux` downloads the stage before `flutter build linux`, so the bundle
+`linux` downloads the stage before `flutter build linux` (in
+`linux-appimage`, so debug and release share the check), so the bundle
 carries the server whole or not at all — the check between download and
-build is what says which. The caches live on the native jobs, whose only
+build is what says which. The stage crosses as a tar: `upload-artifact`
+drops the exec bit and the soname symlinks. The caches live on the native jobs, whose only
 other content is two apt packages, so a miss costs the native build alone;
 the app jobs carry no llama cache.
 
@@ -146,7 +148,9 @@ subject by name.
 
 **The Android version code is derived from the version rather than
 stored**, as `major * 10000 + minor * 100 + patch` (1.0.0 is 10000, 1.2.3
-is 10203); the AppImage and the ipa get the same code. Pubspec carries no `+build`
+is 10203); the AppImage and the ipa get the same code. The Windows build
+gets 0: its build number is FILEVERSION's last field, 16 bits, which the
+code overflows from 6.56. Pubspec carries no `+build`
 suffix: a second number to bump is a second number to forget, and
 forgetting it is a release that will not install over the one before.
 **Minor and patch must stay below 100** — 1.0.100 and 1.1.0 would compute

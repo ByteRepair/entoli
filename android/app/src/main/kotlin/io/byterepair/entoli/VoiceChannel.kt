@@ -48,6 +48,10 @@ object VoiceChannel {
 
     private var channel: MethodChannel? = null
     private var tts: TextToSpeech? = null
+
+    // Whether [tts] has said it is ready. The object outlives the isolate that
+    // asked, so a second `initSpeech` must be answered from this.
+    private var ttsReady = false
     private var recognizer: SpeechRecognizer? = null
 
     // What Settings picked, or null for whatever the device is set to. One
@@ -116,7 +120,6 @@ object VoiceChannel {
             }
             "stopSpeech" -> { tts?.stop(); result.success(null) }
             "disposeSpeech" -> { disposeTts(); result.success(null) }
-            "startRecognition" -> { startRecognition(); result.success(null) }
             "setRecognitionListening" -> {
                 setRecognitionListening(
                     call.argument<Boolean>("on") ?: true,
@@ -230,12 +233,19 @@ object VoiceChannel {
     // nothing above would ever learn the utterance never happened. Dart holds
     // its queue until `speechReady` says otherwise.
     private fun ensureTts(context: Context) {
-        if (tts != null) return
+        tts?.let {
+            if (ttsReady) {
+                speakIn(it)
+                send("speechReady", null)
+            }
+            return
+        }
         tts = TextToSpeech(context) { status ->
             if (status != TextToSpeech.SUCCESS) {
                 send("speechError", "Text-to-speech is not available.")
                 return@TextToSpeech
             }
+            ttsReady = true
             send("speechReady", null)
             tts?.let { speakIn(it) }
             tts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
@@ -287,6 +297,7 @@ object VoiceChannel {
         tts?.stop()
         tts?.shutdown()
         tts = null
+        ttsReady = false
     }
 
     // --- Speech recognition ---

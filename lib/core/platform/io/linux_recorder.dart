@@ -73,6 +73,8 @@ class LinuxRecorder extends RecordLinux {
     }
     await stop(recorderId);
     _process = await Process.start(pwRecord, pwRecordArgs(config));
+    // An undrained stderr fills its pipe and blocks pw-record mid-capture.
+    unawaited(_process!.stderr.drain<void>());
     return _process!.stdout.map((data) =>
         data is Uint8List ? data : Uint8List.fromList(data));
   }

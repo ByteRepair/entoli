@@ -1,61 +1,49 @@
 import Cocoa
 import FlutterMacOS
 import UserNotifications
-import Darwin
 
-/// macOS's half of `ReminderAlarms`: notifications over
-/// `UNUserNotificationCenter`, scheduling over launchd — one job per request
-/// code under `~/Library/LaunchAgents/`, each a one-line `sh` that checks its
-/// binary, names its store, spawns this executable detached with the wake
-/// argument the Runner hides the whole app under and exits — the shell is
-/// launchd's whole tracked instance, so every bootout and cancel the app
-/// performs touches nothing living — and removes itself when its binary is
-/// gone. The job is the wake: a fire with the process dead launches the
+/// macOS's half of `ReminderAlarms`, beside the notification half both Apples
+/// share (`RemindersShared.swift`): scheduling over launchd — one job per
+/// request code under `~/Library/LaunchAgents/`, each a one-line `sh` that
+/// checks its binary, names its store, spawns this executable detached with
+/// the wake argument the Runner hides the whole app under and exits — the
+/// shell is launchd's whole tracked instance, so every bootout and cancel the
+/// app performs touches nothing living — and removes itself when its binary
+/// is gone. The job is the wake: a fire with the process dead launches the
 /// app, the clock kinds' own launch catch-up runs what is due, and a session
 /// nobody came to look at quits from `doneFiring`.
-///
-/// The call shapes are `RemindersChannel.kt`'s, and the errors stay on this
-/// side as a `FlutterError` for Dart to log: the clock kind's diff awaits
-/// every schedule, and a thrown error there would hold every reload after it.
-class RemindersPlugin: NSObject, UNUserNotificationCenterDelegate {
-  static let shared = RemindersPlugin()
+extension RemindersPlugin {
+  /// The banner alone, where iOS adds the sound.
+  static let authorizationOptions: UNAuthorizationOptions = [.alert]
+  static let presentationOptions: UNNotificationPresentationOptions = [.banner]
 
-  /// Called once, from `MainFlutterWindow.awakeFromNib` — the engine's
-  /// messenger is ours from there on, and so is the notification centre's
-  /// delegate, which no one else has installed.
-  static func register(with binaryMessenger: FlutterBinaryMessenger) {
-    let channel = FlutterMethodChannel(
-      name: "agent_chat/reminders", binaryMessenger: binaryMessenger)
-    channel.setMethodCallHandler { call, result in
-      shared.handle(call, result)
-    }
-    shared.channel = channel
-    UNUserNotificationCenter.current().delegate = shared
-  }
+  /// Where every launchctl call and plist write runs, in the order asked: a
+  /// call blocks on launchctl, and the main thread is the UI's.
+  private static let launchd = DispatchQueue(label: "io.byterepair.entoli.launchd")
 
-  private var channel: FlutterMethodChannel?
-
-  /// The chat id a tapped notification carries before Dart's handler was
-  /// listening — held for the first drain of `takeOpenChat`, the
-  /// held-pending split the Android receive makes of the same launch-by-tap.
-  private var pendingOpen: String?
-
-  private func handle(_ call: FlutterMethodCall, _ result: @escaping FlutterResult) {
+  /// The calls only this platform answers; false for one it does not know.
+  func handlePlatform(_ call: FlutterMethodCall, _ result: @escaping FlutterResult) -> Bool {
     switch call.method {
     case "schedule": schedule(call, result)
     case "cancel": cancel(call, result)
-    case "notify": post(call, result)
-    case "notificationsAllowed": notificationsAllowed(result)
-    case "requestNotifications": requestNotifications(result)
     case "staleCodes": staleCodes(call, result)
-    case "takeOpenChat":
-      // The stash is the answer: a tap that launched the process delivered
-      // its chat id here before Dart's handler was listening, and the first
-      // drain takes it now. The "open" invoke was only the nudge.
-      result(pendingOpen)
-      pendingOpen = nil
     case "doneFiring": doneFiring(result)
-    default: result(FlutterMethodNotImplemented)
+    default: return false
+    }
+    return true
+  }
+
+  /// Runs [work] on the launchd queue and answers its error, or nil, on main.
+  private func onLaunchd(_ errorName: String, _ result: @escaping FlutterResult,
+                         _ work: @escaping () throws -> Void) {
+    Self.launchd.async {
+      var answer: Any?
+      do {
+        try work()
+      } catch {
+        answer = FlutterError(code: errorName, message: String(describing: error), details: nil)
+      }
+      DispatchQueue.main.async { result(answer) }
     }
   }
 
@@ -69,12 +57,9 @@ class RemindersPlugin: NSObject, UNUserNotificationCenterDelegate {
       return
     }
     let calendar = arguments["calendar"] as? String
-    do {
-      try writeJob(code: code, at: Date(timeIntervalSince1970: Double(millis) / 1000),
-                   store: store, calendar: calendar)
-      result(nil)
-    } catch {
-      result(FlutterError(code: "schedule", message: String(describing: error), details: nil))
+    let at = Date(timeIntervalSince1970: Double(millis) / 1000)
+    onLaunchd("schedule", result) {
+      try self.writeJob(code: code, at: at, store: store, calendar: calendar)
     }
   }
 
@@ -89,22 +74,23 @@ class RemindersPlugin: NSObject, UNUserNotificationCenterDelegate {
     // The job runs under launchd's environment, which is not the one the old
     // app that armed it ran under — so the store rides in the command line
     // and the wake re-derives the data directory from what was written here.
-    // The wake is spawned detached and the shell exits at once: launchd's
-    // tracked instance is the shell alone, never the app, because teardown of
-    // a service is SIGTERM to its tracked instance and then SIGKILL
-    // (`launchd.plist(5)`, `ExitTimeOut`), and the app's own diffs boot out
-    // and cancel this label all the time — a wake that exec'd itself died at
-    // its first diff's bootout, before any fire ran. The app is spawned
-    // directly, never through `open`: backgrounded `open -g` is deferred by
-    // launch services and sometimes never reaches its engine, and `-j` is
-    // worse — hidden launches never started one at all here. What `open`
-    // would buy is one-instance activation, which the wake guard in the
-    // Runner answers instead. The line also carries the job's own removal,
-    // for the one case no writer survives — an uninstall — on which launchd
-    // never tidies anything: each interval re-runs `sh` into a nonzero exit
-    // forever. The binary it was written for is checked first; when it is
-    // gone the shell takes the plist and the service out itself — the one
-    // bootout that may exec, the shell meaning to die with the job. A
+    // ENTOLI_WAKE tells the app's startup it is a wake, which runs no update
+    // check. The wake is spawned detached and the shell exits at once:
+    // launchd's tracked instance is the shell alone, never the app, because
+    // teardown of a service is SIGTERM to its tracked instance and then
+    // SIGKILL (`launchd.plist(5)`, `ExitTimeOut`), and the app's own diffs
+    // boot out and cancel this label all the time — a wake that exec'd
+    // itself died at its first diff's bootout, before any fire ran. The app
+    // is spawned directly, never through `open`: backgrounded `open -g` is
+    // deferred by launch services and sometimes never reaches its engine, and
+    // `-j` is worse — hidden launches never started one at all here. What
+    // `open` would buy is one-instance activation, which the wake guard in
+    // the Runner answers instead. The line also carries the job's own
+    // removal, for the one case no writer survives — an uninstall — on which
+    // launchd never tidies anything: each interval re-runs `sh` into a
+    // nonzero exit forever. The binary it was written for is checked first;
+    // when it is gone the shell takes the plist and the service out itself —
+    // the one bootout that may exec, the shell meaning to die with the job. A
     // moved-but-alive app rewrites the job at its next launch's diff.
     guard let executable = Bundle.main.executableURL?.path else {
       throw MessageError("no executable in \(Bundle.main.bundlePath)")
@@ -116,6 +102,7 @@ class RemindersPlugin: NSObject, UNUserNotificationCenterDelegate {
         + "if [ ! -x \"$B\" ]; then rm -f \"$P\"; "
         + "exec /bin/launchctl bootout \"gui/\(getuid())/$L\"; fi; "
         + "export AGENT_CHAT_CONFIG='\(Self.shellQuoted(store))'; "
+        + "export ENTOLI_WAKE=1; "
         + "\"$B\" entoli-wake & exit 0"
     var content: [String: Any] = [
       "Label": label,
@@ -144,7 +131,25 @@ class RemindersPlugin: NSObject, UNUserNotificationCenterDelegate {
     guard (content as NSDictionary).write(toFile: plist.path, atomically: true) else {
       throw MessageError("plist not written to \(plist.path)")
     }
-    try runLaunchctl(["bootstrap", "gui/\(getuid())", plist.path])
+    try bootstrap(plist.path)
+  }
+
+  /// A bootstrap right behind its own bootout often finds launchd still
+  /// tearing the old service down, and exits 5 (I/O error) or 37 (operation
+  /// already in progress); it is asked again a few times before that is the
+  /// answer.
+  private func bootstrap(_ plist: String) throws {
+    var attempt = 0
+    while true {
+      do {
+        try runLaunchctl(["bootstrap", "gui/\(getuid())", plist])
+        return
+      } catch let error as MessageError
+                where attempt < 4 && (error.status == 5 || error.status == 37) {
+        attempt += 1
+        Thread.sleep(forTimeInterval: 0.2 * Double(attempt))
+      }
+    }
   }
 
   /// What `-c` reads back as one string: a literal quote becomes the
@@ -163,20 +168,19 @@ class RemindersPlugin: NSObject, UNUserNotificationCenterDelegate {
       return
     }
     let label = Self.jobLabel(store: store, code: code)
-    // A job that was loaded gets booted; that a never-loaded one's bootout
-    // reports failure is the usual answer, not news. The plist is what has to
-    // be gone — a job loaded without its file is launchd's to error on, and
-    // the next schedule rewrites both halves of it.
-    _ = try? runLaunchctl(["bootout", "gui/\(getuid())/\(label)"])
-    do {
-      try FileManager.default.removeItem(at: Self.agentDirectory().appendingPathComponent("\(label).plist"))
-    } catch let error as NSError where error.code == NSFileNoSuchFileError {
-      // A plist that was never there is not a failure to say.
-    } catch {
-      result(FlutterError(code: "cancel", message: String(describing: error), details: nil))
-      return
+    onLaunchd("cancel", result) {
+      // A job that was loaded gets booted; that a never-loaded one's bootout
+      // reports failure is the usual answer, not news. The plist is what has
+      // to be gone — a job loaded without its file is launchd's to error on,
+      // and the next schedule rewrites both halves of it.
+      _ = try? self.runLaunchctl(["bootout", "gui/\(getuid())/\(label)"])
+      do {
+        try FileManager.default.removeItem(
+          at: Self.agentDirectory().appendingPathComponent("\(label).plist"))
+      } catch let error as NSError where error.code == NSFileNoSuchFileError {
+        // A plist that was never there is not a failure to say.
+      }
     }
-    result(nil)
   }
 
   /// The jobs launchd still holds that nothing on the clock wants — a trigger
@@ -186,7 +190,8 @@ class RemindersPlugin: NSObject, UNUserNotificationCenterDelegate {
   /// belonging to another data directory (the debug leaf, an
   /// `AGENT_CHAT_CONFIG` scratch) is never visible here and never pruned by
   /// a session that is not its store's. The plist's name is the code; the
-  /// manager does the cancelling through the channel.
+  /// manager does the cancelling through the channel. Listed on the launchd
+  /// queue, behind the writes and removals asked before it.
   private func staleCodes(_ call: FlutterMethodCall, _ result: @escaping FlutterResult) {
     guard let arguments = call.arguments as? [String: Any],
           let store = arguments["store"] as? String
@@ -197,86 +202,35 @@ class RemindersPlugin: NSObject, UNUserNotificationCenterDelegate {
     let wanted = Set((arguments["wanted"] as? [Any])?
         .compactMap { ($0 as? NSNumber)?.intValue } ?? [])
     let prefix = Self.jobPrefix(store: store)
-    let listed = (try? FileManager.default.contentsOfDirectory(
-      at: Self.agentDirectory(), includingPropertiesForKeys: nil)) ?? []
-    let stale = listed.compactMap { url -> Int? in
-      guard url.pathExtension == "plist" else { return nil }
-      let name = url.deletingPathExtension().lastPathComponent
-      guard name.hasPrefix(prefix) else { return nil }
-      guard let code = Int(name.dropFirst(prefix.count)) else { return nil }
-      return wanted.contains(code) ? nil : code
-    }
-    result(stale)
-  }
-
-  private func post(_ call: FlutterMethodCall, _ result: @escaping FlutterResult) {
-    guard let arguments = call.arguments as? [String: Any],
-          let title = arguments["title"] as? String,
-          let body = arguments["body"] as? String
-    else {
-      result(FlutterError(code: "arguments", message: "title and body required", details: nil))
-      return
-    }
-    let chatId = arguments["chatId"] as? String
-    let content = UNMutableNotificationContent()
-    content.title = title
-    content.body = body
-    // The identifier named after the chat is the tap route and the replace at
-    // once: a repost rewrites the one notification rather than piling up
-    // beside it, and a tap carries the id back through [open].
-    let identifier: String
-    if let chatId {
-      content.userInfo["chatId"] = chatId
-      identifier = "chat.\(chatId)"
-    } else {
-      identifier = UUID().uuidString
-    }
-    // Trigger nil is delivered immediately; nothing here waits.
-    let request = UNNotificationRequest(identifier: identifier, content: content, trigger: nil)
-    UNUserNotificationCenter.current().add(request) { error in
-      DispatchQueue.main.async {
-        result(error.map {
-          FlutterError(code: "notify", message: String(describing: $0), details: nil)
-        })
+    Self.launchd.async {
+      let listed = (try? FileManager.default.contentsOfDirectory(
+        at: Self.agentDirectory(), includingPropertiesForKeys: nil)) ?? []
+      let stale = listed.compactMap { url -> Int? in
+        guard url.pathExtension == "plist" else { return nil }
+        let name = url.deletingPathExtension().lastPathComponent
+        guard name.hasPrefix(prefix) else { return nil }
+        guard let code = Int(name.dropFirst(prefix.count)) else { return nil }
+        return wanted.contains(code) ? nil : code
       }
-    }
-  }
-
-  private func notificationsAllowed(_ result: @escaping FlutterResult) {
-    UNUserNotificationCenter.current().getNotificationSettings { settings in
-      DispatchQueue.main.async {
-        result(settings.authorizationStatus == .authorized
-            || settings.authorizationStatus == .provisional)
-      }
-    }
-  }
-
-  private func requestNotifications(_ result: @escaping FlutterResult) {
-    UNUserNotificationCenter.current().requestAuthorization(options: [.alert]) {
-      granted, _ in
-      DispatchQueue.main.async { result(granted) }
+      DispatchQueue.main.async { result(stale) }
     }
   }
 
   /// A wake session's work has drained; a launch nobody came to look at stops
-  /// being an app and quits, the next fire's job being launchd's. The short
-  /// delay lets the reply reach Dart before the process goes. A session
-  /// someone activated keeps living, from there an ordinary one.
+  /// being an app and quits, the next fire's job being launchd's. The quit
+  /// waits behind the launchd queue, so no rewrite is cut between its bootout
+  /// and its bootstrap, and a short delay lets the reply reach Dart before
+  /// the process goes. A session someone activated keeps living, from there
+  /// an ordinary one.
   private func doneFiring(_ result: @escaping FlutterResult) {
     if AppDelegate.wake && !AppDelegate.userShowedUp {
-      DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-        NSApp.terminate(nil)
+      Self.launchd.async {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+          NSApp.terminate(nil)
+        }
       }
     }
     result(nil)
-  }
-
-  /// A tapped notification takes its chat id back through the channel —
-  /// held for `takeOpenChat` and nudged, the two routes in. The delegate
-  /// methods below call this.
-  func open(chatId: String) {
-    pendingOpen = chatId
-    channel?.invokeMethod("open", arguments: chatId)
   }
 
   /// The label carries the bundle identifier and the data directory the jobs
@@ -296,8 +250,8 @@ class RemindersPlugin: NSObject, UNUserNotificationCenterDelegate {
   /// occurrence: the hourly its minute, the rest their hour, the weekly its
   /// weekday and the monthly its day. Whatever the clamp arithmetic does to
   /// a monthly anchor's later occurrences, the entries only owe the next
-  /// one — the stamp re-arms. launchd counts Weekday from Sunday (0 and 7
-  /// both), Dart from Monday.
+  /// one — the stamp re-arms. launchd counts Weekday from Sunday 0,
+  /// Calendar from Sunday 1.
   static func calendarEntries(_ repeatName: String, at: Date) -> [String: Int] {
     let parts = Calendar.current
       .dateComponents([.weekday, .day, .hour, .minute], from: at)
@@ -306,7 +260,7 @@ class RemindersPlugin: NSObject, UNUserNotificationCenterDelegate {
     switch repeatName {
     case "daily": return ["Hour": hour, "Minute": minute]
     case "weekly":
-      return ["Weekday": (parts.weekday ?? 1) % 7, "Hour": hour, "Minute": minute]
+      return ["Weekday": (parts.weekday ?? 1) - 1, "Hour": hour, "Minute": minute]
     case "monthly": return ["Day": parts.day ?? 1, "Hour": hour, "Minute": minute]
     default: return ["Minute": minute]
     }
@@ -333,9 +287,9 @@ class RemindersPlugin: NSObject, UNUserNotificationCenterDelegate {
       .appendingPathComponent("Library/LaunchAgents", isDirectory: true)
   }
 
-  /// One launchctl call, its stderr in the error it answers when it failed.
-  /// Reading stderr to the end before waiting on the exit is the order that
-  /// cannot deadlock a pipe.
+  /// One launchctl call, its stderr and exit status in the error it answers
+  /// when it failed. Reading stderr to the end before waiting on the exit is
+  /// the order that cannot deadlock a pipe.
   func runLaunchctl(_ arguments: [String]) throws {
     let process = Process()
     process.executableURL = URL(fileURLWithPath: "/bin/launchctl")
@@ -348,32 +302,9 @@ class RemindersPlugin: NSObject, UNUserNotificationCenterDelegate {
     process.waitUntilExit()
     guard process.terminationStatus == 0 else {
       throw MessageError(
-        "launchctl \(arguments.first ?? "") exited \(process.terminationStatus): \(output)")
+        "launchctl \(arguments.first ?? "") exited \(process.terminationStatus): \(output)",
+        status: process.terminationStatus)
     }
-  }
-
-  /// The frontmost app is shown the banner it would otherwise swallow, the
-  /// way Android's always-posted notification reads; a hidden wake session is
-  /// a background app and is never asked.
-  func userNotificationCenter(
-    _ center: UNUserNotificationCenter, willPresent notification: UNNotification
-  ) async -> UNNotificationPresentationOptions {
-    [.banner]
-  }
-
-  func userNotificationCenter(
-    _ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse
-  ) async {
-    // A tap is the default action; a dismiss is not an opening and says
-    // nothing the chat wants.
-    guard response.actionIdentifier == UNNotificationDefaultActionIdentifier else {
-      return
-    }
-    guard let chatId = response.notification.request.content.userInfo["chatId"] as? String
-    else {
-      return
-    }
-    open(chatId: chatId)
   }
 }
 
@@ -390,9 +321,12 @@ extension URL {
 /// ever sees of a refused boot.
 struct MessageError: Error, CustomStringConvertible {
   let message: String
+  /// launchctl's exit status, where launchctl is what failed.
+  let status: Int32?
 
-  init(_ message: String) {
+  init(_ message: String, status: Int32? = nil) {
     self.message = message
+    self.status = status
   }
 
   var description: String {

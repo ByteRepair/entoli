@@ -4,10 +4,6 @@ import "../../domain/file_tools.dart";
 import "../../domain/rootfs.dart";
 import "../../domain/shell.dart";
 
-/// The guest path where the project workspace is mounted: Alpine's `/root`,
-/// which is also `HOME` inside the guest.
-const guestHome = "/root";
-
 /// How a command is run inside a downloaded Linux: the proot invocation, the
 /// environment on both sides of it bar `HOME`, and the sentence the model is
 /// told.
@@ -79,7 +75,7 @@ ShellDriver prootDriver({
       "PROOT_LOADER": proot.loader,
       if (proot.loader32 != null) "PROOT_LOADER_32": proot.loader32!,
       "PROOT_TMP_DIR": proot.tmpDir,
-      "PATH": "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+      "PATH": guestPath,
       "LANG": "C.UTF-8",
       // Declared rather than probed, the catalog's own word — what the model
       // is told and what a script sees agree by construction.

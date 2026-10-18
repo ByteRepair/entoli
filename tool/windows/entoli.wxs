@@ -18,8 +18,16 @@
          built later finds this one and replaces it, and an installer built
          sooner refuses over it. Like the Android keystore, a change here is
          not an update but a different app; it is never re-generated. -->
+    <!-- Same version too: otherwise a rebuild of one version installs as a
+         second entry beside the first. ICE61 warns about it, deliberately. -->
     <MajorUpgrade
+        AllowSameVersionUpgrades="yes"
         DowngradeErrorMessage="A newer version of Entoli is already installed." />
+
+    <!-- The icon Add/Remove Programs shows: the exe's own ico. -->
+    <Icon Id="AppIcon.ico"
+        SourceFile="$(sys.SOURCEFILEDIR)..\..\windows\runner\resources\app_icon.ico" />
+    <Property Id="ARPPRODUCTICON" Value="AppIcon.ico" />
 
     <!-- The cabinet rides inside the MSI: an external one is a second file a
          release does not attach, and an installer that installs only where

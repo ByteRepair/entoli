@@ -320,17 +320,6 @@ jobs:
 
       - uses: ./.github/actions/linux-llama
 
-      - uses: actions/upload-artifact@v7.0.1
-        with:
-          name: llama-linux
-          path: build/llama/
-          if-no-files-found: error
-          # Already stripped .so files; recompressing buys little and costs time.
-          compression-level: 0
-          # Read by the linux job right after; a re-run of the publisher never
-          # wants it, unlike the aab, so one day is enough.
-          retention-days: 1
-
   # The iOS App Store ipa. One macos runner rather than a tools/application
   # split: the iSH core is a minutes-long clang build of one library, not a
   # toolchain the app build never needs, and the app build wants the
@@ -378,7 +367,8 @@ jobs:
         run: |
           set -euo pipefail
           echo "key=ish-$(git rev-parse HEAD:tool/ios/ish/src)-$( \
-            shasum -a 256 tool/ios/ish/build.sh tool/ios/ish/ish_bridge.c | \
+            shasum -a 256 tool/ios/ish/build.sh tool/ios/ish/ish_bridge.c \
+              tool/ios/ish/ish_bridge.h | \
             shasum -a 256 | cut -c1-12)" >> "$GITHUB_OUTPUT"
 
       - name: Restore the IshCore xcframework
@@ -476,23 +466,7 @@ jobs:
         with:
           ref: ${{ inputs.tag }}
 
-      # The stage the bundle's CMakeLists installs from — the artifact the llama
-      # job uploaded. Unpacked before `flutter build linux` runs, which is what
-      # makes the "whole or not at all" above true.
-      - uses: actions/download-artifact@v8.0.1
-        with:
-          name: llama-linux
-          path: build/llama
-
-      - name: Check the downloaded model server is whole
-        run: |
-          set -euo pipefail
-          for lib in llama-server libllama-common.so.0 libggml-base.so.0 \
-            libggml-vulkan.so libggml-cpu.so; do
-            [ -e "build/llama/$lib" ] ||
-              { echo "::error::the llama artifact has no $lib" >&2; exit 1; }
-          done
-
+      # `linux-appimage` downloads, unpacks and checks the llama stage first.
       - id: build
         uses: ./.github/actions/linux-appimage
         with:
@@ -675,7 +649,9 @@ jobs:
       - uses: ./.github/actions/flutter-setup
 
       - name: Build the app
-        run: flutter build windows --release --build-number="${{ needs.version.outputs.code }}"
+        # Not the Android code: the build number lands in FILEVERSION's last
+        # 16-bit field, which major*10000+minor*100+patch overflows from 6.56.
+        run: flutter build windows --release --build-number=0
 
       # make-msi.ps1 refuses a bundle with no exe and an MSI with no exe in it:
       # there is no second place to catch a half-built one or an empty harvest.

@@ -452,6 +452,15 @@ const defaultShellEnvironment = {
   "BASH_ENV": "",
 };
 
+/// Where a Linux guest (proot on Android, iSH on iOS) has the project
+/// workspace mounted: Alpine's `/root`, which is also `HOME` inside it.
+const guestHome = "/root";
+
+/// The guest's own `PATH`: a non-login ash falls back to its compiled-in
+/// default, which does not name `/usr/local/bin`, where a setup's installs
+/// land.
+const guestPath = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin";
+
 /// The persistent-shell dispatcher script, templated on a per-session token.
 /// Both the host shell ([LocalShell]) and the in-process emulator
 /// ([IshShell]) use it, which is why it lives here: the contract — a Ctrl-C

@@ -5,6 +5,8 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.provider.OpenableColumns
 import androidx.core.content.FileProvider
 import io.flutter.Log
@@ -12,6 +14,7 @@ import io.flutter.plugin.common.BinaryMessenger
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 import java.io.File
+import java.util.concurrent.Executors
 
 // The workspace explorer's way out of the app and back in: ACTION_VIEW to open
 // a file, the share sheet to send a selection anywhere, and ACTION_SEND from
@@ -67,10 +70,20 @@ object FilesChannel {
         intent.action = Intent.ACTION_MAIN
         if (uris.isEmpty()) return
         val appContext = context.applicationContext
-        val dir = incomingDir(appContext).apply { mkdirs() }
-        uris.forEach { uri -> stage(appContext, uri, dir)?.let { pending += it } }
-        if (pending.isNotEmpty()) channel?.invokeMethod("shared", null)
+        // Off the main thread: a large share would otherwise freeze the launch.
+        copier.execute {
+            val dir = incomingDir(appContext).apply { mkdirs() }
+            val staged = uris.mapNotNull { uri -> stage(appContext, uri, dir) }
+            if (staged.isEmpty()) return@execute
+            synchronized(pending) { pending += staged }
+            main.post { channel?.invokeMethod("shared", null) }
+        }
     }
+
+    // One thread, so shares stage in the order they arrived and `take`'s prune
+    // never runs under a copy still being written.
+    private val copier = Executors.newSingleThreadExecutor()
+    private val main = Handler(Looper.getMainLooper())
 
     private fun stage(context: Context, uri: Uri, dir: File): Staged? = try {
         val name = displayName(context, uri)
@@ -93,11 +106,12 @@ object FilesChannel {
     // an earlier batch nobody claimed, since only one is ever offered at a
     // time — see `IncomingShares`.
     private fun take(context: Context): List<Map<String, String>> {
-        val keep = pending.map { it.file }.toSet()
-        incomingDir(context).listFiles()?.forEach { if (it !in keep) it.deleteRecursively() }
-        val staged = pending.map { mapOf("path" to it.name, "file" to it.file.absolutePath) }
-        pending.clear()
-        return staged
+        val taken = synchronized(pending) { pending.toList().also { pending.clear() } }
+        copier.execute {
+            val keep = (taken + synchronized(pending) { pending.toList() }).map { it.file }.toSet()
+            incomingDir(context).listFiles()?.forEach { if (it !in keep) it.deleteRecursively() }
+        }
+        return taken.map { mapOf("path" to it.name, "file" to it.file.absolutePath) }
     }
 
     private fun open(context: Context, call: MethodCall) {

@@ -51,7 +51,19 @@ class LocalShell extends Shell {
     // workingDirectory fails with ENOENT that names neither, so make it.
     Directory(cwd).createSync(recursive: true);
     final argv = command.skip(1).toList();
-    if (_hasSetsid != false) {
+    // The AppImage runtime's own variables describe the app, not the user's
+    // machine, and a command inheriting `APPDIR` or `ARGV0` misreads both.
+    // Dart cannot unset an inherited variable, so the parent's is copied here.
+    if (includeParentEnvironment &&
+        _appImageVars.any(Platform.environment.containsKey)) {
+      env = {
+        for (final e in Platform.environment.entries)
+          if (!_appImageVars.contains(e.key)) e.key: e.value,
+        ...env,
+      };
+      includeParentEnvironment = false;
+    }
+    if (_hasSetsid != false && !Platform.isWindows) {
       try {
         final process = await Process.start("setsid", [command.first, ...argv],
             workingDirectory: cwd,
@@ -69,6 +81,8 @@ class LocalShell extends Shell {
         includeParentEnvironment: includeParentEnvironment);
     return (process: process, ownsGroup: false);
   }
+
+  static const _appImageVars = {"APPIMAGE", "APPDIR", "ARGV0", "OWD"};
 
   /// One persistent shell per chat, keyed by the directory it starts in —
   /// which is the chat's own, so it is unique to the chat.
@@ -103,8 +117,9 @@ class LocalShell extends Shell {
 
   /// One expression, beside the shell that reads it: `io/platform.dart`'s
   /// `_home` composes the data and cache directories from the same answer.
-  static String? machineHomeDir() =>
-      Platform.environment["HOME"] ?? Platform.environment["USERPROFILE"];
+  static String? machineHomeDir() => Platform.isWindows
+      ? Platform.environment["USERPROFILE"] ?? Platform.environment["HOME"]
+      : Platform.environment["HOME"];
 
   /// The machine user's own home directory; null where there is no real user
   /// home (the web, Android's app-private storage).
@@ -162,7 +177,7 @@ class LocalShell extends Shell {
     final bundled = tools?.names;
     final description = bundled != null
         ? "$where, with $bundled bundled with the app"
-        : Platform.isAndroid && tools?.proot != null
+        : tools?.proot != null
             ? "$where. There is no git and no package manager here; installing "
                 "a Linux from the Terminal settings gives you both"
             : where;
@@ -283,24 +298,55 @@ class LocalShell extends Shell {
   static final String? shellPath = resolveShell();
 
   @visibleForTesting
-  static String? resolveShell({String? path, bool Function(String)? isExecutable}) {
+  static String? resolveShell({
+    String? path,
+    bool Function(String)? isExecutable,
+    bool? windows,
+    Map<String, String>? environment,
+  }) {
     final executable = isExecutable ?? _executable;
-    final dirs = (path ?? Platform.environment["PATH"] ?? "")
-        .split(Platform.isWindows ? ";" : ":");
-    for (final name in const ["bash", "sh"]) {
+    final win = windows ?? Platform.isWindows;
+    final env = environment ?? Platform.environment;
+    final paths = win ? p.windows : p.posix;
+    // WSL's `System32\bash.exe` runs a Linux that cannot take a Windows path.
+    final systemRoot = (env["SystemRoot"] ?? r"C:\Windows").toLowerCase();
+    final dirs = (path ?? env["PATH"] ?? "")
+        .split(listSeparator(windows: win))
+        .where((dir) => dir.isNotEmpty &&
+            !(win &&
+                (paths.equals(systemRoot, dir.toLowerCase()) ||
+                    paths.isWithin(systemRoot, dir.toLowerCase()))))
+        .toList();
+    for (final name in win ? const ["bash.exe", "sh.exe"] : const ["bash", "sh"]) {
       for (final dir in dirs) {
-        if (dir.isEmpty) continue;
-        final candidate = "$dir${Platform.pathSeparator}$name";
+        final candidate = paths.join(dir, name);
         if (executable(candidate)) return candidate;
       }
     }
-    for (final candidate in _fallbacks) {
+    final fallbacks = win
+        ? [
+            for (final root in {env["ProgramFiles"], env["ProgramW6432"]})
+              if (root != null) ...[
+                paths.join(root, "Git", "bin", "bash.exe"),
+                paths.join(root, "Git", "usr", "bin", "bash.exe"),
+              ],
+            // Git for Windows puts `cmd\git.exe` on PATH, its bash beside.
+            for (final dir in dirs)
+              if (executable(paths.join(dir, "git.exe")))
+                paths.normalize(paths.join(dir, "..", "bin", "bash.exe")),
+          ]
+        : _fallbacks;
+    for (final candidate in fallbacks) {
       if (executable(candidate)) return candidate;
     }
     return null;
   }
 
   static const _fallbacks = ["/bin/bash", "/system/bin/sh", "/bin/sh"];
+
+  /// What separates the directories in a `PATH`.
+  static String listSeparator({bool? windows}) =>
+      (windows ?? Platform.isWindows) ? ";" : ":";
 
   /// Windows reports no mode bits, so there the file being there is the whole
   /// of the test.
@@ -327,7 +373,22 @@ const _drainGrace = Duration(seconds: 2);
 /// itself. A group kill is preferred so a timed-out `npm install` that only
 /// loses its shell does not keep downloading; the fallback is for a platform
 /// whose `setsid` was not there to make a group at all.
+///
+/// Windows has neither groups nor signals: a kill there is `taskkill /T`, the
+/// one way to take bash's children with it, and an interrupt is not sent.
 void _signalGroup(Process process, bool ownsGroup, ProcessSignal signal) {
+  if (Platform.isWindows) {
+    if (signal == ProcessSignal.sigint) return;
+    unawaited(Process.run(
+            "taskkill", ["/T", "/F", "/PID", "${process.pid}"])
+        .then<void>((r) {
+      if (r.exitCode != 0) process.kill();
+    }, onError: (Object e) {
+      logFailure("shell", "taskkill failed", e);
+      process.kill();
+    }));
+    return;
+  }
   if (ownsGroup) {
     try {
       if (Process.killPid(-process.pid, signal)) return;
@@ -608,6 +669,11 @@ class _Session {
     if (run.interrupted) return;
     run.interrupted = true;
     run.byTimeout = byTimeout || run.byTimeout;
+    // No Ctrl-C to send on Windows, so the stop is the kill.
+    if (Platform.isWindows) {
+      _killGroup();
+      return;
+    }
     final process = _process;
     if (process != null) _signalGroup(process, _ownsGroup, ProcessSignal.sigint);
     run.escalateTimer = Timer(_grace, () {

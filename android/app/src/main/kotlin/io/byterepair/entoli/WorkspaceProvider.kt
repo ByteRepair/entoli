@@ -8,7 +8,6 @@ import android.provider.DocumentsContract.Document
 import android.provider.DocumentsContract.Root
 import android.provider.DocumentsProvider
 import android.webkit.MimeTypeMap
-import io.flutter.util.PathUtils
 import org.json.JSONObject
 import java.io.File
 import java.io.FileNotFoundException
@@ -241,11 +240,9 @@ class WorkspaceProvider : DocumentsProvider() {
     private fun notFound(documentId: String) =
         FileNotFoundException("No workspace document at $documentId")
 
-    // The call path_provider's getApplicationDocumentsDirectory makes, so this
-    // is where `platformDataDir` put the data directory rather than a guess at
-    // it. Lazy, not eager: a provider is constructed during process start, and
+    // Lazy, not eager: a provider is constructed during process start, and
     // nothing about this belongs there.
-    private val dataDir by lazy { File(PathUtils.getDataDirectory(app), "agent-chat") }
+    private val dataDir by lazy { appDataDir(app) }
 
     private val app get() = context!!
 

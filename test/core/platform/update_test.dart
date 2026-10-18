@@ -153,13 +153,14 @@ void main() {
         flavour: UpdateFlavour.windows,
         cacheDir: tmp.path,
         httpClient: network,
+        installedExe: r"C:\Program Files\Entoli\entoli.exe",
         spawn: (script) async => scripts.add(script),
         debug: false,
       );
 
       await updater.check(version: "1.2.3", enabled: true);
 
-      final msi = File("${tmp.path}/updates/$msiAsset");
+      final msi = File("${tmp.path}/updates/$pid-$msiAsset");
       expect(msi.readAsBytesSync(), "installer".codeUnits,
           reason: "the waiter installs this once the process is gone");
       expect(scripts, hasLength(1));
@@ -167,12 +168,13 @@ void main() {
       expect(scripts.single, contains("-Verb RunAs"),
           reason: "silent mode suppresses the elevation prompt; RunAs asks");
       expect(scripts.single, contains("'/qn'"));
-      expect(scripts.single, contains("'${msi.path}'"));
+      expect(scripts.single, contains("'\"${msi.path}\"'"));
     });
 
     test("the waiter waits for the app and installs the quoted path silently",
         () {
-      final script = windowsUpdateCommand(4242, r"C:\Users\a b\entoli.msi");
+      final script = windowsUpdateCommand(
+          4242, r"C:\Users\a b\entoli.msi", r"C:\Users\a b\msi.log");
       expect(script, startsWith("Wait-Process -Id 4242 "));
       expect(script, contains("-Verb RunAs"),
           reason: "the per-machine install cannot elevate itself; RunAs "
@@ -180,11 +182,40 @@ void main() {
       expect(script, contains("'/i'"));
       expect(script, contains("'/qn'"));
       expect(script, contains("'/norestart'"));
-      expect(script, contains(r"'C:\Users\a b\entoli.msi'"),
+      // Start-Process joins -ArgumentList with bare spaces, so the double
+      // quotes msiexec needs ride inside each PowerShell string.
+      expect(script, contains(r"""'"C:\Users\a b\entoli.msi"'"""),
           reason: "an unquoted path with a space is two arguments");
-      expect(windowsUpdateCommand(1, r"C:\Users\a'b\entoli.msi"),
-          contains(r"'C:\Users\a''b\entoli.msi'"));
+      expect(script, endsWith(r"""'/l*v', '"C:\Users\a b\msi.log"'"""));
+      expect(windowsUpdateCommand(1, r"C:\Users\a'b\entoli.msi", "x"),
+          contains(r"""'"C:\Users\a''b\entoli.msi"'"""));
     });
+
+    test("only the installed folder's exe is an installed app", () {
+      const env = {"ProgramFiles": r"C:\Program Files"};
+      expect(installedWindowsExe(r"c:\program files\ENTOLI\entoli.exe", env),
+          isNotNull);
+      expect(
+          installedWindowsExe(r"C:\src\entoli\build\windows\x64\runner\"
+              r"Release\entoli.exe", env),
+          isNull);
+      expect(installedWindowsExe(r"C:\Program Files\Other\entoli.exe", env),
+          isNull);
+      expect(installedWindowsExe(r"C:\Program Files\Entoli\entoli.exe", {}),
+          isNull);
+    });
+
+    test("a build that is not the installed one asks nothing", () async {
+      final network = release("v1.3.0", msiAsset, "installer".codeUnits);
+      await DesktopUpdater(
+        flavour: UpdateFlavour.windows,
+        cacheDir: tmp.path,
+        httpClient: network,
+        spawn: (_) async => fail("armed a non-installed build"),
+        debug: false,
+      ).check(version: "1.2.3", enabled: true);
+      expect(network.asked, 0);
+    }, skip: Platform.isWindows ? "the runner may be under Program Files" : null);
   });
 
   group("macOS", () {
@@ -243,7 +274,7 @@ void main() {
           "new-engine");
       // The image is gone once the swap landed, and with it anything staged
       // beside the bundle or mounted for the copy.
-      expect(File("${tmp.path}/cache/updates/$dmgAsset").existsSync(),
+      expect(File("${tmp.path}/cache/updates/$pid-$dmgAsset").existsSync(),
           isFalse, reason: "put in place is not keep a copy");
       expect(Directory("${tmp.path}/cache/updates/mount-$pid").existsSync(),
           isFalse);
@@ -287,7 +318,7 @@ void main() {
               .where((e) => e.path.contains(".entoli-")),
           isEmpty,
           reason: "the check takes its staging back");
-      expect(File("${tmp.path}/cache/updates/$dmgAsset").existsSync(),
+      expect(File("${tmp.path}/cache/updates/$pid-$dmgAsset").existsSync(),
           isFalse, reason: "the refused download goes with the refusal");
     });
 
@@ -306,7 +337,7 @@ void main() {
           File("${applications.path}/Entoli.app/Contents/MacOS/entoli")
               .readAsStringSync(),
           "old-engine");
-      expect(File("${tmp.path}/cache/updates/$dmgAsset").existsSync(),
+      expect(File("${tmp.path}/cache/updates/$pid-$dmgAsset").existsSync(),
           isFalse, reason: "the refused download goes with the refusal");
     });
   }, skip: !Platform.isMacOS ? "hdiutil and ditto" : null);

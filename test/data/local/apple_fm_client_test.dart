@@ -157,6 +157,26 @@ void main() {
     ]);
   });
 
+  test("a trailing tool result is the prompt, worded as one", () async {
+    AppleFmClient(const AppleFmProbe("available"))
+        .stream(const [
+          LlmMessage(role: LlmRole.user, text: "find the file"),
+          LlmMessage(
+            role: LlmRole.assistant,
+            text: "",
+            toolCalls: [
+              LlmToolCall(id: "c0", name: "read", argumentsJson: "{}")
+            ],
+          ),
+          LlmMessage(role: LlmRole.tool, toolCallId: "c0", text: "its size"),
+        ], model: appleModelId)
+        .toList();
+    await breathe();
+
+    expect(outgoing("generate")["prompt"],
+        "[Result of the read call:]\nits size");
+  });
+
   test("a framework failure is worded by its code", () async {
     final reply = AppleFmClient(const AppleFmProbe("available"))
         .stream(const [LlmMessage(role: LlmRole.user, text: "hi")],

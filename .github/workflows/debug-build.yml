@@ -61,24 +61,11 @@ jobs:
 
       - uses: ./.github/actions/linux-llama
 
-      - uses: actions/upload-artifact@v7.0.1
-        with:
-          name: llama-linux
-          path: build/llama/
-          if-no-files-found: error
-          compression-level: 0
-          retention-days: 1
-
   linux:
     needs: llama-linux
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7.0.1
-
-      - uses: actions/download-artifact@v8.0.1
-        with:
-          name: llama-linux
-          path: build/llama
 
       - id: build
         uses: ./.github/actions/linux-appimage

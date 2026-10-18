@@ -6,11 +6,15 @@ class MainFlutterWindow: NSWindow {
     // A wake whose app already runs leaves at once: no second engine over
     // one store, and the running copy's own timer is what fires its due.
     // Direct-exec launches are not deduplicated by launch services the way
-    // `open` is, so this is the guard the wake command line relies on.
+    // `open` is, so this is the guard the wake command line relies on. The
+    // same executable, not just the same bundle id: another copy (a debug
+    // build, a second install) serves its own store and fires none of ours.
     if AppDelegate.wake {
+      let executable = Bundle.main.executableURL?.resolvingSymlinksInPath()
       let others = NSWorkspace.shared.runningApplications.contains {
         $0.bundleIdentifier == Bundle.main.bundleIdentifier
             && $0.processIdentifier != ProcessInfo.processInfo.processIdentifier
+            && $0.executableURL?.resolvingSymlinksInPath() == executable
       }
       if others {
         exit(0)

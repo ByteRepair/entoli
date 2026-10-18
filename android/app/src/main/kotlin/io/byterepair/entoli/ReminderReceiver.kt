@@ -18,8 +18,12 @@ import io.flutter.Log
 class ReminderReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action != ACTION_FIRE) return
-        val id = intent.getStringExtra(EXTRA_ID) ?: return
         val appContext = context.applicationContext
+        val code = intent.getIntExtra(EXTRA_CODE, -1)
+        val id = triggerIdFor(appContext, code) ?: run {
+            Log.w(TAG, "No trigger holds request code $code; alarm dropped")
+            return
+        }
         RemindersChannel.receiveFire(appContext, id)
         try {
             appContext.startForegroundService(
@@ -37,9 +41,26 @@ class ReminderReceiver : BroadcastReceiver() {
         AppEngine.runIfIdle(appContext)
     }
 
+    // The alarm carries only its request code, the one thing Dart arms with;
+    // the trigger it belongs to is whatever `reminders.json` says holds it now.
+    private fun triggerIdFor(context: Context, code: Int): String? {
+        if (code < 0) return null
+        return try {
+            val reminders = readReminders(context) ?: return null
+            (0 until reminders.length())
+                .map { reminders.getJSONObject(it) }
+                .firstOrNull { it.optInt("requestCode", -1) == code }
+                ?.optString("id")
+                ?.takeIf { it.isNotEmpty() }
+        } catch (e: Exception) {
+            Log.w(TAG, "Could not read reminders for code $code: $e")
+            null
+        }
+    }
+
     companion object {
         private const val TAG = "ReminderReceiver"
         const val ACTION_FIRE = "io.byterepair.entoli.FIRE_REMINDER"
-        const val EXTRA_ID = "reminder_id"
+        const val EXTRA_CODE = "reminder_code"
     }
 }

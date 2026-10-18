@@ -48,10 +48,23 @@ class IshShell extends Shell {
         _transportFor = transport != null ? (() => transport) : IshWorker.new;
 
   /// Where the guest's rootfs is mounted from, asked per command: a Linux
-  /// installed from the settings page reaches the next command, and one
-  /// deleted stops being where commands run without the app having to be
-  /// restarted. Empty where none is installed.
+  /// installed where none was reaches the next command, and one deleted stops
+  /// being where commands run. The emulator mounts it once per process, so a
+  /// different one picked or the same one reinstalled after the first command
+  /// takes a restart. Empty where none is installed.
   final String Function() rootfsDir;
+
+  /// The rootfs the first command booted the guest from: the one every later
+  /// command runs in until a restart, see [rootfsDir].
+  String? _bootedRootfs;
+
+  /// The project workspace the guest's [guestHome] is bound to. The guest
+  /// has one mount table for every session, so `/root` names one project at a
+  /// time: a command in another project closes this one's idle sessions and
+  /// the bridge rebinds; a busy one makes it wait. See "The workspace inside
+  /// the guest" in ios/AGENTS.md.
+  String? _boundHome;
+  int _liveOneShots = 0;
 
   final String dataDir;
 
@@ -89,7 +102,7 @@ class IshShell extends Shell {
   /// Null where no Linux is installed — there is no guest to mask anything
   /// in, and the file tools then resolve host paths directly.
   @override
-  String? get guestRoot => rootfsInstalled ? "/root" : null;
+  String? get guestRoot => rootfsInstalled ? guestHome : null;
 
   /// What `HOME` is for a command here: the guest path where the project
   /// workspace is bound, so `~` in a command expands to it and the prompt,
@@ -125,13 +138,24 @@ class IshShell extends Shell {
           "No Linux is installed on this device to run commands in. Install "
           "one from the Terminal settings.");
     }
+    final rootfs = rootfsDir();
+    _bootedRootfs ??= rootfs;
+    if (rootfs != _bootedRootfs) {
+      return _IshUnavailableRun(
+          "The Linux was changed after the guest started, and the guest runs "
+          "the one it started with until the app restarts. Restart Entoli to "
+          "run commands in the new one.");
+    }
+    final busy = _claimHome(home);
+    if (busy != null) return _IshUnavailableRun(busy);
     // The guest's view of the chat workspace: the project workspace is bound
     // at [guestRoot], so the chat's own is that plus its suffix past the
     // project workspace — the same words the prompt tells the model.
     final guestCwd = guestWorkspacePath(guestRoot!, home, cwd);
     if (oneShot) {
-      return _IshOneShotRun(
-        rootfsDir: rootfsDir(),
+      _liveOneShots++;
+      final run = _IshOneShotRun(
+        rootfsDir: rootfs,
         dataDir: dataDir,
         home: home,
         guestCwd: guestCwd,
@@ -140,10 +164,33 @@ class IshShell extends Shell {
         environment: _compose(extra: environment),
         transport: _transportFor(),
       );
+      run.result.then((_) => _liveOneShots--,
+          onError: (Object _) => _liveOneShots--);
+      return run;
     }
     return _sessions
         .putIfAbsent(cwd, () => _IshSession(this, cwd, guestCwd, home))
         .start(command, timeout, environment: environment, restart: restart);
+  }
+
+  /// Point the guest's [guestHome] at [home]'s project, or say why not yet.
+  /// Another project's idle sessions are closed — their next command starts
+  /// cold — since their `/root` is about to name someone else's files.
+  String? _claimHome(String home) {
+    if (_boundHome != null && _boundHome != home) {
+      if (_liveOneShots > 0 || _sessions.values.any((s) => s.busy)) {
+        return "A command from another project is running in the Linux "
+            "guest, which can hold one project's workspace at a time. Run "
+            "this again once it finishes.";
+      }
+      for (final MapEntry(key: cwd, value: session) in _sessions.entries) {
+        _cwds[cwd]?.value = session._guestCwd;
+        session.close();
+      }
+      _sessions.clear();
+    }
+    _boundHome = home;
+    return null;
   }
 
   /// Seeded with the guest's own words for [cwd] — the host path it is keyed
@@ -183,11 +230,7 @@ class IshShell extends Shell {
     Map<String, String>? extra,
   }) =>
       {
-        // The guest's own PATH: a non-login ash falls back to its
-        // compiled-in default, which does not name /usr/local/bin — where a
-        // setup's installs land — and a `command not found` one command at a
-        // time is how that would be noticed.
-        "PATH": "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+        "PATH": guestPath,
         ...defaultShellEnvironment,
         "HOME": guestRoot ?? "/",
         ...environment(),
@@ -235,6 +278,9 @@ class _IshSession {
   /// Set by [close]: a queued `_execute` body reads it and boots nothing,
   /// its own run among the ones close answered.
   bool _closed = false;
+
+  /// A run is pending or queued: the guest's `/root` must not move under it.
+  bool get busy => _runs.any((r) => !r.state.done.isCompleted);
 
   ShellRun start(String command, Duration timeout,
       {Map<String, String>? environment, bool restart = false}) {
@@ -391,8 +437,12 @@ class _IshSession {
     // the guest it would have started is one this close would never see
     // again.
     final id = _sessionId;
+    final handle = _handle;
     _sessionId = null;
     _handle = 0;
+    // A worker parked in a run's poll would leave the destroy and the stop
+    // queued behind it for the command's whole life; the hangup returns it.
+    if (_current != null && handle != 0) _transport.hangup(handle);
     _current = null;
     _closed = true;
     if (id != null) _transport.destroy(id);
@@ -629,9 +679,9 @@ abstract class IshTransport {
   void interrupt(int handle);
 
   /// The escalation for a command that ignored the interrupt: the bridge
-  /// kills the guest and closes the read end, so the worker's blocked run
-  /// returns at once and its own destroy follows when it does. Non-blocking,
-  /// safe to call while [run] is pending.
+  /// kills the guest's process group and wakes the worker's poll, so its
+  /// blocked run returns at once and its own destroy follows when it does.
+  /// Non-blocking, safe to call while [run] is pending.
   void hangup(int handle);
 
   /// Free the guest and its handle on the worker.
@@ -901,7 +951,7 @@ class IshWorker implements IshTransport {
   final Map<int, void Function(String)> _outputSinks = {};
 
   /// One order for init across every worker's isolate. The bridge's boot
-  /// and one-time binds (`ish_booted`, the static `bound`s in
+  /// and binds (`ish_booted`, the static `bound_home` and `bound` in
   /// ish_bridge.c) are the C state two isolates could touch at once, and
   /// nothing locks them. The runs it orders stay parallel: each touches
   /// only its own task, whose mm, fds and signals the bridge gives the

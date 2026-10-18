@@ -31,6 +31,13 @@ looks beside the executable. The app is built after the script runs, so the
 bundle carries the server whole or not at all; a build that skipped it ships
 without it, and the On-device page says so.
 
+**A release build is one instance per session.** A second launch registers
+the same application id on the session bus, finds the first, activates it —
+which raises its window — and exits, rather than running a second session
+over the same data directory (two trigger managers, settings written over
+each other). A debug build stays non-unique: its data directory is its own,
+and it must run beside an installed copy.
+
 **The session bus is a runtime dependency.** Reminders post over
 `org.freedesktop.Notifications`, and the sync keyring reaches the Secret
 Service through the same bus. A session without a bus — headless, a minimal

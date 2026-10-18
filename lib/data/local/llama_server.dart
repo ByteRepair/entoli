@@ -243,7 +243,8 @@ class LlamaServerPool extends LocalLlm {
         environment: _binaries.environment,
       );
       return parseDevices("${result.stdout}");
-    } on ProcessException {
+    } on ProcessException catch (e) {
+      logFailure("llama", "device probe failed", e.message);
       return const [];
     }
   }
@@ -439,6 +440,20 @@ class _Server {
       this.threads == threads &&
       this.slotSavePath == slotSavePath;
 
+  /// `setpriv --pdeathsig` has the kernel stop the server when the app dies,
+  /// which a crash or a SIGKILL otherwise leaves holding the model's memory.
+  /// It fires when the spawning thread goes, and the spawn is on the root
+  /// isolate's UI thread, which lives as long as the app. Linux only.
+  static final List<String> _deathTie = () {
+    if (!Platform.isLinux) return const <String>[];
+    for (final dir in (Platform.environment["PATH"] ?? "").split(":")) {
+      if (dir.isEmpty) continue;
+      final setpriv = "$dir/setpriv";
+      if (File(setpriv).existsSync()) return [setpriv, "--pdeathsig", "TERM"];
+    }
+    return const <String>[];
+  }();
+
   Future<void> spawn(LlamaBinaries binaries, String modelFile,
       {required void Function() onChange}) async {
     // Asked of the OS rather than picked: a fixed port is one another app can
@@ -462,9 +477,10 @@ class _Server {
     );
 
     try {
+      final command = [..._deathTie, ...launch.command];
       final process = await Process.start(
-        launch.command.first,
-        launch.command.sublist(1),
+        command.first,
+        command.sublist(1),
         environment: launch.environment,
       );
       _process = process;

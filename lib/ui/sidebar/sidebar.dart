@@ -103,7 +103,7 @@ void openNewChat(BuildContext context, WidgetRef ref) {
 /// The new-chat screen in [project], null being the default one: the
 /// new-chat shortcuts, each of which names where the chat goes.
 void openNewChatIn(BuildContext context, WidgetRef ref, String? project) {
-  selectProject(ref, project);
+  selectProject(ref, localProject(project));
   closeNavDrawer(context);
 }
 

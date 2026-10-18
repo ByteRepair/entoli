@@ -4,6 +4,7 @@ import "package:url_launcher/url_launcher.dart";
 import "package:webview_flutter/webview_flutter.dart";
 
 import "../core/log.dart";
+import "../core/platform/form_factor.dart";
 import "../core/platform/io/artifact_server_factory.dart"
     if (dart.library.js_interop) "../core/platform/web/artifact_server_factory.dart"
     show startArtifactServer;
@@ -18,6 +19,12 @@ import "../domain/artifact_server.dart";
 import "../domain/chat_store.dart";
 import "../domain/link_opener.dart";
 import "widgets/dialogs.dart";
+
+/// Web, mail and phone links alone: anything else, `file:` included, would
+/// hand the OS whatever scheme a model wrote.
+@visibleForTesting
+bool isOpenableLink(Uri url) =>
+    const {"http", "https", "mailto", "tel"}.contains(url.scheme.toLowerCase());
 
 /// Opens links from rendered markdown, and artifacts the model rendered.
 ///
@@ -54,21 +61,20 @@ class PlatformLinkOpener implements LinkOpener {
   /// same null in tests that keeps sync-unaware callers on the local paths.
   final SyncHub? _hub;
 
-  static bool get _isAndroid =>
-      !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
-
   /// Where an artifact opens in the app's own webview, served from loopback,
   /// rather than as a `file://` page handed to another app. The phones: iOS
   /// has no app that will open a file inside Entoli's container, so the
   /// desktop route's launch did nothing there at all.
-  static bool get _inAppArtifacts =>
-      !kIsWeb &&
-      (defaultTargetPlatform == TargetPlatform.android ||
-          defaultTargetPlatform == TargetPlatform.iOS);
+  static bool get _inAppArtifacts => isPhone;
 
   @override
   Future<void> open(BuildContext context, Uri url) async {
-    if (_isAndroid && (url.scheme == "http" || url.scheme == "https")) {
+    // Model-written links come through here; artifacts open by their own path.
+    if (!isOpenableLink(url)) {
+      logFailure("link", "refused a link with scheme ${url.scheme}");
+      return;
+    }
+    if (isAndroid && (url.scheme == "http" || url.scheme == "https")) {
       await Navigator.of(context).push(
         MaterialPageRoute<void>(builder: (_) => _WebViewPage(url: url)),
       );

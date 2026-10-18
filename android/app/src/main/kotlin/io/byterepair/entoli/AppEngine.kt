@@ -1,11 +1,15 @@
 package io.byterepair.entoli
 
 import android.content.Context
+import android.os.Process
+import android.system.Os
+import android.system.OsConstants
 import io.flutter.FlutterInjector
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.embedding.engine.FlutterEngineCache
 import io.flutter.embedding.engine.dart.DartExecutor
 import io.flutter.plugins.GeneratedPluginRegistrant
+import java.io.File
 // The one place the app's engine is built. Every way the process comes to be
 // running Dart goes through [ensure] — an activity launch, or an alarm waking
 // nothing — so channels and plugins are registered exactly once and both paths
@@ -72,9 +76,36 @@ object AppEngine {
     /// attach to belongs to MainActivity.onDestroy's rules instead.
     fun releaseIfUnwanted() {
         if (everAttached || ForegroundWork.busy) return
+        release()
+    }
+
+    /// Throw the cached engine away, so the next launch runs `main` afresh.
+    /// The process lives on, so what it decided about attachment goes too.
+    fun release() {
+        everAttached = false
         val cache = FlutterEngineCache.getInstance()
         val engine = cache.get(ID) ?: return
         cache.remove(ID)
+        killChildren()
         engine.destroy()
+    }
+
+    // What Dart started with Process.start — a model server, a persistent
+    // shell — outlives the isolate, and the process with it; nothing on this
+    // platform stops them on the way out. Only direct children: their own
+    // die with them or are reparented, and are not ours to find.
+    private fun killChildren() {
+        val me = Process.myPid()
+        File("/proc").listFiles()?.forEach { dir ->
+            val pid = dir.name.toIntOrNull() ?: return@forEach
+            try {
+                // `pid (comm) state ppid ...`; comm may hold spaces and parens.
+                val stat = File(dir, "stat").readText()
+                val ppid = stat.substringAfterLast(')').trim().split(' ')[1].toInt()
+                if (ppid == me) Os.kill(pid, OsConstants.SIGKILL)
+            } catch (e: Exception) {
+                // Gone between the listing and the read, or not ours to signal.
+            }
+        }
     }
 }

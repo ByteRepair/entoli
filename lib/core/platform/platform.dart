@@ -62,8 +62,8 @@ export "io/platform.dart" if (dart.library.js_interop) "web/platform.dart"
         setupComplete,
         withWritableDir;
 
-// The app's only conditional import: everything platform-varying is resolved
-// here or re-exported from the side that answers it.
+// The app's platform seam: everything platform-varying is resolved here or
+// re-exported from the side that answers it.
 
 /// The agent, wired to what this platform can reach and to whatever the
 /// settings page last wrote. [libraries] is Entoli's commands and agents per

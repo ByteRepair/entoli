@@ -51,7 +51,11 @@ echo "==> llama.cpp $LLAMA_CPP_VERSION"
 (
   cd "$src/llama.cpp-$LLAMA_CPP_VERSION"
   bdir=build-linux
-  if [ -f "$bdir/llama-server" ]; then
+  # What the configure below is a function of: this script (its flags) and the
+  # compilers. A tree configured otherwise is configured again.
+  stamp="$(sha256sum "$here/build-llama.sh" | cut -d' ' -f1) $CC $CXX"
+  if [ -f "$bdir/bin/llama-server" ] &&
+    [ "$(cat "$bdir/.entoli-stamp" 2>/dev/null)" = "$stamp" ]; then
     echo "==> already built, reusing"
   else
     # SPIRV-Headers, which ggml-vulkan's cmake requires at configure time.
@@ -133,22 +137,26 @@ echo "==> llama.cpp $LLAMA_CPP_VERSION"
       -DLLAMA_BUILD_APP=OFF \
       -DLLAMA_BUILD_UI=OFF
     cmake --build "$bdir" -j"$jobs" --target llama-server >/dev/null
+    echo "$stamp" >"$bdir/.entoli-stamp"
   fi
 
   # Built shared and found through `LD_LIBRARY_PATH` — the arrangement
   # `LlamaBinaries.environment` already makes — so the staging copies the
-  # bin/ directory's libraries whole: the server and every libllama-*/libggml*
-  # it names, symlinks preserved, since `NEEDED` carries the soname and a
-  # flattened copy of the real files only is a loader that cannot resolve it.
+  # bin/ directory's runtime libraries: the versioned ones with their soname
+  # symlinks, since `NEEDED` carries the soname and a flattened copy of the
+  # real files only is a loader that cannot resolve it, and the unversioned
+  # real files — the libggml-*.so backends GGML_BACKEND_DL loads by name. The
+  # bare `libllama.so` symlinks are for linking against, not running.
   # The build tree's rpath points back here, and is stripped from what leaves.
   rm -rf "$out"
   mkdir -p "$out"
-  cp -P "$bdir"/bin/lib*.so* "$out/"
+  cp -P "$bdir"/bin/lib*.so.* "$out/"
+  find "$bdir/bin" -maxdepth 1 -type f -name "lib*.so" -exec cp {} "$out/" \;
   cp "$bdir/bin/llama-server" "$out/"
   # One pass over the real files, in the shape build.sh's strip loop is: the
   # soname symlinks beside them are names of the same ELF, and walking them
   # would read each library once per name it answers to.
-  real_files=$(find "$out" -type f \( -name "lib*.so.*" -o -name llama-server \))
+  real_files=$(find "$out" -type f \( -name "lib*.so*" -o -name llama-server \))
   echo "$real_files" | xargs strip
   # CMake puts a runpath naming this build tree into what it links; a staged
   # binary must resolve by name out of `LD_LIBRARY_PATH` or nothing else.

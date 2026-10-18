@@ -1,5 +1,7 @@
+import "dart:ffi";
 import "dart:io";
 
+import "package:ffi/ffi.dart";
 import "package:flutter/foundation.dart"
     show kDebugMode, kProfileMode;
 import "package:http/http.dart" as http;
@@ -32,7 +34,7 @@ const _stagingPrefix = ".entoli-";
 ///   from. POSIX takes the name out from under a running binary; the old
 ///   inode keeps this process alive, the new one serves the next launch.
 /// - macOS: the disk image, mounted for the app bundle inside it, which is
-///   copied beside the running bundle and swapped in by two renames.
+///   copied beside the running bundle and swapped in by one atomic rename.
 /// - Windows: the installer, armed to run the moment this process exits —
 ///   a running exe cannot be renamed, and the install is the update.
 ///
@@ -52,6 +54,11 @@ class DesktopUpdater implements AppUpdateHost {
     /// one. Default: walked up from the executable, which only an installed
     /// (or built) bundle sits at the end of.
     String? bundle,
+
+    /// The installed `entoli.exe` this build runs from, or null where it is
+    /// not the MSI's — a `flutter run`, a copied Release folder. Default:
+    /// the executable, where it sits under Program Files\Entoli.
+    String? installedExe,
     this.httpClient,
 
     /// The Windows half only: what starts the exit-armed installer. Default
@@ -63,12 +70,16 @@ class DesktopUpdater implements AppUpdateHost {
     /// debug build — so a test that wants the check to run passes `false`.
     this.debug,
   })  : appImage = appImage ?? Platform.environment["APPIMAGE"],
-        bundle = bundle ?? _resolvedBundle();
+        bundle = bundle ?? _resolvedBundle(),
+        installedExe = installedExe ??
+            installedWindowsExe(
+                Platform.resolvedExecutable, Platform.environment);
 
   final UpdateFlavour flavour;
   final String cacheDir;
   final String? appImage;
   final String? bundle;
+  final String? installedExe;
 
   /// The client the tag check and the download ride, or null to make one per
   /// check and close it there — a client dropped open holds its socket.
@@ -97,7 +108,12 @@ class DesktopUpdater implements AppUpdateHost {
     if (version == null) {
       return logDetail(_tag, () => "the running version is unknown");
     }
-    if (!_located()) {
+    // A trigger wake is a hidden session that exits when its turn is done,
+    // not a launch to spend a download on.
+    if (Platform.environment["ENTOLI_WAKE"] == "1") {
+      return logDetail(_tag, () => "a wake session; not checked");
+    }
+    if (!await _located()) {
       return logDetail(_tag, () => "not running from a $flavourBuild");
     }
     // Leftovers first, before anything of this run's: a check that was killed
@@ -136,13 +152,28 @@ class DesktopUpdater implements AppUpdateHost {
   }
 
   /// Whether this build is anywhere it could be replaced from: Linux without
-  /// an AppImage under it and macOS out of a plain bundle are checks that
-  /// would run at nothing.
-  bool _located() => switch (flavour) {
+  /// an AppImage under it, macOS out of a plain bundle and Windows out of
+  /// anything but the installed folder are checks that would run at nothing.
+  Future<bool> _located() async => switch (flavour) {
         UpdateFlavour.linux => appImage != null,
-        UpdateFlavour.macos => bundle != null,
-        UpdateFlavour.windows => true,
+        UpdateFlavour.macos => bundle != null && await _writableBeside(bundle!),
+        UpdateFlavour.windows => installedExe != null,
       };
+
+  /// Whether the swap could land: a translocated copy, a mounted image or a
+  /// folder this user cannot write would otherwise fetch the whole image on
+  /// every launch and fail at the end.
+  Future<bool> _writableBeside(String bundle) async {
+    if (bundle.contains("/AppTranslocation/")) return false;
+    final probe = Directory(p.join(p.dirname(bundle), _stagingName));
+    try {
+      await probe.create();
+      await probe.delete();
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
 
   String get flavourBuild => switch (flavour) {
         UpdateFlavour.linux => "AppImage",
@@ -215,7 +246,9 @@ class DesktopUpdater implements AppUpdateHost {
     }
   }
 
-  String _cacheStage(String asset) => p.join(cacheDir, "updates", asset);
+  /// Per process, like [_stagingName]: two copies checking at once must not
+  /// write, or arm, the same file.
+  String _cacheStage(String asset) => p.join(cacheDir, "updates", "$pid-$asset");
 
   /// The name the staged file carries under this process, distinct from any
   /// other copy of the app running a check with its own — a file beside the
@@ -248,7 +281,9 @@ class DesktopUpdater implements AppUpdateHost {
       case UpdateFlavour.linux:
         await sweep(p.dirname(appImage!), (name) => name.startsWith(_stagingPrefix));
       case UpdateFlavour.macos:
-        if (bundle != null) {
+        // With the bundle missing, a swap's rollback failed and what is
+        // beside it may be the only copy of the app left.
+        if (bundle != null && await Directory(bundle!).exists()) {
           await sweep(p.dirname(bundle!), (name) => name.startsWith(_stagingPrefix));
         }
       case UpdateFlavour.windows:
@@ -275,6 +310,7 @@ class DesktopUpdater implements AppUpdateHost {
     final parent = p.dirname(running);
     final name = p.basename(running);
     final mount = p.join(cacheDir, "updates", "mount-$pid");
+    var attached = false;
     try {
       await Directory(mount).create(recursive: true);
       final attach = await Process.run("hdiutil", [
@@ -291,6 +327,7 @@ class DesktopUpdater implements AppUpdateHost {
             "hdiutil", ["attach", dmg], attach.stderr.toString(),
             attach.exitCode);
       }
+      attached = true;
       // One app in the image is what a release ships; anything else is not a
       // release this build was made from.
       final sources = [
@@ -314,22 +351,35 @@ class DesktopUpdater implements AppUpdateHost {
         throw StateError("the downloaded bundle has no executable in it");
       }
       final aside = p.join(parent, "${_stagingPrefix}old-$pid", name);
-      await Directory(p.dirname(aside)).create(recursive: true);
-      await Directory(running).rename(aside);
-      try {
-        await Directory(staged).rename(running);
-      } catch (_) {
-        // Between the two renames the location looks empty for the width of
-        // one call. Fail there and the old bundle goes back in, because an
-        // update that aborts must never read as an uninstall.
+      if (_renameSwap(staged, running)) {
+        // The old bundle is now at the staged path; its directory becomes
+        // the aside. Failing that, the sweep takes it under the staging name.
         try {
-          await Directory(aside).rename(running);
+          await Directory(p.dirname(staged)).rename(p.dirname(aside));
         } catch (_) {}
-        rethrow;
+      } else {
+        await Directory(p.dirname(aside)).create(recursive: true);
+        await Directory(running).rename(aside);
+        try {
+          await Directory(staged).rename(running);
+        } catch (_) {
+          // Between the two renames the location is empty. Fail there and
+          // the old bundle goes back in, because an update that aborts must
+          // never read as an uninstall.
+          try {
+            await Directory(aside).rename(running);
+          } catch (error) {
+            // Neither is in place: the discard and the sweep both leave the
+            // two copies alone while the bundle path is missing.
+            logFailure(_tag, "the old bundle could not be put back from "
+                "$aside", error);
+          }
+          rethrow;
+        }
       }
-      // The old build is left for the sweep: a bundle this process may still
-      // lazily read from is taken away a day later, when nothing can be
-      // holding it open, rather than now.
+      // The old build is left for the sweep a day out rather than deleted
+      // now. Nothing here reads it any more: what this process loads from
+      // now on resolves by path, into the new bundle.
       try {
         await Directory(p.join(parent, _stagingName)).delete(recursive: true);
       } catch (_) {}
@@ -338,17 +388,43 @@ class DesktopUpdater implements AppUpdateHost {
         await File(dmg).delete();
       } catch (_) {}
     } finally {
-      try {
-        await Process.run("hdiutil", ["detach", "-quiet", mount]);
-      } catch (_) {}
+      if (attached) await _detach(mount);
       try {
         await Directory(mount).delete();
       } catch (_) {}
     }
   }
 
+  /// hdiutil refuses a detach while anything still holds the volume —
+  /// Spotlight, a ditto just finished — so it is retried, then forced, the
+  /// way make-dmg.sh does.
+  Future<void> _detach(String mount) async {
+    Future<bool> detach(List<String> extra) async {
+      try {
+        final run = await Process.run(
+            "hdiutil", ["detach", "-quiet", ...extra, mount]);
+        if (run.exitCode == 0) return true;
+        if (extra.isNotEmpty) {
+          logFailure(_tag, "the update image would not detach", run.stderr);
+        }
+      } catch (error) {
+        if (extra.isNotEmpty) {
+          logFailure(_tag, "the update image would not detach", error);
+        }
+      }
+      return false;
+    }
+
+    for (var attempt = 0; attempt < 3; attempt++) {
+      if (await detach(const [])) return;
+      await Future<void>.delayed(const Duration(seconds: 2));
+    }
+    await detach(const ["-force"]);
+  }
+
   Future<void> _armInstaller(String msi) async {
-    final script = windowsUpdateCommand(pid, msi);
+    final script =
+        windowsUpdateCommand(pid, msi, p.join(p.dirname(msi), "msi.log"));
     // A final public field does not promote, so the arm goes through a local.
     final arm = spawn;
     if (arm != null) {
@@ -370,7 +446,10 @@ class DesktopUpdater implements AppUpdateHost {
       await File(staged).delete();
     } catch (_) {}
     final roots = <String>[
-      if (flavour == UpdateFlavour.macos && bundle != null)
+      // Not with the bundle missing: the staged copy may be the only app.
+      if (flavour == UpdateFlavour.macos &&
+          bundle != null &&
+          await Directory(bundle!).exists())
         p.join(p.dirname(bundle!), _stagingName),
       if (await Directory(p.join(cacheDir, "updates", "mount-$pid")).exists())
         p.join(cacheDir, "updates", "mount-$pid"),
@@ -387,11 +466,52 @@ class DesktopUpdater implements AppUpdateHost {
 /// then install silently, under RunAs — the consent the user answers at
 /// quit. RunAs is load-bearing, not decorative: silent mode suppresses the
 /// elevation prompt itself, and a per-machine install that cannot ask fails
-/// with "insufficient privileges" and nothing to show for it.
-String windowsUpdateCommand(int pid, String msiPath) =>
-    "Wait-Process -Id $pid -ErrorAction SilentlyContinue; "
-    "Start-Process msiexec.exe -Verb RunAs -ArgumentList '/i', "
-    "'${msiPath.replaceAll("'", "''")}', '/qn', '/norestart'";
+/// with "insufficient privileges" and nothing to show for it. Start-Process
+/// joins -ArgumentList with bare spaces, so the paths carry their own double
+/// quotes; the log at [logPath] is the only trace an install that failed
+/// unattended leaves.
+String windowsUpdateCommand(int pid, String msiPath, String logPath) {
+  String quoted(String path) => "'\"${path.replaceAll("'", "''")}\"'";
+  return "Wait-Process -Id $pid -ErrorAction SilentlyContinue; "
+      "Start-Process msiexec.exe -Verb RunAs -ArgumentList '/i', "
+      "${quoted(msiPath)}, '/qn', '/norestart', '/l*v', ${quoted(logPath)}";
+}
+
+/// [exe] where it is the MSI's install, under Program Files\Entoli (see
+/// tool/windows/entoli.wxs), else null.
+String? installedWindowsExe(String exe, Map<String, String> environment) {
+  for (final root in [environment["ProgramW6432"], environment["ProgramFiles"]]) {
+    if (root == null) continue;
+    final folder = p.windows.join(root, "Entoli").toLowerCase();
+    if (p.windows.isWithin(folder, exe.toLowerCase())) return exe;
+  }
+  return null;
+}
+
+typedef _RenamexNative = Int32 Function(Pointer<Utf8>, Pointer<Utf8>, Uint32);
+typedef _Renamex = int Function(Pointer<Utf8>, Pointer<Utf8>, int);
+
+/// Exchanges [a] and [b] in one step with macOS's renamex_np(RENAME_SWAP),
+/// so no moment has neither in place. False where the call is not there or
+/// refused, which the two-rename path answers.
+bool _renameSwap(String a, String b) {
+  const renameSwap = 0x00000002;
+  try {
+    final renamex = DynamicLibrary.process()
+        .lookupFunction<_RenamexNative, _Renamex>("renamex_np");
+    final from = a.toNativeUtf8();
+    final to = b.toNativeUtf8();
+    try {
+      return renamex(from, to, renameSwap) == 0;
+    } finally {
+      malloc.free(from);
+      malloc.free(to);
+    }
+  } catch (error) {
+    logFailure(_tag, "renamex_np is not available", error);
+    return false;
+  }
+}
 
 /// The `.app` the running build executes from, or null where the executable
 /// is not inside one. Three parents up from the engine, only the last of

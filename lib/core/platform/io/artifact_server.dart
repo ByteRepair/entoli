@@ -1,11 +1,13 @@
 import "dart:convert";
 import "dart:io";
 
+import "package:path/path.dart" as p;
+
 import "../../../domain/artifact_server.dart";
 import "../../../domain/artifact_style.dart";
 import "../../../domain/content_type.dart";
 
-/// Serves [rootDir] over HTTP on a random localhost port. Used on Android,
+/// Serves [rootDir] over HTTP on a random localhost port. Used on the phones,
 /// where the WebView blocks `file://` URLs — even with `setAllowFileAccess(true)`
 /// — so local content is served over `http://` instead, which the WebView allows
 /// without restriction. Stopped by [stop] when the viewer page is disposed.
@@ -32,9 +34,13 @@ class IoArtifactServer implements ArtifactServer {
 
   Future<void> _handle(HttpRequest request) async {
     final path = Uri.decodeComponent(request.uri.path.substring(1));
-    final file = File("$rootDir/${path.isEmpty ? 'index.html' : path}");
+    // Decoding after the URI's dot-segment pass lets `..%2F` through, so the
+    // decoded path is held to [rootDir] here.
+    final resolved =
+        p.normalize(p.join(rootDir, path.isEmpty ? "index.html" : path));
+    final file = File(resolved);
 
-    if (!await file.exists()) {
+    if (!p.isWithin(rootDir, resolved) || !await file.exists()) {
       request.response
         ..statusCode = HttpStatus.notFound
         ..write("Not found: $path");

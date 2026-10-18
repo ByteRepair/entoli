@@ -8,16 +8,15 @@ import android.os.Build
 import android.os.Bundle
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
-import io.flutter.embedding.engine.FlutterEngineCache
 
 class MainActivity : FlutterActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         AppEngine.noteActivityAttached()
         requestNotifications()
-        FilesChannel.receive(this, intent)
-        AssistantChannel.receive(intent)
-        RemindersChannel.receive(this, intent)
+        // A recreated activity is handed the intent it was first launched
+        // with, which was already consumed in the process that has since died.
+        if (savedInstanceState == null) receive(intent)
     }
 
     // The share or the assistant gesture that arrives while the app is already
@@ -25,6 +24,13 @@ class MainActivity : FlutterActivity() {
     // the two apart.
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
+        receive(intent)
+    }
+
+    // Reopened from recents, Android replays the original launch intent; the
+    // share, gesture or tap it carried was dealt with the first time.
+    private fun receive(intent: Intent?) {
+        if (intent == null || (intent.flags and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY) != 0) return
         FilesChannel.receive(this, intent)
         AssistantChannel.receive(intent)
         RemindersChannel.receive(this, intent)
@@ -52,11 +58,7 @@ class MainActivity : FlutterActivity() {
     // Android happened to reclaim the process.
     override fun onDestroy() {
         super.onDestroy()
-        if (isFinishing && !isChangingConfigurations && !ForegroundWork.busy) {
-            val engine = FlutterEngineCache.getInstance().get(AppEngine.ID)
-            FlutterEngineCache.getInstance().remove(AppEngine.ID)
-            engine?.destroy()
-        }
+        if (isFinishing && !isChangingConfigurations && !ForegroundWork.busy) AppEngine.release()
     }
 
     // On launch rather than when a turn first needs one: the service is started

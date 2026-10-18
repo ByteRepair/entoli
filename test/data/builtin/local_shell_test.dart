@@ -571,6 +571,29 @@ void main() {
       expect(resolve("/usr/bin", const {}), isNull);
     });
 
+    test("on Windows: bash.exe off PATH past WSL's, then Git for Windows", () {
+      String? win(String path, Set<String> present) => LocalShell.resolveShell(
+          path: path,
+          isExecutable: present.contains,
+          windows: true,
+          environment: const {
+            "SystemRoot": r"C:\Windows",
+            "ProgramFiles": r"C:\Program Files",
+          });
+
+      expect(
+          win(r"C:\Windows\System32;C:\msys\usr\bin",
+              {r"C:\Windows\System32\bash.exe", r"C:\msys\usr\bin\bash.exe"}),
+          r"C:\msys\usr\bin\bash.exe");
+      expect(win(r"C:\Windows\system32", {r"C:\Windows\system32\bash.exe"}),
+          isNull);
+      expect(win("", {r"C:\Program Files\Git\bin\bash.exe"}),
+          r"C:\Program Files\Git\bin\bash.exe");
+      expect(
+          win(r"D:\Git\cmd", {r"D:\Git\cmd\git.exe", r"D:\Git\bin\bash.exe"}),
+          r"D:\Git\bin\bash.exe");
+    });
+
     test("and a command sent to it anyway fails rather than throwing", () async {
       final result = await LocalShell(driver: ({String? project}) => null)
           .start("echo hi",
