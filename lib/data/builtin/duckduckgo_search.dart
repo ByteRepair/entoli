@@ -93,7 +93,7 @@ class DuckDuckGoSearch extends WebSearch {
 
   /// Parse DuckDuckGo Lite's result table. Each result is three rows: the
   /// title link, the snippet, and the display URL. The actual URL is encoded
-  /// in the redirect's `uddg` query parameter.
+  /// in the redirect's `uddg` query parameter, or is the href itself.
   String _parseResults(String html) {
     final doc = parse(html);
     final links = doc.querySelectorAll("a.result-link");
@@ -122,8 +122,10 @@ class DuckDuckGoSearch extends WebSearch {
 
   String _extractUrl(String href) {
     final match = _uddg.firstMatch(href);
-    if (match == null) return "";
-    return Uri.decodeComponent(match.group(1)!);
+    if (match != null) return Uri.decodeComponent(match.group(1)!);
+    if (href.startsWith("//")) return "https:$href";
+    if (href.startsWith("http://") || href.startsWith("https://")) return href;
+    return "";
   }
 
   /// Strip markup and return the page's readable text. `<script>` and
