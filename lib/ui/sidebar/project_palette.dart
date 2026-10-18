@@ -59,7 +59,9 @@ PaletteAction _createProject(_NewProjectAnswer answer, String? device) =>
     (context, ref) async {
       if (device != null) {
         final hub = ref.read(syncHubProvider);
-        await hub.createRemoteProject(device, answer.name);
+        if (!await hub.createRemoteProject(device, answer.name)) {
+          throw StateError("${answer.name} was not made on $device");
+        }
         final ProjectRef made = (device: device, project: answer.name);
         if (answer.omada || answer.description.trim().isNotEmpty) {
           await hub.writeRemoteProject(
@@ -196,8 +198,13 @@ class _ProjectPaletteState extends ConsumerState<ProjectPalette> {
                   key: const ValueKey(_newPage),
                   omadaByDefault: ref.watch(appSettingsProvider).omadaByDefault,
                   onBack: () => setState(() => _creating = false),
-                  onCreate: (answer) => _pick(_createProject(
-                      answer, ref.read(selectedProjectProvider).device)),
+                  // Made before the palette goes, so the page can say it is
+                  // waiting on a paired device.
+                  onCreate: (answer) async {
+                    await _createProject(
+                        answer, ref.read(selectedProjectProvider).device)(context, ref);
+                    if (context.mounted) Navigator.of(context).pop();
+                  },
                 )
               : KeyedSubtree(key: const ValueKey(_listPage), child: _list(context)),
         ),
@@ -550,7 +557,7 @@ class _NewProject extends StatefulWidget {
 
   final bool omadaByDefault;
   final VoidCallback onBack;
-  final ValueChanged<_NewProjectAnswer> onCreate;
+  final Future<void> Function(_NewProjectAnswer) onCreate;
 
   @override
   State<_NewProject> createState() => _NewProjectState();
@@ -577,11 +584,22 @@ class _NewProjectState extends State<_NewProject> {
     super.dispose();
   }
 
-  void _submit() {
+  bool _making = false;
+
+  Future<void> _submit() async {
     final dir = _dir;
-    if (dir == null) return;
-    widget.onCreate(
-        (name: dir, description: _description.text, omada: _omada));
+    if (dir == null || _making) return;
+    setState(() => _making = true);
+    try {
+      await widget.onCreate(
+          (name: dir, description: _description.text, omada: _omada));
+    } catch (e) {
+      logFailure("palette", "could not create $dir", e);
+      if (!mounted) return;
+      setState(() => _making = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("The project could not be created.")));
+    }
   }
 
   @override
@@ -657,8 +675,11 @@ class _NewProjectState extends State<_NewProject> {
           child: Align(
             alignment: Alignment.centerRight,
             child: FilledButton(
-              onPressed: dir == null ? null : _submit,
-              child: const Text("Create"),
+              onPressed: dir == null || _making ? null : _submit,
+              child: _making
+                  ? const SizedBox.square(
+                      dimension: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                  : const Text("Create"),
             ),
           ),
         ),

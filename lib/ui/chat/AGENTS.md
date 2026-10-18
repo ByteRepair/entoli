@@ -770,7 +770,9 @@ composer's menus are the only place those are named, and nothing names them
 until the character that opens one has been typed, so a user who does not know
 they exist never finds out. Six at most, because everything the user has
 written is a menu and `/` is what opens the menu; with nothing at all in the
-library it says how to reach them instead.
+library it says how to reach them instead. A paired device's project offers
+that device's library, through `promptLibraryOf` like its menus; its badges
+are left off, since they name this device's projects.
 
 **Both rows are `ChipRow`s** (see "Shared UI" in `lib/ui/widgets/AGENTS.md`),
 which is why nothing here snaps when the set changes: picking a badge grows

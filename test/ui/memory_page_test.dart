@@ -5,6 +5,7 @@ import "package:flutter_test/flutter_test.dart";
 
 import "package:agent_chat/data/builtin/memory/store.dart";
 import "package:agent_chat/domain/app_settings.dart";
+import "package:agent_chat/domain/project.dart" show localProject;
 import "package:agent_chat/domain/tristate.dart";
 import "package:agent_chat/providers.dart";
 import "package:agent_chat/ui/memory/memory_page.dart";
@@ -27,7 +28,7 @@ void main() {
   }
 
   Future<void> open(WidgetTester tester) async {
-    await app.pump(tester, MemoryPage(dir: dir, title: "Memories"));
+    await app.pump(tester, MemoryPage(project: localProject(null), title: "Memories"));
     await pumpUntil(tester, find.byType(ListTile));
     await settleIo(tester);
   }
@@ -67,7 +68,7 @@ void main() {
     });
 
     testWidgets("an empty store says so and offers to add one", (tester) async {
-      await app.pump(tester, MemoryPage(dir: dir, title: "Memories"));
+      await app.pump(tester, MemoryPage(project: localProject(null), title: "Memories"));
       await pumpUntil(tester, find.text("No memories yet"));
 
       expect(find.text("Add a memory"), findsOneWidget);

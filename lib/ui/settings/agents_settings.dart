@@ -48,9 +48,13 @@ const _agentFiles = XTypeGroup(
 /// entries its directory, the default's and the bundled presets make up, with
 /// nothing to change any of them, since a turn in it answers to the spec.
 class AgentsSection extends ConsumerStatefulWidget {
-  const AgentsSection({super.key, this.project});
+  const AgentsSection({super.key, this.project, this.device});
 
   final String? project;
+
+  /// The paired device [project] is on, null for this one. Its list is
+  /// that device's, shown and not changed here: the files are there.
+  final String? device;
 
   @override
   ConsumerState<AgentsSection> createState() => _AgentsSectionState();
@@ -65,12 +69,14 @@ class _AgentsSectionState extends ConsumerState<AgentsSection> {
   /// bundled.
   Set<String>? _userAgents;
 
-  bool get _writable => promptsDirUserWritable(widget.project);
+  bool get _writable => _local && promptsDirUserWritable(widget.project);
+
+  bool get _local => widget.device == null;
 
   @override
   void initState() {
     super.initState();
-    _scan();
+    if (_local) _scan();
   }
 
   @override
@@ -313,7 +319,8 @@ class _AgentsSectionState extends ConsumerState<AgentsSection> {
   @override
   Widget build(BuildContext context) {
     final agents =
-        ref.watch(promptLibraryProvider(widget.project)).entries(CompletionKind.agent);
+        ref.watch(promptLibraryOf((device: widget.device, project: widget.project)))
+            .entries(CompletionKind.agent);
     final userAgents = _userAgents;
     final description = !_writable
         ? "System prompts a message can address as @name in this project. "
@@ -382,7 +389,7 @@ class _AgentsSectionState extends ConsumerState<AgentsSection> {
     final owned = inDir == true && _writable;
     return ListTile(
       dense: true,
-      leading: AgentPicture(name: agent.name, project: widget.project),
+      leading: _local ? AgentPicture(name: agent.name, project: widget.project) : null,
       title: Text(agent.name),
       subtitle:
           agent.description == null ? null : Text(agent.description!, maxLines: 1, overflow: TextOverflow.ellipsis),
@@ -414,11 +421,12 @@ class _AgentsSectionState extends ConsumerState<AgentsSection> {
               ),
             true => const SizedBox.shrink(),
           },
-          IconButton(
-            icon: const Icon(Icons.download),
-            tooltip: "Export ${agent.name}",
-            onPressed: () => _export(agent),
-          ),
+          if (_local)
+            IconButton(
+              icon: const Icon(Icons.download),
+              tooltip: "Export ${agent.name}",
+              onPressed: () => _export(agent),
+            ),
         ],
       ),
     );

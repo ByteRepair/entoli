@@ -156,6 +156,7 @@ class _NewChatState extends ConsumerState<_NewChat> {
         onSend: _send,
         onAbort: () {},
         project: project,
+        device: at.device,
         workspace: null,
       );
     }
@@ -275,8 +276,8 @@ class _EmptyChat extends ConsumerWidget {
   });
 
   /// The paired device [project] is on, or null for this one. Its question
-  /// is that device's; the badges and the starters, which name this
-  /// device's projects and library, are left off.
+  /// and starters are that device's; the badges, which name this device's
+  /// projects, are left off.
   final String? device;
 
   /// The project this chat is in, or on the new-chat screen the one the next
@@ -296,10 +297,10 @@ class _EmptyChat extends ConsumerWidget {
     final theme = Theme.of(context);
     final remote = device != null;
     final starters = [
-      if (!remote)
-        for (final kind in CompletionKind.values)
-          for (final option in ref.watch(completionsProvider((project: project, kind: kind))))
-            (kind: kind, option: option),
+      for (final kind in CompletionKind.values)
+        for (final option in ref.watch(completionsProvider(
+            (project: (device: device, project: project), kind: kind))))
+          (kind: kind, option: option),
     ];
     final question = remote
         ? emptyChatQuestionFor(project,
@@ -736,13 +737,13 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
     ref.listen(mirrorChatControllerProvider(widget.chatId), (_, _) => _follow.jumpIfFollowing());
     // One pass over the Remotes list for the two things drawn from it, so the
     // page rebuilds when they change rather than whenever anything does.
-    final (:online, :deviceName) = ref.watch(remoteChatsProvider.select((chats) {
+    final (:online, :deviceName, :deviceId) = ref.watch(remoteChatsProvider.select((chats) {
       for (final entry in chats) {
         if (entry.chatId == widget.chatId) {
-          return (online: entry.online, deviceName: entry.deviceName);
+          return (online: entry.online, deviceName: entry.deviceName, deviceId: entry.deviceId);
         }
       }
-      return (online: false, deviceName: "the home device");
+      return (online: false, deviceName: "the home device", deviceId: null);
     }));
     final chat = view.chat;
     if (chat == null) return _waiting();
@@ -769,6 +770,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
               view: view,
               driver: driver,
               project: chat.state.project,
+              device: deviceId,
               workspace: null)
           : ViewOnlyBar(
               online: online,
@@ -871,6 +873,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
     required ChatViewState view,
     required TurnDriver driver,
     required String? project,
+    String? device,
     VoidCallback? onVoice,
     String? workspace,
     String? workspaceHome,
@@ -888,6 +891,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
                     driver.send(text, attachments: attachments),
                 onAbort: driver.abort,
                 project: project,
+                device: device,
                 onVoice: onVoice,
                 workspace: workspace,
                 workspaceHome: workspaceHome,

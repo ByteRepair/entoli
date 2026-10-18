@@ -6,11 +6,13 @@ import "package:flutter_test/flutter_test.dart";
 
 import "package:agent_chat/data/sync/sync_hub.dart";
 import "package:agent_chat/domain/agent_backend.dart";
+import "package:agent_chat/domain/app_settings.dart";
 import "package:agent_chat/domain/builtin_project.dart";
 import "package:agent_chat/domain/chat_log.dart";
 import "package:agent_chat/domain/chat_meta.dart";
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/domain/permission.dart";
+import "package:agent_chat/domain/project_settings.dart";
 import "package:agent_chat/domain/project.dart";
 import "package:agent_chat/domain/prompt_library.dart";
 import "package:agent_chat/providers.dart";
@@ -124,8 +126,9 @@ void main() {
       expect(find.text("hello"), findsOneWidget);
     });
 
-    // A paired device's project is a new chat there: the composer, and none
-    // of what names this device's own models, projects or library.
+    // A paired device's project is a new chat there: the composer and that
+    // device's library, and none of what names this device's own models or
+    // projects.
     testWidgets("a paired device's project offers a chat there", (tester) async {
       app.dispose();
       app = TestApp.create(remotes: [
@@ -140,7 +143,18 @@ void main() {
               updatedAt: DateTime.utc(2026, 1, 1)),
           online: true,
         ),
-      ]);
+      ], remoteProjects: {
+        (device: "phone", project: null): RemoteProject(
+            ProjectSettings(),
+            AppSettings(),
+            PromptLibrary([
+              PromptDocument(
+                  kind: CompletionKind.skill,
+                  name: "deploy",
+                  frontmatter: const {},
+                  body: ""),
+            ])),
+      });
       app.container
           .read(selectedProjectProvider.notifier)
           .select((device: "phone", project: null));
@@ -150,6 +164,7 @@ void main() {
       expect(find.byType(Composer), findsOneWidget);
       expect(find.byTooltip("Chat settings"), findsNothing);
       expect(find.byType(ChoiceChip), findsNothing);
+      expect(find.widgetWithText(ActionChip, "/deploy"), findsOneWidget);
       expect(app.container.read(selectedChatIdProvider), isNull);
     });
 

@@ -238,6 +238,15 @@ with no protocol change, since the type byte already separates the streams. A
 resource that is not there answers with an empty final chunk, so the asking
 side gets a null rather than a hang.
 
+**The other way, an attachment goes ahead of its prompt.** A mirror's `send`
+streams each attachment's bytes as `resourceChunk`s under a `u`-prefixed id
+nothing asked for, then sends `promptSend` (or `chatStart`) naming them in
+`files`. Messages from one peer arrive in order, so the home device has the
+bytes by the time the prompt names them; it takes them out of the peer's
+`uploads` and hands them to its own `ChatController.send`, which saves them
+under the chat as a local attachment would be. Unclaimed bytes go with the
+connection.
+
 `SyncByteCache` holds what came back, bounded at 64MB of bytes rather than a
 count of entries — an image-heavy conversation is where the megabytes are. It
 belongs to the `SyncHub` rather than to the page that shows them, so a mirror
@@ -352,9 +361,28 @@ listens to controllers for `servedChats`). A page waits on
 sent as a `projectWrite` and waited on until the snapshot comes back — and
 `appSettingsOf(ref)` is the inherited values the rows name, that device's.
 `ProjectSettingsNotifier.replace` is the home end of a write, re-anchoring the
-project's TTLs when that changed. What a paired device keeps as files — the
-path, the workspace, the instructions, skills, agents and memories — is left
-off its page until those are routed too.
+project's TTLs when that changed. The path, the workspace and the instructions
+are left off a paired device's page: they are files there, and nothing here
+reads them.
+
+**Its skills and agents come with it.** Each snapshot is followed by the
+project's resolved library as `projectPrompts`, paged by size, bodies left
+behind: the menus, the starters and the Skills and Agents pages read
+frontmatter alone, and a body is what would not fit. `promptLibraryOf(ref)` is
+`promptLibraryProvider` here and the followed project's library there, so the
+composer's `/` and `@` offer the paired device's set and only that; the field
+holds the project followed while it is up, so the menu is there when `/` is
+typed. What a message names is still resolved where the turn runs, on the home
+device, from its own copy. The pages list a paired device's entries and stop:
+the view page and Export read the files, and importing or editing one is not
+routed.
+
+**Its memories are asked for, not held.** `memoriesProvider(ref)` is a
+`MemoryStore` here and a `RemoteMemories` there, which sends each read or
+change as a `memoryCall` and returns the `memories` that answer it — the list
+after a change, the matches for a search. Nothing is kept between calls; the
+page keeps what it last drew while the device is away, frozen, and reads again
+when it is back.
 
 **Away is frozen, back is read again.** With the device gone the page keeps
 what it last had under an offline strip, its rows absorbed; a reconnect's
@@ -366,9 +394,9 @@ project, take the first prompt and hand this device the lock; it lists the new
 chat before answering `chatStarted`, and messages from one peer arrive in
 order, so the mirror is there to open by the time the id is. The new-chat
 screen shows a spinner until then and the chat page its own until the
-snapshot lands. Its badges, starters, settings and voice are left off for a
-paired device's project, since they name this device's projects, library and
-models.
+snapshot lands. Its badges, settings and voice are left off for a paired
+device's project, since they name this device's projects and models; its
+starters are that device's library.
 
 `remoteChatsProvider` bridges the hub's `ValueNotifier` into Riverpod, and is
 deliberately separate from `chatListProvider`, which reads the local store and

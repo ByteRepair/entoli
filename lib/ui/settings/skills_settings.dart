@@ -48,9 +48,13 @@ const _skillFiles = XTypeGroup(
 /// entries its directory, the default's and the bundled presets make up, with
 /// nothing to change any of them, since a turn in it answers to the spec.
 class SkillsSection extends ConsumerStatefulWidget {
-  const SkillsSection({super.key, this.project});
+  const SkillsSection({super.key, this.project, this.device});
 
   final String? project;
+
+  /// The paired device [project] is on, null for this one. Its list is
+  /// that device's, shown and not changed here: the files are there.
+  final String? device;
 
   @override
   ConsumerState<SkillsSection> createState() => _SkillsSectionState();
@@ -71,12 +75,14 @@ class _SkillsSectionState extends ConsumerState<SkillsSection> {
   /// offer, so the field stays null and means this [SkillsSection.project].
   String? _destination;
 
-  bool get _writable => promptsDirUserWritable(widget.project);
+  bool get _writable => _local && promptsDirUserWritable(widget.project);
+
+  bool get _local => widget.device == null;
 
   @override
   void initState() {
     super.initState();
-    _scan();
+    if (_local) _scan();
   }
 
   @override
@@ -236,7 +242,8 @@ class _SkillsSectionState extends ConsumerState<SkillsSection> {
   @override
   Widget build(BuildContext context) {
     final skills =
-        ref.watch(promptLibraryProvider(widget.project)).entries(CompletionKind.skill);
+        ref.watch(promptLibraryOf((device: widget.device, project: widget.project)))
+            .entries(CompletionKind.skill);
     final userSkills = _userSkills;
     final loaded = {for (final skill in skills) skill.name};
     final notLoaded = [
@@ -306,7 +313,9 @@ class _SkillsSectionState extends ConsumerState<SkillsSection> {
       title: Text(skill.name),
       // No subtitle: the description is the view page's content, and the row
       // is the way in, not a preview of it.
-      onTap: () => _open(skill.name),
+      // The view page and Export read the skill's files, which a paired
+      // device's are not here.
+      onTap: _local ? () => _open(skill.name) : null,
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -333,11 +342,12 @@ class _SkillsSectionState extends ConsumerState<SkillsSection> {
               child: Icon(Icons.warning_amber_rounded,
                   size: 20, color: Theme.of(context).colorScheme.error),
             ),
-          IconButton(
-            icon: const Icon(Icons.download),
-            tooltip: "Export ${skill.name}",
-            onPressed: () => _export(skill.name),
-          ),
+          if (_local)
+            IconButton(
+              icon: const Icon(Icons.download),
+              tooltip: "Export ${skill.name}",
+              onPressed: () => _export(skill.name),
+            ),
         ],
       ),
     );

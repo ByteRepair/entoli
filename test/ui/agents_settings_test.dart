@@ -7,6 +7,7 @@ import "package:agent_chat/data/prompts/agent_pictures.dart"
     show readAgentPicture;
 import "package:agent_chat/data/prompts/prompt_sources.dart" show promptTiers;
 import "package:agent_chat/domain/models.dart";
+import "package:agent_chat/domain/project.dart" show localProject;
 import "package:agent_chat/providers.dart";
 import "package:agent_chat/ui/settings/settings_page.dart";
 import "package:agent_chat/ui/sidebar/project_settings_page.dart"
@@ -363,7 +364,7 @@ void main() {
       expect(
         app.container
             .read(completionsProvider(
-                (project: "my-team", kind: CompletionKind.agent)))
+                (project: localProject("my-team"), kind: CompletionKind.agent)))
             .map((option) => option.name),
         contains("researcher"),
       );
@@ -381,7 +382,7 @@ void main() {
       expect(
         app.container
             .read(completionsProvider(
-                (project: "my-team", kind: CompletionKind.agent)))
+                (project: localProject("my-team"), kind: CompletionKind.agent)))
             .map((option) => option.name),
         isNot(contains("researcher")),
       );
@@ -440,7 +441,7 @@ void main() {
 
       expect(
         app.container
-            .read(completionsProvider((project: "work", kind: CompletionKind.agent)))
+            .read(completionsProvider((project: localProject("work"), kind: CompletionKind.agent)))
             .map((option) => option.name),
         contains("tester"),
       );

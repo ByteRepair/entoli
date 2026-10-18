@@ -52,6 +52,7 @@ import "domain/trigger_runner.dart";
 import "domain/trigger_manager.dart";
 import "domain/rootfs_store.dart";
 import "domain/shell.dart";
+import "data/builtin/memory/store.dart" show Memories, MemoryStore;
 import "data/sync/sync_hub.dart";
 import "data/sync/sync_keep_alive.dart";
 import "domain/temp_chat_ttl.dart";
@@ -1186,10 +1187,12 @@ final attachmentBytesProvider =
 /// knows. The library is per project — `null` is the default, the way it is
 /// everywhere a project is named — so a menu offers what the project it is in
 /// offers, including an override the project ships.
-final completionsProvider =
-    Provider.family<List<CompletionOption>, ({String? project, CompletionKind kind})>(
-        (ref, spec) =>
-            ref.watch(promptLibraryProvider(spec.project)).options(spec.kind));
+///
+/// A paired device's project offers that device's: auto-disposed, so the
+/// follow it holds goes with the menu.
+final completionsProvider = Provider.autoDispose
+    .family<List<CompletionOption>, ({ProjectRef project, CompletionKind kind})>(
+        (ref, spec) => ref.watch(promptLibraryOf(spec.project)).options(spec.kind));
 
 /// An agent's profile picture, or null where none is set. Named like the
 /// `.md` — `<agents dir>/<name>.png` — and resolved over the same tier walk
@@ -1247,6 +1250,21 @@ NotifierProvider<ProjectSettingsNotifier, ProjectSettings> projectSettingsOf(
 ProviderListenable<AppSettings> appSettingsOf(ProjectRef project) => project.device == null
     ? appSettingsProvider
     : remoteProjectProvider(project).select((p) => p?.app ?? AppSettings());
+
+/// [project]'s skills and agents, on whichever device it is. A paired
+/// device's come without their bodies, which only that device reads.
+ProviderListenable<PromptLibrary> promptLibraryOf(ProjectRef project) =>
+    project.device == null
+        ? promptLibraryProvider(project.project)
+        : remoteProjectProvider(project).select((p) => p?.library ?? PromptLibrary.empty);
+
+/// [project]'s memories, on whichever device it is. A paired device's are
+/// asked for on every read.
+final memoriesProvider = Provider.family<Memories, ProjectRef>((ref, project) {
+  if (project.device != null) return RemoteMemories(ref.watch(syncHubProvider), project);
+  final config = ref.watch(appConfigProvider);
+  return MemoryStore(config.fs, config.memoryDir(project: project.project));
+});
 
 /// Whether Omada runs in [project]: the one rule [omadaFor] resolves — a
 /// built-in's spec, a user project's toggle, the default project false —

@@ -3,6 +3,7 @@ import "package:flutter/services.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../domain/models.dart";
+import "../../domain/project.dart" show ProjectRef;
 import "../../domain/shell.dart";
 import "../../providers.dart";
 import "text_input.dart";
@@ -129,6 +130,7 @@ class CompletionField extends ConsumerStatefulWidget {
     super.key,
     required this.controller,
     this.project,
+    this.device,
     this.decoration,
     this.style,
     this.minLines,
@@ -147,6 +149,9 @@ class CompletionField extends ConsumerStatefulWidget {
   /// default project, the way it is everywhere a project is named. The
   /// composer passes the chat's own; a trigger editor passes the trigger's.
   final String? project;
+
+  /// The paired device [project] is on, null for this one.
+  final String? device;
   final InputDecoration? decoration;
   final TextStyle? style;
   final int? minLines;
@@ -253,9 +258,13 @@ class CompletionFieldState extends ConsumerState<CompletionField> {
   @override
   Widget build(BuildContext context) {
     final token = _token;
+    final ProjectRef project = (device: widget.device, project: widget.project);
+    // Held while the field is up, so a paired device's menu is there by the
+    // time a `/` is typed.
+    if (widget.device != null) ref.watch(promptLibraryOf(project));
     final options = token == null
         ? const <CompletionOption>[]
-        : ref.watch(completionsProvider((project: widget.project, kind: token.kind)));
+        : ref.watch(completionsProvider((project: project, kind: token.kind)));
     final matches = _matching(options, token?.query ?? "");
 
     final field = Shortcuts(

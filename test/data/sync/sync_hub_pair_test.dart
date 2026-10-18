@@ -4,6 +4,7 @@ import "dart:io" show Directory;
 import "dart:typed_data";
 
 import "package:agent_chat/core/config.dart";
+import "package:agent_chat/data/builtin/memory/store.dart";
 import "package:agent_chat/data/local/file_chat_store.dart";
 import "package:agent_chat/data/sync/channel.dart";
 import "package:agent_chat/data/sync/handshake.dart" show HandshakeException;
@@ -16,6 +17,7 @@ import "package:agent_chat/domain/chat_store.dart";
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/domain/project.dart" show ProjectRef;
 import "package:agent_chat/domain/project_settings.dart";
+import "package:agent_chat/domain/prompt_library.dart";
 import "package:agent_chat/domain/sync/devices.dart";
 import "package:agent_chat/domain/sync/identity.dart";
 import "package:agent_chat/domain/sync/protocol.dart";
@@ -711,7 +713,7 @@ void main() {
   group("control", () {
     late _Turns turns;
 
-    setUp(() => home.hub.remoteTurns = turns = _Turns(home.repo)..hub = home.hub);
+    setUp(() => home.hub.remoteTurns = turns = _Turns(home.repo, home.config)..hub = home.hub);
 
     test("asking for a free chat is granted and told to everyone", () async {
       final state = await mirrored();
@@ -779,6 +781,24 @@ void main() {
       await waitForSync(() => turns.prompts.isNotEmpty);
 
       expect(turns.prompts.single, (state.id, "do the thing"));
+    });
+
+    test("the holder's attachments go ahead of its prompt and arrive whole",
+        () async {
+      final state = await mirrored();
+      await away.hub.requestControl(state.id);
+      await waitForSync(() => away.hub.holdsControl(state.id));
+      // Past one chunk, so the pieces have to be put back together.
+      final bytes = Uint8List.fromList(List.generate(70000, (i) => i % 251));
+
+      await away.hub.sendRemotePrompt(state.id, "look", attachments: [
+        Attachment(filename: "a.bin", mimeType: "application/octet-stream", bytes: bytes),
+      ]);
+      await waitForSync(() => turns.prompts.isNotEmpty);
+
+      final sent = turns.attached.single.single;
+      expect((sent.filename, sent.mimeType), ("a.bin", "application/octet-stream"));
+      expect(sent.bytes, bytes);
     });
 
     test("every verb reaches the home device's own controller", () async {
@@ -936,6 +956,49 @@ void main() {
       away.hub.unfollowProject(work);
       expect(away.hub.remoteProject(work), isNull);
       await waitForSync(() => home.hub.servedProjects.value.isEmpty);
+    });
+
+    test("a project's skills and agents come with it, past one message",
+        () async {
+      await home.repo.createProject("work");
+      await mirrored();
+      final ProjectRef work = (device: home.identity.id, project: "work");
+      turns.libraries["work"] = PromptLibrary([
+        for (var i = 0; i < 80; i++)
+          PromptDocument(
+              kind: i.isEven ? CompletionKind.skill : CompletionKind.agent,
+              name: "entry-$i",
+              frontmatter: {"description": "d" * 1000},
+              body: "never sent"),
+      ]);
+
+      away.hub.followProject(work);
+      await waitForSync(
+          () => away.hub.remoteProject(work)?.library.all.length == 80);
+      final skill = away.hub.remoteProject(work)!.library.find(CompletionKind.skill, "entry-0")!;
+      expect(skill.description, "d" * 1000);
+      expect(skill.body, isEmpty);
+
+      // A change at home reaches whoever has it open.
+      turns.libraries["work"] = PromptLibrary.empty;
+      home.hub.publishProject("work");
+      await waitForSync(() => away.hub.remoteProject(work)!.library.all.isEmpty);
+    });
+
+    test("a project's memories are read and changed there", () async {
+      await home.repo.createProject("work");
+      await mirrored();
+      final memories = RemoteMemories(away.hub, (device: home.identity.id, project: "work"));
+      final store = turns.memories("work");
+
+      await memories.add("the build uses pnpm");
+      final [added] = await store.entries();
+      expect(added.text, "the build uses pnpm");
+      await memories.pin(added.id);
+      expect((await memories.entries()).single.pinned, isTrue);
+      expect((await memories.search("pnpm")).single.id, added.id);
+      await memories.delete(added.id);
+      expect(await store.entries(), isEmpty);
     });
 
     test("a project not on the home device is neither read nor written",
@@ -1103,10 +1166,13 @@ void main() {
 /// What the real one does with these is `RemoteTurnDriver`'s; what is being
 /// checked here is that they arrive at all, and only from the holder.
 class _Turns implements RemoteTurns {
-  _Turns(this.repo);
+  _Turns(this.repo, this.config);
 
   /// The writes are the repository's, run for real so their echo comes back.
   final ChatRepository repo;
+  final AppConfig config;
+  final attached = <List<Attachment>>[];
+  final libraries = <String?, PromptLibrary>{};
   final edits = <(String, String, String, Object?)>[];
   final prompts = <(String, String)>[];
   final resumed = <String>[];
@@ -1115,7 +1181,10 @@ class _Turns implements RemoteTurns {
   final answered = <(String, String, List<String?>)>[];
 
   @override
-  void prompt(String chatId, String text) => prompts.add((chatId, text));
+  void prompt(String chatId, String text, {List<Attachment> attachments = const []}) {
+    prompts.add((chatId, text));
+    attached.add(attachments);
+  }
 
   @override
   void resume(String chatId) => resumed.add(chatId);
@@ -1187,6 +1256,13 @@ class _Turns implements RemoteTurns {
 
   @override
   Future<void> deleteProject(String name) => repo.deleteProject(name);
+
+  @override
+  PromptLibrary library(String? project) => libraries[project] ?? PromptLibrary.empty;
+
+  @override
+  Memories memories(String? project) =>
+      MemoryStore(config.fs, config.memoryDir(project: project));
 }
 
 class _Device {

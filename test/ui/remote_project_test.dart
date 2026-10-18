@@ -7,7 +7,9 @@ import "package:agent_chat/domain/app_settings.dart";
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/domain/project.dart" show ProjectRef;
 import "package:agent_chat/domain/project_settings.dart";
+import "package:agent_chat/domain/prompt_library.dart";
 import "package:agent_chat/ui/chat/widgets/view_only_bar.dart" show MirrorStrip;
+import "package:agent_chat/ui/memory/memory_page.dart" show MemoryTile;
 import "package:agent_chat/ui/sidebar/project_settings_page.dart";
 import "package:agent_chat/ui/sidebar/sidebar.dart";
 
@@ -38,7 +40,14 @@ void main() {
           if (answered)
             work: RemoteProject(
                 ProjectSettings(description: "Asked on the desktop", omada: true),
-                AppSettings()),
+                AppSettings(),
+                PromptLibrary([
+                  PromptDocument(
+                      kind: CompletionKind.skill,
+                      name: "deploy",
+                      frontmatter: const {},
+                      body: ""),
+                ])),
         },
       );
 
@@ -62,12 +71,30 @@ void main() {
     await settleIo(tester);
 
     expect(find.text("Asked on the desktop"), findsOneWidget);
-    expect(find.text("Round order"), findsOneWidget);
     expect(find.text("Chats"), findsOneWidget);
-    for (final local in ["Path", "Project workspace", "Instructions", "Project memories"]) {
+    await tester.scrollUntilVisible(find.byType(MemoryTile), 200,
+        scrollable: find.byType(Scrollable).first);
+    await tester.scrollUntilVisible(find.text("Round order"), 200,
+        scrollable: find.byType(Scrollable).first);
+    expect(find.text("Round order"), findsOneWidget);
+    for (final local in ["Path", "Project workspace", "Instructions"]) {
       expect(find.text(local), findsNothing, reason: local);
     }
     expect(find.byType(MirrorStrip), findsNothing);
+  });
+
+  // Its library is the device's: listed, and nothing here to open or export.
+  testWidgets("its skills are the device's, shown and not changed",
+      (tester) async {
+    app = appWith(online: true);
+    await app.pump(tester, const ProjectSettingsPage(project: "work", device: "device-1"));
+    await settleIo(tester);
+
+    await tester.tap(find.text("Skills"));
+    await settleIo(tester);
+    expect(find.widgetWithText(ListTile, "deploy"), findsOneWidget);
+    expect(find.byTooltip("Export deploy"), findsNothing);
+    expect(find.text("Import skill"), findsNothing);
   });
 
   testWidgets("with the device away it is read, not written", (tester) async {

@@ -119,7 +119,7 @@ Future<bool> startChatWith(
   final at = ref.read(selectedProjectProvider);
   if (at.device != null) {
     // Made there, which runs the turn: this device follows it, holding it.
-    final id = await ref.read(syncHubProvider).startRemoteChat(at, text);
+    final id = await ref.read(syncHubProvider).startRemoteChat(at, text, attachments: attachments);
     if (id == null) return false;
     ref.read(selectedChatIdProvider.notifier).select(id);
     return true;
@@ -171,9 +171,10 @@ class _SidebarState extends ConsumerState<Sidebar> {
   /// built-in the halves its spec says it has, plus a settings gear where its
   /// spec says it has a page worth opening; a user's project its settings
   /// page. The gear visibility is one predicate across every kind — see
-  /// `projectHasSettingsPage`.
-  List<Widget> _projectButtons(
-      BuildContext context, WidgetRef ref, String? project) {
+  /// `projectHasSettingsPage`. A paired device's has no workspace here.
+  List<Widget> _projectButtons(BuildContext context, WidgetRef ref, ProjectRef at) {
+    final project = at.project;
+    final local = at.device == null;
     final spec = builtinProjectOf(project);
     Widget workspace() => IconButton(
           icon: const Icon(Icons.folder_outlined),
@@ -198,7 +199,7 @@ class _SidebarState extends ConsumerState<Sidebar> {
           onPressed: () => Navigator.of(context).push(
             MaterialPageRoute(
               builder: (_) => MemoryPage(
-                dir: ref.read(appConfigProvider).memoryDir(),
+                project: (device: at.device, project: null),
                 title: "Memories",
               ),
             ),
@@ -209,13 +210,13 @@ class _SidebarState extends ConsumerState<Sidebar> {
           tooltip: "Project settings",
           onPressed: () => Navigator.of(context).push(
             MaterialPageRoute(
-              builder: (_) => ProjectSettingsPage(project: project!),
+              builder: (_) => ProjectSettingsPage(project: project!, device: at.device),
             ),
           ),
         );
-    if (project == null) return [workspace(), memories()];
+    if (project == null) return [if (local) workspace(), memories()];
     return [
-      if (spec?.sharedWorkspace ?? true) workspace(),
+      if (local && (spec?.sharedWorkspace ?? true)) workspace(),
       if (spec == null || spec.memory != MemoryPolicy.off) memories(),
       if (projectHasSettingsPage(project)) settingsGear(),
     ];
@@ -239,17 +240,7 @@ class _SidebarState extends ConsumerState<Sidebar> {
               child: Row(
                 children: [
                   const Expanded(child: _ProjectMenu()),
-                  if (selected.device == null)
-                    ..._projectButtons(context, ref, selected.project)
-                  else if (projectHasSettingsPage(selected.project))
-                    IconButton(
-                      icon: const Icon(Icons.settings),
-                      tooltip: "Project settings",
-                      onPressed: () => Navigator.of(context).push(MaterialPageRoute(
-                        builder: (_) => ProjectSettingsPage(
-                            project: selected.project!, device: selected.device),
-                      )),
-                    ),
+                  ..._projectButtons(context, ref, selected),
                 ],
               ),
             ),

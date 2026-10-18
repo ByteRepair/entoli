@@ -123,8 +123,8 @@ class ProjectSettingsPage extends ConsumerWidget {
                   // is the button the copy icon used to be — description keeps its
                   // dialog on the tap, workspace and the prompts pages keep their
                   // pushes, and chats states its count without one. A paired device's
-                  // files are there, with no path here: its path, workspace,
-                  // instructions, skills, agents and memories are left off.
+                  // files are there, with no path here: its path, workspace and
+                  // instructions are left off.
                   SettingsCardRow(children: [
                     SettingsCard.copy(
                       icon: Icons.badge_outlined,
@@ -158,24 +158,23 @@ class ProjectSettingsPage extends ConsumerWidget {
                   // told by name. The built-ins' pages are view-only — the sections
                   // gate themselves on the spec — but what they hold is shown, the way
                   // the Memory rows are.
-                  if (!remote) ...[
-                    SettingsCardRow(children: [
-                      if (builtIn?.bundledInstructions == null ||
-                          builtIn?.includesUserInstructions == true)
-                        _ProfileCard(project: project),
-                      _PromptsCard(
-                        project: project,
-                        kind: CompletionKind.skill,
-                        icon: Icons.extension_outlined,
-                      ),
-                      _PromptsCard(
-                        project: project,
-                        kind: CompletionKind.agent,
-                        icon: Icons.smart_toy_outlined,
-                      ),
-                    ]),
-                    const Divider(),
-                  ],
+                  SettingsCardRow(children: [
+                    if (!remote &&
+                        (builtIn?.bundledInstructions == null ||
+                            builtIn?.includesUserInstructions == true))
+                      _ProfileCard(project: project),
+                    _PromptsCard(
+                      at: at,
+                      kind: CompletionKind.skill,
+                      icon: Icons.extension_outlined,
+                    ),
+                    _PromptsCard(
+                      at: at,
+                      kind: CompletionKind.agent,
+                      icon: Icons.smart_toy_outlined,
+                    ),
+                  ]),
+                  const Divider(),
                   SettingsCardRow(children: [
                     _EnvironmentCard(at: at),
                     if (builtIn == null) _PermissionsCard(at: at),
@@ -183,11 +182,7 @@ class ProjectSettingsPage extends ConsumerWidget {
                   const Divider(),
                   if (builtIn == null) ...[
                     _ProjectMemoryRow(at: at),
-                    if (!remote)
-                      MemoryTile(
-                        dir: ref.watch(appConfigProvider).memoryDir(project: project),
-                        title: "Project memories",
-                      ),
+                    MemoryTile(project: at, title: "Project memories"),
                     const Divider(),
                   ],
                   // The Omada rows: the toggle — read-only for a built-in, whose
@@ -543,19 +538,19 @@ class _TempChatTtlRow extends ConsumerWidget {
 /// project's own.
 class _PromptsCard extends ConsumerWidget {
   const _PromptsCard({
-    required this.project,
+    required this.at,
     required this.kind,
     required this.icon,
   });
 
-  final String project;
+  final ProjectRef at;
   final CompletionKind kind;
   final IconData icon;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final count =
-        ref.watch(promptLibraryProvider(project)).entries(kind).length;
+    final project = at.project!;
+    final count = ref.watch(promptLibraryOf(at)).entries(kind).length;
     return SettingsCard(
       icon: icon,
       title: kind.label,
@@ -568,8 +563,8 @@ class _PromptsCard extends ConsumerWidget {
             // is pinned to the bottom of the page rather than one row more
             // of a list here.
             body: switch (kind) {
-              CompletionKind.skill => SkillsSection(project: project),
-              CompletionKind.agent => AgentsSection(project: project),
+              CompletionKind.skill => SkillsSection(project: project, device: at.device),
+              CompletionKind.agent => AgentsSection(project: project, device: at.device),
             },
           ),
         ),

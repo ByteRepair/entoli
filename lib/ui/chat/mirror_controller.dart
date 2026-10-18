@@ -82,11 +82,10 @@ class MirrorChatController extends Notifier<ChatViewState>
 
   SyncHub get _hub => ref.read(syncHubProvider);
 
-  /// Attachments are not sent from a mirror: their bytes would have to cross
-  /// to be saved under a chat on the other side, which is a phase of its own.
+  /// Attachments go ahead of the prompt, and are saved under the chat there.
   @override
   Future<void> send(String text, {List<Attachment> attachments = const []}) =>
-      _hub.sendRemotePrompt(chatId, text);
+      _hub.sendRemotePrompt(chatId, text, attachments: attachments);
 
   @override
   Future<void> resume() => _hub.resumeRemote(chatId);

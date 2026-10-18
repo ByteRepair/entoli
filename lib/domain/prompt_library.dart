@@ -69,6 +69,23 @@ class PromptDocument {
     );
   }
 
+  /// The wire's shape, body left behind: a paired device's menus and lists
+  /// read the frontmatter alone, and a body is what would not fit a message.
+  Map<String, dynamic> toJson() => {
+        "kind": kind.name,
+        "name": name,
+        "frontmatter": frontmatter,
+        "metadata": metadata,
+      };
+
+  factory PromptDocument.fromJson(Map<String, dynamic> json) => PromptDocument(
+        kind: CompletionKind.values.byName(json["kind"] as String),
+        name: json["name"] as String,
+        frontmatter: (json["frontmatter"] as Map).cast<String, String>(),
+        metadata: (json["metadata"] as Map).cast<String, String>(),
+        body: "",
+      );
+
   /// The `.md` source for a document: a `description` frontmatter where there
   /// is one, then the body. The inverse of [parse] for the scalars an agent
   /// editor writes — `description` is the only one, and an empty description
@@ -130,6 +147,9 @@ class PromptLibrary {
       ];
 
   PromptDocument? find(CompletionKind kind, String name) => _byKind[kind]?[name];
+
+  /// Every entry, each kind in turn.
+  List<PromptDocument> get all => [for (final kind in CompletionKind.values) ...entries(kind)];
 }
 
 /// A message that is nothing but `/name` plus arguments runs that skill. The

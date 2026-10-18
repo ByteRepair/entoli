@@ -1,5 +1,6 @@
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
+import "../../data/builtin/memory/store.dart";
 import "../../data/sync/sync_hub.dart";
 import "../../domain/app_settings.dart";
 import "../../domain/chat_meta.dart";
@@ -7,6 +8,7 @@ import "../../domain/chat_repository.dart";
 import "../../domain/models.dart";
 import "../../domain/project.dart" show localProject;
 import "../../domain/project_settings.dart";
+import "../../domain/prompt_library.dart";
 import "../../domain/sync/protocol.dart";
 import "../../providers.dart";
 import "../sidebar/sidebar.dart" show selectedChatIdProvider, selectedProjectProvider;
@@ -42,19 +44,24 @@ class RemoteTurnDriver implements RemoteTurns {
   }
 
   late final ProviderSubscription<AppSettings> _app;
-  final _projects = <String?, ProviderSubscription<ProjectSettings>>{};
+  final _projects = <String?, List<ProviderSubscription<Object>>>{};
 
   void _servedProjects() {
     final served = _hub.servedProjects.value;
     for (final project in _projects.keys.toList()) {
-      if (!served.contains(project)) _projects.remove(project)?.close();
+      if (served.contains(project)) continue;
+      for (final subscription in _projects.remove(project)!) {
+        subscription.close();
+      }
     }
     for (final project in served) {
-      _projects.putIfAbsent(
-        project,
-        () => _ref.listen<ProjectSettings>(projectSettingsProvider(project),
-            (_, _) => _hub.publishProject(project)),
-      );
+      _projects.putIfAbsent(project, () {
+        void publish(_, _) => _hub.publishProject(project);
+        return [
+          _ref.listen<ProjectSettings>(projectSettingsProvider(project), publish),
+          _ref.listen<PromptLibrary>(promptLibraryProvider(project), publish),
+        ];
+      });
     }
   }
 
@@ -123,7 +130,8 @@ class RemoteTurnDriver implements RemoteTurns {
   }
 
   @override
-  void prompt(String chatId, String text) => _of(chatId).send(text);
+  void prompt(String chatId, String text, {List<Attachment> attachments = const []}) =>
+      _of(chatId).send(text, attachments: attachments);
 
   @override
   void resume(String chatId) => _of(chatId).resume();
@@ -231,9 +239,18 @@ class RemoteTurnDriver implements RemoteTurns {
     _ref.invalidate(chatListProvider);
   }
 
+  @override
+  PromptLibrary library(String? project) => _ref.read(promptLibraryProvider(project));
+
+  @override
+  Memories memories(String? project) {
+    final config = _ref.read(appConfigProvider);
+    return MemoryStore(config.fs, config.memoryDir(project: project));
+  }
+
   void dispose() {
     _hub.servedProjects.removeListener(_servedProjects);
-    for (final subscription in _projects.values) {
+    for (final subscription in _projects.values.expand((s) => s)) {
       subscription.close();
     }
     _projects.clear();

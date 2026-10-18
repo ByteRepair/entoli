@@ -146,9 +146,11 @@ sealed class SyncMessage with _$SyncMessage {
     String? retry,
   }) = SyncTurnState;
 
+  /// [files] went ahead as [SyncResourceChunk]s under their ids.
   const factory SyncMessage.promptSend({
     required String chatId,
     required String text,
+    @Default(<SyncFile>[]) List<SyncFile> files,
   }) = SyncPromptSend;
 
   const factory SyncMessage.approvalRespond({
@@ -223,6 +225,7 @@ sealed class SyncMessage with _$SyncMessage {
     required String requestId,
     String? project,
     required String text,
+    @Default(<SyncFile>[]) List<SyncFile> files,
   }) = SyncChatStart;
 
   /// [chatId] is null where no chat was made.
@@ -247,6 +250,34 @@ sealed class SyncMessage with _$SyncMessage {
     required AppSettings app,
   }) = SyncProjectSnapshot;
 
+  /// [project]'s skills and agents, after each snapshot: [PromptDocument]
+  /// JSON, bodies left behind, paged by size while [more].
+  const factory SyncMessage.projectPrompts({
+    String? project,
+    required List<Map<String, dynamic>> documents,
+    @Default(false) bool more,
+  }) = SyncProjectPrompts;
+
+  /// Read or change [project]'s memories: [op] is `list`, `search` (by
+  /// [text]), `add` ([text]), `pin`, `unpin` or `delete` ([id]). Answered by
+  /// [SyncMemories]: what a list or the search reads after it.
+  const factory SyncMessage.memoryCall({
+    required String requestId,
+    String? project,
+    required String op,
+    String? id,
+    String? text,
+  }) = SyncMemoryCall;
+
+  /// [MemoryEntry] JSON, paged by size while [more]; [failed] where the call
+  /// did not go through.
+  const factory SyncMessage.memories({
+    required String requestId,
+    @Default(<Map<String, dynamic>>[]) List<Map<String, dynamic>> entries,
+    @Default(false) bool more,
+    @Default(false) bool failed,
+  }) = SyncMemories;
+
   /// Answered by a [SyncProjectSnapshot].
   const factory SyncMessage.projectWrite({
     String? project,
@@ -262,6 +293,19 @@ sealed class SyncMessage with _$SyncMessage {
 
   factory SyncMessage.fromJson(Map<String, dynamic> json) =>
       _$SyncMessageFromJson(json);
+}
+
+/// An attachment sent with a prompt, its bytes ahead of it under [id].
+@freezed
+abstract class SyncFile with _$SyncFile {
+  const factory SyncFile({
+    required String id,
+    required String filename,
+    required String mimeType,
+  }) = _SyncFile;
+
+  factory SyncFile.fromJson(Map<String, dynamic> json) =>
+      _$SyncFileFromJson(json);
 }
 
 /// One `ask_user` call on the wire. The questions themselves are not sent:

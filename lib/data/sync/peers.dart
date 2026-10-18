@@ -1,4 +1,5 @@
 import "dart:async";
+import "dart:typed_data";
 
 import "package:flutter/foundation.dart";
 
@@ -67,6 +68,9 @@ class LivePeer {
 
   /// This device's projects the peer has open, null for the default one.
   final projectSubscriptions = <String?>{};
+
+  /// Attachment bytes the peer sent ahead of the prompt that names them.
+  final uploads = <String, BytesBuilder>{};
 
   StreamSubscription<Map<String, dynamic>>? pump;
 
