@@ -771,6 +771,7 @@ not a log: when the last consolidation pass ran, written through a rename,
 and a stamp that will not parse reads as never.
 
 `update` replaces a memory's text by appending a record with the same id, and
+writes nothing for an id that is not live (the tool says so), and
 `maintain` is the batch shape the model reports in — drops, replacements and
 new ones, an op on a missing id ignored, a replacement of a missing id
 landing as a new memory rather than a record with a made-up id, so a model

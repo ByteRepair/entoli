@@ -1293,6 +1293,23 @@ void main() {
       expect(entries.single.chat, "chat-2");
     });
 
+    test("memory_update on a deleted id fails and writes nothing", () async {
+      final entry = await store.add("a fact that is wrong");
+      await store.delete(entry.id);
+
+      final client = FakeLlmClient([
+        [fileCall(memoryUpdateToolName, {"id": entry.id, "text": "revived"})],
+        [finish],
+      ]);
+      final events =
+          await agentOver(client, memoryStore: store).run(userMessage("update")).toList();
+
+      final result = events.whereType<ToolResultEvent>().first.result;
+      expect(result.returnCode, isNot(0));
+      expect(result.exceptionInfo, contains("no memory with id ${entry.id}"));
+      expect(await store.entries(), isEmpty);
+    });
+
     test("memory_update refuses a missing argument", () async {
       final client = FakeLlmClient([
         [fileCall(memoryUpdateToolName, {"text": "no id given"})],
