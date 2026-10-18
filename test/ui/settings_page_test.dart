@@ -135,14 +135,14 @@ void main() {
 
     testWidgets("a divider stands where one group ends and another begins",
         (tester) async {
-      useWindow(tester, const Size(1200, 1200));
+      useWindow(tester, const Size(1200, 1300));
       await app.pump(tester, const SettingsPage());
       final panel = find.ancestor(of: tile("General"), matching: find.byType(ListView));
 
       // The whole order, dividers included: the walk of the panel reads it as
       // it is drawn. Scoped to the panel: the settings beside it are dividers
       // of their own. Widened until the whole list fits, since the assertion
-      // is all fifteen of the categories.
+      // is all sixteen of the categories.
       expect(
         tester
             .widgetList<Widget>(find.descendant(
@@ -170,6 +170,7 @@ void main() {
           "Data",
           "─",
           "Welcome",
+          "Shortcuts",
           "About",
         ],
       );

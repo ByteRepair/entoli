@@ -1,9 +1,10 @@
-import "package:flutter/foundation.dart";
 import "package:flutter/material.dart";
 import "package:flutter/services.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
+import "../domain/builtin_project.dart";
 import "chat/chat_page.dart";
+import "shortcuts.dart";
 import "sidebar/project_palette.dart";
 import "sidebar/sidebar.dart";
 import "widgets/nav_drawer.dart";
@@ -30,24 +31,27 @@ class _AppShellState extends ConsumerState<AppShell> {
     super.dispose();
   }
 
-  /// Ctrl+K, or Cmd+K on Apple's platforms, opens the project palette. A
-  /// handler rather than a `Shortcuts` widget: those hear a key only while
-  /// focus is below them, and with nothing in the shell focused it is the
-  /// route's scope, which is above.
+  /// The [AppShortcut]s. A handler rather than a `Shortcuts` widget: those
+  /// hear a key only while focus is below them, and with nothing in the shell
+  /// focused it is the route's scope, which is above.
   bool _key(KeyEvent event) {
-    if (event is! KeyDownEvent || event.logicalKey != LogicalKeyboardKey.keyK) {
-      return false;
-    }
-    final keys = HardwareKeyboard.instance;
-    final apple = defaultTargetPlatform == TargetPlatform.macOS ||
-        defaultTargetPlatform == TargetPlatform.iOS;
-    final chord = apple
-        ? keys.isMetaPressed && !keys.isControlPressed
-        : keys.isControlPressed && !keys.isMetaPressed;
-    if (!chord || keys.isShiftPressed || keys.isAltPressed) return false;
+    if (event is! KeyDownEvent) return false;
+    final shortcut = AppShortcut.of(event);
+    if (shortcut == null) return false;
     // Not over a page pushed on top, the palette itself included.
     if (!(ModalRoute.of(context)?.isCurrent ?? true)) return false;
-    showProjectPalette(context, ref);
+    switch (shortcut) {
+      case AppShortcut.projectPalette:
+        showProjectPalette(context, ref);
+      case AppShortcut.newChat:
+        openNewChat(context, ref);
+      case AppShortcut.newAnonymousChat:
+        openNewChatIn(context, ref, const AnonymousProject().dir);
+      case AppShortcut.newOmadaChat:
+        openNewChatIn(context, ref, omadaBaseProject);
+      case AppShortcut.togglePin:
+        toggleOpenChatPin(ref);
+    }
     return true;
   }
 

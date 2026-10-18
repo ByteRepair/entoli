@@ -134,6 +134,39 @@ void openNewChat(BuildContext context, WidgetRef ref) {
   closeNavDrawer(context);
 }
 
+/// The new-chat screen in [project], a built-in one being the point: the
+/// shortcuts for an anonymous chat and an Omada one.
+void openNewChatIn(BuildContext context, WidgetRef ref, String project) {
+  selectProject(ref, project);
+  closeNavDrawer(context);
+}
+
+/// Pinning ends a temporary chat, which the title bar of the open one says —
+/// so where [open], the write is handed to its controller, or the bar keeps
+/// counting down to an expiry that is no longer there. Only there: reading the
+/// notifier for any other chat builds a controller, and loads a conversation
+/// nobody is looking at.
+Future<void> setChatPinned(WidgetRef ref, ChatState chat, bool pinned,
+    {required bool open}) async {
+  final repo = ref.read(chatRepositoryProvider);
+  final written =
+      await (pinned ? repo.pinChat(chat.id, chat) : repo.unpinChat(chat.id, chat));
+  if (open) {
+    ref.read(chatControllerProvider(chat.id).notifier).applyState(written);
+  }
+  ref.invalidate(chatListProvider);
+}
+
+/// Pin the open chat, or unpin it if it is pinned. Nothing for the new-chat
+/// screen or a mirror, whose state is the home device's.
+Future<void> toggleOpenChatPin(WidgetRef ref) async {
+  final id = ref.read(selectedChatIdProvider);
+  if (id == null || ref.read(isMirroredChatProvider(id))) return;
+  final chat = ref.read(chatControllerProvider(id)).chat?.state;
+  if (chat == null) return;
+  await setChatPinned(ref, chat, !chat.pinned, open: true);
+}
+
 /// Start a chat and say the first thing in it. The new-chat screen's composer
 /// is the one caller: it holds the text, the files and the settings until
 /// there is a chat to put them in, and this is that moment. False is a chat
@@ -662,20 +695,8 @@ class _ChatTile extends ConsumerWidget {
     ref.invalidate(chatListProvider);
   }
 
-  /// Pinning ends a temporary chat, which the title bar of the open one says —
-  /// so the write is handed to its controller, or the bar keeps counting down
-  /// to an expiry that is no longer there. Only where this chat is the open
-  /// one: reading the notifier for any other builds a controller, and loads a
-  /// conversation nobody is looking at.
-  Future<void> _setPinned(WidgetRef ref, bool pinned) async {
-    final repo = ref.read(chatRepositoryProvider);
-    final written =
-        await (pinned ? repo.pinChat(chat.id, chat) : repo.unpinChat(chat.id, chat));
-    if (selected && !remote) {
-      ref.read(chatControllerProvider(chat.id).notifier).applyState(written);
-    }
-    ref.invalidate(chatListProvider);
-  }
+  Future<void> _setPinned(WidgetRef ref, bool pinned) =>
+      setChatPinned(ref, chat, pinned, open: selected && !remote);
 
   /// File a chat elsewhere and follow it: it has just left the list being
   /// shown, and a chat that vanished on being moved reads as a deletion.
