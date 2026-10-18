@@ -334,9 +334,10 @@ The model picker and the workspace are left off a mirror's settings: the
 picker offers this device's providers, and the workspace's files are the
 home device's.
 
-These messages are why the protocol is 2: a build before them drops the link on
-the first frame it cannot parse, mid-session, so the handshake refuses it up
-front with a version error instead. Both devices update together.
+These messages made the protocol 2, and splitting a message across frames
+made it 3: a build on the other framing reads the first piece of a large
+message as a whole one and drops the link, so the handshake refuses it up
+front with a version mismatch instead. Both devices update together.
 
 **A paired device's projects are in the project switcher**, named
 `Device · project` — and a device's default project is the device's name
