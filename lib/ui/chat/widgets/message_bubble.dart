@@ -27,7 +27,6 @@ class MessageBubble extends StatefulWidget {
     super.key,
     required this.chatId,
     required this.message,
-    this.author,
     this.avatar,
     this.entoli = false,
     this.isWaiting = false,
@@ -48,10 +47,6 @@ class MessageBubble extends StatefulWidget {
   final String chatId;
 
   final Message message;
-
-  /// The addressed member to name over the reply, the way a prompt shows
-  /// "You". Null draws nothing. See [Message.author].
-  final String? author;
 
   /// The author's profile picture, drawn beside the name where the message
   /// names an addressed member — the page's bytes are the whole gate. Bytes in
@@ -213,16 +208,16 @@ class _MessageBubbleState extends State<MessageBubble> {
   /// change under one — an edit is a new message, with a new id.
   String? _command;
 
-  void _readCommand() => _command = widget.message.role == MessageRole.user
-      ? shellBypassCommand(widget.message.plainText)
-      : null;
+  /// Whether this prompt runs a callback (`/compact`) rather than asking for
+  /// anything said. Read beside [_command], for the same reasons.
+  bool _wired = false;
 
-  /// Whether this prompt runs a callback rather than asking for anything said
-  /// — a `/skill` flagged `invocation: callback`. A command bubble is a
-  /// command; a callback bubble is a request the app carried out, so it reads
-  /// as one of the things the user said, just not something a model answered.
-  late final bool _wired = widget.message.role == MessageRole.user &&
-      wiredSkillFromText(widget.message.plainText) != null;
+  void _readCommand() {
+    final user = widget.message.role == MessageRole.user;
+    final text = widget.message.plainText;
+    _command = user ? shellBypassCommand(text) : null;
+    _wired = user && wiredSkillFromText(text) != null;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -244,7 +239,7 @@ class _MessageBubbleState extends State<MessageBubble> {
               : theme.colorScheme.surfaceContainerHighest
         ),
       MessageRole.assistant =>
-        (widget.author ?? (widget.entoli ? "Entoli" : null), null),
+        (widget.message.author ?? (widget.entoli ? "Entoli" : null), null),
       MessageRole.tool => ("Tool", theme.colorScheme.tertiaryContainer),
       MessageRole.system => ("System", theme.colorScheme.tertiaryContainer),
     };
@@ -517,37 +512,37 @@ class _MessageBubbleState extends State<MessageBubble> {
         case ToolCallPart(:final toolCall):
           // A question to the user is important; so is a live call and a call
           // that came back non-zero. The rest join the run.
-          if (toolCall.name == askToolName || isLive(i) || failedResult(toolCall.id)) {
+          final result = results[toolCall.id];
+          final important =
+              toolCall.name == askToolName || isLive(i) || failedResult(toolCall.id);
+          final label = _label(switch (toolCall.name) {
+            askToolName => AskLabel(call: toolCall, result: result),
+            "task" => TaskLabel(call: toolCall, result: result),
+            "websearch" || "webfetch" => WebLabel(call: toolCall, result: result),
+            _ when important => ToolLabel(call: toolCall, result: result,
+                running: isLive(i) && widget.message.hasText),
+            _ => DiffTextLabel.forRun(toolCall, result) ??
+                ToolLabel(call: toolCall, result: result),
+          });
+          if (important) {
             flushRun();
-            rows.add(_label(switch (toolCall.name) {
-              askToolName => AskLabel(call: toolCall, result: results[toolCall.id]),
-              "task" => TaskLabel(call: toolCall, result: results[toolCall.id]),
-              "websearch" => WebSearchLabel(call: toolCall, result: results[toolCall.id]),
-              "webfetch" => WebFetchLabel(call: toolCall, result: results[toolCall.id]),
-              _ => ToolLabel(call: toolCall, result: results[toolCall.id],
-                  running: isLive(i) && widget.message.hasText),
-            }));
+            rows.add(label);
             break;
           }
           if (runStart == -1) runStart = i;
-          run.add(_label(switch (toolCall.name) {
-            "task" => TaskLabel(call: toolCall, result: results[toolCall.id]),
-            "websearch" => WebSearchLabel(call: toolCall, result: results[toolCall.id]),
-            "webfetch" => WebFetchLabel(call: toolCall, result: results[toolCall.id]),
-            _ => DiffTextLabel.forRun(toolCall, results[toolCall.id]) ??
-                ToolLabel(call: toolCall, result: results[toolCall.id]),
-          }));
+          run.add(label);
         case ToolResultPart(:final result):
           // Already drawn by the call it answers, unless the call is gone. An
           // orphaned failed result is important; an orphaned success joins the
           // run for the same reason any other success would.
           if (calls.contains(result.callId)) continue;
+          final label = _label(ToolLabel(result: result));
           if (result.returnCode != 0) {
             flushRun();
-            rows.add(_label(ToolLabel(result: result)));
+            rows.add(label);
           } else {
             if (runStart == -1) runStart = i;
-            run.add(_label(ToolLabel(result: result)));
+            run.add(label);
           }
         case FilePart():
           continue;

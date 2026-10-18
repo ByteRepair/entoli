@@ -12,8 +12,7 @@ import "chat_controller.dart";
 /// it on the way out of the app.
 ///
 /// For a trigger pointed at a chat already driving a turn, [send] waits for
-/// that turn before speaking: the room refuses a send mid-turn, and a trigger
-/// fire swallowed by the refusal would be lost — its stamp already moved.
+/// that turn before speaking, so the `turnDone` it awaits after is its own.
 class ChatControllerTriggerTurnDriver implements TriggerTurnDriver {
   ChatControllerTriggerTurnDriver(this._ref);
 

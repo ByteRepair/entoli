@@ -143,11 +143,8 @@ class InstructionsLabel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final files = part.files;
-    // What a single read is named by: the bare name where it is an
-    // instruction file proper, the path when it is anything else — a nested
-    // one is clearer as where it sits.
     final text = switch (files) {
-      [final only] => "Read ${basenameOf(only.path)}",
+      [final only] => "Read ${_basenameOf(only.path)}",
       final several => "Read ${several.length} instruction files",
     };
     return _Label(
@@ -172,14 +169,14 @@ class InstructionsLabel extends StatelessWidget {
 /// What a single file's label names it by: the bare name where it is an
 /// instruction file proper, the path when it is anything else — a nested one
 /// is clearer as where it sits.
-String basenameOf(String path) =>
+String _basenameOf(String path) =>
     p.basename(path) == instructionFileName ? instructionFileName : path;
 
 /// What a recorded decision reads as, on a label's text and in its drawer's
 /// Outcome section. The wording is the shared contract of the two — one
 /// helper so they cannot disagree. Null where the result carries none: a
 /// log from before the field existed, or a call nothing stood in front of.
-String? outcomeText(
+String? _outcomeText(
     PermissionSource? by, List<PermissionTier> tiers, PermissionDecision? decided) {
   final allowed = switch (decided) {
     PermissionDecision.deny => "denied",
@@ -222,7 +219,7 @@ extension on ToolResult {
   /// clause and the drawer's Outcome section. Null where nothing was
   /// recorded, which is the old-log case and the ungated call's.
   String? get permissionOutcome {
-    final wording = outcomeText(decidedBy, decidedTier, decided);
+    final wording = _outcomeText(decidedBy, decidedTier, decided);
     if (wording == null) return null;
     // An old log records who decided but not what — the exit code is the
     // only witness there, and it is right except for the banner answers,
@@ -299,14 +296,7 @@ class DiffTextLabel extends StatelessWidget {
           mono: true,
           sections: _runSections(call, result),
         ),
-        style: TextButton.styleFrom(
-          foregroundColor: theme.colorScheme.onSurfaceVariant,
-          textStyle: theme.textTheme.labelMedium,
-          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-          minimumSize: Size.zero,
-          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-          visualDensity: VisualDensity.compact,
-        ),
+        style: _labelStyle(theme.colorScheme.onSurfaceVariant, theme.textTheme.labelMedium),
         child: SingleChildScrollView(
           scrollDirection: Axis.horizontal,
           child: Column(
@@ -519,7 +509,8 @@ class TaskLabel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final (agent, prompt) = _parse(call.argumentsJson);
+    final agent = stringArg(call.argumentsJson, "agent") ?? "task";
+    final prompt = stringArg(call.argumentsJson, "prompt") ?? "";
     final failed = (result?.returnCode ?? 0) != 0;
     return _Label(
       icon: failed ? Icons.error_outline : Icons.account_tree_outlined,
@@ -538,67 +529,39 @@ class TaskLabel extends StatelessWidget {
       ),
     );
   }
-
-  (String, String) _parse(String? json) {
-    final agent = stringArg(json, "agent") ?? "task";
-    final prompt = stringArg(json, "prompt") ?? "";
-    return (agent, prompt);
-  }
 }
 
-/// A `websearch` call, once it is history. Reads the query out of the call's
-/// arguments and shows the results behind the drawer.
-class WebSearchLabel extends StatelessWidget {
-  const WebSearchLabel({super.key, required this.call, this.result});
+/// A `websearch` or `webfetch` call, once it is history: the query or URL
+/// read out of the call's arguments, and what came back behind the drawer.
+class WebLabel extends StatelessWidget {
+  const WebLabel({super.key, required this.call, this.result});
 
   final ToolCall call;
   final ToolResult? result;
 
   @override
   Widget build(BuildContext context) {
-    final query = stringArg(call.argumentsJson, "query") ?? "";
+    final search = call.name == "websearch";
+    final what = stringArg(call.argumentsJson, search ? "query" : "url") ?? "";
     final failed = (result?.returnCode ?? 0) != 0;
+    final verb = search
+        ? (result == null ? "Searching" : "Searched")
+        : (result == null ? "Fetching" : "Fetched");
     return _Label(
-      icon: failed ? Icons.error_outline : Icons.travel_explore_outlined,
-      text: result == null ? "Searching: $query" : "Searched: $query",
+      icon: failed
+          ? Icons.error_outline
+          : search
+              ? Icons.travel_explore_outlined
+              : Icons.language_outlined,
+      text: "$verb: $what",
       isError: failed,
       onTap: () => showActivitySheet(
         context,
-        title: "Web search",
+        title: search ? "Web search" : "Web fetch",
         mono: true,
         sections: [
-          (label: "Query", body: query, isError: false),
-          (label: "Results", body: result?.output, isError: false),
-          (label: "Error", body: result?.exceptionInfo, isError: true),
-        ],
-      ),
-    );
-  }
-}
-
-/// A `webfetch` call, once it is history. Reads the URL out of the call's
-/// arguments and shows the fetched content behind the drawer.
-class WebFetchLabel extends StatelessWidget {
-  const WebFetchLabel({super.key, required this.call, this.result});
-
-  final ToolCall call;
-  final ToolResult? result;
-
-  @override
-  Widget build(BuildContext context) {
-    final url = stringArg(call.argumentsJson, "url") ?? "";
-    final failed = (result?.returnCode ?? 0) != 0;
-    return _Label(
-      icon: failed ? Icons.error_outline : Icons.language_outlined,
-      text: result == null ? "Fetching: $url" : "Fetched: $url",
-      isError: failed,
-      onTap: () => showActivitySheet(
-        context,
-        title: "Web fetch",
-        mono: true,
-        sections: [
-          (label: "URL", body: url, isError: false),
-          (label: "Content", body: result?.output, isError: false),
+          (label: search ? "Query" : "URL", body: what, isError: false),
+          (label: search ? "Results" : "Content", body: result?.output, isError: false),
           (label: "Error", body: result?.exceptionInfo, isError: true),
         ],
       ),
@@ -641,15 +604,8 @@ class _ActivityGroupState extends State<ActivityGroup> {
               onPressed: () => setState(() => _collapsed = !_collapsed),
               icon: Icon(_collapsed ? Icons.expand_more : Icons.expand_less, size: 16),
               label: Text(_collapsed ? "Expand activities" : "Collapse activities"),
-              style: TextButton.styleFrom(
-                foregroundColor: theme.colorScheme.onSurfaceVariant,
-                textStyle: (theme.textTheme.labelMedium ?? const TextStyle())
-                    .copyWith(fontWeight: FontWeight.w600),
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                minimumSize: Size.zero,
-                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                visualDensity: VisualDensity.compact,
-              ),
+              style: _labelStyle(theme.colorScheme.onSurfaceVariant,
+                  theme.textTheme.labelMedium?.copyWith(fontWeight: FontWeight.w600)),
             ),
           ),
           if (!_collapsed) ...widget.children,
@@ -660,11 +616,9 @@ class _ActivityGroupState extends State<ActivityGroup> {
 }
 
 /// An `artifact` call, once it is history: a prominent card the user taps to
-/// open the page the model rendered. Not a slim [ToolLabel] the way the
-/// original was: an artifact is output the user came for, not background
-/// activity, so it is drawn as the one thing in the conversation worth
-/// reaching for. The artifact's identity is in the part, not the tool call,
-/// so this reads an [ArtifactPart] rather than a [ToolCall].
+/// open the page the model rendered. Output the user came for rather than
+/// background activity, so not a slim [ToolLabel]. The artifact's identity is
+/// in the part, not the tool call, so this reads an [ArtifactPart].
 class ArtifactLabel extends ConsumerWidget {
   const ArtifactLabel({
     super.key,
@@ -681,87 +635,25 @@ class ArtifactLabel extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
-    final label = title.isEmpty ? "View artifact" : title;
-    return Align(
-      alignment: Alignment.centerLeft,
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 420),
-        child: Material(
-          color: scheme.primaryContainer,
-          borderRadius: BorderRadius.circular(16),
-          clipBehavior: Clip.antiAlias,
-          child: InkWell(
-            onTap: () => ref
-                .read(linkOpenerProvider)
-                .openArtifact(context, chatId, artifactId, entryFile: entryFile, title: title),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-              child: Row(
-                children: [
-                  Container(
-                    width: 40,
-                    height: 40,
-                    decoration: BoxDecoration(
-                      color: scheme.onPrimaryContainer.withValues(alpha: 0.12),
-                      shape: BoxShape.circle,
-                    ),
-                    alignment: Alignment.center,
-                    child: Icon(
-                      Icons.insert_chart_outlined,
-                      size: 20,
-                      color: scheme.onPrimaryContainer,
-                    ),
-                  ),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          "Artifact",
-                          style: theme.textTheme.labelSmall?.copyWith(
-                            color: scheme.onPrimaryContainer.withValues(alpha: 0.75),
-                            letterSpacing: 0.5,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          label,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: theme.textTheme.titleSmall?.copyWith(
-                            color: scheme.onPrimaryContainer,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Icon(
-                    Icons.open_in_new,
-                    size: 18,
-                    color: scheme.onPrimaryContainer.withValues(alpha: 0.7),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
+    final scheme = Theme.of(context).colorScheme;
+    return _OutputCard(
+      kind: "Artifact",
+      label: title.isEmpty ? "View artifact" : title,
+      icon: Icons.insert_chart_outlined,
+      action: Icons.open_in_new,
+      background: scheme.primaryContainer,
+      foreground: scheme.onPrimaryContainer,
+      onTap: () => ref
+          .read(linkOpenerProvider)
+          .openArtifact(context, chatId, artifactId, entryFile: entryFile, title: title),
     );
   }
 }
 
-/// A `create_skill` call, once it is history: a prominent card the user taps
-/// to review and install the skill the model drafted. Mirrors [ArtifactLabel]:
-/// a skill offered for install is output the user came for, not background
-/// activity, so it breaks an activity run the way an artifact does.
-class SkillInstallLabel extends ConsumerWidget {
+/// A `create_skill` call, once it is history: a card the user taps to review
+/// and install the skill the model drafted. Breaks an activity run the way an
+/// artifact does, for the same reason.
+class SkillInstallLabel extends StatelessWidget {
   const SkillInstallLabel({
     super.key,
     required this.chatId,
@@ -774,20 +666,59 @@ class SkillInstallLabel extends ConsumerWidget {
   final String title;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return _OutputCard(
+      kind: "Skill",
+      label: title.isEmpty ? "Install skill" : title,
+      icon: Icons.extension,
+      action: Icons.install_desktop,
+      background: scheme.secondaryContainer,
+      foreground: scheme.onSecondaryContainer,
+      onTap: () => Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) =>
+              SkillInstallPreviewPage(chatId: chatId, installId: installId),
+        ),
+      ),
+    );
+  }
+}
+
+/// The card [ArtifactLabel] and [SkillInstallLabel] are drawn as.
+class _OutputCard extends StatelessWidget {
+  const _OutputCard({
+    required this.kind,
+    required this.label,
+    required this.icon,
+    required this.action,
+    required this.background,
+    required this.foreground,
+    required this.onTap,
+  });
+
+  final String kind;
+  final String label;
+  final IconData icon;
+  final IconData action;
+  final Color background;
+  final Color foreground;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
-    final label = title.isEmpty ? "Install skill" : title;
     return Align(
       alignment: Alignment.centerLeft,
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 420),
         child: Material(
-          color: scheme.secondaryContainer,
+          color: background,
           borderRadius: BorderRadius.circular(16),
           clipBehavior: Clip.antiAlias,
           child: InkWell(
-            onTap: () => _openPreview(context),
+            onTap: onTap,
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
               child: Row(
@@ -796,15 +727,11 @@ class SkillInstallLabel extends ConsumerWidget {
                     width: 40,
                     height: 40,
                     decoration: BoxDecoration(
-                      color: scheme.onSecondaryContainer.withValues(alpha: 0.12),
+                      color: foreground.withValues(alpha: 0.12),
                       shape: BoxShape.circle,
                     ),
                     alignment: Alignment.center,
-                    child: Icon(
-                      Icons.extension,
-                      size: 20,
-                      color: scheme.onSecondaryContainer,
-                    ),
+                    child: Icon(icon, size: 20, color: foreground),
                   ),
                   const SizedBox(width: 14),
                   Expanded(
@@ -813,10 +740,9 @@ class SkillInstallLabel extends ConsumerWidget {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Text(
-                          "Skill",
+                          kind,
                           style: theme.textTheme.labelSmall?.copyWith(
-                            color: scheme.onSecondaryContainer
-                                .withValues(alpha: 0.75),
+                            color: foreground.withValues(alpha: 0.75),
                             letterSpacing: 0.5,
                             fontWeight: FontWeight.w600,
                           ),
@@ -827,7 +753,7 @@ class SkillInstallLabel extends ConsumerWidget {
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: theme.textTheme.titleSmall?.copyWith(
-                            color: scheme.onSecondaryContainer,
+                            color: foreground,
                             fontWeight: FontWeight.w600,
                           ),
                         ),
@@ -835,27 +761,11 @@ class SkillInstallLabel extends ConsumerWidget {
                     ),
                   ),
                   const SizedBox(width: 8),
-                  Icon(
-                    Icons.install_desktop,
-                    size: 18,
-                    color: scheme.onSecondaryContainer.withValues(alpha: 0.7),
-                  ),
+                  Icon(action, size: 18, color: foreground.withValues(alpha: 0.7)),
                 ],
               ),
             ),
           ),
-        ),
-      ),
-    );
-  }
-
-  void _openPreview(BuildContext context) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => SkillInstallPreviewPage(
-          chatId: chatId,
-          installId: installId,
         ),
       ),
     );
@@ -890,18 +800,21 @@ class _Label extends StatelessWidget {
         onPressed: onTap,
         icon: iconWidget ?? Icon(icon, size: 15),
         label: Text(text),
-        style: TextButton.styleFrom(
-          foregroundColor: color,
-          textStyle: theme.textTheme.labelMedium,
-          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-          minimumSize: Size.zero,
-          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-          visualDensity: VisualDensity.compact,
-        ),
+        style: _labelStyle(color, theme.textTheme.labelMedium),
       ),
     );
   }
 }
+
+/// The frameless, one-line button every label above a reply is drawn as.
+ButtonStyle _labelStyle(Color color, TextStyle? text) => TextButton.styleFrom(
+      foregroundColor: color,
+      textStyle: text,
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      minimumSize: Size.zero,
+      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      visualDensity: VisualDensity.compact,
+    );
 
 typedef ActivitySection = ({String? label, String? body, bool isError});
 
