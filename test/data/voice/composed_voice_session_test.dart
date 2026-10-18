@@ -26,8 +26,6 @@ class _FakeListener implements Listener {
     if (!on && finish) finished++;
   }
 
-
-
   @override
   Future<void> dispose() async {
     disposed = true;
@@ -169,17 +167,19 @@ void main() {
       await session.dispose();
     });
 
-    test("speak and stopSpeaking reach the speaker", () async {
+    test("speak, stopSpeaking and dispose reach the halves", () async {
       final listener = _FakeListener();
       final speaker = _FakeSpeaker();
       final session = ComposedVoiceSession(listener, speaker);
 
       await session.speak("a sentence");
       await session.stopSpeaking();
+      await session.dispose();
 
       expect(speaker.spoken, ["a sentence"]);
       expect(speaker.stopCount, 1);
-      await session.dispose();
+      expect(listener.disposed, isTrue);
+      expect(speaker.disposed, isTrue);
     });
 
     test("with no listener, level is a dead notifier and setListening is a no-op",
@@ -191,17 +191,5 @@ void main() {
       await session.setListening(false); // does not throw
       await session.dispose();
     });
-
-    test("dispose disposes both halves", () async {
-      final listener = _FakeListener();
-      final speaker = _FakeSpeaker();
-      final session = ComposedVoiceSession(listener, speaker);
-
-      await session.dispose();
-
-      expect(listener.disposed, isTrue);
-      expect(speaker.disposed, isTrue);
-    });
   });
-
 }

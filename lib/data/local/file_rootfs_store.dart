@@ -51,21 +51,8 @@ class FileRootfsStore extends RootfsStore {
     return File(p.join(dir, _marker)).existsSync() ? dir : null;
   }
 
-  /// Read off the disk rather than off the catalog, so a distribution the
-  /// catalog has since renamed still shows as taking up the space it takes up.
   @override
-  Future<Set<String>> installed() async {
-    final dir = Directory(root);
-    if (!await dir.exists()) return const {};
-    final out = <String>{};
-    await for (final entry in dir.list()) {
-      if (entry is! Directory) continue;
-      if (await File(p.join(entry.path, _marker)).exists()) {
-        out.add(p.basename(entry.path));
-      }
-    }
-    return out;
-  }
+  Future<Set<String>> installed() => markedDirs(root, _marker);
 
   /// A rootfs that hosted a session contains proot's mode-0000 bind stubs,
   /// which `dart:io` cannot list — see `tree_ops.dart` — so the removal goes
@@ -96,23 +83,13 @@ class FileRootfsStore extends RootfsStore {
           final dir = Directory(directoryFor(rootfs.id))..createSync(recursive: true);
           final archive = p.join(dir.path, "_rootfs.tar.gz");
 
-          run.report(DownloadProgress(received: 0, total: image.bytes));
-          // Hashed on the way past rather than by reading the file back: it is
-          // the same bytes, and a phone reads them slowly.
-          final hash = _Sha256Sink();
-          final hashing = sha256.startChunkedConversion(hash);
-          await run.fetch(
-            url: image.url,
-            to: archive,
-            total: image.bytes,
-            watch: hashing,
-          );
-          hashing.close();
+          final digest =
+              await run.fetchSha256(url: image.url, to: archive, total: image.bytes);
           if (run.cancelled) return;
           // Before a byte of it is unpacked, let alone run. Everything in here
           // becomes a program this device will execute, so arriving is not the
           // same as being what was asked for.
-          if ("${hash.digest}" != image.sha256) {
+          if (digest != image.sha256) {
             throw StateError(
               "The download did not match what ${rootfs.name} ${rootfs.version} was "
               "checked to be, so nothing was installed.",
@@ -137,6 +114,35 @@ class FileRootfsStore extends RootfsStore {
   /// `/system/bin/tar`, so this is one call through it.
   static Future<ProcessResult> _systemTar(String archive, String into) =>
       runTar(["-xzf", archive, "-C", into]);
+}
+
+/// The ids under [root] whose directory holds [marker] — read off the disk
+/// rather than the catalog, so an entry the catalog has since renamed still
+/// shows as taking up the space it takes up.
+Future<Set<String>> markedDirs(String root, String marker) async {
+  final dir = Directory(root);
+  if (!await dir.exists()) return const {};
+  final out = <String>{};
+  await for (final entry in dir.list()) {
+    if (entry is Directory && await File(p.join(entry.path, marker)).exists()) {
+      out.add(p.basename(entry.path));
+    }
+  }
+  return out;
+}
+
+extension DownloadRunSha256 on DownloadRun {
+  /// [fetch] one file and answer its SHA-256 in hex, hashed on the way past
+  /// rather than by reading back what may be gigabytes.
+  Future<String> fetchSha256(
+      {required String url, required String to, required int total}) async {
+    report(DownloadProgress(received: 0, total: total));
+    final hash = _Sha256Sink();
+    final hashing = sha256.startChunkedConversion(hash);
+    await fetch(url: url, to: to, total: total, watch: hashing);
+    hashing.close();
+    return "${hash.digest}";
+  }
 }
 
 /// Where the hash of the download lands. `package:convert` has one of these and

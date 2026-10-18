@@ -120,29 +120,34 @@ void main() {
     expect(Directory(config.syncDir).existsSync(), isTrue);
   });
 
-  test("a rootfs directory is left out of the backup", () async {
-    // A per-project rootfs is a re-fetchable Linux tree that lives under the
-    // data dir, and the one a built-in with rootfs isolation puts there holds
-    // proot's mode-0000 bind stubs — see `tree_ops.dart`. The walker cannot
-    // list those, so `rootfs/` is skipped the way `sync/` is.
+  test("sync/ and a project's rootfs/ are left out, same-named workspace folders are not",
+      () async {
+    write("sync/secrets.json",
+        jsonEncode({"provider-keys": base64Encode(utf8.encode('{"a":"sk-secret"}'))}));
+    // A mode-0000 stub, as proot leaves it on the host: the walker cannot list it.
     final rootfs = Directory(
         "${config.projectDir(project: "byte-repair")}/rootfs/alpine/opt/skills-bundled");
     rootfs.createSync(recursive: true);
-    // The stub: a mode-0000 directory, as proot leaves it on the host.
     Process.runSync("chmod", ["0000", rootfs.path]);
     addTearDown(() => Process.runSync("chmod", ["-R", "u+rwX", rootfs.path]));
+    write("projects/default/workspace/sync/notes.txt", "mine");
+    write("projects/default/workspace/rootfs/notes.txt", "mine");
 
-    final a = await archive();
+    final zip = await archive();
 
-    // No member names anything under the rootfs.
-    expect(a.files.where((f) => f.name.contains("rootfs/")), isEmpty);
+    for (final member in zip.files) {
+      if (member.isDirectory) continue;
+      expect(String.fromCharCodes(member.readBytes()!),
+          isNot(contains("sk-secret")), reason: member.name);
+    }
+    expect(zip.files.where((f) => f.name.startsWith("sync/")), isEmpty);
+    expect(zip.files.where((f) => f.name.startsWith("projects/byte-repair/rootfs")),
+        isEmpty);
+    expect(zip.findFile("projects/default/workspace/sync/notes.txt"), isNotNull);
+    expect(zip.findFile("projects/default/workspace/rootfs/notes.txt"), isNotNull);
   });
 
   test("a restore clears a rootfs with mode-0000 stubs via deleteTree", () async {
-    // The latent half of the same bug: a restore wipes the data dir first, and
-    // a plain `Directory.delete(recursive: true)` dies on a mode-0000 stub the
-    // way the walker did. `deleteTree` is the io side's `removeTree`, which
-    // `chmod`s past them.
     final rootfs = Directory(
         "${config.projectDir(project: "byte-repair")}/rootfs/alpine/opt/skills");
     rootfs.createSync(recursive: true);
@@ -156,8 +161,6 @@ void main() {
       if (err != null) throw Exception("could not delete $path: $err");
     }
 
-    // Without `deleteTree` this throws on the stub; with it, `removeTree`
-    // `chmod`s past it and the restore completes.
     await restoreBackup(config, backup, deleteTree: deleteTree);
 
     expect(rootfs.existsSync(), isFalse);
@@ -230,24 +233,5 @@ void main() {
   test("the filename carries the day and the time", () {
     expect(backupFilename(DateTime(2026, 8, 18, 9, 5)),
         "entoli-backup-2026-08-18-0905.zip");
-  });
-
-  test("no key material rides in the archive", () async {
-    // A provider key lives only in the secret store, and the store's
-    // directory is the one a backup skips — so a backup can be shared
-    // without carrying credentials.
-    write("sync/secrets.json",
-        jsonEncode({"provider-keys": base64Encode(utf8.encode('{"a":"sk-secret"}'))}));
-
-    final zip = ZipDecoder().decodeBytes(await writeBackup(config));
-
-    // Every member decoded, the same idiom the tests above use: a key never
-    // rides in the archive, under any name.
-    for (final member in zip.files) {
-      if (member.isDirectory) continue;
-      expect(String.fromCharCodes(member.readBytes()!),
-          isNot(contains("sk-secret")), reason: member.name);
-    }
-    expect(zip.findFile("sync/secrets.json"), isNull);
   });
 }

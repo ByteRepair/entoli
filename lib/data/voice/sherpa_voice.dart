@@ -45,14 +45,9 @@ class SherpaVoice extends Voice {
     return composeSession(listener, sherpaSpeaker(speech, speaker));
   }
 
-  /// The sherpa listening half for one recognition model. Shared with
-  /// `AndroidVoice`, which holds a [SherpaVoice] and composes one when a
-  /// downloaded model rather than the system recognizer is what was picked.
-  ///
-  /// Everything that can refuse, before the worker is spawned: a spawn
-  /// returns as soon as the isolate has sent its port back, which is
-  /// before it has loaded its model, so a refusal after this point is a
-  /// hundred megabytes read off a disk and freed again.
+  /// The sherpa listening half for one recognition model; `AndroidVoice` uses
+  /// it too. Everything that can refuse runs before the worker is spawned,
+  /// which would otherwise load a hundred megabytes only to free them.
   Future<SherpaListener> sherpaListener(RecognitionModel recognition) async {
     final listenDir = await _store.directoryOf(recognition);
     if (listenDir == null) throw StateError("${recognition.name} is not downloaded.");
@@ -96,12 +91,8 @@ String get _speechDir => p.join(Directory.systemTemp.path, "entoli-speech");
 /// recognizer, in one worker isolate. The gate, the level and the event stream
 /// are [MicrophoneListener]'s; what is here is the recorder and the worker.
 ///
-/// **Silero says whether it is a voice, not whose.** A television two rooms
-/// away is speech to it, and so was a turn — the same complaint the system
-/// recogniser answered with the gate, arriving here for the same reason. So
-/// this measures what it hands over: one reading per detector window, which is
-/// 32 ms of audio whatever size the platform's chunks are, on the [decibels]
-/// scale rather than the service's.
+/// Silero says whether it is a voice, not whose, so this feeds the gate one
+/// [decibels] reading per 32 ms detector window.
 class SherpaListener extends MicrophoneListener {
   SherpaListener(this._recorder, this._worker) : super(LoudnessGate()) {
     _worker.messages.listen(_fromWorker);
@@ -206,9 +197,7 @@ class SherpaListener extends MicrophoneListener {
 /// to a temp directory and played through `audioplayers`. [SpeechSilent] is
 /// emitted when the queue has drained and nothing is pending; [SpeechFailed]
 /// once the engine rather than the sentence is what failed — see
-/// [SpeechFailures], which is the system synthesiser's rule and now this one's
-/// too. Before it, one sentence a voice would not say, or one wav the player
-/// refused, ended voice mode.
+/// [SpeechFailures].
 class SherpaSpeaker implements Speaker {
   SherpaSpeaker(this._worker) {
     _worker.messages.listen(_fromWorker);

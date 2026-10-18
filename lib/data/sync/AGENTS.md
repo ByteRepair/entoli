@@ -12,7 +12,7 @@ types/prompts/approves.
 | Passive eavesdropping (Wi-Fi, ISP) | DTLS (mandatory in WebRTC, no opt-out) + app-layer ChaCha20-Poly1305 on every message. Defense in depth: a libwebrtc regression leaks nothing readable. |
 | Malicious signaling relay / TURN | Relays shuttle opaque ciphertext. After the handshake everything is AEAD — chat records, titles, even signaling envelopes — under keys the relay never sees. |
 | MITM during pairing | The pairing secret travels out-of-band (QR / typed code, 128-bit). The handshake mixes it into HKDF over the full transcript (psk, both ephemeral X25519 keys, both Ed25519 identity keys). Both screens show the resulting SAS; an altered key changes it visibly. |
-| Impersonation on reconnect | Each device has a persistent Ed25519 keypair. Peer keys are pinned in `devices.json`; reconnects verify the peer's identity via signed transcript and `requirePeerId` refuses a different key. |
+| Impersonation on reconnect | Each device has a persistent Ed25519 keypair. Peer keys are pinned in `devices.json`; reconnects verify the peer's identity via signed transcript, the handshake refuses an id that is not the hash of the signing key, and `requirePeerId` refuses a different key. |
 | Stolen/replayed pairing payload | Pairing secrets are single-use for fresh pairs; reconnect tokens are derived per-pair. Channel keys are per-connection via ephemeral X25519. |
 | Message injection/replay/ordering | AEAD nonces are monotonic per-direction counters; a replayed or reordered frame fails its MAC. Role enforcement at dispatch disconnects on violation. |
 | Compromised paired device | Devices are individually revocable. Mirrors are RAM-only on the viewing device — never written to the data dir, so never in backups or IndexedDB. |
@@ -353,8 +353,6 @@ The home device says so too: `drivenChats` is chat id to the name of the device
 driving it, and the local chat page draws it as a title line. Prompts arriving
 that nobody here typed are otherwise unexplained.
 
-### Testing it
-
 ### The pairing secret is not a valid base64 length
 
 `generatePsk` is 32 random bytes as base64url with the padding stripped, so a
@@ -376,24 +374,15 @@ ignores where the view starts, so the counter came out of whatever happened to
 be in front of it. A loopback channel hands back freshly allocated lists at
 offset zero, where the two spellings agree.
 
-**Nothing may be awaited between the decrypt loop starting and the pump being
-attached.** `channel.listen()` starts decrypting into a broadcast stream, so
-anything arriving before there is a listener is dropped rather than queued.
-The subscription therefore goes on *first* — before the codes-matched gate,
-which is the widest window there could be, since it waits for a person. The
-other side sends the moment *its* human has confirmed, which can be a long
-time before ours has. What arrives before this side has agreed is held rather
-than handled: a welcome applied before the codes matched would leave mirrors
-behind from a pairing that was then refused.
-
-That one subscription is attached before the hello goes out, and
-the hello is read off it rather than through a second `firstWhere`. Both sides
-answer the moment they have the other's hello and send their welcome straight
-after, and the stream is broadcast — so subscribing after the send, or
-awaiting anything between the reply and the pump, drops whichever message
-lands in the gap. That gap is a microtask on a loopback channel — where it
-never once opened — and a whole turn of the event loop on a real one, where it
-opened every time.
+**Nothing the peer sends may be dropped before this side listens.** The other
+side sends the moment *its* human has confirmed the codes, which can be long
+before ours has. `SecureChannel.incoming` is single-subscription so it buffers
+until the pump attaches, and the hello is read off that one subscription
+rather than a second `firstWhere`. A broadcast stream here dropped whatever
+landed in the gap — a microtask on loopback, a whole event-loop turn on
+WebRTC. What arrives before this side has agreed is held rather than handled:
+a welcome applied before the codes matched would leave mirrors behind from a
+pairing that was then refused.
 
 `SyncHub.establishForTest` is the seam: it runs the shared tail of every route
 — handshake, codes-matched gate, hello, filing the peer — over a `ByteChannel`

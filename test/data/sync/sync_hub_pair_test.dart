@@ -571,6 +571,19 @@ void main() {
         ["m1", "r1"]);
   });
 
+  test("a redial over a connection not yet seen dead stays online", () async {
+    final first = loopbackPair();
+    await pair(first.$1, first.$2);
+    final second = loopbackPair();
+    await pair(second.$1, second.$2,
+        knownToHome: away.identity.id, knownToAway: home.identity.id);
+    // The superseded connection closes after the new one is filed.
+    await pumpEventQueue();
+
+    expect(home.hub.peers.value[away.identity.id]?.status, PeerStatus.online);
+    expect(away.hub.peers.value[home.identity.id]?.status, PeerStatus.online);
+  });
+
   test("a chat made after pairing appears in the mirror's list", () async {
     final links = loopbackPair();
     await pair(links.$1, links.$2);

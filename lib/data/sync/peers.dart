@@ -55,6 +55,10 @@ class LivePeer {
   final void Function() _onClose;
   bool _closed = false;
 
+  /// Replaced by a newer connection to the same device: closing this one must
+  /// not report the device gone, or it takes the new one down with it.
+  bool _superseded = false;
+
   DateTime lastPong = DateTime.now();
 
   /// This device's chat ids the peer is following. Only subscribers get
@@ -98,7 +102,7 @@ class LivePeer {
     _closed = true;
     await pump?.cancel();
     await channel.close();
-    _onClose();
+    if (!_superseded) _onClose();
   }
 }
 
@@ -140,7 +144,8 @@ class SyncPeers {
       status == PeerStatus.online || status == PeerStatus.connecting;
 
   void adopt(LivePeer peer) {
-    _live[peer.deviceId]?.close();
+    final old = _live[peer.deviceId];
+    if (old != null) unawaited((old.._superseded = true).close());
     _live[peer.deviceId] = peer;
   }
 

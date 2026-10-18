@@ -350,8 +350,7 @@ class SyncPairing {
       weOffered: false,
       psk: invite.psk,
       knownDeviceId: null,
-      onFailed: () => link.close(),
-    ));
+    ).catchError((Object _) => link.close()));
     return PairingOffer(
       kind: PairingOffer.answerKind,
       psk: "",
@@ -381,7 +380,6 @@ class SyncPairing {
         weOffered: true,
         psk: pending.psk,
         knownDeviceId: null,
-        onFailed: () => pending.link.close(),
       );
     } catch (_) {
       unawaited(pending.link.close());
@@ -525,7 +523,6 @@ class SyncPairing {
             weOffered: false,
             psk: psk,
             knownDeviceId: known?.deviceId,
-            onFailed: () => link!.close(),
           );
         } catch (error) {
           logFailure("sync", "answering an offer failed", error);
@@ -601,7 +598,6 @@ class SyncPairing {
               weOffered: false,
               psk: psk,
               knownDeviceId: null,
-              onFailed: () => link!.close(),
             );
           } catch (error) {
             await link?.close();
@@ -660,7 +656,6 @@ class SyncPairing {
         psk: psk,
         knownDeviceId: knownDeviceId,
         address: address,
-        onFailed: () => link.close(),
       );
     } catch (_) {
       await link.close();
@@ -701,7 +696,6 @@ class SyncPairing {
           weOffered: weOffer,
           psk: psk,
           knownDeviceId: knownId,
-          onFailed: () => link.close(),
         );
       } catch (_) {
         await link.close();
@@ -730,7 +724,6 @@ class SyncPairing {
       weOffered: weOffered,
       psk: psk,
       knownDeviceId: knownDeviceId,
-      onFailed: () async {},
     );
   }
 
@@ -742,7 +735,6 @@ class SyncPairing {
     required String psk,
     required String? knownDeviceId,
     String? address,
-    required Future<void> Function() onFailed,
   }) async {
     final handshake =
         Handshake(identity, pairingSecret: psk, name: deviceName);
@@ -862,7 +854,6 @@ class SyncPairing {
     } catch (error) {
       logFailure("sync", "could not establish a channel", error);
       await channel?.close();
-      unawaited(onFailed());
       _fail(error);
       rethrow;
     }
