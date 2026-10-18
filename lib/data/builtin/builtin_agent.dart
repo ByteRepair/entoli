@@ -495,6 +495,10 @@ class BuiltinAgent {
   /// and the sandbox is only ever offered where the machine itself is the
   /// driver — a guest's rootfs is already the boundary, and Android's
   /// per-app sandbox is the OS's.
+  ///
+  /// The project's workspace is granted beside the chat's own: it is where
+  /// work another conversation should find goes, and the file tools and
+  /// `writable_directories` already treat it as writable.
   CommandSandbox? sandboxFor() {
     final helper = sandboxHelper ?? shell.driverSandboxHelper;
     if (helper == null) return null;
@@ -503,7 +507,10 @@ class BuiltinAgent {
       workspace: workspace,
       tmp: tmp,
       home: shell.machineHome,
-      extraWrites: _grantedDirs,
+      extraWrites: [
+        if (projectWorkspace != workspace) projectWorkspace,
+        ..._grantedDirs,
+      ],
     );
   }
 
@@ -2435,11 +2442,12 @@ class BuiltinAgent {
     );
   }
 
-  /// After a command the confinement denied: one offer to rerun it, unconfined
-  /// or with the denied directory joining the grant, rather than leaving the
-  /// denial for the model to discover. Off under [sandboxReprompt] false, on a
-  /// run a human already decided, in `never` mode — nobody is there to ask —
-  /// and past the one per call this turn allows.
+  /// After a command the confinement denied: one offer to rerun it
+  /// unconfined, rather than leaving the denial for the model to discover.
+  /// Every violation is a write the sandbox refused — the ruleset reads
+  /// everywhere — so unconfined is the one rerun that can go differently.
+  /// Off under [sandboxReprompt] false and in `never` mode, where nobody is
+  /// there to ask. The rerun is not offered again: it runs unconfined.
   ///
   /// Streaming, because the banner is where the answer comes from; the caller
   /// yields this between the first result and its report, and reads
@@ -2452,21 +2460,14 @@ class BuiltinAgent {
   ) async* {
     if (result.violations.isEmpty ||
         !sandboxReprompt ||
-        _humanDecided ||
         approveMode == ApproveMode.never) {
       return;
     }
-    // The rerun rides the ordinary gated path — a denial the user denies here
-    // is the answer, not a loop. _askAndExecute sets _humanDecided, so this
-    // rerun's own result carries no second re-prompt, and its outcome is in
-    // _commandResult when the events are done: the caller reads it there.
-    // A write denial is rerun unconfined — the human read the command and
-    // answered — and a read denial rerun confined, there being nothing a
-    // grant could widen: a read refusal is the file's own perms.
-    final writeDenied = result.violations.any((v) => v.startsWith("writing "));
+    // What an "always" answer grants. A denial the shim could not name has
+    // no path here, and its banner offers no "always".
     final deniedDirs = [
       for (final violation in result.violations)
-        if (violation.startsWith("writing "))
+        if (violation.startsWith("writing /"))
           violation.substring("writing ".length),
     ];
     // The re-prompt's approval carries what it is agreeing to: the denied
@@ -2486,6 +2487,7 @@ class BuiltinAgent {
       argumentsJson: call.argumentsJson,
       argumentsText: result.violations.join("; "),
       deniedDirs: deniedDirs,
+      rerun: true,
     );
     yield ApprovalRequestEvent(approval);
     final answer = await approve(approval);
@@ -2499,12 +2501,9 @@ class BuiltinAgent {
       tiers: allowed ? const [] : [PermissionTier.once],
       decided: allowed ? PermissionDecision.allow : PermissionDecision.deny,
     );
-    _humanDecided = true;
     _commandResult = allowed
-        ? await _execute(call, command, unconfined: writeDenied)
-        : const ShellResult.failed("The user denied this command. Ask them what "
-            "to do instead, or try something else.");
-    _humanDecided = false;
+        ? await _execute(call, command, unconfined: true)
+        : const ShellResult.failed(_deniedByUser);
   }
 
   /// Reports [run]'s output as it prints, each change no more than

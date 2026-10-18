@@ -217,6 +217,26 @@ void main() {
       expect(find.text("Allow"), findsOneWidget);
       expect(find.text("Deny"), findsOneWidget);
     });
+
+    testWidgets("a re-prompt with no path to grant hides them",
+        (tester) async {
+      tester.view.physicalSize = const Size(1400, 1200);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      await asking(
+          tester,
+          const ToolApproval(
+            id: "call-1-reprompt",
+            toolName: "bash",
+            argumentsText: "denied (the sandbox refused something it could "
+                "not name)",
+            rerun: true,
+          ));
+
+      expect(find.text("Always in chat"), findsNothing);
+      expect(find.text("Always in project"), findsNothing);
+      expect(find.text("Allow"), findsOneWidget);
+    });
   });
 
 }

@@ -504,6 +504,10 @@ abstract class ToolApproval with _$ToolApproval {
     /// refused while the command ran. Empty for an ordinary banner, where an
     /// "always" answer derives a command rule instead.
     @Default([]) List<String> deniedDirs,
+
+    /// Whether this is the sandbox's re-prompt: an offer to rerun a call
+    /// unconfined, whose "always" is [deniedDirs] and never a command rule.
+    @Default(false) bool rerun,
   }) = _ToolApproval;
 
   factory ToolApproval.fromJson(Map<String, dynamic> json) => _$ToolApprovalFromJson(json);

@@ -294,21 +294,37 @@ and a command the parse cannot model is escalated to the banner even under an
 allow rule (refused in `never`, where nobody can answer). A rule-allow carries
 `writes`, the directories the sandbox grants beside the workspace — the same
 `writableDirs` a project sets — so an allow is one answer to "may it run *and*
-write there". What the sandbox denied while a command ran rides the result as
-`violations`, and — where `sandboxReprompt` is on and no human decided
-already — one offer to rerun is made: unconfined for a denied write, or with
-the denied directory joining the grant. What the sandbox denied is *reported*,
+write there". The grant is the chat's workspace, its tmp, the project's
+workspace beside it, and those directories. What the sandbox denied while a
+command ran rides the result as `violations`, and — where `sandboxReprompt` is
+on and the mode is not `never` — one offer to rerun it unconfined is made,
+whether or not a human approved the command first: the approval was for the
+command, the denial is news. What the sandbox denied is *reported*,
 not scraped: the confinement exports an `LD_PRELOAD` shim beside the helper
 (`entoli-deny-report.so`, compiled with it, best-effort) that records every
 syscall the kernel refused — `op\tpath`, one line, into a file under the
 grant — and the result reads that report, filters it against the grant, and
 words it. No wording table, no quote marks to chase: the denial is the
-syscall's, whatever the failing tool chose to print about it. The prose is
-now only a cross-check — a `Permission denied` in the command's output with
-an empty report (a static binary bypassing the shim) is a `denied (unreported)`
-violation and a `logFailure` line, so a blind channel is visible rather than
-silent; a shim that cannot work at all degrades to that same cross-check,
-never to a broken command. The two "always" banner answers write
+syscall's, whatever the failing tool chose to print about it.
+
+The path is absolute and is what Landlock checked: the file for a content
+`write`, the directory for an entry a `make` or `remove` touched. Both halves
+matter. `mkdir -p` changes into each parent and makes the next by its bare
+name, so a path taken as given was resolved against the wrong directory, read
+as inside the grant, and dropped; and a granted path that does not exist yet
+fails the helper at startup, so an "always" over a new file must name the
+directory it goes in. The ruleset reads everywhere, so a write outside the
+grant is the only denial the sandbox can make: a read, an exec, or anything
+inside the grant is the file's own permissions, explains the output's
+`Permission denied`, and is not a violation. That is why the rerun is always
+unconfined — a confined one would be refused again.
+
+The prose is only a cross-check — a `Permission denied` in the command's
+output with nothing in the report (a static binary bypassing the shim) is the
+unnamed violation and a `logFailure` line, so a blind channel is visible
+rather than silent. Its banner offers no "always", having no path to persist
+(`ToolApproval.rerun`); a shim that cannot work at all degrades to that same
+cross-check, never to a broken command. The two "always" banner answers write
 the derived rule: `ruleFromApproval` reads the command's leading words, the
 file's directory or the fetch's host, and the repository persists it to the
 tier the answer named.

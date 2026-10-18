@@ -325,6 +325,13 @@ int main(int argc, char **argv) {
 /// not the prose a failing tool chose to print about it. Enforcement is
 /// Landlock's alone; the shim only says what was denied.
 ///
+/// The path is absolute and names what Landlock checked: the file for a
+/// content write, the directory for an entry made in or removed from it.
+/// `mkdir -p` changes into each parent and makes the next by its bare name,
+/// so a path reported as the call gave it was resolved against the wrong
+/// directory and filtered out as inside the grant; and a grant to a
+/// directory that does not exist yet is one the helper refuses outright.
+///
 /// Two load-bearing details the code shows and the comment keeps:
 /// the real symbols are resolved at load and the report is written with
 /// raw syscalls, because the interposed `open` would see the report file's
@@ -356,6 +363,11 @@ const reportShimSource = r"""
  * concurrent commands in one report cannot interleave mid-line. A failed
  * write is dropped — best-effort beside a denial the kernel answered.
  *
+ * The ops are what Landlock decides: "write" (a file's content, the path
+ * the file), "make" and "remove" (an entry, the path the directory it is
+ * in), and "read", "exec", "chmod" — which the ruleset grants everywhere or
+ * does not handle, so a denial of one is the file's own permissions.
+ *
  * The real symbols are resolved once at load (a constructor), not per call:
  * a miss leaves the pointer null and the wrapper passes through to the
  * real call failing on its own — there is no path where the shim substitutes
@@ -368,6 +380,7 @@ const reportShimSource = r"""
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <sys/stat.h>
 #include <sys/syscall.h>
 #include <sys/types.h>
@@ -376,12 +389,21 @@ const reportShimSource = r"""
 static int (*real_open)(const char *, int, ...);
 static int (*real_openat)(int, const char *, int, ...);
 static int (*real_creat)(const char *, mode_t);
+static FILE *(*real_fopen)(const char *, const char *);
 static int (*real_mkdir)(const char *, mode_t);
 static int (*real_mkdirat)(int, const char *, mode_t);
+static int (*real_mknod)(const char *, mode_t, dev_t);
+static int (*real_mknodat)(int, const char *, mode_t, dev_t);
 static int (*real_unlink)(const char *);
 static int (*real_unlinkat)(int, const char *, int);
+static int (*real_rmdir)(const char *);
 static int (*real_rename)(const char *, const char *);
+static int (*real_renameat)(int, const char *, int, const char *);
+static int (*real_renameat2)(int, const char *, int, const char *, unsigned);
+static int (*real_link)(const char *, const char *);
+static int (*real_linkat)(int, const char *, int, const char *, int);
 static int (*real_symlink)(const char *, const char *);
+static int (*real_symlinkat)(const char *, int, const char *);
 static int (*real_truncate)(const char *, off_t);
 static int (*real_fchmodat)(int, const char *, mode_t, int);
 static int (*real_execve)(const char *, char *const[], char *const[]);
@@ -391,7 +413,15 @@ static int (*real_execve)(const char *, char *const[], char *const[]);
 static int (*real_open64)(const char *, int, ...);
 static int (*real_openat64)(int, const char *, int, ...);
 static int (*real_creat64)(const char *, mode_t);
+static FILE *(*real_fopen64)(const char *, const char *);
 static int (*real_truncate64)(const char *, off_t);
+/* The fortified names: a _FORTIFY_SOURCE build (coreutils on Fedora) binds
+ * these for an open with no mode, and they reach the kernel through libc's
+ * internal open rather than the interposed one. */
+static int (*real___open_2)(const char *, int);
+static int (*real___open64_2)(const char *, int);
+static int (*real___openat_2)(int, const char *, int);
+static int (*real___openat64_2)(int, const char *, int);
 
 /* Resolved at load time, before any command runs. A symbol libc does not
  * export is left null; the wrapper checks. */
@@ -399,19 +429,33 @@ __attribute__((constructor)) static void resolve_reals(void) {
   real_open = dlsym(RTLD_NEXT, "open");
   real_openat = dlsym(RTLD_NEXT, "openat");
   real_creat = dlsym(RTLD_NEXT, "creat");
+  real_fopen = dlsym(RTLD_NEXT, "fopen");
   real_mkdir = dlsym(RTLD_NEXT, "mkdir");
   real_mkdirat = dlsym(RTLD_NEXT, "mkdirat");
+  real_mknod = dlsym(RTLD_NEXT, "mknod");
+  real_mknodat = dlsym(RTLD_NEXT, "mknodat");
   real_unlink = dlsym(RTLD_NEXT, "unlink");
   real_unlinkat = dlsym(RTLD_NEXT, "unlinkat");
+  real_rmdir = dlsym(RTLD_NEXT, "rmdir");
   real_rename = dlsym(RTLD_NEXT, "rename");
+  real_renameat = dlsym(RTLD_NEXT, "renameat");
+  real_renameat2 = dlsym(RTLD_NEXT, "renameat2");
+  real_link = dlsym(RTLD_NEXT, "link");
+  real_linkat = dlsym(RTLD_NEXT, "linkat");
   real_symlink = dlsym(RTLD_NEXT, "symlink");
+  real_symlinkat = dlsym(RTLD_NEXT, "symlinkat");
   real_truncate = dlsym(RTLD_NEXT, "truncate");
   real_fchmodat = dlsym(RTLD_NEXT, "fchmodat");
   real_execve = dlsym(RTLD_NEXT, "execve");
   real_open64 = dlsym(RTLD_NEXT, "open64");
   real_openat64 = dlsym(RTLD_NEXT, "openat64");
   real_creat64 = dlsym(RTLD_NEXT, "creat64");
+  real_fopen64 = dlsym(RTLD_NEXT, "fopen64");
   real_truncate64 = dlsym(RTLD_NEXT, "truncate64");
+  real___open_2 = dlsym(RTLD_NEXT, "__open_2");
+  real___open64_2 = dlsym(RTLD_NEXT, "__open64_2");
+  real___openat_2 = dlsym(RTLD_NEXT, "__openat_2");
+  real___openat64_2 = dlsym(RTLD_NEXT, "__openat64_2");
 }
 
 static const char *report_path(void) {
@@ -419,10 +463,54 @@ static const char *report_path(void) {
   return path == NULL || path[0] == '\0' ? NULL : path;
 }
 
-/* One denial, "op\tpath". Best-effort: a failed write is dropped. */
-static void report(const char *op, const char *path) {
+/* [path] made absolute against [dirfd], or the cwd for AT_FDCWD, into
+ * [out]. Raw syscalls, so nothing here is interposed. A base that cannot be
+ * read — a deleted cwd — leaves the path as the call gave it. */
+static void absolute(int dirfd, const char *path, char *out, size_t size) {
+  if (path == NULL) path = "";
+  if (path[0] == '/') {
+    snprintf(out, size, "%s", path);
+    return;
+  }
+  char base[4096];
+  long n;
+  if (dirfd == AT_FDCWD) {
+    n = syscall(SYS_getcwd, base, sizeof(base));
+  } else {
+    char link[64];
+    snprintf(link, sizeof(link), "/proc/self/fd/%d", dirfd);
+    n = syscall(SYS_readlinkat, AT_FDCWD, link, base, sizeof(base) - 1);
+    if (n > 0) base[n] = '\0';
+  }
+  if (n <= 0 || base[0] != '/') {
+    snprintf(out, size, "%s", path);
+    return;
+  }
+  if (path[0] == '\0') {
+    snprintf(out, size, "%s", base);
+    return;
+  }
+  snprintf(out, size, "%s/%s", strcmp(base, "/") == 0 ? "" : base, path);
+}
+
+/* [path] cut to the directory it is an entry in. */
+static void parent(char *path) {
+  size_t len = strlen(path);
+  while (len > 1 && path[len - 1] == '/') path[--len] = '\0';
+  char *slash = strrchr(path, '/');
+  if (slash == NULL) return;
+  if (slash == path) slash[1] = '\0';
+  else *slash = '\0';
+}
+
+/* One denial, "op\tpath". Best-effort: a failed write is dropped. [entry]
+ * names the directory [path] is in rather than [path] itself. */
+static void report(const char *op, int dirfd, const char *path, int entry) {
   const char *out = report_path();
   if (out == NULL) return;
+  char resolved[4096];
+  absolute(dirfd, path, resolved, sizeof(resolved));
+  if (entry) parent(resolved);
   /* Raw syscalls, not the interposed libc calls: the report file is
    * usually outside the grant, so the interposed open would see its own
    * EACCES and recurse forever — the segfault the first confined run
@@ -431,7 +519,7 @@ static void report(const char *op, const char *path) {
                         O_WRONLY | O_APPEND | O_CREAT | O_CLOEXEC, 0600);
   if (fd < 0) return;
   char line[4200];
-  int n = snprintf(line, sizeof(line), "%s\t%s\n", op, path == NULL ? "" : path);
+  int n = snprintf(line, sizeof(line), "%s\t%s\n", op, resolved);
   if (n > 0) {
     ssize_t written = syscall(SYS_write, fd, line, (size_t)n);
     (void)written;
@@ -439,15 +527,48 @@ static void report(const char *op, const char *path) {
   syscall(SYS_close, fd);
 }
 
-/* On EACCES/EPERM/EROFS, record the denial and put errno back exactly as
- * the real call left it. */
-#define REPORT_ON_DENY(op, path_arg)                                            \
+static int denied(int err) {
+  return err == EACCES || err == EPERM || err == EROFS;
+}
+
+/* On a denial, record it and put errno back exactly as the real call left
+ * it. */
+#define REPORT_ON_DENY(op, dirfd, path, entry)                                  \
   do {                                                                          \
     int saved_ = errno;                                                         \
-    if (saved_ == EACCES || saved_ == EPERM || saved_ == EROFS)                  \
-      report(op, path_arg);                                                     \
+    if (denied(saved_)) report(op, dirfd, path, entry);                         \
     errno = saved_;                                                             \
   } while (0)
+
+/* An open's denial in Landlock's terms. O_TMPFILE makes an unnamed file in
+ * the directory it names; O_CREAT makes an entry where there was none and
+ * writes the file where there was one; any other write access writes it. */
+static void report_open(int dirfd, const char *path, int flags) {
+  int saved = errno;
+  if (!denied(saved)) return;
+  if ((flags & O_TMPFILE) == O_TMPFILE) {
+    report("make", dirfd, path, 0);
+  } else if (flags & O_CREAT) {
+    int exists = syscall(SYS_faccessat, dirfd, path, F_OK) == 0;
+    report(exists ? "write" : "make", dirfd, path, !exists);
+  } else if ((flags & O_ACCMODE) != O_RDONLY || (flags & O_TRUNC)) {
+    report("write", dirfd, path, 0);
+  } else {
+    report("read", dirfd, path, 0);
+  }
+  errno = saved;
+}
+
+/* fopen's mode as the open flags it stands for. */
+static int fopen_flags(const char *mode) {
+  if (mode == NULL) return O_RDONLY;
+  int plus = strchr(mode, '+') != NULL;
+  switch (mode[0]) {
+    case 'w': return (plus ? O_RDWR : O_WRONLY) | O_CREAT | O_TRUNC;
+    case 'a': return (plus ? O_RDWR : O_WRONLY) | O_CREAT | O_APPEND;
+    default: return plus ? O_RDWR : O_RDONLY;
+  }
+}
 
 #define GUARD(real_ptr)                                                        \
   if (real_ptr == NULL) {                                                       \
@@ -455,143 +576,247 @@ static void report(const char *op, const char *path) {
     return -1;                                                                  \
   }
 
+#define GUARD_FILE(real_ptr)                                                   \
+  if (real_ptr == NULL) {                                                       \
+    errno = ENOSYS;                                                             \
+    return NULL;                                                                \
+  }
+
+#define OPEN_MODE(flags, mode)                                                 \
+  mode_t mode = 0;                                                              \
+  if (flags & (O_CREAT | O_TMPFILE)) {                                          \
+    va_list ap;                                                                 \
+    va_start(ap, flags);                                                        \
+    mode = va_arg(ap, int);                                                     \
+    va_end(ap);                                                                 \
+  }
+
 int open(const char *path, int flags, ...) {
   GUARD(real_open)
-  mode_t mode = 0;
-  if (flags & (O_CREAT | O_TMPFILE)) {
-    va_list ap;
-    va_start(ap, flags);
-    mode = va_arg(ap, int);
-    va_end(ap);
-  }
+  OPEN_MODE(flags, mode)
   int rc = real_open(path, flags, mode);
-  REPORT_ON_DENY(flags & (O_CREAT | O_TMPFILE) ? "create" : "open", path);
+  if (rc < 0) report_open(AT_FDCWD, path, flags);
   return rc;
 }
 
 int open64(const char *path, int flags, ...) {
   GUARD(real_open64)
-  mode_t mode = 0;
-  if (flags & (O_CREAT | O_TMPFILE)) {
-    va_list ap;
-    va_start(ap, flags);
-    mode = va_arg(ap, int);
-    va_end(ap);
-  }
+  OPEN_MODE(flags, mode)
   int rc = real_open64(path, flags, mode);
-  REPORT_ON_DENY(flags & (O_CREAT | O_TMPFILE) ? "create" : "open", path);
+  if (rc < 0) report_open(AT_FDCWD, path, flags);
   return rc;
 }
 
 int openat(int dirfd, const char *path, int flags, ...) {
   GUARD(real_openat)
-  mode_t mode = 0;
-  if (flags & (O_CREAT | O_TMPFILE)) {
-    va_list ap;
-    va_start(ap, flags);
-    mode = va_arg(ap, int);
-    va_end(ap);
-  }
+  OPEN_MODE(flags, mode)
   int rc = real_openat(dirfd, path, flags, mode);
-  REPORT_ON_DENY(flags & O_CREAT ? "create" : "open", path);
+  if (rc < 0) report_open(dirfd, path, flags);
   return rc;
 }
 
 int openat64(int dirfd, const char *path, int flags, ...) {
   GUARD(real_openat64)
-  mode_t mode = 0;
-  if (flags & (O_CREAT | O_TMPFILE)) {
-    va_list ap;
-    va_start(ap, flags);
-    mode = va_arg(ap, int);
-    va_end(ap);
-  }
+  OPEN_MODE(flags, mode)
   int rc = real_openat64(dirfd, path, flags, mode);
-  REPORT_ON_DENY(flags & O_CREAT ? "create" : "open", path);
+  if (rc < 0) report_open(dirfd, path, flags);
+  return rc;
+}
+
+int __open_2(const char *path, int flags) {
+  GUARD(real___open_2)
+  int rc = real___open_2(path, flags);
+  if (rc < 0) report_open(AT_FDCWD, path, flags);
+  return rc;
+}
+
+int __open64_2(const char *path, int flags) {
+  GUARD(real___open64_2)
+  int rc = real___open64_2(path, flags);
+  if (rc < 0) report_open(AT_FDCWD, path, flags);
+  return rc;
+}
+
+int __openat_2(int dirfd, const char *path, int flags) {
+  GUARD(real___openat_2)
+  int rc = real___openat_2(dirfd, path, flags);
+  if (rc < 0) report_open(dirfd, path, flags);
+  return rc;
+}
+
+int __openat64_2(int dirfd, const char *path, int flags) {
+  GUARD(real___openat64_2)
+  int rc = real___openat64_2(dirfd, path, flags);
+  if (rc < 0) report_open(dirfd, path, flags);
   return rc;
 }
 
 int creat(const char *path, mode_t mode) {
   GUARD(real_creat)
   int rc = real_creat(path, mode);
-  REPORT_ON_DENY("create", path);
+  if (rc < 0) report_open(AT_FDCWD, path, O_CREAT | O_WRONLY | O_TRUNC);
   return rc;
 }
 
 int creat64(const char *path, mode_t mode) {
   GUARD(real_creat64)
   int rc = real_creat64(path, mode);
-  REPORT_ON_DENY("create", path);
+  if (rc < 0) report_open(AT_FDCWD, path, O_CREAT | O_WRONLY | O_TRUNC);
   return rc;
+}
+
+FILE *fopen(const char *path, const char *mode) {
+  GUARD_FILE(real_fopen)
+  FILE *f = real_fopen(path, mode);
+  if (f == NULL) report_open(AT_FDCWD, path, fopen_flags(mode));
+  return f;
+}
+
+FILE *fopen64(const char *path, const char *mode) {
+  GUARD_FILE(real_fopen64)
+  FILE *f = real_fopen64(path, mode);
+  if (f == NULL) report_open(AT_FDCWD, path, fopen_flags(mode));
+  return f;
 }
 
 int mkdir(const char *path, mode_t mode) {
   GUARD(real_mkdir)
   int rc = real_mkdir(path, mode);
-  REPORT_ON_DENY("mkdir", path);
+  if (rc < 0) REPORT_ON_DENY("make", AT_FDCWD, path, 1);
   return rc;
 }
 
 int mkdirat(int dirfd, const char *path, mode_t mode) {
   GUARD(real_mkdirat)
   int rc = real_mkdirat(dirfd, path, mode);
-  REPORT_ON_DENY("create", path);
+  if (rc < 0) REPORT_ON_DENY("make", dirfd, path, 1);
+  return rc;
+}
+
+int mknod(const char *path, mode_t mode, dev_t dev) {
+  GUARD(real_mknod)
+  int rc = real_mknod(path, mode, dev);
+  if (rc < 0) REPORT_ON_DENY("make", AT_FDCWD, path, 1);
+  return rc;
+}
+
+int mknodat(int dirfd, const char *path, mode_t mode, dev_t dev) {
+  GUARD(real_mknodat)
+  int rc = real_mknodat(dirfd, path, mode, dev);
+  if (rc < 0) REPORT_ON_DENY("make", dirfd, path, 1);
   return rc;
 }
 
 int unlink(const char *path) {
   GUARD(real_unlink)
   int rc = real_unlink(path);
-  REPORT_ON_DENY("unlink", path);
+  if (rc < 0) REPORT_ON_DENY("remove", AT_FDCWD, path, 1);
   return rc;
 }
 
 int unlinkat(int dirfd, const char *path, int flags) {
   GUARD(real_unlinkat)
   int rc = real_unlinkat(dirfd, path, flags);
-  REPORT_ON_DENY("unlink", path);
+  if (rc < 0) REPORT_ON_DENY("remove", dirfd, path, 1);
   return rc;
 }
+
+int rmdir(const char *path) {
+  GUARD(real_rmdir)
+  int rc = real_rmdir(path);
+  if (rc < 0) REPORT_ON_DENY("remove", AT_FDCWD, path, 1);
+  return rc;
+}
+
+/* A rename removes an entry from one directory and makes one in another,
+ * and the errno does not say which was refused: both are reported, and the
+ * reader drops whichever is inside the grant. */
+#define REPORT_RENAME(olddirfd, from, newdirfd, to)                            \
+  do {                                                                          \
+    int saved_ = errno;                                                         \
+    if (denied(saved_)) {                                                       \
+      report("remove", olddirfd, from, 1);                                      \
+      report("make", newdirfd, to, 1);                                          \
+    }                                                                           \
+    errno = saved_;                                                             \
+  } while (0)
 
 int rename(const char *from, const char *to) {
   GUARD(real_rename)
   int rc = real_rename(from, to);
-  REPORT_ON_DENY("rename", to);
+  if (rc < 0) REPORT_RENAME(AT_FDCWD, from, AT_FDCWD, to);
+  return rc;
+}
+
+int renameat(int olddirfd, const char *from, int newdirfd, const char *to) {
+  GUARD(real_renameat)
+  int rc = real_renameat(olddirfd, from, newdirfd, to);
+  if (rc < 0) REPORT_RENAME(olddirfd, from, newdirfd, to);
+  return rc;
+}
+
+int renameat2(int olddirfd, const char *from, int newdirfd, const char *to,
+              unsigned flags) {
+  GUARD(real_renameat2)
+  int rc = real_renameat2(olddirfd, from, newdirfd, to, flags);
+  if (rc < 0) REPORT_RENAME(olddirfd, from, newdirfd, to);
+  return rc;
+}
+
+int link(const char *target, const char *path) {
+  GUARD(real_link)
+  int rc = real_link(target, path);
+  if (rc < 0) REPORT_ON_DENY("make", AT_FDCWD, path, 1);
+  return rc;
+}
+
+int linkat(int olddirfd, const char *target, int newdirfd, const char *path,
+           int flags) {
+  GUARD(real_linkat)
+  int rc = real_linkat(olddirfd, target, newdirfd, path, flags);
+  if (rc < 0) REPORT_ON_DENY("make", newdirfd, path, 1);
   return rc;
 }
 
 int symlink(const char *target, const char *path) {
   GUARD(real_symlink)
   int rc = real_symlink(target, path);
-  REPORT_ON_DENY("link", path);
+  if (rc < 0) REPORT_ON_DENY("make", AT_FDCWD, path, 1);
+  return rc;
+}
+
+int symlinkat(const char *target, int dirfd, const char *path) {
+  GUARD(real_symlinkat)
+  int rc = real_symlinkat(target, dirfd, path);
+  if (rc < 0) REPORT_ON_DENY("make", dirfd, path, 1);
   return rc;
 }
 
 int truncate(const char *path, off_t length) {
   GUARD(real_truncate)
   int rc = real_truncate(path, length);
-  REPORT_ON_DENY("truncate", path);
+  if (rc < 0) REPORT_ON_DENY("write", AT_FDCWD, path, 0);
   return rc;
 }
 
 int truncate64(const char *path, off_t length) {
   GUARD(real_truncate64)
   int rc = real_truncate64(path, length);
-  REPORT_ON_DENY("truncate", path);
+  if (rc < 0) REPORT_ON_DENY("write", AT_FDCWD, path, 0);
   return rc;
 }
 
 int fchmodat(int dirfd, const char *path, mode_t mode, int flags) {
   GUARD(real_fchmodat)
   int rc = real_fchmodat(dirfd, path, mode, flags);
-  REPORT_ON_DENY("chmod", path);
+  if (rc < 0) REPORT_ON_DENY("chmod", dirfd, path, 0);
   return rc;
 }
 
 int execve(const char *path, char *const argv[], char *const envp[]) {
   GUARD(real_execve)
   int rc = real_execve(path, argv, envp);
-  REPORT_ON_DENY("exec", path);
+  REPORT_ON_DENY("exec", AT_FDCWD, path, 0);
   return rc;
 }
 """;

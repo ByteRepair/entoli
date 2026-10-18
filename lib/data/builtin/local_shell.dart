@@ -902,8 +902,7 @@ class _OneShotRun implements ShellRun {
     final report = reportPath == null
         ? const <String>[]
         : await _readReport(reportPath);
-    final verdict =
-        sandboxViolations(report, text, cwd, sandbox);
+    final verdict = sandboxViolations(report, text, sandbox);
     // The output named a denial the report did not: the shim missed this
     // process. No path in the line.
     if (verdict.unreported) {
@@ -1012,83 +1011,75 @@ class _OneShotRun implements ShellRun {
 }
 
 /// What the confinement denied, read off the report the shim wrote: one
-/// line per refused syscall, `op\tpath` — the operation the command was
-/// about, not the prose a failing tool chose to print. Only denials of
-/// paths outside the grant are collected — a permission error on a
-/// workspace file is the command's own business, not the sandbox's — and
-/// the count is capped, so one bad loop cannot bury the tool result.
+/// line per refused syscall, `op\tpath`, the path absolute and naming what
+/// Landlock checked — the file a write went to, the directory an entry was
+/// made in or removed from. The ruleset reads everywhere and writes the
+/// grant, so a `write`, `make` or `remove` outside the grant is the only
+/// denial the sandbox can have made, and each is a `writing <path>`
+/// violation. Any other line — a read, an exec, a write inside the grant —
+/// is the file's own permissions, which the command's output already says.
+/// Nothing is capped: one entry per path is what bounds the list.
 ///
 /// [outputText] is the cross-check: a denial word in the command's own
-/// output that no report line explains means the process bypassed the shim
-/// (a static binary making raw syscalls), and that is a `denied (unreported)`
+/// output with no report line at all beside it means the process bypassed
+/// the shim (a static binary making raw syscalls), and that is an unnamed
 /// violation rather than silence — the model sees that something was taken,
 /// and the log says the channel was blind.
-///
-/// A mutating op (`create`, `mkdir`, `unlink`, `rename`, `link`,
-/// `truncate`, `chmod`) words the violation `writing`, which is what arms
-/// the re-prompt; a read or an unrecognized op words it `denied`.
 ({List<String> violations, bool unreported}) sandboxViolations(
   List<String> reportLines,
   String outputText,
-  String cwd,
   CommandSandbox? sandbox,
 ) {
   if (sandbox == null) return (violations: const [], unreported: false);
-  final workspace = sandbox.workspace;
-  final tmp = sandbox.tmp;
-  final extras = sandbox.extraWrites;
+  final granted = [
+    sandbox.workspace,
+    if (sandbox.tmp != null) sandbox.tmp!,
+    ...sandbox.extraWrites,
+  ];
 
-  String resolve(String raw) {
-    final path = raw.trim();
-    if (path.startsWith("/")) return p.normalize(path);
-    final base = cwd.startsWith("/") ? cwd : workspace;
-    return p.normalize(p.join(base, path));
-  }
-
-  const writeOps = {
-    "create", "mkdir", "unlink", "rename", "link", "truncate", "chmod",
-  };
-  final found = <String, bool>{};
-  var explained = 0;
+  const writeOps = {"write", "make", "remove"};
+  final found = <String>{};
+  var explained = false;
   for (final line in reportLines) {
     final tab = line.indexOf("\t");
-    final op = tab < 0 ? "" : line.substring(0, tab).trim();
-    final raw = tab < 0 ? line : line.substring(tab + 1);
-    if (raw.trim().isEmpty) continue;
-    final path = resolve(raw);
-    if (pathInside(path, workspace) ||
-        tmp != null && pathInside(path, tmp) ||
-        extras.any((dir) => pathInside(path, dir))) {
-      continue;
-    }
+    if (tab < 0) continue;
+    final op = line.substring(0, tab).trim();
+    final raw = line.substring(tab + 1).trim();
+    if (raw.isEmpty) continue;
+    // A path the shim could not make absolute (its cwd was deleted) is
+    // reported as given; it cannot be placed against the grant, so it is
+    // kept rather than guessed inside.
+    final path = raw.startsWith("/") ? p.normalize(raw) : raw;
     // /dev/null is where commands throw output away and /dev/tty is the
     // shell's own terminal plumbing — denials there are not what the
     // command was about.
     if (path == "/dev/null" || path == "/dev/tty") continue;
-    found[path] = (found[path] ?? false) || writeOps.contains(op);
-    explained++;
-    if (found.length >= 5) break;
+    explained = true;
+    if (!writeOps.contains(op)) continue;
+    if (path.startsWith("/") && granted.any((dir) => pathInside(path, dir))) {
+      continue;
+    }
+    found.add(path);
   }
 
   // The prose cross-check. The denial words are few and stable — what the
   // kernel's refusals read like in C — and only a report that named nothing
-  // of its own while they appear is a channel problem, not a wording
-  // problem: a line about shell plumbing or a denial inside the grant
-  // explains nothing the output screams about and does not count. A report
-  // line and a prose line of the same denial collapse into one entry.
+  // while they appear is a channel problem; a line about shell plumbing
+  // explains nothing and does not count.
   final proseDenied = RegExp(r"Permission denied|Read-only file system|"
       r"Operation not permitted");
-  final unreported = proseDenied.hasMatch(outputText) && (explained == 0);
+  final unreported = proseDenied.hasMatch(outputText) && !explained;
 
   return (
     violations: [
-      for (final entry in found.entries)
-        entry.value ? "writing ${entry.key}" : "denied ${entry.key}",
-      if (unreported)
-        "denied (the sandbox refused something it could not name; the "
-            "command's own output says so above)",
+      for (final path in found) "writing $path",
+      if (unreported) unnamedViolation,
     ],
     unreported: unreported,
   );
 }
+
+/// The violation a denial the report did not name is worded as.
+const unnamedViolation = "denied (the sandbox refused something it could "
+    "not name; the command's own output says so above)";
 

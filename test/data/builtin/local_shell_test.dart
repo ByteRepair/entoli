@@ -679,17 +679,16 @@ void main() {
           reason: "the tmp is made for the confined run");
     });
 
-    test("a read denial is worded neutrally, a write denial as a write",
+    test("a write denial is a violation, a read denial is the file's own",
         () async {
       final sandbox = CommandSandbox(workspace: workspace.path);
       final driver = LocalShell.hostDriver(sandboxHelper: helper);
       final shell = LocalShell(driver: ({String? project}) => driver);
       if (!Platform.isLinux || await helper.prefixFor(sandbox) == null) return;
       final denied = File(p.join(home.path, "denied.txt"));
-      // Outside the workspace: the kernel refuses both, with the two
-      // wordings a transcript shows — the shell's own for the write, the
-      // tool's for the read the file's own perms give. Only the second
-      // carries the tool's write words, so only it is worded `writing`.
+      // Outside the workspace: the kernel refuses both. The ruleset reads
+      // everywhere, so the read's refusal is the file's mode and no
+      // violation; the new file is an entry made in `home`.
       denied.writeAsStringSync("keep\n");
       Process.runSync("chmod", ["000", denied.path]);
       addTearDown(() => Process.runSync("chmod", ["644", denied.path]));
@@ -699,52 +698,110 @@ void main() {
               cwd: workspace.path, home: home.path,
               timeout: const Duration(seconds: 10), sandbox: sandbox)
           .result;
-      expect(result.violations, contains("writing ${p.join(home.path, "w.txt")}"),
+      expect(result.violations, ["writing ${home.path}"],
           reason: "out=${result.output} viol=${result.violations}");
-      expect(result.violations, contains("denied ${denied.path}"),
+    });
+
+    test("mkdir -p outside the grant names the directory it was refused in",
+        () async {
+      // `mkdir -p` changes into each parent and makes the next by its bare
+      // name; reported as given, the name was resolved against the
+      // workspace, read as inside the grant, and the denial went unnamed.
+      final sandbox = CommandSandbox(workspace: workspace.path);
+      final driver = LocalShell.hostDriver(sandboxHelper: helper);
+      final shell = LocalShell(driver: ({String? project}) => driver);
+      if (!Platform.isLinux || await helper.prefixFor(sandbox) == null) return;
+      final result = await shell
+          .start("mkdir -p ${p.join(home.path, "tools", "downloads")}",
+              cwd: workspace.path, home: home.path,
+              timeout: const Duration(seconds: 10), sandbox: sandbox)
+          .result;
+      expect(result.violations, ["writing ${home.path}"],
           reason: "out=${result.output} viol=${result.violations}");
+    });
+
+    test("an existing file written outside the grant names the file",
+        () async {
+      final sandbox = CommandSandbox(workspace: workspace.path);
+      final driver = LocalShell.hostDriver(sandboxHelper: helper);
+      final shell = LocalShell(driver: ({String? project}) => driver);
+      if (!Platform.isLinux || await helper.prefixFor(sandbox) == null) return;
+      final file = File(p.join(home.path, "kept.txt"))..writeAsStringSync("x\n");
+      final result = await shell
+          .start("echo y >> ${file.path}; printf y | tee ${file.path}",
+              cwd: workspace.path, home: home.path,
+              timeout: const Duration(seconds: 10), sandbox: sandbox)
+          .result;
+      expect(result.violations, ["writing ${file.path}"],
+          reason: "out=${result.output} viol=${result.violations}");
+      expect(file.readAsStringSync(), "x\n");
+    });
+
+    test("a rename out of the grant names the directory it would land in",
+        () async {
+      final sandbox = CommandSandbox(workspace: workspace.path);
+      final driver = LocalShell.hostDriver(sandboxHelper: helper);
+      final shell = LocalShell(driver: ({String? project}) => driver);
+      if (!Platform.isLinux || await helper.prefixFor(sandbox) == null) return;
+      File(p.join(workspace.path, "moved.txt")).writeAsStringSync("x\n");
+      final result = await shell
+          .start("mv moved.txt ${p.join(home.path, "moved.txt")}",
+              cwd: workspace.path, home: home.path,
+              timeout: const Duration(seconds: 10), sandbox: sandbox)
+          .result;
+      expect(result.violations, contains("writing ${home.path}"),
+          reason: "out=${result.output} viol=${result.violations}");
+      expect(result.violations.where((v) => v.contains("could not name")),
+          isEmpty);
     });
   });
 
   test("sandbox violations are read off the report, cross-checked by prose", () {
     const ws = CommandSandbox(workspace: "/home/u/ws");
     const unnamed = "unreported";
-    // (report, output, cwd, sandbox, violations, unreported)
-    final cases = <(List<String>, String, String, CommandSandbox, List<String>, bool)>[
-      // A write op outside the grant words writing; a read words denied.
-      (["mkdir\t/etc/hosts"], "", "/", ws, ["writing /etc/hosts"], false),
-      (["open\t/etc/shadow"], "", "/", ws, ["denied /etc/shadow"], false),
-      // A relative path is joined against the cwd.
-      (["mkdir\tconfig.json"], "", "/home/yiannis/Projects/repo", ws,
-          ["writing /home/yiannis/Projects/repo/config.json"], false),
+    // (report, output, sandbox, violations, unreported)
+    final cases = <(List<String>, String, CommandSandbox, List<String>, bool)>[
+      // A write, make or remove outside the grant is a violation.
+      (["write\t/etc/hosts"], "", ws, ["writing /etc/hosts"], false),
+      (["make\t/etc"], "", ws, ["writing /etc"], false),
+      (["remove\t/etc"], "", ws, ["writing /etc"], false),
+      // A read or an exec is the file's own permissions: the ruleset reads
+      // everywhere.
+      (["read\t/etc/shadow"], "", ws, [], false),
+      (["exec\t/opt/tool"], "", ws, [], false),
       // Inside the grant, an extra write root, or shell plumbing: nothing.
-      (["open\t/home/u/ws/local.txt"], "", "/home/u/ws/repo", ws, [], false),
-      (["open\t/mnt/data/out.txt"], "", "/home/u/ws",
+      (["write\t/home/u/ws/local.txt"], "", ws, [], false),
+      (["make\t/mnt/data"], "",
           const CommandSandbox(workspace: "/home/u/ws", extraWrites: ["/mnt/data"]),
           [], false),
-      (["open\t/dev/null"], "", "/", ws, [], false),
-      (["open\t/dev/tty"], "", "/", ws, [], false),
-      // A report naming only plumbing or in-grant denials does not mask an
-      // unexplained denial in the output.
-      (["open\t/dev/tty"], "git: fatal: cannot lock ref: Permission denied",
-          "/", ws, [unnamed], true),
-      (["open\t/home/u/ws/local.txt"],
-          "touch: cannot touch '/etc/hosts': Permission denied", "/", ws,
-          [unnamed], true),
-      // One entry per path, writing winning over a read of it.
-      (["mkdir\t/etc/a", "mkdir\t/etc/a"], "", "/", ws, ["writing /etc/a"], false),
-      (["open\t/etc/a", "mkdir\t/etc/a"], "", "/", ws, ["writing /etc/a"], false),
+      (["write\t/dev/null"], "", ws, [], false),
+      (["write\t/dev/tty"], "", ws, [], false),
+      // The path is normalized before it is placed against the grant.
+      (["make\t/home/u/ws/../other"], "", ws, ["writing /home/u/other"], false),
+      // A path the shim could not make absolute is kept as given.
+      (["make\tdir"], "", ws, ["writing dir"], false),
+      // A report naming only plumbing does not mask an unexplained denial
+      // in the output.
+      (["write\t/dev/tty"], "git: fatal: cannot lock ref: Permission denied",
+          ws, [unnamed], true),
+      // Any named denial explains the prose, inside the grant or a read.
+      (["write\t/home/u/ws/local.txt"],
+          "sh: /home/u/ws/local.txt: Permission denied", ws, [], false),
+      (["read\t/etc/shadow"], "cat: /etc/shadow: Permission denied", ws, [],
+          false),
+      // One entry per path.
+      (["make\t/etc", "make\t/etc"], "", ws, ["writing /etc"], false),
       // Prose a report explains is not unreported; prose a silent report
       // leaves is.
-      (["mkdir\t/etc/hosts"],
-          "mkdir: cannot create directory '/etc/hosts': Permission denied",
-          "/", ws, ["writing /etc/hosts"], false),
-      ([], "some-static-binary: /etc/hosts: Permission denied", "/", ws,
+      (["make\t/etc"],
+          "mkdir: cannot create directory '/etc/x': Permission denied",
+          ws, ["writing /etc"], false),
+      ([], "some-static-binary: /etc/hosts: Permission denied", ws,
           [unnamed], true),
-      ([], "all went fine", "/", ws, [], false),
+      ([], "all went fine", ws, [], false),
     ];
-    for (final (report, output, cwd, sandbox, violations, unreported) in cases) {
-      final verdict = sandboxViolations(report, output, cwd, sandbox);
+    for (final (report, output, sandbox, violations, unreported) in cases) {
+      final verdict = sandboxViolations(report, output, sandbox);
       final reason = "report=$report output=$output";
       expect(verdict.unreported, unreported, reason: reason);
       expect(verdict.violations, hasLength(violations.length), reason: reason);
