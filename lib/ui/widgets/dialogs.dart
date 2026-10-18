@@ -115,62 +115,6 @@ Future<String?> promptForText(
   );
 }
 
-/// Ask for a new project's name and whether it is a team. Returns null if
-/// dismissed, or if the name is not one — [projectNameFrom]'s answer is the
-/// only thing that leaves. The switch starts where the app default says a
-/// project should.
-Future<({String name, bool omada})?> promptNewProject(
-    BuildContext context,
-    {required bool omadaByDefault}) {
-  final controller = TextEditingController();
-  var omada = omadaByDefault;
-  ({String name, bool omada})? submit() {
-    final name = projectNameFrom(controller.text);
-    return name == null ? null : (name: name, omada: omada);
-  }
-
-  return showDialog<({String name, bool omada})>(
-    context: context,
-    builder: (context) => StatefulBuilder(
-      builder: (context, setState) => AlertDialog(
-        title: const Text("New project"),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: controller,
-              autofocus: true,
-              decoration: const InputDecoration(hintText: "Project name"),
-              onSubmitted: (_) {
-                final answer = submit();
-                if (answer != null) Navigator.pop(context, answer);
-              },
-            ),
-            SwitchListTile(
-              contentPadding: EdgeInsets.zero,
-              title: const Text("Team chats (Omada)"),
-              subtitle: const Text(
-                  "Several named agents take part in this project's chats."),
-              value: omada,
-              onChanged: (value) => setState(() => omada = value),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancel")),
-          FilledButton(
-            onPressed: () {
-              final answer = submit();
-              if (answer != null) Navigator.pop(context, answer);
-            },
-            child: const Text("Create"),
-          ),
-        ],
-      ),
-    ),
-  );
-}
-
 /// Ask for a name and its value. Returns null if dismissed or if the name was
 /// left blank — a value without one names nothing.
 Future<({String name, String value})?> promptForPair(

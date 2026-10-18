@@ -1,6 +1,7 @@
 import "dart:io";
 
 import "package:flutter/material.dart";
+import "package:flutter/services.dart";
 import "package:flutter_test/flutter_test.dart";
 
 import "package:agent_chat/domain/app_settings.dart";
@@ -12,6 +13,7 @@ import "package:agent_chat/domain/temp_chat_ttl.dart";
 import "package:agent_chat/providers.dart";
 import "package:agent_chat/ui/chat/chat_page.dart";
 import "package:agent_chat/ui/sidebar/chat_groups.dart";
+import "package:agent_chat/ui/sidebar/project_palette.dart";
 import "package:agent_chat/ui/sidebar/project_settings_page.dart";
 import "package:agent_chat/ui/sidebar/sidebar.dart";
 import "package:agent_chat/ui/workspace/workspace_page.dart";
@@ -315,6 +317,89 @@ void main() {
       expect(find.text("Delete project…"), findsNothing);
     });
 
+    testWidgets("the palette rules off the user's projects and counts chats",
+        (tester) async {
+      await io(tester, () => app.seedChat(title: "at work", project: "work"));
+      await pumpBeside(tester);
+      await openProjectMenu(tester);
+
+      final palette = find.byType(ProjectPalette);
+      expect(find.descendant(of: palette, matching: find.byType(Divider)),
+          findsWidgets);
+      final work = find.ancestor(
+          of: find.descendant(of: palette, matching: find.text("work")),
+          matching: find.byType(Row));
+      expect(find.descendant(of: work.first, matching: find.text("1")),
+          findsOneWidget);
+    });
+
+    testWidgets("searching lists projects, then chats tagged with theirs",
+        (tester) async {
+      await io(tester, () => app.seedChat(title: "work notes", project: "work"));
+      await pumpBeside(tester);
+      await openProjectMenu(tester);
+
+      await tester.enterText(
+          find.descendant(
+              of: find.byType(ProjectPalette), matching: find.byType(TextField)),
+          "work");
+      await settleIo(tester);
+
+      final palette = find.byType(ProjectPalette);
+      expect(find.descendant(of: palette, matching: find.text("Projects")),
+          findsOneWidget);
+      expect(find.descendant(of: palette, matching: find.text("work notes")),
+          findsOneWidget);
+      // The project row and the chat's tag, the field's own text aside.
+      expect(
+          find.descendant(
+              of: find.descendant(
+                  of: palette, matching: find.byType(SingleChildScrollView)),
+              matching: find.text("work")),
+          findsNWidgets(2));
+      expect(
+          tester.getTopLeft(find.descendant(
+                  of: palette, matching: find.text("Projects"))).dy <
+              tester.getTopLeft(find.descendant(
+                  of: palette, matching: find.text("work notes"))).dy,
+          isTrue);
+    });
+
+    // A chat the sidebar does not list would be open with nothing saying so.
+    testWidgets("picking a found chat opens it in its own project",
+        (tester) async {
+      final chat =
+          await io(tester, () => app.seedChat(title: "work notes", project: "work"));
+      await pumpBeside(tester);
+      await openProjectMenu(tester);
+      await tester.enterText(
+          find.descendant(
+              of: find.byType(ProjectPalette), matching: find.byType(TextField)),
+          "notes");
+      await settleIo(tester);
+
+      await tester.tap(find.text("work notes"));
+      await settleIo(tester);
+
+      expect(find.byType(ProjectPalette), findsNothing);
+      expect(app.container.read(selectedProjectProvider), "work");
+      expect(app.container.read(selectedChatIdProvider), chat.state.id);
+    });
+
+    testWidgets("enter picks the row the arrow keys are on", (tester) async {
+      await pumpBeside(tester);
+      await openProjectMenu(tester);
+
+      // The default project is where it starts; one down is the first built-in.
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.pump();
+      await tester.testTextInput.receiveAction(TextInputAction.go);
+      await settleIo(tester);
+
+      expect(app.container.read(selectedProjectProvider),
+          builtinProjects.first.dir);
+    });
+
     // Anonymous has neither a settings page nor a shared workspace, so the
     // slot beside the switcher holds nothing for it. Byte Repair has both,
     // since its spec ships a note and reads the user's files on top of it.
@@ -398,9 +483,10 @@ void main() {
       await pumpBeside(tester);
       await openProjectMenu(tester);
 
-      await tester.tap(find.text("New project…"));
+      await tester.tap(find.text("New Project"));
       await settleIo(tester);
-      await tester.enterText(find.byType(TextField), "My Side Project");
+      await tester.enterText(find.widgetWithText(TextField, "Name"), "My Side Project");
+      await tester.pump();
       await tester.tap(find.text("Create"));
       await settleIo(tester, least: 20);
 
@@ -408,13 +494,72 @@ void main() {
       expect(Directory(app.config.projectWorkspaceDir(project: "My-Side-Project")).existsSync(), isTrue);
     });
 
+    testWidgets("creating one with a description sets it", (tester) async {
+      await pumpBeside(tester);
+      await openProjectMenu(tester);
+
+      await tester.tap(find.text("New Project"));
+      await settleIo(tester);
+      await tester.enterText(find.widgetWithText(TextField, "Name"), "notes");
+      await tester.pump();
+      await tester.enterText(
+          find.widgetWithText(TextField, "Description"), "What are we writing?");
+      await tester.tap(find.text("Create"));
+      await settleIo(tester, least: 20);
+
+      await io(tester, () async {});
+      expect(app.container.read(selectedProjectProvider), "notes");
+      expect(ProjectSettings.load(app.config, project: "notes").description,
+          "What are we writing?");
+    });
+
+    // Left blank it is the default question, not a project that asks nothing.
+    testWidgets("creating one without a description leaves it unset", (tester) async {
+      await pumpBeside(tester);
+      await openProjectMenu(tester);
+
+      await tester.tap(find.text("New Project"));
+      await settleIo(tester);
+      await tester.enterText(find.widgetWithText(TextField, "Name"), "plain");
+      await tester.pump();
+      await tester.tap(find.text("Create"));
+      await settleIo(tester, least: 20);
+
+      await io(tester, () async {});
+      expect(app.container.read(selectedProjectProvider), "plain");
+      expect(ProjectSettings.load(app.config, project: "plain").description,
+          isNull);
+    });
+
+    testWidgets("back from the new project page is the palette, not out of it",
+        (tester) async {
+      await pumpBeside(tester);
+      await openProjectMenu(tester);
+      await tester.tap(find.text("New Project"));
+      await settleIo(tester);
+      expect(find.text("New project"), findsOneWidget);
+
+      await tester.tap(find.byTooltip("Back"));
+      await settleIo(tester);
+      expect(find.byType(ProjectPalette), findsOneWidget);
+      expect(find.text("New project"), findsNothing);
+
+      await tester.tap(find.text("New Project"));
+      await settleIo(tester);
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await settleIo(tester);
+      expect(find.byType(ProjectPalette), findsOneWidget);
+      expect(find.text("New project"), findsNothing);
+    });
+
     testWidgets("creating one with the switch on writes the Omada flag", (tester) async {
       await pumpBeside(tester);
       await openProjectMenu(tester);
 
-      await tester.tap(find.text("New project…"));
+      await tester.tap(find.text("New Project"));
       await settleIo(tester);
-      await tester.enterText(find.byType(TextField), "Team");
+      await tester.enterText(find.widgetWithText(TextField, "Name"), "Team");
+      await tester.pump();
       await tester.tap(find.byType(SwitchListTile));
       await settleIo(tester);
       await tester.tap(find.text("Create"));
@@ -431,9 +576,10 @@ void main() {
       await pumpBeside(tester);
       await openProjectMenu(tester);
 
-      await tester.tap(find.text("New project…"));
+      await tester.tap(find.text("New Project"));
       await settleIo(tester);
-      await tester.enterText(find.byType(TextField), "Plain");
+      await tester.enterText(find.widgetWithText(TextField, "Name"), "Plain");
+      await tester.pump();
       await tester.tap(find.text("Create"));
       await settleIo(tester, least: 20);
 
@@ -470,7 +616,7 @@ void main() {
 
       final label = find
           .descendant(
-            of: find.byType(TextButton),
+            of: find.byTooltip("Switch project"),
             matching: find.text("team"),
           )
           .first;
@@ -604,8 +750,10 @@ void main() {
       await pumpBeside(tester);
       await switchTo(tester, "work");
 
-      await openProjectMenu(tester);
-      await tester.tap(find.text("Delete project…"));
+      await tester.tap(find.byTooltip("Project settings"));
+      await settleIo(tester);
+      await tester.scrollUntilVisible(find.text("Delete project"), 200);
+      await tester.tap(find.text("Delete project"));
       await settleIo(tester);
       await tester.tap(find.text("Delete"));
       await settleIo(tester, least: 20);
@@ -625,8 +773,10 @@ void main() {
       await pumpBeside(tester);
       await switchTo(tester, "work");
 
-      await openProjectMenu(tester);
-      await tester.tap(find.text("Delete project…"));
+      await tester.tap(find.byTooltip("Project settings"));
+      await settleIo(tester);
+      await tester.scrollUntilVisible(find.text("Delete project"), 200);
+      await tester.tap(find.text("Delete project"));
       await settleIo(tester);
       await tester.tap(find.text("Delete"));
       await settleIo(tester, least: 20);

@@ -80,3 +80,27 @@ A chat with a turn in flight has a spinner in its row's leading slot, off the
 backend's `runningTurns`. The slot is reserved whether or not anything runs, so
 a turn starting or ending never moves the title; the docked sidebar is
 `sidebarWidth` wide to make up the room.
+
+## The project palette
+
+The switcher at the top of the sidebar opens `project_palette.dart`, and so does
+Ctrl+K (Cmd+K on Apple's platforms). It is the whole screen below
+`compactWidth` and a box in the middle above it. The default project and the
+built-ins sit above a rule, the user's projects below it, other devices'
+projects under their own heading; each row is a spinner slot, the icon, the
+name and its chat count. Typing searches project names first, then chat titles
+in every project, each chat tagged with its own. Picking a chat switches to its
+project first, since the sidebar lists one project and would otherwise deny the
+chat on screen.
+
+A pick is returned to the opener rather than run in the palette: the palette's
+ref is disposed by then, and the drawer a picked chat closes is the opener's.
+The shortcut is a `HardwareKeyboard` handler in `AppShell` rather than a
+`Shortcuts` widget, which hears nothing once focus has fallen back to the
+route's scope above it. Deleting a project is on its settings page alone.
+
+New Project swaps the list for a page in the same panel — name, description,
+the Omada switch — and back, Esc or the system back key return to the list
+rather than out of the palette (`PopScope` while the page is up). A blank
+description is left unset, which is the default question; an empty string
+would be a project that asks nothing.

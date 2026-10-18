@@ -8,7 +8,7 @@ const double navBreakpoint = 900.0;
 const double navPanelWidth = 280.0;
 
 /// Material's compact breakpoint — a phone, either way up.
-const double _compact = 600.0;
+const double compactWidth = 600.0;
 
 /// Picking something in a nav panel should reveal it, and as a drawer the panel
 /// is sitting over the thing it is revealing. Takes the tapped tile's own
@@ -28,7 +28,7 @@ class NavDrawer extends StatelessWidget {
   Widget build(BuildContext context) {
     final width = MediaQuery.sizeOf(context).width;
     return Drawer(
-      width: width < _compact ? width : null,
+      width: width < compactWidth ? width : null,
       // Claims the back key from Android, which the drawer's own
       // `LocalHistoryEntry` does not — see AGENTS.md. Deleting this as dead
       // code is how it shipped broken once.
