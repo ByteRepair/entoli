@@ -741,10 +741,10 @@ void main() {
       expect(turns.prompts.single, (state.id, "do the thing"));
     });
 
-    test("its attachments go ahead of its prompt and arrive whole",
+    test("its attachments travel with its prompt and arrive whole",
         () async {
       final state = await mirrored();
-      // Past one chunk, so the pieces have to be put back together.
+      // Past one frame, so the pieces have to be put back together.
       final bytes = Uint8List.fromList(List.generate(70000, (i) => i % 251));
 
       await away.hub.sendRemotePrompt(state.id, "look", attachments: [
@@ -1043,21 +1043,6 @@ void main() {
 
       expect((await other.hub.sendRemotePrompt(state.id, "hi"))!.ok, isFalse);
       expect(turns.prompts, isEmpty);
-    });
-
-    test("a prompt whose attachment never came still runs, without it", () async {
-      final state = await mirrored();
-      away.hub.followChat(state.id);
-      await waitForSync(() => home.hub.servedChats.value.contains(state.id));
-
-      await away.hub.sendForTest(
-          state.id,
-          SyncMessage.promptSend(requestId: "q-test", chatId: state.id, text: "hi", files: [
-            const SyncFile(id: "u-lost", filename: "lost.png", mimeType: "image/png"),
-          ]));
-      await waitForSync(() => turns.prompts.isNotEmpty);
-
-      expect(turns.prompts.last, (state.id, "hi"));
     });
 
     test("the turn the home device is running reaches the mirror", () async {

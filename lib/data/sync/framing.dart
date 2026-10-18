@@ -151,6 +151,7 @@ final class SecureChannel implements ByteChannel {
         Uint8List frame;
         try {
           frame = await _reader.next();
+          lastFrame = DateTime.now();
         } on ChannelClosedException {
           break;
         } catch (error) {
@@ -178,6 +179,11 @@ final class SecureChannel implements ByteChannel {
 
   /// The message being put back together.
   final _pieces = BytesBuilder(copy: false);
+
+  /// When the last frame arrived, a piece of a message included: what the
+  /// liveness check reads, since a message that takes longer than its cutoff
+  /// to arrive whole is a link that is working.
+  DateTime lastFrame = DateTime.now();
 
   Future<Uint8List> _open(Uint8List frame) async {
     if (frame.length < 5 + 16) {

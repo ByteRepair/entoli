@@ -82,14 +82,13 @@ class MirrorChatController extends Notifier<ChatViewState>
 
   SyncHub get _hub => ref.read(syncHubProvider);
 
-  /// Attachments go ahead of the prompt, and are saved under the chat there.
-  /// Throws [Undelivered] where not all of it arrived: the composer has
-  /// already cleared, so the page says so.
+  /// Attachments go with the prompt, and are saved under the chat there.
+  /// Throws [Undelivered] where it did not arrive: the composer has already
+  /// cleared, so the page says so.
   @override
   Future<void> send(String text, {List<Attachment> attachments = const []}) async {
     final reply = await _hub.sendRemotePrompt(chatId, text, attachments: attachments);
     if (reply == null || !reply.ok) throw const Undelivered("The message did not reach the other device.");
-    if (reply.missing.isNotEmpty) throw Undelivered.missing(reply.missing);
   }
 
   @override
@@ -140,14 +139,9 @@ final chatViewProvider = Provider.family<ChatViewState, String>((ref, chatId) =>
         ? ref.watch(mirrorChatControllerProvider(chatId))
         : ref.watch(chatControllerProvider(chatId)));
 
-/// A message a paired device did not take whole. [message] is said to the
-/// user.
+/// A message a paired device did not take. [message] is said to the user.
 class Undelivered implements Exception {
   const Undelivered(this.message);
-
-  Undelivered.missing(List<String> filenames)
-      : message = "${filenames.join(", ")} did not reach the other device; "
-            "the message went without ${filenames.length == 1 ? "it" : "them"}.";
 
   final String message;
 

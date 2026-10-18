@@ -71,7 +71,7 @@ void main() {
 
   test("the driving arms travel too", () {
     roundTrips(const SyncMessage.promptSend(requestId: "q1", chatId: "c1", text: "hi"));
-    roundTrips(const SyncMessage.reply(requestId: "q1", ok: false, missing: ["a.png"]));
+    roundTrips(const SyncMessage.reply(requestId: "q1", ok: false, entries: [{"id": "m1"}]));
     roundTrips(const SyncMessage.approvalRespond(
         chatId: "c1", approvalId: "a", allow: false));
     roundTrips(const SyncMessage.questionsRespond(

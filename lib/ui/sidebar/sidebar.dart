@@ -102,16 +102,15 @@ void openNewChat(BuildContext context, WidgetRef ref) {
 
 /// Start a chat and say the first thing in it. The new-chat screen's composer
 /// is the one caller: it holds the text, the files and the settings until
-/// there is a chat to put them in, and this is that moment. Null is a chat
-/// that could not be made, so that the caller can put back what it cleared;
-/// otherwise the attachments a paired device did not receive.
+/// there is a chat to put them in, and this is that moment. False is a chat
+/// that could not be made, so that the caller can put back what it cleared.
 ///
 /// The turn is deliberately not awaited — it runs for as long as the model
 /// takes, and the page has to arrive on the message rather than after the
 /// reply. Nothing waits on the controller having read the chat back either:
 /// `send` waits on that itself, which is what [ChatController] owes anything
 /// that drives a turn it has only just built.
-Future<List<String>?> startChatWith(
+Future<bool> startChatWith(
   WidgetRef ref,
   String text, {
   List<Attachment> attachments = const [],
@@ -122,16 +121,16 @@ Future<List<String>?> startChatWith(
     // Made there, which runs the turn: this device follows it, holding it.
     final reply = await ref.read(syncHubProvider).startRemoteChat(at, text, attachments: attachments);
     final id = reply?.chatId;
-    if (id == null) return null;
+    if (id == null) return false;
     ref.read(selectedChatIdProvider.notifier).select(id);
-    return reply!.missing;
+    return true;
   }
   final id = await ref.read(selectedChatIdProvider.notifier).create(meta: meta);
-  if (id == null) return null;
+  if (id == null) return false;
   unawaited(ref
       .read(chatControllerProvider(id).notifier)
       .send(text, attachments: attachments));
-  return const [];
+  return true;
 }
 
 class Sidebar extends ConsumerStatefulWidget {

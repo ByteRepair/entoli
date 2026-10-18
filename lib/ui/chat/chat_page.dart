@@ -131,20 +131,17 @@ class _NewChatState extends ConsumerState<_NewChat> {
   /// is logged, and this is the only thing left on screen to say so.
   Future<void> _send(String text, List<Attachment> attachments) async {
     setState(() => _starting = true);
-    final missing =
+    final made =
         await startChatWith(ref, text, attachments: attachments, meta: _meta);
     if (!mounted) return;
     setState(() => _starting = false);
-    if (missing == null) {
+    if (!made) {
       _controller.text = text;
-      _say("Could not start a chat.");
-    } else if (missing.isNotEmpty) {
-      _say(Undelivered.missing(missing).message);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Could not start a chat.")),
+      );
     }
   }
-
-  void _say(String message) =>
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
 
   /// The composer, or a "setup required" bar where the project needs setup
   /// and has not been set up yet. The bar replaces the composer entirely,

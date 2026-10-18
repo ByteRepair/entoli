@@ -5,7 +5,6 @@ import "../chat_log.dart";
 import "../chat_meta.dart";
 import "../models.dart";
 import "../project_settings.dart";
-import "identity.dart";
 
 part "protocol.freezed.dart";
 part "protocol.g.dart";
@@ -34,7 +33,6 @@ sealed class SyncMessage with _$SyncMessage {
     required List<ChatState> chats,
     @Default(<String>[]) List<String> omadaProjects,
     @Default(<String>[]) List<String> projects,
-    @Default(SyncIdentity.protocolVersion) int proto,
   }) = SyncWelcome;
 
   const factory SyncMessage.chatsChanged({
@@ -125,8 +123,7 @@ sealed class SyncMessage with _$SyncMessage {
     String? retry,
   }) = SyncTurnState;
 
-  /// [files] went ahead as [SyncResourceChunk]s under their ids. Answered by
-  /// a [SyncReply] naming any whose bytes did not arrive.
+  /// Answered by a [SyncReply].
   const factory SyncMessage.promptSend({
     required String requestId,
     required String chatId,
@@ -210,13 +207,13 @@ sealed class SyncMessage with _$SyncMessage {
   }) = SyncChatStart;
 
   /// The answer to a request by its [requestId]: [ok] where it went through,
-  /// [chatId] the chat a [SyncChatStart] made, and [missing] the attachments
-  /// a prompt named whose bytes did not arrive.
+  /// [chatId] the chat a [SyncChatStart] made, and [entries] the [MemoryEntry]
+  /// JSON a [SyncMemoryCall] read.
   const factory SyncMessage.reply({
     required String requestId,
     @Default(true) bool ok,
     String? chatId,
-    @Default(<String>[]) List<String> missing,
+    @Default(<Map<String, dynamic>>[]) List<Map<String, dynamic>> entries,
   }) = SyncReply;
 
   // ---- A project on the home device, read only while it is open. --------
@@ -244,7 +241,7 @@ sealed class SyncMessage with _$SyncMessage {
 
   /// Read or change [project]'s memories: [op] is `list`, `search` (by
   /// [text]), `add` ([text]), `pin`, `unpin` or `delete` ([id]). Answered by
-  /// [SyncMemories]: what a list or the search reads after it.
+  /// a [SyncReply] with what a list or the search reads after it.
   const factory SyncMessage.memoryCall({
     required String requestId,
     String? project,
@@ -252,13 +249,6 @@ sealed class SyncMessage with _$SyncMessage {
     String? id,
     String? text,
   }) = SyncMemoryCall;
-
-  /// [MemoryEntry] JSON; [failed] where the call did not go through.
-  const factory SyncMessage.memories({
-    required String requestId,
-    @Default(<Map<String, dynamic>>[]) List<Map<String, dynamic>> entries,
-    @Default(false) bool failed,
-  }) = SyncMemories;
 
   /// The three below are answered by a [SyncReply]; a follower has the
   /// snapshot of what was written ahead of it.
@@ -284,11 +274,12 @@ sealed class SyncMessage with _$SyncMessage {
       _$SyncMessageFromJson(json);
 }
 
-/// An attachment sent with a prompt, its bytes ahead of it under [id].
+/// An attachment sent with a prompt. Inline: the framing splits a message of
+/// any size, and the liveness check counts its pieces.
 @freezed
 abstract class SyncFile with _$SyncFile {
   const factory SyncFile({
-    required String id,
+    required String bytesB64,
     required String filename,
     required String mimeType,
   }) = _SyncFile;

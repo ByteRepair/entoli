@@ -240,7 +240,7 @@ associated data, so the bit cannot be flipped, and the counter keeps the
 pieces in order; one message's pieces are one link of the send chain, so
 nothing lands between them. Nothing above the framing pages anything: a
 snapshot's records are one `recordAppend`, a project's library one
-`projectPrompts`, a memory answer one `memories`.
+`projectPrompts`, a prompt's attachments ride inside it.
 
 ### Attachments
 
@@ -254,14 +254,13 @@ with no protocol change, since the type byte already separates the streams. A
 resource that is not there answers with an empty final chunk, so the asking
 side gets a null rather than a hang.
 
-**The other way, an attachment goes ahead of its prompt.** A mirror's `send`
-streams each attachment's bytes as `resourceChunk`s under a `u`-prefixed id
-nothing asked for, then sends `promptSend` (or `chatStart`) naming them in
-`files`. Messages from one peer arrive in order, so the home device has the
-bytes by the time the prompt names them; it takes them out of the peer's
-`uploads` and hands them to its own `ChatController.send`, which saves them
-under the chat as a local attachment would be. Unclaimed bytes go with the
-connection.
+**The other way, an attachment rides inside its prompt.** A mirror's `send`
+puts each attachment's bytes in `promptSend`'s (or `chatStart`'s) `files`,
+base64; the home device hands them to its own `ChatController.send`, which
+saves them under the chat as a local attachment would be. It used to send them
+ahead as unrequested chunks, which needed a per-peer holding area, a way to
+say some never came, and a cleanup for those never claimed — all for a case an
+ordered, reliable channel does not have.
 
 `SyncByteCache` holds what came back, bounded at 64MB of bytes rather than a
 count of entries — an image-heavy conversation is where the megabytes are. It
@@ -408,8 +407,8 @@ routed.
 
 **Its memories are asked for, not held.** `memoriesProvider(ref)` is a
 `MemoryStore` here and a `RemoteMemories` there, which sends each read or
-change as a `memoryCall` and returns the `memories` that answer it — the list
-after a change, the matches for a search. Nothing is kept between calls; the
+change as a `memoryCall` and returns the entries of the `reply` that answers
+it — the list after a change, the matches for a search. Nothing is kept between calls; the
 page keeps what it last drew while the device is away, frozen, and reads again
 when it is back.
 
@@ -433,16 +432,14 @@ stays sync-unaware. Two sources of truth, never merged.
 
 ### Requests and their reply
 
-`promptSend`, `chatStart`, `projectWrite`, `projectCreate` and
-`projectDelete` carry a `requestId` and are answered by one `reply`: `ok`,
-the chat a start made, and the attachments a prompt named whose bytes never
-came. The asker waits through the same echo list the chat writes use
+`promptSend`, `chatStart`, `memoryCall`, `projectWrite`, `projectCreate`
+and `projectDelete` carry a `requestId` and are answered by one `reply`: `ok`,
+the chat a start made, and the entries a memory call read. The asker waits through the same echo list the chat writes use
 (`_ask` over `_send`), so a device away or silent is a null after 30s and a
 refusal is an answer at once rather than that wait. A home device's create
 and delete list the projects again before replying, so the asker can select
-what it made. Where attachments went missing the page says which in a snack
-bar (`Undelivered`); the message went without them. Memories keep their own
-`memories` answer, since it carries the entries.
+what it made. A prompt that did not land says so in a snack bar
+(`Undelivered`).
 
 ## Driving a turn from the other end
 
@@ -485,7 +482,7 @@ themselves cross as records.
 `TurnDriver` is the interface the two controllers meet on, so `TurnSurface`,
 `TurnQuestions`, `Composer` and the approval banner are the same widgets at
 both ends. `ChatController` implements it by running the turn;
-`MirrorChatController` implements it by sending, attachments ahead of the
+`MirrorChatController` implements it by sending, attachments inside the
 prompt (see "Attachments"). `chatViewProvider` is the view from whichever controller a chat has, for
 a page — the Context page — that only reads it.
 
@@ -660,9 +657,12 @@ close, so its data channel never ends by itself and ICE goes on probing every
 candidate path — a wall of STUN lines in the native log. The heartbeat in
 `watchLiveness` is the one check: a ping every 5s, and 15s unanswered closes
 the peer, which stops the probing and takes it offline through `_peerGone`.
-Any frame counts as the answer, stamped on arrival rather than in the handler
-queue: a handler streaming a large resource holds that queue past 15s, and a
-pong behind it would drop a link that is working.
+Any frame counts as the answer — `SecureChannel.lastFrame`, stamped as each
+frame is read, a piece of a message included. Counting whole messages was not
+enough: a pong waits behind whatever the other side is sending, and a
+snapshot of a long conversation over a slow relay takes more than 15s to
+arrive whole, so the link dropped, reconnected, asked for the same snapshot
+and dropped again.
 It was 30s and 75s, which left a dead peer listed and probed for up to a
 minute and three quarters. Watching ICE's connection state would see a dead
 transport sooner, but not an app stuck while WebRTC's threads still answer,

@@ -1,5 +1,4 @@
 import "dart:async";
-import "dart:typed_data";
 
 import "package:flutter/foundation.dart";
 
@@ -60,17 +59,12 @@ class LivePeer {
   /// not report the device gone, or it takes the new one down with it.
   bool _superseded = false;
 
-  DateTime lastPong = DateTime.now();
-
   /// This device's chat ids the peer is following. Only subscribers get
   /// record and state pushes.
   final subscriptions = <String>{};
 
   /// This device's projects the peer has open, null for the default one.
   final projectSubscriptions = <String?>{};
-
-  /// Attachment bytes the peer sent ahead of the prompt that names them.
-  final uploads = <String, BytesBuilder>{};
 
   StreamSubscription<Map<String, dynamic>>? pump;
 
@@ -81,9 +75,6 @@ class LivePeer {
 
   void enqueue(SyncMessage message) {
     if (_closed) return;
-    // Any frame is an answer: a pong queued behind a handler sending a large
-    // resource would otherwise land past the cutoff and drop a working link.
-    lastPong = DateTime.now();
     _queue = _queue.then((_) => handle?.call(message)).catchError((Object error) =>
         logFailure("sync", "handling a message from $deviceId", error));
   }
@@ -236,7 +227,7 @@ class SyncPeers {
     _pingTimer = Timer.periodic(const Duration(seconds: 5), (_) {
       final cutoff = DateTime.now().subtract(const Duration(seconds: 15));
       for (final peer in _live.values.toList()) {
-        if (peer.lastPong.isBefore(cutoff)) {
+        if (peer.channel.lastFrame.isBefore(cutoff)) {
           unawaited(peer.close());
           continue;
         }
