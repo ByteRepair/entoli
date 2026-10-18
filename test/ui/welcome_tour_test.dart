@@ -1,6 +1,7 @@
 import "package:flutter/material.dart";
 import "package:flutter_test/flutter_test.dart";
 
+import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/providers.dart";
 import "package:agent_chat/ui/settings/settings_page.dart";
 import "package:agent_chat/ui/settings/welcome_page.dart";
@@ -21,70 +22,96 @@ void main() {
 
   Finder button(String label) => find.widgetWithText(FilledButton, label);
 
-  Finder previous() => find.widgetWithText(OutlinedButton, "Previous");
+  Finder back() => find.widgetWithText(TextButton, "Back");
 
-  Future<void> walkToLast(WidgetTester tester) async {
-    for (var i = 0; i < 4; i++) {
+  Future<void> next(WidgetTester tester, [int times = 1]) async {
+    for (var i = 0; i < times; i++) {
       await tester.tap(button("Next"));
       await tester.pumpAndSettle();
     }
   }
 
-  testWidgets("walks forward and back through five pages", (tester) async {
+  // Six pages of what the app is, then the provider page.
+  Future<void> walkToProviders(WidgetTester tester) => next(tester, 6);
+
+  Future<void> walkToLast(WidgetTester tester) => next(tester, 11);
+
+  testWidgets("walks forward and back through the pages", (tester) async {
     await app.pump(tester, const WelcomePage());
 
     expect(find.text("Welcome to Entoli"), findsOneWidget);
-    expect(button("Previous"), findsNothing);
+    expect(back(), findsNothing);
 
-    await tester.tap(button("Next"));
+    await next(tester);
+    expect(find.text("Bring your own model"), findsOneWidget);
+    await tester.tap(back());
     await tester.pumpAndSettle();
-    expect(find.text("Provider and Model Setup"), findsOneWidget);
+    expect(find.text("Welcome to Entoli"), findsOneWidget);
+
+    await walkToProviders(tester);
+    expect(find.text("Connect a model"), findsOneWidget);
+    expect(find.text("4 models ready"), findsOneWidget);
+
+    await next(tester);
+    expect(find.text("Pick a model"), findsOneWidget);
     // Both halves of the LLM pickers travel with the page.
     expect(find.text("LLM"), findsOneWidget);
     expect(find.text("Title LLM"), findsOneWidget);
 
-    await tester.tap(previous());
-    await tester.pumpAndSettle();
-    expect(find.text("Welcome to Entoli"), findsOneWidget);
-
-    await tester.tap(button("Next"));
-    await tester.pumpAndSettle();
-    await tester.tap(button("Next"));
-    await tester.pumpAndSettle();
-    // The memory page is the category's own section: auto-memory alone, the
-    // AGENTS.md half of it living in settings only.
-    expect(find.text("Agent Memory"), findsOneWidget);
-    await scrollTo(tester, find.text("Keep memories"));
-    // The Memory LLM picker travels under the master gate.
-    await tester.tap(find.text("Keep memories"));
+    await next(tester);
+    // One switch, and it is the Memory category's "Keep memories".
+    expect(find.text("Remember things"), findsOneWidget);
+    expect(find.byType(SwitchListTile), findsOneWidget);
+    expect(find.text("Memory LLM"), findsNothing);
+    final memory = app.container.read(appSettingsProvider).autoMemory;
+    await tester.tap(find.text("Enable memories"));
     await settleIo(tester);
-    expect(find.text("Memory LLM"), findsOneWidget);
+    expect(app.container.read(appSettingsProvider).autoMemory, !memory);
 
-    await tester.tap(button("Next"));
-    await tester.pumpAndSettle();
-    // The extras page carries Byte Repair with the rest: what its code being
-    // formally verified means is said in plain terms there.
+    await next(tester);
+    expect(find.text("More to set up"), findsOneWidget);
+    expect(find.text("Marketplace"), findsOneWidget);
+    await scrollTo(tester, find.text("Byte Repair"));
     expect(find.text("Byte Repair"), findsOneWidget);
-    await scrollTo(tester, find.textContaining("Formally verified coding"));
-    expect(find.textContaining("Formally verified coding"), findsOneWidget);
 
-    await tester.tap(button("Next"));
-    await tester.pumpAndSettle();
-    expect(find.text("What you can do with Entoli"), findsOneWidget);
+    await next(tester, 2);
+    expect(find.text("Yours alone"), findsOneWidget);
     expect(button("Done"), findsOneWidget);
     expect(button("Next"), findsNothing);
   });
 
-  // The setup page holds the tour until a model is picked: the button is dead
-  // and the swipe cannot go around it. Unseeded, unlike the walks, so the
-  // gate has something to hold.
-  testWidgets("Next is held on the setup page until a model is picked",
+  // The provider page holds the tour until some model is reachable: the
+  // button is dead and the swipe cannot go around it.
+  testWidgets("Next is held on the provider page until a model is reachable",
+      (tester) async {
+    app.backend.modelList = const [];
+    await app.pump(tester, const WelcomePage());
+    await walkToProviders(tester);
+
+    expect(find.text("Set one up to continue."), findsOneWidget);
+    expect(tester.widget<FilledButton>(button("Next")).onPressed, isNull);
+    await tester.drag(find.byType(PageView), const Offset(-400, 0));
+    await tester.pumpAndSettle();
+    expect(find.text("Connect a model"), findsOneWidget);
+
+    app.backend.modelList = const [
+      ModelOption(providerId: "anthropic", modelId: "claude-sonnet-4"),
+    ];
+    app.container.invalidate(availableModelsProvider);
+    await settleIo(tester);
+    expect(find.text("1 model ready"), findsOneWidget);
+    expect(tester.widget<FilledButton>(button("Next")).onPressed, isNotNull);
+  });
+
+  // Unseeded, unlike the walks, so the model page's gate has something to
+  // hold.
+  testWidgets("Next is held on the model page until a model is picked",
       (tester) async {
     app.dispose();
     app = TestApp.create();
     await app.pump(tester, const WelcomePage());
-    await tester.tap(button("Next"));
-    await tester.pumpAndSettle();
+    await walkToProviders(tester);
+    await next(tester);
 
     expect(tester.widget<FilledButton>(button("Next")).onPressed, isNull);
 
@@ -95,9 +122,8 @@ void main() {
     await settleIo(tester, least: 3);
     expect(tester.widget<FilledButton>(button("Next")).onPressed, isNotNull);
 
-    await tester.tap(button("Next"));
-    await tester.pumpAndSettle();
-    expect(find.text("Agent Memory"), findsOneWidget);
+    await next(tester);
+    expect(find.text("Remember things"), findsOneWidget);
   });
 
   testWidgets("the first-run page has no back arrow", (tester) async {
@@ -112,7 +138,7 @@ void main() {
       await pumpSettings(tester, app, SettingsCategory.welcome);
 
       expect(find.byType(WelcomeTour), findsOneWidget);
-      expect(find.text("Provider and Model Setup"), findsNothing);
+      expect(find.text("Connect a model"), findsNothing);
     });
 
     // Done in a settings pane has nothing of its own to leave, so it must not
