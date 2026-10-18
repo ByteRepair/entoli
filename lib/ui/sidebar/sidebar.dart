@@ -15,12 +15,12 @@ import "../memory/memory_page.dart";
 import "../marketplace/marketplace_page.dart";
 import "../profile/profile_page.dart";
 import "../settings/settings_page.dart";
-import "../widgets/anchored_menu.dart";
 import "../widgets/nav_drawer.dart";
 import "../widgets/dialogs.dart";
 import "../widgets/nothing.dart";
 import "../workspace/workspace_page.dart";
 import "chat_groups.dart";
+import "project_palette.dart";
 import "project_settings_page.dart";
 
 /// The sidebar's width where it is docked beside the chat pane.
@@ -712,15 +712,19 @@ class _ChatTile extends ConsumerWidget {
 String _remoteLabel(String deviceName, String? project) =>
     project == null ? deviceName : "$deviceName · ${projectLabel(project)}";
 
+/// A project on a paired device, as the switcher lists it.
+typedef RemoteEntry = ({RemoteScope scope, String label, bool omada, int count});
+
 /// Every project that has a mirrored chat in it, one entry each, device
 /// first. A device with nothing mirrored has no projects to offer — the
 /// welcome is what says a project exists at all.
-List<({RemoteScope scope, String label, bool omada})> _remoteEntries(
-    List<RemoteChatEntry> remotes) {
+List<RemoteEntry> remoteEntries(List<RemoteChatEntry> remotes) {
   final byScope = <RemoteScope, RemoteChatEntry>{};
+  final counts = <RemoteScope, int>{};
   for (final entry in remotes) {
-    byScope[(deviceId: entry.deviceId, project: entry.state.project)] ??=
-        entry;
+    final scope = (deviceId: entry.deviceId, project: entry.state.project);
+    byScope[scope] ??= entry;
+    counts[scope] = (counts[scope] ?? 0) + 1;
   }
   final entries = [
     for (final MapEntry(key: scope, value: entry) in byScope.entries)
@@ -728,6 +732,7 @@ List<({RemoteScope scope, String label, bool omada})> _remoteEntries(
         scope: scope,
         label: _remoteLabel(entry.deviceName, scope.project),
         omada: entry.omada,
+        count: counts[scope]!,
       ),
   ];
   entries.sort((a, b) => a.label.toLowerCase().compareTo(b.label.toLowerCase()));
@@ -748,137 +753,55 @@ String _scopeLabel(
   return projectLabel(project);
 }
 
-/// The project being shown, and everything that changes it.
+/// The project being shown, and the way to the palette that changes it.
 class _ProjectMenu extends ConsumerWidget {
   const _ProjectMenu();
 
-  Future<void> _create(BuildContext context, WidgetRef ref) async {
-    final name = await promptNewProject(context,
-        omadaByDefault: ref.read(appSettingsProvider).omadaByDefault);
-    if (name == null) return;
-    await ref.read(chatRepositoryProvider).createProject(name.name);
-    if (name.omada) {
-      await ref
-          .read(projectSettingsProvider(name.name).notifier)
-          .setOmada(true);
-    }
-    ref.invalidate(projectListProvider);
-    selectProject(ref, name.name);
-  }
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
     final remote = ref.watch(selectedRemoteProvider);
     final project = ref.watch(selectedProjectProvider);
-    // Watched rather than read when the menu opens: it is a `FutureProvider`,
-    // so nothing loads it until something watches, and a menu that read it on
-    // the way up got an empty list every time.
-    final projects = ref.watch(projectListProvider).value ?? const <String>[];
-    // The label alone, not the list behind it: that is only wanted when the
-    // menu opens, and watching it redrew this button on every state diff from
-    // every mirrored chat. A `String` comes back, so `select` compares it.
+    // The label alone, not the list behind it: watching the list redrew this
+    // button on every state diff from every mirrored chat. A `String` comes
+    // back, so `select` compares it.
     final label = remote == null
         ? projectLabel(project)
         : ref.watch(remoteChatsProvider
             .select((chats) => _scopeLabel(chats, remote, project)));
-    return Align(
-      alignment: Alignment.centerLeft,
-      // The button's own context, which is what the menu is anchored under.
-      child: Builder(
-        builder: (context) => TextButton.icon(
-          iconAlignment: IconAlignment.end,
-          icon: const Icon(Icons.arrow_drop_down),
-          label: Text(
-            label,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-            ).merge(
-              projectLabelStyle(remote == null
-                  ? ref.watch(omadaOnProvider(project))
-                  : ref.watch(remoteChatsProvider.select((chats) => chats.any(
-                      (e) =>
-                          e.deviceId == remote.deviceId &&
-                          e.state.project == remote.project &&
-                          e.omada)))),
-            ),
+    final omada = remote == null
+        ? ref.watch(omadaOnProvider(project))
+        : ref.watch(remoteChatsProvider.select((chats) => chats.any((e) =>
+            e.deviceId == remote.deviceId &&
+            e.state.project == remote.project &&
+            e.omada)));
+    return Tooltip(
+      message: "Switch project",
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: () => showProjectPalette(context, ref),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+          child: Row(
+            children: [
+              Icon(remote == null ? projectGlyph(project) : remoteGlyph,
+                  size: 22),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  label,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.titleMedium
+                      ?.copyWith(fontWeight: FontWeight.bold)
+                      .merge(projectLabelStyle(omada)),
+                ),
+              ),
+              Icon(Icons.unfold_more,
+                  size: 20, color: theme.colorScheme.onSurfaceVariant),
+            ],
           ),
-          onPressed: () => _open(context, ref, projects),
         ),
       ),
     );
-  }
-
-  /// One row of the menu. The check column's geometry is here once rather
-  /// than at each list that has rows in it.
-  PopupMenuItem<VoidCallback> _row(
-          {required bool checked,
-          required String label,
-          bool omada = false,
-          IconData? icon,
-          required VoidCallback pick}) =>
-      PopupMenuItem(
-        value: pick,
-        child: Row(
-          children: [
-            Icon(Icons.check,
-                size: 18, color: checked ? null : Colors.transparent),
-            const SizedBox(width: 12),
-            // A built-in project's icon sits beside the check; a user project
-            // or a remote entry reserves the slot so the labels all align.
-            if (icon != null)
-              Icon(icon, size: 18)
-            else
-              const SizedBox(width: 18),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                label,
-                overflow: TextOverflow.ellipsis,
-                // Omada is a fact about the project the menu says once, in
-                // the style rather than in new geometry.
-                style: projectLabelStyle(omada),
-              ),
-            ),
-          ],
-        ),
-      );
-
-  Future<void> _open(
-      BuildContext context, WidgetRef ref, List<String> projects) async {
-    final selected = ref.read(selectedProjectProvider);
-    final remote = ref.read(selectedRemoteProvider);
-    final remotes = _remoteEntries(ref.read(remoteChatsProvider));
-    final chosen = await showAnchoredMenu<VoidCallback>(context, [
-      for (final project in everyProject(projects))
-        _row(
-          checked: remote == null && project == selected,
-          label: projectLabel(project),
-          omada: ref.read(omadaOnProvider(project)),
-          icon: projectIcon(project),
-          pick: () => selectProject(ref, project),
-        ),
-      if (remotes.isNotEmpty) const PopupMenuDivider(),
-      for (final entry in remotes)
-        _row(
-          checked: entry.scope == remote,
-          label: entry.label,
-          omada: entry.omada,
-          pick: () => selectRemote(ref, entry.scope),
-        ),
-      const PopupMenuDivider(),
-      PopupMenuItem(
-        value: () => _create(context, ref),
-        child: const Text("New project…"),
-      ),
-      // A built-in project cannot be deleted, so it is not offered one.
-      if (selected != null && isProjectName(selected))
-        PopupMenuItem(
-          value: () => deleteProject(context, ref, selected),
-          child: const Text("Delete project…"),
-        ),
-    ]);
-    if (context.mounted) chosen?.call();
   }
 }

@@ -301,7 +301,7 @@ void main() {
     Future<void> pickRemote(WidgetTester tester) async {
       await app.pump(tester, const Sidebar());
       await settleIo(tester);
-      await tester.tap(find.byIcon(Icons.arrow_drop_down));
+      await tester.tap(find.byIcon(Icons.unfold_more));
       await settleIo(tester);
       await tester.tap(find.text("Desktop").last);
       await settleIo(tester);
@@ -313,7 +313,7 @@ void main() {
       await app.pump(tester, const Sidebar());
       await settleIo(tester);
 
-      await tester.tap(find.byIcon(Icons.arrow_drop_down));
+      await tester.tap(find.byIcon(Icons.unfold_more));
       await settleIo(tester);
 
       // Its default project, so the device's name alone — the local default
@@ -325,7 +325,7 @@ void main() {
         (tester) async {
       FontStyle? style() => tester
           .widget<Text>(find.descendant(
-              of: find.byType(TextButton), matching: find.text("Desktop")))
+              of: find.byTooltip("Switch project"), matching: find.text("Desktop")))
           .style
           ?.fontStyle;
       for (final omada in [true, false]) {
