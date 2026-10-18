@@ -127,7 +127,12 @@ class BuiltinBackend implements AgentBackend {
   /// settings' global guess.
   final Map<String, int?> _windows = {};
   final _RunningTurns _running = _RunningTurns();
-  final Map<String, StreamController<AgentEvent>> _controllers = {};
+  /// Every open turn stream per chat: a parallel round runs several at once.
+  final Map<String, Set<StreamController<AgentEvent>>> _controllers = {};
+
+  @visibleForTesting
+  int get openTurnStreams =>
+      _controllers.values.fold(0, (n, set) => n + set.length);
   final Map<String, List<ToolApproval>> _approvals = {};
   /// One per approval on screen, created when the request is forwarded and
   /// completed by whichever comes first: the user's answer, or the turn ending.
@@ -185,7 +190,7 @@ class BuiltinBackend implements AgentBackend {
     required TurnSettings settings,
   }) {
     final controller = StreamController<AgentEvent>();
-    _controllers[chatId] = controller;
+    (_controllers[chatId] ??= {}).add(controller);
     unawaited(_runTurn(chatId, prompt, controller,
         history: history, compactions: compactions, settings: settings));
     return controller.stream;
@@ -533,6 +538,10 @@ class BuiltinBackend implements AgentBackend {
       _clearApprovals(chatId);
       _clearQuestions(chatId);
       if (!controller.isClosed) await controller.close();
+      final open = _controllers[chatId];
+      if (open != null && open.remove(controller) && open.isEmpty) {
+        _controllers.remove(chatId);
+      }
       // Last, after the stream is closed: dropping it here is what releases
       // Android's hold on the process, and the listener is still writing the
       // turn's closing records when the agent itself has stopped.
@@ -1287,8 +1296,8 @@ class BuiltinBackend implements AgentBackend {
     await _running.stopAll(chatId);
     _clearApprovals(chatId);
     _clearQuestions(chatId);
-    final controller = _controllers.remove(chatId);
-    if (controller != null && !controller.isClosed) {
+    for (final controller in _controllers.remove(chatId) ?? const {}) {
+      if (controller.isClosed) continue;
       controller.add(const DoneEvent(aborted: true));
       await controller.close();
     }
