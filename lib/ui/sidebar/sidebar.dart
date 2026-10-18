@@ -23,6 +23,9 @@ import "../workspace/workspace_page.dart";
 import "chat_groups.dart";
 import "project_settings_page.dart";
 
+/// The sidebar's width where it is docked beside the chat pane.
+const sidebarWidth = 300.0;
+
 /// Which chat the pane is showing, or null for the new-chat screen. **Null is
 /// a screen rather than a chat to be made**: nothing is written until there is
 /// something to say — see "Nothing selected is a new chat".
@@ -592,6 +595,17 @@ class _ChatTile extends ConsumerWidget {
                 size: 14,
                 color: theme.colorScheme.onSurfaceVariant,
               ),
+            // The slot is there whether or not a turn is, so the title does
+            // not reflow each time one starts or ends.
+            SizedBox.square(
+              dimension: 16,
+              child: ValueListenableBuilder<Set<String>>(
+                valueListenable: ref.watch(agentBackendProvider).runningTurns,
+                builder: (context, running, _) => running.contains(chat.id)
+                    ? const CircularProgressIndicator(strokeWidth: 2)
+                    : const SizedBox.shrink(),
+              ),
+            ),
             PopupMenuButton<String>(
           icon: const Icon(Icons.more_vert),
           onSelected: (value) async {

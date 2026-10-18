@@ -37,7 +37,7 @@ void main() {
         underSystemBars(
           bars,
           Row(children: [
-            const SizedBox(width: 280, child: Sidebar()),
+            const SizedBox(width: sidebarWidth, child: Sidebar()),
             if (beside != null) Expanded(child: beside),
           ]),
         ),
@@ -140,6 +140,23 @@ void main() {
 
     expect(app.container.read(selectedChatIdProvider), isNotNull);
     expect(find.byType(Sidebar), findsOneWidget);
+  });
+
+  testWidgets("a chat with a turn running spins, and its title does not move",
+      (tester) async {
+    final chat = await io(tester, () => app.seedChat());
+    await pumpBeside(tester);
+    final idle = tester.getRect(find.text("old chat"));
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+
+    app.backend.runningTurns.value = {chat.state.id};
+    await tester.pump();
+    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    expect(tester.getRect(find.text("old chat")), idle);
+
+    app.backend.runningTurns.value = const {};
+    await tester.pump();
+    expect(find.byType(CircularProgressIndicator), findsNothing);
   });
 
   group("what the list looks like", () {
