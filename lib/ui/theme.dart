@@ -57,7 +57,8 @@ const entoliLook = (primary: entoliIndigo, secondary: null, radius: 12.0);
 ///
 /// Every field and dropdown is outlined, so the border is here rather than at
 /// each of them — see "The theme". A field passing its own still wins. The
-/// radius reaches the same set: fields, dialogs, menus, sheets and buttons.
+/// radius reaches the same set: fields, cards, dialogs, menus, sheets and
+/// buttons.
 ThemeData entoliTheme(Brightness brightness, [AppLook look = entoliLook]) {
   final corners = BorderRadius.circular(look.radius);
   final shape = RoundedRectangleBorder(borderRadius: corners);
@@ -68,6 +69,7 @@ ThemeData entoliTheme(Brightness brightness, [AppLook look = entoliLook]) {
     textTheme: _displayTiers,
     inputDecorationTheme:
         InputDecorationTheme(border: OutlineInputBorder(borderRadius: corners)),
+    cardTheme: CardThemeData(shape: shape),
     dialogTheme: DialogThemeData(shape: shape),
     popupMenuTheme: PopupMenuThemeData(shape: shape),
     menuTheme: MenuThemeData(style: MenuStyle(shape: WidgetStatePropertyAll(shape))),

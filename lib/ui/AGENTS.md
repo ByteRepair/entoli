@@ -77,7 +77,7 @@ one seed gives.
 
 `CornerRadius` is named after Material's shape scale, which is where its eight
 numbers come from, and it reaches the shapes `entoliTheme` sets and no others:
-fields, dialogs, menus, sheets and buttons. The `BorderRadius.circular` literals
+fields, cards, dialogs, menus, sheets and buttons. The `BorderRadius.circular` literals
 scattered through the widgets are deliberately not it — a bubble, a code block
 inside that bubble and a search box were each tuned against the ones around
 them, and collapsing them onto one number would flatten a hierarchy rather than

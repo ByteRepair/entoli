@@ -1,7 +1,9 @@
 import "package:flutter/material.dart";
 import "package:flutter_test/flutter_test.dart";
 
+import "package:agent_chat/domain/corner_radius.dart";
 import "package:agent_chat/ui/sidebar/project_settings_page.dart";
+import "package:agent_chat/ui/theme.dart";
 import "package:agent_chat/ui/widgets/settings_card.dart";
 import "package:agent_chat/ui/workspace/workspace_page.dart";
 
@@ -105,6 +107,31 @@ void main() {
       expect(find.byIcon(Icons.refresh), findsOneWidget);
       expect(find.byIcon(Icons.arrow_right), findsNothing);
     });
+
+    testWidgets("the ink is clipped to the card at a non-default radius",
+        (tester) async {
+      const radius = CornerRadius.extraLarge;
+      await app.pump(
+        tester,
+        Theme(
+          data: entoliTheme(Brightness.light,
+              (primary: entoliIndigo, secondary: null, radius: radius.radius)),
+          child: Scaffold(
+            body: ListView(children: [_card("One", onTap: () {})]),
+          ),
+        ),
+      );
+
+      final ink = tester.widget<InkWell>(find.byType(InkWell));
+      expect(ink.borderRadius, isNull);
+      expect(ink.customBorder, isNull);
+      final clip = tester.widget<PhysicalShape>(find.descendant(
+          of: find.byType(Card), matching: find.byType(PhysicalShape)));
+      expect(clip.clipBehavior, isNot(Clip.none));
+      final shape = (clip.clipper as ShapeBorderClipper).shape;
+      expect((shape as RoundedRectangleBorder).borderRadius,
+          BorderRadius.circular(radius.radius));
+    });
   });
 
   group("SettingsCardRow", () {
@@ -138,6 +165,10 @@ void main() {
       expect(rects[1].left, greaterThan(rects[0].right));
       expect(rects[0].width, rects[1].width);
       expect(rects[2].width, rects[0].width);
+      // The two and their gap fill the row inside its padding, no more short.
+      final row = tester.getRect(find.byType(SettingsCardRow));
+      expect(rects[0].left, row.left + 8);
+      expect(rects[1].right, row.right - 8);
     });
 
     testWidgets("a wide row's cards are capped, not stretched", (tester) async {
@@ -201,8 +232,9 @@ List<Rect> _rowChildren(WidgetTester tester) {
   return [for (final box in boxes) box.localToGlobal(Offset.zero) & box.size];
 }
 
-SettingsCard _card(String title) => SettingsCard(
+SettingsCard _card(String title, {VoidCallback? onTap}) => SettingsCard(
       icon: Icons.folder_outlined,
       title: title,
       subtitle: "Browse files",
+      onTap: onTap,
     );
