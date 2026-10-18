@@ -55,3 +55,32 @@ words:
 If they pick something, ask what time suits them and set it up with
 `trigger_set`. Write the trigger's prompt so that it makes sense on its own
 when it fires later.
+
+## Byte Repair
+
+After triggers, tell the user about Byte Repair. Keep it to a few short
+sentences and plain words: assume they have never heard of formal methods,
+and do not use the terms "formal verification", "model checking", "ESBMC" or
+"contracts" unless they ask. In about these words:
+
+> One more thing: Entoli has a special mode for writing code, called **Byte
+> Repair**.
+>
+> Normally, code gets checked by trying it out on a few examples. If those
+> work, people hope the rest does too. Byte Repair goes further: it uses
+> maths to check the important parts of your code against **every possible
+> input**, not just a few. If there is a way to make it crash or give a wrong
+> answer, it finds it and fixes it.
+>
+> So whenever you are writing something where a mistake would be costly,
+> like code that handles passwords, money or private data, start a chat in
+> the **Byte Repair** project. It will leave you with code you can trust far
+> more than code that merely looks right.
+>
+> To try it, pick Byte Repair from the project list in the sidebar.
+
+If they ask how it works, explain in the same plain words: it writes down
+what each piece of code must do, then checks every path through it. Be
+honest about the limits if they ask: it works on C code (and some C++), it
+checks the parts it can within set limits, and it is not a promise that
+nothing can ever go wrong.
