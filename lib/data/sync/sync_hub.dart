@@ -554,7 +554,7 @@ class SyncHub implements ArtifactBytes, RemoteChats {
       case SyncPing():
         await peer.send(const SyncMessage.pong());
       case SyncPong():
-        peer.lastPong = DateTime.now();
+        break; // counted on arrival, in [LivePeer.enqueue]
       case SyncWelcome(:final chats, :final omadaProjects, :final projects) ||
             SyncChatsChanged(:final chats, :final omadaProjects, :final projects):
         _omadaProjects[peer.deviceId] = omadaProjects.toSet();
@@ -715,6 +715,8 @@ class SyncHub implements ArtifactBytes, RemoteChats {
       // -- mirroring: a project of the peer's this device has open
       case SyncProjectSnapshot(:final project, :final settings, :final app):
         final ProjectRef ref = (device: peer.deviceId, project: project);
+        // Its pages follow it; any held are a run a dropped link cut short.
+        _promptPages.remove(ref);
         if (_followedProjects.contains(ref)) {
           _projects[ref] = RemoteProject(settings, app, _projects[ref]?.library);
           _projectUpdates.add(ref);
@@ -760,7 +762,16 @@ class SyncHub implements ArtifactBytes, RemoteChats {
     }
   }
 
-  Future<void> _sendProject(LivePeer peer, String? project) async {
+  /// Per peer, the last project send: a write's answer and the publish it
+  /// sets off run at once, and two runs of pages interleaved read as one.
+  final _projectSends = Expando<Future<void>>();
+
+  Future<void> _sendProject(LivePeer peer, String? project) =>
+      _projectSends[peer] = (_projectSends[peer] ?? Future.value())
+          .catchError((Object _) {})
+          .then((_) => _sendProjectNow(peer, project));
+
+  Future<void> _sendProjectNow(LivePeer peer, String? project) async {
     final turns = remoteTurns;
     if (turns == null) return;
     await peer.send(SyncMessage.projectSnapshot(

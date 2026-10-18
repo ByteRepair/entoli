@@ -937,6 +937,12 @@ void main() {
       expect(skill.description, "d" * 1000);
       expect(skill.body, "b" * 1000);
 
+      // A write is answered to the writer and published to followers at
+      // once: the two runs of pages must not interleave.
+      await away.hub.writeRemoteProject(work, ProjectSettings(omada: true));
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      expect(away.hub.remoteProject(work)!.library.all.length, 80);
+
       // A change at home reaches whoever has it open.
       turns.libraries["work"] = PromptLibrary.empty;
       home.hub.publishProject("work");
