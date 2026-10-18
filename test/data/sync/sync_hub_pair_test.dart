@@ -880,12 +880,19 @@ void main() {
         () async {
       await mirrored();
 
-      await away.hub.createRemoteProject(home.identity.id, "notes");
+      expect(
+          await away.hub.createRemoteProject(home.identity.id, "notes",
+              settings: ProjectSettings(description: "jottings")),
+          isTrue);
       expect(await home.repo.listProjects(), contains("notes"));
+      expect(turns.projects["notes"]!.description, "jottings");
       expect(away.hub.deviceProjects.value[home.identity.id], contains("notes"));
+      // Refused rather than left to time out.
+      expect(await away.hub.createRemoteProject(home.identity.id, "notes"), isFalse);
 
-      await away.hub.deleteRemoteProject(home.identity.id, "notes");
+      expect(await away.hub.deleteRemoteProject(home.identity.id, "notes"), isTrue);
       expect(await home.repo.listProjects(), isNot(contains("notes")));
+      expect(await away.hub.deleteRemoteProject(home.identity.id, "notes"), isFalse);
       expect(away.hub.deviceProjects.value[home.identity.id],
           isNot(contains("notes")));
     });
@@ -945,7 +952,7 @@ void main() {
 
       // A change at home reaches whoever has it open.
       turns.libraries["work"] = PromptLibrary.empty;
-      home.hub.publishProject("work");
+      home.hub.publishPrompts("work");
       await waitForSync(() => away.hub.remoteProject(work)!.library.all.isEmpty);
     });
 
@@ -971,9 +978,7 @@ void main() {
       final ProjectRef nowhere = (device: home.identity.id, project: "nowhere");
 
       away.hub.followProject(nowhere);
-      await away.hub.sendForTest("chat-1",
-          SyncMessage.projectWrite(project: "nowhere", settings: ProjectSettings()));
-      await Future<void>.delayed(Duration.zero);
+      expect(await away.hub.writeRemoteProject(nowhere, ProjectSettings()), isFalse);
 
       expect(away.hub.remoteProject(nowhere), isNull);
       expect(turns.projects, isEmpty);
@@ -1006,8 +1011,9 @@ void main() {
       await home.repo.createProject("work");
       await mirrored();
 
-      final id = await away.hub
-          .startRemoteChat((device: home.identity.id, project: "work"), "hello");
+      final id = (await away.hub
+              .startRemoteChat((device: home.identity.id, project: "work"), "hello"))
+          ?.chatId;
 
       expect(id, isNotNull);
       expect((await home.store.loadState(id!))!.project, "work");
@@ -1019,10 +1025,11 @@ void main() {
         () async {
       await mirrored();
 
-      final id = await away.hub
+      final reply = await away.hub
           .startRemoteChat((device: home.identity.id, project: "nowhere"), "hi");
 
-      expect(id, isNull);
+      expect(reply!.ok, isFalse);
+      expect(reply.chatId, isNull);
       expect(turns.prompts, isEmpty);
     });
 
@@ -1035,11 +1042,23 @@ void main() {
       // Listed there, never opened.
       await waitForSync(() => other.hub.mirror(state.id) != null);
 
-      await other.hub.sendForTest(
-          state.id, SyncMessage.promptSend(chatId: state.id, text: "hi"));
-      await Future<void>.delayed(Duration.zero);
-
+      expect((await other.hub.sendRemotePrompt(state.id, "hi"))!.ok, isFalse);
       expect(turns.prompts, isEmpty);
+    });
+
+    test("a prompt whose attachment never came still runs, without it", () async {
+      final state = await mirrored();
+      away.hub.followChat(state.id);
+      await waitForSync(() => home.hub.servedChats.value.contains(state.id));
+
+      await away.hub.sendForTest(
+          state.id,
+          SyncMessage.promptSend(requestId: "q-test", chatId: state.id, text: "hi", files: [
+            const SyncFile(id: "u-lost", filename: "lost.png", mimeType: "image/png"),
+          ]));
+      await waitForSync(() => turns.prompts.isNotEmpty);
+
+      expect(turns.prompts.last, (state.id, "hi"));
     });
 
     test("the turn the home device is running reaches the mirror", () async {

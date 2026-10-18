@@ -85,6 +85,12 @@ class ProjectSettingsPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final ProjectRef at = (device: device, project: project);
     final remote = device != null;
+    if (ref.watch(projectGoneProvider(at))) {
+      return Scaffold(
+        appBar: AppBar(title: const Text("Project settings")),
+        body: const Center(child: Text("This project is no longer on that device.")),
+      );
+    }
     if (!ref.watch(projectLoadedProvider(at))) {
       return Scaffold(
         appBar: AppBar(title: const Text("Project settings")),
@@ -228,7 +234,13 @@ class ProjectSettingsPage extends ConsumerWidget {
   /// is gone, onto that device's default project.
   Future<void> _deleteRemote(
       BuildContext context, WidgetRef ref, ProjectRef at) async {
-    await ref.read(syncHubProvider).deleteRemoteProject(at.device!, at.project!);
+    if (!await ref.read(syncHubProvider).deleteRemoteProject(at.device!, at.project!)) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text("The project was not deleted there.")));
+      }
+      return;
+    }
     selectProject(ref, (device: at.device, project: null));
     if (context.mounted) Navigator.of(context).popUntil((r) => r.isFirst);
   }

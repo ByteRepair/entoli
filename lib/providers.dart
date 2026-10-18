@@ -867,6 +867,14 @@ final remoteProjectProvider = NotifierProvider.autoDispose
 final projectLoadedProvider = Provider.autoDispose.family<bool, ProjectRef>((ref, project) =>
     project.device == null || ref.watch(remoteProjectProvider(project)) != null);
 
+/// A paired device's project its device's listing no longer names: deleted
+/// there, so nothing will answer for it. Unknown until a listing has come.
+final projectGoneProvider = Provider.autoDispose.family<bool, ProjectRef>((ref, project) {
+  if (project.device == null) return false;
+  final listed = ref.watch(deviceProjectsProvider.select((d) => d[project.device]));
+  return listed != null && !everyProject(listed).contains(project.project);
+});
+
 /// A paired device's project whose device is away: what it last said stays
 /// readable, and nothing is written until it is back.
 final projectFrozenProvider = Provider.family<bool, ProjectRef>((ref, project) =>
@@ -1393,7 +1401,10 @@ class RemoteProjectSettingsNotifier extends ProjectSettingsNotifier {
     final next = state.copy();
     change(next);
     state = next;
-    await ref.read(syncHubProvider).writeRemoteProject(at, next);
+    // Refused or unanswered: back to what the device last said.
+    if (!await ref.read(syncHubProvider).writeRemoteProject(at, next) && ref.mounted) {
+      state = ref.read(remoteProjectProvider(at))?.settings.copy() ?? state;
+    }
   }
 }
 

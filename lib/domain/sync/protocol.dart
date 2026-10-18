@@ -126,8 +126,10 @@ sealed class SyncMessage with _$SyncMessage {
     String? retry,
   }) = SyncTurnState;
 
-  /// [files] went ahead as [SyncResourceChunk]s under their ids.
+  /// [files] went ahead as [SyncResourceChunk]s under their ids. Answered by
+  /// a [SyncReply] naming any whose bytes did not arrive.
   const factory SyncMessage.promptSend({
+    required String requestId,
     required String chatId,
     required String text,
     @Default(<SyncFile>[]) List<SyncFile> files,
@@ -199,8 +201,8 @@ sealed class SyncMessage with _$SyncMessage {
   const factory SyncMessage.chatDelete({required String chatId}) =
       SyncChatDelete;
 
-  /// Make a chat in [project] and say [text] in it.
-  /// Answered by [SyncChatStarted], after the chat list that names it.
+  /// Make a chat in [project] and say [text] in it. Answered by a
+  /// [SyncReply] carrying its id, after the chat list that names it.
   const factory SyncMessage.chatStart({
     required String requestId,
     String? project,
@@ -208,11 +210,15 @@ sealed class SyncMessage with _$SyncMessage {
     @Default(<SyncFile>[]) List<SyncFile> files,
   }) = SyncChatStart;
 
-  /// [chatId] is null where no chat was made.
-  const factory SyncMessage.chatStarted({
+  /// The answer to a request by its [requestId]: [ok] where it went through,
+  /// [chatId] the chat a [SyncChatStart] made, and [missing] the attachments
+  /// a prompt named whose bytes did not arrive.
+  const factory SyncMessage.reply({
     required String requestId,
+    @Default(true) bool ok,
     String? chatId,
-  }) = SyncChatStarted;
+    @Default(<String>[]) List<String> missing,
+  }) = SyncReply;
 
   // ---- A project on the home device, read only while it is open. --------
 
@@ -223,15 +229,15 @@ sealed class SyncMessage with _$SyncMessage {
   const factory SyncMessage.projectClose({String? project}) = SyncProjectClose;
 
   /// [project]'s settings and the app settings they inherit from, whole, on
-  /// open and on every change while followed.
+  /// open and on every change to either while followed.
   const factory SyncMessage.projectSnapshot({
     String? project,
     required ProjectSettings settings,
     required AppSettings app,
   }) = SyncProjectSnapshot;
 
-  /// [project]'s skills and agents, after each snapshot: [PromptDocument]
-  /// JSON, paged by size while [more].
+  /// [project]'s skills and agents, after the first snapshot and on every
+  /// change to them: [PromptDocument] JSON, paged by size while [more].
   const factory SyncMessage.projectPrompts({
     String? project,
     required List<Map<String, dynamic>> documents,
@@ -258,18 +264,25 @@ sealed class SyncMessage with _$SyncMessage {
     @Default(false) bool failed,
   }) = SyncMemories;
 
-  /// Answered by a [SyncProjectSnapshot].
+  /// The three below are answered by a [SyncReply]; a follower has the
+  /// snapshot of what was written ahead of it.
   const factory SyncMessage.projectWrite({
+    required String requestId,
     String? project,
     required ProjectSettings settings,
   }) = SyncProjectWrite;
 
-  /// Answered by the chat list, which names the projects.
-  const factory SyncMessage.projectCreate({required String name}) =
-      SyncProjectCreate;
+  /// [settings] are the new project's, written with it.
+  const factory SyncMessage.projectCreate({
+    required String requestId,
+    required String name,
+    ProjectSettings? settings,
+  }) = SyncProjectCreate;
 
-  const factory SyncMessage.projectDelete({required String name}) =
-      SyncProjectDelete;
+  const factory SyncMessage.projectDelete({
+    required String requestId,
+    required String name,
+  }) = SyncProjectDelete;
 
   factory SyncMessage.fromJson(Map<String, dynamic> json) =>
       _$SyncMessageFromJson(json);

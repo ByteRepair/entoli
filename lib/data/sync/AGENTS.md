@@ -355,24 +355,32 @@ a deletion's chats leave in that list rather than as a `chatDeleted` each.
 (`projectOpen`) while something watches it and closes it when the last watcher
 goes, taking what it read with it; the home device answers with a
 `projectSnapshot` — the project's `ProjectSettings` and the `AppSettings` they
-inherit from, whole — and sends another on every change while it is followed
-(`RemoteTurnDriver` listens to both providers for `servedProjects`, the way it
-listens to controllers for `servedChats`). A page waits on
-`projectLoadedProvider` and draws a spinner until the first one lands.
+inherit from, whole — and sends another on every change to either while it is
+followed (`RemoteTurnDriver` listens to the providers for `servedProjects`,
+the way it listens to controllers for `servedChats`). A page waits on
+`projectLoadedProvider` and draws a spinner until the first one lands, unless
+`projectGoneProvider` says the device's listing no longer names the project:
+the listing is what answers for a project deleted there, open or not, so a
+refused `projectOpen` needs no reply of its own.
 
 **The same page, either device.** `projectSettingsOf(ref)` is
 `projectSettingsProvider` for this device's and
 `RemoteProjectSettingsNotifier` for a paired one's — the same setters, each
-sent as a `projectWrite` and waited on until the snapshot comes back — and
+sent as a `projectWrite` and waited on for its reply, the value put back where
+it was refused — and
 `appSettingsOf(ref)` is the inherited values the rows name, that device's.
 `ProjectSettingsNotifier.replace` is the home end of a write, re-anchoring the
 project's TTLs when that changed. The path, the workspace and the instructions
 are left off a paired device's page: they are files there, and nothing here
 reads them.
 
-**Its skills and agents come with it.** Each snapshot is followed by the
-project's resolved library as `projectPrompts`, paged by size like records, so
-one page is one document at most where a document is large.
+**Its skills and agents come with it, apart.** The project's resolved library
+follows the first snapshot as `projectPrompts`, paged by size like records, so
+one page is one document at most where a document is large, and is sent again
+only when the library changes: a settings write is a few hundred bytes, not
+the default project's hundred-odd kilobytes of skills. A peer's project sends
+go through one queue (`_inOrder`), so two runs of pages never interleave, and
+a write's reply goes through it too, behind the snapshot it set off.
 `promptLibraryOf(ref)` is
 `promptLibraryProvider` here and the followed project's library there, so the
 composer's `/` and `@` offer the paired device's set and only that; the field
@@ -396,7 +404,7 @@ A project gone from the device's list is dropped.
 
 **Starting a chat there.** `chatStart` asks the home device to make one in the
 project and take the first prompt; it lists the new
-chat before answering `chatStarted`, and messages from one peer arrive in
+chat before its `reply`, and messages from one peer arrive in
 order, so the mirror is there to open by the time the id is. The new-chat
 screen shows a spinner until then and the chat page its own until the
 snapshot lands. Its badges, settings and voice are left off for a paired
@@ -406,6 +414,19 @@ starters are that device's library.
 `remoteChatsProvider` bridges the hub's `ValueNotifier` into Riverpod, and is
 deliberately separate from `chatListProvider`, which reads the local store and
 stays sync-unaware. Two sources of truth, never merged.
+
+### Requests and their reply
+
+`promptSend`, `chatStart`, `projectWrite`, `projectCreate` and
+`projectDelete` carry a `requestId` and are answered by one `reply`: `ok`,
+the chat a start made, and the attachments a prompt named whose bytes never
+came. The asker waits through the same echo list the chat writes use
+(`_ask` over `_send`), so a device away or silent is a null after 30s and a
+refusal is an answer at once rather than that wait. A home device's create
+and delete list the projects again before replying, so the asker can select
+what it made. Where attachments went missing the page says which in a snack
+bar (`Undelivered`); the message went without them. Memories keep their own
+`memories` answer, since it carries pages of entries.
 
 ## Driving a turn from the other end
 

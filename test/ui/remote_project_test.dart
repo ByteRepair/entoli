@@ -64,6 +64,15 @@ void main() {
     expect(find.text("Project name"), findsNothing);
   });
 
+  testWidgets("a project the device no longer lists says so rather than wait",
+      (tester) async {
+    app = appWith(online: true);
+    await app.pump(tester, const ProjectSettingsPage(project: "gone", device: "device-1"));
+
+    expect(find.text("This project is no longer on that device."), findsOneWidget);
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+  });
+
   testWidgets("it reads the device's settings, less what is on its disk",
       (tester) async {
     app = appWith(online: true);

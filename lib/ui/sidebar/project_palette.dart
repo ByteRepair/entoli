@@ -58,21 +58,16 @@ typedef _NewProjectAnswer = ({String name, String description, bool omada});
 PaletteAction _createProject(_NewProjectAnswer answer, String? device) =>
     (context, ref) async {
       if (device != null) {
-        final hub = ref.read(syncHubProvider);
-        if (!await hub.createRemoteProject(device, answer.name)) {
+        final description = answer.description.trim();
+        if (!await ref.read(syncHubProvider).createRemoteProject(device, answer.name,
+            settings: answer.omada || description.isNotEmpty
+                ? ProjectSettings(
+                    omada: answer.omada,
+                    description: description.isEmpty ? null : description)
+                : null)) {
           throw StateError("${answer.name} was not made on $device");
         }
-        final ProjectRef made = (device: device, project: answer.name);
-        if (answer.omada || answer.description.trim().isNotEmpty) {
-          await hub.writeRemoteProject(
-              made,
-              ProjectSettings(
-                  omada: answer.omada,
-                  description: answer.description.trim().isEmpty
-                      ? null
-                      : answer.description.trim()));
-        }
-        selectProject(ref, made);
+        selectProject(ref, (device: device, project: answer.name));
         return;
       }
       await ref.read(chatRepositoryProvider).createProject(answer.name);

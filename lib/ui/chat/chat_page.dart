@@ -131,15 +131,20 @@ class _NewChatState extends ConsumerState<_NewChat> {
   /// is logged, and this is the only thing left on screen to say so.
   Future<void> _send(String text, List<Attachment> attachments) async {
     setState(() => _starting = true);
-    final started =
+    final missing =
         await startChatWith(ref, text, attachments: attachments, meta: _meta);
-    if (mounted) setState(() => _starting = false);
-    if (started || !mounted) return;
-    _controller.text = text;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text("Could not start a chat.")),
-    );
+    if (!mounted) return;
+    setState(() => _starting = false);
+    if (missing == null) {
+      _controller.text = text;
+      _say("Could not start a chat.");
+    } else if (missing.isNotEmpty) {
+      _say(Undelivered.missing(missing).message);
+    }
   }
+
+  void _say(String message) =>
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
 
   /// The composer, or a "setup required" bar where the project needs setup
   /// and has not been set up yet. The bar replaces the composer entirely,
@@ -870,8 +875,16 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
             _ => Composer(
                 controller: _controller,
                 agentSpeaking: view.roomPhase == RoomPhase.agentSpeaking,
-                onSend: (text, attachments) =>
-                    driver.send(text, attachments: attachments),
+                onSend: (text, attachments) async {
+                  try {
+                    await driver.send(text, attachments: attachments);
+                  } on Undelivered catch (e) {
+                    if (mounted) {
+                      ScaffoldMessenger.of(context)
+                          .showSnackBar(SnackBar(content: Text(e.message)));
+                    }
+                  }
+                },
                 onAbort: driver.abort,
                 project: project,
                 device: device,

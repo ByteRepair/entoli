@@ -55,13 +55,12 @@ class RemoteTurnDriver implements RemoteTurns {
       }
     }
     for (final project in served) {
-      _projects.putIfAbsent(project, () {
-        void publish(_, _) => _hub.publishProject(project);
-        return [
-          _ref.listen<ProjectSettings>(projectSettingsProvider(project), publish),
-          _ref.listen<PromptLibrary>(promptLibraryProvider(project), publish),
-        ];
-      });
+      _projects.putIfAbsent(project, () => [
+            _ref.listen<ProjectSettings>(
+                projectSettingsProvider(project), (_, _) => _hub.publishProject(project)),
+            _ref.listen<PromptLibrary>(
+                promptLibraryProvider(project), (_, _) => _hub.publishPrompts(project)),
+          ]);
     }
   }
 
