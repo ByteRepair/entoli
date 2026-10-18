@@ -67,11 +67,12 @@ class SettingsCard extends StatelessWidget {
         ? theme.textTheme.bodySmall
             ?.copyWith(color: theme.colorScheme.onSurfaceVariant)
         : _mono;
+    // Clipped, so the ink takes the card's own shape at every corner radius.
     return Card(
       margin: EdgeInsets.zero,
+      clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: action,
-        borderRadius: const BorderRadius.all(Radius.circular(12)),
         child: Padding(
           padding: const EdgeInsets.all(12),
           child: Column(
@@ -113,15 +114,12 @@ class SettingsCardRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // The padding is inside the layout, not around it: the width a card gets
-    // is halved out of what the line actually has to lay out in.
+    // The constraints are already inside the padding.
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 8),
       child: LayoutBuilder(builder: (context, constraints) {
         const gap = 8.0;
-        const pad = 16.0;
-        final width =
-            ((constraints.maxWidth - pad - gap) / 2).clamp(160.0, 240.0);
+        final width = ((constraints.maxWidth - gap) / 2).clamp(160.0, 240.0);
         return Wrap(
           spacing: gap,
           runSpacing: gap,

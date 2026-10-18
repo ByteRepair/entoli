@@ -50,6 +50,7 @@ class _DeviceGroup {
     required this.deviceId,
     required this.deviceName,
     required this.projects,
+    required this.omada,
   });
 
   final String deviceId;
@@ -59,6 +60,9 @@ class _DeviceGroup {
   /// device's default project, named the way [projectLabel] names it
   /// everywhere else a project is shown.
   final List<String?> projects;
+
+  /// Those of [projects] with Omada on at the device, not here.
+  final Set<String?> omada;
 }
 
 /// Every device that has a mirrored chat, with the projects its mirrors sit
@@ -67,20 +71,21 @@ class _DeviceGroup {
 List<_DeviceGroup> _deviceGroups(List<RemoteChatEntry> entries) {
   final names = <String, String>{};
   final projects = <String, Set<String?>>{};
+  final omada = <String, Set<String?>>{};
   for (final entry in entries) {
     names[entry.deviceId] ??= entry.deviceName;
     (projects[entry.deviceId] ??= {}).add(entry.state.project);
+    if (entry.omada) (omada[entry.deviceId] ??= {}).add(entry.state.project);
   }
   return [
     for (final id in names.keys)
       _DeviceGroup(
         deviceId: id,
         deviceName: names[id]!,
-        projects: [
-          for (final project in projects[id]!) project,
-        ]..sort((a, b) => projectLabel(a)
+        projects: projects[id]!.toList()..sort((a, b) => projectLabel(a)
             .toLowerCase()
             .compareTo(projectLabel(b).toLowerCase())),
+        omada: omada[id] ?? const {},
       ),
   ]..sort((a, b) =>
       a.deviceName.toLowerCase().compareTo(b.deviceName.toLowerCase()));
@@ -156,24 +161,8 @@ class _DeviceCardState extends ConsumerState<_DeviceCard> {
                     ChipRowEntry(
                       key: ValueKey(project),
                       child: ActionChip(
-                        // The icon rides in the label rather than the avatar
-                        // slot, the way the empty-chat badges keep the label
-                        // and any mark beside it one piece.
-                        label: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            if (projectIcon(project) case final icon?)
-                              Padding(
-                                padding: const EdgeInsets.only(right: 6),
-                                child: Icon(icon, size: 18),
-                              ),
-                            Text(
-                              projectLabel(project),
-                              style:
-                                  projectLabelStyle(ref.watch(omadaOnProvider(project))),
-                            ),
-                          ],
-                        ),
+                        label: ProjectChipLabel(project,
+                            omada: group.omada.contains(project)),
                         onPressed: () => selectRemote(
                           ref,
                           (deviceId: group.deviceId, project: project),
@@ -187,4 +176,32 @@ class _DeviceCardState extends ConsumerState<_DeviceCard> {
       ),
     );
   }
+}
+/// A project badge's label: its built-in icon where it has one, then its name.
+/// In the label rather than the chip's avatar slot, since a `ChoiceChip`
+/// paints its selected check over the avatar.
+class ProjectChipLabel extends ConsumerWidget {
+  const ProjectChipLabel(this.project, {this.omada, super.key});
+
+  final String? project;
+
+  /// Whether [project] runs Omada; null asks this device, which is wrong for
+  /// a paired device's project of the same name.
+  final bool? omada;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) => Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (projectIcon(project) case final icon?)
+            Padding(
+              padding: const EdgeInsets.only(right: 6),
+              child: Icon(icon, size: 18),
+            ),
+          Text(
+            projectLabel(project),
+            style: projectLabelStyle(omada ?? ref.watch(omadaOnProvider(project))),
+          ),
+        ],
+      );
 }

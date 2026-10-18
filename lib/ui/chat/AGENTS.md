@@ -213,9 +213,9 @@ message": under overlapping turns (relay, a parallel fan-out) a sibling's
 still-streaming reply can sit below, and resuming by position would re-open
 the wrong recorder. The user-facing Continue keeps the last-reply rule, an
 open chat with one unfinished reply being what it offers to carry on.
-`_turnDone` stays open across
+`turnDone` stays open across
 the rounds — a trigger awaiting it, or a voice handover, gets one completion,
-at the true end, not one per attempt. A `_retryGen` bumped by `abort` and
+at the true end, not one per attempt. A per-turn `retryGen` bumped by `abort` and
 `interrupt` is what keeps a round waiting out its backoff from firing after
 the user pressed stop: the wait holds nothing, and the generation is how it
 notices the turn was ended behind it.

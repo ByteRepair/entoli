@@ -29,9 +29,4 @@ enum ThemeColour {
   /// already was — eight colours picked to look like one another rather than
   /// one per family from wherever it happened to sit.
   final int argb;
-
-  /// An unknown name is a file written by a later build, so it falls back
-  /// rather than failing the whole settings load.
-  static ThemeColour fromName(String? name) =>
-      values.firstWhere((colour) => colour.name == name, orElse: () => indigo);
 }

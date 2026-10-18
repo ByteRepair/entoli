@@ -159,9 +159,8 @@ class AnthropicClient implements LlmClient {
         case "message_start":
           // The usage object arrives here and again — larger — on
           // message_delta; both are read, the latter winning.
-          readUsage(((event["message"] as Map<String, dynamic>?)
-                  ?["usage"]) as Map<String, dynamic>? ??
-              const {});
+          readUsage((event["message"] as Map<String, dynamic>?)?["usage"]
+              as Map<String, dynamic>?);
 
         case "message_delta":
           final delta = event["delta"] as Map<String, dynamic>? ?? const {};

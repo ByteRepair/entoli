@@ -11,9 +11,4 @@ enum AssistantView {
   const AssistantView(this.label);
 
   final String label;
-
-  /// An unknown name is a file written by a later build, so it falls back
-  /// rather than failing the whole settings load.
-  static AssistantView fromName(String? name) =>
-      values.firstWhere((view) => view.name == name, orElse: () => chat);
 }

@@ -48,6 +48,7 @@ void main() {
 
   TestApp appWith({
     required bool online,
+    bool omada = false,
     MirrorControl control = const MirrorControl(),
     bool running = false,
     List<ToolApproval> approvals = const [],
@@ -61,6 +62,7 @@ void main() {
             deviceName: "Desktop",
             state: state,
             online: online,
+            omada: omada,
           ),
         ],
         mirrors: {
@@ -317,6 +319,22 @@ void main() {
       // Its default project, so the device's name alone — the local default
       // has no name either.
       expect(find.text("Desktop"), findsOneWidget);
+    });
+
+    testWidgets("its name is styled by Omada on the device, not here",
+        (tester) async {
+      FontStyle? style() => tester
+          .widget<Text>(find.descendant(
+              of: find.byType(TextButton), matching: find.text("Desktop")))
+          .style
+          ?.fontStyle;
+      for (final omada in [true, false]) {
+        app = appWith(online: true, omada: omada);
+        await pickRemote(tester);
+        expect(style() == FontStyle.italic, omada);
+        app.dispose();
+      }
+      app = appWith(online: true);
     });
 
     testWidgets("picking it lists that device's chats", (tester) async {

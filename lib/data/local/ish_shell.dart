@@ -30,7 +30,6 @@ import "ish_ffi.dart";
 /// is meant to end — so interrupt and its escalation go straight to the
 /// bridge from the calling isolate, which the bridge is built for. See
 /// [IshTransport].
-/// [IshTransport].
 ///
 /// The dispatcher script (`dispatcherScript` in `domain/shell.dart`) is passed
 /// to the C bridge and runs inside the guest's own `/bin/sh`, so a `cd` or an
@@ -51,10 +50,7 @@ class IshShell extends Shell {
   /// Where the guest's rootfs is mounted from, asked per command: a Linux
   /// installed from the settings page reaches the next command, and one
   /// deleted stops being where commands run without the app having to be
-  /// restarted. Empty where none is installed. Held as the closure itself —
-  /// an initializing formal rather than a private field under a differently
-  /// named parameter, which is what `prefer_initializing_formals` asks for
-  /// and what CI's analyzer refuses otherwise.
+  /// restarted. Empty where none is installed.
   final String Function() rootfsDir;
 
   final String dataDir;
@@ -62,9 +58,6 @@ class IshShell extends Shell {
   final Map<String, String> Function() environment;
 
   final String Function() _describe;
-
-  /// Where the rootfs directory is on the host: one ask of [rootfsDir].
-  String get rootfsPath => rootfsDir();
 
   /// Whether the thing commands would run in is there. Empty is how "no
   /// Linux installed" reads here, and false is what keeps the agent from
@@ -138,7 +131,7 @@ class IshShell extends Shell {
     final guestCwd = guestWorkspacePath(guestRoot!, home, cwd);
     if (oneShot) {
       return _IshOneShotRun(
-        rootfsDir: rootfsPath,
+        rootfsDir: rootfsDir(),
         dataDir: dataDir,
         home: home,
         guestCwd: guestCwd,
@@ -245,7 +238,7 @@ class _IshSession {
 
   ShellRun start(String command, Duration timeout,
       {Map<String, String>? environment, bool restart = false}) {
-    final run = _IshRun(timeout, this);
+    final run = _IshRun(this);
     _runs.add(run);
     _queue = _queue.then((_) => _execute(run, command, timeout,
         environment: environment, restart: restart));
@@ -272,7 +265,7 @@ class _IshSession {
       if (old != null) _transport.destroy(old);
       try {
         final (:sessionId, :handle) = await _transport.init(
-          rootfsDir: _shell.rootfsPath,
+          rootfsDir: _shell.rootfsDir(),
           dataDir: _shell.dataDir,
           home: _workspaceHome,
           cwd: _guestCwd,
@@ -314,7 +307,21 @@ class _IshSession {
       run.state.escalateTimer?.cancel();
       _standing = result.cwd ?? _guestCwd;
       _shell._cwds[_cwdPath]?.value = result.cwd ?? _guestCwd;
-      run.state.complete(result);
+      // The model is told a stop or a timeout happened, as LocalShell's
+      // session tells it; a hung-up run already says it did not complete.
+      run.state.complete(!run.state.interrupted || result.exceptionInfo != null
+          ? result
+          : ShellResult(
+              returnCode: result.returnCode,
+              output: result.output,
+              cwd: result.cwd,
+              violations: result.violations,
+              exceptionInfo: run.state.byTimeout
+                  ? "The command timed out after ${timeout.inSeconds}s and "
+                      "was interrupted. Anything it printed before that is "
+                      "above."
+                  : "The command was interrupted.",
+            ));
     } catch (e) {
       _current = null;
       run.state.timeoutTimer?.cancel();
@@ -408,8 +415,6 @@ class _IshSession {
 }
 
 class _IshRunState {
-  _IshRunState(this.timeout);
-  final Duration timeout;
   bool interrupted = false;
   bool byTimeout = false;
 
@@ -460,10 +465,9 @@ class _IshUnavailableRun implements ShellRun {
 }
 
 class _IshRun implements ShellRun {
-  _IshRun(this.timeout, this._session) : state = _IshRunState(timeout);
-  final Duration timeout;
+  _IshRun(this._session);
   final _IshSession _session;
-  final _IshRunState state;
+  final _IshRunState state = _IshRunState();
   @override
   Future<ShellResult> get result => state.done.future;
   @override
@@ -511,27 +515,16 @@ class _IshOneShotRun implements ShellRun {
   bool _interrupted = false;
   Timer? _escalateTimer;
 
-  /// What the command has printed so far — same shape and cap as the
-  /// session's, published from [_pushOutput] to whoever asks.
-  final ValueNotifier<String?> _output = ValueNotifier(null);
-  bool _watched = false;
-
-  static const _outputCap = 65536;
-
-  void _pushOutput(String delta) {
-    if (!_watched) return;
-    var next = (_output.value ?? "") + delta;
-    if (next.length > _outputCap) next = next.substring(0, _outputCap);
-    _output.value = next;
-  }
+  /// What the command has printed so far, the session run's accumulator.
+  final _state = _IshRunState();
 
   @override
   late final Future<ShellResult> result;
   @override
   ValueListenable<String?>? get output {
     // Asking is the watch, as the session's run has it.
-    _watched = true;
-    return _output;
+    _state.watched = true;
+    return _state.output;
   }
 
   @override
@@ -583,7 +576,7 @@ class _IshOneShotRun implements ShellRun {
         sessionId: _sessionId!,
         scriptB64: scriptB64,
         timeout: timeout,
-        onOutput: _pushOutput,
+        onOutput: _state.pushOutput,
       );
       if (!timer.isActive) {
         return ShellResult(

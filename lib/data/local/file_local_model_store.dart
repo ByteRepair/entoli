@@ -1,13 +1,13 @@
 import "dart:io";
 
-import "package:crypto/crypto.dart";
 import "package:path/path.dart" as p;
 import "package:http/http.dart" as http;
 
-import "../../domain/download.dart";
 import "../../domain/local_model.dart";
 import "../../domain/local_model_store.dart";
+import "../../domain/download.dart";
 import "../download.dart";
+import "file_rootfs_store.dart" show markedDirs, DownloadRunSha256;
 
 /// A downloaded model in a directory of its own, outside the data directory —
 /// see [LocalModelStore] for why that matters. `dart:io` rather than the
@@ -54,21 +54,8 @@ class FileLocalModelStore extends LocalModelStore {
     return marked ? _fileFor(model) : null;
   }
 
-  /// Read off the disk rather than off the catalog, so a model the catalog has
-  /// since renamed still shows as taking up the space it takes up.
   @override
-  Future<Set<String>> installed() async {
-    final dir = Directory(root);
-    if (!await dir.exists()) return const {};
-    final out = <String>{};
-    await for (final entry in dir.list()) {
-      if (entry is! Directory) continue;
-      if (await File(p.join(entry.path, _marker)).exists()) {
-        out.add(p.basename(entry.path));
-      }
-    }
-    return out;
-  }
+  Future<Set<String>> installed() => markedDirs(root, _marker);
 
   @override
   Future<void> delete(String id) async {
@@ -90,24 +77,14 @@ class FileLocalModelStore extends LocalModelStore {
           final dir = Directory(directoryFor(model.id))
             ..createSync(recursive: true);
 
-          run.report(DownloadProgress(received: 0, total: model.bytes));
-          // Hashed on the way past rather than by reading the file back: it is
-          // the same bytes, and this is the largest file the app fetches.
-          final hash = _Sha256Sink();
-          final hashing = sha256.startChunkedConversion(hash);
-          await run.fetch(
-            url: model.url,
-            to: _fileFor(model),
-            total: model.bytes,
-            watch: hashing,
-          );
-          hashing.close();
+          final digest = await run.fetchSha256(
+              url: model.url, to: _fileFor(model), total: model.bytes);
           if (run.cancelled) return;
           // A gigabyte over somebody's mobile data, and the publisher already
           // says what it should come to. Weights are not a program, so this is
           // not the check a rootfs gets — it is the check that the download
           // finished, and arrived from the model it claims to be.
-          if ("${hash.digest}" != model.sha256) {
+          if (digest != model.sha256) {
             throw StateError(
               "The download did not match what ${model.name} was checked to "
               "be, so nothing was kept.",
@@ -117,16 +94,4 @@ class FileLocalModelStore extends LocalModelStore {
           _installed[model.id] = true;
         },
       ).stream;
-}
-
-/// Where the hash of the download lands. `package:convert` has one of these and
-/// is not a dependency for four lines.
-class _Sha256Sink implements Sink<Digest> {
-  Digest? digest;
-
-  @override
-  void add(Digest data) => digest = data;
-
-  @override
-  void close() {}
 }

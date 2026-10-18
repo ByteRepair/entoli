@@ -182,7 +182,7 @@ class _ThreadsSliderState extends ConsumerState<_ThreadsSlider> {
 
   @override
   Widget build(BuildContext context) {
-    final max = ref.watch(localMaxThreadsProvider);
+    final max = ref.watch(localLlmProvider).maxThreads;
     if (max == null || max <= 1) return const SizedBox.shrink();
     final chosen = ref.watch(appSettingsProvider.select((s) => s.localModelThreads));
     final value = _dragging ?? (chosen ?? max).toDouble();

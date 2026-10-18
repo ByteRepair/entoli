@@ -23,7 +23,7 @@ class ArtifactArgs {
 /// Parse an `artifact` call's arguments. A missing `path` is the one thing
 /// rejected, since the path is the whole point. The [entryFile] is derived
 /// from the basename of [path] — the viewer opens it.
-ArtifactArgs? artifactArgsFrom(String? argumentsJson, {String Function(String)? basenameOf}) {
+ArtifactArgs? artifactArgsFrom(String? argumentsJson) {
   final decoded = decodeArgs(argumentsJson);
   if (decoded == null) return null;
 
@@ -32,16 +32,9 @@ ArtifactArgs? artifactArgsFrom(String? argumentsJson, {String Function(String)? 
   final title = decoded["title"] is String ? decoded["title"] as String : "";
   final artifactId = decoded["artifact_id"] is String ? decoded["artifact_id"] as String : null;
 
-  // The entry file is the basename of the path. The `basenameOf` injection is
-  // for tests that don't have a real filesystem; production passes nothing and
-  // gets a plain string split.
-  final entryFile = (basenameOf ?? _basename)(path);
-  if (entryFile.isEmpty) return null;
+  final entryFile =
+      path.split(RegExp(r"[/\\]")).where((s) => s.isNotEmpty).lastOrNull;
+  if (entryFile == null) return null;
 
   return ArtifactArgs(path: path, entryFile: entryFile, title: title, artifactId: artifactId);
-}
-
-String _basename(String path) {
-  final segments = path.split(RegExp(r"[/\\]")).where((s) => s.isNotEmpty);
-  return segments.isEmpty ? "" : segments.last;
 }

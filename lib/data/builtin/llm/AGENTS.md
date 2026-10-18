@@ -84,7 +84,7 @@ re-entering `resume` (see `lib/ui/chat/AGENTS.md`, "Automatic retry rounds");
 A request that died mid-stream is retryable too, and safe to resume, because
 resuming appends to the same reply rather than starting another.
 
-**The parent agent spends one attempt per request**, `options.parent`: the
+**The parent agent spends one attempt per request**, `maxAttempts: 1`: the
 controller owns the patience, and the two retrying would be the same patience
 twice. Sub-agents keep the four-attempt default, a failed worker being a tool
 result the parent can redo rather than a turn to give up on. Four attempts with

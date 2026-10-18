@@ -62,42 +62,26 @@ void main() {
       .where((s) => s.startsWith("/") || s.startsWith("@"))
       .toList();
 
-  testWidgets("typing / offers every skill, in name order", (tester) async {
+  // `/` offers skills and only at the start; `@` offers agents anywhere a word
+  // starts. Each in name order, narrowed by what follows; nothing matching is
+  // no menu.
+  testWidgets("the menu offers what the typed trigger matches", (tester) async {
     await pump(tester);
-    await type(tester, "/");
-
-    expect(menuItems(tester), ["/init", "/revert", "/review"]);
-  });
-
-  testWidgets("typing narrows the menu to what matches", (tester) async {
-    await pump(tester);
-    await type(tester, "/rev");
-
-    expect(menuItems(tester), ["/revert", "/review"]);
-  });
-
-  testWidgets("a query that matches nothing closes the menu", (tester) async {
-    await pump(tester);
-    await type(tester, "/zzz");
-
-    expect(find.byType(ListView), findsNothing);
-  });
-
-  testWidgets("typing @ offers agents instead", (tester) async {
-    await pump(tester);
-    await type(tester, "@");
-
-    expect(menuItems(tester), ["@build", "@explore"]);
-  });
-
-  testWidgets("@ works mid-message, / only at the start", (tester) async {
-    await pump(tester);
-
-    await type(tester, "have @exp");
-    expect(menuItems(tester), ["@explore"]);
-
-    await type(tester, "see /rev");
-    expect(find.byType(ListView), findsNothing);
+    for (final (text, offered) in [
+      ("/", ["/init", "/revert", "/review"]),
+      ("/rev", ["/revert", "/review"]),
+      ("/zzz", <String>[]),
+      ("@", ["@build", "@explore"]),
+      ("have @exp", ["@explore"]),
+      ("see /rev", <String>[]),
+    ]) {
+      await type(tester, text);
+      if (offered.isEmpty) {
+        expect(find.byType(ListView), findsNothing, reason: text);
+      } else {
+        expect(menuItems(tester), offered, reason: text);
+      }
+    }
   });
 
   testWidgets("tapping an entry completes it and closes the menu", (tester) async {

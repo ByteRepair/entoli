@@ -7,7 +7,7 @@ import "package:path/path.dart" as p;
 
 import "package:agent_chat/core/config.dart";
 import "package:agent_chat/core/platform/io/platform.dart"
-    show platformByteRepairBinDir, platformDriver, platformSetupComplete;
+    show byteRepairBinDir, platformDriver, setupComplete;
 import "package:agent_chat/domain/builtin_project.dart";
 import "package:agent_chat/domain/models.dart" show CompletionKind;
 import "package:agent_chat/domain/shell.dart";
@@ -124,7 +124,7 @@ void main() {
 
   test("the bin directory is composed from the cache directory, and the "
       "store's install dir is the same answer", () {
-    expect(platformByteRepairBinDir("/cache/root"),
+    expect(byteRepairBinDir("/cache/root"),
         "/cache/root/byte-repair/bin");
   });
 
@@ -136,23 +136,23 @@ void main() {
     debugDefaultTargetPlatformOverride = TargetPlatform.macOS;
     try {
       final project = ByteRepairProject().dir;
-      final real = platformByteRepairBinDir(config.dataDir);
+      final real = byteRepairBinDir(config.dataDir);
       // No marker: gated whatever else is true.
-      expect(platformSetupComplete(config, project, byteRepairBinDir: real),
+      expect(setupComplete(config, project, real),
           isFalse);
       // Marker without the binary: the gate stays up, honestly.
       File(config.setupCompleteFile(project: project))
         ..createSync(recursive: true)
         ..writeAsStringSync("done");
-      expect(platformSetupComplete(config, project, byteRepairBinDir: real),
+      expect(setupComplete(config, project, real),
           isFalse);
       // Both: through.
       Directory(real!).createSync(recursive: true);
       File(p.join(real, "esbmc")).writeAsStringSync("");
-      expect(platformSetupComplete(config, project, byteRepairBinDir: real),
+      expect(setupComplete(config, project, real),
           isTrue);
       // The binary alone is nothing without the marker.
-      expect(platformSetupComplete(unmarked, project, byteRepairBinDir: real),
+      expect(setupComplete(unmarked, project, real),
           isFalse);
     } finally {
       debugDefaultTargetPlatformOverride = null;
@@ -169,7 +169,7 @@ void main() {
       File(config.setupCompleteFile(project: project))
         ..createSync(recursive: true)
         ..writeAsStringSync("done");
-      expect(platformSetupComplete(config, project, byteRepairBinDir: null),
+      expect(setupComplete(config, project, null),
           isFalse);
     } finally {
       debugDefaultTargetPlatformOverride = null;

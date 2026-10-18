@@ -16,9 +16,4 @@ enum CornerRadius {
   const CornerRadius(this.radius);
 
   final double radius;
-
-  /// An unknown name is a file written by a later build, so it falls back
-  /// rather than failing the whole settings load.
-  static CornerRadius fromName(String? name) =>
-      values.firstWhere((corner) => corner.name == name, orElse: () => medium);
 }

@@ -30,59 +30,24 @@ void main() {
   void makeProject(String name) =>
       Directory(config.projectDir(project: name)).createSync(recursive: true);
 
-  group("settings round-trip", () {
-    test("the app-level tone and citations survive save and load", () async {
-      final settings = AppSettings(tone: Tone.direct, citations: true);
-      await settings.save(config);
+  test("the app-level tone and citations round-trip; defaults leave no trace",
+      () async {
+    await AppSettings(tone: Tone.direct, citations: true).save(config);
+    final loaded = AppSettings.load(config);
+    expect(loaded.tone, Tone.direct);
+    expect(loaded.citations, isTrue);
 
-      final loaded = AppSettings.load(config);
-      expect(loaded.tone, Tone.direct);
-      expect(loaded.citations, isTrue);
-    });
+    // An unknown name is a later build's, and loads as none.
+    final path = config.settingsFile;
+    final json =
+        jsonDecode(config.documents.read(path)!) as Map<String, dynamic>;
+    await config.documents.write(path, jsonEncode(json..["tone"] = "shouty"));
+    expect(AppSettings.load(config).tone, Tone.none);
 
-    test("an unknown tone name loads as none", () async {
-      await AppSettings(tone: Tone.direct).save(config);
-      // Documents is the copy the loads read: a file written behind it is not
-      // seen until hydrate runs again (test/AGENTS.md, "What the wire is not
-      // tested against" is not this; the rule is "settings go through
-      // config.documents").
-      final path = config.settingsFile;
-      final json =
-          jsonDecode(config.documents.read(path)!) as Map<String, dynamic>;
-      json["tone"] = "shouty";
-      await config.documents.write(path, jsonEncode(json));
-
-      expect(AppSettings.load(config).tone, Tone.none);
-    });
-
-    test("defaults leave no trace", () async {
-      await AppSettings().save(config);
-      final json =
-          jsonDecode(File(config.settingsFile).readAsStringSync())
-              as Map<String, dynamic>;
-      expect(json.containsKey("tone"), isFalse);
-      expect(json.containsKey("citations"), isFalse);
-    });
-
-    test("the project-level answers survive save and load", () async {
-      makeProject("proj");
-      await ProjectSettings(tone: Tone.kind, citations: false)
-          .save(config, project: "proj");
-
-      final loaded = ProjectSettings.load(config, project: "proj");
-      expect(loaded.tone, Tone.kind);
-      // Off is a written answer, not the absent one: the project said no.
-      expect(loaded.citations, isFalse);
-    });
-
-    test("a project's absent keys load as null", () async {
-      makeProject("proj");
-      await ProjectSettings().save(config, project: "proj");
-
-      final loaded = ProjectSettings.load(config, project: "proj");
-      expect(loaded.tone, isNull);
-      expect(loaded.citations, isNull);
-    });
+    await AppSettings().save(config);
+    final written = jsonDecode(config.documents.read(path)!) as Map;
+    expect(written.containsKey("tone"), isFalse);
+    expect(written.containsKey("citations"), isFalse);
   });
 
   group("turn-time resolution", () {

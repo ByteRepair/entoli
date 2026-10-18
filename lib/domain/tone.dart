@@ -24,14 +24,4 @@ enum Tone {
         formal => "Word replies in a formal, professional register, with "
             "no slang or contractions.",
       };
-
-  /// An unknown name is a file written by a later build, so it falls back
-  /// rather than failing the whole settings load.
-  static Tone fromName(String? name) =>
-      values.firstWhere((t) => t.name == name, orElse: () => none);
-
-  /// Null when the key is absent, so a nullable field reads as "inherit".
-  static Tone? fromNameNullable(String? name) => name == null
-      ? null
-      : values.cast<Tone?>().firstWhere((t) => t!.name == name, orElse: () => null);
 }

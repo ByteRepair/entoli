@@ -7,7 +7,7 @@ import "package:path/path.dart" as p;
 
 import "package:agent_chat/core/config.dart";
 import "package:agent_chat/core/platform/io/platform.dart"
-    show platformChmodReadOnly, platformChmodWritable;
+    show chmodReadOnly, chmodWritable;
 import "package:agent_chat/data/prompts/agent_pictures.dart";
 import "package:agent_chat/domain/bundled_prompt_file.dart";
 import "package:agent_chat/data/prompts/bundled_skill_data.dart";
@@ -20,7 +20,7 @@ import "package:agent_chat/domain/project_settings.dart";
 import "../../harness.dart";
 
 /// The chmod lock is a deliberate no-op where there is no bash for a model to
-/// write through — `platformChmodReadOnly` runs on Linux and Android alone —
+/// write through — `chmodReadOnly` runs on Linux and Android alone —
 /// so the two assertions about the release and the write-through have nothing
 /// to assert on macOS and Windows.
 final _skipWithoutChmodLock = Platform.isLinux || Platform.isAndroid
@@ -121,11 +121,11 @@ void main() {
       config,
       acquireWrite: (paths) async {
         acquired.addAll(paths);
-        await platformChmodWritable(paths);
+        await chmodWritable(paths);
       },
       releaseWrite: (paths) async {
         released.addAll(paths);
-        await platformChmodReadOnly(paths);
+        await chmodReadOnly(paths);
       },
     );
 
@@ -152,8 +152,8 @@ void main() {
 
     await installBundledSkills(
       config,
-      acquireWrite: platformChmodWritable,
-      releaseWrite: platformChmodReadOnly,
+      acquireWrite: chmodWritable,
+      releaseWrite: chmodReadOnly,
     );
 
     final original = bundledSkillFiles

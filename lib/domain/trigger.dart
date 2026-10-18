@@ -15,12 +15,6 @@ enum ScheduleRepeat {
   const ScheduleRepeat(this.label);
 
   final String label;
-
-  /// An unknown name is a file written by a later build, so it falls back
-  /// rather than failing the whole list — the bargain [TempChatTtl.fromName]
-  /// makes.
-  static ScheduleRepeat fromName(String? name) =>
-      values.firstWhere((t) => t.name == name, orElse: () => ScheduleRepeat.off);
 }
 
 /// When a file trigger fires, and over which kinds of change. Declaration
@@ -39,23 +33,10 @@ enum FileEvent {
 
   final String label;
 
-  /// An unknown name is a file written by a later build, so it falls back to
-  /// a change — the one every event kinds' writes carry — rather than
-  /// failing the record, the bargain [ScheduleRepeat.fromName] makes. A
-  /// record the reader cannot name is a lost fire, not a lost list.
-  static FileEvent fromName(String? name) => values.firstWhere(
-      (t) => t.name == name,
-      orElse: () => throw ArgumentError.value(name, "event"));
-
-  /// The read-side of the enum: tolerant, for a stored list. [fromName] is
-  /// the parse's own voice, where a caller wants the refusal.
-  static FileEvent fromNameOr(String? name) => switch (name) {
-        "create" => create,
-        "change" => change,
-        "delete" => delete,
-        "move" => move,
-        _ => change,
-      };
+  /// Throws on a name this build does not know: the tool's parse wants the
+  /// refusal. A stored list reads tolerantly instead, in [Trigger.fromJson].
+  static FileEvent fromName(String? name) =>
+      values.asNameMap()[name] ?? (throw ArgumentError.value(name, "event"));
 }
 
 /// What sets a trigger off. Data, and nothing but: which behaviour watches
@@ -360,17 +341,13 @@ class Trigger {
     String? name,
     String? prompt,
     TriggerSource? source,
-    bool clearChatId = false,
-    String? chatId,
     String? member,
     bool clearMember = false,
     String? project,
     TempChatTtl? tempChatTtl,
     bool clearTempChatTtl = false,
     bool? enabled,
-    bool? byAgent,
     DateTime? lastFiredAt,
-    bool clearLastFiredAt = false,
     DateTime? nextFireAt,
     bool clearNextFireAt = false,
     int? requestCode,
@@ -380,13 +357,13 @@ class Trigger {
         name: name ?? this.name,
         prompt: prompt ?? this.prompt,
         source: source ?? this.source,
-        chatId: clearChatId ? null : (chatId ?? this.chatId),
+        chatId: chatId,
         member: clearMember ? null : (member ?? this.member),
         project: project ?? this.project,
         tempChatTtl: clearTempChatTtl ? null : (tempChatTtl ?? this.tempChatTtl),
         enabled: enabled ?? this.enabled,
-        byAgent: byAgent ?? this.byAgent,
-        lastFiredAt: clearLastFiredAt ? null : (lastFiredAt ?? this.lastFiredAt),
+        byAgent: byAgent,
+        lastFiredAt: lastFiredAt ?? this.lastFiredAt,
         nextFireAt: clearNextFireAt ? null : (nextFireAt ?? this.nextFireAt),
         requestCode: requestCode ?? this.requestCode,
       );
@@ -408,7 +385,7 @@ class Trigger {
       chatId: json["chatId"] as String?,
       member: json["member"] as String?,
       project: json["project"] as String?,
-      tempChatTtl: TempChatTtl.fromNameNullable(json["tempChatTtl"] as String?) ??
+      tempChatTtl: TempChatTtl.values.asNameMap()[json["tempChatTtl"]] ??
           // `temporary` is what a build before the TTL field wrote, and false
           // there meant the one TTL a bool could name.
           ((json["temporary"] as bool? ?? true) ? null : TempChatTtl.off),
@@ -423,7 +400,9 @@ class Trigger {
   static TriggerSource _legacySourceFrom(Map<String, dynamic> json) =>
       ScheduleSource(
         at: _date(json["at"]) ?? DateTime(2026),
-        repeat: ScheduleRepeat.fromName(json["repeat"] as String?),
+        // An unknown name is a later build's: fall back, not lose the list.
+        repeat: ScheduleRepeat.values.asNameMap()[json["repeat"]] ??
+            ScheduleRepeat.off,
       );
 
   static TriggerSource _sourceFrom(Map<String, dynamic> json) {
@@ -442,9 +421,8 @@ class Trigger {
 
   static FileSource _fileSourceFrom(Map<String, dynamic> json) {
     final rawEvents = json["events"] as List?;
-    // A name this build does not know falls back rather than failing the
-    // record — an unknown kind's bargain, held here too. What is not a
-    // string (a hand edit, a corrupted field) is dropped the same way.
+    // A name this build does not know reads as a change rather than failing
+    // the record; what is not a string is dropped.
     return FileSource(
       paths: [
         for (final p in json["paths"] as List? ?? const [])
@@ -455,7 +433,8 @@ class Trigger {
           ? FileEvent.values.toSet()
           : {
               for (final e in rawEvents)
-                if (e is String) FileEvent.fromNameOr(e),
+                if (e is String)
+                  FileEvent.values.asNameMap()[e] ?? FileEvent.change,
             },
       cooldown: Duration(
           seconds: json["cooldownSeconds"] is int

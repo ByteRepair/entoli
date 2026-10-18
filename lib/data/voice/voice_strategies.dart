@@ -23,11 +23,6 @@ Future<AudioRecorder> openMicrophone() async {
 /// The listening half of a voice session: a microphone, voice activity, and
 /// recognition. Emits [VoiceHeard] for transcribed utterances and [VoiceFailed]
 /// on a fault it cannot recover from.
-///
-/// Extracted from `SherpaVoice` so a session can compose a [Listener] and a
-/// [Speaker] independently: sherpa's pair on the desktops, the system engines'
-/// on Android, and a null [Listener] for reading one message out. The session
-/// wires the two together; neither knows about the other.
 abstract class Listener {
   Stream<VoiceEvent> get events;
 
@@ -42,24 +37,14 @@ abstract class Listener {
   Future<void> dispose();
 }
 
-/// Everything a [Listener] with a microphone behind it is made of, which turned
-/// out to be everything except the engine: the event stream, the level, and the
-/// [LoudnessGate] that decides whether what was heard was meant for the phone.
-///
-/// It exists because the gate did not. It was written for the system recogniser
-/// and lived in that class, so the desktops answered the fan and the television
-/// for as long as Android had stopped — and the same was true of the rest of
-/// this before it: two implementations of one thing, one of which was written.
-/// Held here, an engine gets it by being a listener rather than by remembering
-/// to be one. What a subclass supplies is only what its engine gives it —
-/// readings through [measured] and words through [heard] — and which
-/// [LoudnessGate] those readings are on.
+/// Everything a [Listener] with a microphone behind it shares across engines:
+/// the event stream, the level, and the [LoudnessGate] that decides whether
+/// what was heard was meant for the phone. A subclass supplies readings
+/// through [measured] and words through [heard].
 abstract class MicrophoneListener implements Listener {
   MicrophoneListener(this.gate);
 
-  /// Whether what was heard was meant for the phone. One gate serves both
-  /// engines and is handed in rather than built here only so a test can watch
-  /// one: there is nothing scale-dependent left in it to configure.
+  /// Handed in only so a test can watch it.
   final LoudnessGate gate;
 
   /// Single-subscription, not broadcast: a failure to start is emitted before
@@ -182,19 +167,8 @@ abstract class Speaker {
 }
 
 /// How many sentences in a row a speaker may lose before the engine, rather
-/// than the sentence, is what failed.
-///
-/// **One dropped sentence is not a broken engine.** A synthesiser refuses the
-/// odd utterance, a voice comes back with no samples in it, a file will not
-/// play; reported up, each of those ends voice mode over a sentence that could
-/// have been skipped. But an engine that has stopped working answers every
-/// sentence that way, and a reply nobody can hear with a session that will not
-/// say so is worse.
-///
-/// It was the system synthesiser's rule and only its own, so on the desktops
-/// one bad sentence still ended the session. A count is small enough to have
-/// been written twice and was instead written once — which is the same shape as
-/// the gate above it.
+/// than the sentence, is what failed: a synthesiser refuses the odd utterance,
+/// but a broken one refuses every one.
 class SpeechFailures {
   static const _budget = 3;
 
@@ -211,13 +185,7 @@ class SpeechFailures {
 
 /// A [VoiceSession] composed of a [Listener] and a [Speaker], neither knowing
 /// about the other. It forwards both halves' events and owns one rule: what a
-/// microphone that has been shut is still allowed to say. Each `Voice` picks
-/// its own pair in `start`, which is what makes `AndroidVoice` a dozen lines
-/// and gives read-aloud a speak-only session for free.
-///
-/// [composeSession] is how every `Voice.start` finishes: a half that refuses
-/// once the other is built must not orphan it, since a listener holds a
-/// recorder, an isolate or a bridge subscription only its dispose frees.
+/// microphone that has been shut is still allowed to say.
 class ComposedVoiceSession implements VoiceSession {
   ComposedVoiceSession(this._listener, this._speaker) {
     _listener?.events.listen(_onListener);
@@ -231,9 +199,7 @@ class ComposedVoiceSession implements VoiceSession {
   final _levelOf = ValueNotifier(0.0);
 
   /// What [setListening] was last told, and whether one more utterance is still
-  /// wanted after it was shut. Held here rather than in each [Listener] because
-  /// it is one rule about what the session is allowed to say, and a listener
-  /// that forgot it would be silently back to the bug below.
+  /// wanted after it was shut.
   bool _listening = false;
   bool _finishing = false;
 
@@ -283,9 +249,6 @@ class ComposedVoiceSession implements VoiceSession {
 
   @override
   Future<void> setListening(bool on, {bool finish = false}) {
-    // The one place that knows whether this is a change, so the one place that
-    // can drop the call when it is not — every caller gets that rather than the
-    // one that remembered to keep a copy of the answer.
     if (on == _listening) return Future.value();
     // Set before the call rather than after it: what the engine does with the
     // request takes a platform hop, and anything it flushes in between is
@@ -311,9 +274,8 @@ class ComposedVoiceSession implements VoiceSession {
   }
 }
 
-/// Builds the session, disposing the built listener if the speaker half
-/// refuses — the same all-or-nothing `start` was before halves could be
-/// composed from two different engines.
+/// How every `Voice.start` finishes: a speaker that refuses must not orphan
+/// the listener, which holds a recorder, an isolate or a subscription.
 Future<VoiceSession> composeSession(
     Listener? listener, Future<Speaker> speaker) async {
   try {

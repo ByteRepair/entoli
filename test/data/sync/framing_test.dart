@@ -2,6 +2,7 @@ import "dart:async";
 import "dart:convert";
 import "dart:typed_data";
 
+import "package:agent_chat/data/sync/channel.dart";
 import "package:agent_chat/data/sync/framing.dart";
 import "package:agent_chat/data/sync/handshake.dart";
 import "package:agent_chat/domain/sync/identity.dart";
@@ -35,6 +36,29 @@ void main() {
     final both = await Future.wait([a, b]);
     return (both[0], both[1]);
   }
+
+  test("a peer claiming an id its key does not stand for is refused",
+      () async {
+    final links = loopbackPair();
+    final victim = await SyncIdentity.load(FakeSecretStore());
+    final attacker = await SyncIdentity.load(FakeSecretStore());
+    final joined = Handshake(await SyncIdentity.load(FakeSecretStore()),
+            pairingSecret: "cGFpcmluZy1zZWNyZXQtZm9yLWEtdGVzdA")
+        .run(links.$2, initiator: false, reader: ChannelReader(links.$2));
+    await links.$1.send(utf8.encode(jsonEncode({
+      "v": SyncIdentity.protocolVersion,
+      "role": "i",
+      "id": victim.id,
+      "pk": attacker.publicKeyB64,
+      "eph": base64Encode(List.filled(32, 9)),
+      "name": "x",
+    })));
+
+    await expectLater(
+        joined,
+        throwsA(isA<HandshakeException>().having(
+            (e) => e.message, "message", "peer id does not match its key")));
+  });
 
   test("what one end seals, the other opens", () async {
     final (a, b) = await connected();

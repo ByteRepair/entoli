@@ -61,90 +61,83 @@ class Handshake {
   /// between. Whoever opened it closes it.
   Future<SessionKeys> run(ByteChannel raw,
       {required bool initiator, required ChannelReader reader}) async {
-    {
-      final eph = await X25519().newKeyPair();
-      final ephPub =
-          Uint8List.fromList((await eph.extractPublicKey()).bytes);
+    final eph = await X25519().newKeyPair();
+    final ephPub = Uint8List.fromList((await eph.extractPublicKey()).bytes);
+    final hello = {
+      "v": SyncIdentity.protocolVersion,
+      "role": initiator ? "i" : "j",
+      "id": _local.id,
+      "pk": _local.publicKeyB64,
+      "eph": base64Encode(ephPub),
+      "name": name,
+    };
+    Future<Map<String, dynamic>> receive({bool hello = true}) async => parse(
+        utf8.decode(await reader.next().timeout(timeout, onTimeout: _timedOut)),
+        hello: hello);
 
-      Map<String, dynamic> remote;
-      if (initiator) {
-        await raw.send(utf8.encode(jsonEncode(_hello("i", ephPub))));
-        remote = parse(utf8.decode(
-            await reader.next().timeout(timeout, onTimeout: _timedOut)));
-        if (remote["role"] != "j") {
-          throw const HandshakeException("unexpected handshake role");
-        }
-      } else {
-        remote = parse(utf8.decode(
-            await reader.next().timeout(timeout, onTimeout: _timedOut)));
-        if (remote["role"] != "i") {
-          throw const HandshakeException("unexpected handshake role");
-        }
-      }
-      if (remote["v"] != SyncIdentity.protocolVersion) {
-        throw HandshakeException(
-            "protocol version ${remote["v"]} not supported");
-      }
-
-      final remotePk = base64Decode(remote["pk"] as String);
-      final remoteEph = base64Decode(remote["eph"] as String);
-      _peer = PeerIdentity(
-        id: remote["id"] as String,
-        publicKey: Uint8List.fromList(remotePk),
-        name: (remote["name"] as String?) ?? "",
-      );
-
-      // Fixed order by role, so both sides hash the same bytes — local
-      // first would have each side signing its own ordering.
-      List<int> transcript() => [
-            ...utf8.encode(_sigContext),
-            ...(initiator ? ephPub : remoteEph),
-            ...(initiator ? remoteEph : ephPub),
-            ...(initiator ? _local.publicKey : remotePk),
-            ...(initiator ? remotePk : _local.publicKey),
-          ];
-
-      Signature signatureOf(List<int> bytes) => Signature(bytes,
-          publicKey: SimplePublicKey(remotePk, type: KeyPairType.ed25519));
-
-      Future<bool> verify(Object? sig) =>
-          Ed25519().verify(transcript(), signature: signatureOf(base64Decode(sig as String)));
-
-      Future<List<int>> sign() async =>
-          (await Ed25519().sign(transcript(), keyPair: _local.keyPair)).bytes;
-
-      SessionKeys keys;
-      if (initiator) {
-        if (!await verify(remote["sig"])) {
-          throw const HandshakeException("joiner signature invalid");
-        }
-        await raw.send(utf8.encode(jsonEncode({
-          "v": SyncIdentity.protocolVersion,
-          "role": "i",
-          "sig": base64Encode(await sign()),
-        })));
-        keys = await _keys(initiator: true, eph: eph, remoteEph: remoteEph);
-      } else {
-        await raw.send(utf8.encode(jsonEncode({
-          "v": SyncIdentity.protocolVersion,
-          "role": "j",
-          "id": _local.id,
-          "pk": _local.publicKeyB64,
-          "eph": base64Encode(ephPub),
-          "name": name,
-          "sig": base64Encode(await sign()),
-        })));
-        final last = parse(
-            utf8.decode(
-                await reader.next().timeout(timeout, onTimeout: _timedOut)),
-            hello: false);
-        if (last["role"] != "i" || !await verify(last["sig"])) {
-          throw const HandshakeException("initiator signature invalid");
-        }
-        keys = await _keys(initiator: false, eph: eph, remoteEph: remoteEph);
-      }
-      return keys;
+    if (initiator) await raw.send(utf8.encode(jsonEncode(hello)));
+    final remote = await receive();
+    if (remote["role"] != (initiator ? "j" : "i")) {
+      throw const HandshakeException("unexpected handshake role");
     }
+    if (remote["v"] != SyncIdentity.protocolVersion) {
+      throw HandshakeException(
+          "protocol version ${remote["v"]} not supported");
+    }
+
+    final remotePk = base64Decode(remote["pk"] as String);
+    final remoteEph = base64Decode(remote["eph"] as String);
+    // The id is what the registry pins and a reconnect is held to, so it must
+    // be the one the signing key stands for, not whatever the peer claims.
+    if (remote["id"] != SyncIdentity.idOf(remotePk)) {
+      throw const HandshakeException("peer id does not match its key");
+    }
+    _peer = PeerIdentity(
+      id: remote["id"] as String,
+      publicKey: Uint8List.fromList(remotePk),
+      name: (remote["name"] as String?) ?? "",
+    );
+
+    // Fixed order by role, so both sides hash the same bytes — local
+    // first would have each side signing its own ordering.
+    List<int> transcript() => [
+          ...utf8.encode(_sigContext),
+          ...(initiator ? ephPub : remoteEph),
+          ...(initiator ? remoteEph : ephPub),
+          ...(initiator ? _local.publicKey : remotePk),
+          ...(initiator ? remotePk : _local.publicKey),
+        ];
+
+    Signature signatureOf(List<int> bytes) => Signature(bytes,
+        publicKey: SimplePublicKey(remotePk, type: KeyPairType.ed25519));
+
+    Future<bool> verify(Object? sig) =>
+        Ed25519().verify(transcript(), signature: signatureOf(base64Decode(sig as String)));
+
+    Future<List<int>> sign() async =>
+        (await Ed25519().sign(transcript(), keyPair: _local.keyPair)).bytes;
+
+    SessionKeys keys;
+    if (initiator) {
+      if (!await verify(remote["sig"])) {
+        throw const HandshakeException("joiner signature invalid");
+      }
+      await raw.send(utf8.encode(jsonEncode({
+        "v": SyncIdentity.protocolVersion,
+        "role": "i",
+        "sig": base64Encode(await sign()),
+      })));
+      keys = await _keys(initiator: true, eph: eph, remoteEph: remoteEph);
+    } else {
+      await raw.send(utf8.encode(
+          jsonEncode({...hello, "sig": base64Encode(await sign())})));
+      final last = await receive(hello: false);
+      if (last["role"] != "i" || !await verify(last["sig"])) {
+        throw const HandshakeException("initiator signature invalid");
+      }
+      keys = await _keys(initiator: false, eph: eph, remoteEph: remoteEph);
+    }
+    return keys;
   }
 
   /// Holds the peer to the id recorded when they were paired. Their id
@@ -156,15 +149,6 @@ class Handshake {
       throw const HandshakeException("peer is not who we paired with");
     }
   }
-
-  Map<String, Object> _hello(String role, Uint8List ephPub) => {
-        "v": SyncIdentity.protocolVersion,
-        "role": role,
-        "id": _local.id,
-        "pk": _local.publicKeyB64,
-        "eph": base64Encode(ephPub),
-        "name": name,
-      };
 
   Future<SessionKeys> _keys(
       {required bool initiator,

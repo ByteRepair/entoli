@@ -22,7 +22,9 @@ class FileTriggerStore {
 
   Future<List<Trigger>> load() async {
     try {
-      final text = await _config.fs.file(_config.remindersFile).readAsString();
+      final file = _config.fs.file(_config.remindersFile);
+      if (!await file.exists()) return const [];
+      final text = await file.readAsString();
       final list = jsonDecode(text) as List<dynamic>;
       // Per record, not per file: one entry this build cannot read is one
       // lost trigger, not a list emptied out and written back over its

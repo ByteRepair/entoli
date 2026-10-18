@@ -51,8 +51,6 @@ import "package:uuid/uuid.dart";
 /// A [LinkOpener] that records what it was asked to open, for UI tests that
 /// assert on the call rather than on a browser opening.
 class FakeLinkOpener implements LinkOpener {
-  FakeLinkOpener();
-
   final List<Uri> opened = [];
   final List<({String chatId, String artifactId, String entryFile, String? title})> openedArtifacts = [];
 
@@ -70,20 +68,11 @@ class FakeLinkOpener implements LinkOpener {
       openedArtifacts.add((chatId: chatId, artifactId: artifactId, entryFile: entryFile, title: title));
 }
 
-/// Two providers, two models each, deliberately not in alphabetical order so
-/// tests can assert the UI sorts them.
-const testModels = [
-  ModelOption(providerId: "ollama-cloud", modelId: "llama-3", label: "Llama 3"),
-  ModelOption(providerId: "ollama-cloud", modelId: "qwen-2.5", label: "Qwen 2.5"),
-  ModelOption(providerId: "anthropic", modelId: "claude-sonnet-4", label: "Claude Sonnet 4"),
-  ModelOption(providerId: "anthropic", modelId: "claude-haiku-3", label: "Claude Haiku 3"),
-];
-
 /// The models [testProvider] is answered with, labelled the way the real
-/// registry labels them: `<provider display name> · <model id>`.
-const testProviderModelIds = ["qwen-2.5", "claude-sonnet-4", "llama-3", "claude-haiku-3"];
+/// registry labels them: `<provider display name> · <model id>`, and
+/// deliberately out of order so tests can assert the UI sorts them.
 final testProviderModels = [
-  for (final id in testProviderModelIds)
+  for (final id in ["qwen-2.5", "claude-sonnet-4", "llama-3", "claude-haiku-3"])
     ModelOption(providerId: testProviderId, modelId: id, label: "Test · $id"),
 ];
 
@@ -299,7 +288,7 @@ class FakeAssistantLaunch implements AssistantLaunch {
 /// The alarm port a trigger is set against, with the answers a test wants
 /// to control. [fire] and [tap] are the two things Android does on its own:
 /// an alarm going off, and a notification being tapped.
-class FakeReminderAlarms implements ReminderAlarms {  // ignore: duplicate-ignore
+class FakeReminderAlarms implements ReminderAlarms {
   FakeReminderAlarms({this.available = true, this.schedulesOverride});
 
   @override
@@ -619,17 +608,11 @@ class FakeBackend implements AgentBackend {
   /// What `usageFor` answers, keyed by chat id, in context tokens.
   final Map<String, int> usageHolder = {};
 
-  /// The window that same request stood in, mirroring the pair the real
-  /// backend keeps.
-  final Map<String, int> windowHolder = {};
+  @override
+  int? contextWindowFor(String chatId) => null;
 
   @override
-  int? contextWindowFor(String chatId) => windowHolder[chatId];
-
-  var didShutdown = false;
-
-  @override
-  Future<void> shutdown() async => didShutdown = true;
+  Future<void> shutdown() async {}
 
   final List<String> aborted = [];
 
@@ -667,7 +650,14 @@ class FakeBackend implements AgentBackend {
   void closeChatShell(String chatId, {required String? project}) =>
       closedShells.add((chatId, project));
 
-  List<ModelOption> modelList = testModels;
+  /// Two providers, two models each, deliberately not in alphabetical order so
+  /// tests can assert the UI sorts them.
+  List<ModelOption> modelList = const [
+    ModelOption(providerId: "ollama-cloud", modelId: "llama-3", label: "Llama 3"),
+    ModelOption(providerId: "ollama-cloud", modelId: "qwen-2.5", label: "Qwen 2.5"),
+    ModelOption(providerId: "anthropic", modelId: "claude-sonnet-4", label: "Claude Sonnet 4"),
+    ModelOption(providerId: "anthropic", modelId: "claude-haiku-3", label: "Claude Haiku 3"),
+  ];
 
   @override
   Future<List<ModelOption>> models() async => modelList;

@@ -6,7 +6,7 @@ import "package:record/record.dart"
 
 import "package:agent_chat/core/platform/io/linux_recorder.dart";
 import "package:agent_chat/core/platform/io/platform.dart"
-    show platformRegisterRecorder;
+    show registerRecorder;
 
 /// The config the voice session sends: raw mono 16 kHz PCM with the two
 /// noise properties on. The argv for it is pinned, and the device variant
@@ -86,16 +86,16 @@ void main() {
     );
   });
 
-  test("platformRegisterRecorder puts LinuxRecorder on RecordPlatform.instance",
+  test("registerRecorder puts LinuxRecorder on RecordPlatform.instance",
       () {
     final before = RecordPlatform.instance;
-    platformRegisterRecorder();
+    registerRecorder();
     expect(RecordPlatform.instance, isA<LinuxRecorder>());
     // Not left standing over the suite: another test in this file spawns
     // through the stock instance.
     RecordPlatform.instance = before;
   }, skip: Platform.isLinux
       ? null
-      : "platformRegisterRecorder answers Linux alone, and leaves the stock "
+      : "registerRecorder answers Linux alone, and leaves the stock "
           "platform implementation standing everywhere else");
 }

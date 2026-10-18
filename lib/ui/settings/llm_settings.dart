@@ -54,7 +54,9 @@ class DefaultsSection extends ConsumerWidget {
       ],
     );
   }
-}/// How a turn runs and is bounded: the retry rounds, the step limit, the
+}
+
+/// How a turn runs and is bounded: the retry rounds, the step limit, the
 /// context window the auto-compact threshold reads against and acts at. One
 /// section because they are one subject — the turn's own behaviour — wherever
 /// the page that draws it sits.
@@ -67,10 +69,10 @@ class TurnsSection extends ConsumerWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const SectionHeader("Turns"),
-        RetryTurnsField(),
-        MaxStepsField(),
-        TotalContextField(),
-        AutoCompactField(),
+        const _RetryTurnsField(),
+        const _MaxStepsField(),
+        const _TotalContextField(),
+        const _AutoCompactField(),
       ],
     );
   }
@@ -80,8 +82,8 @@ class TurnsSection extends ConsumerWidget {
 /// user. Null is the backend's own default; Omada member turns run under it
 /// too — the value rides every turn — and the round's own bound is the
 /// generations cap beside it.
-class MaxStepsField extends ConsumerWidget {
-  const MaxStepsField({super.key});
+class _MaxStepsField extends ConsumerWidget {
+  const _MaxStepsField();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -101,8 +103,8 @@ class MaxStepsField extends ConsumerWidget {
 /// Auto-compact: summarize the conversation when it grows past the slider's
 /// share of the model's window. Off, a long chat keeps growing until the
 /// provider refuses it. The manual `/compact` needs nothing here.
-class AutoCompactField extends ConsumerWidget {
-  const AutoCompactField({super.key});
+class _AutoCompactField extends ConsumerWidget {
+  const _AutoCompactField();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -151,8 +153,8 @@ class AutoCompactField extends ConsumerWidget {
 /// auto-compact threshold's share is taken against and the summarizer's own
 /// ask must fit under. Asked for in a dialog, the way a description is: a
 /// value typed occasionally, not slid to.
-class TotalContextField extends ConsumerWidget {
-  const TotalContextField({super.key});
+class _TotalContextField extends ConsumerWidget {
+  const _TotalContextField();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -189,10 +191,10 @@ class TotalContextField extends ConsumerWidget {
   }
 }
 
-/// automatically before it is left failed. Off is the switch; the slider is
-/// the count, the shape the cores slider keeps.
-class RetryTurnsField extends ConsumerWidget {
-  const RetryTurnsField({super.key});
+/// How many times a failed turn is carried on automatically before it is left
+/// failed. Off is the switch; the slider is the count.
+class _RetryTurnsField extends ConsumerWidget {
+  const _RetryTurnsField();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -239,4 +241,3 @@ class RetryTurnsField extends ConsumerWidget {
 extension on int {
   String get inK => this >= 1000 && this % 1000 == 0 ? "${this ~/ 1000}k" : "$this";
 }
-

@@ -319,7 +319,6 @@ class _SidebarState extends ConsumerState<Sidebar> {
       ),
     );
   }
-
 }
 
 const _noMatch = "No chat's title matches that.";
@@ -691,8 +690,6 @@ class _ChatTile extends ConsumerWidget {
   }
 }
 
-/// The project being shown, and everything that changes it. Its name is what
-/// the chats and the shared workspace sit under on disk.
 /// How a project on a paired device is read out. Its default project is the
 /// device's name alone — the local default has no name either, and inventing
 /// one here would be the only place in the app that gives it one.
@@ -702,16 +699,20 @@ String _remoteLabel(String deviceName, String? project) =>
 /// Every project that has a mirrored chat in it, one entry each, device
 /// first. A device with nothing mirrored has no projects to offer — the
 /// welcome is what says a project exists at all.
-List<({RemoteScope scope, String label})> _remoteEntries(
+List<({RemoteScope scope, String label, bool omada})> _remoteEntries(
     List<RemoteChatEntry> remotes) {
-  final byScope = <RemoteScope, String>{};
+  final byScope = <RemoteScope, RemoteChatEntry>{};
   for (final entry in remotes) {
     byScope[(deviceId: entry.deviceId, project: entry.state.project)] ??=
-        entry.deviceName;
+        entry;
   }
   final entries = [
-    for (final scope in byScope.keys)
-      (scope: scope, label: _remoteLabel(byScope[scope]!, scope.project)),
+    for (final MapEntry(key: scope, value: entry) in byScope.entries)
+      (
+        scope: scope,
+        label: _remoteLabel(entry.deviceName, scope.project),
+        omada: entry.omada,
+      ),
   ];
   entries.sort((a, b) => a.label.toLowerCase().compareTo(b.label.toLowerCase()));
   return entries;
@@ -731,6 +732,7 @@ String _scopeLabel(
   return projectLabel(project);
 }
 
+/// The project being shown, and everything that changes it.
 class _ProjectMenu extends ConsumerWidget {
   const _ProjectMenu();
 
@@ -747,9 +749,6 @@ class _ProjectMenu extends ConsumerWidget {
     ref.invalidate(projectListProvider);
     selectProject(ref, name.name);
   }
-
-  Future<void> _delete(BuildContext context, WidgetRef ref, String project) =>
-      deleteProject(context, ref, project);
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -780,8 +779,13 @@ class _ProjectMenu extends ConsumerWidget {
               fontSize: 18,
               fontWeight: FontWeight.bold,
             ).merge(
-              projectLabelStyle(
-                  remote == null && ref.watch(omadaOnProvider(project))),
+              projectLabelStyle(remote == null
+                  ? ref.watch(omadaOnProvider(project))
+                  : ref.watch(remoteChatsProvider.select((chats) => chats.any(
+                      (e) =>
+                          e.deviceId == remote.deviceId &&
+                          e.state.project == remote.project &&
+                          e.omada)))),
             ),
           ),
           onPressed: () => _open(context, ref, projects),
@@ -844,6 +848,7 @@ class _ProjectMenu extends ConsumerWidget {
         _row(
           checked: entry.scope == remote,
           label: entry.label,
+          omada: entry.omada,
           pick: () => selectRemote(ref, entry.scope),
         ),
       const PopupMenuDivider(),
@@ -854,7 +859,7 @@ class _ProjectMenu extends ConsumerWidget {
       // A built-in project cannot be deleted, so it is not offered one.
       if (selected != null && isProjectName(selected))
         PopupMenuItem(
-          value: () => _delete(context, ref, selected),
+          value: () => deleteProject(context, ref, selected),
           child: const Text("Delete project…"),
         ),
     ]);

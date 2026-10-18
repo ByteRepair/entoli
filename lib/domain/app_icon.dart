@@ -15,11 +15,6 @@ enum AppIcon {
   final String description;
 
   String get asset => "assets/icons/$name.svg";
-
-  /// An unknown name is a file written by a later build, so it falls back
-  /// rather than failing the whole settings load.
-  static AppIcon fromName(String? name) =>
-      values.firstWhere((icon) => icon.name == name, orElse: () => cookie);
 }
 
 /// Changes the icon the launcher shows. Android only; elsewhere [available] is

@@ -105,7 +105,8 @@ void main() {
       await settleIo(tester);
       expect(find.text("main.dart"), findsOneWidget);
 
-      await tester.tap(find.byType(BackButton));
+      // The system back gesture climbs too, not only the bar's arrow.
+      await tester.binding.handlePopRoute();
       await settleIo(tester);
       expect(find.text("deep"), findsOneWidget);
       expect(find.text("main.dart"), findsNothing);

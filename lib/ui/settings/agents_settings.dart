@@ -142,24 +142,7 @@ class _AgentsSectionState extends ConsumerState<AgentsSection> {
       _say("That name cannot be a file name.");
       return;
     }
-    final config = ref.read(appConfigProvider);
-    if (previous == null) {
-      final exists = await config.fs
-          .file(agentFilePath(config, edit.name, project: widget.project))
-          .exists();
-      if (!mounted) return;
-      if (exists) {
-        final confirmed = await confirm(
-          context,
-          title: "Replace ${edit.name}?",
-          message: "An agent with that name is already installed. Saving this one "
-              "replaces it.",
-          confirmLabel: "Replace",
-        );
-        if (!confirmed) return;
-      }
-    }
-
+    if (previous == null && !await _mayReplace(edit.name, "Saving")) return;
     await _write(
       edit.name,
       PromptDocument.toSource(description: edit.description, body: edit.body),
@@ -270,28 +253,32 @@ class _AgentsSectionState extends ConsumerState<AgentsSection> {
       _say("That file cannot be imported: there is no prompt in it.");
       return;
     }
-    final config = ref.read(appConfigProvider);
-    final name = config.fs.path.basenameWithoutExtension(file.name);
+    final name =
+        ref.read(appConfigProvider).fs.path.basenameWithoutExtension(file.name);
     if (!isFolderName(name)) {
       _say("That file cannot be imported: its name cannot be a file name.");
       return;
     }
+    if (!await _mayReplace(name, "Importing")) return;
+    await _write(name, source, "Imported $name.");
+  }
+
+  /// False where [name] is already in this project's directory and the user
+  /// would rather keep it, or the page went away while asking.
+  Future<bool> _mayReplace(String name, String doing) async {
+    final config = ref.read(appConfigProvider);
     final exists = await config.fs
         .file(agentFilePath(config, name, project: widget.project))
         .exists();
-    if (!mounted) return;
-    if (exists) {
-      final confirmed = await confirm(
-        context,
-        title: "Replace $name?",
-        message: "An agent with that name is already installed. Importing "
-            "this one replaces it.",
-        confirmLabel: "Replace",
-      );
-      if (!confirmed) return;
-    }
-
-    await _write(name, source, "Imported $name.");
+    if (!mounted) return false;
+    return !exists ||
+        await confirm(
+          context,
+          title: "Replace $name?",
+          message: "An agent with that name is already installed. $doing "
+              "this one replaces it.",
+          confirmLabel: "Replace",
+        );
   }
 
   /// Re-read the library of the project a change landed in. The global page
@@ -320,8 +307,7 @@ class _AgentsSectionState extends ConsumerState<AgentsSection> {
       whileBusy(context, _busy, work);
 
   void _say(String message) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    if (mounted) say(context, message);
   }
 
   @override
@@ -424,7 +410,7 @@ class _AgentsSectionState extends ConsumerState<AgentsSection> {
               ),
             false => Padding(
                 padding: const EdgeInsets.only(right: 12),
-                child: Text(_originLabel(CompletionKind.agent, agent.name)),
+                child: Text(_originLabel(agent.name)),
               ),
             true => const SizedBox.shrink(),
           },
@@ -440,8 +426,8 @@ class _AgentsSectionState extends ConsumerState<AgentsSection> {
 
   /// Where an entry the project's directory does not hold came from: a preset
   /// the binary embeds, or a default-project entry this project inherits.
-  String _originLabel(CompletionKind kind, String name) =>
-      isBundledPromptName(kind, name, project: widget.project)
+  String _originLabel(String name) =>
+      isBundledPromptName(CompletionKind.agent, name, project: widget.project)
           ? "Bundled"
           : "Inherited";
 }
@@ -565,15 +551,11 @@ class _AgentEditorPageState extends ConsumerState<AgentEditorPage> {
         .then((picks) => picks.isEmpty ? null : picks.single);
     if (attachment == null) return;
     if (!attachment.filename.toLowerCase().endsWith(".png")) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("The picture is saved as a .png — pick a PNG image.")));
+      if (mounted) say(context, "The picture is saved as a .png — pick a PNG image.");
       return;
     }
     _pick(attachment.bytes);
   }
-
-  void _clearPicture() => _pick(null);
 
   Future<void> _save() async {
     final name = _name.text.trim();
@@ -674,7 +656,7 @@ class _AgentEditorPageState extends ConsumerState<AgentEditorPage> {
                     IconButton(
                       icon: const Icon(Icons.close),
                       tooltip: "Remove the picture",
-                      onPressed: _clearPicture,
+                      onPressed: () => _pick(null),
                     ),
                 ],
               ),

@@ -35,6 +35,27 @@ void main() {
     expect(await FileSecretStore(config).read("k"), bytes());
   });
 
+  test("two first writes at once both land", () async {
+    await Future.wait([store.write("a", bytes()), store.write("b", bytes())]);
+
+    final again = FileSecretStore(config);
+    expect(await again.read("a"), bytes());
+    expect(await again.read("b"), bytes());
+  });
+
+  test("writes in flight land in call order", () async {
+    await store.write("seed", bytes());
+    await Future.wait([
+      store.write("a", Uint8List.fromList([1])),
+      store.write("b", bytes()),
+      store.write("a", Uint8List.fromList([2])),
+    ]);
+
+    final again = FileSecretStore(config);
+    expect(await again.read("a"), [2]);
+    expect(await again.read("b"), bytes());
+  });
+
   test("read answers null for a key nothing was written under", () async {
     expect(await store.read("nope"), isNull);
   });

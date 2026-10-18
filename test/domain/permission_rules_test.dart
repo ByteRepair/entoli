@@ -236,6 +236,12 @@ void main() {
       expect(rule.decision, PermissionDecision.allow);
     });
 
+    test("a command that parses to no segments does not throw", () {
+      final rule = ruleFromApproval(
+          const ToolApproval(id: "a", toolName: "bash", argumentsText: ";"));
+      expect(rule!.tool, "bash");
+    });
+
     test(
       "a compound command keeps only the words before the first operator",
       () {

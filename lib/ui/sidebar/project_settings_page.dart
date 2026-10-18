@@ -19,12 +19,13 @@ import "../widgets/destructive_button.dart";
 import "../widgets/dialogs.dart" show confirm, promptForText;
 import "../widgets/environment_section.dart";
 import "../widgets/resettable_field.dart";
+import "../widgets/section_header.dart" show mutedParagraph;
 import "../widgets/settings_card.dart";
 import "../workspace/workspace_page.dart";
 import "sidebar.dart";
 
 /// Delete a project, its chats, and its shared workspace. Confirms first
-/// (unless [confirm] is false — the settings page's `DestructiveButton` has
+/// (unless [ask] is false — the settings page's `DestructiveButton` has
 /// already asked), deselects the project and its chats, and invalidates the
 /// lists so the UI reflects the deletion. Shared by the sidebar's project
 /// menu and the project settings page so the invalidations agree.
@@ -33,13 +34,18 @@ Future<void> deleteProject(
   WidgetRef ref,
   String project, {
   bool popToRoot = false,
-  bool confirm = true,
+  bool ask = true,
 }) async {
-  if (confirm) {
-    final count = (ref.read(chatListProvider).value ?? const [])
-        .where((c) => c.project == project)
-        .length;
-    if (!await _confirmDeleteProject(context, project, count)) return;
+  if (ask &&
+      !await confirm(
+        context,
+        title: "Delete project?",
+        message: _deleteMessage(
+            project, _chatsIn(ref.read(chatListProvider).value, project)),
+        confirmLabel: "Delete",
+        destructive: true,
+      )) {
+    return;
   }
   await ref.read(chatRepositoryProvider).deleteProject(project);
   selectProject(ref, null);
@@ -56,16 +62,12 @@ Future<void> deleteProject(
   if (context.mounted && popToRoot) Navigator.of(context).popUntil((r) => r.isFirst);
 }
 
-Future<bool> _confirmDeleteProject(BuildContext context, String project, int count) {
-  return confirm(
-    context,
-    title: "Delete project?",
-    message: "Delete \"$project\", its $count ${count == 1 ? "chat" : "chats"} "
-        "and its shared workspace? This cannot be undone.",
-    confirmLabel: "Delete",
-    destructive: true,
-  );
-}
+String _deleteMessage(String project, int count) =>
+    "Delete \"$project\", its $count ${count == 1 ? "chat" : "chats"} "
+    "and its shared workspace? This cannot be undone.";
+
+int _chatsIn(List<ChatState>? chats, String project) =>
+    (chats ?? const []).where((c) => c.project == project).length;
 
 class ProjectSettingsPage extends ConsumerWidget {
   const ProjectSettingsPage({super.key, required this.project});
@@ -74,8 +76,7 @@ class ProjectSettingsPage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final chats = ref.watch(chatListProvider).value ?? const [];
-    final count = chats.where((c) => c.project == project).length;
+    final count = _chatsIn(ref.watch(chatListProvider).value, project);
     final path = ref.watch(appConfigProvider).projectDir(project: project);
     // A built-in reaches this page where its spec says it has one; the rows a
     // built-in cannot use — its own memory store, and deletion — are hidden
@@ -94,8 +95,18 @@ class ProjectSettingsPage extends ConsumerWidget {
           // dialog on the tap, workspace and the prompts pages keep their
           // pushes, and chats states its count without one.
           SettingsCardRow(children: [
-            _NameCard(project: project),
-            _PathCard(path: path),
+            SettingsCard.copy(
+              icon: Icons.badge_outlined,
+              title: "Project name",
+              value: project,
+              said: "Copied project name",
+            ),
+            SettingsCard.copy(
+              icon: Icons.route,
+              title: "Path",
+              value: path,
+              said: "Copied project path",
+            ),
             if (builtIn == null) _DescriptionCard(project: project),
             WorkspaceTile(
               root: ref
@@ -103,7 +114,11 @@ class ProjectSettingsPage extends ConsumerWidget {
                   .projectWorkspaceDir(project: project),
               title: "Project workspace",
             ),
-            _ChatsCard(count: count),
+            SettingsCard(
+              icon: Icons.forum_outlined,
+              title: "Chats",
+              subtitle: "$count",
+            ),
           ]),
           const Divider(),
           // Instructions, skills and agents: what a turn in this project is
@@ -160,47 +175,13 @@ class ProjectSettingsPage extends ConsumerWidget {
               icon: Icons.delete,
               label: "Delete project",
               confirmTitle: "Delete project?",
-              confirmMessage: "Delete \"$project\", its $count "
-                  "${count == 1 ? "chat" : "chats"} and its shared workspace? "
-                  "This cannot be undone.",
+              confirmMessage: _deleteMessage(project, count),
               onConfirmed: () => deleteProject(context, ref, project,
-                  popToRoot: true, confirm: false),
+                  popToRoot: true, ask: false),
             ),
           ],
         ],
       ),
-    );
-  }
-}
-
-class _NameCard extends StatelessWidget {
-  const _NameCard({required this.project});
-
-  final String project;
-
-  @override
-  Widget build(BuildContext context) {
-    return SettingsCard.copy(
-      icon: Icons.badge_outlined,
-      title: "Project name",
-      value: project,
-      said: "Copied project name",
-    );
-  }
-}
-
-class _PathCard extends StatelessWidget {
-  const _PathCard({required this.path});
-
-  final String path;
-
-  @override
-  Widget build(BuildContext context) {
-    return SettingsCard.copy(
-      icon: Icons.route,
-      title: "Path",
-      value: path,
-      said: "Copied project path",
     );
   }
 }
@@ -242,21 +223,6 @@ class _DescriptionCard extends ConsumerWidget {
         if (text == null || !context.mounted) return;
         ref.read(projectSettingsProvider(project).notifier).setDescription(text);
       },
-    );
-  }
-}
-
-class _ChatsCard extends StatelessWidget {
-  const _ChatsCard({required this.count});
-
-  final int count;
-
-  @override
-  Widget build(BuildContext context) {
-    return SettingsCard(
-      icon: Icons.forum_outlined,
-      title: "Chats",
-      subtitle: "$count",
     );
   }
 }
@@ -496,7 +462,8 @@ class _TempChatTtlRow extends ConsumerWidget {
     return InheritableDropdown<TempChatTtl>(
       label: "Temporary chats",
       value: settings.tempChatTtl,
-      inherited: appTtl.label,
+      // What `ChatRepository._resolveTempTtl` falls to below this level.
+      inherited: (builtinProjectOf(project)?.tempChatTtl ?? appTtl).label,
       options: tempChatTtlLabels,
       onChanged: (v) =>
           ref.read(projectSettingsProvider(project).notifier).setTempChatTtl(v),
@@ -580,17 +547,15 @@ class _ProjectPermissionsPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final settings = ref.watch(projectSettingsProvider(project));
-    final theme = Theme.of(context);
     return Scaffold(
       appBar: AppBar(title: const Text("Permissions")),
       body: ListView(children: [
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-          child: Text(
+          child: mutedParagraph(
+            context,
             "The app's own permissions (Settings > General > Agent) apply "
             "before these, in every project, without being listed here.",
-            style: theme.textTheme.bodySmall
-                ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
           ),
         ),
         const SizedBox(height: 4),

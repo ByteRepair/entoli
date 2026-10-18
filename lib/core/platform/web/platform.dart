@@ -40,12 +40,8 @@ Shell platformShell({
 }) =>
     const UnavailableShell();
 
-Future<Toolset?> platformInstallTools(String cacheDir) async => null;
+Future<Toolset?> installBundledTools(String cacheDir) async => null;
 
-/// A browser cannot run a command at all, so there is nothing for a Linux to
-/// be run under. The [project], [config] and [byteRepairBinDir] parameters
-/// are unused here: the io side resolves a per-project rootfs instance and a
-/// per-project bin directory from them.
 ShellDriver? platformDriver({
   required String defaultSkillsBundledDir,
   required String defaultUserSkillsDir,
@@ -63,13 +59,11 @@ ShellDriver? platformDriver({
 }) =>
     null;
 
-/// The app replacing itself from the latest release. A browser is not one of
-/// the platforms that can: the site carries the newest build already, and a
-/// reload of it is the whole of what an update means here.
-AppUpdateHost platformUpdateHost(String cacheDir) =>
+/// The site carries the newest build already; a reload is the update.
+AppUpdateHost createAppUpdateHost(String cacheDir) =>
     const UnavailableAppUpdateHost();
 
-Future<String?> platformAbi() async => null;
+Future<String?> deviceAbi() async => null;
 
 /// A web build writes `version.json` beside `index.html` rather than under
 /// `assets/`, so it is fetched rather than read through `rootBundle`.
@@ -81,10 +75,8 @@ Future<String?> platformVersionJson() async {
   }
 }
 
-RootfsStore platformRootfsStore(String cacheDir) => const UnavailableRootfsStore();
+RootfsStore createRootfsStore(String cacheDir) => const UnavailableRootfsStore();
 
-/// Nothing to copy a rootfs onto and no shell to run an install script in:
-/// every operation answers with an error from the store itself.
 ByteRepairStore platformByteRepairStore(
   AppConfig config,
   String project,
@@ -95,48 +87,36 @@ ByteRepairStore platformByteRepairStore(
     UnavailableByteRepairStore(
         config: config, project: project, workspace: workspace);
 
-/// No bin directory: there is no shell to inject one into.
-String? platformByteRepairBinDir(String cacheDir) => null;
+String? byteRepairBinDir(String cacheDir) => null;
 
-/// True: there is no marker to read and nothing that could write one, so a
-/// project that requires setup never gates a chat here — and no guest env
-/// to require anything of, the io side's env clause having no answer here.
-bool platformSetupComplete(AppConfig config, String? project,
-        {String? byteRepairBinDir}) =>
-    true;
+/// Nothing could write the marker here, so nothing is gated by it.
+bool setupComplete(AppConfig config, String? project, String? binDir) => true;
 
 WebSearch platformWebSearch() => const UnavailableWebSearch();
 
-/// Nowhere to put a gigabyte of weights, and nothing that could run them.
-LocalModelStore platformLocalModelStore(String cacheDir) =>
+LocalModelStore createLocalModelStore(String cacheDir) =>
     const UnavailableLocalModelStore();
 
-Future<LocalLlm> platformLocalLlm(LocalModelStore store, String cacheDir) async =>
+Future<LocalLlm> createLocalLlm(LocalModelStore store, String cacheDir) async =>
     const UnavailableLocalLlm();
 
-/// No native framework behind this build, so no Apple model either — the
-/// browser reaches its providers over the wire, as it always has.
-Future<AppleFm?> platformCreateAppleFm() async => null;
+Future<AppleFm?> createAppleFm() async => null;
 
-/// No server, so nothing to persist a KV cache for.
-LocalKvCache? platformLocalKvCache(String cacheDir, LocalLlm localLlm) => null;
+LocalKvCache? createLocalKvCache(String cacheDir, LocalLlm localLlm) => null;
 
-/// Nominal, like [platformDataDir]: nothing here fetches a model, so nothing
-/// needs somewhere to keep one.
-Future<String> platformCacheDir() async => "/agent-chat-cache";
+/// Nominal: nothing here fetches a model.
+Future<String> cacheDir() async => "/agent-chat-cache";
 
-/// Nothing to register: the Silero asset is not in this build.
-void platformRegisterVoiceLicences() {}
+void registerVoiceLicences() {}
 
-/// No recorder of the platform's own: voice mode runs nothing here.
-void platformRegisterRecorder() {}
+void registerRecorder() {}
 
-VoiceModelStore platformVoiceModelStore(String cacheDir) =>
+VoiceModelStore createVoiceModelStore(String cacheDir) =>
     const UnavailableVoiceModelStore();
 
 /// See issue #58: the browser's own speech APIs are how this platform gets
 /// voice mode, rather than sherpa's WebAssembly.
-Voice platformVoice(VoiceModelStore store, String cacheDir) =>
+Voice createVoice(VoiceModelStore store, String cacheDir) =>
     const UnavailableVoice();
 
 FileHandoff platformFileHandoff(FileSystem fs) => WebFileHandoff(fs);
@@ -147,40 +127,26 @@ FileHandoff platformFileHandoff(FileSystem fs) => WebFileHandoff(fs);
 BackupHandoff platformBackupHandoff(FileSystem fs, FileHandoff handoff) =>
     const FileSelectorBackup();
 
-/// A browser has no system assistant gesture. The stream never fires, so the
-/// launch handler is inert — the same answer the desktop stub gives.
-AssistantLaunch platformAssistantLaunch() => const UnavailableAssistantLaunch();
+AssistantLaunch createAssistantLaunch() => const UnavailableAssistantLaunch();
 
-/// A browser cannot be woken, so nothing is ever due by the system's say-so,
-/// and it has no session bus to post what a reminder did through either.
-Future<ReminderAlarms> platformReminderAlarms() async =>
+Future<ReminderAlarms> createReminderAlarms() async =>
     const UnavailableReminderAlarms();
 
-/// An IndexedDB file system has no inotify to carry, and nothing a browser
-/// runs is in the way of a change the app itself made — the app would have
-/// to hear its own writes, which the trigger's own edit is.
-FileWatches platformFileWatches() => const UnavailableFileWatches();
+FileWatches createFileWatches() => const UnavailableFileWatches();
 
-/// IndexedDB, through the same `FileSystem` the rest of the app is written
-/// against. The layout under [platformDataDir] is the one on disk elsewhere.
-///
 /// Paged, which the default is not: unpaged, `fs_shim` stores a file as one
 /// value and an append reads the whole thing back to rewrite it, which is the
 /// opposite of what `conv.jsonl` is for. Page size is per file and converted on
 /// the first write, so nothing has to be migrated.
-FileSystem platformFileSystem() =>
+FileSystem createFileSystem() =>
     fileSystemWeb.withIdbOptions(options: FileSystemIdbOptions.pageDefault);
 
-/// Nominal on a platform with no filesystem of its own, but not arbitrary: it
-/// is the root every path is resolved under, and what the chats are stored
-/// beneath.
-Future<String> platformDataDir() async => "/agent-chat";
+/// Nominal but load-bearing: the root every path, chats included, is under.
+Future<String> dataDir() async => "/agent-chat";
 
-/// Ask the browser to keep what we wrote. Without this the origin's storage is
-/// evictable, and a chat can be gone on the next visit because something else
-/// wanted the space. A browser that refuses (or does not implement it) leaves
-/// the app working exactly as it did — the data is just evictable again.
-Future<void> platformPersist() async {
+/// Without this the origin's storage is evictable. A browser that refuses
+/// leaves the data evictable and nothing else changed.
+Future<void> persist() async {
   try {
     await web.window.navigator.storage.persist().toDart;
   } catch (_) {}
@@ -188,40 +154,29 @@ Future<void> platformPersist() async {
 
 String? processEnv(String name) => null;
 
-/// A browser has no keyring to ask. The file under the data directory —
-/// origin-scoped IndexedDB — is the ceiling this platform has; the Sync page
-/// says so rather than pretending otherwise.
-SecretStore platformSecretStore(AppConfig config) =>
+/// No keyring: origin-scoped IndexedDB is this platform's ceiling, and the
+/// Sync page says so.
+SecretStore createSecretStore(AppConfig config) =>
     FileSecretStore(config);
 
 /// Nowhere to bind: see `signaling.dart`. A web device pairs as the joiner.
-LanSignaling? platformLanSignaling() => createWebLanSignaling();
+LanSignaling? createLanSignaling() => createWebLanSignaling();
 
-/// A browser has no hostname of its own to give. `location.hostname` is the
-/// server the page came from, which is a different machine's name entirely.
-Future<String?> platformHostname() async => null;
+/// `location.hostname` is the server the page came from, not this machine.
+Future<String?> deviceHostname() async => null;
 
-/// And no login shell: there is no shell behind any of a browser's commands,
-/// which is the whole of what a browser's shell driver is.
-Future<String?> platformCaptureLoginPath() async => null;
+Future<String?> captureLoginPath() async => null;
 
-/// No-op: a browser has no `chmod`, and no `bash` to guard against. The file
-/// tools' `safeRelativePath` already prevents reaching skill dirs.
-Future<void> platformChmodReadOnly(List<String> paths) async {}
+Future<void> chmodReadOnly(List<String> paths) async {}
 
-/// No-op: a browser has no `chmod`, so there is no lock to release either.
-Future<void> platformChmodWritable(List<String> paths) async {}
+Future<void> chmodWritable(List<String> paths) async {}
 
-/// No-op on the web: there is nothing to toggle. The action runs directly.
-Future<T> platformWithWritableDir<T>(
+Future<T> withWritableDir<T>(
         String path, Future<T> Function() action) async =>
     await action();
 
-/// The web has no rootfs under the data directory (the Byte Repair store is
-/// `Unavailable`), so there are no proot mode-0000 stubs to `chmod` past — a
-/// plain recursive delete is all the restore clear needs here. The signature
-/// matches the io side so `restoreBackup` calls one seam.
-Future<void> platformDeleteTree(String path) async {
+/// No rootfs here, so no proot stubs: a plain recursive delete.
+Future<void> deleteTree(String path) async {
   final fs = fileSystemWeb;
   if (await fs.isDirectory(path)) {
     await fs.directory(path).delete(recursive: true);

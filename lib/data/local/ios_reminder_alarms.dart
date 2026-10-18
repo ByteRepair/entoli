@@ -1,5 +1,6 @@
 import "dart:async";
 
+import "package:flutter/foundation.dart" show protected;
 import "package:flutter/services.dart";
 
 import "../../core/log.dart";
@@ -8,14 +9,11 @@ import "../../domain/reminder_alarms.dart";
 /// iOS's local notifications, behind `agent_chat/reminders` and
 /// `RemindersPlugin.swift`.
 ///
-/// The system clock is a notifications clock: nothing wakes the process, so
-/// what the system delivers with the app closed is the due notification the
-/// arm composed — [schedule] carries the label and the chat id for exactly
-/// that — and the turn itself runs at the clock kinds' launch catch-up, the
-/// path every missed fire already lands in. So [schedules] is true for it:
-/// the clock does deliver the moment dead, worded "Ran late" on the runs that
-/// waited. There is no fire half — [fired] is empty and [takeFired] answers
-/// nothing — the macOS shape.
+/// Nothing wakes the process: what the system delivers with the app closed is
+/// the notification [schedule] composed (hence its label and chat id), and the
+/// turn runs at the clock kinds' launch catch-up. So [schedules] is true, and
+/// there is no fire half — [fired] is empty and [takeFired] answers nothing.
+/// [MacosReminderAlarms] shares all of this but the arm.
 class IosReminderAlarms implements ReminderAlarms {
   IosReminderAlarms() {
     _channel.setMethodCallHandler(_onCall);
@@ -44,10 +42,8 @@ class IosReminderAlarms implements ReminderAlarms {
     }
   }
 
-  // No exact-alarm permission exists to be denied, and the editor's "approx."
-  // and the settings row ask this before showing anything: notification
-  // authorization is the one gate, and [notificationsAllowed] is where it is
-  // asked.
+  // No exact-alarm permission exists to be denied: notification authorization
+  // is the one gate.
   @override
   Future<bool> exactAllowed() async => true;
 
@@ -65,7 +61,7 @@ class IosReminderAlarms implements ReminderAlarms {
   @override
   Future<void> schedule(int requestCode, DateTime at,
           {String? calendar, String? label, String? chatId}) =>
-      _run(
+      run(
         "schedule",
         {
           "code": requestCode,
@@ -79,32 +75,29 @@ class IosReminderAlarms implements ReminderAlarms {
 
   @override
   Future<void> cancel(int requestCode) =>
-      _run("cancel", {"code": requestCode}, "cancel $requestCode");
+      run("cancel", {"code": requestCode}, "cancel $requestCode");
 
   @override
-  Future<List<int>> staleCodes(Set<int> wanted) async {
+  Future<List<int>> staleCodes(Set<int> wanted) =>
+      listStale({"wanted": wanted.toList()});
+
+  @protected
+  Future<List<int>> listStale(Map<Object, Object?> arguments) async {
     try {
-      return await _channel.invokeListMethod<int>(
-            "staleCodes",
-            {"wanted": wanted.toList()},
-          ) ??
+      return await _channel.invokeListMethod<int>("staleCodes", arguments) ??
           const [];
     } catch (error) {
-      logFailure("reminders", "notification listing not read; none pruned",
-          error);
+      logFailure("reminders", "scheduled listing not read; none pruned", error);
       return const [];
     }
   }
 
   // Foreground, or yes: the brief window after backgrounding is the one
-  // place a claimed fire could be killed by the suspension, and there the
-  // defer dance re-arms it a notification rather than half-running it.
+  // place a claimed fire could be killed by the suspension.
   @override
   Future<bool> canHoldTurn() async =>
       await _channel.invokeMethod<bool>("canHoldTurn") ?? true;
 
-  // Nothing was held: no receiver intercepted a wake, the OS posted its
-  // notification all the same.
   @override
   Future<void> doneFiring() async {}
 
@@ -115,8 +108,7 @@ class IosReminderAlarms implements ReminderAlarms {
     String? chatId,
     String channel = ReminderAlarms.defaultChannel,
   }) async {
-    // No channel to pick: the notification centre has no per-app groups the
-    // way Android's channels are.
+    // No channel to pick: the notification centre has no per-app groups.
     try {
       await _channel
           .invokeMethod(
@@ -139,18 +131,16 @@ class IosReminderAlarms implements ReminderAlarms {
   Future<String?> takeOpenChat() =>
       _channel.invokeMethod<String>("takeOpenChat");
 
-  /// The clock kind's diff awaits [schedule] and [cancel] before its watch's
-  /// `started` completes, and the manager's reload holds on that — a thrown
-  /// error here would complete nothing and hold every reload after it. A
-  /// refused authorization is a line, not a stall; the trigger then fires as
-  /// catch-up at the next launch, which is where every missed fire already
-  /// lands.
-  Future<void> _run(String method, Map<Object, Object?> arguments,
+  /// Never throws: the clock kind's diff awaits [schedule] and [cancel] before
+  /// its watch's `started` completes, and the manager's reload holds on that.
+  /// A refusal is a line; the trigger then fires as catch-up at next launch.
+  @protected
+  Future<void> run(String method, Map<Object, Object?> arguments,
       String what) async {
     try {
       await _channel.invokeMethod(method, arguments);
     } catch (error) {
-      logFailure("reminders", "notification not armed: $what", error);
+      logFailure("reminders", "alarm not updated: $what", error);
     }
   }
 }

@@ -16,27 +16,11 @@ enum TempChatTtl {
   const TempChatTtl(this.label);
 
   final String label;
-
-  /// An unknown name is a file written by a later build, so it falls back
-  /// rather than failing the whole settings load.
-  static TempChatTtl fromName(String? name) =>
-      values.firstWhere((t) => t.name == name, orElse: () => off);
-
-  /// Null when the key is absent, so a nullable field reads as "inherit".
-  static TempChatTtl? fromNameNullable(String? name) => name == null
-      ? null
-      : values.cast<TempChatTtl?>().firstWhere((t) => t!.name == name, orElse: () => null);
 }
 
 /// Human-readable labels, shared by the app, project and chat settings pages
 /// so they always agree.
-const tempChatTtlLabels = {
-  TempChatTtl.off: "Off",
-  TempChatTtl.hours24: "24 hours",
-  TempChatTtl.days7: "7 days",
-  TempChatTtl.month1: "1 month",
-  TempChatTtl.year1: "1 year",
-};
+final tempChatTtlLabels = {for (final t in TempChatTtl.values) t: t.label};
 
 /// The window a TTL opens. Null for [TempChatTtl.off]. A month is 30 days and
 /// a year 365, as fixed [Duration]s: the codebase's tone is "dumb is fine", and

@@ -96,6 +96,16 @@ class ChatRepository {
 
   Future<List<ChatState>> listChats() => _store.list();
 
+  /// Which of [chats]' projects run Omada, for a paired device to style them.
+  List<String> omadaProjects(Iterable<ChatState> chats) => [
+        for (final project in {for (final c in chats) c.project})
+          if (project != null &&
+              omadaFor(project,
+                  projectOmada:
+                      ProjectSettings.load(_config, project: project).omada))
+            project,
+      ];
+
   /// Make a chat and write it. **Callers create one only when there is
   /// something to put in it** — the new-chat screen as the first message is
   /// sent, voice mode on the way in, a reminder as it fires — so a screen
@@ -331,7 +341,7 @@ class ChatRepository {
   /// conversation is.
   Future<Chat> appendCompaction(String chatId,
       {required String upToMessageId, required String summary}) {
-    return _rethreadAt(
+    return _rethread(
         chatId, ChatRecord.compaction(upToMessageId: upToMessageId, summary: summary));
   }
 
@@ -356,7 +366,7 @@ class ChatRepository {
     if (meta.headless == true) {
       disabled..add(AgentCapability.ask)..add(AgentCapability.task);
     }
-    final projectSettings = await projectSettingsOf(project);
+    final projectSettings = ProjectSettings.load(_config, project: project);
     // Whether Omada runs, resolved once by [omadaFor]: a built-in's answer is
     // its spec, a user project's its toggle, and the default project's is
     // false. In an Omada-on project, members are brought in by mentioning
@@ -376,7 +386,7 @@ class ChatRepository {
     // The default project's rules and writable roots are the app tier: they
     // apply to every project before its own, invisibly.
     final defaultProjectSettings =
-        project == null ? projectSettings : await projectSettingsOf(null);
+        project == null ? projectSettings : ProjectSettings.load(_config);
     return TurnSettings(
       model: meta.model ?? settings.defaultModelId,
       provider: meta.model != null ? meta.provider : settings.defaultProviderId,
@@ -450,7 +460,7 @@ class ChatRepository {
     String? dir;
     if (settings.autoMemory) {
       var owner = project;
-      if (owner != null && !(await projectSettingsOf(owner)).useProjectMemory) {
+      if (owner != null && !ProjectSettings.load(_config, project: owner).useProjectMemory) {
         owner = null;
       }
       dir = _config.memoryDir(project: owner);
@@ -469,11 +479,6 @@ class ChatRepository {
     );
   }
 
-  /// A project's settings, read off `project.json` when they exist. The default
-  /// project is null and lives in the data directory.
-  Future<ProjectSettings> projectSettingsOf(String? project) async =>
-      ProjectSettings.load(_config, project: project);
-
   /// Which TTL applies to a chat: its own choice wins, else the project's, else
   /// a built-in project's shipped default, else the app default. [project] is
   /// passed in by [saveState], which is holding the state it is about to write
@@ -482,7 +487,7 @@ class ChatRepository {
     final meta = await loadMeta(chatId);
     if (meta.tempChatTtl != null) return meta.tempChatTtl!;
     final proj = project ?? await projectOf(chatId);
-    final projectSettings = await projectSettingsOf(proj);
+    final projectSettings = ProjectSettings.load(_config, project: proj);
     if (projectSettings.tempChatTtl != null) return projectSettings.tempChatTtl!;
     final builtInTtl = builtinProjectOf(proj)?.tempChatTtl;
     if (builtInTtl != null) return builtInTtl;
@@ -533,25 +538,19 @@ class ChatRepository {
 
   /// Read [messageId] rather than the thread beside it that is on screen.
   Future<Chat> selectThread(Chat chat, String messageId) =>
-      _rethread(chat, ChatRecord.select(messageId: messageId));
+      _rethread(chat.state.id, ChatRecord.select(messageId: messageId));
 
   /// Delete the thread [messageId] heads, and everything below it. The last one
   /// at a branch can go too: what is left is the conversation cut off there,
   /// which is what this record meant before there were threads.
   Future<Chat> deleteThread(Chat chat, String messageId) =>
-      _rethread(chat, ChatRecord.rewind(messageId: messageId));
+      _rethread(chat.state.id, ChatRecord.rewind(messageId: messageId));
 
   /// Append a record that changes which thread is being read, and load back
   /// what the log now says. Reading it again rather than working it out here:
   /// which messages a branch leaves live is `replayTree`'s to answer, and a
   /// second version of that walk is a second version to disagree.
-  Future<Chat> _rethread(Chat chat, ChatRecord record) =>
-      _rethreadAt(chat.state.id, record);
-
-  /// [_rethread] by chat id, for a caller holding no [Chat] — a compaction's
-  /// marker, which the summarizer answered while the room was already
-  /// settled.
-  Future<Chat> _rethreadAt(String chatId, ChatRecord record) async {
+  Future<Chat> _rethread(String chatId, ChatRecord record) async {
     await append(chatId, [record]);
     final now = await openChat(chatId);
     // A session is the conversation the model has seen, and which conversation
@@ -592,8 +591,7 @@ class ChatRepository {
   /// beside [saveState]'s anchoring, so the rules about it stay in one place.
   Future<ChatState> keepExpiredChat(String chatId, ChatState state) async {
     final meta = await loadMeta(chatId);
-    meta.tempChatTtl = TempChatTtl.off;
-    await saveMeta(chatId, meta);
+    await saveMeta(chatId, meta..tempChatTtl = TempChatTtl.off);
     return saveState(state.copyWith(tempTtlSince: null, tempTtlExpiresAt: null));
   }
 
@@ -602,16 +600,8 @@ class ChatRepository {
   /// set to off so `saveState`'s resolution keeps it that way. The chat-level
   /// override is written even when it already resolved to off, so a later
   /// app/project change cannot revive the expiry under a pinned chat.
-  Future<ChatState> pinChat(String chatId, ChatState state) async {
-    final meta = await loadMeta(chatId);
-    meta.tempChatTtl = TempChatTtl.off;
-    await saveMeta(chatId, meta);
-    return saveState(state.copyWith(
-      pinned: true,
-      tempTtlSince: null,
-      tempTtlExpiresAt: null,
-    ));
-  }
+  Future<ChatState> pinChat(String chatId, ChatState state) =>
+      keepExpiredChat(chatId, state.copyWith(pinned: true));
 
   /// Unpin a chat. The TTL override set by [pinChat] stays, so the chat remains
   /// non-temporary; the chat settings page offers the TTL combobox again, with
@@ -636,42 +626,42 @@ class ChatRepository {
     ApprovalResponse r, {
     ToolApproval? approval,
   }) async {
-    final deniedDirs = approval?.deniedDirs ?? const [];
     if (r == ApprovalResponse.alwaysAllowChat ||
         r == ApprovalResponse.alwaysAllowProject) {
-      if (deniedDirs.isNotEmpty) {
-        // Over the app's own data either way — beneath the tree it names the
-        // data itself, above it carries those writes. The tool's banner
-        // refuses these first; this is the re-prompt's door, which the
-        // answer could outlive the turn.
-        final grantable = [
-          for (final d in deniedDirs)
-            if (!pathInside(_config.dataDir, d) &&
-                !pathInside(d, _config.dataDir))
-              d,
-        ];
-        if (grantable.length < deniedDirs.length) {
-          logFailure("perms", "refused a persisted grant over the app's data");
-        }
-        if (grantable.isNotEmpty) {
-          // A re-prompt's "always" is the paths: they become the tier's
-          // writable directories, and every later confined command — this
-          // chat's or the project's — writes there without a banner. The
-          // command's own prose is not recorded: it varies every turn and
-          // would claim to allow what it cannot name.
-          if (r == ApprovalResponse.alwaysAllowChat) {
-            await _saveChatDirs(chatId, grantable);
-          } else {
-            await _saveProjectDirs(await projectOf(chatId), grantable);
+      final deniedDirs = approval?.deniedDirs ?? const [];
+      // A re-prompt's "always" is the paths: they become the tier's writable
+      // directories. The command's prose is not recorded: it varies every
+      // turn and would claim to allow what it cannot name. Never over the
+      // app's own data either way — this door could outlive the turn.
+      final dirs = [
+        for (final d in deniedDirs)
+          if (!pathInside(_config.dataDir, d) && !pathInside(d, _config.dataDir)) d,
+      ];
+      if (dirs.length < deniedDirs.length) {
+        logFailure("perms", "refused a persisted grant over the app's data");
+      }
+      final rule = deniedDirs.isEmpty ? ruleFromApproval(approval) : null;
+      if (rule != null || dirs.isNotEmpty) {
+        if (r == ApprovalResponse.alwaysAllowChat) {
+          // Read fresh: the running turn may have written the TTL since.
+          final meta = await _store.loadMeta(chatId);
+          final grant = _grant(meta.permissions, meta.writableDirs, rule, dirs);
+          if (grant != null) {
+            await _store.saveMeta(chatId, meta
+              ..permissions = grant.rules
+              ..writableDirs = grant.dirs);
+            _changes.add(MetaChanged(chatId, meta));
           }
-        }
-      } else {
-        final rule = ruleFromApproval(approval);
-        if (rule != null) {
-          if (r == ApprovalResponse.alwaysAllowChat) {
-            await _saveChatRule(chatId, rule);
-          } else {
-            await _saveProjectRule(await projectOf(chatId), rule);
+        } else {
+          final project = await projectOf(chatId);
+          final settings = ProjectSettings.load(_config, project: project);
+          final grant =
+              _grant(settings.permissions, settings.writableDirs, rule, dirs);
+          if (grant != null) {
+            await (settings
+                  ..permissions = grant.rules
+                  ..writableDirs = grant.dirs)
+                .save(_config, project: project);
           }
         }
       }
@@ -679,61 +669,24 @@ class ChatRepository {
     await _backend.respondApproval(chatId, approvalId, r);
   }
 
-  /// Writes [rule] onto the chat's `meta.json`, read fresh — the turn that is
-  /// running may have written the TTL or the anchor since the UI read it.
-  /// An equivalent rule already there is not appended again: two banners
-  /// whose calls share a head derive the same rule, and pressing Always
-  /// twice should not stack copies.
-  Future<void> _saveChatRule(String chatId, PermissionRule rule) async {
-    final meta = await _store.loadMeta(chatId);
-    if (meta.permissions.any(_sameRule(rule))) return;
-    await _store.saveMeta(chatId, meta..permissions = [...meta.permissions, rule]);
-    _changes.add(MetaChanged(chatId, meta));
-  }
-
-  /// Writes [rule] onto the project's `project.json`, read fresh; null is the
-  /// default project's file. Same dedup as [_saveChatRule].
-  Future<void> _saveProjectRule(String? project, PermissionRule rule) async {
-    final settings = ProjectSettings.load(_config, project: project);
-    if (settings.permissions.any(_sameRule(rule))) return;
-    settings.permissions = [...settings.permissions, rule];
-    await settings.save(_config, project: project);
-  }
-
-  /// What makes two rules the same for the dedup: everything persisted.
-  static bool Function(PermissionRule) _sameRule(PermissionRule rule) =>
-      (existing) =>
-          existing.tool == rule.tool &&
-          existing.pattern == rule.pattern &&
-          existing.decision == rule.decision &&
-          _sameStrings(existing.writes, rule.writes);
-
-  static bool _sameStrings(List<String> a, List<String> b) =>
-      a.length == b.length &&
-      [for (final x in a) b.contains(x)].every((v) => v);
-
-  /// Writes [dirs] onto the chat's `meta.json`, deduped — two banners over
-  /// the same denial name the same directory.
-  Future<void> _saveChatDirs(String chatId, List<String> dirs) async {
-    final meta = await _store.loadMeta(chatId);    final fresh = [for (final d in dirs) if (!meta.writableDirs.contains(d)) d];
-    if (fresh.isEmpty) return;
-    final next = meta..writableDirs = [...meta.writableDirs, ...fresh];
-    // ignore: avoid_print
-    print("DBG encode: ${next.encode()}");
-    await _store.saveMeta(chatId, next);
-    _changes.add(MetaChanged(chatId, meta));
-  }
-
-  /// Writes [dirs] onto the project's `project.json`, deduped; null is the
-  /// default project's file.
-  Future<void> _saveProjectDirs(String? project, List<String> dirs) async {
-    final settings = ProjectSettings.load(_config, project: project);
-    final fresh = [
-      for (final d in dirs) if (!settings.writableDirs.contains(d)) d,
-    ];
-    if (fresh.isEmpty) return;
-    settings.writableDirs = [...settings.writableDirs, ...fresh];
-    await settings.save(_config, project: project);
+  /// [rules] and [dirs] with [rule] and [newDirs] added, or null where they
+  /// already hold them: two banners over the same call derive the same grant,
+  /// and pressing Always twice should not stack copies.
+  static ({List<PermissionRule> rules, List<String> dirs})? _grant(
+      List<PermissionRule> rules,
+      List<String> dirs,
+      PermissionRule? rule,
+      List<String> newDirs) {
+    final addRule = rule != null &&
+        !rules.any((r) =>
+            r.tool == rule.tool &&
+            r.pattern == rule.pattern &&
+            r.decision == rule.decision &&
+            r.writes.length == rule.writes.length &&
+            r.writes.toSet().containsAll(rule.writes));
+    final fresh = [for (final d in newDirs) if (!dirs.contains(d)) d];
+    if (!addRule && fresh.isEmpty) return null;
+    return (rules: [...rules, if (addRule) rule], dirs: [...dirs, ...fresh]);
   }
 
   Future<void> respondQuestions(String chatId, String requestId, List<String?> answers) =>

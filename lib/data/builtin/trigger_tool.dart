@@ -197,12 +197,10 @@ TriggerSource? _timerSource(Map<String, dynamic> args) {
 /// `nextAfter` on a draft is never asked.
 final _draftAnchor = DateTime.fromMillisecondsSinceEpoch(0);
 
-
 TriggerSource? _fileSource(Map<String, dynamic> args) {
   final raw = args["paths"];
-  if (raw is! List || raw.isEmpty) return null;
-  final paths = [if (raw.every((p) => p is String)) ...raw.cast<String>()];
-  if (paths.length != raw.length) return null;
+  if (raw is! List || raw.isEmpty || raw.any((p) => p is! String)) return null;
+  final paths = raw.cast<String>().toList();
   final eventNames = args["events"];
   final events = eventNames == null
       ? FileEvent.values.toSet()

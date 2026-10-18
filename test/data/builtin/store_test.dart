@@ -115,11 +115,16 @@ void main() {
       expect([for (final e in entries) e.text], ["first, revised", "second"]);
     });
 
-    test("an update to a missing id is a new memory under that id", () async {
-      await store.update("no-such-id", "a fact with no predecessor");
-      final entries = await store.entries();
-      expect(entries, hasLength(1));
-      expect(entries.single.id, "no-such-id");
+    test("an update to a missing or deleted id writes nothing", () async {
+      final gone = await store.add("a fact");
+      await store.delete(gone.id);
+
+      expect(await store.update("no-such-id", "a fact with no predecessor"),
+          isNull);
+      expect(await store.update(gone.id, "a fact revived"), isNull);
+      expect(await store.entries(), isEmpty);
+      await store.add("a later fact");
+      expect([for (final e in await store.entries()) e.text], ["a later fact"]);
     });
 
     test("an empty update is refused", () async {

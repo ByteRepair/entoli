@@ -183,8 +183,8 @@ is".
 
 The name, the prompt, and one row of "When" — a `SegmentedButton` over the
 three sources, each kind bringing its own rows under it: a schedule its date
-and time and repeat, a timer its countdown minutes, a file watch its paths,
-its kinds of change and its cooldown. Beside them the "Address to" row: the
+and time and repeat, a timer its countdown minutes, a file watch its paths
+and its kinds of change. Beside them the "Address to" row: the
 member the fire names, from the trigger's project's library, or nothing for
 the whole room — one row for both targets, since addressing is not a
 property of where the fire lands. A stored member the library has since

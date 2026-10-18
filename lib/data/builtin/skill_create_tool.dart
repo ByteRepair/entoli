@@ -62,8 +62,6 @@ class CreateSkillArgs {
 }
 
 CreateSkillArgs? createSkillArgsFrom(String json) {
-  final args = decodeArgs(json);
-  if (args == null) return null;
   final path = stringArg(json, "path");
   if (path == null) return null;
   return CreateSkillArgs(path: path, name: stringArg(json, "name"));

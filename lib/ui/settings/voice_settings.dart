@@ -37,13 +37,8 @@ class VoiceSection extends ConsumerWidget {
               : "Voice mode needs a microphone and models on disk, and a "
                   "browser has neither.",
         ),
-        // The sentinel is in the list like any other model and filtered by the
-        // same `installed` set, which holds it only where the device has the
-        // engine — so nothing here knows which platform it is drawing on.
-        // The pickers offer only what is downloaded, so the list below is not a
-        // menu of things that might work — it is what the app has. Hidden
-        // whole where the device's own engines are everything: a picker of one
-        // is a control that says nothing.
+        // Hidden whole where the device's own engines are everything: a
+        // picker of one is a control that says nothing.
         if (voice.hasModelCatalog) ...[
           InstalledPicker(
             label: "Recognition model",
@@ -111,9 +106,9 @@ class VoiceCatalogSections extends ConsumerWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Divider(),
-        VoiceCatalogSection.recognition(),
+        _VoiceCatalogSection.recognition(),
         Divider(),
-        VoiceCatalogSection.speech(),
+        _VoiceCatalogSection.speech(),
       ],
     );
   }
@@ -123,14 +118,14 @@ class VoiceCatalogSections extends ConsumerWidget {
 /// its size, what it can understand, and the button that fetches or removes it.
 /// The two are separate sections because they answer separate questions: a
 /// single list of eight would leave the reader working out which ones speak.
-class VoiceCatalogSection extends StatelessWidget {
-  const VoiceCatalogSection.recognition({super.key})
+class _VoiceCatalogSection extends StatelessWidget {
+  const _VoiceCatalogSection.recognition()
       : title = "Recognition models",
         description = "Bigger is more accurate and slower. Everything here "
             "runs on this device.",
         models = recognitionModels;
 
-  const VoiceCatalogSection.speech({super.key})
+  const _VoiceCatalogSection.speech()
       : title = "Speech models",
         description = "One voice each, except where the model says otherwise.",
         models = speechModels;
@@ -239,9 +234,6 @@ class _MissingEngines extends StatelessWidget {
     final hears = installed.contains(nativeRecognition.id);
     final speaks = installed.contains(nativeSpeech.id);
     if (hears && speaks) return const SizedBox.shrink();
-    final theme = Theme.of(context);
-    final style = theme.textTheme.bodySmall
-        ?.copyWith(color: theme.colorScheme.onSurfaceVariant);
     return Padding(
       // The inset every other block on this page keeps: `SectionHeader` above
       // and `LabelledField` between are both 16, and a paragraph flush to the
@@ -251,22 +243,20 @@ class _MissingEngines extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           if (!hears)
-            Text(
-              "This device has nothing to hear with. Android gives a "
-              "recognizer the microphone only where it is the one set as the "
-              "system's voice-input service — set one there "
-              "(Settings → Apps → Default apps → Digital assistant app → "
-              "Voice input), or pick a downloaded model below.",
-              style: style,
-            ),
+            mutedParagraph(
+                context,
+                "This device has nothing to hear with. Android gives a "
+                "recognizer the microphone only where it is the one set as the "
+                "system's voice-input service — set one there "
+                "(Settings → Apps → Default apps → Digital assistant app → "
+                "Voice input), or pick a downloaded model below."),
           if (!speaks)
-            Text(
-              "This device has nothing to speak with. Voice mode uses the "
-              "engines the platform provides, and one without the usual "
-              "speech apps may have none installed. Either of these adds one, "
-              "and works for every app rather than only this one:",
-              style: style,
-            ),
+            mutedParagraph(
+                context,
+                "This device has nothing to speak with. Voice mode uses the "
+                "engines the platform provides, and one without the usual "
+                "speech apps may have none installed. Either of these adds one, "
+                "and works for every app rather than only this one:"),
           const SizedBox(height: 8),
           if (!speaks)
             _EngineLink(label: "RHVoice — speech synthesis", url: _rhVoice),
@@ -357,7 +347,6 @@ class _SpeakerField extends ConsumerWidget {
       ),
     );
   }
-
 }
 
 /// Which language the device's own engines are asked to hear and speak in —

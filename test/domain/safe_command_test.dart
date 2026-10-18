@@ -47,6 +47,13 @@ void main() {
         "git remote update",
         "git -c core.fsmonitor=x status",
         "git worktree remove ../other",
+        // Writes these read-only tools can still make.
+        "echo x >&/tmp/evil",
+        "echo x >& /tmp/evil",
+        "tree -o /tmp/evil",
+        "uniq names.txt /tmp/evil",
+        "git show --output=/tmp/evil",
+        "git branch --set-upstream-to=origin/x",
       ]) {
         expect(
           profileSegment(segment).reach,
@@ -72,6 +79,8 @@ void main() {
         "git status 2>&1",
         "cat x >&2",
         "du . 2>/dev/null",
+        "ls 2>&-",
+        "uniq -c names.txt",
       ]) {
         expect(
           profileSegment(segment).reach,

@@ -493,6 +493,27 @@ void main() {
       expect(top, lessThan(bottom ~/ 2), reason: "the oldest fades out of the window");
     });
 
+    testWidgets("follows a reply that grows in place", (tester) async {
+      Widget window(String last) => Scaffold(
+            body: SizedBox(
+              width: 200,
+              child: TranscriptWindow(lines: [
+                for (var i = 0; i < 3; i++) VoiceLine(VoiceLineKind.said, "line $i"),
+                VoiceLine(VoiceLineKind.replied, last),
+              ]),
+            ),
+          );
+      await app.pump(tester, window("short"));
+      await app.pump(tester, window("a reply that keeps going " * 6));
+
+      final position = tester
+          .state<ScrollableState>(find.descendant(
+              of: find.byType(TranscriptWindow), matching: find.byType(Scrollable)))
+          .position;
+      expect(position.maxScrollExtent, greaterThan(0));
+      expect(position.pixels, position.maxScrollExtent);
+    });
+
     testWidgets("scrolls back to what was said at the start", (tester) async {
       final lines = [
         for (var i = 0; i < 20; i++) VoiceLine(VoiceLineKind.said, "line $i"),

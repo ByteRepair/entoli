@@ -293,22 +293,6 @@ LlmCompletion taskCall(String agent, String prompt, {String id = "task-1", Strin
       ),
     );
 
-/// One assistant turn that calls `websearch`.
-LlmCompletion searchCall(String query, {String id = "search-1", String text = ""}) =>
-    LlmCompletion(
-      message: LlmMessage(
-        role: LlmRole.assistant,
-        text: text,
-        toolCalls: [
-          LlmToolCall(
-            id: id,
-            name: "websearch",
-            argumentsJson: jsonEncode({"query": query}),
-          ),
-        ],
-      ),
-    );
-
 /// One assistant turn that calls `webfetch`.
 LlmCompletion fetchCall(String url, {String id = "fetch-1", String text = ""}) =>
     LlmCompletion(

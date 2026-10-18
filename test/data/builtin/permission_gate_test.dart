@@ -784,6 +784,21 @@ void main() {
       expect(approvals.first.approval.id, isNot(approvals.last.approval.id));
     });
 
+    test("a denial that is not a write is rerun confined", () async {
+      final client = FakeLlmClient([
+        [bashCall("cat /etc/shadow")], [finish],
+      ]);
+      await agentOver(
+        client,
+        approveMode: ApproveMode.ask,
+        approvals: [ApprovalResponse.allow, ApprovalResponse.allow],
+        respond: (_) => const ShellResult(
+            returnCode: 1, output: "", violations: ["denied /etc/shadow"]),
+      ).run(userMessage("go")).toList();
+      expect(shell.ran, hasLength(2));
+      expect(shell.sandboxes.whereType<CommandSandbox>(), hasLength(2));
+    });
+
     test("the re-prompt is gated by the setting", () async {
       final client = FakeLlmClient([
         [bashCall("python3 build.py")], [finish],

@@ -36,16 +36,12 @@ void main() {
     final skillsRoot = Directory("${projectDir.path}/skills");
     if (skillsRoot.existsSync()) {
       for (final skillDir in skillsRoot.listSync().whereType<Directory>()) {
-        for (final e in _collectSkill(skillDir, project)) {
-          skills.add(e);
-        }
+        skills.addAll(_collectSkill(skillDir, project));
       }
     }
     final agentsRoot = Directory("${projectDir.path}/agents");
     if (agentsRoot.existsSync()) {
-      for (final e in _collectAgents(agentsRoot, project)) {
-        agents.add(e);
-      }
+      agents.addAll(_collectAgents(agentsRoot, project));
     }
   }
 
@@ -95,15 +91,13 @@ List<BundledPromptFile> _collectSkill(
   }
   for (final file in allFiles(skillDir)) {
     final relative = file.substring(skillDir.path.length + 1);
-    final binary = _isBinary(File(file));
+    final bytes = File(file).readAsBytesSync();
+    final binary = _isBinary(bytes);
     // CRs come out before the hash and the embed both, so the sha256 the
     // const carries describes the bytes it is paired with (normalizeCr).
-    final content = binary
-        ? base64Encode(File(file).readAsBytesSync())
-        : normalizeCr(File(file).readAsStringSync());
-    final sha = binary
-        ? sha256OfBytes(File(file).readAsBytesSync())
-        : sha256Of(content);
+    final content =
+        binary ? base64Encode(bytes) : normalizeCr(utf8.decode(bytes));
+    final sha = binary ? sha256OfBytes(bytes) : sha256Of(content);
     entries.add(BundledPromptFile(
         project, skillName, relative, sha, content,
         binary: binary));
@@ -116,8 +110,7 @@ List<BundledPromptFile> _collectSkill(
 /// text — SKILL.md, scripts, the licences — decodes cleanly, so the sniff
 /// is for the fonts and archives, where those are the only two tells there
 /// are.
-bool _isBinary(File file) {
-  final bytes = file.readAsBytesSync();
+bool _isBinary(List<int> bytes) {
   if (bytes.contains(0)) return true;
   try {
     utf8.decode(bytes, allowMalformed: false);

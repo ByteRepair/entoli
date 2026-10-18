@@ -111,6 +111,15 @@ void main() {
         reason: "no redirect in it; enforcement is what refuses the unlink");
   });
 
+  test("a substitution is held to the top level's rules, nested too", () {
+    for (final command in [
+      r"echo $(echo x > $HOME/y)",
+      r"echo $(echo $(HOME=/tmp/evil ls))",
+    ]) {
+      expect(parse(command).escalationReasons, isNotEmpty, reason: command);
+    }
+  });
+
   test("a comment is not parsed as a command", () {
     final a = parse("# this is a comment\necho hi");
     expect(a.modelable, isTrue);

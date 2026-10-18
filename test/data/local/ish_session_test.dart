@@ -20,6 +20,16 @@ void main() {
   const cwd = "/ws/chats/cb764c2a";
   const home = "/ws";
 
+  /// What [run] answered, once the fake clock's microtasks have run. A
+  /// `fakeAsync` body must stay synchronous: an `await` in it suspends the
+  /// body past the end of the test, and every expect after it never runs.
+  ShellResult resultOf(FakeAsync async, ShellRun run) {
+    ShellResult? result;
+    run.result.then((r) => result = r);
+    async.flushMicrotasks();
+    return result!;
+  }
+
   IshShell ishShell(IshTransport transport) => IshShell(
         rootfsDir: () => "/rootfs",
         dataDir: "/data",
@@ -38,7 +48,7 @@ void main() {
     });
 
     test("a stop is delivered while the run is pending, and ends it", () {
-      fakeAsync((async) async {
+      fakeAsync((async) {
         final fake = FakeIshTransport();
         final shell = ishShell(fake);
         final run = shell.start("sleep 60",
@@ -48,17 +58,19 @@ void main() {
         final handle = fake.lastHandle!;
         expect(fake.destroys, isEmpty);
 
-        await run.kill();
+        run.kill();
+        async.flushMicrotasks();
         expect(fake.interrupts, [handle]);
         expect(fake.hangups, isEmpty);
-        final result = await run.result;
+        final result = resultOf(async, run);
         expect(result.returnCode, 130);
+        expect(result.exceptionInfo, "The command was interrupted.");
         expect(fake.destroys, isEmpty);
       });
     });
 
     test("a guest that ignores the SIGINT is hung up a second later", () {
-      fakeAsync((async) async {
+      fakeAsync((async) {
         final fake = FakeIshTransport()..interruptEnds = false;
         final shell = ishShell(fake);
         final run = shell.start("trap '' INT; sleep 60",
@@ -67,14 +79,15 @@ void main() {
         final handle = fake.lastHandle!;
         final session = fake.lastSession!;
 
-        await run.kill();
+        run.kill();
+        async.flushMicrotasks();
         expect(fake.interrupts, [handle]);
         // The guest ignored it; the run is still in the worker's hands.
         expect(fake.pendingSessions, isNotEmpty);
 
         async.elapse(const Duration(seconds: 1));
         expect(fake.hangups, [handle]);
-        final result = await run.result;
+        final result = resultOf(async, run);
         expect(result.returnCode, -1);
         expect(result.exceptionInfo, "The command did not complete.");
         expect(fake.destroys, [session]);
@@ -82,7 +95,7 @@ void main() {
     });
 
     test("the timeout interrupts on its own, then escalates the same way", () {
-      fakeAsync((async) async {
+      fakeAsync((async) {
         final fake = FakeIshTransport()..interruptEnds = false;
         final shell = ishShell(fake);
         final run = shell.start("sleep 60",
@@ -95,13 +108,13 @@ void main() {
         expect(fake.hangups, isEmpty);
         async.elapse(const Duration(seconds: 1));
         expect(fake.hangups, [handle]);
-        final result = await run.result;
+        final result = resultOf(async, run);
         expect(result.returnCode, -1);
       });
     });
 
     test("a timeout the guest honours leaves the session standing", () {
-      fakeAsync((async) async {
+      fakeAsync((async) {
         final fake = FakeIshTransport();
         final shell = ishShell(fake);
         final run = shell.start("sleep 60",
@@ -110,7 +123,9 @@ void main() {
         // The guest answered within the escalation's second: rc 130, the
         // trap's doing, the interrupt honoured.
         async.elapse(const Duration(seconds: 2));
-        expect((await run.result).returnCode, 130);
+        final result = resultOf(async, run);
+        expect(result.returnCode, 130);
+        expect(result.exceptionInfo, contains("timed out after 2s"));
         // The escalation's second runs out against an answered run, and the
         // session keeps its life, cd and exports with it — a stop and a
         // timeout agree here, unlike LocalShell, whose timeout kills the
@@ -128,7 +143,7 @@ void main() {
     });
 
     test("a command after a hung-up run starts a session cold", () {
-      fakeAsync((async) async {
+      fakeAsync((async) {
         final fake = FakeIshTransport()..interruptEnds = false;
         final shell = ishShell(fake);
         shell.start("sleep 60",
@@ -172,7 +187,7 @@ void main() {
     });
 
     test("a command's output is streamed while it runs", () {
-      fakeAsync((async) async {
+      fakeAsync((async) {
         final fake = FakeIshTransport();
         final shell = ishShell(fake);
         final run = shell.start("echo hello",
@@ -184,16 +199,17 @@ void main() {
         async.flushMicrotasks();
         expect(output!.value, "hello");
         expect(fake.destroys, isEmpty);
-        await run.kill();
+        run.kill();
+        async.flushMicrotasks();
         // The command's words already shown keep their place through the
         // stop, as the host shell's do.
         expect(output.value, "hello");
-        expect((await run.result).returnCode, 130);
+        expect(resultOf(async, run).returnCode, 130);
       });
     });
 
     test("a run nobody watches keeps its output off", () {
-      fakeAsync((async) async {
+      fakeAsync((async) {
         final fake = FakeIshTransport();
         final shell = ishShell(fake);
         final run = shell.start("echo hello",
@@ -209,12 +225,12 @@ void main() {
     });
 
     test("an init that fails completes the run failed", () {
-      fakeAsync((async) async {
+      fakeAsync((async) {
         final fake = FakeIshTransport()..initError = "no rootfs";
         final shell = ishShell(fake);
         final run = shell.start("echo hi",
             cwd: cwd, home: home, timeout: const Duration(minutes: 5));
-        final result = await run.result;
+        final result = resultOf(async, run);
         expect(result.exceptionInfo, contains("no rootfs"));
       });
     });
@@ -240,7 +256,7 @@ void main() {
 
   group("close", () {
     test("answers every run the session holds, queued ones included", () {
-      fakeAsync((async) async {
+      fakeAsync((async) {
         final fake = FakeIshTransport();
         final shell = ishShell(fake);
         final first = shell.start("a", cwd: cwd, home: home,
@@ -254,8 +270,8 @@ void main() {
         expect(fake.destroys, [session]);
         // The queued body is answered, not booted: one init, one guest.
         expect(fake.inits.length, 1);
-        final one = await first.result;
-        final two = await second.result;
+        final one = resultOf(async, first);
+        final two = resultOf(async, second);
         expect(one.exceptionInfo, contains("restarted"));
         expect(two.exceptionInfo, contains("restarted"));
       });
@@ -264,7 +280,7 @@ void main() {
 
   group("a one-shot run", () {
     test("interrupts and escalates like a session's", () {
-      fakeAsync((async) async {
+      fakeAsync((async) {
         final fake = FakeIshTransport()..interruptEnds = false;
         final shell = ishShell(fake);
         final run = shell.start("sleep 60",
@@ -275,18 +291,19 @@ void main() {
         async.flushMicrotasks();
         final handle = fake.lastHandle!;
 
-        await run.kill();
+        run.kill();
+        async.flushMicrotasks();
         expect(fake.interrupts, [handle]);
         async.elapse(const Duration(seconds: 1));
         expect(fake.hangups, [handle]);
-        final result = await run.result;
+        final result = resultOf(async, run);
         expect(result.returnCode, -1);
         expect(fake.destroys, isNotEmpty);
       });
     });
 
     test("says so where no iSH is linked, without running anything", () {
-      fakeAsync((async) async {
+      fakeAsync((async) {
         final fake = FakeIshTransport()..answersNotLinked = true;
         final shell = ishShell(fake);
         final run = shell.start("echo hi",
@@ -294,7 +311,7 @@ void main() {
             home: home,
             timeout: const Duration(minutes: 5),
             oneShot: true);
-        final result = await run.result;
+        final result = resultOf(async, run);
         expect(result.exceptionInfo, contains("not available"));
         expect(fake.runs, isEmpty);
         expect(fake.destroys, isEmpty);

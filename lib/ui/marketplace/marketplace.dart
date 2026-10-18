@@ -136,12 +136,12 @@ Future<List<MarketplaceEntry>> fetchMarketplaceEntries(
   http.Client client,
   CompletionKind kind,
 ) async {
-  final (response, locations) = await (
-    client.get(Uri.parse("$marketplaceBaseUrl/${kind.folder}/index.json")),
-    _fetchLocations(client, kind),
-  ).wait;
-  final body = utf8.decode(response.bodyBytes);
-  final json = jsonDecode(body) as Map<String, Object?>;
+  final index = Uri.parse("$marketplaceBaseUrl/${kind.folder}/index.json");
+  final (body, locations) =
+      await (_get(client, index), _fetchLocations(client, kind)).wait;
+  // A missing index is a site that cannot be read, not an empty one.
+  if (body == null) throw http.ClientException("HTTP 404", index);
+  final json = jsonDecode(utf8.decode(body)) as Map<String, Object?>;
   return [
     for (final MapEntry(:key, :value) in json.entries)
       MarketplaceEntry.fromJson(

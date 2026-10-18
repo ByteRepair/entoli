@@ -3,6 +3,7 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:fs_shim/fs.dart";
 
 import "../../domain/file_handoff.dart";
+import "../../domain/models.dart" show ChatTitle;
 import "../../domain/project.dart";
 import "../../domain/workspace.dart";
 import "../../providers.dart";
@@ -46,13 +47,13 @@ class ShareTargetPage extends ConsumerWidget {
           for (final chat in chats)
             _Target(
               icon: Icons.chat_bubble_outline,
-              title: chat.title,
+              title: chat.title.orUntitled,
               subtitle: projectLabel(chat.project),
               onTap: () => _save(
                 context,
                 config.fs,
                 config.workspaceDir(chat.id, project: chat.project),
-                chat.title,
+                chat.title.orUntitled,
               ),
             ),
         ],

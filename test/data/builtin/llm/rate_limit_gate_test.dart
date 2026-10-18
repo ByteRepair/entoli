@@ -37,6 +37,37 @@ void main() {
       await queued;
       gate.release();
     });
+
+    test("a fresh acquire cannot take the slot a release hands a waiter",
+        () async {
+      final gate = RateLimitGate(maxConcurrent: 1);
+      var holding = 0;
+      var maxSeen = 0;
+      Future<void> hold(Future<void> acquired) async {
+        await acquired;
+        holding++;
+        if (holding > maxSeen) maxSeen = holding;
+      }
+
+      await gate.acquire();
+      holding = 1;
+      final waiter = hold(gate.acquire());
+      await Future<void>.delayed(Duration.zero);
+
+      // The fresh acquire is still in its cooldown check when the release
+      // lands, so it reaches the count before the woken waiter does.
+      final fresh = hold(gate.acquire());
+      holding--;
+      gate.release();
+      await Future<void>.delayed(Duration.zero);
+
+      expect(maxSeen, 1);
+      expect(holding, 1);
+      holding--;
+      gate.release();
+      await Future.wait([waiter, fresh]);
+      expect(maxSeen, 1);
+    });
   });
 
   group("RateLimitGate cooldown", () {
