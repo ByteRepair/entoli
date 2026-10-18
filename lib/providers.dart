@@ -56,6 +56,7 @@ import "data/sync/sync_keep_alive.dart";
 import "domain/temp_chat_ttl.dart";
 import "domain/theme_colour.dart";
 import "domain/tone.dart";
+import "domain/tristate.dart";
 import "domain/turn_keep_alive.dart";
 import "domain/voice.dart";
 import "domain/voice_model.dart"
@@ -1217,10 +1218,8 @@ class ProjectSettingsNotifier extends Notifier<ProjectSettings> {
     return ProjectSettings.load(_config, project: project);
   }
 
-  /// Whether this project keeps an auto-memory store of its own rather than
-  /// sharing the default project's.
-  Future<void> setUseProjectMemory(bool value) =>
-      _update((s) => s.useProjectMemory = value);
+  /// Which auto-memory store this project's chats use.
+  Future<void> setMemory(Tristate value) => _update((s) => s.memory = value);
 
   /// Whether this project's chats can carry several agents in one round.
   Future<void> setOmada(bool value) => _update((s) => s.omada = value);

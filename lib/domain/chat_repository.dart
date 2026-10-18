@@ -20,6 +20,7 @@ import "../domain/project_settings.dart";
 import "../domain/prompt_library.dart";
 import "../domain/shell.dart";
 import "../domain/temp_chat_ttl.dart";
+import "../domain/tristate.dart";
 
 /// What changed on disk, as [ChatRepository.changes] reports it. The sync
 /// layer's whole view of this device: everything a mirror needs to follow.
@@ -395,7 +396,9 @@ class ChatRepository {
       classifierProvider: settings.classifierProviderId,
       classifierModel: settings.classifierModelId,
       profile: profileUnder(builtIn, appProfile: settings.profile),
-      memory: builtIn?.memory == MemoryPolicy.off || meta.memoryOff == true
+      memory: builtIn?.memory == MemoryPolicy.off ||
+              meta.memoryOff == true ||
+              projectSettings.memory == Tristate.off
           ? MemorySettings.off
           : await _resolveMemory(settings, project),
       sharedWorkspace: builtIn?.sharedWorkspace ?? true,
@@ -450,7 +453,7 @@ class ChatRepository {
   }
 
   /// Which memories a turn reads and writes: the app-level gates over which
-  /// project's store answers. A non-default project with its own toggle on
+  /// project's store answers. A non-default project set to [Tristate.on]
   /// keeps a store of its own; every other chat shares the default project's.
   /// Both halves of the background model travel together or not at all, and
   /// until one is picked nothing in the subsystem writes. With the master
@@ -460,7 +463,8 @@ class ChatRepository {
     String? dir;
     if (settings.autoMemory) {
       var owner = project;
-      if (owner != null && !ProjectSettings.load(_config, project: owner).useProjectMemory) {
+      if (owner != null &&
+          ProjectSettings.load(_config, project: owner).memory != Tristate.on) {
         owner = null;
       }
       dir = _config.memoryDir(project: owner);

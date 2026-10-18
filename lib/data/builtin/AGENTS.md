@@ -949,10 +949,10 @@ where a built-in project or the chat's own say so. The subsystem hangs off
 `autoMemory`, which is off by default and owns the store; the sub-gates —
 recall, extraction, the agent tools — default on and mean nothing while it is
 off, which is how the settings page draws them dead under a dead master.
-Which project's store answers is the project's own question: a non-default
-project keeps its own only while `useProjectMemory` is on, and that is off by
-default, so a named project's chats share the default project's memories until
-the user says otherwise. The Memory LLM — the half of extraction that writes —
+Which project's store answers is the project's own question, its `memory`
+tristate: `off` has none, as a chat's `memoryOff` does; `on` keeps a store of
+its own; `inherit`, the default, shares the default project's, so a named
+project's chats share those memories until the user says otherwise. The Memory LLM — the half of extraction that writes —
 travels with its provider or not at all, and until one is picked nothing in
 the subsystem writes.
 
