@@ -124,10 +124,13 @@ void main() {
       await settleIo(tester);
     }
 
-    testWidgets("Ctrl+N leaves the open chat for the new-chat screen",
-        (tester) async {
+    testWidgets("Ctrl+N leaves the open chat for the default project's "
+        "new-chat screen", (tester) async {
       await pumpAt(tester, const Size(1200, 800));
       await io(tester, () => app.openSomeChat());
+      app.container
+          .read(selectedProjectProvider.notifier)
+          .select(const AnonymousProject().dir);
       await settleIo(tester);
 
       await chord(tester, LogicalKeyboardKey.keyN);

@@ -44,7 +44,7 @@ class _AppShellState extends ConsumerState<AppShell> {
       case AppShortcut.projectPalette:
         showProjectPalette(context, ref);
       case AppShortcut.newChat:
-        openNewChat(context, ref);
+        openNewChatIn(context, ref, null);
       case AppShortcut.newAnonymousChat:
         openNewChatIn(context, ref, const AnonymousProject().dir);
       case AppShortcut.newOmadaChat:

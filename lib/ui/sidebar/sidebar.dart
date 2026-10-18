@@ -134,9 +134,9 @@ void openNewChat(BuildContext context, WidgetRef ref) {
   closeNavDrawer(context);
 }
 
-/// The new-chat screen in [project], a built-in one being the point: the
-/// shortcuts for an anonymous chat and an Omada one.
-void openNewChatIn(BuildContext context, WidgetRef ref, String project) {
+/// The new-chat screen in [project], null being the default one: the
+/// new-chat shortcuts, each of which names where the chat goes.
+void openNewChatIn(BuildContext context, WidgetRef ref, String? project) {
   selectProject(ref, project);
   closeNavDrawer(context);
 }
