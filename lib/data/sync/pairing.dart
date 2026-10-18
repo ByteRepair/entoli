@@ -791,6 +791,7 @@ class SyncPairing {
         // this side waits out the timeout below for an answer that can no
         // longer come.
         onError: (Object error) {
+          logFailure("sync", "link to $deviceId failed", error);
           if (!hello.isCompleted) hello.completeError(error);
           unawaited(live.close());
         },

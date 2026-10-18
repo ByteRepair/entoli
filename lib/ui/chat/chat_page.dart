@@ -27,7 +27,7 @@ import "chat_controller.dart";
 import "mirror_controller.dart";
 import "widgets/activity_label.dart" show formatRemaining;
 import "widgets/composer.dart";
-import "widgets/synced_device_cards.dart";
+import "widgets/paired_project_badges.dart";
 import "widgets/message_bubble.dart";
 import "widgets/omada_separator.dart" show ConversationSeparator;
 import "widgets/needs_setup_bar.dart";
@@ -202,7 +202,7 @@ class _NewChatState extends ConsumerState<_NewChat> {
             project: at.project,
             device: at.device,
             controller: _controller,
-            // The paired devices' cards are the new-chat screen's own — a
+            // The paired devices' badges are the new-chat screen's own — a
             // chat that exists with nothing said in it yet is mid-turn at
             // worst, and a list of other devices under its question would
             // say nothing true about it.
@@ -227,7 +227,7 @@ class _NewChatState extends ConsumerState<_NewChat> {
 class _ProjectBadges extends ConsumerWidget {
   const _ProjectBadges({required this.selected, required this.settled});
 
-  final String? selected;
+  final ProjectRef selected;
   final bool settled;
 
   @override
@@ -249,7 +249,7 @@ class _ProjectBadges extends ConsumerWidget {
                 curve: Curves.easeOut,
                 child: ChoiceChip(
                   label: ProjectChipLabel(project),
-                  selected: project == selected,
+                  selected: localProject(project) == selected,
                   onSelected: (on) => selectProject(ref, localProject(on ? project : null)),
                 ),
               ),
@@ -276,8 +276,7 @@ class _EmptyChat extends ConsumerWidget {
   });
 
   /// The paired device [project] is on, or null for this one. Its question
-  /// and starters are that device's; the badges, which name this device's
-  /// projects, are left off.
+  /// and starters are that device's.
   final String? device;
 
   /// The project this chat is in, or on the new-chat screen the one the next
@@ -288,7 +287,7 @@ class _EmptyChat extends ConsumerWidget {
   /// where a trigger lands and why it does not ask for the focus.
   final TextEditingController controller;
 
-  /// The paired devices' cards, which only the new-chat screen asks for —
+  /// The paired devices' badges, which only the new-chat screen asks for —
   /// see its own call for why.
   final bool showSyncedCards;
 
@@ -324,7 +323,11 @@ class _EmptyChat extends ConsumerWidget {
             // away, rather than the widget leaving the tree and the next
             // question's arrival being a mount instead of a change.
             _QuestionSweep(text: question, style: theme.textTheme.titleMedium),
-            if (!remote) _ProjectBadges(selected: project, settled: true),
+            // On the new-chat screen this device's badges stay whichever
+            // device is picked, so there is always a way back to them.
+            if (!remote || showSyncedCards)
+              _ProjectBadges(selected: (device: device, project: project), settled: true),
+            if (showSyncedCards) const PairedProjectBadges(),
             const SizedBox(height: 20),
             ChipRow(
               settled: true,
@@ -362,10 +365,6 @@ class _EmptyChat extends ConsumerWidget {
                         ),
                     ],
             ),
-            if (showSyncedCards) ...[
-              const SizedBox(height: 20),
-              const SyncedDeviceCards(),
-            ],
           ],
         ),
       ),
