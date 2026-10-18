@@ -40,7 +40,7 @@ system as it was before Omada existed, byte for byte.
 everything Omada does hangs off it: a message addressing members is answered
 by them as participants, each in a session of their own, with the author on
 the record; members hand off to each other by mentioning one another in a
-reply, chain-capped; a member declines with `pass`. The turn's scheduling is
+reply, chain-capped; a member declines with `end_turn`. The turn's scheduling is
 the room's `_schedules` — one FIFO per member of what they have been
 addressed to run — resolved once at dispatch, and it is gated on the toggle:
 **turning Omada off ends promotion for every turn after it**, whatever the
@@ -75,7 +75,7 @@ with the room's member turns, and each member with the others.
 
 **The room contract is My Team's note, not a per-turn overlay.** Every Omada
 turn runs under `MyTeamProject`'s bundled note (`assets/prompts/projects/
-my-team/system/instructions.md`): the room, the handles, `pass`, and that
+my-team/system/instructions.md`): the room, the handles, `end_turn`, and that
 every other member's handle in a reply is handed a turn — worded once for
 any participant, main agent or member, since both run under it. A member
 tells which one it is by the `You are @name` line `memberPrompt` opens its
@@ -121,10 +121,17 @@ wave that would pass it. Under relay the finished turn's generation entry is
 spent when its handoff is scheduled — waves overlap, so a wave's cleanup
 cannot be the thing that retires the entry.
 
-**A pass ends what agents hand each other, not what the user asked for.** A
-reply that says nothing but `pass` clears the schedule of agent-addressed
-items and continues the user's own — a turn the user addressed to another
-member is that member's to run, however the round around it went.
+**A member says nothing by calling `end_turn`, and silence is not a row.** A
+reply is a message, and a model given only messages writes one — a
+thank-you, an "all set" — that hands the room another turn; a text `pass`
+convention was tried first and models wrote around it. The tool (members
+only: the house answers what nobody else was asked) takes an optional
+`reason`, ends the loop without another model call, and leaves the call on
+the log. A reply that ended with it and wrote no text (`endedSilently`)
+names no one, so it hands to no one; it is not drawn (`entriesOf`) and not
+worded into any other participant's session, and it shows no running label.
+It does not clear what siblings handed off — silence is nothing said, not a
+veto.
 
 **A say is not refused, it is queued.** While a turn runs, the user's send
 lands on the log the moment it is said (`_sayLater` — the log is the queue)

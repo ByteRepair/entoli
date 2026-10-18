@@ -311,6 +311,7 @@ List<LlmTool> agentTools({
   required bool offerMemory,
   bool oneShot = false,
   List<PromptDocument>? participants,
+  bool member = false,
 }) =>
     [
       file_tool_defs.readTool,
@@ -325,6 +326,7 @@ List<LlmTool> agentTools({
       // the tool list and the dispatch share — a call where the turn holds
       // no room finds only `unknownTool`.
       if (participants != null) listParticipantsTool,
+      if (participants != null && member) endTurnTool,
       if (caps.artifact) artifactTool,
       if (!oneShot) ...[planAddTool, planNextTool, planDoneTool],
       // Presenting parks the turn on the panel's answer, so it rides `ask`
@@ -739,9 +741,13 @@ class BuiltinAgent {
         offerMemory: memoryStore != null,
         oneShot: oneShot,
         participants: roomParticipants,
+        member: viewer != null,
       );
 
   bool _cancelled = false;
+
+  /// Set by an `end_turn` call: the loop stops after the batch it was in.
+  bool _ended = false;
   ShellRun? _running;
 
   /// Circuit breaker for auto mode: too many escalations means the classifier
@@ -871,7 +877,7 @@ class BuiltinAgent {
       if (completion.message.toolCalls.isEmpty) break;
 
       yield* _executeAll(completion.message.toolCalls);
-      if (_cancelled) break;
+      if (_cancelled || _ended) break;
 
       if (step == options.stepLimit - 1) {
         yield StepLimitEvent(options.stepLimit);
@@ -980,6 +986,8 @@ class BuiltinAgent {
         skillToolName => _skill,
         listParticipantsToolName when roomParticipants != null =>
           _listParticipants,
+        endTurnToolName when roomParticipants != null && viewer != null =>
+          _endTurn,
         websearchToolName => _webSearch,
         webfetchToolName => _webFetch,
         memorySaveToolName => _memorySave,
@@ -1204,6 +1212,15 @@ class BuiltinAgent {
   Stream<AgentEvent> _listParticipants(LlmToolCall call) async* {
     yield _called(call);
     yield _ok(call, participantsListing(roomParticipants!));
+  }
+
+  /// Say nothing. The call and its result stay on the log, where the reason
+  /// is the record of why; the loop stops without asking the model again,
+  /// since a follow-up step would be the reply the call declined to write.
+  Stream<AgentEvent> _endTurn(LlmToolCall call) async* {
+    _ended = true;
+    yield _called(call);
+    yield _ok(call, "Turn ended.");
   }
 
   /// Search the web. Read-only, so no approval — the result is worded the same

@@ -7,6 +7,7 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../domain/agent_backend.dart";
 import "../../domain/chat_meta.dart";
+import "../../domain/end_turn.dart";
 import "../../domain/models.dart";
 import "../../domain/project.dart";
 import "../../domain/prompt_library.dart" show nameOf;
@@ -504,7 +505,8 @@ class CompactionEntry extends ConversationEntry {
 /// first — both flips are rows, the off-flip bounding an on-section — and
 /// every message carries whether it sits in an on-section, which is what
 /// names the main agent "Entoli" there. A compaction boundary is said after
-/// the message it covers: the divider is where the summary took over.
+/// the message it covers: the divider is where the summary took over. A reply
+/// that ended with `end_turn` is not a row: it is on the log, not the page.
 List<ConversationEntry> entriesOf(Chat chat) {
   final entries = <ConversationEntry>[];
   var on = false;
@@ -515,8 +517,10 @@ List<ConversationEntry> entriesOf(Chat chat) {
       on = opener;
       entries.add(SectionEntry(on));
     }
-    entries.add(MessageEntry(m,
-        inOmadaSection: on, last: index == chat.messages.length - 1));
+    if (!endedSilently(m)) {
+      entries.add(MessageEntry(m,
+          inOmadaSection: on, last: index == chat.messages.length - 1));
+    }
     final marker = byBoundary[m.id];
     if (marker != null) entries.add(CompactionEntry(marker.summary));
   }

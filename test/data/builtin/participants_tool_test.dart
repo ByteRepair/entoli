@@ -34,6 +34,7 @@ void main() {
     List<PromptDocument>? members, {
     ApproveMode approveMode = ApproveMode.never,
     List<ToolApproval>? asked,
+    String? viewer,
   }) =>
       BuiltinAgent(
         session: session,
@@ -51,6 +52,7 @@ void main() {
         },
         answer: (request) async => request.unanswered,
         roomParticipants: members,
+        viewer: viewer,
       );
 
   final finish = saidOnly("done");
@@ -141,6 +143,44 @@ void main() {
       final result = events.whereType<ToolResultEvent>().first.result;
       expect(result.returnCode, -1);
       expect(result.exceptionInfo, contains("no tool called '$listParticipantsToolName'"));
+    });
+  });
+
+  group("end_turn", () {
+    test("is offered on a member's turn, not the house's or a direct one",
+        () async {
+      Future<List<String>> offered(List<PromptDocument>? members,
+          {String? viewer}) async {
+        final client = FakeLlmClient([[finish]]);
+        await agentWith(client, members, viewer: viewer)
+            .run(userMessage("hi"))
+            .toList();
+        return client.calls.first.tools.map((t) => t.name).toList();
+      }
+
+      final room = [memberDoc("explore")];
+      expect(await offered(room, viewer: "explore"), contains(endTurnToolName));
+      expect(await offered(room), isNot(contains(endTurnToolName)));
+      expect(await offered(null, viewer: "explore"),
+          isNot(contains(endTurnToolName)));
+    });
+
+    test("ends the turn without asking the model again", () async {
+      final client = FakeLlmClient([
+        [fileCall(endTurnToolName, {"reason": "Not for me."})],
+        [saidOnly("never asked")],
+      ]);
+      final events = await agentWith(client, [memberDoc("explore")],
+              viewer: "explore")
+          .run(userMessage("hi"))
+          .toList();
+
+      expect(client.calls, hasLength(1));
+      final call = events.whereType<ToolCallEvent>().single.call;
+      expect(call.name, endTurnToolName);
+      expect(call.argumentsJson, contains("Not for me."));
+      expect(events.whereType<TextDelta>(), isEmpty);
+      expect(events.last, isA<DoneEvent>());
     });
   });
 }

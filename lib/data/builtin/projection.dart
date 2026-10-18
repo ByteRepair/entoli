@@ -3,6 +3,7 @@ import "dart:typed_data";
 import "package:collection/collection.dart";
 
 import "../../domain/ask.dart";
+import "../../domain/end_turn.dart";
 import "../../domain/models.dart";
 import "../../domain/prompt_library.dart";
 import "llm/llm_client.dart";
@@ -137,6 +138,9 @@ Future<List<LlmMessage>> projectionOf(
         // main agent's — which is the dialect [viewer] is carried in.
         final theirs = nameOf(message.author) ?? mainAgentLabel;
         if (theirs != (viewer ?? mainAgentLabel)) {
+          // Silence is for the room too: another reader is not told a member
+          // said nothing, which would be one more message to answer.
+          if (endedSilently(message)) continue;
           final said = _saidText(message);
           if (said != null) {
             projected.add(LlmMessage(
