@@ -1,6 +1,7 @@
 name: Build the Linux app
 description: >
-  Builds the Linux bundle in one mode and packages it as an AppImage. What that
+  Builds the Linux bundle in one mode, with the model server `linux-llama`
+  uploaded, and packages it as an AppImage. What that
   packaging is lives in `tool/linux/`, where it can also be run by hand.
 
 inputs:
@@ -25,6 +26,28 @@ outputs:
 runs:
   using: composite
   steps:
+    # The stage the bundle's CMakeLists installs from — the artifact
+    # `linux-llama` uploaded — unpacked and checked before `flutter build
+    # linux`, so the bundle carries the server whole or not at all.
+    - uses: actions/download-artifact@v8.0.1
+      with:
+        name: llama-linux
+        path: ${{ runner.temp }}/llama-linux
+
+    - name: Unpack and check the model server
+      shell: bash
+      run: |
+        set -euo pipefail
+        mkdir -p build/llama
+        tar -C build/llama -xf "$RUNNER_TEMP/llama-linux/llama-linux.tar"
+        [ -x build/llama/llama-server ] ||
+          { echo "::error::the llama artifact has no executable llama-server" >&2; exit 1; }
+        for lib in libllama-common.so.0 libggml-base.so.0 \
+          libggml-vulkan.so libggml-cpu.so; do
+          [ -e "build/llama/$lib" ] ||
+            { echo "::error::the llama artifact has no $lib" >&2; exit 1; }
+        done
+
     # The Ubuntu list in README.md; keep the README part in step. cmake and
     # ninja stay here — `flutter build linux` drives the engine's own cmake
     # too — and patchelf and binutils do not: their one consumer is the

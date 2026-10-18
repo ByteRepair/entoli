@@ -1,3 +1,4 @@
+import "dart:async";
 import "dart:ffi";
 import "dart:io";
 import "dart:isolate";
@@ -64,6 +65,7 @@ import "../../../domain/voice.dart";
 import "../../../domain/voice_model_store.dart";
 import "../../../domain/web_search.dart";
 import "../../config.dart";
+import "../form_factor.dart" show isPhone;
 import "keyring_secret_store.dart";
 import "linux_recorder.dart";
 import "signaling_server.dart";
@@ -81,8 +83,8 @@ Shell platformShell({
 }) {
   if (Platform.isIOS) {
     // No host shell and no proot: IshShell drives the emulator through FFI,
-    // resolving the rootfs per command so an install or deletion on the
-    // Terminal page reaches the next command. See ios/AGENTS.md.
+    // resolving the rootfs per command; the guest boots once, so a swap after
+    // the first command is refused until a restart. See ios/AGENTS.md.
     String? rootfsDir() {
       final rootfs = rootfsById(rootfsId?.call());
       return rootfs != null ? rootfsStore?.directoryOfSync(rootfs.id) : null;
@@ -158,8 +160,8 @@ ShellDriver? platformDriver({
       projectHome: Platform.isAndroid,
       environment: isolated && byteRepairBinDir != null
           ? {
-              "PATH": "$byteRepairBinDir${Platform.isWindows ? ";" : ":"}"
-                  "${Platform.environment["PATH"] ?? ""}",
+              "PATH": "$byteRepairBinDir${LocalShell.listSeparator()}"
+                  "${loginPath ?? Platform.environment["PATH"] ?? ""}",
             }
           : null,
       sandboxHelper: Platform.isLinux && config != null
@@ -252,9 +254,7 @@ String? byteRepairBinDir(String cacheDir) =>
 /// may empty. On a phone a rootfs must be picked, since the "Host" env has no
 /// package manager (iOS's no shell) to stand the setup up again.
 bool setupComplete(AppConfig config, String? project, String? binDir) {
-  if ((defaultTargetPlatform == TargetPlatform.android ||
-          defaultTargetPlatform == TargetPlatform.iOS) &&
-      AppSettings.load(config).rootfsId == null) {
+  if (isPhone && AppSettings.load(config).rootfsId == null) {
     return false;
   }
   if (!File(config.setupCompleteFile(project: project)).existsSync()) {
@@ -366,15 +366,16 @@ FileSystem createFileSystem() => fileSystemIo;
 FileWatches createFileWatches() => IoFileWatches();
 
 /// `$AGENT_CHAT_CONFIG` if set, else `~/.config/agent-chat` on desktop and
-/// app-private storage on the phones. A Linux or macOS debug build uses
-/// `agent-chat-debug`, so it never touches an installed copy's data.
+/// app-private storage on the phones. A desktop debug build uses
+/// `agent-chat-debug`, so it never touches an installed copy's data; a
+/// phone's debug build is its own app, its storage already apart.
 Future<String> dataDir() async {
   final override = processEnv("AGENT_CHAT_CONFIG");
   return override ?? p.join(await _resolveBase(), _dirLeaf);
 }
 
 String get _dirLeaf =>
-    (Platform.isLinux || Platform.isMacOS) && kDebugMode
+    (Platform.isLinux || Platform.isMacOS || Platform.isWindows) && kDebugMode
         ? "agent-chat-debug"
         : "agent-chat";
 
@@ -405,7 +406,7 @@ Future<String> cacheDir() async {
   if (Platform.isMacOS) return p.join(_home, "Library", "Caches", _dirLeaf);
   if (Platform.isWindows) {
     final local = Platform.environment["LOCALAPPDATA"] ?? p.join(_home, "AppData", "Local");
-    return p.join(local, "agent-chat", "Cache");
+    return p.join(local, _dirLeaf, "Cache");
   }
   return p.join((await getApplicationSupportDirectory()).path, "agent-chat");
 }
@@ -462,8 +463,10 @@ String? _getenv(String name) {
 }
 
 /// The desktop keyring where a Secret Service answers, else the plain file.
-SecretStore createSecretStore(AppConfig config) =>
-    KeyringSecretStore(FileSecretStore(config));
+/// Only Linux has a Secret Service to ask.
+SecretStore createSecretStore(AppConfig config) => Platform.isLinux
+    ? KeyringSecretStore(FileSecretStore(config))
+    : FileSecretStore(config);
 
 LanSignaling? createLanSignaling() => SignalingServer();
 
@@ -479,13 +482,21 @@ Future<String?> captureLoginPath() async {
   }
   if (!File(login).existsSync()) return null;
   try {
-    final result = await Process.run(login, ["-l", "-c", r'echo "$PATH"'],
+    final process = await Process.start(login, ["-l", "-c", r'echo "$PATH"'],
         environment: {"HOME": home, "PATH": "/usr/bin:/bin"},
-        includeParentEnvironment: false)
-        .timeout(const Duration(seconds: 5));
-    if (result.exitCode != 0) return null;
-    final lines = result.stdout
-        .toString()
+        includeParentEnvironment: false);
+    final stdout = process.stdout.transform(systemEncoding.decoder).join();
+    unawaited(process.stderr.drain<void>());
+    final int code;
+    try {
+      code = await process.exitCode.timeout(const Duration(seconds: 5));
+    } on TimeoutException {
+      // A profile that waits on input would otherwise be left running.
+      process.kill(ProcessSignal.sigkill);
+      return null;
+    }
+    if (code != 0) return null;
+    final lines = (await stdout)
         .split("\n")
         .map((l) => l.trim())
         .where((l) => l.isNotEmpty)

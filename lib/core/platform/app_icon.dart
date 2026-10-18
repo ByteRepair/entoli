@@ -1,8 +1,8 @@
-import "package:flutter/foundation.dart";
 import "package:flutter/services.dart";
 
 import "../../domain/app_icon.dart";
 import "../../core/log.dart";
+import "form_factor.dart";
 
 /// Tells `MainActivity.kt` which launcher entry to show. The default icon
 /// (cookie) is what `MainActivity` itself wears via the app-level
@@ -22,8 +22,7 @@ class LauncherAliases implements LauncherIcons {
   };
 
   @override
-  bool get available =>
-      !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
+  bool get available => isAndroid;
 
   @override
   Future<void> use(AppIcon icon) async {

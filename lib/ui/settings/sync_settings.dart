@@ -8,6 +8,7 @@ import "package:qr_flutter/qr_flutter.dart";
 import "package:url_launcher/url_launcher.dart";
 
 import "../../core/log.dart";
+import "../../core/platform/form_factor.dart";
 import "../../data/sync/sync_hub.dart";
 import "../../domain/app_settings.dart";
 import "../../providers.dart";
@@ -86,14 +87,11 @@ class SyncSection extends ConsumerWidget {
 /// Where the sync keep-alive's foreground service exists: Android only, the
 /// one platform whose process freezes with the screen. Everywhere else the
 /// setting has nothing to switch, so the row is not drawn.
-bool get _android => !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
+bool get _android => isAndroid;
 
 /// Where the paste-a-code field gets a camera button: the phones, the devices
 /// that are pointed at a code another screen shows.
-bool get _canScan =>
-    !kIsWeb &&
-    (defaultTargetPlatform == TargetPlatform.android ||
-        defaultTargetPlatform == TargetPlatform.iOS);
+bool get _canScan => isPhone;
 
 /// The Internet relay, on its own screen — reached from the row on the Sync
 /// page. One field: the `wss://` URL both devices dial to pair across the

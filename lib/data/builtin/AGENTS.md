@@ -143,6 +143,15 @@ in `data/local/` — and `platformDriver` picks between the two per command.
 `LocalShell` runs whichever it is handed, since to it both are a command that
 ends in a shell, and that is the whole of what a new driver owes it.
 
+On Windows the host driver wants `bash.exe` or `sh.exe` off `PATH`, skipping
+anything under `%SystemRoot%` — WSL's `System32\bash.exe` runs a Linux that
+cannot take a Windows path — then Git for Windows' bash, found under
+`%ProgramFiles%\Git` or beside the `git.exe` on `PATH`. There is no `setsid`
+and no signal there: a stop or a timeout is `taskkill /T /F`, the one way to
+take bash's children with it, and the interrupt step is skipped. The AppImage
+runtime's `APPIMAGE`, `APPDIR`, `ARGV0` and `OWD` are stripped from every
+command's environment; they describe the app, not the machine.
+
 **The shell creates the directory it is told to stand in if it is not there.**
 A spawn `workingDirectory` that does not exist fails with an ENOENT that names
 neither the directory nor the reason, and the cwds the app hands the shell are
