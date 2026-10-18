@@ -89,7 +89,7 @@ void ish_boot(const char *rootfs_dir) {
 // lands on it, so each component is made the way init.c makes /dev/pts; a
 // component that is already there is fine (EEXIST), and a mount that did not
 // land is not fatal — the shell still runs, from a workspace it cannot see.
-static void bind_host_dir(const char *host_dir, const char *point) {
+static int bind_host_dir(const char *host_dir, const char *point) {
     char made[PATH_MAX];
     snprintf(made, sizeof(made), "%s", point);
     // mkdir -p, in the guest, one component at a time: do_mount wants the
@@ -102,10 +102,14 @@ static void bind_host_dir(const char *host_dir, const char *point) {
         *p = '/';
     }
     generic_mkdirat(AT_PWD, made, 0777);
-    if (do_mount(&realfs, host_dir, made, "", 0) < 0) {
+    // do_mount walks the mount list, which wants mounts_lock (kernel/fs.h).
+    lock(&mounts_lock);
+    int err = do_mount(&realfs, host_dir, made, "", 0);
+    unlock(&mounts_lock);
+    if (err < 0) {
         printk("ish: could not bind %s at %s\n", host_dir, made);
-        return;
     }
+    return err;
 }
 
 // Bind the app's data directory into the guest at its own absolute host
@@ -121,13 +125,24 @@ static void bind_data_dir(const char *data_dir) {
 }
 
 // Bind the project workspace at /root — the clean guest path proot gives it
-// on Android, and the one the model is told. One bind per process, like the
-// data-dir one.
+// on Android, and the one the model is told. The guest has one mount table,
+// so /root names one project at a time: another workspace rebinds it, which
+// IshShell asks for only once no session of the bound project is running.
+// The old bind is unmounted where nothing holds it; where a dying shell
+// still does, the new one shadows it (do_mount puts the newest first among
+// equal-length points).
 static void bind_workspace(const char *workspace) {
-    static bool bound = false;
-    if (bound) return;
-    bind_host_dir(workspace, "/root");
-    bound = true;
+    static char bound_home[PATH_MAX];
+    if (strcmp(bound_home, workspace) == 0) return;
+    if (bound_home[0] != '\0') {
+        lock(&mounts_lock);
+        do_umount("/root");
+        unlock(&mounts_lock);
+        bound_home[0] = '\0';
+    }
+    if (bind_host_dir(workspace, "/root") == 0) {
+        snprintf(bound_home, sizeof(bound_home), "%s", workspace);
+    }
 }
 
 ish_session *ish_session_init(
@@ -159,60 +174,41 @@ ish_session *ish_session_init(
         bind_workspace(home);
     }
 
+    ish_session *s = calloc(1, sizeof(*s));
+    if (!s) {
+        *error = "out of memory";
+        return NULL;
+    }
+    strncpy(s->token, token, sizeof(s->token) - 1);
+
+    // Two real host pipes; the guest gets the other ends as fds 0, 1 and 2.
+    // Beside them the wake pipe the hangup's byte lands in, whose read end is
+    // non-blocking, which is what makes each run's drain of a previous
+    // command's byte safe. -1 until made, since fd 0 is a real fd here and
+    // the failure path closes only what was opened. Made before the guest
+    // task, so a failure here has no task to leave behind.
+    int stdin_pipe[2] = {-1, -1};
+    int stdout_pipe[2] = {-1, -1};
+    int wake_pipe[2] = {-1, -1};
+    if (pipe(stdin_pipe) < 0 || pipe(stdout_pipe) < 0 || pipe(wake_pipe) < 0) {
+        *error = "failed to create the session pipes";
+        goto fail;
+    }
+    int wake_flags = fcntl(wake_pipe[0], F_GETFL, 0);
+    if (wake_flags >= 0) {
+        fcntl(wake_pipe[0], F_SETFL, wake_flags | O_NONBLOCK);
+    }
+
     // A child of the kernel's init task: its own mm, fds, and signal state,
     // with `current` switched to it for the calls below. This is
     // TerminalViewController's -startSession without the tty — the
     // dispatcher runs non-interactively over pipes instead.
     if (become_new_init_child() < 0) {
         *error = "failed to create the guest task";
-        return NULL;
+        goto fail;
     }
     struct task *task = current;
 
-    ish_session *s = calloc(1, sizeof(*s));
-    if (!s) {
-        *error = "out of memory";
-        return NULL;
-    }
-    // -1, not calloc's zero: fd 0 is a real fd here, and destroy closes only
-    // what is still open.
-    s->stdin_write = -1;
-    s->stdout_read = -1;
-    s->wake_read = -1;
-    s->wake_write = -1;
-    strncpy(s->token, token, sizeof(s->token) - 1);
-
-    // Two real host pipes; the guest gets the other ends as fds 0, 1 and 2.
-    int stdin_pipe[2], stdout_pipe[2];
-    if (pipe(stdin_pipe) < 0 || pipe(stdout_pipe) < 0) {
-        *error = "failed to create the session pipes";
-        close(stdin_pipe[0]);
-        close(stdin_pipe[1]);
-        close(stdout_pipe[0]);
-        close(stdout_pipe[1]);
-        free(s);
-        return NULL;
-    }
-    s->stdin_write = stdin_pipe[1];
-    s->stdout_read = stdout_pipe[0];
-    // The wake pipe the hangup's byte lands in. Its read end is non-blocking,
-    // which is what makes each run's drain of a previous command's byte safe.
-    int wake_pipe[2];
-    if (pipe(wake_pipe) < 0) {
-        *error = "failed to create the session pipes";
-        close(stdin_pipe[0]);
-        close(stdin_pipe[1]);
-        close(stdout_pipe[0]);
-        close(stdout_pipe[1]);
-        free(s);
-        return NULL;
-    }
-    s->wake_read = wake_pipe[0];
-    s->wake_write = wake_pipe[1];
-    int wake_flags = fcntl(s->wake_read, F_GETFL, 0);
-    if (wake_flags >= 0) {
-        fcntl(s->wake_read, F_SETFL, wake_flags | O_NONBLOCK);
-    }
     // A fresh init child's table is empty, so the three installs land on
     // fds 0, 1 and 2 in this order.
     fd_t in = guest_fd_from_host(stdin_pipe[0]);
@@ -220,14 +216,7 @@ ish_session *ish_session_init(
     fd_t errfd = guest_fd_from_host(stdout_pipe[1]);
     if (in != 0 || out != 1 || errfd != 2) {
         *error = "failed to wire the guest stdio";
-        close(stdin_pipe[0]);
-        close(stdin_pipe[1]);
-        close(stdout_pipe[0]);
-        close(stdout_pipe[1]);
-        close(s->wake_read);
-        close(s->wake_write);
-        free(s);
-        return NULL;
+        goto fail;
     }
 
     // The working directory the guest shell starts in is the chat's own, in
@@ -237,14 +226,7 @@ ish_session *ish_session_init(
     struct fd *pwd = generic_open(cwd, O_RDONLY_, 0);
     if (IS_ERR(pwd)) {
         *error = "the working directory could not be opened in the guest";
-        close(stdin_pipe[0]);
-        close(stdin_pipe[1]);
-        close(stdout_pipe[0]);
-        close(stdout_pipe[1]);
-        close(s->wake_read);
-        close(s->wake_write);
-        free(s);
-        return NULL;
+        goto fail;
     }
     fs_chdir(task->fs, pwd);
 
@@ -275,20 +257,27 @@ ish_session *ish_session_init(
     envp[pos] = '\0';
     if (do_execve("/bin/sh", 3, argv, envp) < 0) {
         *error = "failed to exec /bin/sh in the guest; the rootfs has none";
-        close(stdin_pipe[0]);
-        close(stdin_pipe[1]);
-        close(stdout_pipe[0]);
-        close(stdout_pipe[1]);
-        close(s->wake_read);
-        close(s->wake_write);
-        free(s);
-        return NULL;
+        goto fail;
     }
+    s->pid = task->pid;
+    s->stdin_write = stdin_pipe[1];
+    s->stdout_read = stdout_pipe[0];
+    s->wake_read = wake_pipe[0];
+    s->wake_write = wake_pipe[1];
     // task_start sets the task's pthread going; do_execve only dressed it.
     task_start(task);
 
     *error = NULL;
     return s;
+
+fail:
+    for (int i = 0; i < 2; i++) {
+        if (stdin_pipe[i] >= 0) close(stdin_pipe[i]);
+        if (stdout_pipe[i] >= 0) close(stdout_pipe[i]);
+        if (wake_pipe[i] >= 0) close(wake_pipe[i]);
+    }
+    free(s);
+    return NULL;
 }
 
 void ish_session_drain_wake(ish_session *session) {
@@ -318,13 +307,10 @@ void ish_session_write_stdin(ish_session *session, const char *script_b64) {
 
 int32_t ish_session_poll(ish_session *session) {
     if (!session) return -1;
-    // Polled on both ends rather than read plainly: a close of stdout_read
-    // does not wake a reader parked on the same fd, and a child the
+    // Polled on both ends rather than read plainly: a child the
     // escalation's SIGKILL did not reach can hold the guest's write end for
     // its own life. The wake pipe's byte is the whole of the ending another
-    // thread can deliver: once hangup has -1'd stdout, poll passes that
-    // entry over (fd < 0 answers nothing), and the read that races the
-    // close still EBADFs out the same way.
+    // thread can deliver.
     struct pollfd fds[2];
     fds[0].fd = session->stdout_read;
     fds[0].events = POLLIN;
@@ -355,39 +341,33 @@ int32_t ish_session_read(ish_session *session, char *buf, int32_t cap) {
 }
 
 void ish_session_interrupt(ish_session *session) {
-    // Deliver a SIGINT to the guest. The dispatcher's trap turns it into a
-    // 130 while the shell survives — the same contract LocalShell keeps.
-    // Null after the shell died: interrupting a dead session is a no-op, the
-    // way kill() on a dead process is.
-    if (!session || !session->task) return;
-    send_signal(session->task, SIGINT_, SIGINFO_NIL);
+    // Deliver a SIGINT to the guest's process group, the Ctrl-C LocalShell
+    // sends its own. The dispatcher's trap turns it into a 130 while the
+    // shell survives. send_group_signal looks the group up under pids_lock
+    // and answers ESRCH where it is gone, so a dead session is a no-op.
+    if (!session || session->pid <= 0) return;
+    send_group_signal(session->pid, SIGINT_, SIGINFO_NIL);
 }
 
 void ish_session_hangup(ish_session *session) {
     if (!session) return;
-    if (session->task) {
-        send_signal(session->task, SIGKILL_, SIGINFO_NIL);
+    if (session->pid > 0) {
+        send_group_signal(session->pid, SIGKILL_, SIGINFO_NIL);
     }
-    if (session->stdout_read >= 0) {
-        close(session->stdout_read);
-        session->stdout_read = -1;
-    }
-    // The byte, not the close, is what the run's poll answers: the byte can
-    // be sent from this thread, the close cannot wake anything.
+    // The byte is what the run's poll answers. stdout is not closed here:
+    // the worker may be reading it, and a close from this thread could hand
+    // its number to another open before that read lands.
     if (session->wake_write >= 0) {
         char wake = 0;
         ssize_t unused = write(session->wake_write, &wake, 1);
         (void) unused;
     }
-    // The session stays valid — stdin, the wake pipe and the struct itself
-    // stay destroy's work, which owns every close after this. The run ends
-    // "did not complete" the moment its poll answers.
 }
 
 void ish_session_destroy(ish_session *session) {
     if (!session) return;
-    if (session->task) {
-        send_signal(session->task, SIGKILL_, SIGINFO_NIL);
+    if (session->pid > 0) {
+        send_group_signal(session->pid, SIGKILL_, SIGINFO_NIL);
     }
     if (session->stdin_write >= 0) {
         close(session->stdin_write);

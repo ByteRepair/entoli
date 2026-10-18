@@ -276,6 +276,100 @@ void main() {
         expect(two.exceptionInfo, contains("restarted"));
       });
     });
+
+    test("hangs up a pending run, so its worker can apply the destroy", () {
+      fakeAsync((async) {
+        final fake = FakeIshTransport();
+        final shell = ishShell(fake);
+        shell.start("sleep 60",
+            cwd: cwd, home: home, timeout: const Duration(minutes: 5));
+        async.flushMicrotasks();
+        final handle = fake.lastHandle!;
+        shell.closeSession(cwd);
+        expect(fake.hangups, [handle]);
+      });
+    });
+
+    test("an idle session is not hung up", () async {
+      final fake = FakeIshTransport();
+      final shell = ishShell(fake);
+      final run = shell.start("true",
+          cwd: cwd, home: home, timeout: const Duration(minutes: 5));
+      await Future<void>.delayed(Duration.zero);
+      fake._settle(fake.pendingSessions.single,
+          const ShellResult(returnCode: 0, output: ""));
+      await run.result;
+      shell.closeSession(cwd);
+      expect(fake.hangups, isEmpty);
+      expect(fake.destroys, hasLength(1));
+    });
+  });
+
+  group("one /root at a time", () {
+    const otherHome = "/ws2";
+    const otherCwd = "$otherHome/chats/b";
+
+    test("another project closes the idle sessions and binds its own", () async {
+      final fake = FakeIshTransport();
+      final shell = ishShell(fake);
+      final first = shell.start("true",
+          cwd: cwd, home: home, timeout: const Duration(minutes: 5));
+      await Future<void>.delayed(Duration.zero);
+      final firstSession = fake.pendingSessions.single;
+      fake._settle(firstSession, const ShellResult(returnCode: 0, output: ""));
+      await first.result;
+
+      shell.start("true",
+          cwd: otherCwd, home: otherHome, timeout: const Duration(minutes: 5));
+      await Future<void>.delayed(Duration.zero);
+      expect(fake.destroys, [firstSession]);
+      expect(fake.initHomes, [home, otherHome]);
+    });
+
+    test("another project waits while the bound one has a command running",
+        () async {
+      final fake = FakeIshTransport();
+      final shell = ishShell(fake);
+      shell.start("sleep 30",
+          cwd: cwd, home: home, timeout: const Duration(minutes: 5));
+      await Future<void>.delayed(Duration.zero);
+
+      final refused = await shell
+          .start("true",
+              cwd: otherCwd,
+              home: otherHome,
+              timeout: const Duration(minutes: 5))
+          .result;
+      expect(refused.exceptionInfo, contains("another project"));
+      expect(fake.destroys, isEmpty);
+      expect(fake.initHomes, [home]);
+
+      // Another chat of the bound project is not held back.
+      shell.start("true",
+          cwd: "$home/chats/c", home: home, timeout: const Duration(minutes: 5));
+      await Future<void>.delayed(Duration.zero);
+      expect(fake.initHomes, [home, home]);
+    });
+  });
+
+  test("a rootfs changed after the guest booted is refused", () async {
+    var rootfs = "/rootfs";
+    final fake = FakeIshTransport();
+    final shell = IshShell(
+      rootfsDir: () => rootfs,
+      dataDir: "/data",
+      environment: () => {},
+      platformDescription: () => "iSH",
+      transport: fake,
+    );
+    shell.start("true", cwd: cwd, home: home, timeout: const Duration(minutes: 5));
+    await Future<void>.delayed(Duration.zero);
+    rootfs = "/rootfs2";
+    final result = await shell
+        .start("true", cwd: cwd, home: home, timeout: const Duration(minutes: 5))
+        .result;
+    expect(result.exceptionInfo, contains("Restart"));
+    expect(fake.inits, hasLength(1));
   });
 
   group("a one-shot run", () {
@@ -511,6 +605,7 @@ class FakeIshTransport implements IshTransport {
   bool interruptEnds = true;
 
   final List<String> inits = [];
+  final List<String> initHomes = [];
   final List<String> runs = [];
   final List<int> interrupts = [];
   final List<int> hangups = [];
@@ -545,10 +640,12 @@ class FakeIshTransport implements IshTransport {
   }) async {
     if (initError != null) throw StateError(initError!);
     inits.add(cwd);
+    initHomes.add(home);
     _nextSession++;
     _nextHandle++;
     lastSession = _nextSession;
     lastHandle = answersNotLinked ? null : _nextHandle;
+    _sessionOf[_nextHandle] = _nextSession;
     return answersNotLinked
         ? (sessionId: -1, handle: 0)
         : (sessionId: _nextSession, handle: _nextHandle);
@@ -586,8 +683,11 @@ class FakeIshTransport implements IshTransport {
   @override
   void hangup(int handle) {
     hangups.add(handle);
-    pending.keys.toList().forEach((id) => _settle(id, hungUp(id)));
+    final id = _sessionOf[handle];
+    if (id != null) _settle(id, hungUp(id));
   }
+
+  final Map<int, int> _sessionOf = {};
 
   @override
   void destroy(int sessionId) {

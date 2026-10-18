@@ -26,6 +26,8 @@
 	<string>$(PRODUCT_COPYRIGHT)</string>
 	<key>NSAppleEventsUsageDescription</key>
 	<string>Entoli runs commands for you and the agent. A command such as osascript can ask another app to do something, and macOS asks you first, once for each app.</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Entoli connects to devices on your local network when you sync with your other devices, or when you use a model or service you run on this network.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Voice mode listens to you so the conversation can hear you. Audio never leaves this device.</string>
 	<key>NSMainNibFile</key>

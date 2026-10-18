@@ -107,7 +107,7 @@ in the running app over the VM service.
 2. **The link wiring is xcconfig, not CocoaPods.** `ios/Flutter/Ish.xcconfig`,
    which Debug and Release both include, force-loads the right `IshCore.xcframework` slice per
    SDK and name the system libraries (`-lz -lbz2 -lxml2 -lsqlite3 -liconv`)
-   the podspec would have carried; there is no Podfile. The framework itself
+   a podspec would have carried; there is no Podfile. The framework itself
    is built by `tool/ios/ish/build.sh` (LLVM's clang and lld wanted for the
    vdso; `brew install llvm lld`, both keg-only and not on PATH by default).
    `tools/fakefsify.c` is deliberately not compiled — its `main()` collides
@@ -131,11 +131,13 @@ in the running app over the VM service.
 `IshShell` delivers a stop on the calling isolate, not through the worker:
 the worker parks in a run's poll/read loop for the whole of the command, so
 a message to it would queue behind the run it is meant to end. The bridge's
-`ish_session_interrupt` is a `send_signal` — marked under iSH's own locks
-(`kernel/signal.c`) and honoured by the guest's interpreter thread at its
-next scheduling point — so a direct FFI call over the session handle's
-address (which `init`'s answer carries to the caller) is the same call,
-delivered on time.
+`ish_session_interrupt` is a `send_group_signal` to the shell's process
+group — every init child is its own session leader, so the group is the
+shell and the command it runs, the Ctrl-C LocalShell sends; looked up under
+`pids_lock` by the guest pid, never a task pointer that dies with the shell,
+and honoured by the guest's interpreter threads at their next scheduling
+point — so a direct FFI call over the session handle's address (which
+`init`'s answer carries to the caller) is the same call, delivered on time.
 
 Output rides the loop as it happens: every read the worker makes is resolved
 by [IshRunBuffer] — the marker parse, the bridge's own C until now — and
@@ -147,15 +149,16 @@ bridge's 64 KiB head cap for what the model sees. The loop still parks
 between chunks, which is what makes a message-queued stop wrong.
 
 A guest that ignores the SIGINT is answered a second later by its
-escalation, `ish_session_hangup`: SIGKILL into the guest first (the kill
-leads, or a dying guest writes into the closing pipe end and the
-interpreter dies of SIGPIPE), the read end closed, and one byte dropped
-into a wake pipe the run polls beside its stdout. The byte, not the close,
-is what returns the worker: a close does not wake a reader parked on the
-same fd, and a child the kill did not reach can hold the guest's write end
-for its own life — without the byte, a hung-up run would wait on the child
-rather than on the second. The run returns "did not complete" and hands
-teardown back to the queued destroy.
+escalation, `ish_session_hangup`: SIGKILL to the group, and one byte
+dropped into a wake pipe the run polls beside its stdout. The byte is what
+returns the worker: a child that left the group can hold the guest's write
+end for its own life — without the byte, a hung-up run would wait on the
+child rather than on the second. The read end is not closed there: the
+worker may be reading it, and a close from another thread hands its number
+to the next open. The run returns "did not complete" and hands teardown back
+to the queued destroy, which closes every pipe end. A session closed with a
+run still pending is hung up first, for the same reason a stop is not
+posted: the destroy would otherwise queue behind the run.
 
 A run the guest answers within the second — the SIGINT honoured, rc 130 —
 leaves the session standing, cd and exports with it. On a timeout that is a
@@ -180,7 +183,7 @@ when it dies so a crashed FFI call cannot leave a turn hanging. Every
 session and every one-shot run
 owns a worker of its own, so one chat's command does not wait on another
 chat's — what the emulator serializes for them is only the boot itself
-(`IshWorker._ops`), since the bridge's boot and one-time binds are the C
+(`IshWorker._ops`), since the bridge's boot and binds are the C
 state two isolates could reach at once; the runs stay parallel, each
 interpreter being its own task.
 
@@ -311,9 +314,28 @@ host paths the app's own `dart:io` uses.
 Beside the mask, the app's whole data directory is bound at its own absolute
 host path (`bind_data_dir`, a second `realfs` mount), so a host-shaped path
 still resolves inside the guest — the fallback spelling, not the one the
-model is given. Both binds are made once per process, in `ish_session_init`,
-before the shell's working directory is opened; a bind that does not land is
-logged and the shell starts anyway. The fakefs root is mounted by
+model is given. Both binds are made in `ish_session_init`, before the shell's
+working directory is opened; a bind that does not land is logged and the
+shell starts anyway.
+
+The guest has one mount table for every session, so `/root` names **one
+project at a time**. The data-dir bind is made once per process; the
+workspace bind is made again whenever a session asks for a different
+project. `IshShell` decides when that may happen (`_claimHome`): a command in
+another project closes the bound project's idle sessions — their next
+command starts cold, at the chat's own directory — and the bridge unmounts
+the old `/root` (or, where a dying shell still holds it, shadows it with the
+new one); a session or one-shot of the bound project still running makes
+the other project's command fail with a "run this again" rather than move
+`/root` under it. Chats of one project share `/root` freely. Per-project
+guest paths were the alternative, and were not taken: `guestRoot` is one
+value every caller (prompt, file tools, composer) reads without a project.
+
+The rootfs itself is mounted once per process, at the first command. A Linux
+installed where none was reaches the next command; a different one picked,
+or the same one reinstalled, after the guest booted takes a restart —
+`IshShell` refuses a command whose rootfs is not the one it booted with and
+says so, and a reinstall in place is not something it can see. The fakefs root is mounted by
 `mount_root(&fakefs, rootfsDir/data)` in `ish_bridge.c`'s `ish_boot`, the
 way the app's own boot mounts `<root>/data` (`fakefs_mount` asserts the
 source ends in `data` and derives the sibling `meta.db` from it).
@@ -331,7 +353,12 @@ iOS refuses the process wake every other scheduling clock is — AlarmManager,
 launchd — and a scheduled local notification runs no code. What the platform
 does have is the due-moment notification, and that is what the clock is:
 `IosReminderAlarms` (`lib/data/local/ios_reminder_alarms.dart`) behind
-`agent_chat/reminders` and `RemindersPlugin.swift`. A one shot or a timer arms
+`agent_chat/reminders` and `RemindersPlugin.swift` — the arm, cancel and
+prune; the notification half (posting, permission, the tap route, the
+present policy) is `macos/Runner/RemindersShared.swift`, one file both
+Runners compile, the iOS project referencing it across the tree. iOS keeps
+64 pending requests and drops the rest silently, so an arm that lands at the
+limit says so in the device log. A one shot or a timer arms
 a `UNTimeIntervalNotificationTrigger`; a repeating schedule arms a
 `UNCalendarNotificationTrigger` on the repeat's components — wall-clock
 anchored and coalescing what a sleep swallows, the property the `calendar`

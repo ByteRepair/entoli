@@ -24,7 +24,7 @@ out=${OUT_DIR:-$here/dist}
 # without --recurse-submodules has an empty src/ here; init it shallowly so
 # the build is self-contained the way tool/android/build.sh is for Android.
 if [ ! -f "$src/kernel/calls.h" ]; then
-    git submodule update --init --recursive --depth 1
+    git -C "$here" submodule update --init --recursive --depth 1 -- src
 fi
 if [ ! -f "$src/kernel/calls.h" ]; then
     echo "iSH source is not present. Run 'git submodule update --init --recursive' from the repo root." >&2
@@ -137,9 +137,9 @@ build_lib() {
   local destdir="$work/$outname"
   mkdir -p "$destdir"
   local sdkroot; sdkroot=$(xcrun --sdk "$sdk" --show-sdk-path)
-  # The deployment target is the podspec's: without it every object carries
-  # the SDK's own minimum and linking them into the app fails on the version
-  # check. Simulator slices get the -simulator suffix clang wants.
+  # A deployment target at or below the app's: without it every object
+  # carries the SDK's own minimum and linking them into the app fails on the
+  # version check. Simulator slices get the -simulator suffix clang wants.
   local minios=14.0
   local target
   if [ "$sdk" = iphoneos ]; then

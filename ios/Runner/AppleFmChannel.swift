@@ -115,6 +115,8 @@ class AppleFmChannel: NSObject {
   /// the text streamed out as it is produced. Nothing is held here between
   /// asks — the Dart client composes every request whole.
   private func generate(_ id: String, _ args: [String: Any]) async {
+    // Every exit, the early ones included, or the task stays in `generations`.
+    defer { finishGeneration(id) }
     guard #available(iOS 26.0, *) else {
       send("error", [
         "id": id, "code": "os",
@@ -138,7 +140,6 @@ class AppleFmChannel: NSObject {
       }
       send("error", ["id": id, "code": "other", "message": "\(error)"])
     }
-    finishGeneration(id)
   }
 
   @available(iOS 26.0, *)
@@ -167,10 +168,13 @@ class AppleFmChannel: NSObject {
     }
 
     var entries = [Transcript.Entry]()
-    if !instructions.isEmpty {
+    // A seeded transcript's instructions are where the session reads its
+    // tools' definitions from, so the entry is owed wherever there are tools.
+    if !instructions.isEmpty || !tools.isEmpty {
       entries.append(.instructions(Transcript.Instructions(
-        segments: [.text(Transcript.TextSegment(content: instructions))],
-        toolDefinitions: [])))
+        segments: instructions.isEmpty
+          ? [] : [.text(Transcript.TextSegment(content: instructions))],
+        toolDefinitions: tools.map { Transcript.ToolDefinition(tool: $0) })))
     }
     for entry in (args["history"] as? [[String: Any]]) ?? [] {
       guard let text = entry["text"] as? String, !text.isEmpty else { continue }
@@ -279,11 +283,12 @@ struct BridgeHandoff: Error {}
 /// A generation that cannot start because this OS or this build carries no
 /// model for the id it was asked for. The wording rides out as it is; the
 /// Dart side's error map says the rest.
-struct GenerationFailure: Error {
+struct GenerationFailure: Error, CustomStringConvertible {
   let message: String
   init(_ message: String) {
     self.message = message
   }
+  var description: String { message }
 }
 
 /// One of the agent's tools, as the framework sees it. The arguments are the

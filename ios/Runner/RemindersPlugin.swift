@@ -2,65 +2,40 @@ import Flutter
 import UIKit
 import UserNotifications
 
-/// iOS's half of `ReminderAlarms`: UNUserNotificationCenter, scheduling and
-/// notifications alike. There is no process to wake — iOS refuses one — so
-/// the system clock's arm is a scheduled notification the OS posts with the
-/// process dead, carrying the label and chat id the arm was given: the words
-/// and the tap route are fixed at arm time, and the turn itself runs at the
-/// next launch's catch-up, a due notification's tap being that launch.
+/// iOS's half of `ReminderAlarms`, beside the notification half both Apples
+/// share (`macos/Runner/RemindersShared.swift`). There is no process to wake
+/// — iOS refuses one — so the system clock's arm is a scheduled notification
+/// the OS posts with the process dead, carrying the label and chat id the arm
+/// was given: the words and the tap route are fixed at arm time, and the turn
+/// itself runs at the next launch's catch-up, a due notification's tap being
+/// that launch.
 ///
 /// The call shapes are the macOS plugin's; `calendar`'s names map to
 /// DateComponents rather than launchd's entries, and there is no store
 /// namespacing — the notification centre is per-app, so one data directory is
 /// all one app ever has.
-///
-/// The errors stay on this side as a `FlutterError` for Dart to log: the
-/// clock kind's diff awaits every schedule, and a thrown error there would
-/// hold every reload after it.
-class RemindersPlugin: NSObject, UNUserNotificationCenterDelegate {
-  static let shared = RemindersPlugin()
+extension RemindersPlugin {
+  /// The banner and its sound, where macOS asks for the banner alone.
+  static let authorizationOptions: UNAuthorizationOptions = [.alert, .sound]
+  static let presentationOptions: UNNotificationPresentationOptions = [.banner, .sound]
 
-  /// Called once, from the AppDelegate when the implicit engine is up — the
-  /// registrar's messenger is the channel's, and so is the notification
-  /// centre's delegate, which no one else has installed.
-  static func register(with registrar: FlutterPluginRegistrar) {
-    let channel = FlutterMethodChannel(
-      name: "agent_chat/reminders", binaryMessenger: registrar.messenger())
-    channel.setMethodCallHandler { call, result in
-      shared.handle(call, result)
-    }
-    shared.channel = channel
-    UNUserNotificationCenter.current().delegate = shared
-  }
+  /// iOS keeps this many pending requests and drops the rest without a word.
+  private static let pendingLimit = 64
 
-  private var channel: FlutterMethodChannel?
-
-  /// The chat id a tapped notification carries before Dart's handler was
-  /// listening — held for the first drain of `takeOpenChat`, the held-pending
-  /// split the Android receive makes of the same launch-by-tap.
-  private var pendingOpen: String?
-
-  private func handle(_ call: FlutterMethodCall, _ result: @escaping FlutterResult) {
+  /// The calls only this platform answers; false for one it does not know.
+  func handlePlatform(_ call: FlutterMethodCall, _ result: @escaping FlutterResult) -> Bool {
     switch call.method {
     case "schedule": schedule(call, result)
     case "cancel": cancel(call, result)
-    case "notify": post(call, result)
-    case "notificationsAllowed": notificationsAllowed(result)
-    case "requestNotifications": requestNotifications(result)
     case "staleCodes": staleCodes(call, result)
     case "canHoldTurn":
       // A suspended process never claims a fire; the one place a claim could
       // be killed mid-turn is the brief window after backgrounding, where
       // the defer dance hands the fire back instead.
       result(UIApplication.shared.applicationState == .active)
-    case "takeOpenChat":
-      // The stash is the answer: a tap that launched the process delivered
-      // its chat id here before Dart's handler was listening, and the first
-      // drain takes it now. The "open" invoke was only the nudge.
-      result(pendingOpen)
-      pendingOpen = nil
-    default: result(FlutterMethodNotImplemented)
+    default: return false
     }
+    return true
   }
 
   /// The arm: no calendar form counts from now — a one shot or a timer, a
@@ -102,7 +77,16 @@ class RemindersPlugin: NSObject, UNUserNotificationCenterDelegate {
     }
     let request = UNNotificationRequest(
       identifier: Self.triggerIdentifier(code), content: content, trigger: trigger)
-    add(request, errorName: "schedule", then: result)
+    add(request, errorName: "schedule") { answer in
+      result(answer)
+      UNUserNotificationCenter.current().getPendingNotificationRequests { requests in
+        if requests.count >= Self.pendingLimit {
+          NSLog("[reminders] %ld notifications pending, iOS's limit: the latest "
+                + "past it are dropped and run only at a launch's catch-up",
+                requests.count)
+        }
+      }
+    }
   }
 
   /// The `UNCalendarNotificationTrigger` components of a repeating schedule's
@@ -168,104 +152,11 @@ class RemindersPlugin: NSObject, UNUserNotificationCenterDelegate {
     }
   }
 
-  private func post(_ call: FlutterMethodCall, _ result: @escaping FlutterResult) {
-    guard let arguments = call.arguments as? [String: Any],
-          let title = arguments["title"] as? String,
-          let body = arguments["body"] as? String
-    else {
-      result(FlutterError(code: "arguments", message: "title and body required", details: nil))
-      return
-    }
-    let chatId = arguments["chatId"] as? String
-    let content = UNMutableNotificationContent()
-    content.title = title
-    content.body = body
-    // The identifier named after the chat is the tap route and the replace at
-    // once: a repost rewrites the one notification rather than piling up
-    // beside it, and a tap carries the id back through [open].
-    let identifier: String
-    if let chatId {
-      content.userInfo["chatId"] = chatId
-      identifier = "chat.\(chatId)"
-    } else {
-      identifier = UUID().uuidString
-    }
-    // Trigger nil is delivered immediately; nothing here waits.
-    let request = UNNotificationRequest(identifier: identifier, content: content, trigger: nil)
-    add(request, errorName: "notify", then: result)
-  }
-
-  private func notificationsAllowed(_ result: @escaping FlutterResult) {
-    UNUserNotificationCenter.current().getNotificationSettings { settings in
-      DispatchQueue.main.async {
-        result(settings.authorizationStatus == .authorized
-            || settings.authorizationStatus == .provisional)
-      }
-    }
-  }
-
-  private func requestNotifications(_ result: @escaping FlutterResult) {
-    UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) {
-      granted, _ in
-      DispatchQueue.main.async { result(granted) }
-    }
-  }
-
-  /// A tapped notification takes its chat id back through the channel —
-  /// held for `takeOpenChat` and nudged, the two routes in. A due arm's and
-  /// a completion's both name their chat in userInfo.
-  func open(chatId: String) {
-    pendingOpen = chatId
-    channel?.invokeMethod("open", arguments: chatId)
-  }
-
-  /// The arms' namespace: the request code is the identifier, and the arm
-  /// write, the cancel, the prune and the present policy all spell it
-  /// through this pair — the macOS plugin's jobLabel, minus the store
-  /// namespacing the notification centre wants none of. A completion post
-  /// wears `chat.<id>` and nothing parses it for a code.
-  static let triggerPrefix = "trigger."
-
+  /// An arm's identifier: the request code under the arms' namespace, which
+  /// the arm write, the cancel, the prune and the present policy all spell
+  /// through `triggerPrefix`. A completion post wears `chat.<id>` and nothing
+  /// parses it for a code.
   static func triggerIdentifier(_ code: Int) -> String {
     triggerPrefix + "\(code)"
-  }
-
-  /// One completion hop for both posts: the error stays on this side as a
-  /// `FlutterError` for Dart to log.
-  private func add(_ request: UNNotificationRequest, errorName: String,
-                   then result: @escaping FlutterResult) {
-    UNUserNotificationCenter.current().add(request) { error in
-      DispatchQueue.main.async {
-        result(error.map {
-          FlutterError(code: errorName, message: String(describing: $0), details: nil)
-        })
-      }
-    }
-  }
-
-  func userNotificationCenter(
-    _ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse
-  ) async {
-    // A tap is the default action; a dismiss is not an opening and says
-    // nothing the chat wants.
-    guard response.actionIdentifier == UNNotificationDefaultActionIdentifier else {
-      return
-    }
-    guard let chatId = response.notification.request.content.userInfo["chatId"] as? String
-    else {
-      return
-    }
-    open(chatId: chatId)
-  }
-
-  /// The frontmost app is shown the completion banner it would otherwise
-  /// swallow, the way Android's always-posted notification reads — but not
-  /// a due arm's: when the process is here, its own clock runs that fire a
-  /// moment behind the system's, so the banner would arrive beside the run
-  /// it came with.
-  func userNotificationCenter(
-    _ center: UNUserNotificationCenter, willPresent notification: UNNotification
-  ) async -> UNNotificationPresentationOptions {
-    notification.request.identifier.hasPrefix("trigger.") ? [] : [.banner, .sound]
   }
 }

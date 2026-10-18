@@ -19,6 +19,7 @@
 		E00000001AAAAAAAAAAAAAAAA /* entoli.icon in Resources */ = {isa = PBXBuildFile; fileRef = E00000002AAAAAAAAAAAAAAAA /* entoli.icon */; };
 		E00000003AAAAAAAAAAAAAAAA /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = E00000004AAAAAAAAAAAAAAAA /* PrivacyInfo.xcprivacy */; };
 		E1D2B33B4C5D6E7F8A90B1C2 /* RemindersPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1D2B33A4C5D6E7F8A90B1C2 /* RemindersPlugin.swift */; };
+		E1D2B33D4C5D6E7F8A90B1C2 /* RemindersShared.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1D2B33C4C5D6E7F8A90B1C2 /* RemindersShared.swift */; };
 		F01CE00000000000000000C1 /* VoiceChannel.swift in Sources */ = {isa = PBXBuildFile; fileRef = F01CE00000000000000000C0 /* VoiceChannel.swift */; };
 		F01CE00000000000000000D1 /* AppleFmChannel.swift in Sources */ = {isa = PBXBuildFile; fileRef = F01CE00000000000000000D0 /* AppleFmChannel.swift */; };
 		FC942E4D954581A69F70C2AB /* IshCore.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = E2AD518B0A99A053D1A7C29F /* IshCore.xcframework */; };
@@ -68,6 +69,7 @@
 		E00000002AAAAAAAAAAAAAAAA /* entoli.icon */ = {isa = PBXFileReference; lastKnownFileType = folder.iconcomposer.icon; path = entoli.icon; sourceTree = "<group>"; };
 		E00000004AAAAAAAAAAAAAAAA /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		E1D2B33A4C5D6E7F8A90B1C2 /* RemindersPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemindersPlugin.swift; sourceTree = "<group>"; };
+		E1D2B33C4C5D6E7F8A90B1C2 /* RemindersShared.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = RemindersShared.swift; path = ../macos/Runner/RemindersShared.swift; sourceTree = SOURCE_ROOT; };
 		E2AD518B0A99A053D1A7C29F /* IshCore.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = IshCore.xcframework; path = ../tool/ios/ish/dist/IshCore.xcframework; sourceTree = SOURCE_ROOT; };
 		F01CE00000000000000000C0 /* VoiceChannel.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = VoiceChannel.swift; sourceTree = "<group>"; };
 		F01CE00000000000000000D0 /* AppleFmChannel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleFmChannel.swift; sourceTree = "<group>"; };
@@ -142,6 +144,7 @@
 				F01CE00000000000000000D0 /* AppleFmChannel.swift */,
 				7884E8672EC3CC0400C636F2 /* SceneDelegate.swift */,
 				E1D2B33A4C5D6E7F8A90B1C2 /* RemindersPlugin.swift */,
+				E1D2B33C4C5D6E7F8A90B1C2 /* RemindersShared.swift */,
 				74858FAD1ED2DC5600515810 /* Runner-Bridging-Header.h */,
 			);
 			path = Runner;
@@ -308,6 +311,7 @@
 				1498D2341E8E89220040F4C2 /* GeneratedPluginRegistrant.m in Sources */,
 				7884E8682EC3CC0700C636F2 /* SceneDelegate.swift in Sources */,
 				E1D2B33B4C5D6E7F8A90B1C2 /* RemindersPlugin.swift in Sources */,
+				E1D2B33D4C5D6E7F8A90B1C2 /* RemindersShared.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

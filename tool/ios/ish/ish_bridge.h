@@ -30,14 +30,18 @@
 
 // The handle Dart holds. Opaque from its side; a pointer to this struct.
 typedef struct {
-    // The iSH guest task running the persistent /bin/sh. Null once the shell
-    // has died and not yet respawned.
-    struct task *task;
+    // The guest pid of the persistent /bin/sh, which is also its process
+    // group: every init child is its own session leader (construct_task's
+    // task_setsid), and the commands it runs inherit the group. A pid rather
+    // than the task, which is freed when the shell exits; the signals go
+    // through send_group_signal, which looks it up under pids_lock.
+    pid_t_ pid;
     // The host ends of the two pipes the session's stdio is plumbed through.
     // The guest holds the other ends as its fds 0, 1 and 2; the bridge reads
     // and writes these with the host's own read(2) and write(2), which is
-    // what iSH's adhoc-fd plumbing puts behind the guest fds. hangup closes
-    // and -1s the read end; destroy closes only what is still open.
+    // what iSH's adhoc-fd plumbing puts behind the guest fds. destroy closes
+    // every one; nothing else does, so a worker's read never races a reused
+    // fd number.
     int stdin_write;
     int stdout_read;
     // A pipe the hangup's byte lands in, whose read end a run polls beside
@@ -71,7 +75,9 @@ void ish_boot(const char *rootfs_dir);
 // guest at /root (the same clean path proot gives it on Android, so the
 // model is told `~` and not the app container's layout); [cwd] is where the
 // shell starts, in the guest's own words — /root plus the chat workspace's
-// suffix past the project workspace.
+// suffix past the project workspace. /root names one project at a time: a
+// [home] other than the bound one rebinds it, which the caller does only
+// once no session of the other project is left running.
 //
 // Returns null and sets *error where the rootfs is not present or the shell
 // failed to start.
@@ -108,17 +114,16 @@ int32_t ish_session_poll(ish_session *session);
 // guest is gone, -2 worth retrying (EINTR/EAGAIN), -1 fatal.
 int32_t ish_session_read(ish_session *session, char *buf, int32_t cap);
 
-// Deliver SIGINT to the guest shell. A no-op where the shell has died, which
-// is what the task pointer being null says.
+// Deliver SIGINT to the guest shell's process group — the command and the
+// shell, whose trap keeps it alive. A no-op where the group is gone.
 void ish_session_interrupt(ish_session *session);
 
-// The escalation for a command that ignored the interrupt: SIGKILL the guest,
-// close the read end, and drop one byte into the wake pipe a run polls beside
-// its stdout — the byte, not the close, is what returns it, since a close
-// does not wake a reader parked on the same fd and a child the kill did not
-// reach can hold the guest's write end for its own life. The kill leads, or
-// a dying guest writes into the closing pipe end and the interpreter dies of
-// SIGPIPE. Non-blocking; safe from another thread while ish_session_run is
+// The escalation for a command that ignored the interrupt: SIGKILL the
+// guest's process group and drop one byte into the wake pipe a run polls
+// beside its stdout — the byte is what returns it, since a child that left
+// the group can hold the guest's write end for its own life. The read end
+// stays open for destroy: closing it here would race the worker's read of
+// the same fd number. Non-blocking; safe from another thread while a run is
 // pending on the session.
 void ish_session_hangup(ish_session *session);
 
