@@ -150,7 +150,7 @@ class _NewChatState extends ConsumerState<_NewChat> {
     if (_starting) return const SizedBox.shrink();
     // A paired device's project: its setup and its voice are that device's.
     if (at.device != null) {
-      if (ref.watch(projectFrozenProvider(at))) return const ViewOnlyBar(online: false);
+      if (ref.watch(projectFrozenProvider(at))) return const ViewOnlyBar();
       return Composer(
         controller: _controller,
         agentSpeaking: false,
@@ -694,18 +694,12 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
       _checkExpiry(context, chat.state);
     }
 
-    // A chat being typed into from a paired device says so: the prompts
-    // arriving are somebody else's, and nothing else on the page would tell.
-    final drivenBy = ref.watch(drivenChatsProvider)[widget.chatId];
     return _page(
       context,
       chat: chat,
       view: view,
       editing: notifier,
-      details: [
-        if (drivenBy != null)
-          _TitleLine(icon: Icons.edit_outlined, text: "Driven from $drivenBy"),
-      ],
+      details: const [],
       whenEmpty: _EmptyChat(project: chat.state.project, controller: _controller),
       bottom: ref.watch(setupCompleteProvider(chat.state.project))
           ? _turnBar(
@@ -728,12 +722,11 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
 
   /// A mirrored chat's page. Every byte came over the wire and stays in RAM,
   /// and every write goes back to the home device — the repository routes the
-  /// settings there, and the controller the edits. Control decides the
-  /// composer and the editing row; the turn runs on the home device either way.
+  /// settings there, and the controller the turns and edits. Offline, it is a
+  /// snapshot: read, and nothing to type into.
   Widget _mirrored(BuildContext context) {
     final view = ref.watch(mirrorChatControllerProvider(widget.chatId));
     final driver = ref.read(mirrorChatControllerProvider(widget.chatId).notifier);
-    final control = ref.watch(mirrorControlProvider(widget.chatId));
     ref.listen(mirrorChatControllerProvider(widget.chatId), (_, _) => _follow.jumpIfFollowing());
     // One pass over the Remotes list for the two things drawn from it, so the
     // page rebuilds when they change rather than whenever anything does.
@@ -749,35 +742,25 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
     if (chat == null) return _waiting();
     _opening(chat);
 
-    final held = control.held && online;
-    final controls = ref.read(mirrorControlProvider(widget.chatId).notifier);
     return _page(
       context,
       chat: chat,
       view: view,
-      details: [_TitleLine(icon: Icons.devices_other, text: deviceName)],
-      // The conversation is the holder's to change, the way the composer is.
-      editing: held ? driver : null,
+      // The device is the strip's to say.
+      details: const [],
+      editing: online ? driver : null,
       whenEmpty: const Center(child: Text("No messages yet")),
-      banner: !online
-          ? MirrorStrip.offline(deviceName: deviceName)
-          : held
-              ? MirrorStrip.inControl(
-                  deviceName: deviceName, onRelease: controls.release)
-              : null,
-      bottom: held
+      banner: online
+          ? MirrorStrip.remote(deviceName: deviceName)
+          : MirrorStrip.offline(deviceName: deviceName),
+      bottom: online
           ? _turnBar(
               view: view,
               driver: driver,
               project: chat.state.project,
               device: deviceId,
               workspace: null)
-          : ViewOnlyBar(
-              online: online,
-              asking: control.asking,
-              takenByAnother: control.takenByAnother,
-              onTakeControl: controls.take,
-            ),
+          : const ViewOnlyBar(),
     );
   }
 

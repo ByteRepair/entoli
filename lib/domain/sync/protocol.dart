@@ -20,8 +20,7 @@ part "protocol.g.dart";
 ///
 /// Commands never travel. A prompt sent from a mirror is *run* on the chat's
 /// home device, through the same `ChatController` a local one goes through —
-/// what comes back is the ordinary record stream. What the control arms move
-/// is who may type, not where the work happens.
+/// what comes back is the ordinary record stream.
 @freezed
 sealed class SyncMessage with _$SyncMessage {
   /// The home device's chat list, sent right after `hello` and again
@@ -112,26 +111,7 @@ sealed class SyncMessage with _$SyncMessage {
 
   const factory SyncMessage.pong() = SyncPong;
 
-  // ---- Control, and driving a turn from the other end. ------------------
-
-  /// Who holds the chat, as the home device sees it — a device id, or null
-  /// for nobody. Pushed to every subscriber whenever it changes, so a second
-  /// mirror watching the same chat sees that someone else has it.
-  const factory SyncMessage.controlState({
-    required String chatId,
-    String? holder,
-  }) = SyncControlState;
-
-  const factory SyncMessage.controlRequest({required String chatId}) =
-      SyncControlRequest;
-
-  const factory SyncMessage.controlGrant({
-    required String chatId,
-    required bool granted,
-  }) = SyncControlGrant;
-
-  const factory SyncMessage.controlRelease({required String chatId}) =
-      SyncControlRelease;
+  // ---- Driving a turn from the other end. -------------------------------
 
   /// The turn-scoped view state a mirror cannot get from the log: whether one
   /// is running, what it is waiting to be allowed or told, and the line the
@@ -172,7 +152,7 @@ sealed class SyncMessage with _$SyncMessage {
   const factory SyncMessage.turnResume({required String chatId}) =
       SyncTurnResume;
 
-  // ---- Editing the conversation, from the holder alone. -----------------
+  // ---- Editing the conversation. ----------------------------------------
 
   const factory SyncMessage.editResend({
     required String chatId,
@@ -219,7 +199,7 @@ sealed class SyncMessage with _$SyncMessage {
   const factory SyncMessage.chatDelete({required String chatId}) =
       SyncChatDelete;
 
-  /// Make a chat in [project] and say [text] in it, the asker holding it.
+  /// Make a chat in [project] and say [text] in it.
   /// Answered by [SyncChatStarted], after the chat list that names it.
   const factory SyncMessage.chatStart({
     required String requestId,

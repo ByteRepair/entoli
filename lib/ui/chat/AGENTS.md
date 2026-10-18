@@ -628,8 +628,8 @@ the divider its only evidence, the way the memory extraction's note is.
 mirrored from a paired device, and `TurnDriver` is what both implement so that
 every widget between them — the composer, the turn surface, the question panel,
 the approval banner — is the same widget at either end. One runs the turn; the
-other sends it to the device that will. See "Control, and driving a turn from
-the other end" for the lock and what refuses what.
+other sends it to the device that will. See "Driving a turn from the other
+end" for what the home device takes and from whom.
 
 `ChatPage` branches on `isMirroredChatProvider` before anything else, and the
 two arms meet again at `_page`: same bar, same centred column, same

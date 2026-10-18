@@ -814,16 +814,6 @@ class RemoteChats extends HubValue<List<RemoteChatEntry>> {
 final remoteChatsProvider =
     NotifierProvider<RemoteChats, List<RemoteChatEntry>>(RemoteChats.new);
 
-/// The other direction: chats of *this* device a paired one is driving, by
-/// the name of the device driving them.
-class DrivenChats extends HubValue<Map<String, String>> {
-  @override
-  ValueListenable<Map<String, String>> of(SyncHub hub) => hub.drivenChats;
-}
-
-final drivenChatsProvider =
-    NotifierProvider<DrivenChats, Map<String, String>>(DrivenChats.new);
-
 /// Every device this one has paired with, online or not. One list rather than
 /// the registry for membership and the hub for status: a device paired while
 /// the Sync page was open landed in the hub and not in the registry read the

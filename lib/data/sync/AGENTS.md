@@ -1,9 +1,9 @@
-# Sync: paired devices, live mirrors, remote control
+# Sync: paired devices, live mirrors, driving a chat from the other end
 
 Two Entoli devices pair over a QR or typed code, open a WebRTC data channel
 between them, and one mirrors the other's chats or drives them remotely.
-Commands always run on the chat's home device; control moves only who
-types/prompts/approves.
+Commands always run on the chat's home device; a mirror only types, prompts
+and approves.
 
 ## The threat model and how it is answered
 
@@ -138,7 +138,7 @@ the code has a seam rather than by subject:
   here together, on purpose: they are two ends of one conversation, every
   message the serving side sends is one the mirror side receives, and a
   protocol change is never one without the other. Separating them by which
-  end you are looking from would put the control lock, resource transfer and
+  end you are looking from would put driving, resource transfer and
   chat-following each in two files.
 
 `pairing.dart` owns the three decisions above the wire:
@@ -275,10 +275,11 @@ home device is elsewhere. Records replay through the same pure
 `chatFrom`/`replayTree` a reload uses, so the page draws the log rather than a
 second rendering of it.
 
-`ChatPage` branches on `isMirroredChatProvider`: `ViewOnlyBar` where the
-composer goes until this device holds the chat, a `MirrorStrip` under the
-title bar — "Running on" while held, offline while the home device is away —
-and no expiry check. The same strip heads every page whose data is a paired
+`ChatPage` branches on `isMirroredChatProvider`: online, a composer and the
+editing row like a local chat, under a `MirrorStrip` naming the device ("On
+<device>") — the one place the page names it, the title bar no longer does;
+offline, the strip says so and `ViewOnlyBar` takes the composer's place over a
+snapshot that has stopped moving. No expiry check. The same strip heads every page whose data is a paired
 device's: a mirror's chat settings, a paired project's settings and its
 memories, as `MirrorStrip.remote` ("On <device>") or offline while it is away.
 
@@ -301,17 +302,16 @@ since those messages go to subscribers only. A home device gone ends the wait
 with nothing written, and a page reading a mirror whose device is away offers
 no writes at all.
 
-**No lock for these.** A paired device is the user's own; the lock is about two
-devices driving one turn, not about who may rename a chat. What the home end
-does check is that the id is one of its chats (`_ours`) — a write naming any
+**Nothing to hold for these.** A paired device is the user's own. What the home
+end does check is that the id is one of its chats (`_ours`) — a write naming any
 other would create one — and it keeps the chat's id and project from its own
 copy, since a move is not a state write. Moving is not routed: where to is a
 project on the home device, which this device cannot list yet.
 
 **Editing the conversation is a turn verb.** Edit, regenerate and the thread
-arrows go through `TurnDriver` to the home device's `ChatController`, held to
-the lock like a prompt, so the editing row shows only while this device holds
-the chat. A thread change is computed from the conversation the controller
+arrows go through `TurnDriver` to the home device's `ChatController`, taken
+from a following device like a prompt, and the editing row shows while the
+device is online. A thread change is computed from the conversation the controller
 holds, which is the home device's.
 
 The model picker and the workspace are left off a mirror's settings: the
@@ -393,7 +393,7 @@ welcome opens every followed project again rather than trusting what is held.
 A project gone from the device's list is dropped.
 
 **Starting a chat there.** `chatStart` asks the home device to make one in the
-project, take the first prompt and hand this device the lock; it lists the new
+project and take the first prompt; it lists the new
 chat before answering `chatStarted`, and messages from one peer arrive in
 order, so the mirror is there to open by the time the id is. The new-chat
 screen shows a spinner until then and the chat page its own until the
@@ -405,7 +405,7 @@ starters are that device's library.
 deliberately separate from `chatListProvider`, which reads the local store and
 stays sync-unaware. Two sources of truth, never merged.
 
-## Control, and driving a turn from the other end
+## Driving a turn from the other end
 
 **Nothing about a turn ever moves.** A prompt typed on a mirror is *run* on the
 chat's home device, by the same `ChatController` a locally typed one goes
@@ -414,21 +414,15 @@ ordinary record stream that was already mirroring. What crosses the wire is the
 asking and the answering. The commands stay where the files are, which is the
 whole reason the chat has a home device at all.
 
-**The lock is the home device's answer.** `controlRequest` is a request:
-`_control` maps a chat to the one device id holding it, first asker wins, and
-`controlGrant` plus a `controlState` to every subscriber says what happened. A
-mirror never decides it has control — `holdsControl` compares the holder the
-home end sent against this device's own id — which is what makes a race between
-two phones resolve rather than double up. Re-asking while already holding it is
-granted, since a mirror that reconnected does not know it never lost the lock.
-
-Every arm that drives a turn — `promptSend`, `turnResume`, `turnAbort`,
-`approvalRespond`, `questionsRespond` — is refused at the home device unless
-the sender holds the chat. **A page drawing a composer is not what permits a
-turn**; the guard on the mirror side only exists so it does not shout into the
-void. A lock is released by `controlRelease`, by the chat being deleted, or by
-the connection carrying it going away — one that outlived its connection would
-leave the chat unusable at both ends until somebody restarted.
+**There is no lock.** A paired device is the user's own, so any device
+following a chat may drive it: every arm that drives a turn — `promptSend`,
+`turnResume`, `turnAbort`, `approvalRespond`, `questionsRespond`, and the
+edit verbs — is taken at the home device from a peer that has the chat open
+(`_follows`, its subscription) and dropped from one that does not, since an id
+it was never shown names nothing to drive. There was a control lock, one
+holder at a time with Take control and Hand back; it guarded nothing a paired
+device is not already trusted with, and only made a mirror press a button
+before typing.
 
 **The turn-scoped state is its own message.** Whether a turn is running, what
 it is waiting to be allowed, what it is waiting to be told, the line the
@@ -441,9 +435,9 @@ rather than a second encoding of them. `AskRequest.argumentsJson` exists for
 that and nothing else reads it.
 
 `RemoteTurnDriver` is the home end, read once in `main` for its effect the way
-`TurnKeepAlive` is. It holds one `ChatController` open per **watched** chat —
-not per held one — because a mirror that is only reading still has to see a
-turn happening; that is what `SyncHub.servedChats` is for. Publishing is the
+`TurnKeepAlive` is. It holds one `ChatController` open per **watched** chat,
+because a mirror has to see a turn happening; that is what
+`SyncHub.servedChats` is for. Publishing is the
 same subscription's other half, and it is deduplicated: `ChatViewState` has no
 `==` and is replaced on every flush of a streaming reply, tens of times a
 second, while none of what `turnState` carries changes between them. The words
@@ -452,19 +446,14 @@ themselves cross as records.
 `TurnDriver` is the interface the two controllers meet on, so `TurnSurface`,
 `TurnQuestions`, `Composer` and the approval banner are the same widgets at
 both ends. `ChatController` implements it by running the turn;
-`MirrorChatController` implements it by sending. Attachments are the one verb
-missing: their bytes would have to cross to be saved under a chat on the other
-side. `chatViewProvider` is the view from whichever controller a chat has, for
+`MirrorChatController` implements it by sending, attachments ahead of the
+prompt (see "Attachments"). `chatViewProvider` is the view from whichever controller a chat has, for
 a page — the Context page — that only reads it.
 
 Offline outranks everything a mirror last heard. A status line from before the
 connection dropped is a turn claiming to still be alive, and an approval
 nothing can carry the answer to is worse than no approval — so `_viewOf` blanks
 them all.
-
-The home device says so too: `drivenChats` is chat id to the name of the device
-driving it, and the local chat page draws it as a title line. Prompts arriving
-that nobody here typed are otherwise unexplained.
 
 ### The pairing secret is not a valid base64 length
 

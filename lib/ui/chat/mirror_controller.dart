@@ -23,8 +23,8 @@ import "chat_controller.dart"
 ///
 /// It is a [TurnDriver] as well, and none of that runs anything here. Every
 /// verb goes over the wire to the chat's home device, which runs it through
-/// its own [ChatController] — and that device refuses the lot unless this one
-/// holds the chat, so a page drawing a composer is not what permits a turn.
+/// its own [ChatController]. A paired device is the user's own, so any one
+/// following the chat may drive it.
 class MirrorChatController extends Notifier<ChatViewState>
     implements TurnDriver {
   MirrorChatController(this.chatId);
@@ -134,53 +134,3 @@ final chatViewProvider = Provider.family<ChatViewState, String>((ref, chatId) =>
     ref.watch(isMirroredChatProvider(chatId))
         ? ref.watch(mirrorChatControllerProvider(chatId))
         : ref.watch(chatControllerProvider(chatId)));
-
-/// Who may type into a mirrored chat. Its own state rather than a field on
-/// [ChatViewState] because it is not about the turn — a chat with nothing
-/// running still has a holder, and a local chat has no such question.
-class MirrorControl {
-  const MirrorControl({this.holder, this.held = false, this.asking = false});
-
-  /// The device id the home end says has it, or null for nobody. Always the
-  /// home device's answer: taking control is a request, not a decision.
-  final String? holder;
-
-  /// Whether that is this device.
-  final bool held;
-
-  /// Asked for and not yet answered — what the button says while it waits.
-  final bool asking;
-
-  /// Somebody else has it, which is the one case with nothing to offer.
-  bool get takenByAnother => holder != null && !held;
-}
-
-class MirrorControlNotifier extends Notifier<MirrorControl> {
-  MirrorControlNotifier(this.chatId);
-
-  final String chatId;
-  StreamSubscription<String>? _sub;
-
-  @override
-  MirrorControl build() {
-    final hub = ref.watch(syncHubProvider);
-    _sub = hub.mirrorUpdates.where((id) => id == chatId).listen((_) {
-      if (ref.mounted) state = _of(hub);
-    });
-    ref.onDispose(() => _sub?.cancel());
-    return _of(hub);
-  }
-
-  MirrorControl _of(SyncHub hub) => MirrorControl(
-        holder: hub.mirror(chatId)?.controlHolder,
-        held: hub.holdsControl(chatId),
-        asking: hub.isRequestingControl(chatId),
-      );
-
-  Future<void> take() => ref.read(syncHubProvider).requestControl(chatId);
-
-  Future<void> release() => ref.read(syncHubProvider).releaseControl(chatId);
-}
-
-final mirrorControlProvider = NotifierProvider.family<MirrorControlNotifier,
-    MirrorControl, String>(MirrorControlNotifier.new);

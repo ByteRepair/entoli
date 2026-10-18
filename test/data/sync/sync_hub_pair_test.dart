@@ -706,39 +706,19 @@ void main() {
     expect(await away.registry.list(), isEmpty);
   });
 
-  /// Control and teleport, over the same two real hubs. What is being proven
-  /// is that the lock is the *home* device's answer and that nothing runs
-  /// without it — a mirror drawing a composer is a consequence, not a
-  /// permission.
-  group("control", () {
+  /// Driving a chat from the other end, over the same two real hubs: what a
+  /// following device sends runs on the home device, and nothing else does.
+  group("driving", () {
     late _Turns turns;
 
     setUp(() => home.hub.remoteTurns = turns = _Turns(home.repo, home.config)..hub = home.hub);
 
-    test("asking for a free chat is granted and told to everyone", () async {
-      final state = await mirrored();
-
-      await away.hub.requestControl(state.id);
-      await waitForSync(() => away.hub.holdsControl(state.id));
-
-      expect(home.hub.heldBy(state.id), away.identity.id);
-      expect(home.hub.drivenChats.value[state.id], away.hub.deviceName);
-      expect(away.hub.mirror(state.id)!.controlHolder, away.identity.id);
-    });
-
     test("a rename of a connected device lands on every name it is said",
         () async {
       final state = await mirrored();
-      await away.hub.requestControl(state.id);
-      await waitForSync(() => away.hub.holdsControl(state.id));
-      expect(home.hub.drivenChats.value[state.id], away.hub.deviceName);
 
-      // The home end's row and its driven line read one book.
       await home.hub.rename(away.identity.id, "Renamed Away");
-      expect(home.hub.drivenChats.value[state.id], "Renamed Away");
       expect(home.hub.peers.value[away.identity.id]!.name, "Renamed Away");
-      // A lock, a status, a subscription: none of that moved.
-      expect(away.hub.holdsControl(state.id), isTrue);
 
       // The mirror side: its Remotes rows derive their name from the book,
       // which is what shows on screen — the mirror's own field stays the
@@ -752,30 +732,8 @@ void main() {
           "Renamed Home");
     });
 
-    test("a second device is refused, and hears who has it", () async {
+    test("a following device's prompt runs on the home device", () async {
       final state = await mirrored();
-      final other = await _Device.create("${tempDir.path}/other");
-      addTearDown(other.hub.dispose);
-      final links = loopbackPair();
-      await pairing(home, other, links.$1, links.$2, psk: generatePsk());
-      other.hub.followChat(state.id);
-      await waitForSync(() => other.hub.mirror(state.id) != null);
-
-      await away.hub.requestControl(state.id);
-      await waitForSync(() => away.hub.holdsControl(state.id));
-      await other.hub.requestControl(state.id);
-      await waitForSync(
-          () => other.hub.mirror(state.id)!.controlHolder != null);
-
-      expect(other.hub.holdsControl(state.id), isFalse);
-      expect(other.hub.mirror(state.id)!.controlHolder, away.identity.id);
-      expect(home.hub.heldBy(state.id), away.identity.id);
-    });
-
-    test("the holder's prompt runs on the home device", () async {
-      final state = await mirrored();
-      await away.hub.requestControl(state.id);
-      await waitForSync(() => away.hub.holdsControl(state.id));
 
       await away.hub.sendRemotePrompt(state.id, "do the thing");
       await waitForSync(() => turns.prompts.isNotEmpty);
@@ -783,11 +741,9 @@ void main() {
       expect(turns.prompts.single, (state.id, "do the thing"));
     });
 
-    test("the holder's attachments go ahead of its prompt and arrive whole",
+    test("its attachments go ahead of its prompt and arrive whole",
         () async {
       final state = await mirrored();
-      await away.hub.requestControl(state.id);
-      await waitForSync(() => away.hub.holdsControl(state.id));
       // Past one chunk, so the pieces have to be put back together.
       final bytes = Uint8List.fromList(List.generate(70000, (i) => i % 251));
 
@@ -803,8 +759,6 @@ void main() {
 
     test("every verb reaches the home device's own controller", () async {
       final state = await mirrored();
-      await away.hub.requestControl(state.id);
-      await waitForSync(() => away.hub.holdsControl(state.id));
 
       await away.hub.resumeRemote(state.id);
       await away.hub.respondRemoteApproval(state.id, "a1", true);
@@ -822,10 +776,8 @@ void main() {
       expect(turns.answered.single.$3, ["yes"]);
     });
 
-    test("the holder's edits reach the home device's controller", () async {
+    test("its edits reach the home device's controller", () async {
       final state = await mirrored();
-      await away.hub.requestControl(state.id);
-      await waitForSync(() => away.hub.holdsControl(state.id));
 
       await away.hub.editRemote(state.id, "m1", "again");
       await away.hub.regenerateRemote(state.id, "r1");
@@ -841,17 +793,23 @@ void main() {
       ]);
     });
 
-    test("an edit from a device holding nothing is dropped", () async {
+    test("an edit from a device not following the chat is dropped", () async {
       final state = await mirrored();
+      final other = await _Device.create("${tempDir.path}/other");
+      addTearDown(other.hub.dispose);
+      final links = loopbackPair();
+      await pairing(home, other, links.$1, links.$2, psk: generatePsk());
+      // Listed there, never opened.
+      await waitForSync(() => other.hub.mirror(state.id) != null);
 
-      await away.hub.sendForTest(state.id,
+      await other.hub.sendForTest(state.id,
           SyncMessage.regenerate(chatId: state.id, messageId: "r1"));
       await Future<void>.delayed(Duration.zero);
 
       expect(turns.edits, isEmpty);
     });
 
-    test("the mirror's repository writes land at home, with no lock, and wait "
+    test("the mirror's repository writes land at home, and wait "
         "for the echo", () async {
       final state = await mirrored();
 
@@ -1037,8 +995,8 @@ void main() {
           away.hub.remoteProject(base)!.settings.description == "while away");
     });
 
-    test("a chat started from here is made there, held by this device, and "
-        "listed before it is answered", () async {
+    test("a chat started from here is made there and listed before it is "
+        "answered", () async {
       await home.repo.createProject("work");
       await mirrored();
 
@@ -1048,10 +1006,7 @@ void main() {
       expect(id, isNotNull);
       expect((await home.store.loadState(id!))!.project, "work");
       expect(away.hub.mirror(id), isNotNull);
-      expect(home.hub.heldBy(id), away.identity.id);
       expect(turns.prompts.last, (id, "hello"));
-      away.hub.followChat(id);
-      await waitForSync(() => away.hub.holdsControl(id));
     });
 
     test("a chat asked for in a project that is not there is not made",
@@ -1065,47 +1020,20 @@ void main() {
       expect(turns.prompts, isEmpty);
     });
 
-    test("a prompt from a device holding nothing is dropped", () async {
+    test("a prompt from a device not following the chat is dropped", () async {
       final state = await mirrored();
+      final other = await _Device.create("${tempDir.path}/other");
+      addTearDown(other.hub.dispose);
+      final links = loopbackPair();
+      await pairing(home, other, links.$1, links.$2, psk: generatePsk());
+      // Listed there, never opened.
+      await waitForSync(() => other.hub.mirror(state.id) != null);
 
-      // Past the local guard, which is about not shouting into the void
-      // rather than about permission: the home device is what refuses. The
-      // frame was enqueued by the send already; one drain delivers and
-      // handles it.
-      await away.hub.sendForTest(
+      await other.hub.sendForTest(
           state.id, SyncMessage.promptSend(chatId: state.id, text: "hi"));
       await Future<void>.delayed(Duration.zero);
 
       expect(turns.prompts, isEmpty);
-    });
-
-    test("releasing hands it back", () async {
-      final state = await mirrored();
-      await away.hub.requestControl(state.id);
-      await waitForSync(() => away.hub.holdsControl(state.id));
-
-      await away.hub.releaseControl(state.id);
-      await waitForSync(() => home.hub.heldBy(state.id) == null);
-
-      await waitForSync(
-          () => away.hub.mirror(state.id)!.controlHolder == null);
-      expect(home.hub.drivenChats.value, isEmpty);
-    });
-
-    test("a lock does not outlive the connection that took it", () async {
-      final state = _seedChat(home);
-      final links = loopbackPair();
-      await pair(links.$1, links.$2);
-      away.hub.followChat(state.id);
-      await waitForSync(() => away.hub.mirror(state.id) != null);
-      await away.hub.requestControl(state.id);
-      await waitForSync(() => away.hub.holdsControl(state.id));
-
-      await links.$1.close();
-      await links.$2.close();
-
-      await waitForSync(() => home.hub.heldBy(state.id) == null);
-      expect(home.hub.drivenChats.value, isEmpty);
     });
 
     test("the turn the home device is running reaches the mirror", () async {

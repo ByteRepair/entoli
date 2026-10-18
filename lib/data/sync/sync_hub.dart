@@ -56,12 +56,6 @@ class MirrorChat {
   ChatMeta meta;
   final List<ChatRecord> records = [];
 
-  /// Which device the home end says holds the chat, or null for nobody.
-  /// Never assumed locally: taking control is the home device's answer, so
-  /// a request that lost a race reads as somebody else's id rather than as
-  /// this device's own.
-  String? controlHolder;
-
   /// The turn, as the home device last reported it. None of this is in the
   /// log — a running turn, a command waiting to be allowed, a question
   /// waiting to be answered — so it arrives as its own message.
@@ -284,11 +278,6 @@ class SyncHub implements ArtifactBytes, RemoteChats {
   /// from where the mirror already is.
   final _desired = <String>{};
 
-  /// Chats of this device somebody else is driving: chat id to the device id
-  /// holding it. One holder at a time, and the home device is never in it —
-  /// this device typing is not a lock, it is the absence of one.
-  final _control = <String, String>{};
-
   /// Set by the container once there is a way to run a turn. Null until then,
   /// which is every test that is only about the wire.
   RemoteTurns? remoteTurns;
@@ -306,23 +295,9 @@ class SyncHub implements ArtifactBytes, RemoteChats {
   /// rebuilt whenever anything under it moves.
   final remotes = ValueNotifier<List<RemoteChatEntry>>(const []);
 
-  /// Chats of this device somebody else is driving, by the name of the device
-  /// driving them — what the local chat page says over a conversation being
-  /// typed into from elsewhere. Names rather than ids: it is read out.
-  final drivenChats = ValueNotifier<Map<String, String>>(const {});
-
   ValueNotifier<Set<String>> get servedChats => _peers.servedChats;
 
   MirrorChat? mirror(String chatId) => _mirrors[chatId];
-
-  /// Which device is driving one of *this* device's chats, or null. What the
-  /// local chat page reads to say it is being typed in from elsewhere.
-  String? heldBy(String chatId) => _control[chatId];
-
-  /// Whether this device holds a mirrored chat — the home device's answer,
-  /// never a local guess.
-  bool holdsControl(String chatId) =>
-      _mirrors[chatId]?.controlHolder == identity.id;
 
   /// Whether the connection to [chatId]'s home device is up. False for a
   /// stale snapshot: the page disables the composer and shows its banner.
@@ -639,22 +614,18 @@ class SyncHub implements ArtifactBytes, RemoteChats {
           }
         }
 
-      // -- serving: somebody else driving one of this device's chats
-      case SyncControlRequest(:final chatId):
-        await _serveControlRequest(peer, chatId);
-      case SyncControlRelease(:final chatId):
-        await _serveControlRelease(peer, chatId);
+      // -- serving: a paired device driving one of this device's chats
       case SyncPromptSend(:final chatId, :final text, :final files):
         final attachments = _takeUploads(peer, files);
-        if (_holds(peer, chatId)) {
+        if (_follows(peer, chatId)) {
           remoteTurns?.prompt(chatId, text, attachments: attachments);
         }
       case SyncTurnResume(:final chatId):
-        if (_holds(peer, chatId)) remoteTurns?.resume(chatId);
+        if (_follows(peer, chatId)) remoteTurns?.resume(chatId);
       case SyncTurnAbort(:final chatId):
-        if (_holds(peer, chatId)) remoteTurns?.abort(chatId);
+        if (_follows(peer, chatId)) remoteTurns?.abort(chatId);
       case SyncApprovalRespond(:final chatId, :final approvalId, :final allow):
-        if (_holds(peer, chatId)) {
+        if (_follows(peer, chatId)) {
           remoteTurns?.approve(chatId, approvalId, allow);
         }
       case SyncQuestionsRespond(
@@ -662,21 +633,21 @@ class SyncHub implements ArtifactBytes, RemoteChats {
           :final requestId,
           :final answers
         ):
-        if (_holds(peer, chatId)) {
+        if (_follows(peer, chatId)) {
           remoteTurns?.answer(chatId, requestId, answers);
         }
       case SyncEditResend(:final chatId, :final messageId, :final text):
-        if (_holds(peer, chatId)) {
+        if (_follows(peer, chatId)) {
           remoteTurns?.editResend(chatId, messageId, text);
         }
       case SyncRegenerate(:final chatId, :final messageId):
-        if (_holds(peer, chatId)) remoteTurns?.regenerate(chatId, messageId);
+        if (_follows(peer, chatId)) remoteTurns?.regenerate(chatId, messageId);
       case SyncThreadStep(:final chatId, :final messageId, :final step):
-        if (_holds(peer, chatId)) {
+        if (_follows(peer, chatId)) {
           remoteTurns?.stepThread(chatId, messageId, step);
         }
       case SyncThreadDelete(:final chatId, :final messageId):
-        if (_holds(peer, chatId)) remoteTurns?.deleteThread(chatId, messageId);
+        if (_follows(peer, chatId)) remoteTurns?.deleteThread(chatId, messageId);
 
       // -- serving: a paired device is the user's own, so no lock for these
       case SyncStateWrite(:final chatId, :final state, :final reanchor):
@@ -708,8 +679,6 @@ class SyncHub implements ArtifactBytes, RemoteChats {
         String? chatId;
         if (turns != null && await _isProject(project)) {
           chatId = await turns.startChat(project);
-          _control[chatId] = peer.deviceId;
-          _refreshDriven();
           // Listed before it is answered, so the asker has the mirror to open.
           await _announceChats();
           turns.prompt(chatId, text, attachments: attachments);
@@ -764,13 +733,6 @@ class SyncHub implements ArtifactBytes, RemoteChats {
         }
 
       // -- mirroring: what the home device says about a chat we follow
-      case SyncControlState(:final chatId, :final holder):
-        _onMirror(peer, chatId, (mirror) => mirror.controlHolder = holder);
-      case SyncControlGrant(:final chatId, :final granted):
-        // The state message that follows is what actually moves the holder;
-        // a refusal is worth nothing more than dropping the asking flag.
-        if (!granted) _requesting.remove(chatId);
-        _touch(chatId);
       case SyncTurnState(
           :final chatId,
           :final running,
@@ -930,11 +892,10 @@ class SyncHub implements ArtifactBytes, RemoteChats {
     });
   }
 
-  /// Whether [peer] is the device this chat's control was granted to. Every
-  /// arm that drives a turn goes through it: a peer that never asked, or that
-  /// lost the race, must not be able to type into somebody's conversation.
-  bool _holds(LivePeer peer, String chatId) =>
-      _control[chatId] == peer.deviceId;
+  /// Whether [peer] has [chatId] open. Every arm that drives a turn goes
+  /// through it: a paired device is the user's own, so following the chat is
+  /// all it takes, and an id it was never shown names nothing to drive.
+  bool _follows(LivePeer peer, String chatId) => peer.subscriptions.contains(chatId);
 
   /// A fresh listing from the peer. Mirrors of this peer not in it go; those
   /// in it are added or refreshed — keeping records already held, so the
@@ -979,7 +940,6 @@ class SyncHub implements ArtifactBytes, RemoteChats {
     if (mirror == null || mirror.peerId != peerId) return;
     _mirrors.remove(chatId);
     byteCache.drop(chatId);
-    _requesting.remove(chatId);
     _rebuildRemotes();
     _touch(chatId);
   }
@@ -1004,10 +964,6 @@ class SyncHub implements ArtifactBytes, RemoteChats {
     try {
       if (state == null) throw StateError("no chat $chatId");
       peer.subscriptions.add(chatId);
-      // Who holds it goes with the snapshot: a mirror that reconnects mid-
-      // turn must not draw a Take control button for a chat it already has.
-      await peer.send(
-          SyncMessage.controlState(chatId: chatId, holder: _control[chatId]));
       await peer.send(SyncMessage.chatSnapshot(
         chatId: chatId,
         state: state,
@@ -1059,9 +1015,7 @@ class SyncHub implements ArtifactBytes, RemoteChats {
           peer.subscriptions.remove(chatId);
           unawaited(peer.send(SyncMessage.chatDeleted(chatId: chatId)));
         }
-        _control.remove(chatId);
         _announced.remove(chatId);
-        _refreshDriven();
         _peers.refreshServed();
       case ProjectsChanged():
         unawaited(_announceChats());
@@ -1100,42 +1054,6 @@ class SyncHub implements ArtifactBytes, RemoteChats {
     }
   }
 
-  // -------------------------------------------------------------- control
-
-  /// One holder at a time, first asker wins. Re-asking while already holding
-  /// it is granted rather than refused: a mirror that reconnected does not
-  /// know it never lost the lock.
-  Future<void> _serveControlRequest(LivePeer peer, String chatId) async {
-    final held = _control[chatId];
-    final granted = held == null || held == peer.deviceId;
-    if (granted) {
-      _control[chatId] = peer.deviceId;
-    }
-    await peer.send(
-        SyncMessage.controlGrant(chatId: chatId, granted: granted));
-    _announceControl(chatId);
-  }
-
-  Future<void> _serveControlRelease(LivePeer peer, String chatId) async {
-    if (_control[chatId] != peer.deviceId) return;
-    _control.remove(chatId);
-    _announceControl(chatId);
-  }
-
-  /// Everyone watching the chat hears who holds it, not only the asker — a
-  /// second mirror has to see that the first one took it.
-  void _announceControl(String chatId) {
-    _refreshDriven();
-    _peers.toSubscribers(chatId,
-        SyncMessage.controlState(chatId: chatId, holder: _control[chatId]));
-  }
-
-  void _refreshDriven() => drivenChats.value = {
-        for (final entry in _control.entries)
-          entry.key:
-              _peers.states.value[entry.value]?.name ?? entry.value,
-      };
-
   /// The turn as this device's own controller has it, on its way to whoever
   /// is watching. Called by the container on every change: none of this is in
   /// the log, so nothing else would carry it.
@@ -1159,34 +1077,11 @@ class SyncHub implements ArtifactBytes, RemoteChats {
         ));
   }
 
-  /// Chats this device holds on a peer, asked for and not yet answered. Only
-  /// so a button can say "asking"; the holder itself is the home device's.
-  final _requesting = <String>{};
-
-  bool isRequestingControl(String chatId) => _requesting.contains(chatId);
-
-  Future<void> requestControl(String chatId) async {
-    final peer = _peerHosting(chatId);
-    if (peer == null) return;
-    _requesting.add(chatId);
-    _touch(chatId);
-    await peer.send(SyncMessage.controlRequest(chatId: chatId));
-  }
-
-  Future<void> releaseControl(String chatId) async {
-    _requesting.remove(chatId);
-    final peer = _peerHosting(chatId);
-    if (peer == null) return;
-    await peer.send(SyncMessage.controlRelease(chatId: chatId));
-  }
-
-  /// Drive a turn on the chat's home device. Every one of these is refused
-  /// there unless this device holds the chat, so the check here is about not
-  /// sending into the void rather than about permission.
+  /// Drive a turn on the chat's home device, which runs it.
   Future<void> sendRemotePrompt(String chatId, String text,
       {List<Attachment> attachments = const []}) async {
     final peer = _peerHosting(chatId);
-    if (!holdsControl(chatId) || peer == null) return;
+    if (peer == null) return;
     final files = await _upload(peer, attachments);
     await peer.send(SyncMessage.promptSend(chatId: chatId, text: text, files: files));
   }
@@ -1244,14 +1139,11 @@ class SyncHub implements ArtifactBytes, RemoteChats {
   Future<void> deleteThreadRemote(String chatId, String messageId) =>
       _drive(chatId, SyncMessage.threadDelete(chatId: chatId, messageId: messageId));
 
-  Future<void> _drive(String chatId, SyncMessage message) async {
-    if (!holdsControl(chatId)) return;
-    await _peerHosting(chatId)?.send(message);
-  }
+  Future<void> _drive(String chatId, SyncMessage message) async =>
+      _peerHosting(chatId)?.send(message);
 
-  /// Straight to the chat's home device, past the guard in [_drive]. That
-  /// guard is about not shouting into the void; what refuses a peer holding
-  /// nothing is the home device, and this is how a test reaches it.
+  /// Any message straight to the chat's home device, for a test of what that
+  /// device refuses.
   @visibleForTesting
   Future<void> sendForTest(String chatId, SyncMessage message) async =>
       _peerHosting(chatId)?.send(message);
@@ -1377,13 +1269,6 @@ class SyncHub implements ArtifactBytes, RemoteChats {
     for (final call in _memoryCalls.values) {
       if (call.peerId == deviceId && !call.done.isCompleted) call.done.complete(null);
     }
-    // A lock outliving the connection that took it would leave the chat
-    // unusable at both ends until one side restarted.
-    for (final entry in _control.entries.toList()) {
-      if (entry.value != deviceId) continue;
-      _control.remove(entry.key);
-      _announceControl(entry.key);
-    }
     // Both directions: the chats this device served them, and the ones it
     // mirrors from them — a mirror's page has a banner to raise, and nothing
     // else tells it the snapshot has stopped moving.
@@ -1445,9 +1330,6 @@ class SyncHub implements ArtifactBytes, RemoteChats {
     await _peers.dispose();
     _mirrors.clear();
     byteCache.dispose();
-    _control.clear();
-    _requesting.clear();
-    drivenChats.value = const {};
     _desired.clear();
     remotes.value = const [];
     await _mirrorUpdates.close();
@@ -1463,11 +1345,9 @@ class SyncHub implements ArtifactBytes, RemoteChats {
   /// keeps what it calls this one until renamed there too.
   Future<void> rename(String deviceId, String name) async {
     await registry.rename(deviceId, name);
-    // The row and the driven line are the book's; the mirrors' Remotes rows
-    // derive theirs from that same PeerState at rebuild. One write, then the
-    // two rebuilds, is every surface the name is said on.
+    // The row is the book's; the mirrors' Remotes rows derive theirs from
+    // that same PeerState at rebuild.
     _peers.renamed(deviceId, name);
-    _refreshDriven();
     _rebuildRemotes();
   }
 

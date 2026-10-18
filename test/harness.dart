@@ -149,9 +149,7 @@ class TestApp {
   /// [remotes] is the Remotes section of the sidebar: chats mirrored from a
   /// paired device. Empty by default, which is every test with no sync in it —
   /// and load-bearing, because it is also what stands in for the [SyncHub]
-  /// nothing here builds. [mirrors] is what one of those chats reads as, and
-  /// [control] whether this device is driving one. [drivenBy] is the other
-  /// direction: chats of this device a paired one is typing into.
+  /// nothing here builds. [mirrors] is what one of those chats reads as.
   factory TestApp.create({
     PromptLibrary? library,
     bool launcherIcons = true,
@@ -175,8 +173,6 @@ class TestApp {
     int? systemAccent,
     List<RemoteChatEntry> remotes = const [],
     Map<String, ChatViewState> mirrors = const {},
-    Map<String, String> drivenBy = const {},
-    MirrorControl control = const MirrorControl(),
     Map<ProjectRef, RemoteProject> remoteProjects = const {},
     SyncHub? hub,
     Clock? clock,
@@ -307,11 +303,8 @@ class TestApp {
                     ],
                 })),
           ],
-          drivenChatsProvider.overrideWith(() => FakeDrivenChats(drivenBy)),
           mirrorChatControllerProvider
               .overrideWith2((id) => FakeMirrorChat(id, mirrors)),
-          mirrorControlProvider
-              .overrideWith2((id) => FakeMirrorControl(id, control)),
           if (hub == null)
             remoteProjectProvider.overrideWith2(
                 (project) => FakeRemoteProject(project, remoteProjects)),
