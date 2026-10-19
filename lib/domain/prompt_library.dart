@@ -110,7 +110,7 @@ abstract class PromptSource {
 class PromptLibrary {
   /// [documents] are in precedence order, lowest first — a later one replaces
   /// an earlier one of the same kind and name. That is how a file in
-  /// `$AGENT_CHAT_CONFIG` overrides the preset it shares a name with.
+  /// `$ENTOLI_CONFIG` overrides the preset it shares a name with.
   PromptLibrary(Iterable<PromptDocument> documents) {
     for (final document in documents) {
       _byKind.putIfAbsent(document.kind, () => {})[document.name] = document;

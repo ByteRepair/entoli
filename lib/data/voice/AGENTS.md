@@ -622,9 +622,9 @@ A downloaded Linux is beside them, at `<cacheDir>/rootfs/<id>/`, and it is there
 for exactly the same two reasons — see "A whole Linux under proot".
 
 `platformCacheDir` resolves it by hand, the way `platformDataDir` does:
-`$XDG_CACHE_HOME/agent-chat` or `~/.cache/agent-chat` on Linux,
-`~/Library/Caches/agent-chat` on macOS, `%LOCALAPPDATA%\agent-chat\Cache` on
-Windows, and `$AGENT_CHAT_CACHE` over any of them.
+`$XDG_CACHE_HOME/entoli` or `~/.cache/entoli` on Linux,
+`~/Library/Caches/entoli` on macOS, `%LOCALAPPDATA%\entoli\Cache` on
+Windows, and `$ENTOLI_CACHE` over any of them.
 
 **Android is the one place "cache" is the wrong word.** `getCacheDir()` is
 evictable — the system empties it under storage pressure and the app's settings

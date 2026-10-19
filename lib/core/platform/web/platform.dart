@@ -105,7 +105,7 @@ Future<AppleFm?> createAppleFm() async => null;
 LocalKvCache? createLocalKvCache(String cacheDir, LocalLlm localLlm) => null;
 
 /// Nominal: nothing here fetches a model.
-Future<String> cacheDir() async => "/agent-chat-cache";
+Future<String> cacheDir() async => "/entoli-cache";
 
 void registerVoiceLicences() {}
 
@@ -142,7 +142,7 @@ FileSystem createFileSystem() =>
     fileSystemWeb.withIdbOptions(options: FileSystemIdbOptions.pageDefault);
 
 /// Nominal but load-bearing: the root every path, chats included, is under.
-Future<String> dataDir() async => "/agent-chat";
+Future<String> dataDir() async => "/entoli";
 
 /// Without this the origin's storage is evictable. A browser that refuses
 /// leaves the data evictable and nothing else changed.

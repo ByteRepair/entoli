@@ -3,11 +3,12 @@
 Flutter (Linux/Web/Android/iOS/macOS) ChatGPT-style UI over a coding agent. Client-side:
 it calls the user's own LLM endpoints and runs commands on their machine.
 
-The app is named Entoli; most of the identifiers are not, and deliberately.
-The data directory is still `~/.config/agent-chat`, the env var is still
-`AGENT_CHAT_CONFIG`, and the Dart package is still `agent_chat`. Renaming any
-of those would leave the chats already written where nothing reads them, for a
-string nobody sees.
+The app is named Entoli, and so is everything a user can see of it: the data
+directory is `~/.config/entoli` and the cache's leaf is `entoli`, overridden
+by `ENTOLI_CONFIG` and `ENTOLI_CACHE`. They were `agent-chat` until just before
+the first public release, renamed with no migration since nobody outside had
+data in them. What still says `agent_chat` does so deliberately, being a
+string nobody sees: the Dart package, the method channels, the binary.
 
 The application id is `io.byterepair.entoli` — the Android `applicationId` and
 `namespace` and the Linux `APPLICATION_ID`, all one string. Changing it makes
@@ -154,8 +155,8 @@ with no engine running, which is why writes go through a rename. The file name
 is the reminder's and stayed, a rename being a migration.
 `<dataDir>/models.json` is models.dev trimmed to what the app reads, a cache
 refetched daily — see "The model catalog" in `lib/ui/widgets/AGENTS.md`.
-Data dir: `$AGENT_CHAT_CONFIG` if set, else `~/.config/agent-chat` (desktop),
-app-private storage (Android), and `/agent-chat` in a browser — where it is a
+Data dir: `$ENTOLI_CONFIG` if set, else `~/.config/entoli` (desktop),
+app-private storage (Android), and `/entoli` in a browser — where it is a
 name in IndexedDB rather than a path, and load-bearing all the same.
 `AppConfig` is not the only thing that knows this layout: `WorkspaceProvider`
 reads the workspace half of it in Kotlin, because Android's Files app asks with
@@ -171,7 +172,7 @@ question a `FileSystem` does not answer is where this platform keeps things,
 and that stays in `core/platform/`.
 
 The whole layout is in it, prefs included: `settings.json` on the web is
-`/agent-chat/settings.json` in IndexedDB, the same path it has on a disk. What
+`/entoli/settings.json` in IndexedDB, the same path it has on a disk. What
 that costs is the synchronous read — `fs_shim` has no sync methods anywhere,
 deliberately, because a browser cannot have them. `AppSettings.load` and
 `ProjectSettings.load` need one: the shell asks for the environment on every

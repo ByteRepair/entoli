@@ -14,7 +14,7 @@ void main() {
     tmpDir: "/data/user/0/pkg/cache/tools/tmp",
     resolvConf: "/data/user/0/pkg/cache/tools/etc/resolv.conf",
   );
-  const dataDir = "/data/user/0/pkg/app_flutter/agent-chat";
+  const dataDir = "/data/user/0/pkg/app_flutter/entoli";
   const defaultSkillsBundled = "$dataDir/projects/default/skills-bundled";
   const defaultUserSkills = "$dataDir/projects/default/skills";
   const home = "$dataDir/projects/default/workspace";

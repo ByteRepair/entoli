@@ -78,7 +78,7 @@ through `launchctl bootstrap gui/<uid>` (raw plists, not `SMAppService`, which
 wants its plist inside a signed bundle's `Contents/Library/LaunchAgents/`
 where a per-code runtime rewrite would break the signature). The label
 carries the bundle identifier plus the data directory the jobs serve, Dart
-handing it per call — the debug leaf, an `AGENT_CHAT_CONFIG` scratch and the
+handing it per call — the debug leaf, an `ENTOLI_CONFIG` scratch and the
 installed copy each get their own namespace, so no prune ever sees a job
 that is not its store's. The job's whole
 business is one line of shell: export the store the jobs were armed for,

@@ -116,9 +116,9 @@ void main() {
 
   group("persisting the KV cache", () {
     test("a slot path brings quantised KV with it", () {
-      final it = launch(slotSavePath: "/cache/agent-chat/kv-cache");
+      final it = launch(slotSavePath: "/cache/entoli/kv-cache");
 
-      expect(valueOf(it.command, "--slot-save-path"), "/cache/agent-chat/kv-cache");
+      expect(valueOf(it.command, "--slot-save-path"), "/cache/entoli/kv-cache");
       // q8_0 halves what a dump costs on disk, and rides on the cache being on
       // so a user who turned it off keeps f16 generation.
       expect(valueOf(it.command, "-ctk"), "q8_0");
