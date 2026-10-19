@@ -78,8 +78,8 @@ are escalated, not parsed. Byte Repair's setup rides the bash that exists —
 Git-for-Windows' — and fetches `esbmc-windows.zip` into the app's cache
 there, its exec carried by `.exe` and the Expand-Archive fallback its
 extraction chain reaches for. **The data directory is
-`%USERPROFILE%\.config\agent-chat`**, the desktop default's shape — the
-cache's `%LOCALAPPDATA%\agent-chat\Cache`, and `$AGENT_CHAT_CONFIG` over
+`%USERPROFILE%\.config\entoli`**, the desktop default's shape — the
+cache's `%LOCALAPPDATA%\entoli\Cache`, and `$ENTOLI_CONFIG` over
 both. **Nothing signs it.** Like the DMG, the first run of both the installer
 and the app goes through SmartScreen's Run anyway until a code-signing
 certificate exists; the MSI's signing and the DMG's grow together. **The

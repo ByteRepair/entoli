@@ -30,7 +30,7 @@ void main() {
 
   setUp(() async {
     fs = newFileSystemMemory();
-    config = await AppConfig.load(fs, "/agent-chat");
+    config = await AppConfig.load(fs, "/entoli");
     store = FileChatStore(config);
   });
 
@@ -198,7 +198,7 @@ void main() {
       await store.saveMeta("kept", ChatMeta(model: "qwen-2.5"));
       final resource = await store.saveResource("kept", "note.txt", Uint8List.fromList([7]));
 
-      final reloaded = FileChatStore(await AppConfig.load(fs, "/agent-chat"));
+      final reloaded = FileChatStore(await AppConfig.load(fs, "/entoli"));
 
       expect((await reloaded.list()).single.id, "kept");
       expect((await reloaded.load("kept")).messages, hasLength(1));
@@ -219,7 +219,7 @@ void main() {
       await store.createProject("work");
       await ProjectSettings(memory: Tristate.on).save(config, project: "work");
 
-      final reloaded = await AppConfig.load(fs, "/agent-chat");
+      final reloaded = await AppConfig.load(fs, "/entoli");
 
       expect(AppSettings.load(reloaded).defaultProviderId, "ollama");
       expect(AppSettings.load(reloaded).approveMode, ApproveMode.never);

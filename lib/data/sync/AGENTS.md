@@ -786,7 +786,7 @@ non-required camera feature for it, and iOS's `Info.plist` the
   "Entoli — paired devices" (and one per other kind, named by its key). The
   labels follow the app's name, so a debug build reads "Entoli (Debug)" —
   and its lookups carry a `build` attribute, so the two installs' items are
-  separate, the keyring-side twin of the `agent-chat-debug` data directory.
+  separate, the keyring-side twin of the `entoli-debug` data directory.
   Falls back to `FileSecretStore` where no service answers (headless, minimal
   WM, the dev toolbox).
 - **Android**: `FileSecretStore` under app-private storage — already out of

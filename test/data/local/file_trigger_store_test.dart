@@ -10,7 +10,7 @@ void main() {
   late DebugPrintCallback saved;
 
   setUp(() async {
-    config = await AppConfig.load(newFileSystemMemory(), "/agent-chat");
+    config = await AppConfig.load(newFileSystemMemory(), "/entoli");
     logged = [];
     saved = debugPrint;
     debugPrint = (message, {wrapWidth}) => logged.add(message ?? "");

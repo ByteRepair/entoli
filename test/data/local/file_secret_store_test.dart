@@ -16,7 +16,7 @@ void main() {
 
   setUp(() async {
     fs = newFileSystemMemory();
-    config = await AppConfig.load(fs, "/agent-chat");
+    config = await AppConfig.load(fs, "/entoli");
     store = FileSecretStore(config);
   });
 
@@ -26,7 +26,7 @@ void main() {
     await store.write("k", bytes());
 
     expect(await store.read("k"), bytes());
-    expect(await fs.file("/agent-chat/sync/secrets.json").exists(), isTrue);
+    expect(await fs.file("/entoli/sync/secrets.json").exists(), isTrue);
   });
 
   test("a second store reads what the first wrote", () async {

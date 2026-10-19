@@ -15,7 +15,7 @@ void main() {
   late AppConfig config;
 
   setUp(() async {
-    config = await AppConfig.load(newFileSystemMemory(), "/agent-chat");
+    config = await AppConfig.load(newFileSystemMemory(), "/entoli");
   });
 
   AppSecrets secretsOver() => AppSecrets(FileSecretStore(config));

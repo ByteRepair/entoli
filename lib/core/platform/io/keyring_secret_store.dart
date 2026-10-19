@@ -21,7 +21,7 @@ const _tag = "secrets";
 /// (in a debug build, "Entoli (Debug)" throughout). Lookups carry a `build`
 /// attribute beside the schema, so a debug install's items are its own and
 /// never touch the release one's — the keyring-side twin of the
-/// `agent-chat-debug` data directory. Where no service answers — a headless
+/// `entoli-debug` data directory. Where no service answers — a headless
 /// session, a minimal window manager, the dev toolbox — reads and writes
 /// fall through to the plain file under the data directory, the same store
 /// Android uses. The fallback is decided once, at first use: a session whose

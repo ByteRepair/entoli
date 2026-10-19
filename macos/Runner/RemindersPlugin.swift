@@ -101,7 +101,7 @@ extension RemindersPlugin {
         + "L='\(Self.shellQuoted(label))'; "
         + "if [ ! -x \"$B\" ]; then rm -f \"$P\"; "
         + "exec /bin/launchctl bootout \"gui/\(getuid())/$L\"; fi; "
-        + "export AGENT_CHAT_CONFIG='\(Self.shellQuoted(store))'; "
+        + "export ENTOLI_CONFIG='\(Self.shellQuoted(store))'; "
         + "export ENTOLI_WAKE=1; "
         + "\"$B\" entoli-wake & exit 0"
     var content: [String: Any] = [
@@ -188,7 +188,7 @@ extension RemindersPlugin {
   /// without the prune below it would keep waking the app on the old
   /// schedule. The listing is scoped to this store's own prefix, so a job
   /// belonging to another data directory (the debug leaf, an
-  /// `AGENT_CHAT_CONFIG` scratch) is never visible here and never pruned by
+  /// `ENTOLI_CONFIG` scratch) is never visible here and never pruned by
   /// a session that is not its store's. The plist's name is the code; the
   /// manager does the cancelling through the channel. Listed on the launchd
   /// queue, behind the writes and removals asked before it.
@@ -236,7 +236,7 @@ extension RemindersPlugin {
   /// The label carries the bundle identifier and the data directory the jobs
   /// serve, Dart passing the latter per call so no rule of its is replicated
   /// here. Two copies of one flavour with different data directories — the
-  /// debug leaf, an `AGENT_CHAT_CONFIG` scratch — then never share a
+  /// debug leaf, an `ENTOLI_CONFIG` scratch — then never share a
   /// namespace, which is what keeps each one's prune to its own jobs.
   static func jobPrefix(store: String) -> String {
     "\(Bundle.main.bundleIdentifier ?? "entoli").\(storeMark(store)).trigger."

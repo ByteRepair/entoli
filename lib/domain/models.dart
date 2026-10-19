@@ -614,7 +614,7 @@ typedef ModelChoice = ({String? providerId, String? modelId});
 /// What a message can address, the character that starts one, and the
 /// directory the files defining them live in — the app's own are embedded in
 /// code (generated from `assets/prompts/` at build time), the user's are under
-/// `$AGENT_CHAT_CONFIG/`. A skill's directory holds a `SKILL.md` (and whatever
+/// `$ENTOLI_CONFIG/`. A skill's directory holds a `SKILL.md` (and whatever
 /// else the skill needs); an agent's holds flat `.md` files.
 enum CompletionKind {
   skill("/", "Skills", "skills"),

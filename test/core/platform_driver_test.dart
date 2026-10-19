@@ -30,7 +30,7 @@ void main() {
     unmarked = tempConfig();
   });
 
-  const binDir = "/cache/agent-chat/byte-repair/bin";
+  const binDir = "/cache/entoli/byte-repair/bin";
 
   ShellDriver? driverOf({String? project, String? bin = binDir}) =>
       platformDriver(
@@ -77,8 +77,8 @@ void main() {
     const proot = Proot(
       binary: "/data/app/pkg/lib/arm/libproot.so",
       loader: "/data/app/pkg/lib/arm/libproot-loader.so",
-      tmpDir: "/cache/agent-chat/tools/tmp",
-      resolvConf: "/cache/agent-chat/tools/etc/resolv.conf",
+      tmpDir: "/cache/entoli/tools/tmp",
+      resolvConf: "/cache/entoli/tools/etc/resolv.conf",
     );
     final home = config.projectWorkspaceDir(project: project);
     final cwd = p.join(home, "chats", "abc-123");

@@ -365,19 +365,19 @@ FileSystem createFileSystem() => fileSystemIo;
 
 FileWatches createFileWatches() => IoFileWatches();
 
-/// `$AGENT_CHAT_CONFIG` if set, else `~/.config/agent-chat` on desktop and
+/// `$ENTOLI_CONFIG` if set, else `~/.config/entoli` on desktop and
 /// app-private storage on the phones. A desktop debug build uses
-/// `agent-chat-debug`, so it never touches an installed copy's data; a
+/// `entoli-debug`, so it never touches an installed copy's data; a
 /// phone's debug build is its own app, its storage already apart.
 Future<String> dataDir() async {
-  final override = processEnv("AGENT_CHAT_CONFIG");
+  final override = processEnv("ENTOLI_CONFIG");
   return override ?? p.join(await _resolveBase(), _dirLeaf);
 }
 
 String get _dirLeaf =>
     (Platform.isLinux || Platform.isMacOS || Platform.isWindows) && kDebugMode
-        ? "agent-chat-debug"
-        : "agent-chat";
+        ? "entoli-debug"
+        : "entoli";
 
 Future<String> _resolveBase() async {
   if (Platform.isLinux || Platform.isMacOS || Platform.isWindows) {
@@ -389,15 +389,15 @@ Future<String> _resolveBase() async {
 
 String get _home => LocalShell.machineHomeDir()!;
 
-/// Where things that can be fetched again live. `$AGENT_CHAT_CACHE` if set,
+/// Where things that can be fetched again live. `$ENTOLI_CACHE` if set,
 /// else the platform's cache directory, named by hand so it pairs with
-/// `~/.config/agent-chat`.
+/// `~/.config/entoli`.
 ///
 /// **Android uses the support directory, deliberately**: `getCacheDir()` is
 /// emptied under storage pressure and by Clear Cache, and a model the user
 /// chose to download is not something to lose that way.
 Future<String> cacheDir() async {
-  final override = processEnv("AGENT_CHAT_CACHE");
+  final override = processEnv("ENTOLI_CACHE");
   if (override != null) return override;
   if (Platform.isLinux) {
     final xdg = Platform.environment["XDG_CACHE_HOME"];
@@ -408,7 +408,7 @@ Future<String> cacheDir() async {
     final local = Platform.environment["LOCALAPPDATA"] ?? p.join(_home, "AppData", "Local");
     return p.join(local, _dirLeaf, "Cache");
   }
-  return p.join((await getApplicationSupportDirectory()).path, "agent-chat");
+  return p.join((await getApplicationSupportDirectory()).path, "entoli");
 }
 
 /// Silero's detector ships inside the app, so its licence does too. Here
