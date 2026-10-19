@@ -233,6 +233,24 @@ void main() {
       expect(bold.primary, isNot(pastel.primary));
     });
 
+    testWidgets("an operating system's theme keeps its accent on grey surfaces",
+        (tester) async {
+      app.seedSettings(AppSettings(
+          primaryColour: ColourTheme.apple.primary,
+          secondaryColour: ColourTheme.apple.secondary));
+      final scheme = (await pumpApp(tester)).theme!.colorScheme;
+
+      final apple = ColorScheme.fromSeed(
+          seedColor: ThemeColour.apple.colour,
+          dynamicSchemeVariant: DynamicSchemeVariant.fidelity);
+      expect(scheme.primary, apple.primary);
+      expect(scheme.surface, isNot(apple.surface));
+      for (final role in [scheme.surface, scheme.surfaceContainer, scheme.outline]) {
+        expect(role.r, role.g);
+        expect(role.g, role.b);
+      }
+    });
+
     testWidgets("picking a corner persists it", (tester) async {
       await pumpAppearance(tester, app);
 

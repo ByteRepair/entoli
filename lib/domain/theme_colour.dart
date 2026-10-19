@@ -43,39 +43,50 @@ enum ThemeColour {
 
   // Material's 500 tones. Yellow is its amber: a true yellow is unreadable as a
   // primary on a light surface.
-  boldRed("Red", 0xFFF44336, ThemeColourGroup.bold),
-  boldOrange("Orange", 0xFFFF9800, ThemeColourGroup.bold),
-  boldYellow("Yellow", 0xFFFFC107, ThemeColourGroup.bold),
-  boldGreen("Green", 0xFF4CAF50, ThemeColourGroup.bold),
-  boldCyan("Cyan", 0xFF00BCD4, ThemeColourGroup.bold),
-  boldBlue("Blue", 0xFF2196F3, ThemeColourGroup.bold),
-  boldPurple("Purple", 0xFF9C27B0, ThemeColourGroup.bold),
-  boldBrown("Brown", 0xFF795548, ThemeColourGroup.bold),
-  boldSlate("Slate", 0xFF607D8B, ThemeColourGroup.bold),
+  boldRed("Red", 0xFFF44336, group: ThemeColourGroup.bold),
+  boldOrange("Orange", 0xFFFF9800, group: ThemeColourGroup.bold),
+  boldYellow("Yellow", 0xFFFFC107, group: ThemeColourGroup.bold),
+  boldGreen("Green", 0xFF4CAF50, group: ThemeColourGroup.bold),
+  boldCyan("Cyan", 0xFF00BCD4, group: ThemeColourGroup.bold),
+  boldBlue("Blue", 0xFF2196F3, group: ThemeColourGroup.bold),
+  boldPurple("Purple", 0xFF9C27B0, group: ThemeColourGroup.bold),
+  boldBrown("Brown", 0xFF795548, group: ThemeColourGroup.bold),
+  boldSlate("Slate", 0xFF607D8B, group: ThemeColourGroup.bold),
 
   // As each upstream publishes it; see [ColourTheme].
-  apple("iOS / macOS", 0xFF007AFF, ThemeColourGroup.theme),
-  windows("Windows", 0xFF0078D7, ThemeColourGroup.theme),
-  adwaita("GNOME Adwaita", 0xFF3584E4, ThemeColourGroup.theme),
-  breeze("KDE Breeze", 0xFF3DAEE9, ThemeColourGroup.theme),
-  ubuntuOrange("Ubuntu orange", 0xFFE95420, ThemeColourGroup.theme),
-  ubuntuAubergine("Ubuntu aubergine", 0xFF77216F, ThemeColourGroup.theme),
-  materialPrimary("Material primary", 0xFF6750A4, ThemeColourGroup.theme),
-  materialSecondary("Material secondary", 0xFF625B71, ThemeColourGroup.theme),
-  draculaPurple("Dracula purple", 0xFFBD93F9, ThemeColourGroup.theme),
-  draculaPink("Dracula pink", 0xFFFF79C6, ThemeColourGroup.theme),
-  nordFrost("Nord frost", 0xFF88C0D0, ThemeColourGroup.theme),
-  nordBlue("Nord blue", 0xFF5E81AC, ThemeColourGroup.theme),
-  solarizedBlue("Solarized blue", 0xFF268BD2, ThemeColourGroup.theme),
-  solarizedYellow("Solarized yellow", 0xFFB58900, ThemeColourGroup.theme),
-  gruvboxYellow("Gruvbox yellow", 0xFFD79921, ThemeColourGroup.theme),
-  gruvboxAqua("Gruvbox aqua", 0xFF689D6A, ThemeColourGroup.theme);
+  apple("iOS / macOS", 0xFF007AFF,
+      group: ThemeColourGroup.theme, greySurfaces: true),
+  windows("Windows", 0xFF0078D7,
+      group: ThemeColourGroup.theme, greySurfaces: true),
+  adwaita("GNOME Adwaita", 0xFF3584E4,
+      group: ThemeColourGroup.theme, greySurfaces: true),
+  breeze("KDE Breeze", 0xFF3DAEE9,
+      group: ThemeColourGroup.theme, greySurfaces: true),
+  ubuntuOrange("Ubuntu orange", 0xFFE95420,
+      group: ThemeColourGroup.theme, greySurfaces: true),
+  ubuntuAubergine("Ubuntu aubergine", 0xFF77216F, group: ThemeColourGroup.theme),
+  materialPrimary("Material primary", 0xFF6750A4, group: ThemeColourGroup.theme),
+  materialSecondary("Material secondary", 0xFF625B71, group: ThemeColourGroup.theme),
+  draculaPurple("Dracula purple", 0xFFBD93F9, group: ThemeColourGroup.theme),
+  draculaPink("Dracula pink", 0xFFFF79C6, group: ThemeColourGroup.theme),
+  nordFrost("Nord frost", 0xFF88C0D0, group: ThemeColourGroup.theme),
+  nordBlue("Nord blue", 0xFF5E81AC, group: ThemeColourGroup.theme),
+  solarizedBlue("Solarized blue", 0xFF268BD2, group: ThemeColourGroup.theme),
+  solarizedYellow("Solarized yellow", 0xFFB58900, group: ThemeColourGroup.theme),
+  gruvboxYellow("Gruvbox yellow", 0xFFD79921, group: ThemeColourGroup.theme),
+  gruvboxAqua("Gruvbox aqua", 0xFF689D6A, group: ThemeColourGroup.theme);
 
-  const ThemeColour(this.label, this.argb, [this.group = ThemeColourGroup.pastel]);
+  const ThemeColour(this.label, this.argb,
+      {this.group = ThemeColourGroup.pastel, this.greySurfaces = false});
 
   final String label;
   final int argb;
   final ThemeColourGroup group;
+
+  /// Whether, as the primary, the surfaces are neutral grey rather than tinted
+  /// with it: the desktop and phone systems paint their windows grey, and
+  /// Material tints them.
+  final bool greySurfaces;
 
   static Iterable<ThemeColour> inGroup(ThemeColourGroup group) =>
       values.where((c) => c.group == group);

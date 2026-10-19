@@ -86,6 +86,12 @@ That is also why there is no pastel brown or slate: `tonalSpot` lands
 them next to amber and a blue. The variant travels with the seed (`Seed` in
 `ui/theme.dart`), since a bold primary can sit beside a pastel secondary.
 
+`fidelity` also tints every surface with the seed, which the operating systems'
+own themes do not: iOS/macOS, Windows, Adwaita, Breeze and Ubuntu paint their
+windows grey. Their primaries carry `greySurfaces`, and `_scheme` takes the
+neutral roles from a `monochrome` scheme for them. The editor themes and
+Material You keep the tint, since their own backgrounds are tinted.
+
 The primary is the seed. The secondary is grafted from a *second* scheme seeded
 with it: `fromSeed`'s `secondary:` names one role, which would leave
 `secondaryContainer` a tone of the primary seed beside a colour that is not.

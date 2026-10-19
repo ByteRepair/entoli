@@ -41,20 +41,23 @@ final appLookProvider = Provider<AppLook>((ref) {
   final settings = ref.watch(appSettingsProvider.select(
       (s) => (primary: s.primaryColour, secondary: s.secondaryColour, radius: s.cornerRadius)));
   return (
-    primary: accent == null ? settings.primary.seed : (colour: Color(accent), variant: DynamicSchemeVariant.tonalSpot),
+    primary: accent == null
+        ? settings.primary.seed
+        : (colour: Color(accent), variant: DynamicSchemeVariant.tonalSpot, grey: false),
     secondary: accent == null ? settings.secondary.seed : null,
     radius: settings.radius.radius,
   );
 });
 
-/// A colour and how a scheme is built from it.
-typedef Seed = ({Color colour, DynamicSchemeVariant variant});
+/// A colour, how a scheme is built from it, and whether its surfaces are grey
+/// rather than tinted with it — which only a primary decides.
+typedef Seed = ({Color colour, DynamicSchemeVariant variant, bool grey});
 
 /// A seed, the seed of the accent group beside it, and how round a corner is.
 typedef AppLook = ({Seed primary, Seed? secondary, double radius});
 
 const entoliLook = (
-  primary: (colour: entoliIndigo, variant: DynamicSchemeVariant.tonalSpot),
+  primary: (colour: entoliIndigo, variant: DynamicSchemeVariant.tonalSpot, grey: false),
   secondary: null,
   radius: 12.0,
 );
@@ -115,10 +118,11 @@ const _displayTiers = TextTheme(
 /// the primary seed beside a colour that is not. The same colour twice would
 /// graft what is already there, so it skips a scheme instead.
 ColorScheme _scheme(Brightness brightness, Seed primary, Seed? secondary) {
-  final scheme = ColorScheme.fromSeed(
+  var scheme = ColorScheme.fromSeed(
       seedColor: primary.colour,
       brightness: brightness,
       dynamicSchemeVariant: primary.variant);
+  if (primary.grey) scheme = _greySurfaces(scheme, brightness);
   if (secondary == null || secondary == primary) return scheme;
   final accent = ColorScheme.fromSeed(
       seedColor: secondary.colour,
@@ -132,6 +136,32 @@ ColorScheme _scheme(Brightness brightness, Seed primary, Seed? secondary) {
   );
 }
 
+/// [scheme] with every neutral role taken from a monochrome one, whose
+/// surfaces and outlines have no chroma at all. The accent roles are left as
+/// they were.
+ColorScheme _greySurfaces(ColorScheme scheme, Brightness brightness) {
+  final grey = ColorScheme.fromSeed(
+      seedColor: scheme.primary,
+      brightness: brightness,
+      dynamicSchemeVariant: DynamicSchemeVariant.monochrome);
+  return scheme.copyWith(
+    surface: grey.surface,
+    onSurface: grey.onSurface,
+    onSurfaceVariant: grey.onSurfaceVariant,
+    surfaceDim: grey.surfaceDim,
+    surfaceBright: grey.surfaceBright,
+    surfaceContainerLowest: grey.surfaceContainerLowest,
+    surfaceContainerLow: grey.surfaceContainerLow,
+    surfaceContainer: grey.surfaceContainer,
+    surfaceContainerHigh: grey.surfaceContainerHigh,
+    surfaceContainerHighest: grey.surfaceContainerHighest,
+    outline: grey.outline,
+    outlineVariant: grey.outlineVariant,
+    inverseSurface: grey.inverseSurface,
+    onInverseSurface: grey.onInverseSurface,
+  );
+}
+
 extension ThemeColourValue on ThemeColour {
   Color get colour => Color(argb);
 
@@ -142,6 +172,7 @@ extension ThemeColourValue on ThemeColour {
         variant: group.vivid
             ? DynamicSchemeVariant.fidelity
             : DynamicSchemeVariant.tonalSpot,
+        grey: greySurfaces,
       );
 }
 
