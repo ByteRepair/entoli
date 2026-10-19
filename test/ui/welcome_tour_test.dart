@@ -38,7 +38,13 @@ void main() {
   // Six pages of what the app is, then the provider page.
   Future<void> walkToProviders(WidgetTester tester) => next(tester, 6);
 
-  Future<void> walkToLast(WidgetTester tester) => next(tester, 11);
+  Future<void> walkToLast(WidgetTester tester) => next(tester, 12);
+
+  // The last page's checkbox, which Done waits on.
+  Future<void> accept(WidgetTester tester) async {
+    await tester.tap(find.byType(CheckboxListTile));
+    await tester.pumpAndSettle();
+  }
 
   testWidgets("walks forward and back through the pages", (tester) async {
     await app.pump(tester, const WelcomePage());
@@ -88,8 +94,25 @@ void main() {
 
     await next(tester, 2);
     expect(find.text("Yours alone"), findsOneWidget);
+
+    await next(tester);
+    expect(find.text("Check its work"), findsOneWidget);
     expect(button("Done"), findsOneWidget);
     expect(button("Next"), findsNothing);
+  });
+
+  // The last page holds Done until the user takes responsibility, and a
+  // replay asks again rather than remembering the tick.
+  testWidgets("Done is held on the last page until the box is ticked",
+      (tester) async {
+    await app.pump(tester, const WelcomePage());
+    await walkToLast(tester);
+
+    expect(tester.widget<FilledButton>(button("Done")).onPressed, isNull);
+    await accept(tester);
+    expect(tester.widget<FilledButton>(button("Done")).onPressed, isNotNull);
+    await accept(tester);
+    expect(tester.widget<FilledButton>(button("Done")).onPressed, isNull);
   });
 
   // The provider page holds the tour until some model is reachable: the
@@ -163,6 +186,7 @@ void main() {
                   initialCategory: SettingsCategory.welcome, focus: true))));
       await tester.pumpAndSettle();
       await walkToLast(tester);
+      await accept(tester);
       await tester.tap(button("Done"));
       await settleIo(tester, least: 3);
 
@@ -189,6 +213,7 @@ void main() {
 
     // Walk it out; the flag lands through the notifier.
     await walkToLast(tester);
+    await accept(tester);
     await tester.tap(button("Done"));
     await settleIo(tester, least: 3);
     expect(find.byType(WelcomePage), findsNothing);

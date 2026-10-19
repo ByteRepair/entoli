@@ -41,7 +41,11 @@ class _WelcomeTourState extends ConsumerState<WelcomeTour> {
   final _controller = PageController();
   int _page = 0;
 
-  static const _pageWidgets = [
+  /// The last page's checkbox, which holds Done. Not stored: a replay from
+  /// settings asks again.
+  final _accepted = ValueNotifier(false);
+
+  late final _pageWidgets = <Widget>[
     _IntroPage(),
     _Slide(
       icon: Icons.key,
@@ -80,11 +84,13 @@ class _WelcomeTourState extends ConsumerState<WelcomeTour> {
       body: "Nothing leaves your model without your say-so, and no service "
           "stamps its watermark on what Entoli writes for you.",
     ),
+    _ResponsibilityPage(accepted: _accepted),
   ];
 
   @override
   void dispose() {
     _controller.dispose();
+    _accepted.dispose();
     super.dispose();
   }
 
@@ -159,13 +165,17 @@ class _WelcomeTourState extends ConsumerState<WelcomeTour> {
             ),
           ),
         ),
-        _TourBar(
-          page: _page,
-          pages: _pageWidgets.length,
-          onPrevious: () => _go(_page - 1),
-          onNext: () => _go(_page + 1),
-          onDone: _done,
-          nextEnabled: !gate,
+        ValueListenableBuilder(
+          valueListenable: _accepted,
+          builder: (context, accepted, _) => _TourBar(
+            page: _page,
+            pages: _pageWidgets.length,
+            onPrevious: () => _go(_page - 1),
+            onNext: () => _go(_page + 1),
+            onDone: _done,
+            nextEnabled: !gate,
+            doneEnabled: accepted,
+          ),
         ),
       ],
     );
@@ -209,6 +219,7 @@ class _TourBar extends StatelessWidget {
     required this.onNext,
     required this.onDone,
     this.nextEnabled = true,
+    this.doneEnabled = true,
   });
 
   final int page;
@@ -219,6 +230,9 @@ class _TourBar extends StatelessWidget {
 
   /// False is a setup page's gate; every other page moves on freely.
   final bool nextEnabled;
+
+  /// False until the last page's checkbox is ticked.
+  final bool doneEnabled;
 
   @override
   Widget build(BuildContext context) {
@@ -253,7 +267,10 @@ class _TourBar extends StatelessWidget {
                 TextButton(onPressed: onPrevious, child: const Text("Back")),
               const Spacer(),
               last
-                  ? FilledButton(onPressed: onDone, child: const Text("Done"))
+                  ? FilledButton(
+                      onPressed: doneEnabled ? onDone : null,
+                      child: const Text("Done"),
+                    )
                   : FilledButton(
                       onPressed: nextEnabled ? onNext : null,
                       child: const Text("Next"),
@@ -558,6 +575,36 @@ class _IdeasPage extends StatelessWidget {
               for (final (icon, label) in _ideas)
                 Chip(avatar: Icon(icon, size: 18), label: Text(label)),
             ],
+          ),
+        ],
+      );
+}
+
+/// The last page: the agent can be wrong, and what it is let do is the user's
+/// call. Done waits on the checkbox.
+class _ResponsibilityPage extends StatelessWidget {
+  const _ResponsibilityPage({required this.accepted});
+
+  final ValueNotifier<bool> accepted;
+
+  @override
+  Widget build(BuildContext context) => _Slide(
+        icon: Icons.fact_check_outlined,
+        title: "Check its work",
+        body: "AI can make mistakes. Review what it does, and the commands "
+            "you approve, before you rely on them.",
+        children: [
+          Card(
+            child: ValueListenableBuilder(
+              valueListenable: accepted,
+              builder: (context, value, _) => CheckboxListTile(
+                title: const Text(
+                    "I understand, and I take full responsibility for how I "
+                    "use Entoli and what I let it do."),
+                value: value,
+                onChanged: (v) => accepted.value = v ?? false,
+              ),
+            ),
           ),
         ],
       );
