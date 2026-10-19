@@ -162,6 +162,46 @@ ColorScheme _greySurfaces(ColorScheme scheme, Brightness brightness) {
   );
 }
 
+/// The scheme's own foreground for [fill], paired the way Material pairs its
+/// roles, so text on it gets the contrast the scheme was built with whatever
+/// the seed — a bold seed's container is the seed itself, which `onSurface`
+/// can be unreadable on. A fill that is no role gets black or white by its
+/// brightness.
+Color onFill(ColorScheme s, Color fill) {
+  final pairs = {
+    s.primary: s.onPrimary,
+    s.primaryContainer: s.onPrimaryContainer,
+    s.secondary: s.onSecondary,
+    s.secondaryContainer: s.onSecondaryContainer,
+    s.tertiary: s.onTertiary,
+    s.tertiaryContainer: s.onTertiaryContainer,
+    s.error: s.onError,
+    s.errorContainer: s.onErrorContainer,
+    s.surface: s.onSurface,
+    s.surfaceContainerLowest: s.onSurface,
+    s.surfaceContainerLow: s.onSurface,
+    s.surfaceContainer: s.onSurface,
+    s.surfaceContainerHigh: s.onSurface,
+    s.surfaceContainerHighest: s.onSurface,
+    s.inverseSurface: s.onInverseSurface,
+  };
+  return pairs[fill] ??
+      (ThemeData.estimateBrightnessForColor(fill) == Brightness.dark
+          ? Colors.white
+          : Colors.black);
+}
+
+/// [theme] for what is drawn on [fill]: its text, and the links and caret
+/// that take `primary`, in [onFill]'s colour. What paints its own surface —
+/// code, which names `onSurface` — is left as it was.
+ThemeData onFillTheme(ThemeData theme, Color fill) {
+  final fg = onFill(theme.colorScheme, fill);
+  return theme.copyWith(
+    textTheme: theme.textTheme.apply(bodyColor: fg, displayColor: fg),
+    colorScheme: theme.colorScheme.copyWith(primary: fg),
+  );
+}
+
 extension ThemeColourValue on ThemeColour {
   Color get colour => Color(argb);
 
