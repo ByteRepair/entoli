@@ -89,6 +89,13 @@ download. It also rewrites the workstation JVM figures in
 build, it loses the runner mid-build — the v2.2.0 App Bundle job died at 58
 minutes, no logs.
 
+**The ipa job runs on the `xcode-27` image with Xcode 27.1 selected**, not
+`macos-latest`: the FoundationModels API `AppleFmChannel.swift` gates with
+`#available(iOS 27.0, *)` still has to exist in the SDK it compiles against,
+and v6.0.0's archive failed on macos-26's Xcode 26.6 for want of it. The image
+is a public preview; the job returns to `macos-latest` when that carries
+Xcode 27.
+
 **The ipa job is one runner where Android needed two.** The iSH core is a
 minutes-long clang of one static library, not a toolchain with gigabytes of
 its own, so `ios` checks the submodule out itself (recursive; `build.sh`'s

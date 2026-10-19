@@ -339,9 +339,17 @@ jobs:
   # certificate and a profile as it goes. No certificate or profile is
   # stored anywhere, and an unsigned archive means no fresh runner mints an
   # Apple Development certificate of its own.
+  #
+  # On the xcode-27 image, not macos-latest: AppleFmChannel.swift reaches
+  # FoundationModels API that only the iOS 27 SDK declares
+  # (`LanguageModelError`, `session.usage`), and `#available` gates the call,
+  # not the compile — macos-26's newest Xcode, 26.6, fails the archive on
+  # them. 27.1 by path because the image defaults to 27.0, and 27.1 is what
+  # the app is built with locally. The image is a public preview; when an
+  # Xcode 27 lands on macos-latest this goes back.
   ios:
     needs: version
-    runs-on: macos-latest
+    runs-on: xcode-27
     env:
       IPA: ${{ needs.version.outputs.ipa }}
       VERSION_CODE: ${{ needs.version.outputs.code }}
@@ -366,6 +374,12 @@ jobs:
         with:
           ref: ${{ inputs.tag }}
           submodules: recursive
+
+      - name: Select Xcode 27.1
+        run: |
+          set -euo pipefail
+          sudo xcode-select -s /Applications/Xcode_27.1.app
+          xcodebuild -version
 
       - uses: ./.github/actions/flutter-setup
 
