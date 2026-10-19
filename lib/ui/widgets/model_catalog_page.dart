@@ -41,29 +41,29 @@ enum ModelRole {
 }
 
 /// What a picker offers: each configured provider's models from the catalog
-/// that [role] can use, and the on-device ones, whose metadata the app keeps
-/// itself.
+/// that [role] can use, then whatever the endpoints list that the catalog does
+/// not know — a self-hosted server's models, the on-device ones.
 List<CatalogEntry> catalogEntries(
   ModelCatalog catalog,
   List<LlmProviderConfig> providers,
   List<ModelOption> listed, {
   required ModelRole role,
 }) {
-  final configured = {for (final p in providers) p.id};
   // Same-named models — one model through two providers — keep the order the
   // providers are configured in.
   final order = {for (final (i, p) in providers.indexed) p.id: i};
+  final known = <(String, String)>{};
   return [
     for (final p in providers)
       for (final m in catalog.modelsOf(p))
-        if (role.offers(m))
+        if (known.add((p.id, m.id)) && role.offers(m))
           CatalogEntry(p.id, p.displayName, m,
               custom: p.customModels.any((c) => c.id == m.id)),
-    // The on-device endpoints, named by their own listing — `<endpoint> ·
-    // <model>` — and no image model runs there.
+    // Named by their own listing — `<endpoint> · <model>` — and taken to be
+    // chat models, since nothing says otherwise: no image model is guessed.
     if (role != ModelRole.image)
       for (final o in listed)
-        if (!configured.contains(o.providerId))
+        if (!known.contains((o.providerId, o.modelId)))
           _listedEntry(o),
   ]..sort((a, b) {
       final byName =
@@ -118,8 +118,22 @@ class _ModelCatalogPageState extends ConsumerState<ModelCatalogPage> {
     super.dispose();
   }
 
-  bool _matches(CatalogEntry e) {
-    final words = _search.text.toLowerCase().split(RegExp(r"\s+")).where((w) => w.isNotEmpty);
+  // Rebuilt only when what it is built from changes, not on every keystroke.
+  // Records compare their fields with ==, which is identity for all three.
+  Object? _entriesKey;
+  var _entries = const <CatalogEntry>[];
+
+  List<CatalogEntry> _entriesOf(
+      ModelCatalog catalog, List<LlmProviderConfig> providers, List<ModelOption> listed) {
+    final key = (catalog, providers, listed);
+    if (key != _entriesKey) {
+      _entriesKey = key;
+      _entries = catalogEntries(catalog, providers, listed, role: widget.role);
+    }
+    return _entries;
+  }
+
+  bool _matches(CatalogEntry e, List<String> words) {
     final hay = "${e.info.displayName} ${e.info.id} ${e.providerName}".toLowerCase();
     return words.every(hay.contains) &&
         (!_reasoning || e.info.reasoning) &&
@@ -149,8 +163,10 @@ class _ModelCatalogPageState extends ConsumerState<ModelCatalogPage> {
     return ValueListenableBuilder(
       valueListenable: ModelCatalog.notifier,
       builder: (context, catalog, _) {
-        final all = catalogEntries(catalog, providers, listed, role: widget.role);
-        final shown = all.where(_matches).toList();
+        final all = _entriesOf(catalog, providers, listed);
+        final words = _search.text.toLowerCase().split(RegExp(r"\s+"))
+          ..removeWhere((w) => w.isEmpty);
+        final shown = all.where((e) => _matches(e, words)).toList();
         final names = {
           for (final p in providers) p.id: p.displayName,
           for (final e in all) e.providerId: e.providerName,

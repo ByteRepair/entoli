@@ -148,7 +148,7 @@ class OpenAiClient implements LlmClient {
         yield LlmReasoningChunk(thought);
       }
 
-      images.addAll(imagesIn(delta["images"]));
+      images.addAll(imagesIn(delta["images"], start: images.length));
 
       final toolCalls = delta["tool_calls"];
       if (toolCalls is List) {
@@ -328,7 +328,8 @@ class OpenAiClient implements LlmClient {
 /// OpenRouter's `images`, on a message or a streamed delta: a list of
 /// `{"type": "image_url", "image_url": {"url": "data:..."}}`. Not in the OpenAI
 /// spec, so anything that is not a data URL is skipped rather than fetched.
-List<LlmAttachment> imagesIn(Object? images) {
+/// [start] numbers the names on from the images a stream already had.
+List<LlmAttachment> imagesIn(Object? images, {int start = 0}) {
   if (images is! List) return const [];
   final out = <LlmAttachment>[];
   for (final image in images) {
@@ -337,9 +338,10 @@ List<LlmAttachment> imagesIn(Object? images) {
     if (url is! String || !url.startsWith("data:")) continue;
     try {
       final data = UriData.parse(url);
-      final ext = data.mimeType.split("/").last;
+      // `image/svg+xml` is an `.svg`.
+      final ext = data.mimeType.split("/").last.split("+").first;
       out.add(LlmAttachment(
-        filename: "image-${out.length}.$ext",
+        filename: "image-${start + out.length}.$ext",
         mimeType: data.mimeType,
         bytes: data.contentAsBytes(),
       ));

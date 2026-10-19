@@ -621,8 +621,8 @@ the same way it words a command's — the model reads one shape, whatever ran.
 
 ## Images (the `image_generation` tool)
 
-Offered only when Settings > Image Generation is on and its image model
-resolves to an OpenAI-shaped provider; Anthropic makes no images, so it is not
+Offered only when Settings > Image Generation names an image model (its "Off"
+entry is the switch) and that model resolves to an OpenAI-shaped provider; Anthropic makes no images, so it is not
 offered there. `OpenAiClient.generateImage` asks `gpt-image*`/`dall-e*` through
 the Images API and anything else (OpenRouter) through `/chat/completions` with
 `modalities: ["image", "text"]`. The quality setting reaches only the Images
@@ -640,9 +640,11 @@ messages take text alone. An image made by the chat model itself, with no call
 before it, is not sent back: an assistant message cannot carry one.
 
 **Whether a model gets images is decided at send time**, by `_resolveModel`
-wrapping the client in `TextOnlyClient` where the registry does not say the
-model reads them (`ModelInfo.readsImages`, unknown counting as no). Every image
-is then a line naming it. At send time rather than in the projection because a
+wrapping the client in `TextOnlyClient` where the catalog says the model does
+not read them (`ModelInfo.readsImages`); every image is then a line naming it.
+A model the catalog does not know passes images through, as before there was a
+catalog: a self-hosted endpoint's vision model would otherwise lose them with
+no way to say so. At send time rather than in the projection because a
 session outlives its model: switch a chat to a text-only one and a projection
 made earlier would still carry the images, and a provider rejects the whole
 request over one — after which every later turn fails the same way, the image

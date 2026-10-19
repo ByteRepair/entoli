@@ -1,3 +1,4 @@
+import "package:flutter/foundation.dart" show compute;
 import "package:http/http.dart" as http;
 
 import "../core/config.dart";
@@ -19,8 +20,8 @@ Future<void> loadModelCatalog(AppConfig config, http.Client client,
   DateTime? fetched;
   try {
     if (await file.exists()) {
-      final text = await file.readAsString();
-      ModelCatalog.notifier.value = ModelCatalog.parse(text);
+      // Off the UI isolate, as the fetch's parse is: the cache is most of it.
+      ModelCatalog.notifier.value = await compute(ModelCatalog.parse, await file.readAsString());
       fetched = ModelCatalog.current.fetched;
     }
   } catch (e) {
@@ -36,10 +37,10 @@ Future<void> loadModelCatalog(AppConfig config, http.Client client,
       logFailure("models", "models.dev answered ${response.statusCode}");
       return;
     }
-    final text = ModelCatalog.parse(response.body).toJsonText(
-        extra: {ModelCatalog.fetchedKey: DateTime.now().toIso8601String()});
-    ModelCatalog.notifier.value = ModelCatalog.parse(text);
-    await writeThroughRename(config.fs, config.modelsFile, text);
+    final catalog =
+        (await compute(ModelCatalog.parse, response.body)).fetchedAt(DateTime.now());
+    ModelCatalog.notifier.value = catalog;
+    await writeThroughRename(config.fs, config.modelsFile, catalog.toJsonText());
   } catch (e) {
     logFailure("models", "fetching the model catalog failed", e);
   }

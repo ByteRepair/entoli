@@ -430,7 +430,7 @@ class ChatRepository {
       approveMode: meta.approveMode ?? settings.approveMode,
       classifierProvider: settings.classifierProviderId,
       classifierModel: settings.classifierModelId,
-      imageProvider: settings.imageGeneration ? settings.imageProviderId : null,
+      imageProvider: settings.imageProviderId,
       imageModel: settings.imageModelId,
       imageQuality: settings.imageQuality,
       profile: profileUnder(builtIn, appProfile: settings.profile),

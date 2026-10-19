@@ -33,9 +33,10 @@ void main() {
     String? helperOffText,
     ModelRole role = ModelRole.agent,
     List<LlmProviderConfig> providers = const [testProvider],
+    List<ModelOption>? listed,
   }) async {
     reported = null;
-    app.backend.modelList = testProviderModels;
+    app.backend.modelList = listed ?? testProviderModels;
     await io(tester, () => app.seedProviders(providers));
     await app.pump(
       tester,
@@ -109,16 +110,34 @@ void main() {
         },
       }));
 
+  /// The endpoint listing every [seedKinds] model, as `/models` would.
+  final kindsListed = [
+    for (final id in ["agentic", "chatty", "listener", "painter"])
+      ModelOption(providerId: testProviderId, modelId: id, label: "Test · $id"),
+  ];
+
   testWidgets("a model that cannot call tools is not offered for chats", (tester) async {
     seedKinds();
-    await pump(tester);
+    // Listed too: what the catalog says of a model wins over the endpoint
+    // naming it.
+    await pump(tester, listed: kindsListed);
     await openModelCatalog(tester);
     expect(cards(tester), ["Test · agentic"]);
   });
 
+  testWidgets("a model only the endpoint lists is offered, once", (tester) async {
+    seedKinds();
+    await pump(tester, listed: [
+      ...kindsListed,
+      const ModelOption(providerId: testProviderId, modelId: "my-finetune", label: "Test · my-finetune"),
+    ]);
+    await openModelCatalog(tester);
+    expect(cards(tester), ["Test · agentic", "Test · my-finetune"]);
+  });
+
   testWidgets("a background role is offered any model that talks", (tester) async {
     seedKinds();
-    await pump(tester, role: ModelRole.text, nullLabel: "Off");
+    await pump(tester, role: ModelRole.text, nullLabel: "Off", listed: const []);
     await openModelCatalog(tester);
     expect(cards(tester), ["Test · agentic", "Test · chatty"]);
   });
@@ -136,6 +155,7 @@ void main() {
     }));
     await pump(tester, role: ModelRole.image, defaultOf: LlmProviderConfig.imageDefaultOf);
     await openModelCatalog(tester);
+    // The listed models are not guessed to make images.
     expect(cards(tester), ["Test · painter"]);
   });
 
@@ -160,7 +180,7 @@ void main() {
         },
       },
     }));
-    await pump(tester);
+    await pump(tester, listed: const []);
     await openModelCatalog(tester);
 
     for (final text in [

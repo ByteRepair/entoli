@@ -1855,21 +1855,22 @@ class BuiltinAgent {
       return;
     }
     yield _called(call, prompt);
-    final List<LlmAttachment> images;
+    final List<ImageEvent> saved;
     try {
-      images = await generateImage!(prompt);
-    } on LlmException catch (e) {
+      final images = await generateImage!(prompt);
+      saved = [for (final image in images) await _saved(image)];
+    } catch (e) {
       yield _failed(call, "$e");
       return;
     }
-    if (images.isEmpty) {
+    if (saved.isEmpty) {
       yield _failed(call, "The image model returned no image.");
       return;
     }
-    for (final image in images) {
-      yield await _saved(image);
+    for (final event in saved) {
+      yield event;
     }
-    yield _ok(call, "Generated ${images.length} image(s), attached below and "
+    yield _ok(call, "Generated ${saved.length} image(s), attached below and "
         "shown to the user in the chat.");
   }
 

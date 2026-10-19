@@ -1,7 +1,6 @@
 import "dart:async";
 
 import "package:clock/clock.dart";
-import "package:collection/collection.dart";
 import "package:flutter/foundation.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:flutter_riverpod/misc.dart" show ProviderListenable;
@@ -456,17 +455,6 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
   Future<void> setClassifierModel(ModelChoice choice) => _update((s) => s
     ..classifierProviderId = choice.providerId
     ..classifierModelId = choice.modelId);
-
-  /// Turning it on with no image model picked lands on the first provider
-  /// that has an image default, the picker's own reset target.
-  Future<void> setImageGeneration(bool on) => _update((s) {
-        s.imageGeneration = on;
-        if (on && s.imageProviderId == null) {
-          s.imageProviderId = s.llmProviders
-              .firstWhereOrNull((p) => LlmProviderConfig.imageDefaultOf(p) != null)
-              ?.id;
-        }
-      });
 
   Future<void> setImageQuality(ImageQuality value) =>
       _update((s) => s.imageQuality = value);

@@ -264,8 +264,11 @@ Iterable<LlmMessage> _assistant(
     String? signature;
     final calls = <LlmToolCall>[];
     // A tool's images go back on its result, the way an attachment rides the
-    // message it came with. Recorded after the call that made them; an image
-    // with no call before it is the model's own answer, which it has.
+    // message it came with. Recorded between the call that made them and its
+    // result; an image outside that is the model's own answer, which it has.
+    // A FilePart names no response, so one the model answered with alone is
+    // grouped after the previous response's results — the reset is what keeps
+    // it off them.
     final images = <String, List<LlmAttachment>>{};
     String? lastCall;
 
@@ -303,6 +306,7 @@ Iterable<LlmMessage> _assistant(
             images.putIfAbsent(lastCall, () => []).add(image);
           }
         case ToolResultPart():
+          lastCall = null;
         case ArtifactPart():
         case SkillInstallPart():
         case ApprovalPart():

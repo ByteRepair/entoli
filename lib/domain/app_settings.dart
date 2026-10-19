@@ -27,7 +27,6 @@ class AppSettings {
     this.titleProviderId,
     this.classifierModelId,
     this.classifierProviderId,
-    this.imageGeneration = false,
     this.imageModelId,
     this.imageProviderId,
     this.imageQuality = ImageQuality.auto,
@@ -99,11 +98,9 @@ class AppSettings {
   String? classifierModelId;
   String? classifierProviderId;
 
-  /// Whether the agent is offered `image_generation`, answered by the image
-  /// model below. Off by default: every call is a paid request.
-  bool imageGeneration;
-
-  /// What answers `image_generation`. Both halves or neither, as the title's.
+  /// What answers `image_generation`, and whether the agent is offered it at
+  /// all: no provider is off, the default, since every call is a paid request.
+  /// Both halves or neither, as the title's.
   String? imageModelId;
   String? imageProviderId;
   ImageQuality imageQuality;
@@ -429,7 +426,6 @@ class AppSettings {
         titleProviderId: _orNull(json["titleProviderId"] as String?),
         classifierModelId: _orNull(json["classifierModelId"] as String?),
         classifierProviderId: _orNull(json["classifierProviderId"] as String?),
-        imageGeneration: json["imageGeneration"] as bool? ?? false,
         imageModelId: _orNull(json["imageModelId"] as String?),
         imageProviderId: _orNull(json["imageProviderId"] as String?),
         imageQuality: ImageQuality.values.asNameMap()[json["imageQuality"]] ??
@@ -549,7 +545,6 @@ class AppSettings {
       if (titleProviderId != null) "titleProviderId": titleProviderId,
       if (classifierModelId != null) "classifierModelId": classifierModelId,
       if (classifierProviderId != null) "classifierProviderId": classifierProviderId,
-      if (imageGeneration) "imageGeneration": imageGeneration,
       if (imageModelId != null) "imageModelId": imageModelId,
       if (imageProviderId != null) "imageProviderId": imageProviderId,
       if (imageQuality != ImageQuality.auto) "imageQuality": imageQuality.name,

@@ -115,8 +115,7 @@ void main() {
 
     test("the trimmed copy reads back the same and carries when it was fetched", () {
       final at = DateTime.utc(2026, 10, 19);
-      final text = ModelCatalog.current
-          .toJsonText(extra: {ModelCatalog.fetchedKey: at.toIso8601String()});
+      final text = ModelCatalog.current.fetchedAt(at).toJsonText();
       expect(text, isNot(contains("release_date")));
       ModelCatalog.notifier.value = ModelCatalog.parse(text);
       expect(ModelCatalog.current.fetched, at);

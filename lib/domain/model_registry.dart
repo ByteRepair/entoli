@@ -4,95 +4,9 @@ import "package:flutter/foundation.dart" show ValueNotifier;
 
 import "local_model.dart";
 import "llm_provider.dart";
+import "model_info.dart";
 
-/// What the app knows of one model: the fields of models.dev it reads, in
-/// models.dev's own JSON shape, which is also how a model the user adds by
-/// hand is stored.
-class ModelInfo {
-  const ModelInfo({
-    required this.id,
-    this.name,
-    this.readsImages = false,
-    this.makesImages = false,
-    this.context,
-    this.output,
-    this.reasoning = false,
-    this.toolCall = false,
-    this.talks = true,
-    this.inputCost,
-    this.outputCost,
-  });
-
-  factory ModelInfo.fromJson(String id, Map json) {
-    final modalities = json["modalities"];
-    // A side not named is text, the ordinary case.
-    bool has(String side, String kind) =>
-        (modalities is Map ? modalities[side] as List? : null)?.contains(kind) ??
-        kind == "text";
-    final limit = json["limit"] is Map ? json["limit"] as Map : const {};
-    final cost = json["cost"] is Map ? json["cost"] as Map : const {};
-    // models.dev writes 0 for a model with no window to speak of (an image
-    // model), which is no answer rather than a window of nothing.
-    int? positive(Object? n) => n is num && n > 0 ? n.toInt() : null;
-    double? price(Object? n) => n is num ? n.toDouble() : null;
-    return ModelInfo(
-      id: id,
-      name: json["name"] is String ? json["name"] as String : null,
-      readsImages: has("input", "image"),
-      makesImages: has("output", "image"),
-      talks: has("input", "text") && has("output", "text"),
-      context: positive(limit["context"]),
-      output: positive(limit["output"]),
-      reasoning: json["reasoning"] == true,
-      toolCall: json["tool_call"] == true,
-      inputCost: price(cost["input"]),
-      outputCost: price(cost["output"]),
-    );
-  }
-
-  final String id;
-  final String? name;
-
-  /// Whether an image may be sent to it. False is also the answer for a model
-  /// nobody knows, since an image a model cannot take fails the whole request.
-  final bool readsImages;
-  final bool makesImages;
-
-  /// The context window in tokens, null where unknown — read as
-  /// `AppSettings.totalContext`, the app-wide guess.
-  final int? context;
-  final int? output;
-  final bool reasoning;
-  final bool toolCall;
-
-  /// Takes text in and gives text out: a chat model, rather than a speech,
-  /// transcription or image-only one.
-  final bool talks;
-
-  /// US dollars per million tokens.
-  final double? inputCost;
-  final double? outputCost;
-
-  String get displayName => name ?? id;
-
-  /// What the agent needs of a model that answers turns: it works through
-  /// tools. The background roles — title, classifier, memory — need only
-  /// [talks].
-  bool get answersTurns => talks && toolCall;
-
-  Map<String, dynamic> toJson() => {
-        if (name != null) "name": name,
-        "reasoning": reasoning,
-        "tool_call": toolCall,
-        "modalities": {
-          "input": [if (talks) "text", if (readsImages) "image"],
-          "output": [if (talks) "text", if (makesImages) "image"],
-        },
-        "limit": {"context": ?context, "output": ?output},
-        if (inputCost != null || outputCost != null)
-          "cost": {"input": ?inputCost, "output": ?outputCost},
-      };
-}
+export "model_info.dart";
 
 /// models.dev (`https://models.dev/api.json`), or the trimmed copy of it the
 /// app keeps: the same shape with only the fields [ModelInfo] reads.
@@ -158,11 +72,14 @@ class ModelCatalog {
     return [...own.values, ...?_of(provider)?.values.where((m) => !own.containsKey(m.id))];
   }
 
+  /// This catalog, as fetched from models.dev at [at].
+  ModelCatalog fetchedAt(DateTime at) => ModelCatalog._(_providers, _apis, at);
+
   /// The same file with only the fields [ModelInfo] reads, for the cache.
-  String toJsonText({Map<String, Object?> extra = const {}}) {
+  String toJsonText() {
     final apiOf = {for (final e in _apis.entries) e.value: e.key};
     return jsonEncode({
-      ...extra,
+      fetchedKey: ?fetched?.toIso8601String(),
       for (final MapEntry(key: id, value: models) in _providers.entries)
         id: {
           "api": ?apiOf[id],
@@ -177,7 +94,7 @@ class ModelCatalog {
 
 /// What the app knows of [modelId] at [provider]: the on-device models, kept
 /// here by hand, then the provider's own and models.dev. Null where nothing is
-/// known, which every reader treats as "no images, the global context guess".
+/// known, which every reader treats as "images pass, the global context guess".
 ///
 /// The Apple on-device model: `SystemLanguageModel.contextSize` reads 8,192
 /// on the OS today, and the framework only exposes it from 26.4 on — one

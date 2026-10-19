@@ -819,6 +819,23 @@ void main() {
       expect(events.whereType<ToolResultEvent>().single.result.returnCode, 0);
     });
 
+    test("an image model that fails any way fails the call, not the turn", () async {
+      final client = FakeLlmClient([
+        [fileCall(imageGenerationToolName, {"prompt": "a cat"})],
+        [finish],
+      ]);
+      final events = await agentOver(client,
+              generateImage: (_) async => throw const FormatException("not JSON"),
+              saveResource: (_, _) async => "r")
+          .run(userMessage("draw a cat"))
+          .toList();
+
+      final result = events.whereType<ToolResultEvent>().single.result;
+      expect(result.returnCode, isNot(0));
+      expect(result.exceptionInfo, contains("not JSON"));
+      expect(client.calls, hasLength(2));
+    });
+
     test("an image the chat model answers with is recorded too", () async {
       final saved = <String>[];
       final client = FakeLlmClient([

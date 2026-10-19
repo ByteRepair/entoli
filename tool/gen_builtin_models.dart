@@ -2,32 +2,22 @@
 // default models, so they can be picked before the first catalog fetch or
 // without one. Fetches models.dev, so unlike the other generators it is run by
 // hand when a preset's defaults change, and its output is committed.
-//
-// The defaults are read out of the source rather than imported: the domain
-// imports Flutter, which `dart run` cannot load.
 import "dart:convert";
 import "dart:io";
+
+import "package:agent_chat/domain/llm_provider.dart";
 
 import "gen_common.dart";
 
 Future<void> main() async {
-  final source = File("lib/domain/llm_provider.dart").readAsStringSync();
-  final wanted = <String, Set<String>>{};
-  // Each preset: its id, then the ids its default fields name.
-  final presets = source.split("LlmProviderConfig(").skip(1);
-  for (final preset in presets) {
-    final id = RegExp(r'\bid: "([^"]+)"').firstMatch(preset)?.group(1);
-    if (id == null) continue;
-    for (final m in RegExp(r'default(?:Light)?ModelId: "([^"]+)"').allMatches(preset)) {
-      wanted.putIfAbsent(id, () => {}).add(m.group(1)!);
-    }
-  }
-  final images = RegExp(r'"([\w-]+)": "([^"]+)",').allMatches(
-      source.substring(source.indexOf("imageDefaultOf")));
-  for (final m in images.take(8)) {
-    if (!wanted.containsKey(m.group(1))) continue;
-    wanted[m.group(1)!]!.add(m.group(2)!);
-  }
+  final wanted = {
+    for (final p in llmProviderPresets)
+      p.id: {
+        ?p.defaultModelId,
+        ?p.defaultLightModelId,
+        ?LlmProviderConfig.imageDefaultOf(p),
+      },
+  }..removeWhere((_, ids) => ids.isEmpty);
 
   final client = HttpClient();
   final request = await client.getUrl(Uri.parse("https://models.dev/api.json"));

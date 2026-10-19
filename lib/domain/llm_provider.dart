@@ -1,4 +1,4 @@
-import "model_registry.dart";
+import "model_info.dart";
 
 /// Which wire format a provider speaks. Everything that copied OpenAI's
 /// `/chat/completions` is [openai]; Anthropic's `/messages` is its own.

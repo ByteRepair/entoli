@@ -70,31 +70,23 @@ class ImageSection extends ConsumerWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const SectionHeader("Image generation"),
-        SwitchListTile(
-          contentPadding: const EdgeInsets.symmetric(horizontal: 16),
-          title: const Text("Image generation"),
-          subtitle: const Text("Lets the agent make images, shown in the "
-              "chat. Each one is a paid request to the image model."),
-          value: settings.imageGeneration,
-          onChanged: notifier.setImageGeneration,
-        ),
-        if (settings.imageGeneration)
-          LabelledField(
-            label: "Image LLM",
-            child: ModelPicker(
-              nullLabel: noneOptionLabel,
-              defaultOf: LlmProviderConfig.imageDefaultOf,
-              role: ModelRole.image,
-              helperOffText: "No image model: the agent is not offered the "
-                  "tool. OpenAI and OpenRouter have defaults.",
-              choice: (
-                providerId: settings.imageProviderId,
-                modelId: settings.imageModelId,
-              ),
-              onChanged: notifier.setImageModel,
+        LabelledField(
+          label: "Image LLM",
+          child: ModelPicker(
+            nullLabel: "Off",
+            defaultOf: LlmProviderConfig.imageDefaultOf,
+            role: ModelRole.image,
+            helperOffText: "Lets the agent make images, shown in the chat. "
+                "Each one is a paid request to the image model. OpenAI and "
+                "OpenRouter have defaults.",
+            choice: (
+              providerId: settings.imageProviderId,
+              modelId: settings.imageModelId,
             ),
+            onChanged: notifier.setImageModel,
           ),
-        if (settings.imageGeneration)
+        ),
+        if (settings.imageProviderId != null)
           LabelledField(
             label: "Quality",
             child: DropdownButtonFormField<ImageQuality>(

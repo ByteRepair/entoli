@@ -489,7 +489,7 @@ class BuiltinBackend implements AgentBackend {
             controller.add(ShellOutputEvent(callId: callId, text: text)),
         onUsage: (usage) {
           _usage[chatId] = usage.contextTokens;
-          _windows[chatId] = _infoOf(settings.provider, settings.model)?.context;
+          _windows[chatId] = target.info?.context;
         },
       );
       // The real kill replaces the placeholder.
@@ -942,7 +942,7 @@ class BuiltinBackend implements AgentBackend {
     // here in the first place. The window is the model's own where the
     // registry knows it, the settings' global guess where it does not — and
     // where the model still refuses a span, the ladder below is the answer.
-    final window = _infoOf(settings.provider, settings.model)?.context ??
+    final window = target.info?.context ??
         AppSettings.load(config).totalContext;
     final budget = window ~/ 2;
     // The retry ladder: a span too big to summarize is not a failure to give
@@ -1004,7 +1004,7 @@ class BuiltinBackend implements AgentBackend {
   /// fails by writing nothing and leaving a line in the log — a turn is over
   /// when its last event is out, whatever this is still doing.
   Future<void> _extractMemories({
-    required ({LlmClient client, String modelId}) target,
+    required _Target target,
     required MemoryStore store,
     required String chatId,
     required Message? prompt,
@@ -1074,7 +1074,7 @@ class BuiltinBackend implements AgentBackend {
   /// [consolidationMinInterval], one at a time. A tidy store says nothing on
   /// success, and a failure is a log line like any other background failure.
   Future<void> _consolidateMemories({
-    required ({LlmClient client, String modelId}) target,
+    required _Target target,
     required MemoryStore store,
     required String chatId,
   }) async {
@@ -1142,7 +1142,7 @@ class BuiltinBackend implements AgentBackend {
   /// the future it collects, a timed-out future leaving the response being
   /// read to nobody.
   Future<String?> _oneCompletion(
-    ({LlmClient client, String modelId}) target,
+    _Target target,
     List<LlmMessage> messages, {
     required Duration timeout,
   }) async {
@@ -1233,7 +1233,7 @@ class BuiltinBackend implements AgentBackend {
   /// default for a turn, the light one for the title, memory and classifier
   /// roles. None is None: a provider without that field leaves nothing to
   /// answer with, which is the caller's error, not a guess from a model list.
-  ({LlmClient client, String modelId})? _resolveModel(
+  _Target? _resolveModel(
     String? model,
     String? provider, {
     String? Function(LlmProviderConfig) defaultOf = LlmProviderConfig.chatDefaultOf,
@@ -1245,22 +1245,16 @@ class BuiltinBackend implements AgentBackend {
     final modelId = model ?? defaultOf(config);
     if (modelId == null || modelId.isEmpty) return null;
     final client = registry.clientOf(endpoint);
+    final info = modelInfoOf(config, modelId);
     // Here rather than at each request: everything that asks the model
     // resolves it through this, the compaction's one-shot read included.
+    // Unknown passes images through: a model only the endpoint lists is
+    // trusted as it was before there was a catalog to ask.
     return (
-      client: modelInfoOf(config, modelId)?.readsImages ?? false
-          ? client
-          : TextOnlyClient(client),
+      client: info?.readsImages ?? true ? client : TextOnlyClient(client),
       modelId: modelId,
+      info: info,
     );
-  }
-
-  /// What the registry knows of the model a turn resolves to, the provider's
-  /// default standing in for a null model as it does for the turn.
-  ModelInfo? _infoOf(String? provider, String? model) {
-    final config = provider == null ? null : registry.endpointFor(provider)?.config;
-    return modelInfoOf(
-        config, model ?? (config == null ? null : LlmProviderConfig.chatDefaultOf(config)));
   }
 
   /// The classifier model, resolved the same way the main model is. Null when
@@ -1280,13 +1274,13 @@ class BuiltinBackend implements AgentBackend {
   /// not speak the OpenAI shape: Anthropic makes no images.
   Future<List<LlmAttachment>> Function(String prompt)? _imageGenerator(
       String? provider, String? model, ImageQuality quality) {
-    final target = _resolveModel(model, provider,
-        defaultOf: LlmProviderConfig.imageDefaultOf);
-    final resolved = target?.client;
-    final client = resolved is TextOnlyClient ? resolved.inner : resolved;
-    if (target == null || client is! OpenAiClient) return null;
+    final endpoint = provider == null ? null : registry.endpointFor(provider);
+    if (endpoint == null) return null;
+    final modelId = model ?? LlmProviderConfig.imageDefaultOf(endpoint.config);
+    final client = registry.clientOf(endpoint);
+    if (modelId == null || client is! OpenAiClient) return null;
     return (prompt) => client.generateImage(prompt,
-        model: target.modelId,
+        model: modelId,
         quality: quality == ImageQuality.auto ? null : quality.name);
   }
 
@@ -1504,3 +1498,6 @@ class _RunningTurns extends ValueNotifier<Set<String>> {
     if (keys.isNotEmpty) value = chats;
   }
 }
+
+/// A model resolved to ask: the client, the id, and what the catalog knows.
+typedef _Target = ({LlmClient client, String modelId, ModelInfo? info});

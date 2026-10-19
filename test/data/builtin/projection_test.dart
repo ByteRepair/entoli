@@ -303,6 +303,21 @@ void main() {
     }
   });
 
+  // A FilePart names no response, so an image the model answered with alone
+  // follows the previous response's results; it is not theirs.
+  test("an image after a result is not that result's", () async {
+    final turn = [
+      call("c1", "bash", '{"command":"ls"}', response: "r1"),
+      ran("c1", "ok"),
+      const MessagePart.file(resource: "cat.png", filename: "image-0.png", mimeType: "image/png"),
+    ];
+    final cat = LlmAttachment(
+        filename: "image-0.png", mimeType: "image/png", bytes: Uint8List.fromList([7]));
+
+    final projected = assistantMessages(turn, files: {"cat.png": cat}).toList();
+    expect(projected.where((m) => m.role == LlmRole.tool).single.attachments, isEmpty);
+  });
+
   // The bytes are gone, the conversation is not: the model is told a file was
   // attached and asked to carry on without it.
   test("an attachment whose resource has gone is left named", () async {

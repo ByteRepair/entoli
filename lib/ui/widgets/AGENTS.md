@@ -270,16 +270,19 @@ the built-in snapshot are trimmed to those. Structured output went for that
 reason: nothing sends a schema, the background roles parse their JSON from text.
 
 The models come from `ModelCatalog` (`domain/model_registry.dart`), which is
-models.dev's own shape, and nothing else for a configured provider: a provider
+models.dev's own shape: a provider
 is matched to its models.dev entry by id, then by base URL, and the model by
 its exact id inside it. `data/model_catalog.dart` loads it at startup — the
 presets' default models built in (`lib/data/builtin_models.dart`, written by
 `tool/gen_builtin_models.dart` and committed, since it fetches), then the
-cached copy in `<dataDir>/models.json`, then a fetch when that is a day old.
-So with no network and no cache the Defaults are still pickable, and nothing
-else is. Run the generator when a preset's defaults change.
+cached copy in `<dataDir>/models.json`, then a fetch when that is a day old,
+or when the first provider is added. So with no network and no cache the
+Defaults are still pickable. Run the generator when a preset's defaults change.
 
 A model the catalog does not list is added on the "Add model" page, onto the
 provider it is reached through (`LlmProviderConfig.customModels`, in the same
-shape), where it comes before the catalog's own entry of the same id. The
-on-device endpoints are not in models.dev; their models are their own listing's.
+shape), where it comes before the catalog's own entry of the same id. What an
+endpoint lists itself (`/models`, or the provider's `models` field) and the
+catalog does not know is offered too, as a chat model with nothing known of it
+— a self-hosted server's models, and the on-device ones, which models.dev does
+not list. One the catalog does know is offered by what the catalog says.
