@@ -346,10 +346,12 @@ tier the answer named.
 The directory grant is the re-prompt's route carrying a tool's name:
 `add_directory` (`lib/data/builtin/directory_tools.dart`) is the model's ask
 for write access to a directory outside the workspaces, and its banner — the
-ordinary one, four answers — is the whole grant. A plain allow joins the
-directory to the turn's runtime grant; an always answer reaches the repository
-with the directory in `deniedDirs`, so it lands in the named tier's
-`writableDirs` and no rule is written. `writable_directories` lists the
+ordinary one less its plain Allow — is the whole grant. The model asks because
+the work there recurs, and a this-turn-only grant lapsed at the next turn,
+re-raising every write; a mirrored chat, which has no always answers, keeps
+it. An always answer joins the directory to the turn's runtime grant and
+reaches the repository with it in `deniedDirs`, so it lands in the named
+tier's `writableDirs` and no rule is written. `writable_directories` lists the
 workspaces and what was granted beside them. The file tools read the same
 store — `outsideWorkspaces` carries the turn's writable set — so a granted
 directory behaves the same by command or by file tool: one store, two readers.
