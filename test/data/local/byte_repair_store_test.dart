@@ -71,41 +71,46 @@ void main() {
   }
 
   /// The POSIX base every fetch-path run needs, then the fetch itself: wget
-  /// leaves a zip where the script told it to — logging the URL it was aimed
-  /// at into the file answered — and unzip copies the staged [body] as the
-  /// [binary] it lands, [companion] riding beside it where a release ships
-  /// one, in the [layout] the release's archive holds. Through /bin/cp, the
-  /// stubs being the whole of the PATH and `cp` not among them; `uname`
-  /// answers [os] for `-s` and [arch] for `-m` where the run is told it is
-  /// on a platform other than this host's, the host's own `uname`
-  /// otherwise. Answers the log.
+  /// leaves a zip where `-O` told it to — logging the URL, its last argument,
+  /// into the file answered — and unzip copies the staged [body] as the
+  /// [binary] it lands under `-d`, [companion] riding beside it where a
+  /// release ships one, in the [layout] the release's archive holds. Through
+  /// /bin/cp, the stubs being the whole of the PATH and `cp` not among them;
+  /// `uname` answers [os] for `-s` and [arch] for `-m`, Linux on x86_64
+  /// unless told otherwise, so a run reads the same on every host — a mac's
+  /// own answer is a refusal. Answers the log.
   Future<File> stubEsbmcFetch(
     String layout,
     String body, {
     String binary = "esbmc",
     String? companion,
-    String? os,
-    String arch = "",
+    String os = "Linux",
+    String arch = "x86_64",
   }) async {
     final log = File(p.join(config.dataDir, "wget.log"))..createSync();
-    if (os == null) {
-      await stubReal("uname");
-    } else {
-      await stubTool("uname",
-          'if [ "\$1" = "-s" ]; then echo "$os"; else echo "$arch"; fi');
-    }
-    for (final name in ["mkdir", "find", "head", "mv", "rm", "chmod", "dirname"]) {
+    await stubTool("uname",
+        'if [ "\$1" = "-s" ]; then echo "$os"; else echo "$arch"; fi');
+    for (final name in [
+      "mkdir", "mktemp", "find", "head", "mv", "rm", "chmod", "dirname"
+    ]) {
       await stubReal(name);
     }
-    await stubTool("wget", 'echo "\$4" >> "${log.path}"; echo zip > "\$3"');
+    await stubTool("wget", r'''
+while [ $# -gt 0 ]; do
+  case "$1" in -O) out="$2"; shift 2; continue ;; esac
+  url="$1"; shift
+done
+echo zip > "$out"
+echo "$url" >> ''' '"${log.path}"');
     final staged = p.join(config.dataDir, "esbmc-staged");
     final file = File(staged)..writeAsStringSync("#!/bin/sh\n$body\n");
     await Process.run("chmod", ["+x", file.path]);
     await stubTool("unzip", [
-      "mkdir -p /tmp/_esbmc_extract/$layout",
-      "cp \"$staged\" /tmp/_esbmc_extract/$layout/$binary",
-      if (companion != null) ": > /tmp/_esbmc_extract/$layout/$companion",
-    ].join(" && ").replaceFirst("cp ", "/bin/cp "));
+      r'while [ $# -gt 0 ]; do case "$1" in -d) d="$2"; shift ;; esac; shift; done',
+      'mkdir -p "\$d/$layout"',
+      '/bin/cp "$staged" "\$d/$layout/$binary"',
+      if (companion != null) ': > "\$d/$layout/$companion"',
+    ].join(" && ").replaceFirst("done && ", "done; "));
     return log;
   }
 
@@ -177,6 +182,25 @@ void main() {
     expect(apkLog.readAsStringSync(), contains("add --no-cache make github-cli"));
   });
 
+  test("apk installs only what is missing", () async {
+    await stubReal("mkdir");
+    await stubReal("cp");
+    await stubReal("chmod");
+    await stubEsbmcOnPath();
+    await stubTool("gh", "echo gh");
+    final apkLog = File(p.join(config.dataDir, "apk.log"))..createSync();
+    await stubTool("apk", 'echo "\$*" >> "${apkLog.path}"');
+
+    final result = await runScript({
+      "ENV_INSTALL_DIR": bin,
+      "ENV_PACKAGE_MANAGER": "apk",
+    });
+
+    expect(result.exitCode, 0, reason: result.stderr);
+    // No index refresh or whole-system upgrade, and gh is left alone.
+    expect(apkLog.readAsLinesSync(), ["add --no-cache make"]);
+  });
+
   test("a package manager the script does not know is a failure, not a skip",
       () async {
     await stubReal("mkdir");
@@ -206,7 +230,8 @@ void main() {
     expect(installed.statSync().modeString(), contains("x"));
     expect(installed.readAsStringSync(), contains("8.5 stub"));
     // The scratch the run made is gone with it.
-    expect(File("/tmp/_esbmc.zip").existsSync(), isFalse);
+    expect(Directory(bin).listSync().map((e) => p.basename(e.path)),
+        isNot(contains(startsWith(".esbmc-download."))));
   });
 
   test("an esbmc on PATH that cannot run is fetched rather than skipped", () async {
@@ -260,10 +285,53 @@ void main() {
     return log.readAsStringSync();
   }
 
-  test("macOS' release is the mac zip, installed bare", () async {
-    expect(await fetchedFrom("Darwin", "arm64", "esbmc"),
-        contains("esbmc-macos.zip"));
-    expect(File(p.join(bin, "esbmc")).existsSync(), isTrue);
+  test("macOS without brew refuses rather than fetch a release that cannot "
+      "start there", () async {
+    final log = await stubEsbmcFetch("bin", 'echo "esbmc version 8.5 stub"',
+        os: "Darwin", arch: "arm64");
+
+    final result = await runScript({"ENV_INSTALL_DIR": bin});
+
+    expect(result.exitCode, isNot(0));
+    expect(result.stderr, contains("needs Homebrew's libraries"));
+    expect(log.readAsStringSync(), isEmpty);
+  });
+
+  test("a Linux arch with no release refuses before downloading", () async {
+    final log = await stubEsbmcFetch("bin", 'echo "esbmc version 8.5 stub"',
+        os: "Linux", arch: "armv7l");
+
+    final result = await runScript({"ENV_INSTALL_DIR": bin});
+
+    expect(result.exitCode, isNot(0));
+    expect(result.stderr, contains("no Linux release for armv7l"));
+    expect(log.readAsStringSync(), isEmpty);
+  });
+
+  test("a failed download says so, and leaves no scratch", () async {
+    await stubEsbmcFetch("bin", 'echo "esbmc version 8.5 stub"');
+    await stubTool("wget", "exit 4");
+
+    final result = await runScript({"ENV_INSTALL_DIR": bin});
+
+    expect(result.exitCode, isNot(0));
+    expect(result.stderr, contains("could not download https://github.com/"));
+    expect(Directory(bin).listSync(), isEmpty);
+  });
+
+  test("a scratch a killed run left is swept, never read", () async {
+    // An older release's binary in an older run's extract, where a fixed
+    // path would have had the next run's find pick it.
+    final stale = Directory(p.join(bin, ".esbmc-download.old", "x", "bin"))
+      ..createSync(recursive: true);
+    File(p.join(stale.path, "esbmc")).writeAsStringSync("#!/bin/sh\necho stale\n");
+    await stubEsbmcFetch("release/bin", 'echo "esbmc version 8.6 stub"');
+
+    final result = await runScript({"ENV_INSTALL_DIR": bin});
+
+    expect(result.exitCode, 0, reason: result.stderr);
+    expect(result.stdout, contains("8.6 stub"));
+    expect(Directory(p.join(bin, ".esbmc-download.old")).existsSync(), isFalse);
   });
 
   test("Linux splits the release by the arch it runs on", () async {
@@ -311,6 +379,7 @@ void main() {
       await stubTool("brew", """
 if [ "\$1" = "--prefix" ]; then echo "$prefix"; exit 0; fi
 shift
+echo "env \$HOMEBREW_NO_INSTALL_UPGRADE \$HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK" > "${log.path}.env"
 echo "install \$*" >> "${log.path}"
 for f in "\$@"; do
   case "\$f" in
@@ -361,6 +430,27 @@ done""");
       expect(Link(p.join(bin, "make")).targetSync(),
           p.join(brew.prefix, "opt", "make", "libexec", "gnubin", "make"));
       expect(result.stdout, contains("esbmc from brew"));
+      // Nothing the user already has is upgraded on the way.
+      expect(File("${brew.log.path}.env").readAsStringSync().trim(), "env 1 1");
+    });
+
+    test("a link that does not run is setup's failure, not a success",
+        () async {
+      final brew = await stubBrew();
+      await stubTool("make", "echo make");
+      // A brew whose gh install claims success and lands nothing.
+      await stubTool("brew", """
+if [ "\$1" = "--prefix" ]; then echo "${brew.prefix}"; fi
+exit 0""");
+
+      final result = await runScript({
+        "ENV_INSTALL_DIR": bin,
+        "ENV_PACKAGE_MANAGER": "brew",
+        "ENV_BREW": brew.brew,
+      });
+
+      expect(result.exitCode, isNot(0));
+      expect(result.stderr, contains("gh was installed, but"));
     });
 
     test("an esbmc already linked and running is kept, and a stale one is "

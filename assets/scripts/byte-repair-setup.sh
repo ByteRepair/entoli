@@ -1,106 +1,95 @@
-# Byte Repair setup: installs make, github-cli, and ESBMC so they are on PATH
-# for every agent turn in the project. Runs inside the configured terminal env
-# (proot rootfs on Android, host shell on the desktops), so uname -s picks the
-# platform the binary must be a release of, and uname -m its word size where
-# the release splits by that.
-#
-# The install decisions belong to the caller, not to this script:
-# - ENV_INSTALL_DIR: where to install. Refused when unset.
-# - ENV_PACKAGE_MANAGER: what installs packages there (apk on Alpine, brew on
-#   a mac). Unset means a host whose package manager is not ours to touch;
-#   anything the script then needs is fetched as a static binary instead.
-#   brew is the one that installs outside ENV_INSTALL_DIR: what it installs
-#   lives in Homebrew's own prefix and is linked into ENV_INSTALL_DIR.
-# - ENV_BREW: the brew executable, with ENV_PACKAGE_MANAGER=brew. Unset means
-#   Homebrew is not installed.
-# - ENV_ESBMC_BINARY: the name the release's binary carries — esbmc, or the
-#   .exe anything Windows runs needs the extension to exec. Unset means the
-#   POSIX name.
-set -e
+# Byte Repair setup: installs make, github-cli and ESBMC so they are on PATH
+# for every agent turn in the project. The caller decides, the script obeys:
+# - ENV_INSTALL_DIR: where the tools land. Required.
+# - ENV_PACKAGE_MANAGER: apk in a guest, brew on a mac, unset on a host whose
+#   package manager is not ours to touch (missing tools are then skipped, and
+#   ESBMC is fetched from its release).
+# - ENV_BREW: the brew executable, with ENV_PACKAGE_MANAGER=brew.
+# - ENV_ESBMC_BINARY: the binary's file name, esbmc.exe on Windows. Default esbmc.
+# See "Byte Repair's environment, in four variables" in lib/data/local/AGENTS.md.
+set -eu
 
-if [ -z "$ENV_INSTALL_DIR" ]; then
-  echo "ENV_INSTALL_DIR is not set. The installation directory must be set explicitly; nothing was installed." >&2
+BIN="${ENV_INSTALL_DIR:-}"
+PM="${ENV_PACKAGE_MANAGER:-}"
+BINARY="${ENV_ESBMC_BINARY:-esbmc}"
+
+fail() {
+  echo "$*" >&2
   exit 1
-fi
-
-BIN="$ENV_INSTALL_DIR"
-mkdir -p "$BIN"
+}
 
 have() {
   command -v "$1" >/dev/null 2>&1
 }
 
-# Works, not just present: a present-but-unstartable binary once read as
-# installed, was skipped, and setup exited 0 having done nothing.
+# Runs, not just present: a found but unstartable binary must not read as
+# installed.
 works() {
   "$1" --version >/dev/null 2>&1
 }
 
-# Homebrew is the mac's whole answer: the ESBMC release for macOS is linked
-# against Homebrew's z3, mpfr, gmp, boost and llvm by absolute path and
-# carries none of them, so a fetched zip cannot start where those kegs are
-# missing. Homebrew itself is not installed here: its installer wants sudo,
-# which a setup with no terminal cannot answer, so its absence is a refusal
-# naming the command, which the settings page shows too.
-if [ "$ENV_PACKAGE_MANAGER" = brew ]; then
-  BREW="$ENV_BREW"
+[ -n "$BIN" ] || fail "ENV_INSTALL_DIR is not set. The installation directory must be set explicitly; nothing was installed."
+case "$PM" in
+  ""|apk|brew) ;;
+  *) fail "Unknown package manager: $PM" ;;
+esac
+mkdir -p "$BIN"
+
+# Homebrew is not installed here: its installer asks for sudo, which a run
+# with no terminal cannot answer. The settings page shows the same command.
+if [ "$PM" = brew ]; then
+  BREW="${ENV_BREW:-}"
   if [ -z "$BREW" ] || [ ! -x "$BREW" ]; then
     echo "Homebrew is not installed, and setup installs make, GitHub CLI and ESBMC with it. Install it by pasting this into a terminal, then run setup again:" >&2
-    echo '/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"' >&2
-    exit 1
+    fail '/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"'
   fi
   BREW_PREFIX=$("$BREW" --prefix)
-  export HOMEBREW_NO_ENV_HINTS=1 HOMEBREW_NO_INSTALL_CLEANUP=1 NONINTERACTIVE=1
+  # Install what is missing and touch nothing else: no upgrading a formula
+  # the user already has, or the formulae that depend on what was upgraded,
+  # and no cleanup of the old versions their own builds may still link.
+  export HOMEBREW_NO_INSTALL_UPGRADE=1 HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK=1 \
+    HOMEBREW_NO_INSTALL_CLEANUP=1 HOMEBREW_NO_ENV_HINTS=1
 fi
 
-# A tool Homebrew holds, linked rather than copied into $BIN: a brew upgrade
-# moves what the binary loads, and a copy would be left pointing at the old
-# kegs where a link follows the formula.
-link_brew() {
+# Linked, not copied: a brew upgrade moves the libraries a copy would still
+# point at, where a link follows the formula.
+link_tool() {
+  case "$2" in
+    /*) ;;
+    *) fail "cannot link $1 to the relative path $2" ;;
+  esac
   ln -sf "$2" "$BIN/$1"
+  works "$BIN/$1" || fail "$1 was installed, but $BIN/$1 does not run; setup did not succeed"
 }
 
 # --- make and github-cli ------------------------------------------------------
-# One invocation, not one per tool: apk --no-cache re-fetches the package
-# index on every call, and a phone pays that twice otherwise.
-PKGS=""
-works make || PKGS="make"
-works gh || PKGS="$PKGS gh"
-if [ -n "$PKGS" ]; then
-  # The mapping is the script's, not the call site's: apk and pacman call gh
-  # github-cli and the rest call it gh.
-  case "$ENV_PACKAGE_MANAGER" in
-    apk)     PKGS=" ${PKGS%% gh} github-cli" ;;
-    apt-get|dnf|yum|pacman|brew|"") ;;
-    *)       echo "Unknown package manager: $ENV_PACKAGE_MANAGER" >&2; exit 1 ;;
-  esac
-  case "$ENV_PACKAGE_MANAGER" in
+missing=""
+works make || missing="make"
+works gh || missing="${missing:+$missing }gh"
+if [ -n "$missing" ]; then
+  case "$PM" in
     "")
-      echo "No package manager was provided; skipping: $PKGS" >&2
+      echo "No package manager was provided; skipping: $missing" >&2
       ;;
     apk)
-      apk update && apk upgrade
-      apk add --no-cache $PKGS
-      ;;
-    apt-get)
-      apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y $PKGS
-      ;;
-    dnf)
-      dnf install -y $PKGS
-      ;;
-    yum)
-      yum install -y $PKGS
-      ;;
-    pacman)
-      pacman -Sy --noconfirm $PKGS
+      # One call for both: --no-cache fetches the index on every call. gh is
+      # github-cli on Alpine.
+      pkgs=""
+      for tool in $missing; do
+        case "$tool" in
+          gh) pkgs="$pkgs github-cli" ;;
+          *)  pkgs="$pkgs $tool" ;;
+        esac
+      done
+      apk add --no-cache $pkgs || fail "apk could not install:$pkgs"
       ;;
     brew)
-      "$BREW" install $PKGS
-      # Homebrew's make is gmake on PATH; the make name is in gnubin.
-      for pkg in $PKGS; do
-        case "$pkg" in
-          make) link_brew make "$BREW_PREFIX/opt/make/libexec/gnubin/make" ;;
-          gh)   link_brew gh "$BREW_PREFIX/bin/gh" ;;
+      "$BREW" install $missing || fail "brew could not install: $missing"
+      for tool in $missing; do
+        case "$tool" in
+          # Homebrew's make is gmake on PATH; the make name is in gnubin.
+          make) link_tool make "$BREW_PREFIX/opt/make/libexec/gnubin/make" ;;
+          gh)   link_tool gh "$BREW_PREFIX/bin/gh" ;;
         esac
       done
       ;;
@@ -108,124 +97,104 @@ if [ -n "$PKGS" ]; then
 fi
 
 # --- ESBMC --------------------------------------------------------------------
-# Homebrew's formula where brew is the package manager. Otherwise the release
-# zip, whose asset follows the platform the script runs on, not the word size alone:
-# uname -s names the OS, and a guest's zip is not a desktop's — a mac picking
-# the linux one by its arm was the state before there was one of its own. The
-# binary's name is the caller's, not probed: the gate asking for the file the
-# setup lands and the import writing under it ask the same const.
-BINARY="${ENV_ESBMC_BINARY:-esbmc}"
-if [ "$ENV_PACKAGE_MANAGER" = brew ]; then
-  # What the bin directory already links to is kept when it runs; anything
-  # else there — a link to a removed keg, the unstartable zip binary an
-  # older setup left — goes, so the PATH probe below cannot find it.
-  if ! works "$BIN/$BINARY"; then
-    rm -f "$BIN/$BINARY"
-    if works "$BINARY"; then
-      ESBMC_SRC=$(command -v "$BINARY")
-    else
-      "$BREW" install esbmc
-      ESBMC_SRC="$BREW_PREFIX/bin/$BINARY"
-    fi
-    link_brew "$BINARY" "$ESBMC_SRC"
+# Whatever ends up in $BIN is what the gate and the turns use, so a working
+# binary found elsewhere on PATH is linked or copied in, not left where it is.
+
+install_esbmc_brew() {
+  works "$BIN/$BINARY" && return 0
+  # A link to a removed keg, or the unstartable zip binary an older setup
+  # left: gone first, so the PATH probe below cannot find it.
+  rm -f "$BIN/$BINARY"
+  if works "$BINARY"; then
+    link_tool "$BINARY" "$(command -v "$BINARY")"
+  else
+    "$BREW" install esbmc || fail "brew could not install esbmc"
+    link_tool "$BINARY" "$BREW_PREFIX/bin/$BINARY"
   fi
-else
-  OS=$(uname -s)
-  case "$OS" in
-    Darwin)
-      ASSET="esbmc-macos.zip"
-      ;;
+}
+
+esbmc_asset() {
+  case "$(uname -s)" in
+    # The mac release links Homebrew's z3, mpfr, gmp, boost and llvm by
+    # absolute path and ships none of them: it only starts where brew would.
+    Darwin) fail "ESBMC's macOS release needs Homebrew's libraries; run setup with ENV_PACKAGE_MANAGER=brew" ;;
     Linux)
       case "$(uname -m)" in
-        aarch64|arm64) ASSET="esbmc-linux-armv8.zip" ;;
-        *)             ASSET="esbmc-linux.zip" ;;
+        x86_64|amd64)  echo "esbmc-linux.zip" ;;
+        aarch64|arm64) echo "esbmc-linux-armv8.zip" ;;
+        *) fail "ESBMC has no Linux release for $(uname -m)" ;;
       esac
       ;;
-    MINGW*|MSYS*|CYGWIN*)
-      ASSET="esbmc-windows.zip"
-      ;;
-    *)
-      echo "unsupported platform for ESBMC: $OS" >&2
-      exit 1
-      ;;
+    MINGW*|MSYS*|CYGWIN*) echo "esbmc-windows.zip" ;;
+    *) fail "unsupported platform for ESBMC: $(uname -s)" ;;
   esac
+}
 
-  if ! works "$BINARY"; then
-    URL="https://github.com/esbmc/esbmc/releases/latest/download/$ASSET"
-    TMPZIP="/tmp/_esbmc.zip"
-
-    if have wget; then
-      wget -q -O "$TMPZIP" "$URL"
-    elif have curl; then
-      curl -fsSL -o "$TMPZIP" "$URL"
-    else
-      echo "neither wget nor curl is available" >&2
-      exit 1
-    fi
-
-    # Extract the whole archive, since the layout varies between releases
-    # (v8.4: bin/esbmc at root; v8.5: release/bin/esbmc).
-    TMPDIR_EXTRACT="/tmp/_esbmc_extract"
-    mkdir -p "$TMPDIR_EXTRACT"
-
-    if have unzip; then
-      unzip -o "$TMPZIP" -d "$TMPDIR_EXTRACT"
-    # Found is not running here either — works, not have: Windows' Store
-    # python3 stub is on every default install's PATH and dies when run, and
-    # set -e would end the setup before a real answer below it is reached.
-    elif works python3; then
-      python3 -c "
-import zipfile
-z = zipfile.ZipFile('$TMPZIP')
-z.extractall('$TMPDIR_EXTRACT')
-"
-    elif command -v busybox >/dev/null 2>&1 && busybox unzip >/dev/null 2>&1; then
-      busybox unzip -o "$TMPZIP" -d "$TMPDIR_EXTRACT"
-    elif have cygpath && have powershell.exe; then
-      # Git-for-Windows' bash ships no unzip; PowerShell's Expand-Archive is a
-      # call away, and cygpath is what turns the MSYS paths into arguments it
-      # reads.
-      powershell.exe -NoProfile -Command "Expand-Archive -Force -Path \"$(cygpath -w $TMPZIP)\" -DestinationPath \"$(cygpath -w $TMPDIR_EXTRACT)\"" >/dev/null
-    else
-      echo "no unzip tool available (unzip, python3, busybox, powershell)" >&2
-      rm -f "$TMPZIP"
-      exit 1
-    fi
-
-    ESBMC_BIN=$(find "$TMPDIR_EXTRACT" -name "$BINARY" -type f | head -1)
-    if [ -z "$ESBMC_BIN" ]; then
-      echo "esbmc binary not found in archive" >&2
-      rm -rf "$TMPDIR_EXTRACT" "$TMPZIP"
-      exit 1
-    fi
-
-    # The binary's own directory moves whole, not the binary alone: a release's
-    # bin/ carries what loads the binary with it (the windows release's
-    # libz3.dll), and one file taken out of its company is the one that cannot
-    # start afterwards. Nothing from the levels above — README, licenses,
-    # headers — follows.
-    ESBMC_BIN_DIR=$(dirname "$ESBMC_BIN")
-    mv -f "$ESBMC_BIN_DIR"/* "$BIN/"
-    chmod +x "$BIN/$BINARY"
-    rm -rf "$TMPDIR_EXTRACT" "$TMPZIP"
+download() {
+  if have wget; then
+    wget -q -T 30 -O "$2" "$1"
+  elif have curl; then
+    curl -fsSL --connect-timeout 30 --retry 2 -o "$2" "$1"
   else
-    # Nothing is fetched: the machine's own binary is the one running, but
-    # what the turns find and the gate asks for afterwards is what $BIN
-    # holds — so it is copied in. The re-setup run that would copy the file
-    # onto itself is the [ -f ]'s answer.
+    fail "neither wget nor curl is available to download ESBMC"
+  fi || fail "could not download $1"
+}
+
+extract() {
+  if have unzip; then
+    unzip -q -o "$1" -d "$2"
+  # works, not have: Windows' Store python3 stub is on PATH and dies when run.
+  elif works python3; then
+    python3 -c 'import sys, zipfile; zipfile.ZipFile(sys.argv[1]).extractall(sys.argv[2])' "$1" "$2"
+  elif have cygpath && have powershell.exe; then
+    # Git for Windows' bash has no unzip. Single-quoted for PowerShell, with
+    # a quote in a path doubled.
+    zip=$(cygpath -w "$1" | sed "s/'/''/g")
+    dest=$(cygpath -w "$2" | sed "s/'/''/g")
+    powershell.exe -NoProfile -Command "Expand-Archive -Force -LiteralPath '$zip' -DestinationPath '$dest'" >/dev/null
+  else
+    fail "no unzip tool available (unzip, python3 or PowerShell)"
+  fi || fail "could not extract the ESBMC archive"
+}
+
+install_esbmc_release() {
+  if works "$BINARY"; then
+    # The re-run that would copy $BIN's own binary onto itself is the -f's.
     if [ ! -f "$BIN/$BINARY" ]; then
       cp "$(command -v "$BINARY")" "$BIN/$BINARY"
       chmod +x "$BIN/$BINARY"
     fi
+    return 0
   fi
+
+  asset=$(esbmc_asset)
+  # Scratch beside $BIN rather than in a shared /tmp: a fresh name, no other
+  # user's files, the final mv a rename, and gone however the run ends. A
+  # run killed outright leaves its scratch to the next one to sweep.
+  rm -rf "$BIN"/.esbmc-download.*
+  scratch=$(mktemp -d "$BIN/.esbmc-download.XXXXXX")
+  trap 'rm -rf "$scratch"' EXIT
+  trap 'exit 1' HUP INT TERM
+
+  download "https://github.com/esbmc/esbmc/releases/latest/download/$asset" "$scratch/esbmc.zip"
+  extract "$scratch/esbmc.zip" "$scratch/x"
+
+  # Under a bin/ wherever the release puts it (v8.4: bin/, v8.5: release/bin/).
+  found=$(find "$scratch/x" -path "*/bin/$BINARY" -type f | head -1)
+  [ -n "$found" ] || fail "esbmc binary not found in $asset"
+  # The whole bin/, not the binary alone: it carries what loads the binary
+  # (the windows release's libz3.dll).
+  mv -f "$(dirname "$found")"/* "$BIN/"
+  chmod +x "$BIN/$BINARY"
+}
+
+if [ "$PM" = brew ]; then
+  install_esbmc_brew
+else
+  install_esbmc_release
 fi
 
-# The binary that stands at the end is the one the turns will run: what the
-# two arms above leave in $BIN, fetched or copied in. It is verified outright
-# rather than falling back to whatever PATH answers — a bin directory holding
-# an unstartable leftover while a machine binary works behind it would be the
-# gate, the turns and the setup's own exit reading three different things.
-if ! "$BIN/$BINARY" --version 2>&1; then
-  echo "the esbmc at $BIN/$BINARY cannot be run (see the error above); setup did not succeed" >&2
-  exit 1
-fi
+# $BIN's binary itself, not whatever PATH answers: it is what the gate and
+# the turns will run.
+"$BIN/$BINARY" --version 2>&1 ||
+  fail "the esbmc at $BIN/$BINARY cannot be run (see the error above); setup did not succeed"
