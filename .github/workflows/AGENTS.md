@@ -211,8 +211,9 @@ the `.p8`) are one App Store Connect API key, which both signs the export in
 `release-build.yml` and uploads in `release.yml`'s `testflight` job. The team
 is not a secret: it is the project's `DEVELOPMENT_TEAM` and the `teamID` of
 `tool/ios/ExportOptions.plist`, both committed. The same key notarizes the
-DMG in the macos job. A caller without them ships every build but the ipa
-and the DMG. The key needs the **Admin** role: App Manager uploads but
+DMG in the macos job. A dispatch of `release-build.yml` without them builds
+everything but the ipa and the DMG; a release without them publishes
+nothing, every platform or none. The key needs the **Admin** role: App Manager uploads but
 cannot create the certificate or profile the export asks for. Nothing about
 the ipa goes stale yearly — Apple renews the cloud-managed certificate and
 regenerates the profile itself — and a leaked key is revoked in App Store
@@ -248,12 +249,15 @@ pair — the App Bundle included, so the same check covers both channels:
 gh attestation verify entoli-x86_64.AppImage --repo ByteRepair/entoli
 ```
 
-`fail-fast: false`, since one entry failing should leave the others
-attached — and the publish, `testflight` and `play` jobs run past a failed
-build (`!cancelled()`, gated on the version job's outputs), since a failed
-called workflow would otherwise skip every one of them and attach nothing.
-An entry whose build failed fails at its download. `--clobber` is what
-makes re-running safe. A re-run attests
+**A release publishes every platform or none.** `needs: build` is the
+whole called workflow, so one failed build job skips the publish matrix,
+`testflight` and `play` alike: nothing is attached and nothing reaches a
+store until every build passes. The fix is the failed job's, then *Re-run
+failed jobs*, which rebuilds only those and runs the publishers after.
+
+`fail-fast: false` on the matrix, since past the builds one entry failing
+to attach should not cancel the others. `--clobber` is what makes
+re-running safe. A re-run attests
 and re-attaches files already built and checked rather than trusting a
 rebuild to match. **A job that never checks out has no git remote** —
 `gh release upload` reads the repository from it and dies with `not a git

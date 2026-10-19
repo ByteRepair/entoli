@@ -28,9 +28,10 @@ on:
         required: true
       ANDROID_KEY_PASSWORD:
         required: true
-      # Apple's are optional: a caller without them gets every build but the
-      # ipa and the DMG, whose jobs fail fast on the empties instead of
-      # shipping something unsigned.
+      # Apple's are optional here: a dispatch without them gets every build
+      # but the ipa and the DMG, whose jobs fail fast on the empties instead
+      # of building something unsigned. Through release.yml that failure
+      # publishes nothing at all, since a release is every platform or none.
       # The App Store Connect API key signs as well as uploads: the export
       # asks Apple for the distribution certificate and profile with it.
       APPLE_API_ISSUER:

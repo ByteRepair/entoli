@@ -49,14 +49,12 @@ jobs:
   # the same one, and one run of it per file so a bundle on the release is
   # about the file it sits beside rather than naming all of them.
   #
-  # Not skipped when a build job fails: `needs: build` is the whole called
-  # workflow, which fails if any one job in it does, and a plain `needs` would
-  # then attach nothing at all. The version job is what names the assets, so
-  # an empty list is a build that never got that far; past it, an entry whose
-  # build failed fails its own download and leaves the others attached.
+  # All or nothing: `needs: build` is the whole called workflow, which fails
+  # if any one job in it does, and then this, `testflight` and `play` are all
+  # skipped. A release goes out with every platform or none — a failed build
+  # is fixed and the failed jobs re-run, and the publishers run once they pass.
   publish:
     needs: build
-    if: ${{ !cancelled() && needs.build.outputs.assets != '' }}
     runs-on: ubuntu-latest
     permissions:
       contents: write # attach assets to the release
@@ -109,11 +107,8 @@ jobs:
   # matrix, both holding Apple's/Google's wall clock off it: a build, then
   # two upload jobs and the attachments, each failable without the others.
   # See "Google Play" below and the ipa notes in AGENTS.md.
-  # Run past a failed build for the same reason the publish matrix is; where
-  # the ios job was the one that failed, the download says so in seconds.
   testflight:
     needs: build
-    if: ${{ !cancelled() && needs.build.outputs.ipa != '' }}
     runs-on: macos-latest
     env:
       IPA: ${{ needs.build.outputs.ipa }}
@@ -162,7 +157,6 @@ jobs:
   # See "Releasing" in AGENTS.md.
   play:
     needs: build
-    if: ${{ !cancelled() && needs.build.outputs.version != '' }}
     uses: ./.github/workflows/publish-play.yml
     with:
       tag: ${{ inputs.tag || github.event.release.tag_name }}
