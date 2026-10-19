@@ -355,26 +355,24 @@ class _AppearanceSection extends ConsumerWidget {
         // while the system is picking there is nothing here to pick.
         if (ref.watch(paletteAccentProvider) == null) ...[
           _ChoiceRow(
-            label: "Primary colour",
+            label: "Theme colours",
             children: [
-              for (final colour in ThemeColour.values)
+              for (final theme in ColourTheme.values)
                 _ColourChoice(
-                  colour: colour,
-                  selected: colour == settings.primaryColour,
-                  onTap: () => notifier.setPrimaryColour(colour),
+                  label: theme.label,
+                  colour: theme.primary,
+                  second: theme.secondary,
+                  selected: theme.primary == settings.primaryColour &&
+                      theme.secondary == settings.secondaryColour,
+                  onTap: () => notifier.setColourTheme(theme),
                 ),
             ],
           ),
-          _ChoiceRow(
-            label: "Secondary colour",
-            children: [
-              for (final colour in ThemeColour.values)
-                _ColourChoice(
-                  colour: colour,
-                  selected: colour == settings.secondaryColour,
-                  onTap: () => notifier.setSecondaryColour(colour),
-                ),
-            ],
+          _CustomColours(
+            primary: settings.primaryColour,
+            secondary: settings.secondaryColour,
+            onPrimary: notifier.setPrimaryColour,
+            onSecondary: notifier.setSecondaryColour,
           ),
         ],
         _ChoiceRow(
@@ -419,39 +417,146 @@ class _ChoiceRow extends StatelessWidget {
       );
 }
 
-/// The eight seeds, as the colours themselves: a swatch says what it does and
-/// a name in a dropdown would not.
+enum _Slot { primary, secondary }
+
+/// The two seeds picked one at a time from one set of swatches: a switch says
+/// which is being picked, and wears each one's current colour, so a theme's
+/// pair is visible here even though no swatch below is it.
+class _CustomColours extends StatefulWidget {
+  const _CustomColours({
+    required this.primary,
+    required this.secondary,
+    required this.onPrimary,
+    required this.onSecondary,
+  });
+
+  final ThemeColour primary;
+  final ThemeColour secondary;
+  final ValueChanged<ThemeColour> onPrimary;
+  final ValueChanged<ThemeColour> onSecondary;
+
+  @override
+  State<_CustomColours> createState() => _CustomColoursState();
+}
+
+class _CustomColoursState extends State<_CustomColours> {
+  var _slot = _Slot.primary;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final groupStyle = theme.textTheme.labelSmall
+        ?.copyWith(color: theme.colorScheme.onSurfaceVariant);
+    final selected = _slot == _Slot.primary ? widget.primary : widget.secondary;
+    final onPick = _slot == _Slot.primary ? widget.onPrimary : widget.onSecondary;
+    Widget dot(ThemeColour colour) => Container(
+          width: 14,
+          height: 14,
+          decoration: BoxDecoration(
+            color: colour.colour,
+            shape: BoxShape.circle,
+            border: Border.all(color: theme.colorScheme.outlineVariant),
+          ),
+        );
+    Widget group(String name, ThemeColourGroup group) => Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(name, style: groupStyle),
+            const SizedBox(height: 8),
+            Wrap(spacing: 12, runSpacing: 12, children: [
+              for (final colour in ThemeColour.inGroup(group))
+                _ColourChoice(
+                  label: colour.label,
+                  colour: colour,
+                  selected: colour == selected,
+                  onTap: () => onPick(colour),
+                ),
+            ]),
+          ],
+        );
+    return LabelledField(
+      label: "Custom colours",
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SegmentedButton<_Slot>(
+            showSelectedIcon: false,
+            segments: [
+              ButtonSegment(
+                value: _Slot.primary,
+                icon: dot(widget.primary),
+                label: const Text("Primary"),
+              ),
+              ButtonSegment(
+                value: _Slot.secondary,
+                icon: dot(widget.secondary),
+                label: const Text("Secondary"),
+              ),
+            ],
+            selected: {_slot},
+            onSelectionChanged: (picked) => setState(() => _slot = picked.first),
+          ),
+          const SizedBox(height: 16),
+          group("Bold colours", ThemeColourGroup.bold),
+          const SizedBox(height: 16),
+          group("Pastel colours", ThemeColourGroup.pastel),
+        ],
+      ),
+    );
+  }
+}
+
+/// The seeds as the colours themselves: a swatch says what it does and a name
+/// in a dropdown would not. A [second] colour splits it diagonally, a theme
+/// being its two seeds.
 class _ColourChoice extends StatelessWidget {
   const _ColourChoice({
+    required this.label,
     required this.colour,
+    this.second,
     required this.selected,
     required this.onTap,
   });
 
+  final String label;
   final ThemeColour colour;
+  final ThemeColour? second;
   final bool selected;
   final VoidCallback onTap;
 
   @override
-  Widget build(BuildContext context) => _Choice(
-        tooltip: colour.label,
-        label: colour.label,
-        selected: selected,
-        onTap: onTap,
-        fill: colour.colour,
-        width: 40,
-        height: 40,
-        // The tick sits on the swatch rather than on the surface, so it is read
-        // against the colour it is marking.
-        child: selected
-            ? Icon(Icons.check,
-                size: 18,
-                color: ThemeData.estimateBrightnessForColor(colour.colour) ==
-                        Brightness.dark
-                    ? Colors.white
-                    : Colors.black)
-            : null,
-      );
+  Widget build(BuildContext context) {
+    final a = colour.colour;
+    final b = (second ?? colour).colour;
+    return _Choice(
+      tooltip: label,
+      label: label,
+      selected: selected,
+      onTap: onTap,
+      fill: a,
+      gradient: a == b
+          ? null
+          : LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [a, a, b, b],
+              stops: const [0, 0.5, 0.5, 1],
+            ),
+      width: 40,
+      height: 40,
+      // The tick sits on the swatch rather than on the surface, so it is read
+      // against the colour it is marking — across a split, against the two
+      // mixed, since it straddles the line.
+      child: selected
+          ? Icon(Icons.check,
+              size: 18,
+              color: ThemeData.estimateBrightnessForColor(Color.lerp(a, b, 0.5)!) ==
+                      Brightness.dark
+                  ? Colors.white
+                  : Colors.black)
+          : null,
+    );
+  }
 }
 
 /// A corner drawn at its own radius, which is the whole of what the choice is.
@@ -493,6 +598,7 @@ class _Choice extends StatelessWidget {
     this.label,
     this.corners,
     this.fill,
+    this.gradient,
     this.width,
     this.height,
     this.padding,
@@ -507,6 +613,9 @@ class _Choice extends StatelessWidget {
   final String? label;
   final BorderRadius? corners;
   final Color? fill;
+
+  /// Painted over [fill] where given.
+  final Gradient? gradient;
   final double? width;
   final double? height;
   final EdgeInsets? padding;
@@ -531,6 +640,7 @@ class _Choice extends StatelessWidget {
             padding: padding,
             decoration: BoxDecoration(
               color: fill,
+              gradient: gradient,
               shape: corners == null ? BoxShape.circle : BoxShape.rectangle,
               borderRadius: corners,
               border: Border.all(

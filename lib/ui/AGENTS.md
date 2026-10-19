@@ -34,9 +34,8 @@ what keeps every sync-unaware caller on the local paths unchanged.
 
 ## The theme
 
-One palette, seeded from `entoliIndigo` by default — the colour the icon sits
-on, which the seed used to miss by being `Colors.indigo` instead — and built in
-each brightness by `entoliTheme`. `MaterialApp` gets both as `theme` and
+One palette, seeded by default from the iOS / macOS theme (Apple's systemBlue
+as both seeds, on grey surfaces; see below) and built in each brightness by `entoliTheme`. `MaterialApp` gets both as `theme` and
 `darkTheme` whichever is in use, so a system that turns dark at sunset turns the
 app with it without anything being told. `AppTheme` — `system`, `light`, `dark`
 — says which, and is app-level with no per-chat override for the same reason the
@@ -63,17 +62,51 @@ geometry *under* whatever the theme carries, so a family on the geometry side
 Three things, all app-level like the theme itself: a primary colour, a secondary
 one and a corner radius. The colours are a `ThemeColour`, eight of Tailwind's
 600 tones — which is what `entoliIndigo` already was, so the row looks like one
-set rather than one colour per family from wherever it happened to sit — and
-both default to `indigo`, which is the scheme the app had before any of this
-existed. That colour has one spelling, `entoliIndigoArgb` beside the enum:
-`entoliIndigo` is it as a `Color`, and a const `Color` cannot be built from an
+set rather than one colour per family from wherever it happened to sit. Both
+default to `apple`, the iOS / macOS theme. `indigo` was the default before the
+themes; `settings.json` always writes both fields, so an install that saved
+its settings keeps it. Each of the two has one spelling, `entoliIndigoArgb`
+and `appleBlueArgb` beside the enum: a const `Color` cannot be built from an
 enum's field, so the layer with no `Color` in it holds the number.
+
+Those eight are the *pastel* row, and they keep their unprefixed enum names
+because `settings.json` stores them. Above them is a *bold* row (Material's 500
+tones, `bold*`). Both rows are drawn once, under a Primary | Secondary switch
+that says which field a tap writes and wears each one's current colour; two
+copies of every row was a wall of swatches. Above all of it sits one row of
+`ColourTheme`s — well-known schemes such as Adwaita or Dracula, each a pair of
+`ThemeColour`s from the `theme` group that one tap writes into both fields.
+A theme with one accent is that accent twice and draws as a solid swatch; a
+pair draws split diagonally. Nothing new is stored: a theme is selected while
+the two fields hold its pair.
+
+What separates the rows is the scheme variant, not only the hex. The pastels
+are strong colours that `fromSeed`'s default `tonalSpot` softens, and that
+softening is what makes them pastel; bold and theme seeds go through
+`fidelity`, which keeps the seed's chroma so the app looks like the swatch.
+That is also why there is no pastel brown or slate: `tonalSpot` lands
+them next to amber and a blue. The variant travels with the seed (`Seed` in
+`ui/theme.dart`), since a bold primary can sit beside a pastel secondary.
+
+`fidelity` also tints every surface with the seed, which the operating systems'
+own themes do not: iOS/macOS, Windows, Adwaita, Breeze and Ubuntu paint their
+windows grey. Their primaries carry `greySurfaces`, and `_scheme` takes the
+neutral roles from a `monochrome` scheme for them. The editor themes and
+Material You keep the tint, since their own backgrounds are tinted.
+
+Text on a filled surface takes the scheme's paired foreground, not the page's.
+With `fidelity` a container *is* the seed, so `onSurface` on a bold yellow in
+dark mode is light grey on yellow. `onFill` looks the fill up among the
+scheme's roles and returns its `on*` partner, which Material builds to contrast
+with it; `onFillTheme` hands that to a subtree's text and to `primary`, so
+links and the caret follow. The message bubble wraps what was said in it. Code
+names `onSurface` on a surface of its own, so it is left alone.
 
 The primary is the seed. The secondary is grafted from a *second* scheme seeded
 with it: `fromSeed`'s `secondary:` names one role, which would leave
 `secondaryContainer` a tone of the primary seed beside a colour that is not.
-Both indigo is the ungrafted scheme, so the default is byte-identical to what
-one seed gives.
+The same colour twice is the ungrafted scheme, so the default is byte-identical
+to what one seed gives.
 
 `CornerRadius` is named after Material's shape scale, which is where its eight
 numbers come from, and it reaches the shapes `entoliTheme` sets and no others:

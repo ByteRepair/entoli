@@ -28,13 +28,22 @@ void main() {
   /// What the page is drawing as chosen, rather than what the file says.
   AppTheme shown(WidgetTester tester) => field(tester).selected.single;
 
-  /// A swatch or a corner in the row labelled [row]. Scoped to it because the
-  /// two colour rows offer the same eight tooltips.
-  Future<void> tapChoice(WidgetTester tester, String row, String choice) async {
-    final target = find.descendant(
-      of: find.ancestor(of: find.text(row), matching: find.byType(LabelledField)),
-      matching: find.byTooltip(choice),
-    );
+  /// A swatch or a corner in the row labelled [row], and within it the
+  /// [group] of swatches where given. Scoped because bold and pastel share
+  /// some names.
+  Future<void> tapChoice(WidgetTester tester, String row, String choice,
+      {String? group}) async {
+    var scope =
+        find.ancestor(of: find.text(row), matching: find.byType(LabelledField));
+    if (group != null) {
+      scope = find
+          .ancestor(
+            of: find.descendant(of: scope, matching: find.text(group)),
+            matching: find.byType(Column),
+          )
+          .first;
+    }
+    final target = find.descendant(of: scope, matching: find.byTooltip(choice));
     await scrollTo(tester, target);
     await tester.tap(target);
     await settleIo(tester);
@@ -135,14 +144,19 @@ void main() {
   });
 
   group("the palette", () {
-    testWidgets("a fresh install is seeded from the app's own indigo",
-        (tester) async {
+    final appleBlue = ColorScheme.fromSeed(
+        seedColor: ThemeColour.apple.colour,
+        dynamicSchemeVariant: DynamicSchemeVariant.fidelity);
+
+    testWidgets("a fresh install wears the iOS / macOS theme", (tester) async {
       final materialApp = await pumpApp(tester);
 
-      expect(
-        materialApp.theme?.colorScheme.primary,
-        ColorScheme.fromSeed(seedColor: entoliIndigo).primary,
-      );
+      final saved = AppSettings.load(app.config);
+      expect(saved.primaryColour, ColourTheme.apple.primary);
+      expect(saved.secondaryColour, ColourTheme.apple.secondary);
+      expect(materialApp.theme?.colorScheme.primary, appleBlue.primary);
+      expect(entoliTheme(Brightness.light).colorScheme,
+          materialApp.theme!.colorScheme);
     });
 
     testWidgets("the primary colour is what the scheme is seeded from",
@@ -161,7 +175,7 @@ void main() {
       final scheme = (await pumpApp(tester)).theme!.colorScheme;
 
       final amber = ColorScheme.fromSeed(seedColor: ThemeColour.amber.colour);
-      expect(scheme.primary, ColorScheme.fromSeed(seedColor: entoliIndigo).primary);
+      expect(scheme.primary, appleBlue.primary);
       expect(scheme.secondary, amber.secondary);
       expect(scheme.secondaryContainer, amber.secondaryContainer);
     });
@@ -182,15 +196,67 @@ void main() {
       );
     });
 
-    testWidgets("picking a colour persists it, one row at a time", (tester) async {
+    testWidgets("picking a colour persists it to the seed the switch names", (tester) async {
       await pumpAppearance(tester, app);
 
-      await tapChoice(tester, "Primary colour", ThemeColour.green.label);
-      await tapChoice(tester, "Secondary colour", ThemeColour.pink.label);
+      await tapChoice(tester, "Custom colours", ThemeColour.green.label,
+          group: "Pastel colours");
+      await scrollTo(tester, find.text("Secondary"));
+      await tester.tap(find.text("Secondary"));
+      await tester.pumpAndSettle();
+      await tapChoice(tester, "Custom colours", ThemeColour.boldGreen.label,
+          group: "Bold colours");
 
       final saved = AppSettings.load(app.config);
       expect(saved.primaryColour, ThemeColour.green);
-      expect(saved.secondaryColour, ThemeColour.pink);
+      expect(saved.secondaryColour, ThemeColour.boldGreen);
+    });
+
+    testWidgets("picking a theme sets both colours", (tester) async {
+      await pumpAppearance(tester, app);
+
+      await tapChoice(tester, "Theme colours", ColourTheme.dracula.label);
+      var saved = AppSettings.load(app.config);
+      expect(saved.primaryColour, ThemeColour.draculaPurple);
+      expect(saved.secondaryColour, ThemeColour.draculaPink);
+
+      await tapChoice(tester, "Theme colours", ColourTheme.adwaita.label);
+      saved = AppSettings.load(app.config);
+      expect(saved.primaryColour, ThemeColour.adwaita);
+      expect(saved.secondaryColour, ThemeColour.adwaita);
+    });
+
+    testWidgets("a bold colour keeps its chroma, where a pastel is softened",
+        (tester) async {
+      app.seedSettings(AppSettings(
+          primaryColour: ThemeColour.boldRed, secondaryColour: ThemeColour.red));
+      final scheme = (await pumpApp(tester)).theme!.colorScheme;
+
+      final bold = ColorScheme.fromSeed(
+          seedColor: ThemeColour.boldRed.colour,
+          dynamicSchemeVariant: DynamicSchemeVariant.fidelity);
+      final pastel = ColorScheme.fromSeed(seedColor: ThemeColour.red.colour);
+      expect(scheme.primary, bold.primary);
+      expect(scheme.secondary, pastel.secondary);
+      expect(bold.primary, isNot(pastel.primary));
+    });
+
+    testWidgets("an operating system's theme keeps its accent on grey surfaces",
+        (tester) async {
+      app.seedSettings(AppSettings(
+          primaryColour: ColourTheme.apple.primary,
+          secondaryColour: ColourTheme.apple.secondary));
+      final scheme = (await pumpApp(tester)).theme!.colorScheme;
+
+      final apple = ColorScheme.fromSeed(
+          seedColor: ThemeColour.apple.colour,
+          dynamicSchemeVariant: DynamicSchemeVariant.fidelity);
+      expect(scheme.primary, apple.primary);
+      expect(scheme.surface, isNot(apple.surface));
+      for (final role in [scheme.surface, scheme.surfaceContainer, scheme.outline]) {
+        expect(role.r, role.g);
+        expect(role.g, role.b);
+      }
     });
 
     testWidgets("picking a corner persists it", (tester) async {
@@ -208,7 +274,7 @@ void main() {
       await pumpAppearance(tester, app);
 
       expect(find.text("Material 3 Expressive"), findsNothing);
-      expect(find.text("Primary colour"), findsOneWidget);
+      expect(find.text("Custom colours"), findsOneWidget);
     });
 
     group("on a phone that has one", () {
@@ -226,8 +292,8 @@ void main() {
         await settleIo(tester);
 
         expect(AppSettings.load(app.config).systemPalette, isTrue);
-        expect(find.text("Primary colour"), findsNothing);
-        expect(find.text("Secondary colour"), findsNothing);
+        expect(find.text("Theme colours"), findsNothing);
+        expect(find.text("Custom colours"), findsNothing);
       });
 
       testWidgets("the palette is seeded from the system's accent", (tester) async {
@@ -277,7 +343,7 @@ void main() {
           '{"primaryColour":"chartreuse","secondaryColour":"teal","cornerRadius":"sharp"}');
 
       final saved = AppSettings.load(app.config);
-      expect(saved.primaryColour, ThemeColour.indigo);
+      expect(saved.primaryColour, ThemeColour.apple);
       expect(saved.secondaryColour, ThemeColour.teal);
       expect(saved.cornerRadius, CornerRadius.medium);
     });

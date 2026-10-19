@@ -14,6 +14,7 @@ import "../../../domain/wired_skill.dart";
 import "../../widgets/action_icon.dart";
 import "../../widgets/agent_picture.dart" show AgentPictureImage;
 import "../../widgets/attachment_chip.dart";
+import "../../theme.dart" show onFillTheme;
 import "../../widgets/dialogs.dart";
 import "activity_label.dart";
 import "code_block.dart";
@@ -630,7 +631,16 @@ class _MessageBubbleState extends State<MessageBubble> {
               for (final f in files) AttachmentChip.sent(f, chatId: widget.chatId),
             ],
           ),
-        ...said,
+        if (bg == null)
+          ...said
+        else
+          Theme(
+            data: onFillTheme(Theme.of(context), bg),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: said,
+            ),
+          ),
         ...trailing,
       ],
     );

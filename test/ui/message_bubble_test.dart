@@ -9,6 +9,8 @@ import "package:flutter_markdown_plus/flutter_markdown_plus.dart";
 
 import "package:agent_chat/domain/ask.dart";
 import "package:agent_chat/domain/models.dart";
+import "package:agent_chat/domain/theme_colour.dart";
+import "package:agent_chat/ui/theme.dart";
 import "package:agent_chat/ui/chat/widgets/activity_label.dart"
     show ActivityGroup;
 import "package:agent_chat/ui/chat/widgets/message_bubble.dart";
@@ -95,6 +97,39 @@ void main() {
         .firstWhere((t) => t.data?.contains("usage limit reached") ?? false);
     final context = tester.element(find.byType(MessageBubble));
     expect(rendered.style?.color, Theme.of(context).colorScheme.error);
+  });
+
+  // A bold seed's container is the seed itself, which the page's own text
+  // colour can be unreadable on; the bubble takes the scheme's paired one.
+  testWidgets("a user's words take the colour paired with the bubble's fill",
+      (tester) async {
+    final seed = ThemeColour.boldBlue.seed;
+    final theme = entoliTheme(Brightness.light,
+        (primary: seed, secondary: null, radius: 12.0));
+    await app.pump(
+      tester,
+      Theme(
+        data: theme,
+        child: Scaffold(
+          body: MessageBubble(
+            chatId: "chat-1",
+            message: _message(MessageRole.user, [const TextPart(text: "hello")]),
+            isWaiting: false,
+          ),
+        ),
+      ),
+    );
+
+    final rich = tester.widget<RichText>(find.byWidgetPredicate(
+        (w) => w is RichText && w.text.toPlainText() == "hello"));
+    Color? colour;
+    rich.text.visitChildren((span) {
+      colour ??= span.style?.color;
+      return colour == null;
+    });
+    final scheme = theme.colorScheme;
+    expect(colour, scheme.onPrimaryContainer);
+    expect(scheme.onPrimaryContainer, isNot(scheme.onSurface));
   });
 
   // A running turn shows a spinner while nothing is being written and a caret

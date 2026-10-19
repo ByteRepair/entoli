@@ -41,16 +41,32 @@ final appLookProvider = Provider<AppLook>((ref) {
   final settings = ref.watch(appSettingsProvider.select(
       (s) => (primary: s.primaryColour, secondary: s.secondaryColour, radius: s.cornerRadius)));
   return (
-    primary: accent == null ? settings.primary.colour : Color(accent),
-    secondary: accent == null ? settings.secondary.colour : null,
+    primary: accent == null
+        ? settings.primary.seed
+        : (colour: Color(accent), variant: DynamicSchemeVariant.tonalSpot, grey: false),
+    secondary: accent == null ? settings.secondary.seed : null,
     radius: settings.radius.radius,
   );
 });
 
-/// A seed, the seed of the accent group beside it, and how round a corner is.
-typedef AppLook = ({Color primary, Color? secondary, double radius});
+/// A colour, how a scheme is built from it, and whether its surfaces are grey
+/// rather than tinted with it — which only a primary decides.
+typedef Seed = ({Color colour, DynamicSchemeVariant variant, bool grey});
 
-const entoliLook = (primary: entoliIndigo, secondary: null, radius: 12.0);
+/// A seed, the seed of the accent group beside it, and how round a corner is.
+typedef AppLook = ({Seed primary, Seed? secondary, double radius});
+
+/// What `ThemeColour.apple.seed` resolves to, the default, spelled out because
+/// a getter cannot be const.
+const entoliLook = (
+  primary: (
+    colour: Color(appleBlueArgb),
+    variant: DynamicSchemeVariant.fidelity,
+    grey: true,
+  ),
+  secondary: null,
+  radius: 12.0,
+);
 
 /// The app's palette, in the brightness asked for. A null `secondary` derives
 /// it from the primary seed, which is what Material does with one seed.
@@ -107,10 +123,17 @@ const _displayTiers = TextTheme(
 /// `fromSeed` flat: that names one role, leaving `secondaryContainer` a tone of
 /// the primary seed beside a colour that is not. The same colour twice would
 /// graft what is already there, so it skips a scheme instead.
-ColorScheme _scheme(Brightness brightness, Color primary, Color? secondary) {
-  final scheme = ColorScheme.fromSeed(seedColor: primary, brightness: brightness);
+ColorScheme _scheme(Brightness brightness, Seed primary, Seed? secondary) {
+  var scheme = ColorScheme.fromSeed(
+      seedColor: primary.colour,
+      brightness: brightness,
+      dynamicSchemeVariant: primary.variant);
+  if (primary.grey) scheme = _greySurfaces(scheme, brightness);
   if (secondary == null || secondary == primary) return scheme;
-  final accent = ColorScheme.fromSeed(seedColor: secondary, brightness: brightness);
+  final accent = ColorScheme.fromSeed(
+      seedColor: secondary.colour,
+      brightness: brightness,
+      dynamicSchemeVariant: secondary.variant);
   return scheme.copyWith(
     secondary: accent.secondary,
     onSecondary: accent.onSecondary,
@@ -119,8 +142,84 @@ ColorScheme _scheme(Brightness brightness, Color primary, Color? secondary) {
   );
 }
 
+/// [scheme] with every neutral role taken from a monochrome one, whose
+/// surfaces and outlines have no chroma at all. The accent roles are left as
+/// they were.
+ColorScheme _greySurfaces(ColorScheme scheme, Brightness brightness) {
+  final grey = ColorScheme.fromSeed(
+      seedColor: scheme.primary,
+      brightness: brightness,
+      dynamicSchemeVariant: DynamicSchemeVariant.monochrome);
+  return scheme.copyWith(
+    surface: grey.surface,
+    onSurface: grey.onSurface,
+    onSurfaceVariant: grey.onSurfaceVariant,
+    surfaceDim: grey.surfaceDim,
+    surfaceBright: grey.surfaceBright,
+    surfaceContainerLowest: grey.surfaceContainerLowest,
+    surfaceContainerLow: grey.surfaceContainerLow,
+    surfaceContainer: grey.surfaceContainer,
+    surfaceContainerHigh: grey.surfaceContainerHigh,
+    surfaceContainerHighest: grey.surfaceContainerHighest,
+    outline: grey.outline,
+    outlineVariant: grey.outlineVariant,
+    inverseSurface: grey.inverseSurface,
+    onInverseSurface: grey.onInverseSurface,
+  );
+}
+
+/// The scheme's own foreground for [fill], paired the way Material pairs its
+/// roles, so text on it gets the contrast the scheme was built with whatever
+/// the seed — a bold seed's container is the seed itself, which `onSurface`
+/// can be unreadable on. A fill that is no role gets black or white by its
+/// brightness.
+Color onFill(ColorScheme s, Color fill) {
+  final pairs = {
+    s.primary: s.onPrimary,
+    s.primaryContainer: s.onPrimaryContainer,
+    s.secondary: s.onSecondary,
+    s.secondaryContainer: s.onSecondaryContainer,
+    s.tertiary: s.onTertiary,
+    s.tertiaryContainer: s.onTertiaryContainer,
+    s.error: s.onError,
+    s.errorContainer: s.onErrorContainer,
+    s.surface: s.onSurface,
+    s.surfaceContainerLowest: s.onSurface,
+    s.surfaceContainerLow: s.onSurface,
+    s.surfaceContainer: s.onSurface,
+    s.surfaceContainerHigh: s.onSurface,
+    s.surfaceContainerHighest: s.onSurface,
+    s.inverseSurface: s.onInverseSurface,
+  };
+  return pairs[fill] ??
+      (ThemeData.estimateBrightnessForColor(fill) == Brightness.dark
+          ? Colors.white
+          : Colors.black);
+}
+
+/// [theme] for what is drawn on [fill]: its text, and the links and caret
+/// that take `primary`, in [onFill]'s colour. What paints its own surface —
+/// code, which names `onSurface` — is left as it was.
+ThemeData onFillTheme(ThemeData theme, Color fill) {
+  final fg = onFill(theme.colorScheme, fill);
+  return theme.copyWith(
+    textTheme: theme.textTheme.apply(bodyColor: fg, displayColor: fg),
+    colorScheme: theme.colorScheme.copyWith(primary: fg),
+  );
+}
+
 extension ThemeColourValue on ThemeColour {
   Color get colour => Color(argb);
+
+  /// Fidelity keeps the seed's chroma, so a bold colour stays bold; the
+  /// default softens it, which is what a pastel is.
+  Seed get seed => (
+        colour: colour,
+        variant: group.vivid
+            ? DynamicSchemeVariant.fidelity
+            : DynamicSchemeVariant.tonalSpot,
+        grey: greySurfaces,
+      );
 }
 
 extension AppThemeMode on AppTheme {

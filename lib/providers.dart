@@ -579,6 +579,10 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
   Future<void> setSecondaryColour(ThemeColour colour) =>
       _update((s) => s.secondaryColour = colour);
 
+  Future<void> setColourTheme(ColourTheme theme) => _update((s) => s
+    ..primaryColour = theme.primary
+    ..secondaryColour = theme.secondary);
+
   Future<void> setCornerRadius(CornerRadius corner) =>
       _update((s) => s.cornerRadius = corner);
 
