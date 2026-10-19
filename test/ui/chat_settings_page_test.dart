@@ -76,7 +76,9 @@ void main() {
   testWidgets("chosen model is still shown after saving and reopening", (tester) async {
     await openPage(tester);
 
-    await openDropdown(tester);
+    await openPickerFor(tester);
+    await tester.dragUntilVisible(
+        find.text("Qwen 2.5"), find.byType(CustomScrollView), const Offset(0, -200));
     await tester.tap(find.text("Qwen 2.5").last);
     await settleIo(tester);
 
@@ -132,7 +134,7 @@ void main() {
     await seedMeta(tester, ChatMeta(provider: "ollama-cloud", model: "qwen-2.5"));
     await openPage(tester);
 
-    await openDropdown(tester);
+    await openPickerFor(tester);
     await tester.tap(find.textContaining(defaultOptionLabel).last);
     await settleIo(tester);
 

@@ -29,6 +29,7 @@ import "package:agent_chat/domain/llm_provider.dart";
 import "package:agent_chat/domain/local_llm.dart";
 import "package:agent_chat/domain/local_model.dart";
 import "package:agent_chat/domain/local_model_store.dart";
+import "package:agent_chat/domain/model_registry.dart";
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/domain/prompt_library.dart";
 import "package:agent_chat/domain/file_watches.dart";
@@ -78,6 +79,20 @@ final testProviderModels = [
   for (final id in ["qwen-2.5", "claude-sonnet-4", "llama-3", "claude-haiku-3"])
     ModelOption(providerId: testProviderId, modelId: id, label: "Test · $id"),
 ];
+
+/// [models] as the model catalog, as models.dev would list them: each one
+/// able to answer turns, and fetched, so no page reads as offline.
+void seedCatalog(List<ModelOption> models) =>
+    ModelCatalog.notifier.value = ModelCatalog.parse(jsonEncode({
+      ModelCatalog.fetchedKey: "2026-01-01T00:00:00.000",
+      for (final provider in models.map((m) => m.providerId).toSet())
+        provider: {
+          "models": {
+            for (final m in models.where((m) => m.providerId == provider))
+              m.modelId: {"tool_call": true},
+          },
+        },
+    }));
 
 /// The provider the model-picker tests configure: one entry with both defaults
 /// named, so the injected "Default" entry has something to point at.

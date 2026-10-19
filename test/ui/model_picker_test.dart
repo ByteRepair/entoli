@@ -1,8 +1,12 @@
+import "dart:convert";
+
 import "package:flutter/material.dart";
 import "package:flutter_test/flutter_test.dart";
 
 import "package:agent_chat/domain/llm_provider.dart";
+import "package:agent_chat/domain/model_registry.dart";
 import "package:agent_chat/domain/models.dart";
+import "package:agent_chat/providers.dart";
 import "package:agent_chat/ui/widgets/model_picker.dart";
 import "package:agent_chat/ui/widgets/resettable_field.dart";
 
@@ -18,9 +22,8 @@ void main() {
   setUp(() => app = TestApp.create());
   tearDown(() => app.dispose());
 
-  /// The configured provider, with defaults the injected Default entry names,
-  /// and its models labelled the way the registry labels them —
-  /// "<provider> · <model>".
+  /// The configured provider, with defaults the Default entry names, and its
+  /// models in the catalog.
   Future<void> pump(
     WidgetTester tester, {
     ModelChoice choice = (providerId: null, modelId: null),
@@ -28,12 +31,11 @@ void main() {
     String? Function(LlmProviderConfig)? defaultOf,
     String nullLabel = noneOptionLabel,
     String? helperOffText,
-    List<ModelOption>? models,
+    ModelRole role = ModelRole.agent,
     List<LlmProviderConfig> providers = const [testProvider],
   }) async {
-    final modelList = models ?? testProviderModels;
     reported = null;
-    app.backend.modelList = modelList;
+    app.backend.modelList = testProviderModels;
     await io(tester, () => app.seedProviders(providers));
     await app.pump(
       tester,
@@ -44,55 +46,149 @@ void main() {
           defaultOf: defaultOf ?? (config) => config.defaultModelId,
           inherited: inherited,
           helperOffText: helperOffText,
+          role: role,
           onChanged: (c) => reported = c,
         ),
       ),
     );
   }
 
-  Finder entry(String label) => find.widgetWithText(DropdownMenuItem<ModelChoice>, label).last;
+  /// What the closed field reads.
+  String fieldText(WidgetTester tester) => tester
+      .widget<Text>(find.descendant(
+          of: find.byType(InputDecorator), matching: find.byType(Text)).first)
+      .data!;
 
-  Future<void> open(WidgetTester tester) async {
-    await tester.tap(find.byType(DropdownButtonFormField<ModelChoice>));
-    await tester.pumpAndSettle();
-  }
+  List<String> cards(WidgetTester tester) =>
+      catalogLabels(tester).where((l) => l.startsWith("Test · ")).toList();
 
-  testWidgets("None leads the list, then the Default entry, then the models", (tester) async {
+  testWidgets("the quick picks lead, then the models by name", (tester) async {
+    useWindow(tester, const Size(800, 1200));
     await pump(tester);
 
-    await open(tester);
-    expect(
-      popupLabels(tester),
-      [
-        noneOptionLabel,
-        "Test - Default (glm-5.3-flash)",
-        "Test · claude-haiku-3",
-        "Test · claude-sonnet-4",
-        "Test · llama-3",
-        "Test · qwen-2.5",
-      ],
-    );
+    await openModelCatalog(tester);
+    final labels = catalogLabels(tester);
+    expect(labels.indexOf(noneOptionLabel), lessThan(labels.indexOf("Test - Default")));
+    expect(cards(tester), [
+      "Test · claude-haiku-3",
+      "Test · claude-sonnet-4",
+      "Test · llama-3",
+      "Test · qwen-2.5",
+    ]);
   });
 
-  testWidgets("the Default entry names the light default where the picker is a light one",
-      (tester) async {
-    await pump(
-      tester,
-      defaultOf: (config) => config.defaultLightModelId,
-      nullLabel: "Off",
-      helperOffText: "Off, nothing happens.",
-    );
+  testWidgets("a light picker's Default entry names the light default", (tester) async {
+    await pump(tester, defaultOf: LlmProviderConfig.lightDefaultOf, nullLabel: "Off");
 
-    await open(tester);
-    expect(popupLabels(tester), contains("Test - Default (nemotron-3-nano:30b)"));
+    await openModelCatalog(tester);
+    expect(catalogLabels(tester), contains("nemotron-3-nano:30b"));
+  });
+
+  testWidgets("a search narrows the models to the ones every word names", (tester) async {
+    await pump(tester);
+
+    await openModelCatalog(tester);
+    await tester.enterText(find.byType(TextField), "claude son");
+    await tester.pumpAndSettle();
+    expect(cards(tester), ["Test · claude-sonnet-4"]);
+  });
+
+  /// One model per kind a role tells apart.
+  void seedKinds() => ModelCatalog.notifier.value = ModelCatalog.parse(jsonEncode({
+        testProviderId: {
+          "models": {
+            "agentic": {"tool_call": true},
+            "chatty": {"tool_call": false},
+            "listener": {
+              "modalities": {"input": ["audio"], "output": ["text"]},
+            },
+            "painter": {
+              "modalities": {"input": ["text"], "output": ["image"]},
+            },
+          },
+        },
+      }));
+
+  testWidgets("a model that cannot call tools is not offered for chats", (tester) async {
+    seedKinds();
+    await pump(tester);
+    await openModelCatalog(tester);
+    expect(cards(tester), ["Test · agentic"]);
+  });
+
+  testWidgets("a background role is offered any model that talks", (tester) async {
+    seedKinds();
+    await pump(tester, role: ModelRole.text, nullLabel: "Off");
+    await openModelCatalog(tester);
+    expect(cards(tester), ["Test · agentic", "Test · chatty"]);
+  });
+
+  testWidgets("the image picker offers the models that make images", (tester) async {
+    ModelCatalog.notifier.value = ModelCatalog.parse(jsonEncode({
+      testProviderId: {
+        "models": {
+          "agentic": {"tool_call": true},
+          "painter": {
+            "modalities": {"output": ["image"]},
+          },
+        },
+      },
+    }));
+    await pump(tester, role: ModelRole.image, defaultOf: LlmProviderConfig.imageDefaultOf);
+    await openModelCatalog(tester);
+    expect(cards(tester), ["Test · painter"]);
+  });
+
+  testWidgets("an image picker over providers that make no images says so", (tester) async {
+    await pump(tester, role: ModelRole.image, defaultOf: LlmProviderConfig.imageDefaultOf);
+    await openModelCatalog(tester);
+    expect(find.text("No image models"), findsOneWidget);
+  });
+
+  testWidgets("a card says what the model costs and can do", (tester) async {
+    ModelCatalog.notifier.value = ModelCatalog.parse(jsonEncode({
+      testProviderId: {
+        "models": {
+          "gpt-x": {
+            "name": "GPT X",
+            "tool_call": true,
+            "reasoning": true,
+            "modalities": {"input": ["text", "image"]},
+            "limit": {"context": 400000},
+            "cost": {"input": 1.25, "output": 10},
+          },
+        },
+      },
+    }));
+    await pump(tester);
+    await openModelCatalog(tester);
+
+    for (final text in [
+      "GPT X",
+      "400K context",
+      "\$1.25 in · \$10 out /M",
+      "Tools",
+      "Reasoning",
+      "Sees images",
+    ]) {
+      expect(find.descendant(of: find.byType(Card), matching: find.text(text)),
+          findsOneWidget,
+          reason: text);
+    }
+  });
+
+  testWidgets("before the catalog is fetched, it says only the defaults are there",
+      (tester) async {
+    ModelCatalog.notifier.value = ModelCatalog.empty;
+    await pump(tester);
+    await openModelCatalog(tester);
+    expect(find.text("Only the default models for now"), findsOneWidget);
   });
 
   testWidgets("picking a model reports the pair", (tester) async {
     await pump(tester);
 
-    await open(tester);
-    await tester.tap(find.text("Test · claude-sonnet-4").last);
-    await settleIo(tester);
+    await pickModel(tester, "Test · claude-sonnet-4");
 
     expect(reported, (providerId: testProviderId, modelId: "claude-sonnet-4"));
   });
@@ -100,9 +196,7 @@ void main() {
   testWidgets("picking the Default entry stores the provider with no model", (tester) async {
     await pump(tester, choice: (providerId: testProviderId, modelId: "claude-sonnet-4"));
 
-    await open(tester);
-    await tester.tap(entry("Test - Default (glm-5.3-flash)"));
-    await settleIo(tester);
+    await pickModel(tester, "Test - Default");
 
     expect(reported, (providerId: testProviderId, modelId: null));
   });
@@ -110,25 +204,20 @@ void main() {
   testWidgets("picking None clears both halves", (tester) async {
     await pump(tester, choice: (providerId: testProviderId, modelId: "claude-sonnet-4"));
 
-    await open(tester);
-    await tester.tap(find.text(noneOptionLabel).last);
-    await settleIo(tester);
+    await pickModel(tester, noneOptionLabel);
 
     expect(reported, (providerId: null, modelId: null));
   });
 
-  testWidgets("a stored Default choice reads as its provider's Default entry", (tester) async {
+  testWidgets("a stored Default choice reads as its provider's Default", (tester) async {
     await pump(tester, choice: (providerId: testProviderId, modelId: null));
 
-    final field = tester.widget<DropdownButtonFormField<ModelChoice>>(
-      find.byType(DropdownButtonFormField<ModelChoice>),
-    );
-    expect(field.initialValue, (providerId: testProviderId, modelId: null));
+    expect(fieldText(tester), "Test - Default (glm-5.3-flash)");
   });
 
   // A provider that names no default — a custom one added by hand, say — has
-  // no Default entry, so a stored Default choice against it must read as the
-  // null entry rather than as a value nothing renders.
+  // no Default entry, so a stored Default choice against it reads as the null
+  // entry.
   testWidgets("a Default choice against a provider with no default reads as None",
       (tester) async {
     const bareProvider = LlmProviderConfig(
@@ -137,41 +226,44 @@ void main() {
       api: LlmApi.openai,
       baseUrl: "https://bare.example/v1",
     );
-    reported = null;
-    app.backend.modelList = const [];
-    await io(tester, () => app.seedProviders([bareProvider]));
-    await app.pump(
-      tester,
-      Scaffold(
-        body: ModelPicker(
-          choice: (providerId: "bare", modelId: null),
-          nullLabel: noneOptionLabel,
-          onChanged: (c) => reported = c,
-        ),
-      ),
-    );
+    await pump(tester,
+        providers: const [bareProvider], choice: (providerId: "bare", modelId: null));
 
-    expect(tester.takeException(), isNull);
-    final field = tester.widget<DropdownButtonFormField<ModelChoice>>(
-      find.byType(DropdownButtonFormField<ModelChoice>),
-    );
-    expect(field.initialValue, (providerId: null, modelId: null));
-    expect(find.text(noneOptionLabel), findsOneWidget);
+    expect(fieldText(tester), noneOptionLabel);
   });
 
-  testWidgets("a model the backend no longer offers falls back to the Default entry",
-      (tester) async {
-    await pump(
-      tester,
-      choice: (providerId: testProviderId, modelId: "gone-1"),
-      models: const [],
-    );
+  // The field names what is stored rather than pretending it is something
+  // else: a turn will ask for that id, and the provider is what answers.
+  testWidgets("a model the catalog does not know reads as its id", (tester) async {
+    await pump(tester, choice: (providerId: testProviderId, modelId: "gone-1"));
 
-    expect(tester.takeException(), isNull);
-    final field = tester.widget<DropdownButtonFormField<ModelChoice>>(
-      find.byType(DropdownButtonFormField<ModelChoice>),
-    );
-    expect(field.initialValue, (providerId: testProviderId, modelId: null));
+    expect(fieldText(tester), "gone-1");
+  });
+
+  testWidgets("a model added by hand is stored on its provider and offered", (tester) async {
+    useWindow(tester, const Size(800, 1400));
+    await pump(tester);
+    await openModelCatalog(tester);
+
+    await tester.tap(find.text("Add model"));
+    await tester.pumpAndSettle();
+    // The requirement is said up front, not only once it is switched off.
+    expect(find.textContaining("Required for agentic use"), findsOneWidget);
+    expect(find.text("Structured output"), findsNothing);
+    await tester.enterText(
+        find.widgetWithText(TextFormField, "Model id"), "ft:glm:acme");
+    await tester.enterText(
+        find.widgetWithText(TextFormField, "Context window"), "65536");
+    await tester.tap(find.text("Save"));
+    await settleIo(tester);
+
+    final provider = app.container.read(appSettingsProvider).llmProviders.single;
+    expect(provider.customModels.single.id, "ft:glm:acme");
+    expect(provider.customModels.single.context, 65536);
+    expect(provider.customModels.single.answersTurns, isTrue);
+    // Back on the catalog, searched for, ready to pick.
+    expect(cards(tester), ["Test · ft:glm:acme"]);
+    expect(find.text("Added by you"), findsOneWidget);
   });
 
   testWidgets("reset puts a pick back on the provider default", (tester) async {
@@ -180,18 +272,6 @@ void main() {
     await tester.tap(find.byTooltip("Reset to Test - Default (glm-5.3-flash)"));
     await settleIo(tester);
 
-    expect(reported, (providerId: testProviderId, modelId: null));
-  });
-
-  // The reset button is always live: pressed where the field already sits on
-  // its target it rewrites the same value, and where a stored pair reads as
-  // None — a provider removed under it — it is the cleanup.
-  testWidgets("reset reports its target from None with a provider up", (tester) async {
-    await pump(tester);
-
-    final tooltip = "Reset to Test - Default (glm-5.3-flash)";
-    await tester.tap(find.byTooltip(tooltip));
-    await settleIo(tester);
     expect(reported, (providerId: testProviderId, modelId: null));
   });
 
@@ -207,19 +287,9 @@ void main() {
     expect(reported, (providerId: testProviderId, modelId: null));
   });
 
-  testWidgets("reset clears a stored pair nothing offers", (tester) async {
-    reported = null;
-    app.backend.modelList = const [];
-    await app.pump(
-      tester,
-      Scaffold(
-        body: ModelPicker(
-          choice: (providerId: testProviderId, modelId: "gone-1"),
-          nullLabel: noneOptionLabel,
-          onChanged: (c) => reported = c,
-        ),
-      ),
-    );
+  testWidgets("with no provider, reset is to the null entry", (tester) async {
+    await pump(tester,
+        providers: const [], choice: (providerId: testProviderId, modelId: "gone-1"));
 
     await tester.tap(find.byTooltip("Reset to $noneOptionLabel"));
     await settleIo(tester);
@@ -234,17 +304,18 @@ void main() {
     );
 
     expect(find.text("Using Test · qwen-2.5"), findsOneWidget);
-    await open(tester);
-    expect(popupLabels(tester), contains("Default (Test · qwen-2.5)"));
+    await openModelCatalog(tester);
+    expect(catalogLabels(tester), contains("Default (Test · qwen-2.5)"));
   });
 
   testWidgets("the optional picker's Off text is its helper", (tester) async {
-    await pump(
-      tester,
-      nullLabel: "Off",
-      helperOffText: "Off, nothing happens.",
-    );
+    await pump(tester, nullLabel: "Off", helperOffText: "Off, nothing happens.");
 
     expect(find.text("Off, nothing happens."), findsOneWidget);
+  });
+
+  testWidgets("the field sits in a resettable row", (tester) async {
+    await pump(tester);
+    expect(find.byType(ResettableField), findsOneWidget);
   });
 }

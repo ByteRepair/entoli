@@ -7,7 +7,6 @@ import "package:path/path.dart" as p;
 
 import "package:agent_chat/domain/app_settings.dart";
 import "package:agent_chat/domain/builtin_project.dart";
-import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/providers.dart";
 import "package:agent_chat/ui/settings/settings_page.dart";
 import "package:agent_chat/ui/widgets/resettable_field.dart";
@@ -135,14 +134,14 @@ void main() {
 
     testWidgets("a divider stands where one group ends and another begins",
         (tester) async {
-      useWindow(tester, const Size(1200, 1300));
+      useWindow(tester, const Size(1200, 1400));
       await app.pump(tester, const SettingsPage());
       final panel = find.ancestor(of: tile("General"), matching: find.byType(ListView));
 
       // The whole order, dividers included: the walk of the panel reads it as
       // it is drawn. Scoped to the panel: the settings beside it are dividers
       // of their own. Widened until the whole list fits, since the assertion
-      // is all sixteen of the categories.
+      // is all seventeen of the categories.
       expect(
         tester
             .widgetList<Widget>(find.descendant(
@@ -155,6 +154,7 @@ void main() {
           "Providers",
           "On-device",
           "LLMs",
+          "Image Generation",
           "─",
           "Memory",
           "Voice",
@@ -283,7 +283,7 @@ void main() {
   testWidgets("selecting a model persists it with its provider", (tester) async {
     await pumpSettings(tester, app, SettingsCategory.llms);
 
-    await openDropdown(tester);
+    await openPickerFor(tester);
     await tester.tap(find.text("Claude Sonnet 4").last);
     await settleIo(tester);
 
@@ -314,24 +314,20 @@ void main() {
   group("the title model", () {
     Future<void> openTitleDropdown(WidgetTester tester) async {
       // Scoped by the label that precedes it: the model picker above it is a
-      // dropdown of the same type.
-      final label = find.text("Title LLM");
-      await scrollTo(tester, label);
-      final field = find.descendant(
-        of: find.ancestor(of: label, matching: find.byType(LabelledField)),
-        matching: find.byType(DropdownButtonFormField<ModelChoice>),
-      );
-      await tester.tap(field);
-      await settleIo(tester);
+      // picker of the same type.
+      await scrollTo(tester, find.text("Title LLM"));
+      await openPickerFor(tester, label: "Title LLM");
     }
 
     testWidgets("is off until one is picked, and every model is offered", (tester) async {
+      useWindow(tester, const Size(800, 1400));
       await pumpSettings(tester, app, SettingsCategory.llms);
       await openTitleDropdown(tester);
 
       // Off, then all four models by name: nothing inherits from this, so
       // there is no provider to narrow the list to.
-      expect(popupLabels(tester), [
+      const names = {"Off", "Claude Haiku 3", "Claude Sonnet 4", "Llama 3", "Qwen 2.5"};
+      expect(catalogLabels(tester).where(names.contains), [
         "Off",
         "Claude Haiku 3",
         "Claude Sonnet 4",

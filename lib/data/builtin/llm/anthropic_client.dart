@@ -256,28 +256,35 @@ class AnthropicClient implements LlmClient {
 
   List<Map<String, dynamic>> _userBlocks(LlmMessage message) {
     if (message.role == LlmRole.tool) {
+      final images = message.attachments.where((a) => a.isImage);
       return [
         {
           "type": "tool_result",
           "tool_use_id": message.toolCallId ?? "",
-          "content": message.text,
+          "content": images.isEmpty
+              ? message.text
+              : [
+                  {"type": "text", "text": message.text},
+                  ...images.map(_imageBlock),
+                ],
         },
       ];
     }
     final text = inlineText(message);
     return [
       if (text.isNotEmpty) {"type": "text", "text": text},
-      for (final image in message.attachments.where((a) => a.isImage))
-        {
-          "type": "image",
-          "source": {
-            "type": "base64",
-            "media_type": image.mimeType,
-            "data": image.base64,
-          },
-        },
+      ...message.attachments.where((a) => a.isImage).map(_imageBlock),
     ];
   }
+
+  Map<String, dynamic> _imageBlock(LlmAttachment image) => {
+        "type": "image",
+        "source": {
+          "type": "base64",
+          "media_type": image.mimeType,
+          "data": image.base64,
+        },
+      };
 
   /// A truncated tool call leaves half a JSON object behind. Sending it back as
   /// an empty input keeps the turn replayable; the model sees its own mistake

@@ -141,6 +141,7 @@ class AutoMemorySection extends ConsumerWidget {
             child: ModelPicker(
               nullLabel: "Off",
               defaultOf: LlmProviderConfig.lightDefaultOf,
+              role: ModelRole.text,
               helperOffText: "What writes memories in the background. Off, "
                   "extraction is inert and the store only ever holds what the "
                   "agent or you saved.",

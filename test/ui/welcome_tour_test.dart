@@ -6,6 +6,7 @@ import "package:flutter_test/flutter_test.dart";
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/providers.dart";
 import "package:agent_chat/ui/sidebar/sidebar.dart";
+import "package:agent_chat/ui/settings/llm_settings.dart" show ImageSection;
 import "package:agent_chat/ui/settings/settings_page.dart";
 import "package:agent_chat/ui/settings/welcome_page.dart";
 import "package:agent_chat/ui/welcome_gate.dart";
@@ -76,6 +77,14 @@ void main() {
     expect(find.text("Marketplace"), findsOneWidget);
     await scrollTo(tester, find.text("Byte Repair"));
     expect(find.text("Byte Repair"), findsOneWidget);
+    // Image generation opens its own settings page, and back returns here.
+    await scrollTo(tester, find.text("Image generation"));
+    await tester.tap(find.text("Image generation"));
+    await tester.pumpAndSettle();
+    expect(find.byType(ImageSection), findsOneWidget);
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    expect(find.text("More to set up"), findsOneWidget);
 
     await next(tester, 2);
     expect(find.text("Yours alone"), findsOneWidget);
@@ -120,7 +129,7 @@ void main() {
 
     // Picked through the LLM picker the page embeds, which is how a user
     // unlocks it.
-    await openDropdown(tester);
+    await openPickerFor(tester);
     await tester.tap(find.text("Llama 3").last);
     await settleIo(tester, least: 3);
     expect(tester.widget<FilledButton>(button("Next")).onPressed, isNotNull);

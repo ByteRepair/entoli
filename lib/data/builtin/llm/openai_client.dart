@@ -60,7 +60,7 @@ class OpenAiClient implements LlmClient {
       headers: _headers,
       body: {
         "model": model,
-        "messages": mergeLeadingSystem(messages).map(_encodeMessage).toList(),
+        "messages": _encodeAll(mergeLeadingSystem(messages)),
         "stream": true,
         // Ask for the usage object on the final frame: OpenAI's streaming
         // shape sends it only when asked, and the auto-compact threshold
@@ -80,6 +80,7 @@ class OpenAiClient implements LlmClient {
     final text = StringBuffer();
     final reasoning = StringBuffer();
     final calls = <int, _PartialCall>{};
+    final images = <LlmAttachment>[];
     String? finishReason;
     LlmUsage? usage;
 
@@ -147,6 +148,8 @@ class OpenAiClient implements LlmClient {
         yield LlmReasoningChunk(thought);
       }
 
+      images.addAll(imagesIn(delta["images"]));
+
       final toolCalls = delta["tool_calls"];
       if (toolCalls is List) {
         for (final raw in toolCalls) {
@@ -172,6 +175,7 @@ class OpenAiClient implements LlmClient {
         role: LlmRole.assistant,
         text: text.toString(),
         reasoning: reasoning.isEmpty ? null : reasoning.toString(),
+        attachments: images,
         toolCalls: [
           for (final index in calls.keys.toList()..sort())
             LlmToolCall(
@@ -184,6 +188,59 @@ class OpenAiClient implements LlmClient {
     );
   }
 
+  /// One image from [prompt]. OpenAI's own image models answer only the
+  /// Images API; everything else that makes images through this shape
+  /// (OpenRouter's) answers `/chat/completions` asked for the image modality.
+  ///
+  /// [quality] is `low`, `medium` or `high`, null for the provider's default.
+  /// Only the Images API takes one; the chat shape has no such field.
+  Future<List<LlmAttachment>> generateImage(String prompt,
+      {required String model, String? quality}) async {
+    final dallE = model.startsWith("dall-e");
+    final imagesApi = model.startsWith("gpt-image") || dallE;
+    final response = await postStream(
+      _http,
+      under(baseUrl, imagesApi ? "images/generations" : "chat/completions"),
+      headers: {"content-type": "application/json", ..._auth},
+      body: imagesApi
+          ? {
+              "model": model,
+              "prompt": prompt,
+              // gpt-image always answers base64 and rejects the field.
+              if (dallE) "response_format": "b64_json",
+              // DALL·E has two grades rather than three.
+              if (quality != null)
+                "quality": dallE ? (quality == "high" ? "hd" : "standard") : quality,
+            }
+          : {
+              "model": model,
+              "messages": [
+                {"role": "user", "content": prompt},
+              ],
+              "modalities": ["image", "text"],
+            },
+    );
+    final json = jsonDecode(await response.stream.bytesToString());
+    if (json is! Map<String, dynamic>) return const [];
+    if (imagesApi) {
+      final data = json["data"];
+      return [
+        if (data is List)
+          for (final (i, item) in data.indexed)
+            if (item is Map && item["b64_json"] is String)
+              LlmAttachment(
+                filename: "image-$i.png",
+                mimeType: "image/png",
+                bytes: base64Decode(item["b64_json"] as String),
+              ),
+      ];
+    }
+    final choices = json["choices"];
+    if (choices is! List || choices.isEmpty) return const [];
+    final message = (choices.first as Map)["message"];
+    return message is Map ? imagesIn(message["images"]) : const [];
+  }
+
   Map<String, dynamic> _encodeTool(LlmTool tool) => {
         "type": "function",
         "function": {
@@ -191,6 +248,36 @@ class OpenAiClient implements LlmClient {
           "description": tool.description,
           "parameters": tool.schema,
         },
+      };
+
+  /// A tool message takes text alone, so the images on a run of results go
+  /// in one user message straight after it.
+  List<Map<String, dynamic>> _encodeAll(List<LlmMessage> messages) {
+    final out = <Map<String, dynamic>>[];
+    final images = <LlmAttachment>[];
+    for (final (i, message) in messages.indexed) {
+      out.add(_encodeMessage(message));
+      if (message.role == LlmRole.tool) {
+        images.addAll(message.attachments.where((a) => a.isImage));
+      }
+      final runEnds = i + 1 == messages.length || messages[i + 1].role != LlmRole.tool;
+      if (images.isNotEmpty && runEnds) {
+        out.add({
+          "role": "user",
+          "content": [
+            {"type": "text", "text": "The images the tool results above returned."},
+            ...images.map(_imageUrl),
+          ],
+        });
+        images.clear();
+      }
+    }
+    return out;
+  }
+
+  Map<String, dynamic> _imageUrl(LlmAttachment image) => {
+        "type": "image_url",
+        "image_url": {"url": "data:${image.mimeType};base64,${image.base64}"},
       };
 
   Map<String, dynamic> _encodeMessage(LlmMessage message) {
@@ -233,13 +320,34 @@ class OpenAiClient implements LlmClient {
     if (images.isEmpty) return text;
     return [
       if (text.isNotEmpty) {"type": "text", "text": text},
-      for (final image in images)
-        {
-          "type": "image_url",
-          "image_url": {"url": "data:${image.mimeType};base64,${image.base64}"},
-        },
+      ...images.map(_imageUrl),
     ];
   }
+}
+
+/// OpenRouter's `images`, on a message or a streamed delta: a list of
+/// `{"type": "image_url", "image_url": {"url": "data:..."}}`. Not in the OpenAI
+/// spec, so anything that is not a data URL is skipped rather than fetched.
+List<LlmAttachment> imagesIn(Object? images) {
+  if (images is! List) return const [];
+  final out = <LlmAttachment>[];
+  for (final image in images) {
+    final ref = image is Map ? image["image_url"] : null;
+    final url = ref is Map ? ref["url"] : null;
+    if (url is! String || !url.startsWith("data:")) continue;
+    try {
+      final data = UriData.parse(url);
+      final ext = data.mimeType.split("/").last;
+      out.add(LlmAttachment(
+        filename: "image-${out.length}.$ext",
+        mimeType: data.mimeType,
+        bytes: data.contentAsBytes(),
+      ));
+    } on FormatException {
+      continue;
+    }
+  }
+  return out;
 }
 
 class _PartialCall {

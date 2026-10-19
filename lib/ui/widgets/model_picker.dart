@@ -3,11 +3,16 @@ import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../domain/llm_provider.dart";
+import "../../domain/model_registry.dart";
 import "../../domain/models.dart";
 import "../../providers.dart";
+import "model_catalog_page.dart";
 import "resettable_field.dart";
 
-/// One model out of every configured provider, or the null entry above them.
+export "model_catalog_page.dart" show ModelRole;
+
+/// One model out of every configured provider, or the null entry above them,
+/// picked on the [ModelCatalogPage] the field opens.
 ///
 /// Three states, spelled by the stored [ModelChoice]:
 ///
@@ -23,8 +28,9 @@ import "resettable_field.dart";
 /// chat default for the LLM field, the light one for title, memory and
 /// classifier. [inherited] is what the null entry resolves to at the level
 /// above (the chat override's "Default (app default)"); where it is null the
-/// null entry is what [nullLabel] says and resolves to nothing.
-class ModelPicker extends StatelessWidget {
+/// null entry is what [nullLabel] says and resolves to nothing. [role] is what
+/// the model is for, which decides what the catalog offers.
+class ModelPicker extends ConsumerWidget {
   const ModelPicker({
     super.key,
     required this.choice,
@@ -33,6 +39,7 @@ class ModelPicker extends StatelessWidget {
     this.defaultOf = LlmProviderConfig.chatDefaultOf,
     this.inherited,
     this.helperOffText,
+    this.role = ModelRole.agent,
   });
 
   final ModelChoice choice;
@@ -53,187 +60,93 @@ class ModelPicker extends StatelessWidget {
   /// pickers' "Off, ..." lines.
   final String? helperOffText;
 
+  final ModelRole role;
 
   @override
-  Widget build(BuildContext context) {
-    return _Models((providers, models) {
-      final none = choice.providerId == null && choice.modelId == null;
-      return ResettableField(
-        resetLabel: providers.isEmpty ? nullLabel : _defaultLabel(providers),
-        onReset: () => onChanged(_resetTarget(providers)),
-        child: _dropdown(
-          providers: providers,
-          models: models,
-          choice: choice,
-          onChanged: onChanged,
-          nullLabel: nullLabel,
-          defaultOf: defaultOf,
-          inherited: inherited,
-          helperText: none ? helperOffText ?? _inheritedHelper(models) : null,
+  Widget build(BuildContext context, WidgetRef ref) {
+    final providers = ref.watch(appSettingsProvider.select((s) => s.llmProviders));
+    final listed = ref.watch(sortedModelsProvider).value ?? const <ModelOption>[];
+    final none = choice.providerId == null && choice.modelId == null;
+    final nullEntry =
+        inherited == null ? nullLabel : "$nullLabel (${_name(providers, listed, inherited!)})";
+    final defaultEntry = _defaultEntry(providers, defaultOf);
+    return ResettableField(
+      resetLabel: defaultEntry == null
+          ? nullLabel
+          : "${defaultEntry.displayName} - Default (${defaultOf(defaultEntry)})",
+      onReset: () => onChanged(defaultEntry == null
+          ? (providerId: null, modelId: null)
+          : (providerId: defaultEntry.id, modelId: null)),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(4),
+        onTap: () async {
+          final picked = await Navigator.of(context).push<ModelChoice>(
+            MaterialPageRoute(
+              builder: (_) => ModelCatalogPage(
+                choice: choice,
+                nullEntry: nullEntry,
+                defaultOf: defaultOf,
+                role: role,
+              ),
+            ),
+          );
+          if (picked != null) onChanged(picked);
+        },
+        child: InputDecorator(
+          decoration: InputDecoration(
+            helperText: none ? helperOffText ?? _inheritedHelper(providers, listed) : null,
+            helperMaxLines: 3,
+            suffixIcon: const Icon(Icons.chevron_right),
+          ),
+          child: Text(_label(providers, listed),
+              maxLines: 1, overflow: TextOverflow.ellipsis),
         ),
-      );
-    });
+      ),
+    );
   }
 
-  String? _inheritedHelper(List<ModelOption> models) =>
-      inherited == null ? null : "Using ${_inheritedName(models, inherited)}";
+  String? _inheritedHelper(List<LlmProviderConfig> providers, List<ModelOption> listed) =>
+      inherited == null ? null : "Using ${_name(providers, listed, inherited!)}";
 
-  /// Where reset lands: the first Default entry the dropdown shows — the
-  /// first provider that names one — or the null entry when there is nothing
-  /// to have a default.
-  ModelChoice _resetTarget(List<LlmProviderConfig> providers) {
-    final provider = _defaultEntry(providers, defaultOf);
-    return provider == null
-        ? (providerId: null, modelId: null)
-        : (providerId: provider.id, modelId: null);
-  }
-
-  String _defaultLabel(List<LlmProviderConfig> providers) {
-    final provider = _defaultEntry(providers, defaultOf);
-    if (provider == null) return nullLabel;
-    return "${provider.displayName} - Default (${defaultOf(provider)})";
+  /// What the field reads as. A Default whose provider is gone, or names no
+  /// default, has nothing to resolve to and reads as the null entry, whose
+  /// helper names what it inherits; a model
+  /// is named by what the catalog calls it, its id where nothing does.
+  String _label(List<LlmProviderConfig> providers, List<ModelOption> listed) {
+    final provider = providers.firstWhereOrNull((p) => p.id == choice.providerId);
+    if (choice.modelId == null) {
+      final model = provider == null ? null : defaultOf(provider);
+      return model == null ? nullLabel : "${provider!.displayName} - Default ($model)";
+    }
+    // A provider gone from settings, and from the on-device endpoints, leaves
+    // nothing that could answer: as good as nothing chosen.
+    final reachable = provider != null ||
+        choice.providerId == null ||
+        listed.any((m) => m.providerId == choice.providerId);
+    return reachable ? _name(providers, listed, choice) : nullLabel;
   }
 }
 
-/// What the null entry resolves to at the level above, named for the helper
-/// line and the popup's `Default (…)` entry: the matched model's label, the
-/// stored model id, or "the app default" when nothing is known.
-String _inheritedName(List<ModelOption> models, ModelChoice? inherited) {
-  final option = models.firstWhereOrNull((m) =>
-      m.modelId == inherited?.modelId &&
-      (inherited?.providerId == null || m.providerId == inherited?.providerId));
-  return option != null
-      ? (option.label ?? option.modelId)
-      : inherited?.modelId ?? "the app default";
+/// A chosen model by the name the catalog gives it, then the on-device list's,
+/// then its id; "the app default" where nothing is chosen.
+String _name(List<LlmProviderConfig> providers, List<ModelOption> listed, ModelChoice choice) {
+  final provider = providers.firstWhereOrNull((p) => p.id == choice.providerId);
+  final model = choice.modelId ??
+      (provider == null ? null : LlmProviderConfig.chatDefaultOf(provider));
+  if (model == null) return "the app default";
+  return modelInfoOf(provider, model)?.name ??
+      listed
+          // A model stored without its provider, as an older chat's was.
+          .firstWhereOrNull((m) =>
+              m.modelId == model &&
+              (choice.providerId == null || m.providerId == choice.providerId))
+          ?.label ??
+      model;
 }
 
-/// The first provider whose Default entry the dropdown shows, or null when
+/// The first provider whose Default entry the catalog shows, or null when
 /// none of them names one. Reset anchors here rather than on the first
 /// provider, since only providers naming one have an entry to land on.
 LlmProviderConfig? _defaultEntry(List<LlmProviderConfig> providers,
         String? Function(LlmProviderConfig) defaultOf) =>
     providers.firstWhereOrNull((p) => defaultOf(p) != null);
-
-/// What a picker's dropdown shows, built over the configured providers and the
-/// models they offer. The two things arrive together: a provider with no models
-/// listed and none answered still shows its Default entry, naming what it
-/// resolves to, and a model from a provider no longer configured is matched
-/// against what is there rather than trusted.
-typedef _DropdownBuilder = Widget Function(
-    List<LlmProviderConfig> providers, List<ModelOption> models);
-
-class _Models extends ConsumerWidget {
-  const _Models(this.builder);
-
-  final _DropdownBuilder builder;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final providers = ref.watch(appSettingsProvider.select((s) => s.llmProviders));
-    return ref.watch(sortedModelsProvider).when(
-          data: (models) => builder(providers, models),
-          loading: () => const Row(
-            children: [
-              SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)),
-              SizedBox(width: 12),
-              Text("Loading models..."),
-            ],
-          ),
-          error: (e, _) => Text("Failed to load models: $e"),
-        );
-  }
-}
-
-DropdownButtonFormField<ModelChoice> _dropdown({
-  required List<LlmProviderConfig> providers,
-  required List<ModelOption> models,
-  required ModelChoice choice,
-  required ValueChanged<ModelChoice> onChanged,
-  required String nullLabel,
-  required String? Function(LlmProviderConfig) defaultOf,
-  required ModelChoice? inherited,
-  required String? helperText,
-}) {
-  final nullEntry = inherited == null
-      ? nullLabel
-      : "$nullLabel (${_inheritedName(models, inherited)})";
-  return DropdownButtonFormField<ModelChoice>(
-    initialValue: _match(providers, models, choice, defaultOf),
-    isExpanded: true,
-    decoration: InputDecoration(helperText: helperText),
-    // The closed field names the entry; the popup entry says what a Default
-    // resolves to beside it. Without the builder the closed state would show
-    // the whole "Default (inherited)" string, which is popup detail.
-    selectedItemBuilder: (context) => [
-      Text(nullLabel),
-      for (final provider in providers)
-        if (defaultOf(provider) != null) Text("${provider.displayName} - Default"),
-      for (final m in models) Text(m.label ?? m.modelId),
-    ],
-    items: [
-      DropdownMenuItem<ModelChoice>(
-        value: (providerId: null, modelId: null),
-        child: Text(nullEntry),
-      ),
-      // One Default entry per provider that names one, saying the model it
-      // resolves to. A provider without one has nothing to resolve to, so it
-      // offers its models alone.
-      for (final provider in providers)
-        if (defaultOf(provider) != null)
-          DropdownMenuItem<ModelChoice>(
-            value: (providerId: provider.id, modelId: null),
-            child: Text("${provider.displayName} - Default (${defaultOf(provider)})"),
-          ),
-      for (final m in models)
-        DropdownMenuItem<ModelChoice>(
-          value: (providerId: m.providerId, modelId: m.modelId),
-          child: Text(m.label ?? m.modelId),
-        ),
-    ],
-    onChanged: (c) =>
-        onChanged((providerId: c?.providerId, modelId: c?.modelId)),
-  );
-}
-
-/// A stored choice is matched against the items rather than trusted: one whose
-/// model the backend no longer offers reads as its provider's Default — or,
-/// where the provider is gone too, as the null entry — or the dropdown asserts
-/// on having no item for its value.
-ModelChoice? _match(
-  List<LlmProviderConfig> providers,
-  List<ModelOption> models,
-  ModelChoice choice,
-  String? Function(LlmProviderConfig) defaultOf,
-) {
-  // The Default entry a named provider resolves to, or nothing when it is
-  // gone or names no default.
-  ModelChoice? defaultChoiceOf(String? providerId) {
-    final provider = providers.firstWhereOrNull((p) => p.id == providerId);
-    return provider != null && defaultOf(provider) != null
-        ? (providerId: provider.id, modelId: null)
-        : null;
-  }
-
-  if (choice.providerId == null && choice.modelId == null) {
-    return (providerId: null, modelId: null);
-  }
-  if (choice.modelId == null) {
-    // A Default choice: its provider's Default entry, where the provider is
-    // still there and names a default. One without — a custom provider, or
-    // one whose preset names nothing — has nothing to resolve to, so it reads
-    // as the null entry rather than as an item nothing renders.
-    return defaultChoiceOf(choice.providerId) ?? (providerId: null, modelId: null);
-  }
-  // A specific model is matched by its own pair: the provider it rides with
-  // is the one the backend offered it under, not one from settings. One the
-  // backend no longer offers falls back to its provider's Default entry where
-  // the provider is configured and names one — a model that has gone is not
-  // nothing chosen — and the null entry where it is not.
-  final found = models.firstWhereOrNull((m) =>
-      m.modelId == choice.modelId &&
-      (choice.providerId == null || m.providerId == choice.providerId));
-  if (found != null) {
-    return (providerId: found.providerId, modelId: found.modelId);
-  }
-  return defaultChoiceOf(choice.providerId) ?? (providerId: null, modelId: null);
-}

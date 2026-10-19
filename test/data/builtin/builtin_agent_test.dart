@@ -1,11 +1,13 @@
 import "dart:async";
 import "dart:io";
+import "dart:typed_data";
 
 import "package:flutter_test/flutter_test.dart";
 import "package:fs_shim/fs_io.dart" show fileSystemIo;
 import "package:path/path.dart" as p;
 
 import "package:agent_chat/data/builtin/builtin_agent.dart";
+import "package:agent_chat/data/builtin/image_tool.dart";
 import "package:agent_chat/data/builtin/memory/instructions.dart";
 import "package:agent_chat/data/builtin/memory/store.dart";
 import "package:agent_chat/data/builtin/memory_tools.dart";
@@ -40,6 +42,8 @@ void main() {
     PermissionClassifier? classifier,
     bool canRunCommands = true,
     Future<String> Function(String path, String entryFile, {String? artifactId})? saveArtifact,
+    Future<List<LlmAttachment>> Function(String prompt)? generateImage,
+    Future<String> Function(String filename, Uint8List bytes)? saveResource,
     MemorySettings memory = MemorySettings.off,
     List<InstructionFile> instructions = const [],
     MemoryStore? memoryStore,
@@ -70,6 +74,8 @@ void main() {
       // Nothing picked, unless the test says what was.
       answer: (request) async => answers ?? request.unanswered,
       saveArtifact: saveArtifact,
+      generateImage: generateImage,
+      saveResource: saveResource,
       memory: memory,
       instructions: instructions,
       memoryStore: memoryStore,
@@ -769,6 +775,66 @@ void main() {
       await agentOver(client).resume().toList();
 
       expect(client.sent.single.last.text, "what is 2+2?");
+    });
+  });
+
+  group("images", () {
+    final cat = LlmAttachment(
+        filename: "image-0.png", mimeType: "image/png", bytes: Uint8List(3));
+    Future<String> saveTo(List<String> saved, String filename, Uint8List _) async {
+      saved.add(filename);
+      return "res-$filename";
+    }
+
+    test("the tool is offered only with an image model behind it", () async {
+      final client = FakeLlmClient([[finish], [finish]]);
+      await agentOver(client).run(userMessage("hi")).toList();
+      await agentOver(client,
+              generateImage: (_) async => [cat],
+              saveResource: (_, _) async => "r")
+          .run(userMessage("hi"))
+          .toList();
+
+      bool offered(int call) =>
+          client.calls[call].tools.any((t) => t.name == imageGenerationToolName);
+      expect(offered(0), isFalse);
+      expect(offered(1), isTrue);
+    });
+
+    test("a generated image is saved and recorded on the reply", () async {
+      final saved = <String>[];
+      final client = FakeLlmClient([
+        [fileCall(imageGenerationToolName, {"prompt": "a cat"})],
+        [finish],
+      ]);
+      final events = await agentOver(client,
+              generateImage: (prompt) async => prompt == "a cat" ? [cat] : [],
+              saveResource: (f, b) => saveTo(saved, f, b))
+          .run(userMessage("draw a cat"))
+          .toList();
+
+      expect(saved, ["image-0.png"]);
+      final part = events.whereType<ImageEvent>().single.part;
+      expect(part.resource, "res-image-0.png");
+      expect(events.whereType<ToolResultEvent>().single.result.returnCode, 0);
+    });
+
+    test("an image the chat model answers with is recorded too", () async {
+      final saved = <String>[];
+      final client = FakeLlmClient([
+        [
+          LlmCompletion(
+              message: LlmMessage(
+                  role: LlmRole.assistant, text: "here", attachments: [cat])),
+        ],
+      ]);
+      final events = await agentOver(client,
+              saveResource: (f, b) => saveTo(saved, f, b))
+          .run(userMessage("draw a cat"))
+          .toList();
+
+      expect(saved, ["image-0.png"]);
+      expect(events.whereType<ImageEvent>(), hasLength(1));
     });
   });
 

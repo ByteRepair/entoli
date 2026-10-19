@@ -1,4 +1,5 @@
 import "dart:convert";
+import "dart:typed_data";
 
 import "package:flutter_test/flutter_test.dart";
 import "package:http/http.dart" as http;
@@ -288,5 +289,21 @@ void main() {
 
       expect(await client.listModels(), ["claude-a", "claude-b"]);
     });
+  });
+
+  test("a tool result's images go inside it", () async {
+    await clientStreaming([{"type": "message_stop"}]).stream([
+      const LlmMessage(role: LlmRole.user, text: "draw"),
+      const LlmMessage(role: LlmRole.assistant, toolCalls: [
+        LlmToolCall(id: "c1", name: "image_generation", argumentsJson: "{}"),
+      ]),
+      LlmMessage(role: LlmRole.tool, toolCallId: "c1", text: "made", attachments: [
+        LlmAttachment(filename: "a.png", mimeType: "image/png", bytes: Uint8List.fromList([1])),
+      ]),
+    ], model: "claude-test").toList();
+
+    final result = ((sentBody()["messages"] as List).last["content"] as List).single as Map;
+    expect(result["type"], "tool_result");
+    expect((result["content"] as List).map((b) => b["type"]), ["text", "image"]);
   });
 }

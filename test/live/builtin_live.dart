@@ -139,6 +139,8 @@ void main() {
           log("artifact: $title (entry: $entryFile)");
         case SkillInstallEvent(:final title):
           log("skill offered: $title");
+        case ImageEvent(:final part):
+          log("image: ${part.filename}");
         case RetryEvent(:final attempt, :final message):
           log("retry $attempt: $message");
         // Drawn as a row beside the spinner in the app; here it is one line per

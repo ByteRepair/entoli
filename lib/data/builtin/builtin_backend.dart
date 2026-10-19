@@ -32,6 +32,8 @@ import "memory/instructions.dart";
 import "memory/store.dart";
 import "llm/gated_client.dart";
 import "llm/llm_client.dart";
+import "llm/openai_client.dart";
+import "llm/text_only_client.dart";
 import "llm/llm_registry.dart";
 import "llm/rate_limit_gate.dart";
 import "permission_classifier.dart";
@@ -125,7 +127,7 @@ class BuiltinBackend implements AgentBackend {
   /// that reported it.
   final Map<String, int> _usage = {};
 
-  /// The context window the chat's model stands in, as `contextWindowOf`
+  /// The context window the chat's model stands in, as `modelInfoOf`
   /// named it when the request beside this entry ran — written where the
   /// usage is written, so the threshold answers both halves of itself from
   /// one pair of maps with no `meta.json` read on the settle path. Null
@@ -464,6 +466,11 @@ class BuiltinBackend implements AgentBackend {
           }
           return store.createArtifact(chatId, resolved, entryFile, project: project);
         },
+        generateImage:
+            _imageGenerator(settings.imageProvider, settings.imageModel,
+                settings.imageQuality),
+        saveResource: (filename, bytes) =>
+            store.saveResource(chatId, filename, bytes),
         registerTrigger: triggerRegistry?.call(chatId, project),
         editSettings: editSettings,
         packageSkill: (path, name) async {
@@ -482,7 +489,7 @@ class BuiltinBackend implements AgentBackend {
             controller.add(ShellOutputEvent(callId: callId, text: text)),
         onUsage: (usage) {
           _usage[chatId] = usage.contextTokens;
-          _windows[chatId] = contextWindowOf(settings.provider, settings.model);
+          _windows[chatId] = _infoOf(settings.provider, settings.model)?.context;
         },
       );
       // The real kill replaces the placeholder.
@@ -935,7 +942,7 @@ class BuiltinBackend implements AgentBackend {
     // here in the first place. The window is the model's own where the
     // registry knows it, the settings' global guess where it does not — and
     // where the model still refuses a span, the ladder below is the answer.
-    final window = contextWindowOf(settings.provider, settings.model) ??
+    final window = _infoOf(settings.provider, settings.model)?.context ??
         AppSettings.load(config).totalContext;
     final budget = window ~/ 2;
     // The retry ladder: a span too big to summarize is not a failure to give
@@ -1237,7 +1244,23 @@ class BuiltinBackend implements AgentBackend {
     final config = endpoint.config;
     final modelId = model ?? defaultOf(config);
     if (modelId == null || modelId.isEmpty) return null;
-    return (client: registry.clientOf(endpoint), modelId: modelId);
+    final client = registry.clientOf(endpoint);
+    // Here rather than at each request: everything that asks the model
+    // resolves it through this, the compaction's one-shot read included.
+    return (
+      client: modelInfoOf(config, modelId)?.readsImages ?? false
+          ? client
+          : TextOnlyClient(client),
+      modelId: modelId,
+    );
+  }
+
+  /// What the registry knows of the model a turn resolves to, the provider's
+  /// default standing in for a null model as it does for the turn.
+  ModelInfo? _infoOf(String? provider, String? model) {
+    final config = provider == null ? null : registry.endpointFor(provider)?.config;
+    return modelInfoOf(
+        config, model ?? (config == null ? null : LlmProviderConfig.chatDefaultOf(config)));
   }
 
   /// The classifier model, resolved the same way the main model is. Null when
@@ -1251,6 +1274,20 @@ class BuiltinBackend implements AgentBackend {
     );
     if (target == null) return null;
     return LlmClassifier(client: target.client, model: target.modelId);
+  }
+
+  /// Null, and so no tool, where the image model is off or its provider does
+  /// not speak the OpenAI shape: Anthropic makes no images.
+  Future<List<LlmAttachment>> Function(String prompt)? _imageGenerator(
+      String? provider, String? model, ImageQuality quality) {
+    final target = _resolveModel(model, provider,
+        defaultOf: LlmProviderConfig.imageDefaultOf);
+    final resolved = target?.client;
+    final client = resolved is TextOnlyClient ? resolved.inner : resolved;
+    if (target == null || client is! OpenAiClient) return null;
+    return (prompt) => client.generateImage(prompt,
+        model: target.modelId,
+        quality: quality == ImageQuality.auto ? null : quality.name);
   }
 
   Future<ApprovalResponse> _awaitApproval(ToolApproval approval) =>

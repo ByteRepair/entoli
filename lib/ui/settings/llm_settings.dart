@@ -41,6 +41,7 @@ class DefaultsSection extends ConsumerWidget {
           child: ModelPicker(
             nullLabel: "Off",
             defaultOf: LlmProviderConfig.lightDefaultOf,
+            role: ModelRole.text,
             helperOffText: "Names a chat from its first message. Off, chats "
                 "stay \"New chat\" until you rename them.",
             choice: (
@@ -51,6 +52,77 @@ class DefaultsSection extends ConsumerWidget {
                 ref.read(appSettingsProvider.notifier).setTitleModel(choice),
           ),
         ),
+      ],
+    );
+  }
+}
+
+/// The model behind the agent's `image_generation` tool. Off, the tool is not
+/// offered at all.
+class ImageSection extends ConsumerWidget {
+  const ImageSection({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final settings = ref.watch(appSettingsProvider);
+    final notifier = ref.read(appSettingsProvider.notifier);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SectionHeader("Image generation"),
+        SwitchListTile(
+          contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+          title: const Text("Image generation"),
+          subtitle: const Text("Lets the agent make images, shown in the "
+              "chat. Each one is a paid request to the image model."),
+          value: settings.imageGeneration,
+          onChanged: notifier.setImageGeneration,
+        ),
+        if (settings.imageGeneration)
+          LabelledField(
+            label: "Image LLM",
+            child: ModelPicker(
+              nullLabel: noneOptionLabel,
+              defaultOf: LlmProviderConfig.imageDefaultOf,
+              role: ModelRole.image,
+              helperOffText: "No image model: the agent is not offered the "
+                  "tool. OpenAI and OpenRouter have defaults.",
+              choice: (
+                providerId: settings.imageProviderId,
+                modelId: settings.imageModelId,
+              ),
+              onChanged: notifier.setImageModel,
+            ),
+          ),
+        if (settings.imageGeneration)
+          LabelledField(
+            label: "Quality",
+            child: DropdownButtonFormField<ImageQuality>(
+              initialValue: settings.imageQuality,
+              isExpanded: true,
+              decoration: const InputDecoration(
+                helperText: "Sent to OpenAI's image models; higher costs more "
+                    "and takes longer. OpenRouter's image models take no "
+                    "quality and ignore it.",
+                helperMaxLines: 3,
+              ),
+              items: [
+                for (final q in ImageQuality.values)
+                  DropdownMenuItem(
+                    value: q,
+                    child: Text(switch (q) {
+                      ImageQuality.auto => "Provider default",
+                      ImageQuality.low => "Low",
+                      ImageQuality.medium => "Medium",
+                      ImageQuality.high => "High",
+                    }),
+                  ),
+              ],
+              onChanged: (value) {
+                if (value != null) notifier.setImageQuality(value);
+              },
+            ),
+          ),
       ],
     );
   }

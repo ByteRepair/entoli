@@ -34,8 +34,10 @@ import "package:agent_chat/domain/chat_meta.dart";
 import "package:agent_chat/domain/chat_repository.dart";
 import "package:agent_chat/domain/chat_store.dart";
 import "package:agent_chat/domain/llm_provider.dart";
+import "package:agent_chat/domain/model_registry.dart";
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/ui/widgets/resettable_field.dart" show LabelledField;
+import "package:agent_chat/ui/widgets/model_picker.dart";
 import "package:agent_chat/domain/prompt_library.dart";
 import "package:agent_chat/domain/trigger.dart";
 import "package:agent_chat/domain/shell.dart";
@@ -179,6 +181,7 @@ class TestApp {
     http.Client? marketplaceClient,
   }) {
     final config = tempConfig();
+    seedCatalog(testProviderModels);
     final backend = FakeBackend();
     final picker = FakeAttachmentPicker();
     final launcher = FakeLauncherIcons(available: launcherIcons);
@@ -430,6 +433,7 @@ class TestApp {
   void dispose() {
     prefill?.dispose();
     container.dispose();
+    ModelCatalog.notifier.value = ModelCatalog.empty;
   }
 }
 
@@ -787,20 +791,44 @@ Future<void> openCategory(WidgetTester tester, SettingsCategory category) async 
 /// Open the model dropdown. Scoped to the field labelled [label] — the LLMs
 /// page has two pickers of the same type, and the chat settings page three —
 /// defaulting to the one under "LLM".
-Future<void> openDropdown(WidgetTester tester, {String label = "LLM"}) async {
+/// Open the catalog of the model picker under the field labelled [label].
+Future<void> openPickerFor(WidgetTester tester, {String label = "LLM"}) async {
   final labelField = find.ancestor(
     of: find.text(label),
     matching: find.byType(LabelledField),
   );
-  await tester.tap(find.descendant(
-    of: labelField,
-    matching: find.byType(DropdownButtonFormField<ModelChoice>),
-  ));
-  await tester.pumpAndSettle();
+  await openModelCatalog(tester,
+      field: find.descendant(of: labelField, matching: find.byType(ModelPicker)));
 }
 
 /// Item labels of the open dropdown popup, which renders in its own ListView
 /// above the page's.
+/// Open the catalog of the [ModelPicker] [field] finds — the only one where
+/// it is null.
+Future<void> openModelCatalog(WidgetTester tester, {Finder? field}) async {
+  await tester.tap(find.descendant(
+      of: field ?? find.byType(ModelPicker), matching: find.byType(InputDecorator)));
+  await tester.pumpAndSettle();
+}
+
+/// Open a picker's catalog and pick the entry reading [label]: a model by
+/// its `<provider> · <id>` line, a quick pick by its title.
+Future<void> pickModel(WidgetTester tester, String label, {Finder? field}) async {
+  await openModelCatalog(tester, field: field);
+  await tester.dragUntilVisible(
+      find.text(label), find.byType(CustomScrollView), const Offset(0, -200));
+  await tester.tap(find.text(label).last);
+  await settleIo(tester);
+}
+
+/// The model cards and quick picks of an open catalog, top to bottom: each
+/// quick pick's title and each card's `<provider> · <id>` line.
+List<String> catalogLabels(WidgetTester tester) => [
+      for (final t in tester.widgetList<Text>(find.descendant(
+          of: find.byType(CustomScrollView), matching: find.byType(Text))))
+        ?t.data,
+    ];
+
 List<String?> popupLabels(WidgetTester tester) => tester
     .widgetList<Text>(find.descendant(
       of: find.byType(ListView).last,

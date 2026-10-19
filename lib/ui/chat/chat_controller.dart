@@ -846,6 +846,7 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
       case ToolCallEvent():
       case ArtifactEvent():
       case SkillInstallEvent():
+      case ImageEvent():
       case InstructionsReadEvent():
         break;
       case ToolResultEvent():

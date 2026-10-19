@@ -7,6 +7,7 @@ import "package:uuid/uuid.dart";
 import "../../core/log.dart";
 import "../../domain/chat_log.dart";
 import "../../domain/models.dart";
+import "../../domain/project.dart";
 import "../../providers.dart";
 import "../marketplace/marketplace_page.dart";
 import "../sidebar/sidebar.dart";
@@ -112,8 +113,7 @@ class _WelcomeTourState extends ConsumerState<WelcomeTour> {
         ...recordsOf([repo.composeUserPrompt("/entoli-welcome-party"), greeting]),
         ChatRecord.turnEnd(messageId: greeting.id, reason: TurnEnd.done),
       ]);
-      ref.read(selectedRemoteProvider.notifier).select(null);
-      ref.read(selectedProjectProvider.notifier).select(null);
+      ref.read(selectedProjectProvider.notifier).select(localProject(null));
       ref.read(selectedChatIdProvider.notifier).select(chat.state.id);
       ref.invalidate(chatListProvider);
     } catch (e) {
@@ -519,6 +519,11 @@ class _ExtrasPage extends StatelessWidget {
             title: "Voice",
             detail: "Talk to the agent and hear it answer.",
             category: SettingsCategory.voice,
+          ),
+          _SetupRow.category(
+            title: "Image generation",
+            detail: "Let the agent make images, shown in the chat.",
+            category: SettingsCategory.images,
           ),
           _SetupRow.category(
             title: "Terminal",

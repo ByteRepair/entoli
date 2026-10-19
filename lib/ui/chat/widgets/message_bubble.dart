@@ -404,7 +404,10 @@ class _MessageBubbleState extends State<MessageBubble> {
     final theme = Theme.of(context);
     final rows = <Widget>[];
     final spoken = <Widget>[];
-    var files = widget.message.files.toList();
+    // A prompt's files head its bubble; a reply's are drawn where they were
+    // made, below the call that made them.
+    final isUser = widget.message.role == MessageRole.user;
+    var files = isUser ? widget.message.files.toList() : <FilePart>[];
 
     final parts = widget.message.parts;
     // The part a running turn is working on. A turn is always working on its
@@ -546,7 +549,12 @@ class _MessageBubbleState extends State<MessageBubble> {
             run.add(label);
           }
         case FilePart():
-          continue;
+          if (isUser) continue;
+          flushRun();
+          closeBubble();
+          rows.add(AttachmentStrip(children: [
+            AttachmentChip.sent(part, chatId: widget.chatId, size: 256),
+          ]));
         case ArtifactPart(:final artifactId, :final entryFile, :final title):
           flushRun();
           rows.add(ArtifactLabel(

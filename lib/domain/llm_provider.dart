@@ -1,3 +1,5 @@
+import "model_registry.dart";
+
 /// Which wire format a provider speaks. Everything that copied OpenAI's
 /// `/chat/completions` is [openai]; Anthropic's `/messages` is its own.
 enum LlmApi { openai, anthropic }
@@ -17,6 +19,7 @@ class LlmProviderConfig {
     this.models = const [],
     this.defaultModelId,
     this.defaultLightModelId,
+    this.customModels = const [],
   });
 
   final String id;
@@ -44,6 +47,10 @@ class LlmProviderConfig {
   /// The light model behind the title, memory and classifier roles.
   final String? defaultLightModelId;
 
+  /// Models the user described by hand, for what models.dev does not list —
+  /// a fine-tune, a private deployment. Ahead of the catalog's on a clash.
+  final List<ModelInfo> customModels;
+
   String get displayName => label ?? id;
 
   /// [lookup] reads the app's own environment and whatever settings adds, so a
@@ -67,6 +74,14 @@ class LlmProviderConfig {
   static String? lightDefaultOf(LlmProviderConfig config) =>
       config.defaultLightModelId;
 
+  /// Keyed by preset id rather than stored on the config, so a provider added
+  /// before image generation existed gets one too. Only the presets whose API
+  /// answers an image request are here.
+  static String? imageDefaultOf(LlmProviderConfig config) => const {
+        "openai": "gpt-image-1",
+        "openrouter": "google/gemini-2.5-flash-image",
+      }[config.id];
+
   LlmProviderConfig copyWith({
     String? id,
     LlmApi? api,
@@ -76,6 +91,7 @@ class LlmProviderConfig {
     List<String>? models,
     String? defaultModelId,
     String? defaultLightModelId,
+    List<ModelInfo>? customModels,
   }) =>
       LlmProviderConfig(
         id: id ?? this.id,
@@ -86,6 +102,7 @@ class LlmProviderConfig {
         models: models ?? this.models,
         defaultModelId: defaultModelId ?? this.defaultModelId,
         defaultLightModelId: defaultLightModelId ?? this.defaultLightModelId,
+        customModels: customModels ?? this.customModels,
       );
 
   Map<String, dynamic> toJson() => {
@@ -97,6 +114,8 @@ class LlmProviderConfig {
         if (models.isNotEmpty) "models": models,
         if (defaultModelId != null) "defaultModelId": defaultModelId,
         if (defaultLightModelId != null) "defaultLightModelId": defaultLightModelId,
+        if (customModels.isNotEmpty)
+          "customModels": {for (final m in customModels) m.id: m.toJson()},
       };
 
   /// Null for anything that does not name an id and a base URL: a half-written
@@ -107,6 +126,7 @@ class LlmProviderConfig {
     final baseUrl = value["baseUrl"];
     if (id is! String || id.isEmpty || baseUrl is! String || baseUrl.isEmpty) return null;
     final models = value["models"];
+    final custom = value["customModels"];
     return LlmProviderConfig(
       id: id,
       api: value["api"] == "anthropic" ? LlmApi.anthropic : LlmApi.openai,
@@ -118,6 +138,11 @@ class LlmProviderConfig {
       models: models is List ? models.whereType<String>().toList() : const [],
       defaultModelId: value["defaultModelId"] as String?,
       defaultLightModelId: value["defaultLightModelId"] as String?,
+      customModels: [
+        if (custom is Map)
+          for (final MapEntry(:key, :value) in custom.entries)
+            if (key is String && value is Map) ModelInfo.fromJson(key, value),
+      ],
     );
   }
 }
@@ -150,8 +175,8 @@ const llmProviderPresets = <LlmProviderConfig>[
     api: LlmApi.openai,
     baseUrl: "https://openrouter.ai/api/v1",
     apiKeyEnv: "OPENROUTER_API_KEY",
-    defaultModelId: "glm-5.3-flash",
-    defaultLightModelId: "nemotron-3-nano:30b",
+    defaultModelId: "z-ai/glm-5.3-flash",
+    defaultLightModelId: "nvidia/nemotron-3-nano-30b-a3b",
   ),
   LlmProviderConfig(
     id: "groq",
@@ -159,8 +184,8 @@ const llmProviderPresets = <LlmProviderConfig>[
     api: LlmApi.openai,
     baseUrl: "https://api.groq.com/openai/v1",
     apiKeyEnv: "GROQ_API_KEY",
-    defaultModelId: "glm-5.3-flash",
-    defaultLightModelId: "nemotron-3-nano:30b",
+    defaultModelId: "openai/gpt-oss-120b",
+    defaultLightModelId: "openai/gpt-oss-20b",
   ),
   LlmProviderConfig(
     id: "ollama-cloud",

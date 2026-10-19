@@ -2,6 +2,7 @@ import "dart:async";
 
 import "package:flutter/foundation.dart" show ValueListenable;
 
+import "../domain/app_settings.dart" show ImageQuality;
 import "../domain/ask.dart";
 import "../domain/builtin_project.dart";
 import "../domain/chat_log.dart";
@@ -112,6 +113,13 @@ class ArtifactEvent extends AgentEvent {
   final String artifactId;
   final String entryFile;
   final String title;
+}
+
+/// An image the model made, already saved under the chat's `resources/`.
+/// Recorded as the reply's own [FilePart], so it is drawn where it was made.
+class ImageEvent extends AgentEvent {
+  const ImageEvent(this.part);
+  final FilePart part;
 }
 
 /// A skill was drafted in the workspace and packaged for the user to install.
@@ -328,6 +336,11 @@ class TurnSettings {
   final String? classifierProvider;
   final String? classifierModel;
 
+  /// The model behind `image_generation`. Null provider means the tool is off.
+  final String? imageProvider;
+  final String? imageModel;
+  final ImageQuality imageQuality;
+
   final Profile? profile;
 
   /// How this turn's replies are worded. The project's answer over the app's;
@@ -407,6 +420,9 @@ class TurnSettings {
     this.approveMode = ApproveMode.ask,
     this.classifierProvider,
     this.classifierModel,
+    this.imageProvider,
+    this.imageModel,
+    this.imageQuality = ImageQuality.auto,
     this.profile,
     this.sharedWorkspace = true,
     this.disabled = const {},
