@@ -1,8 +1,10 @@
 import "dart:async";
 import "dart:convert";
 
+import "package:flutter/foundation.dart" show kIsWeb;
 import "package:http/http.dart" as http;
 
+import "../../../domain/browser_reach.dart";
 import "llm_client.dart";
 
 /// Server-sent events, reduced to the `data:` payloads. Both providers put
@@ -69,7 +71,11 @@ Future<http.StreamedResponse> postStream(
   } catch (e) {
     // No status to judge by: a connection that never opened is worth another
     // try, and a provider that is genuinely down will exhaust the attempts.
-    throw LlmException("Could not reach $url: $e", retryable: true);
+    throw LlmException(
+        kIsWeb
+            ? browserUnreachable(url, origin: Uri.base.origin)
+            : "Could not reach $url: $e",
+        retryable: true);
   }
 
   if (response.statusCode == 200) return response;

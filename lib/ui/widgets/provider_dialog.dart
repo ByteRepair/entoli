@@ -1,5 +1,7 @@
+import "package:flutter/foundation.dart" show kIsWeb;
 import "package:flutter/material.dart";
 
+import "../../domain/browser_reach.dart";
 import "../../domain/llm_provider.dart";
 
 /// Add or edit one endpoint the agent can call. Returns null if dismissed, or
@@ -85,6 +87,14 @@ class _ProviderDialogState extends State<_ProviderDialog> {
     return widget.storedKey == null ? "" : null;
   }
 
+  /// What a browser must be told about the URL being typed, where it is one
+  /// the browser cannot reach as it stands.
+  String? get _reachNote {
+    if (!kIsWeb) return null;
+    final url = Uri.tryParse(_baseUrl.text.trim());
+    return url == null ? null : browserReachNote(url, origin: Uri.base.origin);
+  }
+
   ProviderEdit? _submit() {
     final id = _id.text.trim();
     final baseUrl = _baseUrl.text.trim();
@@ -142,9 +152,12 @@ class _ProviderDialogState extends State<_ProviderDialog> {
               const SizedBox(height: 16),
               TextField(
                 controller: _baseUrl,
-                decoration: const InputDecoration(
+                onChanged: (_) => setState(() {}),
+                decoration: InputDecoration(
                   labelText: "Base URL",
-                  helperText: "The versioned root, e.g. https://api.openai.com/v1",
+                  helperText: _reachNote ??
+                      "The versioned root, e.g. https://api.openai.com/v1",
+                  helperMaxLines: 4,
                 ),
               ),
               const SizedBox(height: 16),

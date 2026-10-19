@@ -1,3 +1,4 @@
+import "package:flutter/foundation.dart" show kIsWeb;
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
@@ -17,6 +18,7 @@ import "../../domain/app_settings.dart";
 import "../../providers.dart";
 import "../chat/widgets/activity_label.dart";
 import "../sidebar/sidebar.dart";
+import "../fonts.dart" show monoFamily;
 import "../theme.dart";
 import "../widgets/add_button_row.dart";
 import "../widgets/anchored_menu.dart";
@@ -977,6 +979,9 @@ class _RecommendedProviderState extends ConsumerState<_RecommendedProvider> {
   static final _ollamaCloud =
       llmProviderPresets.firstWhere((p) => p.id == "ollama-cloud");
 
+  static final _ollamaLocal =
+      llmProviderPresets.firstWhere((p) => p.id == "ollama");
+
   final _apiKey = TextEditingController();
 
   @override
@@ -997,6 +1002,7 @@ class _RecommendedProviderState extends ConsumerState<_RecommendedProvider> {
 
   @override
   Widget build(BuildContext context) {
+    if (kIsWeb) return _inBrowser(context);
     final hasKey = _apiKey.text.trim().isNotEmpty;
     return Card(
       margin: const EdgeInsets.fromLTRB(16, 16, 16, 0),
@@ -1035,6 +1041,56 @@ class _RecommendedProviderState extends ConsumerState<_RecommendedProvider> {
             FilledButton(
               onPressed: hasKey ? _addWithKey : null,
               child: const Text("Add Ollama Cloud"),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Ollama Cloud answers no browser, so a page has to reach it through an
+  /// Ollama on the user's own machine, which serves the cloud models once it
+  /// is signed in and told to accept this page.
+  Widget _inBrowser(BuildContext context) {
+    final origin = Uri.base.origin;
+    return Card(
+      margin: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              "Entoli works with both privacy-respecting and other providers. "
+              "We recommend Ollama Cloud: it does not keep or train on your "
+              "prompts and outputs.",
+            ),
+            const SizedBox(height: 12),
+            const Text(
+              "A browser cannot call Ollama Cloud directly. Install Ollama on "
+              "this computer, sign in with ollama signin, and start it so it "
+              "accepts this page:",
+            ),
+            const SizedBox(height: 8),
+            SelectableText(
+              "OLLAMA_ORIGINS=$origin ollama serve",
+              style: const TextStyle(fontFamily: monoFamily),
+            ),
+            const SizedBox(height: 8),
+            const Text("Its cloud models are then listed under their :cloud "
+                "names."),
+            const SizedBox(height: 12),
+            FilledButton(
+              onPressed: () => ref
+                  .read(appSettingsProvider.notifier)
+                  .upsertProvider(_ollamaLocal),
+              child: const Text("Add Ollama on this computer"),
+            ),
+            const SizedBox(height: 4),
+            TextButton(
+              onPressed: () =>
+                  ref.read(linkOpenerProvider).open(context, _signUp),
+              child: const Text("Sign up for Ollama"),
             ),
           ],
         ),
