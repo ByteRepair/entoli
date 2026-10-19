@@ -76,12 +76,8 @@ jobs:
           name: entoli-debug-x86_64.AppImage
           build-number: ${{ github.run_number }}
 
-      - uses: actions/upload-artifact@v7.0.1
-        with:
-          name: linux-debug
-          path: ${{ steps.build.outputs.bundle }}
-          retention-days: 14
-
+      # The AppImage alone, as the release ships: the bundle it was packed
+      # from is the same files again, uncompressed into a zip of its own.
       - uses: actions/upload-artifact@v7.0.1
         with:
           name: linux-debug-appimage

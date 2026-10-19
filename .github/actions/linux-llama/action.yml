@@ -2,11 +2,10 @@ name: Build the Linux model server
 description: >
   Builds llama.cpp's server for the desktop — `tool/linux/build-llama.sh` — and
   stages it where `linux/CMakeLists.txt` installs the bundle's lib/ from, then
-  uploads the stage as the `llama-linux` artifact. Cached
-  on what decides the output, the way the Android tools are: the versions and
-  the recipe, and the work dir the sources unpack into is the Android build's
-  own, so the key carries this file — where the recipe lives is the other half
-  of what it answers.
+  uploads the stage as the `llama-linux` artifact. Cached on what decides the
+  output, the way the Android tools are: the versions and the recipe, and this
+  file. Only the stage is cached — the sources and objects in the work dir are
+  nothing a hit reads.
 
 runs:
   using: composite
@@ -15,9 +14,7 @@ runs:
       id: llama-cache
       uses: actions/cache/restore@v6.1.0
       with:
-        path: |
-          tool/android/build
-          build/llama
+        path: build/llama
         key: linux-llama-${{ hashFiles('tool/android/versions.sh', 'tool/linux/build-llama.sh', '.github/actions/linux-llama/action.yml') }}
 
     # Nothing on a hit path reaches for a toolchain, so the install is gated
@@ -39,9 +36,7 @@ runs:
       if: github.ref_type != 'tag' && steps.llama-cache.outputs.cache-hit != 'true'
       uses: actions/cache/save@v6.1.0
       with:
-        path: |
-          tool/android/build
-          build/llama
+        path: build/llama
         key: ${{ steps.llama-cache.outputs.cache-primary-key }}
 
     # The upload below names the stage either way; this is what fails the
