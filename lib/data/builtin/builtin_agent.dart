@@ -787,6 +787,7 @@ class BuiltinAgent {
       );
 
   bool _cancelled = false;
+  final Completer<void> _stopped = Completer();
 
   /// Set by an `end_turn` call: the loop stops after the batch it was in.
   bool _ended = false;
@@ -809,6 +810,7 @@ class BuiltinAgent {
   /// build going is not aborted, and a fan-out of sub-agents is not either.
   Future<void> cancel() async {
     _cancelled = true;
+    if (!_stopped.isCompleted) _stopped.complete();
     await _running?.kill();
     await subAgentRunner?.cancel();
   }
@@ -2321,8 +2323,17 @@ class BuiltinAgent {
       return;
     }
 
-    final decision = await (classifier ?? const NoClassifier())
-        .classify(toolName, call.argumentsJson, workspace: workspace);
+    // Raced with a stop: a turn outliving its abort ran on into the next
+    // turn, clearing its banner and rewriting the session under it.
+    final decision = await Future.any([
+      (classifier ?? const NoClassifier())
+          .classify(toolName, call.argumentsJson, workspace: workspace),
+      _stopped.future.then((_) => PermissionDecision.ask),
+    ]);
+    if (_cancelled) {
+      _commandResult = const ShellResult.failed(notExecuted);
+      return;
+    }
 
     if (decision != PermissionDecision.ask) {
       _consecutiveAsks = 0;
