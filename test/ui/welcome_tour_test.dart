@@ -138,6 +138,30 @@ void main() {
     expect(tester.widget<FilledButton>(button("Next")).onPressed, isNotNull);
   });
 
+  testWidgets("the provider page is not left dimmed by a model added in settings",
+      (tester) async {
+    app.backend.modelList = const [];
+    await app.pump(tester, const WelcomePage());
+    await walkToProviders(tester);
+
+    await tester.tap(find.text("A provider"));
+    await tester.pumpAndSettle();
+    expect(find.text("Connect a model"), findsNothing);
+    // What the tour watches changing while it is covered is what rebuilt it
+    // with no dimensions to read the page from.
+    app.backend.modelList = const [
+      ModelOption(providerId: "anthropic", modelId: "claude-sonnet-4"),
+    ];
+    app.container.invalidate(availableModelsProvider);
+    await settleIo(tester);
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    final fade = tester.widget<Opacity>(find
+        .ancestor(of: find.text("Connect a model"), matching: find.byType(Opacity))
+        .first);
+    expect(fade.opacity, 1);
+  });
+
   // Unseeded, unlike the walks, so the model page's gate has something to
   // hold.
   testWidgets("Next is held on the model page until a model is picked",
