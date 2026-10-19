@@ -6,12 +6,10 @@ Play, `pages.yml` deploys the web app from the same tag. Either can fail
 without the other, and only the first checks the tag against pubspec — a
 version disagreement stops the binaries and deploys the site anyway.
 
-Three files are attached, named after the app and not the package or the version (a person is what downloads
-them, and the tag is where a version lives), so the same names serve every
-release. Each was meant to carry a provenance attestation beside it; that
-step is commented out in `release.yml` until the repository is public, where
-`attest-build-provenance` fails, and nothing below about attestations holds
-until it is back:
+Three files are attached, each with a provenance attestation beside it
+(`<file>.sigstore.json`), named after the app and not the package or the
+version (a person is what downloads them, and the tag is where a version
+lives), so the same names serve every release:
 
 - `entoli.aab`, signed, for Google Play — an input to Play, which resigns
   it into per-device APKs of its own

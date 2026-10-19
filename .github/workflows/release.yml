@@ -2,14 +2,13 @@ name: Release
 
 # Attaches the binaries a published release is downloaded from — a signed App
 # Bundle for Google Play, a Linux AppImage, a macOS DMG, an iOS App Store ipa
-# and a Windows MSI — to the tag they were built from (a provenance
-# attestation beside each once the repository is public), and uploads the
-# bundle to Play. The ipa goes to TestFlight in a job of its own, Apple's
-# processing wall clock running beside the attachments rather than ahead of
-# them. There is no release APK; `debug-build.yml` builds
-# an APK by hand. `release-build.yml` is what builds them and can be run on
-# its own; `pages.yml` answers the same event for the web app.
-# See "Releasing" in AGENTS.md.
+# and a Windows MSI — to the tag they were built from, each with a provenance
+# attestation beside it, and uploads the bundle to Play. The ipa goes to
+# TestFlight in a job of its own, Apple's processing wall clock running beside
+# the attachments rather than ahead of them. There is no release APK;
+# `debug-build.yml` builds an APK by hand. `release-build.yml` is what builds
+# them and can be run on its own; `pages.yml` answers the same event for the
+# web app. See "Releasing" in AGENTS.md.
 on:
   release:
     types: [published]
@@ -61,8 +60,8 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write # attach assets to the release
-      # attestations: write # and the Sigstore signing certificate beside it,
-      # off until the repository is public, where attest-build-provenance fails
+      id-token: write # mint the short-lived Sigstore signing certificate
+      attestations: write # record the attestation against the repository
     strategy:
       # Each entry attests and uploads a different file, so one that fails
       # should leave the other binaries attached rather than cancel them.
@@ -77,20 +76,23 @@ jobs:
           name: ${{ matrix.asset.artifact }}
           path: dist
 
-      # - id: attest
-      #   uses: actions/attest-build-provenance@v4.2.2
-      #   with:
-      #     subject-path: dist/${{ matrix.asset.file }}
+      - id: attest
+        uses: actions/attest-build-provenance@v4.2.2
+        with:
+          subject-path: dist/${{ matrix.asset.file }}
 
-      - name: Attach the binary to the release
+      - name: Attach the binary and its attestation to the release
         env:
           GH_TOKEN: ${{ github.token }}
+          BUNDLE: ${{ steps.attest.outputs.bundle-path }}
         run: |
           set -euo pipefail
+          cp "$BUNDLE" "dist/$FILE.sigstore.json"
           # --repo because gh reads it off the git remote otherwise, and this
           # job never checks out. --clobber so a re-run replaces the assets.
           gh release upload "$TAG" \
             "dist/$FILE" \
+            "dist/$FILE.sigstore.json" \
             --repo "$GITHUB_REPOSITORY" \
             --clobber
 
@@ -98,8 +100,8 @@ jobs:
         run: |
           set -euo pipefail
           {
-            # echo "\`gh attestation verify $FILE --repo $GITHUB_REPOSITORY\`"
-            # echo
+            echo "\`gh attestation verify $FILE --repo $GITHUB_REPOSITORY\`"
+            echo
             echo "$FILE attached."
           } >> "$GITHUB_STEP_SUMMARY"
 
