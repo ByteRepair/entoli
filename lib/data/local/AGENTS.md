@@ -91,7 +91,7 @@ us, so a CVE in a bundled tool is a version bump in `versions.sh` and a release
 every user has to install. That is the cost that took git out of this list, and
 it is worth weighing before anything is added back to it.
 
-## Byte Repair's environment, in three variables
+## Byte Repair's environment, in four variables
 
 `byte-repair-setup.sh` answers to what it is told and probes nothing. Where to
 install is the store's `ENV_INSTALL_DIR` — `/usr/local/bin` inside a guest
@@ -100,19 +100,64 @@ install is the store's `ENV_INSTALL_DIR` — `/usr/local/bin` inside a guest
 rather than guess a destination. What installs packages is
 `ENV_PACKAGE_MANAGER` — `apk` in a guest, from the same `Rootfs.packageManager`
 the proot guest driver declares for every command in it, and what the install
-environment names for the setup run — and nothing on the host, whose package
-manager is not
-ours to touch. Unset does not mean unavailable: a skipped install is a note and
-the run carries on, so a host with make already on it pays nothing and one
-without it sees the honest "Not installed" row. A named manager that fails is
-a failure, so a guest install that did not happen never reads as done.
+environment names for the setup run — `brew` on a mac, and nothing on the
+Linux and Windows hosts, whose package managers are not ours to touch. Unset
+does not mean unavailable: a skipped install is a note and the run carries on,
+so a host with make already on it pays nothing and one without it sees the
+honest "Not installed" row. A named manager that fails is a failure, so a guest
+install that did not happen never reads as done, and one the script does not
+know is refused before anything runs. Only `apk` and `brew` are ever named;
+the arms for apt-get, dnf, yum and pacman went, being code nothing reached.
+
+**Install what is missing, touch nothing else.** A guest gets `apk add
+--no-cache` of exactly the missing packages — no `apk update` (the
+`--no-cache` add fetches the index itself) and no `apk upgrade`, which
+upgraded the whole guest on every setup, iSH's one base Alpine every project
+shares included. Brew is told the same with `HOMEBREW_NO_INSTALL_UPGRADE`
+and `HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK`, without which `brew install`
+upgrades a formula the user already has and then upgrades or reinstalls what
+depends on whatever it upgraded; `HOMEBREW_NO_INSTALL_CLEANUP` keeps the old
+versions the user's own builds may still link. A dependency esbmc needs newer
+than the installed one is still upgraded, since there is no install without
+it.
+
+**A mac installs with Homebrew because nothing else starts there.** ESBMC's
+macOS release is linked against Homebrew's z3, mpfr, gmp, boost and llvm by
+absolute path and ships none of them, so on a mac without exactly those kegs
+the fetched binary died in the loader and the setup could never succeed.
+The formula is bottled and brings its own dependencies, so the store names
+`brew` on a mac host, and the fourth variable, `ENV_BREW`, is the `brew` it
+found at Homebrew's two supported prefixes (`/opt/homebrew`, `/usr/local`) —
+the store asks, the script is told. What brew installs, make and gh included,
+lives in Homebrew's prefix, outside the app, and is *linked* into the bin
+directory rather than copied: a `brew upgrade` moves the kegs a binary loads,
+and a link follows the formula where a copy would be left pointing at the old
+ones. Homebrew's make is `gmake` on PATH, so the link is to its `gnubin` make.
+Every link is run before the setup carries on, so one pointing at nothing is a
+failure rather than a "Not installed" row after a setup that said it worked.
+A delete takes the links and leaves Homebrew's installs, and the settings page
+says before Run Setup that the tools go into the system rather than the app.
+
+Homebrew itself is not installed by the setup. Its installer asks for an
+administrator's password through sudo, which a run with no terminal cannot
+type, and its `NONINTERACTIVE` mode — the installer's variable, not
+`brew`'s — aborts unless sudo is already cached. A
+private Homebrew under the cache directory needs no sudo but is no answer
+either: Homebrew's bottles relocate only to a prefix of a few characters, so
+`llvm@22`, `boost`, `python@3.14` and `openssl@4` would build from source —
+hours, and Xcode's tools. So with no `ENV_BREW` the script refuses, naming
+brew.sh's install command, and the settings page shows the same command in a
+code block with a copy button until a `brew` is there.
 
 The one thing the script does probe is the platform it is on — `uname -s`,
 which picks the ESBMC release the fetch lands, with `uname -m` splitting it on
-Linux alone: esbmc-macos, esbmc-windows and esbmc-linux or its armv8 brother.
-The machine it runs on is the machine the binary runs on, so this probe is
-honest; a platform whose name it does not know refuses at that case rather
-than fetching a zip that cannot run. The name the release's binary carries
+Linux alone: esbmc-windows, and esbmc-linux for x86_64 or its armv8 brother
+for arm64. The machine it runs on is the machine the binary runs on, so this
+probe is honest. Anything else refuses before the download rather than after
+it: a platform it does not know, a Linux arch with no release (a 32-bit
+`armv7l` userland once got the x86_64 zip and an "Exec format error" 240 MB
+later), and a mac told no package manager, whose release cannot start without
+Homebrew's libraries. The name the release's binary carries
 in is not probed at all — it is told (`ENV_ESBMC_BINARY`, the same
 `esbmcFileName` the gate asks for and the import writes under, one encoding
 of the name, Dart's), and the script's own default is the bare POSIX one.
@@ -120,12 +165,23 @@ Windows is the one of the three with no unzip of its own, where PowerShell's
 Expand-Archive is the fallback the chain reaches. The binary's own `bin/`
 lands whole, not one file out of it: the windows release carries `libz3.dll`
 where its `esbmc.exe` is, and a single-binary move would leave an install
-that cannot load its z3. What a release cannot ship is the verification's
-to refuse rather than the script's to hide: the mac zip is linked against
-homebrew's absolute paths and carries none of them, so on a mac without its
-z3, mpfr, gmp, boost and llvm the run ends on the tail's exit 1 naming the
-loader's missing library — the same honest refusal an unstartable binary has
-given all along.
+that cannot load its z3. The binary is the first file under a `bin/` named
+for it, wherever the release nests that (v8.4 at the root, v8.5 under
+`release/`).
+
+The download and the extract happen in a scratch directory made fresh by
+`mktemp` inside the bin directory, not at a fixed `/tmp` path. A fixed path
+let an interrupted run's leftovers be read by the next one — its `find`
+picking an older release's binary — let another user on a shared machine
+plant one there first, and leaked the 240 MB zip on every failed attempt,
+`set -e` leaving with no cleanup. An exit trap removes the scratch however the
+run ends, a run killed outright leaves it for the next run to sweep before
+it starts, and the final move is a rename on the one filesystem. Each step
+that can fail without saying why — a download (`wget -q` prints nothing), an
+extract — fails with a line naming it, the downloads give up on a stalled
+connection after 30 seconds rather than at the half-hour limit, and `unzip
+-q` keeps the archive's listing out of the text the settings page shows as
+the error.
 
 "Already installed" means *on PATH and runs* (`works`, a `--version` probe),
 not merely found: a binary present but unstartable — a local build missing its

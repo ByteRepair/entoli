@@ -8,6 +8,7 @@ import "package:path/path.dart" as p;
 import "package:agent_chat/domain/app_settings.dart";
 import "package:agent_chat/domain/builtin_project.dart";
 import "package:agent_chat/providers.dart";
+import "package:agent_chat/ui/chat/widgets/code_block.dart" show CodeBlock;
 import "package:agent_chat/ui/settings/settings_page.dart";
 import "package:agent_chat/ui/widgets/resettable_field.dart";
 
@@ -580,8 +581,38 @@ void main() {
           "Repair again.");
     });
 
-    targetTest("the fetched tools a setup left are named, the rootfs never",
+    // A mac's setup installs with Homebrew: the page says so before the
+    // button is pressed, and with no Homebrew it is the command to paste,
+    // drawn as a reply's code block with its copy button.
+    targetTest("a mac says Homebrew installs, and gives its install command "
+        "where it is missing", TargetPlatform.macOS, (tester) async {
+      app.dispose();
+      final bin = p.join(app.config.dataDir, "byte-repair", "bin");
+      app = TestApp.create(byteRepairInstallDir: bin);
+      await pumpSettings(tester, app, SettingsCategory.byteRepair);
+
+      expect(find.textContaining("Run Setup uses Homebrew"), findsOneWidget);
+      expect(find.textContaining("Homebrew is not installed"), findsOneWidget);
+      expect(find.byType(CodeBlock), findsOneWidget);
+      expect(find.byTooltip("Copy code"), findsOneWidget);
+      expect(find.text("Run Setup"), findsOneWidget);
+    });
+
+    targetTest("a mac with Homebrew has no command to paste",
         TargetPlatform.macOS, (tester) async {
+      app.dispose();
+      final bin = p.join(app.config.dataDir, "byte-repair", "bin");
+      final brew = p.join(app.config.dataDir, "brew");
+      app = TestApp.create(byteRepairInstallDir: bin, byteRepairBrewPaths: [brew]);
+      File(brew).writeAsStringSync("");
+      await pumpSettings(tester, app, SettingsCategory.byteRepair);
+
+      expect(find.textContaining("Run Setup uses Homebrew"), findsOneWidget);
+      expect(find.byType(CodeBlock), findsNothing);
+    });
+
+    targetTest("the fetched tools a setup left are named, the rootfs never",
+        TargetPlatform.linux, (tester) async {
       app.dispose();
       final bin = p.join(app.config.dataDir, "byte-repair", "bin");
       app = TestApp.create(byteRepairInstallDir: bin);

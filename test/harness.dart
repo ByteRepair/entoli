@@ -135,7 +135,9 @@ class TestApp {
   /// with: the guest's `/usr/local/bin` by default, the Android and iOS
   /// answer, which is the one the gate excludes from every host read. A host
   /// path — a desktop's — gates on that instead; null is a desktop with no
-  /// install destination.
+  /// install destination. [byteRepairBrewPaths] is where the store looks for
+  /// `brew` on a mac target: none by default, so no test reads the machine's
+  /// own Homebrew.
   /// [abi] is what the device answers with, and only Android answers at all —
   /// so it is named by a test that is about one, and left alone by the rest.
   /// [systemAccent] is the colour the system is themed to, which is the other
@@ -168,6 +170,7 @@ class TestApp {
     Set<String> linuxes = const {},
     bool proot = false,
     String? byteRepairInstallDir = guestEsbmcInstallDir,
+    List<String> byteRepairBrewPaths = const [],
     Set<String> localModels = const {},
     FakeLocalLlm? localLlm,
     bool prefill = false,
@@ -271,7 +274,8 @@ class TestApp {
               project: ByteRepairProject().dir,
               workspace: config.projectWorkspaceDir(project: ByteRepairProject().dir),
               installDir: byteRepairInstallDir,
-              rootfsStore: linux)),
+              rootfsStore: linux,
+              brewPaths: byteRepairBrewPaths)),
           installedRootfsProvider.overrideWith(() => InstalledRootfs(linuxes)),
           localModelStoreProvider.overrideWithValue(onDevice),
           localLlmProvider.overrideWithValue(server),

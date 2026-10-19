@@ -137,7 +137,15 @@ inside a rootfs they go to the guest's own `/usr/local/bin`; on Linux they go
 to `<cacheDir>/byte-repair/bin`, which the project's turns are given on PATH —
 so Byte Repair works on the host env with no root and nothing installed into
 the machine, and a tool already on the machine is used rather than fetched.
-See "Byte Repair's environment, in three variables" in `lib/data/local/AGENTS.md`.
+A mac is the exception to "nothing installed": its tools come from Homebrew,
+into the system, and are linked into the same bin directory. The page says so
+in a line above Run Setup, and where no `brew` is installed it shows Homebrew's
+install command to paste into a terminal, drawn as a reply's `CodeBlock` so it
+carries the same copy button; the setup cannot run that installer itself,
+which wants sudo. Both are the store's (`setupNotice`, `prerequisite`), so the
+page names no platform. A delete takes the links and leaves what Homebrew
+installed, and its confirm says that.
+See "Byte Repair's environment, in four variables" in `lib/data/local/AGENTS.md`.
 The
 banner asks the same env question everywhere, the store naming the platform's
 own answer: a "Host" env on Android has no package manager, while iOS's has

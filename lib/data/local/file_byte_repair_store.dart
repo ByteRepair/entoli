@@ -6,12 +6,25 @@ import "package:path/path.dart" as p;
 import "../../core/log.dart";
 import "../../core/platform/form_factor.dart";
 import "../../domain/app_settings.dart";
+import "../../domain/rootfs.dart" show packageManagerEnvVar;
 import "byte_repair_store.dart";
 import "tree_ops.dart";
 
 /// The name ESBMC lands under in a bin directory. The setup script installs
 /// under it and the setup gate checks for it, so both agree by asking here.
 final String esbmcFileName = Platform.isWindows ? "esbmc.exe" : "esbmc";
+
+/// Homebrew's own install command, the one brew.sh gives. A mac's setup
+/// installs with Homebrew and cannot install Homebrew itself: the installer
+/// asks for an administrator's password through sudo, and the setup runs with
+/// no terminal to type it into.
+const homebrewInstallCommand = '/bin/bash -c "\$(curl -fsSL '
+    'https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"';
+
+/// Where Homebrew's installer puts `brew`: Apple silicon's prefix, then
+/// Intel's. The only two it supports, so asking them is asking whether it is
+/// installed.
+const homebrewPaths = ["/opt/homebrew/bin/brew", "/usr/local/bin/brew"];
 
 /// The io side of [ByteRepairStore]: the rootfs copy, the ESBMC import, the
 /// environment delete, and the markers.
@@ -23,7 +36,11 @@ class FileByteRepairStore extends ByteRepairStore {
     super.installDir,
     super.installTimeout,
     super.rootfsStore,
+    this.brewPaths = homebrewPaths,
   });
+
+  /// [homebrewPaths], or a test's own.
+  final List<String> brewPaths;
 
   @override
   Future<String?> ensureRootfs() async {
@@ -108,7 +125,37 @@ class FileByteRepairStore extends ByteRepairStore {
   Map<String, String> installEnvironment() => {
         ...super.installEnvironment(),
         "ENV_ESBMC_BINARY": esbmcFileName,
+        if (_usesHomebrew) packageManagerEnvVar: "brew",
+        if (_usesHomebrew && _brew != null) "ENV_BREW": _brew!,
       };
+
+  /// The installed `brew`, or null where Homebrew is not installed.
+  String? get _brew =>
+      brewPaths.where((path) => File(path).existsSync()).firstOrNull;
+
+  /// A mac's host setup installs with Homebrew, the one way to an ESBMC that
+  /// starts there: the release's mac binary is linked against Homebrew's z3,
+  /// mpfr, gmp, boost and llvm and ships none of them. The target, not
+  /// `Platform`, like [capabilityBanner].
+  bool get _usesHomebrew => isMac && _hostInstallDir != null;
+
+  @override
+  String? get setupNotice => _usesHomebrew
+      ? "On this Mac, Run Setup uses Homebrew to install whichever of make, "
+          "GitHub CLI and ESBMC are missing. They are installed into the "
+          "system, not the app, so deleting the Byte Repair data leaves them "
+          "installed."
+      : null;
+
+  @override
+  ({String why, String command})? get prerequisite =>
+      _usesHomebrew && _brew == null
+          ? (
+              why: "Homebrew is not installed. Paste this into a terminal and "
+                  "run it, then press Run Setup:",
+              command: homebrewInstallCommand,
+            )
+          : null;
 
   @override
   String? get capabilityBanner {
@@ -136,7 +183,10 @@ class FileByteRepairStore extends ByteRepairStore {
           "installed into it)";
     }
     if (_hostInstallDir != null && Directory(_hostInstallDir!).existsSync()) {
-      return "the tools the setup fetched into the app's cache directory";
+      return _usesHomebrew
+          ? "the links the setup made to Homebrew's tools (Homebrew keeps "
+              "what it installed)"
+          : "the tools the setup fetched into the app's cache directory";
     }
     return null;
   }

@@ -50,6 +50,14 @@ page's catalog. A macOS turn is a Linux-desktop-with-no-Linux-installed turn:
 PATH. The login-PATH capture covers it the same way (`$SHELL` as a login
 shell, macOS's zsh on the list).
 
+Byte Repair's setup is the one thing that installs onto this host rather than
+into the app: Homebrew's `esbmc` formula, and make and gh where missing,
+linked into `<cacheDir>/byte-repair/bin`. ESBMC's own mac release links
+Homebrew's libraries by absolute path and ships none of them, so nothing else
+starts here. Homebrew itself is the user's to install, its installer wanting
+sudo; see "Byte Repair's environment, in four variables" in
+`lib/data/local/AGENTS.md`.
+
 ## Waking for a trigger
 
 **The model the pieces below implement:** `reminders.json` is the only truth,

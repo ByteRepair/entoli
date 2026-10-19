@@ -13,7 +13,7 @@ import "../../domain/shell.dart";
 /// through the configured terminal env with [project]: a guest's rootfs on
 /// Android and iOS, the host shell with an injected bin directory on the
 /// desktops. The script is told its environment and probes nothing — see
-/// "Byte Repair's environment, in three variables" in the directory's
+/// "Byte Repair's environment, in four variables" in the directory's
 /// AGENTS.md.
 ///
 /// "Run Setup" owns the lifecycle: copy the base rootfs into the project (for
@@ -120,6 +120,16 @@ abstract class ByteRepairStore {
   /// here rather than in the widget, whose `defaultTargetPlatform` on the web
   /// is the phone the browser runs on.
   String? get capabilityBanner;
+
+  /// What a setup does to the machine beyond the app's own directories, for
+  /// the line above Run Setup: null where it installs nowhere else.
+  String? get setupNotice => null;
+
+  /// What the user has to install before a setup can work — a line saying
+  /// so and the command to paste into a terminal, shown under the notice with
+  /// a copy button — or null where nothing is missing. The setup cannot run
+  /// it itself; see the implementations.
+  ({String why, String command})? get prerequisite => null;
 
   /// The delete confirm's message.
   String get deleteConfirmMessage {
