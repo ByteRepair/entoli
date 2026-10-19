@@ -48,6 +48,7 @@ void main() {
       final semantics = tester.ensureSemantics();
       await pumpAppearance(tester, app);
 
+      await scrollTo(tester, choice(AppIcon.prompt));
       await tester.tap(choice(AppIcon.prompt));
       await settleIo(tester);
       expect(AppSettings.load(app.config).appIcon, AppIcon.prompt);
@@ -88,6 +89,7 @@ void main() {
       await pumpAppearance(tester, app);
       expect(find.textContaining("does not follow this"), findsOneWidget);
 
+      await scrollTo(tester, choice(AppIcon.prompt));
       await tester.tap(choice(AppIcon.prompt));
       await settleIo(tester);
 

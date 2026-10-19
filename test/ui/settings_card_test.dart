@@ -115,7 +115,7 @@ void main() {
         tester,
         Theme(
           data: entoliTheme(Brightness.light,
-              (primary: entoliIndigo, secondary: null, radius: radius.radius)),
+              (primary: entoliLook.primary, secondary: null, radius: radius.radius)),
           child: Scaffold(
             body: ListView(children: [_card("One", onTap: () {})]),
           ),

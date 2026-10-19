@@ -28,13 +28,22 @@ void main() {
   /// What the page is drawing as chosen, rather than what the file says.
   AppTheme shown(WidgetTester tester) => field(tester).selected.single;
 
-  /// A swatch or a corner in the row labelled [row]. Scoped to it because the
-  /// two colour rows offer the same eight tooltips.
-  Future<void> tapChoice(WidgetTester tester, String row, String choice) async {
-    final target = find.descendant(
-      of: find.ancestor(of: find.text(row), matching: find.byType(LabelledField)),
-      matching: find.byTooltip(choice),
-    );
+  /// A swatch or a corner in the row labelled [row], and within it the
+  /// [group] of swatches where given. Scoped because the two colour rows offer
+  /// the same tooltips, and bold and pastel share some names.
+  Future<void> tapChoice(WidgetTester tester, String row, String choice,
+      {String? group}) async {
+    var scope =
+        find.ancestor(of: find.text(row), matching: find.byType(LabelledField));
+    if (group != null) {
+      scope = find
+          .ancestor(
+            of: find.descendant(of: scope, matching: find.text(group)),
+            matching: find.byType(Column),
+          )
+          .first;
+    }
+    final target = find.descendant(of: scope, matching: find.byTooltip(choice));
     await scrollTo(tester, target);
     await tester.tap(target);
     await settleIo(tester);
@@ -185,12 +194,43 @@ void main() {
     testWidgets("picking a colour persists it, one row at a time", (tester) async {
       await pumpAppearance(tester, app);
 
-      await tapChoice(tester, "Primary colour", ThemeColour.green.label);
-      await tapChoice(tester, "Secondary colour", ThemeColour.pink.label);
+      await tapChoice(tester, "Primary colour", ThemeColour.green.label,
+          group: "Pastel colours");
+      await tapChoice(tester, "Secondary colour", ThemeColour.boldGreen.label,
+          group: "Bold colours");
 
       final saved = AppSettings.load(app.config);
       expect(saved.primaryColour, ThemeColour.green);
-      expect(saved.secondaryColour, ThemeColour.pink);
+      expect(saved.secondaryColour, ThemeColour.boldGreen);
+    });
+
+    testWidgets("picking a theme sets both colours", (tester) async {
+      await pumpAppearance(tester, app);
+
+      await tapChoice(tester, "Theme colours", ColourTheme.dracula.label);
+      var saved = AppSettings.load(app.config);
+      expect(saved.primaryColour, ThemeColour.draculaPurple);
+      expect(saved.secondaryColour, ThemeColour.draculaPink);
+
+      await tapChoice(tester, "Theme colours", ColourTheme.adwaita.label);
+      saved = AppSettings.load(app.config);
+      expect(saved.primaryColour, ThemeColour.adwaita);
+      expect(saved.secondaryColour, ThemeColour.adwaita);
+    });
+
+    testWidgets("a bold colour keeps its chroma, where a pastel is softened",
+        (tester) async {
+      app.seedSettings(AppSettings(
+          primaryColour: ThemeColour.boldRed, secondaryColour: ThemeColour.red));
+      final scheme = (await pumpApp(tester)).theme!.colorScheme;
+
+      final bold = ColorScheme.fromSeed(
+          seedColor: ThemeColour.boldRed.colour,
+          dynamicSchemeVariant: DynamicSchemeVariant.fidelity);
+      final pastel = ColorScheme.fromSeed(seedColor: ThemeColour.red.colour);
+      expect(scheme.primary, bold.primary);
+      expect(scheme.secondary, pastel.secondary);
+      expect(bold.primary, isNot(pastel.primary));
     });
 
     testWidgets("picking a corner persists it", (tester) async {
@@ -226,6 +266,7 @@ void main() {
         await settleIo(tester);
 
         expect(AppSettings.load(app.config).systemPalette, isTrue);
+        expect(find.text("Theme colours"), findsNothing);
         expect(find.text("Primary colour"), findsNothing);
         expect(find.text("Secondary colour"), findsNothing);
       });

@@ -41,16 +41,23 @@ final appLookProvider = Provider<AppLook>((ref) {
   final settings = ref.watch(appSettingsProvider.select(
       (s) => (primary: s.primaryColour, secondary: s.secondaryColour, radius: s.cornerRadius)));
   return (
-    primary: accent == null ? settings.primary.colour : Color(accent),
-    secondary: accent == null ? settings.secondary.colour : null,
+    primary: accent == null ? settings.primary.seed : (colour: Color(accent), variant: DynamicSchemeVariant.tonalSpot),
+    secondary: accent == null ? settings.secondary.seed : null,
     radius: settings.radius.radius,
   );
 });
 
-/// A seed, the seed of the accent group beside it, and how round a corner is.
-typedef AppLook = ({Color primary, Color? secondary, double radius});
+/// A colour and how a scheme is built from it.
+typedef Seed = ({Color colour, DynamicSchemeVariant variant});
 
-const entoliLook = (primary: entoliIndigo, secondary: null, radius: 12.0);
+/// A seed, the seed of the accent group beside it, and how round a corner is.
+typedef AppLook = ({Seed primary, Seed? secondary, double radius});
+
+const entoliLook = (
+  primary: (colour: entoliIndigo, variant: DynamicSchemeVariant.tonalSpot),
+  secondary: null,
+  radius: 12.0,
+);
 
 /// The app's palette, in the brightness asked for. A null `secondary` derives
 /// it from the primary seed, which is what Material does with one seed.
@@ -107,10 +114,16 @@ const _displayTiers = TextTheme(
 /// `fromSeed` flat: that names one role, leaving `secondaryContainer` a tone of
 /// the primary seed beside a colour that is not. The same colour twice would
 /// graft what is already there, so it skips a scheme instead.
-ColorScheme _scheme(Brightness brightness, Color primary, Color? secondary) {
-  final scheme = ColorScheme.fromSeed(seedColor: primary, brightness: brightness);
+ColorScheme _scheme(Brightness brightness, Seed primary, Seed? secondary) {
+  final scheme = ColorScheme.fromSeed(
+      seedColor: primary.colour,
+      brightness: brightness,
+      dynamicSchemeVariant: primary.variant);
   if (secondary == null || secondary == primary) return scheme;
-  final accent = ColorScheme.fromSeed(seedColor: secondary, brightness: brightness);
+  final accent = ColorScheme.fromSeed(
+      seedColor: secondary.colour,
+      brightness: brightness,
+      dynamicSchemeVariant: secondary.variant);
   return scheme.copyWith(
     secondary: accent.secondary,
     onSecondary: accent.onSecondary,
@@ -121,6 +134,15 @@ ColorScheme _scheme(Brightness brightness, Color primary, Color? secondary) {
 
 extension ThemeColourValue on ThemeColour {
   Color get colour => Color(argb);
+
+  /// Fidelity keeps the seed's chroma, so a bold colour stays bold; the
+  /// default softens it, which is what a pastel is.
+  Seed get seed => (
+        colour: colour,
+        variant: group.vivid
+            ? DynamicSchemeVariant.fidelity
+            : DynamicSchemeVariant.tonalSpot,
+      );
 }
 
 extension AppThemeMode on AppTheme {
