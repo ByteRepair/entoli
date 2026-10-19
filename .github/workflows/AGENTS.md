@@ -268,6 +268,14 @@ explicitly.
 than making anyone recreate one: recreating changes its timestamp and
 notifies every watcher a second time.
 
+**Moving a released tag by force turns its release back into a draft.**
+v6.0.0 was repointed at a fix with `git push --tags -f`, and GitHub left its
+release a draft from that moment: the dispatched rebuild attached every asset
+to it (the publisher's token can write drafts) while Play's read-only token
+could not see it at all. After a repoint, publish the draft again — which
+fires `release.yml` once more, a run to cancel when the assets are already
+attached — and re-run whatever failed.
+
 ## Google Play
 
 `release.yml` calls `publish-play.yml` after the build, in parallel with
@@ -309,7 +317,9 @@ Cloud console and issue a new one in a minute. Rotate freely, on any doubt.
 at 500 characters and rejects the upload rather than truncating, so a body
 over the cap is dropped with a warning instead of cut. Only
 `whatsnew-en-US` is written, the release body being English; a Greek
-listing keeps what the Console holds.
+listing keeps what the Console holds. A release this job cannot read — a draft,
+invisible to its read-only token — is uploaded without notes and a warning,
+not failed: the bundle is what the job is for.
 
 A rejected upload is usually Console state no workflow can supply — the
 data safety form, the content rating, a reachable privacy policy, the
