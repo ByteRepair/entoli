@@ -28,8 +28,22 @@ import "../../../domain/sync/lan_signaling.dart";
 import "../../../domain/voice.dart";
 import "../../../domain/voice_model_store.dart";
 import "../../../domain/web_search.dart";
+import "../../../data/web/guest_shell.dart";
 import "../../config.dart";
+import "browser_linux.dart";
 import "signaling.dart";
+
+/// The page's one filesystem, shared by the app and the guest's mount of it:
+/// two handles on one IndexedDB would each keep their own paging state.
+///
+/// Paged, which the default is not: unpaged, `fs_shim` stores a file as one
+/// value and an append reads the whole thing back to rewrite it, which is the
+/// opposite of what `conv.jsonl` is for. Page size is per file and converted on
+/// the first write, so nothing has to be migrated.
+final _fs =
+    fileSystemWeb.withIdbOptions(options: FileSystemIdbOptions.pageDefault);
+
+final _linux = BrowserLinux(_fs, _dataDir);
 
 Shell platformShell({
   required Map<String, String> Function() environment,
@@ -38,9 +52,20 @@ Shell platformShell({
   RootfsStore? rootfsStore,
   String? Function()? rootfsId,
 }) =>
-    const UnavailableShell();
+    GuestShell(
+      guest: _linux.guest,
+      available: () => _linux.available,
+      description: _linux.describe,
+      environment: environment,
+      fs: _fs,
+    );
 
-Future<Toolset?> installBundledTools(String cacheDir) async => null;
+/// What this build ships beside the app is the Linux under `linux/`, and
+/// whether the site serves it is learned here, before the shell is built.
+Future<Toolset?> installBundledTools(String cacheDir) async {
+  await _linux.probe();
+  return null;
+}
 
 ShellDriver? platformDriver({
   required String defaultSkillsBundledDir,
@@ -134,15 +159,13 @@ Future<ReminderAlarms> createReminderAlarms() async =>
 
 FileWatches createFileWatches() => const UnavailableFileWatches();
 
-/// Paged, which the default is not: unpaged, `fs_shim` stores a file as one
-/// value and an append reads the whole thing back to rewrite it, which is the
-/// opposite of what `conv.jsonl` is for. Page size is per file and converted on
-/// the first write, so nothing has to be migrated.
-FileSystem createFileSystem() =>
-    fileSystemWeb.withIdbOptions(options: FileSystemIdbOptions.pageDefault);
+FileSystem createFileSystem() => _fs;
 
-/// Nominal but load-bearing: the root every path, chats included, is under.
-Future<String> dataDir() async => "/entoli";
+const _dataDir = "/entoli";
+
+/// Nominal but load-bearing: the root every path, chats included, is under,
+/// and the path the guest mounts the app's files at.
+Future<String> dataDir() async => _dataDir;
 
 /// Without this the origin's storage is evictable. A browser that refuses
 /// leaves the data evictable and nothing else changed.
@@ -177,7 +200,7 @@ Future<T> withWritableDir<T>(
 
 /// No rootfs here, so no proot stubs: a plain recursive delete.
 Future<void> deleteTree(String path) async {
-  final fs = fileSystemWeb;
+  final fs = _fs;
   if (await fs.isDirectory(path)) {
     await fs.directory(path).delete(recursive: true);
   }

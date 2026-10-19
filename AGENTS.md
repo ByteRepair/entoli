@@ -35,6 +35,8 @@ named in a cross-reference is findable from this list.
   layer, three rendezvous transports, the SyncHub, mirroring a chat, driving a
   turn from the other end, what the Sync page can do about a
   peer, secrets at rest
+- `lib/data/web/AGENTS.md` — The browser's Linux: the image, the mux, the
+  app's files mounted over 9p
 - `lib/data/local/AGENTS.md` — Bundled tools, A whole Linux under proot,
   Running a model on the device
 - `android/AGENTS.md` — Staying alive off screen, The workspaces in the Files
@@ -444,7 +446,10 @@ is `logDetail`, which is debug-only.
 - UI runs forwarded to host: `toolbox run --container flutter-dev flutter run -d linux --debug`.
 - Web: `toolbox run --container flutter-dev flutter run -d web-server --web-port 8087 --web-hostname 127.0.0.1`.
   Nothing runs the app in a browser here, so a web-only regression in the UI is
-  caught by reloading the page.
+  caught by reloading the page. Commands need the browser's Linux in
+  `web/linux/image/`: `tool/web/linux/build.sh` (podman or docker), and
+  `tool/web/linux/smoke.sh` boots it in a headless Chromium (the toolbox's
+  `chromium-headless`) and runs commands through it end to end.
 - Voice mode on Linux needs `parecord` (`pulseaudio-utils`) or `pw-record`
   (`pipewire-utils`) on `PATH`; with neither, a session fails to start with a
   message saying so rather than hearing nothing.

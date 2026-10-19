@@ -99,7 +99,8 @@ or CORS, a directory on a disk or a database in a page — is resolved in
 `lib/core/platform/platform.dart`, which holds the app's single conditional
 import (`io/platform.dart` or `web/platform.dart`) and is otherwise plain
 wiring: `LocalShell`, `DuckDuckGoSearch` and `fileSystemIo` on desktop and
-Android; `UnavailableShell`, `UnavailableWebSearch` and `fileSystemWeb` in a
+Android; `GuestShell` (the Linux the page emulates, see "The browser's Linux"
+in `lib/data/web/AGENTS.md`), `UnavailableWebSearch` and `fileSystemWeb` in a
 browser. One import site is the point: an implementation a platform cannot use
 is not reachable from its program, so nothing further down has to test for it.
 (There is a second one, `lib/core/tls.dart`, for the TLS trust a network call
@@ -124,8 +125,9 @@ disk is already as durable as the app is.
 a default of `DuckDuckGoSearch()` puts its HTML parser in the web bundle
 (~280 KB) where CORS means it can never be called.
 
-`Shell.canRunCommands` is what a browser actually changes, and it is not one
-failing command — it is the whole loop. With no shell there is nothing to run,
+`Shell.canRunCommands` is what a platform with no shell changes — a browser
+on a site that serves no Linux image, an iOS device with no Linux installed —
+and it is not one failing command, it is the whole loop. With no shell there is nothing to run,
 so `bashTool` is dropped from the request and a system prompt with no tool
 instructions is used; the turn ends when the model replies with text and no
 tool call, the same termination signal the shell path uses.
@@ -136,8 +138,8 @@ rather than named.** The host driver is the machine's own shell — `bash` then
 shell sits that a `PATH` may not name, a stripped environment and Android, which
 has no `/bin` at all. It was `/bin/bash` or `/bin/sh`, which meant a phone was
 offered the `bash` tool and then failed every command it ran, one at a time.
-Nothing found is a null driver and `canRunCommands: false`, which is the
-browser's answer and the honest one: the loop stops offering a tool there is
+Nothing found is a null driver and `canRunCommands: false`, the honest
+answer: the loop stops offering a tool there is
 nothing behind. The other driver is the guest — see "A whole Linux under proot"
 in `data/local/` — and `platformDriver` picks between the two per command.
 `LocalShell` runs whichever it is handed, since to it both are a command that

@@ -8,6 +8,7 @@ import "../../domain/corner_radius.dart";
 import "../../domain/theme_colour.dart";
 import "../../data/backup.dart";
 import "../../core/platform/platform.dart" as platform;
+import "../../domain/browser_reach.dart";
 import "../../domain/llm_provider.dart";
 import "../../domain/permission.dart";
 import "../../domain/project_settings.dart"
@@ -1053,6 +1054,11 @@ class _RecommendedProviderState extends ConsumerState<_RecommendedProvider> {
   /// is signed in and told to accept this page.
   Widget _inBrowser(BuildContext context) {
     final origin = Uri.base.origin;
+    // Ollama allows its own machine's origins unasked, so a page served from
+    // one has nothing to tell it.
+    final allowed = browserReachNote(Uri.parse(_ollamaLocal.baseUrl),
+            origin: origin) ==
+        null;
     return Card(
       margin: const EdgeInsets.fromLTRB(16, 16, 16, 0),
       child: Padding(
@@ -1066,17 +1072,19 @@ class _RecommendedProviderState extends ConsumerState<_RecommendedProvider> {
               "prompts and outputs.",
             ),
             const SizedBox(height: 12),
-            const Text(
+            Text(
               "A browser cannot call Ollama Cloud directly. Install Ollama on "
-              "this computer, sign in with ollama signin, and start it so it "
-              "accepts this page:",
+              "this computer and sign in with ollama signin"
+              "${allowed ? "." : ", and start it so it accepts this page:"}",
             ),
             const SizedBox(height: 8),
-            SelectableText(
-              "OLLAMA_ORIGINS=$origin ollama serve",
-              style: const TextStyle(fontFamily: monoFamily),
-            ),
-            const SizedBox(height: 8),
+            if (!allowed) ...[
+              SelectableText(
+                "OLLAMA_ORIGINS=$origin ollama serve",
+                style: const TextStyle(fontFamily: monoFamily),
+              ),
+              const SizedBox(height: 8),
+            ],
             const Text("Its cloud models are then listed under their :cloud "
                 "names."),
             const SizedBox(height: 12),

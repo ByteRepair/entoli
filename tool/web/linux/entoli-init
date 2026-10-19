@@ -1,0 +1,35 @@
+#!/bin/sh
+# PID 1 of the browser's Linux, until it execs the mux: the mounts a system
+# needs, then the app's own files over 9p at the path the app calls them by
+# (entoli.data= on the kernel command line), so a path means the same thing to
+# the file tools and to a command.
+export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+# The initramfs hands the root over read-only, for a fsck nobody runs here.
+mount -o remount,rw /
+mountpoint -q /proc || mount -t proc proc /proc
+mountpoint -q /sys || mount -t sysfs sysfs /sys
+mountpoint -q /dev || mount -t devtmpfs devtmpfs /dev
+mkdir -p /dev/pts /dev/shm
+mount -t devpts devpts /dev/pts
+mount -t tmpfs -o mode=1777 tmpfs /dev/shm
+mount -t tmpfs -o mode=1777 tmpfs /tmp
+mount -t tmpfs -o mode=755 tmpfs /run
+hostname entoli
+ip link set lo up
+
+data=/entoli
+for arg in $(cat /proc/cmdline); do
+	case "$arg" in
+	entoli.data=*) data="${arg#entoli.data=}" ;;
+	esac
+done
+
+# cache=mmap: the app writes these files between commands, so the guest may
+# not keep its own copy of them, but git maps its packs and needs the mmap.
+modprobe 9pnet_virtio 2>/dev/null
+mkdir -p "$data"
+mount -t 9p -o trans=virtio,version=9p2000.L,cache=mmap,msize=131072 host9p "$data" ||
+	echo "entoli-init: the app's files did not mount at $data" >&2
+
+exec /usr/local/sbin/entoli-mux /dev/ttyS1

@@ -1,0 +1,27 @@
+# The browser's Linux: an i386 Alpine for v86, which emulates a 32-bit PC.
+# Built by build.sh, which turns the result into a disk image.
+ARG ALPINE
+
+FROM docker.io/library/alpine:${ALPINE} AS mux
+RUN apk add --no-cache gcc musl-dev
+COPY entoli-mux.c /src/
+RUN gcc -static -Os -s -Wall -Wextra -o /entoli-mux /src/entoli-mux.c
+
+FROM docker.io/library/alpine:${ALPINE}
+# A guest in a browser has no network apk could reach (no mirror allows a
+# page's origin), so what the agent reaches for is installed here or nowhere.
+RUN apk add --no-cache linux-virt mkinitfs \
+      bash coreutils findutils grep sed gawk diffutils patch file tree less \
+      tar gzip xz zip unzip zstd \
+      git make jq ripgrep procps bc \
+      python3 py3-yaml \
+      ca-certificates curl
+# v86 boots the kernel directly, so the initramfs only has to find /dev/sda.
+RUN mkinitfs -F "base ata scsi ext4" $(cat /usr/share/kernel/virt/kernel.release)
+COPY --from=mux /entoli-mux /usr/local/sbin/entoli-mux
+COPY entoli-init /sbin/entoli-init
+RUN chmod 755 /sbin/entoli-init \
+    && cat /usr/share/kernel/virt/kernel.release > /etc/entoli-kernel \
+    && mkdir -p /usr/share/git-core/templates-empty \
+    && printf '[safe]\n\tdirectory = *\n[init]\n\ttemplateDir = /usr/share/git-core/templates-empty\n' > /etc/gitconfig \
+    && rm -rf /var/cache/apk/*

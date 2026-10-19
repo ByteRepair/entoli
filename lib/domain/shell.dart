@@ -1,6 +1,6 @@
-/// Where the agent's commands run. Desktop and Android have a real shell; a
-/// browser does not, and that is the whole of the difference between the
-/// platforms' agent. The `!` syntax that sends a message to the shell instead
+/// Where the agent's commands run. Desktop and Android have a real shell; iOS
+/// and a browser have an emulated Linux, and a platform with neither has none,
+/// which is the whole of the difference between the platforms' agent. The `!` syntax that sends a message to the shell instead
 /// of the model is here too, since it is the same shell it reaches.
 library;
 
@@ -398,7 +398,7 @@ abstract class Shell {
   bool get platformIsWindows => false;
 }
 
-/// The web's shell: there isn't one. A command that reaches it anyway is
+/// The shell of a platform with none. A command that reaches it anyway is
 /// reported as failed rather than thrown, so the model is told why instead of
 /// the turn dying.
 class UnavailableShell extends Shell {

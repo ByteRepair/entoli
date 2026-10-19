@@ -1,3 +1,4 @@
+import "package:flutter/foundation.dart" show kIsWeb;
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
@@ -35,6 +36,17 @@ class TerminalSection extends ConsumerWidget {
         "Where commands run",
         description: "This platform has no terminal, so the agent has no "
             "commands to run.",
+      );
+    }
+    // A shell with nothing to pick between: the browser's, whose one Linux is
+    // the one the site serves.
+    if (kIsWeb) {
+      final platform = ref.read(shellProvider).platformDescription;
+      return SectionHeader(
+        "Where commands run",
+        description: "Commands run in $platform. What a command changes in a "
+            "project's workspace is kept; anything else it changes in the "
+            "system is gone when the page is reloaded.",
       );
     }
     final installed = ref.watch(installedRootfsProvider);
