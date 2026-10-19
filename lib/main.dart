@@ -12,6 +12,7 @@ import "core/platform/platform.dart" as platform;
 import "core/platform/system_palette.dart";
 import "core/tls.dart";
 import "data/local/file_trigger_store.dart";
+import "data/model_catalog.dart";
 import "data/local/file_selector_picker.dart";
 import "data/prompts/bundled_skills.dart";
 import "data/sync/file_devices.dart";
@@ -289,6 +290,22 @@ class AppSession {
             enabled: container.read(appSettingsProvider).autoUpdate,
           ));
     }
+    // The model catalog, read from its cache and refreshed in the background.
+    // Only a hosted provider sends anything there: on-device models are
+    // described by the app itself.
+    void loadCatalog() {
+      final client = tlsClient();
+      unawaited(loadModelCatalog(config, client,
+              fetch: container.read(appSettingsProvider).llmProviders.isNotEmpty)
+          .whenComplete(client.close));
+    }
+
+    loadCatalog();
+    // The first provider fetches it then: the welcome tour adds one.
+    container.listen(appSettingsProvider.select((s) => s.llmProviders.isNotEmpty),
+        (was, now) {
+      if (now && was == false) loadCatalog();
+    });
     // Sweep expired temporary chats on startup, then every 30 minutes. The
     // timer is in-process and dies with the session: a chat expiring while the
     // app is closed is caught at the next launch. Skips the currently-open

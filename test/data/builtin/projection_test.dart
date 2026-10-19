@@ -281,6 +281,43 @@ void main() {
     expect(projected.single.attachments.single.bytes, [1, 2, 3]);
   });
 
+  test("an image a tool made rides that tool's result", () async {
+    final turn = [
+      call("c1", "image_generation", '{"prompt":"a cat"}', response: "r1"),
+      const MessagePart.file(resource: "cat.png", filename: "image-0.png", mimeType: "image/png"),
+      ran("c1", "Generated 1 image(s)"),
+      call("c2", "bash", '{"command":"ls"}', response: "r1"),
+      ran("c2", "ok"),
+    ];
+    final cat = LlmAttachment(
+        filename: "image-0.png", mimeType: "image/png", bytes: Uint8List.fromList([7]));
+
+    final reloaded = await projectionOf([said(MessageRole.assistant, turn)],
+        load: (resource) async => resource == "cat.png" ? cat.bytes : null);
+    final live = assistantMessages(turn, files: {"cat.png": cat}).toList();
+
+    for (final projected in [reloaded, live]) {
+      final results = projected.where((m) => m.role == LlmRole.tool).toList();
+      expect(results.first.attachments, [cat]);
+      expect(results.last.attachments, isEmpty);
+    }
+  });
+
+  // A FilePart names no response, so an image the model answered with alone
+  // follows the previous response's results; it is not theirs.
+  test("an image after a result is not that result's", () async {
+    final turn = [
+      call("c1", "bash", '{"command":"ls"}', response: "r1"),
+      ran("c1", "ok"),
+      const MessagePart.file(resource: "cat.png", filename: "image-0.png", mimeType: "image/png"),
+    ];
+    final cat = LlmAttachment(
+        filename: "image-0.png", mimeType: "image/png", bytes: Uint8List.fromList([7]));
+
+    final projected = assistantMessages(turn, files: {"cat.png": cat}).toList();
+    expect(projected.where((m) => m.role == LlmRole.tool).single.attachments, isEmpty);
+  });
+
   // The bytes are gone, the conversation is not: the model is told a file was
   // attached and asked to carry on without it.
   test("an attachment whose resource has gone is left named", () async {

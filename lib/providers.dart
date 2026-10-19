@@ -33,6 +33,7 @@ import "domain/chat_store.dart";
 import "domain/file_handoff.dart";
 import "domain/link_opener.dart";
 import "domain/llm_provider.dart";
+import "domain/model_registry.dart";
 import "data/builtin/llm/local_prefill.dart";
 import "data/local/byte_repair_store.dart";
 import "domain/local_llm.dart";
@@ -454,6 +455,26 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
   Future<void> setClassifierModel(ModelChoice choice) => _update((s) => s
     ..classifierProviderId = choice.providerId
     ..classifierModelId = choice.modelId);
+
+  Future<void> setImageQuality(ImageQuality value) =>
+      _update((s) => s.imageQuality = value);
+
+  /// A model described by hand, on the provider it is reached through. One of
+  /// the same id is replaced.
+  Future<void> addCustomModel(String providerId, ModelInfo model) => _update((s) =>
+      s.llmProviders = [
+        for (final p in s.llmProviders)
+          p.id == providerId
+              ? p.copyWith(customModels: [
+                  ...p.customModels.where((m) => m.id != model.id),
+                  model,
+                ])
+              : p,
+      ]);
+
+  Future<void> setImageModel(ModelChoice choice) => _update((s) => s
+    ..imageProviderId = choice.providerId
+    ..imageModelId = choice.modelId);
 
   /// Read when a command runs, so an edit reaches the next one.
   Future<void> setEnvironment(Map<String, String> env) =>

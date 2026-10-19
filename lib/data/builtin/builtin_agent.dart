@@ -1,5 +1,6 @@
 import "dart:async";
 import "dart:convert";
+import "dart:typed_data";
 
 import "package:fs_shim/fs.dart";
 import "package:flutter/foundation.dart" show visibleForTesting;
@@ -27,6 +28,7 @@ import "ask_tool.dart";
 import "artifact_tool.dart";
 import "compact_prompt.dart" show estimateTokens;
 import "file_tools.dart" as file_tool_defs;
+import "image_tool.dart";
 import "llm/llm_client.dart";
 import "llm/rate_limit_gate.dart";
 import "../prompts/skill_import.dart" show SkillImportException;
@@ -71,6 +73,7 @@ String? runningTool(String name) => switch (name) {
       taskToolName => "Working on a sub-task",
       triggerSetName => "Setting a trigger",
       artifactToolName => "Publishing the artifact",
+      imageGenerationToolName => "Generating an image",
       presentPlanToolName => "Presenting the plan",
       _ => null,
     };
@@ -312,6 +315,7 @@ List<LlmTool> agentTools({
   required AgentCapabilities caps,
   List<PromptDocument> skills = const [],
   required bool offerMemory,
+  bool offerImage = false,
   bool oneShot = false,
   List<PromptDocument>? participants,
   bool member = false,
@@ -357,6 +361,7 @@ List<LlmTool> agentTools({
       // end of the list, both, so the list's older adjacencies stand.
       if (caps.ask && !oneShot) addDirectoryTool,
       writableDirectoriesTool,
+      if (offerImage) imageGenerationTool,
     ];
 
 /// The agent loop: ask the model, run the command it asked for, show it the
@@ -395,6 +400,8 @@ class BuiltinAgent {
     this.tone = Tone.none,
     this.citations = false,
     this.saveArtifact,
+    this.generateImage,
+    this.saveResource,
     this.packageSkill,
     this.registerTrigger,
     this.editSettings,
@@ -701,6 +708,14 @@ class BuiltinAgent {
   final Future<String> Function(String path, String entryFile,
       {String? artifactId})? saveArtifact;
 
+  /// Asks the image model for [prompt]. Null withholds `image_generation`:
+  /// the setting is off, or the agent is a sub-agent.
+  final Future<List<LlmAttachment>> Function(String prompt)? generateImage;
+
+  /// Saves bytes under the chat's `resources/` and returns the resource name.
+  /// Null where nothing is shown — a sub-agent's images are dropped.
+  final Future<String> Function(String filename, Uint8List bytes)? saveResource;
+
   /// Packages a skill drafted in the workspace and stages the `.skill` for the
   /// user to install. Null where the agent is a sub-agent: a worker does not
   /// offer skills for install. Returns the install id.
@@ -764,6 +779,7 @@ class BuiltinAgent {
         caps: _offered,
         skills: skills,
         offerMemory: memoryStore != null,
+        offerImage: generateImage != null && saveResource != null,
         oneShot: oneShot,
         participants: roomParticipants,
         member: viewer != null,
@@ -849,7 +865,7 @@ class BuiltinAgent {
         final from = session.messages.length;
         void sayWhatWasSaid() {
           said.flushDeltas();
-          session.replaceTurn(from, assistantMessages(said.parts));
+          session.replaceTurn(from, assistantMessages(said.parts, files: _images));
         }
 
         _sayWhatWasSaid = sayWhatWasSaid;
@@ -1021,6 +1037,9 @@ class BuiltinAgent {
         memoryUpdateToolName => _memoryUpdate,
         memoryDeleteToolName => _memoryDelete,
         artifactToolName when saveArtifact != null => _artifact,
+        imageGenerationToolName
+            when generateImage != null && saveResource != null =>
+          _generateImage,
         planAddToolName when !oneShot => _planAdd,
         planNextToolName when !oneShot => _planNext,
         planDoneToolName when !oneShot => _planDone,
@@ -1824,6 +1843,46 @@ class BuiltinAgent {
             output: "Artifact $label published. The user can view it in the "
                 "app. It is saved with the chat. To update it, edit the files "
                 "and call artifact again with artifact_id: \"$id\".")));
+  }
+
+  /// Generate an image and show it in the reply. Not gated: it touches neither
+  /// the workspace nor the shell, and the setting is the user's consent.
+  Stream<AgentEvent> _generateImage(LlmToolCall call) async* {
+    final prompt = stringArg(call.argumentsJson, "prompt");
+    if (prompt == null) {
+      yield* _reject(call,
+          'The $imageGenerationToolName tool takes {"prompt": "..."}.');
+      return;
+    }
+    yield _called(call, prompt);
+    final List<ImageEvent> saved;
+    try {
+      final images = await generateImage!(prompt);
+      saved = [for (final image in images) await _saved(image)];
+    } catch (e) {
+      yield _failed(call, "$e");
+      return;
+    }
+    if (saved.isEmpty) {
+      yield _failed(call, "The image model returned no image.");
+      return;
+    }
+    for (final event in saved) {
+      yield event;
+    }
+    yield _ok(call, "Generated ${saved.length} image(s), attached below and "
+        "shown to the user in the chat.");
+  }
+
+  /// Images saved this session, by resource: the bytes the projection hands
+  /// back to the model on the result that made them, as a reload reads them.
+  final _images = <String, LlmAttachment>{};
+
+  Future<ImageEvent> _saved(LlmAttachment image) async {
+    final resource = await saveResource!(image.filename, image.bytes);
+    _images[resource] = image;
+    return ImageEvent(FilePart(
+        resource: resource, filename: image.filename, mimeType: image.mimeType));
   }
 
   /// Package a skill the model drafted in its workspace and offer it to the
@@ -2707,6 +2766,12 @@ class BuiltinAgent {
               // with the bubble showing nothing.
               if (!textStreamed && chunk.message.text.isNotEmpty) {
                 yield TextDelta(chunk.message.text);
+              }
+              // A model that answers with images (OpenRouter's image models).
+              if (saveResource != null) {
+                for (final image in chunk.message.attachments.where((a) => a.isImage)) {
+                  yield await _saved(image);
+                }
               }
               rateLimitGate?.onSuccess();
               _completion = chunk;

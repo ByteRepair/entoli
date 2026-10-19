@@ -32,6 +32,8 @@ import "memory/instructions.dart";
 import "memory/store.dart";
 import "llm/gated_client.dart";
 import "llm/llm_client.dart";
+import "llm/openai_client.dart";
+import "llm/text_only_client.dart";
 import "llm/llm_registry.dart";
 import "llm/rate_limit_gate.dart";
 import "permission_classifier.dart";
@@ -125,7 +127,7 @@ class BuiltinBackend implements AgentBackend {
   /// that reported it.
   final Map<String, int> _usage = {};
 
-  /// The context window the chat's model stands in, as `contextWindowOf`
+  /// The context window the chat's model stands in, as `modelInfoOf`
   /// named it when the request beside this entry ran — written where the
   /// usage is written, so the threshold answers both halves of itself from
   /// one pair of maps with no `meta.json` read on the settle path. Null
@@ -464,6 +466,11 @@ class BuiltinBackend implements AgentBackend {
           }
           return store.createArtifact(chatId, resolved, entryFile, project: project);
         },
+        generateImage:
+            _imageGenerator(settings.imageProvider, settings.imageModel,
+                settings.imageQuality),
+        saveResource: (filename, bytes) =>
+            store.saveResource(chatId, filename, bytes),
         registerTrigger: triggerRegistry?.call(chatId, project),
         editSettings: editSettings,
         packageSkill: (path, name) async {
@@ -482,7 +489,7 @@ class BuiltinBackend implements AgentBackend {
             controller.add(ShellOutputEvent(callId: callId, text: text)),
         onUsage: (usage) {
           _usage[chatId] = usage.contextTokens;
-          _windows[chatId] = contextWindowOf(settings.provider, settings.model);
+          _windows[chatId] = target.info?.context;
         },
       );
       // The real kill replaces the placeholder.
@@ -935,7 +942,7 @@ class BuiltinBackend implements AgentBackend {
     // here in the first place. The window is the model's own where the
     // registry knows it, the settings' global guess where it does not — and
     // where the model still refuses a span, the ladder below is the answer.
-    final window = contextWindowOf(settings.provider, settings.model) ??
+    final window = target.info?.context ??
         AppSettings.load(config).totalContext;
     final budget = window ~/ 2;
     // The retry ladder: a span too big to summarize is not a failure to give
@@ -997,7 +1004,7 @@ class BuiltinBackend implements AgentBackend {
   /// fails by writing nothing and leaving a line in the log — a turn is over
   /// when its last event is out, whatever this is still doing.
   Future<void> _extractMemories({
-    required ({LlmClient client, String modelId}) target,
+    required _Target target,
     required MemoryStore store,
     required String chatId,
     required Message? prompt,
@@ -1067,7 +1074,7 @@ class BuiltinBackend implements AgentBackend {
   /// [consolidationMinInterval], one at a time. A tidy store says nothing on
   /// success, and a failure is a log line like any other background failure.
   Future<void> _consolidateMemories({
-    required ({LlmClient client, String modelId}) target,
+    required _Target target,
     required MemoryStore store,
     required String chatId,
   }) async {
@@ -1135,7 +1142,7 @@ class BuiltinBackend implements AgentBackend {
   /// the future it collects, a timed-out future leaving the response being
   /// read to nobody.
   Future<String?> _oneCompletion(
-    ({LlmClient client, String modelId}) target,
+    _Target target,
     List<LlmMessage> messages, {
     required Duration timeout,
   }) async {
@@ -1226,7 +1233,7 @@ class BuiltinBackend implements AgentBackend {
   /// default for a turn, the light one for the title, memory and classifier
   /// roles. None is None: a provider without that field leaves nothing to
   /// answer with, which is the caller's error, not a guess from a model list.
-  ({LlmClient client, String modelId})? _resolveModel(
+  _Target? _resolveModel(
     String? model,
     String? provider, {
     String? Function(LlmProviderConfig) defaultOf = LlmProviderConfig.chatDefaultOf,
@@ -1237,7 +1244,17 @@ class BuiltinBackend implements AgentBackend {
     final config = endpoint.config;
     final modelId = model ?? defaultOf(config);
     if (modelId == null || modelId.isEmpty) return null;
-    return (client: registry.clientOf(endpoint), modelId: modelId);
+    final client = registry.clientOf(endpoint);
+    final info = modelInfoOf(config, modelId);
+    // Here rather than at each request: everything that asks the model
+    // resolves it through this, the compaction's one-shot read included.
+    // Unknown passes images through: a model only the endpoint lists is
+    // trusted as it was before there was a catalog to ask.
+    return (
+      client: info?.readsImages ?? true ? client : TextOnlyClient(client),
+      modelId: modelId,
+      info: info,
+    );
   }
 
   /// The classifier model, resolved the same way the main model is. Null when
@@ -1251,6 +1268,20 @@ class BuiltinBackend implements AgentBackend {
     );
     if (target == null) return null;
     return LlmClassifier(client: target.client, model: target.modelId);
+  }
+
+  /// Null, and so no tool, where the image model is off or its provider does
+  /// not speak the OpenAI shape: Anthropic makes no images.
+  Future<List<LlmAttachment>> Function(String prompt)? _imageGenerator(
+      String? provider, String? model, ImageQuality quality) {
+    final endpoint = provider == null ? null : registry.endpointFor(provider);
+    if (endpoint == null) return null;
+    final modelId = model ?? LlmProviderConfig.imageDefaultOf(endpoint.config);
+    final client = registry.clientOf(endpoint);
+    if (modelId == null || client is! OpenAiClient) return null;
+    return (prompt) => client.generateImage(prompt,
+        model: modelId,
+        quality: quality == ImageQuality.auto ? null : quality.name);
   }
 
   Future<ApprovalResponse> _awaitApproval(ToolApproval approval) =>
@@ -1467,3 +1498,6 @@ class _RunningTurns extends ValueNotifier<Set<String>> {
     if (keys.isNotEmpty) value = chats;
   }
 }
+
+/// A model resolved to ask: the client, the id, and what the catalog knows.
+typedef _Target = ({LlmClient client, String modelId, ModelInfo? info});

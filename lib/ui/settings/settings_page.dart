@@ -48,9 +48,10 @@ import "voice_settings.dart";
 import "welcome_page.dart";
 
 /// The page's categories, in the order they are offered and the groups they
-/// are offered in. General, Providers, On-device and LLMs are the app and the
-/// plumbing that answers a chat — everything an endpoint is, where a model can
-/// run without a network, and everything a model is asked to do; Memory, Voice
+/// are offered in. General, Providers, On-device, LLMs and Image Generation
+/// are the app and the plumbing that answers a chat — everything an endpoint
+/// is, where a model can run without a network, and everything a model is
+/// asked to do; Memory, Voice
 /// and Triggers are what a conversation does beyond the text; Agents and
 /// Skills are what a message addresses by name; Terminal and Byte Repair are
 /// where commands run; Sync and Data are the device and all of it at once —
@@ -62,6 +63,7 @@ enum SettingsCategory {
   providers("Providers", Icons.cloud_outlined),
   onDevice("On-device", Icons.memory),
   llms("LLMs", Icons.auto_awesome_outlined),
+  images("Image Generation", Icons.image_outlined),
   memory("Memory", Icons.psychology, dividerAbove: true),
   voice("Voice", Icons.graphic_eq),
   triggers("Triggers", Icons.alarm),
@@ -261,6 +263,7 @@ List<Widget> _sectionsOf(SettingsCategory category) => switch (category) {
           Divider(),
           TurnsSection(),
         ],
+      SettingsCategory.images => const [ImageSection()],
       // The two things the agent carries between conversations: the files the
       // user writes (instructions) and the ones it writes (memories).
       SettingsCategory.memory => const [
@@ -686,6 +689,7 @@ class _AgentSection extends ConsumerWidget {
           child: ModelPicker(
             nullLabel: "Off",
             defaultOf: LlmProviderConfig.lightDefaultOf,
+            role: ModelRole.text,
             helperOffText: "Classifies commands as safe, dangerous, or "
                 "uncertain. Off, auto mode asks for every command.",
             choice: (

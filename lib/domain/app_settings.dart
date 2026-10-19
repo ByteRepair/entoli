@@ -14,6 +14,10 @@ import "temp_chat_ttl.dart";
 import "theme_colour.dart";
 import "tone.dart";
 
+/// How hard the image model works on one image. Named as OpenAI's `quality`
+/// is; [auto] sends nothing and leaves the provider's own default.
+enum ImageQuality { auto, low, medium, high }
+
 /// Persisted app-level settings (default model for new chats, etc.).
 class AppSettings {
   AppSettings({
@@ -23,6 +27,9 @@ class AppSettings {
     this.titleProviderId,
     this.classifierModelId,
     this.classifierProviderId,
+    this.imageModelId,
+    this.imageProviderId,
+    this.imageQuality = ImageQuality.auto,
     this.instructionImports = true,
     this.nestedInstructions = true,
     this.instructionExcludes = const [],
@@ -90,6 +97,13 @@ class AppSettings {
   /// here auto mode falls back to asking for every command.
   String? classifierModelId;
   String? classifierProviderId;
+
+  /// What answers `image_generation`, and whether the agent is offered it at
+  /// all: no provider is off, the default, since every call is a paid request.
+  /// Both halves or neither, as the title's.
+  String? imageModelId;
+  String? imageProviderId;
+  ImageQuality imageQuality;
 
   /// Whether `@path` references inside an AGENTS.md pull in more files. The
   /// files themselves are read into every turn; this and [nestedInstructions]
@@ -412,6 +426,10 @@ class AppSettings {
         titleProviderId: _orNull(json["titleProviderId"] as String?),
         classifierModelId: _orNull(json["classifierModelId"] as String?),
         classifierProviderId: _orNull(json["classifierProviderId"] as String?),
+        imageModelId: _orNull(json["imageModelId"] as String?),
+        imageProviderId: _orNull(json["imageProviderId"] as String?),
+        imageQuality: ImageQuality.values.asNameMap()[json["imageQuality"]] ??
+            ImageQuality.auto,
         instructionImports: json["instructionImports"] as bool? ?? true,
         nestedInstructions: json["nestedInstructions"] as bool? ?? true,
         instructionExcludes:
@@ -527,6 +545,9 @@ class AppSettings {
       if (titleProviderId != null) "titleProviderId": titleProviderId,
       if (classifierModelId != null) "classifierModelId": classifierModelId,
       if (classifierProviderId != null) "classifierProviderId": classifierProviderId,
+      if (imageModelId != null) "imageModelId": imageModelId,
+      if (imageProviderId != null) "imageProviderId": imageProviderId,
+      if (imageQuality != ImageQuality.auto) "imageQuality": imageQuality.name,
       // Written only when off, so a file that predates the on defaults says
       // nothing and gets them.
       if (!instructionImports) "instructionImports": instructionImports,

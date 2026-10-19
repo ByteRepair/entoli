@@ -98,6 +98,7 @@ class _ProviderDialogState extends State<_ProviderDialog> {
         apiKeyEnv: widget.initial?.apiKeyEnv,
         defaultModelId: widget.initial?.defaultModelId,
         defaultLightModelId: widget.initial?.defaultLightModelId,
+        customModels: widget.initial?.customModels ?? const [],
         models: [
           for (final model in _models.text.split(RegExp(r"[,\n]")))
             if (model.trim().isNotEmpty) model.trim(),

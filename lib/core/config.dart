@@ -257,6 +257,10 @@ class AppConfig {
 
   String get settingsFile => fs.path.join(dataDir, "settings.json");
 
+  /// models.dev, trimmed: see `ModelCatalog`. A cache, fetched again when
+  /// it is a day old, so nothing is lost when it is.
+  String get modelsFile => fs.path.join(dataDir, "models.json");
+
   /// The user's triggers, one JSON list. Not a document in [Documents]:
   /// nothing needs to read it synchronously, and Kotlin reads it behind the
   /// app's back to re-arm alarms — which is why writes go through a rename.

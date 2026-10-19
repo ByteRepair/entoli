@@ -202,6 +202,7 @@ class SubAgentRunner {
           case ShellRunEvent():
           case ArtifactEvent():
           case SkillInstallEvent():
+          case ImageEvent():
           case ApprovalRequestEvent():
           case QuestionRequestEvent():
           case SubAgentStartEvent():

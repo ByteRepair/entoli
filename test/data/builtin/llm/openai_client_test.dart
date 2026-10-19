@@ -413,4 +413,95 @@ void main() {
       expect(chunks.whereType<LlmPromptProgress>().single.fraction, isNull);
     });
   });
+
+  group("images", () {
+    const png = "data:image/png;base64,iVBORw0K";
+
+    test("an image a model streams back rides the completion", () async {
+      final chunks = await clientStreaming([
+        delta({"content": "Here it is"}),
+        delta({
+          "images": [
+            {"type": "image_url", "image_url": {"url": png}},
+            {"type": "image_url", "image_url": {"url": "https://not.inline/x.png"}},
+          ],
+        }),
+        "[DONE]",
+      ]).stream(const [], model: "img-test").toList();
+
+      final image = chunks.whereType<LlmCompletion>().single.message.attachments.single;
+      expect(image.mimeType, "image/png");
+      expect(image.bytes, base64Decode("iVBORw0K"));
+    });
+
+    OpenAiClient clientAnswering(Object body) {
+      requests = [];
+      return OpenAiClient(
+        baseUrl: Uri.parse("https://example.test/v1"),
+        httpClient: MockClient.streaming((request, _) async {
+          requests.add(request);
+          return http.StreamedResponse(Stream.value(utf8.encode(jsonEncode(body))), 200);
+        }),
+      );
+    }
+
+    test("an OpenAI image model is asked through the Images API", () async {
+      final images = await clientAnswering({
+        "data": [
+          {"b64_json": "iVBORw0K"},
+        ],
+      }).generateImage("a cat", model: "gpt-image-1");
+
+      expect(requests.single.url.path, "/v1/images/generations");
+      expect(sentBody(), {"model": "gpt-image-1", "prompt": "a cat"});
+      expect(images.single.bytes, base64Decode("iVBORw0K"));
+    });
+
+    test("a tool result's images follow the results in a user message", () async {
+      await clientStreaming(["[DONE]"]).stream([
+        const LlmMessage(role: LlmRole.assistant, toolCalls: [
+          LlmToolCall(id: "c1", name: "image_generation", argumentsJson: "{}"),
+          LlmToolCall(id: "c2", name: "bash", argumentsJson: "{}"),
+        ]),
+        LlmMessage(role: LlmRole.tool, toolCallId: "c1", text: "made", attachments: [
+          LlmAttachment(filename: "a.png", mimeType: "image/png", bytes: base64Decode("iVBORw0K")),
+        ]),
+        const LlmMessage(role: LlmRole.tool, toolCallId: "c2", text: "ok"),
+      ], model: "gpt-test").toList();
+
+      final sent = (sentBody()["messages"] as List).cast<Map<String, dynamic>>();
+      expect(sent.map((m) => m["role"]), ["assistant", "tool", "tool", "user"]);
+      expect(sent[1]["content"], "made");
+      expect((sent.last["content"] as List).last["image_url"]["url"], png);
+    });
+
+    test("quality is sent as the Images API names it", () async {
+      final answer = {"data": const []};
+      await clientAnswering(answer)
+          .generateImage("a cat", model: "gpt-image-1", quality: "low");
+      expect(sentBody()["quality"], "low");
+      await clientAnswering(answer)
+          .generateImage("a cat", model: "dall-e-3", quality: "high");
+      expect(sentBody()["quality"], "hd");
+    });
+
+    test("any other model is asked for the image modality", () async {
+      final images = await clientAnswering({
+        "choices": [
+          {
+            "message": {
+              "content": "",
+              "images": [
+                {"type": "image_url", "image_url": {"url": png}},
+              ],
+            },
+          },
+        ],
+      }).generateImage("a cat", model: "google/gemini-2.5-flash-image");
+
+      expect(requests.single.url.path, "/v1/chat/completions");
+      expect(sentBody()["modalities"], ["image", "text"]);
+      expect(images.single.mimeType, "image/png");
+    });
+  });
 }

@@ -254,3 +254,35 @@ has to fall back to null.
 `DownloadProgress` in `domain/download.dart` is what a store reports, and it is
 one type because it was the same three fields twice — a bar reading one of them
 cannot tell which store filled it in.
+
+## The model catalog
+
+Every model picker is a field that opens `ModelCatalogPage`: a search over
+every model the configured providers offer, with what each costs and can do,
+under the entries that store less than a model — the null entry and each
+provider's Default. What a picker is offered is its `ModelRole`'s: the chat
+LLM only models that talk (text in, text out) and call tools, since the agent
+works through tools; title, classifier and memory any model that talks, being
+plain completions; the image model only models that make images.
+
+`ModelInfo` holds only the models.dev fields something reads, and the cache and
+the built-in snapshot are trimmed to those. Structured output went for that
+reason: nothing sends a schema, the background roles parse their JSON from text.
+
+The models come from `ModelCatalog` (`domain/model_registry.dart`), which is
+models.dev's own shape: a provider
+is matched to its models.dev entry by id, then by base URL, and the model by
+its exact id inside it. `data/model_catalog.dart` loads it at startup — the
+presets' default models built in (`lib/data/builtin_models.dart`, written by
+`tool/gen_builtin_models.dart` and committed, since it fetches), then the
+cached copy in `<dataDir>/models.json`, then a fetch when that is a day old,
+or when the first provider is added. So with no network and no cache the
+Defaults are still pickable. Run the generator when a preset's defaults change.
+
+A model the catalog does not list is added on the "Add model" page, onto the
+provider it is reached through (`LlmProviderConfig.customModels`, in the same
+shape), where it comes before the catalog's own entry of the same id. What an
+endpoint lists itself (`/models`, or the provider's `models` field) and the
+catalog does not know is offered too, as a chat model with nothing known of it
+— a self-hosted server's models, and the on-device ones, which models.dev does
+not list. One the catalog does know is offered by what the catalog says.

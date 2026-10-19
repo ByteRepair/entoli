@@ -90,8 +90,9 @@ Future<List<LlmMessage>> projectionOf(
   // read is its own IndexedDB transaction, and a long conversation's would
   // otherwise be one round trip after another. Only the verbatim half's bytes
   // are read — the summarized span's are what the summary replaced.
+  // A reply's are the images its tools made, which ride their results.
   final files = await Future.wait(messages.asMap().entries.map((e) =>
-      e.value.role == MessageRole.user && e.key >= from
+      e.key >= from && e.value.files.isNotEmpty
           ? _attachments(e.value, load)
           : _noFiles));
   final projected = <LlmMessage>[];
@@ -127,7 +128,7 @@ Future<List<LlmMessage>> projectionOf(
         projected.add(LlmMessage(
           role: LlmRole.user,
           text: wording,
-          attachments: files[index],
+          attachments: files[index].values.toList(),
         ));
       case MessageRole.assistant:
         // Someone else's reply reaches this viewer labeled as theirs: an
@@ -160,7 +161,7 @@ Future<List<LlmMessage>> projectionOf(
           // viewer reads what was said, not the commands behind it.
           continue;
         }
-        projected.addAll(_assistant(message));
+        projected.addAll(_assistant(message, files[index]));
       case MessageRole.system:
       case MessageRole.tool:
         // The system prompt is rewritten every turn, and a result is a part of
@@ -199,25 +200,30 @@ String _userText(Message message) {
   return text.isEmpty ? "(attached: $files)" : "$text\n\n(attached: $files)";
 }
 
-final Future<List<LlmAttachment>> _noFiles = Future.value(const []);
+final Future<Map<String, LlmAttachment>> _noFiles = Future.value(const {});
 
-Future<List<LlmAttachment>> _attachments(Message message, ResourceLoader load) async {
+/// By resource name, which is how a reply's [FilePart] finds its bytes.
+Future<Map<String, LlmAttachment>> _attachments(Message message, ResourceLoader load) async {
   final loaded = await Future.wait(message.files.map((file) async {
     final bytes = await load(file.resource);
     return bytes == null
         ? null
-        : LlmAttachment(
-            filename: file.filename, mimeType: file.mimeType, bytes: bytes);
+        : MapEntry(file.resource,
+            LlmAttachment(filename: file.filename, mimeType: file.mimeType, bytes: bytes));
   }));
-  return loaded.nonNulls.toList();
+  return Map.fromEntries(loaded.nonNulls);
 }
 
 /// One turn's reply as the provider messages it becomes: one per response, each
 /// followed by the results answering its calls. What a running turn puts in
 /// front of the model, and what a reload rebuilds — the same function, so there
 /// is nothing to keep level. See "One accumulation" in `lib/domain/AGENTS.md`.
-Iterable<LlmMessage> assistantMessages(List<MessagePart> parts) =>
-    _assistant(unloggedMessage(MessageRole.assistant, _noDate, parts));
+///
+/// [files] are the bytes of the reply's [FilePart]s by resource, which a live
+/// turn holds already and a reload reads first.
+Iterable<LlmMessage> assistantMessages(List<MessagePart> parts,
+        {Map<String, LlmAttachment> files = const {}}) =>
+    _assistant(unloggedMessage(MessageRole.assistant, _noDate, parts), files);
 
 /// What another participant said in a reply, worded for a different viewer:
 /// the plain text of it, which is what one agent owes another. Thinking and
@@ -232,7 +238,8 @@ String? _saidText(Message message) {
 /// assembled has none to give.
 final _noDate = DateTime.fromMillisecondsSinceEpoch(0);
 
-Iterable<LlmMessage> _assistant(Message message) sync* {
+Iterable<LlmMessage> _assistant(
+    Message message, Map<String, LlmAttachment> files) sync* {
   // Over the whole message rather than per response: a result is paired to its
   // call by id, and one that landed in a later response than the call it
   // answers must not be read as missing.
@@ -256,6 +263,14 @@ Iterable<LlmMessage> _assistant(Message message) sync* {
     final text = StringBuffer();
     String? signature;
     final calls = <LlmToolCall>[];
+    // A tool's images go back on its result, the way an attachment rides the
+    // message it came with. Recorded between the call that made them and its
+    // result; an image outside that is the model's own answer, which it has.
+    // A FilePart names no response, so one the model answered with alone is
+    // grouped after the previous response's results — the reset is what keeps
+    // it off them.
+    final images = <String, List<LlmAttachment>>{};
+    String? lastCall;
 
     for (final part in response) {
       switch (part) {
@@ -265,6 +280,7 @@ Iterable<LlmMessage> _assistant(Message message) sync* {
         case TextPart():
           text.write(part.text);
         case ToolCallPart(:final toolCall):
+          lastCall = toolCall.id;
           calls.add(LlmToolCall(
             id: toolCall.id,
             name: toolCall.name,
@@ -284,8 +300,13 @@ Iterable<LlmMessage> _assistant(Message message) sync* {
             ),
             part.cwd,
           ));
+        case FilePart(:final resource):
+          final image = files[resource];
+          if (lastCall != null && image != null) {
+            images.putIfAbsent(lastCall, () => []).add(image);
+          }
         case ToolResultPart():
-        case FilePart():
+          lastCall = null;
         case ArtifactPart():
         case SkillInstallPart():
         case ApprovalPart():
@@ -325,6 +346,7 @@ Iterable<LlmMessage> _assistant(Message message) sync* {
         text: result == null
             ? _interruptedText(call.name)
             : noted(_toolResultText(call.name, result), result.cwd),
+        attachments: images[call.id] ?? const [],
       );
     }
   }

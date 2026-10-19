@@ -521,6 +521,11 @@ class _ExtrasPage extends StatelessWidget {
             category: SettingsCategory.voice,
           ),
           _SetupRow.category(
+            title: "Image generation",
+            detail: "Let the agent make images, shown in the chat.",
+            category: SettingsCategory.images,
+          ),
+          _SetupRow.category(
             title: "Terminal",
             detail: "Run commands here, or in an isolated Linux.",
             category: SettingsCategory.terminal,

@@ -37,6 +37,14 @@ The provider's own privacy policy applies to the data they receive. The app
 calls their endpoint directly; there is no proxy or intermediary controlled by
 the app.
 
+### Model catalog
+
+When at least one hosted LLM provider is configured, the app fetches the
+public model list from models.dev (`https://models.dev/api.json`) at most once
+a day, to know each model's context window, price and what it can read. The
+request is a plain GET carrying your IP address and standard HTTP headers;
+nothing about you or your conversations is sent.
+
 ### Web search
 
 The agent's web search queries DuckDuckGo directly from your device over

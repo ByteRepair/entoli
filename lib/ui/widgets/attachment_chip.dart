@@ -5,6 +5,7 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../domain/models.dart";
 import "../../providers.dart";
+import "image_viewer.dart";
 
 /// One attached file. An image shows itself, anything else its name and an
 /// icon. The composer already holds the bytes it just read; a sent message
@@ -15,10 +16,13 @@ class AttachmentChip extends ConsumerWidget {
       : filename = attachment.filename,
         mimeType = attachment.mimeType,
         bytes = attachment.bytes,
-        source = null;
+        source = null,
+        size = _size;
 
   /// Part of a message that has already gone out.
-  AttachmentChip.sent(FilePart part, {super.key, required String chatId})
+  /// [size] is larger for an image the model made: it is the reply itself.
+  AttachmentChip.sent(FilePart part,
+      {super.key, required String chatId, this.size = _size})
       : filename = part.filename,
         mimeType = part.mimeType,
         bytes = null,
@@ -32,6 +36,7 @@ class AttachmentChip extends ConsumerWidget {
   final Uint8List? bytes;
   final ({String chatId, String resource})? source;
   final VoidCallback? onRemove;
+  final double size;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -48,8 +53,8 @@ class AttachmentChip extends ConsumerWidget {
         clipBehavior: Clip.none,
         children: [
           Container(
-            width: _size,
-            height: _size,
+            width: size,
+            height: size,
             clipBehavior: Clip.antiAlias,
             decoration: BoxDecoration(
               color: theme.colorScheme.surfaceContainerHighest,
@@ -57,13 +62,16 @@ class AttachmentChip extends ConsumerWidget {
               border: Border.all(color: theme.colorScheme.outlineVariant),
             ),
             child: isImage && data != null
-                ? Image.memory(
-                    data,
-                    // Without a decode target a phone photo becomes tens of MB
-                    // of bitmap to fill 64 logical pixels, and two of them
-                    // evict the whole image cache.
-                    cacheWidth: (_size * MediaQuery.devicePixelRatioOf(context)).round(),
-                    fit: BoxFit.cover,
+                ? InkWell(
+                    onTap: () => showImageViewer(context, data, label: filename),
+                    child: Image.memory(
+                      data,
+                      // Without a decode target a phone photo becomes tens of
+                      // MB of bitmap to fill 64 logical pixels, and two of
+                      // them evict the whole image cache.
+                      cacheWidth: (size * MediaQuery.devicePixelRatioOf(context)).round(),
+                      fit: BoxFit.cover,
+                    ),
                   )
                 : _name(theme),
           ),

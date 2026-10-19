@@ -27,7 +27,7 @@ named in a cross-reference is findable from this list.
 - `lib/ui/marketplace/AGENTS.md` — The marketplace page
 - `lib/data/builtin/AGENTS.md` — The agent loop, Running the commands, Running a
   command yourself, Approvals, Questions, Sub-agents, Their own transcripts,
-   Carrying one on, Web search, Skills, The plan, Memory
+   Carrying one on, Web search, Images, Skills, The plan, Memory
 - `lib/data/builtin/llm/AGENTS.md` — Reaching a provider, Errors, and how long
   the UI waits
 - `lib/data/sync/AGENTS.md` — The threat model, the handshake, the framing
@@ -64,7 +64,8 @@ named in a cross-reference is findable from this list.
   change about it, The keyboard and the caret
 - `lib/ui/settings/AGENTS.md` — Setting overrides, What the app is, Backing it
   all up
-- `lib/ui/widgets/AGENTS.md` — Shared UI, A catalog of things to download
+- `lib/ui/widgets/AGENTS.md` — Shared UI, A catalog of things to download, The
+  model catalog
 - `.github/workflows/AGENTS.md` — Releasing
 - `tool/linux/AGENTS.md` — The Linux AppImage
 - `test/AGENTS.md` — how the tests are written and what they fake
@@ -151,6 +152,8 @@ beside the sync identity (`AppSecrets`), which is what keeps them out of
 schedule, timer and file sources — one JSON list; the boot receiver reads it
 with no engine running, which is why writes go through a rename. The file name
 is the reminder's and stayed, a rename being a migration.
+`<dataDir>/models.json` is models.dev trimmed to what the app reads, a cache
+refetched daily — see "The model catalog" in `lib/ui/widgets/AGENTS.md`.
 Data dir: `$AGENT_CHAT_CONFIG` if set, else `~/.config/agent-chat` (desktop),
 app-private storage (Android), and `/agent-chat` in a browser — where it is a
 name in IndexedDB rather than a path, and load-bearing all the same.
