@@ -13,7 +13,7 @@ runs:
   steps:
     - name: Restore the built model server
       id: llama-cache
-      uses: actions/cache@v6.1.0
+      uses: actions/cache/restore@v6.1.0
       with:
         path: |
           tool/android/build
@@ -33,6 +33,16 @@ runs:
       if: steps.llama-cache.outputs.cache-hit != 'true'
       shell: bash
       run: tool/linux/build-llama.sh
+
+    # From a branch only, as bundled-tools saves.
+    - name: Save the built model server
+      if: github.ref_type != 'tag' && steps.llama-cache.outputs.cache-hit != 'true'
+      uses: actions/cache/save@v6.1.0
+      with:
+        path: |
+          tool/android/build
+          build/llama
+        key: ${{ steps.llama-cache.outputs.cache-primary-key }}
 
     # The upload below names the stage either way; this is what fails the
     # job with its own line where a cache hit restored nothing.

@@ -6,10 +6,12 @@ Play, `pages.yml` deploys the web app from the same tag. Either can fail
 without the other, and only the first checks the tag against pubspec — a
 version disagreement stops the binaries and deploys the site anyway.
 
-Three files are attached, each with a provenance attestation beside it, named
-after the app and not the package or the version (a person is what downloads
+Three files are attached, named after the app and not the package or the version (a person is what downloads
 them, and the tag is where a version lives), so the same names serve every
-release:
+release. Each was meant to carry a provenance attestation beside it; that
+step is commented out in `release.yml` until the repository is public, where
+`attest-build-provenance` fails, and nothing below about attestations holds
+until it is back:
 
 - `entoli.aab`, signed, for Google Play — an input to Play, which resigns
   it into per-device APKs of its own
@@ -113,8 +115,10 @@ width.
 
 **The TestFlight upload is release.yml's `testflight` job, not the
 build's.** Apple's upload-and-processing wall clock belongs beside Play's,
-in parallel with the publish matrix: a build whose Apple side is slow still
-attaches its five assets. The job downloads the `ipa` artifact and uploads
+in parallel with the publish matrix rather than ahead of it. What it does
+not buy is an early attach: `needs: build` is the whole called workflow, so
+every publish still waits for its slowest job — the DMG's notarization
+included. The job downloads the `ipa` artifact and uploads
 it with `altool`, skipping with a notice when the API trio is absent and
 saying so in the step summary as well as the log when a runner's Xcode has
 stopped shipping altool. A bare dispatch of `release-build.yml` therefore
@@ -180,8 +184,8 @@ any runner lacking one, so missing secrets still succeed and ship a bundle
 nothing installs over at the next release. The run fails before it builds
 if any secret is empty, and asserts on the signer after —
 `keytool -printcert -jarfile`, the bundle being a signed jar, and
-`CN=Android Debug` failing it. The signer's SHA-256 goes in the run
-summary, a change in it being the one thing a user cannot recover from.
+`CN=Android Debug` failing it. The signer's SHA-256 fingerprint goes in
+the run summary, a change in it being the one thing a user cannot recover from.
 
 **The keystore is the maintainer's, and nothing here can regenerate it.**
 Android identifies an app by its signing key, so losing it ends the ability
@@ -240,7 +244,11 @@ gh attestation verify entoli-x86_64.AppImage --repo ByteRepair/entoli
 ```
 
 `fail-fast: false`, since one entry failing should leave the others
-attached, and `--clobber` is what makes re-running safe. A re-run attests
+attached — and the publish, `testflight` and `play` jobs run past a failed
+build (`!cancelled()`, gated on the version job's outputs), since a failed
+called workflow would otherwise skip every one of them and attach nothing.
+An entry whose build failed fails at its download. `--clobber` is what
+makes re-running safe. A re-run attests
 and re-attaches files already built and checked rather than trusting a
 rebuild to match. **A job that never checks out has no git remote** —
 `gh release upload` reads the repository from it and dies with `not a git
@@ -327,3 +335,22 @@ to a step output inside a job where the secret is not in scope, so the id
 survives the artifact and the publisher, which references none of the
 `ANDROID_*` secrets. Parsing stays in the job that checks out and builds,
 so the id uploaded under cannot drift from the id built with.
+## Caches
+
+**Nothing is saved from a tag run.** A cache is scoped to the ref that wrote
+it, and a run reads only its own ref's and the default branch's — so what a
+release writes under `refs/tags/vX.Y.Z` no later run can ever read. Before
+this rule every release saved the 1.8 GB Windows SDK and its pub cache there,
+minutes of post-step on a 2x runner, and the dead tag caches filled the
+repository's 10 GB until master's own were evicted. Every cache is therefore
+an `actions/cache/restore` and a separate `actions/cache/save` gated on
+`github.ref_type != 'tag'` — `flutter-setup` drives `subosito/flutter-action`
+as a dry run for its keys to do the same for the SDK.
+
+A tag run restores from master, so a cache only helps a release once
+something on master has written it. CI writes the Linux Flutter and codegen
+ones; the bundled tools, the Linux model server and the macOS SDK come from
+dispatches of `debug-build.yml` or `release-build.yml` on master, and the
+Windows SDK and the iSH xcframework from a `release-build.yml` dispatch
+alone — which is the way to warm them before a release that moved their
+inputs.

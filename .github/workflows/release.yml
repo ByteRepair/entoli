@@ -2,10 +2,11 @@ name: Release
 
 # Attaches the binaries a published release is downloaded from — a signed App
 # Bundle for Google Play, a Linux AppImage, a macOS DMG, an iOS App Store ipa
-# and a Windows MSI — to the tag they were built from, each with a provenance
-# attestation beside it, and uploads the bundle to Play. The ipa goes to
-# TestFlight in a job of its own, Apple's wall clock not holding the other
-# assets' publishing back. There is no release APK; `debug-build.yml` builds
+# and a Windows MSI — to the tag they were built from (a provenance
+# attestation beside each once the repository is public), and uploads the
+# bundle to Play. The ipa goes to TestFlight in a job of its own, Apple's
+# processing wall clock running beside the attachments rather than ahead of
+# them. There is no release APK; `debug-build.yml` builds
 # an APK by hand. `release-build.yml` is what builds them and can be run on
 # its own; `pages.yml` answers the same event for the web app.
 # See "Releasing" in AGENTS.md.
@@ -48,8 +49,15 @@ jobs:
   # A job of its own so the keystore and `contents: write` are never held by
   # the same one, and one run of it per file so a bundle on the release is
   # about the file it sits beside rather than naming all of them.
+  #
+  # Not skipped when a build job fails: `needs: build` is the whole called
+  # workflow, which fails if any one job in it does, and a plain `needs` would
+  # then attach nothing at all. The version job is what names the assets, so
+  # an empty list is a build that never got that far; past it, an entry whose
+  # build failed fails its own download and leaves the others attached.
   publish:
     needs: build
+    if: ${{ !cancelled() && needs.build.outputs.assets != '' }}
     runs-on: ubuntu-latest
     permissions:
       contents: write # attach assets to the release
@@ -99,8 +107,11 @@ jobs:
   # matrix, both holding Apple's/Google's wall clock off it: a build, then
   # two upload jobs and the attachments, each failable without the others.
   # See "Google Play" below and the ipa notes in AGENTS.md.
+  # Run past a failed build for the same reason the publish matrix is; where
+  # the ios job was the one that failed, the download says so in seconds.
   testflight:
     needs: build
+    if: ${{ !cancelled() && needs.build.outputs.ipa != '' }}
     runs-on: macos-latest
     env:
       IPA: ${{ needs.build.outputs.ipa }}
@@ -149,6 +160,7 @@ jobs:
   # See "Releasing" in AGENTS.md.
   play:
     needs: build
+    if: ${{ !cancelled() && needs.build.outputs.version != '' }}
     uses: ./.github/workflows/publish-play.yml
     with:
       tag: ${{ inputs.tag || github.event.release.tag_name }}

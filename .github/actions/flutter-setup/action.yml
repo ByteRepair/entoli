@@ -7,19 +7,48 @@ description: >
 runs:
   using: composite
   steps:
-    # The one pin. No caller passes a version in.
+    # The one pin. No caller passes a version in. A dry run only names the
+    # SDK's path and cache keys: the caches are restored and saved below, so
+    # a tag run can read them without writing any (see "Caches" in
+    # .github/workflows/AGENTS.md).
+    - id: flutter
+      uses: subosito/flutter-action@v2.23.0
+      with:
+        flutter-version: 3.44.8
+        channel: stable
+        dry-run: true
+
+    - name: Restore the Flutter SDK
+      id: sdk-cache
+      uses: actions/cache/restore@v6.1.0
+      with:
+        path: ${{ steps.flutter.outputs.CACHE-PATH }}
+        key: ${{ steps.flutter.outputs.CACHE-KEY }}
+
+    # Keyed on pubspec.yaml because there is no lockfile to key on; the prefix
+    # restores the last set, and pub fetches only what changed.
+    - name: Restore the pub cache
+      id: pub-cache
+      uses: actions/cache/restore@v6.1.0
+      with:
+        path: ${{ steps.flutter.outputs.PUB-CACHE-PATH }}
+        key: ${{ steps.flutter.outputs.PUB-CACHE-KEY }}-${{ hashFiles('pubspec.yaml') }}
+        restore-keys: ${{ steps.flutter.outputs.PUB-CACHE-KEY }}-
+
+    # Installs where the restore put nothing, and puts the SDK on PATH either
+    # way.
     - uses: subosito/flutter-action@v2.23.0
       with:
         flutter-version: 3.44.8
         channel: stable
-        cache: true
 
     # Most of build_runner's minute is compiling its own entrypoint, which the
     # packages alone decide — so the key is pubspec rather than the sources.
     # Restoring a graph built against older ones is safe: build_runner rebuilds
     # whatever its recorded input digests say is stale.
     - name: Restore build_runner's cache
-      uses: actions/cache@v6.1.0
+      id: codegen-cache
+      uses: actions/cache/restore@v6.1.0
       with:
         path: .dart_tool/build
         key: codegen-${{ runner.os }}-${{ hashFiles('pubspec.yaml') }}
@@ -27,3 +56,28 @@ runs:
 
     - shell: bash
       run: tool/prepare.sh
+
+    # Saved from a branch only. A cache written on a tag is scoped to that tag,
+    # and no later run can read it: every release used to write the 1.8 GB
+    # Windows SDK there, minutes of post-step on a 2x runner, and crowd the
+    # repository's 10 GB out of the master caches that CI does read.
+    - name: Save the Flutter SDK
+      if: github.ref_type != 'tag' && steps.sdk-cache.outputs.cache-hit != 'true'
+      uses: actions/cache/save@v6.1.0
+      with:
+        path: ${{ steps.flutter.outputs.CACHE-PATH }}
+        key: ${{ steps.flutter.outputs.CACHE-KEY }}
+
+    - name: Save the pub cache
+      if: github.ref_type != 'tag' && steps.pub-cache.outputs.cache-hit != 'true'
+      uses: actions/cache/save@v6.1.0
+      with:
+        path: ${{ steps.flutter.outputs.PUB-CACHE-PATH }}
+        key: ${{ steps.flutter.outputs.PUB-CACHE-KEY }}-${{ hashFiles('pubspec.yaml') }}
+
+    - name: Save build_runner's cache
+      if: github.ref_type != 'tag' && steps.codegen-cache.outputs.cache-hit != 'true'
+      uses: actions/cache/save@v6.1.0
+      with:
+        path: .dart_tool/build
+        key: codegen-${{ runner.os }}-${{ hashFiles('pubspec.yaml') }}

@@ -5,9 +5,9 @@ name: Release build
 # DMG, an iOS App Store ipa and a Windows MSI, named after the app and not the
 # version, so the same names serve every release. No APK: Play is the Android
 # channel a release serves, and a hand install builds one with `flutter build
-# apk` — locally, or through debug-build.yml's dispatch. The ipa uploads to
-# TestFlight as it is built; the store is the channel it is distributed
-# through. `release.yml` calls this and attaches what comes out; a dispatch
+# apk` — locally, or through debug-build.yml's dispatch. The ipa goes to
+# TestFlight from release.yml's `testflight` job, not from here; the store is
+# the channel it is distributed through. `release.yml` calls this and attaches what comes out; a dispatch
 # says whether a tag builds without publishing anything.
 # See "Releasing" in AGENTS.md.
 on:
@@ -246,6 +246,15 @@ jobs:
             echo "::error::The App Bundle is signed with the debug key"
             exit 1
           fi
+          # The one change a user cannot recover from, so it is in the summary
+          # where a release is read, not only in this log.
+          {
+            echo "### Signer"
+            echo
+            echo '```'
+            { grep -m1 'SHA256:' <<<"$certs" || true; } | sed 's/^[[:space:]]*//'
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Name the bundle after the release
         run: |
@@ -373,7 +382,7 @@ jobs:
 
       - name: Restore the IshCore xcframework
         id: ishcache
-        uses: actions/cache@v6.1.0
+        uses: actions/cache/restore@v6.1.0
         with:
           path: tool/ios/ish/dist/
           key: ${{ steps.ishkey.outputs.key }}
@@ -385,6 +394,15 @@ jobs:
         run: |
           brew install --quiet llvm lld
           tool/ios/ish/build.sh
+
+      # From a branch only: a release's tag scope is one no later release
+      # reads, so it is a dispatch from master that warms this.
+      - name: Save the IshCore xcframework
+        if: github.ref_type != 'tag' && steps.ishcache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6.1.0
+        with:
+          path: tool/ios/ish/dist/
+          key: ${{ steps.ishkey.outputs.key }}
 
       # Archived unsigned, then exported with automatic signing. The key is
       # decoded into runner temp and dies with the runner; it needs the
@@ -450,14 +468,7 @@ jobs:
           file: dist/${{ env.IPA }}
           version-code: ${{ env.VERSION_CODE }}
 
-  # The desktop model server and the app run on separate runners, the way the
-  # Android tools and bundle do: the server build is a native cmake of
-  # llama.cpp with minutes of its own, and the app build has no use for the
-  # toolchain under it. The llama job builds and uploads the stage as an
-  # artifact; the linux job downloads it before `flutter build linux`, so the
-  # bundle either carries the server whole or not at all. The cache lives on
-  # the llama job, whose only other content is two apt packages, so a cache
-  # miss costs the build alone rather than a Flutter setup too.
+  # The app half of the llama-linux split above.
   linux:
     needs: [version, llama-linux]
     runs-on: ubuntu-latest

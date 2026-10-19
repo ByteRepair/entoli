@@ -5,8 +5,15 @@ on:
     branches: [master]
   pull_request:
 
+permissions:
+  contents: read
+
+# A PR's newer push supersedes its older one. Master's do not: each is a merge
+# that should be tested, and cancelling one leaves it with no result at all —
+# so a push to master is a group of its own by its sha, where a shared group
+# would still drop a queued one in favour of the next.
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ci-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
   cancel-in-progress: true
 
 jobs:
