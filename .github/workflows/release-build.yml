@@ -617,6 +617,11 @@ jobs:
       # notarytool's own exit is not trusted to stop the step: the status
       # decides, so a rejection or a timeout still prints Apple's log, which
       # names the file that failed.
+      #
+      # Three hours rather than one: v6.0.0's submission, the team's first,
+      # was still in Apple's queue when an hour ran out. A wait is free on a
+      # public repository's runner, and a timeout is not a rejection — Apple
+      # carries on, so the error names the submission to look up afterwards.
       - name: Notarize the DMG
         env:
           KEY: ${{ steps.cert.outputs.key }}
@@ -626,9 +631,13 @@ jobs:
           set -euo pipefail
           auth=(--key "$KEY" --key-id "$API_KEY_ID" --issuer "$API_ISSUER")
           result="$(xcrun notarytool submit "dist/$DMG" "${auth[@]}" \
-            --wait --timeout 1h --output-format json)" || true
+            --wait --timeout 3h --output-format json)" || true
           id="$(printf '%s' "$result" | plutil -extract id raw -o - - 2>/dev/null || true)"
           status="$(printf '%s' "$result" | plutil -extract status raw -o - - 2>/dev/null || true)"
+          if [ -z "$status" ] && [ -n "$id" ]; then
+            echo "::error::Notarization of $id did not finish within the wait; Apple is still processing it (xcrun notarytool info $id)"
+            exit 1
+          fi
           if [ "$status" != Accepted ]; then
             echo "::error::Notarization ended ${status:-without a status}"
             [ -n "$id" ] && xcrun notarytool log "$id" "${auth[@]}" || true
