@@ -255,6 +255,13 @@ whole called workflow, so one failed build job skips the publish matrix,
 store until every build passes. The fix is the failed job's, then *Re-run
 failed jobs*, which rebuilds only those and runs the publishers after.
 
+**Every channel also waits on the release being published.** The `gate`
+job runs after the builds and fails unless the tag's release exists and is
+not a draft; the publish matrix, `testflight` and `play` all need it, so an
+unpublished release ships to none of them rather than to some. It reads
+with a `contents: read` token, to which a draft is a 404 — the same answer
+as no release at all, and both mean the same thing here.
+
 `fail-fast: false` on the matrix, since past the builds one entry failing
 to attach should not cancel the others. `--clobber` is what makes
 re-running safe. A re-run attests
@@ -272,9 +279,10 @@ notifies every watcher a second time.
 v6.0.0 was repointed at a fix with `git push --tags -f`, and GitHub left its
 release a draft from that moment: the dispatched rebuild attached every asset
 to it (the publisher's token can write drafts) while Play's read-only token
-could not see it at all. After a repoint, publish the draft again — which
-fires `release.yml` once more, a run to cancel when the assets are already
-attached — and re-run whatever failed.
+could not see it at all, so two channels shipped and one did not. The gate
+now stops all three on a draft. After a repoint, publish the draft again —
+which fires `release.yml` once more, a run to cancel when the dispatched
+run's builds are already done — and re-run the failed jobs there.
 
 ## Google Play
 
@@ -317,9 +325,10 @@ Cloud console and issue a new one in a minute. Rotate freely, on any doubt.
 at 500 characters and rejects the upload rather than truncating, so a body
 over the cap is dropped with a warning instead of cut. Only
 `whatsnew-en-US` is written, the release body being English; a Greek
-listing keeps what the Console holds. A release this job cannot read — a draft,
-invisible to its read-only token — is uploaded without notes and a warning,
-not failed: the bundle is what the job is for.
+listing keeps what the Console holds. A release this job cannot read — a
+draft, invisible to its read-only token, which the gate should already have
+stopped — is uploaded without notes and a warning, not failed: the bundle is
+what the job is for.
 
 A rejected upload is usually Console state no workflow can supply — the
 data safety form, the content rating, a reachable privacy policy, the

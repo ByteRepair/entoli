@@ -78,9 +78,9 @@ jobs:
         run: |
           set -euo pipefail
           # Unreadable is not fatal: the notes are optional and the bundle is
-          # what matters. A draft release is the usual case — this job's
-          # read-only token cannot see one, and a release whose tag was moved
-          # by force comes back as a draft (v6.0.0's Play upload failed here).
+          # what matters. release.yml's gate already refuses an unpublished
+          # release (a draft is invisible to this read-only token, which is
+          # how v6.0.0's Play upload failed here), so this is the second line.
           if ! body="$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json body -q .body)"; then
             echo "::warning title=Play release notes::Release $TAG could not be read (a draft is invisible to this job's token); uploading without notes"
             echo "directory=" >> "$GITHUB_OUTPUT"

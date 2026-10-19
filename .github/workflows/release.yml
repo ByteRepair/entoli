@@ -45,6 +45,30 @@ jobs:
       MACOS_CERT_P12: ${{ secrets.MACOS_CERT_P12 }}
       MACOS_CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
 
+  # The one thing every channel waits on besides the builds: a published
+  # release. Without it the channels drift apart — v6.0.0's tag was moved by
+  # force, which left its release a draft, and the publish matrix attached to
+  # the draft and TestFlight uploaded while Play, unable to see it, failed.
+  # Read-only on purpose: to that token a draft does not exist, so the same
+  # 404 answers "no release" and "not published yet". After building, so the
+  # builds are not held back while the release is published; then *Re-run
+  # failed jobs* runs this and every channel with it.
+  gate:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Check the release is published
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if ! gh api "repos/$GITHUB_REPOSITORY/releases/tags/$TAG" --jq .tag_name >/dev/null; then
+            echo "::error::Release $TAG is not published (a draft, or no release for this tag). Publish it, cancel the run that publishing starts, then re-run the failed jobs here."
+            exit 1
+          fi
+
   # A job of its own so the keystore and `contents: write` are never held by
   # the same one, and one run of it per file so a bundle on the release is
   # about the file it sits beside rather than naming all of them.
@@ -53,8 +77,9 @@ jobs:
   # if any one job in it does, and then this, `testflight` and `play` are all
   # skipped. A release goes out with every platform or none — a failed build
   # is fixed and the failed jobs re-run, and the publishers run once they pass.
+  # The gate holds all three the same way on an unpublished release.
   publish:
-    needs: build
+    needs: [build, gate]
     runs-on: ubuntu-latest
     permissions:
       contents: write # attach assets to the release
@@ -108,7 +133,7 @@ jobs:
   # two upload jobs and the attachments, each failable without the others.
   # See "Google Play" below and the ipa notes in AGENTS.md.
   testflight:
-    needs: build
+    needs: [build, gate]
     runs-on: macos-latest
     env:
       IPA: ${{ needs.build.outputs.ipa }}
@@ -156,7 +181,7 @@ jobs:
   # sends the bundle to Play, which resigns it into per-device APKs of its own.
   # See "Releasing" in AGENTS.md.
   play:
-    needs: build
+    needs: [build, gate]
     uses: ./.github/workflows/publish-play.yml
     with:
       tag: ${{ inputs.tag || github.event.release.tag_name }}
