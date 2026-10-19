@@ -448,13 +448,18 @@ class FakeClassifier implements PermissionClassifier {
 
   final List<({String tool, String args})> classified = [];
 
+  /// The writable set each call was told, beside the workspace.
+  final List<List<String>> alsoWritable = [];
+
   @override
   Future<PermissionDecision> classify(
     String toolName,
     String argumentsJson, {
     required String workspace,
+    List<String> alsoWritable = const [],
   }) async {
     classified.add((tool: toolName, args: argumentsJson));
+    this.alsoWritable.add(alsoWritable);
     return decide?.call(toolName, argumentsJson) ?? decision;
   }
 }

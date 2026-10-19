@@ -2322,7 +2322,12 @@ class BuiltinAgent {
     }
 
     final decision = await (classifier ?? const NoClassifier())
-        .classify(toolName, call.argumentsJson, workspace: workspace);
+        .classify(toolName, call.argumentsJson,
+            workspace: workspace,
+            alsoWritable: [
+              if (projectWorkspace != workspace) projectWorkspace,
+              ..._grantedDirs,
+            ]);
 
     if (decision != PermissionDecision.ask) {
       _consecutiveAsks = 0;
