@@ -29,8 +29,8 @@ void main() {
   AppTheme shown(WidgetTester tester) => field(tester).selected.single;
 
   /// A swatch or a corner in the row labelled [row], and within it the
-  /// [group] of swatches where given. Scoped because the two colour rows offer
-  /// the same tooltips, and bold and pastel share some names.
+  /// [group] of swatches where given. Scoped because bold and pastel share
+  /// some names.
   Future<void> tapChoice(WidgetTester tester, String row, String choice,
       {String? group}) async {
     var scope =
@@ -191,12 +191,15 @@ void main() {
       );
     });
 
-    testWidgets("picking a colour persists it, one row at a time", (tester) async {
+    testWidgets("picking a colour persists it to the seed the switch names", (tester) async {
       await pumpAppearance(tester, app);
 
-      await tapChoice(tester, "Primary colour", ThemeColour.green.label,
+      await tapChoice(tester, "Custom colours", ThemeColour.green.label,
           group: "Pastel colours");
-      await tapChoice(tester, "Secondary colour", ThemeColour.boldGreen.label,
+      await scrollTo(tester, find.text("Secondary"));
+      await tester.tap(find.text("Secondary"));
+      await tester.pumpAndSettle();
+      await tapChoice(tester, "Custom colours", ThemeColour.boldGreen.label,
           group: "Bold colours");
 
       final saved = AppSettings.load(app.config);
@@ -266,7 +269,7 @@ void main() {
       await pumpAppearance(tester, app);
 
       expect(find.text("Material 3 Expressive"), findsNothing);
-      expect(find.text("Primary colour"), findsOneWidget);
+      expect(find.text("Custom colours"), findsOneWidget);
     });
 
     group("on a phone that has one", () {
@@ -285,8 +288,7 @@ void main() {
 
         expect(AppSettings.load(app.config).systemPalette, isTrue);
         expect(find.text("Theme colours"), findsNothing);
-        expect(find.text("Primary colour"), findsNothing);
-        expect(find.text("Secondary colour"), findsNothing);
+        expect(find.text("Custom colours"), findsNothing);
       });
 
       testWidgets("the palette is seeded from the system's accent", (tester) async {

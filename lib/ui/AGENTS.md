@@ -70,8 +70,10 @@ existed. That colour has one spelling, `entoliIndigoArgb` beside the enum:
 enum's field, so the layer with no `Color` in it holds the number.
 
 Those eight are the *pastel* row, and they keep their unprefixed enum names
-because `settings.json` stores them. Above them each colour picker has a *bold*
-row (Material's 500 tones, `bold*`), and above both pickers sits one row of
+because `settings.json` stores them. Above them is a *bold* row (Material's 500
+tones, `bold*`). Both rows are drawn once, under a Primary | Secondary switch
+that says which field a tap writes and wears each one's current colour; two
+copies of every row was a wall of swatches. Above all of it sits one row of
 `ColourTheme`s — well-known schemes such as Adwaita or Dracula, each a pair of
 `ThemeColour`s from the `theme` group that one tap writes into both fields.
 A theme with one accent is that accent twice and draws as a solid swatch; a
@@ -91,6 +93,14 @@ own themes do not: iOS/macOS, Windows, Adwaita, Breeze and Ubuntu paint their
 windows grey. Their primaries carry `greySurfaces`, and `_scheme` takes the
 neutral roles from a `monochrome` scheme for them. The editor themes and
 Material You keep the tint, since their own backgrounds are tinted.
+
+Text on a filled surface takes the scheme's paired foreground, not the page's.
+With `fidelity` a container *is* the seed, so `onSurface` on a bold yellow in
+dark mode is light grey on yellow. `onFill` looks the fill up among the
+scheme's roles and returns its `on*` partner, which Material builds to contrast
+with it; `onFillTheme` hands that to a subtree's text and to `primary`, so
+links and the caret follow. The message bubble wraps what was said in it. Code
+names `onSurface` on a surface of its own, so it is left alone.
 
 The primary is the seed. The secondary is grafted from a *second* scheme seeded
 with it: `fromSeed`'s `secondary:` names one role, which would leave

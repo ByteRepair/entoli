@@ -365,15 +365,11 @@ class _AppearanceSection extends ConsumerWidget {
                 ),
             ],
           ),
-          _ColourRows(
-            label: "Primary colour",
-            selected: settings.primaryColour,
-            onPick: notifier.setPrimaryColour,
-          ),
-          _ColourRows(
-            label: "Secondary colour",
-            selected: settings.secondaryColour,
-            onPick: notifier.setSecondaryColour,
+          _CustomColours(
+            primary: settings.primaryColour,
+            secondary: settings.secondaryColour,
+            onPrimary: notifier.setPrimaryColour,
+            onSecondary: notifier.setSecondaryColour,
           ),
         ],
         _ChoiceRow(
@@ -418,28 +414,52 @@ class _ChoiceRow extends StatelessWidget {
       );
 }
 
-/// One seed's swatches, bold above pastel, each group under its own name.
-class _ColourRows extends StatelessWidget {
-  const _ColourRows({
-    required this.label,
-    required this.selected,
-    required this.onPick,
+enum _Slot { primary, secondary }
+
+/// The two seeds picked one at a time from one set of swatches: a switch says
+/// which is being picked, and wears each one's current colour, so a theme's
+/// pair is visible here even though no swatch below is it.
+class _CustomColours extends StatefulWidget {
+  const _CustomColours({
+    required this.primary,
+    required this.secondary,
+    required this.onPrimary,
+    required this.onSecondary,
   });
 
-  final String label;
-  final ThemeColour selected;
-  final ValueChanged<ThemeColour> onPick;
+  final ThemeColour primary;
+  final ThemeColour secondary;
+  final ValueChanged<ThemeColour> onPrimary;
+  final ValueChanged<ThemeColour> onSecondary;
+
+  @override
+  State<_CustomColours> createState() => _CustomColoursState();
+}
+
+class _CustomColoursState extends State<_CustomColours> {
+  var _slot = _Slot.primary;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final groupStyle = theme.textTheme.labelSmall
         ?.copyWith(color: theme.colorScheme.onSurfaceVariant);
+    final selected = _slot == _Slot.primary ? widget.primary : widget.secondary;
+    final onPick = _slot == _Slot.primary ? widget.onPrimary : widget.onSecondary;
+    Widget dot(ThemeColour colour) => Container(
+          width: 14,
+          height: 14,
+          decoration: BoxDecoration(
+            color: colour.colour,
+            shape: BoxShape.circle,
+            border: Border.all(color: theme.colorScheme.outlineVariant),
+          ),
+        );
     Widget group(String name, ThemeColourGroup group) => Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(name, style: groupStyle),
-            const SizedBox(height: 6),
+            const SizedBox(height: 8),
             Wrap(spacing: 12, runSpacing: 12, children: [
               for (final colour in ThemeColour.inGroup(group))
                 _ColourChoice(
@@ -452,12 +472,30 @@ class _ColourRows extends StatelessWidget {
           ],
         );
     return LabelledField(
-      label: label,
+      label: "Custom colours",
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          SegmentedButton<_Slot>(
+            showSelectedIcon: false,
+            segments: [
+              ButtonSegment(
+                value: _Slot.primary,
+                icon: dot(widget.primary),
+                label: const Text("Primary"),
+              ),
+              ButtonSegment(
+                value: _Slot.secondary,
+                icon: dot(widget.secondary),
+                label: const Text("Secondary"),
+              ),
+            ],
+            selected: {_slot},
+            onSelectionChanged: (picked) => setState(() => _slot = picked.first),
+          ),
+          const SizedBox(height: 16),
           group("Bold colours", ThemeColourGroup.bold),
-          const SizedBox(height: 12),
+          const SizedBox(height: 16),
           group("Pastel colours", ThemeColourGroup.pastel),
         ],
       ),
