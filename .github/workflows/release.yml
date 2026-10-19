@@ -4,11 +4,11 @@ name: Release
 # Bundle for Google Play, a Linux AppImage, a macOS DMG, an iOS App Store ipa
 # and a Windows MSI — to the tag they were built from, each with a provenance
 # attestation beside it, and uploads the bundle to Play. The ipa goes to
-# TestFlight in a job of its own, Apple's wall clock not holding the other
-# assets' publishing back. There is no release APK; `debug-build.yml` builds
-# an APK by hand. `release-build.yml` is what builds them and can be run on
-# its own; `pages.yml` answers the same event for the web app.
-# See "Releasing" in AGENTS.md.
+# TestFlight in a job of its own, Apple's processing wall clock running beside
+# the attachments rather than ahead of them. There is no release APK;
+# `debug-build.yml` builds an APK by hand. `release-build.yml` is what builds
+# them and can be run on its own; `pages.yml` answers the same event for the
+# web app. See "Releasing" in AGENTS.md.
 on:
   release:
     types: [published]
@@ -48,13 +48,18 @@ jobs:
   # A job of its own so the keystore and `contents: write` are never held by
   # the same one, and one run of it per file so a bundle on the release is
   # about the file it sits beside rather than naming all of them.
+  #
+  # All or nothing: `needs: build` is the whole called workflow, which fails
+  # if any one job in it does, and then this, `testflight` and `play` are all
+  # skipped. A release goes out with every platform or none — a failed build
+  # is fixed and the failed jobs re-run, and the publishers run once they pass.
   publish:
     needs: build
     runs-on: ubuntu-latest
     permissions:
       contents: write # attach assets to the release
-      # attestations: write # and the Sigstore signing certificate beside it,
-      # off until the repository is public, where attest-build-provenance fails
+      id-token: write # mint the short-lived Sigstore signing certificate
+      attestations: write # record the attestation against the repository
     strategy:
       # Each entry attests and uploads a different file, so one that fails
       # should leave the other binaries attached rather than cancel them.
@@ -69,20 +74,23 @@ jobs:
           name: ${{ matrix.asset.artifact }}
           path: dist
 
-      # - id: attest
-      #   uses: actions/attest-build-provenance@v4.2.2
-      #   with:
-      #     subject-path: dist/${{ matrix.asset.file }}
+      - id: attest
+        uses: actions/attest-build-provenance@v4.2.2
+        with:
+          subject-path: dist/${{ matrix.asset.file }}
 
-      - name: Attach the binary to the release
+      - name: Attach the binary and its attestation to the release
         env:
           GH_TOKEN: ${{ github.token }}
+          BUNDLE: ${{ steps.attest.outputs.bundle-path }}
         run: |
           set -euo pipefail
+          cp "$BUNDLE" "dist/$FILE.sigstore.json"
           # --repo because gh reads it off the git remote otherwise, and this
           # job never checks out. --clobber so a re-run replaces the assets.
           gh release upload "$TAG" \
             "dist/$FILE" \
+            "dist/$FILE.sigstore.json" \
             --repo "$GITHUB_REPOSITORY" \
             --clobber
 
@@ -90,8 +98,8 @@ jobs:
         run: |
           set -euo pipefail
           {
-            # echo "\`gh attestation verify $FILE --repo $GITHUB_REPOSITORY\`"
-            # echo
+            echo "\`gh attestation verify $FILE --repo $GITHUB_REPOSITORY\`"
+            echo
             echo "$FILE attached."
           } >> "$GITHUB_STEP_SUMMARY"
 

@@ -38,7 +38,7 @@ runs:
 
     - name: Restore the built tools
       id: cache
-      uses: actions/cache@v6.1.0
+      uses: actions/cache/restore@v6.1.0
       with:
         path: tool/android/dist
         # The recipe and the versions between them decide every byte of the
@@ -78,6 +78,15 @@ runs:
         for abi in ${{ steps.abis.outputs.list }}; do
           tool/android/build.sh "$abi"
         done
+
+    # From a branch only: a tag's cache scope is one no later run reads. See
+    # "Caches" in .github/workflows/AGENTS.md.
+    - name: Save the built tools
+      if: github.ref_type != 'tag' && steps.cache.outputs.cache-hit != 'true'
+      uses: actions/cache/save@v6.1.0
+      with:
+        path: tool/android/dist
+        key: ${{ steps.cache.outputs.cache-primary-key }}
 
     - name: Stage them into the app's native libraries
       if: inputs.stage == 'true'

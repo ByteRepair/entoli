@@ -5,9 +5,9 @@ name: Release build
 # DMG, an iOS App Store ipa and a Windows MSI, named after the app and not the
 # version, so the same names serve every release. No APK: Play is the Android
 # channel a release serves, and a hand install builds one with `flutter build
-# apk` — locally, or through debug-build.yml's dispatch. The ipa uploads to
-# TestFlight as it is built; the store is the channel it is distributed
-# through. `release.yml` calls this and attaches what comes out; a dispatch
+# apk` — locally, or through debug-build.yml's dispatch. The ipa goes to
+# TestFlight from release.yml's `testflight` job, not from here; the store is
+# the channel it is distributed through. `release.yml` calls this and attaches what comes out; a dispatch
 # says whether a tag builds without publishing anything.
 # See "Releasing" in AGENTS.md.
 on:
@@ -28,9 +28,10 @@ on:
         required: true
       ANDROID_KEY_PASSWORD:
         required: true
-      # Apple's are optional: a caller without them gets every build but the
-      # ipa and the DMG, whose jobs fail fast on the empties instead of
-      # shipping something unsigned.
+      # Apple's are optional here: a dispatch without them gets every build
+      # but the ipa and the DMG, whose jobs fail fast on the empties instead
+      # of building something unsigned. Through release.yml that failure
+      # publishes nothing at all, since a release is every platform or none.
       # The App Store Connect API key signs as well as uploads: the export
       # asks Apple for the distribution certificate and profile with it.
       APPLE_API_ISSUER:
@@ -246,6 +247,15 @@ jobs:
             echo "::error::The App Bundle is signed with the debug key"
             exit 1
           fi
+          # The one change a user cannot recover from, so it is in the summary
+          # where a release is read, not only in this log.
+          {
+            echo "### Signer"
+            echo
+            echo '```'
+            { grep -m1 'SHA256:' <<<"$certs" || true; } | sed 's/^[[:space:]]*//'
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Name the bundle after the release
         run: |
@@ -330,9 +340,17 @@ jobs:
   # certificate and a profile as it goes. No certificate or profile is
   # stored anywhere, and an unsigned archive means no fresh runner mints an
   # Apple Development certificate of its own.
+  #
+  # On the xcode-27 image, not macos-latest: AppleFmChannel.swift reaches
+  # FoundationModels API that only the iOS 27 SDK declares
+  # (`LanguageModelError`, `session.usage`), and `#available` gates the call,
+  # not the compile — macos-26's newest Xcode, 26.6, fails the archive on
+  # them. 27.1 by path because the image defaults to 27.0, and 27.1 is what
+  # the app is built with locally. The image is a public preview; when an
+  # Xcode 27 lands on macos-latest this goes back.
   ios:
     needs: version
-    runs-on: macos-latest
+    runs-on: xcode-27
     env:
       IPA: ${{ needs.version.outputs.ipa }}
       VERSION_CODE: ${{ needs.version.outputs.code }}
@@ -358,6 +376,12 @@ jobs:
           ref: ${{ inputs.tag }}
           submodules: recursive
 
+      - name: Select Xcode 27.1
+        run: |
+          set -euo pipefail
+          sudo xcode-select -s /Applications/Xcode_27.1.app
+          xcodebuild -version
+
       - uses: ./.github/actions/flutter-setup
 
       # Cached on the submodule gitlink and the repo's own inputs to the
@@ -373,7 +397,7 @@ jobs:
 
       - name: Restore the IshCore xcframework
         id: ishcache
-        uses: actions/cache@v6.1.0
+        uses: actions/cache/restore@v6.1.0
         with:
           path: tool/ios/ish/dist/
           key: ${{ steps.ishkey.outputs.key }}
@@ -385,6 +409,15 @@ jobs:
         run: |
           brew install --quiet llvm lld
           tool/ios/ish/build.sh
+
+      # From a branch only: a release's tag scope is one no later release
+      # reads, so it is a dispatch from master that warms this.
+      - name: Save the IshCore xcframework
+        if: github.ref_type != 'tag' && steps.ishcache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6.1.0
+        with:
+          path: tool/ios/ish/dist/
+          key: ${{ steps.ishkey.outputs.key }}
 
       # Archived unsigned, then exported with automatic signing. The key is
       # decoded into runner temp and dies with the runner; it needs the
@@ -450,14 +483,7 @@ jobs:
           file: dist/${{ env.IPA }}
           version-code: ${{ env.VERSION_CODE }}
 
-  # The desktop model server and the app run on separate runners, the way the
-  # Android tools and bundle do: the server build is a native cmake of
-  # llama.cpp with minutes of its own, and the app build has no use for the
-  # toolchain under it. The llama job builds and uploads the stage as an
-  # artifact; the linux job downloads it before `flutter build linux`, so the
-  # bundle either carries the server whole or not at all. The cache lives on
-  # the llama job, whose only other content is two apt packages, so a cache
-  # miss costs the build alone rather than a Flutter setup too.
+  # The app half of the llama-linux split above.
   linux:
     needs: [version, llama-linux]
     runs-on: ubuntu-latest
@@ -592,6 +618,11 @@ jobs:
       # notarytool's own exit is not trusted to stop the step: the status
       # decides, so a rejection or a timeout still prints Apple's log, which
       # names the file that failed.
+      #
+      # Three hours rather than one: v6.0.0's submission, the team's first,
+      # was still in Apple's queue when an hour ran out. A wait is free on a
+      # public repository's runner, and a timeout is not a rejection — Apple
+      # carries on, so the error names the submission to look up afterwards.
       - name: Notarize the DMG
         env:
           KEY: ${{ steps.cert.outputs.key }}
@@ -601,9 +632,13 @@ jobs:
           set -euo pipefail
           auth=(--key "$KEY" --key-id "$API_KEY_ID" --issuer "$API_ISSUER")
           result="$(xcrun notarytool submit "dist/$DMG" "${auth[@]}" \
-            --wait --timeout 1h --output-format json)" || true
+            --wait --timeout 3h --output-format json)" || true
           id="$(printf '%s' "$result" | plutil -extract id raw -o - - 2>/dev/null || true)"
           status="$(printf '%s' "$result" | plutil -extract status raw -o - - 2>/dev/null || true)"
+          if [ -z "$status" ] && [ -n "$id" ]; then
+            echo "::error::Notarization of $id did not finish within the wait; Apple is still processing it (xcrun notarytool info $id)"
+            exit 1
+          fi
           if [ "$status" != Accepted ]; then
             echo "::error::Notarization ended ${status:-without a status}"
             [ -n "$id" ] && xcrun notarytool log "$id" "${auth[@]}" || true

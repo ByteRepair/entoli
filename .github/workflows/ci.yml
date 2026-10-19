@@ -1,16 +1,41 @@
 name: CI
 
+# Notes-only changes run nothing: the AGENTS.md files and the READMEs reach no
+# build. Every other markdown file can — `PRIVACY.md` and everything under
+# `assets/` are compiled into the app — so the filter names the ones it skips
+# and puts `assets/` back after them, rather than skipping `**.md`.
 on:
   push:
     branches: [master]
+    paths:
+      - '**'
+      - '!**/AGENTS.md'
+      - '!**/README.md'
+      - 'assets/**'
   pull_request:
+    paths:
+      - '**'
+      - '!**/AGENTS.md'
+      - '!**/README.md'
+      - 'assets/**'
 
+permissions:
+  contents: read
+
+# A PR's newer push supersedes its older one. Master's do not: each is a merge
+# that should be tested, and cancelling one leaves it with no result at all —
+# so a push to master is a group of its own by its sha, where a shared group
+# would still drop a queued one in favour of the next.
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ci-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
   cancel-in-progress: true
 
 jobs:
-  analyze:
+  # One job rather than analyze beside test: each paid its own runner and its
+  # own Flutter setup (one to two and a half minutes, rounded up to a billed
+  # minute), and analyze is a minute against test's thirteen, so running it
+  # first costs little wall clock and fails a broken tree before the suite.
+  check:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7.0.1
@@ -18,12 +43,5 @@ jobs:
       - uses: ./.github/actions/flutter-setup
 
       - run: flutter analyze
-
-  test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7.0.1
-
-      - uses: ./.github/actions/flutter-setup
 
       - run: flutter test --concurrency 8

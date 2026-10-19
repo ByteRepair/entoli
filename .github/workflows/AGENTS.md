@@ -6,10 +6,10 @@ Play, `pages.yml` deploys the web app from the same tag. Either can fail
 without the other, and only the first checks the tag against pubspec — a
 version disagreement stops the binaries and deploys the site anyway.
 
-Three files are attached, each with a provenance attestation beside it, named
-after the app and not the package or the version (a person is what downloads
-them, and the tag is where a version lives), so the same names serve every
-release:
+Three files are attached, each with a provenance attestation beside it
+(`<file>.sigstore.json`), named after the app and not the package or the
+version (a person is what downloads them, and the tag is where a version
+lives), so the same names serve every release:
 
 - `entoli.aab`, signed, for Google Play — an input to Play, which resigns
   it into per-device APKs of its own
@@ -87,6 +87,13 @@ download. It also rewrites the workstation JVM figures in
 build, it loses the runner mid-build — the v2.2.0 App Bundle job died at 58
 minutes, no logs.
 
+**The ipa job runs on the `xcode-27` image with Xcode 27.1 selected**, not
+`macos-latest`: the FoundationModels API `AppleFmChannel.swift` gates with
+`#available(iOS 27.0, *)` still has to exist in the SDK it compiles against,
+and v6.0.0's archive failed on macos-26's Xcode 26.6 for want of it. The image
+is a public preview; the job returns to `macos-latest` when that carries
+Xcode 27.
+
 **The ipa job is one runner where Android needed two.** The iSH core is a
 minutes-long clang of one static library, not a toolchain with gigabytes of
 its own, so `ios` checks the submodule out itself (recursive; `build.sh`'s
@@ -113,8 +120,10 @@ width.
 
 **The TestFlight upload is release.yml's `testflight` job, not the
 build's.** Apple's upload-and-processing wall clock belongs beside Play's,
-in parallel with the publish matrix: a build whose Apple side is slow still
-attaches its five assets. The job downloads the `ipa` artifact and uploads
+in parallel with the publish matrix rather than ahead of it. What it does
+not buy is an early attach: `needs: build` is the whole called workflow, so
+every publish still waits for its slowest job — the DMG's notarization
+included. The job downloads the `ipa` artifact and uploads
 it with `altool`, skipping with a notice when the API trio is absent and
 saying so in the step summary as well as the log when a runner's Xcode has
 stopped shipping altool. A bare dispatch of `release-build.yml` therefore
@@ -180,8 +189,8 @@ any runner lacking one, so missing secrets still succeed and ship a bundle
 nothing installs over at the next release. The run fails before it builds
 if any secret is empty, and asserts on the signer after —
 `keytool -printcert -jarfile`, the bundle being a signed jar, and
-`CN=Android Debug` failing it. The signer's SHA-256 goes in the run
-summary, a change in it being the one thing a user cannot recover from.
+`CN=Android Debug` failing it. The signer's SHA-256 fingerprint goes in
+the run summary, a change in it being the one thing a user cannot recover from.
 
 **The keystore is the maintainer's, and nothing here can regenerate it.**
 Android identifies an app by its signing key, so losing it ends the ability
@@ -202,8 +211,9 @@ the `.p8`) are one App Store Connect API key, which both signs the export in
 `release-build.yml` and uploads in `release.yml`'s `testflight` job. The team
 is not a secret: it is the project's `DEVELOPMENT_TEAM` and the `teamID` of
 `tool/ios/ExportOptions.plist`, both committed. The same key notarizes the
-DMG in the macos job. A caller without them ships every build but the ipa
-and the DMG. The key needs the **Admin** role: App Manager uploads but
+DMG in the macos job. A dispatch of `release-build.yml` without them builds
+everything but the ipa and the DMG; a release without them publishes
+nothing, every platform or none. The key needs the **Admin** role: App Manager uploads but
 cannot create the certificate or profile the export asks for. Nothing about
 the ipa goes stale yearly — Apple renews the cloud-managed certificate and
 regenerates the profile itself — and a leaked key is revoked in App Store
@@ -239,8 +249,15 @@ pair — the App Bundle included, so the same check covers both channels:
 gh attestation verify entoli-x86_64.AppImage --repo ByteRepair/entoli
 ```
 
-`fail-fast: false`, since one entry failing should leave the others
-attached, and `--clobber` is what makes re-running safe. A re-run attests
+**A release publishes every platform or none.** `needs: build` is the
+whole called workflow, so one failed build job skips the publish matrix,
+`testflight` and `play` alike: nothing is attached and nothing reaches a
+store until every build passes. The fix is the failed job's, then *Re-run
+failed jobs*, which rebuilds only those and runs the publishers after.
+
+`fail-fast: false` on the matrix, since past the builds one entry failing
+to attach should not cancel the others. `--clobber` is what makes
+re-running safe. A re-run attests
 and re-attaches files already built and checked rather than trusting a
 rebuild to match. **A job that never checks out has no git remote** —
 `gh release upload` reads the repository from it and dies with `not a git
@@ -327,3 +344,22 @@ to a step output inside a job where the secret is not in scope, so the id
 survives the artifact and the publisher, which references none of the
 `ANDROID_*` secrets. Parsing stays in the job that checks out and builds,
 so the id uploaded under cannot drift from the id built with.
+## Caches
+
+**Nothing is saved from a tag run.** A cache is scoped to the ref that wrote
+it, and a run reads only its own ref's and the default branch's — so what a
+release writes under `refs/tags/vX.Y.Z` no later run can ever read. Before
+this rule every release saved the 1.8 GB Windows SDK and its pub cache there,
+minutes of post-step on a 2x runner, and the dead tag caches filled the
+repository's 10 GB until master's own were evicted. Every cache is therefore
+an `actions/cache/restore` and a separate `actions/cache/save` gated on
+`github.ref_type != 'tag'` — `flutter-setup` drives `subosito/flutter-action`
+as a dry run for its keys to do the same for the SDK.
+
+A tag run restores from master, so a cache only helps a release once
+something on master has written it. CI writes the Linux Flutter and codegen
+ones; the bundled tools, the Linux model server and the macOS SDK come from
+dispatches of `debug-build.yml` or `release-build.yml` on master, and the
+Windows SDK and the iSH xcframework from a `release-build.yml` dispatch
+alone — which is the way to warm them before a release that moved their
+inputs.
