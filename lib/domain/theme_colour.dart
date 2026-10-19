@@ -4,6 +4,10 @@
 /// has to be the literal and the layer that has no `Color` is it.
 const entoliIndigoArgb = 0xFF4F46E5;
 
+/// Apple's systemBlue, the seed of the palette a fresh install has. A literal
+/// beside the enum for the reason [entoliIndigoArgb] is: `entoliLook` is const.
+const appleBlueArgb = 0xFF007AFF;
+
 /// Which row a [ThemeColour] is drawn in, and how the palette is built from it.
 enum ThemeColourGroup {
   /// Picked only through a [ColourTheme], never on its own.
@@ -19,8 +23,8 @@ enum ThemeColourGroup {
 
 /// A colour the palette is seeded from, offered for the primary and the
 /// secondary alike. Declaration order within a group is the order the settings
-/// page draws them in, and [indigo] — the app's own — is first because it is
-/// the default.
+/// page draws them in. [indigo], the app's own, is first among the pastels;
+/// the default is the iOS / macOS theme, [apple] as both seeds.
 ///
 /// Held as ARGB rather than as a `Color` for the reason `AppTheme` mirrors
 /// `ThemeMode`: nothing in `domain/` takes a UI dependency. `ui/theme.dart`
@@ -54,7 +58,7 @@ enum ThemeColour {
   boldSlate("Slate", 0xFF607D8B, group: ThemeColourGroup.bold),
 
   // As each upstream publishes it; see [ColourTheme].
-  apple("iOS / macOS", 0xFF007AFF,
+  apple("iOS / macOS", appleBlueArgb,
       group: ThemeColourGroup.theme, greySurfaces: true),
   windows("Windows", 0xFF0078D7,
       group: ThemeColourGroup.theme, greySurfaces: true),

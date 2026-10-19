@@ -144,14 +144,19 @@ void main() {
   });
 
   group("the palette", () {
-    testWidgets("a fresh install is seeded from the app's own indigo",
-        (tester) async {
+    final appleBlue = ColorScheme.fromSeed(
+        seedColor: ThemeColour.apple.colour,
+        dynamicSchemeVariant: DynamicSchemeVariant.fidelity);
+
+    testWidgets("a fresh install wears the iOS / macOS theme", (tester) async {
       final materialApp = await pumpApp(tester);
 
-      expect(
-        materialApp.theme?.colorScheme.primary,
-        ColorScheme.fromSeed(seedColor: entoliIndigo).primary,
-      );
+      final saved = AppSettings.load(app.config);
+      expect(saved.primaryColour, ColourTheme.apple.primary);
+      expect(saved.secondaryColour, ColourTheme.apple.secondary);
+      expect(materialApp.theme?.colorScheme.primary, appleBlue.primary);
+      expect(entoliTheme(Brightness.light).colorScheme,
+          materialApp.theme!.colorScheme);
     });
 
     testWidgets("the primary colour is what the scheme is seeded from",
@@ -170,7 +175,7 @@ void main() {
       final scheme = (await pumpApp(tester)).theme!.colorScheme;
 
       final amber = ColorScheme.fromSeed(seedColor: ThemeColour.amber.colour);
-      expect(scheme.primary, ColorScheme.fromSeed(seedColor: entoliIndigo).primary);
+      expect(scheme.primary, appleBlue.primary);
       expect(scheme.secondary, amber.secondary);
       expect(scheme.secondaryContainer, amber.secondaryContainer);
     });
@@ -338,7 +343,7 @@ void main() {
           '{"primaryColour":"chartreuse","secondaryColour":"teal","cornerRadius":"sharp"}');
 
       final saved = AppSettings.load(app.config);
-      expect(saved.primaryColour, ThemeColour.indigo);
+      expect(saved.primaryColour, ThemeColour.apple);
       expect(saved.secondaryColour, ThemeColour.teal);
       expect(saved.cornerRadius, CornerRadius.medium);
     });

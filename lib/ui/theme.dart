@@ -56,8 +56,14 @@ typedef Seed = ({Color colour, DynamicSchemeVariant variant, bool grey});
 /// A seed, the seed of the accent group beside it, and how round a corner is.
 typedef AppLook = ({Seed primary, Seed? secondary, double radius});
 
+/// What `ThemeColour.apple.seed` resolves to, the default, spelled out because
+/// a getter cannot be const.
 const entoliLook = (
-  primary: (colour: entoliIndigo, variant: DynamicSchemeVariant.tonalSpot, grey: false),
+  primary: (
+    colour: Color(appleBlueArgb),
+    variant: DynamicSchemeVariant.fidelity,
+    grey: true,
+  ),
   secondary: null,
   radius: 12.0,
 );
