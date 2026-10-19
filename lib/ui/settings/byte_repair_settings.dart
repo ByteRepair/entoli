@@ -5,6 +5,7 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 import "../../data/local/byte_repair_store.dart";
 import "../../domain/builtin_project.dart";
 import "../../providers.dart";
+import "../chat/widgets/code_block.dart";
 import "../widgets/destructive_button.dart";
 import "../widgets/section_header.dart";
 import "../widgets/settings_warning_banner.dart";
@@ -22,7 +23,11 @@ import "../widgets/settings_warning_banner.dart";
 /// says so and hides the buttons, which could only report their own refusal;
 /// the delete stays, the data being real wherever the tooling is not, with
 /// its confirm message the store's
-/// [ByteRepairStore.deleteConfirmMessage].
+/// [ByteRepairStore.deleteConfirmMessage]. Where it can run, what it does to
+/// the machine outside the app is said above the buttons
+/// ([ByteRepairStore.setupNotice]), and a prerequisite only the user can
+/// install is a command to paste into a terminal, drawn as a reply's code
+/// block is so it carries the same copy button.
 class ByteRepairSection extends ConsumerStatefulWidget {
   const ByteRepairSection({super.key});
 
@@ -56,6 +61,31 @@ class _ByteRepairSectionState extends ConsumerState<ByteRepairSection> {
             text: banner,
           )
         else ...[
+          if (store.setupNotice case final notice?)
+            SettingsWarningBanner(
+              icon: Icons.info_outline,
+              color: theme.colorScheme.onSurfaceVariant,
+              text: notice,
+            ),
+          if (store.prerequisite case (:final why, :final command)) ...[
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+              child: Text(
+                why,
+                style: theme.textTheme.bodySmall,
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: DecoratedBox(
+                decoration: codeBlockDecoration(theme),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: CodeBlock(code: command, language: "bash"),
+                ),
+              ),
+            ),
+          ],
           const SizedBox(height: 8),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),

@@ -301,6 +301,93 @@ void main() {
     expect(result.stderr, contains("unsupported platform for ESBMC: FreeBSD"));
   });
 
+  group("Homebrew", () {
+    /// A brew that installs into [prefix] what the script links to, logging
+    /// each install's arguments; `--prefix` answers [prefix]. The tools it
+    /// lands answer `--version`, so the tail's check runs them.
+    Future<({String brew, File log, String prefix})> stubBrew() async {
+      final prefix = p.join(config.dataDir, "homebrew");
+      final log = File(p.join(config.dataDir, "brew.log"))..createSync();
+      await stubTool("brew", """
+if [ "\$1" = "--prefix" ]; then echo "$prefix"; exit 0; fi
+shift
+echo "install \$*" >> "${log.path}"
+for f in "\$@"; do
+  case "\$f" in
+    make) d="$prefix/opt/make/libexec/gnubin" ;;
+    *)    d="$prefix/bin" ;;
+  esac
+  /bin/mkdir -p "\$d"
+  printf '#!/bin/sh\\necho "%s from brew"\\n' "\$f" > "\$d/\$f"
+  /bin/chmod +x "\$d/\$f"
+done""");
+      for (final name in ["mkdir", "rm", "ln"]) {
+        await stubReal(name);
+      }
+      return (brew: p.join(stubs.path, "brew"), log: log, prefix: prefix);
+    }
+
+    test("no brew is a refusal naming Homebrew's install command, before "
+        "anything is fetched", () async {
+      await stubReal("mkdir");
+      await stubTool("wget", 'echo "wget must not run" >&2; exit 1');
+
+      final result = await runScript(
+          {"ENV_INSTALL_DIR": bin, "ENV_PACKAGE_MANAGER": "brew"});
+
+      expect(result.exitCode, isNot(0));
+      expect(result.stderr, contains("Homebrew is not installed"));
+      expect(result.stderr, contains(homebrewInstallCommand.replaceAll(r"\$", r"$")));
+      expect(result.stderr, isNot(contains("wget must not run")));
+    });
+
+    test("what is missing is installed with brew and linked into the bin "
+        "directory, make under its own name", () async {
+      final brew = await stubBrew();
+
+      final result = await runScript({
+        "ENV_INSTALL_DIR": bin,
+        "ENV_PACKAGE_MANAGER": "brew",
+        "ENV_BREW": brew.brew,
+      });
+
+      expect(result.exitCode, 0, reason: result.stderr);
+      // make and gh in one call, then the formula, never the release zip.
+      expect(brew.log.readAsLinesSync(), ["install make gh", "install esbmc"]);
+      expect(Link(p.join(bin, "esbmc")).targetSync(),
+          p.join(brew.prefix, "bin", "esbmc"));
+      expect(Link(p.join(bin, "gh")).targetSync(),
+          p.join(brew.prefix, "bin", "gh"));
+      expect(Link(p.join(bin, "make")).targetSync(),
+          p.join(brew.prefix, "opt", "make", "libexec", "gnubin", "make"));
+      expect(result.stdout, contains("esbmc from brew"));
+    });
+
+    test("an esbmc already linked and running is kept, and a stale one is "
+        "replaced", () async {
+      final brew = await stubBrew();
+      await stubTool("make", "echo make");
+      await stubTool("gh", "echo gh");
+      Directory(bin).createSync(recursive: true);
+      // A link to a keg an upgrade took away: present, unstartable.
+      Link(p.join(bin, "esbmc")).createSync(p.join(brew.prefix, "gone"));
+
+      final vars = {
+        "ENV_INSTALL_DIR": bin,
+        "ENV_PACKAGE_MANAGER": "brew",
+        "ENV_BREW": brew.brew,
+        "PATH": "$bin:${stubs.path}",
+      };
+      var result = await runScript(vars);
+      expect(result.exitCode, 0, reason: result.stderr);
+      expect(brew.log.readAsLinesSync(), ["install esbmc"]);
+
+      result = await runScript(vars);
+      expect(result.exitCode, 0, reason: result.stderr);
+      expect(brew.log.readAsLinesSync(), ["install esbmc"]);
+    });
+  });
+
   test("the store passes its install dir and the binary's name, install only",
       () async {
     final s = FileByteRepairStore(
@@ -387,6 +474,59 @@ void main() {
     await AppSettings(rootfsId: alpine.id).save(config);
     expect(guest.installEnvironment(),
         containsPair("ENV_PACKAGE_MANAGER", "apk"));
+  });
+
+  group("a mac's Homebrew", () {
+    FileByteRepairStore macStore(String? installDir, {required bool brew}) {
+      final fake = p.join(config.dataDir, "brew");
+      if (brew) File(fake).writeAsStringSync("");
+      return FileByteRepairStore(
+        config: config,
+        project: ByteRepairProject().dir,
+        workspace: config.projectWorkspaceDir(project: ByteRepairProject().dir),
+        installDir: installDir,
+        brewPaths: [fake],
+      );
+    }
+
+    test("the host install names brew and where it is", () {
+      withTarget(TargetPlatform.macOS, () {
+        final env = macStore(bin, brew: true).installEnvironment();
+        expect(env, containsPair("ENV_PACKAGE_MANAGER", "brew"));
+        expect(env, containsPair("ENV_BREW", p.join(config.dataDir, "brew")));
+        expect(macStore(bin, brew: true).setupNotice, contains("Homebrew"));
+        expect(macStore(bin, brew: true).prerequisite, isNull);
+      });
+    });
+
+    test("no Homebrew is the install command to paste, and the run is told "
+        "so by ENV_BREW's absence", () {
+      withTarget(TargetPlatform.macOS, () {
+        final store = macStore(bin, brew: false);
+        expect(store.prerequisite?.command, homebrewInstallCommand);
+        expect(store.installEnvironment(), isNot(contains("ENV_BREW")));
+      });
+    });
+
+    test("Linux and Windows say nothing of it", () {
+      for (final platform in [TargetPlatform.linux, TargetPlatform.windows]) {
+        withTarget(platform, () {
+          final store = macStore(bin, brew: true);
+          expect(store.setupNotice, isNull);
+          expect(store.prerequisite, isNull);
+          expect(store.installEnvironment(),
+              isNot(contains("ENV_PACKAGE_MANAGER")));
+        });
+      }
+    });
+
+    test("a deletion names links, not tools, Homebrew keeping its own", () {
+      Directory(bin).createSync(recursive: true);
+      withTarget(TargetPlatform.macOS, () {
+        expect(macStore(bin, brew: true).environmentDeletion,
+            contains("Homebrew keeps what it installed"));
+      });
+    });
   });
 
   group("environmentDeletion", () {
