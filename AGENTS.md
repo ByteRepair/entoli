@@ -493,6 +493,12 @@ is `logDetail`, which is debug-only.
   and it wants running again whenever a `@freezed` or `@JsonSerializable` type
   changes. `dart run build_runner watch` is the answer while editing
   `lib/domain/`. CI runs the script through `.github/actions/flutter-setup`.
+- The Flutter version is the one `.github/actions/flutter-setup` pins, and
+  local work wants the same one: `pubspec.lock` is committed and CI runs
+  `pub get --enforce-lockfile`, and `flutter_test` pins exact versions of
+  packages like `collection` and `meta` per Flutter release, so a `pub get`
+  on another Flutter rewrites the lock and CI refuses it. A dependency change
+  is a `pubspec.yaml` edit plus the `pubspec.lock` it produces, in one commit.
 - Analyze: `flutter analyze`. Tests: `flutter test` — see `test/AGENTS.md`.
 - The repo is not `dart format` clean and is not meant to be; match the file you
   are in rather than reformatting it.
