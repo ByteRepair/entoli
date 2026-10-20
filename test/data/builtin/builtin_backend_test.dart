@@ -60,6 +60,7 @@ void main() {
     ShellResult Function(String)? respond,
     PromptLibrary? library,
     BuiltinOptions options = const BuiltinOptions(),
+    LlmClient? judge,
   }) {
     client = FakeLlmClient(turns);
     shell = FakeShell(respond ?? okEmpty);
@@ -70,8 +71,18 @@ void main() {
       store: FileChatStore(config),
       options: options,
       registry: LlmRegistry(
-        endpoints: () =>
-            [for (final p in providers) LlmEndpoint(p, build: (_, _) => client)],
+        endpoints: () => [
+          for (final p in providers) LlmEndpoint(p, build: (_, _) => client),
+          if (judge != null)
+            LlmEndpoint(
+                const LlmProviderConfig(
+                    id: "judge",
+                    api: LlmApi.openai,
+                    baseUrl: "https://judge.test/v1",
+                    models: ["judge-model"],
+                    defaultModelId: "judge-model"),
+                build: (_, _) => judge),
+        ],
         lookupEnv: (_) => null,
         lookupKey: (_) => null,
       ),
@@ -931,7 +942,7 @@ void main() {
       final events = await send(backend, "!ls", provider: null, model: null);
 
       expect(shell.ran, ["ls"]);
-      expect(events.whereType<ErrorEvent>(), isEmpty);
+      expect(events.whereType<ErrorEvent>().map((e) => e.message), isEmpty);
     });
 
     test("it runs in the chat's own workspace, with the project's for a home",
@@ -1445,6 +1456,62 @@ void main() {
   });
 
   group("sessions", () {
+    // Stopped while auto mode's classifier was still answering, the old turn
+    // used to wake when it did: run the command, and write itself into the
+    // session the resent turn had rebuilt — a RangeError on its next step.
+    test("a turn stopped mid-classification stops there", () async {
+      final verdict = Completer<void>();
+      final judge = FakeLlmClient([
+        [const LlmCompletion(message: LlmMessage(role: LlmRole.assistant, text: "allow"))],
+        [const LlmCompletion(message: LlmMessage(role: LlmRole.assistant, text: "ask"))],
+      ]);
+      final backend = backendOver([
+        [bashCall("pdflatex main.tex")],
+        [bashCall("rm -rf build", id: "call-2")],
+        [finish],
+      ], judge: _Held(judge, verdict.future));
+      Stream<AgentEvent> auto(String text) => backend.sendPrompt(
+          chatId, userMessage(text, at: sentAt),
+          settings: const TurnSettings(
+              model: "fake-model",
+              provider: "fake",
+              classifierProvider: "judge",
+              classifierModel: "judge-model",
+              approveMode: ApproveMode.auto));
+
+      final first = auto("one").toList();
+      await untilPending("the classifier",
+          () async => judge.sent.isEmpty ? const <bool>[] : const [true]);
+      await backend.abort(chatId);
+      await first;
+
+      // The resend: the log's thread, with the stopped call unanswered.
+      await backend.resetSession(chatId, history: [
+        userMessage("one", at: sentAt),
+        Message(
+          id: "a1",
+          role: MessageRole.assistant,
+          createdAt: sentAt,
+          parts: const [
+            MessagePart.toolCall(
+                toolCall: ToolCall(
+                    id: "call-1", name: "bash", argumentsJson: '{"command":"pdflatex main.tex"}')),
+          ],
+        ),
+      ]);
+      final second = auto("two").toList();
+      final pending = await untilPending(
+          "the approval", () => backend.pendingApprovals(chatId));
+      verdict.complete();
+      await pumpEvents();
+      await backend.respondApproval(chatId, pending.single.id, ApprovalResponse.allow);
+      final events = await second;
+
+      expect(shell.ran, ["rm -rf build"]);
+      expect(events.whereType<ErrorEvent>().map((e) => e.message), isEmpty);
+      expect(client.sent.last.map((m) => m.text).join("\n"), contains("two"));
+    });
+
     test("a second prompt continues the conversation", () async {
       final backend = backendOver([
         [finish],
@@ -2321,4 +2388,30 @@ Future<void> untilMemory(MemoryStore store, String want) async {
     }
     await Future<void>.delayed(const Duration(milliseconds: 10));
   }
+}
+
+/// [inner]'s first answer, held until [gate] completes: a classifier still
+/// thinking.
+class _Held implements LlmClient {
+  _Held(this.inner, this.gate);
+
+  final FakeLlmClient inner;
+  final Future<void> gate;
+
+  @override
+  Stream<LlmChunk> stream(List<LlmMessage> messages,
+      {required String model,
+      List<LlmTool> tools = const [],
+      double? temperature,
+      String? reasoningEffort}) async* {
+    final chunks = await inner.stream(messages, model: model, tools: tools).toList();
+    if (inner.sent.length == 1) await gate;
+    yield* Stream.fromIterable(chunks);
+  }
+
+  @override
+  Future<List<String>> listModels() => inner.listModels();
+
+  @override
+  void close() {}
 }
