@@ -161,6 +161,7 @@ class _WelcomeTourState extends ConsumerState<WelcomeTour> {
             itemBuilder: (context, i) => _Fade(
               controller: _controller,
               index: i,
+              current: _page,
               child: _pageWidgets[i],
             ),
           ),
@@ -187,11 +188,15 @@ class _Fade extends StatelessWidget {
   const _Fade({
     required this.controller,
     required this.index,
+    required this.current,
     required this.child,
   });
 
   final PageController controller;
   final int index;
+
+  /// The page the tour is on, for when the controller has no position.
+  final int current;
   final Widget child;
 
   @override
@@ -199,11 +204,12 @@ class _Fade extends StatelessWidget {
         animation: controller,
         child: child,
         builder: (context, child) {
-          // No position before the first layout.
+          // No position before the first layout, nor while settings covers
+          // the tour; a rebuild then (a provider added) must not dim the page.
           final position = controller.hasClients &&
                   controller.position.haveDimensions
-              ? controller.page ?? 0
-              : controller.initialPage.toDouble();
+              ? controller.page ?? current.toDouble()
+              : current.toDouble();
           final distance = (position - index).abs().clamp(0.0, 1.0);
           return Opacity(opacity: 1 - distance * 0.8, child: child);
         },
