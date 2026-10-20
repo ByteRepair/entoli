@@ -64,7 +64,7 @@ image ships NDKs under `$ANDROID_HOME/ndk` that `ndkVersion` does not name
 (~7 GB) beside the one Gradle installs left the v4.6.0 build dead inside
 `signReleaseBundle` with 82 MB free: bundletool's "Location not within
 channel boundaries", a disk-full error wearing a password. On 26.04 the
-image's set is exactly Flutter 3.44's pin and there is nothing to delete.
+image's set is exactly the pinned Flutter's NDK and there is nothing to delete.
 The number is stated in `android-build-setup` rather than read from
 Flutter, so a stale pin's worst effect is an NDK left behind.
 
@@ -137,7 +137,12 @@ compliance" in `ios/AGENTS.md`. Nothing here can read that setting, so the
 the person cutting the release reads it.
 
 **Every job that touches Dart starts with `.github/actions/flutter-setup`**
-— the SDK pin, packages and codegen. The generated sources are not
+— the SDK pin, packages and codegen. **The packages are `pubspec.lock`'s,
+enforced** (`tool/prepare.sh` passes `--enforce-lockfile` where `CI` is set),
+so a re-run builds what the first attempt did: before the lock was committed,
+v6.0.0's macOS re-run resolved a `json_serializable` and a `source_helper`
+published between attempts that did not compile together, and failed in
+codegen. The generated sources are not
 committed, so build_runner runs on every job; the action caches the asset
 graph. The release workflows therefore need `tool/prepare.sh` in the
 tagged tree: rebuilding an older release breaks if the script is renamed.
@@ -373,7 +378,8 @@ minutes of post-step on a 2x runner, and the dead tag caches filled the
 repository's 10 GB until master's own were evicted. Every cache is therefore
 an `actions/cache/restore` and a separate `actions/cache/save` gated on
 `github.ref_type != 'tag'` — `flutter-setup` drives `subosito/flutter-action`
-as a dry run for its keys to do the same for the SDK.
+as a dry run for its keys to do the same for the SDK. The pub and codegen
+caches are keyed on `pubspec.lock`.
 
 A tag run restores from master, so a cache only helps a release once
 something on master has written it. CI writes the Linux Flutter and codegen

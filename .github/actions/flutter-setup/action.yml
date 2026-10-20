@@ -14,7 +14,7 @@ runs:
     - id: flutter
       uses: subosito/flutter-action@v2.23.0
       with:
-        flutter-version: 3.44.8
+        flutter-version: 3.47.7
         channel: stable
         dry-run: true
 
@@ -25,25 +25,25 @@ runs:
         path: ${{ steps.flutter.outputs.CACHE-PATH }}
         key: ${{ steps.flutter.outputs.CACHE-KEY }}
 
-    # Keyed on pubspec.yaml because there is no lockfile to key on; the prefix
-    # restores the last set, and pub fetches only what changed.
+    # Keyed on the lock, which says exactly which packages a job fetches; the
+    # prefix restores the last set, and pub fetches only what changed.
     - name: Restore the pub cache
       id: pub-cache
       uses: actions/cache/restore@v6.1.0
       with:
         path: ${{ steps.flutter.outputs.PUB-CACHE-PATH }}
-        key: ${{ steps.flutter.outputs.PUB-CACHE-KEY }}-${{ hashFiles('pubspec.yaml') }}
+        key: ${{ steps.flutter.outputs.PUB-CACHE-KEY }}-${{ hashFiles('pubspec.lock') }}
         restore-keys: ${{ steps.flutter.outputs.PUB-CACHE-KEY }}-
 
     # Installs where the restore put nothing, and puts the SDK on PATH either
     # way.
     - uses: subosito/flutter-action@v2.23.0
       with:
-        flutter-version: 3.44.8
+        flutter-version: 3.47.7
         channel: stable
 
     # Most of build_runner's minute is compiling its own entrypoint, which the
-    # packages alone decide — so the key is pubspec rather than the sources.
+    # packages alone decide — so the key is the lock rather than the sources.
     # Restoring a graph built against older ones is safe: build_runner rebuilds
     # whatever its recorded input digests say is stale.
     - name: Restore build_runner's cache
@@ -51,7 +51,7 @@ runs:
       uses: actions/cache/restore@v6.1.0
       with:
         path: .dart_tool/build
-        key: codegen-${{ runner.os }}-${{ hashFiles('pubspec.yaml') }}
+        key: codegen-${{ runner.os }}-${{ hashFiles('pubspec.lock') }}
         restore-keys: codegen-${{ runner.os }}-
 
     - shell: bash
@@ -73,11 +73,11 @@ runs:
       uses: actions/cache/save@v6.1.0
       with:
         path: ${{ steps.flutter.outputs.PUB-CACHE-PATH }}
-        key: ${{ steps.flutter.outputs.PUB-CACHE-KEY }}-${{ hashFiles('pubspec.yaml') }}
+        key: ${{ steps.flutter.outputs.PUB-CACHE-KEY }}-${{ hashFiles('pubspec.lock') }}
 
     - name: Save build_runner's cache
       if: github.ref_type != 'tag' && steps.codegen-cache.outputs.cache-hit != 'true'
       uses: actions/cache/save@v6.1.0
       with:
         path: .dart_tool/build
-        key: codegen-${{ runner.os }}-${{ hashFiles('pubspec.yaml') }}
+        key: codegen-${{ runner.os }}-${{ hashFiles('pubspec.lock') }}

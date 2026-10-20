@@ -1,6 +1,9 @@
 # Miscellaneous
 *.class
 *.lock
+# The app's lock is committed: CI enforces it, so a dependency published
+# mid-release cannot change what a re-run builds.
+!/pubspec.lock
 *.log
 *.pyc
 *.swp
