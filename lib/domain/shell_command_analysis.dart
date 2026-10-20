@@ -197,6 +197,62 @@ List<String> _segmentsOf(String command) {
   return segments;
 }
 
+/// Whether [command] reads or writes a file the way the file tools would:
+/// `cat`, `head`, `tail`, `nl`, `less` or `more` naming a file rather than
+/// filtering a pipe, `sed` given a file or `-i`, or `echo`, `printf` or `cat`
+/// writing one through a redirect. A guess for a reminder, never a gate.
+bool isFileToolWork(String command) {
+  const readers = {"cat", "head", "tail", "nl", "less", "more"};
+  const writers = {"echo", "printf", "cat"};
+  final tokens = _tokenize(command, <String>[]);
+  var words = <String?>[];
+  var piped = false;
+  var redirected = false;
+  var target = false;
+  var outTarget = false;
+
+  bool judge() {
+    final rest = words.skipWhile((w) => w != null && _isAssignmentWord(w));
+    final name = rest.firstOrNull?.split("/").last;
+    if (name == null) return false;
+    final args = rest.skip(1).whereType<String>();
+    final operands = args.where((a) => !a.startsWith("-")).length;
+    if (redirected && writers.contains(name)) return true;
+    if (readers.contains(name)) return !piped && operands > 0;
+    if (name == "sed") {
+      return args.any((a) => a.startsWith("-i") || a == "--in-place") ||
+          (!piped && operands >= 2);
+    }
+    return false;
+  }
+
+  for (final tok in tokens) {
+    if (tok.kind == _TokKind.word) {
+      if (target) {
+        if (outTarget && _plainOf(tok) != "/dev/null") redirected = true;
+        target = false;
+      } else {
+        words.add(_plainOf(tok));
+      }
+      continue;
+    }
+    switch (tok.text) {
+      case "|" || "||" || "&&" || ";" || "&" || ";;" || "\n":
+        if (judge()) return true;
+        words = [];
+        piped = tok.text == "|";
+        redirected = false;
+      case ">" || ">>" || "&>" || "&>>":
+        target = true;
+        outTarget = true;
+      case "<" || "<<" || "<<<":
+        target = true;
+        outTarget = false;
+    }
+  }
+  return judge();
+}
+
 /// Variables that decide where a command's writes, reads or tools land.
 /// Assigning one in a command is an escalation, because the parse answers for
 /// what the command does under the environment it was handed and one of these

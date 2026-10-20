@@ -110,8 +110,8 @@ class AppSettings {
   /// only reach further than the two of them.
   bool instructionImports;
 
-  /// Whether reading a file in a subdirectory that has its own AGENTS.md
-  /// pulls that file into the turn.
+  /// Whether reading a file pulls the AGENTS.md of each directory above it,
+  /// up to the filesystem root, into the turn.
   bool nestedInstructions;
 
   /// Glob patterns that keep an AGENTS.md out of a turn: a file whose path

@@ -85,20 +85,19 @@ Future<List<InstructionFile>> loadInstructions(
 }
 
 /// The AGENTS.md files above [filePath], nearest first, that have not been
-/// loaded already — what reading a file in a subdirectory pulls into the
-/// turn. The walk stops at the project workspace root; empty unless
-/// [filePath] sits inside it. A file whose path [excludes] names is skipped.
+/// loaded already — what reading a file pulls into the turn. The walk goes to
+/// the filesystem root, so a repository outside the workspaces brings its own
+/// rules with the first file read in it. A file whose path [excludes] names
+/// is skipped.
 Future<List<InstructionFile>> findNestedInstructions(
   FileSystem fs,
   String filePath, {
   required Set<String> alreadyLoaded,
-  required String projectWorkspace,
   List<String> excludes = const [],
 }) async {
-  final root = _norm(fs, projectWorkspace);
   var dir = _norm(fs, fs.path.dirname(filePath));
   final found = <InstructionFile>[];
-  while (_inside(dir, root)) {
+  while (true) {
     await _readInto(
       fs,
       fs.path.join(dir, instructionFileName),

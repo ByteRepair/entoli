@@ -295,7 +295,6 @@ void main() {
       final found = await findNestedInstructions(fileSystemIo,
           p.join(chatWorkspace, "sub", "notes.txt"),
           alreadyLoaded: {},
-          projectWorkspace: projectWorkspace,
           excludes: ["**/sub/AGENTS.md"]);
       expect(found, isEmpty);
     });
@@ -306,8 +305,7 @@ void main() {
       write("chats/chat-1/sub/AGENTS.md", "sub rules");
       final found = await findNestedInstructions(fileSystemIo,
           p.join(chatWorkspace, "sub", "notes.txt"),
-          alreadyLoaded: {},
-          projectWorkspace: projectWorkspace);
+          alreadyLoaded: {});
       expect(found.single.path, p.join(chatWorkspace, "sub", "AGENTS.md"));
     });
 
@@ -316,8 +314,7 @@ void main() {
       write("chats/chat-1/sub/AGENTS.md", "sub rules");
       final found = await findNestedInstructions(fileSystemIo,
           p.join(chatWorkspace, "sub", "notes.txt"),
-          alreadyLoaded: {p.join(projectWorkspace, "AGENTS.md")},
-          projectWorkspace: projectWorkspace);
+          alreadyLoaded: {p.join(projectWorkspace, "AGENTS.md")});
       expect(found.single.path, p.join(chatWorkspace, "sub", "AGENTS.md"));
     });
 
@@ -325,17 +322,30 @@ void main() {
       write("chats/chat-1/sub/AGENTS.md", "sub rules");
       final found = await findNestedInstructions(fileSystemIo,
           p.join(chatWorkspace, "sub", "notes.txt"),
-          alreadyLoaded: {p.join(chatWorkspace, "sub", "AGENTS.md")},
-          projectWorkspace: projectWorkspace);
+          alreadyLoaded: {p.join(chatWorkspace, "sub", "AGENTS.md")});
       expect(found, isEmpty);
     });
 
-    test("a file outside the workspaces finds nothing", () async {
+    test("a file outside the workspaces finds its repository's", () async {
+      final repo = p.join(tmp.path, "elsewhere");
+      Directory(p.join(repo, "src")).createSync(recursive: true);
+      File(p.join(repo, "AGENTS.md")).writeAsStringSync("repo rules");
       final found = await findNestedInstructions(fileSystemIo,
-          p.join(tmp.path, "elsewhere", "notes.txt"),
-          alreadyLoaded: {},
-          projectWorkspace: projectWorkspace);
-      expect(found, isEmpty);
+          p.join(repo, "src", "notes.txt"),
+          alreadyLoaded: {});
+      expect(found.single.path, p.join(repo, "AGENTS.md"));
+    });
+
+    test("walks past the project workspace's root", () async {
+      File(p.join(tmp.path, "AGENTS.md")).writeAsStringSync("above rules");
+      write("chats/chat-1/sub/AGENTS.md", "sub rules");
+      final found = await findNestedInstructions(fileSystemIo,
+          p.join(chatWorkspace, "sub", "notes.txt"),
+          alreadyLoaded: {});
+      expect(found.map((f) => f.path), [
+        p.join(chatWorkspace, "sub", "AGENTS.md"),
+        p.join(tmp.path, "AGENTS.md"),
+      ]);
     });
   });
 }

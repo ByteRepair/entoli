@@ -60,7 +60,7 @@ class InstructionsSection extends ConsumerWidget {
         SwitchListTile(
           title: const Text("Nested AGENTS.md"),
           subtitle: const Text(
-              "Reading a file pulls in a subdirectory's own AGENTS.md."),
+              "Reading a file pulls in the AGENTS.md of every directory above it."),
           value: settings.nestedInstructions,
           onChanged: (value) =>
               ref.read(appSettingsProvider.notifier).setNestedInstructions(value),
