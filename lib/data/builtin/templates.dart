@@ -603,6 +603,19 @@ String shellRunTranscript({
     "to:\n\n$command\n\n"
     "${observation(returnCode: returnCode, output: output, exceptionInfo: exceptionInfo, violations: violations)}";
 
+/// Appended to a `bash` result that read or wrote a file, now and then — see
+/// [fileToolReminderEvery]. The read tool is what brings in the AGENTS.md
+/// above a file, and the write and edit tools are what check the file is
+/// the one the model read, so a `cat` or a `sed -i` skips both.
+const fileToolReminder = "Reminder: use the read tool to read a file, and "
+    "write or edit to change one, rather than bash. The read tool also brings "
+    "in the AGENTS.md instructions of the directories above the file. Keep "
+    "bash for running programs.";
+
+/// The first `bash` call in a reply that does a file tool's work gets
+/// [fileToolReminder], and every this-many after it.
+const fileToolReminderEvery = 5;
+
 /// What a call the agent never got to is answered with — the ones left over
 /// when a turn is aborted part-way through a message's calls. A call that may
 /// have run but whose result was never written down is not this; see

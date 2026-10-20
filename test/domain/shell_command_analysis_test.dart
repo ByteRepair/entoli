@@ -160,4 +160,30 @@ void main() {
     expect(note, isNot(contains("- cd")), reason: "nothing reliable to name");
     expect(note, contains("split"));
   });
+  group("isFileToolWork", () {
+    test("names a file read or written through the shell", () {
+      for (final command in [
+        "cat notes.txt",
+        "head -n 20 src/main.c",
+        "cd repo && sed -n '80,130p' setup.py",
+        "sed -i 's/a/b/' x.txt",
+        "echo hi > out.txt",
+        "cat > f.txt <<'EOF'\nbody\nEOF",
+      ]) {
+        expect(isFileToolWork(command), isTrue, reason: command);
+      }
+    });
+
+    test("leaves pipes, programs and discarded output alone", () {
+      for (final command in [
+        "git log | head -5",
+        "ls -la | sed 's/x/y/'",
+        "flutter test",
+        "echo done 2>/dev/null",
+        "grep -rn foo lib",
+      ]) {
+        expect(isFileToolWork(command), isFalse, reason: command);
+      }
+    });
+  });
 }

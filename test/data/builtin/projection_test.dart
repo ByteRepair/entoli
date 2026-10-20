@@ -677,4 +677,32 @@ void main() {
       expect(projected.last.text, userTurnText("resumed work", at: at, first: true));
     });
   });
+
+  test("a bash call doing a file tool's work is reminded, now and then",
+      () async {
+    final cat = '{"command":"cat notes.txt"}';
+    final parts = <MessagePart>[
+      call("c0", "bash", '{"command":"git status"}', response: "r0"),
+      ran("c0", ""),
+      for (var i = 1; i <= fileToolReminderEvery + 1; i++) ...[
+        call("c$i", "bash", cat, response: "r$i"),
+        ran("c$i", "hi"),
+      ],
+    ];
+    final projected = await project([
+      asked("look"),
+      said(MessageRole.assistant, parts),
+    ]);
+
+    final reminded = [
+      for (final m in projected)
+        if (m.role == LlmRole.tool) m.text.contains(fileToolReminder),
+    ];
+    expect(reminded, [
+      false,
+      true,
+      for (var i = 1; i < fileToolReminderEvery; i++) false,
+      true,
+    ]);
+  });
 }

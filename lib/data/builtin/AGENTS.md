@@ -975,11 +975,30 @@ provider reporting one (issue #135), so until then it is the floor alone.
 
 A nested `AGENTS.md` found above a file the agent reads mid-turn joins the
 turn where the nested switch is on, and that one defaults on too: a
-subdirectory that writes its own rules is a place the user meant to have
-them. `_loadedInstructions` holds the paths already in front of the model so
-the same file is never injected twice. They render as "## Workspace
-instructions" — the one section of the second message with no preamble of its
-own, because these are the instructions.
+directory that writes its own rules is a place the user meant to have them.
+The walk goes from the file's directory to `/`, not to the workspace root: the
+agent's real work is often a repository elsewhere on the machine, and its
+rules sit at that repository's root. An AGENTS.md read on purpose is not
+appended to itself. `_loadedInstructions` holds the paths already in front of
+the model so the same file is never injected twice. They render as
+"## Workspace instructions" — the one section of the second message with no
+preamble of its own, because these are the instructions.
+
+Only `read` walks. A `cat` or an `ls` through `bash` brings nothing in, so a
+`bash` result that does a file tool's work (`isFileToolWork`: a reader naming
+a file, `sed` on one, a write through a redirect) carries `fileToolReminder`,
+on the reply's first such call and every `fileToolReminderEvery` after. The
+projection adds it, counting the reply's own calls, so a reload words what the
+live turn sent and nothing is logged.
+
+**`write` and `edit` refuse a file the model has not read**, and one that
+changed since: `BuiltinSession.readFiles` stamps each read, write and edit
+(modification time and size), and an existing file whose stamp is missing or
+stale is refused with an answer telling the model to read it first. A file
+that does not exist is a `write` creating it and needs no read. The check runs
+before the gate, so a refusal raises no banner, and again inside the run. The
+stamps are not rebuilt from the log: `replaceWith` clears them, so after a
+rewind or a restart the model reads again before it edits.
 
 **The first reach of each file is recorded** as an `InstructionsPart` on the
 reply — the turn's up-front load one part naming every file it first put in

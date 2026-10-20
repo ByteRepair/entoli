@@ -82,6 +82,40 @@ EditArgs? editArgsFrom(String? json) {
   );
 }
 
+/// A file as it stood when the model read it. Modification time and size
+/// rather than the content: a change neither moves is one this misses, which
+/// is Claude Code's bargain too.
+typedef FileStamp = ({DateTime modified, int size});
+
+/// [path]'s stamp now, or null where nothing is there.
+Future<FileStamp?> fileStampOf(FileSystem fs, String path) async {
+  final stat = await fs.file(path).stat();
+  if (stat.type == FileSystemEntityType.notFound) return null;
+  return (modified: stat.modified, size: stat.size);
+}
+
+/// Why `write` or `edit` may not touch [path] yet, or null where it may. An
+/// existing file must have been read, and not changed since: the model edits
+/// what it saw, and what it saw has to be what is there. A file that does not
+/// exist is a `write` creating it, which needs no read.
+Future<String?> unreadFileProblem(FileSystem fs, String path,
+    {required String shownPath,
+    required String toolName,
+    required Map<String, FileStamp> readFiles}) async {
+  final now = await fileStampOf(fs, path);
+  if (now == null) return null;
+  final read = readFiles[path];
+  if (read == null) {
+    return "$shownPath has not been read yet. Read it with the $readToolName "
+        "tool first, then call $toolName again.";
+  }
+  if (read != now) {
+    return "$shownPath has changed since it was last read. Read it again "
+        "with the $readToolName tool, then call $toolName again.";
+  }
+  return null;
+}
+
 /// The guest path of a chat workspace, given the [guestRoot] where the project
 /// workspace is mounted inside the guest, the project workspace [projectWorkspace]
 /// on the host, and the chat workspace [workspace] on the host. The chat

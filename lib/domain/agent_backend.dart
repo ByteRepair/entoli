@@ -240,8 +240,7 @@ class MemorySettings {
   /// files.
   final bool imports;
 
-  /// Whether reading a file pulls in the AGENTS.md of a subdirectory that has
-  /// one.
+  /// Whether reading a file pulls in the AGENTS.md of each directory above it.
   final bool nested;
 
   /// The glob patterns a file's path must not name for an AGENTS.md of its to
