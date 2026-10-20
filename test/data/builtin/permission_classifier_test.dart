@@ -55,6 +55,18 @@ void main() {
       expect(client.sent.single.last.text, isNot(contains('"url"')));
     });
 
+    test("granted directories reach the prompt as writable", () async {
+      var c = classifierOver([saidOnly("allow")]);
+      await c.classify("bash", '{"command": "ls"}',
+          workspace: "/ws", alsoWritable: ["/proj", "/home/u/repo"]);
+      expect(client.sent.single.last.text,
+          contains("Also writable: /proj, /home/u/repo"));
+
+      c = classifierOver([saidOnly("allow")]);
+      await c.classify("bash", '{"command": "ls"}', workspace: "/ws");
+      expect(client.sent.single.last.text, isNot(contains("Also writable")));
+    });
+
     test("the system prompt has the rules, anchored on workspace writes", () async {
       final c = classifierOver([saidOnly("allow")]);
       await c.classify("bash", '{"command": "ls"}', workspace: "/tmp");

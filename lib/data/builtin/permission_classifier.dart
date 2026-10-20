@@ -22,8 +22,10 @@ class LlmClassifier implements PermissionClassifier {
     String toolName,
     String argumentsJson, {
     required String workspace,
+    List<String> alsoWritable = const [],
   }) async {
-    final prompt = _classifierPrompt(toolName, argumentsJson, workspace: workspace);
+    final prompt = _classifierPrompt(toolName, argumentsJson,
+        workspace: workspace, alsoWritable: alsoWritable);
     try {
       final chunks = await client
           .stream([
@@ -58,8 +60,9 @@ class LlmClassifier implements PermissionClassifier {
 
   static const _systemPrompt = """
 You are a permission classifier. Decide whether a tool call is safe to run
-without asking the user. The workspace path below is the one folder the
-conversation may write to freely.
+without asking the user. The workspace path below is the folder the
+conversation may write to freely; any "Also writable" paths below it are
+granted the same, so a write inside one is a workspace write.
 
 Reply with exactly one word: allow, ask, or deny.
 
@@ -88,9 +91,11 @@ that must never run. A write you are merely unsure about is ask.
     String toolName,
     String argumentsJson, {
     required String workspace,
+    List<String> alsoWritable = const [],
   }) {
     final args = _pretty(argumentsJson, toolName);
-    return "Tool: $toolName\nArguments: $args\nWorkspace: $workspace";
+    return "Tool: $toolName\nArguments: $args\nWorkspace: $workspace"
+        "${alsoWritable.isEmpty ? "" : "\nAlso writable: ${alsoWritable.join(", ")}"}";
   }
 
   /// Render the arguments as something the model can read. A bash command is

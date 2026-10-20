@@ -434,6 +434,26 @@ void main() {
       expect(classifier.classified, isEmpty);
     });
 
+    // A granted directory is the workspace's own permissions to the sandbox;
+    // the classifier, not told, read a write there as one past the workspace
+    // and asked.
+    test("the classifier is told the project workspace and the grants",
+        () async {
+      final client = FakeLlmClient([
+        [bashCall("make -C /home/u/repo")], [finish],
+      ]);
+      final classifier = FakeClassifier();
+      await agentOver(
+        client,
+        approveMode: ApproveMode.auto,
+        classifier: classifier,
+        writableDirs: ["/home/u/repo"],
+      ).run(userMessage("go")).toList();
+
+      expect(classifier.alsoWritable.single,
+          [p.dirname(p.dirname(workspaceDir)), "/home/u/repo"]);
+    });
+
     test("a denied command is refused, not run", () async {
       final client = FakeLlmClient([
         [bashCall("rm -rf /")], [finish],
@@ -957,7 +977,7 @@ class _StubClassifier implements PermissionClassifier {
 
   @override
   Future<PermissionDecision> classify(String toolName, String argumentsJson,
-          {required String workspace}) async =>
+          {required String workspace, List<String> alsoWritable = const []}) async =>
       decision;
 }
 
@@ -969,7 +989,7 @@ class _SpyClassifier implements PermissionClassifier {
 
   @override
   Future<PermissionDecision> classify(String toolName, String argumentsJson,
-          {required String workspace}) async {
+          {required String workspace, List<String> alsoWritable = const []}) async {
     ask();
     return PermissionDecision.allow;
   }

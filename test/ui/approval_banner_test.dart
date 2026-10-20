@@ -218,6 +218,26 @@ void main() {
       expect(find.text("Deny"), findsOneWidget);
     });
 
+    testWidgets("a directory grant offers no this-turn-only allow",
+        (tester) async {
+      tester.view.physicalSize = const Size(1400, 1200);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      await asking(
+          tester,
+          const ToolApproval(
+            id: "call-2",
+            toolName: "add_directory",
+            argumentsText: "/home/yiannis/Projects/x",
+            deniedDirs: ["/home/yiannis/Projects/x"],
+          ));
+
+      expect(find.text("Allow"), findsNothing);
+      expect(find.text("Always in chat"), findsOneWidget);
+      expect(find.text("Always in project"), findsOneWidget);
+      expect(find.text("Deny"), findsOneWidget);
+    });
+
     testWidgets("a re-prompt with no path to grant hides them",
         (tester) async {
       tester.view.physicalSize = const Size(1400, 1200);

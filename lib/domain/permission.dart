@@ -54,6 +54,7 @@ abstract class PermissionClassifier {
     String toolName,
     String argumentsJson, {
     required String workspace,
+    List<String> alsoWritable,
   });
 }
 
@@ -68,6 +69,7 @@ class NoClassifier implements PermissionClassifier {
     String toolName,
     String argumentsJson, {
     required String workspace,
+    List<String> alsoWritable = const [],
   }) async =>
       PermissionDecision.ask;
 }
