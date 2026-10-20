@@ -502,6 +502,24 @@ void main() {
         "<p>hello</p>");
   });
 
+  // The plan lives in the home device's workspace, and a mirror reads it
+  // fresh each time: it changes while the turn works through it.
+  test("a chat's plan crosses under its synthetic name, uncached", () async {
+    final state = _seedChat(home);
+    final links = loopbackPair();
+    await pair(links.$1, links.$2);
+    away.hub.followChat(state.id);
+    await waitForSync(() => away.hub.mirror(state.id) != null);
+
+    expect(await away.hub.planText(state.id), isNull);
+
+    final store = home.store as FakeChatStore;
+    store.stagePlan(state.id, "- [ ] one\n  how\n");
+    expect(await away.hub.planText(state.id), "- [ ] one\n  how\n");
+    store.stagePlan(state.id, "- [x] one\n  how\n");
+    expect(await away.hub.planText(state.id), "- [x] one\n  how\n");
+  });
+
   test("an artifact that is not there answers null, not a hang", () async {
     final state = _seedChat(home);
     final links = loopbackPair();

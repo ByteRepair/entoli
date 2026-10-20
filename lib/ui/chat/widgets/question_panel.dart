@@ -15,6 +15,11 @@ import "../../../domain/ask.dart";
 /// The composer is gone for as long as the panel is up, so that button is the
 /// only way out: with nothing picked it reads `Skip` and answers nothing, which
 /// is how a user who has nothing to say gets the turn moving again.
+///
+/// Every question ends in a field to type an answer of one's own, since the
+/// composer is not there to say it in: options the model thought of are not
+/// always the answer, and a plan's "not like this" is only useful with what
+/// to change. Typing picks it; the text is the answer.
 class QuestionPanel extends StatefulWidget {
   const QuestionPanel({super.key, required this.request, required this.onAnswered});
 
@@ -30,9 +35,31 @@ class QuestionPanel extends StatefulWidget {
 
 class _QuestionPanelState extends State<QuestionPanel> {
   late final List<String?> _answers = widget.request.unanswered;
+  late final List<TextEditingController> _typed = [
+    for (final _ in _questions) TextEditingController(),
+  ];
   int _at = 0;
 
   List<AskQuestion> get _questions => widget.request.questions;
+
+  @override
+  void dispose() {
+    for (final controller in _typed) {
+      controller.dispose();
+    }
+    super.dispose();
+  }
+
+  /// The answer at [at] is the typed one rather than an option's.
+  bool _typedPicked(int at) =>
+      _answers[at] != null &&
+      _questions[at].options.every((o) => o.answer != _answers[at]);
+
+  void _type(String text) => setState(
+      () => _answers[_at] = text.trim().isEmpty ? null : text.trim());
+
+  /// The typed answer, picked again from what is already in the field.
+  void _pickTyped() => _type(_typed[_at].text);
 
   /// Picking moves on, which is the fast path through a batch. It stops at the
   /// last question rather than submitting there.
@@ -104,6 +131,18 @@ class _QuestionPanelState extends State<QuestionPanel> {
                         isPicked: _answers[_at] == option.answer,
                         onTap: () => _pick(option),
                       ),
+                    _TypedTile(
+                      // One field per question, so moving between them keeps
+                      // what was typed into each.
+                      key: ValueKey(_at),
+                      controller: _typed[_at],
+                      isPicked: _typedPicked(_at),
+                      onChanged: _type,
+                      onTap: _pickTyped,
+                      onSubmitted: () {
+                        if (_at < _questions.length - 1) _goTo(_at + 1);
+                      },
+                    ),
                   ],
                 ),
               ),
@@ -273,6 +312,67 @@ class _OptionTile extends StatelessWidget {
                 ],
               ],
             ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The last row of every question: an answer the user writes themselves.
+class _TypedTile extends StatelessWidget {
+  const _TypedTile({
+    super.key,
+    required this.controller,
+    required this.isPicked,
+    required this.onChanged,
+    required this.onTap,
+    required this.onSubmitted,
+  });
+
+  final TextEditingController controller;
+  final bool isPicked;
+  final ValueChanged<String> onChanged;
+  final VoidCallback onTap;
+  final VoidCallback onSubmitted;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    // A press anywhere on it re-picks what it holds. A listener rather than
+    // the field's own onTap, which a focused field does not report for
+    // every tap.
+    return Listener(
+      onPointerDown: (_) => onTap(),
+      child: Material(
+        color: isPicked
+            ? theme.colorScheme.primaryContainer
+            : theme.colorScheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(10),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+          child: Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: controller,
+                  onChanged: onChanged,
+                  onSubmitted: (_) => onSubmitted(),
+                  minLines: 1,
+                  maxLines: 4,
+                  textInputAction: TextInputAction.next,
+                  decoration: const InputDecoration(
+                    hintText: "Something else — type your own answer",
+                    border: InputBorder.none,
+                    isDense: true,
+                  ),
+                ),
+              ),
+              if (isPicked) ...[
+                const SizedBox(width: 8),
+                Icon(Icons.check, size: 18, color: theme.colorScheme.onPrimaryContainer),
+              ],
+            ],
           ),
         ),
       ),

@@ -1,6 +1,7 @@
 import "package:flutter_test/flutter_test.dart";
 
 import "package:agent_chat/domain/ask.dart";
+import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/domain/plan.dart";
 
 void main() {
@@ -54,6 +55,15 @@ Some prose, with a list that is not the plan:
   group("planAddTask", () {
     test("creates the file when there is none", () {
       expect(planAddTask(null, "one"), "# Plan\n\n## Tasks\n\n- [ ] one\n");
+      expect(planAddTask(null, "one", details: "how"),
+          "# Plan\n\n## Tasks\n\n- [ ] one\n  how\n");
+    });
+
+    test("fills a section that has nothing in it yet", () {
+      expect(planAddTask("# Plan\n\n## Tasks\n", "one"),
+          "# Plan\n\n## Tasks\n\n- [ ] one\n");
+      expect(planAddTask("## Tasks\n\n## Later\n\n- [ ] b\n", "a"),
+          "## Tasks\n\n- [ ] a\n\n## Later\n\n- [ ] b\n");
     });
 
     test("appends to the section it names", () {
@@ -150,59 +160,79 @@ Some prose, with a list that is not the plan:
     test("the verdict wording covers go, changes, and nothing answered", () {
       expect(planVerdict("go"), contains("Approved"));
       expect(planVerdict("go"), contains(planNextToolName));
-      expect(planVerdict("changes"), contains("Do not start executing"));
-      expect(planVerdict("changes"), contains("artifact_id"));
+      expect(planVerdict("split task 2"), contains("Do not start executing"));
+      expect(planVerdict("split task 2"), contains("\"split task 2\""));
       expect(planVerdict(null), contains("Finish the turn"));
     });
   });
 
   group("presentPlanArgsFrom", () {
-    test("everything is optional", () {
-      final empty = presentPlanArgsFrom("{}")!;
-      expect(empty.title, isNull);
-      expect(empty.artifactId, isNull);
+    test("the title is optional", () {
+      expect(presentPlanArgsFrom("{}")!.title, isNull);
       expect(presentPlanArgsFrom(null), isNull);
       expect(presentPlanArgsFrom("[]"), isNull);
-      final args = presentPlanArgsFrom('{"title": "T", "artifact_id": "a1"}')!;
-      expect(args.title, "T");
-      expect(args.artifactId, "a1");
-      expect(presentPlanArgsFrom('{"artifact_id": ""}')!.artifactId, isNull);
+      expect(presentPlanArgsFrom('{"title": "T"}')!.title, "T");
     });
   });
 
-  group("planHtml", () {
-    test("counts and lists the tasks", () {
-      const plan = "# Plan\n\n## Tasks\n\n- [x] one\n- [ ] two\n";
-      final html = planHtml(plan, title: "The work");
-      expect(html, contains("<title>The work</title>"));
-      expect(html, contains("1 of 2 tasks done"));
-      expect(html, contains("status done"));
-      expect(html, contains("status pending"));
-      expect(html, contains(">one</li>"));
-      expect(html, contains(">todo</span>two</li>"));
+  group("details", () {
+    const plan = """
+# Plan
+
+## Setup
+
+- [x] clone
+  Clone the repo.
+
+## Work
+
+- [ ] fix the parser
+  Read `parse.dart` first.
+
+  - keep the old entry point
+  - add a test
+- [ ] write docs
+""";
+
+    test("the indented lines under a task are its details, and lists in them are not tasks", () {
+      final tasks = planTasksFrom(plan);
+      expect(tasks.map((t) => t.text), ["clone", "fix the parser", "write docs"]);
+      expect(tasks[0].details, "Clone the repo.");
+      expect(tasks[1].details,
+          "Read `parse.dart` first.\n\n- keep the old entry point\n- add a test");
+      expect(tasks[2].details, isEmpty);
     });
 
-    test("escapes what the plan holds", () {
-      final html = planHtml("- [ ] <b>bold</b> & \"quoted\"");
-      expect(html, isNot(contains("<b>")));
-      expect(html, contains("&lt;b&gt;"));
-      expect(html, contains("&amp;"));
+    test("tasks are grouped under their headings, numbered across them", () {
+      final sections = planSectionsFrom(plan);
+      expect(sections.map((s) => s.heading), ["Setup", "Work"]);
+      expect(sections[1].tasks.map((t) => t.index), [2, 3]);
     });
 
-    test("groups tasks under their headings", () {
-      const plan = "# Plan\n\n## Setup\n\n- [x] clone\n\n## Work\n\n- [ ] fix\n";
-      final html = planHtml(plan);
-      final setup = html.indexOf(">Setup</h2>");
-      final work = html.indexOf(">Work</h2>");
-      expect(setup, greaterThan(0));
-      expect(work, greaterThan(setup));
-      expect(html.indexOf(">clone</li>"), greaterThan(setup));
-      expect(html.indexOf(">fix</li>"), greaterThan(work));
+    test("prose after a task ends its details", () {
+      final tasks = planTasksFrom("- [ ] one\n  how\nSome prose.\n");
+      expect(tasks.single.details, "how");
     });
 
-    test("no tasks says so rather than showing an empty list", () {
-      final html = planHtml("# Plan\n\nNothing to do.");
-      expect(html, contains("No tasks in the plan yet."));
+    test("planMark leaves the details alone", () {
+      expect(planMark(plan, 2, PlanTaskStatus.done),
+          plan.replaceFirst("- [ ] fix the parser", "- [x] fix the parser"));
+    });
+
+    test("planAddTask indents the details under the task, at the section's end", () {
+      final added = planAddTask(plan, "release",
+          section: "Setup", details: "Tag it.\n\nThen push.");
+      expect(added,
+          contains("  Clone the repo.\n- [ ] release\n  Tag it.\n\n  Then push.\n\n## Work"));
+      final release = planTasksFrom(added)[1];
+      expect(release.text, "release");
+      expect(release.details, "Tag it.\n\nThen push.");
+    });
+
+    test("planNextResult carries the details", () {
+      final next = planNext(plan)!;
+      expect(planNextResult(next, planProgress(plan)),
+          startsWith("Task 2 of 3: fix the parser\n\nRead `parse.dart` first."));
     });
   });
 
@@ -210,15 +240,44 @@ Some prose, with a list that is not the plan:
     test("asks one question with the two answers, and the document round-trips", () {
       final q = planApprovalQuestion("The work");
       expect(q.question, contains("The work"));
-      expect(q.options.map((o) => o.label), ["Go", "Request changes"]);
-      expect(q.options.map((o) => o.answer), ["go", "changes"]);
+      expect(q.options.map((o) => o.label), ["Go"]);
+      expect(q.options.map((o) => o.answer), ["go"]);
 
       // The JSON the tool sends parses into the same pair the panel runs.
       final questions = askQuestionsFrom(planApprovalQuestionsJson("The work"));
       expect(questions, hasLength(1));
-      expect(questions.single.options.map((o) => o.answer), ["go", "changes"]);
+      expect(questions.single.options.map((o) => o.answer), ["go"]);
       expect(questions.single.question, contains("The work"));
       expect(askQuestionsFrom(planApprovalQuestionsJson(null)), hasLength(1));
     });
   });
+
+  group("planRevision", () {
+    Message reply(List<MessagePart> parts) => Message(
+        id: "a", role: MessageRole.assistant, createdAt: DateTime(2026), parts: parts);
+    ToolCallPart call(String id, String name) =>
+        ToolCallPart(toolCall: ToolCall(id: id, name: name));
+    ToolResultPart result(String id) =>
+        ToolResultPart(result: ToolResult(callId: id, returnCode: 0, output: ""));
+
+    test("moves on a plan tool's or a file edit's result, not on anything else", () {
+      expect(planRevision([]), 0);
+      expect(
+          planRevision([
+            reply([
+              call("1", planAddToolName),
+              result("1"),
+              call("2", "bash"),
+              result("2"),
+              call("3", "edit"),
+              // A call still running has changed nothing yet.
+              call("4", planDoneToolName),
+              const TextPart(text: "done"),
+            ]),
+            reply([result("3")]),
+          ]),
+          2);
+    });
+  });
+
 }

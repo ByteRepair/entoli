@@ -346,10 +346,8 @@ List<LlmTool> agentTools({
       if (participants != null && member) endTurnTool,
       if (caps.artifact) artifactTool,
       if (!oneShot) ...[planAddTool, planNextTool, planDoneTool],
-      // Presenting parks the turn on the panel's answer, so it rides `ask`
-      // (a headless turn's takes fold out of caps) and the artifact's
-      // publish path; a sub-agent's missing `saveArtifact` withholds the
-      // rest, the way it withholds `artifact`.
+      // Presenting parks the turn on the panel's answer, so it rides `ask`:
+      // a headless turn's and a sub-agent's takes fold it out of caps.
       if (caps.presentPlan) presentPlanTool,
       if (caps.createSkill) createSkillTool,
       // Triggers ride the turn itself: only a top-level turn is its own
@@ -2005,10 +2003,19 @@ class BuiltinAgent {
           "was missing.");
       return;
     }
+    final details = stringArg(call.argumentsJson, "details");
+    if (details == null) {
+      yield* _reject(call,
+          'The $planAddToolName tool takes {"task": "...", "details": "..."}; '
+          "the details were missing. Write the plan for this task: how it "
+          "will be done, what it touches, and how it will be verified.");
+      return;
+    }
     final section = stringArg(call.argumentsJson, "section");
     yield _called(call, task);
     Future<ShellResult> run() async {
-      final updated = planAddTask(await _readPlan(), task, section: section);
+      final updated = planAddTask(await _readPlan(), task,
+          section: section, details: details);
       await fs.file(_planPath).writeAsString(updated);
       return ShellResult(returnCode: 0, output: planAddResult(task, planProgress(updated)));
     }
@@ -2069,42 +2076,24 @@ class BuiltinAgent {
     yield _ok(call, planDoneResult(found, planProgress(marked)));
   }
 
-  /// The plan, put to the user: the plan's page published through the same
-  /// path the `artifact` tool takes, its card in the chat, and the Go /
-  /// changes question the panel asks — all one call, so the model cannot
-  /// show the plan without asking about it, or ask without showing it.
+  /// The plan, put to the user: the chat draws the present_plan call as the
+  /// plan itself, read off $planFileName, and the Go / changes question the
+  /// panel asks sits under it — one call, so the model cannot show the plan
+  /// without asking about it, or ask without showing it.
   Stream<AgentEvent> _presentPlan(LlmToolCall call) async* {
     final args = presentPlanArgsFrom(call.argumentsJson);
     if (args == null) {
       yield* _reject(call,
           'The $presentPlanToolName tool takes no required arguments; "title" '
-          'and "artifact_id" are optional strings.');
+          "is an optional string.");
       return;
     }
     yield _called(call, args.title ?? planFileName);
-    final plan = await _readPlan();
-    final missing = _planMissing(plan);
+    final missing = _planMissing(await _readPlan());
     if (missing != null) {
       yield _failed(call, missing);
       return;
     }
-    final html = planHtml(plan!, title: args.title);
-    final htmlPath = fs.path.join(workspace, planHtmlPath);
-    final entryFile = fs.path.basename(planHtmlPath);
-    await fs.directory(fs.path.dirname(htmlPath)).create(recursive: true);
-    await fs.file(htmlPath).writeAsString(html);
-    // Straight-line, so the publish's failure is the tool's answer rather
-    // than the turn dying — the same answer `_guarded` would build, said
-    // here because the plan's publish carries no approval gate around it.
-    String? id;
-    try {
-      id = await saveArtifact!(planHtmlPath, entryFile,
-          artifactId: args.artifactId);
-    } catch (e) {
-      yield _failed(call, "$e");
-      return;
-    }
-    yield ArtifactEvent(artifactId: id, entryFile: entryFile, title: args.title ?? "Plan");
     // Emitted before it is awaited, for the same reason an approval is: the
     // panel is where the verdict comes from. The verdict is then the tool's
     // result, so the model reads it as the outcome of presenting rather than

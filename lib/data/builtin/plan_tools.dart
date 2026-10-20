@@ -9,15 +9,22 @@ import "llm/llm_client.dart";
 const planAddTool = LlmTool(
   name: planAddToolName,
   description: "Add one task to the plan ($planFileName in the workspace). "
-      "One call per task, in the order the work goes. The plan is shown to "
-      "the user for approval before any of it starts, so a task is a step "
-      "they would want to read: what is done, not how.",
+      "One call per task, in the order the work goes. The user reads every "
+      "task and its details before approving, and $planNextToolName hands "
+      "the details back when the task is taken, so write them to be worked "
+      "from: the approach, the files or parts touched, decisions and risks, "
+      "and how the result will be checked.",
   schema: {
     "type": "object",
     "properties": {
       "task": {
         "type": "string",
-        "description": "The task, one line — what will be done.",
+        "description": "The task's title, one line — what will be done.",
+      },
+      "details": {
+        "type": "string",
+        "description": "The plan for this task, in markdown: how it will be "
+            "done, what it touches, and how it will be verified.",
       },
       "section": {
         "type": "string",
@@ -25,7 +32,7 @@ const planAddTool = LlmTool(
             "go under \"$planDefaultSection\".",
       },
     },
-    "required": ["task"],
+    "required": ["task", "details"],
   },
 );
 
@@ -34,7 +41,8 @@ const planAddTool = LlmTool(
 const planNextTool = LlmTool(
   name: planNextToolName,
   description: "Take the next pending task of the plan and mark it as being "
-      "worked on. Answers the task's number, so plan_done can name it. "
+      "worked on. Answers the task's number, so plan_done can name it, and "
+      "the plan written for it. "
       "\"All tasks done.\" when nothing is left.",
   schema: {"type": "object", "properties": {}},
 );
@@ -58,29 +66,25 @@ const planDoneTool = LlmTool(
   },
 );
 
-/// The plan, presented. The card the user opens and the Go/changes question
-/// are one call, so the model cannot show one without the other.
+/// The plan, presented: drawn in the chat with the Go/changes question under
+/// it, one call, so the model cannot show it without asking about it.
 const presentPlanTool = LlmTool(
   name: presentPlanToolName,
   description:
-      "Present the plan for approval when the last task is recorded. "
-      "Publishes the plan as a card the user opens, then asks them: Go, or "
-      "request changes. Do not start executing until the answer is Go; on a "
-      "request for changes, find out what to adjust, revise the plan, and "
-      "call this again with the same artifact_id.",
+      "Present the plan for approval when the last task is recorded. The "
+      "chat shows every task with its details, then asks the user: Go, or "
+      "type the changes they want. Do not start executing until the answer "
+      "is Go; on changes, revise the plan as they asked and call this "
+      "again. It publishes nothing: where a diagram would explain "
+      "the plan better than prose and `artifact` is offered, publish one "
+      "first.",
   schema: {
     "type": "object",
     "properties": {
       "title": {
         "type": "string",
-        "description": "A short title for the plan, shown on the card and "
-            "the question.",
-      },
-      "artifact_id": {
-        "type": "string",
-        "description": "The id returned by an earlier $presentPlanToolName "
-            "call. Pass it to update the plan already on the screen rather "
-            "than publish a second card.",
+        "description": "A short title for the plan, shown in the chat and "
+            "on the question.",
       },
     },
   },

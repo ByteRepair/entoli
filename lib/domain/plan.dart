@@ -1,67 +1,172 @@
 import "dart:convert";
 
 import "ask.dart";
+import "models.dart";
 import "tool_arg.dart";
 
 /// The tool names, named here rather than beside the schemas, for the same
 /// reason `artifactToolName` is: the agent dispatches on these, and what has
-/// to recognise a call by name — the dispatch, a test, a sync peer — reads
-/// this file rather than trusting the schema it was sent.
+/// to recognise a call by name — the dispatch, a test, a sync peer, the chat
+/// drawing a presented plan — reads this file rather than trusting the schema
+/// it was sent.
 const planAddToolName = "plan_add";
 const planNextToolName = "plan_next";
 const planDoneToolName = "plan_done";
 const presentPlanToolName = "present_plan";
 
+/// The calls that can have changed the plan by the time their result lands:
+/// the plan tools, and the file tools the model edits `PLAN.md` with.
+const _planWriters = {
+  planAddToolName,
+  planNextToolName,
+  planDoneToolName,
+  presentPlanToolName,
+  "write",
+  "edit",
+};
+
+/// How many results of [_planWriters] calls [messages] hold: a number that
+/// moves whenever the plan may have, and only then, so a reader of the file
+/// — across the sync channel, on a mirror — asks again on that and not on
+/// every part of a turn. A `bash` that rewrote the file is missed until the
+/// next of these lands.
+int planRevision(List<Message> messages) {
+  final writers = {
+    for (final message in messages)
+      for (final part in message.parts)
+        if (part case ToolCallPart(:final toolCall)
+            when _planWriters.contains(toolCall.name))
+          toolCall.id,
+  };
+  var revision = 0;
+  for (final message in messages) {
+    for (final part in message.parts) {
+      if (part case ToolResultPart(:final result)
+          when writers.contains(result.callId)) {
+        revision++;
+      }
+    }
+  }
+  return revision;
+}
+
 /// Where the plan lives, relative to the chat's own workspace — the directory
 /// the model works in, so the model can read it and edit it around the tools.
 const planFileName = "PLAN.md";
 
-/// Where `present_plan` writes the HTML it publishes from, relative to the
-/// workspace. A dot-name so the plan page reads as machinery beside work.
-const planHtmlPath = ".plan/plan.html";
-
 /// The section a task goes to when the model did not name one.
 const planDefaultSection = "Tasks";
 
-/// One task line of the plan.
+/// One task of the plan: its line, and the plan for it indented under that.
 class PlanTask {
-  const PlanTask({required this.index, required this.status, required this.text});
+  const PlanTask({
+    required this.index,
+    required this.status,
+    required this.text,
+    this.details = "",
+  });
 
   /// The task's number as the tools speak it: 1-based, in file order.
   final int index;
 
   final PlanTaskStatus status;
   final String text;
+
+  /// How the task will be done, as markdown, dedented; empty where the task
+  /// has none.
+  final String details;
 }
 
 enum PlanTaskStatus { pending, inProgress, done }
 
-/// Both compiled once: `_taskLine` runs once per line of the plan file, and
-/// a parse runs several times per tool call — the pattern
-/// `workspace.dart` names ("Both compiled once").
-final _bullet = RegExp(r"^\s*[-*]\s+(.*)$");
+/// The tasks filed under one heading of the plan.
+class PlanSection {
+  const PlanSection(this.heading, this.tasks);
+  final String heading;
+  final List<PlanTask> tasks;
+}
+
+/// All compiled once: `_taskLine` runs once per line of the plan file, and a
+/// parse runs several times per tool call — the pattern `workspace.dart`
+/// names ("Both compiled once").
+///
+/// A task is a bullet at the start of a line. An indented line under it is
+/// its details, so a list inside a task's plan is not a task of its own.
+final _bullet = RegExp(r"^[-*]\s+(.*)$");
 final _marker = RegExp(r"^\[([ xX~])\]\s*(.*)$");
 final _markerOnly = RegExp(r"\[[ xX~]\]");
 final _hashes = RegExp(r"^#+\s*");
 
-/// The tasks of a plan file's text, in file order, numbering from 1.
+/// How far a task's details are indented under its line: a markdown list
+/// item's continuation.
+const _detailIndent = "  ";
+
+/// The plan's tasks, grouped under the headings they sat under, numbering
+/// from 1 across the whole file.
 ///
 /// Liberal, because the file is also the model's own writing: a task is a
 /// list line whose marker is one of the plan statuses — a bare bullet counts
-/// as pending, so a plan written by hand or by an older skill still reads.
-/// Prose and other lists in the file are ignored.
-List<PlanTask> planTasksFrom(String? text) {
+/// as pending, so a plan written by hand still reads. Prose and other lists
+/// are ignored. A task written before any heading sits under the default
+/// one; the tools' own first line, `# Plan`, names nothing, since a heading
+/// with no tasks under it is not a section.
+List<PlanSection> planSectionsFrom(String? text) {
   if (text == null) return const [];
+  final sections = <PlanSection>[];
+  var heading = planDefaultSection;
+  var tasks = <PlanTask>[];
   var index = 0;
-  final tasks = <PlanTask>[];
-  for (final line in text.split("\n")) {
-    final task = _taskLine(line);
-    if (task == null) continue;
+  // The task being read and its detail lines, held until the next line that
+  // is neither, since only then are the details known to be over.
+  ({PlanTaskStatus status, String? text})? open;
+  final details = <String>[];
+
+  void closeTask() {
+    if (open == null) return;
     tasks.add(PlanTask(
-        index: ++index, status: task.status, text: task.text ?? "(untitled task)"));
+      index: ++index,
+      status: open!.status,
+      text: open!.text ?? "(untitled task)",
+      details: _dedent(details),
+    ));
+    open = null;
+    details.clear();
   }
-  return tasks;
+
+  void closeSection() {
+    closeTask();
+    if (tasks.isNotEmpty) sections.add(PlanSection(heading, tasks));
+    tasks = [];
+  }
+
+  for (final line in text.split("\n")) {
+    if (open != null && (line.trim().isEmpty || line.startsWith(RegExp(r"\s")))) {
+      details.add(line);
+      continue;
+    }
+    if (line.startsWith("#")) {
+      closeSection();
+      final named = line.replaceFirst(_hashes, "").trim();
+      heading = named.isEmpty ? planDefaultSection : named;
+      continue;
+    }
+    closeTask();
+    open = _taskLine(line);
+  }
+  closeSection();
+  return sections;
 }
+
+/// The tasks of a plan file's text, in file order, numbering from 1.
+List<PlanTask> planTasksFrom(String? text) =>
+    [for (final section in planSectionsFrom(text)) ...section.tasks];
+
+String _dedent(List<String> lines) => [
+      for (final line in lines)
+        line.startsWith(_detailIndent)
+            ? line.substring(_detailIndent.length)
+            : line.trimLeft(),
+    ].join("\n").trim();
 
 ({PlanTaskStatus status, String? text})? _taskLine(String line) {
   final bullet = _bullet.firstMatch(line);
@@ -122,41 +227,58 @@ List<PlanTask> planCandidates(String? text, String task) {
       .toList();
 }
 
-/// Add [task] to the end of [section], creating the heading where neither the
-/// section nor the file exists yet. The rest of the file stands, since the
-/// prose in it is not ours to rewrite.
-String planAddTask(String? text, String task, {String? section}) {
+/// Add [task] to the end of [section], with [details] indented under it,
+/// creating the heading where neither the section nor the file exists yet.
+/// The rest of the file stands, since the prose in it is not ours to rewrite.
+String planAddTask(String? text, String task,
+    {String? section, String details = ""}) {
   final body = text ?? "";
   final named = section?.trim() ?? "";
   final heading = named.isEmpty ? planDefaultSection : named;
-  final line = "- [ ] ${task.trim()}";
+  final entry = [
+    "- [ ] ${task.trim()}",
+    for (final line in details.trim().split("\n"))
+      if (details.trim().isNotEmpty)
+        line.trim().isEmpty ? "" : "$_detailIndent${line.trimRight()}",
+  ];
   if (body.trim().isEmpty) {
-    return "# Plan\n\n## $heading\n\n$line\n";
+    return "# Plan\n\n## $heading\n\n${entry.join("\n")}\n";
   }
   final lines = body.split("\n");
   var at = -1;
   for (var i = 0; i < lines.length; i++) {
-    if (lines[i].trim() == "## $heading") {
-      at = i + 1;
-      // Past the heading's blank line, then past the tasks already in the
-      // section, so the task lands at its end.
-      while (at < lines.length && lines[at].trim().isEmpty) {
-        at++;
-      }
-      while (at < lines.length && lines[at].trim().isNotEmpty) {
-        at++;
-      }
-      break;
+    if (lines[i].trim() != "## $heading") continue;
+    // The section runs to the next heading; the task goes after whatever it
+    // holds, ahead of the blank lines that close it.
+    at = i + 1;
+    while (at < lines.length && !lines[at].startsWith("#")) {
+      at++;
     }
+    while (at > i + 1 && lines[at - 1].trim().isEmpty) {
+      at--;
+    }
+    // A section with nothing in it yet keeps the blank line under its
+    // heading.
+    if (at == i + 1) {
+      final rest = lines.sublist(at).skipWhile((l) => l.trim().isEmpty);
+      return [
+        ...lines.sublist(0, at),
+        "",
+        ...entry,
+        "",
+        ...rest,
+      ].join("\n");
+    }
+    break;
   }
   // A section nobody wrote yet is opened at the end, so the task is not
   // filed under whatever heading came before it.
   if (at < 0) {
-    return "${body.trimRight()}\n\n## $heading\n\n$line\n";
+    return "${body.trimRight()}\n\n## $heading\n\n${entry.join("\n")}\n";
   }
   return [
     ...lines.sublist(0, at),
-    line,
+    ...entry,
     ...lines.sublist(at),
   ].join("\n");
 }
@@ -177,7 +299,9 @@ String? planMark(String? text, int index, PlanTaskStatus status) {
       PlanTaskStatus.inProgress => "[~]",
       PlanTaskStatus.done => "[x]",
     };
-    lines[i] = lines[i].replaceFirst(_markerOnly, marker);
+    lines[i] = _markerOnly.hasMatch(lines[i])
+        ? lines[i].replaceFirst(_markerOnly, marker)
+        : lines[i].replaceFirst(RegExp(r"^([-*]\s+)"), "\$1$marker ");
     return lines.join("\n");
   }
   return null;
@@ -191,38 +315,37 @@ String planAddResult(String task, (int done, int total) progress) =>
     "Added: ${task.trim()}. ${progress.$2} task(s) in the plan, "
     "${progress.$1} done.";
 
-/// The `plan_next` tool's result.
-String planNextResult(PlanTask task, (int done, int total) progress) =>
-    "Task ${task.index} of ${progress.$2}: ${task.text}";
+/// The `plan_next` tool's result: the task and the plan written for it, so
+/// the work starts from what the user approved.
+String planNextResult(PlanTask task, (int done, int total) progress) => [
+      "Task ${task.index} of ${progress.$2}: ${task.text}",
+      if (task.details.isNotEmpty) task.details,
+    ].join("\n\n");
 
 /// The `plan_done` tool's result.
 String planDoneResult(PlanTask task, (int done, int total) progress) =>
     "Task ${task.index} done: ${task.text}. ${progress.$1} of ${progress.$2} "
     "tasks done.";
 
-/// The verdict `present_plan` asks with: one question, fixed, the plan on the
-/// card beside it. The user's two answers are machine-readable so the verdict
-/// reads as an outcome of presenting rather than as the user's prose.
+/// The verdict `present_plan` asks with: one question, fixed, the plan drawn
+/// in the chat above it. Go is the one option, machine-readable so the
+/// verdict reads as an outcome of presenting; anything else is what the user
+/// typed into the panel's own answer, and is the change they want. A bare
+/// "request changes" button used to be the other option, and it ended the
+/// question with nothing said about what to change.
 AskQuestion planApprovalQuestion(String? title) => AskQuestion(
       question: title == null || title.isEmpty
           ? "Approve this plan?"
           : "Approve the plan \"$title\"?",
-      summary: "The plan is on the card beside this message. Go starts the "
-          "work; request changes to say what to adjust.",
-      options: const [
-        AskOption(label: "Go", value: "go"),
-        AskOption(
-            label: "Request changes",
-            value: "changes",
-            detail: "The plan needs adjusting before any work starts."),
-      ],
+      summary: "The plan is in the chat above; tap a task to read its plan. "
+          "Go starts the work; to change it, type what to adjust.",
+      options: const [AskOption(label: "Go", value: "go")],
     );
 
 /// The question as another device reads it off a `present_plan` call's
 /// arguments, in the one shape `askQuestionsFrom` round-trips. The call's
-/// arguments are not questions — they name a title and an artifact id — so
-/// the questions, not the tool args, are what travels as
-/// `AskRequest.argumentsJson`.
+/// arguments are not questions — they name a title — so the questions, not
+/// the tool args, are what travels as `AskRequest.argumentsJson`.
 String planApprovalQuestionsJson(String? title) => const JsonEncoder()
     .convert({
       "questions": [
@@ -249,145 +372,19 @@ String planVerdict(String? verdict) => switch (verdict) {
       "go" =>
         "Approved: the user pressed Go. Start working through the plan with "
         "$planNextToolName and $planDoneToolName, one task at a time.",
-      "changes" =>
-        "The user asked for changes. Find out what to adjust, revise the plan "
-        "(edit $planFileName, or remove a line and re-add the task with "
-        "$planAddToolName), and present it again with the same artifact_id. "
-        "Do not start executing until the answer is Go.",
-      _ =>
+      null =>
         "No verdict was reached. Finish the turn; do not start executing "
         "the plan.",
+      final changes =>
+        "The user asked for changes: \"$changes\". Revise the plan "
+        "(edit $planFileName, or add tasks with $planAddToolName) and "
+        "present it again. Do not start executing until the answer is Go.",
     };
 
-/// A `present_plan` call's arguments: everything is optional, so only a body
-/// that is not an object at all fails. [title] is the plan's name on the card
-/// and the question; [artifactId] updates the plan already on the screen
-/// rather than publishing a second card.
-({String? title, String? artifactId})? presentPlanArgsFrom(String? json) {
+/// A `present_plan` call's title, the plan's name in the chat and on the
+/// question. Everything is optional, so only a body that is not an object at
+/// all fails.
+({String? title})? presentPlanArgsFrom(String? json) {
   if (decodeArgs(json) == null) return null;
-  return (
-    title: stringArg(json, "title"),
-    artifactId: stringArg(json, "artifact_id"),
-  );
+  return (title: stringArg(json, "title"));
 }
-
-/// The page `present_plan` publishes: the plan as one self-contained HTML
-/// file for the artifact viewer. The base stylesheet the store injects at
-/// publish time styles the elements; [_planPageCss] rides under it. Nothing
-/// model-written reaches the page unescaped — the plan is the model's prose,
-/// and the page opens in the app's viewer.
-String planHtml(String plan, {String? title}) {
-  final heading = title == null || title.trim().isEmpty ? "Plan" : title.trim();
-  // One parse: the sections carry every task, and the progress line is
-  // counted off them rather than read back out of the text.
-  final sections = _sections(plan);
-  final tasks = [for (final section in sections) ...section.tasks];
-  final body = [
-    for (final section in sections) ...[
-      "<h2>${_escape(section.heading)}</h2>",
-      "<ul>",
-      for (final task in section.tasks)
-        "<li><span class=\"status ${_statusClass(task.status)}\">"
-            "${_statusLabel(task.status)}</span>${_escape(task.text)}</li>",
-      "</ul>",
-    ],
-    if (tasks.isEmpty) "<p>No tasks in the plan yet.</p>",
-  ].join("\n");
-  return """<!DOCTYPE html>
-<html>
-<head>
-<meta charset="utf-8">
-<title>${_escape(heading)}</title>
-$_planPageCss
-</head>
-<body>
-<main>
-<h1>${_escape(heading)}</h1>
-<p class="progress">${tasks.where((t) => t.status == PlanTaskStatus.done).length} of ${tasks.length} tasks done</p>
-$body
-</main>
-</body>
-</html>""";
-}
-
-final class _PlanSection {
-  const _PlanSection(this.heading, this.tasks);
-  final String heading;
-  final List<PlanTask> tasks;
-}
-
-/// The plan's task lines, grouped under the headings they sat under. A task
-/// written before any heading sits under the default one; the tools' own
-/// first line, `# Plan`, is skipped rather than shown as a section of
-/// itself. A heading nobody wrote tasks under produces nothing, so prose
-/// plans without tasks do not render phantom sections.
-List<_PlanSection> _sections(String plan) {
-  final sections = <_PlanSection>[];
-  var current = _PlanSection(planDefaultSection, []);
-  var number = 0;
-  void close() {
-    if (current.tasks.isNotEmpty) sections.add(current);
-  }
-
-  for (final line in plan.split("\n")) {
-    final trimmed = line.trim();
-    if (trimmed.startsWith("#")) {
-      final heading = trimmed.replaceFirst(_hashes, "").trim();
-      if (heading.isEmpty) continue;
-      close();
-      current = _PlanSection(heading, []);
-      continue;
-    }
-    final task = _taskLine(line);
-    if (task == null) continue;
-    current.tasks.add(PlanTask(
-        index: ++number,
-        status: task.status,
-        text: task.text ?? "(untitled task)"));
-  }
-  close();
-  return sections;
-}
-
-String _statusClass(PlanTaskStatus status) => switch (status) {
-      PlanTaskStatus.pending => "pending",
-      PlanTaskStatus.inProgress => "in-progress",
-      PlanTaskStatus.done => "done",
-    };
-
-String _statusLabel(PlanTaskStatus status) => switch (status) {
-      PlanTaskStatus.pending => "todo",
-      PlanTaskStatus.inProgress => "doing",
-      PlanTaskStatus.done => "done",
-    };
-
-/// The plan page's own styles, after the base stylesheet the viewer injects:
-/// the base styles elements, so the chips ride on it rather than fight it.
-const _planPageCss = """
-<style>
-.progress {
-  font-size: 0.9rem;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--ink-soft);
-}
-ul { list-style: none; padding: 0; }
-li { padding: 0.4rem 0; border-bottom: 1px solid var(--rule-soft); }
-.status {
-  display: inline-block;
-  min-width: 3.5rem;
-  text-align: center;
-  font-family: var(--font-mono);
-  font-size: 0.72rem;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  padding: 0.1rem 0.5rem;
-  margin-right: 0.6rem;
-  border: 1px solid var(--rule-soft);
-}
-.status.pending { color: var(--ink-soft); }
-.status.in-progress { color: var(--accent); border-color: var(--accent); }
-.status.done { color: var(--bg); background: var(--ink); border-color: var(--ink); }
-</style>""";
-
-String _escape(String text) => const HtmlEscape().convert(text);

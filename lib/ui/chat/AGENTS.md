@@ -622,6 +622,24 @@ replaced. Auto-compact
 leaves the same trace with no turn around it: unawaited after a settled turn,
 the divider its only evidence, the way the memory extraction's note is.
 
+## The plan, on screen
+
+A `present_plan` call is drawn as the plan it put to the user (`PlanLabel`):
+every task with whether it is done, each opening to its details as markdown.
+It is not a slim activity label, since the plan is what the turn stopped to
+show. The bar carries a checklist button beside the running-turn spinner for
+as long as the chat has a plan, and it opens `PlanPage`, the same list with
+the progress over it.
+
+Both read `PLAN.md` off the chat's workspace through `planProvider`, not off
+the call: the card shows where the work stands now, ticks included. The
+provider reads again when `planRevision` moves — a result landing for a plan
+tool or a `write`/`edit` — rather than watching the file, since every write to
+it lands in the conversation as one; a `bash` that rewrote it is picked up at
+the next. A mirrored chat's plan is asked of its home device over the sync
+channel (see "Attachments" in `lib/data/sync/AGENTS.md`), so the same card and
+page draw it at either end.
+
 ## A chat whose home device is elsewhere
 
 `MirrorChatController` is the counterpart of `ChatController` for a chat being

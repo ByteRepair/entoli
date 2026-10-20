@@ -574,6 +574,8 @@ class ChatRepository {
   Future<Uint8List?> readResource(String chatId, String resource) =>
       _store.readResource(chatId, resource);
 
+  Future<String?> readPlan(String chatId) => _store.readPlan(chatId);
+
   /// A whole artifact as one zip — what a peer's `resourceRequest` naming one
   /// is answered with. Null where there is no artifact by that id.
   Future<Uint8List?> readArtifactZip(String chatId, String artifactId) =>

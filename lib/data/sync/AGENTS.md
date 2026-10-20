@@ -281,6 +281,16 @@ moment its record lands: the mirror sees it as the record naming the
 artifact again, and that record's arrival drops the cache entry, so the next
 open refetches.
 
+**The plan rides it too, and is never cached.** A mirror's plan card and plan
+page ask for `.plan/PLAN.md`, answered with the chat's `PLAN.md` read out of
+the home device's workspace (`ChatRepository.readPlan`). Same reasoning as the
+artifact: a `/` no attachment name can hold, no new `SyncMessage`, and an old
+home device answers it as an attachment it does not have — null, which the
+card says it could not read. Unlike an artifact it goes around
+`SyncByteCache`: the file changes with every task ticked, and `planProvider`
+asks again only when `planRevision` says it may have, so a cache would only
+be a stale answer to a question asked because the old one was stale.
+
 ### What a mirror looks like
 
 `MirrorChatController` is deliberately its own provider family rather than an

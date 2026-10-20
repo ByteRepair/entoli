@@ -104,11 +104,10 @@ class AgentCapabilities {
         trigger: false,
       );
 
-  /// Whether `present_plan` is offered: the one tool that both parks the turn
-  /// on an answer (`ask`) and publishes a card (`artifact`), so it rides the
-  /// pair rather than adding a capability of its own. One spelling of the
-  /// predicate, for the tool list, the prompt, and the dispatch to read.
-  bool get presentPlan => ask && artifact;
+  /// Whether `present_plan` is offered: it parks the turn on an answer, so it
+  /// rides `ask` rather than adding a capability of its own. One spelling of
+  /// the predicate, for the tool list, the prompt, and the dispatch to read.
+  bool get presentPlan => ask;
 }
 
 /// The rules the agent operates under. Ported from mini-swe-agent's `mini.yaml`
@@ -351,8 +350,8 @@ String _withoutShell({
   // and a sub-agent always has a shell — so only the presenter is gated.
   final plan = caps.presentPlan
       ? "\n\n`$presentPlanToolName` puts a plan ($planFileName in the "
-          "workspace) to the user for\napproval: it publishes the plan as a "
-          "card and asks Go or request changes.\n"
+          "workspace) to the user for\napproval: it shows every task with its "
+          "details and asks for Go or the changes to make.\n"
           "`$planAddToolName`/`$planNextToolName`/`$planDoneToolName` work "
           "through it."
       : "";

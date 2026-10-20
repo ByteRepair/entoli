@@ -9,6 +9,7 @@ import "package:flutter_markdown_plus/flutter_markdown_plus.dart";
 import "../../../domain/ask.dart";
 import "../../../domain/formatted_text.dart";
 import "../../../domain/models.dart";
+import "../../../domain/plan.dart" show presentPlanToolName;
 import "../../../domain/shell.dart";
 import "../../../domain/wired_skill.dart";
 import "../../widgets/action_icon.dart";
@@ -18,6 +19,7 @@ import "../../theme.dart" show onFillTheme;
 import "../../widgets/dialogs.dart";
 import "activity_label.dart";
 import "code_block.dart";
+import "plan_view.dart" show PlanLabel;
 import "reply_style.dart";
 import "shell_run.dart";
 
@@ -518,6 +520,13 @@ class _MessageBubbleState extends State<MessageBubble> {
           // A question to the user is important; so is a live call and a call
           // that came back non-zero. The rest join the run.
           final result = results[toolCall.id];
+          // The plan put to the user is what the turn stopped to show, not
+          // activity on the way to a reply.
+          if (toolCall.name == presentPlanToolName && !failedResult(toolCall.id)) {
+            flushRun();
+            rows.add(_label(PlanLabel(chatId: widget.chatId, call: toolCall)));
+            break;
+          }
           final important =
               toolCall.name == askToolName || isLive(i) || failedResult(toolCall.id);
           final label = _label(switch (toolCall.name) {

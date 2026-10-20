@@ -1613,26 +1613,22 @@ void main() {
     /// The agent under test plus its workspace path: the tests here read and
     /// seed `PLAN.md` through it, so a local holds both instead of each test
     /// carrying the pair.
-    (BuiltinAgent, String) planAgent(
-      FakeLlmClient client, {
-      List<String?>? answers,
-      Future<String> Function(String path, String entryFile, {String? artifactId})? saveArtifact,
-    }) {
-      final agent = agentOver(client, answers: answers, saveArtifact: saveArtifact);
+    (BuiltinAgent, String) planAgent(FakeLlmClient client, {List<String?>? answers}) {
+      final agent = agentOver(client, answers: answers);
       return (agent, agent.workspace);
     }
 
     test("plan_add files the task, under the section it names", () async {
       // Default section: Tasks, with the counts and the session message.
       final client = FakeLlmClient([
-        [fileCall(planAddToolName, {"task": "add parser"})],
+        [fileCall(planAddToolName, {"task": "add parser", "details": "Parse the header in `parse.dart`."})],
         [finish],
       ]);
       final (agent, workspace) = planAgent(client);
       final events = await agent.run(userMessage("plan it")).toList();
 
       final plan = File(p.join(workspace, "PLAN.md")).readAsStringSync();
-      expect(plan, contains("- [ ] add parser"));
+      expect(plan, contains("- [ ] add parser\n  Parse the header in `parse.dart`."));
       final result = events.whereType<ToolResultEvent>().single.result;
       expect(result.returnCode, 0);
       expect(result.output, contains("add parser"));
@@ -1641,7 +1637,7 @@ void main() {
 
       // A named section, created when it does not exist.
       final sectioned = FakeLlmClient([
-        [fileCall(planAddToolName, {"task": "clone", "section": "Setup"})],
+        [fileCall(planAddToolName, {"task": "clone", "section": "Setup", "details": "Clone it."})],
         [finish],
       ]);
       final (sectionedAgent, sectionedWorkspace) = planAgent(sectioned);
@@ -1652,6 +1648,18 @@ void main() {
       final setup = setupPlan.indexOf("## Setup");
       expect(setup, greaterThanOrEqualTo(0));
       expect(setupPlan.indexOf("- [ ] clone"), greaterThan(setup));
+
+      // No details: refused, and nothing written.
+      final bare = FakeLlmClient([
+        [fileCall(planAddToolName, {"task": "vague"})],
+        [finish],
+      ]);
+      final (bareAgent, bareWorkspace) = planAgent(bare);
+      final bareEvents = await bareAgent.run(userMessage("plan it")).toList();
+      final refused = bareEvents.whereType<ToolResultEvent>().single.result;
+      expect(refused.returnCode, -1);
+      expect(refused.exceptionInfo, contains("details"));
+      expect(File(p.join(bareWorkspace, "PLAN.md")).existsSync(), isFalse);
     });
 
     test("plan_next takes the first pending task", () async {
@@ -1662,14 +1670,13 @@ void main() {
       ]);
       final (agent, workspace) = planAgent(client);
       File(p.join(workspace, "PLAN.md")).writeAsStringSync(
-          "# Plan\n\n## Tasks\n\n- [ ] one\n- [ ] two\n");
+          "# Plan\n\n## Tasks\n\n- [ ] one\n  How one is done.\n- [ ] two\n");
       final events = await agent.run(userMessage("go")).toList();
 
       expect(File(p.join(workspace, "PLAN.md")).readAsStringSync(),
           contains("- [~] one"));
       final result = events.whereType<ToolResultEvent>().single.result;
-      expect(result.output, contains("Task 1 of 2"));
-      expect(result.output, contains("one"));
+      expect(result.output, "Task 1 of 2: one\n\nHow one is done.");
 
       // Nothing pending left.
       final exhausted = FakeLlmClient([
@@ -1745,38 +1752,21 @@ void main() {
       expect(File(p.join(workspace, "PLAN.md")).existsSync(), isFalse);
     });
 
-    test("present_plan publishes the plan, shows the card, and asks", () async {
-      final saved = <({String path, String? entryFile, String? artifactId})>[];
+    test("present_plan publishes nothing and asks", () async {
       final client = FakeLlmClient([
         [fileCall(presentPlanToolName, {"title": "The work"}, id: "pp-1")],
         [finish],
       ]);
-      final (agent, workspace) = planAgent(
-        client,
-        answers: ["go"],
-        saveArtifact: (path, entryFile, {artifactId}) async {
-          saved.add((path: path, entryFile: entryFile, artifactId: artifactId));
-          return "art-9";
-        },
-      );
+      final (agent, workspace) = planAgent(client, answers: ["go"]);
       File(p.join(workspace, "PLAN.md")).writeAsStringSync("- [ ] one\n- [ ] two\n");
       final events = await agent.run(userMessage("present it")).toList();
 
-      expect(saved.single.path, ".plan/plan.html");
-      expect(saved.single.entryFile, "plan.html");
-      final html = File(
-              p.join(workspace, ".plan", "plan.html"))
-          .readAsStringSync();
-      expect(html, contains("<title>The work</title>"));
-      expect(html, contains("0 of 2 tasks done"));
-
-      final artifact = events.whereType<ArtifactEvent>().single;
-      expect(artifact.artifactId, "art-9");
-      expect(artifact.title, "The work");
+      expect(events.whereType<ArtifactEvent>(), isEmpty);
 
       final request = events.whereType<QuestionRequestEvent>().single.request;
+      expect(request.questions.single.question, contains("The work"));
       expect(request.questions.single.options.map((o) => o.answer),
-          ["go", "changes"]);
+          ["go"]);
 
       final result = events.whereType<ToolResultEvent>().single.result;
       expect(result.returnCode, 0);
@@ -1787,39 +1777,12 @@ void main() {
           contains("Approved"));
     });
 
-    test("present_plan updates the same artifact on a re-present", () async {
-      final saved = <({String path, String? entryFile, String? artifactId})>[];
-      final client = FakeLlmClient([
-        [fileCall(presentPlanToolName, {"artifact_id": "art-5"}, id: "pp-2")],
-        [finish],
-      ]);
-      final (agent, workspace) = planAgent(
-        client,
-        answers: ["changes"],
-        saveArtifact: (path, entryFile, {artifactId}) async {
-          saved.add((path: path, entryFile: entryFile, artifactId: artifactId));
-          return artifactId ?? "art-new";
-        },
-      );
-      File(p.join(workspace, "PLAN.md")).writeAsStringSync("- [ ] one\n");
-      final events = await agent.run(userMessage("present again")).toList();
-
-      expect(saved.single.artifactId, "art-5");
-      expect(events.whereType<ArtifactEvent>().single.artifactId, "art-5");
-      expect(events.whereType<ToolResultEvent>().single.result.output,
-          contains("Do not start executing"));
-    });
-
     test("a request for changes tells the model to revise, not to start", () async {
       final client = FakeLlmClient([
         [fileCall(presentPlanToolName, {}, id: "pp-3")],
         [finish],
       ]);
-      final (agent, workspace) = planAgent(
-        client,
-        answers: ["changes"],
-        saveArtifact: (path, entryFile, {artifactId}) async => "art-2",
-      );
+      final (agent, workspace) = planAgent(client, answers: ["merge tasks 1 and 2"]);
       File(p.join(workspace, "PLAN.md")).writeAsStringSync("- [ ] one\n");
       final events = await agent.run(userMessage("present it")).toList();
 
@@ -1832,10 +1795,7 @@ void main() {
         [fileCall(presentPlanToolName, {}, id: "pp-4")],
         [finish],
       ]);
-      final (held, heldWorkspace) = planAgent(
-        unanswered,
-        saveArtifact: (path, entryFile, {artifactId}) async => "art-3",
-      );
+      final (held, heldWorkspace) = planAgent(unanswered);
       File(p.join(heldWorkspace, "PLAN.md")).writeAsStringSync("- [ ] one\n");
       final heldEvents = await held.run(userMessage("present it")).toList();
 
@@ -1848,31 +1808,26 @@ void main() {
         [fileCall(presentPlanToolName, {}, id: "pp-5")],
         [finish],
       ]);
-      final (agent, _) = planAgent(
-        client,
-        saveArtifact: (path, entryFile, {artifactId}) async => "art-4",
-      );
+      final (agent, _) = planAgent(client);
       final events = await agent.run(userMessage("present it")).toList();
 
-      expect(events.whereType<ArtifactEvent>(), isEmpty);
       expect(events.whereType<QuestionRequestEvent>(), isEmpty);
       expect(events.whereType<ToolResultEvent>().single.result.returnCode, -1);
       expect(events.whereType<ToolResultEvent>().single.result.exceptionInfo,
           contains(planAddToolName));
     });
 
-    test("present_plan rides ask and artifact, the file trio does not", () async {
-      // No saveArtifact: a turn without the publish path loses present_plan
-      // and the artifact tool, and keeps the file trio and the plan trio,
-      // which ride the floor like the file tools do.
+    test("present_plan rides ask alone, not the artifact's publish path", () async {
+      // No saveArtifact: the turn loses the artifact tool and keeps
+      // present_plan, which publishes nothing, and the plan trio, which
+      // rides the floor like the file tools do.
       final client = FakeLlmClient([
         [saidOnly("nothing to run")],
       ]);
       await agentOver(client).run(userMessage("hi")).toList();
       final tools = client.calls.single.tools.map((t) => t.name).toSet();
-      expect(
-          tools, containsAll([planAddToolName, planNextToolName, planDoneToolName]));
-      expect(tools, isNot(contains(presentPlanToolName)));
+      expect(tools, containsAll(
+          [planAddToolName, planNextToolName, planDoneToolName, presentPlanToolName]));
       expect(tools, isNot(contains(artifactToolName)));
     });
   });

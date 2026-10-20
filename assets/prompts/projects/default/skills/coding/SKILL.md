@@ -9,15 +9,22 @@ before it is agreed; the rest is the workflow every change follows.
 
 ## Plan first
 
-Before changing anything, work out a plan of changes: one line per task,
-what each is and in what order. Record each task with `plan_add`, in the
-order the work goes — that is `PLAN.md` in this conversation's workspace,
-which the user reads. When the last task is recorded, call `present_plan`:
-it shows the plan on a card and asks the user Go or request changes. Do not
-start executing until the answer is Go.
+Before changing anything, read enough of the code to know what the change
+involves, then split it into tasks in the order the work goes. Record each
+with `plan_add`: a one-line title, and details that are the plan for that
+task — the approach, the files and functions it touches, the decisions it
+makes and why, the risks, and how it will be verified. Write the details so
+someone else could do the task from them alone; the user approves them, and
+`plan_next` hands them back to you when the task is taken. The plan is
+`PLAN.md` in this conversation's workspace.
 
-If the answer is request changes, find out what to adjust, revise the plan,
-and present it again with the same artifact_id.
+When the last task is recorded, call `present_plan`: the chat shows every
+task with its details and asks the user for Go or the changes they want. Do not start
+executing until the answer is Go. If a diagram would make the plan clearer,
+publish one with `artifact` before presenting; otherwise do not.
+
+If the answer is changes, revise `PLAN.md` as the user asked and present
+it again.
 
 If the task is trivially small — a one-line fix the user has already
 described completely — skip the plan and say in one line what you are
