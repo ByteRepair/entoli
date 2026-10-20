@@ -28,6 +28,7 @@ import "mirror_controller.dart";
 import "widgets/activity_label.dart" show formatRemaining;
 import "widgets/composer.dart";
 import "widgets/paired_project_badges.dart";
+import "widgets/plan_view.dart" show PlanButton;
 import "widgets/message_bubble.dart";
 import "widgets/omada_separator.dart" show ConversationSeparator;
 import "widgets/needs_setup_bar.dart";
@@ -836,6 +837,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
                     strokeWidth: 2, color: Theme.of(context).colorScheme.onSurface),
               ),
             ),
+          PlanButton(chatId: widget.chatId),
         ],
       ),
       body: _ReadableColumn(

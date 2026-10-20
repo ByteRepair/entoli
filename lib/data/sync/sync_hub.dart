@@ -1174,20 +1174,38 @@ class SyncHub implements ArtifactBytes, RemoteChats {
   Future<Uint8List?> artifactBytes(String chatId, String artifactId) =>
       resourceBytes(chatId, "$_artifactPrefix$artifactId");
 
+  /// The synthetic name the chat's `PLAN.md` is asked for under: the `/`
+  /// keeps it out of `resourceName`'s alphabet, as for an artifact. An older
+  /// home device reads it as an attachment it does not have and answers
+  /// null.
+  static const _planResource = ".plan/PLAN.md";
+
+  /// A mirrored chat's plan, fetched fresh rather than cached: it changes as
+  /// the turn works through it, and the caller asks again when it might have.
+  Future<String?> planText(String chatId) async {
+    final bytes = await fetchResource(chatId, _planResource);
+    return bytes == null ? null : utf8.decode(bytes, allowMalformed: true);
+  }
+
   /// Streams a resource to a subscribing peer, base64 inside control
   /// frames — correlation stays trivial and every frame rides the same AEAD
   /// as the rest of the traffic. Binary framing can come later without a
   /// protocol change: the type byte already separates the streams. A name
   /// under [_artifactPrefix] is an artifact rather than an attachment, and
-  /// goes out as one zip of its files.
+  /// goes out as one zip of its files; [_planResource] is the chat's plan.
   Future<void> _serveResource(
       LivePeer peer, String id, String chatId, String resource) async {
     Uint8List? bytes;
     if (peer.subscriptions.contains(chatId)) {
-      bytes = resource.startsWith(_artifactPrefix)
-          ? await _repo?.readArtifactZip(
-              chatId, resource.substring(_artifactPrefix.length))
-          : await _repo?.readResource(chatId, resource);
+      bytes = switch (resource) {
+        _planResource => switch (await _repo?.readPlan(chatId)) {
+            final plan? => utf8.encode(plan),
+            null => null,
+          },
+        _ when resource.startsWith(_artifactPrefix) => await _repo
+            ?.readArtifactZip(chatId, resource.substring(_artifactPrefix.length)),
+        _ => await _repo?.readResource(chatId, resource),
+      };
     }
     await _sendChunks(peer, id, bytes);
   }

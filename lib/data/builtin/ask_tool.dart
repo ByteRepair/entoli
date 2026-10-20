@@ -9,8 +9,9 @@ const askTool = LlmTool(
   description: "Ask the user one or more questions and wait for their answers. "
       "Use it when the answer is theirs to give — a choice between directions, "
       "a preference, a detail only they know — and guessing would waste the "
-      "turn. They answer by picking one of the options you offer, so the "
-      "options have to cover the ground.",
+      "turn. They answer by picking one of the options you offer, or by "
+      "typing an answer of their own, which comes back as the answer text. "
+      "Do not add an \"other\" option; the panel always offers one.",
   schema: {
     "type": "object",
     "properties": {
@@ -27,7 +28,8 @@ const askTool = LlmTool(
             },
             "options": {
               "type": "array",
-              "description": "The answers to offer. At least one; the user picks exactly one.",
+              "description": "The answers to offer. At least one; the user picks "
+                  "exactly one, or types their own.",
               "items": {
                 "type": "object",
                 "properties": {

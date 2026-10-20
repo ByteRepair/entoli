@@ -13,6 +13,7 @@ import "../../domain/chat_meta.dart";
 import "../../domain/documents.dart";
 import "../../domain/chat_store.dart";
 import "../../domain/models.dart";
+import "../../domain/plan.dart" show planFileName;
 import "../../domain/artifact_style.dart";
 import "../../domain/project.dart";
 import "../../domain/workspace.dart";
@@ -307,6 +308,14 @@ class FileChatStore implements ChatStore {
     // `base` is the artifact root itself: the entries come out named relative
     // to it, the shape the unzip on the far side writes back.
     return ZipEncoder().encodeBytes(await archiveOf(_fs, [dir], base: dir));
+  }
+
+  @override
+  Future<String?> readPlan(String chatId) async {
+    final project = await projectOf(chatId);
+    final file = _fs.file(
+        _fs.path.join(config.workspaceDir(chatId, project: project), planFileName));
+    return await file.exists() ? file.readAsString() : null;
   }
 
   @override

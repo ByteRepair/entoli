@@ -116,6 +116,39 @@ void main() {
     await endTurn(tester);
   });
 
+  // The composer is gone while the panel is up, so an answer that is not on
+  // the list is typed into the question itself.
+  testWidgets("a typed answer is picked by typing, and sent as its text",
+      (tester) async {
+    await asking(tester, request([database]));
+
+    await tester.enterText(find.byType(TextField).last, "  MySQL, actually ");
+    await tester.pump();
+    expect(find.text("Send"), findsOneWidget);
+    // Picking an option takes over from the typed answer, and the field keeps
+    // its text for going back to.
+    await tester.tap(find.text("Postgres"));
+    await tester.pump();
+    await tester.tap(find.byType(TextField).last);
+    await tester.pump();
+    await tester.tap(find.text("Send"));
+    await tester.pump();
+
+    expect(app.backend.answered.single.answers, ["MySQL, actually"]);
+    await endTurn(tester);
+  });
+
+  testWidgets("a cleared typed answer answers nothing", (tester) async {
+    await asking(tester, request([database]));
+
+    await tester.enterText(find.byType(TextField).last, "MySQL");
+    await tester.pump();
+    await tester.enterText(find.byType(TextField).last, "");
+    await tester.pump();
+
+    expect(find.text("Skip"), findsOneWidget);
+  });
+
   // One button and one action. Two names for it would be two promises, and
   // which one it is is the whole of what "nothing picked" changes.
   testWidgets("the button offers to skip until something is picked",

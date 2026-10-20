@@ -12,6 +12,7 @@ import "package:agent_chat/domain/chat_log.dart";
 import "package:agent_chat/domain/chat_meta.dart";
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/domain/permission.dart";
+import "package:agent_chat/domain/plan.dart";
 import "package:agent_chat/domain/project_settings.dart";
 import "package:agent_chat/domain/project.dart";
 import "package:agent_chat/domain/prompt_library.dart";
@@ -20,6 +21,7 @@ import "package:agent_chat/ui/chat/widgets/omada_separator.dart";
 import "package:agent_chat/ui/widgets/agent_picture.dart" show AgentPictureImage;
 import "package:agent_chat/ui/chat/chat_controller.dart";
 import "package:agent_chat/ui/chat/chat_page.dart";
+import "package:agent_chat/ui/chat/plan_page.dart";
 import "package:agent_chat/ui/chat/widgets/composer.dart";
 import "package:agent_chat/ui/chat/widgets/view_only_bar.dart";
 import "package:agent_chat/ui/chat/widgets/message_bubble.dart";
@@ -1208,6 +1210,77 @@ void main() {
       expect(find.text("@scout"), findsOneWidget);
       expect(find.byType(Image), findsOneWidget);
     });
+  });
+
+
+  // The plan the agent presented is drawn in the conversation, each task
+  // opening to its details, and the bar carries a way to it for as long as
+  // the chat has one.
+  testWidgets("a presented plan shows its tasks, their details, and a page", (tester) async {
+    final chat = await io(tester, () async {
+      final chat = await app.repo.createChat(title: "planned");
+      final full = chat.copyWith(messages: [
+        Message(
+          id: "u1",
+          role: MessageRole.user,
+          createdAt: DateTime(2026, 1, 1),
+          parts: [const TextPart(text: "fix it")],
+        ),
+        Message(
+          id: "a1",
+          role: MessageRole.assistant,
+          createdAt: DateTime(2026, 1, 1, 0, 1),
+          parts: [
+            const ToolCallPart(
+                toolCall: ToolCall(
+                    id: "pp-1",
+                    name: presentPlanToolName,
+                    argumentsJson: '{"title": "The fix"}')),
+            ToolResultPart(
+                result: ToolResult(
+                    callId: "pp-1", returnCode: 0, output: planVerdict("go"))),
+          ],
+        ),
+      ]);
+      await app.writeChat(full);
+      final workspace = app.config.workspaceDir(chat.state.id);
+      await app.config.fs.directory(workspace).create(recursive: true);
+      await app.config.fs
+          .file(app.config.fs.path.join(workspace, planFileName))
+          .writeAsString("# Plan\n\n## Tasks\n\n- [x] read the parser\n"
+              "  Start at `parse.dart`.\n- [ ] fix the header\n  Keep the old entry point.\n");
+      return full;
+    });
+
+    await open(tester, chat.state.id);
+
+    expect(find.text("The fix"), findsOneWidget);
+    expect(find.text("1 of 2 tasks done"), findsOneWidget);
+    // As wide as the reply it sits in, less the gutter the reply's text keeps.
+    final bubble = find.byType(MessageBubble).last;
+    expect(
+        tester.getSize(find.descendant(of: bubble, matching: find.byType(Card))).width,
+        greaterThanOrEqualTo(tester.getSize(bubble).width - 24));
+    expect(find.text("Keep the old entry point."), findsNothing);
+    await tester.tap(find.text("2. fix the header"));
+    await settleIo(tester);
+    expect(find.text("Keep the old entry point."), findsOneWidget);
+
+    final button =
+        find.descendant(of: find.byType(AppBar), matching: find.byIcon(Icons.checklist));
+    expect(button, findsOneWidget);
+    await tester.tap(button);
+    await settleIo(tester);
+    expect(find.byType(PlanPage), findsOneWidget);
+    expect(find.descendant(of: find.byType(PlanPage), matching: find.text("1. read the parser")),
+        findsOneWidget);
+  });
+
+  testWidgets("a chat with no plan has no plan button", (tester) async {
+    final chat = await seedLongChat(tester, title: "unplanned");
+    await open(tester, chat.state.id);
+    expect(find.descendant(of: find.byType(AppBar), matching: find.byIcon(Icons.checklist)),
+        findsNothing);
   });
 
 }

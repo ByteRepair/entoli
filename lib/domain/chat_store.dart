@@ -99,6 +99,10 @@ abstract class ChatStore {
   /// need to verify it exists should use [readArtifactFile] instead.
   Future<String> artifactPath(String chatId, String artifactId, {String? project});
 
+  /// The chat's `PLAN.md`, out of its workspace. Null where there is none.
+  /// What the plan card and page read, here and on a mirror.
+  Future<String?> readPlan(String chatId);
+
   /// Read a staged skill package out of `skill-installs/<installId>/`. Null
   /// once the chat (and its staging) is gone.
   Future<Uint8List?> readSkillInstall(String chatId, String installId);

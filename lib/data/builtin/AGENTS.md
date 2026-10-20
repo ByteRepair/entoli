@@ -484,6 +484,14 @@ because the panel answers by clicking and there would be nothing to click. Every
 question comes back to the model whether or not it was answered: one that asked
 three and got two needs to know which one it is still missing.
 
+**Every question also takes a typed answer.** The panel ends each question's
+options with a field, and what is typed there is the answer, as text, the
+same string slot an option's value travels in — so the result, the label and
+a sync peer's `questionsRespond` carry it with no change. The composer is gone
+while the panel is up, so without the field a user whose answer is not on
+the list could only pick a wrong one or skip. The tool's description tells
+the model this, and not to add an "other" option of its own.
+
 `QuestionPanel` takes the composer's place while a request is up — including its
 stop button, which is why the panel carries the only way out of it. The rest
 mirrors approvals exactly: turn-scoped view state, `_clearQuestions` beside
@@ -785,37 +793,45 @@ project workspace stays work another conversation picks up. The file is also
 the model's own writing: the tools are line edits over it, never a
 re-serialization, and the parser (`lib/domain/plan.dart`) is deliberately
 liberal — a bare bullet is a pending task — so a plan the model wrote by hand
-or an older skill produced still reads.
+still reads.
+
+**A task is a title and a plan.** The title is a bullet at the start of a
+line; its details are the lines indented under it, a markdown list item's
+continuation. That is why a task must start at column 0: a list inside a
+task's details is part of the details, not tasks of their own. One-line tasks
+were what the user was asked to approve before, and a list of titles said too
+little to approve or to work from.
 
 Four tools. `plan_add` records a task (creating the file when there is none),
-one call per task; `plan_next` marks the first pending task in progress and
-answers its number; `plan_done` ticks one, by number or by enough of its text
-to identify it (ambiguous is refused with the candidates, not guessed). The
-trio rides the floor beside the file tools — no shell needed, so a browser has
-them — and is dropped for a sub-agent through the `oneShot` flag.
+one call per task, and refuses a call without `details`; `plan_next` marks the
+first pending task in progress and answers its number and its details, so the
+work starts from what the user approved; `plan_done` ticks one, by number or
+by enough of its text to identify it (ambiguous is refused with the
+candidates, not guessed). The trio rides the floor beside the file tools — no
+shell needed, so a browser has them — and is dropped for a sub-agent through
+the `oneShot` flag.
 
-`present_plan` is the end of planning, and it is the ask and artifact tools
-assembled rather than new machinery: it renders PLAN.md into a page
-(`planHtml`, model-written text escaped), publishes it through the same
-`saveArtifact` callback the `artifact` tool calls, emits the `ArtifactEvent`
-the chat draws the card from, and then raises the existing
-`QuestionRequestEvent` with one fixed question — Go, or request changes — on
-the `answer` completer. The panel takes the composer's place exactly as for
+`present_plan` is the end of planning, and it is the ask tool with a fixed
+question: it raises `QuestionRequestEvent` with Go, or changes typed into the
+panel's own answer field (see "Questions"), on the
+`answer` completer. It publishes nothing. The chat draws the call itself as
+the plan (`PlanLabel`, read off the file — see "The plan, on screen" in
+`lib/ui/chat/AGENTS.md`), so the plan is on screen above the panel without a
+page to open. It used to render the plan into an artifact, which made a card
+of every plan whether a page helped or not; a diagram is now the model's call,
+made with `artifact`. The panel takes the composer's place exactly as for
 `ask_user`, and a sync mirror renders it the same way — the questions travel
 as the request's document (`planApprovalQuestionsJson`), since the call's own
 arguments name a title, not a question. The verdict is the tool's result, so
-the projection words it with zero changes — unlike `ask_user`, nothing splits
-for it. The tool is offered where `AgentCapabilities.presentPlan` (`ask` &&
-`artifact`) holds: a headless turn folds `ask` out of its takes already (a
-Go/Deny nobody answers would park it on a completer), and a sub-agent's
-missing `saveArtifact` withholds it the way `artifact` is withheld. Nothing
-answered reads as "finish the turn", never as "start".
+the projection words it with zero changes. The tool is offered where `ask`
+is: a headless turn and a sub-agent fold `ask` out of their takes (a Go/Deny
+nobody answers would park it on a completer). Nothing answered reads as
+"finish the turn", never as "start".
 
 The workflow is the coding skill's ("Plan first"), not the system prompt's —
 the prompt carries only the one tool-fragment line, the skill carries the
-plan-first rule and the do-not-execute-before-Go one. An update on a re-present
-is the artifact's `artifact_id`, so the card is one card growing, not a card
-per revision.
+plan-first rule, what a task's details hold, and the do-not-execute-before-Go
+rule.
 
 ## Memory
 

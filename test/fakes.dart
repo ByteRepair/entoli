@@ -798,6 +798,14 @@ class FakeChatStore implements ChatStore {
     String chatId, String artifactId, String relativePath, {String? project}) async =>
       _artifacts[chatId]?[artifactId]?[relativePath];
 
+  final Map<String, String> _plans = {};
+
+  /// A chat's `PLAN.md`, as [readPlan] answers it.
+  void stagePlan(String chatId, String plan) => _plans[chatId] = plan;
+
+  @override
+  Future<String?> readPlan(String chatId) async => _plans[chatId];
+
   @override
   Future<Uint8List?> readArtifactZip(String chatId, String artifactId,
       {String? project}) async {
