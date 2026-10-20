@@ -188,6 +188,26 @@ const llmProviderPresets = <LlmProviderConfig>[
     defaultLightModelId: "openai/gpt-oss-20b",
   ),
   LlmProviderConfig(
+    id: "google",
+    label: "Google Gemini",
+    api: LlmApi.openai,
+    // Gemini's OpenAI-compatible surface, not its native one.
+    baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai",
+    apiKeyEnv: "GEMINI_API_KEY",
+    defaultModelId: "gemini-flash-latest",
+    defaultLightModelId: "gemini-flash-lite-latest",
+  ),
+  LlmProviderConfig(
+    id: "zai",
+    label: "Z.ai",
+    api: LlmApi.openai,
+    baseUrl: "https://api.z.ai/api/paas/v4",
+    apiKeyEnv: "ZAI_API_KEY",
+    // The free ones, so the preset costs nothing until the user picks otherwise.
+    defaultModelId: "glm-4.7-flash",
+    defaultLightModelId: "glm-4.5-flash",
+  ),
+  LlmProviderConfig(
     id: "ollama-cloud",
     label: "Ollama Cloud",
     api: LlmApi.openai,
@@ -214,3 +234,98 @@ const llmProviderPresets = <LlmProviderConfig>[
     defaultLightModelId: "nemotron-3-nano:30b",
   ),
 ];
+
+/// What a provider's terms say happens to the prompts sent to it.
+enum PromptUse {
+  /// Never leaves the machine.
+  local,
+
+  /// Not kept or trained on, by the provider's own terms.
+  notTrained,
+
+  /// Up to whichever upstream a request is routed to.
+  dependsOnRoute,
+
+  /// The free tier trains on prompts and may have them read by people; the
+  /// paid tier does not.
+  trainedWhenFree,
+
+  /// The terms do not say for the free tier.
+  unstated,
+}
+
+/// What the Add provider list says about a preset, beside its name. Keyed by
+/// preset id like [LlmProviderConfig.imageDefaultOf], so it is never written
+/// into `settings.json` and a policy change is a release, not a migration.
+class PresetTerms {
+  const PresetTerms({
+    required this.blurb,
+    required this.prompts,
+    this.freeTier,
+    this.policy,
+  });
+
+  final String blurb;
+  final PromptUse prompts;
+
+  /// Non-null where the preset can be used for free and that comes at a cost
+  /// to privacy: what the user is told, and must accept, before adding it.
+  final String? freeTier;
+
+  final String? policy;
+
+  static PresetTerms? of(String id) => _presetTerms[id];
+}
+
+const _presetTerms = <String, PresetTerms>{
+  "anthropic": PresetTerms(
+    blurb: "Claude models.",
+    prompts: PromptUse.notTrained,
+    policy: "https://www.anthropic.com/legal/commercial-terms",
+  ),
+  "openai": PresetTerms(
+    blurb: "GPT models, and gpt-image for pictures.",
+    prompts: PromptUse.notTrained,
+    policy: "https://openai.com/enterprise-privacy",
+  ),
+  "openrouter": PresetTerms(
+    blurb: "One key for hundreds of models from many providers.",
+    prompts: PromptUse.dependsOnRoute,
+    policy: "https://openrouter.ai/privacy",
+  ),
+  "google": PresetTerms(
+    blurb: "Gemini models, with a free tier.",
+    prompts: PromptUse.trainedWhenFree,
+    freeTier: "On Google's free tier, your prompts and the replies are used "
+        "to improve Google's products, and people at Google may read them. "
+        "Do not send anything private, confidential or personal. A key with "
+        "billing turned on is not used this way.",
+    policy: "https://ai.google.dev/gemini-api/terms",
+  ),
+  "zai": PresetTerms(
+    blurb: "GLM models, some of them free.",
+    prompts: PromptUse.unstated,
+    freeTier: "The GLM Flash models are free. Z.ai's terms do not say how "
+        "prompts sent to the free models are handled, so treat them as not "
+        "private.",
+    policy: "https://docs.z.ai/legal-agreement/privacy-policy",
+  ),
+  "groq": PresetTerms(
+    blurb: "Open models on fast hardware.",
+    prompts: PromptUse.notTrained,
+    policy: "https://groq.com/privacy-policy",
+  ),
+  "ollama-cloud": PresetTerms(
+    blurb: "Open models, hosted by Ollama.",
+    prompts: PromptUse.notTrained,
+    policy: "https://ollama.com/privacy",
+  ),
+  "ollama": PresetTerms(
+    blurb: "Models you run yourself with Ollama.",
+    prompts: PromptUse.local,
+  ),
+  "lmstudio": PresetTerms(
+    blurb: "Models you run yourself with LM Studio.",
+    prompts: PromptUse.local,
+  ),
+};
