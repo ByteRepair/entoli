@@ -1256,6 +1256,11 @@ void main() {
 
     expect(find.text("The fix"), findsOneWidget);
     expect(find.text("1 of 2 tasks done"), findsOneWidget);
+    // As wide as the reply it sits in, less the gutter the reply's text keeps.
+    final bubble = find.byType(MessageBubble).last;
+    expect(
+        tester.getSize(find.descendant(of: bubble, matching: find.byType(Card))).width,
+        greaterThanOrEqualTo(tester.getSize(bubble).width - 24));
     expect(find.text("Keep the old entry point."), findsNothing);
     await tester.tap(find.text("2. fix the header"));
     await settleIo(tester);

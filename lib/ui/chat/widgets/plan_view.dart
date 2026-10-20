@@ -61,39 +61,35 @@ class PlanLabel extends ConsumerWidget {
     final title = stringArg(call.argumentsJson, "title") ?? "Plan";
     final plan = ref.watch(planProvider(chatId));
     final sections = plan.value;
-    return Align(
-      alignment: Alignment.centerLeft,
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 560),
-        child: Card.outlined(
-          margin: const EdgeInsets.symmetric(vertical: 6),
-          clipBehavior: Clip.antiAlias,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              ListTile(
-                leading: const Icon(Icons.checklist),
-                title: Text(title, style: theme.textTheme.titleMedium),
-                subtitle: Text(switch (sections) {
-                  final sections? => _progress(sections),
-                  // A mirror's first read is a round trip to the home device.
-                  null when plan.isLoading => "Reading the plan…",
-                  null => "The plan could not be read.",
-                }),
-                trailing: sections == null
-                    ? null
-                    : IconButton(
-                        tooltip: "Open the plan",
-                        icon: const Icon(Icons.open_in_full),
-                        onPressed: () => Navigator.of(context).push(
-                          MaterialPageRoute(builder: (_) => PlanPage(chatId: chatId)),
-                        ),
-                      ),
-              ),
-              if (sections != null) PlanTaskList(sections: sections),
-            ],
+    // The whole width of the reply's column, like the reply itself: task
+    // details are prose, and a narrow card wrapped them into a ribbon.
+    return Card.outlined(
+      margin: const EdgeInsets.symmetric(vertical: 6),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          ListTile(
+            leading: const Icon(Icons.checklist),
+            title: Text(title, style: theme.textTheme.titleMedium),
+            subtitle: Text(switch (sections) {
+              final sections? => _progress(sections),
+              // A mirror's first read is a round trip to the home device.
+              null when plan.isLoading => "Reading the plan…",
+              null => "The plan could not be read.",
+            }),
+            trailing: sections == null
+                ? null
+                : IconButton(
+                    tooltip: "Open the plan",
+                    icon: const Icon(Icons.open_in_full),
+                    onPressed: () => Navigator.of(context).push(
+                      MaterialPageRoute(builder: (_) => PlanPage(chatId: chatId)),
+                    ),
+                  ),
           ),
-        ),
+          if (sections != null) PlanTaskList(sections: sections),
+        ],
       ),
     );
   }
