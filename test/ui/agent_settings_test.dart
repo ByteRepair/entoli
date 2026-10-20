@@ -16,11 +16,13 @@ void main() {
   setUp(() => app = TestApp.create());
   tearDown(() => app.dispose());
 
-  /// Open the menu behind the Add provider button and choose an entry.
+  /// Open the picker behind the Add provider button and choose an entry.
   Future<void> addProvider(WidgetTester tester, String entry) async {
     await scrollTo(tester, find.text("Add provider"));
     await tester.tap(find.text("Add provider"));
     await settleIo(tester);
+    await tester.ensureVisible(find.text(entry).last);
+    await tester.pumpAndSettle();
     await tester.tap(find.text(entry).last);
     await settleIo(tester);
   }
@@ -113,8 +115,35 @@ void main() {
       await tester.tap(find.text("Add provider"));
       await settleIo(tester);
 
-      expect(find.text("Groq"), findsOneWidget); // the row, not a menu entry
+      expect(find.text("Groq"), findsOneWidget); // the row, not a picker entry
       expect(find.text("OpenAI"), findsOneWidget);
+    });
+
+    testWidgets("a free tier paid for in privacy is accepted before its key is asked", (tester) async {
+      await pumpSettings(tester, app, SettingsCategory.providers);
+      await addProvider(tester, "Google Gemini");
+
+      expect(find.textContaining("free tier is not private"), findsOneWidget);
+      await tester.tap(find.text("Cancel").last);
+      await settleIo(tester);
+      expect(dialogField("API key"), findsNothing);
+
+      await tester.tap(find.text("Google Gemini").last);
+      await settleIo(tester);
+      await tester.tap(find.text("I understand, add it"));
+      await settleIo(tester);
+      await tester.enterText(dialogField("API key"), "gm-secret");
+      await saveDialog(tester);
+
+      expect(saved().single.id, "google");
+    });
+
+    testWidgets("a provider with no free tier is not warned about", (tester) async {
+      await pumpSettings(tester, app, SettingsCategory.providers);
+      await addProvider(tester, "Anthropic");
+
+      expect(find.textContaining("free tier is not private"), findsNothing);
+      expect(dialogField("API key"), findsOneWidget);
     });
 
     testWidgets("editing one replaces it rather than adding another", (tester) async {

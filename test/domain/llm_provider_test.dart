@@ -98,7 +98,7 @@ void main() {
       expect(llmProviderPresets.map((p) => p.id),
           containsAll(["anthropic", "openai", "openrouter", "ollama-cloud", "ollama"]));
       for (final preset in llmProviderPresets) {
-        expect(preset.baseUrl, endsWith("/v1"), reason: preset.id);
+        expect(preset.baseUrl, contains(RegExp(r"/v\d")), reason: preset.id);
         // A preset names a variable, never key material: nothing shipped
         // carries a credential.
         expect(preset.toJson().containsKey("apiKey"), isFalse, reason: preset.id);

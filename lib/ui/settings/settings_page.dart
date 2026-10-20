@@ -19,7 +19,6 @@ import "../chat/widgets/activity_label.dart";
 import "../sidebar/sidebar.dart";
 import "../theme.dart";
 import "../widgets/add_button_row.dart";
-import "../widgets/anchored_menu.dart";
 import "../widgets/busy.dart";
 import "../widgets/app_mark.dart";
 import "../widgets/dialogs.dart";
@@ -39,6 +38,7 @@ import "llm_settings.dart";
 import "local_model_settings.dart";
 import "memory_settings.dart";
 import "privacy_policy_page.dart";
+import "provider_picker.dart";
 import "shortcuts_settings.dart";
 import "triggers.dart";
 import "skills_settings.dart";
@@ -1106,13 +1106,10 @@ class _ProvidersEditor extends ConsumerWidget {
             onRemove: () => _remove(ref, provider),
           ),
         AddButtonRow(
-          // The button's own context, which is what the menu is anchored under.
-          child: Builder(
-            builder: (context) => OutlinedButton.icon(
-              icon: const Icon(Icons.add),
-              label: const Text("Add provider"),
-              onPressed: () => _add(context, ref, configured),
-            ),
+          child: OutlinedButton.icon(
+            icon: const Icon(Icons.add),
+            label: const Text("Add provider"),
+            onPressed: () => _add(context, ref, configured),
           ),
         ),
       ],
@@ -1120,20 +1117,11 @@ class _ProvidersEditor extends ConsumerWidget {
   }
 
   Future<void> _add(BuildContext context, WidgetRef ref, Set<String> configured) async {
-    final chosen = await showAnchoredMenu<VoidCallback>(context, [
-      // One already configured is edited from its row rather than added again.
-      for (final preset in llmProviderPresets)
-        if (!configured.contains(preset.id))
-          PopupMenuItem(
-            value: () => _upsert(context, ref, initial: preset),
-            child: Text(preset.displayName),
-          ),
-      PopupMenuItem(
-        value: () => _upsert(context, ref),
-        child: const Text("Custom…"),
-      ),
-    ]);
-    if (context.mounted) chosen?.call();
+    // One already configured is edited from its row rather than added again.
+    final chosen = await pickProviderPreset(context, configured: configured);
+    if (chosen != null && context.mounted) {
+      await _upsert(context, ref, initial: chosen.preset);
+    }
   }
 
   String _describe(LlmProviderConfig provider, {String? storedKey}) {
