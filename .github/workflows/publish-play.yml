@@ -77,7 +77,15 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          body="$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json body -q .body)"
+          # Unreadable is not fatal: the notes are optional and the bundle is
+          # what matters. release.yml's gate already refuses an unpublished
+          # release (a draft is invisible to this read-only token, which is
+          # how v6.0.0's Play upload failed here), so this is the second line.
+          if ! body="$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json body -q .body)"; then
+            echo "::warning title=Play release notes::Release $TAG could not be read (a draft is invisible to this job's token); uploading without notes"
+            echo "directory=" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
 
           if [ -z "$body" ]; then
             echo "::notice::Release $TAG has no notes; Play keeps whatever the listing already says"

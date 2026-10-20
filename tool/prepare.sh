@@ -3,7 +3,10 @@
 set -euo pipefail
 cd "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/.."
 
-flutter pub get
+# Enforced on CI: pubspec.lock is committed, and a lock that disagrees with
+# pubspec.yaml should fail a build rather than resolve something new. Locally
+# it is left free to update, which is how a dependency change lands in it.
+flutter pub get ${CI:+--enforce-lockfile}
 # Build_runner before the generators: they import the domain (gen_bundled_skills
 # reaches models.dart through skill_validate), whose freezed and json parts do
 # not exist until this has run — a cold checkout cannot compile them first.

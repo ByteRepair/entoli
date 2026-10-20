@@ -243,9 +243,18 @@ class BuiltinSession {
   /// Put the conversation back into a session that does not have it — one
   /// rewound, or one belonging to a chat opened after a restart. `project` is
   /// what builds the argument, out of what `conv.jsonl` kept.
-  void replaceWith(Iterable<LlmMessage> conversation) => messages
-    ..clear()
-    ..addAll(conversation);
+  void replaceWith(Iterable<LlmMessage> conversation) {
+    messages
+      ..clear()
+      ..addAll(conversation);
+    readFiles.clear();
+  }
+
+  /// The files the model has read, by resolved path, as they stood when it
+  /// read them: what `write` and `edit` check an existing file against. Not
+  /// rebuilt from the log — a session refilled after a rewind or a restart
+  /// starts empty, and the model reads again.
+  final Map<String, FileStamp> readFiles = {};
 
   /// Replace everything from [from] on with [turn]. How a running turn puts
   /// what it has said into the conversation: it is rebuilt from the turn's own
@@ -1353,14 +1362,18 @@ class BuiltinAgent {
         buf.writeln("$i: ${lines[i - 1]}");
       }
       final result = buf.toString();
+      await _stamp(path);
       nested = memory.nested
-          ? await findNestedInstructions(
-              fs,
-              path,
-              alreadyLoaded: _loadedInstructions,
-              projectWorkspace: projectWorkspace,
-              excludes: memory.excludes,
-            )
+          ? [
+              // An AGENTS.md read on purpose is already in front of the model.
+              for (final file in await findNestedInstructions(
+                fs,
+                path,
+                alreadyLoaded: _loadedInstructions,
+                excludes: memory.excludes,
+              ))
+                if (file.path != path) file,
+            ]
           : const <InstructionFile>[];
       final output = nested.isEmpty
           ? (result.isEmpty ? "(empty file)" : result)
@@ -1390,10 +1403,19 @@ class BuiltinAgent {
       return;
     }
     final path = _resolvePath(args.path);
+    // Asked before the gate too, so a refusal raises no banner first.
+    if (await _unread(path, args.path, writeToolName) case final problem?) {
+      yield* _reject(call, problem);
+      return;
+    }
     yield _called(call, args.path);
     Future<ShellResult> run() async {
+      if (await _unread(path, args.path, writeToolName) case final problem?) {
+        return ShellResult.failed(problem);
+      }
       await fs.directory(fs.path.dirname(path)).create(recursive: true);
       await fs.file(path).writeAsString(args.content);
+      await _stamp(path);
       return ShellResult(
           returnCode: 0, output: "Wrote ${args.content.length} bytes to ${args.path}");
     }
@@ -1410,12 +1432,19 @@ class BuiltinAgent {
       return;
     }
     final path = _resolvePath(args.path);
+    if (await _unread(path, args.path, editToolName) case final problem?) {
+      yield* _reject(call, problem);
+      return;
+    }
     yield _called(call, args.path);
     Future<ShellResult> run() async {
       final file = fs.file(path);
       if (!await file.exists()) {
         return ShellResult(
             returnCode: -1, output: "", exceptionInfo: "File not found: ${args.path}");
+      }
+      if (await _unread(path, args.path, editToolName) case final problem?) {
+        return ShellResult.failed(problem);
       }
       final content = await file.readAsString();
       final count = content.split(args.oldString).length - 1;
@@ -1435,10 +1464,21 @@ class BuiltinAgent {
           ? content.replaceAll(args.oldString, args.newString)
           : content.replaceFirst(args.oldString, args.newString);
       await file.writeAsString(updated);
+      await _stamp(path);
       return ShellResult(
           returnCode: 0, output: "Edited ${args.path}: replaced $count occurrence(s).");
     }
     yield* _runFileTool(call, path, editToolName, run);
+  }
+
+  Future<String?> _unread(String path, String shownPath, String toolName) =>
+      unreadFileProblem(fs, path,
+          shownPath: shownPath, toolName: toolName, readFiles: session.readFiles);
+
+  /// What the model wrote is what it has seen, so the next edit needs no read.
+  Future<void> _stamp(String path) async {
+    final stamp = await fileStampOf(fs, path);
+    if (stamp != null) session.readFiles[path] = stamp;
   }
 
   /// Register a trigger. The chat is the turn's own — a trigger fires into
@@ -2326,8 +2366,12 @@ class BuiltinAgent {
     // Raced with a stop: a turn outliving its abort ran on into the next
     // turn, clearing its banner and rewriting the session under it.
     final decision = await Future.any([
-      (classifier ?? const NoClassifier())
-          .classify(toolName, call.argumentsJson, workspace: workspace),
+      (classifier ?? const NoClassifier()).classify(toolName, call.argumentsJson,
+          workspace: workspace,
+          alsoWritable: [
+            if (projectWorkspace != workspace) projectWorkspace,
+            ..._grantedDirs,
+          ]),
       _stopped.future.then((_) => PermissionDecision.ask),
     ]);
     if (_cancelled) {

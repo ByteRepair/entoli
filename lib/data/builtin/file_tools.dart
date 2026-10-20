@@ -9,7 +9,9 @@ const readTool = LlmTool(
       "line numbers. Paths are relative to the workspace; prefix with "
       "`project:` to read from the project workspace; an absolute path reads "
       "the machine directly, and the user is asked before it runs. Use "
-      "`offset` and `limit` (1-indexed) to read a slice of a large file.",
+      "`offset` and `limit` (1-indexed) to read a slice of a large file. "
+      "Any AGENTS.md in the directories above the file comes back with it: "
+      "follow those instructions.",
   schema: {
     "type": "object",
     "properties": {
@@ -40,7 +42,8 @@ const writeTool = LlmTool(
       "to the project workspace; an absolute path writes the machine "
       "directly, and the user is asked before it runs. The content is the "
       "full file — no append or merge. Use `edit` for partial changes to an "
-      "existing file.",
+      "existing file. An existing file must be read with `read` first, and "
+      "read again if it has changed since.",
   schema: {
     "type": "object",
     "properties": {
@@ -68,7 +71,8 @@ const editTool = LlmTool(
       "workspace; prefix with `project:` to edit in the project workspace; "
       "an absolute path edits the machine directly, and the user is asked "
       "before it runs. Use `write` to create a new file or overwrite one "
-      "entirely.",
+      "entirely. The file must be read with `read` first, and read again if "
+      "it has changed since.",
   schema: {
     "type": "object",
     "properties": {

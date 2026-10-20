@@ -989,6 +989,93 @@ void main() {
       expect(offResult.output, isNot(contains("sub rules")));
     });
 
+    test("a read outside the workspaces brings the repository's AGENTS.md",
+        () async {
+      final client = FakeLlmClient([
+        [readCall("PLACEHOLDER")],
+        [finish],
+      ]);
+      final agent = agentOver(client, memory: const MemorySettings(nested: true));
+      final repo = p.join(p.dirname(agent.projectWorkspace), "repo");
+      Directory(p.join(repo, "src")).createSync(recursive: true);
+      File(p.join(repo, "src", "main.c")).writeAsStringSync("int main;");
+      File(p.join(repo, "AGENTS.md")).writeAsStringSync("repo rules");
+      client.turns[0] = [readCall(p.join(repo, "src", "main.c"))];
+
+      final events = await agent.run(userMessage("read it")).toList();
+
+      expect(events.whereType<ToolResultEvent>().single.result.output,
+          contains("repo rules"));
+      expect(events.whereType<InstructionsReadEvent>().single.files.single.path,
+          p.join(repo, "AGENTS.md"));
+    });
+
+    test("reading an AGENTS.md does not append it to itself", () async {
+      final client = FakeLlmClient([
+        [readCall("sub/AGENTS.md")],
+        [finish],
+      ]);
+      final agent = agentOver(client, memory: const MemorySettings(nested: true));
+      Directory(p.join(agent.workspace, "sub")).createSync(recursive: true);
+      File(p.join(agent.workspace, "sub", "AGENTS.md"))
+          .writeAsStringSync("sub rules");
+
+      final events = await agent.run(userMessage("read it")).toList();
+
+      final output = events.whereType<ToolResultEvent>().single.result.output;
+      expect("sub rules".allMatches(output), hasLength(1));
+      expect(events.whereType<InstructionsReadEvent>(), isEmpty);
+    });
+
+    test("edit and write refuse an existing file that was not read", () async {
+      final client = FakeLlmClient([
+        [editCall("a.txt", "one", "two")],
+        [writeCall("a.txt", "over", id: "write-1")],
+        [writeCall("new.txt", "fresh", id: "write-2")],
+        [finish],
+      ]);
+      final agent = agentOver(client);
+      File(p.join(agent.workspace, "a.txt")).writeAsStringSync("one");
+
+      final events = await agent.run(userMessage("change it")).toList();
+
+      final results = events.whereType<ToolResultEvent>().toList();
+      expect(results[0].result.returnCode, isNot(0));
+      expect(results[0].result.exceptionInfo, contains("has not been read"));
+      expect(results[1].result.exceptionInfo, contains("has not been read"));
+      // A new file needs no read.
+      expect(results[2].result.returnCode, 0);
+      expect(File(p.join(agent.workspace, "a.txt")).readAsStringSync(), "one");
+    });
+
+    test("an edit after a read lands; one after the file changed is refused",
+        () async {
+      late String file;
+      final client = FakeLlmClient([
+        [readCall("a.txt")],
+        [editCall("a.txt", "one", "two")],
+        [editCall("a.txt", "two", "three", id: "edit-2")],
+        [bashCall("change it")],
+        [editCall("a.txt", "two", "four", id: "edit-3")],
+        [finish],
+      ]);
+      final agent = agentOver(client, respond: (_) {
+        File(file).writeAsStringSync("someone else's text");
+        return ok("");
+      });
+      file = p.join(agent.workspace, "a.txt");
+      File(file).writeAsStringSync("one");
+
+      final events = await agent.run(userMessage("change it")).toList();
+
+      final results = events.whereType<ToolResultEvent>().toList();
+      expect(results[1].result.returnCode, 0);
+      // Its own edit counts as seen: the second needs no read between.
+      expect(results[2].result.returnCode, 0);
+      expect(results[4].result.exceptionInfo, contains("has changed"));
+      expect(File(file).readAsStringSync(), "someone else's text");
+    });
+
     test("the edit tool replaces once, across all, or refuses", () async {
       // A unique string is the ordinary case.
       final client = FakeLlmClient([

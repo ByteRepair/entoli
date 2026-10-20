@@ -346,13 +346,18 @@ tier the answer named.
 The directory grant is the re-prompt's route carrying a tool's name:
 `add_directory` (`lib/data/builtin/directory_tools.dart`) is the model's ask
 for write access to a directory outside the workspaces, and its banner — the
-ordinary one, four answers — is the whole grant. A plain allow joins the
-directory to the turn's runtime grant; an always answer reaches the repository
-with the directory in `deniedDirs`, so it lands in the named tier's
-`writableDirs` and no rule is written. `writable_directories` lists the
+ordinary one less its plain Allow — is the whole grant. The model asks because
+the work there recurs, and a this-turn-only grant lapsed at the next turn,
+re-raising every write; a mirrored chat, which has no always answers, keeps
+it. An always answer joins the directory to the turn's runtime grant and
+reaches the repository with it in `deniedDirs`, so it lands in the named
+tier's `writableDirs` and no rule is written. `writable_directories` lists the
 workspaces and what was granted beside them. The file tools read the same
 store — `outsideWorkspaces` carries the turn's writable set — so a granted
-directory behaves the same by command or by file tool: one store, two readers.
+directory behaves the same by command or by file tool; and auto mode's
+classifier is handed it as `alsoWritable`, beside the project workspace, since
+a rubric anchored on the chat's workspace alone read every write in a granted
+directory as one past it and asked. One store, three readers.
 The app's data directory refuses in both directions — anything beneath it, or
 anything containing it, would make the app's own settings, secrets and chats
 writable from inside its own permit. The tool's door refuses before any
@@ -970,11 +975,30 @@ provider reporting one (issue #135), so until then it is the floor alone.
 
 A nested `AGENTS.md` found above a file the agent reads mid-turn joins the
 turn where the nested switch is on, and that one defaults on too: a
-subdirectory that writes its own rules is a place the user meant to have
-them. `_loadedInstructions` holds the paths already in front of the model so
-the same file is never injected twice. They render as "## Workspace
-instructions" — the one section of the second message with no preamble of its
-own, because these are the instructions.
+directory that writes its own rules is a place the user meant to have them.
+The walk goes from the file's directory to `/`, not to the workspace root: the
+agent's real work is often a repository elsewhere on the machine, and its
+rules sit at that repository's root. An AGENTS.md read on purpose is not
+appended to itself. `_loadedInstructions` holds the paths already in front of
+the model so the same file is never injected twice. They render as
+"## Workspace instructions" — the one section of the second message with no
+preamble of its own, because these are the instructions.
+
+Only `read` walks. A `cat` or an `ls` through `bash` brings nothing in, so a
+`bash` result that does a file tool's work (`isFileToolWork`: a reader naming
+a file, `sed` on one, a write through a redirect) carries `fileToolReminder`,
+on the reply's first such call and every `fileToolReminderEvery` after. The
+projection adds it, counting the reply's own calls, so a reload words what the
+live turn sent and nothing is logged.
+
+**`write` and `edit` refuse a file the model has not read**, and one that
+changed since: `BuiltinSession.readFiles` stamps each read, write and edit
+(modification time and size), and an existing file whose stamp is missing or
+stale is refused with an answer telling the model to read it first. A file
+that does not exist is a `write` creating it and needs no read. The check runs
+before the gate, so a refusal raises no banner, and again inside the run. The
+stamps are not rebuilt from the log: `replaceWith` clears them, so after a
+rewind or a restart the model reads again before it edits.
 
 **The first reach of each file is recorded** as an `InstructionsPart` on the
 reply — the turn's up-front load one part naming every file it first put in

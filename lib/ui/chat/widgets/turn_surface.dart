@@ -1,5 +1,6 @@
 import "package:flutter/material.dart";
 
+import "../../../data/builtin/directory_tools.dart";
 import "../../../domain/models.dart";
 import "../chat_controller.dart";
 import "approval_banner.dart";
@@ -46,8 +47,13 @@ class TurnSurface extends StatelessWidget {
           for (final approval in approvals)
             ApprovalBanner(
               approval: approval,
-              onAllow: () =>
-                  notifier.respondApproval(approval.id, ApprovalResponse.allow),
+              // A mirrored chat keeps it: with no always answers there,
+              // Deny would be all that was left.
+              onAllow: notifier.rulesWritable &&
+                      approval.toolName == addDirectoryName
+                  ? null
+                  : () => notifier.respondApproval(
+                      approval.id, ApprovalResponse.allow),
               onDeny: () => notifier.respondApproval(approval.id, ApprovalResponse.deny),
               // A re-prompt with no path to grant has nothing to persist.
               onAlwaysAllowChat: !notifier.rulesWritable ||

@@ -64,7 +64,7 @@ image ships NDKs under `$ANDROID_HOME/ndk` that `ndkVersion` does not name
 (~7 GB) beside the one Gradle installs left the v4.6.0 build dead inside
 `signReleaseBundle` with 82 MB free: bundletool's "Location not within
 channel boundaries", a disk-full error wearing a password. On 26.04 the
-image's set is exactly Flutter 3.44's pin and there is nothing to delete.
+image's set is exactly the pinned Flutter's NDK and there is nothing to delete.
 The number is stated in `android-build-setup` rather than read from
 Flutter, so a stale pin's worst effect is an NDK left behind.
 
@@ -137,7 +137,12 @@ compliance" in `ios/AGENTS.md`. Nothing here can read that setting, so the
 the person cutting the release reads it.
 
 **Every job that touches Dart starts with `.github/actions/flutter-setup`**
-— the SDK pin, packages and codegen. The generated sources are not
+— the SDK pin, packages and codegen. **The packages are `pubspec.lock`'s,
+enforced** (`tool/prepare.sh` passes `--enforce-lockfile` where `CI` is set),
+so a re-run builds what the first attempt did: before the lock was committed,
+v6.0.0's macOS re-run resolved a `json_serializable` and a `source_helper`
+published between attempts that did not compile together, and failed in
+codegen. The generated sources are not
 committed, so build_runner runs on every job; the action caches the asset
 graph. The release workflows therefore need `tool/prepare.sh` in the
 tagged tree: rebuilding an older release breaks if the script is renamed.
@@ -255,6 +260,13 @@ whole called workflow, so one failed build job skips the publish matrix,
 store until every build passes. The fix is the failed job's, then *Re-run
 failed jobs*, which rebuilds only those and runs the publishers after.
 
+**Every channel also waits on the release being published.** The `gate`
+job runs after the builds and fails unless the tag's release exists and is
+not a draft; the publish matrix, `testflight` and `play` all need it, so an
+unpublished release ships to none of them rather than to some. It reads
+with a `contents: read` token, to which a draft is a 404 — the same answer
+as no release at all, and both mean the same thing here.
+
 `fail-fast: false` on the matrix, since past the builds one entry failing
 to attach should not cancel the others. `--clobber` is what makes
 re-running safe. A re-run attests
@@ -267,6 +279,15 @@ explicitly.
 `workflow_dispatch` takes a tag and rebuilds an existing release rather
 than making anyone recreate one: recreating changes its timestamp and
 notifies every watcher a second time.
+
+**Moving a released tag by force turns its release back into a draft.**
+v6.0.0 was repointed at a fix with `git push --tags -f`, and GitHub left its
+release a draft from that moment: the dispatched rebuild attached every asset
+to it (the publisher's token can write drafts) while Play's read-only token
+could not see it at all, so two channels shipped and one did not. The gate
+now stops all three on a draft. After a repoint, publish the draft again —
+which fires `release.yml` once more, a run to cancel when the dispatched
+run's builds are already done — and re-run the failed jobs there.
 
 ## Google Play
 
@@ -309,7 +330,10 @@ Cloud console and issue a new one in a minute. Rotate freely, on any doubt.
 at 500 characters and rejects the upload rather than truncating, so a body
 over the cap is dropped with a warning instead of cut. Only
 `whatsnew-en-US` is written, the release body being English; a Greek
-listing keeps what the Console holds.
+listing keeps what the Console holds. A release this job cannot read — a
+draft, invisible to its read-only token, which the gate should already have
+stopped — is uploaded without notes and a warning, not failed: the bundle is
+what the job is for.
 
 A rejected upload is usually Console state no workflow can supply — the
 data safety form, the content rating, a reachable privacy policy, the
@@ -354,7 +378,8 @@ minutes of post-step on a 2x runner, and the dead tag caches filled the
 repository's 10 GB until master's own were evicted. Every cache is therefore
 an `actions/cache/restore` and a separate `actions/cache/save` gated on
 `github.ref_type != 'tag'` — `flutter-setup` drives `subosito/flutter-action`
-as a dry run for its keys to do the same for the SDK.
+as a dry run for its keys to do the same for the SDK. The pub and codegen
+caches are keyed on `pubspec.lock`.
 
 A tag run restores from master, so a cache only helps a release once
 something on master has written it. CI writes the Linux Flutter and codegen

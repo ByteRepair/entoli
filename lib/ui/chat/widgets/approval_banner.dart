@@ -30,7 +30,11 @@ class ApprovalBanner extends StatelessWidget {
   });
 
   final ToolApproval approval;
-  final VoidCallback onAllow;
+
+  /// Null where a this-turn-only answer would mislead: an `add_directory`
+  /// grant is asked for because the work there recurs, and a plain Allow
+  /// lapsed at the next turn.
+  final VoidCallback? onAllow;
   final VoidCallback onDeny;
 
   /// Writes the derived rule on the chat's `meta.json`. Null where this
@@ -117,7 +121,8 @@ class ApprovalBanner extends StatelessWidget {
                 TextButton(
                     onPressed: onAlwaysAllowProject,
                     child: const Text("Always in project")),
-              FilledButton(onPressed: onAllow, child: const Text("Allow")),
+              if (onAllow != null)
+                FilledButton(onPressed: onAllow, child: const Text("Allow")),
             ],
           ),
         ],

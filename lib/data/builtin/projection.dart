@@ -6,6 +6,9 @@ import "../../domain/ask.dart";
 import "../../domain/end_turn.dart";
 import "../../domain/models.dart";
 import "../../domain/prompt_library.dart";
+import "../../domain/shell_command_analysis.dart" show isFileToolWork;
+import "../../domain/tool_arg.dart";
+import "builtin_agent.dart" show bashToolName;
 import "llm/llm_client.dart";
 import "templates.dart";
 
@@ -258,6 +261,16 @@ Iterable<LlmMessage> _assistant(
     return note == null ? text : "$text\n\n$note";
   }
 
+  // Counted over the reply's own calls, like the cwd above, so a reload
+  // reminds where the live turn did.
+  var fileWork = 0;
+  bool reminded(LlmToolCall call) {
+    if (call.name != bashToolName) return false;
+    final command = stringArg(call.argumentsJson, "command");
+    if (command == null || !isFileToolWork(command)) return false;
+    return fileWork++ % fileToolReminderEvery == 0;
+  }
+
   for (final response in _responses(message.parts)) {
     final reasoning = StringBuffer();
     final text = StringBuffer();
@@ -340,12 +353,15 @@ Iterable<LlmMessage> _assistant(
     // provider that sees a tool call with no result rejects the next turn.
     for (final call in calls) {
       final result = results[call.id];
+      final answer = result == null
+          ? _interruptedText(call.name)
+          : noted(_toolResultText(call.name, result), result.cwd);
       yield LlmMessage(
         role: LlmRole.tool,
         toolCallId: call.id,
-        text: result == null
-            ? _interruptedText(call.name)
-            : noted(_toolResultText(call.name, result), result.cwd),
+        text: result != null && reminded(call)
+            ? "$answer\n\n$fileToolReminder"
+            : answer,
         attachments: images[call.id] ?? const [],
       );
     }
