@@ -180,7 +180,7 @@ class _PairedDevicePageState extends ConsumerState<PairedDevicePage> {
         leading: Icon(peerStatusIcon(status),
             size: 20, color: peerStatusColor(status, theme)),
         title: Text(_peerStatusWord(status)),
-        subtitle: peer?.error == null ? null : Text(peer!.error!),
+        subtitle: peer?.error == null ? null : SelectableText(peer!.error!),
         // The row's action, beside the status it acts on. Connecting is the
         // wait's own state; a dial that finds nothing is said on this page.
         trailing: status == PeerStatus.connecting

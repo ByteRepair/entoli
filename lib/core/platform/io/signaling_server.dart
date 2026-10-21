@@ -67,22 +67,32 @@ class SignalingServer implements LanSignaling {
     return server.port;
   }
 
-  /// Answers [discover]'s broadcasts on the usual port, over UDP. Only a
-  /// probe for a token this server holds gets a reply, so the port is no
-  /// use for reflecting traffic at anyone.
+  /// The one UDP socket, on the usual port: it answers other devices'
+  /// probes and is what [discover] broadcasts from, so its replies come back
+  /// to the port a firewall rule opens rather than to an ephemeral one a
+  /// stateful firewall cannot match to a broadcast. Only a probe for a token
+  /// this server holds gets a reply, so the port is no use for reflecting
+  /// traffic at anyone.
   Future<void> _listenForDiscovery(int httpPort) async {
     try {
       final udp = _udp = await RawDatagramSocket.bind(
-          InternetAddress.anyIPv4, preferredSignalingPort);
+          InternetAddress.anyIPv4, preferredSignalingPort)
+        ..broadcastEnabled = true;
       udp.listen((event) {
         final datagram = event == RawSocketEvent.read ? udp.receive() : null;
         if (datagram == null) return;
         try {
-          final answer = _routes.answerProbe(
-              jsonDecode(utf8.decode(datagram.data)) as Map<String, dynamic>);
-          if (answer == null) return;
-          udp.send(utf8.encode(jsonEncode({...answer, "port": httpPort})),
-              datagram.address, datagram.port);
+          final message =
+              jsonDecode(utf8.decode(datagram.data)) as Map<String, dynamic>;
+          final answer = _routes.answerProbe(message);
+          if (answer != null) {
+            udp.send(utf8.encode(jsonEncode({...answer, "port": httpPort})),
+                datagram.address, datagram.port);
+          } else {
+            for (final heard in [..._discoveries]) {
+              heard(datagram.address.address, message);
+            }
+          }
         } catch (_) {
           // Anything else on the LAN may send to this port; traffic, not a
           // failure.
@@ -94,35 +104,38 @@ class SignalingServer implements LanSignaling {
     }
   }
 
+  /// The [discover]s waiting on replies, each handed every datagram that is
+  /// not a probe.
+  final _discoveries = <void Function(String from, Map<String, dynamic>)>{};
+
   @override
   Future<List<String>> discover(String token) async {
+    await start();
+    final udp = _udp;
+    if (udp == null) return const [];
     final own = await addresses();
     final (:probe, :isAnswer) = SignalingRoutes.probeFor(token);
-    final socket = await RawDatagramSocket.bind(InternetAddress.anyIPv4, 0)
-      ..broadcastEnabled = true;
     final found = <String>{};
-    socket.listen((event) {
-      final datagram = event == RawSocketEvent.read ? socket.receive() : null;
-      if (datagram == null || own.contains(datagram.address.address)) return;
-      try {
-        final reply = jsonDecode(utf8.decode(datagram.data));
-        if (isAnswer(reply) && reply["port"] is int) {
-          found.add("${datagram.address.address}:${reply["port"]}");
-        }
-      } catch (_) {
-        // Not an answer to this probe.
-      }
-    });
-    final payload = utf8.encode(jsonEncode(probe));
-    for (final to in lanBroadcasts(own)) {
-      try {
-        socket.send(payload, InternetAddress(to), preferredSignalingPort);
-      } catch (error) {
-        logFailure("sync", "could not broadcast to $to", error);
+    void heard(String from, Map<String, dynamic> reply) {
+      if (!own.contains(from) && isAnswer(reply) && reply["port"] is int) {
+        found.add("$from:${reply["port"]}");
       }
     }
-    await Future<void>.delayed(const Duration(seconds: 2));
-    socket.close();
+
+    _discoveries.add(heard);
+    try {
+      final payload = utf8.encode(jsonEncode(probe));
+      for (final to in lanBroadcasts(own)) {
+        try {
+          udp.send(payload, InternetAddress(to), preferredSignalingPort);
+        } catch (error) {
+          logFailure("sync", "could not broadcast to $to", error);
+        }
+      }
+      await Future<void>.delayed(const Duration(seconds: 2));
+    } finally {
+      _discoveries.remove(heard);
+    }
     return found.toList();
   }
 

@@ -3,6 +3,7 @@ import "dart:convert";
 
 import "package:http/http.dart" as http;
 
+import "../../../domain/sync/lan_signaling.dart" show preferredSignalingPort;
 import "../../../domain/sync/signaling_routes.dart";
 import "../handshake.dart" show ProtocolMismatchException;
 
@@ -59,8 +60,10 @@ class LanSignaler {
       }
     }
     if (last == null && outdated) throw ProtocolMismatchException("older");
-    throw SignalingException(
-        "could not reach the other device${last == null ? "" : ": $last"}");
+    throw SignalingException(last == null
+        ? "could not reach the other device; check that its firewall allows "
+            "TCP and UDP port $preferredSignalingPort"
+        : "could not reach the other device: $last");
   }
 
   /// The address and the status it answered with, 0 where it did not; 200

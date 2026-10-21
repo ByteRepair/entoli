@@ -671,7 +671,14 @@ address does not move; a LAN one does, between connections. So `connect` tries
 the saved addresses and then `discover`: one UDP datagram to the limited
 broadcast and to each private /24's, on the usual port, carrying the probe
 below, and two seconds for replies. The server listens on UDP beside its HTTP,
-and replies, with its port, only to a probe for a token it holds. Replies from
+and replies, with its port, only to a probe for a token it holds. The
+broadcast goes out from that same socket rather than an ephemeral one: a
+stateful firewall cannot match a reply from a host to a packet sent to a
+broadcast address, so the reply has to arrive at a port the rule already
+opens. One rule, TCP and UDP 47921, is then both being dialled and dialling,
+and a LAN dial that reaches nobody says so in its error. Windows and macOS
+firewall by app rather than by port, and Fedora Workstation opens 1025-65535;
+the hand-written Linux rule that opens only TCP is the case this is for. Replies from
 this device's own addresses are dropped, since its own server holds the same
 token and would take the offer. Only a press of Connect asks; nothing redials
 on its own.
