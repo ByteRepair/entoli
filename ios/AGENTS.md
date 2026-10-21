@@ -250,10 +250,11 @@ constant stands in until a reader wants a channel round trip. The framework
 is weak-linked in both xcconfigs; an OS below 26 starts, and the handshake
 answers `os`.
 
-The simulator cannot run the model (device eligibility fails there, like
-the recognizer), so the bring-up is a real device's: the handshake, one
-no-tools turn, a tool handoff read back through `conv.jsonl`, then
-multi-step against the error map. What the VM does pin is the client's own
+The simulator runs the model, on a Mac with Apple Intelligence on — the
+host's model answers — so the bring-up is the simulator's as much as a
+device's: the welcome chat's tool turns are the quick check, since they
+offer a nested object (`ask`) and a string enum (the tone), the two shapes
+that once named a node like its root and failed every turn. What the VM does pin is the client's own
 protocol over a mock channel — `test/data/local/apple_fm_client_test.dart`:
 the streaming, the handoff ending, the history wording, the error map.
 
