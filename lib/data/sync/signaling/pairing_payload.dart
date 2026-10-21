@@ -33,7 +33,7 @@ class PairingOffer {
   final String psk;
   final String name;
 
-  /// LAN: every address the signaling server answers on, best first.
+  /// LAN: every address the signaling server answers on, probed at once.
   final List<String> hosts;
   final int port;
 

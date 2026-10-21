@@ -31,8 +31,8 @@ abstract interface class LanSignaling {
   /// Binds and answers with the port chosen by the OS — what goes in the QR.
   Future<int> start();
 
-  /// This machine's addresses a peer on the same network could reach, best
-  /// first. What goes into the QR beside the port.
+  /// This machine's addresses a peer could reach, in no useful order. What
+  /// goes into the QR beside the port.
   Future<List<String>> addresses();
 
   /// The host's half of an exchange: completes the offer [id] names.

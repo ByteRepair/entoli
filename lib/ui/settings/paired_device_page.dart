@@ -199,10 +199,10 @@ class _PairedDevicePageState extends ConsumerState<PairedDevicePage> {
         title: const Text("Last connected"),
         subtitle: Text(describeFire(device.lastSeenAt, DateTime.now())),
       ),
-      if (device.lastAddress != null)
+      if (device.addresses.isNotEmpty)
         ListTile(
-          title: const Text("Last address"),
-          subtitle: Text(device.lastAddress!, style: _monoStyle),
+          title: const Text("Last addresses"),
+          subtitle: Text(device.addresses.join("\n"), style: _monoStyle),
         ),
       ListTile(
         title: const Text("Paired"),

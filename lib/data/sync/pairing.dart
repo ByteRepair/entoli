@@ -408,21 +408,31 @@ class SyncPairing {
     final token = RelaySignaler.roomFor(secret);
 
     Object? failure;
-    final address = device.lastAddress;
-    if (address != null && address.contains(":")) {
-      final at = address.lastIndexOf(":");
+    final server = _server;
+    // Where it was last seen, each on the port it was seen on and the one it
+    // would normally be on — a device that simply restarted is at the second.
+    // Then, where those have all gone stale, the rest of the LAN.
+    for (final addresses in [
+      [
+        for (final address in device.addresses) ...[
+          address,
+          "${address.substring(0, address.lastIndexOf(":"))}"
+              ":$preferredSignalingPort",
+        ],
+      ],
+      if (server != null && !kIsWeb)
+        [
+          for (final host in lanNeighbours(await server.addresses()))
+            "$host:$preferredSignalingPort",
+        ],
+    ]) {
+      if (addresses.isEmpty) continue;
       try {
         await _dialOverLan(
-          hosts: [address.substring(0, at)],
-          // The port it was last seen on, then the one it would normally be
-          // on: a device that restarted onto an ephemeral port is at neither,
-          // but one that simply restarted is at the second.
-          ports: {int.parse(address.substring(at + 1)), preferredSignalingPort}
-              .toList(),
+          addresses: addresses,
           token: token,
           psk: secret,
           knownDeviceId: deviceId,
-          address: address,
         );
         return;
       } catch (error) {
@@ -469,14 +479,13 @@ class SyncPairing {
   String get defaultDeviceName =>
       _hostname ?? "Entoli ${identity.digest.substring(0, 4)}";
 
-  /// Where a peer could dial this device back, or null where it is not
-  /// listening — a browser never is.
-  Future<String?> _dialbackAddress() async {
+  /// Every host:port a peer could dial this device back on, empty where it is
+  /// not listening — a browser never is.
+  Future<List<String>> _dialbackAddresses() async {
     final server = _server;
-    if (server == null || kIsWeb) return null;
+    if (server == null || kIsWeb) return const [];
     final port = server.port ?? await server.start();
-    final addresses = await server.addresses();
-    return addresses.isEmpty ? null : "${addresses.first}:$port";
+    return [for (final host in await server.addresses()) "$host:$port"];
   }
 
   List<Map<String, Object>> iceServers() {
@@ -614,11 +623,9 @@ class SyncPairing {
     activity.value = const PairingActivity();
     try {
       await _dialOverLan(
-        hosts: payload.hosts,
-        ports: [payload.port],
+        addresses: [for (final host in payload.hosts) "$host:${payload.port}"],
         code: payload.code,
         psk: payload.psk,
-        address: "${payload.hosts.first}:${payload.port}",
       );
     } catch (error) {
       _fail(error);
@@ -631,24 +638,18 @@ class SyncPairing {
   /// already diverged, with only one of them learning to try more than the
   /// port it was told about.
   Future<void> _dialOverLan({
-    required List<String> hosts,
-    required List<int> ports,
+    required List<String> addresses,
     required String psk,
     String code = "",
     String token = "",
     String? knownDeviceId,
-    String? address,
   }) async {
     final link = await RtcLink.create(iceServers: iceServers());
     try {
       final sdp = await link.offer();
       final signaler = LanSignaler(client: _client);
-      final answer = await signaler.exchange(
-          hosts: hosts,
-          ports: ports,
-          code: code,
-          token: token,
-          offerSdp: sdp);
+      final (:answer, :address) = await signaler.exchange(
+          addresses: addresses, code: code, token: token, offerSdp: sdp);
       await link.acceptAnswer(answer);
       await _establish(
         link: await link.open(),
@@ -804,6 +805,7 @@ class SyncPairing {
         },
       );
 
+      final dialback = await _dialbackAddresses();
       await channel.sendJson({
         "t": "hello",
         "id": identity.id,
@@ -811,8 +813,9 @@ class SyncPairing {
         // Where this device can be dialled back, if it listens at all. Only
         // the side that dialled knows the other's address otherwise, so only
         // that side could ever reconnect — the other one had no route and
-        // said so.
-        "addr": ?await _dialbackAddress(),
+        // said so. `addr` is the one address a build before `addrs` reads.
+        "addrs": dialback,
+        "addr": ?dialback.firstOrNull,
       });
       final reply = await hello.future.timeout(const Duration(seconds: 15));
 
@@ -829,10 +832,13 @@ class SyncPairing {
       }
       // The registry's own verb rather than the same two fields written here:
       // when a device was last reached, and where, is what a registry is for.
-      // The address it gave is as good as the one we dialled: on the side
-      // that was dialled, it is the only one there is.
-      await registry.markSeen(deviceId,
-          address: address ?? reply["addr"] as String?);
+      // The one we dialled first, since it answered, then every one it gave:
+      // on the side that was dialled, those are the only ones there are.
+      await registry.markSeen(deviceId, addresses: {
+        ?address,
+        ...?(reply["addrs"] as List<Object?>?)?.cast<String>(),
+        ?reply["addr"] as String?,
+      }.toList());
 
       _peers.adopt(live);
       _peers.setStatus(deviceId,

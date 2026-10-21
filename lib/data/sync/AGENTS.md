@@ -651,10 +651,28 @@ time anything answered a dial.
 
 **Both sides have to know where the other is.** Only the device that dialled
 learns an address, so the other one had no route and said so. The `hello` now
-carries where the sender can be dialled back, and `markSeen` records it — a
-device that is not listening sends nothing, which is the honest answer. A
-completed pairing also starts this device listening, which before it had no
-reason to be doing.
+carries every address the sender can be dialled back on (`addrs`, and `addr`,
+the first of them, for a build from before the list), and `markSeen` records
+them, the one that answered first — a device that is not listening sends
+nothing, which is the honest answer. A completed pairing also starts this
+device listening, which before it had no reason to be doing.
+
+**A dead address costs seconds, not the dial.** A device has addresses on
+networks the other is not on — a LAN seen from a tailnet, a docker bridge —
+and those drop rather than refuse. Tried in turn under the offer's 45s, two of
+them outlasted the host's 30s patience before the one that worked was reached,
+which is what "sync does not work over Tailscale" was. `LanSignaler` probes
+every address's health route at once for 3s and posts the offer to those that
+answered, one at a time in the order they did: one at a time because a host
+reachable on two addresses would otherwise answer one reconnect twice.
+
+**Where every saved address has gone stale, the LAN is scanned.** A tailnet
+address does not move; a LAN one does, between connections. So `connect` tries
+the saved addresses and then every other host in this device's private /24s
+on the usual port — only on a press of Connect, nothing redials on its own.
+An Entoli that is not the peer refuses the token, and this device's own
+addresses are left out, since its own server holds the same token and would
+take the offer.
 
 ## When something on the wire goes wrong
 

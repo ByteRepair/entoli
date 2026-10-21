@@ -12,7 +12,7 @@ class PairedDevice {
     required this.publicKey,
     required this.addedAt,
     DateTime? lastSeenAt,
-    this.lastAddress,
+    this.addresses = const [],
   }) : lastSeenAt = lastSeenAt ?? addedAt;
 
   /// The peer's identity id — derived from its public key, so it travels with
@@ -24,9 +24,10 @@ class PairedDevice {
   final DateTime addedAt;
   DateTime lastSeenAt;
 
-  /// The host:port its LAN signaling server answered on last time. A hint for
-  /// reconnecting, not a promise — ports move across restarts.
-  String? lastAddress;
+  /// Every host:port its LAN signaling server was last known on, the one that
+  /// answered first. A hint for reconnecting, not a promise — LAN addresses
+  /// move, though a tailnet's do not.
+  List<String> addresses;
 
   /// The record as [name] addresses it: what a rename is. The name is final
   /// on the record, so a rename is this replacement — every other fact
@@ -37,7 +38,7 @@ class PairedDevice {
         publicKey: publicKey,
         addedAt: addedAt,
         lastSeenAt: lastSeenAt,
-        lastAddress: lastAddress,
+        addresses: addresses,
       );
 
   /// The fingerprint over this record's stored key, or null where it will
@@ -58,7 +59,7 @@ class PairedDevice {
         "publicKey": publicKey,
         "addedAt": addedAt.toIso8601String(),
         "lastSeenAt": lastSeenAt.toIso8601String(),
-        if (lastAddress != null) "lastAddress": lastAddress,
+        if (addresses.isNotEmpty) "addresses": addresses,
       };
 
   static PairedDevice fromJson(Map<String, dynamic> json) => PairedDevice(
@@ -69,7 +70,9 @@ class PairedDevice {
         lastSeenAt: json["lastSeenAt"] == null
             ? null
             : DateTime.parse(json["lastSeenAt"] as String),
-        lastAddress: json["lastAddress"] as String?,
+        // `lastAddress` is the one address a record held before it held all.
+        addresses: (json["addresses"] as List<Object?>?)?.cast<String>() ??
+            [?json["lastAddress"] as String?],
       );
 }
 
@@ -86,7 +89,7 @@ abstract interface class DeviceRegistry {
   /// Drops the record and its stored pairing secret with it.
   Future<void> remove(String id);
 
-  Future<void> markSeen(String id, {String? address});
+  Future<void> markSeen(String id, {List<String>? addresses});
 
   /// What this device addresses [id] by, from now on. A name in this
   /// registry is the one this device files the peer under, for its own rows —

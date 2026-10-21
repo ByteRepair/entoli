@@ -1292,11 +1292,11 @@ class FakeDeviceRegistry implements DeviceRegistry {
   Future<void> remove(String id) async => _devices.remove(id);
 
   @override
-  Future<void> markSeen(String id, {String? address}) async {
+  Future<void> markSeen(String id, {List<String>? addresses}) async {
     final device = _devices[id];
     if (device == null) return;
     device.lastSeenAt = DateTime.now();
-    if (address != null) device.lastAddress = address;
+    if (addresses != null && addresses.isNotEmpty) device.addresses = addresses;
   }
 
   @override

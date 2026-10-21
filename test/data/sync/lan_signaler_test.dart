@@ -1,3 +1,4 @@
+import "dart:async";
 import "dart:convert";
 
 import "package:agent_chat/data/sync/signaling/lan_signaler.dart";
@@ -16,21 +17,31 @@ void main() {
   /// what dialling a device that is not there does.
   late Map<String, SignalingRoutes> lan;
 
+  /// Addresses that neither answer nor refuse: a network this device is not
+  /// on drops the connect, and only a timeout ends it.
+  late Set<String> silent;
+
   late LanSignaler client;
 
   setUp(() {
     host = SignalingRoutes(patience: const Duration(seconds: 2));
     lan = {"192.168.1.5:47921": host};
-    client = LanSignaler(client: MockClient((request) async {
-      final routes = lan["${request.url.host}:${request.url.port}"];
-      if (routes == null) {
-        throw http.ClientException("connection refused", request.url);
-      }
-      final reply = await routes.handle(SignalingRequest(
-          request.method, request.url.path,
-          body: request.body));
-      return http.Response(reply.body, reply.status, headers: reply.headers);
-    }));
+    silent = {};
+    client = LanSignaler(
+      probeTimeout: const Duration(milliseconds: 100),
+      client: MockClient((request) async {
+        final address = "${request.url.host}:${request.url.port}";
+        if (silent.contains(address)) return Completer<http.Response>().future;
+        final routes = lan[address];
+        if (routes == null) {
+          throw http.ClientException("connection refused", request.url);
+        }
+        final reply = await routes.handle(SignalingRequest(
+            request.method, request.url.path,
+            body: request.body));
+        return http.Response(reply.body, reply.status, headers: reply.headers);
+      }),
+    );
   });
 
   tearDown(() async {
@@ -45,14 +56,14 @@ void main() {
     host.arm("123456");
     answerWith("v=0 answer");
 
-    final answer = await client.exchange(
-      hosts: ["192.168.1.5"],
-      ports: [47921],
+    final result = await client.exchange(
+      addresses: ["192.168.1.5:47921"],
       code: "123456",
       offerSdp: "v=0 offer",
     );
 
-    expect(answer, "v=0 answer");
+    expect(result.answer, "v=0 answer");
+    expect(result.address, "192.168.1.5:47921");
   });
 
   test("the offer arrives as it was sent", () async {
@@ -64,8 +75,7 @@ void main() {
     });
 
     await client.exchange(
-        hosts: ["192.168.1.5"],
-        ports: [47921],
+        addresses: ["192.168.1.5:47921"],
         code: "123456",
         offerSdp: "v=0 offer");
 
@@ -78,8 +88,7 @@ void main() {
 
     await expectLater(
       client.exchange(
-          hosts: ["192.168.1.5"],
-          ports: [47921],
+          addresses: ["192.168.1.5:47921"],
           code: "000000",
           offerSdp: "v=0 offer"),
       throwsA(isA<SignalingException>()),
@@ -94,35 +103,56 @@ void main() {
     host.allowReconnect("tok");
     answerWith("v=0 answer");
 
-    final answer = await client.exchange(
-      hosts: ["192.168.1.5"],
-      ports: [51234, 47921],
+    final result = await client.exchange(
+      addresses: ["192.168.1.5:51234", "192.168.1.5:47921"],
       token: "tok",
       offerSdp: "v=0 offer",
     );
 
-    expect(answer, "v=0 answer");
+    expect(result.address, "192.168.1.5:47921");
   });
 
-  test("a dead address is passed over for one that answers", () async {
+  test("an address that never answers does not hold up one that does",
+      () async {
+    // The Tailscale case: the QR's LAN address is on a network the joiner is
+    // not on, and the one that works is listed after it.
+    silent = {"192.168.1.4:47921"};
+    lan = {"100.101.102.103:47921": host};
     host.arm("123456");
     answerWith("v=0 answer");
 
-    final answer = await client.exchange(
-      hosts: ["192.168.1.4", "192.168.1.5"],
-      ports: [47921],
+    final result = await client.exchange(
+      addresses: ["192.168.1.4:47921", "100.101.102.103:47921"],
       code: "123456",
+      offerSdp: "v=0 offer",
+    ).timeout(const Duration(seconds: 1));
+
+    expect(result.address, "100.101.102.103:47921");
+  });
+
+  test("an Entoli that refuses is passed over for the paired one", () async {
+    // What a scan finds: other devices on the LAN answer health too, and
+    // refuse a token they do not hold.
+    final stranger = SignalingRoutes();
+    addTearDown(stranger.close);
+    lan["192.168.1.9:47921"] = stranger;
+    host.allowReconnect("tok");
+    answerWith("v=0 answer");
+
+    final result = await client.exchange(
+      addresses: ["192.168.1.9:47921", "192.168.1.5:47921"],
+      token: "tok",
       offerSdp: "v=0 offer",
     );
 
-    expect(answer, "v=0 answer");
+    expect(result.address, "192.168.1.5:47921");
   });
 
   test("with nothing reachable it says so rather than hanging", () async {
+    silent = {"192.168.1.3:47921"};
     await expectLater(
       client.exchange(
-          hosts: ["192.168.1.4"],
-          ports: [47921],
+          addresses: ["192.168.1.3:47921", "192.168.1.4:47921"],
           code: "123456",
           offerSdp: "v=0 offer"),
       throwsA(isA<SignalingException>()),
@@ -137,11 +167,25 @@ void main() {
 
     await expectLater(
       client.exchange(
-          hosts: ["192.168.1.5"],
-          ports: [47921],
+          addresses: ["192.168.1.5:47921"],
           code: "123456",
           offerSdp: "v=0 offer"),
       throwsA(isA<SignalingException>()),
     );
+  });
+
+  group("lanNeighbours", () {
+    test("is the rest of each private /24, this device left out", () {
+      final hosts = lanNeighbours(["192.168.1.5"]);
+      expect(hosts, hasLength(253));
+      expect(hosts, containsAll(["192.168.1.1", "192.168.1.254"]));
+      expect(hosts, isNot(contains("192.168.1.5")));
+    });
+
+    test("leaves out public and tailnet addresses", () {
+      expect(lanNeighbours(["100.101.102.103", "8.8.8.8", "172.32.0.1"]),
+          isEmpty);
+      expect(lanNeighbours(["10.0.0.2", "172.16.4.2"]), hasLength(506));
+    });
   });
 }

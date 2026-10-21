@@ -70,11 +70,11 @@ class FileDeviceRegistry implements DeviceRegistry {
   }
 
   @override
-  Future<void> markSeen(String id, {String? address}) async {
+  Future<void> markSeen(String id, {List<String>? addresses}) async {
     final device = await byId(id);
     if (device == null) return;
     device.lastSeenAt = DateTime.now();
-    if (address != null) device.lastAddress = address;
+    if (addresses != null && addresses.isNotEmpty) device.addresses = addresses;
     await add(device);
   }
 
