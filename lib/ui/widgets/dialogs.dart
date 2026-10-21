@@ -21,9 +21,10 @@ Future<void> copyToClipboard(
 }
 
 /// Report [error] in a snack bar. The one-line form several pages spell out
-/// for a caught failure, hoisted so they stop duplicating it.
-void say(BuildContext context, Object error) =>
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("$error")));
+/// for a caught failure, hoisted so they stop duplicating it. Selectable, so
+/// it can be copied into an issue.
+void say(BuildContext context, Object error) => ScaffoldMessenger.of(context)
+    .showSnackBar(SnackBar(content: SelectableText("$error")));
 
 /// Run a [work] whose future nobody would await — a sync verb handed to an
 /// `onPressed` — and catch its failure with [say], where dropping it left a

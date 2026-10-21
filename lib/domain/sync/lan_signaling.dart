@@ -11,6 +11,25 @@
 /// timeout per port tried.
 const preferredSignalingPort = 47921;
 
+/// Where [LanSignaling.discover] broadcasts from this device's [own]
+/// addresses: the limited broadcast, which leaves by the default route only,
+/// and the /24 broadcast of each private address, which reaches the LAN
+/// when the default route is a VPN's. Public and CGNAT (100.64/10,
+/// Tailscale's) addresses get none: those are not a LAN, and a tailnet
+/// address does not move anyway.
+// shortcut: assumes a /24, since NetworkInterface gives no prefix length;
+// a wider home network hears only the /24 this device is in.
+List<String> lanBroadcasts(List<String> own) => {
+      "255.255.255.255",
+      for (final address in own)
+        if (address.split(".").map(int.tryParse).toList()
+            case [final a?, final b?, final c?, _?]
+            when a == 10 ||
+                (a == 172 && b >= 16 && b < 32) ||
+                (a == 192 && b == 168))
+          "$a.$b.$c.255",
+    }.toList();
+
 /// The LAN rendezvous a desktop offers while pairing: where a joiner's offer
 /// waits for an answer, and the one-time code that gates it.
 ///
@@ -31,9 +50,14 @@ abstract interface class LanSignaling {
   /// Binds and answers with the port chosen by the OS — what goes in the QR.
   Future<int> start();
 
-  /// This machine's addresses a peer on the same network could reach, best
-  /// first. What goes into the QR beside the port.
+  /// This machine's addresses a peer could reach, in no useful order. What
+  /// goes into the QR beside the port.
   Future<List<String>> addresses();
+
+  /// Asks the LAN, by one broadcast, where the device holding [token] is,
+  /// and answers every `host:port` that proved it does. Never other devices'
+  /// addresses, and never this one's: its own server holds the same token.
+  Future<List<String>> discover(String token);
 
   /// The host's half of an exchange: completes the offer [id] names.
   void postAnswer(String id, String sdp);

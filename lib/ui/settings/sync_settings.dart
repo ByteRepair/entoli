@@ -313,7 +313,7 @@ class _PairedDeviceRow extends StatelessWidget {
             if (failure != null)
               Padding(
                 padding: const EdgeInsets.only(left: 24, right: 8),
-                child: Text(
+                child: SelectableText(
                   failure,
                   style: theme.textTheme.bodySmall
                       ?.copyWith(color: theme.colorScheme.error),

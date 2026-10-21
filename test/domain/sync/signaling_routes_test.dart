@@ -187,7 +187,43 @@ void main() {
     expect((await offer(code: "123456", method: "GET")).status, 405);
   });
 
-  test("a path that is not one of the three is a 404", () async {
+  group("the probe", () {
+    Future<SignalingReply> probe(String token, String nonce) =>
+        routes.handle(SignalingRequest("POST", SignalingRoutes.probePath,
+            body: jsonEncode({
+              "nonce": nonce,
+              "proof": SignalingRoutes.proof(token, "probe", nonce),
+            })));
+
+    test("proves a token it holds, under the host's label", () async {
+      routes.allowReconnect("tok");
+      final reply = await probe("tok", "n1");
+      expect(reply.status, 200);
+      expect(jsonDecode(reply.body)["proof"],
+          SignalingRoutes.proof("tok", "host", "n1"));
+    });
+
+    test("a dialler's probe is answered only by a host holding its token",
+        () {
+      routes.allowReconnect("tok");
+      final (:probe, :isAnswer) = SignalingRoutes.probeFor("tok");
+      expect(isAnswer(routes.answerProbe(probe)), isTrue);
+
+      final other = SignalingRoutes.probeFor("other");
+      expect(routes.answerProbe(other.probe), isNull);
+      // An answer to one probe proves nothing to another.
+      expect(other.isAnswer(routes.answerProbe(probe)), isFalse);
+    });
+
+    test("refuses a token it does not hold, or no longer does", () async {
+      expect((await probe("tok", "n1")).status, 403);
+      routes.allowReconnect("tok");
+      routes.refuseReconnect("tok");
+      expect((await probe("tok", "n1")).status, 403);
+    });
+  });
+
+  test("a path that is not one of the routes is a 404", () async {
     expect(
         (await routes.handle(const SignalingRequest("GET", "/"))).status, 404);
   });

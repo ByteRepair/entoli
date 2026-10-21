@@ -3,50 +3,97 @@ import "dart:convert";
 
 import "package:http/http.dart" as http;
 
-/// The joiner's half of a LAN exchange: POST an offer to the first address
-/// that answers, and wait in the same request for the host's answer — one
-/// round trip, no polling.
+import "../../../domain/sync/lan_signaling.dart" show preferredSignalingPort;
+import "../../../domain/sync/signaling_routes.dart";
+import "../handshake.dart" show ProtocolMismatchException;
+
+/// The joiner's half of a LAN exchange: find which of [exchange]'s addresses
+/// answers, POST the offer there, and wait in the same request for the host's
+/// answer — one round trip, no polling.
 ///
 /// The [client] is the caller's: a dial borrows the pairing's one client and
 /// this class has no lifetime of its own to close it at. Owning one here
 /// behind an optional parameter had `close()` shutting the pairing's shared
 /// client off after the first dial.
 class LanSignaler {
-  LanSignaler({required this.client});
+  LanSignaler({required this.client, this.probeTimeout = const Duration(seconds: 3)});
 
   final http.Client client;
 
-  /// Posts [offerSdp] under [code] — or, for a reconnect, under the [token]
-  /// derived from this pair's secret — and returns the answer SDP. The
-  /// server holds the request open until its host replies or gives up.
-  /// [ports] is tried in order at each host. A reconnect passes two — where
-  /// the device was last seen, then where it would normally be — since a
-  /// device that has restarted is at the second and not the first.
-  Future<String> exchange({
-    required List<String> hosts,
-    required List<int> ports,
+  /// How long an address gets to answer the health route. An address on a
+  /// network this device is not on drops rather than refuses, and tried one
+  /// at a time under the offer's own timeout, a QR naming two dead ones
+  /// outlasted the host's patience before the live one was reached.
+  final Duration probeTimeout;
+
+  /// Probes every `host:port` in [addresses] at once and posts [offerSdp] —
+  /// under [code], or for a reconnect the [token] derived from this pair's
+  /// secret — to each that answers, in the order they answered, until one
+  /// takes it. Returns the answer SDP and the address that gave it.
+  ///
+  /// The offer itself goes to one address at a time: a host reachable on two
+  /// would otherwise answer the same reconnect twice. A reconnect's probe
+  /// has the host prove it holds [token] first, since a scan reaches whoever
+  /// is on the LAN and the token admits offers at the peer and its relay room.
+  Future<({String answer, String address})> exchange({
+    required List<String> addresses,
     String code = "",
     String token = "",
     required String offerSdp,
     Duration timeout = const Duration(seconds: 45),
   }) async {
     Object? last;
-    for (final host in hosts) {
-      for (final port in ports) {
-        try {
-          return await _exchange(host, port, code, token, offerSdp, timeout);
-        } catch (error) {
-          last = error;
-        }
+    var outdated = false;
+    await for (final (address, status) in Stream.fromFutures(
+        addresses.toSet().map((address) => _probe(address, token)))) {
+      // A build before the probe route answers it 404, and would refuse the
+      // handshake on its version anyway.
+      if (status == 404) outdated = true;
+      if (status != 200) continue;
+      try {
+        return (
+          answer: await _exchange(address, code, token, offerSdp, timeout),
+          address: address,
+        );
+      } catch (error) {
+        last = error;
       }
     }
-    throw SignalingException(
-        "could not reach the other device${last == null ? "" : ": $last"}");
+    if (last == null && outdated) throw ProtocolMismatchException("older");
+    throw SignalingException(last == null
+        ? "could not reach the other device; check that its firewall allows "
+            "TCP and UDP port $preferredSignalingPort"
+        : "could not reach the other device: $last");
   }
 
-  Future<String> _exchange(String host, int port, String code, String token,
+  /// The address and the status it answered with, 0 where it did not; 200
+  /// only from a host that proved it holds [token], where there is one.
+  // shortcut: the timeout abandons the connect rather than cancelling it, so
+  // a dead address holds a socket until the OS gives up; fine at a /24.
+  Future<(String, int)> _probe(String address, String token) async {
+    try {
+      if (token.isEmpty) {
+        final response = await client
+            .get(Uri.parse("http://$address${SignalingRoutes.healthPath}"))
+            .timeout(probeTimeout);
+        return (address, response.statusCode);
+      }
+      final (:probe, :isAnswer) = SignalingRoutes.probeFor(token);
+      final response = await client
+          .post(Uri.parse("http://$address${SignalingRoutes.probePath}"),
+              headers: const {"content-type": "application/json"},
+              body: jsonEncode(probe))
+          .timeout(probeTimeout);
+      if (response.statusCode != 200) return (address, response.statusCode);
+      return (address, isAnswer(jsonDecode(response.body)) ? 200 : 403);
+    } catch (_) {
+      return (address, 0);
+    }
+  }
+
+  Future<String> _exchange(String address, String code, String token,
       String offerSdp, Duration timeout) async {
-    final uri = Uri.parse("http://$host:$port/entoli/offer");
+    final uri = Uri.parse("http://$address${SignalingRoutes.offerPath}");
     final response = await client
         .post(uri,
             headers: const {"content-type": "application/json"},

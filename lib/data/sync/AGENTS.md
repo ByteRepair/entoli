@@ -344,7 +344,8 @@ picker offers this device's providers, and the workspace's files are the
 home device's.
 
 These messages made the protocol 2; the project messages, the control lock's
-removal and splitting a message across frames made it 3. A build before them
+removal and splitting a message across frames made it 3; the LAN probe's
+proof and the hello's list of addresses made it 4. A build before them
 drops the link on the first frame it cannot parse, or reads the first piece of
 a large message as a whole one, so the handshake refuses it up front with a
 version mismatch instead. Both devices update together. **Adding, removing or
@@ -651,10 +652,57 @@ time anything answered a dial.
 
 **Both sides have to know where the other is.** Only the device that dialled
 learns an address, so the other one had no route and said so. The `hello` now
-carries where the sender can be dialled back, and `markSeen` records it — a
-device that is not listening sends nothing, which is the honest answer. A
-completed pairing also starts this device listening, which before it had no
-reason to be doing.
+carries every address the sender can be dialled back on (`addrs`), and
+`markSeen` records them, the one that answered first — a device that is not listening sends
+nothing, which is the honest answer. A completed pairing also starts this
+device listening, which before it had no reason to be doing.
+
+**A dead address costs seconds, not the dial.** A device has addresses on
+networks the other is not on — a LAN seen from a tailnet, a docker bridge —
+and those drop rather than refuse. Tried in turn under the offer's 45s, two of
+them outlasted the host's 30s patience before the one that worked was reached,
+which is what "sync does not work over Tailscale" was. `LanSignaler` probes
+every address's health route at once for 3s and posts the offer to those that
+answered, one at a time in the order they did: one at a time because a host
+reachable on two addresses would otherwise answer one reconnect twice.
+
+**Where every saved address has gone stale, the LAN is asked.** A tailnet
+address does not move; a LAN one does, between connections. So `connect` tries
+the saved addresses and then `discover`: one UDP datagram to the limited
+broadcast and to each private /24's, on the usual port, carrying the probe
+below, and two seconds for replies. The server listens on UDP beside its HTTP,
+and replies, with its port, only to a probe for a token it holds. The
+broadcast goes out from that same socket rather than an ephemeral one: a
+stateful firewall cannot match a reply from a host to a packet sent to a
+broadcast address, so the reply has to arrive at a port the rule already
+opens. One rule, TCP and UDP 47921, is then both being dialled and dialling,
+and a LAN dial that reaches nobody says so in its error. Windows and macOS
+firewall by app rather than by port, and Fedora Workstation opens 1025-65535;
+the hand-written Linux rule that opens only TCP is the case this is for. Replies from
+this device's own addresses are dropped, since its own server holds the same
+token and would take the offer. Only a press of Connect asks; nothing redials
+on its own.
+
+It was a scan of the /24s first, and is not because 253 connects to one port
+is the horizontal scan a campus or office network quarantines a device for;
+a broadcast is what every printer sends. What it costs: Android may drop
+broadcasts with the screen off, so a phone in a pocket may not answer, and
+iOS sends none at all without Apple's multicast entitlement, which this app
+does not have — the send fails, is logged, and the dial goes on to the relay.
+
+**The token goes only to a host that proves it holds it.** Whoever is on the
+network hears a broadcast, café Wi-Fi or a carrier's 10/8, and a stale saved
+address may now be someone else's, while the token admits offers at the peer
+and is its relay room's name. So a reconnect's probe, over HTTP as
+`POST /entoli/probe` or in the broadcast, is a fresh nonce and an HMAC of it
+under the token (`SignalingRoutes.probeFor`); the host answers, with its own
+HMAC under a different label, only for a token it holds, and the dialler
+checks that before the offer is sent. An impostor learns an HMAC over a random
+nonce, and a host that answers nobody else is no use for reflecting traffic. This stops impostors, not an
+observer on the path, who reads the cleartext offer either way. A host that
+answers the probe 404 is a build from before it, and with nothing else
+reached the dial says so as a version mismatch. Pairing by code still probes
+`/entoli/health`: there is no token yet, and the code came by the QR.
 
 ## When something on the wire goes wrong
 
