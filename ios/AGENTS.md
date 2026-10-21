@@ -219,6 +219,17 @@ model see a provider like any other. No server: iOS has no exec, and the
 framework *is* the model — the llama pool this build never carried is not a
 gap here, for once; this entry is.
 
+**It names chats and does nothing else.** The 8,192-token window is mostly
+the agent's own prompt and tools — about 6k before the first message — so a
+turn on it opens with a compaction every time, which is a chat that works in
+name only. `isTitleOnlyModel` (`lib/domain/local_model.dart`) is the one
+gate: the backend resolves it for the title's ask alone and refuses a turn
+on it with a line saying so, only the Title LLM picker (`ModelRole.title`)
+lists it, and the welcome tour does not count it as a model connected — so
+an iOS device sets up a provider before its first chat. The MLX rows are
+other models and are not gated. Lifting it is the predicate and nothing
+else, once a slimmer prompt fits the window.
+
 Three decisions worth knowing before touching it:
 
 - **A tool call is reported and ended, not run.** `BridgeTool` forwards the

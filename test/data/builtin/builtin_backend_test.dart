@@ -22,6 +22,7 @@ import "package:agent_chat/domain/agent_backend.dart";
 import "package:agent_chat/domain/builtin_project.dart";
 import "package:agent_chat/domain/chat_log.dart";
 import "package:agent_chat/domain/llm_provider.dart";
+import "package:agent_chat/domain/local_model.dart" show appleModelId, appleProviderId;
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/domain/permission.dart";
 import "package:agent_chat/domain/prompt_library.dart";
@@ -164,6 +165,31 @@ void main() {
 
       expect(events.whereType<ErrorEvent>().single.message, contains("No model is selected"));
       expect(events.last, isA<DoneEvent>());
+    });
+
+    // Its window is mostly the agent's prompt and tools, so it answers the
+    // title's ask and nothing else.
+    test("the Apple system model answers a title and no turn", () async {
+      providers = const [
+        LlmProviderConfig(
+            id: appleProviderId,
+            api: LlmApi.openai,
+            baseUrl: "",
+            models: [appleModelId],
+            defaultModelId: appleModelId),
+      ];
+      final backend = backendOver([
+        [saidOnly("Sorting records")],
+      ]);
+
+      for (final model in [appleModelId, null]) {
+        final events = await send(backend, "hi", provider: appleProviderId, model: model);
+        expect(events.whereType<ErrorEvent>().single.message, contains("only names chats"));
+      }
+      expect(client.sent, isEmpty);
+
+      expect(await backend.ask("name this", model: appleModelId, provider: appleProviderId),
+          "Sorting records");
     });
 
     test("an Omada-on turn withholds the task tool and runs the room note", () async {

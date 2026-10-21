@@ -41,7 +41,7 @@ class DefaultsSection extends ConsumerWidget {
           child: ModelPicker(
             nullLabel: "Off",
             defaultOf: LlmProviderConfig.lightDefaultOf,
-            role: ModelRole.text,
+            role: ModelRole.title,
             helperOffText: "Names a chat from its first message. Off, chats "
                 "stay \"New chat\" until you rename them.",
             choice: (
