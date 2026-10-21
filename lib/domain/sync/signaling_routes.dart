@@ -1,5 +1,6 @@
 import "dart:async";
 import "dart:convert";
+import "dart:math";
 
 import "package:crypto/crypto.dart";
 
@@ -117,17 +118,39 @@ class SignalingRoutes {
       return const SignalingReply(405, headers: cors);
     }
     final body = jsonDecode(request.body) as Map<String, dynamic>;
-    final nonce = body["nonce"] as String? ?? "";
-    if (nonce.isEmpty) return const SignalingReply(400, headers: cors);
+    final answer = answerProbe(body);
+    return answer == null
+        ? const SignalingReply(403, headers: cors)
+        : SignalingReply(200, headers: cors, body: jsonEncode(answer));
+  }
+
+  /// The host's half of a probe, over HTTP or a LAN broadcast: its own proof
+  /// for the token [probe] was made with, or null for one it does not hold.
+  Map<String, String>? answerProbe(Map<String, dynamic> probe) {
+    final nonce = probe["nonce"];
+    if (nonce is! String || nonce.isEmpty) return null;
     for (final token in _tokens) {
-      if (proof(token, "probe", nonce) == body["proof"]) {
-        return SignalingReply(200,
-            headers: cors,
-            body: jsonEncode({"proof": proof(token, "host", nonce)}));
+      if (proof(token, "probe", nonce) == probe["proof"]) {
+        return {"proof": proof(token, "host", nonce)};
       }
     }
-    return const SignalingReply(403, headers: cors);
+    return null;
   }
+
+  /// A dialler's probe for [token]: a fresh nonce and its proof. [isAnswer]
+  /// is whether a host's reply to it proves the host holds [token] too.
+  static ({Map<String, String> probe, bool Function(Object? reply) isAnswer})
+      probeFor(String token) {
+    final nonce =
+        base64Url.encode(List.generate(16, (_) => _random.nextInt(256)));
+    final host = proof(token, "host", nonce);
+    return (
+      probe: {"nonce": nonce, "proof": proof(token, "probe", nonce)},
+      isAnswer: (reply) => reply is Map && reply["proof"] == host,
+    );
+  }
+
+  static final _random = Random.secure();
 
   SignalingReply _answer(SignalingRequest request) {
     final body = jsonDecode(request.body) as Map<String, dynamic>;

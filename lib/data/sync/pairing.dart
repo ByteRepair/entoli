@@ -411,21 +411,19 @@ class SyncPairing {
     final server = _server;
     // Where it was last seen, each on the port it was seen on and the one it
     // would normally be on — a device that simply restarted is at the second.
-    // Then, where those have all gone stale, the rest of the LAN.
-    for (final addresses in [
-      [
-        for (final address in device.addresses) ...[
-          address,
-          "${address.substring(0, address.lastIndexOf(":"))}"
-              ":$preferredSignalingPort",
-        ],
-      ],
-      if (server != null && !kIsWeb)
-        [
-          for (final host in lanNeighbours(await server.addresses()))
-            "$host:$preferredSignalingPort",
-        ],
+    // Then, where those have all gone stale, whoever answers a broadcast for
+    // this pair — asked only then, since asking takes its two seconds.
+    for (final candidates in [
+      () async => [
+            for (final address in device.addresses) ...[
+              address,
+              "${address.substring(0, address.lastIndexOf(":"))}"
+                  ":$preferredSignalingPort",
+            ],
+          ],
+      if (server != null && !kIsWeb) () => server.discover(token),
     ]) {
+      final addresses = await candidates();
       if (addresses.isEmpty) continue;
       try {
         await _dialOverLan(

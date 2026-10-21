@@ -203,6 +203,18 @@ void main() {
           SignalingRoutes.proof("tok", "host", "n1"));
     });
 
+    test("a dialler's probe is answered only by a host holding its token",
+        () {
+      routes.allowReconnect("tok");
+      final (:probe, :isAnswer) = SignalingRoutes.probeFor("tok");
+      expect(isAnswer(routes.answerProbe(probe)), isTrue);
+
+      final other = SignalingRoutes.probeFor("other");
+      expect(routes.answerProbe(other.probe), isNull);
+      // An answer to one probe proves nothing to another.
+      expect(other.isAnswer(routes.answerProbe(probe)), isFalse);
+    });
+
     test("refuses a token it does not hold, or no longer does", () async {
       expect((await probe("tok", "n1")).status, 403);
       routes.allowReconnect("tok");

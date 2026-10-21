@@ -1,6 +1,5 @@
 import "dart:async";
 import "dart:convert";
-import "dart:math";
 
 import "package:http/http.dart" as http;
 
@@ -76,28 +75,18 @@ class LanSignaler {
             .timeout(probeTimeout);
         return (address, response.statusCode);
       }
-      final nonce = base64Url.encode(
-          List.generate(16, (_) => _random.nextInt(256)));
+      final (:probe, :isAnswer) = SignalingRoutes.probeFor(token);
       final response = await client
           .post(Uri.parse("http://$address${SignalingRoutes.probePath}"),
               headers: const {"content-type": "application/json"},
-              body: jsonEncode({
-                "nonce": nonce,
-                "proof": SignalingRoutes.proof(token, "probe", nonce),
-              }))
+              body: jsonEncode(probe))
           .timeout(probeTimeout);
       if (response.statusCode != 200) return (address, response.statusCode);
-      final proof = (jsonDecode(response.body) as Map<String, dynamic>)["proof"];
-      return (
-        address,
-        proof == SignalingRoutes.proof(token, "host", nonce) ? 200 : 403,
-      );
+      return (address, isAnswer(jsonDecode(response.body)) ? 200 : 403);
     } catch (_) {
       return (address, 0);
     }
   }
-
-  static final _random = Random.secure();
 
   Future<String> _exchange(String address, String code, String token,
       String offerSdp, Duration timeout) async {
@@ -122,29 +111,6 @@ class LanSignaler {
     }
     return answer;
   }
-}
-
-/// Every other address in the /24 of each private IPv4 address in [own]:
-/// where a paired device whose saved addresses have all gone stale may now
-/// be. Public and CGNAT (100.64/10, Tailscale's) addresses are not scanned —
-/// those are not a LAN, and a tailnet address does not move anyway.
-// shortcut: assumes a /24, since NetworkInterface gives no prefix length;
-// a wider home network finds only the neighbours in this device's /24.
-List<String> lanNeighbours(List<String> own) {
-  final hosts = <String>{};
-  for (final address in own) {
-    final octets = address.split(".").map(int.tryParse).toList();
-    if (octets.length != 4 || octets.contains(null)) continue;
-    final [a!, b!, c!, _] = octets;
-    final private = a == 10 ||
-        (a == 172 && b >= 16 && b < 32) ||
-        (a == 192 && b == 168);
-    if (!private) continue;
-    for (var d = 1; d < 255; d++) {
-      hosts.add("$a.$b.$c.$d");
-    }
-  }
-  return hosts.difference(own.toSet()).toList();
 }
 
 class SignalingException implements Exception {

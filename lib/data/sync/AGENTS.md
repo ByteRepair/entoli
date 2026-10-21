@@ -666,20 +666,32 @@ every address's health route at once for 3s and posts the offer to those that
 answered, one at a time in the order they did: one at a time because a host
 reachable on two addresses would otherwise answer one reconnect twice.
 
-**Where every saved address has gone stale, the LAN is scanned.** A tailnet
+**Where every saved address has gone stale, the LAN is asked.** A tailnet
 address does not move; a LAN one does, between connections. So `connect` tries
-the saved addresses and then every other host in this device's private /24s
-on the usual port — only on a press of Connect, nothing redials on its own.
-This device's own addresses are left out, since its own server holds the same
-token and would take the offer.
+the saved addresses and then `discover`: one UDP datagram to the limited
+broadcast and to each private /24's, on the usual port, carrying the probe
+below, and two seconds for replies. The server listens on UDP beside its HTTP,
+and replies, with its port, only to a probe for a token it holds. Replies from
+this device's own addresses are dropped, since its own server holds the same
+token and would take the offer. Only a press of Connect asks; nothing redials
+on its own.
 
-**The token goes only to a host that proves it holds it.** A scan reaches
-whoever is on the network, café Wi-Fi or a carrier's 10/8, and the token
-admits offers at the peer and is its relay room's name. So a reconnect's
-probe is `POST /entoli/probe` with a fresh nonce and an HMAC of it under the
-token; the host answers 200, with its own HMAC under a different label, only
-for a token it holds, and the dialler checks that before the offer is sent.
-An impostor learns an HMAC over a random nonce. This stops impostors, not an
+It was a scan of the /24s first, and is not because 253 connects to one port
+is the horizontal scan a campus or office network quarantines a device for;
+a broadcast is what every printer sends. What it costs: Android may drop
+broadcasts with the screen off, so a phone in a pocket may not answer, and
+iOS sends none at all without Apple's multicast entitlement, which this app
+does not have — the send fails, is logged, and the dial goes on to the relay.
+
+**The token goes only to a host that proves it holds it.** Whoever is on the
+network hears a broadcast, café Wi-Fi or a carrier's 10/8, and a stale saved
+address may now be someone else's, while the token admits offers at the peer
+and is its relay room's name. So a reconnect's probe, over HTTP as
+`POST /entoli/probe` or in the broadcast, is a fresh nonce and an HMAC of it
+under the token (`SignalingRoutes.probeFor`); the host answers, with its own
+HMAC under a different label, only for a token it holds, and the dialler
+checks that before the offer is sent. An impostor learns an HMAC over a random
+nonce, and a host that answers nobody else is no use for reflecting traffic. This stops impostors, not an
 observer on the path, who reads the cleartext offer either way. A host that
 answers the probe 404 is a build from before it, and with nothing else
 reached the dial says so as a version mismatch. Pairing by code still probes

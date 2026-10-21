@@ -205,19 +205,4 @@ void main() {
       throwsA(isA<SignalingException>()),
     );
   });
-
-  group("lanNeighbours", () {
-    test("is the rest of each private /24, this device left out", () {
-      final hosts = lanNeighbours(["192.168.1.5"]);
-      expect(hosts, hasLength(253));
-      expect(hosts, containsAll(["192.168.1.1", "192.168.1.254"]));
-      expect(hosts, isNot(contains("192.168.1.5")));
-    });
-
-    test("leaves out public and tailnet addresses", () {
-      expect(lanNeighbours(["100.101.102.103", "8.8.8.8", "172.32.0.1"]),
-          isEmpty);
-      expect(lanNeighbours(["10.0.0.2", "172.16.4.2"]), hasLength(506));
-    });
-  });
 }

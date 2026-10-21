@@ -3,6 +3,7 @@ import "dart:convert";
 import "dart:io";
 
 import "../../../domain/sync/lan_signaling.dart";
+import "../../log.dart";
 import "../../../domain/sync/signaling_routes.dart";
 
 /// The rendezvous two devices on one network meet at before WebRTC can take
@@ -23,6 +24,7 @@ class SignalingServer implements LanSignaling {
 
   final _routes = SignalingRoutes();
   HttpServer? _server;
+  RawDatagramSocket? _udp;
 
   @override
   Stream<IncomingOffer> get offers => _routes.offers;
@@ -61,7 +63,67 @@ class SignalingServer implements LanSignaling {
     }
     _server = server;
     server.listen(_handle, onError: (_) {});
+    await _listenForDiscovery(server.port);
     return server.port;
+  }
+
+  /// Answers [discover]'s broadcasts on the usual port, over UDP. Only a
+  /// probe for a token this server holds gets a reply, so the port is no
+  /// use for reflecting traffic at anyone.
+  Future<void> _listenForDiscovery(int httpPort) async {
+    try {
+      final udp = _udp = await RawDatagramSocket.bind(
+          InternetAddress.anyIPv4, preferredSignalingPort);
+      udp.listen((event) {
+        final datagram = event == RawSocketEvent.read ? udp.receive() : null;
+        if (datagram == null) return;
+        try {
+          final answer = _routes.answerProbe(
+              jsonDecode(utf8.decode(datagram.data)) as Map<String, dynamic>);
+          if (answer == null) return;
+          udp.send(utf8.encode(jsonEncode({...answer, "port": httpPort})),
+              datagram.address, datagram.port);
+        } catch (_) {
+          // Anything else on the LAN may send to this port; traffic, not a
+          // failure.
+        }
+      });
+    } catch (error) {
+      logFailure("sync", "no LAN discovery on udp $preferredSignalingPort",
+          error);
+    }
+  }
+
+  @override
+  Future<List<String>> discover(String token) async {
+    final own = await addresses();
+    final (:probe, :isAnswer) = SignalingRoutes.probeFor(token);
+    final socket = await RawDatagramSocket.bind(InternetAddress.anyIPv4, 0)
+      ..broadcastEnabled = true;
+    final found = <String>{};
+    socket.listen((event) {
+      final datagram = event == RawSocketEvent.read ? socket.receive() : null;
+      if (datagram == null || own.contains(datagram.address.address)) return;
+      try {
+        final reply = jsonDecode(utf8.decode(datagram.data));
+        if (isAnswer(reply) && reply["port"] is int) {
+          found.add("${datagram.address.address}:${reply["port"]}");
+        }
+      } catch (_) {
+        // Not an answer to this probe.
+      }
+    });
+    final payload = utf8.encode(jsonEncode(probe));
+    for (final to in lanBroadcasts(own)) {
+      try {
+        socket.send(payload, InternetAddress(to), preferredSignalingPort);
+      } catch (error) {
+        logFailure("sync", "could not broadcast to $to", error);
+      }
+    }
+    await Future<void>.delayed(const Duration(seconds: 2));
+    socket.close();
+    return found.toList();
   }
 
   @override
@@ -80,6 +142,8 @@ class SignalingServer implements LanSignaling {
   Future<void> close() async {
     await _server?.close(force: true);
     _server = null;
+    _udp?.close();
+    _udp = null;
     await _routes.close();
   }
 
