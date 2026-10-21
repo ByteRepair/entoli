@@ -344,7 +344,8 @@ picker offers this device's providers, and the workspace's files are the
 home device's.
 
 These messages made the protocol 2; the project messages, the control lock's
-removal and splitting a message across frames made it 3. A build before them
+removal and splitting a message across frames made it 3; the LAN probe's
+proof and the hello's list of addresses made it 4. A build before them
 drops the link on the first frame it cannot parse, or reads the first piece of
 a large message as a whole one, so the handshake refuses it up front with a
 version mismatch instead. Both devices update together. **Adding, removing or
@@ -651,9 +652,8 @@ time anything answered a dial.
 
 **Both sides have to know where the other is.** Only the device that dialled
 learns an address, so the other one had no route and said so. The `hello` now
-carries every address the sender can be dialled back on (`addrs`, and `addr`,
-the first of them, for a build from before the list), and `markSeen` records
-them, the one that answered first — a device that is not listening sends
+carries every address the sender can be dialled back on (`addrs`), and
+`markSeen` records them, the one that answered first — a device that is not listening sends
 nothing, which is the honest answer. A completed pairing also starts this
 device listening, which before it had no reason to be doing.
 
@@ -670,9 +670,20 @@ reachable on two addresses would otherwise answer one reconnect twice.
 address does not move; a LAN one does, between connections. So `connect` tries
 the saved addresses and then every other host in this device's private /24s
 on the usual port — only on a press of Connect, nothing redials on its own.
-An Entoli that is not the peer refuses the token, and this device's own
-addresses are left out, since its own server holds the same token and would
-take the offer.
+This device's own addresses are left out, since its own server holds the same
+token and would take the offer.
+
+**The token goes only to a host that proves it holds it.** A scan reaches
+whoever is on the network, café Wi-Fi or a carrier's 10/8, and the token
+admits offers at the peer and is its relay room's name. So a reconnect's
+probe is `POST /entoli/probe` with a fresh nonce and an HMAC of it under the
+token; the host answers 200, with its own HMAC under a different label, only
+for a token it holds, and the dialler checks that before the offer is sent.
+An impostor learns an HMAC over a random nonce. This stops impostors, not an
+observer on the path, who reads the cleartext offer either way. A host that
+answers the probe 404 is a build from before it, and with nothing else
+reached the dial says so as a version mismatch. Pairing by code still probes
+`/entoli/health`: there is no token yet, and the code came by the QR.
 
 ## When something on the wire goes wrong
 

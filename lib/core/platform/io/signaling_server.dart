@@ -9,9 +9,10 @@ import "../../../domain/sync/signaling_routes.dart";
 /// over. Binds all interfaces on the well-known port; that and a one-time code
 /// travel to the other device in the QR, never through any registry.
 ///
-/// Three routes:
+/// Four routes:
 ///
 ///   GET  /entoli/health   — is this still the Entoli signaling server
+///   POST /entoli/probe    — does it hold this reconnect token, with proof
 ///   POST /entoli/offer    — a joiner's SDP, held open until an answer or 30s
 ///   POST /entoli/answer   — the host's answer, completing one waiting offer
 ///

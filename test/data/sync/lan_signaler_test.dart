@@ -1,6 +1,7 @@
 import "dart:async";
 import "dart:convert";
 
+import "package:agent_chat/data/sync/handshake.dart";
 import "package:agent_chat/data/sync/signaling/lan_signaler.dart";
 import "package:agent_chat/domain/sync/signaling_routes.dart";
 import "package:flutter_test/flutter_test.dart";
@@ -130,22 +131,53 @@ void main() {
     expect(result.address, "100.101.102.103:47921");
   });
 
-  test("an Entoli that refuses is passed over for the paired one", () async {
-    // What a scan finds: other devices on the LAN answer health too, and
-    // refuse a token they do not hold.
+  test("a reconnect's token goes to the peer and to nobody else", () async {
+    // What a scan finds: another Entoli, and something answering 200 to
+    // anything. Neither can prove it holds the token, so neither is sent it.
     final stranger = SignalingRoutes();
     addTearDown(stranger.close);
-    lan["192.168.1.9:47921"] = stranger;
+    final bodies = <String, String>{};
+    client = LanSignaler(
+      probeTimeout: const Duration(milliseconds: 100),
+      client: MockClient((request) async {
+        final address = "${request.url.host}:${request.url.port}";
+        bodies[address] = "${bodies[address] ?? ""}${request.body}";
+        if (address == "192.168.1.8:47921") {
+          return http.Response(jsonEncode({"proof": "x", "sdp": "x"}), 200);
+        }
+        final routes = {"192.168.1.9:47921": stranger, ...lan}[address]!;
+        final reply = await routes.handle(SignalingRequest(
+            request.method, request.url.path,
+            body: request.body));
+        return http.Response(reply.body, reply.status, headers: reply.headers);
+      }),
+    );
     host.allowReconnect("tok");
     answerWith("v=0 answer");
 
     final result = await client.exchange(
-      addresses: ["192.168.1.9:47921", "192.168.1.5:47921"],
+      addresses: ["192.168.1.8:47921", "192.168.1.9:47921", "192.168.1.5:47921"],
       token: "tok",
       offerSdp: "v=0 offer",
     );
 
     expect(result.address, "192.168.1.5:47921");
+    expect(bodies["192.168.1.8:47921"], isNot(contains("tok")));
+    expect(bodies["192.168.1.9:47921"], isNot(contains("tok")));
+    expect(bodies["192.168.1.5:47921"], contains("tok"));
+  });
+
+  test("a peer too old to have the probe is a version mismatch", () async {
+    client = LanSignaler(
+        client: MockClient((request) async => http.Response("", 404)));
+
+    await expectLater(
+      client.exchange(
+          addresses: ["192.168.1.5:47921"],
+          token: "tok",
+          offerSdp: "v=0 offer"),
+      throwsA(isA<ProtocolMismatchException>()),
+    );
   });
 
   test("with nothing reachable it says so rather than hanging", () async {

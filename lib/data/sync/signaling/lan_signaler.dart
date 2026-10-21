@@ -1,9 +1,11 @@
 import "dart:async";
 import "dart:convert";
+import "dart:math";
 
 import "package:http/http.dart" as http;
 
 import "../../../domain/sync/signaling_routes.dart";
+import "../handshake.dart" show ProtocolMismatchException;
 
 /// The joiner's half of a LAN exchange: find which of [exchange]'s addresses
 /// answers, POST the offer there, and wait in the same request for the host's
@@ -30,7 +32,9 @@ class LanSignaler {
   /// takes it. Returns the answer SDP and the address that gave it.
   ///
   /// The offer itself goes to one address at a time: a host reachable on two
-  /// would otherwise answer the same reconnect twice.
+  /// would otherwise answer the same reconnect twice. A reconnect's probe
+  /// has the host prove it holds [token] first, since a scan reaches whoever
+  /// is on the LAN and the token admits offers at the peer and its relay room.
   Future<({String answer, String address})> exchange({
     required List<String> addresses,
     String code = "",
@@ -39,9 +43,13 @@ class LanSignaler {
     Duration timeout = const Duration(seconds: 45),
   }) async {
     Object? last;
-    await for (final address
-        in Stream.fromFutures(addresses.toSet().map(_probe))) {
-      if (address == null) continue;
+    var outdated = false;
+    await for (final (address, status) in Stream.fromFutures(
+        addresses.toSet().map((address) => _probe(address, token)))) {
+      // A build before the probe route answers it 404, and would refuse the
+      // handshake on its version anyway.
+      if (status == 404) outdated = true;
+      if (status != 200) continue;
       try {
         return (
           answer: await _exchange(address, code, token, offerSdp, timeout),
@@ -51,22 +59,45 @@ class LanSignaler {
         last = error;
       }
     }
+    if (last == null && outdated) throw ProtocolMismatchException("older");
     throw SignalingException(
         "could not reach the other device${last == null ? "" : ": $last"}");
   }
 
+  /// The address and the status it answered with, 0 where it did not; 200
+  /// only from a host that proved it holds [token], where there is one.
   // shortcut: the timeout abandons the connect rather than cancelling it, so
   // a dead address holds a socket until the OS gives up; fine at a /24.
-  Future<String?> _probe(String address) async {
+  Future<(String, int)> _probe(String address, String token) async {
     try {
+      if (token.isEmpty) {
+        final response = await client
+            .get(Uri.parse("http://$address${SignalingRoutes.healthPath}"))
+            .timeout(probeTimeout);
+        return (address, response.statusCode);
+      }
+      final nonce = base64Url.encode(
+          List.generate(16, (_) => _random.nextInt(256)));
       final response = await client
-          .get(Uri.parse("http://$address${SignalingRoutes.healthPath}"))
+          .post(Uri.parse("http://$address${SignalingRoutes.probePath}"),
+              headers: const {"content-type": "application/json"},
+              body: jsonEncode({
+                "nonce": nonce,
+                "proof": SignalingRoutes.proof(token, "probe", nonce),
+              }))
           .timeout(probeTimeout);
-      return response.statusCode == 200 ? address : null;
+      if (response.statusCode != 200) return (address, response.statusCode);
+      final proof = (jsonDecode(response.body) as Map<String, dynamic>)["proof"];
+      return (
+        address,
+        proof == SignalingRoutes.proof(token, "host", nonce) ? 200 : 403,
+      );
     } catch (_) {
-      return null;
+      return (address, 0);
     }
   }
+
+  static final _random = Random.secure();
 
   Future<String> _exchange(String address, String code, String token,
       String offerSdp, Duration timeout) async {

@@ -1,6 +1,8 @@
 import "dart:async";
 import "dart:convert";
 
+import "package:crypto/crypto.dart";
+
 import "lan_signaling.dart";
 
 /// One request as the rendezvous sees it.
@@ -59,16 +61,26 @@ class SignalingRoutes {
     if (pending != null && !pending.isCompleted) pending.complete(sdp);
   }
 
-  /// The three routes. Named because the io side asks about them too.
+  /// The routes. Named because the io side asks about them too.
   static const healthPath = "/entoli/health";
+  static const probePath = "/entoli/probe";
   static const offerPath = "/entoli/offer";
   static const answerPath = "/entoli/answer";
+
+  /// What either side of a probe proves it holds [token] with, over the
+  /// dialler's fresh [nonce]: the dialler's [label] is "probe", the host's
+  /// "host", so neither answer can be replayed as the other.
+  static String proof(String token, String label, String nonce) =>
+      base64Url.encode(Hmac(sha256, utf8.encode(token))
+          .convert(utf8.encode("$label:$nonce"))
+          .bytes);
 
   /// Which requests carry a body worth reading. Asked before one is drained:
   /// the io side binds a well-known port on every interface, so a POST to a
   /// path that is not one of these is the ordinary case, not the exception.
   static bool carriesBody(String method, String path) =>
-      method == "POST" && (path == offerPath || path == answerPath);
+      method == "POST" &&
+      (path == offerPath || path == answerPath || path == probePath);
 
   /// Permissive CORS plus Chrome's Private-Network preflight answer: a browser
   /// tab served from anywhere must be able to dial this server on the LAN it
@@ -89,10 +101,32 @@ class SignalingRoutes {
     }
     return switch (request.path) {
       healthPath => const SignalingReply(200, headers: cors),
+      probePath => _probe(request),
       answerPath => _answer(request),
       offerPath => _offer(request),
       _ => const SignalingReply(404, headers: cors),
     };
+  }
+
+  /// Answers a reconnect's probe only for a token this host holds, and with
+  /// proof of it, so a dialler sends its token to the peer and to nobody
+  /// else on the network. Stops an impostor, not an observer on the path:
+  /// the offer that follows is cleartext either way.
+  SignalingReply _probe(SignalingRequest request) {
+    if (request.method != "POST") {
+      return const SignalingReply(405, headers: cors);
+    }
+    final body = jsonDecode(request.body) as Map<String, dynamic>;
+    final nonce = body["nonce"] as String? ?? "";
+    if (nonce.isEmpty) return const SignalingReply(400, headers: cors);
+    for (final token in _tokens) {
+      if (proof(token, "probe", nonce) == body["proof"]) {
+        return SignalingReply(200,
+            headers: cors,
+            body: jsonEncode({"proof": proof(token, "host", nonce)}));
+      }
+    }
+    return const SignalingReply(403, headers: cors);
   }
 
   SignalingReply _answer(SignalingRequest request) {

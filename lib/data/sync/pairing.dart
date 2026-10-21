@@ -805,7 +805,6 @@ class SyncPairing {
         },
       );
 
-      final dialback = await _dialbackAddresses();
       await channel.sendJson({
         "t": "hello",
         "id": identity.id,
@@ -813,9 +812,8 @@ class SyncPairing {
         // Where this device can be dialled back, if it listens at all. Only
         // the side that dialled knows the other's address otherwise, so only
         // that side could ever reconnect — the other one had no route and
-        // said so. `addr` is the one address a build before `addrs` reads.
-        "addrs": dialback,
-        "addr": ?dialback.firstOrNull,
+        // said so.
+        "addrs": await _dialbackAddresses(),
       });
       final reply = await hello.future.timeout(const Duration(seconds: 15));
 
@@ -837,7 +835,6 @@ class SyncPairing {
       await registry.markSeen(deviceId, addresses: {
         ?address,
         ...?(reply["addrs"] as List<Object?>?)?.cast<String>(),
-        ?reply["addr"] as String?,
       }.toList());
 
       _peers.adopt(live);
