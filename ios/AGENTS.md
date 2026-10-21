@@ -219,6 +219,17 @@ model see a provider like any other. No server: iOS has no exec, and the
 framework *is* the model — the llama pool this build never carried is not a
 gap here, for once; this entry is.
 
+**It names chats and does nothing else.** The 8,192-token window is mostly
+the agent's own prompt and tools — about 6k before the first message — so a
+turn on it opens with a compaction every time, which is a chat that works in
+name only. `isTitleOnlyModel` (`lib/domain/local_model.dart`) is the one
+gate: the backend resolves it for the title's ask alone and refuses a turn
+on it with a line saying so, only the Title LLM picker (`ModelRole.title`)
+lists it, and the welcome tour does not count it as a model connected — so
+an iOS device sets up a provider before its first chat. The MLX rows are
+other models and are not gated. Lifting it is the predicate and nothing
+else, once a slimmer prompt fits the window.
+
 Three decisions worth knowing before touching it:
 
 - **A tool call is reported and ended, not run.** `BridgeTool` forwards the
@@ -250,10 +261,11 @@ constant stands in until a reader wants a channel round trip. The framework
 is weak-linked in both xcconfigs; an OS below 26 starts, and the handshake
 answers `os`.
 
-The simulator cannot run the model (device eligibility fails there, like
-the recognizer), so the bring-up is a real device's: the handshake, one
-no-tools turn, a tool handoff read back through `conv.jsonl`, then
-multi-step against the error map. What the VM does pin is the client's own
+The simulator runs the model, on a Mac with Apple Intelligence on — the
+host's model answers — so the bring-up is the simulator's as much as a
+device's: the welcome chat's tool turns are the quick check, since they
+offer a nested object (`ask`) and a string enum (the tone), the two shapes
+that once named a node like its root and failed every turn. What the VM does pin is the client's own
 protocol over a mock channel — `test/data/local/apple_fm_client_test.dart`:
 the streaming, the handoff ending, the history wording, the error map.
 

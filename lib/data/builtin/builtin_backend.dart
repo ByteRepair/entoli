@@ -15,6 +15,7 @@ import "../../domain/chat_log.dart" show replayTree;
 import "../../domain/chat_store.dart";
 import "../../domain/file_tools.dart";
 import "../../domain/llm_provider.dart";
+import "../../domain/local_model.dart" show isTitleOnlyModel;
 import "../../domain/models.dart";
 import "../../domain/model_registry.dart";
 import "../../domain/permission.dart";
@@ -245,8 +246,12 @@ class BuiltinBackend implements AgentBackend {
             controller,
             settings.provider == null
                 ? "No model is selected. Add a provider in Settings and pick one."
-                : "'${settings.provider}' is not configured. Add it in Settings, "
-                    "or pick another model.");
+                : isTitleOnlyModel(settings.provider, settings.model)
+                    ? "The Apple on-device model only names chats: its context "
+                        "is too small for the agent. Pick another model for "
+                        "this chat."
+                    : "'${settings.provider}' is not configured. Add it in "
+                        "Settings, or pick another model.");
         return;
       }
 
@@ -904,6 +909,7 @@ class BuiltinBackend implements AgentBackend {
       model,
       provider,
       defaultOf: LlmProviderConfig.lightDefaultOf,
+      title: true,
     );
     if (target == null) return null;
     try {
@@ -1233,10 +1239,16 @@ class BuiltinBackend implements AgentBackend {
   /// default for a turn, the light one for the title, memory and classifier
   /// roles. None is None: a provider without that field leaves nothing to
   /// answer with, which is the caller's error, not a guess from a model list.
+  ///
+  /// [title] is the title's ask, the one role a title-only model answers
+  /// ([isTitleOnlyModel]); everything else resolves one to nothing, so a
+  /// setting written before the gate leaves its feature off rather than
+  /// compacting on every turn.
   _Target? _resolveModel(
     String? model,
     String? provider, {
     String? Function(LlmProviderConfig) defaultOf = LlmProviderConfig.chatDefaultOf,
+    bool title = false,
   }) {
     if (provider == null) return null;
     final endpoint = registry.endpointFor(provider);
@@ -1244,6 +1256,7 @@ class BuiltinBackend implements AgentBackend {
     final config = endpoint.config;
     final modelId = model ?? defaultOf(config);
     if (modelId == null || modelId.isEmpty) return null;
+    if (!title && isTitleOnlyModel(provider, modelId)) return null;
     final client = registry.clientOf(endpoint);
     final info = modelInfoOf(config, modelId);
     // Here rather than at each request: everything that asks the model

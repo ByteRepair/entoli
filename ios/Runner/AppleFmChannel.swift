@@ -154,8 +154,8 @@ class AppleFmChannel: NSObject {
       // A tool whose schema will not convert is left out rather than
       // half-offered: a call the framework cannot decode is the worse
       // failure of the two.
-      let conversion = schema(spec["schema"] as? [String: Any] ?? [:])
-      guard let name = spec["name"] as? String, let dynamic = conversion,
+      guard let name = spec["name"] as? String,
+            let dynamic = schema(spec["schema"] as? [String: Any] ?? [:], name),
             let parameters = try? GenerationSchema(root: dynamic, dependencies: [])
       else { continue }
       tools.append(BridgeTool(
@@ -335,14 +335,21 @@ extension AppleFmChannel {
   /// refusal.
   /// shortcut: no numeric/length guides, when a tool's quality says one is
   /// wanted.
-  private func schema(_ json: [String: Any]) -> DynamicGenerationSchema? {
+  ///
+  /// **Every named node is named by its path**, rooted at the tool's name:
+  /// the framework compiles all the tools' schemas into one grammar, and a
+  /// nested object or enum sharing a name with a root is read as a reference
+  /// back to that root — `#`, which the tool-aware constraints cannot resolve,
+  /// and every turn offering the tool then fails before a token. The `title`
+  /// a schema carries is not unique either, so it is not used.
+  private func schema(_ json: [String: Any], _ path: String) -> DynamicGenerationSchema? {
     switch json["type"] as? String {
     case "object":
       let required = Set((json["required"] as? [String]) ?? [])
       var properties = [DynamicGenerationSchema.Property]()
       for (name, spec) in (json["properties"] as? [String: Any]) ?? [:] {
         guard let spec = spec as? [String: Any],
-              let schema = self.schema(spec)
+              let schema = self.schema(spec, "\(path)_\(name)")
         else { continue }
         properties.append(DynamicGenerationSchema.Property(
           name: name,
@@ -351,11 +358,12 @@ extension AppleFmChannel {
           isOptional: !required.contains(name)))
       }
       return DynamicGenerationSchema(
-        name: json["title"] as? String ?? "parameters",
+        name: path,
         description: json["description"] as? String,
         properties: properties)
     case "array":
-      if let items = json["items"] as? [String: Any], let element = schema(items) {
+      if let items = json["items"] as? [String: Any],
+         let element = schema(items, "\(path)_item") {
         return DynamicGenerationSchema(arrayOf: element)
       }
       return DynamicGenerationSchema(arrayOf: DynamicGenerationSchema(type: String.self))
@@ -370,9 +378,7 @@ extension AppleFmChannel {
       // for; anything else is one free string.
       let choices = (json["enum"] as? [String] ?? []).filter { !$0.isEmpty }
       if choices.count > 1 {
-        return DynamicGenerationSchema(
-          name: json["title"] as? String ?? "parameters",
-          anyOf: choices)
+        return DynamicGenerationSchema(name: path, anyOf: choices)
       }
       return DynamicGenerationSchema(type: String.self)
     default:

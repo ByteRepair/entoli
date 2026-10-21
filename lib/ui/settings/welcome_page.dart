@@ -6,6 +6,7 @@ import "package:uuid/uuid.dart";
 
 import "../../core/log.dart";
 import "../../domain/chat_log.dart";
+import "../../domain/local_model.dart" show isTitleOnlyModel;
 import "../../domain/models.dart";
 import "../../domain/project.dart";
 import "../../providers.dart";
@@ -143,7 +144,7 @@ class _WelcomeTourState extends ConsumerState<WelcomeTour> {
     // around the button. Named off the page list, so reordering or inserting a
     // page cannot move a gate to the wrong one.
     final reachable = ref.watch(
-        availableModelsProvider.select((m) => m.value?.isNotEmpty ?? false));
+        availableModelsProvider.select((m) => _agentModels(m.value) > 0));
     final chosen = ref.watch(
       appSettingsProvider.select((s) => s.defaultProviderId != null),
     );
@@ -425,13 +426,18 @@ class _IntroPage extends StatelessWidget {
   }
 }
 
+/// The models a chat can be answered by: a title-only one, which an iOS
+/// device lists before anything is set up, does not open the tour's gate.
+int _agentModels(List<ModelOption>? models) =>
+    (models ?? const []).where((m) => !isTitleOnlyModel(m.providerId, m.modelId)).length;
+
 /// Where the model runs. Next waits here until some model is reachable.
 class _ProviderPage extends ConsumerWidget {
   const _ProviderPage();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final count = ref.watch(availableModelsProvider).value?.length ?? 0;
+    final count = _agentModels(ref.watch(availableModelsProvider).value);
     final scheme = Theme.of(context).colorScheme;
     return _Slide(
       icon: Icons.hub_outlined,

@@ -3,6 +3,7 @@ import "package:flutter/services.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../domain/llm_provider.dart";
+import "../../domain/local_model.dart" show isTitleOnlyModel;
 import "../../domain/model_registry.dart";
 import "../../domain/models.dart";
 import "../../providers.dart";
@@ -26,16 +27,20 @@ enum ModelRole {
   /// them.
   agent,
 
-  /// A background completion — a title, a classifier verdict, a memory pass —
-  /// which needs only text in and text out.
+  /// A background completion — a classifier verdict, a memory pass — which
+  /// needs only text in and text out.
   text,
+
+  /// A chat's title: [text], plus the models that answer nothing else
+  /// ([isTitleOnlyModel]).
+  title,
 
   /// Answers `image_generation`: only models that make images.
   image;
 
   bool offers(ModelInfo m) => switch (this) {
         agent => m.answersTurns,
-        text => m.talks,
+        text || title => m.talks,
         image => m.makesImages,
       };
 }
@@ -63,7 +68,8 @@ List<CatalogEntry> catalogEntries(
     // chat models, since nothing says otherwise: no image model is guessed.
     if (role != ModelRole.image)
       for (final o in listed)
-        if (!known.contains((o.providerId, o.modelId)))
+        if (!known.contains((o.providerId, o.modelId)) &&
+            (role == ModelRole.title || !isTitleOnlyModel(o.providerId, o.modelId)))
           _listedEntry(o),
   ]..sort((a, b) {
       final byName =

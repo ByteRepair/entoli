@@ -4,9 +4,11 @@ import "package:flutter/material.dart";
 import "package:flutter_test/flutter_test.dart";
 
 import "package:agent_chat/domain/llm_provider.dart";
+import "package:agent_chat/domain/local_model.dart" show appleModelId, appleProviderId;
 import "package:agent_chat/domain/model_registry.dart";
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/providers.dart";
+import "package:agent_chat/ui/widgets/model_catalog_page.dart" show catalogEntries;
 import "package:agent_chat/ui/widgets/model_picker.dart";
 import "package:agent_chat/ui/widgets/resettable_field.dart";
 
@@ -18,6 +20,23 @@ import "../harness.dart";
 void main() {
   late TestApp app;
   ModelChoice? reported;
+
+  // The Apple system model is listed by the device before anything is set
+  // up; only the title picker offers it.
+  test("a title-only model is offered for the title alone", () {
+    const listed = [
+      ModelOption(providerId: appleProviderId, modelId: appleModelId, label: "Apple · On-device"),
+      ModelOption(providerId: "lan", modelId: "qwen", label: "LAN · qwen"),
+    ];
+    List<String> offered(ModelRole role) => [
+          for (final e in catalogEntries(ModelCatalog.empty, const [], listed, role: role))
+            e.info.id,
+        ];
+
+    expect(offered(ModelRole.agent), ["qwen"]);
+    expect(offered(ModelRole.text), ["qwen"]);
+    expect(offered(ModelRole.title), unorderedEquals([appleModelId, "qwen"]));
+  });
 
   setUp(() => app = TestApp.create());
   tearDown(() => app.dispose());
