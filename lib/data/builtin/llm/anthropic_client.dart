@@ -36,6 +36,9 @@ class AnthropicClient implements LlmClient {
 
   Map<String, String> get _auth => {
         "anthropic-version": _version,
+        // Without it the API refuses any request carrying an `Origin`, which
+        // is every request a browser makes; elsewhere it is ignored.
+        "anthropic-dangerous-direct-browser-access": "true",
         if (apiKey != null && apiKey!.isNotEmpty) "x-api-key": apiKey!,
       };
 

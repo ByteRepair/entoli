@@ -46,6 +46,11 @@ jobs:
 
       - uses: ./.github/actions/flutter-setup
 
+      # The Linux the page runs commands in, into web/linux/image, which the
+      # Flutter build then copies into the site.
+      - name: Build the browser's Linux
+        run: tool/web/linux/build.sh
+
       # Project pages live under /<repo>/, and canvaskit is served from the
       # site rather than gstatic so the page has no third-party dependency.
       - name: Build
