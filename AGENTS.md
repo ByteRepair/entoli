@@ -28,7 +28,7 @@ named in a cross-reference is findable from this list.
 - `lib/ui/marketplace/AGENTS.md` — The marketplace page
 - `lib/data/builtin/AGENTS.md` — The agent loop, Running the commands, Running a
   command yourself, Approvals, Questions, Sub-agents, Their own transcripts,
-   Carrying one on, Web search, Images, Skills, The plan, Memory
+   Carrying one on, Web search, The browser, Images, Skills, The plan, Memory
 - `lib/data/builtin/llm/AGENTS.md` — Reaching a provider, Errors, and how long
   the UI waits
 - `lib/data/sync/AGENTS.md` — The threat model, the handshake, the framing

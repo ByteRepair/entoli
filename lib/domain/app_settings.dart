@@ -81,6 +81,7 @@ class AppSettings {
     this.totalContext = defaultTotalContext,
     this.welcomeSeen = false,
     this.autoUpdate = true,
+    this.agentBrowser,
   });
 
   String? defaultModelId;
@@ -407,6 +408,11 @@ class AppSettings {
   /// number.
   static const defaultKvCachePrompts = 10;
 
+  /// The browser the agent drives: null off, `embedded` for the downloaded
+  /// Helium, or a Chromium-family executable's path. See "The browser" in
+  /// `lib/data/builtin/AGENTS.md`.
+  String? agentBrowser;
+
   static AppSettings load(AppConfig config) {
     final text = config.documents.read(config.settingsFile);
     if (text == null) return AppSettings();
@@ -504,6 +510,7 @@ class AppSettings {
         // says nothing and gets the on default — the same bargain the memory
         // gates are held to.
         autoUpdate: json["autoUpdate"] as bool? ?? true,
+        agentBrowser: _orNull(json["agentBrowser"] as String?),
       );
 
   /// `approveMode` is the current key. An older file has `approveCommands` as
@@ -611,5 +618,6 @@ class AppSettings {
       if (totalContext != defaultTotalContext) "totalContext": totalContext,
       if (welcomeSeen) "welcomeSeen": welcomeSeen,
       if (!autoUpdate) "autoUpdate": autoUpdate,
+      if (agentBrowser != null) "agentBrowser": agentBrowser,
     };
 }

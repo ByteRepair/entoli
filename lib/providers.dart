@@ -19,6 +19,7 @@ import "domain/agent_backend.dart";
 import "domain/app_restart.dart";
 import "domain/app_secrets.dart";
 import "domain/app_settings.dart";
+import "domain/agent_browser.dart";
 import "domain/app_update.dart";
 import "domain/app_theme.dart";
 import "domain/assistant_launch.dart";
@@ -321,6 +322,11 @@ final prootAvailableProvider = Provider<bool>((ref) => false);
 final appUpdateHostProvider = Provider<AppUpdateHost>(
     (ref) => const UnavailableAppUpdateHost());
 
+/// The browser the agent drives, the same instance the backend holds: the
+/// settings page closes it before replacing the embedded one under it.
+final agentBrowserProvider =
+    Provider<AgentBrowser>((ref) => const UnavailableAgentBrowser());
+
 /// Whether a message can be read out: a platform that can speak, and a speech
 /// model picked and installed. Half of [voiceReadyProvider], because reading a
 /// message out needs nothing to hear with.
@@ -595,6 +601,10 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
   /// startup, where the platform it is on can do that.
   Future<void> setAutoUpdate(bool value) =>
       _update((s) => s.autoUpdate = value);
+
+  /// Which browser the agent drives; null turns its tools off.
+  Future<void> setAgentBrowser(String? value) =>
+      _update((s) => s.agentBrowser = value);
 
   /// Which project the assistant gesture opens a chat in. Null is the default
   /// project.

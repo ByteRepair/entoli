@@ -13,6 +13,7 @@ import "../../../data/local/byte_repair_store.dart"
     show ByteRepairStore, UnavailableByteRepairStore;
 import "../../../data/local/file_secret_store.dart";
 import "../../../data/web/web_file_handoff.dart";
+import "../../../domain/agent_browser.dart";
 import "../../../domain/app_update.dart";
 import "../../../domain/assistant_launch.dart";
 import "../../../domain/backup_handoff.dart";
@@ -58,6 +59,10 @@ ShellDriver? platformDriver({
   String? loginPath,
 }) =>
     null;
+
+/// A page cannot drive another browser.
+AgentBrowser createAgentBrowser(AppConfig config, String cacheDir) =>
+    const UnavailableAgentBrowser();
 
 /// The site carries the newest build already; a reload is the update.
 AppUpdateHost createAppUpdateHost(String cacheDir) =>

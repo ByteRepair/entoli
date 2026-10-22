@@ -7,6 +7,7 @@ import "package:flutter/foundation.dart" show visibleForTesting;
 import "package:uuid/uuid.dart";
 
 import "../../domain/agent_backend.dart";
+import "../../domain/agent_browser.dart";
 import "../../domain/artifact.dart";
 import "../../domain/ask.dart";
 import "../../domain/command_grants.dart";
@@ -25,6 +26,7 @@ import "../../domain/tool_arg.dart";
 import "../../domain/turn_recorder.dart";
 import "../../domain/web_search.dart";
 import "ask_tool.dart";
+import "browser_tools.dart";
 import "artifact_tool.dart";
 import "compact_prompt.dart" show estimateTokens;
 import "file_tools.dart" as file_tool_defs;
@@ -70,6 +72,9 @@ String? runningTool(String name) => switch (name) {
       bashToolName => "Running a command",
       websearchToolName => "Searching the web",
       webfetchToolName => "Fetching a page",
+      browserGotoToolName || browserSearchToolName => "Opening a page",
+      browserPageTextToolName => "Reading the page",
+      browserScreenshotToolName => "Taking a screenshot",
       taskToolName => "Working on a sub-task",
       triggerSetName => "Setting a trigger",
       artifactToolName => "Publishing the artifact",
@@ -325,6 +330,7 @@ List<LlmTool> agentTools({
   List<PromptDocument> skills = const [],
   required bool offerMemory,
   bool offerImage = false,
+  bool browserScreenshot = false,
   bool oneShot = false,
   List<PromptDocument>? participants,
   bool member = false,
@@ -369,6 +375,8 @@ List<LlmTool> agentTools({
       if (caps.ask && !oneShot) addDirectoryTool,
       writableDirectoriesTool,
       if (offerImage) imageGenerationTool,
+      if (caps.browser && !oneShot)
+        ...browserTools(screenshot: browserScreenshot),
     ];
 
 /// The agent loop: ask the model, run the command it asked for, show it the
@@ -403,6 +411,8 @@ class BuiltinAgent {
     this.skills = const [],
     this.roomParticipants,
     this.webSearch,
+    this.browser,
+    this.seesImages = true,
     this.profile,
     this.tone = Tone.none,
     this.citations = false,
@@ -691,6 +701,15 @@ class BuiltinAgent {
   /// there is no shell.
   final WebSearch? webSearch;
 
+  /// This chat's tab in the browser Settings > Agent Browser picked. Null
+  /// where none is picked, and for a sub-agent: a fan-out of workers on one
+  /// window would navigate each other's pages.
+  final BrowserTab? browser;
+
+  /// Whether the model reads images, which is what offers the browser's
+  /// screenshot: one that cannot would be sent each one as nothing.
+  final bool seesImages;
+
   /// The user's profile, appended to the system prompt as "About the user".
   /// Null means nothing is added. Rewritten every turn with the rest of the
   /// system prompt.
@@ -775,6 +794,7 @@ class BuiltinAgent {
         artifact: caps.artifact && saveArtifact != null,
         createSkill: caps.createSkill && packageSkill != null,
         trigger: caps.trigger && registerTrigger != null,
+        browser: caps.browser && browser != null && !oneShot,
       );
 
   /// What the model may call, and what the system prompt says. One value for
@@ -787,6 +807,7 @@ class BuiltinAgent {
         skills: skills,
         offerMemory: memoryStore != null,
         offerImage: generateImage != null && saveResource != null,
+        browserScreenshot: seesImages && saveResource != null,
         oneShot: oneShot,
         participants: roomParticipants,
         member: viewer != null,
@@ -1041,6 +1062,18 @@ class BuiltinAgent {
           _endTurn,
         websearchToolName => _webSearch,
         webfetchToolName => _webFetch,
+        browserGotoToolName ||
+        browserSearchToolName ||
+        browserClickToolName ||
+        browserTypeToolName ||
+        browserDragToolName ||
+        browserScrollToolName ||
+        browserBackToolName ||
+        browserPageTextToolName when _offered.browser =>
+          _browser,
+        browserScreenshotToolName
+            when _offered.browser && seesImages && saveResource != null =>
+          _browserScreenshot,
         memorySaveToolName => _memorySave,
         memorySearchToolName => _memorySearch,
         memoryUpdateToolName => _memoryUpdate,
@@ -1308,7 +1341,174 @@ class BuiltinAgent {
         () => webSearch!.fetch(url),
         argumentsText: url);
     final result = _commandResult!;
-    yield ToolResultEvent(_ran(call, result));
+    yield ToolResultEvent(_ran(call, _withBrowserHint(result)));
+  }
+
+  /// A fetch that met a wall a browser gets past: a refusal, a challenge, or
+  /// a page that is nothing until its script runs. Pointed at the browser
+  /// where this turn has one.
+  ShellResult _withBrowserHint(ShellResult result) {
+    if (!_offered.browser) return result;
+    final text = "${result.output}\n${result.exceptionInfo ?? ""}";
+    final walled = RegExp(r"HTTP (401|403|429|503)\b").hasMatch(text) ||
+        result.output == "The page has no readable text content." ||
+        RegExp(r"enable javascript|just a moment|verify you are human|captcha",
+                caseSensitive: false)
+            .hasMatch(text.length > 3000 ? text.substring(0, 3000) : text);
+    if (!walled) return result;
+    const hint = "\n\nThis page may need a real browser: try "
+        "`$browserGotoToolName` with the same URL.";
+    return result.returnCode == 0
+        ? ShellResult(returnCode: 0, output: "${result.output}$hint")
+        : ShellResult.failed("${result.exceptionInfo ?? result.output}$hint");
+  }
+
+  /// The browser tools but the screenshot. Opening a page is gated as a fetch
+  /// of the same URL, by the same network rules; a click, a typed field or a
+  /// drag as a command is, worded by what it acts on so the banner and the
+  /// classifier read an element rather than a number. Moving about a page
+  /// and reading it are not gated.
+  Stream<AgentEvent> _browser(LlmToolCall call) async* {
+    final tab = browser!;
+    final args = decodeArgs(call.argumentsJson) ?? const {};
+    int? ref() => args["ref"] is int ? args["ref"] as int : null;
+    double? number(Object? value) => value is num ? value.toDouble() : null;
+    ({double x, double y})? point(Object? value) {
+      if (value is! Map) return null;
+      final x = number(value["x"]), y = number(value["y"]);
+      return x == null || y == null ? null : (x: x, y: y);
+    }
+
+    final Future<String> Function() run;
+    String label;
+    String? navigate;
+    String? acting;
+    switch (call.name) {
+      case browserGotoToolName:
+        final url = stringArg(call.argumentsJson, "url");
+        if (url == null) {
+          yield* _reject(call, 'The $browserGotoToolName tool takes {"url": "..."}.');
+          return;
+        }
+        label = url;
+        navigate = url;
+        run = () => tab.goto(url);
+      case browserSearchToolName:
+        final query = stringArg(call.argumentsJson, "query");
+        if (query == null) {
+          yield* _reject(call, 'The $browserSearchToolName tool takes {"query": "..."}.');
+          return;
+        }
+        label = query;
+        run = () => tab.goto(
+            Uri.https("duckduckgo.com", "/", {"q": query}).toString());
+      case browserClickToolName:
+        final at = ref();
+        final x = number(args["x"]), y = number(args["y"]);
+        if (at == null && (x == null || y == null)) {
+          yield* _reject(call,
+              'The $browserClickToolName tool takes {"ref": n} or {"x": n, "y": n}.');
+          return;
+        }
+        label = at != null ? "[$at]" : "($x, $y)";
+        acting = "click";
+        run = () => tab.click(ref: at, x: x, y: y);
+      case browserTypeToolName:
+        final at = ref();
+        final text = args["text"];
+        if (at == null || text is! String) {
+          yield* _reject(call,
+              'The $browserTypeToolName tool takes {"ref": n, "text": "..."}.');
+          return;
+        }
+        final submit = args["submit"] == true;
+        label = "[$at] $text";
+        acting = submit ? "type \"$text\" and press Enter in" : "type \"$text\" in";
+        run = () => tab.type(at, text, submit: submit);
+      case browserDragToolName:
+        final from = point(args["from"]), to = point(args["to"]);
+        if (from == null || to == null) {
+          yield* _reject(call, 'The $browserDragToolName tool takes '
+              '{"from": {"x": n, "y": n}, "to": {"x": n, "y": n}}.');
+          return;
+        }
+        label = "(${from.x}, ${from.y}) → (${to.x}, ${to.y})";
+        acting = "drag from";
+        run = () => tab.drag(from, to);
+      case browserScrollToolName:
+        final up = args["direction"] == "up";
+        label = up ? "up" : "down";
+        run = () => tab.scroll(up: up);
+      case browserBackToolName:
+        label = "back";
+        run = tab.back;
+      default:
+        final offset = number(args["offset"])?.toInt() ?? 0;
+        label = offset == 0 ? "page" : "from $offset";
+        run = () => tab.pageText(offset: offset);
+    }
+    yield _called(call, label);
+
+    Future<ShellResult> attempt() async {
+      try {
+        return ShellResult(returnCode: 0, output: await run());
+      } catch (e) {
+        return ShellResult.failed("$e");
+      }
+    }
+
+    if (navigate != null) {
+      yield* _runGated(call, webfetchToolName, attempt, argumentsText: navigate);
+    } else if (acting != null) {
+      final String target;
+      try {
+        target = call.name == browserDragToolName
+            ? await tab.describeTarget(
+                x: number((args["from"] as Map)["x"]),
+                y: number((args["from"] as Map)["y"]))
+            : await tab.describeTarget(
+                ref: ref(), x: number(args["x"]), y: number(args["y"]));
+      } catch (e) {
+        yield _failed(call, "$e");
+        return;
+      }
+      final described = "$acting $target";
+      // The arguments the classifier reads: the element and the page, which
+      // the model's own `{"ref": 12}` says nothing about.
+      final gate = LlmToolCall(
+          id: call.id,
+          name: call.name,
+          argumentsJson: jsonEncode({"action": described}));
+      yield* _runGated(gate, call.name, attempt, argumentsText: described);
+    } else {
+      _commandResult = await attempt();
+    }
+    yield ToolResultEvent(_ran(call, _commandResult!));
+  }
+
+  /// The viewport or one element, shown to the model on the result and to
+  /// the user in the chat, as a generated image is.
+  Stream<AgentEvent> _browserScreenshot(LlmToolCall call) async* {
+    final ref = intArg(call.argumentsJson, "ref");
+    yield _called(call, ref == null ? "viewport" : "[$ref]");
+    final BrowserShot shot;
+    final ImageEvent saved;
+    try {
+      shot = await browser!.screenshot(ref: ref);
+      saved = await _saved(LlmAttachment(
+          filename: "screenshot.png", mimeType: "image/png", bytes: shot.png));
+    } catch (e) {
+      yield _failed(call, "$e");
+      return;
+    }
+    yield saved;
+    yield _ok(
+        call,
+        ref == null
+            ? "Screenshot of the viewport attached."
+            : "Screenshot of [$ref] attached. Its top-left corner is at "
+                "(${shot.left.round()}, ${shot.top.round()}) in the viewport: "
+                "add that to a point in it to click there.");
   }
 
   /// Resolve a file-tool path through the workspaces, the guest root and the

@@ -641,6 +641,77 @@ search page is HTML, not JSON, so results are parsed out of the table it
 renders. Both return a `ShellResult`, so the agent words a search's outcome
 the same way it words a command's — the model reads one shape, whatever ran.
 
+A fetch that comes back refused (401, 403, 429, 503), empty, or saying it
+wants JavaScript or a human check gets a line pointing at
+`browser_goto_url`, where the turn has a browser. `webfetch` stays the first
+answer: it needs no window, so a trigger's headless turn and a turn with the
+browser off still read pages.
+
+## The browser (the `browser_*` tools)
+
+A real browser window, with a profile of its own under `<cache>/browser/profile/`
+so a login the agent makes is kept, driven over the Chrome DevTools Protocol.
+`AgentBrowser` is the port (`lib/domain/agent_browser.dart`), `CdpBrowser` the
+desktops' implementation (`lib/data/browser/`), `UnavailableAgentBrowser` the
+phones' and the web's — the phones' webview is not one yet, and the settings
+category is not drawn where `available` is false. Settings > Agent Browser
+writes `agentBrowser`: null off, `embedded` for the downloaded Helium, or a
+Chromium-family executable's path, detected or picked with a file picker and
+launched once to prove it answers before it is saved. Firefox is not offered:
+it speaks WebDriver BiDi, not this protocol.
+
+**Helium is the embedded one for its uBlock Origin**: pages come without the
+ads and trackers, and without most of the scripts that would put text in front
+of the model. It is fetched from `imputnet/helium-<os>`'s latest release —
+the tag read off the `releases/latest` redirect, as the app's own update check
+does — into `<cache>/browser/download/`: the AppImage on Linux, which runs
+where it is put, the `.app` out of the dmg on macOS, the portable zip on
+Windows. Installed whole beside it and renamed over, so a download that dies
+leaves the last one working; the running browser is quit first, since Windows
+will not replace a file in use.
+
+The browser is launched on the first call that needs it and quit after ten
+idle minutes. `--remote-debugging-port=0` lets it pick a port, which it writes
+to `DevToolsActivePort` in the profile — nothing is guessed, so nothing can be
+taken. The AppImage variables are stripped from its environment, as from a
+command's: Helium's own AppImage runtime would read ours. A launch that exits
+0 at once is a browser handing off to a copy already open on that profile, and
+is said as that.
+
+**One tab per chat**, so two turns at once do not navigate each other; a tab
+the user closes is opened again on the next call, and is brought to the front
+before each one — Chrome throttles a background tab until a screenshot of it
+never arrives. Sub-agents get no tab: a fan-out on one window is workers
+fighting over it.
+
+What the model reads after every call is the view: title, URL, scroll
+position, the interactive elements in view numbered `[n]`, and the text in
+view. The page script (`page_script.dart`) runs in an isolated world made per
+evaluation, so the page's own scripts cannot see or replace it; the numbers
+live on the DOM as `data-entoli-ref`, so an element keeps its number for as
+long as its document does. Cross-site frames are invisible to it — a separate
+process, and a challenge widget's sits in a closed shadow root besides — so
+they are read off the browser's target list and named on the view, and a
+challenge frame or a page saying it is one adds a note telling the model to
+screenshot and click, or to ask the user to solve it in the window.
+
+Input is the protocol's, not the page's: a click is `Input.dispatchMouseEvent`,
+which a page sees as trusted, arriving along a short eased path off the exact
+centre; a drag moves in uneven steps. That is what lets a click by `x`, `y`
+reach a checkbox inside a cross-site frame. Screenshots are taken at a scale of
+one over `devicePixelRatio`, so a pixel in the image is a CSS pixel in the
+viewport and a point read off one clicks where it was read — on a HiDPI screen
+it would otherwise be off by the ratio.
+
+`browser_screenshot` is offered only where the model reads images
+(`ModelInfo.readsImages`, unknown counting as yes, as the client does); its
+image rides the result the way a generated one does. Gating: opening a page is
+a `webfetch` of its URL to the rules and the classifier, so a host rule covers
+both; a click, a typed field or a drag is gated as a command is, with the
+element and page it acts on as the banner's text and the classifier's
+`action` argument — `{"ref": 12}` says nothing to either. Scrolling, reading
+and going back are not gated.
+
 ## Images (the `image_generation` tool)
 
 Offered only when Settings > Image Generation names an image model (its "Off"

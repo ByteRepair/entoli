@@ -39,13 +39,17 @@ import "../../../data/local/desktop_file_handoff.dart";
 import "../../../data/local/io_file_watches.dart";
 import "../../../data/local/linux_reminder_alarms.dart";
 import "../../../data/local/macos_reminder_alarms.dart";
+import "../../../data/browser/cdp_browser.dart";
+import "../../../data/browser/helium.dart";
 import "../../../data/builtin/duckduckgo_search.dart";
+import "../../tls/trust_io.dart" show tlsClient;
 import "../../../data/builtin/local_shell.dart";
 import "../../../data/voice/android_voice.dart";
 import "../../../data/voice/file_voice_model_store.dart";
 import "../../../data/voice/ios_voice.dart";
 import "../../../data/voice/sherpa_voice.dart";
 import "../../../domain/app_settings.dart";
+import "../../../domain/agent_browser.dart";
 import "../../../domain/app_update.dart";
 import "../../../core/log.dart";
 import "../../../domain/assistant_launch.dart";
@@ -199,6 +203,21 @@ AppUpdateHost createAppUpdateHost(String cacheDir) {
   return flavour == null
       ? const UnavailableAppUpdateHost()
       : DesktopUpdater(flavour: flavour, cacheDir: cacheDir);
+}
+
+/// The browser the agent drives, on the three desktops: whatever Settings >
+/// Agent Browser picked, under `<cache>/browser/`. The phones' webview is not
+/// one yet.
+AgentBrowser createAgentBrowser(AppConfig config, String cacheDir) {
+  if (!(Platform.isLinux || Platform.isMacOS || Platform.isWindows)) {
+    return const UnavailableAgentBrowser();
+  }
+  final dir = p.join(cacheDir, "browser");
+  return CdpBrowser(
+    browserDir: dir,
+    picked: () => AppSettings.load(config).agentBrowser,
+    embedded: HeliumDownload(dir, client: tlsClient),
+  );
 }
 
 /// The `assets/` prefix is part of the asset key, not just the on-disk path.

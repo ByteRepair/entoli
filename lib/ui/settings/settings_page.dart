@@ -33,6 +33,7 @@ import "../widgets/resettable_field.dart";
 import "../widgets/section_header.dart";
 import "agents_settings.dart";
 import "assistant_settings.dart";
+import "browser_settings.dart";
 import "byte_repair_settings.dart";
 import "llm_settings.dart";
 import "local_model_settings.dart";
@@ -53,8 +54,8 @@ import "welcome_page.dart";
 /// is, where a model can run without a network, and everything a model is
 /// asked to do; Memory, Voice
 /// and Triggers are what a conversation does beyond the text; Agents and
-/// Skills are what a message addresses by name; Terminal and Byte Repair are
-/// where commands run; Sync and Data are the device and all of it at once —
+/// Skills are what a message addresses by name; Terminal, Agent Browser and
+/// Byte Repair are where commands run and pages open; Sync and Data are the device and all of it at once —
 /// the chats, the settings and the workspaces as one file to keep; and
 /// Welcome, Shortcuts and About are the app rather than anything it does,
 /// which is why they are last.
@@ -70,6 +71,7 @@ enum SettingsCategory {
   agents("Agents", Icons.person_outline, dividerAbove: true),
   skills("Skills", Icons.extension),
   terminal("Terminal", Icons.terminal, dividerAbove: true),
+  agentBrowser("Agent Browser", Icons.travel_explore),
   byteRepair("Byte Repair", Icons.verified_user),
   sync("Sync", Icons.sync, dividerAbove: true),
   data("Data", Icons.inventory_2_outlined),
@@ -255,6 +257,7 @@ List<Widget> _sectionsOf(SettingsCategory category) => switch (category) {
       // footers pinned to their bottoms.
       SettingsCategory.skills => const [],
       SettingsCategory.agents => const [],
+      SettingsCategory.agentBrowser => const [AgentBrowserSection()],
       SettingsCategory.byteRepair => const [ByteRepairSection()],
       SettingsCategory.sync => const [SyncSection()],
       SettingsCategory.providers => const [_ProvidersEditor()],
@@ -282,18 +285,21 @@ List<Widget> _sectionsOf(SettingsCategory category) => switch (category) {
 /// The categories as a list: beside the page where there is room for one, and
 /// the page itself where there is not. Material, not Scaffold, since the page
 /// owns that.
-class _Categories extends StatelessWidget {
+class _Categories extends ConsumerWidget {
   const _Categories({required this.selected, required this.onSelect});
 
   final SettingsCategory? selected;
   final ValueChanged<SettingsCategory> onSelect;
 
   @override
-  Widget build(BuildContext context) => Material(
+  Widget build(BuildContext context, WidgetRef ref) => Material(
         child: SafeArea(
           child: ListView(
             children: [
-              for (final category in SettingsCategory.values) ...[
+              for (final category in SettingsCategory.values)
+                // Where there is no browser to drive there is nothing to pick.
+                if (category != SettingsCategory.agentBrowser ||
+                    ref.watch(agentBrowserProvider).available) ...[
                 if (category.dividerAbove) const Divider(),
                 ListTile(
                   selected: category == selected,
