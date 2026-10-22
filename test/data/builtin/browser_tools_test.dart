@@ -79,6 +79,37 @@ class FakeBrowserTab implements BrowserTab {
   Future<void> historyBack() async {}
 
   @override
+  Future<String> upload(int ref, List<String> paths) async {
+    calls.add("upload $ref ${paths.join(",")}");
+    return "uploaded";
+  }
+
+  @override
+  final ValueNotifier<UploadRequest?> uploadRequest = ValueNotifier(null);
+  Completer<String>? _uploading;
+
+  @override
+  Future<String> requestUpload(int ref) {
+    calls.add("request upload $ref");
+    _uploading = Completer();
+    uploadRequest.value = UploadRequest(target: "[$ref] button", url: "https://example.com");
+    return _uploading!.future;
+  }
+
+  @override
+  Future<void> submitUpload(List<String> paths) async {
+    uploadRequest.value = null;
+    _uploading!.complete("The user chose ${paths.length} file(s)");
+  }
+
+  @override
+  void cancelUpload({String why = "The user cancelled the upload."}) {
+    if (_uploading == null || _uploading!.isCompleted) return;
+    uploadRequest.value = null;
+    _uploading!.completeError(UploadCancelled(why));
+  }
+
+  @override
   final ValueNotifier<CredentialRequest?> credentialRequest = ValueNotifier(null);
   Completer<String>? _waiting;
 
@@ -213,6 +244,8 @@ void main() {
     bool oneShot = false,
     bool noAsk = false,
     ApproveMode browserApprove = ApproveMode.never,
+    BrowserUploadPolicy uploads = BrowserUploadPolicy.classifier,
+    void Function(String chat)? inWorkspace,
     List<PermissionRule> permissions = const [],
     ApproveMode approveMode = ApproveMode.never,
     PermissionClassifier? classifier,
@@ -223,6 +256,7 @@ void main() {
     addTearDown(() => tempDir.deleteSync(recursive: true));
     final chat = p.join(tempDir.path, "chats", "chat-1");
     Directory(chat).createSync(recursive: true);
+    inWorkspace?.call(chat);
     return BuiltinAgent(
       session: BuiltinSession(),
       client: client,
@@ -246,6 +280,7 @@ void main() {
       seesImages: seesImages,
       browserHidden: hidden,
       browserApprove: browserApprove,
+      browserUploads: uploads,
       permissions: permissions,
       oneShot: oneShot,
       classifier: classifier,
@@ -605,6 +640,157 @@ void main() {
       expect(offered(client), contains(browserGotoToolName));
       expect(offered(client), isNot(contains(browserCredentialsPromptToolName)));
       expect(offered(client), isNot(contains(browserCredentialsHideToolName)));
+    });
+  });
+
+  group("uploads", () {
+    void report(String chat) =>
+        File(p.join(chat, "report.pdf")).writeAsStringSync("%PDF");
+
+    LlmCompletion upload() => call(browserUploadToolName, {
+          "ref": 4,
+          "paths": ["report.pdf"],
+        });
+
+    test("by default the classifier sees the whole path and the page",
+        () async {
+      final tab = FakeBrowserTab();
+      final classifier = _StubClassifier(PermissionDecision.deny);
+      final events = await agentOver(
+        FakeLlmClient([
+          [upload()],
+          [finish],
+        ]),
+        tab: tab,
+        classifier: classifier,
+        inWorkspace: report,
+      ).run(userMessage("upload it")).toList();
+      expect(tab.calls, isEmpty);
+      final (tool, args) = classifier.asked.single;
+      expect(tool, browserUploadToolName);
+      final action = jsonDecode(args)["action"] as String;
+      expect(action, contains(p.join("chats", "chat-1", "report.pdf")));
+      expect(action, contains("shop.example/cart"));
+      expect(events.whereType<ToolResultEvent>().first.result.exceptionInfo,
+          contains("Denied"));
+    });
+
+    test("it is its own scope: clicks unasked, an upload still asked",
+        () async {
+      final tab = FakeBrowserTab();
+      final classifier = _StubClassifier(PermissionDecision.allow);
+      await agentOver(
+        FakeLlmClient([
+          [call(browserClickToolName, {"ref": 1})],
+          [upload()],
+          [finish],
+        ]),
+        tab: tab,
+        classifier: classifier,
+        inWorkspace: report,
+      ).run(userMessage("go")).toList();
+      // The click asked nobody; only the upload reached the classifier.
+      expect([for (final (tool, _) in classifier.asked) tool],
+          [browserUploadToolName]);
+      expect(tab.calls.last, startsWith("upload 4 "));
+      expect(tab.calls.last, endsWith("report.pdf"));
+    });
+
+    test("Don't ask uploads with nobody asked", () async {
+      final tab = FakeBrowserTab();
+      final classifier = _StubClassifier(PermissionDecision.deny);
+      await agentOver(
+        FakeLlmClient([
+          [upload()],
+          [finish],
+        ]),
+        tab: tab,
+        classifier: classifier,
+        uploads: BrowserUploadPolicy.allow,
+        inWorkspace: report,
+      ).run(userMessage("upload it")).toList();
+      expect(classifier.asked, isEmpty);
+      expect(tab.calls.single, startsWith("upload 4 "));
+    });
+
+    test("a file that is not there is refused before anything", () async {
+      final tab = FakeBrowserTab();
+      final events = await agentOver(
+        FakeLlmClient([
+          [upload()],
+          [finish],
+        ]),
+        tab: tab,
+        uploads: BrowserUploadPolicy.allow,
+      ).run(userMessage("upload it")).toList();
+      expect(tab.calls, isEmpty);
+      expect(events.whereType<ToolResultEvent>().first.result.exceptionInfo,
+          contains("no file at report.pdf"));
+    });
+
+    test("where the user chooses, the agent names no file and waits",
+        () async {
+      final tab = FakeBrowserTab();
+      tab.uploadRequest.addListener(() {
+        if (tab.uploadRequest.value != null) {
+          unawaited(tab.submitUpload(["/home/me/cv.pdf"]));
+        }
+      });
+      final client = FakeLlmClient([
+        [call(browserUploadToolName, {"ref": 4})],
+        [finish],
+      ]);
+      final events = await agentOver(client,
+              tab: tab, uploads: BrowserUploadPolicy.user)
+          .run(userMessage("upload my cv"))
+          .toList();
+      final schema = client.calls.first.tools
+          .firstWhere((t) => t.name == browserUploadToolName)
+          .schema;
+      expect((schema["properties"] as Map).containsKey("paths"), isFalse);
+      expect(tab.calls, ["request upload 4"]);
+      expect(events.whereType<ToolResultEvent>().first.result.output,
+          contains("The user chose 1 file(s)"));
+    });
+
+    test("and a cancel is what the agent hears", () async {
+      final tab = FakeBrowserTab();
+      tab.uploadRequest.addListener(() {
+        if (tab.uploadRequest.value != null) {
+          tab.cancelUpload(why: "The user sent a message instead.");
+        }
+      });
+      final events = await agentOver(
+        FakeLlmClient([
+          [call(browserUploadToolName, {"ref": 4})],
+          [finish],
+        ]),
+        tab: tab,
+        uploads: BrowserUploadPolicy.user,
+      ).run(userMessage("upload my cv")).toList();
+      expect(events.whereType<ToolResultEvent>().first.result.exceptionInfo,
+          contains("sent a message instead"));
+    });
+
+    test("where the user chooses, nobody there means no tool", () async {
+      final client = FakeLlmClient([[finish]]);
+      await agentOver(client,
+              tab: FakeBrowserTab(),
+              uploads: BrowserUploadPolicy.user,
+              noAsk: true)
+          .run(userMessage("hi"))
+          .toList();
+      expect(offered(client), isNot(contains(browserUploadToolName)));
+    });
+
+    test("the policy is written only when not the classifier", () {
+      expect(AppSettings().toJson().containsKey("agentBrowserUploads"), isFalse);
+      expect(
+          AppSettings.fromJson(
+                  AppSettings(agentBrowserUploads: BrowserUploadPolicy.user)
+                      .toJson())
+              .agentBrowserUploads,
+          BrowserUploadPolicy.user);
     });
   });
 

@@ -170,6 +170,7 @@ class CdpBrowser extends AgentBrowser {
       tab._hold.value = null;
       tab._endRequest(const CredentialsDeclined(
           "The browser was quit before the sign-in was filled in."));
+      tab.cancelUpload(why: "The browser was quit before files were chosen.");
     }
     await _quit();
   }
@@ -931,6 +932,148 @@ class _CdpTab implements BrowserTab {
     _request.value = null;
     _waiting = null;
     if (waiting != null && !waiting.isCompleted) waiting.completeError(why);
+  }
+
+  final _upload = ValueNotifier<UploadRequest?>(null);
+  Completer<String>? _uploadWaiting;
+
+  /// The file field the waiting chooser belongs to, by the protocol's id for
+  /// it, which outlives the chooser's interception.
+  int? _chooser;
+
+  @override
+  ValueListenable<UploadRequest?> get uploadRequest => _upload;
+
+  /// Click [ref] with the page's file choosers caught, and answer with the
+  /// one the click opened: no dialog is drawn, so nothing waits on a person
+  /// at a window the browser may not have.
+  Future<({int node, bool multiple, String target, String url})> _openChooser(
+      int ref) async {
+    final page = await _attach();
+    final target = await describeTarget(ref: ref);
+    final opened = Completer<Map<String, dynamic>>();
+    final sub = page.cdp.events
+        .where((e) =>
+            e.sessionId == page.session && e.method == "Page.fileChooserOpened")
+        .listen((e) {
+      if (!opened.isCompleted) opened.complete(e.params);
+    });
+    await page.cdp.send("Page.setInterceptFileChooserDialog",
+        params: {"enabled": true}, sessionId: page.session);
+    try {
+      final rect = await _rect(ref);
+      await _clickAt(
+          (rect["left"] as num) + (rect["width"] as num) / 2.0,
+          (rect["top"] as num) + (rect["height"] as num) / 2.0);
+      final chooser = await opened.future.timeout(const Duration(seconds: 10),
+          onTimeout: () => throw CdpException(
+              "Clicking [$ref] opened no file chooser. Give the number of the "
+              "upload button or the file field itself."));
+      final node = chooser["backendNodeId"];
+      if (node is! int) {
+        throw const CdpException("The file chooser names no field to fill.");
+      }
+      return (
+        node: node,
+        multiple: chooser["mode"] == "selectMultiple",
+        target: target,
+        url: (await _eval("location.href") as String?) ?? "",
+      );
+    } finally {
+      await sub.cancel();
+      try {
+        await page.cdp.send("Page.setInterceptFileChooserDialog",
+            params: {"enabled": false}, sessionId: page.session);
+      } catch (_) {
+        // The tab went with the click; there is nothing to switch off.
+      }
+    }
+  }
+
+  Future<void> _fillChooser(int node, List<String> paths) async {
+    final page = await _attach();
+    await page.cdp.send("DOM.setFileInputFiles",
+        params: {"files": paths, "backendNodeId": node}, sessionId: page.session);
+    await Future<void>.delayed(const Duration(milliseconds: 500));
+  }
+
+  static String _named(List<String> paths) =>
+      paths.map((path) => p.basename(path)).join(", ");
+
+  @override
+  Future<String> upload(int ref, List<String> paths) async {
+    final chooser = await _openChooser(ref);
+    if (!chooser.multiple && paths.length > 1) {
+      await _cancelChooser(chooser.node);
+      throw CdpException("[$ref] takes one file; ${paths.length} were given.");
+    }
+    await _fillChooser(chooser.node, paths);
+    return "Uploaded ${_named(paths)} into ${chooser.target}.\n\n"
+        "${await _describeView()}";
+  }
+
+  @override
+  Future<String> requestUpload(int ref) async {
+    final chooser = await _openChooser(ref);
+    _uploadWaiting?.completeError(
+        const UploadCancelled("A newer upload replaced this one."));
+    final waiting = Completer<String>();
+    _uploadWaiting = waiting;
+    _chooser = chooser.node;
+    _upload.value = UploadRequest(
+        target: chooser.target, url: chooser.url, multiple: chooser.multiple);
+    return waiting.future;
+  }
+
+  @override
+  Future<void> submitUpload(List<String> paths) async {
+    final waiting = _uploadWaiting;
+    final node = _chooser;
+    if (waiting == null || node == null || paths.isEmpty) return;
+    _upload.value = null;
+    _uploadWaiting = null;
+    _chooser = null;
+    try {
+      await _fillChooser(node, paths);
+      waiting.complete("The user chose ${paths.length} file(s) and they were "
+          "given to the page: ${_named(paths)}.\n\n${await _describeView()}");
+    } catch (e) {
+      if (!waiting.isCompleted) waiting.completeError(e);
+    }
+  }
+
+  @override
+  void cancelUpload({String why = "The user cancelled the upload."}) {
+    final waiting = _uploadWaiting;
+    final node = _chooser;
+    if (waiting == null) return;
+    _upload.value = null;
+    _uploadWaiting = null;
+    _chooser = null;
+    if (node != null) unawaited(_cancelChooser(node));
+    if (!waiting.isCompleted) waiting.completeError(UploadCancelled(why));
+  }
+
+  /// What dismissing the dialog would have told the page: a `cancel` on the
+  /// field, which a page waiting on its chooser listens for.
+  Future<void> _cancelChooser(int node) async {
+    final live = _live;
+    if (live == null) return;
+    try {
+      final resolved = await live.cdp.send("DOM.resolveNode",
+          params: {"backendNodeId": node}, sessionId: live.session);
+      final object = (resolved["object"] as Map?)?["objectId"];
+      if (object == null) return;
+      await live.cdp.send("Runtime.callFunctionOn",
+          params: {
+            "objectId": object,
+            "functionDeclaration":
+                "function() { this.dispatchEvent(new Event('cancel', {bubbles: true})); }",
+          },
+          sessionId: live.session);
+    } catch (e) {
+      logFailure(_tag, "a file chooser could not be cancelled", e);
+    }
   }
 
   Future<void> _key(

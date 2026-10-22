@@ -756,6 +756,31 @@ keeps the real dialog, which is how a passkey is actually used, so the card's
 "Open in a window" (`show(byUser: true)`, noted to the agent since the restart
 reloads the page) is the way to sign in with one.
 
+### Uploads (the `browser_upload` tool)
+
+A page's file chooser is a native dialog, which neither the agent nor a
+hidden browser can use, so it is caught instead: `_openChooser` turns on
+`Page.setInterceptFileChooserDialog`, clicks the element the agent named —
+the field itself, or a button that opens a hidden one, the common pattern —
+and takes the `Page.fileChooserOpened` the click raises, with the protocol's
+id for the field and whether it takes several files. `DOM.setFileInputFiles`
+fills it; the page sees an ordinary `change` with the files in it.
+
+**Uploads are their own scope**, `agentBrowserUploads`, apart from "Before
+the agent acts": a file leaving the machine is a different question from a
+click, and the user can take it from the agent while leaving the agent
+everything else. `classifier` is the default — the classifier is shown the
+files' whole resolved paths (where they come from is most of the question)
+and the element and page they go to, and its rubric denies keys, credential
+stores and profiles outright. `allow` asks nobody. `user` takes the paths
+out of the tool's schema altogether (`browserUploadByUserTool`): the call
+opens the chooser and waits on the chat's `UploadPanel`, where the user picks
+with the system's own file picker and presses Upload. Cancel, or a message
+sent instead, is `cancelUpload`: the field gets a `cancel` event, which is
+what dismissing the dialog would have told the page, and the agent's call
+fails saying which. The `user` tool parks the turn on the user, so a turn
+with nobody to answer is not offered it.
+
 ### What the user did, told to the agent
 
 The user moves the page from the card, hides and gives back the browser, and

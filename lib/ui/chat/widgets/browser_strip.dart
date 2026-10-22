@@ -1,5 +1,6 @@
 import "dart:async";
 
+import "package:file_selector/file_selector.dart";
 import "package:flutter/foundation.dart" show defaultTargetPlatform, TargetPlatform;
 import "package:flutter/gestures.dart";
 import "package:flutter/material.dart";
@@ -34,12 +35,14 @@ class BrowserStrip extends ConsumerWidget {
           builder: (_) => BrowserCard(tab: tab, onQuit: browser.close),
         );
     return ListenableBuilder(
-      listenable: Listenable.merge([tab.page, tab.hold, tab.credentialRequest]),
+      listenable: Listenable.merge(
+          [tab.page, tab.hold, tab.credentialRequest, tab.uploadRequest]),
       builder: (context, _) {
         final page = tab.page.value;
         final hold = tab.hold.value;
         final request = tab.credentialRequest.value;
-        if (page == null && hold == null && request == null) {
+        final upload = tab.uploadRequest.value;
+        if (page == null && hold == null && request == null && upload == null) {
           return const SizedBox.shrink();
         }
         final theme = Theme.of(context);
@@ -54,6 +57,13 @@ class BrowserStrip extends ConsumerWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
+              if (upload != null)
+                UploadPanel(
+                  key: ObjectKey(upload),
+                  request: upload,
+                  tab: tab,
+                  onWatch: open,
+                ),
               if (request != null)
                 CredentialPanel(
                   key: ObjectKey(request),
@@ -102,6 +112,111 @@ class BrowserStrip extends ConsumerWidget {
           ),
         );
       },
+    );
+  }
+}
+
+/// A file chooser the page opened, waiting on the user: the agent is not
+/// trusted to pick what leaves the machine here, so the user picks with the
+/// system's own file picker, and Upload hands the page what they picked.
+class UploadPanel extends StatefulWidget {
+  const UploadPanel({
+    super.key,
+    required this.request,
+    required this.tab,
+    required this.onWatch,
+  });
+
+  final UploadRequest request;
+  final BrowserTab tab;
+  final VoidCallback onWatch;
+
+  @override
+  State<UploadPanel> createState() => _UploadPanelState();
+}
+
+class _UploadPanelState extends State<UploadPanel> {
+  List<XFile> _chosen = const [];
+
+  Future<void> _choose() async {
+    final picked = widget.request.multiple
+        ? await openFiles(confirmButtonText: "Choose")
+        : [?await openFile(confirmButtonText: "Choose")];
+    if (picked.isEmpty || !mounted) return;
+    setState(() => _chosen = picked);
+  }
+
+  void _upload() {
+    unawaited(widget.tab
+        .submitUpload([for (final file in _chosen) file.path])
+        .catchError((Object e) {
+      logFailure("browser", "files could not be given to the page", e);
+    }));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final host = Uri.tryParse(widget.request.url)?.host ?? "";
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.upload_file, size: 18),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  "The agent wants to upload "
+                  "${widget.request.multiple ? "files" : "a file"}"
+                  "${host.isEmpty ? "" : " to $host"}",
+                  style: theme.textTheme.titleSmall,
+                ),
+              ),
+              TextButton(
+                onPressed: widget.onWatch,
+                child: const Text("See the page"),
+              ),
+            ],
+          ),
+          Text(
+            "You choose what is sent. Sending a message cancels it.",
+            style: theme.textTheme.bodySmall
+                ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+          ),
+          const SizedBox(height: 8),
+          if (_chosen.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Text(
+                [for (final file in _chosen) file.name].join(", "),
+                style: theme.textTheme.bodyMedium,
+              ),
+            ),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              TextButton(
+                onPressed: () => widget.tab.cancelUpload(),
+                child: const Text("Cancel"),
+              ),
+              const SizedBox(width: 8),
+              OutlinedButton(
+                onPressed: () => unawaited(_choose()),
+                child: Text(_chosen.isEmpty ? "Choose file…" : "Choose again…"),
+              ),
+              const SizedBox(width: 8),
+              FilledButton(
+                onPressed: _chosen.isEmpty ? null : _upload,
+                child: const Text("Upload"),
+              ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 }

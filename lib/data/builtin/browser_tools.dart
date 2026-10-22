@@ -1,3 +1,4 @@
+import "../../domain/agent_browser.dart" show BrowserUploadPolicy;
 import "llm/llm_client.dart";
 
 /// The browser tools, offered where Settings > Agent Browser has picked one.
@@ -269,10 +270,56 @@ const browserCredentialsHideTool = LlmTool(
 /// model reads images: one that cannot would be paying for pictures it is
 /// sent as nothing. [show] only where the browser runs hidden. [credentials]
 /// only where someone is there to answer them.
+const browserUploadToolName = "browser_upload";
+
+const browserUploadTool = LlmTool(
+  name: browserUploadToolName,
+  description: "Upload files from your workspace through the page: give the "
+      "number of the upload button or file field, and the files' paths. The "
+      "page's file chooser is filled in for you, with no dialog. Only upload "
+      "what the task needs.",
+  schema: {
+    "type": "object",
+    "properties": {
+      "ref": {
+        "type": "integer",
+        "description": "The upload button's or file field's number.",
+      },
+      "paths": {
+        "type": "array",
+        "items": {"type": "string"},
+        "description": "Files to upload, as the file tools take paths.",
+      },
+    },
+    "required": ["ref", "paths"],
+  },
+);
+
+/// [browserUploadTool] where the user alone chooses what is uploaded: no
+/// paths, and the call waits on them.
+const browserUploadByUserTool = LlmTool(
+  name: browserUploadToolName,
+  description: "Ask the user to upload a file through the page: give the "
+      "number of the upload button or file field. The user chooses the file "
+      "in the app, which you cannot do here; the call waits for them, and "
+      "says what they chose or that they cancelled.",
+  schema: {
+    "type": "object",
+    "properties": {
+      "ref": {
+        "type": "integer",
+        "description": "The upload button's or file field's number.",
+      },
+    },
+    "required": ["ref"],
+  },
+);
+
 List<LlmTool> browserTools({
   required bool screenshot,
   bool show = false,
   bool credentials = false,
+  BrowserUploadPolicy? upload,
 }) =>
     [
       browserGotoTool,
@@ -290,4 +337,9 @@ List<LlmTool> browserTools({
         browserCredentialsPromptTool,
         browserCredentialsHideTool,
       ],
+      ?switch (upload) {
+        BrowserUploadPolicy.user => browserUploadByUserTool,
+        null => null,
+        _ => browserUploadTool,
+      },
     ];

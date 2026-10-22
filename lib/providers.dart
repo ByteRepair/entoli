@@ -630,6 +630,9 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
   Future<void> setAgentBrowserApproval(BrowserApproval value) =>
       _update((s) => s.agentBrowserApproval = value);
 
+  Future<void> setAgentBrowserUploads(BrowserUploadPolicy value) =>
+      _update((s) => s.agentBrowserUploads = value);
+
   /// Which project the assistant gesture opens a chat in. Null is the default
   /// project.
   Future<void> setAssistantProject(String? project) =>

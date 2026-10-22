@@ -749,6 +749,14 @@ its `reason` as a button that opens the card, and the chip reads "hidden from
 the agent" either way; the card has the "Hide from agent" toggle and, while
 hidden, a band saying so with "Give back to agent".
 
+An upload the user is to choose for is `UploadPanel`, over the sign-in panel's
+place: "Choose file…" opens `file_selector`'s picker (several files where
+the page's field takes several), Upload hands the paths to `submitUpload`,
+Cancel cancels. **A message sent while one waits cancels it**, in the
+composer's `onSend` before the send: what the user said instead is their
+answer, the page's chooser is cancelled as a dismissed dialog would be, and
+the agent's call says so.
+
 ## The chat page
 
 One app bar, whichever layout it is drawn in. Narrow, the sidebar is `ChatPage`'s

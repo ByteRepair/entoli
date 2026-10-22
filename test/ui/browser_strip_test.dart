@@ -78,6 +78,15 @@ class _Tab implements BrowserTab {
   List<String>? submitted;
 
   @override
+  final ValueNotifier<UploadRequest?> uploadRequest = ValueNotifier(null);
+
+  @override
+  void cancelUpload({String why = ""}) {
+    done.add("upload cancelled");
+    uploadRequest.value = null;
+  }
+
+  @override
   Future<void> submitCredentials(List<String> values) async {
     submitted = values;
     credentialRequest.value = null;
@@ -311,6 +320,23 @@ void main() {
       await tester.pump();
       expect(tab.submitted, ["me@example.com", "hunter2"]);
       expect(find.text("Sign in to Example"), findsNothing);
+    });
+
+    testWidgets("an upload waits on the user's file, and can be cancelled",
+        (tester) async {
+      final tab = await pumpStrip(tester);
+      tab.uploadRequest.value = const UploadRequest(
+          target: "[4] button", url: "https://drive.google.com/drive");
+      await tester.pump();
+      expect(find.text("The agent wants to upload a file to drive.google.com"),
+          findsOneWidget);
+      // Nothing to send until a file is chosen.
+      final upload = find.widgetWithText(FilledButton, "Upload");
+      expect(tester.widget<FilledButton>(upload).onPressed, isNull);
+      await tester.tap(find.text("Cancel"));
+      await tester.pump();
+      expect(tab.done, ["upload cancelled"]);
+      expect(find.textContaining("wants to upload"), findsNothing);
     });
 
     testWidgets("declining tells the tab", (tester) async {

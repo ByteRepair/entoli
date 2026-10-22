@@ -1,7 +1,7 @@
 import "dart:convert";
 
 import "../core/config.dart";
-import "agent_browser.dart" show BrowserApproval;
+import "agent_browser.dart" show BrowserApproval, BrowserUploadPolicy;
 import "app_icon.dart";
 import "app_theme.dart";
 import "assistant_view.dart";
@@ -85,6 +85,7 @@ class AppSettings {
     this.agentBrowser,
     this.agentBrowserVisible = false,
     this.agentBrowserApproval = BrowserApproval.never,
+    this.agentBrowserUploads = BrowserUploadPolicy.classifier,
   });
 
   String? defaultModelId;
@@ -425,6 +426,10 @@ class AppSettings {
   /// Nobody by default: picking a browser is the consent.
   BrowserApproval agentBrowserApproval;
 
+  /// Who picks what the agent uploads: its own scope, so the user can take
+  /// uploads from the agent and leave it everything else.
+  BrowserUploadPolicy agentBrowserUploads;
+
   static AppSettings load(AppConfig config) {
     final text = config.documents.read(config.settingsFile);
     if (text == null) return AppSettings();
@@ -527,6 +532,9 @@ class AppSettings {
         agentBrowserApproval:
             BrowserApproval.values.asNameMap()[json["agentBrowserApproval"]] ??
                 BrowserApproval.never,
+        agentBrowserUploads: BrowserUploadPolicy.values
+                .asNameMap()[json["agentBrowserUploads"]] ??
+            BrowserUploadPolicy.classifier,
       );
 
   /// `approveMode` is the current key. An older file has `approveCommands` as
@@ -638,5 +646,7 @@ class AppSettings {
       if (agentBrowserVisible) "agentBrowserVisible": agentBrowserVisible,
       if (agentBrowserApproval != BrowserApproval.never)
         "agentBrowserApproval": agentBrowserApproval.name,
+      if (agentBrowserUploads != BrowserUploadPolicy.classifier)
+        "agentBrowserUploads": agentBrowserUploads.name,
     };
 }

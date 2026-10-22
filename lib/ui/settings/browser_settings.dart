@@ -219,6 +219,36 @@ class _AgentBrowserSectionState extends ConsumerState<AgentBrowserSection> {
             },
           ),
         ),
+        LabelledField(
+          label: "File uploads",
+          child: DropdownButtonFormField<BrowserUploadPolicy>(
+            initialValue: ref.watch(appSettingsProvider).agentBrowserUploads,
+            isExpanded: true,
+            decoration: const InputDecoration(
+              helperText: "Who picks a file the agent uploads to a page. "
+                  "Apart from the setting above: take uploads from the agent "
+                  "and leave it the rest.",
+              helperMaxLines: 3,
+            ),
+            items: const [
+              DropdownMenuItem(
+                  value: BrowserUploadPolicy.classifier,
+                  child: Text("Let the classifier decide")),
+              DropdownMenuItem(
+                  value: BrowserUploadPolicy.allow, child: Text("Don't ask")),
+              DropdownMenuItem(
+                  value: BrowserUploadPolicy.user,
+                  child: Text("I choose the file")),
+            ],
+            onChanged: (value) {
+              if (value != null) {
+                ref
+                    .read(appSettingsProvider.notifier)
+                    .setAgentBrowserUploads(value);
+              }
+            },
+          ),
+        ),
         ValueListenableBuilder<bool>(
           valueListenable: browser.running,
           builder: (context, running, _) => ListTile(

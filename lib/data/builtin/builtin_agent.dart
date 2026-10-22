@@ -77,6 +77,7 @@ String? runningTool(String name) => switch (name) {
       browserScreenshotToolName => "Taking a screenshot",
       browserTypeToolName || browserPressToolName => "Typing",
       browserShowToolName => "Opening the browser window",
+      browserUploadToolName => "Uploading",
       browserCredentialsPromptToolName => "Waiting for you to sign in",
       browserCredentialsHideToolName => "Waiting for you to hand the browser back",
       taskToolName => "Working on a sub-task",
@@ -336,6 +337,7 @@ List<LlmTool> agentTools({
   bool offerImage = false,
   bool browserScreenshot = false,
   bool browserShow = false,
+  BrowserUploadPolicy? browserUpload,
   bool oneShot = false,
   List<PromptDocument>? participants,
   bool member = false,
@@ -387,6 +389,11 @@ List<LlmTool> agentTools({
           // Both park the turn on the user, so they ride `ask` as
           // `present_plan` does: a headless turn has nobody to answer.
           credentials: caps.ask,
+          // Where the user chooses, the call waits on them: a turn with
+          // nobody to answer is not offered it at all.
+          upload: browserUpload == BrowserUploadPolicy.user && !caps.ask
+              ? null
+              : browserUpload,
         ),
     ];
 
@@ -426,6 +433,7 @@ class BuiltinAgent {
     this.seesImages = true,
     this.browserHidden = false,
     this.browserApprove = ApproveMode.never,
+    this.browserUploads = BrowserUploadPolicy.classifier,
     this.profile,
     this.tone = Tone.none,
     this.citations = false,
@@ -732,6 +740,11 @@ class BuiltinAgent {
   /// The standing rules still decide first, so a denied host stays denied.
   final ApproveMode browserApprove;
 
+  /// Who picks what `browser_upload` sends — its own scope, apart from
+  /// [browserApprove], since a file leaving the machine is a different
+  /// question from a click: the user can take it from the agent alone.
+  final BrowserUploadPolicy browserUploads;
+
   /// The user's profile, appended to the system prompt as "About the user".
   /// Null means nothing is added. Rewritten every turn with the rest of the
   /// system prompt.
@@ -831,6 +844,7 @@ class BuiltinAgent {
         offerImage: generateImage != null && saveResource != null,
         browserScreenshot: seesImages && saveResource != null,
         browserShow: browserHidden,
+        browserUpload: browserUploads,
         oneShot: oneShot,
         participants: roomParticipants,
         member: viewer != null,
@@ -1103,6 +1117,10 @@ class BuiltinAgent {
           _browserCredentials,
         browserCredentialsHideToolName when _offered.browser && caps.ask =>
           _browserHide,
+        browserUploadToolName
+            when _offered.browser &&
+                (browserUploads != BrowserUploadPolicy.user || caps.ask) =>
+          _browserUpload,
         memorySaveToolName => _memorySave,
         memorySearchToolName => _memorySearch,
         memoryUpdateToolName => _memoryUpdate,
@@ -1615,6 +1633,93 @@ class BuiltinAgent {
       return;
     }
     yield _ok(call, _noted(done));
+  }
+
+  /// Upload through the page's file chooser. Where the user chooses, the
+  /// call opens the chooser and waits on the chat's panel; otherwise the
+  /// agent's own paths go in, past the classifier unless the user said not
+  /// to ask — described by the files' whole paths, so the classifier sees
+  /// where they come from, and the element and page they go to.
+  Stream<AgentEvent> _browserUpload(LlmToolCall call) async* {
+    final tab = browser!;
+    if (tab.hold.value != null) {
+      yield* _reject(call, _noted(_hidden));
+      return;
+    }
+    final ref = intArg(call.argumentsJson, "ref");
+    if (ref == null) {
+      yield* _reject(call, 'The $browserUploadToolName tool takes {"ref": n'
+          '${browserUploads == BrowserUploadPolicy.user ? "" : ', "paths": ["..."]'}}.');
+      return;
+    }
+    if (browserUploads == BrowserUploadPolicy.user) {
+      yield _called(call, "[$ref], chosen by the user");
+      final String? done;
+      try {
+        done = await _untilStopped(tab.requestUpload(ref));
+      } catch (e) {
+        yield _failed(call, _noted("$e"));
+        return;
+      }
+      if (done == null) {
+        tab.cancelUpload(why: "The turn was stopped.");
+        yield _failed(call, notExecuted);
+        return;
+      }
+      yield _ok(call, _noted(done));
+      return;
+    }
+    final paths = [
+      for (final path in (decodeArgs(call.argumentsJson)?["paths"] as List? ??
+          const []))
+        if (path is String && path.isNotEmpty) path,
+    ];
+    if (paths.isEmpty) {
+      yield* _reject(call, 'The $browserUploadToolName tool takes '
+          '{"ref": n, "paths": ["..."]}: which files to upload.');
+      return;
+    }
+    final resolved = [for (final path in paths) _resolvePath(path)];
+    for (var i = 0; i < resolved.length; i++) {
+      if (!await fs.file(resolved[i]).exists()) {
+        yield* _reject(call, "There is no file at ${paths[i]}.");
+        return;
+      }
+    }
+    yield _called(call, "[$ref] ${paths.join(", ")}");
+    final String target;
+    try {
+      target = await tab.describeTarget(ref: ref);
+    } catch (e) {
+      yield _failed(call, _noted("$e"));
+      return;
+    }
+    final described = "upload ${resolved.join(", ")} into $target";
+    final gate = LlmToolCall(
+        id: call.id,
+        name: call.name,
+        argumentsJson: jsonEncode({"action": described}));
+    yield* _runGated(
+      gate,
+      browserUploadToolName,
+      () async {
+        try {
+          return ShellResult(returnCode: 0, output: await tab.upload(ref, resolved));
+        } catch (e) {
+          return ShellResult.failed("$e");
+        }
+      },
+      argumentsText: described,
+      mode: browserUploads == BrowserUploadPolicy.allow
+          ? ApproveMode.never
+          : ApproveMode.auto,
+    );
+    final result = _commandResult!;
+    yield ToolResultEvent(_ran(
+        call,
+        result.returnCode == 0
+            ? ShellResult(returnCode: 0, output: _noted(result.output))
+            : ShellResult.failed(_noted(result.exceptionInfo ?? result.output))));
   }
 
   /// Hand the browser to the user: every other browser tool refuses until

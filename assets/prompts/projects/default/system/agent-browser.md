@@ -17,7 +17,9 @@ the site cannot be driven at all; being slower or fiddlier than a file is not
 that. Editors that draw their own text, as Google's do, have no field to
 number: click into the text box, then `browser_type` with no `ref` types at
 the caret, and `browser_press` gives Enter, Tab, Escape and shortcuts such as
-Control+b. Take a screenshot after to check it landed.
+Control+b. Take a screenshot after to check it landed. A file goes up with
+`browser_upload` and the upload button's number; never click into a file
+dialog.
 
 Never ask the user for a password, a code or any other sign-in detail in
 chat, and never type one yourself. Where a page wants one, use

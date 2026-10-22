@@ -146,6 +146,28 @@ abstract class BrowserTab {
   /// The turn waiting on it stopped: the panel goes, and the wait ends.
   void cancelCredentials();
 
+  // Uploads: the page's file chooser is caught rather than shown, and filled
+  // in by the agent's paths or by what the user picks.
+
+  /// Click [ref] — an upload button or a file field — and give the chooser
+  /// it opens the files at [paths], which are on this machine.
+  Future<String> upload(int ref, List<String> paths);
+
+  /// The upload the agent is waiting on the user to choose files for.
+  ValueListenable<UploadRequest?> get uploadRequest;
+
+  /// The agent's side where the user chooses: open the chooser behind
+  /// [ref] and wait for the user's files. Throws [UploadCancelled] where the
+  /// user cancels, or [cancelUpload] runs.
+  Future<String> requestUpload(int ref);
+
+  /// The user's side: give the waiting chooser [paths].
+  Future<void> submitUpload(List<String> paths);
+
+  /// Cancel the waiting chooser, as dismissing its dialog would: the user
+  /// pressed Cancel, said something else, or the turn stopped.
+  void cancelUpload({String why = "The user cancelled the upload."});
+
   Future<String> goto(String url);
 
   Future<String> back();
@@ -246,6 +268,30 @@ class CredentialRequest {
 
 class CredentialsDeclined implements Exception {
   const CredentialsDeclined(this.message);
+
+  final String message;
+
+  @override
+  String toString() => message;
+}
+
+/// Who picks what the agent uploads: the agent, unasked; the agent, past the
+/// classifier (the default — a file leaving the machine is worth a look); or
+/// the user alone, in a panel the agent's call waits on.
+enum BrowserUploadPolicy { allow, classifier, user }
+
+/// A file chooser the page opened, waiting on the user's files.
+class UploadRequest {
+  const UploadRequest({required this.target, required this.url, this.multiple = false});
+
+  /// The element that opened it, as a page description names it.
+  final String target;
+  final String url;
+  final bool multiple;
+}
+
+class UploadCancelled implements Exception {
+  const UploadCancelled(this.message);
 
   final String message;
 
