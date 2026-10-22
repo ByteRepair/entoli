@@ -13,7 +13,8 @@ import "../../../domain/file_tools.dart";
 import "../../../domain/models.dart";
 import "../../../domain/tool_arg.dart";
 import "../../../providers.dart";
-import "message_bubble.dart" show StreamingCaret;
+import "../sub_agent_transcript.dart" show subAgentLiveProvider;
+import "message_bubble.dart" show MessageBubble, StreamingCaret;
 
 /// What the model did before it answered, on a line of its own above the
 /// reply: thinking, and tool runs. Frameless, so it reads as a label until it
@@ -40,7 +41,7 @@ class ThinkingLabel extends StatelessWidget {
     return ms == null ? "View thinking" : "Thought for ${formatThinkingTime(ms)}";
   }
 
-  ActivityView? _follow(LiveMessage now) {
+  ActivityView? _follow(LiveMessage now, WidgetRef _) {
     final parts = now.message?.parts;
     final at = this.at;
     if (parts == null || at == null || at >= parts.length) return null;
@@ -186,7 +187,7 @@ class ToolLabel extends StatelessWidget {
         icon: Icons.terminal,
         mono: true,
         sections: _sections(call, result, null),
-        follow: (now) {
+        follow: (now, _) {
           final run = _runIn(now.message, call?.id ?? result!.callId);
           if (run == null) return null;
           final live = now.running && run.result == null;
@@ -613,10 +614,15 @@ class ApprovalLabel extends StatelessWidget {
   }
 }
 
-/// A `task` call, once it is history: the sub-agent that ran and the text it
-/// returned. Reads the agent name and prompt out of the call's arguments.
+/// A `task` call: the sub-agent that ran, and behind the drawer its own
+/// transcript as it is written — the same labels a reply has — with the text
+/// it returned standing in where there is no transcript to show. Reads the
+/// agent name and prompt out of the call's arguments.
 class TaskLabel extends StatelessWidget {
-  const TaskLabel({super.key, required this.call, this.result});
+  const TaskLabel({super.key, required this.chatId, required this.call, this.result});
+
+  /// Whose `subagents/` the transcript is under.
+  final String chatId;
 
   final ToolCall call;
 
@@ -628,6 +634,7 @@ class TaskLabel extends StatelessWidget {
     final agent = stringArg(call.argumentsJson, "agent") ?? "task";
     final prompt = stringArg(call.argumentsJson, "prompt") ?? "";
     final failed = (result?.returnCode ?? 0) != 0;
+    final sub = (chatId: chatId, callId: call.id);
     return _Label(
       icon: failed ? Icons.error_outline : Icons.account_tree_outlined,
       text: result == null
@@ -638,23 +645,47 @@ class TaskLabel extends StatelessWidget {
         context,
         title: "Sub-agent @$agent",
         icon: Icons.account_tree_outlined,
-        sections: _sections(prompt, result),
-        follow: (now) {
+        sections: _sections(prompt, result, transcript: false),
+        follow: (now, ref) {
           final run = _runIn(now.message, call.id);
           if (run == null) return null;
+          final transcript = ref.watch(subAgentLiveProvider(sub)).message;
           return (
             title: null,
-            sections: _sections(prompt, run.result),
+            sections: _sections(prompt, run.result,
+                transcript: transcript?.parts.isNotEmpty ?? false),
             live: now.running && run.result == null,
+          );
+        },
+        below: (ref) {
+          final live = ref.watch(subAgentLiveProvider(sub));
+          final message = live.message;
+          if (message == null || message.parts.isEmpty) return null;
+          return Padding(
+            padding: const EdgeInsets.only(top: 12),
+            // Its own source, so a label in the transcript opens a drawer
+            // that follows the sub-agent rather than the parent's reply.
+            child: ActivitySource(
+              live: subAgentLiveProvider(sub),
+              child: MessageBubble(
+                chatId: chatId,
+                message: message,
+                isWaiting: live.running,
+              ),
+            ),
           );
         },
       ),
     );
   }
 
-  static List<ActivitySection> _sections(String prompt, ToolResult? result) => [
+  /// The Output is the transcript's text joined, so it is left out where the
+  /// transcript is drawn.
+  static List<ActivitySection> _sections(String prompt, ToolResult? result,
+          {required bool transcript}) =>
+      [
         (label: "Prompt", body: prompt, isError: false),
-        (label: "Output", body: result?.output, isError: false),
+        if (!transcript) (label: "Output", body: result?.output, isError: false),
         (label: "Error", body: result?.exceptionInfo, isError: true),
       ];
 }
@@ -689,7 +720,7 @@ class WebLabel extends StatelessWidget {
         icon: search ? Icons.travel_explore_outlined : Icons.language_outlined,
         mono: true,
         sections: _sections(search, what, result),
-        follow: (now) {
+        follow: (now, _) {
           final run = _runIn(now.message, call.id);
           if (run == null) return null;
           return (
@@ -1018,13 +1049,17 @@ class ActivitySource extends InheritedWidget {
 /// With [follow] it streams: what it shows is re-read from the message each
 /// time the message changes, and while [ActivityView.live] it keeps to the
 /// end of what is arriving until the reader scrolls back.
+///
+/// [below] is drawn under the sections and watched through the drawer's own
+/// ref, so what it watches keeps the drawer following too.
 Future<void> showActivitySheet(
   BuildContext context, {
   required String title,
   required List<ActivitySection> sections,
   IconData? icon,
   bool mono = false,
-  ActivityView? Function(LiveMessage now)? follow,
+  ActivityView? Function(LiveMessage now, WidgetRef ref)? follow,
+  Widget? Function(WidgetRef ref)? below,
 }) {
   final source = follow == null ? null : ActivitySource.of(context);
   return showModalBottomSheet<void>(
@@ -1040,7 +1075,8 @@ Future<void> showActivitySheet(
       mono: mono,
       view: source == null || follow == null
           ? null
-          : (ref) => follow(ref.watch(source)),
+          : (ref) => follow(ref.watch(source), ref),
+      below: below,
     ),
   );
 }
@@ -1052,12 +1088,14 @@ class _ActivitySheet extends ConsumerStatefulWidget {
     required this.sections,
     required this.mono,
     required this.view,
+    this.below,
   });
 
   final String title;
   final IconData? icon;
   final List<ActivitySection> sections;
   final bool mono;
+  final Widget? Function(WidgetRef ref)? below;
 
   /// What the drawer shows now, watched through the ref it is handed. Null
   /// where there is nothing to follow.
@@ -1085,6 +1123,7 @@ class _ActivitySheetState extends ConsumerState<_ActivitySheet> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final now = widget.view?.call(ref);
+    final extra = widget.below?.call(ref);
     final live = now?.live ?? false;
     final title = now?.title ?? widget.title;
     final filled = (now?.sections ?? widget.sections)
@@ -1176,28 +1215,35 @@ class _ActivitySheetState extends ConsumerState<_ActivitySheet> {
                   child: SingleChildScrollView(
                     controller: _scroll,
                     padding: const EdgeInsets.only(right: 12),
-                    child: SelectionArea(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          for (final (i, section) in filled.indexed) ...[
-                            if (section.label != null)
-                              Padding(
-                                padding: const EdgeInsets.only(top: 12, bottom: 6),
-                                child: SelectionContainer.disabled(
-                                  child: Text(
-                                    section.label!,
-                                    style: theme.textTheme.labelMedium?.copyWith(
-                                      color: muted,
-                                      fontWeight: FontWeight.w600,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        SelectionArea(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              for (final (i, section) in filled.indexed) ...[
+                                if (section.label != null)
+                                  Padding(
+                                    padding: const EdgeInsets.only(top: 12, bottom: 6),
+                                    child: SelectionContainer.disabled(
+                                      child: Text(
+                                        section.label!,
+                                        style: theme.textTheme.labelMedium?.copyWith(
+                                          color: muted,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
                                     ),
                                   ),
-                                ),
-                              ),
-                            body(section, last: i == filled.length - 1),
-                          ],
-                        ],
-                      ),
+                                body(section,
+                                    last: extra == null && i == filled.length - 1),
+                              ],
+                            ],
+                          ),
+                        ),
+                        ?extra,
+                      ],
                     ),
                   ),
                 ),

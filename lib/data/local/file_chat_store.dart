@@ -163,6 +163,13 @@ class FileChatStore implements ChatStore {
   }
 
   @override
+  Future<List<ChatRecord>> readSubAgentRecords(String chatId, String callId) async {
+    final text = await _readOrNull(
+        config.subAgentFile(chatId, callId, project: await projectOf(chatId)));
+    return text == null ? const [] : decodeLog(text);
+  }
+
+  @override
   Future<void> append(String chatId, List<ChatRecord> records) async {
     if (records.isEmpty) return;
     // No `ensureChatDirs`: every append follows the `saveState` that created

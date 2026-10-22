@@ -16,6 +16,7 @@ import "../../domain/chat_repository.dart";
 import "../../domain/models.dart"
     show ArtifactPart, Attachment, Chat, ChatState, ToolApproval;
 import "../../domain/prompt_library.dart";
+import "../../domain/sub_agent_log.dart" show SubAgentAppend, growTranscript;
 import "../../domain/sync/devices.dart";
 import "../../domain/sync/identity.dart";
 import "../../domain/sync/lan_signaling.dart";
@@ -64,6 +65,9 @@ class MirrorChat {
   List<SyncAsk> asks = const [];
   String? status;
   String? retry;
+
+  /// The sub-agent transcripts followed here, by the call that spawned them.
+  final Map<String, List<ChatRecord>> subAgents = {};
 
   @override
   String toString() => "MirrorChat(${state.id}, ${records.length} records)";
@@ -268,6 +272,7 @@ class SyncHub implements ArtifactBytes, RemoteChats {
 
   ChatRepository? _repo;
   StreamSubscription<RepoEvent>? _changesSub;
+  StreamSubscription<SubAgentAppend>? _subAgentSub;
 
   /// The peer's chats this device mirrors, by chat id. Survives a disconnect
   /// as a stale snapshot; a reconnect replaces it wholesale with fresh data.
@@ -290,6 +295,18 @@ class SyncHub implements ArtifactBytes, RemoteChats {
   final _mirrorUpdates = StreamController<String>.broadcast();
 
   Stream<String> get mirrorUpdates => _mirrorUpdates.stream;
+
+  /// The sub-agent transcripts followed here, as (chatId, callId) — re-opened
+  /// on a reconnect like [_desired].
+  final _desiredSubAgents = <(String, String)>{};
+
+  final _subAgentUpdates =
+      StreamController<({String chatId, String callId})>.broadcast();
+
+  /// A followed sub-agent's transcript moved. Its own stream rather than
+  /// [mirrorUpdates], which replays the whole conversation per event.
+  Stream<({String chatId, String callId})> get subAgentUpdates =>
+      _subAgentUpdates.stream;
 
   /// The Remotes section of the sidebar: one entry per mirrored chat, flat,
   /// rebuilt whenever anything under it moves.
@@ -466,6 +483,7 @@ class SyncHub implements ArtifactBytes, RemoteChats {
     if (_repo != null) return;
     _repo = repo..remote = this;
     _changesSub = repo.changes.listen(_onRepoEvent);
+    _subAgentSub = repo.subAgentAppends.listen(_onSubAgentAppended);
     _peers.watchLiveness();
   }
 
@@ -480,6 +498,35 @@ class SyncHub implements ArtifactBytes, RemoteChats {
     // No unsubscribe message: the home side drops a subscription when the
     // mirror vanishes from its welcome round-trip, and an unwatched stream
     // costs nothing until a turn runs in it.
+  }
+
+  /// What this device holds of a mirrored sub-agent's transcript. Null until
+  /// it has been followed and answered.
+  List<ChatRecord>? subAgentRecords(String chatId, String callId) =>
+      _mirrors[chatId]?.subAgents[callId];
+
+  /// Follow a sub-agent's transcript on the chat's home device, from what is
+  /// already held here.
+  void followSubAgent(String chatId, String callId) {
+    _desiredSubAgents.add((chatId, callId));
+    final peer = _peerHosting(chatId);
+    if (peer != null) _openSubAgentOnPeer(peer, chatId, callId);
+  }
+
+  /// Unlike a chat, said to the home device: a running sub-agent appends
+  /// every second, to a drawer nobody has open any more.
+  void unfollowSubAgent(String chatId, String callId) {
+    _desiredSubAgents.remove((chatId, callId));
+    unawaited(_peerHosting(chatId)
+        ?.send(SyncMessage.subAgentClose(chatId: chatId, callId: callId)));
+  }
+
+  void _openSubAgentOnPeer(LivePeer peer, String chatId, String callId) {
+    unawaited(peer.send(SyncMessage.subAgentOpen(
+      chatId: chatId,
+      callId: callId,
+      fromLine: subAgentRecords(chatId, callId)?.length ?? 0,
+    )));
   }
 
   /// An attachment of a mirrored chat: from the cache, or over the wire and
@@ -561,6 +608,17 @@ class SyncHub implements ArtifactBytes, RemoteChats {
             byteCache.dropResource(chatId, "$_artifactPrefix$artifactId");
           }
         }
+      case SyncSubAgentOpen(:final chatId, :final callId, :final fromLine):
+        await _serveSubAgentOpen(peer, chatId, callId, fromLine);
+      case SyncSubAgentClose(:final chatId, :final callId):
+        peer.subAgentFollows.remove((chatId, callId));
+      case SyncSubAgentAppend(
+          :final chatId,
+          :final callId,
+          :final from,
+          :final records
+        ):
+        _onSubAgentAppend(peer, chatId, callId, from, records);
       case SyncStateDiff(:final chatId, :final state):
         _onMirror(peer, chatId, (mirror) => mirror.state = state);
       case SyncMetaPatch(:final chatId, :final meta):
@@ -881,6 +939,26 @@ class SyncHub implements ArtifactBytes, RemoteChats {
     _touch(chatId);
   }
 
+  /// A followed sub-agent's records, from its chat's home device. A gap is
+  /// records missed — an append that crossed the open — so the transcript is
+  /// asked for again from what is held.
+  void _onSubAgentAppend(LivePeer peer, String chatId, String callId, int from,
+      List<ChatRecord> records) {
+    final mirror = _mirrors[chatId];
+    if (mirror == null || mirror.peerId != peer.deviceId) return;
+    if (!_desiredSubAgents.contains((chatId, callId))) return;
+    final grown =
+        growTranscript(mirror.subAgents[callId] ?? const [], from, records);
+    if (grown == null) {
+      _openSubAgentOnPeer(peer, chatId, callId);
+      return;
+    }
+    mirror.subAgents[callId] = grown;
+    if (!_subAgentUpdates.isClosed) {
+      _subAgentUpdates.add((chatId: chatId, callId: callId));
+    }
+  }
+
   final _touched = <String>{};
 
   /// Says a mirror moved, once per burst. Whoever listens rebuilds the whole
@@ -934,6 +1012,14 @@ class SyncHub implements ArtifactBytes, RemoteChats {
     }
     for (final id in _desired) {
       if (reconnect ? listed.containsKey(id) : added.contains(id)) _openOnPeer(peer, id);
+    }
+    // After the chats: the home device takes a sub-agent's open only from a
+    // peer already following its chat.
+    for (final (chatId, callId) in _desiredSubAgents) {
+      if (_desired.contains(chatId) &&
+          (reconnect ? listed.containsKey(chatId) : added.contains(chatId))) {
+        _openSubAgentOnPeer(peer, chatId, callId);
+      }
     }
     _rebuildRemotes();
   }
@@ -993,6 +1079,23 @@ class SyncHub implements ArtifactBytes, RemoteChats {
     _peers.refreshServed();
   }
 
+  /// A peer following [chatId] wants one of its sub-agents' transcripts. The
+  /// follow goes in before the read, so an append landing during it arrives
+  /// twice rather than not at all — the numbering drops the second copy.
+  Future<void> _serveSubAgentOpen(
+      LivePeer peer, String chatId, String callId, int fromLine) async {
+    final repo = _repo;
+    if (repo == null || !_follows(peer, chatId)) return;
+    peer.subAgentFollows.add((chatId, callId));
+    final records = await repo.subAgentRecords(chatId, callId);
+    await peer.send(SyncMessage.subAgentAppend(
+      chatId: chatId,
+      callId: callId,
+      from: fromLine,
+      records: fromLine < records.length ? records.sublist(fromLine) : const [],
+    ));
+  }
+
   /// Everything written through the repository, fanned out to whichever
   /// peers follow the chat it happened in. Deletions reach everyone: a peer
   /// holding a mirror of something gone must be told even if it never
@@ -1029,6 +1132,21 @@ class SyncHub implements ArtifactBytes, RemoteChats {
         _peers.refreshServed();
       case ProjectsChanged():
         unawaited(_announceChats());
+    }
+  }
+
+  /// A running sub-agent's appends, to the peers following its transcript.
+  void _onSubAgentAppended(SubAgentAppend append) {
+    final message = SyncMessage.subAgentAppend(
+      chatId: append.chatId,
+      callId: append.callId,
+      from: append.from,
+      records: append.records,
+    );
+    for (final peer in _peers.live) {
+      if (peer.subAgentFollows.contains((append.chatId, append.callId))) {
+        unawaited(peer.send(message));
+      }
     }
   }
 
@@ -1308,6 +1426,7 @@ class SyncHub implements ArtifactBytes, RemoteChats {
     // otherwise file a peer into a registry that has already been torn down.
     cancelPairingWindow();
     await _changesSub?.cancel();
+    await _subAgentSub?.cancel();
     // Before the mirror state below: closing a peer runs [_peerGone], which
     // reads it. [_mirrorUpdates] closes after both, and [_touch]'s microtask
     // is why that one is guarded rather than ordered.
@@ -1315,8 +1434,10 @@ class SyncHub implements ArtifactBytes, RemoteChats {
     _mirrors.clear();
     byteCache.dispose();
     _desired.clear();
+    _desiredSubAgents.clear();
     remotes.value = const [];
     await _mirrorUpdates.close();
+    await _subAgentUpdates.close();
     for (final transfer in _pendingResources.values) {
       if (!transfer.completer.isCompleted) transfer.completer.complete(null);
     }

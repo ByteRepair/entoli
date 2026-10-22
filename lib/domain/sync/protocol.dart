@@ -67,6 +67,29 @@ sealed class SyncMessage with _$SyncMessage {
     required List<ChatRecord> records,
   }) = SyncRecordAppend;
 
+  /// Follow the transcript of the sub-agent [callId] spawned in a subscribed
+  /// chat, from record [fromLine] on. Answered with a [SyncSubAgentAppend]
+  /// from that line, then one per append while the sub-agent runs.
+  const factory SyncMessage.subAgentOpen({
+    required String chatId,
+    required String callId,
+    @Default(0) int fromLine,
+  }) = SyncSubAgentOpen;
+
+  const factory SyncMessage.subAgentClose({
+    required String chatId,
+    required String callId,
+  }) = SyncSubAgentClose;
+
+  /// Records of a sub-agent's transcript, numbered from [from] — see
+  /// `growTranscript` for what a mirror makes of a number it did not expect.
+  const factory SyncMessage.subAgentAppend({
+    required String chatId,
+    required String callId,
+    required int from,
+    required List<ChatRecord> records,
+  }) = SyncSubAgentAppend;
+
   /// The chat's head moved: title, pin, project, TTL anchors. Carries the
   /// whole [ChatState] rather than a field diff — every turn rewrites
   /// updatedAt, so per-field patches would be wrong more often than whole.

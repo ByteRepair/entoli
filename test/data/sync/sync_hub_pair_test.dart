@@ -371,6 +371,47 @@ void main() {
         away.hub.mirror(state.id)!.records.length > before);
   });
 
+  test("a running sub-agent's transcript reaches a mirror that follows it",
+      () async {
+    final state = await mirrored();
+    final feed = home.backend.subAgents
+      ..open(state.id, "call-1", const [])
+      ..add(state.id, "call-1", [
+        ChatRecord.message(
+            id: "call-1", role: MessageRole.assistant, createdAt: DateTime.now()),
+      ]);
+
+    away.hub.followSubAgent(state.id, "call-1");
+    await waitForSync(
+        () => away.hub.subAgentRecords(state.id, "call-1")?.length == 1);
+
+    feed.add(state.id, "call-1", [
+      const ChatRecord.part(
+          messageId: "call-1", index: 0, part: MessagePart.text(text: "searching")),
+    ]);
+    await waitForSync(
+        () => away.hub.subAgentRecords(state.id, "call-1")?.length == 2);
+    expect(replay(away.hub.subAgentRecords(state.id, "call-1")!).single.plainText,
+        "searching");
+  });
+
+  test("a finished sub-agent's transcript is read off the home device",
+      () async {
+    final state = await mirrored();
+    (home.store as FakeChatStore).stageSubAgent(state.id, "call-1", [
+      ChatRecord.message(
+          id: "call-1", role: MessageRole.assistant, createdAt: DateTime.now()),
+      const ChatRecord.part(
+          messageId: "call-1", index: 0, part: MessagePart.text(text: "found it")),
+      const ChatRecord.turnEnd(messageId: "call-1", reason: TurnEnd.done),
+    ]);
+
+    away.hub.followSubAgent(state.id, "call-1");
+
+    await waitForSync(
+        () => away.hub.subAgentRecords(state.id, "call-1")?.length == 3);
+  });
+
   test("a retitle arrives as a state diff", () async {
     final state = _seedChat(home);
     final links = loopbackPair();
@@ -1222,18 +1263,20 @@ class _Turns implements RemoteTurns {
 
 class _Device {
   _Device(this.identity, this.hub, this.registry, this.store, this.repo,
-      this.config);
+      this.config, this.backend);
 
   static Future<_Device> create(String dir, {ChatStore? store}) async {
     final config = await AppConfig.load(fileSystemIo, dir);
     final registry = FakeDeviceRegistry();
     final chats = store ?? FakeChatStore();
-    final repo = ChatRepository(chats, FakeBackend(), AppSettings.new, config);
+    final backend = FakeBackend();
+    final repo = ChatRepository(chats, backend, AppSettings.new, config);
     final hub = await testSyncHub(devices: registry);
     hub.attach(repo);
-    return _Device(hub.identity, hub, registry, chats, repo, config);
+    return _Device(hub.identity, hub, registry, chats, repo, config, backend);
   }
 
+  final FakeBackend backend;
   final SyncIdentity identity;
   final SyncHub hub;
   final DeviceRegistry registry;

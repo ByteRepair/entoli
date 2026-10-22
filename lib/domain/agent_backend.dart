@@ -9,7 +9,10 @@ import "../domain/chat_log.dart";
 import "../domain/models.dart";
 import "../domain/permission.dart";
 import "../domain/profile.dart";
+import "../domain/sub_agent_log.dart";
 import "../domain/tone.dart";
+
+export "../domain/sub_agent_log.dart" show SubAgentFeed, SubAgentAppend;
 
 /// Streamed events from an agent turn. The UI renders these as they arrive.
 sealed class AgentEvent {
@@ -459,6 +462,10 @@ abstract class AgentBackend {
   /// turn that earned it. A backend with no memory writes simply never adds
   /// one, and a page that is not interested never listens.
   Stream<MemoryNote> get memoryNotes;
+
+  /// The running sub-agents' transcripts, as they are written. See
+  /// [SubAgentFeed].
+  SubAgentFeed get subAgents;
 
   /// What the chat's model last reported a request cost, in context tokens —
   /// the auto-compact threshold's input. Null where nothing has reported:

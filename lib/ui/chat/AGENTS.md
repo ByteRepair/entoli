@@ -144,6 +144,16 @@ the end the way the conversation does (`ScrollFollow`); a running `bash`
 shows what it has printed so far as its output. With no source above — a
 bubble pumped alone — the drawer is what it was opened with.
 
+**A `task` drawer draws the sub-agent's own transcript** under the prompt, as
+a `MessageBubble` — the same labels a reply has, opening drawers of their own.
+`subAgentTranscriptProvider` follows it off the repository, or off the hub for
+a mirrored chat, the way `chatViewProvider` picks its controller; it lives as
+long as the drawer is open. The bubble sits under its own `ActivitySource`
+(`subAgentLiveProvider`), so a label inside follows the sub-agent rather than
+the parent's reply. It is live while the transcript's log is open and its chat
+runs a turn, since a log left open by a killed process is not a run going on.
+Where there is no transcript the drawer shows what the call returned instead.
+
 ### Selecting a reply, and copying it
 
 The **message** is one `SelectionArea`, with one `SelectionContainer` under it

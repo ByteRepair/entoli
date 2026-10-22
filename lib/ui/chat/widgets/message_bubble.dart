@@ -531,7 +531,7 @@ class _MessageBubbleState extends State<MessageBubble> {
               toolCall.name == askToolName || isLive(i) || failedResult(toolCall.id);
           final label = _label(switch (toolCall.name) {
             askToolName => AskLabel(call: toolCall, result: result),
-            "task" => TaskLabel(call: toolCall, result: result),
+            "task" => TaskLabel(chatId: widget.chatId, call: toolCall, result: result),
             "websearch" || "webfetch" => WebLabel(call: toolCall, result: result),
             _ when important => ToolLabel(call: toolCall, result: result,
                 running: isLive(i) && widget.message.hasText),

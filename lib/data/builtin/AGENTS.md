@@ -598,6 +598,26 @@ recorder does not write is the record opening the message — one level up that 
 the only thing that sees a sub-agent's events at all: they never reach the
 controller that writes `conv.jsonl`, so the store's owner never has them.
 
+### Following one while it runs
+
+The `task` drawer draws the transcript, and it follows the records the log
+already writes rather than a second stream of events. `FileSubAgentLog`
+appends into the backend's `SubAgentFeed` as it writes the file: the feed
+holds a running transcript in memory, seeded from disk for one being carried
+on, and announces each append numbered by where it starts. The repository
+hands that stream on as `subAgentAppends`, which the drawer and the sync hub
+both listen to; a run whose log has closed is let go and read off the file
+from then on (`ChatStore.readSubAgentRecords`).
+
+**The number is the whole of the consistency.** A reader takes a snapshot
+and subscribes at two moments, and a broadcast stream delivers later than it
+is written to, so an append can arrive that the snapshot already holds, or
+one can be missed. `growTranscript` skips the first and calls the second a
+gap, and the reader reads again. Nothing tries to make the two moments one.
+
+The cadence is the recorder's checkpoint, a second, since that is when a
+record is written. The drawer is following the log, not the tokens.
+
 ### Carrying one on
 
 `BuiltinBackend._reviveSubAgents` runs before the resumed session is built. A

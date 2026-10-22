@@ -112,6 +112,9 @@ class BuiltinBackend implements AgentBackend {
   @override
   Stream<MemoryNote> get memoryNotes => _memoryNotes.notes;
 
+  @override
+  final SubAgentFeed subAgents = SubAgentFeed();
+
   /// Limits and timeouts for every turn.
   final BuiltinOptions options;
 
@@ -281,7 +284,8 @@ class BuiltinBackend implements AgentBackend {
         maxRetryBudget: options.rateLimitRetryBudget,
       );
       final gatedClient = GatedLlmClient(target.client, rateLimitGate);
-      final subAgentLog = FileSubAgentLog(config, chatId, project: project);
+      final subAgentLog =
+          FileSubAgentLog(config, chatId, project: project, feed: subAgents);
       final subAgentRunner = SubAgentRunner(
         client: gatedClient,
         shell: shell,
@@ -1444,6 +1448,7 @@ class BuiltinBackend implements AgentBackend {
     registry.close();
     webSearch.close();
     await _memoryNotes.close();
+    await subAgents.close();
   }
 
   @override
