@@ -4,6 +4,7 @@ import "../../../data/builtin/directory_tools.dart";
 import "../../../domain/models.dart";
 import "../chat_controller.dart";
 import "approval_banner.dart";
+import "browser_strip.dart";
 import "question_panel.dart";
 import "resume_bar.dart";
 import "sub_agent_strip.dart";
@@ -43,6 +44,9 @@ class TurnSurface extends StatelessWidget {
           ),
         for (final agents in view.runningSubAgents.values)
           SubAgentStrip(agents: agents),
+        // Not turn-scoped like the strips above: the tab outlives the turn
+        // that opened it, so the chip shows for as long as the tab is open.
+        if (chat != null) BrowserStrip(chatId: chat.state.id),
         for (final approvals in view.approvals.values)
           for (final approval in approvals)
             ApprovalBanner(

@@ -705,6 +705,36 @@ them under the project it left. Messages already composed keep what their
 `/skill` and `@agent` references meant when they were sent — the records are
 on the message, not looked up per turn.
 
+## The agent's browser, on screen
+
+`BrowserStrip` is a chip in `TurnSurface`, below the running sub-agents and
+drawn the way their strip is, for as long as the chat has a browser tab open
+— which is not turn-scoped like the strips above it: the tab outlives the
+turn that opened it, until the user or the idle timer quits the browser. It
+reads the tab straight off `agentBrowserProvider` rather than through the
+controller's view state, since the tab is the browser's, not the turn's, and
+draws nothing on a mirrored chat, whose browser is on the device it came
+from. The chip names the page's host; tapping it opens `BrowserCard`, a dialog
+of the tab's screencast frames over its title and address. A hidden browser
+is watchable through it, which is the point. It listens again when the tab is
+reopened under it (`BrowserPage.opened`) and says so when the tab closes.
+
+The card is also the user's hands on the page: back, forward and reload, a
+Quit for the whole browser (every chat's tab with it — it is one process),
+and the frame itself as a viewport. A pointer event is mapped from the drawn
+frame to the page's CSS pixels (the frame's size is the viewport's) and sent
+as `Input.dispatchMouseEvent`; the protocol counts a double click, so the card
+does. Moves go one at a time, the newest waiting replacing any older, so a
+fast mouse does not queue stale positions behind a slow socket. Every key goes
+to the page while the viewport has focus — Tab and Escape included, which
+would otherwise move focus or close the dialog. A synthesized key runs no
+editing command on its own, so a shortcut names its own (`selectAll`, `copy`,
+`undo`; `browser_input.dart`), and paste is the user's clipboard inserted as
+text, the page's clipboard not being theirs. None of it is gated or told to
+the agent: the user is the one doing it, and the agent's next call reads the
+page as the user left it. It acts only on an open tab — input never starts a
+browser.
+
 ## The chat page
 
 One app bar, whichever layout it is drawn in. Narrow, the sidebar is `ChatPage`'s

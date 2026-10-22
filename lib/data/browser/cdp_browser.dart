@@ -80,10 +80,15 @@ class CdpBrowser extends AgentBrowser {
   BrowserTab tab(String chatId) =>
       _tabs.putIfAbsent(chatId, () => _CdpTab(this, chatId));
 
-  /// The running browser, launched if none is or the pick has changed since.
-  Future<_Running> _ensure() async {
+  /// Put off the idle quit: the agent or the user is using it.
+  void _touch() {
     _idleTimer?.cancel();
     _idleTimer = Timer(idle, () => unawaited(close()));
+  }
+
+  /// The running browser, launched if none is or the pick has changed since.
+  Future<_Running> _ensure() async {
+    _touch();
     final exe = _executable ??
         (throw const CdpException(
             "No browser is picked, or the picked one is gone: see Settings > "
@@ -401,7 +406,16 @@ class _CdpTab implements BrowserTab {
   var _pointer = (x: 0.0, y: 0.0);
   final _random = Random();
 
-  void _forget() => _page = null;
+  final _shown = ValueNotifier<BrowserPage?>(null);
+  var _opened = 0;
+
+  @override
+  ValueListenable<BrowserPage?> get page => _shown;
+
+  void _forget() {
+    _page = null;
+    _shown.value = null;
+  }
 
   Future<({CdpConnection cdp, String target, String session})> _attach() async {
     final running = await _browser._ensure();
@@ -417,17 +431,26 @@ class _CdpTab implements BrowserTab {
       await cdp.send("Page.enable", sessionId: session);
       page = (target: target, session: session);
       _page = page;
+      _shown.value = BrowserPage(url: "about:blank", opened: ++_opened);
       // The user closing the tab is the tab gone; the next call opens another.
+      // A navigation moves the chip's address as it happens, rather than only
+      // when the agent next reads the page.
       final sub = cdp.events
-          .where((e) =>
-              (e.method == "Target.detachedFromTarget" &&
-                  e.params["sessionId"] == session) ||
-              (e.method == "Target.targetDestroyed" &&
-                  e.params["targetId"] == target))
+          .where((e) => e.sessionId == session || e.sessionId == null)
           .listen(null);
-      sub.onData((_) {
-        if (_page?.session == session) _page = null;
-        sub.cancel();
+      sub.onData((e) {
+        if ((e.method == "Target.detachedFromTarget" &&
+                e.params["sessionId"] == session) ||
+            (e.method == "Target.targetDestroyed" &&
+                e.params["targetId"] == target)) {
+          if (_page?.session == session) _forget();
+          sub.cancel();
+        } else if (e.method == "Page.frameNavigated" && _page?.session == session) {
+          final frame = e.params["frame"] as Map? ?? const {};
+          if (frame["parentId"] == null) {
+            _shown.value = _shown.value?.copyWith(url: "${frame["url"]}");
+          }
+        }
       });
     }
     // In front, or Chrome throttles it and a screenshot of it never comes.
@@ -803,8 +826,173 @@ class _CdpTab implements BrowserTab {
     ];
   }
 
+  /// The open tab's session, or null: what the user's input goes to. Never
+  /// launches, and does not bring the tab to the front per event — a mouse
+  /// move is too frequent for a second round trip.
+  ({CdpConnection cdp, String session})? get _live {
+    final page = _page;
+    final running = _browser._running;
+    if (page == null || running == null || running.cdp.isClosed) return null;
+    _browser._touch();
+    return (cdp: running.cdp, session: page.session);
+  }
+
+  @override
+  Future<void> forward() async {
+    final live = _live;
+    if (live == null) return;
+    final history =
+        await live.cdp.send("Page.getNavigationHistory", sessionId: live.session);
+    final index = history["currentIndex"] as int;
+    final entries = history["entries"] as List;
+    if (index + 1 >= entries.length) return;
+    await live.cdp.send("Page.navigateToHistoryEntry",
+        params: {"entryId": (entries[index + 1] as Map)["id"]},
+        sessionId: live.session);
+  }
+
+  @override
+  Future<void> reload() async {
+    final live = _live;
+    if (live == null) return;
+    await live.cdp.send("Page.reload", sessionId: live.session);
+  }
+
+  @override
+  Future<void> pointer(BrowserPointer event) async {
+    final live = _live;
+    if (live == null) return;
+    final type = switch (event.kind) {
+      BrowserPointerKind.move => "mouseMoved",
+      BrowserPointerKind.down => "mousePressed",
+      BrowserPointerKind.up => "mouseReleased",
+      BrowserPointerKind.wheel => "mouseWheel",
+    };
+    await live.cdp.send("Input.dispatchMouseEvent",
+        params: {
+          "type": type,
+          "x": event.x,
+          "y": event.y,
+          "button": event.button,
+          "buttons": event.buttons,
+          "clickCount": event.clickCount,
+          "modifiers": event.modifiers,
+          if (event.kind == BrowserPointerKind.wheel) ...{
+            "deltaX": event.deltaX,
+            "deltaY": event.deltaY,
+          },
+        },
+        sessionId: live.session);
+    // The agent's next glide starts where the user left the pointer.
+    _pointer = (x: event.x, y: event.y);
+  }
+
+  @override
+  Future<void> key(BrowserKey event) async {
+    final live = _live;
+    if (live == null) return;
+    await live.cdp.send("Input.dispatchKeyEvent",
+        params: {
+          // `keyDown` with text inserts it; `rawKeyDown` is a press that
+          // inserts nothing, which a shortcut or an arrow is.
+          "type": event.down
+              ? (event.text == null ? "rawKeyDown" : "keyDown")
+              : "keyUp",
+          "key": event.key,
+          "code": event.code,
+          "windowsVirtualKeyCode": event.keyCode,
+          "modifiers": event.modifiers,
+          if (event.down && event.text != null) ...{
+            "text": event.text,
+            "unmodifiedText": event.text,
+          },
+          if (event.down && event.commands.isNotEmpty) "commands": event.commands,
+        },
+        sessionId: live.session);
+  }
+
+  @override
+  Future<void> insertText(String text) async {
+    final live = _live;
+    if (live == null) return;
+    await live.cdp.send("Input.insertText",
+        params: {"text": text}, sessionId: live.session);
+  }
+
+  /// The screencast: Chrome sends a frame whenever the page repaints, hidden
+  /// or not, and waits for each to be acknowledged before the next, so a slow
+  /// viewer slows the stream rather than queueing it. Started on listen and
+  /// stopped on cancel, so nothing is encoded while nobody watches.
+  @override
+  Stream<BrowserFrame> frames() {
+    final controller = StreamController<BrowserFrame>();
+    StreamSubscription<CdpEvent>? sub;
+    ({CdpConnection cdp, String session})? casting;
+    controller.onListen = () async {
+      final page = _page;
+      final running = _browser._running;
+      if (page == null || running == null) {
+        await controller.close();
+        return;
+      }
+      final cdp = running.cdp;
+      casting = (cdp: cdp, session: page.session);
+      // The tab closing with the browser still up ends the stream too.
+      final opened = _shown.value?.opened;
+      void closed() {
+        if (_shown.value?.opened == opened) return;
+        _shown.removeListener(closed);
+        unawaited(controller.close());
+      }
+
+      _shown.addListener(closed);
+      controller.done.then((_) => _shown.removeListener(closed)).ignore();
+      sub = cdp.events
+          .where((e) =>
+              e.sessionId == page.session && e.method == "Page.screencastFrame")
+          .listen((e) {
+        final meta = e.params["metadata"] as Map? ?? const {};
+        controller.add(BrowserFrame(
+          base64Decode(e.params["data"] as String),
+          width: (meta["deviceWidth"] as num?)?.toDouble() ?? 0,
+          height: (meta["deviceHeight"] as num?)?.toDouble() ?? 0,
+        ));
+        cdp
+            .send("Page.screencastFrameAck",
+                params: {"sessionId": e.params["sessionId"]},
+                sessionId: page.session)
+            .ignore();
+      }, onDone: controller.close);
+      try {
+        await cdp.send("Page.startScreencast",
+            params: {
+              "format": "jpeg",
+              "quality": 70,
+              "maxWidth": 1280,
+              "maxHeight": 900,
+            },
+            sessionId: page.session);
+      } catch (_) {
+        await controller.close();
+      }
+    };
+    controller.onCancel = () async {
+      await sub?.cancel();
+      final on = casting;
+      if (on != null && !on.cdp.isClosed) {
+        try {
+          await on.cdp.send("Page.stopScreencast", sessionId: on.session);
+        } catch (_) {
+          // The tab went first: there is nothing to stop.
+        }
+      }
+    };
+    return controller.stream;
+  }
+
   Future<String> _describeView() async {
     final page = await _snapshot(all: false);
+    _shown.value = _shown.value?.copyWith(url: page.url, title: page.title);
     final out = StringBuffer()
       ..writeln(page.title.isEmpty ? "(untitled)" : page.title)
       ..writeln(page.url)

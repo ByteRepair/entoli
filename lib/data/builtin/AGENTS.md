@@ -726,6 +726,15 @@ element and page it acts on as the banner's text and the classifier's
 `action` argument — `{"ref": 12}` says nothing to either. Scrolling, reading
 and going back are not gated.
 
+The chat watches its tab through two things on `BrowserTab`: `page`, the
+title and address while the tab is open and null once it is not, and
+`frames()`, the browser's own screencast (`Page.startScreencast`). The
+screencast is what makes a hidden browser watchable — it renders with no
+window — and it is started on listen and stopped on cancel, so nothing is
+encoded while nobody looks; Chrome waits for each frame's ack before the
+next, so a slow viewer slows the stream instead of queueing it. See "The
+agent's browser, on screen" in `lib/ui/chat/AGENTS.md`.
+
 ## Images (the `image_generation` tool)
 
 Offered only when Settings > Image Generation names an image model (its "Off"

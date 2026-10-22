@@ -2,6 +2,7 @@ import "dart:convert";
 import "dart:io";
 import "dart:typed_data";
 
+import "package:flutter/foundation.dart" show ValueNotifier;
 import "package:flutter_test/flutter_test.dart";
 import "package:fs_shim/fs_io.dart" show fileSystemIo;
 import "package:path/path.dart" as p;
@@ -26,6 +27,27 @@ import "builtin_fakes.dart";
 /// A tab that records what it was asked and answers with fixed text.
 class FakeBrowserTab implements BrowserTab {
   final calls = <String>[];
+
+  @override
+  final page = ValueNotifier<BrowserPage?>(null);
+
+  @override
+  Stream<BrowserFrame> frames() => const Stream.empty();
+
+  @override
+  Future<void> forward() async {}
+
+  @override
+  Future<void> reload() async {}
+
+  @override
+  Future<void> pointer(BrowserPointer event) async {}
+
+  @override
+  Future<void> key(BrowserKey event) async {}
+
+  @override
+  Future<void> insertText(String text) async {}
 
   @override
   Future<String> goto(String url) async {

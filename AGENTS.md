@@ -49,7 +49,8 @@ named in a cross-reference is findable from this list.
   the layers, what the build does with them, and the Liquid Glass format notes
 - `windows/AGENTS.md` — The exe and its icon, The MSI, What is absent, and
   honestly so, and nothing Windows runs on this host
-- `lib/ui/chat/AGENTS.md` — When a turn is over, Thinking and tool runs,
+- `lib/ui/chat/AGENTS.md` — When a turn is over, Thinking and tool runs, The
+  agent's browser, on screen,
   Selecting a reply, and copying it, How a reply is set, Code blocks, A command
   the user ran, The plan, on screen, A chat whose home device is elsewhere, The chat page
 - `lib/data/voice/AGENTS.md` — Voice mode, What listens and what speaks, The

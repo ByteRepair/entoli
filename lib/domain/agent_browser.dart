@@ -77,6 +77,30 @@ abstract class EmbeddedBrowser {
 /// One chat's page. Every call but [screenshot] answers with text for the
 /// model, describing the page as the call left it; a failure throws.
 abstract class BrowserTab {
+  /// The page while the browser has this tab open, null otherwise: what the
+  /// chat's browser chip is drawn from.
+  ValueListenable<BrowserPage?> get page;
+
+  /// What the tab draws, frame by frame, for as long as it is listened to —
+  /// hidden or not. Ends when the tab closes; empty where it is not open.
+  Stream<BrowserFrame> frames();
+
+  // The user's own hands on the page, from the chat's browser card. They act
+  // only on a tab that is open — none starts a browser — and they are not
+  // gated: the user is the one doing it.
+
+  Future<void> forward();
+
+  Future<void> reload();
+
+  /// A mouse event at a viewport point, in CSS pixels.
+  Future<void> pointer(BrowserPointer event);
+
+  Future<void> key(BrowserKey event);
+
+  /// Text typed at the caret, as a paste puts it there.
+  Future<void> insertText(String text);
+
   Future<String> goto(String url);
 
   Future<String> back();
@@ -108,6 +132,84 @@ abstract class BrowserTab {
   /// What a click on [ref], or at ([x], [y]), would act on and where — the
   /// words an approval is asked in, since a number means nothing to a person.
   Future<String> describeTarget({int? ref, double? x, double? y});
+}
+
+/// An open tab's page. [opened] counts the tab being opened, so a view of its
+/// frames knows to listen again after the tab was closed and reopened.
+class BrowserPage {
+  const BrowserPage({required this.url, this.title = "", required this.opened});
+
+  final String url;
+  final String title;
+  final int opened;
+
+  BrowserPage copyWith({String? url, String? title}) =>
+      BrowserPage(url: url ?? this.url, title: title ?? this.title, opened: opened);
+}
+
+/// One frame of a tab's screencast: a JPEG, and the viewport size it shows.
+class BrowserFrame {
+  const BrowserFrame(this.jpeg, {required this.width, required this.height});
+
+  final Uint8List jpeg;
+  final double width;
+  final double height;
+}
+
+enum BrowserPointerKind { move, down, up, wheel }
+
+/// A mouse event as the DevTools Protocol takes one. [button] is `left`,
+/// `middle`, `right` or `none`; [buttons] the held ones as a bitmask (1 left,
+/// 2 right, 4 middle); [modifiers] the held keys (1 Alt, 2 Ctrl, 4 Meta,
+/// 8 Shift).
+class BrowserPointer {
+  const BrowserPointer(
+    this.kind, {
+    required this.x,
+    required this.y,
+    this.button = "none",
+    this.buttons = 0,
+    this.clickCount = 0,
+    this.deltaX = 0,
+    this.deltaY = 0,
+    this.modifiers = 0,
+  });
+
+  final BrowserPointerKind kind;
+  final double x;
+  final double y;
+  final String button;
+  final int buttons;
+  final int clickCount;
+  final double deltaX;
+  final double deltaY;
+  final int modifiers;
+}
+
+/// A key going down or up, named as the DOM names it: [key] is the value
+/// (`a`, `Enter`), [code] the physical key (`KeyA`, `Enter`), [keyCode] the
+/// legacy number pages still read. [text] is what a press inserts, null for a
+/// key that inserts nothing. [commands] are the editing commands a shortcut
+/// stands for (`selectAll`, `copy`), which a synthesized key does not run on
+/// its own.
+class BrowserKey {
+  const BrowserKey({
+    required this.down,
+    required this.key,
+    required this.code,
+    required this.keyCode,
+    this.text,
+    this.modifiers = 0,
+    this.commands = const [],
+  });
+
+  final bool down;
+  final String key;
+  final String code;
+  final int keyCode;
+  final String? text;
+  final int modifiers;
+  final List<String> commands;
 }
 
 /// A screenshot and where its top-left corner is in the viewport, so a point
