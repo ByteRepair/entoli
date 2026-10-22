@@ -11,6 +11,7 @@ import "package:agent_chat/domain/chat_log.dart";
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/domain/prompt_library.dart";
 import "package:agent_chat/domain/shell.dart";
+import "package:agent_chat/domain/sub_agent_log.dart";
 
 import "../../harness.dart";
 import "builtin_fakes.dart";
@@ -114,6 +115,27 @@ void main() {
       expect(messages, hasLength(1));
       expect(messages.single.plainText, "halfway\nand finished");
       expect(await log.isResumable("call-9"), isFalse);
+    });
+
+    test("a running one is followed record by record, numbered from disk",
+        () async {
+      await log.append("call-9", recordsOf([killedHalfway("call-9", "halfway")]));
+      final onDisk = decodeLog(File(config.subAgentFile(chatId, "call-9")).readAsStringSync());
+      // A fresh process, holding nothing of the run until it is carried on.
+      final appends = <SubAgentAppend>[];
+      log = FileSubAgentLog(config, chatId, feed: SubAgentFeed()..appends.listen(appends.add));
+
+      await runnerOver(FakeLlmClient([
+        [saidOnly("and finished")],
+      ])).resume("general", "call-9");
+      await Future<void>.delayed(Duration.zero);
+
+      expect(appends.first.from, onDisk.length);
+      final followed = appends.fold<List<ChatRecord>>(onDisk,
+          (held, a) => growTranscript(held, a.from, a.records)!);
+      expect(replay(followed).single.plainText, "halfway\nand finished");
+      expect(log.feed!.holds(chatId, "call-9"), isFalse,
+          reason: "a closed run is the file's to answer for");
     });
 
     test("what it already did is put back in front of the model", () async {

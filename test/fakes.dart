@@ -520,6 +520,11 @@ class FakeBackend implements AgentBackend {
   @override
   Stream<MemoryNote> get memoryNotes => memoryNoteHolder.notes;
 
+  /// A real feed, so a test writes a sub-agent's records the way the backend
+  /// would.
+  @override
+  final SubAgentFeed subAgents = SubAgentFeed();
+
   @override
   Future<Chat> createChat({String? title}) async {
     final now = DateTime.now();
@@ -726,6 +731,16 @@ class FakeChatStore implements ChatStore {
 
   @override
   Future<List<ChatRecord>> readRecords(String chatId) async => records(chatId);
+
+  final Map<String, List<ChatRecord>> _subAgents = {};
+
+  /// A finished sub-agent's transcript, as [readSubAgentRecords] answers it.
+  void stageSubAgent(String chatId, String callId, List<ChatRecord> records) =>
+      _subAgents["$chatId/$callId"] = records;
+
+  @override
+  Future<List<ChatRecord>> readSubAgentRecords(String chatId, String callId) async =>
+      _subAgents["$chatId/$callId"] ?? const [];
 
   @override
   Future<List<ChatState>> list() async =>

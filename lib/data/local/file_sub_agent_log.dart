@@ -10,11 +10,15 @@ import "../../domain/sub_agent_log.dart";
 /// there is nothing to look it up by otherwise — unlike `FileChatStore`, which
 /// has to find a chat by id alone.
 class FileSubAgentLog implements SubAgentLog {
-  FileSubAgentLog(this.config, this.chatId, {this.project});
+  FileSubAgentLog(this.config, this.chatId, {this.project, this.feed});
 
   final AppConfig config;
   final String chatId;
   final String? project;
+
+  /// Where a running transcript is held and announced as it is written. Null
+  /// where nothing follows one.
+  final SubAgentFeed? feed;
 
   FileSystem get _fs => config.fs;
 
@@ -24,23 +28,28 @@ class FileSubAgentLog implements SubAgentLog {
   @override
   Future<void> append(String callId, List<ChatRecord> records) async {
     if (records.isEmpty) return;
+    final feed = this.feed;
+    if (feed != null && !feed.holds(chatId, callId)) {
+      feed.open(chatId, callId, await this.records(callId));
+    }
     // Unlike a chat's log, nothing has created this directory: a sub-agent's
     // first record is the first thing to name it.
     await _fs.directory(config.subAgentsDir(chatId, project: project)).create(recursive: true);
     await _fs.file(_path(callId)).writeAsString(encodeLog(records), mode: FileMode.append);
+    feed?.add(chatId, callId, records);
   }
 
   @override
   Future<List<Message>> read(String callId) async =>
-      replay(await _records(callId));
+      replay(await records(callId));
 
   @override
   Future<bool> isResumable(String callId) async {
-    final records = await _records(callId);
+    final records = await this.records(callId);
     return records.isNotEmpty && endsUnfinished(replay(records), records);
   }
 
-  Future<List<ChatRecord>> _records(String callId) async {
+  Future<List<ChatRecord>> records(String callId) async {
     final file = _fs.file(_path(callId));
     if (!await file.exists()) return const [];
     return decodeLog(await file.readAsString());

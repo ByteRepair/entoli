@@ -63,6 +63,10 @@ class LivePeer {
   /// record and state pushes.
   final subscriptions = <String>{};
 
+  /// The sub-agent transcripts the peer is following, as (chatId, callId).
+  /// Only these get a running sub-agent's appends.
+  final subAgentFollows = <(String, String)>{};
+
   /// This device's projects the peer has open, null for the default one.
   final projectSubscriptions = <String?>{};
 

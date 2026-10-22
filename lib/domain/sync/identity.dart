@@ -17,7 +17,7 @@ class SyncIdentity {
 
   /// Bumped by any change a build before it could not read: devices on
   /// different numbers refuse each other at the handshake and say why.
-  static const protocolVersion = 4;
+  static const protocolVersion = 5;
 
   final SimpleKeyPair keyPair;
   final Uint8List publicKey;

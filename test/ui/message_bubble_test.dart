@@ -9,6 +9,7 @@ import "package:flutter_test/flutter_test.dart";
 import "package:flutter_markdown_plus/flutter_markdown_plus.dart";
 
 import "package:agent_chat/domain/ask.dart";
+import "package:agent_chat/domain/chat_log.dart";
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/domain/theme_colour.dart";
 import "package:agent_chat/ui/theme.dart";
@@ -1620,6 +1621,61 @@ void main() {
 
     expect(find.descendant(of: sheet, matching: find.byType(CircularProgressIndicator)),
         findsNothing);
+  });
+
+  testWidgets("a sub-agent's drawer draws its transcript as it is written",
+      (tester) async {
+    const task = ToolCall(
+      id: "call-1",
+      name: "task",
+      argumentsJson: '{"agent":"general","prompt":"look it up"}',
+    );
+    final parent = _message(MessageRole.assistant, const [ToolCallPart(toolCall: task)]);
+    final live = NotifierProvider<_Live, LiveMessage>(
+        () => _Live((message: parent, shellOutput: null, running: true)));
+    final feed = app.backend.subAgents
+      ..open("chat-1", "call-1", const [])
+      ..add("chat-1", "call-1", [
+        ChatRecord.message(
+            id: "call-1", role: MessageRole.assistant, createdAt: DateTime(2026)),
+        const ChatRecord.part(
+            messageId: "call-1", index: 0, part: TextPart(text: "Searching first.")),
+      ]);
+    await app.pump(
+      tester,
+      Scaffold(
+        body: ActivitySource(
+          live: live,
+          child: MessageBubble(chatId: "chat-1", message: parent, isWaiting: true),
+        ),
+      ),
+      settle: false,
+    );
+
+    await tester.tap(find.text("Running sub-agent @general"));
+    await tester.pump(const Duration(milliseconds: 500));
+    // The transcript is read as the drawer first builds, and lands a frame on.
+    await tester.pump(const Duration(milliseconds: 100));
+    final sheet = find.byType(BottomSheet);
+    expect(
+        find.descendant(
+            of: sheet,
+            matching: find.textContaining("Searching first.", findRichText: true)),
+        findsOneWidget);
+    expect(find.descendant(of: sheet, matching: find.text("Output")), findsNothing);
+
+    feed.add("chat-1", "call-1", const [
+      ChatRecord.part(
+          messageId: "call-1",
+          index: 1,
+          part: ToolCallPart(
+              toolCall: ToolCall(
+                  id: "s1", name: "websearch", argumentsJson: '{"query":"cyprus"}'))),
+    ]);
+    await tester.pump(const Duration(milliseconds: 100));
+
+    expect(find.descendant(of: sheet, matching: find.textContaining("cyprus")),
+        findsOneWidget);
   });
 }
 

@@ -441,6 +441,24 @@ starters are that device's library.
 deliberately separate from `chatListProvider`, which reads the local store and
 stays sync-unaware. Two sources of truth, never merged.
 
+### A sub-agent's transcript
+
+A `task` drawer open on a mirror follows the sub-agent's transcript on the
+home device (see "Following one while it runs" in `lib/data/builtin/AGENTS.md`).
+`subAgentOpen{fromLine}` asks for it, from a peer already following the
+chat; the home device puts the follow in before it reads, so an append during
+the read arrives twice rather than not at all, and answers with a
+`subAgentAppend` from that line — memory for a running sub-agent, the file
+for a finished one. Every append after it goes to the peers following that
+transcript, numbered as the feed numbered it, and `growTranscript` on the
+mirror drops what it holds and re-opens on a gap.
+
+Unlike a chat, a mirror says when it stops (`subAgentClose`): a running
+sub-agent appends every second, to a drawer nobody has open any more. What
+was received stays on the `MirrorChat`, in RAM like the rest of it, so
+opening the drawer again resumes from the count held. These three made the
+protocol 5.
+
 ### Requests and their reply
 
 `promptSend`, `chatStart`, `memoryCall`, `projectWrite`, `projectCreate`

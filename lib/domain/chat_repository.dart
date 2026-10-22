@@ -311,6 +311,15 @@ class ChatRepository {
   /// already is.
   Future<List<ChatRecord>> readRecords(String chatId) => _store.readRecords(chatId);
 
+  /// Every running sub-agent's appends to its transcript, as they land.
+  Stream<SubAgentAppend> get subAgentAppends => _backend.subAgents.appends;
+
+  /// A sub-agent's transcript: what memory holds while it runs, the file once
+  /// it is over. Read whole and then followed through [subAgentAppends].
+  Future<List<ChatRecord>> subAgentRecords(String chatId, String callId) async =>
+      _backend.subAgents.held(chatId, callId) ??
+      await _store.readSubAgentRecords(chatId, callId);
+
   /// [history] is what was said before this prompt, for a backend that is not
   /// holding the chat's session — see `AgentBackend.sendPrompt`. It comes from
   /// the caller rather than being read back here: the turn's own records are

@@ -25,6 +25,10 @@ abstract class ChatStore {
   /// own replay.
   Future<List<ChatRecord>> readRecords(String chatId);
 
+  /// The transcript of the sub-agent [callId] spawned, as written. Empty
+  /// where there is none.
+  Future<List<ChatRecord>> readSubAgentRecords(String chatId, String callId);
+
   /// The projects that exist, by name, sorted. The default project is not one
   /// of them: it is `null`, and it is always there.
   Future<List<String>> listProjects();
