@@ -2,8 +2,33 @@
 
 ## The room and its participants
 
-A chat is a room, and `ChatController` owns it. Every widget here renders a
-fact about the room; none of them permits or refuses anything.
+A chat is a room, and `ChatRoom` (`lib/domain/room/`) is it. Every widget
+here renders a fact about the room; none of them permits or refuses anything.
+
+The room is plain Dart, in pieces that each answer one question:
+
+- **`ChatRoom`** — the turns in flight, what was said while they ran, the
+  log they append to, threads, approvals and questions. Its state is
+  `ChatViewState`, which it owns.
+- **`Schedule`** — who speaks next: the per-member FIFOs, the parked wave,
+  the generation cap. No I/O; the room hands it the one call that opens a
+  turn. `OmadaOrdering` carries the policy as two methods, `admits` and
+  `waitsForWave`, rather than a scheduler per ordering.
+- **`Roster`** — who a message addresses. It is also the one place Omada is
+  decided for routing: a direct chat is a roster that addresses no one.
+- **`Agent`** — a participant that takes turns, the house or a member, over
+  the repository's `sendPrompt` and `resumeTurn`.
+- **`RoomHost`** — what the room needs of whoever holds it: settings read at
+  each use, where its state goes, and the services around a turn (naming the
+  chat, the failure notification, auto-compact). `ChatController` is the
+  host: a Riverpod `Notifier` that builds one room and implements
+  `TurnDriver` over it.
+
+The user is not a class: nothing in the room calls them. Their verbs are the
+room's public methods, reached through `TurnDriver`. Sub-agents are not
+rooms either — they share `TurnRecorder` with the room and nothing else, and
+their transcript deliberately leaves the task unlogged (see "Their own
+transcripts" in `lib/data/builtin/AGENTS.md`).
 
 The room has two participants who speak, and a third shape that never does:
 
@@ -41,7 +66,7 @@ everything Omada does hangs off it: a message addressing members is answered
 by them as participants, each in a session of their own, with the author on
 the record; members hand off to each other by mentioning one another in a
 reply, chain-capped; a member declines with `end_turn`. The turn's scheduling is
-the room's `_schedules` — one FIFO per member of what they have been
+the room's `Schedule` — one FIFO per member of what they have been
 addressed to run — resolved once at dispatch, and it is gated on the toggle:
 **turning Omada off ends promotion for every turn after it**, whatever the
 prompt names. What is already on the record stays — history is fact — but
@@ -55,7 +80,7 @@ is a lie if an instruction overlay can put a name on the main agent's
 voice.
 
 **The routing record rides the say.** `Message.addressees` is stamped where
-the say is written — a fresh send in `openTurn`, a say queued while the room
+the say is written — a fresh send in `_openTurn`, a say queued while the room
 ran in `_sayLater` — with who the room resolved it to, sigils on as typed,
 empty for the house's mail; old logs read empty. A reply's is stamped on its
 `turnEnd` record when it closes `done` — its routing is only known once its
@@ -87,11 +112,12 @@ project's toggle — so flipping Omada off leaves the next turn the plain
 prompt it had. The per-turn wording that used to stand here
 (`houseTurnInstructions`/`memberTurnInstructions`) is gone.
 
-**The schedule is the room's order of speaking.** `_schedule` puts an item
-on each member's FIFO: a user prompt addressed by its documents, or a
-handoff — the reply that names them, one generation past the turn that wrote
-it. The null key is the main agent, who answers what no member was addressed
-for. `_dispatch` runs what the schedule holds: **sequential** order
+**The schedule is the room's order of speaking.** `Schedule.addPrompt` and
+`addHandoff` put an item on each member's FIFO: a user prompt addressed by
+its documents, or a handoff — the reply that names them, one generation past
+the turn that wrote it. The null key is the main agent, who answers what no
+member was addressed for. `Schedule.dispatch` runs what the schedule holds,
+asking the ordering's `admits` per item: **sequential** order
 dispatches one item at a time — the mention list is the schedule, and what
 follows dispatches at the settle it causes. **A member holds at most one
 waiting handoff**: a later reply naming them replaces it — the later in the
@@ -108,8 +134,8 @@ way the item is off its FIFO before its turn opens, so a settle re-entering
 finds the schedule behind it and not the item running.
 
 **A handoff wave waits for the room to settle — in the wave orderings.** A
-turn that finishes while a sibling is still speaking records its reply in
-`_settledReplies`; the settle the last sibling causes evaluates every reply
+turn that finishes while a sibling is still speaking parks its reply
+(`Schedule.park`); the settle the last sibling causes evaluates every reply
 the wave finished, in finish order, against the cap read at dispatch. Relay
 has no wave: a reply is evaluated the moment its turn is over, siblings
 beside it notwithstanding, and what it names runs through the per-lane check

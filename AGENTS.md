@@ -84,7 +84,8 @@ backends and one of them was an OpenCode server; with one backend it contrasts
 with nothing either, which is why nothing user-facing names it at all.
 
 - `conv.jsonl` is the source of truth, and it is a log rather than a document.
-  `ChatController` appends a turn's events to it as they arrive;
+  `ChatRoom` (`lib/domain/room/`, held by the `ChatController` notifier)
+  appends a turn's events to it as they arrive;
   `ChatRepository` resolves which model runs and owns rewinding. Context is
   re-injected only when a turn is resent — otherwise the agent's own session
   carries it.

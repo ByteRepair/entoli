@@ -909,7 +909,7 @@ queues on the member's FIFO. The runner puts the sigil'd mention on the
 head of the send text (`prompted(prompt, reason, member:)` — the one
 wording, the mention ahead of the prompt, the kind's reason below), and
 everything after that is the room's own machinery: the composer resolves
-the reference into the message's documents, `mentioned()` reads them, the
+the reference into the message's documents, `Roster.mentioned` reads them, the
 FIFO and the author stamp follow, and the fire is generation zero — the
 user's own message analog, uncapped itself, its handoffs capped. In a
 direct chat nothing stamps; the mention rides inline as instruction
