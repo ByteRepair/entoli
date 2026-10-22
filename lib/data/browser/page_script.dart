@@ -133,9 +133,25 @@ const pageScript = r"""
       });
     },
     // What is at a ref, or at a viewport point, for an approval to name.
+    // With neither, what has focus — into a same-site frame, where a canvas
+    // editor keeps the field its keys go to.
     line(ref, x, y) {
-      let el = ref == null ? document.elementFromPoint(x, y) : byRef(ref);
-      if (el && ref == null) el = el.closest(SELECTOR) || el;
+      let el;
+      if (ref != null) {
+        el = byRef(ref);
+      } else if (x != null) {
+        el = document.elementFromPoint(x, y);
+        if (el) el = el.closest(SELECTOR) || el;
+      } else {
+        el = document.activeElement;
+        try {
+          while (el && el.tagName === 'IFRAME' && el.contentDocument) {
+            el = el.contentDocument.activeElement;
+          }
+        } catch (_) {}
+        if (!el || el === document.body) return 'the page, with nothing focused';
+        if (!el.matches(SELECTOR)) return `the focused ${el.tagName.toLowerCase()}`;
+      }
       if (!el) return null;
       return el.matches(SELECTOR) ? describe(el) : `${el.tagName.toLowerCase()} "${clip(el.innerText, 80)}"`;
     },

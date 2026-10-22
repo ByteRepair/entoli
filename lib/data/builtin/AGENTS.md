@@ -719,12 +719,31 @@ it would otherwise be off by the ratio.
 
 `browser_screenshot` is offered only where the model reads images
 (`ModelInfo.readsImages`, unknown counting as yes, as the client does); its
-image rides the result the way a generated one does. Gating: opening a page is
-a `webfetch` of its URL to the rules and the classifier, so a host rule covers
-both; a click, a typed field or a drag is gated as a command is, with the
-element and page it acts on as the banner's text and the classifier's
-`action` argument — `{"ref": 12}` says nothing to either. Scrolling, reading
-and going back are not gated.
+image rides the result the way a generated one does.
+
+**Typing is two things.** `browser_type` with a `ref` replaces a field's text
+— click it, select its contents, insert. Without one it types at whatever has
+focus, key by key: an editor that draws its own text (Google Docs, Slides,
+Sheets) has no field to number, and reads keydown from a hidden editable in a
+frame it moved focus to, so the model clicks into the text and types with no
+`ref`. Typing into a numbered frame instead was what failed in practice — the
+click on the frame's centre took focus away from the text. `browser_press`
+is one key with modifiers held, the shortcut path; a Control or Meta letter
+inserts nothing and names its editing command (`editingCommand`), as the
+card's keyboard does.
+
+**Gating is the browser's own, and off by default.** A banner at every click
+made a task unusable, and scoping by URL fails the tasks that cross sites;
+picking a browser is the consent. Settings > Agent Browser's "Before the
+agent acts" (`agentBrowserApproval`) is `never`, `classifier` or `always`,
+mapped onto `_runGated`'s modes and used *in place of* the turn's
+`approveMode` for the browser's tools alone. What it gates: opening a page, a
+`webfetch` of its URL so a host rule covers both, and a click, a typed field,
+a key or a drag, with the element and page it acts on as the banner's text
+and the classifier's `action` argument — `{"ref": 12}` says nothing to
+either. The standing rules decide before any mode, so a host the user denied
+stays denied under `never`. Scrolling, reading and going back are never
+gated.
 
 **A passkey request freezes a hidden page.** Google's sign-in asks for one on
 load; Chrome answers with a dialog of its own that takes input from the page,

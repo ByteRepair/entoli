@@ -75,6 +75,7 @@ String? runningTool(String name) => switch (name) {
       browserGotoToolName || browserSearchToolName => "Opening a page",
       browserPageTextToolName => "Reading the page",
       browserScreenshotToolName => "Taking a screenshot",
+      browserTypeToolName || browserPressToolName => "Typing",
       browserShowToolName => "Opening the browser window",
       browserCredentialsPromptToolName => "Waiting for you to sign in",
       browserCredentialsHideToolName => "Waiting for you to hand the browser back",
@@ -424,6 +425,7 @@ class BuiltinAgent {
     this.browser,
     this.seesImages = true,
     this.browserHidden = false,
+    this.browserApprove = ApproveMode.never,
     this.profile,
     this.tone = Tone.none,
     this.citations = false,
@@ -723,6 +725,12 @@ class BuiltinAgent {
 
   /// Whether the browser runs with no window, which offers `browser_show`.
   final bool browserHidden;
+
+  /// The mode the browser's navigation and actions are gated by, in place
+  /// of [approveMode]: Settings > Agent Browser's own answer, since a turn
+  /// asking at every click is no use and picking a browser is the consent.
+  /// The standing rules still decide first, so a denied host stays denied.
+  final ApproveMode browserApprove;
 
   /// The user's profile, appended to the system prompt as "About the user".
   /// Null means nothing is added. Rewritten every turn with the rest of the
@@ -1081,6 +1089,7 @@ class BuiltinAgent {
         browserSearchToolName ||
         browserClickToolName ||
         browserTypeToolName ||
+        browserPressToolName ||
         browserDragToolName ||
         browserScrollToolName ||
         browserBackToolName ||
@@ -1440,15 +1449,29 @@ class BuiltinAgent {
       case browserTypeToolName:
         final at = ref();
         final text = args["text"];
-        if (at == null || text is! String) {
-          yield* _reject(call,
-              'The $browserTypeToolName tool takes {"ref": n, "text": "..."}.');
+        if (text is! String) {
+          yield* _reject(call, 'The $browserTypeToolName tool takes '
+              '{"text": "..."}, and a "ref" to type into that field.');
           return;
         }
         final submit = args["submit"] == true;
-        label = "[$at] $text";
+        label = at == null ? text : "[$at] $text";
         acting = submit ? "type \"$text\" and press Enter in" : "type \"$text\" in";
         run = () => tab.type(at, text, submit: submit);
+      case browserPressToolName:
+        final key = stringArg(call.argumentsJson, "key");
+        if (key == null) {
+          yield* _reject(call, 'The $browserPressToolName tool takes '
+              '{"key": "Enter"}, and "modifiers": ["Control"] to hold any.');
+          return;
+        }
+        final held = {
+          for (final modifier in (args["modifiers"] as List? ?? const []))
+            if (modifier is String) modifier,
+        };
+        label = [...held, key].join("+");
+        acting = "press $label in";
+        run = () => tab.press(key, modifiers: held);
       case browserDragToolName:
         final from = point(args["from"]), to = point(args["to"]);
         if (from == null || to == null) {
@@ -1485,7 +1508,8 @@ class BuiltinAgent {
     }
 
     if (navigate != null) {
-      yield* _runGated(call, webfetchToolName, attempt, argumentsText: navigate);
+      yield* _runGated(call, webfetchToolName, attempt,
+          argumentsText: navigate, mode: browserApprove);
     } else if (acting != null) {
       final String target;
       try {
@@ -1506,7 +1530,8 @@ class BuiltinAgent {
           id: call.id,
           name: call.name,
           argumentsJson: jsonEncode({"action": described}));
-      yield* _runGated(gate, call.name, attempt, argumentsText: described);
+      yield* _runGated(gate, call.name, attempt,
+          argumentsText: described, mode: browserApprove);
     } else {
       _commandResult = await attempt();
     }
@@ -2502,6 +2527,7 @@ class BuiltinAgent {
     Future<ShellResult> Function() run, {
     String? argumentsText,
     ShellCommandAnalysis? analysis,
+    ApproveMode? mode,
   }) async* {
     final rules = [..._runtimeRules, ...permissions];
     final verdict = rulesDecideTraced(
@@ -2576,7 +2602,7 @@ class BuiltinAgent {
         return;
       }
     }
-    switch (approveMode) {
+    switch (mode ?? approveMode) {
       case ApproveMode.ask:
         yield* _askAndExecute(call, toolName, run, argumentsText);
       case ApproveMode.auto:

@@ -191,6 +191,34 @@ class _AgentBrowserSectionState extends ConsumerState<AgentBrowserSection> {
                     "whether it shows a window.");
           },
         ),
+        LabelledField(
+          label: "Before the agent acts",
+          child: DropdownButtonFormField<BrowserApproval>(
+            initialValue: ref.watch(appSettingsProvider).agentBrowserApproval,
+            isExpanded: true,
+            decoration: const InputDecoration(
+              helperText: "Opening a page, clicking, typing and dragging. A "
+                  "site you have denied in a permission rule stays denied.",
+              helperMaxLines: 3,
+            ),
+            items: const [
+              DropdownMenuItem(
+                  value: BrowserApproval.never, child: Text("Don't ask")),
+              DropdownMenuItem(
+                  value: BrowserApproval.classifier,
+                  child: Text("Let the classifier decide")),
+              DropdownMenuItem(
+                  value: BrowserApproval.always, child: Text("Ask every time")),
+            ],
+            onChanged: (value) {
+              if (value != null) {
+                ref
+                    .read(appSettingsProvider.notifier)
+                    .setAgentBrowserApproval(value);
+              }
+            },
+          ),
+        ),
         ValueListenableBuilder<bool>(
           valueListenable: browser.running,
           builder: (context, running, _) => ListTile(

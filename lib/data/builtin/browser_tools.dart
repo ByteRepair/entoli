@@ -13,6 +13,7 @@ const browserScrollToolName = "browser_scroll";
 const browserBackToolName = "browser_back";
 const browserPageTextToolName = "browser_page_text";
 const browserScreenshotToolName = "browser_screenshot";
+const browserPressToolName = "browser_press";
 
 /// What acts on a page: a click or a typed Enter can submit a form, post or
 /// pay, so these are gated the way a command is. Reading and moving about a
@@ -20,6 +21,7 @@ const browserScreenshotToolName = "browser_screenshot";
 const browserActingTools = {
   browserClickToolName,
   browserTypeToolName,
+  browserPressToolName,
   browserDragToolName,
 };
 
@@ -76,17 +78,49 @@ const browserClickTool = LlmTool(
 
 const browserTypeTool = LlmTool(
   name: browserTypeToolName,
-  description: "Replace the text in a field with `text`, by the field's "
-      "number. On a select, picks the option whose label matches. Set "
-      "`submit` to press Enter after.",
+  description: "Type text. With `ref`, replaces the text in that field (on a "
+      "select, picks the option whose label matches). Without `ref`, types "
+      "at whatever has focus, key by key, as a keyboard does: what an editor "
+      "that draws its own text needs, such as Google Docs or Slides, where "
+      "you first click into the text and then type with no `ref`. A newline "
+      "is Enter. Set `submit` to press Enter after.",
   schema: {
     "type": "object",
     "properties": {
-      "ref": {"type": "integer", "description": "The field's number."},
+      "ref": {
+        "type": "integer",
+        "description": "The field's number; leave out to type at the focus.",
+      },
       "text": {"type": "string"},
       "submit": {"type": "boolean"},
     },
-    "required": ["ref", "text"],
+    "required": ["text"],
+  },
+);
+
+const browserPressTool = LlmTool(
+  name: browserPressToolName,
+  description: "Press one key at the focus, optionally with modifiers held: "
+      "Enter, Tab, Escape, Backspace, an arrow, or a shortcut such as "
+      "Control+b for bold or Control+a to select all (Meta on a Mac site "
+      "that wants Cmd).",
+  schema: {
+    "type": "object",
+    "properties": {
+      "key": {
+        "type": "string",
+        "description": "The DOM key name (Enter, Tab, Escape, Backspace, "
+            "Delete, ArrowDown, Home, PageDown, F5) or one character.",
+      },
+      "modifiers": {
+        "type": "array",
+        "items": {
+          "type": "string",
+          "enum": ["Control", "Shift", "Alt", "Meta"],
+        },
+      },
+    },
+    "required": ["key"],
   },
 );
 
@@ -245,6 +279,7 @@ List<LlmTool> browserTools({
       browserSearchTool,
       browserClickTool,
       browserTypeTool,
+      browserPressTool,
       browserDragTool,
       browserScrollTool,
       browserBackTool,

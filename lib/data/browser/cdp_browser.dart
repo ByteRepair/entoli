@@ -64,6 +64,16 @@ class CdpBrowser extends AgentBrowser {
   @override
   ValueListenable<bool> get running => _isRunning;
 
+  final _openTabs = ValueNotifier(const <String>{});
+
+  @override
+  ValueListenable<Set<String>> get openTabs => _openTabs;
+
+  void _tabsChanged() => _openTabs.value = {
+        for (final entry in _tabs.entries)
+          if (entry.value._shown.value != null) entry.key,
+      };
+
   _Running? _running;
   Future<_Running>? _starting;
   Timer? _idleTimer;
@@ -413,7 +423,9 @@ const pageTextChunk = 15000;
 
 /// One chat's tab: opened on first use, and opened again if the user closes it.
 class _CdpTab implements BrowserTab {
-  _CdpTab(this._browser, this.chatId);
+  _CdpTab(this._browser, this.chatId) {
+    _shown.addListener(_browser._tabsChanged);
+  }
 
   final CdpBrowser _browser;
   final String chatId;
@@ -698,8 +710,78 @@ class _CdpTab implements BrowserTab {
   }
 
   @override
-  Future<String> type(int ref, String text, {bool submit = false}) async {
-    await _fill(ref, text, submit: submit);
+  Future<String> type(int? ref, String text, {bool submit = false}) async {
+    if (ref != null) {
+      await _fill(ref, text, submit: submit);
+    } else {
+      await _typeAtFocus(text);
+      if (submit) {
+        final page = await _attach();
+        await _act(() => _key(page, "Enter", 13, text: "\r"));
+      }
+    }
+    return _describeView();
+  }
+
+  /// [text] key by key at whatever has focus. An editor that draws its
+  /// text — Google Docs, Slides — reads keys from a hidden field it moved
+  /// focus to, so a key press is what reaches it where an inserted string
+  /// does not. A newline is Enter.
+  Future<void> _typeAtFocus(String text) async {
+    final page = await _attach();
+    for (final rune in text.runes) {
+      final char = String.fromCharCode(rune);
+      if (char == "\n") {
+        await _key(page, "Enter", 13, text: "\r");
+        continue;
+      }
+      final key = domKey(char);
+      for (final type in ["keyDown", "keyUp"]) {
+        await page.cdp.send("Input.dispatchKeyEvent",
+            params: {
+              "type": type,
+              "key": char,
+              "code": key?.code ?? "",
+              "windowsVirtualKeyCode": key?.keyCode ?? 0,
+              if (type == "keyDown") ...{"text": char, "unmodifiedText": char},
+            },
+            sessionId: page.session);
+      }
+    }
+    await Future<void>.delayed(const Duration(milliseconds: 200));
+  }
+
+  @override
+  Future<String> press(String key, {Set<String> modifiers = const {}}) async {
+    final found = domKey(key) ??
+        (throw CdpException("\"$key\" is not a key this can press. Use a "
+            "DOM key name (Enter, Tab, Escape, ArrowDown, F5) or one character."));
+    final page = await _attach();
+    final bits = domModifiers(modifiers);
+    // Held Control or Meta makes a letter a shortcut: no text goes in, and
+    // an editing one names its command, which a synthesized key does not run
+    // on its own.
+    final shortcut = modifiers.contains("Control") || modifiers.contains("Meta");
+    final command = shortcut
+        ? editingCommand(found.key, shift: modifiers.contains("Shift"))
+        : null;
+    final text = shortcut || modifiers.contains("Alt") ? null : found.text;
+    await _act(() async {
+      for (final type in ["down", "keyUp"]) {
+        final down = type == "down";
+        await page.cdp.send("Input.dispatchKeyEvent",
+            params: {
+              "type": down ? (text == null ? "rawKeyDown" : "keyDown") : "keyUp",
+              "key": found.key,
+              "code": found.code,
+              "windowsVirtualKeyCode": found.keyCode,
+              "modifiers": bits,
+              if (down && text != null) ...{"text": text, "unmodifiedText": text},
+              if (down && command != null) "commands": [command],
+            },
+            sessionId: page.session);
+      }
+    });
     return _describeView();
   }
 
@@ -994,9 +1076,9 @@ class _CdpTab implements BrowserTab {
   @override
   Future<String> describeTarget({int? ref, double? x, double? y}) async {
     final what = await _eval("window.__entoli.line(${ref ?? "null"}, "
-        "${x ?? 0}, ${y ?? 0})");
+        "${x ?? "null"}, ${y ?? "null"})");
     final where = await _eval("location.href");
-    final at = ref == null ? " at ($x, $y)" : "";
+    final at = ref == null && x != null ? " at ($x, $y)" : "";
     return _scrub("${what ?? "nothing"}$at on $where");
   }
 

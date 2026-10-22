@@ -216,7 +216,7 @@ class _ProjectPaletteState extends ConsumerState<ProjectPalette> {
         .toList();
     final remotes = remoteEntries(ref.watch(remoteChatsProvider),
         ref.watch(deviceProjectsProvider), ref.watch(syncPeersProvider));
-    final running = ref.watch(agentBackendProvider).runningTurns;
+    final running = ref.watch(busyChatsProvider);
 
     return ValueListenableBuilder<Set<String>>(
       valueListenable: running,

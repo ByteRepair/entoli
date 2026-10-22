@@ -327,6 +327,24 @@ final appUpdateHostProvider = Provider<AppUpdateHost>(
 final agentBrowserProvider =
     Provider<AgentBrowser>((ref) => const UnavailableAgentBrowser());
 
+/// The chats the sidebar shows as busy: a turn running in it, or its browser
+/// tab open — a chat whose browser is up is active between turns too, and
+/// with the browser hidden nothing else says so.
+final busyChatsProvider = Provider<ValueListenable<Set<String>>>((ref) {
+  final turns = ref.watch(agentBackendProvider).runningTurns;
+  final tabs = ref.watch(agentBrowserProvider).openTabs;
+  final busy = ValueNotifier<Set<String>>({...turns.value, ...tabs.value});
+  void update() => busy.value = {...turns.value, ...tabs.value};
+  turns.addListener(update);
+  tabs.addListener(update);
+  ref.onDispose(() {
+    turns.removeListener(update);
+    tabs.removeListener(update);
+    busy.dispose();
+  });
+  return busy;
+});
+
 /// Whether a message can be read out: a platform that can speak, and a speech
 /// model picked and installed. Half of [voiceReadyProvider], because reading a
 /// message out needs nothing to hear with.
@@ -608,6 +626,9 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
 
   Future<void> setAgentBrowserVisible(bool value) =>
       _update((s) => s.agentBrowserVisible = value);
+
+  Future<void> setAgentBrowserApproval(BrowserApproval value) =>
+      _update((s) => s.agentBrowserApproval = value);
 
   /// Which project the assistant gesture opens a chat in. Null is the default
   /// project.

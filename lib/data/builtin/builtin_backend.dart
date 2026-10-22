@@ -447,6 +447,11 @@ class BuiltinBackend implements AgentBackend {
         browser: caps.browser ? browser.tab(chatId) : null,
         seesImages: target.info?.readsImages ?? true,
         browserHidden: browser.hidden,
+        browserApprove: switch (AppSettings.load(config).agentBrowserApproval) {
+          BrowserApproval.never => ApproveMode.never,
+          BrowserApproval.classifier => ApproveMode.auto,
+          BrowserApproval.always => ApproveMode.ask,
+        },
         profile: settings.profile,
         tone: settings.tone,
         citations: settings.citations,

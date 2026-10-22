@@ -13,6 +13,8 @@ import "package:agent_chat/providers.dart";
 import "package:agent_chat/ui/chat/widgets/browser_input.dart";
 import "package:agent_chat/ui/chat/widgets/browser_strip.dart";
 
+import "../fakes.dart";
+
 /// A one-pixel JPEG, which is all a frame has to be for `Image.memory`.
 final _pixel = base64Decode(
     "/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAP////////////////////////////////////"
@@ -269,6 +271,24 @@ void main() {
     expect(find.byType(BrowserCard), findsOneWidget);
   });
 
+  test("a chat with its browser open is busy, turn or no turn", () {
+    final backend = FakeBackend();
+    final tabs = ValueNotifier<Set<String>>(const {});
+    final container = ProviderContainer(overrides: [
+      agentBackendProvider.overrideWithValue(backend),
+      agentBrowserProvider.overrideWithValue(_TabsBrowser(tabs)),
+    ]);
+    addTearDown(container.dispose);
+    final busy = container.read(busyChatsProvider);
+    backend.runningTurns.value = {"a"};
+    tabs.value = {"b"};
+    expect(busy.value, {"a", "b"});
+    backend.runningTurns.value = const {};
+    expect(busy.value, {"b"});
+    tabs.value = const {};
+    expect(busy.value, isEmpty);
+  });
+
   group("private input", () {
     testWidgets("the sign-in panel hands what is typed to the tab alone",
         (tester) async {
@@ -365,4 +385,15 @@ void main() {
       expect(tab.hold.value, isNull);
     });
   });
+}
+
+/// A browser that is only its set of open tabs.
+class _TabsBrowser implements AgentBrowser {
+  _TabsBrowser(this.openTabs);
+
+  @override
+  final ValueNotifier<Set<String>> openTabs;
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }

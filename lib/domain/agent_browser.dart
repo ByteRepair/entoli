@@ -29,6 +29,10 @@ abstract class AgentBrowser {
   /// Whether a browser process is up, for the settings page's Quit.
   ValueListenable<bool> get running;
 
+  /// The chats with a tab open, for the sidebar to show them as busy: a
+  /// chat whose browser is up is active whether or not a turn is.
+  ValueListenable<Set<String>> get openTabs;
+
   /// The tab [chatId] drives, opened on first use. One tab per chat, so two
   /// chats running at once do not navigate each other's page.
   BrowserTab tab(String chatId);
@@ -154,8 +158,14 @@ abstract class BrowserTab {
   Future<String> drag(
       ({double x, double y}) from, ({double x, double y}) to);
 
-  /// Replace the text in [ref] with [text], and press Enter after if [submit].
-  Future<String> type(int ref, String text, {bool submit = false});
+  /// Replace the text in [ref] with [text], and press Enter after if
+  /// [submit]. With no [ref], type [text] at whatever has focus, key by key,
+  /// as a keyboard does — what an editor drawn on a canvas listens for.
+  Future<String> type(int? ref, String text, {bool submit = false});
+
+  /// Press one key, [key] as the DOM names it (`Enter`, `Tab`, `a`), with
+  /// [modifiers] held (`Control`, `Shift`, `Alt`, `Meta`).
+  Future<String> press(String key, {Set<String> modifiers = const {}});
 
   /// One viewport down, or up.
   Future<String> scroll({bool up = false});
@@ -242,6 +252,79 @@ class CredentialsDeclined implements Exception {
   @override
   String toString() => message;
 }
+
+/// Who is asked before the agent opens a page or acts on one: nobody (the
+/// default — picking a browser is the consent), the auto-mode classifier,
+/// or the user, every time. Standing rules for a host still decide first.
+enum BrowserApproval { never, classifier, always }
+
+/// The DOM's name, physical code, legacy key code and inserted text of a key
+/// named as `KeyboardEvent.key` names it, or null for one it has no entry
+/// for. A single printable character is its own key.
+({String key, String code, int keyCode, String? text})? domKey(String name) {
+  const named = {
+    "Enter": ("Enter", 13, "\r"),
+    "Tab": ("Tab", 9, null),
+    "Escape": ("Escape", 27, null),
+    "Backspace": ("Backspace", 8, null),
+    "Delete": ("Delete", 46, null),
+    "ArrowLeft": ("ArrowLeft", 37, null),
+    "ArrowUp": ("ArrowUp", 38, null),
+    "ArrowRight": ("ArrowRight", 39, null),
+    "ArrowDown": ("ArrowDown", 40, null),
+    "Home": ("Home", 36, null),
+    "End": ("End", 35, null),
+    "PageUp": ("PageUp", 33, null),
+    "PageDown": ("PageDown", 34, null),
+  };
+  final found = named[name];
+  if (found != null) {
+    final (code, keyCode, text) = found;
+    return (key: name, code: code, keyCode: keyCode, text: text);
+  }
+  if (name == " " || name == "Space") {
+    return (key: " ", code: "Space", keyCode: 32, text: " ");
+  }
+  final function = RegExp(r"^F([1-9]|1[0-2])$").firstMatch(name);
+  if (function != null) {
+    return (
+      key: name,
+      code: name,
+      keyCode: 111 + int.parse(function.group(1)!),
+      text: null,
+    );
+  }
+  if (name.runes.length != 1) return null;
+  final upper = name.toUpperCase();
+  final letter = RegExp(r"^[A-Z]$").hasMatch(upper);
+  final digit = RegExp(r"^[0-9]$").hasMatch(name);
+  return (
+    key: name,
+    code: letter ? "Key$upper" : digit ? "Digit$name" : "",
+    keyCode: letter || digit ? upper.codeUnitAt(0) : 0,
+    text: name,
+  );
+}
+
+/// The DOM's modifier bits for named keys held: 1 Alt, 2 Control, 4 Meta,
+/// 8 Shift.
+int domModifiers(Set<String> held) =>
+    (held.contains("Alt") ? 1 : 0) |
+    (held.contains("Control") ? 2 : 0) |
+    (held.contains("Meta") ? 4 : 0) |
+    (held.contains("Shift") ? 8 : 0);
+
+/// The editing command a shortcut stands for. A synthesized key runs none on
+/// its own, so it is named alongside.
+String? editingCommand(String letter, {required bool shift}) =>
+    switch (letter.toLowerCase()) {
+      "a" => "selectAll",
+      "c" => "copy",
+      "x" => "cut",
+      "z" => shift ? "redo" : "undo",
+      "y" => "redo",
+      _ => null,
+    };
 
 enum BrowserPointerKind { move, down, up, wheel }
 
@@ -330,6 +413,11 @@ class UnavailableAgentBrowser extends AgentBrowser {
 
   @override
   ValueListenable<bool> get running => _notRunning;
+
+  static final _noTabs = ValueNotifier(const <String>{});
+
+  @override
+  ValueListenable<Set<String>> get openTabs => _noTabs;
 
   @override
   BrowserTab tab(String chatId) =>

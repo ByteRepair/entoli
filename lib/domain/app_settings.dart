@@ -1,6 +1,7 @@
 import "dart:convert";
 
 import "../core/config.dart";
+import "agent_browser.dart" show BrowserApproval;
 import "app_icon.dart";
 import "app_theme.dart";
 import "assistant_view.dart";
@@ -83,6 +84,7 @@ class AppSettings {
     this.autoUpdate = true,
     this.agentBrowser,
     this.agentBrowserVisible = false,
+    this.agentBrowserApproval = BrowserApproval.never,
   });
 
   String? defaultModelId;
@@ -419,6 +421,10 @@ class AppSettings {
   /// user to finish a check.
   bool agentBrowserVisible;
 
+  /// Who is asked before the browser's agent opens a page or acts on one.
+  /// Nobody by default: picking a browser is the consent.
+  BrowserApproval agentBrowserApproval;
+
   static AppSettings load(AppConfig config) {
     final text = config.documents.read(config.settingsFile);
     if (text == null) return AppSettings();
@@ -518,6 +524,9 @@ class AppSettings {
         autoUpdate: json["autoUpdate"] as bool? ?? true,
         agentBrowser: _orNull(json["agentBrowser"] as String?),
         agentBrowserVisible: json["agentBrowserVisible"] as bool? ?? false,
+        agentBrowserApproval:
+            BrowserApproval.values.asNameMap()[json["agentBrowserApproval"]] ??
+                BrowserApproval.never,
       );
 
   /// `approveMode` is the current key. An older file has `approveCommands` as
@@ -627,5 +636,7 @@ class AppSettings {
       if (!autoUpdate) "autoUpdate": autoUpdate,
       if (agentBrowser != null) "agentBrowser": agentBrowser,
       if (agentBrowserVisible) "agentBrowserVisible": agentBrowserVisible,
+      if (agentBrowserApproval != BrowserApproval.never)
+        "agentBrowserApproval": agentBrowserApproval.name,
     };
 }

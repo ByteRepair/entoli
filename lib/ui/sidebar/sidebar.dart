@@ -600,7 +600,7 @@ class _ChatTile extends ConsumerWidget {
         leading: SizedBox.square(
           dimension: 16,
           child: ValueListenableBuilder<Set<String>>(
-            valueListenable: ref.watch(agentBackendProvider).runningTurns,
+            valueListenable: ref.watch(busyChatsProvider),
             builder: (context, running, _) => running.contains(chat.id)
                 ? const CircularProgressIndicator(strokeWidth: 2)
                 : const SizedBox.shrink(),

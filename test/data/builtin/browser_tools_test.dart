@@ -137,9 +137,15 @@ class FakeBrowserTab implements BrowserTab {
   }
 
   @override
-  Future<String> type(int ref, String text, {bool submit = false}) async {
+  Future<String> type(int? ref, String text, {bool submit = false}) async {
     calls.add("type $ref $text $submit");
     return "typed";
+  }
+
+  @override
+  Future<String> press(String key, {Set<String> modifiers = const {}}) async {
+    calls.add("press ${[...modifiers, key].join("+")}");
+    return "pressed";
   }
 
   @override
@@ -206,6 +212,8 @@ void main() {
     bool hidden = false,
     bool oneShot = false,
     bool noAsk = false,
+    ApproveMode browserApprove = ApproveMode.never,
+    List<PermissionRule> permissions = const [],
     ApproveMode approveMode = ApproveMode.never,
     PermissionClassifier? classifier,
     FakeWebSearch? webSearch,
@@ -237,6 +245,8 @@ void main() {
       browser: tab,
       seesImages: seesImages,
       browserHidden: hidden,
+      browserApprove: browserApprove,
+      permissions: permissions,
       oneShot: oneShot,
       classifier: classifier,
       webSearch: webSearch ?? FakeWebSearch(),
@@ -311,7 +321,7 @@ void main() {
           [finish],
         ]),
         tab: tab,
-        approveMode: ApproveMode.auto,
+        browserApprove: ApproveMode.auto,
         classifier: classifier,
       ).run(userMessage("go")).toList();
       expect(tab.calls, isEmpty);
@@ -329,7 +339,7 @@ void main() {
           [finish],
         ]),
         tab: tab,
-        approveMode: ApproveMode.ask,
+        browserApprove: ApproveMode.ask,
         asked: asked,
       ).run(userMessage("buy")).toList();
       expect(asked.single.argumentsText, contains('button "Buy now"'));
@@ -344,12 +354,68 @@ void main() {
           [finish],
         ]),
         tab: FakeBrowserTab(),
-        approveMode: ApproveMode.auto,
+        browserApprove: ApproveMode.auto,
         classifier: classifier,
       ).run(userMessage("type")).toList();
       final (tool, args) = classifier.asked.single;
       expect(tool, browserTypeToolName);
       expect(jsonDecode(args)["action"], contains("press Enter"));
+    });
+
+    test("by default nothing in the browser asks, whatever the chat's mode",
+        () async {
+      final tab = FakeBrowserTab();
+      final asked = <ToolApproval>[];
+      await agentOver(
+        FakeLlmClient([
+          [call(browserGotoToolName, {"url": "https://example.com"})],
+          [call(browserClickToolName, {"ref": 7})],
+          [call(browserTypeToolName, {"text": "hi"})],
+          [finish],
+        ]),
+        tab: tab,
+        approveMode: ApproveMode.ask,
+        asked: asked,
+      ).run(userMessage("go")).toList();
+      expect(asked, isEmpty);
+      expect(tab.calls, ["goto https://example.com", "click 7", "type null hi false"]);
+    });
+
+    test("a host the user denied stays denied when nothing asks", () async {
+      final tab = FakeBrowserTab();
+      final events = await agentOver(
+        FakeLlmClient([
+          [call(browserGotoToolName, {"url": "https://blocked.example/x"})],
+          [finish],
+        ]),
+        tab: tab,
+        permissions: const [
+          PermissionRule(
+              tool: "webfetch",
+              pattern: "blocked.example",
+              decision: PermissionDecision.deny),
+        ],
+      ).run(userMessage("go")).toList();
+      expect(tab.calls, isEmpty);
+      expect(events.whereType<ToolResultEvent>().first.result.exceptionInfo,
+          contains("Denied"));
+    });
+
+    test("a key press carries its modifiers", () async {
+      final tab = FakeBrowserTab();
+      await agentOver(
+        FakeLlmClient([
+          [
+            call(browserPressToolName, {
+              "key": "b",
+              "modifiers": ["Control"],
+            }),
+          ],
+          [finish],
+        ]),
+        tab: tab,
+      ).run(userMessage("bold")).toList();
+      expect(tab.calls, ["press Control+b"]);
     });
 
     test("reading and scrolling are not gated", () async {
@@ -362,7 +428,7 @@ void main() {
           [finish],
         ]),
         tab: tab,
-        approveMode: ApproveMode.ask,
+        browserApprove: ApproveMode.ask,
         asked: asked,
       ).run(userMessage("read")).toList();
       expect(asked, isEmpty);

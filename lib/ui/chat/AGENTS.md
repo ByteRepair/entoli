@@ -707,6 +707,10 @@ on the message, not looked up per turn.
 
 ## The agent's browser, on screen
 
+The sidebar's spinner (and the project palette's) reads `busyChatsProvider`,
+a turn running *or* a browser tab open: a chat whose browser is up is active
+between turns, and with the browser hidden nothing else on screen says so.
+
 `BrowserStrip` is a chip in `TurnSurface`, below the running sub-agents and
 drawn the way their strip is, for as long as the chat has a browser tab open
 — which is not turn-scoped like the strips above it: the tab outlives the
