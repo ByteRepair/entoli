@@ -76,6 +76,8 @@ String? runningTool(String name) => switch (name) {
       browserPageTextToolName => "Reading the page",
       browserScreenshotToolName => "Taking a screenshot",
       browserShowToolName => "Opening the browser window",
+      browserCredentialsPromptToolName => "Waiting for you to sign in",
+      browserCredentialsHideToolName => "Waiting for you to hand the browser back",
       taskToolName => "Working on a sub-task",
       triggerSetName => "Setting a trigger",
       artifactToolName => "Publishing the artifact",
@@ -378,7 +380,13 @@ List<LlmTool> agentTools({
       writableDirectoriesTool,
       if (offerImage) imageGenerationTool,
       if (caps.browser && !oneShot)
-        ...browserTools(screenshot: browserScreenshot, show: browserShow),
+        ...browserTools(
+          screenshot: browserScreenshot,
+          show: browserShow,
+          // Both park the turn on the user, so they ride `ask` as
+          // `present_plan` does: a headless turn has nobody to answer.
+          credentials: caps.ask,
+        ),
     ];
 
 /// The agent loop: ask the model, run the command it asked for, show it the
@@ -1082,6 +1090,10 @@ class BuiltinAgent {
         browserScreenshotToolName
             when _offered.browser && seesImages && saveResource != null =>
           _browserScreenshot,
+        browserCredentialsPromptToolName when _offered.browser && caps.ask =>
+          _browserCredentials,
+        browserCredentialsHideToolName when _offered.browser && caps.ask =>
+          _browserHide,
         memorySaveToolName => _memorySave,
         memorySearchToolName => _memorySearch,
         memoryUpdateToolName => _memoryUpdate,
@@ -1378,6 +1390,10 @@ class BuiltinAgent {
   /// and reading it are not gated.
   Stream<AgentEvent> _browser(LlmToolCall call) async* {
     final tab = browser!;
+    if (tab.hold.value != null) {
+      yield* _reject(call, _noted(_hidden));
+      return;
+    }
     final args = decodeArgs(call.argumentsJson) ?? const {};
     int? ref() => args["ref"] is int ? args["ref"] as int : null;
     double? number(Object? value) => value is num ? value.toDouble() : null;
@@ -1452,7 +1468,7 @@ class BuiltinAgent {
         run = tab.back;
       case browserShowToolName:
         label = "window";
-        run = tab.show;
+        run = () => tab.show();
       default:
         final offset = number(args["offset"])?.toInt() ?? 0;
         label = offset == 0 ? "page" : "from $offset";
@@ -1494,13 +1510,131 @@ class BuiltinAgent {
     } else {
       _commandResult = await attempt();
     }
+    final result = _commandResult!;
+    _commandResult = result.returnCode == 0
+        ? ShellResult(returnCode: 0, output: _noted(result.output))
+        : ShellResult.failed(_noted(result.exceptionInfo ?? result.output));
     yield ToolResultEvent(_ran(call, _commandResult!));
+  }
+
+  /// [text] under what happened in the browser that this agent did not do
+  /// since its last browser call — the user's back and forward, their hiding
+  /// and giving back, the browser quitting. A turn is never handed a
+  /// message mid-flight, so the next browser result is where the agent
+  /// hears of it, and the log keeps it there.
+  String _noted(String text) {
+    final notes = browser?.takeNotes() ?? const [];
+    if (notes.isEmpty) return text;
+    return "Since your last browser call:\n"
+        "${notes.map((note) => "- $note").join("\n")}\n\n$text";
+  }
+
+  static const _hidden = "The user has hidden the browser from you to do "
+      "something private in it, such as signing in. Do not retry yet: carry "
+      "on with something else, or ask the user and wait for them to say they "
+      "have handed it back.";
+
+  /// Wait on [wait] until it completes or the turn is stopped, whichever
+  /// is first; null where the stop came first.
+  Future<T?> _untilStopped<T>(Future<T> wait) =>
+      Future.any([wait, _stopped.future.then((_) => null)]);
+
+  /// Ask the user to fill in a sign-in. What they type goes from the
+  /// chat's panel to the tab and into the page; the model is told only that
+  /// it was done, and what the page then shows — passwords and the filled
+  /// fields redacted.
+  Stream<AgentEvent> _browserCredentials(LlmToolCall call) async* {
+    final tab = browser!;
+    final args = decodeArgs(call.argumentsJson) ?? const {};
+    final reason = stringArg(call.argumentsJson, "reason");
+    final fields = [
+      for (final field in (args["fields"] as List? ?? const []))
+        if (field is Map && field["ref"] is int && field["label"] is String)
+          CredentialField(
+            ref: field["ref"] as int,
+            label: field["label"] as String,
+            secret: field["secret"] == true,
+          ),
+    ];
+    if (reason == null || fields.isEmpty) {
+      yield* _reject(call, 'The $browserCredentialsPromptToolName tool takes '
+          '{"reason": "...", "fields": [{"ref": n, "label": "..."}], '
+          '"submit": [{"ref": n}]}.');
+      return;
+    }
+    if (tab.hold.value != null) {
+      yield* _reject(call, _noted(_hidden));
+      return;
+    }
+    final submit = [
+      for (final click in (args["submit"] as List? ?? const []))
+        if (click is Map)
+          (
+            ref: click["ref"] is int ? click["ref"] as int : null,
+            x: (click["x"] as num?)?.toDouble(),
+            y: (click["y"] as num?)?.toDouble(),
+          ),
+    ];
+    yield _called(call, reason);
+    final String? done;
+    try {
+      done = await _untilStopped(tab.requestCredentials(
+          CredentialRequest(reason: reason, fields: fields, submit: submit)));
+    } catch (e) {
+      yield _failed(call, "$e");
+      return;
+    }
+    if (done == null) {
+      tab.cancelCredentials();
+      yield _failed(call, notExecuted);
+      return;
+    }
+    yield _ok(call, _noted(done));
+  }
+
+  /// Hand the browser to the user: every other browser tool refuses until
+  /// they give it back, which is what this waits for.
+  Stream<AgentEvent> _browserHide(LlmToolCall call) async* {
+    final tab = browser!;
+    final reason = stringArg(call.argumentsJson, "reason");
+    if (reason == null) {
+      yield* _reject(call,
+          'The $browserCredentialsHideToolName tool takes {"reason": "..."}.');
+      return;
+    }
+    yield _called(call, reason);
+    if (tab.hold.value == null) tab.hide(BrowserHold(reason: reason));
+    final back = Completer<bool>();
+    void given() {
+      if (tab.hold.value == null && !back.isCompleted) back.complete(true);
+    }
+
+    tab.hold.addListener(given);
+    try {
+      given();
+      if (await _untilStopped(back.future) == null) {
+        // Stopped: the browser stays the user's until they give it back.
+        yield _failed(call, notExecuted);
+        return;
+      }
+    } finally {
+      tab.hold.removeListener(given);
+    }
+    yield _ok(
+        call,
+        // The giving back is the note's to say.
+        _noted("Read the page again before acting on it: the user may have "
+            "moved on from where you left it."));
   }
 
   /// The viewport or one element, shown to the model on the result and to
   /// the user in the chat, as a generated image is.
   Stream<AgentEvent> _browserScreenshot(LlmToolCall call) async* {
     final ref = intArg(call.argumentsJson, "ref");
+    if (browser!.hold.value != null) {
+      yield* _reject(call, _noted(_hidden));
+      return;
+    }
     yield _called(call, ref == null ? "viewport" : "[$ref]");
     final BrowserShot shot;
     final ImageEvent saved;
@@ -1515,11 +1649,11 @@ class BuiltinAgent {
     yield saved;
     yield _ok(
         call,
-        ref == null
+        _noted(ref == null
             ? "Screenshot of the viewport attached."
             : "Screenshot of [$ref] attached. Its top-left corner is at "
                 "(${shot.left.round()}, ${shot.top.round()}) in the viewport: "
-                "add that to a point in it to click there.");
+                "add that to a point in it to click there."));
   }
 
   /// Resolve a file-tool path through the workspaces, the guest root and the

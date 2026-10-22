@@ -46,7 +46,8 @@ abstract class AgentBrowser {
   EmbeddedBrowser get embedded;
 
   /// Quit the browser, if one is running. The next call starts it again.
-  Future<void> close();
+  /// [why] is the note each open tab's agent is left.
+  Future<void> close({String why = "The user quit the browser."});
 }
 
 /// A browser found installed, by the name a user knows it under.
@@ -85,9 +86,19 @@ abstract class BrowserTab {
   /// hidden or not. Ends when the tab closes; empty where it is not open.
   Stream<BrowserFrame> frames();
 
+  /// What happened in the browser that the agent did not do — the user's
+  /// navigation, hiding, quitting — in order, since it was last asked. The
+  /// agent puts them on its next browser result, where the log keeps them;
+  /// a turn is never handed a message mid-flight.
+  List<String> takeNotes();
+
   // The user's own hands on the page, from the chat's browser card. They act
   // only on a tab that is open — none starts a browser — and they are not
-  // gated: the user is the one doing it.
+  // gated: the user is the one doing it. Each leaves a note for the agent.
+
+  /// The user's back, where [back] is the agent's: the same move, but this
+  /// one is noted.
+  Future<void> historyBack();
 
   Future<void> forward();
 
@@ -100,6 +111,36 @@ abstract class BrowserTab {
 
   /// Text typed at the caret, as a paste puts it there.
   Future<void> insertText(String text);
+
+  // Private input: what the user types for a sign-in reaches the page from
+  // here, never through the agent, the backend or the log.
+
+  /// Non-null while the browser is hidden from the agent, by the user or by
+  /// the agent asking for it. Every agent tool refuses while it is set; the
+  /// user's own input from the card still works.
+  ValueListenable<BrowserHold?> get hold;
+
+  void hide(BrowserHold hold);
+
+  void unhide();
+
+  /// The sign-in the agent is waiting on, for the chat to draw a panel for.
+  ValueListenable<CredentialRequest?> get credentialRequest;
+
+  /// The agent's side: wait for the user to fill [request] in. Answers with
+  /// the page as the submit left it — never the values. Throws
+  /// [CredentialsDeclined] where the user declines or [cancelCredentials]
+  /// runs.
+  Future<String> requestCredentials(CredentialRequest request);
+
+  /// The user's side: type [values], one per field, into the page, then run
+  /// the submit clicks. Nothing else sees the values.
+  Future<void> submitCredentials(List<String> values);
+
+  void declineCredentials();
+
+  /// The turn waiting on it stopped: the panel goes, and the wait ends.
+  void cancelCredentials();
 
   Future<String> goto(String url);
 
@@ -123,8 +164,11 @@ abstract class BrowserTab {
   Future<String> pageText({int offset = 0});
 
   /// Bring the browser up with a window on this page, for the user to finish
-  /// what the agent cannot. It goes back to hidden the next time it quits.
-  Future<String> show();
+  /// what the agent cannot — a passkey is one, its dialog having nowhere to
+  /// draw in a hidden browser. It goes back to hidden the next time it quits.
+  /// Nothing where it has a window already. [byUser] notes it to the agent:
+  /// the restart reloads the page.
+  Future<String> show({bool byUser = false});
 
   /// The viewport, or the element [ref] alone, as a PNG at CSS-pixel scale.
   Future<BrowserShot> screenshot({int? ref});
@@ -154,6 +198,49 @@ class BrowserFrame {
   final Uint8List jpeg;
   final double width;
   final double height;
+}
+
+/// The browser hidden from the agent. [reason] is the agent's words for the
+/// chat's button, where the agent asked; null where the user hid it.
+class BrowserHold {
+  const BrowserHold({this.reason});
+
+  final String? reason;
+
+  bool get byAgent => reason != null;
+}
+
+/// One field of a sign-in: an element numbered by an earlier page
+/// description, and what the user is asked for. [secret] obscures what they
+/// type.
+class CredentialField {
+  const CredentialField({required this.ref, required this.label, this.secret = false});
+
+  final int ref;
+  final String label;
+  final bool secret;
+}
+
+/// What the agent asks the user to fill in, and the clicks that submit it.
+class CredentialRequest {
+  const CredentialRequest({
+    required this.reason,
+    required this.fields,
+    this.submit = const [],
+  });
+
+  final String reason;
+  final List<CredentialField> fields;
+  final List<({int? ref, double? x, double? y})> submit;
+}
+
+class CredentialsDeclined implements Exception {
+  const CredentialsDeclined(this.message);
+
+  final String message;
+
+  @override
+  String toString() => message;
 }
 
 enum BrowserPointerKind { move, down, up, wheel }
@@ -260,5 +347,5 @@ class UnavailableAgentBrowser extends AgentBrowser {
       throw UnsupportedError("There is no browser on this platform.");
 
   @override
-  Future<void> close() async {}
+  Future<void> close({String why = ""}) async {}
 }

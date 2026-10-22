@@ -1,3 +1,4 @@
+import "dart:async";
 import "dart:convert";
 import "dart:io";
 import "dart:typed_data";
@@ -8,7 +9,7 @@ import "package:fs_shim/fs_io.dart" show fileSystemIo;
 import "package:path/path.dart" as p;
 
 import "package:agent_chat/data/browser/cdp_browser.dart"
-    show challengeNote, looksLikeChallenge;
+    show CdpBrowser, challengeNote, looksLikeChallenge;
 import "package:agent_chat/data/browser/helium.dart";
 import "package:agent_chat/data/builtin/browser_tools.dart";
 import "package:agent_chat/data/builtin/builtin_agent.dart";
@@ -17,6 +18,7 @@ import "package:agent_chat/data/builtin/templates.dart";
 import "package:agent_chat/domain/agent_backend.dart";
 import "package:agent_chat/domain/agent_browser.dart";
 import "package:agent_chat/domain/app_settings.dart";
+import "package:agent_chat/domain/builtin_project.dart" show AgentCapability;
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/domain/permission.dart";
 import "package:agent_chat/domain/shell.dart";
@@ -48,6 +50,66 @@ class FakeBrowserTab implements BrowserTab {
 
   @override
   Future<void> insertText(String text) async {}
+
+  @override
+  final ValueNotifier<BrowserHold?> hold = ValueNotifier(null);
+
+  @override
+  void hide(BrowserHold hold) {
+    this.hold.value = hold;
+    if (!hold.byAgent) notes.add("The user hid the browser from you.");
+  }
+
+  @override
+  void unhide() {
+    hold.value = null;
+    notes.add("The user gave the browser back to you.");
+  }
+
+  final notes = <String>[];
+
+  @override
+  List<String> takeNotes() {
+    final taken = [...notes];
+    notes.clear();
+    return taken;
+  }
+
+  @override
+  Future<void> historyBack() async {}
+
+  @override
+  final ValueNotifier<CredentialRequest?> credentialRequest = ValueNotifier(null);
+  Completer<String>? _waiting;
+
+  /// What a sign-in typed into the page, as the real tab would.
+  final typedIn = <String>[];
+
+  @override
+  Future<String> requestCredentials(CredentialRequest request) {
+    _waiting = Completer();
+    credentialRequest.value = request;
+    return _waiting!.future;
+  }
+
+  @override
+  Future<void> submitCredentials(List<String> values) async {
+    typedIn.addAll(values);
+    credentialRequest.value = null;
+    _waiting!.complete("signed in; page after");
+  }
+
+  @override
+  void declineCredentials() {
+    credentialRequest.value = null;
+    _waiting!.completeError(const CredentialsDeclined("declined"));
+  }
+
+  @override
+  void cancelCredentials() {
+    credentialRequest.value = null;
+    calls.add("cancelled");
+  }
 
   @override
   Future<String> goto(String url) async {
@@ -99,7 +161,7 @@ class FakeBrowserTab implements BrowserTab {
   }
 
   @override
-  Future<String> show() async {
+  Future<String> show({bool byUser = false}) async {
     calls.add("show");
     return "shown";
   }
@@ -143,6 +205,7 @@ void main() {
     bool seesImages = true,
     bool hidden = false,
     bool oneShot = false,
+    bool noAsk = false,
     ApproveMode approveMode = ApproveMode.never,
     PermissionClassifier? classifier,
     FakeWebSearch? webSearch,
@@ -167,7 +230,10 @@ void main() {
       },
       answer: (request) => Future.value(request.unanswered),
       caps: AgentCapabilities.forTurn(
-          commands: true, webSearch: true, disabled: const {}, browser: browser),
+          commands: true,
+          webSearch: true,
+          disabled: {if (noAsk) AgentCapability.ask},
+          browser: browser),
       browser: tab,
       seesImages: seesImages,
       browserHidden: hidden,
@@ -321,6 +387,161 @@ void main() {
     });
   });
 
+  group("private input", () {
+    test("while hidden, every browser tool refuses and touches nothing",
+        () async {
+      final tab = FakeBrowserTab()..hide(const BrowserHold());
+      final events = await agentOver(
+        FakeLlmClient([
+          [call(browserGotoToolName, {"url": "https://example.com"})],
+          [call(browserScreenshotToolName, {})],
+          [finish],
+        ]),
+        tab: tab,
+      ).run(userMessage("go")).toList();
+      expect(tab.calls, isEmpty);
+      final refused = events.whereType<ToolResultEvent>().toList();
+      expect(refused, hasLength(2));
+      for (final result in refused) {
+        expect(result.result.exceptionInfo, contains("hidden the browser"));
+      }
+    });
+
+    test("a sign-in reaches the page, and nothing the agent sees holds it",
+        () async {
+      final tab = FakeBrowserTab();
+      tab.credentialRequest.addListener(() {
+        if (tab.credentialRequest.value != null) {
+          unawaited(tab.submitCredentials(["me@example.com", "hunter2"]));
+        }
+      });
+      final client = FakeLlmClient([
+        [
+          call(browserCredentialsPromptToolName, {
+            "reason": "Sign in to Example",
+            "fields": [
+              {"ref": 3, "label": "Email"},
+              {"ref": 4, "label": "Password", "secret": true},
+            ],
+            "submit": [
+              {"ref": 5},
+            ],
+          }),
+        ],
+        [finish],
+      ]);
+      final events =
+          await agentOver(client, tab: tab).run(userMessage("sign in")).toList();
+      expect(tab.typedIn, ["me@example.com", "hunter2"]);
+      final result = events.whereType<ToolResultEvent>().first.result;
+      expect(result.returnCode, 0);
+      expect(result.output, contains("page after"));
+      // Not in a single event the log could record, nor in what the model
+      // was sent next.
+      for (final event in events) {
+        expect(_describe(event), isNot(contains("hunter2")));
+      }
+      expect(client.sent.last.map((m) => m.text).join(),
+          isNot(contains("hunter2")));
+    });
+
+    test("a declined sign-in is a failure the agent reads", () async {
+      final tab = FakeBrowserTab();
+      tab.credentialRequest.addListener(() {
+        if (tab.credentialRequest.value != null) tab.declineCredentials();
+      });
+      final events = await agentOver(
+        FakeLlmClient([
+          [
+            call(browserCredentialsPromptToolName, {
+              "reason": "Sign in",
+              "fields": [
+                {"ref": 1, "label": "Email"},
+              ],
+            }),
+          ],
+          [finish],
+        ]),
+        tab: tab,
+      ).run(userMessage("sign in")).toList();
+      expect(events.whereType<ToolResultEvent>().first.result.exceptionInfo,
+          "declined");
+    });
+
+    test("hiding shows the reason and waits for the browser back", () async {
+      final tab = FakeBrowserTab();
+      String? shown;
+      tab.hold.addListener(() {
+        final hold = tab.hold.value;
+        if (hold != null) {
+          shown = hold.reason;
+          // The user signs in, then gives it back.
+          scheduleMicrotask(tab.unhide);
+        }
+      });
+      final events = await agentOver(
+        FakeLlmClient([
+          [
+            call(browserCredentialsHideToolName,
+                {"reason": "Please sign in to Google to proceed"}),
+          ],
+          [finish],
+        ]),
+        tab: tab,
+      ).run(userMessage("go")).toList();
+      expect(shown, "Please sign in to Google to proceed");
+      expect(tab.hold.value, isNull);
+      expect(events.whereType<ToolResultEvent>().first.result.output,
+          contains("The user gave the browser back to you."));
+    });
+
+    test("what the user did reaches the next browser result, once",
+        () async {
+      final tab = FakeBrowserTab()
+        ..notes.addAll([
+          "The user went back to https://example.com/.",
+          "The user quit the browser.",
+        ]);
+      final events = await agentOver(
+        FakeLlmClient([
+          [call(browserScrollToolName, {})],
+          [call(browserScrollToolName, {})],
+          [finish],
+        ]),
+        tab: tab,
+      ).run(userMessage("go")).toList();
+      final results = events.whereType<ToolResultEvent>().toList();
+      expect(results.first.result.output,
+          startsWith("Since your last browser call:\n- The user went back"));
+      expect(results.first.result.output, contains("- The user quit the browser."));
+      expect(results.first.result.output, endsWith("scrolled"));
+      expect(results.last.result.output, "scrolled");
+    });
+
+    test("a refusal while hidden carries the note that hid it", () async {
+      final tab = FakeBrowserTab()..hide(const BrowserHold());
+      final events = await agentOver(
+        FakeLlmClient([
+          [call(browserScrollToolName, {})],
+          [finish],
+        ]),
+        tab: tab,
+      ).run(userMessage("go")).toList();
+      expect(events.whereType<ToolResultEvent>().first.result.exceptionInfo,
+          contains("The user hid the browser from you."));
+    });
+
+    test("neither is offered where nobody is there to answer", () async {
+      final client = FakeLlmClient([[finish]]);
+      await agentOver(client, tab: FakeBrowserTab(), noAsk: true)
+          .run(userMessage("hi"))
+          .toList();
+      expect(offered(client), contains(browserGotoToolName));
+      expect(offered(client), isNot(contains(browserCredentialsPromptToolName)));
+      expect(offered(client), isNot(contains(browserCredentialsHideToolName)));
+    });
+  });
+
   test("a screenshot is an image on the result, with its offset", () async {
     final events = await agentOver(
       FakeLlmClient([
@@ -376,6 +597,27 @@ void main() {
     expect(AppSettings.fromJson(picked.toJson()).agentBrowser, embeddedBrowserId);
   });
 
+  test("a quit ends the hiding and any sign-in waiting on the user", () async {
+    final dir = Directory.systemTemp.createTempSync("agent-browser-quit");
+    addTearDown(() => dir.deleteSync(recursive: true));
+    final browser = CdpBrowser(
+      browserDir: dir.path,
+      picked: () => null,
+      embedded: HeliumDownload(dir.path),
+      visible: () => false,
+    );
+    final tab = browser.tab("chat-1");
+    tab.hide(const BrowserHold(reason: "Sign in to Google"));
+    final waiting = tab.requestCredentials(const CredentialRequest(
+        reason: "Sign in", fields: [CredentialField(ref: 1, label: "Email")]));
+    // Listened to before the quit fails it, as the waiting agent is.
+    final declined = expectLater(waiting, throwsA(isA<CredentialsDeclined>()));
+    await browser.close();
+    expect(tab.hold.value, isNull);
+    expect(tab.credentialRequest.value, isNull);
+    await declined;
+  });
+
   test("Helium's assets are named as its releases name them", () {
     expect(heliumAsset(HeliumOs.linux, "0.20.1.1", arm: false),
         "helium-0.20.1.1-x86_64.AppImage");
@@ -401,3 +643,12 @@ void main() {
     });
   });
 }
+
+/// An event as far as anything could record it: its call's arguments and its
+/// result's text.
+String _describe(AgentEvent event) => switch (event) {
+      ToolCallEvent(:final call) => "${call.argumentsJson} ${call.argumentsText}",
+      ToolResultEvent(:final result) =>
+        "${result.output} ${result.exceptionInfo}",
+      _ => "$event",
+    };

@@ -29,42 +29,187 @@ class BrowserStrip extends ConsumerWidget {
       return const SizedBox.shrink();
     }
     final tab = browser.tab(chatId);
-    return ValueListenableBuilder<BrowserPage?>(
-      valueListenable: tab.page,
-      builder: (context, page, _) {
-        if (page == null) return const SizedBox.shrink();
+    void open() => showDialog<void>(
+          context: context,
+          builder: (_) => BrowserCard(tab: tab, onQuit: browser.close),
+        );
+    return ListenableBuilder(
+      listenable: Listenable.merge([tab.page, tab.hold, tab.credentialRequest]),
+      builder: (context, _) {
+        final page = tab.page.value;
+        final hold = tab.hold.value;
+        final request = tab.credentialRequest.value;
+        if (page == null && hold == null && request == null) {
+          return const SizedBox.shrink();
+        }
         final theme = Theme.of(context);
         return Container(
           margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-          alignment: Alignment.centerLeft,
           decoration: BoxDecoration(
             color: theme.colorScheme.surfaceContainerHighest,
             borderRadius: BorderRadius.circular(8),
           ),
-          child: ActionChip(
-            avatar: Icon(Icons.travel_explore,
-                size: 16, color: theme.colorScheme.onPrimaryContainer),
-            label: Text(
-              "Browser · ${_where(page)}",
-              overflow: TextOverflow.ellipsis,
-              style: theme.textTheme.labelSmall?.copyWith(
-                color: theme.colorScheme.onPrimaryContainer,
-                fontWeight: FontWeight.w500,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (request != null)
+                CredentialPanel(
+                  key: ObjectKey(request),
+                  request: request,
+                  tab: tab,
+                  onWatch: open,
+                ),
+              Wrap(
+                spacing: 8,
+                runSpacing: 4,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  if (page != null)
+                    ActionChip(
+                      avatar: Icon(
+                          hold == null ? Icons.travel_explore : Icons.visibility_off,
+                          size: 16,
+                          color: theme.colorScheme.onPrimaryContainer),
+                      label: Text(
+                        "Browser · ${_where(page)}"
+                        "${hold == null ? "" : " · hidden from the agent"}",
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: theme.colorScheme.onPrimaryContainer,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      backgroundColor: theme.colorScheme.primaryContainer,
+                      side: BorderSide.none,
+                      shape: const StadiumBorder(),
+                      visualDensity: VisualDensity.compact,
+                      tooltip: "Watch the agent's browser",
+                      onPressed: open,
+                    ),
+                  // The agent's own words for what it needs done: the button
+                  // that opens the browser to do it.
+                  if (hold?.reason case final reason?)
+                    FilledButton.icon(
+                      icon: const Icon(Icons.login, size: 18),
+                      label: Text(reason),
+                      onPressed: open,
+                    ),
+                ],
               ),
-            ),
-            backgroundColor: theme.colorScheme.primaryContainer,
-            side: BorderSide.none,
-            shape: const StadiumBorder(),
-            visualDensity: VisualDensity.compact,
-            tooltip: "Watch the agent's browser",
-            onPressed: () => showDialog<void>(
-              context: context,
-              builder: (_) => BrowserCard(tab: tab, onQuit: browser.close),
-            ),
+            ],
           ),
         );
       },
+    );
+  }
+}
+
+/// What the agent asked the user to sign in with. The values live in this
+/// widget's fields and go from here to the tab, which types them into the
+/// page; nothing else holds them, and they are gone with the panel.
+class CredentialPanel extends StatefulWidget {
+  const CredentialPanel({
+    super.key,
+    required this.request,
+    required this.tab,
+    required this.onWatch,
+  });
+
+  final CredentialRequest request;
+  final BrowserTab tab;
+  final VoidCallback onWatch;
+
+  @override
+  State<CredentialPanel> createState() => _CredentialPanelState();
+}
+
+class _CredentialPanelState extends State<CredentialPanel> {
+  late final _fields = [
+    for (final _ in widget.request.fields) TextEditingController(),
+  ];
+
+  @override
+  void dispose() {
+    for (final field in _fields) {
+      field.clear();
+      field.dispose();
+    }
+    super.dispose();
+  }
+
+  void _submit() {
+    final values = [for (final field in _fields) field.text];
+    unawaited(widget.tab.submitCredentials(values).catchError((Object e) {
+      logFailure("browser", "a sign-in could not be typed in", e);
+    }));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final request = widget.request;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: AutofillGroup(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.lock_outline, size: 18),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(request.reason, style: theme.textTheme.titleSmall),
+                ),
+                TextButton(
+                  onPressed: widget.onWatch,
+                  child: const Text("See the page"),
+                ),
+              ],
+            ),
+            Text(
+              "Typed into the page by the app. The agent never sees it.",
+              style: theme.textTheme.bodySmall
+                  ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+            ),
+            const SizedBox(height: 8),
+            for (var i = 0; i < request.fields.length; i++)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: TextField(
+                  controller: _fields[i],
+                  obscureText: request.fields[i].secret,
+                  autofocus: i == 0,
+                  autocorrect: false,
+                  enableSuggestions: false,
+                  decoration: InputDecoration(
+                    labelText: request.fields[i].label,
+                    isDense: true,
+                  ),
+                  textInputAction: i == request.fields.length - 1
+                      ? TextInputAction.done
+                      : TextInputAction.next,
+                  onSubmitted:
+                      i == request.fields.length - 1 ? (_) => _submit() : null,
+                ),
+              ),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                TextButton(
+                  onPressed: widget.tab.declineCredentials,
+                  child: const Text("Decline"),
+                ),
+                const SizedBox(width: 8),
+                FilledButton(onPressed: _submit, child: const Text("Sign in")),
+              ],
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -321,7 +466,7 @@ class _BrowserCardState extends State<BrowserCard> {
                   IconButton(
                     tooltip: "Back",
                     icon: const Icon(Icons.arrow_back),
-                    onPressed: open ? () => _send(widget.tab.back) : null,
+                    onPressed: open ? () => _send(widget.tab.historyBack) : null,
                   ),
                   IconButton(
                     tooltip: "Forward",
@@ -361,6 +506,28 @@ class _BrowserCardState extends State<BrowserCard> {
                     ),
                   ),
                   IconButton(
+                    tooltip: "Open in a window",
+                    icon: const Icon(Icons.open_in_new),
+                    onPressed: open
+                        ? () => _send(() => widget.tab.show(byUser: true))
+                        : null,
+                  ),
+                  ValueListenableBuilder<BrowserHold?>(
+                    valueListenable: widget.tab.hold,
+                    builder: (context, hold, _) => hold == null
+                        ? IconButton(
+                            tooltip: "Hide from agent",
+                            icon: const Icon(Icons.visibility_off_outlined),
+                            onPressed: () =>
+                                widget.tab.hide(const BrowserHold()),
+                          )
+                        : IconButton(
+                            tooltip: "Give back to agent",
+                            icon: const Icon(Icons.visibility_outlined),
+                            onPressed: widget.tab.unhide,
+                          ),
+                  ),
+                  IconButton(
                     tooltip: "Quit the browser",
                     icon: const Icon(Icons.power_settings_new),
                     color: theme.colorScheme.error,
@@ -375,6 +542,39 @@ class _BrowserCardState extends State<BrowserCard> {
               ),
             ),
             const Divider(height: 1),
+            ValueListenableBuilder<BrowserHold?>(
+              valueListenable: widget.tab.hold,
+              builder: (context, hold, _) => hold == null
+                  ? const SizedBox.shrink()
+                  : ColoredBox(
+                      color: theme.colorScheme.secondaryContainer,
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 4, 8, 4),
+                        child: Row(
+                          children: [
+                            Icon(Icons.visibility_off,
+                                size: 18,
+                                color: theme.colorScheme.onSecondaryContainer),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                "${hold.reason ?? "Hidden from the agent"}. "
+                                "The agent can do nothing in the browser until "
+                                "you give it back.",
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                    color:
+                                        theme.colorScheme.onSecondaryContainer),
+                              ),
+                            ),
+                            TextButton(
+                              onPressed: widget.tab.unhide,
+                              child: const Text("Give back to agent"),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+            ),
             Flexible(
               child: AspectRatio(
                 aspectRatio: aspect,

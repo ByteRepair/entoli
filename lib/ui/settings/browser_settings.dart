@@ -186,7 +186,9 @@ class _AgentBrowserSectionState extends ConsumerState<AgentBrowserSection> {
                 .setAgentBrowserVisible(value);
             // The running one is in the other mode; the next call starts
             // one in this.
-            await browser.close();
+            await browser.close(
+                why: "The browser restarted because the user changed "
+                    "whether it shows a window.");
           },
         ),
         ValueListenableBuilder<bool>(

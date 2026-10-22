@@ -83,7 +83,10 @@ class CdpBrowser extends AgentBrowser {
   /// Put off the idle quit: the agent or the user is using it.
   void _touch() {
     _idleTimer?.cancel();
-    _idleTimer = Timer(idle, () => unawaited(close()));
+    _idleTimer = Timer(
+        idle,
+        () => unawaited(close(
+            why: "The browser quit after ${idle.inMinutes} idle minutes.")));
   }
 
   /// The running browser, launched if none is or the pick has changed since.
@@ -141,10 +144,23 @@ class CdpBrowser extends AgentBrowser {
     return _launch(exe, _profile, headless: true, userAgent: fixed);
   }
 
-  /// Quit; the next start is hidden again if that is the setting.
+  /// Quit; the next start is hidden again if that is the setting. What a
+  /// sign-in typed goes too — not on [_quit] alone, which `browser_show`'s
+  /// restart runs before reopening the very address that may carry it.
   @override
-  Future<void> close() async {
+  Future<void> close({String why = "The user quit the browser."}) async {
     _shown = false;
+    for (final tab in _tabs.values) {
+      if (tab._page != null) {
+        tab._note("$why Your tab and its page are gone; the next browser "
+            "call starts it again on a blank tab.");
+      }
+      tab._secrets.clear();
+      // Not `unhide`: nobody gave it back, and the quit is the note.
+      tab._hold.value = null;
+      tab._endRequest(const CredentialsDeclined(
+          "The browser was quit before the sign-in was filled in."));
+    }
     await _quit();
   }
 
@@ -417,6 +433,27 @@ class _CdpTab implements BrowserTab {
     _shown.value = null;
   }
 
+  final _notes = <String>[];
+
+  /// The user clicked or typed in the page: one note however much they
+  /// did, and never what they typed, which may be private.
+  bool _handled = false;
+
+  /// Scrubbed as it is written: an address can carry what a sign-in typed,
+  /// and the values are dropped at the quit that may itself be noted.
+  void _note(String note) => _notes.add(_scrub(note));
+
+  @override
+  List<String> takeNotes() {
+    final notes = [
+      ..._notes,
+      if (_handled) "The user clicked or typed in the page themselves.",
+    ];
+    _notes.clear();
+    _handled = false;
+    return notes;
+  }
+
   Future<({CdpConnection cdp, String target, String session})> _attach() async {
     final running = await _browser._ensure();
     final cdp = running.cdp;
@@ -429,6 +466,20 @@ class _CdpTab implements BrowserTab {
           params: {"targetId": target, "flatten": true});
       final session = attached["sessionId"] as String;
       await cdp.send("Page.enable", sessionId: session);
+      // A passkey request opens Chrome's own dialog, which takes input from
+      // the page — and a hidden browser has nowhere to draw it, so the page
+      // looks fine and swallows every click ("Try another way" included).
+      // The protocol's virtual authenticators with no UI stand in: the
+      // request waits silently, and the page stays the user's. A windowed
+      // browser keeps the real dialog, which is how a passkey is used.
+      if (!running.windowed) {
+        try {
+          await cdp.send("WebAuthn.enable",
+              params: {"enableUI": false}, sessionId: session);
+        } catch (e) {
+          logFailure(_tag, "passkeys could not be kept off a hidden tab", e);
+        }
+      }
       page = (target: target, session: session);
       _page = page;
       _shown.value = BrowserPage(url: "about:blank", opened: ++_opened);
@@ -648,6 +699,11 @@ class _CdpTab implements BrowserTab {
 
   @override
   Future<String> type(int ref, String text, {bool submit = false}) async {
+    await _fill(ref, text, submit: submit);
+    return _describeView();
+  }
+
+  Future<void> _fill(int ref, String text, {bool submit = false}) async {
     final chosen = await _eval("window.__entoli.choose($ref, ${jsonEncode(text)})");
     if (chosen == "none") {
       throw CdpException("[$ref] has no option matching \"$text\".");
@@ -672,7 +728,127 @@ class _CdpTab implements BrowserTab {
     } else {
       await Future<void>.delayed(const Duration(milliseconds: 300));
     }
-    return _describeView();
+  }
+
+  final _hold = ValueNotifier<BrowserHold?>(null);
+  final _request = ValueNotifier<CredentialRequest?>(null);
+  Completer<String>? _waiting;
+
+  /// A sign-in being typed in: no screenshot until it is through, so no
+  /// picture of it half-typed reaches the agent.
+  bool _filling = false;
+
+  /// What the user signed in with, until the browser quits: a page
+  /// echoes it — an address with the password in its query, the email
+  /// put back in a field after a failed login, "Signed in as" — so every
+  /// text the agent is answered with has it taken out, raw and URL-encoded.
+  /// Held in memory alone, and dropped at the quit. Short values are not
+  /// held: a two-letter one would blank out half the page.
+  final _secrets = <String>{};
+
+  String _scrub(String text) {
+    for (final secret in _secrets) {
+      for (final form in {
+        secret,
+        Uri.encodeQueryComponent(secret),
+        Uri.encodeComponent(secret),
+      }) {
+        text = text.replaceAll(form, "(hidden)");
+      }
+    }
+    return text;
+  }
+
+  @override
+  ValueListenable<BrowserHold?> get hold => _hold;
+
+  /// The agent's own hide is its call, so it is not noted back to it; the
+  /// giving back always is the user's.
+  @override
+  void hide(BrowserHold hold) {
+    if (_hold.value != null) return;
+    _hold.value = hold;
+    if (!hold.byAgent) _note("The user hid the browser from you.");
+  }
+
+  @override
+  void unhide() {
+    if (_hold.value == null) return;
+    _hold.value = null;
+    _note("The user gave the browser back to you.");
+  }
+
+  @override
+  ValueListenable<CredentialRequest?> get credentialRequest => _request;
+
+  @override
+  Future<String> requestCredentials(CredentialRequest request) {
+    _waiting?.completeError(
+        const CredentialsDeclined("A newer sign-in request replaced this one."));
+    final waiting = Completer<String>();
+    _waiting = waiting;
+    _request.value = request;
+    return waiting.future;
+  }
+
+  @override
+  Future<void> submitCredentials(List<String> values) async {
+    final request = _request.value;
+    final waiting = _waiting;
+    if (request == null || waiting == null) return;
+    _request.value = null;
+    _waiting = null;
+    _filling = true;
+    _secrets.addAll(values.map((v) => v.trim()).where((v) => v.length >= 4));
+    try {
+      for (var i = 0; i < request.fields.length; i++) {
+        final field = request.fields[i];
+        // Marked before it is typed in, so no description of the page ever
+        // carries it.
+        await _eval("window.__entoli.markSecret(${field.ref})");
+        try {
+          await _fill(field.ref, i < values.length ? values[i] : "");
+        } catch (_) {
+          // What failed may name what was typed; the agent hears which
+          // field, and nothing of it.
+          throw CdpException("The \"${field.label}\" field [${field.ref}] could "
+              "not be filled in: it may have gone from the page.");
+        }
+      }
+      for (final click in request.submit) {
+        await _act(() async {
+          if (click.ref != null) {
+            final rect = await _rect(click.ref!);
+            await _clickAt(
+                (rect["left"] as num) + (rect["width"] as num) / 2.0,
+                (rect["top"] as num) + (rect["height"] as num) / 2.0);
+          } else if (click.x != null && click.y != null) {
+            await _clickAt(click.x!, click.y!);
+          }
+        });
+      }
+      _filling = false;
+      waiting.complete("The user filled in the sign-in and it was submitted; "
+          "what they typed is not shown to you.\n\n${await _describeView()}");
+    } catch (e) {
+      _filling = false;
+      if (!waiting.isCompleted) waiting.completeError(e);
+    }
+  }
+
+  @override
+  void declineCredentials() => _endRequest(
+      const CredentialsDeclined("The user declined to sign in here."));
+
+  @override
+  void cancelCredentials() =>
+      _endRequest(const CredentialsDeclined("The turn was stopped."));
+
+  void _endRequest(CredentialsDeclined why) {
+    final waiting = _waiting;
+    _request.value = null;
+    _waiting = null;
+    if (waiting != null && !waiting.isCompleted) waiting.completeError(why);
   }
 
   Future<void> _key(
@@ -740,14 +916,18 @@ class _CdpTab implements BrowserTab {
         ..writeln()
         ..writeln("More follows: call again with offset $end.");
     }
-    return out.toString().trimRight();
+    return _scrub(out.toString().trimRight());
   }
 
   /// Reopened at the page this tab was on: a hidden browser has no window to
   /// raise, so it is quit and started again with one, on the same profile —
   /// the cookies a check leaves are kept for when it is hidden again.
   @override
-  Future<String> show() async {
+  Future<String> show({bool byUser = false}) async {
+    if (_browser._running?.windowed ?? false) {
+      await _attach();
+      return "The browser window is open.";
+    }
     String? url;
     if (_page != null) {
       try {
@@ -757,6 +937,10 @@ class _CdpTab implements BrowserTab {
       }
     }
     await _browser._showWindow();
+    if (byUser) {
+      _note("The user opened the browser in a window, which reloaded the "
+          "page.");
+    }
     if (url == null || url == "about:blank") {
       await _attach();
       return "The browser window is open.";
@@ -766,6 +950,10 @@ class _CdpTab implements BrowserTab {
 
   @override
   Future<BrowserShot> screenshot({int? ref}) async {
+    if (_filling) {
+      throw const CdpException(
+          "A sign-in is being typed in; no screenshot until it is through.");
+    }
     final Map<String, dynamic> clip;
     double left = 0, top = 0;
     final page = await _attach();
@@ -809,7 +997,7 @@ class _CdpTab implements BrowserTab {
         "${x ?? 0}, ${y ?? 0})");
     final where = await _eval("location.href");
     final at = ref == null ? " at ($x, $y)" : "";
-    return "${what ?? "nothing"}$at on $where";
+    return _scrub("${what ?? "nothing"}$at on $where");
   }
 
   /// The cross-site frames in this tab, by URL. They run in processes of
@@ -838,17 +1026,26 @@ class _CdpTab implements BrowserTab {
   }
 
   @override
-  Future<void> forward() async {
+  Future<void> historyBack() => _step(-1, "went back");
+
+  @override
+  Future<void> forward() => _step(1, "went forward");
+
+  /// Move [by] entries through the tab's history, as the user.
+  Future<void> _step(int by, String did) async {
     final live = _live;
     if (live == null) return;
     final history =
         await live.cdp.send("Page.getNavigationHistory", sessionId: live.session);
     final index = history["currentIndex"] as int;
     final entries = history["entries"] as List;
-    if (index + 1 >= entries.length) return;
+    final to = index + by;
+    if (to < 0 || to >= entries.length) return;
+    final entry = entries[to] as Map;
     await live.cdp.send("Page.navigateToHistoryEntry",
-        params: {"entryId": (entries[index + 1] as Map)["id"]},
-        sessionId: live.session);
+        params: {"entryId": entry["id"]}, sessionId: live.session);
+    // No full stop after the address, which would read as part of it.
+    _note("The user $did to: ${entry["url"]}");
   }
 
   @override
@@ -856,6 +1053,7 @@ class _CdpTab implements BrowserTab {
     final live = _live;
     if (live == null) return;
     await live.cdp.send("Page.reload", sessionId: live.session);
+    _note("The user reloaded the page.");
   }
 
   @override
@@ -885,6 +1083,7 @@ class _CdpTab implements BrowserTab {
         sessionId: live.session);
     // The agent's next glide starts where the user left the pointer.
     _pointer = (x: event.x, y: event.y);
+    if (event.kind != BrowserPointerKind.move) _handled = true;
   }
 
   @override
@@ -909,6 +1108,7 @@ class _CdpTab implements BrowserTab {
           if (event.down && event.commands.isNotEmpty) "commands": event.commands,
         },
         sessionId: live.session);
+    _handled = true;
   }
 
   @override
@@ -917,6 +1117,7 @@ class _CdpTab implements BrowserTab {
     if (live == null) return;
     await live.cdp.send("Input.insertText",
         params: {"text": text}, sessionId: live.session);
+    _handled = true;
   }
 
   /// The screencast: Chrome sends a frame whenever the page repaints, hidden
@@ -1025,7 +1226,7 @@ class _CdpTab implements BrowserTab {
         ..writeln()
         ..writeln(challengeNote);
     }
-    return out.toString().trimRight();
+    return _scrub(out.toString().trimRight());
   }
 }
 

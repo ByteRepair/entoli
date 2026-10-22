@@ -70,7 +70,10 @@ const pageScript = r"""
       line += ` = "${clip(chosen ? chosen.text : '', 40)}" of: ` +
         clip([...el.options].map(o => o.text).join(' | '), 160);
     } else if ((tag === 'INPUT' || tag === 'TEXTAREA') && el.value) {
-      line += ` value="${clip(el.value, 60)}"`;
+      // A password, or what the user typed for a sign-in, is theirs alone.
+      line += el.type === 'password' || el.hasAttribute('data-entoli-secret')
+        ? ' value=(hidden)'
+        : ` value="${clip(el.value, 60)}"`;
     }
     if (el.disabled) line += ' disabled';
     return line;
@@ -135,6 +138,11 @@ const pageScript = r"""
       if (el && ref == null) el = el.closest(SELECTOR) || el;
       if (!el) return null;
       return el.matches(SELECTOR) ? describe(el) : `${el.tagName.toLowerCase()} "${clip(el.innerText, 80)}"`;
+    },
+    markSecret(ref) {
+      const el = byRef(ref);
+      if (el) el.setAttribute('data-entoli-secret', '');
+      return !!el;
     },
     selectContents(ref) {
       const el = byRef(ref);

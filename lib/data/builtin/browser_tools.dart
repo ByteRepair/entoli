@@ -160,10 +160,87 @@ const browserShowTool = LlmTool(
   schema: {"type": "object", "properties": {}},
 );
 
+const browserCredentialsPromptToolName = "browser_credentials_prompt";
+const browserCredentialsHideToolName = "browser_credentials_hide";
+
+const browserCredentialsPromptTool = LlmTool(
+  name: browserCredentialsPromptToolName,
+  description: "Ask the user to fill in a sign-in on the current page. They "
+      "type into a panel in the app, which types it into the fields and "
+      "makes the submit clicks itself; you never see what they type, and "
+      "must never ask for a password or code in chat. Waits for them. For a "
+      "sign-in over several pages (email, Next, then password), call once "
+      "per page.",
+  schema: {
+    "type": "object",
+    "properties": {
+      "reason": {
+        "type": "string",
+        "description": "Shown to the user, e.g. \"Sign in to GitHub\".",
+      },
+      "fields": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "ref": {"type": "integer", "description": "The field's number."},
+            "label": {"type": "string", "description": "e.g. \"Password\"."},
+            "secret": {
+              "type": "boolean",
+              "description": "Obscure what the user types.",
+            },
+          },
+          "required": ["ref", "label"],
+        },
+      },
+      "submit": {
+        "type": "array",
+        "description": "The clicks that submit the fields, in order: an "
+            "element's number, or a point.",
+        "items": {
+          "type": "object",
+          "properties": {
+            "ref": {"type": "integer"},
+            "x": {"type": "number"},
+            "y": {"type": "number"},
+          },
+        },
+      },
+    },
+    "required": ["reason", "fields"],
+  },
+);
+
+const browserCredentialsHideTool = LlmTool(
+  name: browserCredentialsHideToolName,
+  description: "Hide the browser from yourself and hand it to the user, for "
+      "a sign-in the prompt cannot do: a multi-step login, a code sent to "
+      "their phone, a passkey. A button labelled with `reason` appears in "
+      "the chat and opens the browser for them. Waits until they give it "
+      "back; the page is then as they left it.",
+  schema: {
+    "type": "object",
+    "properties": {
+      "reason": {
+        "type": "string",
+        "description":
+            "The button's label, e.g. \"Please sign in to Google to proceed\".",
+      },
+    },
+    "required": ["reason"],
+  },
+);
+
 /// The tools, in the order they are offered. [screenshot] only where the
 /// model reads images: one that cannot would be paying for pictures it is
-/// sent as nothing. [show] only where the browser runs hidden.
-List<LlmTool> browserTools({required bool screenshot, bool show = false}) => [
+/// sent as nothing. [show] only where the browser runs hidden. [credentials]
+/// only where someone is there to answer them.
+List<LlmTool> browserTools({
+  required bool screenshot,
+  bool show = false,
+  bool credentials = false,
+}) =>
+    [
       browserGotoTool,
       browserSearchTool,
       browserClickTool,
@@ -174,4 +251,8 @@ List<LlmTool> browserTools({required bool screenshot, bool show = false}) => [
       browserPageTextTool,
       if (screenshot) browserScreenshotTool,
       if (show) browserShowTool,
+      if (credentials) ...[
+        browserCredentialsPromptTool,
+        browserCredentialsHideTool,
+      ],
     ];

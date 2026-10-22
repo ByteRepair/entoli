@@ -735,6 +735,16 @@ the agent: the user is the one doing it, and the agent's next call reads the
 page as the user left it. It acts only on an open tab — input never starts a
 browser.
 
+The strip also draws the two private paths of "Signing in" in
+`lib/data/builtin/AGENTS.md`. A sign-in the agent asked for is
+`CredentialPanel`, above the chip: the fields, obscured where the agent said
+`secret`, with autocorrect and suggestions off, and Sign in and Decline. What
+is typed lives in the panel's controllers and goes from them to
+`submitCredentials`, cleared when the panel goes. A browser the agent hid is
+its `reason` as a button that opens the card, and the chip reads "hidden from
+the agent" either way; the card has the "Hide from agent" toggle and, while
+hidden, a band saying so with "Give back to agent".
+
 ## The chat page
 
 One app bar, whichever layout it is drawn in. Narrow, the sidebar is `ChatPage`'s

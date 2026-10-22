@@ -726,6 +726,76 @@ element and page it acts on as the banner's text and the classifier's
 `action` argument — `{"ref": 12}` says nothing to either. Scrolling, reading
 and going back are not gated.
 
+**A passkey request freezes a hidden page.** Google's sign-in asks for one on
+load; Chrome answers with a dialog of its own that takes input from the page,
+and a headless browser has nowhere to draw it — so the page looks fine and
+swallows every click, "Try another way" included. Each tab of a hidden browser
+is therefore put under the protocol's virtual authenticators with their UI off
+(`WebAuthn.enable`, `enableUI: false`): the request waits silently with no
+authenticator to answer it, and the page stays clickable. A windowed browser
+keeps the real dialog, which is how a passkey is actually used, so the card's
+"Open in a window" (`show(byUser: true)`, noted to the agent since the restart
+reloads the page) is the way to sign in with one.
+
+### What the user did, told to the agent
+
+The user moves the page from the card, hides and gives back the browser, and
+quits it, and the agent has to hear of it — but a turn is never handed a
+message mid-flight (see "The projection" in `lib/domain/AGENTS.md`). So the
+tab keeps notes, and `_noted` puts them at the head of the agent's next
+browser result, success or refusal, as "Since your last browser call:". A
+tool result is in the log, so the note is part of the conversation from then
+on and a reload words it the same. What is noted: the user's back and forward
+with the address reached (`historyBack` is the user's back; the agent's `back`
+leaves no note, it being the agent's own move), reload, hiding and giving
+back (the agent's own hide is not noted back to it), the quit with who quit
+it (`close(why:)`: the user, the idle timer, the window setting), and one
+"clicked or typed in the page" however much the user did — never what they
+typed. A note is scrubbed of sign-in values as it is written, since the quit
+it may describe drops them. A note waits for the agent's next browser call,
+in this turn or a later one; an agent that never uses the browser again is
+never told, and does not need to be.
+
+### Signing in
+
+**What the user signs in with never reaches the agent, the backend or the
+log.** Both private paths live on the tab, which the chat reads directly (as
+it does for the chip), so the values go from the chat's panel to the tab to
+the page and nowhere else — no `AgentEvent` carries them, so no recorder,
+projection or sync ever sees them.
+
+`browser_credentials_prompt` takes fields (a numbered element, a label,
+`secret`) and the clicks that submit them. The tab publishes the request,
+the chat draws a panel, and the agent's call waits on
+`requestCredentials`. On Sign in the tab types each value in, marks each
+field `data-entoli-secret` before it does (the page script then shows its
+value as `(hidden)`, as it does every password field), makes the clicks, and
+only then answers the agent with the page as the submit left it. No
+screenshot is taken while it types. Marking is not enough on its own: a page
+echoes what was typed — a GET form puts the password in the address, a
+failed login puts the email back in a new field — so the tab also holds the
+values in memory until the browser quits and takes them out of every text the
+agent is answered with, raw and URL-encoded. Short values (under four
+characters) are not held, or a two-letter one would blank half the page.
+Pictures are not scrubbed: a screenshot taken after can show an email
+displayed on the page. An error while filling names the field, never what
+was being typed into it. A sign-in over several pages is one prompt per page,
+since the second page's fields do not exist until the first is submitted.
+
+`hold` is the browser hidden from the agent: every agent browser tool refuses
+with a message saying so while it is set, and the user's own input from the
+card still works. The user sets it from the card ("Hide from agent");
+`browser_credentials_hide` sets it with the agent's `reason`, which the chat
+draws as a button that opens the card, and **waits until the user gives the
+browser back** rather than returning at once — an agent told only that the
+browser refuses tends to give up or end its turn. Stopping the turn ends the
+wait and leaves the browser hidden, since the user may be mid-sign-in. A quit
+is different: the hold and any sign-in waiting in the panel end with the
+browser (not through `unhide`, since nobody gave it back — the quit is the
+note), so the chat's button goes and the agent's waits answer. Both
+tools park the turn on the user, so they ride `ask`, as `present_plan` does: a
+headless turn is not offered them.
+
 The chat watches its tab through two things on `BrowserTab`: `page`, the
 title and address while the tab is open and null once it is not, and
 `frames()`, the browser's own screencast (`Page.startScreencast`). The

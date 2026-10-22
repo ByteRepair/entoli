@@ -38,8 +38,11 @@ class _Tab implements BrowserTab {
   final keys = <BrowserKey>[];
 
   @override
-  Future<String> back() async {
-    done.add("back");
+  Future<void> historyBack() async => done.add("back");
+
+  @override
+  Future<String> show({bool byUser = false}) async {
+    done.add(byUser ? "window, by the user" : "window");
     return "";
   }
 
@@ -59,6 +62,32 @@ class _Tab implements BrowserTab {
   Future<void> insertText(String text) async => done.add("insert $text");
 
   @override
+  final ValueNotifier<BrowserHold?> hold = ValueNotifier(null);
+
+  @override
+  void hide(BrowserHold hold) => this.hold.value = hold;
+
+  @override
+  void unhide() => hold.value = null;
+
+  @override
+  final ValueNotifier<CredentialRequest?> credentialRequest = ValueNotifier(null);
+
+  List<String>? submitted;
+
+  @override
+  Future<void> submitCredentials(List<String> values) async {
+    submitted = values;
+    credentialRequest.value = null;
+  }
+
+  @override
+  void declineCredentials() {
+    done.add("declined");
+    credentialRequest.value = null;
+  }
+
+  @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
@@ -67,7 +96,7 @@ class _Browser implements AgentBrowser {
   var quits = 0;
 
   @override
-  Future<void> close() async => quits++;
+  Future<void> close({String why = ""}) async => quits++;
 
   @override
   bool get available => true;
@@ -238,5 +267,102 @@ void main() {
     expect(downs.first.code, "KeyA");
     expect(tab.keys.where((k) => !k.down), hasLength(3));
     expect(find.byType(BrowserCard), findsOneWidget);
+  });
+
+  group("private input", () {
+    testWidgets("the sign-in panel hands what is typed to the tab alone",
+        (tester) async {
+      final tab = await pumpStrip(tester);
+      tab.credentialRequest.value = const CredentialRequest(
+        reason: "Sign in to Example",
+        fields: [
+          CredentialField(ref: 3, label: "Email"),
+          CredentialField(ref: 4, label: "Password", secret: true),
+        ],
+      );
+      await tester.pump();
+      expect(find.text("Sign in to Example"), findsOneWidget);
+      final password = find.widgetWithText(TextField, "Password");
+      expect(tester.widget<TextField>(password).obscureText, isTrue);
+
+      await tester.enterText(find.widgetWithText(TextField, "Email"), "me@example.com");
+      await tester.enterText(password, "hunter2");
+      await tester.tap(find.text("Sign in"));
+      await tester.pump();
+      expect(tab.submitted, ["me@example.com", "hunter2"]);
+      expect(find.text("Sign in to Example"), findsNothing);
+    });
+
+    testWidgets("declining tells the tab", (tester) async {
+      final tab = await pumpStrip(tester);
+      tab.credentialRequest.value = const CredentialRequest(
+          reason: "Sign in", fields: [CredentialField(ref: 1, label: "Email")]);
+      await tester.pump();
+      await tester.tap(find.text("Decline"));
+      await tester.pump();
+      expect(tab.done, ["declined"]);
+    });
+
+    testWidgets("the agent's reason is a button that opens the browser",
+        (tester) async {
+      final tab = await pumpStrip(tester);
+      tab.page.value = const BrowserPage(url: "https://accounts.google.com", opened: 1);
+      tab.hide(const BrowserHold(reason: "Please sign in to Google to proceed"));
+      await tester.pump();
+      expect(find.textContaining("hidden from the agent"), findsOneWidget);
+      await tester.tap(find.text("Please sign in to Google to proceed"));
+      await tester.pump();
+      expect(find.byType(BrowserCard), findsOneWidget);
+
+      await tester.tap(find.text("Give back to agent"));
+      await tester.pump();
+      expect(tab.hold.value, isNull);
+    });
+
+    testWidgets("the agent's button goes when the browser is given back",
+        (tester) async {
+      final tab = await pumpStrip(tester);
+      tab.page.value = const BrowserPage(url: "https://accounts.google.com", opened: 1);
+      tab.hide(const BrowserHold(reason: "Sign in to Google"));
+      await tester.pump();
+      expect(find.text("Sign in to Google"), findsOneWidget);
+      tab.unhide();
+      await tester.pump();
+      expect(find.text("Sign in to Google"), findsNothing);
+      expect(find.textContaining("hidden from the agent"), findsNothing);
+    });
+
+    testWidgets("and when a quit clears it with the tab gone", (tester) async {
+      final tab = await pumpStrip(tester);
+      tab.page.value = const BrowserPage(url: "https://accounts.google.com", opened: 1);
+      tab.hide(const BrowserHold(reason: "Sign in to Google"));
+      await tester.pump();
+      // What the quit does to the tab: no page, no hold.
+      tab.page.value = null;
+      tab.hold.value = null;
+      await tester.pump();
+      expect(find.text("Sign in to Google"), findsNothing);
+      expect(find.byType(ActionChip), findsNothing);
+    });
+
+    testWidgets("the card opens the browser in a window, as the user",
+        (tester) async {
+      final tab = await openCard(tester);
+      await tester.tap(find.byTooltip("Open in a window"));
+      await tester.pump();
+      expect(tab.done, ["window, by the user"]);
+    });
+
+    testWidgets("the card hides the browser from the agent, and gives it back",
+        (tester) async {
+      final tab = await openCard(tester);
+      await tester.tap(find.byTooltip("Hide from agent"));
+      await tester.pump();
+      expect(tab.hold.value, isNotNull);
+      expect(tab.hold.value!.byAgent, isFalse);
+      await tester.tap(find.byTooltip("Give back to agent"));
+      await tester.pump();
+      expect(tab.hold.value, isNull);
+    });
   });
 }
