@@ -44,6 +44,10 @@ class ScrollFollow {
     });
   }
 
+  /// Stop following, for a move away from the end the caller makes itself —
+  /// which no gesture announces. Arriving at the end attaches again, as ever.
+  void detach() => _following = false;
+
   /// What the caller's `NotificationListener<ScrollNotification>` forwards.
   bool onNotification(ScrollNotification notification) {
     if (notification is UserScrollNotification) {

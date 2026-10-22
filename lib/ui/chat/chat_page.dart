@@ -2,7 +2,9 @@ import "dart:async";
 import "dart:math" as math;
 import "dart:typed_data";
 
+import "package:flutter/foundation.dart" show listEquals;
 import "package:flutter/material.dart";
+import "package:flutter/rendering.dart" show RenderAbstractViewport;
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:flutter_riverpod/misc.dart" show ProviderListenable;
 
@@ -27,6 +29,7 @@ import "chat_settings_page.dart";
 import "chat_controller.dart";
 import "mirror_controller.dart";
 import "widgets/activity_label.dart" show ActivitySource, LiveMessage, formatRemaining;
+import "widgets/chapter_rail.dart";
 import "widgets/composer.dart";
 import "widgets/paired_project_badges.dart";
 import "widgets/plan_view.dart" show PlanButton;
@@ -61,24 +64,56 @@ const double _readableWidth = 760;
 /// than under it, or the conversation sits over a field twice its own width.
 /// Both pages with something to type in are this. [banner] is a full-width row
 /// above it, under the title bar, and stays while the conversation scrolls.
+///
+/// [side] goes in the margin to the right of the column, [sideWidth] wide, and
+/// only where the margin has that much room: it is laid over the margin rather
+/// than beside the column, so the column stays centred whether it is there or
+/// not.
 class _ReadableColumn extends StatelessWidget {
-  const _ReadableColumn({required this.child, required this.bottom, this.banner});
+  const _ReadableColumn({
+    required this.child,
+    required this.bottom,
+    this.banner,
+    this.side,
+    this.sideWidth = 0,
+  });
 
   final Widget child;
   final Widget bottom;
   final Widget? banner;
+  final Widget? side;
+  final double sideWidth;
+
+  /// Between the column's edge and [side].
+  static const _sideGap = 16.0;
 
   @override
   Widget build(BuildContext context) => Column(
         children: [
           ?banner,
           Expanded(
-            child: Center(
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: _readableWidth),
-                child: Column(children: [Expanded(child: child), bottom]),
-              ),
-            ),
+            child: LayoutBuilder(builder: (context, constraints) {
+              final column = Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: _readableWidth),
+                  child: Column(children: [Expanded(child: child), bottom]),
+                ),
+              );
+              final margin = (constraints.maxWidth - _readableWidth) / 2;
+              if (side == null || margin < sideWidth + _sideGap * 2) return column;
+              return Stack(
+                children: [
+                  Positioned.fill(child: column),
+                  Positioned(
+                    top: 0,
+                    bottom: 0,
+                    left: constraints.maxWidth - margin + _sideGap,
+                    width: sideWidth,
+                    child: side!,
+                  ),
+                ],
+              );
+            }),
           ),
         ],
       );
@@ -557,6 +592,34 @@ List<ConversationEntry> entriesOf(Chat chat) {
   return entries;
 }
 
+/// The conversation as the chapter rail reads it: its prompts, and every row
+/// by message id — null where a row is not a message — which is what going
+/// to a prompt the list has not built estimates its place in.
+class _Outline {
+  const _Outline(this.chapters, this.rows);
+
+  _Outline.of(Chat chat)
+      : chapters = chaptersOf(chat),
+        rows = [
+          for (final e in entriesOf(chat)) e is MessageEntry ? e.message.id : null,
+        ];
+
+  static const empty = _Outline([], []);
+
+  final List<Chapter> chapters;
+  final List<String?> rows;
+
+  // Compared so that a streamed delta, which changes neither, redraws nothing.
+  @override
+  bool operator ==(Object other) =>
+      other is _Outline &&
+      listEquals(other.chapters, chapters) &&
+      listEquals(other.rows, rows);
+
+  @override
+  int get hashCode => Object.hash(Object.hashAll(chapters), Object.hashAll(rows));
+}
+
 class _ChatBodyState extends ConsumerState<_ChatBody> {
   /// How far off the end still counts as reading the latest: inside it a turn
   /// keeps the view pinned, outside it the jump button appears.
@@ -569,6 +632,24 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
   /// A notifier rather than a field: only the jump button reads it, and a
   /// `setState` mid-drag would rebuild every visible bubble to swap it.
   final ValueNotifier<bool> _atBottom = ValueNotifier(true);
+
+  /// The conversation as the chapter rail reads it, fed from the chat's view
+  /// state rather than from this page's build: once with the chat as it was
+  /// loaded, then on every change to it — a turn, a deletion, a thread
+  /// switched. See [_feedOutline].
+  final ValueNotifier<_Outline> _outline = ValueNotifier(_Outline.empty);
+  ProviderSubscription<bool>? _mirroredFeed;
+  ProviderSubscription<ChatViewState>? _outlineFeed;
+
+  /// The key on each prompt's row: what the rail reads where it is and
+  /// scrolls to. Made as the list builds a prompt's row.
+  final Map<String, GlobalKey> _chapterKeys = {};
+
+  List<Chapter> get _chapters => _outline.value.chapters;
+
+  /// The chapter being read — the last prompt at or above the top of the view.
+  /// A notifier so scrolling redraws the rail and nothing else.
+  final ValueNotifier<int?> _chapter = ValueNotifier(null);
 
   /// The chat the view has already been dropped to the bottom of.
   String? _opened;
@@ -585,6 +666,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
   void initState() {
     super.initState();
     _scroll.addListener(_readPosition);
+    _watchOutline();
     _memoryNotes = ref
         .read(agentBackendProvider)
         .memoryNotes
@@ -598,18 +680,136 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
   }
 
   @override
+  void didUpdateWidget(_ChatBody oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.chatId == widget.chatId) return;
+    _chapterKeys.clear();
+    _chapter.value = null;
+    _watchOutline();
+  }
+
+  /// Feed [_outline] from whichever controller reads this chat, and switch
+  /// over if the chat starts or stops being mirrored.
+  void _watchOutline() {
+    _mirroredFeed?.close();
+    _mirroredFeed = ref.listenManual(
+      isMirroredChatProvider(widget.chatId),
+      (_, mirrored) => _feedOutline(mirrored
+          ? mirrorChatControllerProvider(widget.chatId)
+          : chatControllerProvider(widget.chatId)),
+      fireImmediately: true,
+    );
+  }
+
+  void _feedOutline(ProviderListenable<ChatViewState> source) {
+    _outlineFeed?.close();
+    _outline.value = _Outline.empty;
+    _outlineFeed = ref.listenManual(
+      source,
+      (_, view) {
+        final chat = view.chat;
+        if (chat == null) return;
+        final next = _Outline.of(chat);
+        if (next == _outline.value) return;
+        _outline.value = next;
+        // A chapter added or a thread switched moves which one the view is
+        // in, with no scroll to say so.
+        _afterLayout((_) {});
+      },
+      fireImmediately: true,
+    );
+  }
+
+  @override
   void dispose() {
+    _mirroredFeed?.close();
+    _outlineFeed?.close();
+    _outline.dispose();
     _memoryNotes?.cancel();
     _scroll.removeListener(_readPosition);
     _controller.dispose();
     _scroll.dispose();
     _atBottom.dispose();
+    _chapter.dispose();
     super.dispose();
   }
 
   void _readPosition() {
     if (!_scroll.hasClients) return;
     _atBottom.value = _scroll.position.nearBottom(_slack);
+    // After the frame, not now: a jump reports here before the list has laid
+    // out the rows it moved to, and the rows it reads are the ones it left.
+    if (_chapterQueued) return;
+    _chapterQueued = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _chapterQueued = false;
+      if (mounted && _scroll.hasClients) _readChapter();
+    });
+  }
+
+  bool _chapterQueued = false;
+
+  /// Which chapter the view is in, from the prompts the list has built. One
+  /// built below the top means the one before it is the one being read, built
+  /// or not; none built at all — a reply taller than the window — leaves the
+  /// answer where it was.
+  void _readChapter() {
+    // At the end the last prompt can be too near the bottom ever to reach the
+    // top, and it is the one being read.
+    if (_chapters.isNotEmpty && _scroll.position.nearBottom(0)) {
+      _chapter.value = _chapters.length - 1;
+      return;
+    }
+    final top = _scroll.offset + 24;
+    int? at;
+    for (final (i, chapter) in _chapters.indexed) {
+      final offset = _revealOffset(chapter.id);
+      if (offset == null) continue;
+      if (offset <= top) {
+        at = i;
+      } else {
+        at ??= i == 0 ? 0 : i - 1;
+        break;
+      }
+    }
+    if (at != null) _chapter.value = at;
+  }
+
+  /// The scroll offset that puts [id]'s row at the top of the view, where the
+  /// list has built it.
+  double? _revealOffset(String id) {
+    final box = _chapterKeys[id]?.currentContext?.findRenderObject();
+    if (box == null || !box.attached) return null;
+    return RenderAbstractViewport.of(box).getOffsetToReveal(box, 0).offset;
+  }
+
+  /// Bring chapter [i] to the top. The list builds only what shows, so a
+  /// prompt off screen has no offset to scroll to: jump to where it would be
+  /// if every row were the same height, and look again once that has laid
+  /// out, until it is built.
+  ///
+  /// A scrub along the rail jumps rather than animates: it is one move of many,
+  /// and an animation per tick would trail behind the pointer.
+  void _goToChapter(int i, {bool scrubbing = false, int tries = 8}) {
+    if (!_scroll.hasClients || i >= _chapters.length) return;
+    _follow.detach();
+    final offset = _revealOffset(_chapters[i].id);
+    if (offset != null) {
+      final to = offset.clamp(0.0, _scroll.position.maxScrollExtent);
+      if (scrubbing) {
+        _scroll.jumpTo(to);
+      } else {
+        _scroll.animateTo(to,
+            duration: const Duration(milliseconds: 250), curve: Curves.easeOut);
+      }
+      return;
+    }
+    if (tries == 0) return;
+    final rows = _outline.value.rows;
+    final row = rows.indexOf(_chapters[i].id);
+    if (row < 0) return;
+    _scroll.jumpTo(_scroll.position.maxScrollExtent * row / rows.length);
+    _afterLayout((_) => _goToChapter(i, scrubbing: scrubbing, tries: tries - 1));
   }
 
   /// Once the list has been laid out, which is the first moment its extent is
@@ -797,6 +997,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
   }) {
     final lines = [..._details(chat.state), ...details];
     final barHeight = _barHeight(context, lines.length);
+    final entries = entriesOf(chat);
     final title = Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Column(
@@ -847,7 +1048,13 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
       body: _ReadableColumn(
         banner: banner,
         bottom: bottom,
-        child: _conversation(chat, view, source, editing, whenEmpty),
+        side: ValueListenableBuilder<_Outline>(
+          valueListenable: _outline,
+          builder: (context, outline, _) => ChapterRail(
+              chapters: outline.chapters, current: _chapter, onSelect: _goToChapter),
+        ),
+        sideWidth: ChapterRail.width,
+        child: _conversation(chat, entries, view, source, editing, whenEmpty),
       ),
     );
   }
@@ -920,12 +1127,11 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
         .value;
   }
 
-  Widget _conversation(Chat chat, ChatViewState view,
+  Widget _conversation(Chat chat, List<ConversationEntry> entries, ChatViewState view,
       ProviderListenable<ChatViewState> source, TurnDriver? editing, Widget whenEmpty) {
     final speechReady = ref.watch(speechReadyProvider);
     final reading = ref.watch(readAloudProvider);
     if (chat.messages.isEmpty) return whenEmpty;
-    final entries = entriesOf(chat);
     // While a turn runs, the controller refuses every edit.
     final mutable = editing != null && !view.isRunning;
     return Stack(
@@ -948,30 +1154,35 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
                       onTapLink: (href) => _openLink(context, href),
                     )),
                 MessageEntry(:final message, :final inOmadaSection, :final last) =>
-                  ActivitySource(
-                    live: source.select((v) => _liveMessage(v, message.id)),
-                    child: MessageBubble(
-                      chatId: widget.chatId,
-                      message: message,
-                      avatar: _avatarOf(chat, message),
-                      entoli: inOmadaSection,
-                      isWaiting: view.isRunning && last,
-                      waitingNotice: view.retry,
-                      waitingStatus: view.status,
-                      shellOutput: view.shellOutput[message.id],
-                      onTapLink: (href) => _openLink(context, href),
-                      threads: editing == null ? null : chat.branches[message.id],
-                      onThreadStep:
-                          mutable ? (step) => editing.stepThread(message.id, step) : null,
-                      onDelete: mutable ? () => editing.deleteThread(message.id) : null,
-                      onEdit: mutable && message.role == MessageRole.user
-                          ? (text) => editing.editAndResend(message.id, text)
-                          : null,
-                      onRegenerate: mutable ? () => editing.regenerate(message.id) : null,
-                      onSpeak: speechReady && message.hasText
-                          ? () => readAloud(context, ref, message.id, message.plainText)
-                          : null,
-                      isSpeaking: reading == message.id,
+                  KeyedSubtree(
+                    key: message.role == MessageRole.user
+                        ? _chapterKeys.putIfAbsent(message.id, GlobalKey.new)
+                        : null,
+                    child: ActivitySource(
+                      live: source.select((v) => _liveMessage(v, message.id)),
+                      child: MessageBubble(
+                        chatId: widget.chatId,
+                        message: message,
+                        avatar: _avatarOf(chat, message),
+                        entoli: inOmadaSection,
+                        isWaiting: view.isRunning && last,
+                        waitingNotice: view.retry,
+                        waitingStatus: view.status,
+                        shellOutput: view.shellOutput[message.id],
+                        onTapLink: (href) => _openLink(context, href),
+                        threads: editing == null ? null : chat.branches[message.id],
+                        onThreadStep:
+                            mutable ? (step) => editing.stepThread(message.id, step) : null,
+                        onDelete: mutable ? () => editing.deleteThread(message.id) : null,
+                        onEdit: mutable && message.role == MessageRole.user
+                            ? (text) => editing.editAndResend(message.id, text)
+                            : null,
+                        onRegenerate: mutable ? () => editing.regenerate(message.id) : null,
+                        onSpeak: speechReady && message.hasText
+                            ? () => readAloud(context, ref, message.id, message.plainText)
+                            : null,
+                        isSpeaking: reading == message.id,
+                      ),
                     ),
                   ),
               }),
