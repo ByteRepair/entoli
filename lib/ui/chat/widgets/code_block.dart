@@ -90,6 +90,43 @@ final _grammars = <String, Mode>{
 /// it never compiles a grammar.
 final _highlight = Highlight()..registerLanguages(_grammars);
 
+/// The grammar a workspace file is highlighted with, from its name: the
+/// extension as a grammar's own name or one of its aliases, which is how a
+/// fence names one too. A few names carry no extension, and a few extensions
+/// are a dialect no grammar lists.
+({String name, Mode mode})? grammarOfFile(String fileName) {
+  final base = fileName.split("/").last.toLowerCase();
+  final dot = base.lastIndexOf(".");
+  final key = _grammarByName[base] ??
+      (dot > 0 ? _grammarByExtension[base.substring(dot + 1)] ?? base.substring(dot + 1) : null);
+  final mode = key == null ? null : _highlight.getLanguage(key);
+  if (mode == null) return null;
+  for (final MapEntry(key: name, value: grammar) in _grammars.entries) {
+    if (identical(grammar, mode)) return (name: name, mode: mode);
+  }
+  return null;
+}
+
+const _grammarByName = {
+  "makefile": "makefile",
+  "gnumakefile": "makefile",
+  "dockerfile": "dockerfile",
+  "containerfile": "dockerfile",
+  "cmakelists.txt": "cmake",
+  ".bashrc": "bash",
+  ".zshrc": "bash",
+  ".profile": "bash",
+  ".env": "properties",
+};
+
+const _grammarByExtension = {
+  "jsonl": "json",
+  "cfg": "ini",
+  "conf": "ini",
+  "env": "properties",
+  "htm": "xml",
+};
+
 /// What `MarkdownBody` is given. One for the app rather than one per message:
 /// the builder holds nothing and is read only while markdown is parsed, and
 /// sharing it is also what lets the highlighted spans below be shared.

@@ -28,13 +28,21 @@ as paths and the listing under it is re-read.
 
 A text file is the one thing a tap does not leave the app for. `TextViewerPage`
 reads it through the same `FileSystem` the listing came from, so it is one page
-on every platform rather than three, and it is a viewer and nothing else — the
-file is the agent's output being read, not worked on. Highlighting is the
-obvious next thing to want and is deliberately not here, though the grammars for
-it already are: `CodeBlockBuilder` registers thirty-odd and `cachedSpanOf` is
-public. What is missing is a map from an extension to a grammar name, and a
-reason to believe that running one over 128 KB in a single span costs what
-running it over a fence does. The page is useful without either.
+on every platform rather than three. It opens as a preview: markdown rendered
+with the reply's style sheet, anything else in `re_editor`'s `CodeEditor`,
+read-only and highlighted by the grammar `grammarOfFile` picks from the name —
+the same thirty-one `CodeBlockBuilder` registers, found by a grammar's alias the
+way a fence names one. Edit turns the editor writable (markdown switches to its
+source), and the save is a plain write rather than `writeThroughRename`, since a
+rename makes a new file and drops the mode an agent gave its script. Wrapping
+and text size belong to the reader rather than the file, so they are held for
+the session rather than per page.
+
+Not Monaco, which was asked for: its Flutter wrapper is a webview, and
+`webview_flutter` has no Linux backend, so the one desktop this is developed on
+would have had none — besides shipping several MB of Monaco's JS.
+`re_editor` is pure Flutter from the authors of `re_highlight`, lays out only
+the lines on screen, and highlights in an isolate.
 
 The boundary between it and the hand-off is drawn twice, because a name is not
 evidence. `looksTextual` goes by the extension alone — a known one, or none at
@@ -50,15 +58,13 @@ what will still be on screen to say so if it fails. The app bar keeps that route
 out for the files that *are* text, since a `.md` is often wanted in a real
 editor.
 
-`textViewLimit` is why the read is a prefix rather than the file. A workspace
-holds logs with no upper bound on them, and what is drawn is one paragraph of
-unwrapped monospace, laid out in full whether it is scrolled to or not — so the
-first 128 KB is read and the page says the rest is there. That much text is
-around 100 ms of layout in the frame the read lands in, paid once on a tap and
-not again on a rebuild; the alternatives that cull are worse, since a
-`SelectionArea` over a lazy list re-registers a selectable per row on every
-scroll and costs more than the layout it saves. Reading past the cap only to
-throw it away would still have loaded it. The cap falls on a byte rather than a
+`textViewLimit` (256 KB) is where the page stops showing a file. A workspace
+holds logs with no upper bound on them, so only the head is read — enough to
+tell text from binary — and a file past it gets a pane with two buttons: open it
+in another app, or copy the whole of it, which is the one read of the full file
+and happens only on that tap. The head is never shown on its own: it is not the
+file, and an editor over it would cut the rest off on a save.
+The cap falls on a byte rather than a
 character, which is the one thing `readTextHead` has to undo before it decodes:
 a rune cut in half is otherwise a file that reads as binary.
 
