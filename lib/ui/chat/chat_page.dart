@@ -28,7 +28,7 @@ import "../widgets/scrolling.dart";
 import "chat_settings_page.dart";
 import "chat_controller.dart";
 import "mirror_controller.dart";
-import "widgets/activity_label.dart" show formatRemaining;
+import "widgets/activity_label.dart" show ActivitySource, LiveMessage, formatRemaining;
 import "widgets/chapter_rail.dart";
 import "widgets/composer.dart";
 import "widgets/paired_project_badges.dart";
@@ -902,6 +902,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
       context,
       chat: chat,
       view: view,
+      source: chatControllerProvider(widget.chatId),
       editing: notifier,
       details: const [],
       whenEmpty: _EmptyChat(project: chat.state.project, controller: _controller),
@@ -950,6 +951,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
       context,
       chat: chat,
       view: view,
+      source: mirrorChatControllerProvider(widget.chatId),
       // The device is the strip's to say.
       details: const [],
       editing: online ? driver : null,
@@ -986,6 +988,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
     BuildContext context, {
     required Chat chat,
     required ChatViewState view,
+    required ProviderListenable<ChatViewState> source,
     required List<Widget> details,
     required Widget whenEmpty,
     required Widget bottom,
@@ -1051,7 +1054,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
               chapters: outline.chapters, current: _chapter, onSelect: _goToChapter),
         ),
         sideWidth: ChapterRail.width,
-        child: _conversation(chat, entries, view, editing, whenEmpty),
+        child: _conversation(chat, entries, view, source, editing, whenEmpty),
       ),
     );
   }
@@ -1125,7 +1128,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
   }
 
   Widget _conversation(Chat chat, List<ConversationEntry> entries, ChatViewState view,
-      TurnDriver? editing, Widget whenEmpty) {
+      ProviderListenable<ChatViewState> source, TurnDriver? editing, Widget whenEmpty) {
     final speechReady = ref.watch(speechReadyProvider);
     final reading = ref.watch(readAloudProvider);
     if (chat.messages.isEmpty) return whenEmpty;
@@ -1155,28 +1158,31 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
                     key: message.role == MessageRole.user
                         ? _chapterKeys.putIfAbsent(message.id, GlobalKey.new)
                         : null,
-                    child: MessageBubble(
-                      chatId: widget.chatId,
-                      message: message,
-                      avatar: _avatarOf(chat, message),
-                      entoli: inOmadaSection,
-                      isWaiting: view.isRunning && last,
-                      waitingNotice: view.retry,
-                      waitingStatus: view.status,
-                      shellOutput: view.shellOutput[message.id],
-                      onTapLink: (href) => _openLink(context, href),
-                      threads: editing == null ? null : chat.branches[message.id],
-                      onThreadStep:
-                          mutable ? (step) => editing.stepThread(message.id, step) : null,
-                      onDelete: mutable ? () => editing.deleteThread(message.id) : null,
-                      onEdit: mutable && message.role == MessageRole.user
-                          ? (text) => editing.editAndResend(message.id, text)
-                          : null,
-                      onRegenerate: mutable ? () => editing.regenerate(message.id) : null,
-                      onSpeak: speechReady && message.hasText
-                          ? () => readAloud(context, ref, message.id, message.plainText)
-                          : null,
-                      isSpeaking: reading == message.id,
+                    child: ActivitySource(
+                      live: source.select((v) => _liveMessage(v, message.id)),
+                      child: MessageBubble(
+                        chatId: widget.chatId,
+                        message: message,
+                        avatar: _avatarOf(chat, message),
+                        entoli: inOmadaSection,
+                        isWaiting: view.isRunning && last,
+                        waitingNotice: view.retry,
+                        waitingStatus: view.status,
+                        shellOutput: view.shellOutput[message.id],
+                        onTapLink: (href) => _openLink(context, href),
+                        threads: editing == null ? null : chat.branches[message.id],
+                        onThreadStep:
+                            mutable ? (step) => editing.stepThread(message.id, step) : null,
+                        onDelete: mutable ? () => editing.deleteThread(message.id) : null,
+                        onEdit: mutable && message.role == MessageRole.user
+                            ? (text) => editing.editAndResend(message.id, text)
+                            : null,
+                        onRegenerate: mutable ? () => editing.regenerate(message.id) : null,
+                        onSpeak: speechReady && message.hasText
+                            ? () => readAloud(context, ref, message.id, message.plainText)
+                            : null,
+                        isSpeaking: reading == message.id,
+                      ),
                     ),
                   ),
               }),
@@ -1207,6 +1213,13 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
       ],
     );
   }
+  /// A message as an open activity drawer reads it.
+  static LiveMessage _liveMessage(ChatViewState view, String id) => (
+        message: view.chat?.messages.where((m) => m.id == id).firstOrNull,
+        shellOutput: view.shellOutput[id],
+        running: view.isRunning,
+      );
+
   /// What the bar says about the chat under its title, a line each. The
   /// conditions are here and nowhere else: [_barHeight] counts what this
   /// returns, so a line added here is one the bar makes room for.

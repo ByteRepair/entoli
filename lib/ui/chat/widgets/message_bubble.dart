@@ -511,11 +511,11 @@ class _MessageBubbleState extends State<MessageBubble> {
           // The block being written right now is what the turn is busy with.
           if (isLive(i) && part.durationMs == null) {
             flushRun();
-            rows.add(_label(ThinkingLabel(part: part, isLive: true)));
+            rows.add(_label(ThinkingLabel(part: part, at: i, isLive: true)));
             break;
           }
           if (runStart == -1) runStart = i;
-          run.add(_label(ThinkingLabel(part: part)));
+          run.add(_label(ThinkingLabel(part: part, at: i)));
         case ToolCallPart(:final toolCall):
           // A question to the user is important; so is a live call and a call
           // that came back non-zero. The rest join the run.

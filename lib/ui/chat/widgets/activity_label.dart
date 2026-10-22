@@ -1,24 +1,34 @@
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
+import "package:flutter_riverpod/misc.dart" show ProviderListenable;
 import "package:path/path.dart" as p;
 
 import "../../../core/config.dart"
     show instructionBlockHeader, instructionFileName;
 import "../../fonts.dart";
+import "../../widgets/scrolling.dart" show ScrollFollow;
 import "../../skills/skill_install_preview.dart";
 import "../../../domain/ask.dart";
 import "../../../domain/file_tools.dart";
 import "../../../domain/models.dart";
 import "../../../domain/tool_arg.dart";
 import "../../../providers.dart";
+import "message_bubble.dart" show StreamingCaret;
 
 /// What the model did before it answered, on a line of its own above the
 /// reply: thinking, and tool runs. Frameless, so it reads as a label until it
 /// is tapped, which opens the detail in a drawer.
+///
+/// While the block is being written its tail streams under the label, so the
+/// thinking is read as it happens rather than only once it is over.
 class ThinkingLabel extends StatelessWidget {
-  const ThinkingLabel({super.key, required this.part, this.isLive = false});
+  const ThinkingLabel({super.key, required this.part, this.at, this.isLive = false});
 
   final ReasoningPart part;
+
+  /// Where [part] sits in its message, which is what an open drawer finds it
+  /// by as the block grows. Null draws the drawer from [part] as it was.
+  final int? at;
 
   /// The model is writing this block right now.
   final bool isLive;
@@ -30,15 +40,96 @@ class ThinkingLabel extends StatelessWidget {
     return ms == null ? "View thinking" : "Thought for ${formatThinkingTime(ms)}";
   }
 
+  ActivityView? _follow(LiveMessage now) {
+    final parts = now.message?.parts;
+    final at = this.at;
+    if (parts == null || at == null || at >= parts.length) return null;
+    final part = parts[at];
+    if (part is! ReasoningPart) return null;
+    final live = now.running && part.durationMs == null;
+    return (
+      title: live ? "Thinking…" : "Thinking",
+      sections: [(label: null, body: part.text, isError: false)],
+      live: live,
+    );
+  }
+
+  void _open(BuildContext context) => showActivitySheet(
+        context,
+        title: isLive ? "Thinking…" : "Thinking",
+        icon: Icons.psychology_outlined,
+        sections: [(label: null, body: part.text, isError: false)],
+        follow: _follow,
+      );
+
   @override
   Widget build(BuildContext context) {
-    return _Label(
+    final label = _Label(
       icon: Icons.psychology_outlined,
       text: _text,
-      onTap: () => showActivitySheet(
-        context,
-        title: "Thinking",
-        sections: [(label: null, body: part.text, isError: false)],
+      onTap: () => _open(context),
+    );
+    if (!isLive || part.text.trim().isEmpty) return label;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        label,
+        _ThoughtTail(text: part.text, onTap: () => _open(context)),
+      ],
+    );
+  }
+}
+
+/// The last few lines of a thought being written, faded at the top so it
+/// reads as the end of something longer. The drawer has the whole of it.
+class _ThoughtTail extends StatelessWidget {
+  const _ThoughtTail({required this.text, required this.onTap});
+
+  final String text;
+  final VoidCallback onTap;
+
+  static const _lines = 4;
+
+  /// What is laid out per delta. Only the tail is ever shown, and laying out
+  /// a long thought whole every frame to show its last lines is the cost.
+  static const _tailChars = 800;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final style = theme.textTheme.bodySmall?.copyWith(
+      color: theme.colorScheme.onSurfaceVariant,
+      fontStyle: FontStyle.italic,
+    );
+    final lineHeight = (style?.fontSize ?? 12) * (style?.height ?? 1.4);
+    final tail = text.length > _tailChars
+        ? text.substring(text.length - _tailChars)
+        : text;
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(_labelPadX + _labelIcon + _labelGap, 0, _labelPadX, 6),
+        child: ShaderMask(
+          shaderCallback: (bounds) => const LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [Colors.transparent, Colors.black],
+            stops: [0, 0.45],
+          ).createShader(bounds),
+          blendMode: BlendMode.dstIn,
+          child: SizedBox(
+            height: lineHeight * _lines,
+            width: double.infinity,
+            // Reversed so the newest line is the one held in view.
+            child: SingleChildScrollView(
+              reverse: true,
+              physics: const NeverScrollableScrollPhysics(),
+              child: Text(tail.trim(), style: style),
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -81,9 +172,8 @@ class ToolLabel extends StatelessWidget {
       // below the message handles the no-text-yet case, so this only shows
       // where that one doesn't.
       iconWidget: showSpinner
-          ? SizedBox(
-              width: 15,
-              height: 15,
+          ? Padding(
+              padding: const EdgeInsets.all(1),
               child: CircularProgressIndicator(
                 strokeWidth: 2,
                 color: Theme.of(context).colorScheme.onSurfaceVariant,
@@ -93,19 +183,43 @@ class ToolLabel extends StatelessWidget {
       onTap: () => showActivitySheet(
         context,
         title: name ?? "Tool",
+        icon: Icons.terminal,
         mono: true,
-        sections: [
-          ..._runSections(call!, result),
-          if (result != null && result!.violations.isNotEmpty)
-            (
-              label: "Sandbox",
-              body: result!.violations.join("\n"),
-              isError: true,
-            ),
-        ],
+        sections: _sections(call, result, null),
+        follow: (now) {
+          final run = _runIn(now.message, call?.id ?? result!.callId);
+          if (run == null) return null;
+          final live = now.running && run.result == null;
+          return (
+            title: null,
+            sections: _sections(run.call ?? call, run.result, live ? now.shellOutput : null),
+            live: live,
+          );
+        },
       ),
     );
   }
+
+  static List<ActivitySection> _sections(
+          ToolCall? call, ToolResult? result, String? printing) =>
+      [
+        ..._runSections(call, result, printing: printing),
+        if (result != null && result.violations.isNotEmpty)
+          (label: "Sandbox", body: result.violations.join("\n"), isError: true),
+      ];
+}
+
+/// The call [id] names in [message] and the result answering it, as the
+/// message now stands. Null where neither is in it.
+({ToolCall? call, ToolResult? result})? _runIn(Message? message, String id) {
+  if (message == null) return null;
+  ToolCall? call;
+  for (final part in message.parts) {
+    if (part is ToolCallPart && part.toolCall.id == id) call = part.toolCall;
+  }
+  final result = message.toolResults[id];
+  if (call == null && result == null) return null;
+  return (call: call, result: result);
 }
 
 /// The drawer a tool run opens, whether it was drawn as a label or as a diff.
@@ -113,16 +227,17 @@ class ToolLabel extends StatelessWidget {
 /// nested read appended one to the result: the drawer says what the file held,
 /// and the instructions block — the model's reading, not the file's — lives
 /// in its own record's drawer instead. Cut at the last occurrence, since the
-/// block is appended at the tail.
-List<ActivitySection> _runSections(ToolCall call, ToolResult? result) {
+/// block is appended at the tail. [printing] is what a running command has
+/// printed so far, standing in for the output it has not returned yet.
+List<ActivitySection> _runSections(ToolCall? call, ToolResult? result, {String? printing}) {
   final output = result?.output;
-  String? shown = output;
+  String? shown = output ?? printing;
   if (output != null) {
     final at = output.lastIndexOf(instructionBlockHeader);
     if (at >= 0) shown = output.substring(0, at).trimRight();
   }
   return [
-    (label: "Arguments", body: call.argumentsText ?? call.argumentsJson, isError: false),
+    (label: "Arguments", body: call?.argumentsText ?? call?.argumentsJson, isError: false),
     (label: "Output", body: shown, isError: false),
     (label: "Error", body: result?.exceptionInfo, isError: true),
     (label: "Outcome", body: result?.permissionOutcome, isError: false),
@@ -296,21 +411,22 @@ class DiffTextLabel extends StatelessWidget {
           mono: true,
           sections: _runSections(call, result),
         ),
-        style: _labelStyle(theme.colorScheme.onSurfaceVariant, theme.textTheme.labelMedium),
+        style: _labelStyle(theme.colorScheme.onSurfaceVariant, _labelText(theme)),
         child: SingleChildScrollView(
           scrollDirection: Axis.horizontal,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(children: [
-                Icon(Icons.description_outlined, size: 15, color: theme.colorScheme.onSurfaceVariant),
-                const SizedBox(width: 6),
+                Icon(Icons.description_outlined, size: _labelIcon),
+                const SizedBox(width: _labelGap),
                 Text(title),
               ]),
+              const SizedBox(height: 4),
               for (final line in removed)
-                Text("- $line", style: TextStyle(fontFamily: monoFamily, color: red)),
+                Text("- $line", style: TextStyle(fontFamily: monoFamily, fontSize: 12.5, color: red)),
               for (final line in added)
-                Text("+ $line", style: TextStyle(fontFamily: monoFamily, color: green)),
+                Text("+ $line", style: TextStyle(fontFamily: monoFamily, fontSize: 12.5, color: green)),
             ],
           ),
         ),
@@ -521,14 +637,26 @@ class TaskLabel extends StatelessWidget {
       onTap: () => showActivitySheet(
         context,
         title: "Sub-agent @$agent",
-        sections: [
-          (label: "Prompt", body: prompt, isError: false),
-          (label: "Output", body: result?.output, isError: false),
-          (label: "Error", body: result?.exceptionInfo, isError: true),
-        ],
+        icon: Icons.account_tree_outlined,
+        sections: _sections(prompt, result),
+        follow: (now) {
+          final run = _runIn(now.message, call.id);
+          if (run == null) return null;
+          return (
+            title: null,
+            sections: _sections(prompt, run.result),
+            live: now.running && run.result == null,
+          );
+        },
       ),
     );
   }
+
+  static List<ActivitySection> _sections(String prompt, ToolResult? result) => [
+        (label: "Prompt", body: prompt, isError: false),
+        (label: "Output", body: result?.output, isError: false),
+        (label: "Error", body: result?.exceptionInfo, isError: true),
+      ];
 }
 
 /// A `websearch` or `webfetch` call, once it is history: the query or URL
@@ -558,15 +686,27 @@ class WebLabel extends StatelessWidget {
       onTap: () => showActivitySheet(
         context,
         title: search ? "Web search" : "Web fetch",
+        icon: search ? Icons.travel_explore_outlined : Icons.language_outlined,
         mono: true,
-        sections: [
-          (label: search ? "Query" : "URL", body: what, isError: false),
-          (label: search ? "Results" : "Content", body: result?.output, isError: false),
-          (label: "Error", body: result?.exceptionInfo, isError: true),
-        ],
+        sections: _sections(search, what, result),
+        follow: (now) {
+          final run = _runIn(now.message, call.id);
+          if (run == null) return null;
+          return (
+            title: null,
+            sections: _sections(search, what, run.result),
+            live: now.running && run.result == null,
+          );
+        },
       ),
     );
   }
+
+  static List<ActivitySection> _sections(bool search, String what, ToolResult? result) => [
+        (label: search ? "Query" : "URL", body: what, isError: false),
+        (label: search ? "Results" : "Content", body: result?.output, isError: false),
+        (label: "Error", body: result?.exceptionInfo, isError: true),
+      ];
 }
 
 /// A run of consecutive non-important activity labels (thinking and tool runs
@@ -604,8 +744,7 @@ class _ActivityGroupState extends State<ActivityGroup> {
               onPressed: () => setState(() => _collapsed = !_collapsed),
               icon: Icon(_collapsed ? Icons.expand_more : Icons.expand_less, size: 16),
               label: Text(_collapsed ? "Expand activities" : "Collapse activities"),
-              style: _labelStyle(theme.colorScheme.onSurfaceVariant,
-                  theme.textTheme.labelMedium?.copyWith(fontWeight: FontWeight.w600)),
+              style: _labelStyle(theme.colorScheme.onSurfaceVariant, _labelText(theme)),
             ),
           ),
           if (!_collapsed) ...widget.children,
@@ -796,88 +935,279 @@ class _Label extends StatelessWidget {
     final color = isError ? theme.colorScheme.error : theme.colorScheme.onSurfaceVariant;
     return Align(
       alignment: Alignment.centerLeft,
-      child: TextButton.icon(
+      child: TextButton(
         onPressed: onTap,
-        icon: iconWidget ?? Icon(icon, size: 15),
-        label: Text(text),
-        style: _labelStyle(color, theme.textTheme.labelMedium),
+        style: _labelStyle(color, _labelText(theme)),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SizedBox.square(
+              dimension: _labelIcon,
+              child: iconWidget ?? Icon(icon, size: _labelIcon),
+            ),
+            const SizedBox(width: _labelGap),
+            // One line: the label names what happened, the drawer says it.
+            Flexible(child: Text(text, maxLines: 1, overflow: TextOverflow.ellipsis)),
+            const SizedBox(width: 4),
+            Icon(Icons.chevron_right, size: 16, color: color.withValues(alpha: 0.6)),
+          ],
+        ),
       ),
     );
   }
 }
 
+/// The labels' type: the body size rather than Material's 12pt label tier,
+/// which read as squeezed against a reply in Source Serif, but no weight and
+/// the muted colour, so a label stays quieter than anything said.
+TextStyle? _labelText(ThemeData theme) =>
+    theme.textTheme.bodyMedium?.copyWith(fontSize: 13.5, height: 1.3);
+
+const double _labelIcon = 16;
+const double _labelGap = 10;
+const double _labelPadX = 10;
+
 /// The frameless, one-line button every label above a reply is drawn as.
 ButtonStyle _labelStyle(Color color, TextStyle? text) => TextButton.styleFrom(
       foregroundColor: color,
       textStyle: text,
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-      minimumSize: Size.zero,
+      padding: const EdgeInsets.symmetric(horizontal: _labelPadX, vertical: 7),
+      minimumSize: const Size(0, 34),
       tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-      visualDensity: VisualDensity.compact,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
     );
 
 typedef ActivitySection = ({String? label, String? body, bool isError});
 
+/// A message as it stands now, for a drawer left open while its turn runs.
+/// [running] is the room's: a block or a call with no end yet is live only
+/// while a turn is.
+typedef LiveMessage = ({Message? message, String? shellOutput, bool running});
+
+/// What an open drawer shows, re-read from the [LiveMessage] each time it
+/// changes. A null [title] keeps the one it opened with.
+typedef ActivityView = ({String? title, List<ActivitySection> sections, bool live});
+
+/// Where a label's drawer reads its message from once it is open. The label
+/// cannot be: it is rebuilt per delta, folded into a collapsed run when its
+/// block closes, and gone when the list scrolls it away, all while the drawer
+/// it opened is still up. Above each message on the chat page; absent, a
+/// drawer shows what it was opened with and nothing more.
+class ActivitySource extends InheritedWidget {
+  const ActivitySource({super.key, required this.live, required super.child});
+
+  final ProviderListenable<LiveMessage> live;
+
+  static ProviderListenable<LiveMessage>? of(BuildContext context) =>
+      context.getInheritedWidgetOfExactType<ActivitySource>()?.live;
+
+  // Read once, at the tap that opens a drawer, so nothing depends on it.
+  @override
+  bool updateShouldNotify(ActivitySource oldWidget) => false;
+}
+
 /// The drawer behind a label. Sections with nothing in them are left out, so
 /// a tool that returned nothing does not show an empty heading.
 ///
-/// It grows to what is in it, up to the whole screen: a tool's output is as
-/// long as it is, and a fraction of the height left empty below it is a
-/// fraction of the output not read. A modal route, so the back key closes it.
+/// It opens at most of the screen and grows to the whole of it: a drawer
+/// sized to a one-line output was a strip at the bottom of the window, and a
+/// fraction of the height left empty below a long one is a fraction of the
+/// output not read. On a wide window it is as wide as a reading column, not
+/// Material's 640. A modal route, so the back key closes it.
+///
+/// With [follow] it streams: what it shows is re-read from the message each
+/// time the message changes, and while [ActivityView.live] it keeps to the
+/// end of what is arriving until the reader scrolls back.
 Future<void> showActivitySheet(
   BuildContext context, {
   required String title,
   required List<ActivitySection> sections,
+  IconData? icon,
   bool mono = false,
+  ActivityView? Function(LiveMessage now)? follow,
 }) {
-  final filled = sections.where((s) => s.body != null && s.body!.trim().isNotEmpty).toList();
+  final source = follow == null ? null : ActivitySource.of(context);
   return showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
     useSafeArea: true,
     showDragHandle: true,
-    builder: (context) {
-      final theme = Theme.of(context);
-      return Padding(
-        padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(title, style: theme.textTheme.titleMedium),
-            const SizedBox(height: 8),
-            Flexible(
-              child: SingleChildScrollView(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    for (final section in filled) ...[
-                      if (section.label != null)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 8, bottom: 2),
-                          child: Text(
-                            section.label!,
-                            style: theme.textTheme.labelSmall
-                                ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-                          ),
-                        ),
-                      SelectableText(
-                        section.body!,
-                        style: theme.textTheme.bodyMedium?.copyWith(
-                          fontFamily: mono ? monoFamily : null,
-                          color: section.isError ? theme.colorScheme.error : null,
-                        ),
+    constraints: const BoxConstraints(maxWidth: 960),
+    builder: (context) => _ActivitySheet(
+      title: title,
+      icon: icon,
+      sections: sections,
+      mono: mono,
+      view: source == null || follow == null
+          ? null
+          : (ref) => follow(ref.watch(source)),
+    ),
+  );
+}
+
+class _ActivitySheet extends ConsumerStatefulWidget {
+  const _ActivitySheet({
+    required this.title,
+    required this.icon,
+    required this.sections,
+    required this.mono,
+    required this.view,
+  });
+
+  final String title;
+  final IconData? icon;
+  final List<ActivitySection> sections;
+  final bool mono;
+
+  /// What the drawer shows now, watched through the ref it is handed. Null
+  /// where there is nothing to follow.
+  final ActivityView? Function(WidgetRef ref)? view;
+
+  @override
+  ConsumerState<_ActivitySheet> createState() => _ActivitySheetState();
+}
+
+class _ActivitySheetState extends ConsumerState<_ActivitySheet> {
+  final _scroll = ScrollController();
+  late final _follow = ScrollFollow(_scroll);
+
+  /// How much of the screen the drawer takes before what is in it asks for
+  /// more.
+  static const _openAt = 0.6;
+
+  @override
+  void dispose() {
+    _scroll.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final now = widget.view?.call(ref);
+    final live = now?.live ?? false;
+    final title = now?.title ?? widget.title;
+    final filled = (now?.sections ?? widget.sections)
+        .where((s) => s.body != null && s.body!.trim().isNotEmpty)
+        .toList();
+    if (live) _follow.jumpIfFollowing();
+
+    final muted = theme.colorScheme.onSurfaceVariant;
+    final header = Row(
+      children: [
+        if (widget.icon != null) ...[
+          Icon(widget.icon, size: 20, color: muted),
+          const SizedBox(width: 10),
+        ],
+        Expanded(
+          child: Text(
+            title,
+            style: theme.textTheme.titleMedium,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+        if (live)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            child: SizedBox(
+              width: 16,
+              height: 16,
+              child: CircularProgressIndicator(strokeWidth: 2, color: muted),
+            ),
+          ),
+        IconButton(
+          tooltip: "Close",
+          icon: const Icon(Icons.close),
+          onPressed: () => Navigator.pop(context),
+        ),
+      ],
+    );
+
+    Widget body(ActivitySection section, {required bool last}) {
+      final style = theme.textTheme.bodyMedium?.copyWith(
+        fontFamily: widget.mono ? monoFamily : null,
+        color: section.isError ? theme.colorScheme.error : null,
+        height: 1.5,
+      );
+      final caret = live && last && !section.isError;
+      final text = caret
+          ? Text.rich(
+              TextSpan(text: section.body, children: [
+                WidgetSpan(
+                  alignment: PlaceholderAlignment.middle,
+                  child: StreamingCaret(
+                    color: theme.colorScheme.primary,
+                    height: style?.fontSize ?? 14,
+                  ),
+                ),
+              ]),
+              style: style,
+            )
+          : Text(section.body!, style: style);
+      if (!widget.mono) return text;
+      // Output is set on the surface a code block sits on, so where it starts
+      // and stops is clear against the labels around it.
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: theme.colorScheme.surfaceContainerHighest,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: text,
+      );
+    }
+
+    return LayoutBuilder(
+      builder: (context, constraints) => ConstrainedBox(
+        constraints: BoxConstraints(minHeight: constraints.maxHeight * _openAt),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 0, 8, 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              header,
+              const SizedBox(height: 4),
+              Flexible(
+                child: NotificationListener<ScrollNotification>(
+                  onNotification: _follow.onNotification,
+                  child: SingleChildScrollView(
+                    controller: _scroll,
+                    padding: const EdgeInsets.only(right: 12),
+                    child: SelectionArea(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          for (final (i, section) in filled.indexed) ...[
+                            if (section.label != null)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 12, bottom: 6),
+                                child: SelectionContainer.disabled(
+                                  child: Text(
+                                    section.label!,
+                                    style: theme.textTheme.labelMedium?.copyWith(
+                                      color: muted,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            body(section, last: i == filled.length - 1),
+                          ],
+                        ],
                       ),
-                    ],
-                  ],
+                    ),
+                  ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
-      );
-    },
-  );
+      ),
+    );
+  }
 }
 
 /// "12 seconds", "2 minutes 5 seconds" — what a label reads after "Thought for".

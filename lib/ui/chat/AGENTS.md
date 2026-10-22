@@ -355,10 +355,34 @@ in-memory: `ValueKey`ed on the run's first part index so a per-delta rebuild
 keeps the same expanded/collapsed state, but a reload starts collapsed the way
 every fresh view does.
 
-The drawer is sized by what is in it, up to the whole screen. It used to stop at
-seven tenths of the height, which is a tool's output cut short and a third of the
-screen left empty under it. It is a route, so the back key closes it and nothing
-had to be written for that.
+**A label is muted, not small.** Body-sized type in `onSurfaceVariant`, no
+weight, a 16pt icon and a faint chevron saying it opens, on a 34dp row: the
+12pt label tier on a compact button read as squeezed against the reply, and
+the colour and weight alone are enough to keep a label quieter than anything
+said. One line, ellipsised — the label names what happened, the drawer says it.
+
+**A thought streams where it is being written.** While a block is live its
+last few lines run under the "Thinking…" label, faded at the top, and go when
+it closes. Only the tail is laid out, since that is all that is shown and the
+whole message rebuilds per delta.
+
+The drawer opens at six tenths of the screen and grows with what is in it to
+the whole of it; sized to its content alone, a one-line output was a strip at
+the bottom of the window. On a wide window it is 960 wide rather than
+Material's 640. It is a route, so the back key closes it and nothing had to be
+written for that.
+
+**And it streams.** A label is the wrong thing to hold an open drawer's
+content: it is rebuilt per delta, folded into a collapsed run when its block
+closes, and gone when the list scrolls past it. So the chat page puts an
+`ActivitySource` above each message — a `select` of the chat's own view state
+down to that message, its running command's output and whether a turn runs —
+and a label hands the drawer a `follow` that re-reads its part from it: a
+thinking block by its index, a tool run by its call id. While what it follows
+is live the drawer says so beside its title, ends in a caret, and keeps to
+the end the way the conversation does (`ScrollFollow`); a running `bash`
+shows what it has printed so far as its output. With no source above — a
+bubble pumped alone — the drawer is what it was opened with.
 
 ### Selecting a reply, and copying it
 
