@@ -58,11 +58,12 @@ what will still be on screen to say so if it fails. The app bar keeps that route
 out for the files that *are* text, since a `.md` is often wanted in a real
 editor.
 
-`textViewLimit` is why the read is a prefix rather than the file. A workspace
-holds logs with no upper bound on them, so the first 256 KB is read and the page
-says the rest is there. The editor would cope with more — it lays out only what
-is on screen — but the rendered markdown is laid out whole, and a head is also
-why a truncated file cannot be edited: saving it would cut the rest off.
+`textViewLimit` (256 KB) is where the page stops showing a file. A workspace
+holds logs with no upper bound on them, so only the head is read — enough to
+tell text from binary — and a file past it gets a pane with two buttons: open it
+in another app, or copy the whole of it, which is the one read of the full file
+and happens only on that tap. The head is never shown on its own: it is not the
+file, and an editor over it would cut the rest off on a save.
 The cap falls on a byte rather than a
 character, which is the one thing `readTextHead` has to undo before it decodes:
 a rune cut in half is otherwise a file that reads as binary.

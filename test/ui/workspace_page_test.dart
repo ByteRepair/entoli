@@ -252,17 +252,27 @@ void main() {
       await fromMenu(tester, "Wrap lines");
     });
 
-    testWidgets("a file past the cap is cut off and says so", (tester) async {
+    testWidgets("a file past the cap is not shown, but can be opened or copied whole",
+        (tester) async {
+      final copied = clipboard(tester);
+      final big = "x" * (textViewLimit + 10);
       File("$root/big.log")
         ..createSync(recursive: true)
-        ..writeAsStringSync("x" * (textViewLimit + 10));
+        ..writeAsStringSync(big);
       await open(tester);
-
       await view(tester, "big.log");
 
-      expect(find.textContaining("Showing the first"), findsOneWidget);
-      expect(tester.widget<IconButton>(find.widgetWithIcon(IconButton, Icons.edit_outlined)).onPressed,
-          isNull);
+      expect(find.text("Too large to show here"), findsOneWidget);
+      expect(find.byType(CodeEditor), findsNothing);
+      expect(find.byTooltip("Edit"), findsNothing);
+
+      await tester.tap(find.text("Copy text"));
+      await settleIo(tester);
+      expect(copied, [big]);
+
+      await tester.tap(find.text("Open in another app"));
+      await settleIo(tester);
+      expect(app.handoff.opened, ["$root/big.log"]);
     });
 
     // The extension is only the first half of the rule: a `.log` the agent

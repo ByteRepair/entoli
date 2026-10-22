@@ -74,6 +74,7 @@ class _TextViewerPageState extends ConsumerState<TextViewerPage> {
       // hand-off back on the explorer, which is what stays on screen to say so
       // if it fails.
       if (content == null) return Navigator.of(context).pop(true);
+      if (content.truncated) return setState(() => _content = content);
       final controller = CodeLineEditingController.fromText(
         content.text,
         CodeLineOptions(
@@ -114,8 +115,20 @@ class _TextViewerPageState extends ConsumerState<TextViewerPage> {
             .showSnackBar(SnackBar(content: Text("Saved ${widget.name}")));
       });
 
-  /// A truncated file is only its head, and saving it would cut the rest off.
-  bool get _canEdit => _content != null && !_content!.truncated;
+  bool get _canEdit => _content != null && !_tooLarge;
+
+  /// Past the cap only the head was read, which is not the file, so nothing of
+  /// it is shown or edited.
+  bool get _tooLarge => _content?.truncated ?? false;
+
+  /// The whole file, read now for the clipboard alone when it is too large to
+  /// have been read for the page.
+  Future<void> _copy() => whileBusy(context, _busy, () async {
+        final text = _tooLarge
+            ? await ref.read(appConfigProvider).fs.file(widget.path).readAsString()
+            : _controller!.text;
+        if (mounted) await copyToClipboard(context, text, said: "Copied ${widget.name}");
+      });
 
   void _setScale(double scale) => setState(() => _textScale = scale.clamp(0.6, 2.4));
 
@@ -160,7 +173,7 @@ class _TextViewerPageState extends ConsumerState<TextViewerPage> {
                 _dirty ? "${widget.name} •" : widget.name,
                 overflow: TextOverflow.ellipsis,
               ),
-              actions: [
+              actions: _tooLarge ? null : [
                 if (_editing && _canEdit)
                   IconButton(
                     icon: const Icon(Icons.save_outlined),
@@ -176,9 +189,7 @@ class _TextViewerPageState extends ConsumerState<TextViewerPage> {
                 else
                   IconButton(
                     icon: const Icon(Icons.edit_outlined),
-                    tooltip: _content?.truncated ?? false
-                        ? "Too large to edit here"
-                        : "Edit",
+                    tooltip: "Edit",
                     onPressed: _canEdit ? () => setState(() => _editing = true) : null,
                   ),
                 _menu(content),
@@ -187,7 +198,6 @@ class _TextViewerPageState extends ConsumerState<TextViewerPage> {
             body: Column(
               children: [
                 BusyBar(_busy),
-                if (content != null && content.truncated) const _Truncated(),
                 Expanded(child: _body(content)),
               ],
             ),
@@ -217,8 +227,7 @@ class _TextViewerPageState extends ConsumerState<TextViewerPage> {
           ),
           PopupMenuItem(
             enabled: content != null,
-            value: () => copyToClipboard(context, _controller!.text,
-                said: content!.truncated ? "Copied what is shown" : "Copied ${widget.name}"),
+            value: _copy,
             child: const ListTile(
               leading: Icon(Icons.copy_all_outlined),
               title: Text("Copy"),
@@ -287,10 +296,32 @@ class _TextViewerPageState extends ConsumerState<TextViewerPage> {
         action: TextButton(onPressed: _retry, child: const Text("Try again")),
       );
     }
-    final controller = _controller;
-    if (content == null || controller == null) {
-      return const Center(child: CircularProgressIndicator());
+    if (content == null) return const Center(child: CircularProgressIndicator());
+    if (content.truncated) {
+      return EmptyPane(
+        icon: Icons.description_outlined,
+        title: "Too large to show here",
+        detail: "Files over ${formatSize(textViewLimit)} open in another app.",
+        action: Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          alignment: WrapAlignment.center,
+          children: [
+            FilledButton.icon(
+              onPressed: _handOff,
+              icon: const Icon(Icons.open_in_new),
+              label: const Text("Open in another app"),
+            ),
+            OutlinedButton.icon(
+              onPressed: _copy,
+              icon: const Icon(Icons.copy_all_outlined),
+              label: const Text("Copy text"),
+            ),
+          ],
+        ),
+      );
     }
+    final controller = _controller!;
     if (content.text.isEmpty && !_editing) {
       return const Center(child: Text("This file is empty"));
     }
@@ -377,24 +408,5 @@ class _TextViewerPageState extends ConsumerState<TextViewerPage> {
   void _retry() {
     setState(() => _error = null);
     _load();
-  }
-}
-
-class _Truncated extends StatelessWidget {
-  const _Truncated();
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Container(
-      width: double.infinity,
-      color: theme.colorScheme.surfaceContainerHighest,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      child: Text(
-        "Showing the first ${formatSize(textViewLimit)}. "
-        "Open the file in another app to read or edit the rest.",
-        style: theme.textTheme.bodySmall,
-      ),
-    );
   }
 }
