@@ -2,6 +2,7 @@ import "dart:io";
 
 import "package:flutter/material.dart";
 import "package:flutter_test/flutter_test.dart";
+import "package:re_editor/re_editor.dart";
 
 import "package:agent_chat/domain/workspace.dart";
 import "package:agent_chat/ui/chat/chat_settings_page.dart";
@@ -147,12 +148,22 @@ void main() {
       expect(app.handoff.opened, isEmpty);
     });
 
+    Future<void> fromMenu(WidgetTester tester, String item) async {
+      await tester.tap(find.byTooltip("More"));
+      await settleIo(tester);
+      await tester.tap(find.text(item));
+      await settleIo(tester);
+    }
+
+    CodeLineEditingController editor(WidgetTester tester) =>
+        tester.widget<CodeEditor>(find.byType(CodeEditor)).controller!;
+
     testWidgets("the app bar still opens it in another app", (tester) async {
       seed(files: ["notes.md"]);
       await open(tester);
       await view(tester, "notes.md");
 
-      await tester.tap(find.byTooltip("Open in another app"));
+      await fromMenu(tester, "Open in another app");
       await settleIo(tester);
 
       expect(app.handoff.opened, ["$root/notes.md"]);
@@ -165,10 +176,80 @@ void main() {
       await open(tester);
       await view(tester, "notes.md");
 
-      await tester.tap(find.byTooltip("Copy"));
-      await settleIo(tester);
+      await fromMenu(tester, "Copy");
 
       expect(copied, ["contents of notes.md"]);
+    });
+
+    testWidgets("code opens read-only in the editor until Edit", (tester) async {
+      seed(files: ["main.dart"]);
+      await open(tester);
+      await view(tester, "main.dart");
+
+      expect(editor(tester).text, "contents of main.dart");
+      expect(tester.widget<CodeEditor>(find.byType(CodeEditor)).readOnly, isTrue);
+
+      await tester.tap(find.byTooltip("Edit"));
+      await settleIo(tester);
+
+      expect(tester.widget<CodeEditor>(find.byType(CodeEditor)).readOnly, isFalse);
+    });
+
+    testWidgets("markdown previews rendered and edits as source", (tester) async {
+      seed(files: ["notes.md"]);
+      await open(tester);
+      await view(tester, "notes.md");
+      expect(find.byType(CodeEditor), findsNothing);
+
+      await tester.tap(find.byTooltip("Edit"));
+      await settleIo(tester);
+
+      expect(editor(tester).text, "contents of notes.md");
+    });
+
+    testWidgets("an edit is saved back to the file", (tester) async {
+      seed(files: ["main.dart"]);
+      await open(tester);
+      await view(tester, "main.dart");
+      await tester.tap(find.byTooltip("Edit"));
+      await settleIo(tester);
+
+      editor(tester).text = "void main() {}";
+      await settleIo(tester);
+      await tester.tap(find.byTooltip("Save"));
+      await settleIo(tester);
+
+      expect(File("$root/main.dart").readAsStringSync(), "void main() {}");
+    });
+
+    testWidgets("leaving with unsaved edits asks first", (tester) async {
+      seed(files: ["main.dart"]);
+      await open(tester);
+      await view(tester, "main.dart");
+      await tester.tap(find.byTooltip("Edit"));
+      await settleIo(tester);
+      editor(tester).text = "changed";
+      await settleIo(tester);
+
+      await tester.tap(find.byType(BackButton));
+      await settleIo(tester);
+      expect(find.text("Discard your changes?"), findsOneWidget);
+      await tester.tap(find.text("Discard"));
+      await settleIo(tester);
+
+      expect(find.text("Chat workspace"), findsOneWidget);
+      expect(File("$root/main.dart").readAsStringSync(), "contents of main.dart");
+    });
+
+    testWidgets("lines wrap from the menu", (tester) async {
+      seed(files: ["main.dart"]);
+      await open(tester);
+      await view(tester, "main.dart");
+
+      await fromMenu(tester, "Wrap lines");
+
+      expect(tester.widget<CodeEditor>(find.byType(CodeEditor)).wordWrap, isTrue);
+      await fromMenu(tester, "Wrap lines");
     });
 
     testWidgets("a file past the cap is cut off and says so", (tester) async {
@@ -180,6 +261,8 @@ void main() {
       await view(tester, "big.log");
 
       expect(find.textContaining("Showing the first"), findsOneWidget);
+      expect(tester.widget<IconButton>(find.widgetWithIcon(IconButton, Icons.edit_outlined)).onPressed,
+          isNull);
     });
 
     // The extension is only the first half of the rule: a `.log` the agent
