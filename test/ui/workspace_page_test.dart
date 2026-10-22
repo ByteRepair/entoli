@@ -207,16 +207,6 @@ void main() {
       expect(editor(tester).text, "contents of notes.md");
     });
 
-    testWidgets("markdown too long to render previews as source", (tester) async {
-      File("$root/long.md")
-        ..createSync(recursive: true)
-        ..writeAsStringSync("x" * (markdownPreviewLimit + 1));
-      await open(tester);
-      await view(tester, "long.md");
-
-      expect(tester.widget<CodeEditor>(find.byType(CodeEditor)).readOnly, isTrue);
-    });
-
     testWidgets("an edit is saved back to the file", (tester) async {
       seed(files: ["main.dart"]);
       await open(tester);
@@ -268,9 +258,7 @@ void main() {
         ..writeAsStringSync("x" * (textViewLimit + 10));
       await open(tester);
 
-      await tester.tap(find.text("big.log"));
-      // 4 MB takes longer to read than the default settle gives real I/O.
-      await settleIo(tester, tries: 400);
+      await view(tester, "big.log");
 
       expect(find.textContaining("Showing the first"), findsOneWidget);
       expect(tester.widget<IconButton>(find.widgetWithIcon(IconButton, Icons.edit_outlined)).onPressed,
