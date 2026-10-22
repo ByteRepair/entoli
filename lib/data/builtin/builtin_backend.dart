@@ -188,9 +188,13 @@ class BuiltinBackend implements AgentBackend {
     List<Message> history = const [],
     List<ConversationCompaction> compactions = const [],
     TurnSettings settings = const TurnSettings(),
+    SteerInbox? steers,
   }) =>
       _start(chatId, prompt,
-          history: history, compactions: compactions, settings: settings);
+          history: history,
+          compactions: compactions,
+          settings: settings,
+          steers: steers);
 
   @override
   Stream<AgentEvent> resumeTurn(
@@ -198,9 +202,13 @@ class BuiltinBackend implements AgentBackend {
     List<Message> history = const [],
     List<ConversationCompaction> compactions = const [],
     TurnSettings settings = const TurnSettings(),
+    SteerInbox? steers,
   }) =>
       _start(chatId, null,
-          history: history, compactions: compactions, settings: settings);
+          history: history,
+          compactions: compactions,
+          settings: settings,
+          steers: steers);
 
   /// The stream is returned rather than yielded, so the caller is listening
   /// before the turn starts: closing a controller nobody listens to never
@@ -211,12 +219,16 @@ class BuiltinBackend implements AgentBackend {
     List<Message> history = const [],
     List<ConversationCompaction> compactions = const [],
     required TurnSettings settings,
+    SteerInbox? steers,
   }) {
     final controller = StreamController<AgentEvent>();
     (_controllers[chatId] ??= {}).add(controller);
     _drained[controller] = Completer();
     unawaited(_runTurn(chatId, prompt, controller,
-        history: history, compactions: compactions, settings: settings));
+        history: history,
+        compactions: compactions,
+        settings: settings,
+        steers: steers));
     return controller.stream;
   }
 
@@ -231,6 +243,7 @@ class BuiltinBackend implements AgentBackend {
     List<Message> history = const [],
     List<ConversationCompaction> compactions = const [],
     required TurnSettings settings,
+    SteerInbox? steers,
   }) async {
     final project = settings.project;
     // Registered up front and removed by key in the finally: a parallel
@@ -420,6 +433,7 @@ class BuiltinBackend implements AgentBackend {
         session: session,
         viewer: settings.omadaMember,
         loadResource: _resourcesOf(chatId),
+        steers: steers,
         client: gatedClient,
         shell: shell,
         fs: config.fs,

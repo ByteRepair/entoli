@@ -152,6 +152,9 @@ sealed class SyncMessage with _$SyncMessage {
     required String chatId,
     required String text,
     @Default(<SyncFile>[]) List<SyncFile> files,
+    /// Said over a running turn: wait for it rather than steer it. An older
+    /// home device reads none, and queues as it always did.
+    @Default(false) bool queue,
   }) = SyncPromptSend;
 
   const factory SyncMessage.approvalRespond({

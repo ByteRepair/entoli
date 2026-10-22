@@ -93,6 +93,10 @@ List<VoiceLine> linesOf(MessageRole role, MessagePart part, [SpeakableText? grow
     // opened. It reads as what the agent's own command reads as.
     case ShellRunPart():
       return const [VoiceLine(VoiceLineKind.activity, _ranACommand)];
+    // The user's own words, where they landed in the reply.
+    case SteerPart(:final message):
+      final said = message.plainText.trim();
+      return said.isEmpty ? const [] : [VoiceLine(VoiceLineKind.said, said)];
     case ReasoningPart():
     case ToolResultPart():
     case FilePart():

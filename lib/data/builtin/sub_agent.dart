@@ -214,6 +214,7 @@ class SubAgentRunner {
           case StepLimitEvent():
           case InfoEvent():
           case InstructionsReadEvent():
+          case SteerEvent():
           case DoneEvent():
             break;
         }

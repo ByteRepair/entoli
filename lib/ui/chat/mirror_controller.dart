@@ -87,10 +87,20 @@ class MirrorChatController extends Notifier<ChatViewState>
   /// Throws [Undelivered] where it did not arrive: the composer has already
   /// cleared, so the page says so.
   @override
-  Future<void> send(String text, {List<Attachment> attachments = const []}) async {
-    final reply = await _hub.sendRemotePrompt(chatId, text, attachments: attachments);
+  Future<void> send(String text,
+      {List<Attachment> attachments = const [], bool queue = false}) async {
+    final reply = await _hub.sendRemotePrompt(chatId, text,
+        attachments: attachments, queue: queue);
     if (reply == null || !reply.ok) throw const Undelivered("The message did not reach the other device.");
   }
+
+  /// A say waiting for its turn is the home device's view state, which no
+  /// mirror is sent, so there is none here to act on.
+  @override
+  Future<void> queueSteer(String id) async {}
+
+  @override
+  Future<String?> withdrawSteer(String id) async => null;
 
   @override
   Future<void> resume() => _hub.resumeRemote(chatId);

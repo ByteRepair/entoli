@@ -214,6 +214,50 @@ class ErrorEvent extends AgentEvent {
   final bool retryable;
 }
 
+/// A message the user sent while the turn ran, taken into it at a step
+/// boundary: recorded as a [SteerPart] of the reply, and worded for the model
+/// as a user message after the results it arrived behind.
+class SteerEvent extends AgentEvent {
+  const SteerEvent(this.message);
+  final Message message;
+}
+
+/// What the user has said to a running turn and the turn has not read yet.
+/// The room offers; the agent takes at its next step boundary; whatever is
+/// left when the turn ends is the room's to queue. See "Steering a turn" in
+/// `lib/domain/room/AGENTS.md`.
+class SteerInbox {
+  final List<Message> _pending = [];
+  bool _closed = false;
+
+  /// False once the turn is over, when the say has to be queued instead.
+  bool offer(Message message) {
+    if (_closed) return false;
+    _pending.add(message);
+    return true;
+  }
+
+  /// Takes [id] back where the turn has not read it yet.
+  bool withdraw(String id) {
+    final at = _pending.indexWhere((m) => m.id == id);
+    if (at < 0) return false;
+    _pending.removeAt(at);
+    return true;
+  }
+
+  List<Message> take() {
+    final taken = List.of(_pending);
+    _pending.clear();
+    return taken;
+  }
+
+  /// No more offers; what was never read comes back.
+  List<Message> close() {
+    _closed = true;
+    return take();
+  }
+}
+
 /// The agent ran out of steps without finishing. Not an [ErrorEvent]: the turn
 /// gave up because it hit the step limit, not because something broke, so no
 /// [ErrorPart] is added to the message. The turn still ends as
@@ -524,10 +568,14 @@ abstract class AgentBackend {
   /// [prompt] is the message being logged for this turn, not the text of it —
   /// what the model is shown of a user turn is the whole message, attachments
   /// named rather than passed. See "The projection" in `lib/domain/AGENTS.md`.
+  ///
+  /// [steers] is what the user says to the turn while it runs, read at each
+  /// step boundary.
   Stream<AgentEvent> sendPrompt(String chatId, Message prompt,
       {List<Message> history,
       List<ConversationCompaction> compactions,
-      TurnSettings settings});
+      TurnSettings settings,
+      SteerInbox? steers});
 
   /// Carry on the turn [history] ends in. No prompt, because there is no new
   /// thing to say: the model is handed back what it had already done. Unlike
@@ -536,7 +584,8 @@ abstract class AgentBackend {
   Stream<AgentEvent> resumeTurn(String chatId,
       {List<Message> history,
       List<ConversationCompaction> compactions,
-      TurnSettings settings});
+      TurnSettings settings,
+      SteerInbox? steers});
 
   /// Drop the chat's live session so the next prompt starts a clean one,
   /// seeded with [history]. [compactions] say where the conversation is

@@ -577,10 +577,12 @@ class FakeBackend implements AgentBackend {
   Stream<AgentEvent> sendPrompt(String chatId, Message prompt,
       {List<Message> history = const [],
       List<ConversationCompaction> compactions = const [],
-      TurnSettings settings = const TurnSettings()}) async* {
+      TurnSettings settings = const TurnSettings(),
+      SteerInbox? steers}) async* {
     prompts.add((prompt: prompt, history: history, settings: settings));
+    this.steers = steers;
     yield* Stream.fromIterable(_next());
-    if (hold != null) await hold!.future;
+    yield* _held();
   }
 
   /// The same for `resumeTurn`, minus the prompt it does not have.
@@ -590,10 +592,39 @@ class FakeBackend implements AgentBackend {
   Stream<AgentEvent> resumeTurn(String chatId,
       {List<Message> history = const [],
       List<ConversationCompaction> compactions = const [],
-      TurnSettings settings = const TurnSettings()}) async* {
+      TurnSettings settings = const TurnSettings(),
+      SteerInbox? steers}) async* {
     resumes.add((history: history, settings: settings));
+    this.steers = steers;
     yield* Stream.fromIterable(_next());
-    if (hold != null) await hold!.future;
+    yield* _held();
+  }
+
+  /// The inbox of the turn opened last: what the user has said to it.
+  SteerInbox? steers;
+
+  final StreamController<AgentEvent> _pushed =
+      StreamController<AgentEvent>.broadcast();
+
+  /// Read what was said to the running turn, the way the agent does between
+  /// steps. Reaches a turn held open by [hold].
+  void deliverSteers() {
+    for (final said in steers?.take() ?? const <Message>[]) {
+      _pushed.add(SteerEvent(said));
+    }
+  }
+
+  /// While [hold] is set, the turn stays open and streams what is pushed.
+  Stream<AgentEvent> _held() {
+    final held = hold;
+    if (held == null) return const Stream.empty();
+    final out = StreamController<AgentEvent>();
+    final sub = _pushed.stream.listen(out.add);
+    held.future.whenComplete(() async {
+      await sub.cancel();
+      await out.close();
+    });
+    return out.stream;
   }
 
   final List<List<Message>> resets = [];

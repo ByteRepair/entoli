@@ -20,19 +20,25 @@ class Agent {
   Stream<AgentEvent> take(Message say,
           {required List<Message> history,
           required List<ConversationCompaction> compactions,
-          bool replaces = false}) =>
+          bool replaces = false,
+          SteerInbox? steers}) =>
       _repo.sendPrompt(chatId, say,
           history: history,
           compactions: compactions,
           replaces: replaces,
-          omadaMember: handle);
+          omadaMember: handle,
+          steers: steers);
 
   /// Carry on the turn [history] ends in.
   ///
   /// Pre and post as [take].
   Stream<AgentEvent> carryOn(
           {required List<Message> history,
-          required List<ConversationCompaction> compactions}) =>
+          required List<ConversationCompaction> compactions,
+          SteerInbox? steers}) =>
       _repo.resumeTurn(chatId,
-          history: history, compactions: compactions, omadaMember: handle);
+          history: history,
+          compactions: compactions,
+          omadaMember: handle,
+          steers: steers);
 }

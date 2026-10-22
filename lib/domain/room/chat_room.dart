@@ -10,6 +10,7 @@ import "../chat_repository.dart";
 import "../models.dart";
 import "../project_settings.dart" show OmadaOrdering;
 import "../prompt_library.dart" show nameOf;
+import "../shell.dart" show shellBypassCommand;
 import "../turn_recorder.dart";
 import "../wired_skill.dart";
 import "agent.dart";
@@ -212,8 +213,10 @@ class ChatRoom {
 
   /// The composer's own path: what it is holding becomes files under the chat
   /// before anything else, since from here on a prompt is its parts. Said
-  /// while a turn runs, it is appended to the log as it stands and dispatched
-  /// when the room settles — the log is the queue.
+  /// while a turn runs, it steers that turn — read at its next step — unless
+  /// [queue] asks for it to wait, or no running turn is its addressee's; a
+  /// queued say is appended to the log as it stands and dispatched when the
+  /// room settles — the log is the queue.
   ///
   /// A `/skill` flagged `invocation: callback` never reaches here as a prompt:
   /// it is checked before the room's guards, the way the `!` shell bypass is,
@@ -221,7 +224,8 @@ class ChatRoom {
   /// is the session the turn is rewriting underneath it. Where it is checked
   /// after that, the turn it runs goes through the room's machinery like any
   /// other, so the spinner, Stop and the composer's rules hold.
-  Future<void> send(String text, {List<Attachment> attachments = const []}) async {
+  Future<void> send(String text,
+      {List<Attachment> attachments = const [], bool queue = false}) async {
     await _ready;
     if (state.chat == null) return;
     final wired = wiredSkillFromText(text);
@@ -239,7 +243,8 @@ class ChatRoom {
     }
     final files = await _repo.saveAttachments(chatId, attachments);
     if (state.isRunning) {
-      await _sayLater(text, files);
+      final say = _composeSay(text, files);
+      if (queue || !_steer(say)) await _sayLater(say);
       return;
     }
     await _prompt(text, files: files);
@@ -251,26 +256,72 @@ class ChatRoom {
   /// log holds rather than composing a second one.
   final List<Message> _said = [];
 
-  Future<void> _sayLater(String text, List<MessagePart> files) async {
+  /// A say made while the room runs. The routing record rides it the moment
+  /// it lands — the same stamp a fresh send writes where the prompt is not on
+  /// the log yet.
+  Message _composeSay(String text, List<MessagePart> files) {
     final say = _repo.composeUserPrompt(text,
         project: state.chat?.state.project, files: files);
-    // The routing record rides the say the moment it lands — the same stamp a
-    // fresh send writes where the prompt is not on the log yet.
-    final userMsg = state.chat == null
+    final chat = state.chat;
+    return chat == null
         ? say
-        : say.copyWith(addressees: _roster(state.chat!).addressees(say));
-    // The say lands on the log through the room's one append funnel; state
-    // is re-read after the write, so what changed in flight is not ours to
-    // revert.
-    await _append(recordsOf([userMsg]));
+        : say.copyWith(addressees: _roster(chat).addressees(say));
+  }
+
+  /// Hand [say] to the running turn it addresses, to be read at that turn's
+  /// next step. False where there is none to take it: a command, a say naming
+  /// several members, or one whose addressee is not speaking — those queue.
+  bool _steer(Message say) {
+    final chat = state.chat;
+    if (chat == null || shellBypassCommand(say.plainText) != null) return false;
+    final roster = _roster(chat);
+    if (roster.mentioned(say).length > 1) return false;
+    final to = roster.answering(say);
+    final turn = _turns.values.firstWhereOrNull((t) => t.agent.handle == to);
+    if (turn == null || !turn.steers.offer(say)) return false;
+    _view = state.copyWith(steering: [...state.steering, say]);
+    return true;
+  }
+
+  /// Send a say still waiting for its turn to read it after the turn instead.
+  Future<void> queueSteer(String id) async {
+    final say = _unsteer(id);
+    if (say != null) await _sayLater(say);
+  }
+
+  /// Take back a say its turn has not read yet; null where it already has.
+  Message? withdrawSteer(String id) => _unsteer(id);
+
+  Message? _unsteer(String id) {
+    final say = state.steering.firstWhereOrNull((m) => m.id == id);
+    if (say == null || !_turns.values.any((t) => t.steers.withdraw(id))) {
+      return null;
+    }
+    _view = state.copyWith(steering: [
+      for (final m in state.steering)
+        if (m.id != id) m,
+    ]);
+    return say;
+  }
+
+  Future<void> _sayLater(Message say) async {
+    await _land(say);
+    if (state.chat == null) return;
+    _said.add(say);
+    _drainSaid();
+  }
+
+  /// Put [say] on the log and on screen, after whatever is there. It goes
+  /// through the room's one append funnel; state is re-read after the write,
+  /// so what changed in flight is not ours to revert.
+  Future<void> _land(Message say) async {
+    await _append(recordsOf([say]));
     final chat = state.chat;
     if (chat == null) return;
     _view = state.copyWith(
         chat: chat.copyWith(
-            messages: [...chat.messages, userMsg],
+            messages: [...chat.messages, say],
             state: chat.state.copyWith(updatedAt: DateTime.now())));
-    _said.add(userMsg);
-    _drainSaid();
   }
 
   /// What was said while a turn ran, in the order it was said: schedule each,
@@ -521,7 +572,8 @@ class ChatRoom {
     _listen(turn, agent.take(say,
         history: history,
         compactions: chat.compactions,
-        replaces: replacing != null));
+        replaces: replacing != null,
+        steers: turn.steers));
   }
 
   /// The turn's reply. Always role `assistant` — the role is the render
@@ -578,8 +630,12 @@ class ChatRoom {
     turn.finishing = false;
     turn.recorder.open(reply.id, existing: reply.parts);
 
-    _listen(turn,
-        agent.carryOn(history: chat.messages, compactions: chat.compactions));
+    _listen(
+        turn,
+        agent.carryOn(
+            history: chat.messages,
+            compactions: chat.compactions,
+            steers: turn.steers));
   }
 
   /// What a turn can be carried on from: an assistant's reply. A command's
@@ -695,6 +751,12 @@ class ChatRoom {
       case ImageEvent():
       case InstructionsReadEvent():
         break;
+      case SteerEvent(:final message):
+        // Read: it is the reply's from here, drawn where it landed.
+        _view = state.copyWith(steering: [
+          for (final m in state.steering)
+            if (m.id != message.id) m,
+        ]);
       case ToolResultEvent():
       case ShellRunEvent():
         // The pair completing is the live block's end: the result and the
@@ -855,6 +917,22 @@ class ChatRoom {
   Future<void> _endTurn(_RunningTurn turn, TurnEnd? reason) async {
     if (_disposed) return;
     final done = turn.done;
+    // What was said to the turn and never read goes after it, as a say made
+    // to wait would: dispatched below, or left on the log where the round was
+    // stopped. Landed while the turn still holds the room, so a send racing
+    // this queues behind it.
+    final unread = turn.steers.close();
+    if (unread.isNotEmpty) {
+      _view = state.copyWith(steering: [
+        for (final m in state.steering)
+          if (!unread.contains(m)) m,
+      ]);
+      for (final say in unread) {
+        await _land(say);
+        _said.add(say);
+      }
+      if (_disposed) return;
+    }
     _turns.remove(turn.replyId);
     // The settle reads how deep the round ran when this turn finished; the
     // entry is leaving the table, so the fact stays behind.
@@ -1128,6 +1206,10 @@ class _RunningTurn {
 
   /// The turn's stream subscription, cancelled in [ChatRoom._finishTurn].
   StreamSubscription<AgentEvent>? sub;
+
+  /// What the user says to this turn while it runs. Open across retry rounds,
+  /// closed at the turn's true end.
+  final SteerInbox steers = SteerInbox();
 
   /// This turn is being stopped rather than ended — see [ChatRoom.interrupt].
   bool interrupted = false;

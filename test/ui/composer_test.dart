@@ -16,10 +16,12 @@ void main() {
   final controller = TextEditingController();
   final sent = <String>[];
   final sentAttachments = <List<Attachment>>[];
+  final queued = <String>[];
 
   setUp(() {
     app = TestApp.create();
     controller.clear();
+    queued.clear();
     sent.clear();
     sentAttachments.clear();
   });
@@ -29,7 +31,8 @@ void main() {
   Future<void> pump(WidgetTester tester,
           {EdgeInsets bars = EdgeInsets.zero,
           String? workspace,
-          String? workspaceHome}) =>
+          String? workspaceHome,
+          bool agentSpeaking = false}) =>
       app.pump(
         tester,
         underSystemBars(
@@ -37,11 +40,12 @@ void main() {
           Scaffold(
             body: Composer(
               controller: controller,
-              agentSpeaking: false,
+              agentSpeaking: agentSpeaking,
               onSend: (text, attachments) {
                 sent.add(text);
                 sentAttachments.add(attachments);
               },
+              onQueue: (text, _) => queued.add(text),
               onAbort: () {},
               workspace: workspace,
               workspaceHome: workspaceHome,
@@ -186,6 +190,29 @@ void main() {
 
     expect(sent, ["hello"]);
     expect(controller.text, isEmpty);
+  });
+
+  testWidgets("over a running turn, Send steers and the other button waits",
+      (tester) async {
+    await pump(tester, agentSpeaking: true);
+    expect(find.byTooltip("Send after this turn (Alt+Enter)"), findsNothing);
+
+    await type(tester, "after");
+    await tester.tap(find.byTooltip("Send after this turn (Alt+Enter)"));
+    await settleIo(tester);
+    expect(queued, ["after"]);
+
+    await type(tester, "now");
+    await tester.tap(find.byIcon(Icons.send));
+    await settleIo(tester);
+    expect(sent, ["now"]);
+
+    await type(tester, "also after");
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.altLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.altLeft);
+    await settleIo(tester);
+    expect(queued, ["after", "also after"]);
   });
 
   Future<void> insertVia(WidgetTester tester, String label) async {

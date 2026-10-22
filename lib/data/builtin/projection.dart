@@ -95,7 +95,7 @@ Future<List<LlmMessage>> projectionOf(
   // are read — the summarized span's are what the summary replaced.
   // A reply's are the images its tools made, which ride their results.
   final files = await Future.wait(messages.asMap().entries.map((e) =>
-      e.key >= from && e.value.files.isNotEmpty
+      e.key >= from && _filesOf(e.value).isNotEmpty
           ? _attachments(e.value, load)
           : _noFiles));
   final projected = <LlmMessage>[];
@@ -205,9 +205,16 @@ String _userText(Message message) {
 
 final Future<Map<String, LlmAttachment>> _noFiles = Future.value(const {});
 
+/// A message's own files, and those of what the user said into it mid-turn.
+Iterable<FilePart> _filesOf(Message message) => [
+      ...message.files,
+      for (final steer in message.parts.whereType<SteerPart>())
+        ...steer.message.files,
+    ];
+
 /// By resource name, which is how a reply's [FilePart] finds its bytes.
 Future<Map<String, LlmAttachment>> _attachments(Message message, ResourceLoader load) async {
-  final loaded = await Future.wait(message.files.map((file) async {
+  final loaded = await Future.wait(_filesOf(message).map((file) async {
     final bytes = await load(file.resource);
     return bytes == null
         ? null
@@ -284,6 +291,9 @@ Iterable<LlmMessage> _assistant(
     // it off them.
     final images = <String, List<LlmAttachment>>{};
     String? lastCall;
+    // Said by the user after this response's results landed: it names no
+    // response, so it groups here, and goes after the results.
+    final steers = <Message>[];
 
     for (final part in response) {
       switch (part) {
@@ -320,6 +330,8 @@ Iterable<LlmMessage> _assistant(
           }
         case ToolResultPart():
           lastCall = null;
+        case SteerPart(:final message):
+          steers.add(message);
         case ArtifactPart():
         case SkillInstallPart():
         case ApprovalPart():
@@ -339,7 +351,10 @@ Iterable<LlmMessage> _assistant(
       }
     }
 
-    if (reasoning.isEmpty && text.isEmpty && calls.isEmpty) continue;
+    if (reasoning.isEmpty && text.isEmpty && calls.isEmpty) {
+      yield* _steered(steers, files);
+      continue;
+    }
 
     yield LlmMessage(
       role: LlmRole.assistant,
@@ -365,8 +380,19 @@ Iterable<LlmMessage> _assistant(
         attachments: images[call.id] ?? const [],
       );
     }
+    yield* _steered(steers, files);
   }
 }
+
+Iterable<LlmMessage> _steered(
+        List<Message> steers, Map<String, LlmAttachment> files) =>
+    steers.map((said) => LlmMessage(
+          role: LlmRole.user,
+          text: steerTurnText(_userText(said), at: said.createdAt),
+          attachments: [
+            for (final file in said.files) ?files[file.resource],
+          ],
+        ));
 
 /// The parts of one turn, split into the responses they came out of. A part
 /// naming no response — a result, an error — continues the one before it, since
@@ -400,6 +426,7 @@ String? _responseIdOf(MessagePart part) => switch (part) {
       SkillInstallPart() ||
       ApprovalPart() ||
       InstructionsPart() ||
+      SteerPart() ||
       ErrorPart() =>
         null,
     };

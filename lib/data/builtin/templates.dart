@@ -265,6 +265,14 @@ $recall""",
 String userTurnText(String text, {required DateTime at, required bool first}) =>
     _withNow(first ? _firstTask(text) : text, at);
 
+/// What the user said while the turn was running, read after the tool results
+/// it arrived behind. Said to be the user's, since on some providers it shares
+/// a message with those results.
+String steerTurnText(String text, {required DateTime at}) => _withNow(
+    "The user sent this while you were working. Take it into account in "
+    "what you do next:\n\n$text",
+    at);
+
 /// What a reply written by *another participant* reads as to this viewer's
 /// model: labeled with who wrote it, and marked as another agent's words so it
 /// cannot be mistaken for the human user speaking. A user-role message — the

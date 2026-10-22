@@ -611,6 +611,32 @@ class _MessageBubbleState extends State<MessageBubble> {
         case ErrorPart(:final message):
           flushRun();
           spoken.add(said("Error: $message", isError: true));
+        case SteerPart(:final message):
+          // What the user said while the turn ran, where the turn read it:
+          // their bubble, with the reply carrying on under it.
+          flushRun();
+          closeBubble();
+          rows.add(Align(
+            alignment: Alignment.centerRight,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.only(top: 4, right: 4, bottom: 2),
+                  child: Text(
+                    "You, while it worked",
+                    style: theme.textTheme.labelSmall
+                        ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                  ),
+                ),
+                _bubble(context, theme.colorScheme.primaryContainer,
+                    said: [if (message.hasText) said(message.plainText)],
+                    files: message.files.toList(),
+                    trailing: const []),
+              ],
+            ),
+          ));
       }
     }
     flushRun();

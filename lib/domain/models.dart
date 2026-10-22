@@ -478,6 +478,14 @@ sealed class MessagePart with _$MessagePart {
     required List<InstructionRef> files,
   }) = InstructionsPart;
 
+  /// A message the user sent while this turn ran, read by the model at the
+  /// step boundary it arrived before. Inside the reply rather than a message
+  /// of its own: the turn it steered is one reply, and a message between its
+  /// halves would split it in the log. The projection words it as a user
+  /// message after the results above it. See "Steering a turn" in
+  /// `lib/domain/room/AGENTS.md`.
+  const factory MessagePart.steer({required Message message}) = SteerPart;
+
   factory MessagePart.fromJson(Map<String, dynamic> json) => _$MessagePartFromJson(json);
 }
 
