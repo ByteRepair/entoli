@@ -50,7 +50,10 @@ class _TextViewerPageState extends ConsumerState<TextViewerPage> {
   static bool _wrap = false;
   static double _textScale = 1;
 
-  bool get _rendersMarkdown => _grammar?.name == "markdown";
+  /// Rendered markdown is laid out whole, where the editor lays out what is on
+  /// screen.
+  bool get _rendersMarkdown =>
+      _grammar?.name == "markdown" && (_content?.text.length ?? 0) <= markdownPreviewLimit;
 
   @override
   void initState() {

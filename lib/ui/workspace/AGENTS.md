@@ -59,10 +59,13 @@ out for the files that *are* text, since a `.md` is often wanted in a real
 editor.
 
 `textViewLimit` is why the read is a prefix rather than the file. A workspace
-holds logs with no upper bound on them, so the first 128 KB is read and the page
-says the rest is there. The editor would cope with more — it lays out only what
-is on screen — but the rendered markdown is laid out whole, and a head is also
-why a truncated file cannot be edited: saving it would cut the rest off.
+holds logs with no upper bound on them, so the first 4 MB is read and the page
+says the rest is there. 4 MB is where `re_editor` stops highlighting by itself,
+and the editor lays out only what is on screen, so the cost of going that high
+is the string in memory. Rendered markdown is laid out whole, so past
+`markdownPreviewLimit` (256 KB) a `.md` previews as its source in the read-only
+editor. A head is also why a truncated file cannot be edited: saving it would
+cut the rest off.
 The cap falls on a byte rather than a
 character, which is the one thing `readTextHead` has to undo before it decodes:
 a rune cut in half is otherwise a file that reads as binary.
