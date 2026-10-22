@@ -834,12 +834,68 @@ void main() {
           greaterThan(tester.getRect(find.byType(Composer)).right));
     });
 
+    testWidgets("an existing chat with one prompt has its tick on open", (tester) async {
+      useWindow(tester, const Size(1400, 900));
+      final chat = await seedLongChat(tester, messages: 2);
+      await open(tester, chat.state.id);
+
+      expect(find.byTooltip("line 0"), findsOneWidget);
+    });
+
     testWidgets("is gone where the margin has no room for it", (tester) async {
       useWindow(tester, const Size(850, 900));
       final chat = await seedLongChat(tester);
       await open(tester, chat.state.id);
 
       expect(find.byType(ChapterRail), findsNothing);
+    });
+
+    testWidgets("follows the conversation: a turn adds a tick, a deletion takes it",
+        (tester) async {
+      useWindow(tester, const Size(1400, 900));
+      final chat = await seedLongChat(tester);
+      await open(tester, chat.state.id);
+      final controller = app.container.read(chatControllerProvider(chat.state.id).notifier);
+
+      app.backend.scriptedEvents = [const TextDelta("sure"), const DoneEvent()];
+      await io(tester, () => controller.send("a new prompt"));
+      await settleIo(tester);
+
+      expect(find.byTooltip("a new prompt"), findsOneWidget);
+
+      await io(tester, () => controller.deleteThread("m38"));
+      await settleIo(tester);
+
+      expect(find.byTooltip("line 38"), findsNothing);
+      expect(find.byTooltip("a new prompt"), findsNothing);
+      expect(find.byTooltip("line 36"), findsOneWidget);
+    });
+
+    testWidgets("is the open chat's, when another is opened", (tester) async {
+      useWindow(tester, const Size(1400, 900));
+      final first = await seedLongChat(tester);
+      final second = await io(tester, () async {
+        final chat = await app.repo.createChat(title: "other");
+        final full = chat.copyWith(messages: [
+          for (final (i, text) in ["elsewhere", "and again"].indexed)
+            Message(
+              id: "o$i",
+              role: MessageRole.user,
+              createdAt: DateTime(2026, 2, 1, 0, i),
+              parts: [TextPart(text: text)],
+            ),
+        ]);
+        await app.writeChat(full);
+        return full;
+      });
+      await open(tester, first.state.id);
+      expect(find.byTooltip("line 0"), findsOneWidget);
+
+      app.container.read(selectedChatIdProvider.notifier).select(second.state.id);
+      await pumpUntil(tester, find.byTooltip("elsewhere"));
+
+      expect(find.byTooltip("line 0"), findsNothing);
+      expect(find.byTooltip("and again"), findsOneWidget);
     });
 
     testWidgets("a tick takes the view to its prompt", (tester) async {

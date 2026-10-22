@@ -928,7 +928,19 @@ centred whether it is there or not, and it is drawn only where the margin has
 room for it — `_ReadableColumn`'s `side`. A chapter is a prompt and the turn
 under it, so a branch anywhere in that turn — an edit at the prompt, a
 regenerate under it — puts a fork beside its tick (`chaptersOf`, off
-`Chat.branches`). Which one is being read is the last prompt at or above the
+`Chat.branches`). What it draws is fed from the chat's view state, not
+assigned while the page builds: a `listenManual` with `fireImmediately` hands
+it the chat as loaded, then every change — a turn, a deletion, a thread
+switched — and restarts when the chat id changes, since `_ChatBody` is not
+keyed per chat and its state outlives a switch. The tooltip is the prompt's
+first line, cut at fifty characters. **A press selects, not a tap**, and so
+does every move while pressed, so dragging a mouse or a finger along the rail
+scrubs the conversation prompt by prompt; a scrub jumps where a press
+animates. That is one `Listener` over the whole rail finding the tick by
+height, not a handler per tick — a pointer stays with what it went down on,
+so a tick's own handler never hears the drag reach the next. The rail does
+not scroll, since a drag on it is a scrub; its ticks close up instead when
+there are more than fit. Which one is being read is the last prompt at or above the
 top of the view, read after the frame rather than in the scroll listener: a
 jump reports before the list has laid out the rows it moved to. Going to one
 the list has not built jumps to where it would be if every row were one height
