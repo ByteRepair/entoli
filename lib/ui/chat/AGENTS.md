@@ -921,6 +921,21 @@ could not see, and it passed against a build that closed the app on a phone.
 Anything asserting about the back key needs `frameworkHandlesBack` beside the
 press.
 
+**The chapter rail** (`ChapterRail`) is a tick per prompt in the margin right
+of the column, the one being read picked out, the first line of each on hover.
+It is laid over the margin rather than beside the column, so the column stays
+centred whether it is there or not, and it is drawn only where the margin has
+room for it — `_ReadableColumn`'s `side`. A chapter is a prompt and the turn
+under it, so a branch anywhere in that turn — an edit at the prompt, a
+regenerate under it — puts a fork beside its tick (`chaptersOf`, off
+`Chat.branches`). Which one is being read is the last prompt at or above the
+top of the view, read after the frame rather than in the scroll listener: a
+jump reports before the list has laid out the rows it moved to. Going to one
+the list has not built jumps to where it would be if every row were one height
+and looks again once that has laid out, the same answer `_settleAtBottom`
+gives to the same estimate; it detaches the turn's follow, since no gesture
+said so.
+
 A chat opens at its latest message. `_settleAtBottom` jumps and then jumps
 again until the extent stops moving: a builder lays out only what shows, so the
 extent any one frame reports is an estimate and a single jump lands short of the

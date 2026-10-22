@@ -3,6 +3,7 @@ import "dart:math" as math;
 import "dart:typed_data";
 
 import "package:flutter/material.dart";
+import "package:flutter/rendering.dart" show RenderAbstractViewport;
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../domain/agent_backend.dart";
@@ -26,6 +27,7 @@ import "chat_settings_page.dart";
 import "chat_controller.dart";
 import "mirror_controller.dart";
 import "widgets/activity_label.dart" show formatRemaining;
+import "widgets/chapter_rail.dart";
 import "widgets/composer.dart";
 import "widgets/paired_project_badges.dart";
 import "widgets/plan_view.dart" show PlanButton;
@@ -60,24 +62,56 @@ const double _readableWidth = 760;
 /// than under it, or the conversation sits over a field twice its own width.
 /// Both pages with something to type in are this. [banner] is a full-width row
 /// above it, under the title bar, and stays while the conversation scrolls.
+///
+/// [side] goes in the margin to the right of the column, [sideWidth] wide, and
+/// only where the margin has that much room: it is laid over the margin rather
+/// than beside the column, so the column stays centred whether it is there or
+/// not.
 class _ReadableColumn extends StatelessWidget {
-  const _ReadableColumn({required this.child, required this.bottom, this.banner});
+  const _ReadableColumn({
+    required this.child,
+    required this.bottom,
+    this.banner,
+    this.side,
+    this.sideWidth = 0,
+  });
 
   final Widget child;
   final Widget bottom;
   final Widget? banner;
+  final Widget? side;
+  final double sideWidth;
+
+  /// Between the column's edge and [side].
+  static const _sideGap = 16.0;
 
   @override
   Widget build(BuildContext context) => Column(
         children: [
           ?banner,
           Expanded(
-            child: Center(
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: _readableWidth),
-                child: Column(children: [Expanded(child: child), bottom]),
-              ),
-            ),
+            child: LayoutBuilder(builder: (context, constraints) {
+              final column = Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: _readableWidth),
+                  child: Column(children: [Expanded(child: child), bottom]),
+                ),
+              );
+              final margin = (constraints.maxWidth - _readableWidth) / 2;
+              if (side == null || margin < sideWidth + _sideGap * 2) return column;
+              return Stack(
+                children: [
+                  Positioned.fill(child: column),
+                  Positioned(
+                    top: 0,
+                    bottom: 0,
+                    left: constraints.maxWidth - margin + _sideGap,
+                    width: sideWidth,
+                    child: side!,
+                  ),
+                ],
+              );
+            }),
           ),
         ],
       );
@@ -569,6 +603,15 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
   /// `setState` mid-drag would rebuild every visible bubble to swap it.
   final ValueNotifier<bool> _atBottom = ValueNotifier(true);
 
+  /// The prompts of the thread on screen, for the chapter rail, and the key on
+  /// each one's row: what the rail reads where it is and scrolls to.
+  List<Chapter> _chapters = const [];
+  final Map<String, GlobalKey> _chapterKeys = {};
+
+  /// The chapter being read — the last prompt at or above the top of the view.
+  /// A notifier so scrolling redraws the rail and nothing else.
+  final ValueNotifier<int?> _chapter = ValueNotifier(null);
+
   /// The chat the view has already been dropped to the bottom of.
   String? _opened;
 
@@ -603,13 +646,85 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
     _controller.dispose();
     _scroll.dispose();
     _atBottom.dispose();
+    _chapter.dispose();
     super.dispose();
   }
 
   void _readPosition() {
     if (!_scroll.hasClients) return;
     _atBottom.value = _scroll.position.nearBottom(_slack);
+    // After the frame, not now: a jump reports here before the list has laid
+    // out the rows it moved to, and the rows it reads are the ones it left.
+    if (_chapterQueued) return;
+    _chapterQueued = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _chapterQueued = false;
+      if (mounted && _scroll.hasClients) _readChapter();
+    });
   }
+
+  bool _chapterQueued = false;
+
+  /// Which chapter the view is in, from the prompts the list has built. One
+  /// built below the top means the one before it is the one being read, built
+  /// or not; none built at all — a reply taller than the window — leaves the
+  /// answer where it was.
+  void _readChapter() {
+    // At the end the last prompt can be too near the bottom ever to reach the
+    // top, and it is the one being read.
+    if (_chapters.isNotEmpty && _scroll.position.nearBottom(0)) {
+      _chapter.value = _chapters.length - 1;
+      return;
+    }
+    final top = _scroll.offset + 24;
+    int? at;
+    for (final (i, chapter) in _chapters.indexed) {
+      final offset = _revealOffset(chapter.id);
+      if (offset == null) continue;
+      if (offset <= top) {
+        at = i;
+      } else {
+        at ??= i == 0 ? 0 : i - 1;
+        break;
+      }
+    }
+    if (at != null) _chapter.value = at;
+  }
+
+  /// The scroll offset that puts [id]'s row at the top of the view, where the
+  /// list has built it.
+  double? _revealOffset(String id) {
+    final box = _chapterKeys[id]?.currentContext?.findRenderObject();
+    if (box == null || !box.attached) return null;
+    return RenderAbstractViewport.of(box).getOffsetToReveal(box, 0).offset;
+  }
+
+  /// Bring chapter [i] to the top. The list builds only what shows, so a
+  /// prompt off screen has no offset to scroll to: jump to where it would be
+  /// if every row were the same height, and look again once that has laid
+  /// out, until it is built.
+  void _goToChapter(int i, [int tries = 8]) {
+    if (!_scroll.hasClients || i >= _chapters.length) return;
+    _follow.detach();
+    final offset = _revealOffset(_chapters[i].id);
+    if (offset != null) {
+      _scroll.animateTo(
+        offset.clamp(0, _scroll.position.maxScrollExtent),
+        duration: const Duration(milliseconds: 250),
+        curve: Curves.easeOut,
+      );
+      return;
+    }
+    if (tries == 0) return;
+    final row = _rows.indexOf(_chapters[i].id);
+    if (row < 0) return;
+    _scroll.jumpTo(_scroll.position.maxScrollExtent * row / _rows.length);
+    _afterLayout((_) => _goToChapter(i, tries - 1));
+  }
+
+  /// The conversation's rows by message id, null where a row is not a
+  /// message — what the estimate in [_goToChapter] counts in.
+  List<String?> _rows = const [];
 
   /// Once the list has been laid out, which is the first moment its extent is
   /// worth reading.
@@ -793,6 +908,15 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
   }) {
     final lines = [..._details(chat.state), ...details];
     final barHeight = _barHeight(context, lines.length);
+    final entries = entriesOf(chat);
+    _rows = [for (final e in entries) e is MessageEntry ? e.message.id : null];
+    _chapters = chaptersOf(chat);
+    for (final c in _chapters) {
+      _chapterKeys.putIfAbsent(c.id, GlobalKey.new);
+    }
+    // After the frame: a chapter added or a thread switched moves which one
+    // the view is in, with no scroll to say so.
+    _afterLayout((_) {});
     final title = Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Column(
@@ -843,7 +967,9 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
       body: _ReadableColumn(
         banner: banner,
         bottom: bottom,
-        child: _conversation(chat, view, editing, whenEmpty),
+        side: ChapterRail(chapters: _chapters, current: _chapter, onSelect: _goToChapter),
+        sideWidth: ChapterRail.width,
+        child: _conversation(chat, entries, view, editing, whenEmpty),
       ),
     );
   }
@@ -916,12 +1042,11 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
         .value;
   }
 
-  Widget _conversation(
-      Chat chat, ChatViewState view, TurnDriver? editing, Widget whenEmpty) {
+  Widget _conversation(Chat chat, List<ConversationEntry> entries, ChatViewState view,
+      TurnDriver? editing, Widget whenEmpty) {
     final speechReady = ref.watch(speechReadyProvider);
     final reading = ref.watch(readAloudProvider);
     if (chat.messages.isEmpty) return whenEmpty;
-    final entries = entriesOf(chat);
     // While a turn runs, the controller refuses every edit.
     final mutable = editing != null && !view.isRunning;
     return Stack(
@@ -944,7 +1069,9 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
                       onTapLink: (href) => _openLink(context, href),
                     )),
                 MessageEntry(:final message, :final inOmadaSection, :final last) =>
-                  MessageBubble(
+                  KeyedSubtree(
+                    key: _chapterKeys[message.id],
+                    child: MessageBubble(
                       chatId: widget.chatId,
                       message: message,
                       avatar: _avatarOf(chat, message),
@@ -967,6 +1094,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
                           : null,
                       isSpeaking: reading == message.id,
                     ),
+                  ),
               }),
         ),
         // Only once the reader has left the end: up there a turn no longer

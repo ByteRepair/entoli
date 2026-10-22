@@ -22,6 +22,7 @@ import "package:agent_chat/ui/widgets/agent_picture.dart" show AgentPictureImage
 import "package:agent_chat/ui/chat/chat_controller.dart";
 import "package:agent_chat/ui/chat/chat_page.dart";
 import "package:agent_chat/ui/chat/plan_page.dart";
+import "package:agent_chat/ui/chat/widgets/chapter_rail.dart";
 import "package:agent_chat/ui/chat/widgets/composer.dart";
 import "package:agent_chat/ui/chat/widgets/view_only_bar.dart";
 import "package:agent_chat/ui/chat/widgets/message_bubble.dart";
@@ -813,6 +814,45 @@ void main() {
       expect(second, greaterThan(500));
     });
 
+  });
+
+  group("the chapter rail", () {
+    testWidgets("is beside the column where there is room, and the column stays put",
+        (tester) async {
+      useWindow(tester, const Size(1400, 900));
+      final chat = await seedLongChat(tester);
+      await open(tester, chat.state.id);
+
+      expect(find.byType(ChapterRail), findsOneWidget);
+      // A tick per prompt: forty messages, every other one the user's.
+      expect(find.byTooltip("line 0"), findsOneWidget);
+      expect(find.byTooltip("line 38"), findsOneWidget);
+      expect(find.byTooltip("line 1"), findsNothing);
+      // Laid over the margin, not beside the column: the column is centred.
+      expect(tester.getCenter(find.byType(Composer)).dx, closeTo(700, 1));
+      expect(tester.getRect(find.byType(ChapterRail)).left,
+          greaterThan(tester.getRect(find.byType(Composer)).right));
+    });
+
+    testWidgets("is gone where the margin has no room for it", (tester) async {
+      useWindow(tester, const Size(850, 900));
+      final chat = await seedLongChat(tester);
+      await open(tester, chat.state.id);
+
+      expect(find.byType(ChapterRail), findsNothing);
+    });
+
+    testWidgets("a tick takes the view to its prompt", (tester) async {
+      useWindow(tester, const Size(1400, 900));
+      final chat = await seedLongChat(tester);
+      await open(tester, chat.state.id);
+      expect(find.text("line 0"), findsNothing);
+
+      await tester.tap(find.byTooltip("line 0"));
+      await tester.pumpAndSettle();
+
+      expect(find.text("line 0"), findsOneWidget);
+    });
   });
 
   group("keeping up with a turn", () {
