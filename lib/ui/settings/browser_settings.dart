@@ -175,6 +175,33 @@ class _AgentBrowserSectionState extends ConsumerState<AgentBrowserSection> {
             );
           },
         ),
+        SwitchListTile(
+          title: const Text("Show the browser window"),
+          subtitle: const Text("Off, it runs hidden. The agent can still "
+              "open a window when it needs you to finish a check."),
+          value: ref.watch(appSettingsProvider).agentBrowserVisible,
+          onChanged: (value) async {
+            await ref
+                .read(appSettingsProvider.notifier)
+                .setAgentBrowserVisible(value);
+            // The running one is in the other mode; the next call starts
+            // one in this.
+            await browser.close();
+          },
+        ),
+        ValueListenableBuilder<bool>(
+          valueListenable: browser.running,
+          builder: (context, running, _) => ListTile(
+            title: const Text("Browser process"),
+            subtitle: Text(running
+                ? "Running. It quits by itself after ten idle minutes."
+                : "Not running. It starts when the agent opens a page."),
+            trailing: OutlinedButton(
+              onPressed: running ? () => unawaited(browser.close()) : null,
+              child: const Text("Quit"),
+            ),
+          ),
+        ),
         const Divider(),
         const SectionHeader(
           "Embedded browser",

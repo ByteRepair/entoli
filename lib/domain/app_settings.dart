@@ -82,6 +82,7 @@ class AppSettings {
     this.welcomeSeen = false,
     this.autoUpdate = true,
     this.agentBrowser,
+    this.agentBrowserVisible = false,
   });
 
   String? defaultModelId;
@@ -413,6 +414,11 @@ class AppSettings {
   /// `lib/data/builtin/AGENTS.md`.
   String? agentBrowser;
 
+  /// Whether that browser runs with a window. Hidden by default, with its
+  /// user agent cleared of "Headless"; the agent can still show it for the
+  /// user to finish a check.
+  bool agentBrowserVisible;
+
   static AppSettings load(AppConfig config) {
     final text = config.documents.read(config.settingsFile);
     if (text == null) return AppSettings();
@@ -511,6 +517,7 @@ class AppSettings {
         // gates are held to.
         autoUpdate: json["autoUpdate"] as bool? ?? true,
         agentBrowser: _orNull(json["agentBrowser"] as String?),
+        agentBrowserVisible: json["agentBrowserVisible"] as bool? ?? false,
       );
 
   /// `approveMode` is the current key. An older file has `approveCommands` as
@@ -619,5 +626,6 @@ class AppSettings {
       if (welcomeSeen) "welcomeSeen": welcomeSeen,
       if (!autoUpdate) "autoUpdate": autoUpdate,
       if (agentBrowser != null) "agentBrowser": agentBrowser,
+      if (agentBrowserVisible) "agentBrowserVisible": agentBrowserVisible,
     };
 }

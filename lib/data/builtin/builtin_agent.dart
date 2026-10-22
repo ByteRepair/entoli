@@ -75,6 +75,7 @@ String? runningTool(String name) => switch (name) {
       browserGotoToolName || browserSearchToolName => "Opening a page",
       browserPageTextToolName => "Reading the page",
       browserScreenshotToolName => "Taking a screenshot",
+      browserShowToolName => "Opening the browser window",
       taskToolName => "Working on a sub-task",
       triggerSetName => "Setting a trigger",
       artifactToolName => "Publishing the artifact",
@@ -331,6 +332,7 @@ List<LlmTool> agentTools({
   required bool offerMemory,
   bool offerImage = false,
   bool browserScreenshot = false,
+  bool browserShow = false,
   bool oneShot = false,
   List<PromptDocument>? participants,
   bool member = false,
@@ -376,7 +378,7 @@ List<LlmTool> agentTools({
       writableDirectoriesTool,
       if (offerImage) imageGenerationTool,
       if (caps.browser && !oneShot)
-        ...browserTools(screenshot: browserScreenshot),
+        ...browserTools(screenshot: browserScreenshot, show: browserShow),
     ];
 
 /// The agent loop: ask the model, run the command it asked for, show it the
@@ -413,6 +415,7 @@ class BuiltinAgent {
     this.webSearch,
     this.browser,
     this.seesImages = true,
+    this.browserHidden = false,
     this.profile,
     this.tone = Tone.none,
     this.citations = false,
@@ -710,6 +713,9 @@ class BuiltinAgent {
   /// screenshot: one that cannot would be sent each one as nothing.
   final bool seesImages;
 
+  /// Whether the browser runs with no window, which offers `browser_show`.
+  final bool browserHidden;
+
   /// The user's profile, appended to the system prompt as "About the user".
   /// Null means nothing is added. Rewritten every turn with the rest of the
   /// system prompt.
@@ -808,6 +814,7 @@ class BuiltinAgent {
         offerMemory: memoryStore != null,
         offerImage: generateImage != null && saveResource != null,
         browserScreenshot: seesImages && saveResource != null,
+        browserShow: browserHidden,
         oneShot: oneShot,
         participants: roomParticipants,
         member: viewer != null,
@@ -1069,7 +1076,8 @@ class BuiltinAgent {
         browserDragToolName ||
         browserScrollToolName ||
         browserBackToolName ||
-        browserPageTextToolName when _offered.browser =>
+        browserPageTextToolName ||
+        browserShowToolName when _offered.browser =>
           _browser,
         browserScreenshotToolName
             when _offered.browser && seesImages && saveResource != null =>
@@ -1442,6 +1450,9 @@ class BuiltinAgent {
       case browserBackToolName:
         label = "back";
         run = tab.back;
+      case browserShowToolName:
+        label = "window";
+        run = tab.show;
       default:
         final offset = number(args["offset"])?.toInt() ?? 0;
         label = offset == 0 ? "page" : "from $offset";

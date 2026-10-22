@@ -3,6 +3,7 @@ import "dart:convert";
 import "dart:io";
 import "dart:math";
 
+import "package:flutter/foundation.dart" show ValueListenable, ValueNotifier;
 import "package:path/path.dart" as p;
 
 import "../../core/log.dart";
@@ -22,6 +23,7 @@ class CdpBrowser extends AgentBrowser {
     required this.browserDir,
     required this.picked,
     required this.embedded,
+    required this.visible,
     this.idle = const Duration(minutes: 10),
   });
 
@@ -33,6 +35,9 @@ class CdpBrowser extends AgentBrowser {
 
   @override
   final EmbeddedBrowser embedded;
+
+  /// The setting: whether the browser runs with a window.
+  final bool Function() visible;
 
   final Duration idle;
 
@@ -51,10 +56,25 @@ class CdpBrowser extends AgentBrowser {
   @override
   bool get configured => _executable != null;
 
+  @override
+  bool get hidden => !visible();
+
+  final _isRunning = ValueNotifier(false);
+
+  @override
+  ValueListenable<bool> get running => _isRunning;
+
   _Running? _running;
   Future<_Running>? _starting;
   Timer? _idleTimer;
   final _tabs = <String, _CdpTab>{};
+
+  /// A hidden browser shown for the user by [_CdpTab.show], until it quits.
+  bool _shown = false;
+
+  /// Each executable's own user agent with "Headless" taken out, learned on
+  /// its first hidden launch this run.
+  final _userAgents = <String, String>{};
 
   @override
   BrowserTab tab(String chatId) =>
@@ -68,15 +88,23 @@ class CdpBrowser extends AgentBrowser {
         (throw const CdpException(
             "No browser is picked, or the picked one is gone: see Settings > "
             "Agent Browser."));
+    final windowed = _shown || visible();
     final running = _running;
-    if (running != null && running.executable == exe && !running.cdp.isClosed) {
+    if (running != null &&
+        running.executable == exe &&
+        running.windowed == windowed &&
+        !running.cdp.isClosed) {
       return running;
     }
-    if (running != null) await close();
-    return _starting ??= _launch(exe, _profile).then((started) {
+    if (running != null) await _quit();
+    return _starting ??= _start(exe, windowed: windowed).then((started) {
       _running = started;
+      _isRunning.value = true;
       unawaited(started.cdp.done.then((_) {
-        if (identical(_running, started)) _running = null;
+        if (!identical(_running, started)) return;
+        _running = null;
+        _shown = false;
+        _isRunning.value = false;
         for (final tab in _tabs.values) {
           tab._forget();
         }
@@ -85,26 +113,52 @@ class CdpBrowser extends AgentBrowser {
     }).whenComplete(() => _starting = null);
   }
 
+  /// A hidden launch says it is headless in its user agent, which a site's
+  /// bot check reads before anything else, so the first one asks the browser
+  /// for its own and launches again with the word taken out — by flag rather
+  /// than per tab, so a cross-site frame and a worker send it too.
+  Future<_Running> _start(String exe, {required bool windowed}) async {
+    if (windowed) return _launch(exe, _profile);
+    final known = _userAgents[exe];
+    if (known != null) {
+      return _launch(exe, _profile, headless: true, userAgent: known);
+    }
+    final probe = await _launch(exe, _profile, headless: true);
+    final agent =
+        (await probe.cdp.send("Browser.getVersion"))["userAgent"] as String? ?? "";
+    if (!agent.contains("HeadlessChrome")) {
+      _userAgents[exe] = agent;
+      return probe;
+    }
+    await _stop(probe);
+    final fixed = agent.replaceAll("HeadlessChrome", "Chrome");
+    _userAgents[exe] = fixed;
+    return _launch(exe, _profile, headless: true, userAgent: fixed);
+  }
+
+  /// Quit; the next start is hidden again if that is the setting.
   @override
   Future<void> close() async {
+    _shown = false;
+    await _quit();
+  }
+
+  Future<void> _quit() async {
     _idleTimer?.cancel();
     final running = _running;
     _running = null;
+    _isRunning.value = false;
     for (final tab in _tabs.values) {
       tab._forget();
     }
-    if (running == null) return;
-    try {
-      await running.cdp.send("Browser.close", timeout: const Duration(seconds: 5));
-    } catch (_) {
-      // Gone already, or not answering: the kill below covers both.
-    }
-    await running.cdp.close();
-    await running.process.exitCode
-        .timeout(const Duration(seconds: 5), onTimeout: () {
-      running.process.kill();
-      return -1;
-    });
+    if (running != null) await _stop(running);
+  }
+
+  /// Quit the hidden browser so the next start comes up with a window.
+  Future<void> _showWindow() async {
+    if (_running?.windowed ?? false) return;
+    await _quit();
+    _shown = true;
   }
 
   @override
@@ -123,15 +177,7 @@ class CdpBrowser extends AgentBrowser {
     try {
       final started = await _launch(exe, probe, headless: true);
       await started.cdp.send("Browser.getVersion");
-      try {
-        await started.cdp.send("Browser.close");
-      } catch (_) {}
-      await started.cdp.close();
-      await started.process.exitCode
-          .timeout(const Duration(seconds: 5), onTimeout: () {
-        started.process.kill();
-        return -1;
-      });
+      await _stop(started);
       return exe;
     } finally {
       try {
@@ -142,11 +188,27 @@ class CdpBrowser extends AgentBrowser {
 }
 
 class _Running {
-  _Running(this.executable, this.process, this.cdp);
+  _Running(this.executable, this.process, this.cdp, {required this.windowed});
 
   final String executable;
   final Process process;
   final CdpConnection cdp;
+  final bool windowed;
+}
+
+/// Ask the browser to quit, and kill it where it will not.
+Future<void> _stop(_Running running) async {
+  try {
+    await running.cdp.send("Browser.close", timeout: const Duration(seconds: 5));
+  } catch (_) {
+    // Gone already, or not answering: the kill below covers both.
+  }
+  await running.cdp.close();
+  await running.process.exitCode
+      .timeout(const Duration(seconds: 5), onTimeout: () {
+    running.process.kill(ProcessSignal.sigkill);
+    return -1;
+  });
 }
 
 /// The AppImage runtime's variables describe this app, not the browser being
@@ -157,7 +219,7 @@ const _appImageVars = {"APPIMAGE", "APPDIR", "ARGV0", "OWD"};
 /// The port is read from `DevToolsActivePort`, which the browser writes into
 /// the profile once it listens: no port is guessed, so none can be taken.
 Future<_Running> _launch(String exe, String profile,
-    {bool headless = false}) async {
+    {bool headless = false, String? userAgent}) async {
   await Directory(profile).create(recursive: true);
   final portFile = File(p.join(profile, "DevToolsActivePort"));
   if (await portFile.exists()) await portFile.delete();
@@ -169,7 +231,11 @@ Future<_Running> _launch(String exe, String profile,
       "--no-first-run",
       "--no-default-browser-check",
       "--window-size=1280,900",
+      // Remote debugging alone sets `navigator.webdriver`, window or none, and
+      // it is the first thing a bot check reads.
+      "--disable-blink-features=AutomationControlled",
       if (headless) "--headless=new",
+      if (userAgent != null) "--user-agent=$userAgent",
       "about:blank",
     ],
     environment: {
@@ -199,7 +265,8 @@ Future<_Running> _launch(String exe, String profile,
       if (lines.length >= 2) {
         final url = Uri.parse("ws://127.0.0.1:${lines[0].trim()}${lines[1].trim()}");
         try {
-          return _Running(exe, process, await CdpConnection.connect(url));
+          return _Running(exe, process, await CdpConnection.connect(url),
+              windowed: !headless);
         } catch (error) {
           process.kill();
           throw CdpException("The browser would not take a connection: $error");
@@ -653,6 +720,27 @@ class _CdpTab implements BrowserTab {
     return out.toString().trimRight();
   }
 
+  /// Reopened at the page this tab was on: a hidden browser has no window to
+  /// raise, so it is quit and started again with one, on the same profile —
+  /// the cookies a check leaves are kept for when it is hidden again.
+  @override
+  Future<String> show() async {
+    String? url;
+    if (_page != null) {
+      try {
+        url = await _eval("location.href") as String?;
+      } catch (_) {
+        // Nothing to come back to: the window opens blank.
+      }
+    }
+    await _browser._showWindow();
+    if (url == null || url == "about:blank") {
+      await _attach();
+      return "The browser window is open.";
+    }
+    return goto(url);
+  }
+
   @override
   Future<BrowserShot> screenshot({int? ref}) async {
     final Map<String, dynamic> clip;
@@ -784,5 +872,6 @@ bool looksLikeChallenge(String title, String text, List<String> frames) {
 const challengeNote = "This looks like a human-verification check. Its "
     "widget is usually a frame listed above, which has no numbered elements "
     "of its own: where you can take a screenshot, do, then click or drag "
-    "where it shows by x and y. If it will not pass after a few tries, ask "
-    "the user to complete it in the browser window, then carry on.";
+    "where it shows by x and y. If it will not pass after a few tries, call "
+    "browser_show if the browser is hidden, ask the user to complete it in "
+    "the window, then carry on.";

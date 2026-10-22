@@ -606,6 +606,9 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
   Future<void> setAgentBrowser(String? value) =>
       _update((s) => s.agentBrowser = value);
 
+  Future<void> setAgentBrowserVisible(bool value) =>
+      _update((s) => s.agentBrowserVisible = value);
+
   /// Which project the assistant gesture opens a chat in. Null is the default
   /// project.
   Future<void> setAssistantProject(String? project) =>

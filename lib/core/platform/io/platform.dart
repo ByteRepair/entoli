@@ -216,6 +216,7 @@ AgentBrowser createAgentBrowser(AppConfig config, String cacheDir) {
   return CdpBrowser(
     browserDir: dir,
     picked: () => AppSettings.load(config).agentBrowser,
+    visible: () => AppSettings.load(config).agentBrowserVisible,
     embedded: HeliumDownload(dir, client: tlsClient),
   );
 }

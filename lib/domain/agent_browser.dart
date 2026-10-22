@@ -1,5 +1,7 @@
 import "dart:typed_data";
 
+import "package:flutter/foundation.dart" show ValueListenable, ValueNotifier;
+
 import "download.dart";
 
 /// The browser the agent drives: a real one, with a window the user can see
@@ -19,6 +21,13 @@ abstract class AgentBrowser {
   /// Whether a browser is picked and there to launch: what offers the tools.
   /// Asked per turn, so a pick reaches the next turn without a restart.
   bool get configured;
+
+  /// Whether it runs with no window: the setting's default. A hidden browser
+  /// can still be shown for the user to finish a check, until it next quits.
+  bool get hidden;
+
+  /// Whether a browser process is up, for the settings page's Quit.
+  ValueListenable<bool> get running;
 
   /// The tab [chatId] drives, opened on first use. One tab per chat, so two
   /// chats running at once do not navigate each other's page.
@@ -89,6 +98,10 @@ abstract class BrowserTab {
   /// The whole page's text and elements, from character [offset] on.
   Future<String> pageText({int offset = 0});
 
+  /// Bring the browser up with a window on this page, for the user to finish
+  /// what the agent cannot. It goes back to hidden the next time it quits.
+  Future<String> show();
+
   /// The viewport, or the element [ref] alone, as a PNG at CSS-pixel scale.
   Future<BrowserShot> screenshot({int? ref});
 
@@ -120,6 +133,14 @@ class UnavailableAgentBrowser extends AgentBrowser {
 
   @override
   bool get configured => false;
+
+  @override
+  bool get hidden => true;
+
+  static final _notRunning = ValueNotifier(false);
+
+  @override
+  ValueListenable<bool> get running => _notRunning;
 
   @override
   BrowserTab tab(String chatId) =>

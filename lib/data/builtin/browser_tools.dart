@@ -149,10 +149,21 @@ const browserScreenshotTool = LlmTool(
   },
 );
 
+const browserShowToolName = "browser_show";
+
+const browserShowTool = LlmTool(
+  name: browserShowToolName,
+  description: "Open the browser, which runs hidden, in a window on the "
+      "current page, so the user can finish what you cannot, such as a "
+      "human-verification check. Then ask them to, and carry on once they "
+      "say it is done.",
+  schema: {"type": "object", "properties": {}},
+);
+
 /// The tools, in the order they are offered. [screenshot] only where the
 /// model reads images: one that cannot would be paying for pictures it is
-/// sent as nothing.
-List<LlmTool> browserTools({required bool screenshot}) => [
+/// sent as nothing. [show] only where the browser runs hidden.
+List<LlmTool> browserTools({required bool screenshot, bool show = false}) => [
       browserGotoTool,
       browserSearchTool,
       browserClickTool,
@@ -162,4 +173,5 @@ List<LlmTool> browserTools({required bool screenshot}) => [
       browserBackTool,
       browserPageTextTool,
       if (screenshot) browserScreenshotTool,
+      if (show) browserShowTool,
     ];

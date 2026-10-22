@@ -676,7 +676,21 @@ to `DevToolsActivePort` in the profile — nothing is guessed, so nothing can be
 taken. The AppImage variables are stripped from its environment, as from a
 command's: Helium's own AppImage runtime would read ours. A launch that exits
 0 at once is a browser handing off to a copy already open on that profile, and
-is said as that.
+is said as that. Settings > Agent Browser's Quit is `close()`: `Browser.close`
+over the protocol, then a kill if it has not gone in five seconds.
+
+**Hidden by default** (`agentBrowserVisible` off, written only when on): the
+browser runs `--headless=new`, which is the real browser with no window, and
+says so in its user agent — `HeadlessChrome`, the first thing a bot check
+reads. So the first hidden launch of an executable each run asks it for its
+user agent, quits, and launches again with `--user-agent` set to the same
+string with `Chrome` in its place; by flag rather than per tab, so a
+cross-site frame and a worker send it too. Every launch, window or none,
+passes `--disable-blink-features=AutomationControlled`: remote debugging alone
+sets `navigator.webdriver`, the second thing such a check reads. A hidden
+browser has no window to hand a check to the user in, so `browser_show` —
+offered only while hidden — quits it and starts it again with one, on the same
+profile and page; it is hidden again from its next quit, idle or by hand.
 
 **One tab per chat**, so two turns at once do not navigate each other; a tab
 the user closes is opened again on the next call, and is brought to the front

@@ -1,7 +1,7 @@
 ## Using the browser
 
-The `browser_*` tools drive a real browser window on the user's machine, with
-its own logins and an ad blocker. Prefer `webfetch` for reading a plain page;
+The `browser_*` tools drive a real browser on the user's machine, with its
+own logins and an ad blocker; it may run without a window. Prefer `webfetch` for reading a plain page;
 use the browser where `webfetch` fails, the page needs JavaScript or a login,
 or you have to click, type or fill a form. Each call answers with what is in
 view: the page's interactive elements numbered `[n]`, which `browser_click`

@@ -446,6 +446,7 @@ class BuiltinBackend implements AgentBackend {
         webSearch: webSearch,
         browser: caps.browser ? browser.tab(chatId) : null,
         seesImages: target.info?.readsImages ?? true,
+        browserHidden: browser.hidden,
         profile: settings.profile,
         tone: settings.tone,
         citations: settings.citations,

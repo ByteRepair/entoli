@@ -77,6 +77,12 @@ class FakeBrowserTab implements BrowserTab {
   }
 
   @override
+  Future<String> show() async {
+    calls.add("show");
+    return "shown";
+  }
+
+  @override
   Future<String> describeTarget({int? ref, double? x, double? y}) async =>
       '[$ref] button "Buy now" on https://shop.example/cart';
 }
@@ -113,6 +119,7 @@ void main() {
     BrowserTab? tab,
     bool browser = true,
     bool seesImages = true,
+    bool hidden = false,
     bool oneShot = false,
     ApproveMode approveMode = ApproveMode.never,
     PermissionClassifier? classifier,
@@ -141,6 +148,7 @@ void main() {
           commands: true, webSearch: true, disabled: const {}, browser: browser),
       browser: tab,
       seesImages: seesImages,
+      browserHidden: hidden,
       oneShot: oneShot,
       classifier: classifier,
       webSearch: webSearch ?? FakeWebSearch(),
@@ -167,6 +175,20 @@ void main() {
           .toList();
       expect(offered(blind), contains(browserGotoToolName));
       expect(offered(blind), isNot(contains(browserScreenshotToolName)));
+    });
+
+    test("showing the window is offered only where it is hidden", () async {
+      final hidden = FakeLlmClient([[finish]]);
+      await agentOver(hidden, tab: FakeBrowserTab(), hidden: true)
+          .run(userMessage("hi"))
+          .toList();
+      expect(offered(hidden), contains(browserShowToolName));
+
+      final shown = FakeLlmClient([[finish]]);
+      await agentOver(shown, tab: FakeBrowserTab())
+          .run(userMessage("hi"))
+          .toList();
+      expect(offered(shown), isNot(contains(browserShowToolName)));
     });
 
     test("the prompt says how to use it only where it is offered", () {
@@ -258,6 +280,23 @@ void main() {
       expect(asked, isEmpty);
       expect(tab.calls, ["scroll up", "text 40"]);
     });
+
+    test("showing the window is not gated", () async {
+      final tab = FakeBrowserTab();
+      final asked = <ToolApproval>[];
+      await agentOver(
+        FakeLlmClient([
+          [call(browserShowToolName, {})],
+          [finish],
+        ]),
+        tab: tab,
+        hidden: true,
+        approveMode: ApproveMode.ask,
+        asked: asked,
+      ).run(userMessage("show")).toList();
+      expect(asked, isEmpty);
+      expect(tab.calls, ["show"]);
+    });
   });
 
   test("a screenshot is an image on the result, with its offset", () async {
@@ -303,8 +342,14 @@ void main() {
     });
   });
 
-  test("the setting is written only when picked", () {
+  test("the settings are written only when not the default", () {
     expect(AppSettings().toJson().containsKey("agentBrowser"), isFalse);
+    expect(AppSettings().toJson().containsKey("agentBrowserVisible"), isFalse);
+    expect(AppSettings().agentBrowserVisible, isFalse);
+    expect(
+        AppSettings.fromJson(AppSettings(agentBrowserVisible: true).toJson())
+            .agentBrowserVisible,
+        isTrue);
     final picked = AppSettings(agentBrowser: embeddedBrowserId);
     expect(AppSettings.fromJson(picked.toJson()).agentBrowser, embeddedBrowserId);
   });
