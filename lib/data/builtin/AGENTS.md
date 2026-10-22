@@ -661,6 +661,223 @@ search page is HTML, not JSON, so results are parsed out of the table it
 renders. Both return a `ShellResult`, so the agent words a search's outcome
 the same way it words a command's — the model reads one shape, whatever ran.
 
+A fetch that comes back refused (401, 403, 429, 503), empty, or saying it
+wants JavaScript or a human check gets a line pointing at
+`browser_goto_url`, where the turn has a browser. `webfetch` stays the first
+answer: it needs no window, so a trigger's headless turn and a turn with the
+browser off still read pages.
+
+## The browser (the `browser_*` tools)
+
+A real browser window, with a profile of its own under `<cache>/browser/profile/`
+so a login the agent makes is kept, driven over the Chrome DevTools Protocol.
+`AgentBrowser` is the port (`lib/domain/agent_browser.dart`), `CdpBrowser` the
+desktops' implementation (`lib/data/browser/`), `UnavailableAgentBrowser` the
+phones' and the web's — the phones' webview is not one yet, and the settings
+category is not drawn where `available` is false. Settings > Agent Browser
+writes `agentBrowser`: null off, `embedded` for the downloaded Helium, or a
+Chromium-family executable's path, detected or picked with a file picker and
+launched once to prove it answers before it is saved. Firefox is not offered:
+it speaks WebDriver BiDi, not this protocol.
+
+**Helium is the embedded one for its uBlock Origin**: pages come without the
+ads and trackers, and without most of the scripts that would put text in front
+of the model. It is fetched from `imputnet/helium-<os>`'s latest release —
+the tag read off the `releases/latest` redirect, as the app's own update check
+does — into `<cache>/browser/download/`: the AppImage on Linux, which runs
+where it is put, the `.app` out of the dmg on macOS, the portable zip on
+Windows. Installed whole beside it and renamed over, so a download that dies
+leaves the last one working; the running browser is quit first, since Windows
+will not replace a file in use.
+
+The browser is launched on the first call that needs it and quit after ten
+idle minutes. `--remote-debugging-port=0` lets it pick a port, which it writes
+to `DevToolsActivePort` in the profile — nothing is guessed, so nothing can be
+taken. The AppImage variables are stripped from its environment, as from a
+command's: Helium's own AppImage runtime would read ours. A launch that exits
+0 at once is a browser handing off to a copy already open on that profile, and
+is said as that. Settings > Agent Browser's Quit is `close()`: `Browser.close`
+over the protocol, then a kill if it has not gone in five seconds.
+
+**Hidden by default** (`agentBrowserVisible` off, written only when on): the
+browser runs `--headless=new`, which is the real browser with no window, and
+says so in its user agent — `HeadlessChrome`, the first thing a bot check
+reads. So the first hidden launch of an executable each run asks it for its
+user agent, quits, and launches again with `--user-agent` set to the same
+string with `Chrome` in its place; by flag rather than per tab, so a
+cross-site frame and a worker send it too. Every launch, window or none,
+passes `--disable-blink-features=AutomationControlled`: remote debugging alone
+sets `navigator.webdriver`, the second thing such a check reads. A hidden
+browser has no window to hand a check to the user in, so `browser_show` —
+offered only while hidden — quits it and starts it again with one, on the same
+profile and page; it is hidden again from its next quit, idle or by hand.
+
+**One tab per chat**, so two turns at once do not navigate each other; a tab
+the user closes is opened again on the next call, and is brought to the front
+before each one — Chrome throttles a background tab until a screenshot of it
+never arrives. Sub-agents get no tab: a fan-out on one window is workers
+fighting over it.
+
+What the model reads after every call is the view: title, URL, scroll
+position, the interactive elements in view numbered `[n]`, and the text in
+view. The page script (`page_script.dart`) runs in an isolated world, so the
+page's own scripts cannot see or replace it. The world is made once per
+document and kept: each one made lives until the page navigates, so one per
+call piled up hundreds on a long session in an editor. The numbers
+live on the DOM as `data-entoli-ref`, so an element keeps its number for as
+long as its document does. Cross-site frames are invisible to it — a separate
+process, and a challenge widget's sits in a closed shadow root besides — so
+they are read off the browser's target list and named on the view, and a
+challenge frame or a page saying it is one adds a note telling the model to
+screenshot and click, or to ask the user to solve it in the window.
+
+Input is the protocol's, not the page's: a click is `Input.dispatchMouseEvent`,
+which a page sees as trusted, arriving along a short eased path off the exact
+centre; a drag moves in uneven steps. That is what lets a click by `x`, `y`
+reach a checkbox inside a cross-site frame. Screenshots are taken at a scale of
+one over `devicePixelRatio`, so a pixel in the image is a CSS pixel in the
+viewport and a point read off one clicks where it was read — on a HiDPI screen
+it would otherwise be off by the ratio.
+
+`browser_screenshot` is offered only where the model reads images
+(`ModelInfo.readsImages`, unknown counting as yes, as the client does); its
+image rides the result the way a generated one does.
+
+**Typing is two things.** `browser_type` with a `ref` replaces a field's text
+— click it, select its contents, insert. Without one it types at whatever has
+focus, key by key: an editor that draws its own text (Google Docs, Slides,
+Sheets) has no field to number, and reads keydown from a hidden editable in a
+frame it moved focus to, so the model clicks into the text and types with no
+`ref`. Typing into a numbered frame instead was what failed in practice — the
+click on the frame's centre took focus away from the text. `browser_press`
+is one key with modifiers held, the shortcut path; a Control or Meta letter
+inserts nothing and names its editing command (`editingCommand`), as the
+card's keyboard does.
+
+**Gating is the browser's own, and off by default.** A banner at every click
+made a task unusable, and scoping by URL fails the tasks that cross sites;
+picking a browser is the consent. Settings > Agent Browser's "Before the
+agent acts" (`agentBrowserApproval`) is `never`, `classifier` or `always`,
+mapped onto `_runGated`'s modes and used *in place of* the turn's
+`approveMode` for the browser's tools alone. What it gates: opening a page, a
+`webfetch` of its URL so a host rule covers both, and a click, a typed field,
+a key or a drag, with the element and page it acts on as the banner's text
+and the classifier's `action` argument — `{"ref": 12}` says nothing to
+either. The standing rules decide before any mode, so a host the user denied
+stays denied under `never`. Scrolling, reading and going back are never
+gated.
+
+**A passkey request freezes a hidden page.** Google's sign-in asks for one on
+load; Chrome answers with a dialog of its own that takes input from the page,
+and a headless browser has nowhere to draw it — so the page looks fine and
+swallows every click, "Try another way" included. Each tab of a hidden browser
+is therefore put under the protocol's virtual authenticators with their UI off
+(`WebAuthn.enable`, `enableUI: false`): the request waits silently with no
+authenticator to answer it, and the page stays clickable. A windowed browser
+keeps the real dialog, which is how a passkey is actually used, so the card's
+"Open in a window" (`show(byUser: true)`, noted to the agent since the restart
+reloads the page) is the way to sign in with one.
+
+### Uploads (the `browser_upload` tool)
+
+A page's file chooser is a native dialog, which neither the agent nor a
+hidden browser can use, so it is caught instead: `_openChooser` turns on
+`Page.setInterceptFileChooserDialog`, clicks the element the agent named —
+the field itself, or a button that opens a hidden one, the common pattern —
+and takes the `Page.fileChooserOpened` the click raises, with the protocol's
+id for the field and whether it takes several files. `DOM.setFileInputFiles`
+fills it; the page sees an ordinary `change` with the files in it.
+
+**Uploads are their own scope**, `agentBrowserUploads`, apart from "Before
+the agent acts": a file leaving the machine is a different question from a
+click, and the user can take it from the agent while leaving the agent
+everything else. `classifier` is the default — the classifier is shown the
+files' whole resolved paths (where they come from is most of the question)
+and the element and page they go to, and its rubric denies keys, credential
+stores and profiles outright. `allow` asks nobody. `user` takes the paths
+out of the tool's schema altogether (`browserUploadByUserTool`): the call
+opens the chooser and waits on the chat's `UploadPanel`, where the user picks
+with the system's own file picker and presses Upload. Cancel, or a message
+sent instead, is `cancelUpload`: the field gets a `cancel` event, which is
+what dismissing the dialog would have told the page, and the agent's call
+fails saying which. The `user` tool parks the turn on the user, so a turn
+with nobody to answer is not offered it.
+
+### What the user did, told to the agent
+
+The user moves the page from the card, hides and gives back the browser, and
+quits it, and the agent has to hear of it — but a turn is never handed a
+message mid-flight (see "The projection" in `lib/domain/AGENTS.md`). So the
+tab keeps notes, and `_noted` puts them at the head of the agent's next
+browser result, success or refusal, as "Since your last browser call:". A
+tool result is in the log, so the note is part of the conversation from then
+on and a reload words it the same. What is noted: the user's back and forward
+with the address reached (`historyBack` is the user's back; the agent's `back`
+leaves no note, it being the agent's own move), reload, hiding and giving
+back (the agent's own hide is not noted back to it), the quit with who quit
+it (`close(why:)`: the user, the idle timer; the window closed by hand or a
+crash, which `cdp.done` turns into the same quit), a restart (the settings
+changed, or another chat's `browser_show`, which every chat's tab but the
+showing one hears of), and one
+"clicked or typed in the page" however much the user did — never what they
+typed. A note is scrubbed of sign-in values as it is written, since the quit
+it may describe drops them. A note waits for the agent's next browser call,
+in this turn or a later one; an agent that never uses the browser again is
+never told, and does not need to be.
+
+### Signing in
+
+**What the user signs in with never reaches the agent, the backend or the
+log.** Both private paths live on the tab, which the chat reads directly (as
+it does for the chip), so the values go from the chat's panel to the tab to
+the page and nowhere else — no `AgentEvent` carries them, so no recorder,
+projection or sync ever sees them.
+
+`browser_credentials_prompt` takes fields (a numbered element, a label,
+`secret`) and the clicks that submit them. The tab publishes the request,
+the chat draws a panel, and the agent's call waits on
+`requestCredentials`. On Sign in the tab types each value in, marks each
+field `data-entoli-secret` before it does (the page script then shows its
+value as `(hidden)`, as it does every password field), makes the clicks, and
+only then answers the agent with the page as the submit left it. No
+screenshot is taken while it types. Marking is not enough on its own: a page
+echoes what was typed — a GET form puts the password in the address, a
+failed login puts the email back in a new field — so the tab also holds the
+values in memory until the browser quits and takes them out of every text the
+agent is answered with, raw and URL-encoded. Short values (under four
+characters) are not held, or a two-letter one would blank half the page.
+Pictures cannot be scrubbed, and a sign-in page shows the values back (the
+account chip on Google's password step, the email after a failed login), so
+the tab refuses screenshots on the origin a sign-in was filled in on until
+the browser quits, pointing the agent at `browser_page_text`. A site the
+sign-in redirects to is not blocked; a sign-in the user did by hand behind a
+hold is not known, so not blocked either. An error while filling names the field, never what
+was being typed into it. A sign-in over several pages is one prompt per page,
+since the second page's fields do not exist until the first is submitted.
+
+`hold` is the browser hidden from the agent: every agent browser tool refuses
+with a message saying so while it is set, and the user's own input from the
+card still works. The user sets it from the card ("Hide from agent");
+`browser_credentials_hide` sets it with the agent's `reason`, which the chat
+draws as a button that opens the card, and **waits until the user gives the
+browser back** rather than returning at once — an agent told only that the
+browser refuses tends to give up or end its turn. Stopping the turn ends the
+wait and leaves the browser hidden, since the user may be mid-sign-in. A quit
+is different: the hold and any sign-in or upload waiting in the panel end
+with the browser (not through `unhide`, since nobody gave it back — the quit is the
+note), so the chat's button goes and the agent's waits answer. Both
+tools park the turn on the user, so they ride `ask`, as `present_plan` does: a
+headless turn is not offered them.
+
+The chat watches its tab through two things on `BrowserTab`: `page`, the
+title and address while the tab is open and null once it is not, and
+`frames()`, the browser's own screencast (`Page.startScreencast`). The
+screencast is what makes a hidden browser watchable — it renders with no
+window — and it is started on listen and stopped on cancel, so nothing is
+encoded while nobody looks; Chrome waits for each frame's ack before the
+next, so a slow viewer slows the stream instead of queueing it. See "The
+agent's browser, on screen" in `lib/ui/chat/AGENTS.md`.
+
 ## Images (the `image_generation` tool)
 
 Offered only when Settings > Image Generation names an image model (its "Off"

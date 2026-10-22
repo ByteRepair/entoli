@@ -52,6 +52,7 @@ class AgentCapabilities {
     required this.artifact,
     required this.createSkill,
     this.trigger = false,
+    this.browser = false,
   });
 
   /// The full set, before the platform's facts or a project's takes away any
@@ -76,12 +77,18 @@ class AgentCapabilities {
   final bool createSkill;
   final bool trigger;
 
+  /// Whether the browser tools are offered: a browser picked in Settings >
+  /// Agent Browser, on a platform that can drive one. Off in [full], since
+  /// it is a pick rather than something every device has.
+  final bool browser;
+
   /// What this device can offer, minus what [disabled] takes away — the
   /// project's takes, and a headless turn's.
   AgentCapabilities.forTurn({
     required bool commands,
     required bool webSearch,
     required Set<AgentCapability> disabled,
+    bool browser = false,
   }) : this(
           commands: commands,
           webSearch: webSearch && !disabled.contains(AgentCapability.webSearch),
@@ -90,6 +97,7 @@ class AgentCapabilities {
           artifact: !disabled.contains(AgentCapability.artifact),
           createSkill: !disabled.contains(AgentCapability.createSkill),
           trigger: !disabled.contains(AgentCapability.trigger),
+          browser: browser,
         );
 
   /// What a sub-agent runs under: unattended, so it asks nothing, fans out
@@ -424,6 +432,7 @@ String _toolFragments(AgentCapabilities caps, {bool oneShot = false}) {
     if (caps.task) "`$taskToolName`\n   to delegate a task to a sub-agent",
     if (caps.ask) "`$askToolName` to put a question to the\n   user",
     if (caps.webSearch) "`websearch` to search the web, `webfetch` to read a page",
+    if (caps.browser && !oneShot) "`browser_*` to use a web page in the browser",
     if (caps.artifact) "`artifact`\n   to publish an HTML page the user can view",
     if (!oneShot)
       "`$planAddToolName`/`$planNextToolName`/`$planDoneToolName`"
@@ -462,11 +471,13 @@ String _shellSections({
       ? _substitute(_systemProse("task")!, {"task_tool": taskToolName})
       : null;
   final webSearch = caps.webSearch ? _systemProse("websearch") : null;
+  final browser = caps.browser ? _systemProse("agent-browser") : null;
   final artifacts = caps.artifact ? _artifacts : null;
   final ask = caps.ask ? _asking : null;
   return [
     ?task,
     ?webSearch,
+    ?browser,
     if (skillsText.isNotEmpty) skillsText,
     _files,
     _style,

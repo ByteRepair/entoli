@@ -151,6 +151,7 @@ class AppSession {
     // directory both the store that fills it and the turns' driver that
     // injects it on PATH are built from.
     final byteRepairBin = platform.byteRepairBinDir(cache);
+    final browser = platform.createAgentBrowser(config, cache);
     // The registry the trigger tools run against, assigned like
     // [settingsHome] is: read only from a running app, after the container
     // exists.
@@ -161,7 +162,8 @@ class AppSession {
         appleFm: await appleFm, byteRepairBinDir: byteRepairBin, secrets: secrets,
         loginPath: await loginPath,
         triggerRegistry: (chatId, project) => triggerRegistry(chatId, project),
-        editSettings: (change) => editSettings(change));
+        editSettings: (change) => editSettings(change),
+        browser: browser);
     // One instance, shared: the prefill's notification and every other
     // foreground hold go through the same service.
     final foreground = ForegroundService();
@@ -254,6 +256,7 @@ class AppSession {
         prootAvailableProvider.overrideWithValue(toolset?.proot != null),
         appUpdateHostProvider
             .overrideWithValue(platform.createAppUpdateHost(cache)),
+        agentBrowserProvider.overrideWithValue(browser),
         localModelStoreProvider.overrideWithValue(localModels),
         localLlmProvider.overrideWithValue(server),
         localPrefillProvider.overrideWithValue(prefill),

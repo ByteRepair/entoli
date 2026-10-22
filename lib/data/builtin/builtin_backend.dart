@@ -8,6 +8,7 @@ import "package:uuid/uuid.dart";
 import "../../core/config.dart";
 import "../../core/log.dart";
 import "../../domain/agent_backend.dart";
+import "../../domain/agent_browser.dart";
 import "../../domain/trigger_manager.dart" show TriggerRegistryFactory;
 import "../../domain/app_settings.dart";
 import "../../domain/ask.dart";
@@ -54,6 +55,7 @@ class BuiltinBackend implements AgentBackend {
     required this.registry,
     required this.shell,
     required this.webSearch,
+    this.browser = const UnavailableAgentBrowser(),
     required this.store,
     this.triggerRegistry,
     this.editSettings,
@@ -100,6 +102,10 @@ class BuiltinBackend implements AgentBackend {
   /// ship its HTML parser to every browser that loads the app and could never
   /// call it.
   final WebSearch webSearch;
+
+  /// The browser the `browser_*` tools drive, one tab per chat. Its tools are
+  /// offered on a turn where Settings > Agent Browser has picked one.
+  final AgentBrowser browser;
 
   /// The notes the background memory writes add: the page of the chat they
   /// are about reads its own off the stream.
@@ -275,6 +281,7 @@ class BuiltinBackend implements AgentBackend {
         commands: shell.canRunCommands,
         webSearch: webSearch.available,
         disabled: settings.disabled,
+        browser: browser.configured,
       );
       // One gate per turn, shared by the parent and every sub-agent it spawns:
       // bounds in-flight stream() calls and coordinates 429 backoff so a
@@ -441,6 +448,15 @@ class BuiltinBackend implements AgentBackend {
         answer: _awaitAnswers,
         subAgentRunner: subAgentRunner,
         webSearch: webSearch,
+        browser: caps.browser ? browser.tab(chatId) : null,
+        seesImages: target.info?.readsImages ?? true,
+        browserHidden: browser.hidden,
+        browserUploads: AppSettings.load(config).agentBrowserUploads,
+        browserApprove: switch (AppSettings.load(config).agentBrowserApproval) {
+          BrowserApproval.never => ApproveMode.never,
+          BrowserApproval.classifier => ApproveMode.auto,
+          BrowserApproval.always => ApproveMode.ask,
+        },
         profile: settings.profile,
         tone: settings.tone,
         citations: settings.citations,
@@ -1447,6 +1463,7 @@ class BuiltinBackend implements AgentBackend {
     _sessions.clear();
     registry.close();
     webSearch.close();
+    await browser.close();
     await _memoryNotes.close();
     await subAgents.close();
   }

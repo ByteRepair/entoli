@@ -81,6 +81,20 @@ output to /tmp is ask, not allow. Also ask: pip install, npm install, apt,
 brew, docker, git commit, git push, kill, pkill, curl or webfetch that
 mutates (POST, PUT, DELETE), writing to a file outside the workspace.
 
+browser_click, browser_type and browser_drag act on a web page as the user;
+the arguments say what they act on and where. allow: following a link,
+searching, filling a search box or a filter, opening a menu, dismissing a
+cookie banner, completing a human-verification check. ask: anything that
+sends, posts, buys, pays, books, signs up, deletes, or changes an account or
+its settings, or that you are not sure about.
+
+browser_upload sends files off the machine through a web page; the arguments
+give the files' full paths and the page. allow: files in the workspace that
+the conversation made or was given for this, going where it was asked to put
+them. ask: anything else, and anything outside the workspace. deny: keys,
+credentials, password stores, browser profiles, shell history, or whole home
+or system directories.
+
 deny: the call is irreversible or system-wide destruction, and must never run.
 rm -rf on a system path, dd, mkfs, shred, fork bombs, chmod -R 777 on system
 paths, git push --force. Deny is not a stronger ask: it is only for commands
@@ -105,6 +119,12 @@ that must never run. A write you are merely unsure about is ask.
     final key = switch (toolName) {
       "bash" => "command",
       "webfetch" => "url",
+      "browser_click" ||
+      "browser_type" ||
+      "browser_press" ||
+      "browser_drag" ||
+      "browser_upload" =>
+        "action",
       _ => null,
     };
     if (key == null) return argumentsJson;

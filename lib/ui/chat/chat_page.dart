@@ -1087,6 +1087,15 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
                 controller: _controller,
                 agentSpeaking: view.roomPhase == RoomPhase.agentSpeaking,
                 onSend: (text, attachments) async {
+                  // Something said over an upload waiting on the user is
+                  // their answer to it: the page's chooser is cancelled, as
+                  // dismissing its dialog would, and the agent is told.
+                  final browser = ref.read(agentBrowserProvider);
+                  if (browser.available && browser.configured) {
+                    browser.tab(widget.chatId).cancelUpload(
+                        why: "The user sent a message instead of choosing "
+                            "a file.");
+                  }
                   try {
                     await driver.send(text, attachments: attachments);
                   } on Undelivered catch (e) {

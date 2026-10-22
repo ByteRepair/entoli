@@ -1,6 +1,7 @@
 import "dart:convert";
 
 import "../core/config.dart";
+import "agent_browser.dart" show BrowserApproval, BrowserUploadPolicy;
 import "app_icon.dart";
 import "app_theme.dart";
 import "assistant_view.dart";
@@ -81,6 +82,10 @@ class AppSettings {
     this.totalContext = defaultTotalContext,
     this.welcomeSeen = false,
     this.autoUpdate = true,
+    this.agentBrowser,
+    this.agentBrowserVisible = false,
+    this.agentBrowserApproval = BrowserApproval.never,
+    this.agentBrowserUploads = BrowserUploadPolicy.classifier,
   });
 
   String? defaultModelId;
@@ -407,6 +412,24 @@ class AppSettings {
   /// number.
   static const defaultKvCachePrompts = 10;
 
+  /// The browser the agent drives: null off, `embedded` for the downloaded
+  /// Helium, or a Chromium-family executable's path. See "The browser" in
+  /// `lib/data/builtin/AGENTS.md`.
+  String? agentBrowser;
+
+  /// Whether that browser runs with a window. Hidden by default, with its
+  /// user agent cleared of "Headless"; the agent can still show it for the
+  /// user to finish a check.
+  bool agentBrowserVisible;
+
+  /// Who is asked before the browser's agent opens a page or acts on one.
+  /// Nobody by default: picking a browser is the consent.
+  BrowserApproval agentBrowserApproval;
+
+  /// Who picks what the agent uploads: its own scope, so the user can take
+  /// uploads from the agent and leave it everything else.
+  BrowserUploadPolicy agentBrowserUploads;
+
   static AppSettings load(AppConfig config) {
     final text = config.documents.read(config.settingsFile);
     if (text == null) return AppSettings();
@@ -504,6 +527,14 @@ class AppSettings {
         // says nothing and gets the on default — the same bargain the memory
         // gates are held to.
         autoUpdate: json["autoUpdate"] as bool? ?? true,
+        agentBrowser: _orNull(json["agentBrowser"] as String?),
+        agentBrowserVisible: json["agentBrowserVisible"] as bool? ?? false,
+        agentBrowserApproval:
+            BrowserApproval.values.asNameMap()[json["agentBrowserApproval"]] ??
+                BrowserApproval.never,
+        agentBrowserUploads: BrowserUploadPolicy.values
+                .asNameMap()[json["agentBrowserUploads"]] ??
+            BrowserUploadPolicy.classifier,
       );
 
   /// `approveMode` is the current key. An older file has `approveCommands` as
@@ -611,5 +642,11 @@ class AppSettings {
       if (totalContext != defaultTotalContext) "totalContext": totalContext,
       if (welcomeSeen) "welcomeSeen": welcomeSeen,
       if (!autoUpdate) "autoUpdate": autoUpdate,
+      if (agentBrowser != null) "agentBrowser": agentBrowser,
+      if (agentBrowserVisible) "agentBrowserVisible": agentBrowserVisible,
+      if (agentBrowserApproval != BrowserApproval.never)
+        "agentBrowserApproval": agentBrowserApproval.name,
+      if (agentBrowserUploads != BrowserUploadPolicy.classifier)
+        "agentBrowserUploads": agentBrowserUploads.name,
     };
 }

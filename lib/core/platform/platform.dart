@@ -14,6 +14,7 @@ import "../../data/local/file_chat_store.dart";
 import "../../data/local/byte_repair_store.dart" show ByteRepairStore;
 import "../../data/prompts/prompt_sources.dart";
 import "../../data/local/apple_fm.dart";
+import "../../domain/agent_browser.dart";
 import "../../domain/app_settings.dart";
 import "../../domain/app_secrets.dart";
 import "../../domain/background_work.dart";
@@ -37,6 +38,7 @@ export "io/platform.dart" if (dart.library.js_interop) "web/platform.dart"
         captureLoginPath,
         chmodReadOnly,
         chmodWritable,
+        createAgentBrowser,
         createAppleFm,
         createAppUpdateHost,
         createAssistantLaunch,
@@ -86,6 +88,7 @@ BuiltinBackend createBackend(
   String? loginPath,
   TriggerRegistryFactory? triggerRegistry,
   SettingsEditor? editSettings,
+  AgentBrowser browser = const UnavailableAgentBrowser(),
 }) {
   AppSettings settings() => AppSettings.load(config);
   final backend = BuiltinBackend(
@@ -121,6 +124,7 @@ BuiltinBackend createBackend(
       rootfsId: () => settings().rootfsId,
     ),
     webSearch: platformWebSearch(),
+    browser: browser,
     store: store,
     triggerRegistry: triggerRegistry,
     editSettings: editSettings,
