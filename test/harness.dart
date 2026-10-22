@@ -36,6 +36,7 @@ import "package:agent_chat/domain/chat_store.dart";
 import "package:agent_chat/domain/llm_provider.dart";
 import "package:agent_chat/domain/model_registry.dart";
 import "package:agent_chat/domain/models.dart";
+import "package:agent_chat/domain/room/room_state.dart";
 import "package:agent_chat/ui/widgets/resettable_field.dart" show LabelledField;
 import "package:agent_chat/ui/widgets/model_picker.dart";
 import "package:agent_chat/domain/prompt_library.dart";

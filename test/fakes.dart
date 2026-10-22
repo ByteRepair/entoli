@@ -31,6 +31,7 @@ import "package:agent_chat/domain/local_model.dart";
 import "package:agent_chat/domain/local_model_store.dart";
 import "package:agent_chat/domain/model_registry.dart";
 import "package:agent_chat/domain/models.dart";
+import "package:agent_chat/domain/room/room_state.dart";
 import "package:agent_chat/domain/prompt_library.dart";
 import "package:agent_chat/domain/file_watches.dart";
 import "package:agent_chat/domain/reminder_alarms.dart";
@@ -48,7 +49,6 @@ import "package:agent_chat/domain/voice_model_store.dart";
 import "package:agent_chat/domain/project.dart" show ProjectRef;
 import "package:agent_chat/providers.dart"
     show DeviceProjects, PairedDevices, RemoteChats, RemoteProjectNotifier;
-import "package:agent_chat/ui/chat/chat_controller.dart" show ChatViewState;
 import "package:agent_chat/ui/chat/mirror_controller.dart";
 import "package:uuid/uuid.dart";
 

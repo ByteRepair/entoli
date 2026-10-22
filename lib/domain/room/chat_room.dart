@@ -51,7 +51,7 @@ abstract interface class RoomHost {
 /// of the project's library. This owns everything about it that is not
 /// Riverpod's: the turns in flight, what was said while they ran, the order
 /// of speaking, and the log they all append to. See "The room and its
-/// participants" in `lib/ui/chat/AGENTS.md`.
+/// participants" in `lib/domain/room/AGENTS.md`.
 ///
 /// Invariants:
 /// - An agent has at most one turn in flight.
@@ -72,10 +72,14 @@ class ChatRoom {
 
   /// The room as the page reads it.
   ChatViewState get state => _state;
-  set state(ChatViewState next) {
+  set _view(ChatViewState next) {
     _state = next;
     if (!_disposed) _host.stateChanged(next);
   }
+
+  /// Forget the chat: it was deleted, and a room that outlived its page must
+  /// not re-open it from memory.
+  void reset() => _view = ChatViewState();
 
   bool _disposed = false;
 
@@ -176,7 +180,7 @@ class ChatRoom {
     if (at < 0) return;
     final messages = List<Message>.from(chat.messages);
     messages[at] = change(messages[at]);
-    state = state.copyWith(chat: chat.copyWith(messages: messages));
+    _view = state.copyWith(chat: chat.copyWith(messages: messages));
   }
 
   /// Take a state written elsewhere — the sidebar pinning this chat — in place.
@@ -185,7 +189,7 @@ class ChatRoom {
   void applyState(ChatState written) {
     final chat = state.chat;
     if (chat == null) return;
-    state = state.copyWith(chat: chat.copyWith(state: written));
+    _view = state.copyWith(chat: chat.copyWith(state: written));
   }
 
   /// Retitle in place, for the same reason.
@@ -198,7 +202,7 @@ class ChatRoom {
   Future<void> _load() async {
     try {
       final chat = await _repo.openChat(chatId);
-      if (!_disposed) state = state.copyWith(chat: chat);
+      if (!_disposed) _view = state.copyWith(chat: chat);
     } catch (e) {
       // Deleted under us — swept for its TTL, or removed on a paired device.
       // Left unsaid the page keeps a spinner up with nothing behind it.
@@ -223,7 +227,7 @@ class ChatRoom {
     final wired = wiredSkillFromText(text);
     if (wired != null) {
       if (state.isRunning) {
-        state = state.copyWith(
+        _view = state.copyWith(
             status: "Wait for the turn to finish before compacting");
         return;
       }
@@ -261,7 +265,7 @@ class ChatRoom {
     await _append(recordsOf([userMsg]));
     final chat = state.chat;
     if (chat == null) return;
-    state = state.copyWith(
+    _view = state.copyWith(
         chat: chat.copyWith(
             messages: [...chat.messages, userMsg],
             state: chat.state.copyWith(updatedAt: DateTime.now())));
@@ -347,7 +351,7 @@ class ChatRoom {
     // The wait says what it is: a summarizer over a long conversation is a
     // read of minutes, and a spinner that cannot be told apart from a hang is
     // the row that says nothing.
-    state = state.copyWith(status: "Compacting the conversation");
+    _view = state.copyWith(status: "Compacting the conversation");
     try {
       await compact(instructions: arguments.trim().isEmpty ? null : arguments.trim());
     } catch (e) {
@@ -475,7 +479,7 @@ class ChatRoom {
         .copyWith(state: chat.state.copyWith(updatedAt: DateTime.now()));
 
     final isFirst = chat.messages.isEmpty;
-    state = state.copyWith(chat: updated, isRunning: true, clearRetry: true, clearStatus: true);
+    _view = state.copyWith(chat: updated, isRunning: true, clearRetry: true, clearStatus: true);
     // The prompt and the empty reply go down before the turn starts, so a chat
     // killed before the model says anything still shows what was asked. What
     // comes back carries the TTL anchor the save resolved, and is kept.
@@ -563,7 +567,7 @@ class ChatRoom {
             .firstWhereOrNull((m) => m.id == replyId && _resumableReply(m));
     if (reply == null) return;
 
-    state = state.copyWith(isRunning: true, clearRetry: true, clearStatus: true);
+    _view = state.copyWith(isRunning: true, clearRetry: true, clearStatus: true);
     // The member who wrote the reply carries it on; a fresh entry takes them
     // as its lane, which is what relay's busy check reads.
     final agent = _agent(_roster(chat).known(nameOf(reply.author)));
@@ -668,7 +672,7 @@ class ChatRoom {
     _rethreading = true;
     try {
       final now = await change(_repo);
-      if (!_disposed) state = state.copyWith(chat: now);
+      if (!_disposed) _view = state.copyWith(chat: now);
     } finally {
       _rethreading = false;
     }
@@ -695,7 +699,7 @@ class ChatRoom {
       case ShellRunEvent():
         // The pair completing is the live block's end: the result and the
         // run part are what the conversation keeps of the output from here.
-        state = state.copyWith(
+        _view = state.copyWith(
             shellOutput: _withoutTurn(state.shellOutput, turn.replyId));
         break;
       case ErrorEvent(:final message, :final retryable):
@@ -713,18 +717,18 @@ class ChatRoom {
         // What the close will write, on screen before it does.
         _updateReply(turn, (m) => m.copyWith(context: usage));
       case ApprovalRequestEvent(:final approval):
-        state = state.copyWith(
+        _view = state.copyWith(
             approvals: {
               ...state.approvals,
               turn.replyId: [...state.approvals[turn.replyId] ?? [], approval]
             });
       case QuestionRequestEvent(:final request):
-        state = state.copyWith(questions: {
+        _view = state.copyWith(questions: {
           ...state.questions,
           turn.replyId: [...state.questions[turn.replyId] ?? [], request]
         });
       case SubAgentStartEvent():
-        state = state.copyWith(runningSubAgents: {
+        _view = state.copyWith(runningSubAgents: {
           ...state.runningSubAgents,
           turn.replyId: [
             ...(state.runningSubAgents[turn.replyId] ?? []),
@@ -732,24 +736,24 @@ class ChatRoom {
           ]
         });
       case SubAgentEndEvent(:final id):
-        state = state.copyWith(runningSubAgents: {
+        _view = state.copyWith(runningSubAgents: {
           for (final entry in state.runningSubAgents.entries)
             entry.key: entry.value.where((s) => s.id != id).toList()
         });
       case RetryEvent(:final attempt, :final message):
-        state = state.copyWith(retry: "Attempt $attempt failed: $message");
+        _view = state.copyWith(retry: "Attempt $attempt failed: $message");
       case ShellOutputEvent(:final text):
         // The live view of a command's output, for the block under the label.
         // Cleared where the pair completes, in the cases above.
-        state = state.copyWith(
+        _view = state.copyWith(
             shellOutput: {...state.shellOutput, turn.replyId: text});
       case StatusEvent(:final label):
-        state = label == null
+        _view = label == null
             ? state.copyWith(clearStatus: true)
             : state.copyWith(status: label);
       case DoneEvent(:final aborted):
         if (aborted) turn.recorder.outcome ??= TurnEnd.aborted;
-        state = state.copyWith(
+        _view = state.copyWith(
             shellOutput: _withoutTurn(state.shellOutput, turn.replyId));
         _finishTurn(turn);
     }
@@ -822,7 +826,7 @@ class ChatRoom {
       turn.round++;
       final wait = Duration(seconds: (1 << round).clamp(1, 30));
       if (_disposed) return;
-      state = state.copyWith(
+      _view = state.copyWith(
         retry: "Retrying (${turn.round}/$rounds) — ${turn.errorLine}",
         approvals: _withoutTurn(state.approvals, turn.replyId),
         questions: _withoutTurn(state.questions, turn.replyId),
@@ -859,7 +863,7 @@ class ChatRoom {
     // answered its own outstanding questions with nothing, so a banner or a
     // panel still on screen would send its reply into the void. Only this
     // turn's — a sibling still running keeps its own.
-    state = state.copyWith(
+    _view = state.copyWith(
       // What a reload would now make of the log, so a turn that gave up is
       // offered straight away rather than only once the chat is opened again.
       chat: state.chat?.copyWith(unfinished: reason?.resumable ?? true),
@@ -971,7 +975,7 @@ class ChatRoom {
   void _stampAddressees(String replyId, List<String> to) {
     final chat = state.chat;
     if (chat == null) return;
-    state = state.copyWith(
+    _view = state.copyWith(
         chat: chat.copyWith(messages: [
       for (final m in chat.messages)
         m.id == replyId ? m.copyWith(addressees: to) : m,
@@ -979,13 +983,11 @@ class ChatRoom {
   }
 
   /// Run what the schedule may run now, through the room's ordering.
-  Future<void> _dispatch() {
-    final project = state.chat?.state.project;
-    return _schedule.dispatch(_ordering,
-        cap: _host.maxGenerations(project),
-        busy: () => {for (final turn in _turns.values) turn.agent.handle},
-        run: _run);
-  }
+  Future<void> _dispatch() => _schedule.dispatch(
+      ordering: () => _ordering,
+      cap: () => _host.maxGenerations(state.chat?.state.project),
+      busy: () => {for (final turn in _turns.values) turn.agent.handle},
+      run: _run);
 
   /// Open the turn one scheduled item runs as. [member] null is the main
   /// agent's; a handoff's prompt is the reply that names the member, already
@@ -1076,7 +1078,7 @@ class ChatRoom {
     if (replyId != null) {
       _turns[replyId]?.recorder.recordApprovalAnswer(approvalId, r.name);
     }
-    state = state.copyWith(
+    _view = state.copyWith(
         approvals: _dropItem(state.approvals, approvalId, (a) => a.id));
   }
 
@@ -1084,7 +1086,7 @@ class ChatRoom {
   /// null where nothing was picked.
   Future<void> answerQuestions(String requestId, List<String?> answers) async {
     await _repo.respondQuestions(chatId, requestId, answers);
-    state = state.copyWith(
+    _view = state.copyWith(
         questions: _dropItem(state.questions, requestId, (q) => q.id));
   }
 

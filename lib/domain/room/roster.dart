@@ -8,7 +8,7 @@ import "../wired_skill.dart";
 /// library behind the project's Omada answer. **The one place Omada is
 /// decided for routing** — a direct chat is a roster that addresses no one,
 /// so every say is the house's and no reply hands off. See "The contract
-/// between direct and Omada chats" in `lib/ui/chat/AGENTS.md`.
+/// between direct and Omada chats" in `lib/domain/room/AGENTS.md`.
 ///
 /// Read fresh at each use rather than held, so a toggle or a library edit
 /// reaches the next dispatch and never rewrites what is already stamped.

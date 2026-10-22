@@ -4,7 +4,7 @@ import "package:flutter_test/flutter_test.dart";
 import "package:agent_chat/data/sync/sync_hub.dart" show RemoteChatEntry;
 import "package:agent_chat/domain/ask.dart";
 import "package:agent_chat/domain/models.dart";
-import "package:agent_chat/ui/chat/chat_controller.dart";
+import "package:agent_chat/domain/room/room_state.dart";
 import "package:agent_chat/ui/chat/chat_page.dart";
 import "package:agent_chat/ui/chat/chat_settings_page.dart";
 import "package:agent_chat/ui/chat/widgets/composer.dart";

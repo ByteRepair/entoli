@@ -54,7 +54,7 @@ class ChatViewState {
   final Map<String, String> shellOutput;
 
   /// Who may speak now — see [RoomPhase], whose facts "The room's phase is
-  /// one answer" in `lib/ui/chat/AGENTS.md` owns.
+  /// one answer" in `lib/domain/room/AGENTS.md` owns.
   RoomPhase get roomPhase => questions.values.any((q) => q.isNotEmpty)
       ? RoomPhase.waitingOnYou
       : isRunning

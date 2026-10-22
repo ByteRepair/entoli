@@ -13,7 +13,9 @@ void main() {
   Future<List<(String?, String)>> dispatch(Schedule s, OmadaOrdering o,
       {int cap = 10, Set<String?> busy = const {}}) async {
     final ran = <(String?, String)>[];
-    await s.dispatch(o, cap: cap, busy: () => busy, run: (member, item) async {
+    await s.dispatch(
+        ordering: () => o, cap: () => cap, busy: () => busy,
+        run: (member, item) async {
       ran.add((member, (item.userPrompt ?? item.reply)!.id));
     });
     return ran;
@@ -70,8 +72,11 @@ void main() {
       ..addHandoff(["a"], late, generation: 3, thread: thread)
       ..addHandoff(["a"], early, generation: 0, thread: thread);
     final items = <ScheduledItem>[];
-    await s.dispatch(OmadaOrdering.parallel,
-        cap: 10, busy: () => {}, run: (_, item) async => items.add(item));
+    await s.dispatch(
+        ordering: () => OmadaOrdering.parallel,
+        cap: () => 10,
+        busy: () => {},
+        run: (_, item) async => items.add(item));
     expect(items.single.reply, late);
     expect(items.single.generation, 4);
     expect(s.isEmpty, isTrue);
@@ -86,14 +91,45 @@ void main() {
       if (ran.length == 1) {
         s.addPrompt(["b"], _msg("p2"));
         // Re-entered while the first pass is still running its item.
-        await s.dispatch(OmadaOrdering.sequential,
-            cap: 10, busy: () => {}, run: run);
+        await s.dispatch(
+            ordering: () => OmadaOrdering.sequential,
+            cap: () => 10,
+            busy: () => {},
+            run: run);
         expect(ran, ["p1"], reason: "the re-entry ran nothing itself");
       }
     }
 
-    await s.dispatch(OmadaOrdering.sequential, cap: 10, busy: () => {}, run: run);
+    await s.dispatch(
+        ordering: () => OmadaOrdering.sequential,
+        cap: () => 10,
+        busy: () => {},
+        run: run);
     expect(ran, ["p1", "p2"]);
+  });
+
+  test("each pass reads the ordering afresh", () async {
+    final s = Schedule()..addPrompt(["a", "b"], _msg("p1"));
+    var ordering = OmadaOrdering.sequential;
+    final ran = <String?>[];
+    Future<void> run(String? member, ScheduledItem item) async {
+      ran.add(member);
+      if (ran.length == 1) {
+        ordering = OmadaOrdering.parallel;
+        s.addPrompt(["c"], _msg("p2"));
+        await s.dispatch(
+            ordering: () => ordering,
+            cap: () => 10,
+            busy: () => {},
+            run: run);
+      }
+    }
+
+    await s.dispatch(
+        ordering: () => ordering, cap: () => 10, busy: () => {}, run: run);
+    // The first pass ran "a" alone; the pass the re-entry asked for ran the
+    // rest at once under the ordering it was switched to.
+    expect(ran, ["a", "b", "c"]);
   });
 
   test("a settle hands off the parked replies first, and forgets the rest",

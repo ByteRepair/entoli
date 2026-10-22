@@ -98,11 +98,14 @@ class Schedule {
   /// reads the same queue — so a second call asks for a pass rather than
   /// running one beside it.
   ///
+  /// [ordering] and [cap] are read at each pass, so a settings edit reaches
+  /// the pass a re-entering dispatch asks for.
+  ///
   /// Post: nothing past [cap] was run, and under relay nothing was run for a
   /// member [busy] named.
-  Future<void> dispatch(
-    OmadaOrdering ordering, {
-    required int cap,
+  Future<void> dispatch({
+    required OmadaOrdering Function() ordering,
+    required int Function() cap,
     required Set<String?> Function() busy,
     required Future<void> Function(String? member, ScheduledItem item) run,
   }) async {
@@ -112,10 +115,10 @@ class Schedule {
     }
     _dispatching = true;
     try {
-      await _pass(ordering, cap, busy, run);
+      await _pass(ordering(), cap(), busy, run);
       while (_dispatchPending) {
         _dispatchPending = false;
-        await _pass(ordering, cap, busy, run);
+        await _pass(ordering(), cap(), busy, run);
       }
     } finally {
       _dispatching = false;

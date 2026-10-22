@@ -14,8 +14,6 @@ import "../../domain/room/room_state.dart";
 import "../../domain/room/roster.dart";
 import "../../providers.dart";
 
-export "../../domain/room/room_state.dart";
-
 /// What a page needs of whatever is driving its turn. [ChatController] for a
 /// chat on this device, `MirrorChatController` for one whose home device is a
 /// paired peer — the widgets between them are the same either way, and only
@@ -60,7 +58,7 @@ class ChatController extends Notifier<ChatViewState>
     final room = _room;
     // The provider is not auto-disposed: clear a controller that outlived its page, or its id re-opens the deleted chat from memory.
     final deletionSub = ref.read(chatRepositoryProvider).changes.listen((event) {
-      if (event is Deleted && event.chatId == chatId) room.state = ChatViewState();
+      if (event is Deleted && event.chatId == chatId) room.reset();
     });
     ref.onDispose(() {
       room.dispose();

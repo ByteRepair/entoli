@@ -449,7 +449,7 @@ conversation never gains prose pretending the model read it.
 
 **The check is the `shellBypassCommand` pattern**: one function read by every
 place that must not route a callback message to a model. The dispatch is in
-`ChatController.send` before the room's guards (refusing, not queueing, while
+`ChatRoom.send` before the room's guards (refusing, not queueing, while
 a turn runs — a callback mid-turn is the session the turn is rewriting), and
 the same read covers the title namer, the resume offer (`endsUnfinished`), the
 composer's dress-up, and the Omada author stamp. A name in the enum dispatches
@@ -770,8 +770,8 @@ whatever that name means today. The mentions stay in the text and are not
 stripped, so what the user reads and what the model reads name the same agent.
 
 **An `@mention` is not a participant.** It stacks instructions for the turn —
-the reply is the main agent's — and who speaks is the controller's `_responder`
-decision (see "The room and its participants" in `lib/ui/chat/AGENTS.md`).
+the reply is the main agent's — and who speaks is the room's `Roster.answering`
+decision (see "The room and its participants" in `lib/domain/room/AGENTS.md`).
 Omada is what makes a mention promote the named member, in Omada-on projects.
 
 `completions` is therefore **not** on `AgentBackend`: `completionsProvider`
