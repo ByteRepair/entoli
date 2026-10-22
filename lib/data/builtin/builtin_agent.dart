@@ -1516,15 +1516,7 @@ class BuiltinAgent {
         run = () => tab.pageText(offset: offset);
     }
     yield _called(call, label);
-
-    Future<ShellResult> attempt() async {
-      try {
-        return ShellResult(returnCode: 0, output: await run());
-      } catch (e) {
-        return ShellResult.failed("$e");
-      }
-    }
-
+    final attempt = _attempt(run);
     if (navigate != null) {
       yield* _runGated(call, webfetchToolName, attempt,
           argumentsText: navigate, mode: browserApprove);
@@ -1542,22 +1534,40 @@ class BuiltinAgent {
         return;
       }
       final described = "$acting $target";
-      // The arguments the classifier reads: the element and the page, which
-      // the model's own `{"ref": 12}` says nothing about.
-      final gate = LlmToolCall(
-          id: call.id,
-          name: call.name,
-          argumentsJson: jsonEncode({"action": described}));
-      yield* _runGated(gate, call.name, attempt,
+      yield* _runGated(_described(call, described), call.name, attempt,
           argumentsText: described, mode: browserApprove);
     } else {
       _commandResult = await attempt();
     }
+    yield _browserResult(call);
+  }
+
+  /// [call] as the banner and the classifier read it: what it does to which
+  /// element on which page, which the model's own `{"ref": 12}` says
+  /// nothing about.
+  static LlmToolCall _described(LlmToolCall call, String described) =>
+      LlmToolCall(
+          id: call.id,
+          name: call.name,
+          argumentsJson: jsonEncode({"action": described}));
+
+  static Future<ShellResult> Function() _attempt(
+          Future<String> Function() run) =>
+      () async {
+        try {
+          return ShellResult(returnCode: 0, output: await run());
+        } catch (e) {
+          return ShellResult.failed("$e");
+        }
+      };
+
+  /// The gated browser call's result, under what happened since the last.
+  ToolResultEvent _browserResult(LlmToolCall call) {
     final result = _commandResult!;
     _commandResult = result.returnCode == 0
         ? ShellResult(returnCode: 0, output: _noted(result.output))
         : ShellResult.failed(_noted(result.exceptionInfo ?? result.output));
-    yield ToolResultEvent(_ran(call, _commandResult!));
+    return ToolResultEvent(_ran(call, _commandResult!));
   }
 
   /// [text] under what happened in the browser that this agent did not do
@@ -1695,31 +1705,13 @@ class BuiltinAgent {
       return;
     }
     final described = "upload ${resolved.join(", ")} into $target";
-    final gate = LlmToolCall(
-        id: call.id,
-        name: call.name,
-        argumentsJson: jsonEncode({"action": described}));
-    yield* _runGated(
-      gate,
-      browserUploadToolName,
-      () async {
-        try {
-          return ShellResult(returnCode: 0, output: await tab.upload(ref, resolved));
-        } catch (e) {
-          return ShellResult.failed("$e");
-        }
-      },
-      argumentsText: described,
-      mode: browserUploads == BrowserUploadPolicy.allow
-          ? ApproveMode.never
-          : ApproveMode.auto,
-    );
-    final result = _commandResult!;
-    yield ToolResultEvent(_ran(
-        call,
-        result.returnCode == 0
-            ? ShellResult(returnCode: 0, output: _noted(result.output))
-            : ShellResult.failed(_noted(result.exceptionInfo ?? result.output))));
+    yield* _runGated(_described(call, described), browserUploadToolName,
+        _attempt(() => tab.upload(ref, resolved)),
+        argumentsText: described,
+        mode: browserUploads == BrowserUploadPolicy.allow
+            ? ApproveMode.never
+            : ApproveMode.auto);
+    yield _browserResult(call);
   }
 
   /// Hand the browser to the user: every other browser tool refuses until

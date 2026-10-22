@@ -700,8 +700,10 @@ fighting over it.
 
 What the model reads after every call is the view: title, URL, scroll
 position, the interactive elements in view numbered `[n]`, and the text in
-view. The page script (`page_script.dart`) runs in an isolated world made per
-evaluation, so the page's own scripts cannot see or replace it; the numbers
+view. The page script (`page_script.dart`) runs in an isolated world, so the
+page's own scripts cannot see or replace it. The world is made once per
+document and kept: each one made lives until the page navigates, so one per
+call piled up hundreds on a long session in an editor. The numbers
 live on the DOM as `data-entoli-ref`, so an element keeps its number for as
 long as its document does. Cross-site frames are invisible to it — a separate
 process, and a challenge widget's sits in a closed shadow root besides — so
@@ -793,7 +795,10 @@ on and a reload words it the same. What is noted: the user's back and forward
 with the address reached (`historyBack` is the user's back; the agent's `back`
 leaves no note, it being the agent's own move), reload, hiding and giving
 back (the agent's own hide is not noted back to it), the quit with who quit
-it (`close(why:)`: the user, the idle timer, the window setting), and one
+it (`close(why:)`: the user, the idle timer; the window closed by hand or a
+crash, which `cdp.done` turns into the same quit), a restart (the settings
+changed, or another chat's `browser_show`, which every chat's tab but the
+showing one hears of), and one
 "clicked or typed in the page" however much the user did — never what they
 typed. A note is scrubbed of sign-in values as it is written, since the quit
 it may describe drops them. A note waits for the agent's next browser call,
@@ -821,8 +826,12 @@ failed login puts the email back in a new field — so the tab also holds the
 values in memory until the browser quits and takes them out of every text the
 agent is answered with, raw and URL-encoded. Short values (under four
 characters) are not held, or a two-letter one would blank half the page.
-Pictures are not scrubbed: a screenshot taken after can show an email
-displayed on the page. An error while filling names the field, never what
+Pictures cannot be scrubbed, and a sign-in page shows the values back (the
+account chip on Google's password step, the email after a failed login), so
+the tab refuses screenshots on the origin a sign-in was filled in on until
+the browser quits, pointing the agent at `browser_page_text`. A site the
+sign-in redirects to is not blocked; a sign-in the user did by hand behind a
+hold is not known, so not blocked either. An error while filling names the field, never what
 was being typed into it. A sign-in over several pages is one prompt per page,
 since the second page's fields do not exist until the first is submitted.
 
@@ -834,8 +843,8 @@ draws as a button that opens the card, and **waits until the user gives the
 browser back** rather than returning at once — an agent told only that the
 browser refuses tends to give up or end its turn. Stopping the turn ends the
 wait and leaves the browser hidden, since the user may be mid-sign-in. A quit
-is different: the hold and any sign-in waiting in the panel end with the
-browser (not through `unhide`, since nobody gave it back — the quit is the
+is different: the hold and any sign-in or upload waiting in the panel end
+with the browser (not through `unhide`, since nobody gave it back — the quit is the
 note), so the chat's button goes and the agent's waits answer. Both
 tools park the turn on the user, so they ride `ask`, as `present_plan` does: a
 headless turn is not offered them.

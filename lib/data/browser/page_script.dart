@@ -1,7 +1,7 @@
 /// What the agent runs inside a page, in an isolated world of its own: the
 /// DOM is the page's, the globals are not, so nothing the page runs can see
-/// or replace it. A world is made per evaluation, so the numbering lives on
-/// the DOM — an element keeps its number for as long as the document does.
+/// or replace it. The numbering lives on the DOM, so an element keeps its
+/// number for as long as the document does, whichever world asks.
 const pageScript = r"""
 (() => {
   if (window.__entoli) return;

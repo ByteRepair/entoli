@@ -90,13 +90,26 @@ class CdpBrowser extends AgentBrowser {
   BrowserTab tab(String chatId) =>
       _tabs.putIfAbsent(chatId, () => _CdpTab(this, chatId));
 
-  /// Put off the idle quit: the agent or the user is using it.
+  final _sinceUse = Stopwatch();
+
+  /// Put off the idle quit: the agent or the user is using it. Called per
+  /// mouse move, so it restarts a stopwatch rather than a timer.
   void _touch() {
-    _idleTimer?.cancel();
-    _idleTimer = Timer(
-        idle,
-        () => unawaited(close(
-            why: "The browser quit after ${idle.inMinutes} idle minutes.")));
+    _sinceUse
+      ..reset()
+      ..start();
+    _idleTimer ??= Timer(idle, _idleCheck);
+  }
+
+  void _idleCheck() {
+    final left = idle - _sinceUse.elapsed;
+    if (left > Duration.zero) {
+      _idleTimer = Timer(left, _idleCheck);
+      return;
+    }
+    _idleTimer = null;
+    unawaited(
+        close(why: "The browser quit after ${idle.inMinutes} idle minutes."));
   }
 
   /// The running browser, launched if none is or the pick has changed since.
@@ -114,18 +127,17 @@ class CdpBrowser extends AgentBrowser {
         !running.cdp.isClosed) {
       return running;
     }
-    if (running != null) await _quit();
+    if (running != null) {
+      await _quit("The browser restarted: its settings changed.");
+    }
     return _starting ??= _start(exe, windowed: windowed).then((started) {
       _running = started;
       _isRunning.value = true;
+      // The user closed its window, or it crashed: a quit like any other.
       unawaited(started.cdp.done.then((_) {
         if (!identical(_running, started)) return;
-        _running = null;
-        _shown = false;
-        _isRunning.value = false;
-        for (final tab in _tabs.values) {
-          tab._forget();
-        }
+        _ended();
+        unawaited(_quit("The browser was closed."));
       }));
       return started;
     }).whenComplete(() => _starting = null);
@@ -159,45 +171,55 @@ class CdpBrowser extends AgentBrowser {
   /// restart runs before reopening the very address that may carry it.
   @override
   Future<void> close({String why = "The user quit the browser."}) async {
-    _shown = false;
-    for (final tab in _tabs.values) {
-      if (tab._page != null) {
-        tab._note("$why Your tab and its page are gone; the next browser "
-            "call starts it again on a blank tab.");
-      }
-      tab._secrets.clear();
-      // Not `unhide`: nobody gave it back, and the quit is the note.
-      tab._hold.value = null;
-      tab._endRequest(const CredentialsDeclined(
-          "The browser was quit before the sign-in was filled in."));
-      tab.cancelUpload(why: "The browser was quit before files were chosen.");
-    }
-    await _quit();
+    _ended();
+    await _quit(why);
   }
 
-  Future<void> _quit() async {
+  /// The browser is gone rather than restarting: the window it was shown
+  /// in, what a sign-in typed, and a hide nobody gave back go with it.
+  void _ended() {
+    _shown = false;
+    for (final tab in _tabs.values) {
+      tab._secrets.clear();
+      tab._signedIn.clear();
+      // Not `unhide`: nobody gave it back, and the quit is the note.
+      tab._hold.value = null;
+    }
+  }
+
+  /// Every tab's page goes; each tab that had one hears [why], but
+  /// [quietly], whose own call is the restart.
+  Future<void> _quit(String why, {_CdpTab? quietly}) async {
     _idleTimer?.cancel();
+    _idleTimer = null;
     final running = _running;
     _running = null;
     _isRunning.value = false;
     for (final tab in _tabs.values) {
-      tab._forget();
+      tab._lose(identical(tab, quietly) ? null : why);
     }
     if (running != null) await _stop(running);
   }
 
   /// Quit the hidden browser so the next start comes up with a window.
-  Future<void> _showWindow() async {
+  Future<void> _showWindow(_CdpTab by) async {
     if (_running?.windowed ?? false) return;
-    await _quit();
+    await _quit("The browser restarted to open a window.", quietly: by);
     _shown = true;
   }
 
+  /// One entry per name, the first that exists: a browser on `PATH` as both
+  /// `google-chrome` and `google-chrome-stable` is one browser.
   @override
-  Future<List<FoundBrowser>> detect() async => [
-        for (final (name, path) in _candidates())
-          if (await File(path).exists()) FoundBrowser(name, path),
-      ];
+  Future<List<FoundBrowser>> detect() async {
+    final found = <String, FoundBrowser>{};
+    for (final (name, path) in _candidates()) {
+      if (!found.containsKey(name) && await File(path).exists()) {
+        found[name] = FoundBrowser(name, path);
+      }
+    }
+    return [...found.values];
+  }
 
   @override
   Future<String> verify(String picked) async {
@@ -345,15 +367,7 @@ List<(String, String)> _candidates() {
       ])
         for (final dir in path)
           if (dir.isNotEmpty) (name, p.join(dir, bin)),
-    ].fold<List<(String, String)>>([], (found, candidate) {
-      // One entry per name, the first on PATH: a browser installed as both
-      // `google-chrome` and `google-chrome-stable` is one browser.
-      if (!found.any((f) => f.$1 == candidate.$1) &&
-          File(candidate.$2).existsSync()) {
-        found.add(candidate);
-      }
-      return found;
-    });
+    ];
   }
   if (Platform.isMacOS) {
     final home = Platform.environment["HOME"];
@@ -443,8 +457,28 @@ class _CdpTab implements BrowserTab {
 
   void _forget() {
     _page = null;
+    _world = null;
     _shown.value = null;
   }
+
+  /// The browser quit under this tab: what waited on its page ends, and the
+  /// agent hears [why] where it had a page to lose.
+  void _lose(String? why) {
+    final had = _page != null;
+    // Forgotten first, so the upload's cancel sends nothing to a closing tab.
+    _forget();
+    if (had && why != null) {
+      _note("$why Your tab and its page are gone; the next browser call "
+          "starts it again on a blank tab.");
+    }
+    _endRequest(const CredentialsDeclined(
+        "The browser was quit before the sign-in was filled in."));
+    cancelUpload(why: "The browser was quit before files were chosen.");
+  }
+
+  /// The page script's world in the current document, made once per
+  /// document: each one made lives until the page navigates.
+  int? _world;
 
   final _notes = <String>[];
 
@@ -512,6 +546,7 @@ class _CdpTab implements BrowserTab {
         } else if (e.method == "Page.frameNavigated" && _page?.session == session) {
           final frame = e.params["frame"] as Map? ?? const {};
           if (frame["parentId"] == null) {
+            _world = null;
             _shown.value = _shown.value?.copyWith(url: "${frame["url"]}");
           }
         }
@@ -525,14 +560,17 @@ class _CdpTab implements BrowserTab {
   Future<dynamic> _eval(String expression) async {
     for (var attempt = 0;; attempt++) {
       final page = await _attach();
+      final reused = _world != null;
       try {
-        final world = await page.cdp.send("Page.createIsolatedWorld",
+        final world = _world ??= (await page.cdp.send(
+            "Page.createIsolatedWorld",
             params: {"frameId": page.target, "worldName": "entoli"},
-            sessionId: page.session);
+            sessionId: page.session))["executionContextId"] as int;
         final result = await page.cdp.send("Runtime.evaluate",
             params: {
+              // The script defines itself once per world.
               "expression": "$pageScript\n$expression",
-              "contextId": world["executionContextId"],
+              "contextId": world,
               "returnByValue": true,
               "awaitPromise": true,
             },
@@ -545,9 +583,11 @@ class _CdpTab implements BrowserTab {
         return (result["result"] as Map?)?["value"];
       } on CdpException {
         // A navigation took the frame or its world mid-call; the next
-        // document answers once it is there.
+        // document answers once it is there. A kept world that is gone is
+        // just made again.
+        _world = null;
         if (attempt >= 3) rethrow;
-        await Future<void>.delayed(const Duration(milliseconds: 500));
+        if (!reused) await Future<void>.delayed(const Duration(milliseconds: 500));
       }
     }
   }
@@ -637,9 +677,18 @@ class _CdpTab implements BrowserTab {
     return jsonDecode(json as String) as Map<String, dynamic>;
   }
 
+  /// Click [ref] off its exact centre, the way a pointer lands.
+  Future<void> _clickRef(int ref) async {
+    final rect = await _rect(ref);
+    double near(String start, String size) =>
+        (rect[start] as num) +
+        (rect[size] as num) * (0.4 + _random.nextDouble() * 0.2);
+    await _clickAt(near("left", "width"), near("top", "height"));
+  }
+
   @override
   Future<String> goto(String url) async {
-    final target = Uri.tryParse(url)?.hasScheme == true ? url : "https://$url";
+    final target = pageAddress(url);
     final page = await _attach();
     String? error;
     await _act(() async {
@@ -656,27 +705,32 @@ class _CdpTab implements BrowserTab {
   @override
   Future<String> back() async {
     final page = await _attach();
-    final history = await page.cdp
-        .send("Page.getNavigationHistory", sessionId: page.session);
-    final index = history["currentIndex"] as int;
-    if (index <= 0) return "There is no earlier page in this tab.\n\n${await _describeView()}";
-    final entries = history["entries"] as List;
-    await _act(() => page.cdp.send("Page.navigateToHistoryEntry",
-        params: {"entryId": (entries[index - 1] as Map)["id"]},
-        sessionId: page.session));
+    String? to;
+    await _act(() async => to = await _go(page.cdp, page.session, -1));
+    if (to == null) {
+      return "There is no earlier page in this tab.\n\n${await _describeView()}";
+    }
     return _describeView();
+  }
+
+  /// Move [by] entries through the tab's history; the address moved to, or
+  /// null where there is none that far.
+  static Future<String?> _go(CdpConnection cdp, String session, int by) async {
+    final history =
+        await cdp.send("Page.getNavigationHistory", sessionId: session);
+    final to = (history["currentIndex"] as int) + by;
+    final entries = history["entries"] as List;
+    if (to < 0 || to >= entries.length) return null;
+    final entry = entries[to] as Map;
+    await cdp.send("Page.navigateToHistoryEntry",
+        params: {"entryId": entry["id"]}, sessionId: session);
+    return "${entry["url"]}";
   }
 
   @override
   Future<String> click({int? ref, double? x, double? y}) async {
     if (ref != null) {
-      final rect = await _rect(ref);
-      final width = (rect["width"] as num).toDouble();
-      final height = (rect["height"] as num).toDouble();
-      // Off the exact centre, the way a pointer lands.
-      final cx = (rect["left"] as num) + width * (0.4 + _random.nextDouble() * 0.2);
-      final cy = (rect["top"] as num) + height * (0.4 + _random.nextDouble() * 0.2);
-      await _act(() => _clickAt(cx.toDouble(), cy.toDouble()));
+      await _act(() => _clickRef(ref));
     } else if (x != null && y != null) {
       await _act(() => _clickAt(x, y));
     } else {
@@ -718,7 +772,7 @@ class _CdpTab implements BrowserTab {
       await _typeAtFocus(text);
       if (submit) {
         final page = await _attach();
-        await _act(() => _key(page, "Enter", 13, text: "\r"));
+        await _act(() => _stroke(page.cdp, page.session, "Enter"));
       }
     }
     return _describeView();
@@ -732,57 +786,66 @@ class _CdpTab implements BrowserTab {
     final page = await _attach();
     for (final rune in text.runes) {
       final char = String.fromCharCode(rune);
-      if (char == "\n") {
-        await _key(page, "Enter", 13, text: "\r");
-        continue;
-      }
-      final key = domKey(char);
-      for (final type in ["keyDown", "keyUp"]) {
-        await page.cdp.send("Input.dispatchKeyEvent",
-            params: {
-              "type": type,
-              "key": char,
-              "code": key?.code ?? "",
-              "windowsVirtualKeyCode": key?.keyCode ?? 0,
-              if (type == "keyDown") ...{"text": char, "unmodifiedText": char},
-            },
-            sessionId: page.session);
-      }
+      await _stroke(page.cdp, page.session, char == "\n" ? "Enter" : char);
     }
     await Future<void>.delayed(const Duration(milliseconds: 200));
   }
 
-  @override
-  Future<String> press(String key, {Set<String> modifiers = const {}}) async {
-    final found = domKey(key) ??
-        (throw CdpException("\"$key\" is not a key this can press. Use a "
+  /// Press and release [name], a key [domKey] knows. Held Control or Meta
+  /// makes a letter a shortcut: no text goes in, and an editing one names
+  /// its command, which a synthesized key does not run on its own.
+  static Future<void> _stroke(CdpConnection cdp, String session, String name,
+      {Set<String> modifiers = const {}}) async {
+    final found = domKey(name) ??
+        (throw CdpException("\"$name\" is not a key this can press. Use a "
             "DOM key name (Enter, Tab, Escape, ArrowDown, F5) or one character."));
-    final page = await _attach();
-    final bits = domModifiers(modifiers);
-    // Held Control or Meta makes a letter a shortcut: no text goes in, and
-    // an editing one names its command, which a synthesized key does not run
-    // on its own.
     final shortcut = modifiers.contains("Control") || modifiers.contains("Meta");
     final command = shortcut
         ? editingCommand(found.key, shift: modifiers.contains("Shift"))
         : null;
     final text = shortcut || modifiers.contains("Alt") ? null : found.text;
-    await _act(() async {
-      for (final type in ["down", "keyUp"]) {
-        final down = type == "down";
-        await page.cdp.send("Input.dispatchKeyEvent",
-            params: {
-              "type": down ? (text == null ? "rawKeyDown" : "keyDown") : "keyUp",
-              "key": found.key,
-              "code": found.code,
-              "windowsVirtualKeyCode": found.keyCode,
-              "modifiers": bits,
-              if (down && text != null) ...{"text": text, "unmodifiedText": text},
-              if (down && command != null) "commands": [command],
+    for (final down in [true, false]) {
+      await _sendKey(
+          cdp,
+          session,
+          BrowserKey(
+            down: down,
+            key: found.key,
+            code: found.code,
+            keyCode: found.keyCode,
+            text: text,
+            modifiers: domModifiers(modifiers),
+            commands: [?command],
+          ));
+    }
+  }
+
+  static Future<void> _sendKey(
+          CdpConnection cdp, String session, BrowserKey event) =>
+      cdp.send("Input.dispatchKeyEvent",
+          params: {
+            // `keyDown` with text inserts it; `rawKeyDown` is a press that
+            // inserts nothing, which a shortcut or an arrow is.
+            "type": event.down
+                ? (event.text == null ? "rawKeyDown" : "keyDown")
+                : "keyUp",
+            "key": event.key,
+            "code": event.code,
+            "windowsVirtualKeyCode": event.keyCode,
+            "modifiers": event.modifiers,
+            if (event.down && event.text != null) ...{
+              "text": event.text,
+              "unmodifiedText": event.text,
             },
-            sessionId: page.session);
-      }
-    });
+            if (event.down && event.commands.isNotEmpty)
+              "commands": event.commands,
+          },
+          sessionId: session);
+
+  @override
+  Future<String> press(String key, {Set<String> modifiers = const {}}) async {
+    final page = await _attach();
+    await _act(() => _stroke(page.cdp, page.session, key, modifiers: modifiers));
     return _describeView();
   }
 
@@ -792,14 +855,11 @@ class _CdpTab implements BrowserTab {
       throw CdpException("[$ref] has no option matching \"$text\".");
     }
     if (chosen == null) {
-      final rect = await _rect(ref);
-      await _clickAt(
-          (rect["left"] as num) + (rect["width"] as num) / 2.0,
-          (rect["top"] as num) + (rect["height"] as num) / 2.0);
+      await _clickRef(ref);
       await _eval("window.__entoli.selectContents($ref)");
       final page = await _attach();
       if (text.isEmpty) {
-        await _key(page, "Backspace", 8);
+        await _stroke(page.cdp, page.session, "Backspace");
       } else {
         await page.cdp.send("Input.insertText",
             params: {"text": text}, sessionId: page.session);
@@ -807,7 +867,7 @@ class _CdpTab implements BrowserTab {
     }
     if (submit) {
       final page = await _attach();
-      await _act(() => _key(page, "Enter", 13, text: "\r"));
+      await _act(() => _stroke(page.cdp, page.session, "Enter"));
     } else {
       await Future<void>.delayed(const Duration(milliseconds: 300));
     }
@@ -828,6 +888,12 @@ class _CdpTab implements BrowserTab {
   /// Held in memory alone, and dropped at the quit. Short values are not
   /// held: a two-letter one would blank out half the page.
   final _secrets = <String>{};
+
+  /// The sites a sign-in was filled in on, until the browser quits. Text is
+  /// scrubbed of what was typed; a picture cannot be, and a sign-in page
+  /// shows it back (the account chip on Google's password step, the email
+  /// put back after a failed login), so no screenshot is taken on one.
+  final _signedIn = <String>{};
 
   String _scrub(String text) {
     for (final secret in _secrets) {
@@ -884,6 +950,7 @@ class _CdpTab implements BrowserTab {
     _filling = true;
     _secrets.addAll(values.map((v) => v.trim()).where((v) => v.length >= 4));
     try {
+      _signedIn.add(await _eval("location.origin") as String);
       for (var i = 0; i < request.fields.length; i++) {
         final field = request.fields[i];
         // Marked before it is typed in, so no description of the page ever
@@ -901,10 +968,7 @@ class _CdpTab implements BrowserTab {
       for (final click in request.submit) {
         await _act(() async {
           if (click.ref != null) {
-            final rect = await _rect(click.ref!);
-            await _clickAt(
-                (rect["left"] as num) + (rect["width"] as num) / 2.0,
-                (rect["top"] as num) + (rect["height"] as num) / 2.0);
+            await _clickRef(click.ref!);
           } else if (click.x != null && click.y != null) {
             await _clickAt(click.x!, click.y!);
           }
@@ -961,10 +1025,7 @@ class _CdpTab implements BrowserTab {
     await page.cdp.send("Page.setInterceptFileChooserDialog",
         params: {"enabled": true}, sessionId: page.session);
     try {
-      final rect = await _rect(ref);
-      await _clickAt(
-          (rect["left"] as num) + (rect["width"] as num) / 2.0,
-          (rect["top"] as num) + (rect["height"] as num) / 2.0);
+      await _clickRef(ref);
       final chooser = await opened.future.timeout(const Duration(seconds: 10),
           onTimeout: () => throw CdpException(
               "Clicking [$ref] opened no file chooser. Give the number of the "
@@ -1015,8 +1076,7 @@ class _CdpTab implements BrowserTab {
   @override
   Future<String> requestUpload(int ref) async {
     final chooser = await _openChooser(ref);
-    _uploadWaiting?.completeError(
-        const UploadCancelled("A newer upload replaced this one."));
+    cancelUpload(why: "A newer upload replaced this one.");
     final waiting = Completer<String>();
     _uploadWaiting = waiting;
     _chooser = chooser.node;
@@ -1073,24 +1133,6 @@ class _CdpTab implements BrowserTab {
           sessionId: live.session);
     } catch (e) {
       logFailure(_tag, "a file chooser could not be cancelled", e);
-    }
-  }
-
-  Future<void> _key(
-      ({CdpConnection cdp, String target, String session}) page,
-      String key,
-      int code,
-      {String? text}) async {
-    for (final type in ["keyDown", "keyUp"]) {
-      await page.cdp.send("Input.dispatchKeyEvent",
-          params: {
-            "type": type,
-            "key": key,
-            "code": key,
-            "windowsVirtualKeyCode": code,
-            if (type == "keyDown" && text != null) "text": text,
-          },
-          sessionId: page.session);
     }
   }
 
@@ -1161,7 +1203,7 @@ class _CdpTab implements BrowserTab {
         // Nothing to come back to: the window opens blank.
       }
     }
-    await _browser._showWindow();
+    await _browser._showWindow(this);
     if (byUser) {
       _note("The user opened the browser in a window, which reloaded the "
           "page.");
@@ -1182,10 +1224,17 @@ class _CdpTab implements BrowserTab {
     final Map<String, dynamic> clip;
     double left = 0, top = 0;
     final page = await _attach();
+    final [ratio as num, origin as String] =
+        await _eval("[devicePixelRatio, location.origin]") as List;
+    if (_signedIn.contains(origin)) {
+      throw CdpException("No screenshot on $origin: the user signed in "
+          "there, and the page may show what they typed. Read it with "
+          "browser_page_text instead.");
+    }
     // The clip's scale multiplies device pixels. Undone, a pixel in the image
     // is a CSS pixel in the viewport, which is what a click takes — on a
     // HiDPI screen it would otherwise be off by the ratio.
-    final scale = 1 / ((await _eval("devicePixelRatio") as num?) ?? 1);
+    final scale = 1 / ratio;
     if (ref != null) {
       final rect = await _rect(ref);
       left = (rect["left"] as num).toDouble();
@@ -1260,17 +1309,9 @@ class _CdpTab implements BrowserTab {
   Future<void> _step(int by, String did) async {
     final live = _live;
     if (live == null) return;
-    final history =
-        await live.cdp.send("Page.getNavigationHistory", sessionId: live.session);
-    final index = history["currentIndex"] as int;
-    final entries = history["entries"] as List;
-    final to = index + by;
-    if (to < 0 || to >= entries.length) return;
-    final entry = entries[to] as Map;
-    await live.cdp.send("Page.navigateToHistoryEntry",
-        params: {"entryId": entry["id"]}, sessionId: live.session);
+    final to = await _go(live.cdp, live.session, by);
     // No full stop after the address, which would read as part of it.
-    _note("The user $did to: ${entry["url"]}");
+    if (to != null) _note("The user $did to: $to");
   }
 
   @override
@@ -1315,24 +1356,7 @@ class _CdpTab implements BrowserTab {
   Future<void> key(BrowserKey event) async {
     final live = _live;
     if (live == null) return;
-    await live.cdp.send("Input.dispatchKeyEvent",
-        params: {
-          // `keyDown` with text inserts it; `rawKeyDown` is a press that
-          // inserts nothing, which a shortcut or an arrow is.
-          "type": event.down
-              ? (event.text == null ? "rawKeyDown" : "keyDown")
-              : "keyUp",
-          "key": event.key,
-          "code": event.code,
-          "windowsVirtualKeyCode": event.keyCode,
-          "modifiers": event.modifiers,
-          if (event.down && event.text != null) ...{
-            "text": event.text,
-            "unmodifiedText": event.text,
-          },
-          if (event.down && event.commands.isNotEmpty) "commands": event.commands,
-        },
-        sessionId: live.session);
+    await _sendKey(live.cdp, live.session, event);
     _handled = true;
   }
 
@@ -1464,6 +1488,20 @@ class _ScriptError implements Exception {
 
   @override
   String toString() => message;
+}
+
+/// [url] with a scheme put in front where it names none: `http://` for this
+/// machine, whose dev servers rarely have a certificate, else `https://`.
+/// Not `Uri.hasScheme`, which reads `localhost:8080` as the scheme
+/// `localhost`.
+String pageAddress(String url) {
+  if (RegExp(r"^([a-z][a-z0-9+.-]*://|about:|data:)", caseSensitive: false)
+      .hasMatch(url)) {
+    return url;
+  }
+  final local = RegExp(r"^(localhost|127(\.\d+){3}|0\.0\.0\.0|\[::1\])(:|/|$)")
+      .hasMatch(url);
+  return "${local ? "http" : "https"}://$url";
 }
 
 /// Whether a page is a human check standing in front of the one asked for.
