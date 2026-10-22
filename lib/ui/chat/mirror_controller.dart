@@ -6,9 +6,10 @@ import "../../data/sync/sync_hub.dart";
 import "../../domain/ask.dart";
 import "../../domain/chat_log.dart";
 import "../../domain/models.dart";
+import "../../domain/room/room_state.dart";
 import "../../providers.dart";
 import "chat_controller.dart"
-    show ChatViewState, TurnDriver, chatControllerProvider;
+    show TurnDriver, chatControllerProvider;
 
 /// The controller a mirrored chat is read through — the counterpart
 /// [ChatController] would have been if it read from the wire instead of the

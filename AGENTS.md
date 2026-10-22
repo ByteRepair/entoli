@@ -49,7 +49,9 @@ named in a cross-reference is findable from this list.
   the layers, what the build does with them, and the Liquid Glass format notes
 - `windows/AGENTS.md` — The exe and its icon, The MSI, What is absent, and
   honestly so, and nothing Windows runs on this host
-- `lib/ui/chat/AGENTS.md` — When a turn is over, Thinking and tool runs,
+- `lib/domain/room/AGENTS.md` — The room and its participants, The contract
+  between direct and Omada chats, When a turn is over, Automatic retry rounds
+- `lib/ui/chat/AGENTS.md` — What the turn's extraction kept, Thinking and tool runs,
   Selecting a reply, and copying it, How a reply is set, Code blocks, A command
   the user ran, The plan, on screen, A chat whose home device is elsewhere, The chat page
 - `lib/data/voice/AGENTS.md` — Voice mode, What listens and what speaks, The
@@ -84,7 +86,8 @@ backends and one of them was an OpenCode server; with one backend it contrasts
 with nothing either, which is why nothing user-facing names it at all.
 
 - `conv.jsonl` is the source of truth, and it is a log rather than a document.
-  `ChatController` appends a turn's events to it as they arrive;
+  `ChatRoom` (`lib/domain/room/`, held by the `ChatController` notifier)
+  appends a turn's events to it as they arrive;
   `ChatRepository` resolves which model runs and owns rewinding. Context is
   re-injected only when a turn is resent — otherwise the agent's own session
   carries it.

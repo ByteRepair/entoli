@@ -10,6 +10,7 @@ import "package:agent_chat/domain/app_settings.dart";
 import "package:agent_chat/domain/ask.dart";
 import "package:agent_chat/domain/chat_meta.dart";
 import "package:agent_chat/domain/models.dart";
+import "package:agent_chat/domain/room/room_state.dart";
 import "package:agent_chat/domain/chat_log.dart";
 import "package:agent_chat/domain/temp_chat_ttl.dart";
 import "package:agent_chat/domain/permission.dart";

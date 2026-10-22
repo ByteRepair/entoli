@@ -13,6 +13,20 @@ enum OmadaOrdering {
   sequential,
   parallel,
   relay;
+
+  /// Whether the room waits for every running turn to end before it hands
+  /// off or dispatches what was said meanwhile. Relay alone does not.
+  bool get waitsForWave => this != relay;
+
+  /// Whether a dispatch pass may start a member's next item. [started] is how
+  /// many items this pass has started; [memberBusy], whether the member has a
+  /// turn in flight. The room-wide wait is [waitsForWave]'s, at the callers.
+  bool admits({required int started, required bool memberBusy}) =>
+      switch (this) {
+        sequential => started == 0,
+        parallel => true,
+        relay => !memberBusy,
+      };
 }
 
 /// Human-readable labels, shared by the project settings page so the

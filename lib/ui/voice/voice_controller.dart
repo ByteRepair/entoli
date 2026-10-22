@@ -8,6 +8,7 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 import "../../domain/background_work.dart";
 import "../../domain/chat_meta.dart";
 import "../../domain/models.dart";
+import "../../domain/room/room_state.dart";
 import "../../domain/speech_text.dart";
 import "../../domain/voice.dart";
 import "../../domain/voice_model.dart";

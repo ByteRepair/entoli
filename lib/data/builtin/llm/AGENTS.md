@@ -79,7 +79,7 @@ Failures are reported as they happen: a rejected key or a bad request reaches
 that never opened) emits `RetryEvent` the instant it fails. `ErrorEvent` carries
 whether the failure was retryable — read off the exception the query died on —
 and that flag is what the controller's automatic retry rounds ask before
-re-entering `resume` (see `lib/ui/chat/AGENTS.md`, "Automatic retry rounds");
+re-entering `resume` (see `lib/domain/room/AGENTS.md`, "Automatic retry rounds");
 `_fail`, for a failure the turn never reached a model through, leaves it false.
 A request that died mid-stream is retryable too, and safe to resume, because
 resuming appends to the same reply rather than starting another.

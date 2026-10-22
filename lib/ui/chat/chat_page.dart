@@ -12,6 +12,7 @@ import "../../domain/agent_backend.dart";
 import "../../domain/chat_meta.dart";
 import "../../domain/end_turn.dart";
 import "../../domain/models.dart";
+import "../../domain/room/room_state.dart";
 import "../../domain/project.dart";
 import "../../domain/prompt_library.dart" show nameOf;
 import "../../providers.dart";

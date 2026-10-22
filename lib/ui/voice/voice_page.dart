@@ -3,6 +3,7 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../domain/chat_meta.dart";
 import "../../domain/models.dart";
+import "../../domain/room/room_state.dart";
 import "../../providers.dart";
 import "../chat/chat_controller.dart";
 import "../chat/widgets/turn_surface.dart";
