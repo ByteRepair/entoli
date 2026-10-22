@@ -29,6 +29,7 @@ class MainFlutterWindow: NSWindow {
     RegisterGeneratedPlugins(registry: flutterViewController)
 
     RemindersPlugin.register(with: flutterViewController.engine.binaryMessenger)
+    ClipboardChannel.register(with: flutterViewController.engine.binaryMessenger)
 
     // A wake session is not an opening anyone is watching: the trigger's
     // launchd job started the process, and hiding is the application's own —
@@ -56,5 +57,28 @@ class MainFlutterWindow: NSWindow {
     }
 
     super.awakeFromNib()
+  }
+}
+
+/// The copy with formatting, which Flutter's own clipboard call cannot make:
+/// it writes plain text only. See rich_clipboard.dart. In this file rather
+/// than its own so the Xcode project needs no new entry.
+enum ClipboardChannel {
+  private static var channel: FlutterMethodChannel?
+
+  static func register(with messenger: FlutterBinaryMessenger) {
+    let channel = FlutterMethodChannel(name: "agent_chat/clipboard", binaryMessenger: messenger)
+    channel.setMethodCallHandler { call, result in
+      guard call.method == "setHtml" else { return result(FlutterMethodNotImplemented) }
+      guard let args = call.arguments as? [String: Any],
+            let plain = args["plain"] as? String, let html = args["html"] as? String
+      else { return result(FlutterError(code: "bad-args", message: "plain and html", details: nil)) }
+      let pasteboard = NSPasteboard.general
+      pasteboard.clearContents()
+      pasteboard.setString(html, forType: .html)
+      pasteboard.setString(plain, forType: .string)
+      result(nil)
+    }
+    self.channel = channel
   }
 }

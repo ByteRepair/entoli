@@ -1,6 +1,7 @@
 import "dart:convert";
 import "dart:typed_data";
 
+import "package:flutter/gestures.dart";
 import "package:flutter/material.dart";
 // `RenderParagraph`, which material does not re-export.
 import "package:flutter/rendering.dart";
@@ -1206,6 +1207,124 @@ void main() {
       await dragCopy(tester, tester.getTopLeft(rendered) + const Offset(2, 4));
 
       expect(copied, isEmpty);
+    });
+
+    testWidgets("the copy button carries the message as HTML too", (tester) async {
+      final html = <String>[];
+      clipboard(tester, html: html);
+      await pump(
+        tester,
+        _message(MessageRole.assistant,
+            [const TextPart(text: "# Heading\n\nhere is **bold** <code>")]),
+      );
+      await reveal(tester, find.textContaining("bold"));
+
+      await tester.tap(find.byTooltip("Copy message"));
+      await tester.pumpAndSettle();
+      expect(html.single, contains("<h1>Heading</h1>"));
+      expect(html.single, contains("<strong>bold</strong> &lt;code&gt;"));
+    });
+
+    Future<void> dragOver(WidgetTester tester, {bool copy = true}) async {
+      final rendered = find.byType(MarkdownBody);
+      final from = tester.getTopLeft(rendered.first) + const Offset(2, 4);
+      final to = tester.getBottomRight(rendered.last) - const Offset(2, 4);
+      if (copy) return dragCopy(tester, from, to: to);
+      final gesture = await tester.startGesture(from, kind: PointerDeviceKind.mouse);
+      await tester.pump();
+      await gesture.moveTo(to);
+      await tester.pump();
+      await gesture.up();
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets("Ctrl+C over a selection carries its formatting", (tester) async {
+      final html = <String>[];
+      clipboard(tester, html: html);
+      await pump(
+        tester,
+        _message(MessageRole.assistant, [
+          const TextPart(
+              text: "# Heading\n\nhere is **bold**, *it* and `code`, "
+                  "[a link](https://example.com)\n\n1. one\n2. two"),
+        ]),
+      );
+
+      await dragOver(tester);
+
+      final copied = html.single;
+      expect(copied, contains("<h1>Heading</h1>"));
+      expect(copied, contains("<b>bold</b>"));
+      expect(copied, contains("<i>it</i>"));
+      expect(copied, matches(RegExp(r"<code[^>]*>code</code>")));
+      expect(copied, contains('<a href="https://example.com">a link</a>'));
+      expect(copied, contains("<ol><li>one</li><li>two</li></ol>"));
+    });
+
+    // The bullet goes with the item's start: a drag from inside "hello" did
+    // not pick the item up, only some of its words.
+    testWidgets("part of a list item copies as words, the whole item as an item",
+        (tester) async {
+      final html = <String>[];
+      clipboard(tester, html: html);
+      await pump(
+        tester,
+        _message(MessageRole.assistant, [const TextPart(text: "- hello\n- there")]),
+      );
+
+      final paragraph = tester.renderObject<RenderParagraph>(
+        find.descendant(
+          of: find.byType(MarkdownBody),
+          matching: find.text("hello", findRichText: true),
+        ),
+      );
+      Offset at(int index) =>
+          paragraph.localToGlobal(paragraph.getOffsetForCaret(
+              TextPosition(offset: index), Rect.zero)) +
+          const Offset(0, 7);
+
+      await dragCopy(tester, at(1), to: at(5));
+      expect(html.single, isNot(contains("<li>")));
+      expect(html.single, contains("<p>ello</p>"));
+
+      await dragCopy(tester, at(0), to: at(5));
+      expect(html.last, contains("<ul><li>hello</li></ul>"));
+    });
+
+    testWidgets("a selected code block copies as preformatted text", (tester) async {
+      final html = <String>[];
+      clipboard(tester, html: html);
+      await pump(
+        tester,
+        _message(MessageRole.assistant,
+            [const TextPart(text: "read this:\n\n```\nprint(1)\n```")]),
+      );
+
+      await dragOver(tester);
+
+      expect(html.single, contains("<p>read this:</p>"));
+      expect(html.single, matches(RegExp(r"<pre[^>]*>print\(1\)\n?</pre>")));
+    });
+
+    testWidgets("the selection menu's Copy carries the formatting", (tester) async {
+      final html = <String>[];
+      clipboard(tester, html: html);
+      await pump(
+        tester,
+        _message(MessageRole.assistant, [const TextPart(text: "here is **bold**")]),
+      );
+
+      await dragOver(tester, copy: false);
+      await tester.tapAt(
+        tester.getCenter(find.byType(MarkdownBody)),
+        buttons: kSecondaryMouseButton,
+        kind: PointerDeviceKind.mouse,
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text("Copy"));
+      await tester.pumpAndSettle();
+
+      expect(html.single, contains("<p>here is <b>bold</b></p>"));
     });
   });
 
