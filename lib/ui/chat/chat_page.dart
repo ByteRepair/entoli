@@ -4,6 +4,7 @@ import "dart:typed_data";
 
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
+import "package:flutter_riverpod/misc.dart" show ProviderListenable;
 
 import "../../domain/agent_backend.dart";
 import "../../domain/chat_meta.dart";
@@ -25,7 +26,7 @@ import "../widgets/scrolling.dart";
 import "chat_settings_page.dart";
 import "chat_controller.dart";
 import "mirror_controller.dart";
-import "widgets/activity_label.dart" show formatRemaining;
+import "widgets/activity_label.dart" show ActivitySource, LiveMessage, formatRemaining;
 import "widgets/composer.dart";
 import "widgets/paired_project_badges.dart";
 import "widgets/plan_view.dart" show PlanButton;
@@ -701,6 +702,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
       context,
       chat: chat,
       view: view,
+      source: chatControllerProvider(widget.chatId),
       editing: notifier,
       details: const [],
       whenEmpty: _EmptyChat(project: chat.state.project, controller: _controller),
@@ -749,6 +751,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
       context,
       chat: chat,
       view: view,
+      source: mirrorChatControllerProvider(widget.chatId),
       // The device is the strip's to say.
       details: const [],
       editing: online ? driver : null,
@@ -785,6 +788,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
     BuildContext context, {
     required Chat chat,
     required ChatViewState view,
+    required ProviderListenable<ChatViewState> source,
     required List<Widget> details,
     required Widget whenEmpty,
     required Widget bottom,
@@ -843,7 +847,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
       body: _ReadableColumn(
         banner: banner,
         bottom: bottom,
-        child: _conversation(chat, view, editing, whenEmpty),
+        child: _conversation(chat, view, source, editing, whenEmpty),
       ),
     );
   }
@@ -916,8 +920,8 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
         .value;
   }
 
-  Widget _conversation(
-      Chat chat, ChatViewState view, TurnDriver? editing, Widget whenEmpty) {
+  Widget _conversation(Chat chat, ChatViewState view,
+      ProviderListenable<ChatViewState> source, TurnDriver? editing, Widget whenEmpty) {
     final speechReady = ref.watch(speechReadyProvider);
     final reading = ref.watch(readAloudProvider);
     if (chat.messages.isEmpty) return whenEmpty;
@@ -944,7 +948,9 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
                       onTapLink: (href) => _openLink(context, href),
                     )),
                 MessageEntry(:final message, :final inOmadaSection, :final last) =>
-                  MessageBubble(
+                  ActivitySource(
+                    live: source.select((v) => _liveMessage(v, message.id)),
+                    child: MessageBubble(
                       chatId: widget.chatId,
                       message: message,
                       avatar: _avatarOf(chat, message),
@@ -967,6 +973,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
                           : null,
                       isSpeaking: reading == message.id,
                     ),
+                  ),
               }),
         ),
         // Only once the reader has left the end: up there a turn no longer
@@ -995,6 +1002,13 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
       ],
     );
   }
+  /// A message as an open activity drawer reads it.
+  static LiveMessage _liveMessage(ChatViewState view, String id) => (
+        message: view.chat?.messages.where((m) => m.id == id).firstOrNull,
+        shellOutput: view.shellOutput[id],
+        running: view.isRunning,
+      );
+
   /// What the bar says about the chat under its title, a line each. The
   /// conditions are here and nowhere else: [_barHeight] counts what this
   /// returns, so a line added here is one the bar makes room for.

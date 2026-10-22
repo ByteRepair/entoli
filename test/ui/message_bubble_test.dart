@@ -4,6 +4,7 @@ import "dart:typed_data";
 import "package:flutter/material.dart";
 // `RenderParagraph`, which material does not re-export.
 import "package:flutter/rendering.dart";
+import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:flutter_test/flutter_test.dart";
 import "package:flutter_markdown_plus/flutter_markdown_plus.dart";
 
@@ -12,7 +13,7 @@ import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/domain/theme_colour.dart";
 import "package:agent_chat/ui/theme.dart";
 import "package:agent_chat/ui/chat/widgets/activity_label.dart"
-    show ActivityGroup;
+    show ActivityGroup, ActivitySource, LiveMessage;
 import "package:agent_chat/ui/chat/widgets/message_bubble.dart";
 
 import "../fakes.dart";
@@ -1537,4 +1538,96 @@ void main() {
 
   });
 
+  testWidgets("a thought being written streams under its label", (tester) async {
+    await pump(
+      tester,
+      _message(MessageRole.assistant, const [ReasoningPart(text: "weighing the options")]),
+      isWaiting: true,
+    );
+
+    expect(find.text("Thinking…"), findsOneWidget);
+    expect(find.text("weighing the options"), findsOneWidget);
+
+    // Closed, it is a label again and the thought is behind it.
+    await pump(
+      tester,
+      _message(MessageRole.assistant, const [
+        ReasoningPart(text: "weighing the options", durationMs: 12000),
+        TextPart(text: "done"),
+      ]),
+    );
+
+    expect(find.text("weighing the options"), findsNothing);
+  });
+
+  testWidgets("a drawer with little in it still opens at most of the screen",
+      (tester) async {
+    await pump(
+      tester,
+      _message(MessageRole.assistant,
+          const [ReasoningPart(text: "short", durationMs: 12000)]),
+    );
+    await openThinking(tester);
+
+    final screen = tester.view.physicalSize.height / tester.view.devicePixelRatio;
+    expect(tester.getSize(find.byType(BottomSheet)).height, greaterThan(screen * 0.5));
+  });
+
+  testWidgets("an open drawer streams what its message goes on to say",
+      (tester) async {
+    Message thought(String text, {int? durationMs}) => _message(
+        MessageRole.assistant, [ReasoningPart(text: text, durationMs: durationMs)]);
+    final live = NotifierProvider<_Live, LiveMessage>(
+        () => _Live((message: thought("first"), shellOutput: null, running: true)));
+    await app.pump(
+      tester,
+      Scaffold(
+        body: Consumer(
+          builder: (context, ref, _) => ActivitySource(
+            live: live,
+            child: MessageBubble(
+              chatId: "chat-1",
+              message: ref.watch(live).message!,
+              isWaiting: true,
+            ),
+          ),
+        ),
+      ),
+      settle: false,
+    );
+    await tester.tap(find.text("Thinking…"));
+    await tester.pump(const Duration(milliseconds: 500));
+
+    final sheet = find.byType(BottomSheet);
+    expect(find.descendant(of: sheet, matching: find.textContaining("first")), findsOneWidget);
+
+    app.container.read(live.notifier).state =
+        (message: thought("first then more"), shellOutput: null, running: true);
+    await tester.pump(const Duration(milliseconds: 100));
+
+    expect(find.descendant(of: sheet, matching: find.textContaining("first then more")),
+        findsOneWidget);
+    expect(find.descendant(of: sheet, matching: find.byType(CircularProgressIndicator)),
+        findsOneWidget);
+
+    // The block closing ends the stream, with the drawer still up.
+    app.container.read(live.notifier).state = (
+      message: thought("first then more", durationMs: 3000),
+      shellOutput: null,
+      running: false,
+    );
+    await tester.pump(const Duration(milliseconds: 100));
+
+    expect(find.descendant(of: sheet, matching: find.byType(CircularProgressIndicator)),
+        findsNothing);
+  });
+}
+
+class _Live extends Notifier<LiveMessage> {
+  _Live(this.initial);
+
+  final LiveMessage initial;
+
+  @override
+  LiveMessage build() => initial;
 }
