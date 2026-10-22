@@ -96,6 +96,7 @@ dependencies:
   # org.freedesktop.Notifications — see linux_reminder_alarms.dart.
   dbus: ^0.7.15
   yaml: ^3.1.4
+  re_editor: ^0.10.0
 
 # `sherpa_onnx` depends on `sherpa_onnx_web` whatever platform is being built,
 # and that package ships a 14 MB WebAssembly build of onnxruntime as a

@@ -166,3 +166,6 @@ tool/ios/ish/dist/
 
 # Finder metadata; browsing the tree is not a change to it.
 .DS_Store
+
+# Claude Code's agent worktrees, each a git checkout of its own.
+/.claude/worktrees/

@@ -285,7 +285,7 @@ extension Threads on Chat {
   /// on [Chat] because a message alone cannot answer the second half.
   ///
   /// It only ever decides about a reply. A prompt always carries a `TextPart`,
-  /// empty text and all — see `ChatController._prompt` — so an edit branches
+  /// empty text and all — see `ChatRoom._prompt` — so an edit branches
   /// whatever was typed.
   bool worthAThread(Message message) =>
       message.parts.isNotEmpty || messages.lastOrNull?.id != message.id;

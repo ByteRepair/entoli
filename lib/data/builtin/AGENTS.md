@@ -522,7 +522,7 @@ counter leaves out, for the same reason.
 
 ## Sub-agents (the `task` tool)
 
-In the room's terms (see "The room and its participants" in `lib/ui/chat/AGENTS.md`),
+In the room's terms (see "The room and its participants" in `lib/domain/room/AGENTS.md`),
 a `task` call has the **main agent schedule delegated participant turns**: each
 sub-agent is a participant with the full per-participant shape — its own
 `BuiltinSession`, its transcript per call id, revived through `projectionOf` —
@@ -534,7 +534,7 @@ and `task` goes away. The room contract that replaces the tool's prompting
 is not this file's business — it is the project's bundled note, My Team's
 (`assets/prompts/projects/my-team/system/instructions.md`), which the
 repository hands every Omada turn; see "The room contract is My Team's note"
-in `lib/ui/chat/AGENTS.md`.
+in `lib/domain/room/AGENTS.md`.
 
 `task` spawns a sub-agent with its own session under the named `@agent`'s
 prompt, runs it to completion headless, and returns its final text as the tool
@@ -953,7 +953,7 @@ model knowing.
 omada turn, never the house's. Its call sets `_ended`, and the loop stops
 after that batch rather than asking the model again — the follow-up step
 would be the reply the call declined to write. See "The room and its
-participants" in `lib/ui/chat/AGENTS.md` for what a silent reply is.
+participants" in `lib/domain/room/AGENTS.md` for what a silent reply is.
 
 ## Compaction (the `compact` callback)
 

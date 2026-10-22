@@ -2,6 +2,7 @@ import "package:flutter/material.dart";
 
 import "../../../data/builtin/directory_tools.dart";
 import "../../../domain/models.dart";
+import "../../../domain/room/room_state.dart";
 import "../chat_controller.dart";
 import "approval_banner.dart";
 import "browser_strip.dart";
