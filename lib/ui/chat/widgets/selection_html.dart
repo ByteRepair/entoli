@@ -117,9 +117,11 @@ String selectionHtml(List<SelectedPiece> pieces, RenderedOutline outline) {
       out.write(quote ? "</blockquote>" : _open("blockquote"));
       quote = block.quoted;
     }
+    // Closed before this block is written, or it lands inside them.
+    if (block.kind != BlockKind.listItem) closeList();
+    if (block.kind != BlockKind.cell && block.kind != BlockKind.headerCell) closeTable();
     switch (block.kind) {
       case BlockKind.cell || BlockKind.headerCell:
-        closeList();
         if (!table) out.write(_open("table"));
         if (!table || !piece.sameLine) {
           if (row) out.write("</tr>");
@@ -128,9 +130,7 @@ String selectionHtml(List<SelectedPiece> pieces, RenderedOutline outline) {
         table = row = true;
         final tag = block.kind == BlockKind.headerCell ? "th" : "td";
         out.write("${_open(tag)}$inline</$tag>");
-        continue;
       case BlockKind.listItem:
-        closeTable();
         final tag = block.ordered ? "ol" : "ul";
         if (list != tag) {
           closeList();
@@ -140,7 +140,6 @@ String selectionHtml(List<SelectedPiece> pieces, RenderedOutline outline) {
           list = tag;
         }
         out.write("<li>$inline</li>");
-        continue;
       case BlockKind.heading:
         out.write("<h${block.level}>$inline</h${block.level}>");
       case BlockKind.code:
@@ -148,8 +147,6 @@ String selectionHtml(List<SelectedPiece> pieces, RenderedOutline outline) {
       case BlockKind.paragraph:
         out.write("<p>$inline</p>");
     }
-    closeList();
-    closeTable();
   }
   closeList();
   closeTable();

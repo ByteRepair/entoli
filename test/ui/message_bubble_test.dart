@@ -1291,6 +1291,25 @@ void main() {
       expect(html.last, contains("<ul><li>hello</li></ul>"));
     });
 
+    // The paragraph after a table or list used to be written before either
+    // was closed, inside its last row or item, where a paste drops it.
+    testWidgets("a block after a table or a list is outside it", (tester) async {
+      final html = <String>[];
+      clipboard(tester, html: html);
+      await pump(
+        tester,
+        _message(MessageRole.assistant, [
+          const TextPart(
+              text: "before\n\n| a | b |\n|---|---|\n| c | d |\n\nbetween\n\n- one\n\nafter"),
+        ]),
+      );
+
+      await dragOver(tester);
+
+      expect(html.single, contains("<td style=\"border: 1px solid #d0d7de; padding: 4px 8px\">d</td></tr></table><p>between</p>"));
+      expect(html.single, contains("<ul><li>one</li></ul><p>after</p>"));
+    });
+
     testWidgets("a selected code block copies as preformatted text", (tester) async {
       final html = <String>[];
       clipboard(tester, html: html);
