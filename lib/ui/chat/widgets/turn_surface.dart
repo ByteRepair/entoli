@@ -6,7 +6,6 @@ import "../../../domain/room/room_state.dart";
 import "../chat_controller.dart";
 import "approval_banner.dart";
 import "browser_strip.dart";
-import "composer.dart" show SendCallback;
 import "question_panel.dart";
 import "resume_bar.dart";
 import "steer_strip.dart";
@@ -34,7 +33,7 @@ class TurnSurface extends StatelessWidget {
 
   /// Where a say taken back from the turn goes: the composer it was typed in.
   /// Null where there is none, as on the voice screen.
-  final SendCallback? onWithdrawn;
+  final ValueChanged<Draft>? onWithdrawn;
 
   @override
   Widget build(BuildContext context) {
@@ -57,7 +56,7 @@ class TurnSurface extends StatelessWidget {
           onQueue: notifier.queueSteer,
           onWithdraw: (id) async {
             final said = await notifier.withdrawSteer(id);
-            if (said != null) onWithdrawn?.call(said.text, said.attachments);
+            if (said != null) onWithdrawn?.call(said);
           },
         ),
         // Not turn-scoped like the strips above: the tab outlives the turn

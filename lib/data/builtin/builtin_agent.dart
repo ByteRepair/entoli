@@ -1008,9 +1008,14 @@ class BuiltinAgent {
   /// What the user said since the last step, recorded so the rebuild below
   /// words it; its images are loaded first, since the rebuild is synchronous.
   Stream<AgentEvent> _steered() async* {
-    for (final said in steers?.take() ?? const <Message>[]) {
-      _images.addAll(await attachmentsOf(said, loadResource));
-      yield SteerEvent(said);
+    final said = steers?.take() ?? const <Message>[];
+    final loaded =
+        await Future.wait(said.map((s) => attachmentsOf(s, loadResource)));
+    for (final images in loaded) {
+      _images.addAll(images);
+    }
+    for (final s in said) {
+      yield SteerEvent(s);
     }
   }
 

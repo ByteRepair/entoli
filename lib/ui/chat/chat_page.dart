@@ -1106,8 +1106,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
           TurnSurface(
             view: view,
             notifier: driver,
-            onWithdrawn: (text, attachments) =>
-                _composer.currentState?.restore(text, attachments),
+            onWithdrawn: (said) => _composer.currentState?.restore(said),
           ),
           switch (view.roomPhase) {
             RoomPhase.waitingOnYou => TurnQuestions(view: view, notifier: driver),

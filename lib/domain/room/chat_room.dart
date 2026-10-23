@@ -274,9 +274,8 @@ class ChatRoom {
   bool _steer(Message say) {
     final chat = state.chat;
     if (chat == null || shellBypassCommand(say.plainText) != null) return false;
-    final roster = _roster(chat);
-    if (roster.mentioned(say).length > 1) return false;
-    final to = roster.answering(say);
+    if (say.addressees.length > 1) return false;
+    final to = _roster(chat).answering(say);
     final turn = _turns.values.firstWhereOrNull((t) => t.agent.handle == to);
     if (turn == null || !turn.steers.offer(say)) return false;
     _showSteering();

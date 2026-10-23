@@ -152,7 +152,8 @@ class ComposerState extends ConsumerState<Composer> {
 
   /// Put back a message that was sent and taken back, ahead of whatever has
   /// been typed or attached since.
-  void restore(String text, List<Attachment> attachments) {
+  void restore(Draft said) {
+    final (:text, :attachments) = said;
     final typed = widget.controller.text;
     widget.controller.text =
         typed.isEmpty || text.isEmpty ? "$text$typed" : "$text\n$typed";
@@ -164,20 +165,17 @@ class ComposerState extends ConsumerState<Composer> {
   bool get _worthSending =>
       widget.controller.text.trim().isNotEmpty || _attachments.isNotEmpty;
 
-  /// Whether the queue button is up: something typed while a turn runs. Not
-  /// for a command, which no turn can read and so always waits.
-  bool _queues(bool canSend) =>
-      widget.agentSpeaking &&
-      widget.onQueue != null &&
-      canSend &&
-      !_wired &&
-      !_shell;
+  /// Whether the queue button is on offer once something is typed: while a
+  /// turn runs, and not for a command, which no turn can read and so always
+  /// waits.
+  bool get _queues =>
+      widget.agentSpeaking && widget.onQueue != null && !_wired && !_shell;
 
   void _submit({bool queue = false}) {
     // The button is dead when this is false, but Ctrl/Cmd+Enter reaches here
     // without passing it.
     if (!_worthSending) return;
-    final send = queue && _queues(true) ? widget.onQueue! : widget.onSend;
+    final send = queue && _queues ? widget.onQueue! : widget.onSend;
     send(widget.controller.text.trim(), List.of(_attachments));
     widget.controller.clear();
     setState(_attachments.clear);
@@ -289,7 +287,7 @@ class ComposerState extends ConsumerState<Composer> {
                     builder: (context, canSend, _) => AnimatedSize(
                       duration: const Duration(milliseconds: 180),
                       curve: Curves.easeOut,
-                      child: _queues(canSend)
+                      child: canSend && _queues
                           ? Padding(
                               padding: const EdgeInsets.only(left: 4),
                               child: IconButton.outlined(
@@ -327,7 +325,7 @@ class ComposerState extends ConsumerState<Composer> {
                                  ? "Run"
                                  : _wired
                                      ? "Compact"
-                                     : _queues(canSend)
+                                     : canSend && _queues
                                          ? "Send now, read at its next step"
                                          : "Send",
                            ),

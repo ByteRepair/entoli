@@ -235,12 +235,15 @@ void main() {
     );
     await type(tester, "typed since");
 
-    key.currentState!.restore("taken back", [
-      Attachment(
-          filename: "shot.png",
-          mimeType: "image/png",
-          bytes: Uint8List.fromList([1, 2, 3])),
-    ]);
+    key.currentState!.restore((
+      text: "taken back",
+      attachments: [
+        Attachment(
+            filename: "shot.png",
+            mimeType: "image/png",
+            bytes: Uint8List.fromList([1, 2, 3])),
+      ],
+    ));
     await settleIo(tester);
     await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
     await tester.sendKeyEvent(LogicalKeyboardKey.enter);
