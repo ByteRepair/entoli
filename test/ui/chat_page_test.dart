@@ -911,6 +911,48 @@ void main() {
       expect(find.text("line 0"), findsOneWidget);
     });
 
+    testWidgets("a steer has its tick, and it takes the view into the reply",
+        (tester) async {
+      useWindow(tester, const Size(1400, 900));
+      final tall = [for (var i = 0; i < 60; i++) "para $i"].join("\n\n");
+      final chat = await io(tester, () async {
+        final chat = await app.repo.createChat(title: "steered");
+        final full = chat.copyWith(messages: [
+          Message(
+              id: "u0",
+              role: MessageRole.user,
+              createdAt: DateTime(2026, 1, 1),
+              parts: const [TextPart(text: "start")]),
+          Message(
+              id: "a0",
+              role: MessageRole.assistant,
+              createdAt: DateTime(2026, 1, 1, 0, 1),
+              parts: [
+                TextPart(text: tall),
+                MessagePart.steer(
+                    message: Message(
+                        id: "s0",
+                        role: MessageRole.user,
+                        createdAt: DateTime(2026, 1, 1, 0, 2),
+                        parts: const [TextPart(text: "steer here")])),
+                TextPart(text: tall),
+              ]),
+        ]);
+        await app.writeChat(full);
+        return full;
+      });
+      await open(tester, chat.state.id);
+      await tester.drag(find.byType(SuperListView), const Offset(0, -100000));
+      await tester.pumpAndSettle();
+      expect(find.text("steer here").hitTestable(), findsNothing);
+
+      await tester.tap(find.byTooltip("steer here"));
+      await tester.pumpAndSettle();
+
+      final top = tester.getTopLeft(find.text("steer here")).dy;
+      expect(top, inInclusiveRange(0, 200));
+    });
+
     // It used to jump to a guess at an unbuilt prompt first, which could be
     // below the view, and animate up from there.
     testWidgets("a tick above the view only ever scrolls up", (tester) async {

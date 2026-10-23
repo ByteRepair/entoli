@@ -806,7 +806,12 @@ centred whether it is there or not, and it is drawn only where the margin has
 room for it — `_ReadableColumn`'s `side`. A chapter is a prompt and the turn
 under it, so a branch anywhere in that turn — an edit at the prompt, a
 regenerate under it — puts a fork beside its tick (`chaptersOf`, off
-`Chat.branches`). What it draws is fed from the chat's view state, not
+`Chat.branches`). A steer is a chapter too, with a tick of its own: it is
+something the user said, and a long steered turn would otherwise be one tick
+with every steer in it. It has no row of its own — it is a part of the reply
+— so a `Chapter` carries the `row` it is in as well as its `id`, and going to
+one goes to the reply's row and then to the steer's bubble, keyed through
+`MessageBubble.steerKey`. What it draws is fed from the chat's view state, not
 assigned while the page builds: a `listenManual` with `fireImmediately` hands
 it the chat as loaded, then every change — a turn, a deletion, a thread
 switched — and restarts when the chat id changes, since `_ChatBody` is not

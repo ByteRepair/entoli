@@ -43,8 +43,8 @@ void main() {
       home: Scaffold(
         body: ChapterRail(
           chapters: const [
-            (id: "u1", preview: "first", threads: 1),
-            (id: "u2", preview: "second", threads: 2),
+            (id: "u1", row: "u1", preview: "first", threads: 1),
+            (id: "u2", row: "u2", preview: "second", threads: 2),
           ],
           current: current,
           onSelect: (_, {required scrubbing}) {},
@@ -59,13 +59,44 @@ void main() {
   testWidgets("one prompt still has its tick", (tester) async {
     await tester.pumpWidget(MaterialApp(
       home: ChapterRail(
-        chapters: const [(id: "u1", preview: "first", threads: 1)],
+        chapters: const [(id: "u1", row: "u1", preview: "first", threads: 1)],
         current: ValueNotifier(null),
         onSelect: (_, {required scrubbing}) {},
       ),
     ));
 
     expect(find.byTooltip("first"), findsOneWidget);
+  });
+
+  test("a steer is a chapter in the reply it was read into", () {
+    final chat = Chat(
+      state: makeState("c"),
+      messages: [
+        _said("u1", MessageRole.user, "first"),
+        Message(
+          id: "a1",
+          role: MessageRole.assistant,
+          createdAt: DateTime(2026),
+          parts: [
+            const TextPart(text: "working"),
+            MessagePart.steer(message: _said("s1", MessageRole.user, "use the browser")),
+            const TextPart(text: "more"),
+          ],
+        ),
+        _said("u2", MessageRole.user, "second"),
+        _said("a2", MessageRole.assistant, "reply"),
+      ],
+      branches: {
+        "a2": ["a2x", "a2"],
+      },
+    );
+
+    final chapters = chaptersOf(chat);
+
+    expect(chapters.map((c) => c.id), ["u1", "s1", "u2"]);
+    expect(chapters.map((c) => c.row), ["u1", "a1", "u2"]);
+    expect(chapters.map((c) => c.preview), ["first", "use the browser", "second"]);
+    expect(chapters.map((c) => c.threads), [1, 1, 2]);
   });
 
   test("a long prompt is cut to fifty characters", () {
@@ -94,7 +125,7 @@ void main() {
             height: 400,
             child: ChapterRail(
               chapters: [
-                for (var i = 0; i < 5; i++) (id: "u$i", preview: "p$i", threads: 1),
+                for (var i = 0; i < 5; i++) (id: "u$i", row: "u$i", preview: "p$i", threads: 1),
               ],
               current: current,
               onSelect: (i, {required scrubbing}) => picked.add((i, scrubbing)),
