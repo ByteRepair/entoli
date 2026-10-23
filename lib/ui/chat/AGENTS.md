@@ -814,22 +814,32 @@ keyed per chat and its state outlives a switch. The tooltip is the prompt's
 first line, cut at fifty characters. **A press selects, not a tap**, and so
 does every move while pressed, so dragging a mouse or a finger along the rail
 scrubs the conversation prompt by prompt; a scrub jumps where a press
-animates. That is one `Listener` over the whole rail finding the tick by
+glides. That is one `Listener` over the whole rail finding the tick by
 height, not a handler per tick — a pointer stays with what it went down on,
 so a tick's own handler never hears the drag reach the next. The rail does
 not scroll, since a drag on it is a scrub; its ticks close up instead when
 there are more than fit. Which one is being read is the last prompt at or above the
 top of the view, read after the frame rather than in the scroll listener: a
 jump reports before the list has laid out the rows it moved to. Going to one
-the list has not built jumps to where it would be if every row were one height
-and looks again once that has laid out, the same answer `_settleAtBottom`
-gives to the same estimate; it detaches the turn's follow, since no gesture
-said so.
+detaches the turn's follow, since no gesture said so.
+
+**The list is a `SuperListView`** (`super_sliver_list`), not a `ListView`. A
+`ListView` sizes itself from the rows on screen, so its extent changed with
+every row scrolled in: the scrollbar thumb resized and jittered, and the
+offset corrections near the top showed as jumps. The `ListController` keeps an
+extent per row, measured once a row is laid out, and `_MeasureAll` measures
+every row up front, a frame's budget at a time, for conversations short enough
+that it matters. Going to an unbuilt prompt used to jump to a one-height-per-row
+guess and animate from there, which could land below the view and run back up;
+`_glideTo` instead lerps from where the view is to the sum of the extents above
+the row, read again on every tick as rows are measured on the way, and lands
+with `jumpToItem`. One `AnimationController` drives every glide, so a second
+press takes over the first, and a pointer down or wheel on the list stops it.
 
 A chat opens at its latest message. `_settleAtBottom` jumps and then jumps
 again until the extent stops moving: a builder lays out only what shows, so the
 extent any one frame reports is an estimate and a single jump lands short of the
-end. **Jump to latest goes through it too**, after its animation — the extent it
+end. **Jump to latest goes through it too**, after its glide — the extent it
 read when the button was pressed was that same estimate, so on its own the
 button left the reader a little above the last message, by an amount that
 depended on how tall the messages happened to be. Not

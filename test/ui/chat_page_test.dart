@@ -3,6 +3,7 @@ import "dart:io";
 import "package:flutter/foundation.dart" show debugDefaultTargetPlatformOverride, TargetPlatform;
 import "package:flutter/material.dart";
 import "package:flutter_test/flutter_test.dart";
+import "package:super_sliver_list/super_sliver_list.dart";
 
 import "package:agent_chat/data/sync/sync_hub.dart";
 import "package:agent_chat/domain/agent_backend.dart";
@@ -532,7 +533,7 @@ void main() {
         findsOneWidget);
     expect(find.text(appTitle), findsNothing);
 
-    await tester.drag(find.byType(ListView), const Offset(0, 4000));
+    await tester.drag(find.byType(SuperListView), const Offset(0, 4000));
     await tester.pumpAndSettle();
 
     expect(find.descendant(of: find.byType(AppBar), matching: find.text("at work")),
@@ -909,6 +910,27 @@ void main() {
 
       expect(find.text("line 0"), findsOneWidget);
     });
+
+    // It used to jump to a guess at an unbuilt prompt first, which could be
+    // below the view, and animate up from there.
+    testWidgets("a tick above the view only ever scrolls up", (tester) async {
+      useWindow(tester, const Size(1400, 900));
+      final chat = await seedLongChat(tester);
+      await open(tester, chat.state.id);
+
+      var last = position(tester).pixels;
+      await tester.tap(find.byTooltip("line 10"));
+      for (var i = 0; i < 60; i++) {
+        await tester.pump(const Duration(milliseconds: 16));
+        expect(position(tester).pixels, lessThanOrEqualTo(last + 0.5));
+        last = position(tester).pixels;
+      }
+      await tester.pumpAndSettle();
+
+      expect(tester.getTopLeft(find.text("line 10")).dy,
+          lessThan(tester.getTopLeft(find.text("line 12")).dy));
+      expect(find.text("line 10").hitTestable(), findsOneWidget);
+    });
   });
 
   group("keeping up with a turn", () {
@@ -926,7 +948,7 @@ void main() {
       // In view of the end: nothing to jump for yet.
       expect(find.byTooltip("Jump to latest"), findsNothing);
 
-      await tester.drag(find.byType(ListView), const Offset(0, 600));
+      await tester.drag(find.byType(SuperListView), const Offset(0, 600));
       await tester.pumpAndSettle();
 
       expect(find.byTooltip("Jump to latest"), findsOneWidget);
@@ -946,7 +968,7 @@ void main() {
       await open(tester, chat.state.id);
       final end = position(tester).maxScrollExtent;
       final held = end - 300;
-      await tester.drag(find.byType(ListView), Offset(0, end - held));
+      await tester.drag(find.byType(SuperListView), Offset(0, end - held));
       await tester.pumpAndSettle();
 
       await replyArrives(tester, chat.state.id);
@@ -958,7 +980,7 @@ void main() {
     testWidgets("dragging back down re-attaches the follow", (tester) async {
       final chat = await seedLongChat(tester);
       await open(tester, chat.state.id);
-      await tester.drag(find.byType(ListView), const Offset(0, 600));
+      await tester.drag(find.byType(SuperListView), const Offset(0, 600));
       await tester.pumpAndSettle();
       expect(find.byTooltip("Jump to latest"), findsOneWidget);
 
@@ -966,7 +988,7 @@ void main() {
       // and the extent it lands short of is still an estimate. A fling's
       // ballistic settle runs to the actual end, which is the gesture that
       // says "take me back".
-      await tester.fling(find.byType(ListView), const Offset(0, -800), 4000);
+      await tester.fling(find.byType(SuperListView), const Offset(0, -800), 4000);
       await tester.pumpAndSettle();
       expect(find.byTooltip("Jump to latest"), findsNothing);
 

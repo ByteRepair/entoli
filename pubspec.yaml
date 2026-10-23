@@ -97,6 +97,7 @@ dependencies:
   dbus: ^0.7.15
   yaml: ^3.1.4
   re_editor: ^0.10.0
+  super_sliver_list: ^0.4.1
 
 # `sherpa_onnx` depends on `sherpa_onnx_web` whatever platform is being built,
 # and that package ships a 14 MB WebAssembly build of onnxruntime as a
