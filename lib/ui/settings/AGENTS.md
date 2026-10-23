@@ -65,8 +65,19 @@ which embeds `DefaultsSection` from `llm_settings.dart`, so a row added there is
 on the tour too — until a default is picked. The memory page is one switch,
 the Memory category's "Keep memories", the rest left at their defaults. The
 last page says AI can make mistakes and holds Done behind a checkbox taking
-responsibility for what the user lets it do — the tour's own state rather than
-a setting, so a replay from here asks again. Done, on
+responsibility for what the user lets it do, at the end of the AGPL text
+(`bundledLicence`, embedded from `LICENSE` by `tool/gen_licence.dart`), so
+reaching it means scrolling past the licence; a hint under it says so until
+it is reached. The licence is one `SingleChildScrollView` rather than a lazy
+list, whose estimated extent made the scrollbar jump. Ticked, the box is
+pinned under the licence. The tick frees Done and nothing else: Done is
+what stores it (`licenceAccepted`, beside `welcomeSeen`, one write), and the
+gate wants both, so an install from before the licence was asked for walks
+the tour once more and a tick cannot open the app around Done. A replay
+starts ticked; unticking there confirms, clears both flags and restarts the
+app (`AppRestart`), which stops whatever the session was running and lands
+on the tour. A restart rather than a close because iOS and the web cannot
+close themselves, and Apple rejects apps that try. Done, on
 the first run or a replay, opens a "Welcome to Entoli" chat in the default
 project and leaves settings for it: its log is seeded with a
 `/entoli-welcome-party` message, composed like any `/skill` message so the

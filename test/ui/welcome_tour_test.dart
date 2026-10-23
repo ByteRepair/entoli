@@ -3,6 +3,7 @@ import "dart:async";
 import "package:flutter/material.dart";
 import "package:flutter_test/flutter_test.dart";
 
+import "package:agent_chat/domain/app_settings.dart";
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/providers.dart";
 import "package:agent_chat/ui/sidebar/sidebar.dart";
@@ -40,11 +41,31 @@ void main() {
 
   Future<void> walkToLast(WidgetTester tester) => next(tester, 12);
 
-  // The last page's checkbox, which Done waits on.
+  Finder licence() => find.descendant(
+      of: find.byKey(const ValueKey("licence")),
+      matching: find.byType(Scrollable));
+
+  Finder checkbox() => find.byType(CheckboxListTile);
+
+  // The last page's checkbox, which Done waits on: at the end of the licence
+  // until it is ticked.
   Future<void> accept(WidgetTester tester) async {
-    await tester.tap(find.byType(CheckboxListTile));
+    if (checkbox().evaluate().isEmpty) {
+      await tester.dragUntilVisible(checkbox(), licence(), const Offset(0, -300));
+      await tester.pumpAndSettle();
+    }
+    await tester.ensureVisible(checkbox());
     await tester.pumpAndSettle();
+    await tester.tap(checkbox());
+    await settleIo(tester);
   }
+
+  bool inLicence(WidgetTester tester) => find
+      .descendant(of: find.byKey(const ValueKey("licence")), matching: checkbox())
+      .evaluate()
+      .isNotEmpty;
+
+  AppSettings settings() => app.container.read(appSettingsProvider);
 
   testWidgets("walks forward and back through the pages", (tester) async {
     await app.pump(tester, const WelcomePage());
@@ -101,18 +122,31 @@ void main() {
     expect(button("Next"), findsNothing);
   });
 
-  // The last page holds Done until the user takes responsibility, and a
-  // replay asks again rather than remembering the tick.
+  // The last page holds Done until the user ticks the box at the end of the
+  // licence; first run has no app behind it to restart, so unticking there
+  // just unticks.
   testWidgets("Done is held on the last page until the box is ticked",
       (tester) async {
     await app.pump(tester, const WelcomePage());
     await walkToLast(tester);
 
+    expect(find.textContaining("GNU AFFERO GENERAL PUBLIC LICENSE"),
+        findsOneWidget);
     expect(tester.widget<FilledButton>(button("Done")).onPressed, isNull);
     await accept(tester);
     expect(tester.widget<FilledButton>(button("Done")).onPressed, isNotNull);
+    // Ticking frees Done and nothing else: Done is what stores it.
+    expect(settings().licenceAccepted, isFalse);
+    expect(find.byType(WelcomePage), findsOneWidget);
+    // Ticked, it leaves the licence for the page under it.
+    expect(inLicence(tester), isFalse);
+    expect(checkbox(), findsOneWidget);
+
     await accept(tester);
     expect(tester.widget<FilledButton>(button("Done")).onPressed, isNull);
+    expect(settings().licenceAccepted, isFalse);
+    expect(app.restart.restarts, 0);
+    expect(find.byType(AlertDialog), findsNothing);
   });
 
   // The provider page holds the tour until some model is reachable: the
@@ -192,6 +226,49 @@ void main() {
   });
 
   group("in settings", () {
+    Future<void> replay(WidgetTester tester) async {
+      await app.pump(tester, const SizedBox());
+      unawaited(Navigator.of(tester.element(find.byType(SizedBox))).push(
+          MaterialPageRoute(
+              builder: (_) => const SettingsPage(
+                  initialCategory: SettingsCategory.welcome, focus: true))));
+      await tester.pumpAndSettle();
+      await walkToLast(tester);
+    }
+
+    // A replay remembers the tick, pinned outside the licence.
+    testWidgets("a replay keeps the tick", (tester) async {
+      await io(tester,
+          () => app.container.read(appSettingsProvider.notifier).finishWelcome());
+      await replay(tester);
+
+      expect(tester.widget<CheckboxListTile>(checkbox()).value, isTrue);
+      expect(inLicence(tester), isFalse);
+      expect(tester.widget<FilledButton>(button("Done")).onPressed, isNotNull);
+    });
+
+    testWidgets("unticking there restarts into the tour", (tester) async {
+      await io(tester,
+          () => app.container.read(appSettingsProvider.notifier).finishWelcome());
+      await replay(tester);
+
+      await tester.tap(checkbox());
+      await tester.pumpAndSettle();
+      expect(find.text("By unticking, the app will restart."), findsOneWidget);
+      await tester.tap(find.text("Cancel"));
+      await tester.pumpAndSettle();
+      expect(settings().licenceAccepted, isTrue);
+      expect(app.restart.restarts, 0);
+
+      await tester.tap(checkbox());
+      await tester.pumpAndSettle();
+      await tester.tap(find.text("Restart"));
+      await settleIo(tester);
+      expect(settings().licenceAccepted, isFalse);
+      expect(settings().welcomeSeen, isFalse);
+      expect(app.restart.restarts, 1);
+    });
+
     testWidgets("picked wide, the tour fills the pane", (tester) async {
       useWindow(tester, const Size(1200, 800));
       await pumpSettings(tester, app, SettingsCategory.welcome);
@@ -203,13 +280,7 @@ void main() {
     // Replayed from settings, Done still opens the welcome chat, and leaves
     // settings for it.
     testWidgets("Done there opens the welcome chat and leaves", (tester) async {
-      await app.pump(tester, const SizedBox());
-      unawaited(Navigator.of(tester.element(find.byType(SizedBox))).push(
-          MaterialPageRoute(
-              builder: (_) => const SettingsPage(
-                  initialCategory: SettingsCategory.welcome, focus: true))));
-      await tester.pumpAndSettle();
-      await walkToLast(tester);
+      await replay(tester);
       await accept(tester);
       await tester.tap(button("Done"));
       await settleIo(tester, least: 3);
@@ -241,10 +312,44 @@ void main() {
     await tester.tap(button("Done"));
     await settleIo(tester, least: 3);
     expect(find.byType(WelcomePage), findsNothing);
+    expect(settings().licenceAccepted, isTrue);
 
     // Built again over settings now marked seen, the gate stays bare.
     await app.pump(tester, const WelcomeGate(child: SizedBox.shrink()));
     await tester.pump();
     expect(find.byType(WelcomePage), findsNothing);
+  });
+
+  // A settings file from before the licence was asked for holds the app
+  // behind the tour until it is ticked.
+  testWidgets("a seen tour with no licence tick still opens", (tester) async {
+    await io(tester,
+        () => app.container.read(appSettingsProvider.notifier).setWelcomeSeen(true));
+    await app.pump(tester, const WelcomeGate(child: SizedBox.shrink()));
+    await tester.pump();
+    expect(find.byType(WelcomePage), findsOneWidget);
+
+    // Ticking there must not open the app around Done.
+    await walkToLast(tester);
+    await accept(tester);
+    expect(find.byType(WelcomePage), findsOneWidget);
+  });
+
+  testWidgets("the hint says to scroll until the box is reached",
+      (tester) async {
+    await app.pump(tester, const WelcomePage());
+    await walkToLast(tester);
+
+    double hint() => tester
+        .widget<AnimatedOpacity>(find.ancestor(
+            of: find.text("Scroll to the end to agree"),
+            matching: find.byType(AnimatedOpacity)))
+        .opacity;
+    expect(hint(), 1);
+    await tester.drag(licence(), const Offset(0, -100000));
+    await tester.pumpAndSettle();
+    expect(hint(), 0);
+    await accept(tester);
+    expect(find.text("Scroll to the end to agree"), findsNothing);
   });
 }

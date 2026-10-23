@@ -8,7 +8,8 @@ import "settings/welcome_page.dart";
 /// the home content, not a route over it, so the back key cannot skip it and
 /// the shell is never underneath. In the home chain rather than the shell for
 /// the reason the `Incoming*` wrappers are: an incoming share or a trigger tap
-/// on first launch should stay above the tour.
+/// on first launch should stay above the tour. An unticked licence holds the
+/// app behind the tour too, whatever the tour's own flag says.
 class WelcomeGate extends ConsumerWidget {
   const WelcomeGate({super.key, required this.child});
 
@@ -16,7 +17,8 @@ class WelcomeGate extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final seen = ref.watch(appSettingsProvider.select((s) => s.welcomeSeen));
+    final seen = ref.watch(appSettingsProvider
+        .select((s) => s.welcomeSeen && s.licenceAccepted));
     return seen ? child : const WelcomePage();
   }
 }

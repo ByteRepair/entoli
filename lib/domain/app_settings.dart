@@ -81,6 +81,7 @@ class AppSettings {
     this.autoCompactPercent = defaultAutoCompactPercent,
     this.totalContext = defaultTotalContext,
     this.welcomeSeen = false,
+    this.licenceAccepted = false,
     this.autoUpdate = true,
     this.agentBrowser,
     this.agentBrowserVisible = false,
@@ -366,6 +367,11 @@ class AppSettings {
   /// to decide whether to push the tour, and what its Done writes.
   bool welcomeSeen;
 
+  /// Whether the user ticked the licence at the end of the welcome tour. The
+  /// gate holds the app behind the tour while it is false, so a settings file
+  /// from before it existed goes through the tour once more.
+  bool licenceAccepted;
+
   /// Whether the app checks the latest release at startup and puts the newer
   /// build in place of this one, where the platform can do that — the three
   /// desktops are, and each sees the row. Default on, and written only when
@@ -523,6 +529,7 @@ class AppSettings {
         totalContext: (json["totalContext"] as int? ?? defaultTotalContext)
             .clamp(minTotalContext, maxTotalContext),
         welcomeSeen: json["welcomeSeen"] as bool? ?? false,
+        licenceAccepted: json["licenceAccepted"] as bool? ?? false,
         // Written only when on is the default, so a file that predates it
         // says nothing and gets the on default — the same bargain the memory
         // gates are held to.
@@ -641,6 +648,7 @@ class AppSettings {
         "autoCompactPercent": autoCompactPercent,
       if (totalContext != defaultTotalContext) "totalContext": totalContext,
       if (welcomeSeen) "welcomeSeen": welcomeSeen,
+      if (licenceAccepted) "licenceAccepted": licenceAccepted,
       if (!autoUpdate) "autoUpdate": autoUpdate,
       if (agentBrowser != null) "agentBrowser": agentBrowser,
       if (agentBrowserVisible) "agentBrowserVisible": agentBrowserVisible,
