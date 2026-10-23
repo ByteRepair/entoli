@@ -52,6 +52,10 @@ abstract class AgentBrowser {
   /// Quit the browser, if one is running. The next call starts it again.
   /// [why] is the note each open tab's agent is left.
   Future<void> close({String why = "The user quit the browser."});
+
+  /// Quit the browser and delete its profile: every cookie, login and site's
+  /// storage it kept. The next launch starts signed out of everything.
+  Future<void> clearData();
 }
 
 /// A browser found installed, by the name a user knows it under.
@@ -482,4 +486,7 @@ class UnavailableAgentBrowser extends AgentBrowser {
 
   @override
   Future<void> close({String why = ""}) async {}
+
+  @override
+  Future<void> clearData() async {}
 }

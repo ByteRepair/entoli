@@ -4,6 +4,7 @@ import "package:file_selector/file_selector.dart";
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
+import "../../core/log.dart";
 import "../../domain/agent_browser.dart";
 import "../../domain/download.dart";
 import "../../providers.dart";
@@ -105,6 +106,41 @@ class _AgentBrowserSectionState extends ConsumerState<AgentBrowserSection> {
       if (mounted) setState(() => _problem = "$e");
     } finally {
       if (mounted) setState(() => _verifying = false);
+    }
+  }
+
+  Future<void> _clearData() async {
+    final colors = Theme.of(context).colorScheme;
+    final sure = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text("Delete browser data?"),
+        content: const Text("The browser quits, and its cookies, logins, "
+            "history and site data are deleted. Every site the agent signed "
+            "into is signed out."),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text("Cancel"),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: TextButton.styleFrom(foregroundColor: colors.error),
+            child: const Text("Delete"),
+          ),
+        ],
+      ),
+    );
+    if (sure != true || !mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await ref.read(agentBrowserProvider).clearData();
+      messenger.showSnackBar(
+          const SnackBar(content: Text("Browser data deleted.")));
+    } catch (e) {
+      logFailure("browser", "deleting the profile", e);
+      messenger.showSnackBar(
+          SnackBar(content: Text("Could not delete browser data: $e")));
     }
   }
 
@@ -260,6 +296,15 @@ class _AgentBrowserSectionState extends ConsumerState<AgentBrowserSection> {
               onPressed: running ? () => unawaited(browser.close()) : null,
               child: const Text("Quit"),
             ),
+          ),
+        ),
+        ListTile(
+          title: const Text("Browser data"),
+          subtitle: const Text("The cookies, logins and history of the "
+              "browser's own profile, whichever browser is picked."),
+          trailing: OutlinedButton(
+            onPressed: () => unawaited(_clearData()),
+            child: const Text("Delete"),
           ),
         ),
         const Divider(),

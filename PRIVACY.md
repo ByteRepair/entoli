@@ -16,10 +16,16 @@ The app stores its data locally under its private data directory:
 - **Workspace files** — files the agent creates or edits while running
   commands.
 - **Reminders** — the name, time, and prompt of each reminder you set.
+- **Agent browser profile** (desktop) — the cookies, logins, history and site
+  data of the browser the agent drives, kept in the app's cache directory,
+  apart from your own browser's profile.
 
 None of this leaves your device except as described below. Uninstalling the
-app removes all of it. Backups are user-initiated exports to a local file the
-user chooses.
+app removes all of it, except on desktop, where the data and cache
+directories stay until you delete them. The agent browser's profile can be
+deleted from Settings > Agent Browser > Browser data. Backups are
+user-initiated exports to a local file the user chooses, and do not include
+the browser profile.
 
 ## Data sent to third parties
 
@@ -50,13 +56,33 @@ nothing about you or your conversations is sent.
 The agent's web search queries DuckDuckGo directly from your device over
 HTTPS.
 
-### Model, voice, and Linux downloads
+### The agent browser
 
-Downloading an on-device model, a voice model, or a Linux rootfs makes a
-request to the host that serves the file: Hugging Face for models and voice
-recognition models, GitHub for voice synthesis models, and the Alpine Linux
-CDN for the rootfs. The request includes your IP address and standard HTTP
-headers, under the host's own privacy policy. The files are stored on your
+On desktop, you can give the agent a browser to drive: the embedded Helium or
+a Chromium-family browser you pick. It is off until you pick one. While the
+agent uses it:
+
+- The sites it opens receive requests directly from your device, carrying your
+  IP address, standard HTTP headers, and the cookies of the agent browser's
+  own profile, under each site's own privacy policy.
+- The text of the pages it reads and the screenshots it takes are sent to your
+  LLM provider as tool results, like any other tool's output.
+- A file uploaded to a page is sent to that site. Depending on the upload
+  setting, the classifier model sees the file's path before it goes.
+- What you type into the sign-in prompt goes from the app to the page and
+  nowhere else. It is not sent to your LLM provider, not saved in the
+  conversation, and not synced. While a sign-in is in effect, it is removed
+  from the page text the agent reads, and screenshots of the site you signed
+  into are refused.
+
+### Model, voice, browser, and Linux downloads
+
+Downloading an on-device model, a voice model, the embedded browser, or a
+Linux rootfs makes a request to the host that serves the file: Hugging Face
+for models and voice recognition models, GitHub for voice synthesis models
+and the Helium browser, and the Alpine Linux CDN for the rootfs. The request
+includes your IP address and standard HTTP headers, under the host's own
+privacy policy. The files are stored on your
 device; inference and voice processing happen locally.
 
 ### Marketplace
@@ -114,8 +140,8 @@ The app requests the following permissions, each used only for its feature:
 - **Boot-completed** (Android) — re-arming reminders after device restart.
 - **Foreground service** (Android) — keeping the process alive while a turn
   runs, while voice mode is active, or while a model downloads.
-- **Internet** — calling your configured LLM provider, web search, the
-  marketplace, and sync.
+- **Internet** — calling your configured LLM provider, web search, the agent
+  browser, the marketplace, and sync.
 
 No permission collects data in the background.
 
