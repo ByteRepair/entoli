@@ -627,6 +627,9 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
   static const _slack = 200.0;
 
   final TextEditingController _controller = TextEditingController();
+
+  /// What a steer taken back is put back into, attachments and all.
+  final GlobalKey<ComposerState> _composer = GlobalKey();
   late final ScrollController _scroll = ScrollController();
   late final ScrollFollow _follow = ScrollFollow(_scroll);
 
@@ -1103,16 +1106,13 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
           TurnSurface(
             view: view,
             notifier: driver,
-            // A say taken back goes back where it was typed, ahead of
-            // anything typed since.
-            onWithdrawn: (text) {
-              final typed = _controller.text;
-              _controller.text = typed.isEmpty ? text : "$text\n$typed";
-            },
+            onWithdrawn: (text, attachments) =>
+                _composer.currentState?.restore(text, attachments),
           ),
           switch (view.roomPhase) {
             RoomPhase.waitingOnYou => TurnQuestions(view: view, notifier: driver),
             _ => Composer(
+                key: _composer,
                 controller: _controller,
                 agentSpeaking: view.roomPhase == RoomPhase.agentSpeaking,
                 onSend: send,

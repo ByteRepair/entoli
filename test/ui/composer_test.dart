@@ -215,6 +215,42 @@ void main() {
     expect(queued, ["after", "also after"]);
   });
 
+  testWidgets("a message put back keeps its files, ahead of what came since",
+      (tester) async {
+    final key = GlobalKey<ComposerState>();
+    await app.pump(
+      tester,
+      Scaffold(
+        body: Composer(
+          key: key,
+          controller: controller,
+          agentSpeaking: false,
+          onSend: (text, attachments) {
+            sent.add(text);
+            sentAttachments.add(attachments);
+          },
+          onAbort: () {},
+        ),
+      ),
+    );
+    await type(tester, "typed since");
+
+    key.currentState!.restore("taken back", [
+      Attachment(
+          filename: "shot.png",
+          mimeType: "image/png",
+          bytes: Uint8List.fromList([1, 2, 3])),
+    ]);
+    await settleIo(tester);
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    await settleIo(tester);
+
+    expect(sent, ["taken back\ntyped since"]);
+    expect(sentAttachments.single.single.filename, "shot.png");
+  });
+
   Future<void> insertVia(WidgetTester tester, String label) async {
     await tester.tap(find.byIcon(Icons.add));
     await settleIo(tester);

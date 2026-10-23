@@ -289,8 +289,21 @@ class ChatRoom {
     if (say != null) await _sayLater(say);
   }
 
-  /// Take back a say its turn has not read yet; null where it already has.
-  Message? withdrawSteer(String id) => _unsteer(id);
+  /// Take back a say its turn has not read yet, as the composer held it: its
+  /// text and its files, read back from where sending saved them. Null where
+  /// the turn already has it; a file whose resource has gone is left out.
+  Future<({String text, List<Attachment> attachments})?> withdrawSteer(
+      String id) async {
+    final say = _unsteer(id);
+    if (say == null) return null;
+    final attachments = await Future.wait(say.files.map((f) async {
+      final bytes = await _repo.readResource(chatId, f.resource);
+      return bytes == null
+          ? null
+          : Attachment(filename: f.filename, mimeType: f.mimeType, bytes: bytes);
+    }));
+    return (text: say.plainText, attachments: attachments.nonNulls.toList());
+  }
 
   Message? _unsteer(String id) {
     final say = state.steering.firstWhereOrNull((m) => m.id == id);

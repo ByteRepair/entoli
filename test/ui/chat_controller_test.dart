@@ -1,6 +1,7 @@
 import "dart:io";
 
 import "dart:async";
+import "dart:typed_data";
 
 import "package:flutter_test/flutter_test.dart";
 
@@ -1810,10 +1811,18 @@ void main() {
       await waitFor(() => app.backend.prompts.isNotEmpty, what: "the turn");
 
       await controller.send("keep this for later");
-      await controller.send("never mind");
+      final picture = Attachment(
+          filename: "shot.png",
+          mimeType: "image/png",
+          bytes: Uint8List.fromList([1, 2, 3]));
+      await controller.send("never mind", attachments: [picture]);
       final steering = app.container.read(chatControllerProvider(id)).steering;
       await controller.queueSteer(steering.first.id);
-      expect(await controller.withdrawSteer(steering.last.id), "never mind");
+      // Back as the composer held it, the file read back off the chat.
+      final back = await controller.withdrawSteer(steering.last.id);
+      expect(back?.text, "never mind");
+      expect(back?.attachments.single.filename, "shot.png");
+      expect(back?.attachments.single.bytes, [1, 2, 3]);
 
       // Neither is the turn's to read any more; the queued one is on the log.
       expect(app.container.read(chatControllerProvider(id)).steering, isEmpty);

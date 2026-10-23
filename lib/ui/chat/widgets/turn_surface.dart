@@ -33,7 +33,7 @@ class TurnSurface extends StatelessWidget {
 
   /// Where a say taken back from the turn goes: the composer it was typed in.
   /// Null where there is none, as on the voice screen.
-  final ValueChanged<String>? onWithdrawn;
+  final void Function(String text, List<Attachment> attachments)? onWithdrawn;
 
   @override
   Widget build(BuildContext context) {
@@ -55,8 +55,8 @@ class TurnSurface extends StatelessWidget {
           steering: view.steering,
           onQueue: notifier.queueSteer,
           onWithdraw: (id) async {
-            final text = await notifier.withdrawSteer(id);
-            if (text != null) onWithdrawn?.call(text);
+            final said = await notifier.withdrawSteer(id);
+            if (said != null) onWithdrawn?.call(said.text, said.attachments);
           },
         ),
         // Not turn-scoped like the strips above: the tab outlives the turn

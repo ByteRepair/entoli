@@ -100,7 +100,9 @@ class MirrorChatController extends Notifier<ChatViewState>
   Future<void> queueSteer(String id) async {}
 
   @override
-  Future<String?> withdrawSteer(String id) async => null;
+  Future<({String text, List<Attachment> attachments})?> withdrawSteer(
+          String id) async =>
+      null;
 
   @override
   Future<void> resume() => _hub.resumeRemote(chatId);

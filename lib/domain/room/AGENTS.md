@@ -202,7 +202,8 @@ settle like any queued say, or stay on the log unsent where the round was
 stopped. A `!` command, a say naming several members, or one whose
 addressee is not speaking is queued from the start. The strip's buttons are
 `queueSteer` (send it after the turn instead) and `withdrawSteer` (take it
-back into the composer; its files do not come back with it).
+back into the composer, its files read back from the chat's `resources/`
+where sending saved them, ahead of anything typed since).
 
 A mirror sends the queue flag with the prompt (`SyncPromptSend.queue`); an
 older home device ignores it and queues everything. The strip is the home

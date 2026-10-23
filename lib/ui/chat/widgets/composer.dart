@@ -84,10 +84,10 @@ class Composer extends ConsumerStatefulWidget {
   final String? workspaceHome;
 
   @override
-  ConsumerState<Composer> createState() => _ComposerState();
+  ConsumerState<Composer> createState() => ComposerState();
 }
 
-class _ComposerState extends ConsumerState<Composer> {
+class ComposerState extends ConsumerState<Composer> {
   final GlobalKey<CompletionFieldState> _field = GlobalKey();
   final List<Attachment> _attachments = [];
 
@@ -113,10 +113,10 @@ class _ComposerState extends ConsumerState<Composer> {
   }
 
   @override
-  void didUpdateWidget(Composer old) {
-    super.didUpdateWidget(old);
-    if (old.controller != widget.controller) {
-      old.controller.removeListener(_sync);
+  void didUpdateWidget(Composer oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.controller != widget.controller) {
+      oldWidget.controller.removeListener(_sync);
       widget.controller.addListener(_sync);
       _canSend.value = _worthSending;
     }
@@ -147,6 +147,16 @@ class _ComposerState extends ConsumerState<Composer> {
     final picked = await ref.read(attachmentPickerProvider).pick(kind);
     if (picked.isEmpty || !mounted) return;
     setState(() => _attachments.addAll(picked));
+    _canSend.value = _worthSending;
+  }
+
+  /// Put back a message that was sent and taken back, ahead of whatever has
+  /// been typed or attached since.
+  void restore(String text, List<Attachment> attachments) {
+    final typed = widget.controller.text;
+    widget.controller.text =
+        typed.isEmpty || text.isEmpty ? "$text$typed" : "$text\n$typed";
+    setState(() => _attachments.insertAll(0, attachments));
     _canSend.value = _worthSending;
   }
 
