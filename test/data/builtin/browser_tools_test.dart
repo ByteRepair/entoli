@@ -192,10 +192,13 @@ class FakeBrowserTab implements BrowserTab {
   }
 
   @override
-  Future<BrowserShot> screenshot({int? ref}) async {
-    calls.add("shot ${ref ?? "view"}");
-    return BrowserShot(Uint8List.fromList([1, 2, 3]), left: 10, top: 20);
+  Future<BrowserShot> screenshot({int? ref, bool markClick = false}) async {
+    calls.add("shot ${ref ?? "view"}${markClick ? " marked" : ""}");
+    return BrowserShot(Uint8List.fromList([1, 2, 3]),
+        left: 10, top: 20, click: markClick ? lastClick : null);
   }
+
+  ({double x, double y})? lastClick;
 
   @override
   Future<String> show({bool byUser = false}) async {
@@ -806,6 +809,25 @@ void main() {
         "res-screenshot.png");
     expect(events.whereType<ToolResultEvent>().first.result.output,
         contains("(10, 20)"));
+  });
+
+  test("last_click marks the click and says where, or that there is none",
+      () async {
+    Future<String> marked(FakeBrowserTab tab) async {
+      final events = await agentOver(
+        FakeLlmClient([
+          [call(browserScreenshotToolName, {"last_click": true})],
+          [finish],
+        ]),
+        tab: tab,
+      ).run(userMessage("look")).toList();
+      expect(tab.calls, ["shot view marked"]);
+      return events.whereType<ToolResultEvent>().first.result.output;
+    }
+
+    expect(await marked(FakeBrowserTab()..lastClick = (x: 535, y: 446)),
+        contains("red dot is the last click, at (535, 446)"));
+    expect(await marked(FakeBrowserTab()), contains("No click to mark"));
   });
 
   group("webfetch's hint", () {

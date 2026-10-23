@@ -175,11 +175,16 @@ const browserScreenshotTool = LlmTool(
   description: "Take a screenshot of the viewport, or of one element by "
       "number. One image pixel is one viewport pixel, so a point in it can "
       "be clicked by x and y; for an element's screenshot, add the offset "
-      "the result gives.",
+      "the result gives. Set `last_click` after clicking by x and y to see "
+      "where the click landed.",
   schema: {
     "type": "object",
     "properties": {
       "ref": {"type": "integer"},
+      "last_click": {
+        "type": "boolean",
+        "description": "Mark the last click on this page with a red dot.",
+      },
     },
   },
 );
