@@ -240,6 +240,13 @@ class FileChatStore implements ChatStore {
   }
 
   @override
+  Future<void> deleteResource(String chatId, String resource) async {
+    final dir = config.resourcesDir(chatId, project: await projectOf(chatId));
+    final file = _fs.file(_fs.path.join(dir, _fs.path.basename(resource)));
+    if (await file.exists()) await file.delete();
+  }
+
+  @override
   Future<ChatMeta> loadMeta(String chatId) async =>
       ChatMeta.parse(await _readOrNull(config.metaFile(chatId, project: await projectOf(chatId))));
 

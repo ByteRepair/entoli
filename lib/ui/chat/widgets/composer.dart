@@ -43,6 +43,7 @@ class Composer extends ConsumerStatefulWidget {
     required this.onSend,
     required this.onAbort,
     this.onQueue,
+    this.steers,
     this.project,
     this.device,
     this.onVoice,
@@ -61,6 +62,11 @@ class Composer extends ConsumerStatefulWidget {
   /// Send for after the running turn rather than into it. Null where the
   /// composer has no turn to wait on.
   final SendCallback? onQueue;
+
+  /// Whether what is typed would steer the running turn: the room's rule,
+  /// asked rather than copied, since only it knows who is speaking. Null
+  /// takes everything but a command to steer.
+  final bool Function(String text)? steers;
 
   /// The project the composer is in, so the `/` and `@` menus offer what it
   /// offers. Null is the default, the way it is everywhere a project is named.
@@ -102,6 +108,10 @@ class ComposerState extends ConsumerState<Composer> {
   /// it, not from the turn that follows.
   bool _wired = false;
 
+  /// Whether Send steers the running turn, so the queue button is on offer
+  /// beside it once something is typed.
+  bool _queues = false;
+
   /// Whether Send would do anything. Kept here so only the button redraws when
   /// the answer flips, which is about twice a message.
   final ValueNotifier<bool> _canSend = ValueNotifier(false);
@@ -120,6 +130,7 @@ class ComposerState extends ConsumerState<Composer> {
       widget.controller.addListener(_sync);
       _canSend.value = _worthSending;
     }
+    _queues = _queuesFor(shell: _shell, wired: _wired);
   }
 
   @override
@@ -136,12 +147,21 @@ class ComposerState extends ConsumerState<Composer> {
     _canSend.value = _worthSending;
     final shell = shellBypassCommand(widget.controller.text) != null;
     final wired = wiredSkillFromText(widget.controller.text) != null;
-    if (shell == _shell && wired == _wired) return;
+    final queues = _queuesFor(shell: shell, wired: wired);
+    if (shell == _shell && wired == _wired && queues == _queues) return;
     setState(() {
       _shell = shell;
       _wired = wired;
+      _queues = queues;
     });
   }
+
+  bool _queuesFor({required bool shell, required bool wired}) =>
+      widget.agentSpeaking &&
+      widget.onQueue != null &&
+      !shell &&
+      !wired &&
+      (widget.steers?.call(widget.controller.text) ?? true);
 
   Future<void> _attach(AttachmentKind kind) async {
     final picked = await ref.read(attachmentPickerProvider).pick(kind);
@@ -164,12 +184,6 @@ class ComposerState extends ConsumerState<Composer> {
   /// A file on its own is worth sending, and whitespace on its own is not.
   bool get _worthSending =>
       widget.controller.text.trim().isNotEmpty || _attachments.isNotEmpty;
-
-  /// Whether the queue button is on offer once something is typed: while a
-  /// turn runs, and not for a command, which no turn can read and so always
-  /// waits.
-  bool get _queues =>
-      widget.agentSpeaking && widget.onQueue != null && !_wired && !_shell;
 
   void _submit({bool queue = false}) {
     // The button is dead when this is false, but Ctrl/Cmd+Enter reaches here

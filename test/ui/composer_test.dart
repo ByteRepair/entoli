@@ -32,7 +32,8 @@ void main() {
           {EdgeInsets bars = EdgeInsets.zero,
           String? workspace,
           String? workspaceHome,
-          bool agentSpeaking = false}) =>
+          bool agentSpeaking = false,
+          bool Function(String text)? steers}) =>
       app.pump(
         tester,
         underSystemBars(
@@ -46,6 +47,7 @@ void main() {
                 sentAttachments.add(attachments);
               },
               onQueue: (text, _) => queued.add(text),
+              steers: steers,
               onAbort: () {},
               workspace: workspace,
               workspaceHome: workspaceHome,
@@ -213,6 +215,19 @@ void main() {
     await tester.sendKeyUpEvent(LogicalKeyboardKey.altLeft);
     await settleIo(tester);
     expect(queued, ["after", "also after"]);
+  });
+
+  testWidgets("no queue button where the room would queue the say anyway",
+      (tester) async {
+    await pump(tester,
+        agentSpeaking: true, steers: (text) => !text.contains("@b"));
+    await type(tester, "@a and @b");
+    expect(find.byTooltip("Send after this turn (Alt+Enter)"), findsNothing);
+    expect(find.byTooltip("Send"), findsOneWidget);
+
+    await type(tester, "just @a");
+    expect(
+        find.byTooltip("Send after this turn (Alt+Enter)"), findsOneWidget);
   });
 
   testWidgets("a message put back keeps its files, ahead of what came since",

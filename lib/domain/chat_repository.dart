@@ -587,6 +587,9 @@ class ChatRepository {
   Future<Uint8List?> readResource(String chatId, String resource) =>
       _store.readResource(chatId, resource);
 
+  Future<void> deleteResource(String chatId, String resource) =>
+      _store.deleteResource(chatId, resource);
+
   Future<String?> readPlan(String chatId) => _store.readPlan(chatId);
 
   /// A whole artifact as one zip — what a peer's `resourceRequest` naming one

@@ -1117,6 +1117,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
                 onSend: send,
                 onQueue: (text, attachments) =>
                     send(text, attachments, queue: true),
+                steers: driver.steers,
                 onAbort: driver.abort,
                 project: project,
                 device: device,

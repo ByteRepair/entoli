@@ -272,14 +272,23 @@ class ChatRoom {
   /// next step. False where there is none to take it: a command, a say naming
   /// several members, or one whose addressee is not speaking — those queue.
   bool _steer(Message say) {
-    final chat = state.chat;
-    if (chat == null || shellBypassCommand(say.plainText) != null) return false;
-    if (say.addressees.length > 1) return false;
-    final to = _roster(chat).answering(say);
-    final turn = _turns.values.firstWhereOrNull((t) => t.agent.handle == to);
+    final turn = _steeredBy(say);
     if (turn == null || !turn.steers.offer(say)) return false;
     _showSteering();
     return true;
+  }
+
+  /// Whether [text], sent now, would steer a running turn rather than wait
+  /// for it: the composer asks, to offer the choice only where there is one.
+  bool steers(String text) =>
+      state.isRunning && _steeredBy(_composeSay(text, const [])) != null;
+
+  _RunningTurn? _steeredBy(Message say) {
+    final chat = state.chat;
+    if (chat == null || shellBypassCommand(say.plainText) != null) return null;
+    if (say.addressees.length > 1) return null;
+    final to = _roster(chat).answering(say);
+    return _turns.values.firstWhereOrNull((t) => t.agent.handle == to);
   }
 
   /// The strip, read off the inboxes rather than kept beside them.
@@ -294,13 +303,16 @@ class ChatRoom {
   }
 
   /// Take back a say its turn has not read yet, as the composer held it: its
-  /// text and its files, read back from where sending saved them. Null where
-  /// the turn already has it; a file whose resource has gone is left out.
+  /// text and its files, read back from where sending saved them and removed
+  /// there, since nothing on the log names them and a resend saves its own.
+  /// Null where the turn already has it; a file whose resource has gone is
+  /// left out.
   Future<Draft?> withdrawSteer(String id) async {
     final say = _unsteer(id);
     if (say == null) return null;
     final attachments = await Future.wait(say.files.map((f) async {
       final bytes = await _repo.readResource(chatId, f.resource);
+      await _repo.deleteResource(chatId, f.resource);
       return bytes == null
           ? null
           : Attachment(filename: f.filename, mimeType: f.mimeType, bytes: bytes);

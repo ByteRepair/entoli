@@ -103,6 +103,11 @@ class MirrorChatController extends Notifier<ChatViewState>
   Future<Draft?> withdrawSteer(String id) async =>
       null;
 
+  /// Who is speaking is the home device's to judge, so every say is offered
+  /// both ways and it decides.
+  @override
+  bool steers(String text) => true;
+
   @override
   Future<void> resume() => _hub.resumeRemote(chatId);
 

@@ -54,9 +54,12 @@ class TurnSurface extends StatelessWidget {
         SteerStrip(
           steering: view.steering,
           onQueue: notifier.queueSteer,
-          onWithdraw: (id) async {
-            final said = await notifier.withdrawSteer(id);
-            if (said != null) onWithdrawn?.call(said);
+          onWithdraw: switch (onWithdrawn) {
+            null => null,
+            final restore => (id) async {
+                final said = await notifier.withdrawSteer(id);
+                if (said != null) restore(said);
+              },
           },
         ),
         // Not turn-scoped like the strips above: the tab outlives the turn

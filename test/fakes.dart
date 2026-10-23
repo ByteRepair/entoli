@@ -821,6 +821,10 @@ class FakeChatStore implements ChatStore {
       _resources[chatId]?[resource];
 
   @override
+  Future<void> deleteResource(String chatId, String resource) async =>
+      _resources[chatId]?.remove(resource);
+
+  @override
   Future<String> createArtifact(
       String chatId, String sourceDir, String entryFile,
       {String? project}) async {

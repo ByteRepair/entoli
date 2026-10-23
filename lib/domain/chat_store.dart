@@ -71,6 +71,9 @@ abstract class ChatStore {
   /// Read back what [saveResource] stored. Null once the file is gone.
   Future<Uint8List?> readResource(String chatId, String resource);
 
+  /// Remove what [saveResource] stored. Nothing where it is already gone.
+  Future<void> deleteResource(String chatId, String resource);
+
   /// Copy a workspace directory (or a single file's parent) into a new
   /// `artifacts/<id>/` and return the generated id. The [sourceDir] is an
   /// absolute path already resolved by the caller — the backend resolves
