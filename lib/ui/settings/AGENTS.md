@@ -278,7 +278,8 @@ for an install time nothing shows, and refetches on the web with a cache buster
 — for one field of a file this reads directly.
 
 The libraries are Flutter's own `showLicensePage`, not a list kept here. The
-registry already holds every package that ships, and the app adds the bundled
+registry already holds every package that ships, and the app adds its own
+AGPL (`registerAppLicence`, the entry the welcome tour shows) and the bundled
 font and voice licences to it — see "How a reply is set" and "What listens and
 what speaks", both of which were written against a licence page that did not
 exist yet. The bundled skills join them one entry per skill that carries its

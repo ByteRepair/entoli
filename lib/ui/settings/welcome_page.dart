@@ -1,13 +1,11 @@
 import "dart:async";
 
-import "package:flutter/foundation.dart"
-    show LicenseEntryWithLineBreaks, LicenseParagraph;
+import "package:flutter/foundation.dart" show LicenseParagraph;
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:uuid/uuid.dart";
 
 import "../../core/log.dart";
-import "../../data/licence_data.dart";
 import "../../domain/chat_log.dart";
 import "../../domain/local_model.dart" show isTitleOnlyModel;
 import "../../domain/models.dart";
@@ -15,7 +13,7 @@ import "../../domain/project.dart";
 import "../../providers.dart";
 import "../marketplace/marketplace_page.dart";
 import "../sidebar/sidebar.dart";
-import "../theme.dart" show appTitle;
+import "../app_licence.dart";
 import "../widgets/app_mark.dart";
 import "../widgets/dialogs.dart";
 import "../widgets/scrolling.dart";
@@ -615,10 +613,7 @@ class _ResponsibilityPage extends ConsumerStatefulWidget {
 
 class _ResponsibilityPageState extends ConsumerState<_ResponsibilityPage> {
   /// Unwrapped the way the licence page unwraps every entry, indents kept.
-  static final _licence =
-      LicenseEntryWithLineBreaks(const [appTitle], bundledLicence)
-          .paragraphs
-          .toList();
+  static final _licence = appLicence.paragraphs.toList();
 
   final _scroll = ScrollController();
 
