@@ -807,6 +807,22 @@ what dismissing the dialog would have told the page, and the agent's call
 fails saying which. The `user` tool parks the turn on the user, so a turn
 with nobody to answer is not offered it.
 
+### Downloads
+
+A download lands in the chat's workspace, `downloads/` under it, which is
+`BrowserTab.downloadDir`, set by the turn that hands the tab over. The
+protocol's download behaviour is the browser's rather than a tab's, so one
+directory per chat cannot be set on it: `Browser.setDownloadBehavior` with
+`allowAndName` sends every download into `<cache>/browser/downloads/` under
+the browser's id for it, and `_deliver` moves the finished file into the tab
+it came from under its own name, ` (1)` added where one is there already. The
+tab is found by `Browser.downloadWillBegin`'s frame: a tab's main frame has
+the tab's id, a popup names its opener, and a frame inside a page is looked
+up in each tab's frame tree. The agent hears of each one as a note on its
+next browser result. A hidden browser refuses every download without this,
+which is why it is set at every start. What could not be matched to a tab is
+left in staging, logged, and cleared at the next start.
+
 ### What the user did, told to the agent
 
 The user moves the page from the card, hides and gives back the browser, and

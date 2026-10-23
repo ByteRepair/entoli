@@ -120,6 +120,16 @@ abstract class BrowserTab {
   /// Text typed at the caret, as a paste puts it there.
   Future<void> insertText(String text);
 
+  /// What is selected in the page, or in the field with focus: what the
+  /// user's copy puts on their own clipboard, the page's not being theirs.
+  /// Null where nothing is, or the tab is not open.
+  Future<String?> selectedText();
+
+  /// Where a download from this tab lands, the chat's workspace `downloads/`;
+  /// set by the turn that hands the tab to the agent. Null leaves one in the
+  /// browser's staging directory.
+  abstract String? downloadDir;
+
   // Private input: what the user types for a sign-in reaches the page from
   // here, never through the agent, the backend or the log.
 

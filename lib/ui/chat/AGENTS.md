@@ -536,7 +536,18 @@ to the page while the viewport has focus — Tab and Escape included, which
 would otherwise move focus or close the dialog. A synthesized key runs no
 editing command on its own, so a shortcut names its own (`selectAll`, `copy`,
 `undo`; `browser_input.dart`), and paste is the user's clipboard inserted as
-text, the page's clipboard not being theirs. None of it is gated or told to
+text, the page's clipboard not being theirs. Copy and cut go the other way:
+the page's selection (`selectedText`, a focused field's first) is put on the
+user's clipboard, and the key still goes to the page, whose own handlers are
+all an editor drawn on a canvas has.
+
+A right click opens the card's own menu — Cut, Copy, Paste, Select all — and
+does not reach the page: Chrome draws its context menu nowhere the screencast
+shows. A held finger opens the same menu. A wheel is claimed through the
+pointer-signal resolver and scaled to the page's pixels; a trackpad's two
+fingers arrive as a pan-zoom, not a wheel, and are sent as one. A finger is
+not a mouse: a tap clicks and a drag scrolls, since a drag sent as a mouse
+would select text instead. None of it is gated or told to
 the agent: the user is the one doing it, and the agent's next call reads the
 page as the user left it. It acts only on an open tab — input never starts a
 browser.

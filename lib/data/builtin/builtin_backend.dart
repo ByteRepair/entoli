@@ -462,7 +462,10 @@ class BuiltinBackend implements AgentBackend {
         answer: _awaitAnswers,
         subAgentRunner: subAgentRunner,
         webSearch: webSearch,
-        browser: caps.browser ? browser.tab(chatId) : null,
+        browser: caps.browser
+            ? (browser.tab(chatId)
+              ..downloadDir = config.fs.path.join(workspace, "downloads"))
+            : null,
         seesImages: target.info?.readsImages ?? true,
         browserHidden: browser.hidden,
         browserUploads: AppSettings.load(config).agentBrowserUploads,
