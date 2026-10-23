@@ -147,15 +147,16 @@ class _ChapterRailState extends State<ChapterRail> {
             onPointerMove: (e) => _press(e, pitch, scrubbing: true),
             onPointerUp: (_) => _pressed = null,
             onPointerCancel: (_) => _pressed = null,
-            child: ValueListenableBuilder<int?>(
-              valueListenable: widget.current,
-              builder: (context, at, _) => Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  for (final (i, chapter) in chapters.indexed)
-                    _Tick(chapter: chapter, selected: i == at, height: pitch),
-                ],
-              ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                for (final (i, chapter) in chapters.indexed)
+                  _Tick(
+                      chapter: chapter,
+                      index: i,
+                      current: widget.current,
+                      height: pitch),
+              ],
             ),
           ),
         );
@@ -165,10 +166,19 @@ class _ChapterRailState extends State<ChapterRail> {
 }
 
 class _Tick extends StatefulWidget {
-  const _Tick({required this.chapter, required this.selected, required this.height});
+  const _Tick({
+    required this.chapter,
+    required this.index,
+    required this.current,
+    required this.height,
+  });
 
   final Chapter chapter;
-  final bool selected;
+  final int index;
+
+  /// Listened to by each tick, so a chapter change rebuilds the two whose
+  /// selection flips rather than the whole rail, mid-scroll.
+  final ValueListenable<int?> current;
 
   /// The rail's pitch: every tick is the same height, which is what lets the
   /// rail find the one under a pointer by arithmetic.
@@ -180,14 +190,43 @@ class _Tick extends StatefulWidget {
 
 class _TickState extends State<_Tick> {
   bool _hovered = false;
+  late bool _selected = _isSelected;
+
+  bool get _isSelected => widget.current.value == widget.index;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.current.addListener(_select);
+  }
+
+  @override
+  void didUpdateWidget(_Tick old) {
+    super.didUpdateWidget(old);
+    if (old.current != widget.current) {
+      old.current.removeListener(_select);
+      widget.current.addListener(_select);
+    }
+    _selected = _isSelected;
+  }
+
+  @override
+  void dispose() {
+    widget.current.removeListener(_select);
+    super.dispose();
+  }
+
+  void _select() {
+    if (_isSelected != _selected) setState(() => _selected = _isSelected);
+  }
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final chapter = widget.chapter;
     final branched = chapter.threads > 1;
-    final lit = widget.selected || _hovered;
-    final colour = widget.selected
+    final lit = _selected || _hovered;
+    final colour = _selected
         ? scheme.primary
         : scheme.onSurfaceVariant.withValues(alpha: _hovered ? 0.9 : 0.45);
     return Tooltip(
@@ -218,7 +257,7 @@ class _TickState extends State<_Tick> {
               AnimatedContainer(
                 duration: const Duration(milliseconds: 150),
                 width: lit ? 22 : 14,
-                height: widget.selected ? 3 : 2,
+                height: _selected ? 3 : 2,
                 decoration: BoxDecoration(
                   color: colour,
                   borderRadius: BorderRadius.circular(2),
