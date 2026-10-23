@@ -65,7 +65,10 @@ class Roster {
         : known(nameOf(authorFor(prompt)));
   }
 
-  static bool _notSaid(Message message) =>
-      shellBypassCommand(message.plainText) != null ||
-      wiredSkillFromText(message.plainText) != null;
+  static bool _notSaid(Message message) => isCommand(message.plainText);
 }
+
+/// A `!` command or a callback `/skill` rather than something said: neither
+/// addresses anyone, and neither steers a running turn.
+bool isCommand(String text) =>
+    shellBypassCommand(text) != null || wiredSkillFromText(text) != null;

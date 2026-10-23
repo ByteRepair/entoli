@@ -29,6 +29,10 @@ abstract interface class TurnDriver {
   /// null where the turn already has it.
   Future<Draft?> withdrawSteer(String id);
 
+  /// Whether [text], sent now, would steer the running turn rather than be
+  /// queued after it.
+  bool steers(String text);
+
   Future<void> resume();
   Future<void> abort();
   Future<void> respondApproval(String approvalId, ApprovalResponse r,
@@ -142,6 +146,9 @@ class ChatController extends Notifier<ChatViewState>
 
   @override
   Future<Draft?> withdrawSteer(String id) => _room.withdrawSteer(id);
+
+  @override
+  bool steers(String text) => _room.steers(text);
 
   @override
   Future<void> resume() => _room.resume();

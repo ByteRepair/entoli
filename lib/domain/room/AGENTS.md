@@ -164,8 +164,10 @@ below for the default. A queued say — `send(queue: true)`, the outlined
 button beside Send or Alt+Enter, and every say no running turn can read —
 lands on the log the moment it is said (`_sayLater` — the log is the queue)
 and dispatches when the room settles. The composer names what is on offer:
-an empty field while the agent speaks shows Stop; anything typed shows Send
-and the queue button. Where the say lands after the settle already read the
+an empty field while the agent speaks shows Stop; anything typed shows Send,
+and the queue button beside it where the say would steer — the room's
+`steers`, asked rather than copied, since only the room knows who is
+speaking. Where the say lands after the settle already read the
 queue — the turn was finishing while it was typed — `_sayLater` dispatches
 it itself rather than waiting for a settle that already happened. A say
 whose members are named schedules them through the same ordering anything
@@ -203,7 +205,9 @@ stopped. A `!` command, a say naming several members, or one whose
 addressee is not speaking is queued from the start. The strip's buttons are
 `queueSteer` (send it after the turn instead) and `withdrawSteer` (take it
 back into the composer, its files read back from the chat's `resources/`
-where sending saved them, ahead of anything typed since).
+where sending saved them and deleted there, ahead of anything typed since;
+a resend saves its own). The voice screen has no composer to take a say
+back into, so its strip offers only the first.
 
 A mirror sends the queue flag with the prompt (`SyncPromptSend.queue`); an
 older home device ignores it and queues everything. The strip is the home

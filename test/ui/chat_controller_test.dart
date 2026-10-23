@@ -1809,6 +1809,10 @@ void main() {
       addTearDown(() => app.backend.hold?.complete());
       final (id, controller) = await startTurn("hello, take your time");
       await waitFor(() => app.backend.prompts.isNotEmpty, what: "the turn");
+      // What the composer asks before offering the choice: a command waits.
+      expect(controller.steers("keep this for later"), isTrue);
+      expect(controller.steers("!ls"), isFalse);
+      expect(controller.steers("/compact"), isFalse);
 
       await controller.send("keep this for later");
       final picture = Attachment(
@@ -1823,6 +1827,11 @@ void main() {
       expect(back?.text, "never mind");
       expect(back?.attachments.single.filename, "shot.png");
       expect(back?.attachments.single.bytes, [1, 2, 3]);
+      // Gone from the chat: nothing names it, and a resend saves its own.
+      expect(
+          await app.store
+              .readResource(id, steering.last.files.single.resource),
+          isNull);
 
       // Neither is the turn's to read any more; the queued one is on the log.
       expect(app.container.read(chatControllerProvider(id)).steering, isEmpty);

@@ -5,6 +5,7 @@ import "package:flutter_test/flutter_test.dart";
 
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/domain/prompt_library.dart";
+import "package:agent_chat/domain/room/roster.dart" show isCommand;
 import "package:agent_chat/ui/chat/widgets/composer.dart";
 
 import "../data/builtin/builtin_fakes.dart";
@@ -32,7 +33,8 @@ void main() {
           {EdgeInsets bars = EdgeInsets.zero,
           String? workspace,
           String? workspaceHome,
-          bool agentSpeaking = false}) =>
+          bool agentSpeaking = false,
+          bool Function(String text)? steers}) =>
       app.pump(
         tester,
         underSystemBars(
@@ -46,6 +48,7 @@ void main() {
                 sentAttachments.add(attachments);
               },
               onQueue: (text, _) => queued.add(text),
+              steers: steers ?? (text) => !isCommand(text),
               onAbort: () {},
               workspace: workspace,
               workspaceHome: workspaceHome,
@@ -215,6 +218,19 @@ void main() {
     expect(queued, ["after", "also after"]);
   });
 
+  testWidgets("no queue button where the room would queue the say anyway",
+      (tester) async {
+    await pump(tester,
+        agentSpeaking: true, steers: (text) => !text.contains("@b"));
+    await type(tester, "@a and @b");
+    expect(find.byTooltip("Send after this turn (Alt+Enter)"), findsNothing);
+    expect(find.byTooltip("Send"), findsOneWidget);
+
+    await type(tester, "just @a");
+    expect(
+        find.byTooltip("Send after this turn (Alt+Enter)"), findsOneWidget);
+  });
+
   testWidgets("a message put back keeps its files, ahead of what came since",
       (tester) async {
     final key = GlobalKey<ComposerState>();
@@ -235,12 +251,15 @@ void main() {
     );
     await type(tester, "typed since");
 
-    key.currentState!.restore("taken back", [
-      Attachment(
-          filename: "shot.png",
-          mimeType: "image/png",
-          bytes: Uint8List.fromList([1, 2, 3])),
-    ]);
+    key.currentState!.restore((
+      text: "taken back",
+      attachments: [
+        Attachment(
+            filename: "shot.png",
+            mimeType: "image/png",
+            bytes: Uint8List.fromList([1, 2, 3])),
+      ],
+    ));
     await settleIo(tester);
     await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
     await tester.sendKeyEvent(LogicalKeyboardKey.enter);

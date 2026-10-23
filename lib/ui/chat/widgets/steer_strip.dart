@@ -11,12 +11,13 @@ class SteerStrip extends StatelessWidget {
     super.key,
     required this.steering,
     required this.onQueue,
-    required this.onWithdraw,
+    this.onWithdraw,
   });
 
   final List<Message> steering;
   final ValueChanged<String> onQueue;
-  final ValueChanged<String> onWithdraw;
+  /// Null where there is no composer to take a say back into.
+  final ValueChanged<String>? onWithdraw;
 
   @override
   Widget build(BuildContext context) {
@@ -57,11 +58,12 @@ class SteerStrip extends StatelessWidget {
                   tooltip: "Send after this turn instead",
                   onPressed: () => onQueue(say.id),
                 ),
-                ActionIcon(
-                  icon: Icons.close,
-                  tooltip: "Take back",
-                  onPressed: () => onWithdraw(say.id),
-                ),
+                if (onWithdraw case final withdraw?)
+                  ActionIcon(
+                    icon: Icons.close,
+                    tooltip: "Take back",
+                    onPressed: () => withdraw(say.id),
+                  ),
               ],
             ),
         ],

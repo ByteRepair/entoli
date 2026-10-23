@@ -234,9 +234,19 @@ class FileChatStore implements ChatStore {
 
   @override
   Future<Uint8List?> readResource(String chatId, String resource) async {
-    final dir = config.resourcesDir(chatId, project: await projectOf(chatId));
-    final file = _fs.file(_fs.path.join(dir, _fs.path.basename(resource)));
+    final file = await _resourceFile(chatId, resource);
     return await file.exists() ? file.readAsBytes() : null;
+  }
+
+  @override
+  Future<void> deleteResource(String chatId, String resource) async {
+    final file = await _resourceFile(chatId, resource);
+    if (await file.exists()) await file.delete();
+  }
+
+  Future<File> _resourceFile(String chatId, String resource) async {
+    final dir = config.resourcesDir(chatId, project: await projectOf(chatId));
+    return _fs.file(_fs.path.join(dir, _fs.path.basename(resource)));
   }
 
   @override

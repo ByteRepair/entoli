@@ -6,6 +6,7 @@ import "../../data/sync/sync_hub.dart";
 import "../../domain/ask.dart";
 import "../../domain/chat_log.dart";
 import "../../domain/models.dart";
+import "../../domain/room/roster.dart" show isCommand;
 import "../../domain/room/room_state.dart";
 import "../../providers.dart";
 import "chat_controller.dart"
@@ -102,6 +103,11 @@ class MirrorChatController extends Notifier<ChatViewState>
   @override
   Future<Draft?> withdrawSteer(String id) async =>
       null;
+
+  /// Who is speaking is the home device's to judge, so anything but a command
+  /// is offered both ways and it decides.
+  @override
+  bool steers(String text) => !isCommand(text);
 
   @override
   Future<void> resume() => _hub.resumeRemote(chatId);
