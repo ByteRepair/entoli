@@ -3,19 +3,25 @@ import "dart:async";
 import "package:flutter/material.dart";
 import "package:flutter/services.dart";
 
+import "../../core/platform/rich_clipboard.dart";
 import "../../domain/permission.dart";
 import "../../domain/project.dart";
 import "text_input.dart";
 
 /// Put [text] on the clipboard and say so. Copying is silent otherwise — the
 /// button that did it looks the same afterwards — so what was copied is
-/// [said] in a snack bar.
+/// [said] in a snack bar. With [html], the same entry carries it formatted.
 Future<void> copyToClipboard(
   BuildContext context,
   String text, {
   required String said,
+  String? html,
 }) async {
-  await Clipboard.setData(ClipboardData(text: text));
+  if (html != null) {
+    await setRichClipboard(plain: text, html: html);
+  } else {
+    await Clipboard.setData(ClipboardData(text: text));
+  }
   if (!context.mounted) return;
   ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(said)));
 }

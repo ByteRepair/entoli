@@ -632,7 +632,8 @@ List<bool> frameworkHandlesBack(WidgetTester tester) {
 /// Everything the app put on the clipboard, in order. Takes
 /// `SystemChannels.platform` over for the test, the same way
 /// [frameworkHandlesBack] does — so a test wanting both wants one of them.
-List<String> clipboard(WidgetTester tester) {
+/// [html] collects each rich copy's HTML document beside it.
+List<String> clipboard(WidgetTester tester, {List<String>? html}) {
   final copied = <String>[];
   final messenger = tester.binding.defaultBinaryMessenger;
   messenger.setMockMethodCallHandler(SystemChannels.platform, (call) async {
@@ -641,7 +642,21 @@ List<String> clipboard(WidgetTester tester) {
     }
     return null;
   });
-  addTearDown(() => messenger.setMockMethodCallHandler(SystemChannels.platform, null));
+  // The rich copy's channel, its text half read as any other copy's. Unmocked
+  // it would answer in real time, after the test has stopped pumping.
+  const rich = MethodChannel("agent_chat/clipboard");
+  messenger.setMockMethodCallHandler(rich, (call) async {
+    if (call.method == "setHtml") {
+      final arguments = call.arguments as Map;
+      copied.add(arguments["plain"] as String);
+      html?.add(arguments["html"] as String);
+    }
+    return null;
+  });
+  addTearDown(() {
+    messenger.setMockMethodCallHandler(SystemChannels.platform, null);
+    messenger.setMockMethodCallHandler(rich, null);
+  });
   return copied;
 }
 

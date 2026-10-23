@@ -1,11 +1,15 @@
+import "dart:async";
+import "dart:math" as math;
 import "dart:typed_data";
 
+import "package:flutter/foundation.dart" show defaultTargetPlatform;
 import "package:flutter/gestures.dart";
 import "package:flutter/material.dart";
 // `SelectedContent`, which material does not re-export.
 import "package:flutter/rendering.dart";
 import "package:flutter_markdown_plus/flutter_markdown_plus.dart";
 
+import "../../../core/platform/rich_clipboard.dart";
 import "../../../domain/ask.dart";
 import "../../../domain/formatted_text.dart";
 import "../../../domain/models.dart";
@@ -21,6 +25,7 @@ import "activity_label.dart";
 import "code_block.dart";
 import "plan_view.dart" show PlanLabel;
 import "reply_style.dart";
+import "selection_html.dart";
 import "shell_run.dart";
 
 /// Renders a single message. The bubble holds what the model said; thinking
@@ -191,7 +196,43 @@ class _MessageBubbleState extends State<MessageBubble> {
         // text is what a reader would paste into another document. Raw
         // markdown is the button beside it.
         formattedTextOf(widget.message.plainText),
+        html: htmlClipboardDocument(formattedHtmlOf(widget.message.plainText)),
         said: "Message copied",
+      );
+
+  /// What Ctrl+C and the selection menu's Copy write: the selection as text
+  /// and as HTML, both read before anything is awaited, since the menu clears
+  /// the selection as soon as this returns.
+  Future<void> _copySelection() async {
+    final selection = _selection;
+    final plain = selection?.getSelectedContent()?.plainText;
+    if (selection == null || plain == null) return;
+    final html = selection.selectedHtml(context.findRenderObject(), widget.message.plainText);
+    await setRichClipboard(plain: plain, html: htmlClipboardDocument(html ?? escapeHtml(plain)));
+  }
+
+  /// The selection's menu, the framework's own with Copy swapped for
+  /// [_copySelection]; what follows a copy is what the framework's does.
+  Widget _selectionMenu(BuildContext context, SelectableRegionState region) =>
+      AdaptiveTextSelectionToolbar.buttonItems(
+        anchors: region.contextMenuAnchors,
+        buttonItems: [
+          for (final item in region.contextMenuButtonItems)
+            if (item.type == ContextMenuButtonType.copy)
+              item.copyWith(onPressed: () {
+                unawaited(_copySelection());
+                switch (defaultTargetPlatform) {
+                  case TargetPlatform.android || TargetPlatform.fuchsia:
+                    region.clearSelection();
+                  case TargetPlatform.iOS:
+                    region.hideToolbar(false);
+                  case TargetPlatform.linux || TargetPlatform.macOS || TargetPlatform.windows:
+                    region.hideToolbar();
+                }
+              })
+            else
+              item,
+        ],
       );
 
   Future<void> _copyRaw() =>
@@ -302,13 +343,25 @@ class _MessageBubbleState extends State<MessageBubble> {
                   // and the fragments, so what a selection copies is decided
                   // in one place, [_RenderedSelection] below; the labels
                   // inside stay disabled.
-                  SelectionArea(
-                    child: SelectionContainer(
-                      delegate: _selection ??= _RenderedSelection(),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: align,
-                        children: _rows(context, bg),
+                  //
+                  // The region's copy writes plain text, so Ctrl+C is taken
+                  // over here — the region's copy action defers to one above
+                  // it — and the menu's Copy in `_selectionMenu`.
+                  Actions(
+                    actions: {
+                      CopySelectionTextIntent: CallbackAction<CopySelectionTextIntent>(
+                        onInvoke: (_) => unawaited(_copySelection()),
+                      ),
+                    },
+                    child: SelectionArea(
+                      contextMenuBuilder: _selectionMenu,
+                      child: SelectionContainer(
+                        delegate: _selection ??= _RenderedSelection(),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: align,
+                          children: _rows(context, bg),
+                        ),
                       ),
                     ),
                   ),
@@ -780,32 +833,72 @@ class _MessageTextState extends State<MessageText> {
 /// where they do not share a line. A fragment with no selection, and a
 /// selection collapsed to a point, answer nothing: an empty clipboard is a
 /// copy that reports success over nothing.
+///
+/// [selectedHtml] is the same selection formatted, the clipboard's other half.
 class _RenderedSelection extends StaticSelectionContainerDelegate {
   @override
   SelectedContent? getSelectedContent() {
     final buffer = StringBuffer();
-    // The box of what has been selected so far, in container coordinates: a
-    // fragment that does not overlap it vertically is on a rendered line of
-    // its own, and one newline separates it from what went before. It is
-    // never null where it is read: every fragment that writes text sets it,
-    // and the newline is asked only once something has.
-    Rect covered = Rect.zero;
-    for (final Selectable selectable in selectables) {
-      final SelectedContent? selected = selectable.getSelectedContent();
-      if (selected == null) continue;
-      final Rect box = MatrixUtils.transformRect(
-        selectable.getTransformTo(null),
-        selectable.boundingBoxes.first,
-      );
-      if (buffer.isNotEmpty &&
-          (box.top > covered.bottom || box.bottom < covered.top)) {
-        buffer.write("\n");
-      }
-      buffer.write(selected.plainText);
-      covered = covered.expandToInclude(box);
+    for (final (selectable: _, :selected, :sameLine, box: _) in _selected()) {
+      if (buffer.isNotEmpty && !sameLine) buffer.write("\n");
+      buffer.write(selected);
     }
     if (buffer.isEmpty) return null;
     return SelectedContent(plainText: buffer.toString());
+  }
+
+  /// The selection as an HTML fragment, read from the paragraphs under [root]
+  /// and the [markdown] they were rendered from; null where nothing is.
+  String? selectedHtml(RenderObject? root, String markdown) {
+    final paragraphs = paragraphsUnder(root);
+    final pieces = <SelectedPiece>[];
+    for (final (:selectable, :selected, :sameLine, :box) in _selected()) {
+      final range = selectable.getSelection();
+      final paragraph =
+          range == null ? null : paragraphOf(selectable, paragraphs, selected, range);
+      final start = range == null ? 0 : math.min(range.startOffset, range.endOffset);
+      pieces.add(SelectedPiece(
+        text: selected,
+        paragraph: paragraph,
+        start: start,
+        end: start + selected.length,
+        sameLine: pieces.isNotEmpty && sameLine,
+        // A container of its own — a code block's scroll — drawn in the code
+        // face is a code block.
+        monospace: paragraph == null &&
+            paragraphs.any((p) =>
+                p.attached &&
+                box.contains(MatrixUtils.transformRect(
+                        p.getTransformTo(null), Offset.zero & p.size)
+                    .center) &&
+                isMonospace(p)),
+      ));
+    }
+    if (pieces.isEmpty) return null;
+    return selectionHtml(pieces, RenderedOutline.of(markdown));
+  }
+
+  /// Each selectable with something selected, in order, and whether it shares
+  /// a rendered line with what went before: one that does not overlap the box
+  /// selected so far vertically is a block of its own.
+  List<({Selectable selectable, String selected, bool sameLine, Rect box})> _selected() {
+    final found = <({Selectable selectable, String selected, bool sameLine, Rect box})>[];
+    Rect? covered;
+    for (final Selectable selectable in selectables) {
+      final SelectedContent? selected = selectable.getSelectedContent();
+      if (selected == null) continue;
+      final transform = selectable.getTransformTo(null);
+      final Rect line = MatrixUtils.transformRect(transform, selectable.boundingBoxes.first);
+      final sameLine =
+          covered != null && line.top <= covered.bottom && line.bottom >= covered.top;
+      final Rect box = MatrixUtils.transformRect(
+        transform,
+        selectable.boundingBoxes.reduce((a, b) => a.expandToInclude(b)),
+      );
+      found.add((selectable: selectable, selected: selected.plainText, sameLine: sameLine, box: box));
+      covered = covered?.expandToInclude(line) ?? line;
+    }
+    return found;
   }
 }
 

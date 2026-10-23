@@ -189,6 +189,37 @@ paragraph. What is not text contributes nothing — an image and anything a
 custom element builder drew is outside the fragments — and selection can also
 not cross messages, one region per message as ever.
 
+**A copy carries its formatting too**, so a word processor pastes headings,
+bold and lists rather than flat words. Flutter cannot do this alone: the
+selection API answers in plain text only, and `Clipboard.setData` sends one
+string to an embedder that writes it as `text/plain` — so overriding the
+selection decides *what* is copied, but only `setRichClipboard`
+(`core/platform/rich_clipboard.dart`) can write it with an HTML entry beside
+it. That is a channel, `agent_chat/clipboard`, answered by a few lines in each
+runner (GTK targets, `NSPasteboard`, `UIPasteboard`, `ClipData.newHtmlText`,
+`CF_HTML`) and by `navigator.clipboard.write` in a browser; a runner that does
+not answer gets the plain text. The Apple halves sit in `MainFlutterWindow` and
+`AppDelegate` rather than files of their own, which would want an Xcode
+project entry this host cannot make.
+
+The region's own copy writes plain text, so both ways in are taken over: Ctrl+C
+by an `Actions` above the `SelectionArea` (the region's copy action is
+overridable, and defers to it), and the menu's Copy by `_selectionMenu`, which
+does what the framework's item does after it. Both read the selection before
+anything is awaited, because the menu clears it.
+
+What the HTML says comes from two places, since a fragment knows neither alone
+(`selection_html.dart`). The **spans** under the selected range say what was
+bold, italic, code or a link — the fragment type is private, so its paragraph
+is found by the transform both report and the text it indexes. The **markdown**
+says what kind of block each paragraph was (`RenderedOutline`, keyed by the
+paragraph's text): a list item, a cell, a heading, a quote — which the spans
+cannot, a list item and a paragraph being drawn alike. A code block or table
+under a scroll is a selection container of its own rather than a fragment, so
+it copies as its text, a code block as `pre`. The copy button needs none of
+this and renders the markdown whole (`formattedHtmlOf`), escaping HTML the
+model wrote the way the screen shows it.
+
 What can be done to a message is a row under it rather than a menu, uncovered by
 hovering the message or, where there is no pointer to hover with, by touching
 it. Left to right: which thread this is and the arrows between them, copy,
@@ -196,7 +227,8 @@ raw copy, delete, then Edit and Regenerate. **Copy takes the formatted text**
 (`formattedTextOf`, in `lib/domain/formatted_text.dart`, parsed with the same
 grammar the renderer reads, so the two cannot disagree about what a fence is)
 — what a reader would paste into
-another document, and the same answer at message scale the selection is.
+another document, and the same answer at message scale the selection is,
+formatted beside it as above.
 **Raw copy (`<>`) takes the markdown**, every text part and no thinking — the
 same rule a rewound session is seeded by — and the Edit field reads that too,
 since editing the rendered text would not resend to what produced it. Copy is
