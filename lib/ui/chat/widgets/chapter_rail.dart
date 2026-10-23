@@ -40,7 +40,9 @@ List<Chapter> chaptersOf(Chat chat) {
 const _previewLength = 50;
 
 String _firstLine(String text) {
-  final line = text.trim().split("\n").first.trim();
+  final trimmed = text.trim();
+  final end = trimmed.indexOf("\n");
+  final line = (end < 0 ? trimmed : trimmed.substring(0, end)).trim();
   if (line.isEmpty) return "(attachment)";
   if (line.length <= _previewLength) return line;
   return "${line.substring(0, _previewLength).trimRight()}...";

@@ -44,6 +44,7 @@ class _TextViewerPageState extends ConsumerState<TextViewerPage> {
   /// normalises line breaks to the one it was given, so comparing against the
   /// file as read would call a CRLF file changed before a key was pressed.
   String _saved = "";
+  CodeLines? _lines;
   bool _dirty = false;
 
   /// The reader's, not the file's, so they outlive the page for the session.
@@ -94,6 +95,11 @@ class _TextViewerPageState extends ConsumerState<TextViewerPage> {
   }
 
   void _changed() {
+    // The controller notifies on every caret move too, and `text` joins the
+    // whole document; a selection change keeps the same lines.
+    final lines = _controller!.codeLines;
+    if (identical(lines, _lines)) return;
+    _lines = lines;
     final dirty = _controller!.text != _saved;
     if (dirty != _dirty) setState(() => _dirty = dirty);
   }
@@ -174,7 +180,7 @@ class _TextViewerPageState extends ConsumerState<TextViewerPage> {
                 overflow: TextOverflow.ellipsis,
               ),
               actions: _tooLarge ? null : [
-                if (_editing && _canEdit)
+                if (_editing)
                   IconButton(
                     icon: const Icon(Icons.save_outlined),
                     tooltip: "Save",

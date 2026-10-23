@@ -266,10 +266,6 @@ const browserCredentialsHideTool = LlmTool(
   },
 );
 
-/// The tools, in the order they are offered. [screenshot] only where the
-/// model reads images: one that cannot would be paying for pictures it is
-/// sent as nothing. [show] only where the browser runs hidden. [credentials]
-/// only where someone is there to answer them.
 const browserUploadToolName = "browser_upload";
 
 const browserUploadTool = LlmTool(
@@ -315,6 +311,10 @@ const browserUploadByUserTool = LlmTool(
   },
 );
 
+/// The tools, in the order they are offered. [screenshot] only where the
+/// model reads images: one that cannot would be paying for pictures it is
+/// sent as nothing. [show] only where the browser runs hidden. [credentials]
+/// only where someone is there to answer them.
 List<LlmTool> browserTools({
   required bool screenshot,
   bool show = false,

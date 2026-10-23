@@ -9,6 +9,7 @@ import "package:path/path.dart" as p;
 
 import "../../tls.dart";
 import "../../log.dart";
+import "../../../data/download.dart" show latestReleaseTag;
 import "../../../domain/app_update.dart";
 
 const _tag = "update";
@@ -123,7 +124,7 @@ class DesktopUpdater implements AppUpdateHost {
     final client = httpClient ?? tlsClient();
     String? staged;
     try {
-      final tag = await _latestTag(client);
+      final tag = await latestReleaseTag(client, updateRepo, timeout: _tagTimeout);
       if (!versionIsNewer(version, tag)) {
         return logDetail(_tag, () => "$version is current against $tag");
       }
@@ -180,37 +181,6 @@ class DesktopUpdater implements AppUpdateHost {
         UpdateFlavour.macos => "installed bundle",
         UpdateFlavour.windows => "installed app",
       };
-
-  /// The newest release tag, read off the redirect the page's own URL
-  /// answers with — no API call, no rate limit, and the tag in the one
-  /// header GitHub has always put there.
-  Future<String> _latestTag(http.Client client) async {
-    final request = http.Request("GET", latestReleaseUrl())
-      ..followRedirects = false
-      ..maxRedirects = 0;
-    final response = await client.send(request).timeout(_tagTimeout);
-    try {
-      if (response.statusCode >= 400) {
-        throw HttpException(
-            "${response.statusCode} for the latest release of $updateRepo");
-      }
-      final location = response.headers["location"];
-      final tag = location == null ? null : latestTagOf(Uri.parse(location));
-      if (tag == null) {
-        throw FormatException(
-            "the latest release of $updateRepo points at $location, which "
-            "names no tag");
-      }
-      return tag;
-    } finally {
-      // A redirect's body is nothing, but a body nobody reads holds the
-      // socket until the client is closed. A body that errors while it is
-      // drained says nothing about the tag, which is already in hand.
-      try {
-        await response.stream.drain<void>();
-      } catch (_) {}
-    }
-  }
 
   /// The release asset, streamed onto [staged] — beside the AppImage it will
   /// rename over on Linux, one filesystem so the rename is atomic, and in the

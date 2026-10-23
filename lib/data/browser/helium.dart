@@ -7,8 +7,8 @@ import "package:http/http.dart" as http;
 import "package:path/path.dart" as p;
 
 import "../../domain/agent_browser.dart";
-import "../../domain/app_update.dart" show latestTagOf;
 import "../../domain/download.dart";
+import "../download.dart" show latestReleaseTag;
 
 /// Which desktop a Helium release is fetched for. Each has a repository of its
 /// own, and its asset names carry the version.
@@ -106,19 +106,7 @@ class HeliumDownload implements EmbeddedBrowser {
     final os = _hostOs ?? (throw UnsupportedError("No Helium for this OS."));
     final client = _client();
     try {
-      final request = http.Request("GET",
-          Uri.https("github.com", "/${heliumRepo(os)}/releases/latest"))
-        ..followRedirects = false;
-      final response =
-          await client.send(request).timeout(const Duration(seconds: 30));
-      await response.stream.drain<void>();
-      final location = response.headers["location"];
-      final tag = location == null ? null : latestTagOf(Uri.parse(location));
-      if (tag == null) {
-        throw HttpException(
-            "Helium's latest release answered ${response.statusCode} with no tag.");
-      }
-      return tag;
+      return await latestReleaseTag(client, heliumRepo(os));
     } finally {
       client.close();
     }

@@ -30,7 +30,7 @@ class FileSubAgentLog implements SubAgentLog {
     if (records.isEmpty) return;
     final feed = this.feed;
     if (feed != null && !feed.holds(chatId, callId)) {
-      feed.open(chatId, callId, await this.records(callId));
+      feed.open(chatId, callId, await _records(callId));
     }
     // Unlike a chat's log, nothing has created this directory: a sub-agent's
     // first record is the first thing to name it.
@@ -41,15 +41,15 @@ class FileSubAgentLog implements SubAgentLog {
 
   @override
   Future<List<Message>> read(String callId) async =>
-      replay(await records(callId));
+      replay(await _records(callId));
 
   @override
   Future<bool> isResumable(String callId) async {
-    final records = await this.records(callId);
+    final records = await _records(callId);
     return records.isNotEmpty && endsUnfinished(replay(records), records);
   }
 
-  Future<List<ChatRecord>> records(String callId) async {
+  Future<List<ChatRecord>> _records(String callId) async {
     final file = _fs.file(_path(callId));
     if (!await file.exists()) return const [];
     return decodeLog(await file.readAsString());

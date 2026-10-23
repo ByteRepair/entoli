@@ -8,6 +8,7 @@ import "package:path/path.dart" as p;
 
 import "../../core/log.dart";
 import "../../domain/agent_browser.dart";
+import "../builtin/local_shell.dart" show environmentWithoutAppImage;
 import "cdp.dart";
 import "helium.dart";
 import "page_script.dart";
@@ -276,10 +277,6 @@ Future<void> _stop(_Running running) async {
   });
 }
 
-/// The AppImage runtime's variables describe this app, not the browser being
-/// launched — Helium's own AppImage would read ours as its own.
-const _appImageVars = {"APPIMAGE", "APPDIR", "ARGV0", "OWD"};
-
 /// Start [exe] on [profile] with a DevTools port of its choosing, and connect.
 /// The port is read from `DevToolsActivePort`, which the browser writes into
 /// the profile once it listens: no port is guessed, so none can be taken.
@@ -303,10 +300,7 @@ Future<_Running> _launch(String exe, String profile,
       if (userAgent != null) "--user-agent=$userAgent",
       "about:blank",
     ],
-    environment: {
-      for (final e in Platform.environment.entries)
-        if (!_appImageVars.contains(e.key)) e.key: e.value,
-    },
+    environment: environmentWithoutAppImage(),
     includeParentEnvironment: false,
   );
   // Drained, or a chatty browser fills the pipe and stalls; the tail is kept

@@ -158,12 +158,6 @@ class ChatRoom {
     return messages == null || messages.isEmpty ? null : messages.last;
   }
 
-  /// The single running turn, where exactly one is — every path that drives,
-  /// stops or watches a turn speaks about it, and a room with two running has
-  /// to name which.
-  _RunningTurn? get _liveTurn =>
-      _turns.length == 1 ? _turns.values.first : null;
-
   String get replyText => _reply?.plainText ?? "";
 
   /// Fold [parts] into the message [turn] is writing, by id rather than by
@@ -542,9 +536,6 @@ class ChatRoom {
     if (state.isRunning) return;
     final chat = state.chat;
     if (chat == null || !chat.unfinished) return;
-    // The user re-engaging is a new patience: their budget starts over, the
-    // way a fresh send's would.
-    _liveTurn?.round = 0;
     await _startResume();
   }
 
@@ -575,7 +566,7 @@ class ChatRoom {
     // completion, at the true end, not one per attempt.
     final turn = _turns[reply.id] ?? _openTurnEntry(reply.id, agent);
     turn.interrupted = false;
-    turn.finishing = false;
+    turn.finishing = null;
     turn.recorder.open(reply.id, existing: reply.parts);
 
     _listen(turn,
@@ -772,10 +763,7 @@ class ChatRoom {
   Future<void> _finishTurn(_RunningTurn turn) async {
     // Whoever lands first drives the finish; the rest await its future, so a
     // stop during the retry backoff resolves at the true end, not the guard.
-    if (turn.finishing) return turn.finishingFuture;
-    turn.finishing = true;
-    turn.finishingFuture = _driveTurnToEnd(turn);
-    await turn.finishingFuture;
+    return turn.finishing ??= _driveTurnToEnd(turn);
   }
 
   Future<void> _driveTurnToEnd(_RunningTurn turn) async {
@@ -1132,11 +1120,9 @@ class _RunningTurn {
   /// This turn is being stopped rather than ended — see [ChatRoom.interrupt].
   bool interrupted = false;
 
-  /// Whether [ChatRoom._finishTurn] has begun on this turn.
-  bool finishing = false;
-
-  /// The finish in flight, which a second reach awaits.
-  Future<void>? finishingFuture;
+  /// The finish in flight once [ChatRoom._finishTurn] has begun, which a
+  /// second reach awaits.
+  Future<void>? finishing;
 
   /// Bumped by abort and interrupt so a pending retry cannot fire after the
   /// user pressed stop — this turn's generation, not the room's.
