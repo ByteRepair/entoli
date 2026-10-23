@@ -1,7 +1,7 @@
 /// Building the app again from what is on disk, optionally doing something to
 /// the data directory first with no session alive over it. Restoring a backup
-/// needs both halves — see AGENTS.md, "Backing it all up". Unticking the
-/// licence needs only the second, to stop whatever the session was running.
+/// is the only caller and needs both halves — see AGENTS.md, "Backing it all
+/// up".
 abstract interface class AppRestart {
   /// Stop the app, run [whileStopped] if there is any, and start it again. With
   /// nothing to run the old session is kept on screen until the new one is

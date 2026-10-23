@@ -49,7 +49,7 @@ tour rather than a list of sections — `welcome_page.dart`, not this file — s
 `ListView(children: _sectionsOf(...))`; its switch arm here is exhaustiveness
 only. It is the first-run screen too: a `WelcomeGate` wrapper in the home chain
 (around the shell, under the `Incoming*` wrappers, so what they open stays above
-the tour) shows `WelcomePage` instead of the shell while `welcomeSeen` in
+the tour) shows `WelcomePage` instead of the shell while `licenceAccepted` in
 `settings.json` is still false, and the tour's Done writes the flag through the
 notifier, which swaps the shell in. The tour is the home content, not a route
 over it, so the back key cannot skip it and there is no back arrow; the tour
@@ -67,17 +67,13 @@ the Memory category's "Keep memories", the rest left at their defaults. The
 last page says AI can make mistakes and holds Done behind a checkbox taking
 responsibility for what the user lets it do, at the end of the AGPL text
 (`bundledLicence`, embedded from `LICENSE` by `tool/gen_licence.dart`), so
-reaching it means scrolling past the licence; a hint under it says so until
-it is reached. The licence is one `SingleChildScrollView` rather than a lazy
-list, whose estimated extent made the scrollbar jump. Ticked, the box is
-pinned under the licence. The tick frees Done and nothing else: Done is
-what stores it (`licenceAccepted`, beside `welcomeSeen`, one write), and the
-gate wants both, so an install from before the licence was asked for walks
-the tour once more and a tick cannot open the app around Done. A replay
-starts ticked; unticking there confirms, clears both flags and restarts the
-app (`AppRestart`), which stops whatever the session was running and lands
-on the tour. A restart rather than a close because iOS and the web cannot
-close themselves, and Apple rejects apps that try. Done, on
+reaching it means scrolling past the licence. The tick frees Done; Done is what
+stores it, as `licenceAccepted`, the flag both gates read. It replaced
+`welcomeSeen`, so an install from before walks the tour once more. Unticking on
+a replay confirms, clears it and restarts the app (`AppRestart`), which stops
+whatever the session was running and lands on the tour: a restart rather than a
+close, since iOS and the web cannot close themselves and Apple rejects apps
+that try. Done, on
 the first run or a replay, opens a "Welcome to Entoli" chat in the default
 project and leaves settings for it: its log is seeded with a
 `/entoli-welcome-party` message, composed like any `/skill` message so the

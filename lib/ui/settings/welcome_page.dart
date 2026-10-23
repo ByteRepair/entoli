@@ -1,5 +1,7 @@
 import "dart:async";
 
+import "package:flutter/foundation.dart"
+    show LicenseEntryWithLineBreaks, LicenseParagraph;
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:uuid/uuid.dart";
@@ -13,8 +15,10 @@ import "../../domain/project.dart";
 import "../../providers.dart";
 import "../marketplace/marketplace_page.dart";
 import "../sidebar/sidebar.dart";
+import "../theme.dart" show appTitle;
 import "../widgets/app_mark.dart";
 import "../widgets/dialogs.dart";
+import "../widgets/scrolling.dart";
 import "llm_settings.dart";
 import "settings_page.dart";
 
@@ -44,9 +48,8 @@ class _WelcomeTourState extends ConsumerState<WelcomeTour> {
   final _controller = PageController();
   int _page = 0;
 
-  /// The last page's checkbox, which holds Done. It starts from the stored
-  /// tick, so a replay remembers it; ticking only frees Done, which is what
-  /// stores it.
+  /// The last page's checkbox, which holds Done. Seeded from the stored tick,
+  /// which Done writes.
   late final _accepted =
       ValueNotifier(ref.read(appSettingsProvider).licenceAccepted);
 
@@ -130,7 +133,7 @@ class _WelcomeTourState extends ConsumerState<WelcomeTour> {
     } catch (e) {
       logFailure("welcome", "could not start the welcome chat", e);
     }
-    await ref.read(appSettingsProvider.notifier).finishWelcome();
+    await ref.read(appSettingsProvider.notifier).setLicenceAccepted(true);
     // Replayed from settings, Done leaves them for the chat.
     navigator.popUntil((route) => route.isFirst);
   }
@@ -611,6 +614,12 @@ class _ResponsibilityPage extends ConsumerStatefulWidget {
 }
 
 class _ResponsibilityPageState extends ConsumerState<_ResponsibilityPage> {
+  /// Unwrapped the way the licence page unwraps every entry, indents kept.
+  static final _licence =
+      LicenseEntryWithLineBreaks(const [appTitle], bundledLicence)
+          .paragraphs
+          .toList();
+
   final _scroll = ScrollController();
 
   @override
@@ -635,7 +644,7 @@ class _ResponsibilityPageState extends ConsumerState<_ResponsibilityPage> {
       destructive: true,
     );
     if (!ok) return;
-    await ref.read(appSettingsProvider.notifier).revokeLicence();
+    await ref.read(appSettingsProvider.notifier).setLicenceAccepted(false);
     await restart.restart();
   }
 
@@ -693,11 +702,20 @@ class _ResponsibilityPageState extends ConsumerState<_ResponsibilityPage> {
                                     ?.copyWith(color: muted),
                               ),
                               const SizedBox(height: 16),
-                              for (final paragraph in bundledLicence)
+                              for (final p in _licence)
                                 Padding(
-                                  padding: const EdgeInsets.only(bottom: 8),
-                                  child: Text(paragraph,
-                                      style: theme.textTheme.bodySmall),
+                                  padding: EdgeInsets.only(
+                                    left: p.indent > 0 ? 16.0 * p.indent : 0,
+                                    bottom: 8,
+                                  ),
+                                  child: Text(
+                                    p.text,
+                                    textAlign: p.indent ==
+                                            LicenseParagraph.centeredIndent
+                                        ? TextAlign.center
+                                        : TextAlign.start,
+                                    style: theme.textTheme.bodySmall,
+                                  ),
                                 ),
                               if (!accepted) checkbox,
                             ],
@@ -734,7 +752,7 @@ class _ScrollHint extends StatelessWidget {
       builder: (context, _) {
         final atEnd = scroll.hasClients &&
             scroll.position.hasContentDimensions &&
-            scroll.position.extentAfter < 24;
+            scroll.position.nearBottom(24);
         return AnimatedOpacity(
           opacity: atEnd ? 0 : 1,
           duration: const Duration(milliseconds: 200),

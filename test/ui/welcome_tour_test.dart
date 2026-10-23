@@ -50,10 +50,6 @@ void main() {
   // The last page's checkbox, which Done waits on: at the end of the licence
   // until it is ticked.
   Future<void> accept(WidgetTester tester) async {
-    if (checkbox().evaluate().isEmpty) {
-      await tester.dragUntilVisible(checkbox(), licence(), const Offset(0, -300));
-      await tester.pumpAndSettle();
-    }
     await tester.ensureVisible(checkbox());
     await tester.pumpAndSettle();
     await tester.tap(checkbox());
@@ -239,7 +235,7 @@ void main() {
     // A replay remembers the tick, pinned outside the licence.
     testWidgets("a replay keeps the tick", (tester) async {
       await io(tester,
-          () => app.container.read(appSettingsProvider.notifier).finishWelcome());
+          () => app.container.read(appSettingsProvider.notifier).setLicenceAccepted(true));
       await replay(tester);
 
       expect(tester.widget<CheckboxListTile>(checkbox()).value, isTrue);
@@ -249,7 +245,7 @@ void main() {
 
     testWidgets("unticking there restarts into the tour", (tester) async {
       await io(tester,
-          () => app.container.read(appSettingsProvider.notifier).finishWelcome());
+          () => app.container.read(appSettingsProvider.notifier).setLicenceAccepted(true));
       await replay(tester);
 
       await tester.tap(checkbox());
@@ -265,7 +261,6 @@ void main() {
       await tester.tap(find.text("Restart"));
       await settleIo(tester);
       expect(settings().licenceAccepted, isFalse);
-      expect(settings().welcomeSeen, isFalse);
       expect(app.restart.restarts, 1);
     });
 
@@ -286,7 +281,7 @@ void main() {
       await settleIo(tester, least: 3);
 
       expect(find.byType(WelcomeTour), findsNothing);
-      expect(app.container.read(appSettingsProvider).welcomeSeen, isTrue);
+      expect(settings().licenceAccepted, isTrue);
       final id = app.container.read(selectedChatIdProvider);
       expect(id, isNotNull);
       final chat = await io(tester, () => app.repo.openChat(id!));
@@ -320,18 +315,13 @@ void main() {
     expect(find.byType(WelcomePage), findsNothing);
   });
 
-  // A settings file from before the licence was asked for holds the app
-  // behind the tour until it is ticked.
+  // A settings file from before the licence was asked for says only that the
+  // tour was seen, which no longer lets the app open.
   testWidgets("a seen tour with no licence tick still opens", (tester) async {
     await io(tester,
-        () => app.container.read(appSettingsProvider.notifier).setWelcomeSeen(true));
+        () => app.seedSettings(AppSettings.fromJson({"welcomeSeen": true})));
     await app.pump(tester, const WelcomeGate(child: SizedBox.shrink()));
     await tester.pump();
-    expect(find.byType(WelcomePage), findsOneWidget);
-
-    // Ticking there must not open the app around Done.
-    await walkToLast(tester);
-    await accept(tester);
     expect(find.byType(WelcomePage), findsOneWidget);
   });
 
