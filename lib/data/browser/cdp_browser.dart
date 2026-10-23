@@ -454,6 +454,10 @@ class _CdpTab implements BrowserTab {
   var _pointer = (x: 0.0, y: 0.0);
   final _random = Random();
 
+  /// The agent's last click, in viewport coordinates, until a navigation or
+  /// scroll moves the page out from under it.
+  ({double x, double y})? _lastClick;
+
   final _shown = ValueNotifier<BrowserPage?>(null);
   var _opened = 0;
 
@@ -667,6 +671,7 @@ class _CdpTab implements BrowserTab {
   }
 
   Future<void> _clickAt(double x, double y) async {
+    _lastClick = (x: x, y: y);
     await _moveTo(x, y);
     await _button("mousePressed", x, y);
     await Future<void>.delayed(Duration(milliseconds: 40 + _random.nextInt(80)));
@@ -695,6 +700,7 @@ class _CdpTab implements BrowserTab {
   Future<String> goto(String url) async {
     final target = pageAddress(url);
     final page = await _attach();
+    _lastClick = null;
     String? error;
     await _act(() async {
       final result = await page.cdp.send("Page.navigate",
@@ -710,6 +716,7 @@ class _CdpTab implements BrowserTab {
   @override
   Future<String> back() async {
     final page = await _attach();
+    _lastClick = null;
     String? to;
     await _act(() async => to = await _go(page.cdp, page.session, -1));
     if (to == null) {
@@ -1145,6 +1152,7 @@ class _CdpTab implements BrowserTab {
   Future<String> scroll({bool up = false}) async {
     final before = await _snapshot(all: false);
     final page = await _attach();
+    _lastClick = null;
     final x = before.width / 2, y = before.view / 2;
     await _moveTo(x, y);
     await page.cdp.send("Input.dispatchMouseEvent",
@@ -1221,7 +1229,7 @@ class _CdpTab implements BrowserTab {
   }
 
   @override
-  Future<BrowserShot> screenshot({int? ref}) async {
+  Future<BrowserShot> screenshot({int? ref, bool markClick = false}) async {
     if (_filling) {
       throw const CdpException(
           "A sign-in is being typed in; no screenshot until it is through.");
@@ -1264,10 +1272,29 @@ class _CdpTab implements BrowserTab {
         "scale": scale,
       };
     }
-    final shot = await page.cdp.send("Page.captureScreenshot",
-        params: {"format": "png", "clip": clip, "captureBeyondViewport": false},
-        sessionId: page.session);
-    return BrowserShot(base64Decode(shot["data"] as String), left: left, top: top);
+    final click = markClick ? _lastClick : null;
+    // Drawn into the page for the one capture, from the isolated world, so
+    // the page's own scripts hold no reference to it.
+    if (click != null) {
+      await _eval("""(() => {
+        const dot = window.__entoliDot = document.createElement("div");
+        dot.style.cssText = "position:fixed;left:${click.x - 6}px;"
+          + "top:${click.y - 6}px;width:12px;height:12px;border-radius:50%;"
+          + "background:red;border:2px solid white;box-sizing:border-box;"
+          + "z-index:2147483647;pointer-events:none";
+        document.documentElement.append(dot);
+      })()""");
+    }
+    final Map<String, dynamic> shot;
+    try {
+      shot = await page.cdp.send("Page.captureScreenshot",
+          params: {"format": "png", "clip": clip, "captureBeyondViewport": false},
+          sessionId: page.session);
+    } finally {
+      if (click != null) await _eval("window.__entoliDot?.remove()");
+    }
+    return BrowserShot(base64Decode(shot["data"] as String),
+        left: left, top: top, click: click);
   }
 
   @override
@@ -1529,6 +1556,7 @@ bool looksLikeChallenge(String title, String text, List<String> frames) {
 const challengeNote = "This looks like a human-verification check. Its "
     "widget is usually a frame listed above, which has no numbered elements "
     "of its own: where you can take a screenshot, do, then click or drag "
-    "where it shows by x and y. If it will not pass after a few tries, call "
+    "where it shows by x and y, checking with a last_click screenshot that "
+    "the click hit it. If it will not pass after a few tries, call "
     "browser_show if the browser is hidden, ask the user to complete it in "
     "the window, then carry on.";

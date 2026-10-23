@@ -207,7 +207,8 @@ abstract class BrowserTab {
   Future<String> show({bool byUser = false});
 
   /// The viewport, or the element [ref] alone, as a PNG at CSS-pixel scale.
-  Future<BrowserShot> screenshot({int? ref});
+  /// [markClick] draws a red dot where the last click on this page landed.
+  Future<BrowserShot> screenshot({int? ref, bool markClick = false});
 
   /// What a click on [ref], or at ([x], [y]), would act on and where — the
   /// words an approval is asked in, since a number means nothing to a person.
@@ -435,11 +436,14 @@ class BrowserKey {
 /// A screenshot and where its top-left corner is in the viewport, so a point
 /// read off a cropped one can be clicked.
 class BrowserShot {
-  const BrowserShot(this.png, {this.left = 0, this.top = 0});
+  const BrowserShot(this.png, {this.left = 0, this.top = 0, this.click});
 
   final Uint8List png;
   final double left;
   final double top;
+
+  /// The click marked on it, in viewport coordinates; null where none was.
+  final ({double x, double y})? click;
 }
 
 /// The setting's value for the downloaded browser; anything else non-null is

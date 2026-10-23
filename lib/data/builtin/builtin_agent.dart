@@ -1777,6 +1777,7 @@ class BuiltinAgent {
   /// the user in the chat, as a generated image is.
   Stream<AgentEvent> _browserScreenshot(LlmToolCall call) async* {
     final ref = intArg(call.argumentsJson, "ref");
+    final markClick = decodeArgs(call.argumentsJson)?["last_click"] == true;
     if (browser!.hold.value != null) {
       yield* _reject(call, _noted(_hidden));
       return;
@@ -1785,7 +1786,7 @@ class BuiltinAgent {
     final BrowserShot shot;
     final ImageEvent saved;
     try {
-      shot = await browser!.screenshot(ref: ref);
+      shot = await browser!.screenshot(ref: ref, markClick: markClick);
       saved = await _saved(LlmAttachment(
           filename: "screenshot.png", mimeType: "image/png", bytes: shot.png));
     } catch (e) {
@@ -1793,13 +1794,20 @@ class BuiltinAgent {
       return;
     }
     yield saved;
+    final click = shot.click;
+    final marked = !markClick
+        ? ""
+        : click == null
+            ? " No click to mark: none since the page last loaded or scrolled."
+            : " The red dot is the last click, at "
+                "(${click.x.round()}, ${click.y.round()}) in the viewport.";
     yield _ok(
         call,
         _noted(ref == null
-            ? "Screenshot of the viewport attached."
+            ? "Screenshot of the viewport attached.$marked"
             : "Screenshot of [$ref] attached. Its top-left corner is at "
                 "(${shot.left.round()}, ${shot.top.round()}) in the viewport: "
-                "add that to a point in it to click there."));
+                "add that to a point in it to click there.$marked"));
   }
 
   /// Resolve a file-tool path through the workspaces, the guest root and the
