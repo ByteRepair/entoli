@@ -2,7 +2,7 @@ import "dart:async";
 import "dart:convert";
 
 import "package:flutter/foundation.dart" show ValueListenable, ValueNotifier;
-import "package:flutter/gestures.dart" show kPrimaryButton;
+import "package:flutter/gestures.dart";
 import "package:flutter/material.dart";
 import "package:flutter/services.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
@@ -14,6 +14,7 @@ import "package:agent_chat/ui/chat/widgets/browser_input.dart";
 import "package:agent_chat/ui/chat/widgets/browser_strip.dart";
 
 import "../fakes.dart";
+import "../harness.dart" show clipboard;
 
 /// A one-pixel JPEG, which is all a frame has to be for `Image.memory`.
 final _pixel = base64Decode(
@@ -62,6 +63,12 @@ class _Tab implements BrowserTab {
 
   @override
   Future<void> insertText(String text) async => done.add("insert $text");
+
+  /// What the page has selected.
+  String? selection;
+
+  @override
+  Future<String?> selectedText() async => selection;
 
   @override
   final ValueNotifier<BrowserHold?> hold = ValueNotifier(null);
@@ -231,7 +238,7 @@ void main() {
     final box = tester.getRect(image);
     // A quarter of the way in on each axis is a quarter of the page.
     await tester.tapAt(box.topLeft + Offset(box.width / 4, box.height / 4),
-        buttons: kPrimaryButton);
+        buttons: kPrimaryButton, kind: PointerDeviceKind.mouse);
     await tester.pump();
     final down =
         tab.pointers.firstWhere((p) => p.kind == BrowserPointerKind.down);
@@ -261,6 +268,74 @@ void main() {
     expect(selectAll.text, isNull);
     expect(selectAll.commands, ["selectAll"]);
     expect(selectAll.modifiers, 2);
+  });
+
+  testWidgets("a right click opens a menu, and Copy fills the user's clipboard",
+      (tester) async {
+    final copied = clipboard(tester);
+    final tab = await openCard(tester);
+    tab.selection = "chosen words";
+    await tester.tapAt(tester.getCenter(find.byType(Image)),
+        buttons: kSecondaryButton, kind: PointerDeviceKind.mouse);
+    await tester.pumpAndSettle();
+    // The press is the card's, not the page's.
+    expect(tab.pointers.where((p) => p.kind != BrowserPointerKind.move), isEmpty);
+    expect(find.text("Paste"), findsOneWidget);
+    await tester.tap(find.text("Copy"));
+    await tester.pumpAndSettle();
+    expect(copied, ["chosen words"]);
+    final downs = tab.keys.where((k) => k.down).toList();
+    expect(downs.single.commands, ["copy"]);
+  });
+
+  testWidgets("a wheel scrolls the page by the page's pixels", (tester) async {
+    final tab = await openCard(tester);
+    final box = tester.getRect(find.byType(Image));
+    final mouse = TestPointer(1, PointerDeviceKind.mouse);
+    await tester.sendEventToBinding(mouse.hover(box.center));
+    await tester.sendEventToBinding(mouse.scroll(const Offset(0, 50)));
+    await tester.pump();
+    final wheel =
+        tab.pointers.singleWhere((p) => p.kind == BrowserPointerKind.wheel);
+    expect(wheel.deltaY, closeTo(50 * 1280 / box.width, 1));
+  });
+
+  testWidgets("a finger dragged up scrolls the page down, and clicks nothing",
+      (tester) async {
+    final tab = await openCard(tester);
+    final box = tester.getRect(find.byType(Image));
+    await tester.dragFrom(box.center, const Offset(0, -100),
+        kind: PointerDeviceKind.touch);
+    await tester.pump();
+    expect(tab.pointers.where((p) => p.kind == BrowserPointerKind.down), isEmpty);
+    final scrolled = tab.pointers
+        .where((p) => p.kind == BrowserPointerKind.wheel)
+        .fold<double>(0, (sum, p) => sum + p.deltaY);
+    expect(scrolled, greaterThan(0));
+  });
+
+  testWidgets("a tap of a finger is a click", (tester) async {
+    final tab = await openCard(tester);
+    await tester.tapAt(tester.getCenter(find.byType(Image)),
+        kind: PointerDeviceKind.touch);
+    await tester.pump();
+    expect([for (final p in tab.pointers) p.kind],
+        [BrowserPointerKind.down, BrowserPointerKind.up]);
+    expect(tab.pointers.first.button, "left");
+  });
+
+  testWidgets("two fingers on a trackpad scroll the page", (tester) async {
+    final tab = await openCard(tester);
+    final center = tester.getCenter(find.byType(Image));
+    final pad = TestPointer(2, PointerDeviceKind.trackpad);
+    await tester.sendEventToBinding(pad.panZoomStart(center));
+    await tester.sendEventToBinding(
+        pad.panZoomUpdate(center, pan: const Offset(0, -40)));
+    await tester.sendEventToBinding(pad.panZoomEnd());
+    await tester.pump();
+    final wheel =
+        tab.pointers.singleWhere((p) => p.kind == BrowserPointerKind.wheel);
+    expect(wheel.deltaY, greaterThan(0));
   });
 
   testWidgets("keys typed into the viewport go to the page", (tester) async {

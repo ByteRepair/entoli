@@ -131,7 +131,8 @@ class CdpBrowser extends AgentBrowser {
     if (running != null) {
       await _quit("The browser restarted: its settings changed.");
     }
-    return _starting ??= _start(exe, windowed: windowed).then((started) {
+    return _starting ??= _start(exe, windowed: windowed).then((started) async {
+      await _watchDownloads(started);
       _running = started;
       _isRunning.value = true;
       // The user closed its window, or it crashed: a quit like any other.
@@ -218,6 +219,113 @@ class CdpBrowser extends AgentBrowser {
     if (_running?.windowed ?? false) return;
     await _quit("The browser restarted to open a window.", quietly: by);
     _shown = true;
+  }
+
+  String get _staging => p.join(browserDir, "downloads");
+
+  /// Downloads land in [_staging] under the browser's own id for them, and
+  /// are moved into the downloading tab's [_CdpTab.downloadDir] once whole:
+  /// the behaviour is the browser's, not a tab's, so one directory per chat
+  /// cannot be set on it. A hidden browser denies every download without it.
+  Future<void> _watchDownloads(_Running running) async {
+    final cdp = running.cdp;
+    final begun = <String, Future<(_CdpTab?, String)>>{};
+    cdp.events.where((e) => e.sessionId == null).listen((e) {
+      final guid = e.params["guid"];
+      if (guid is! String) return;
+      if (e.method == "Browser.downloadWillBegin") {
+        final name = "${e.params["suggestedFilename"] ?? ""}";
+        begun[guid] = _tabOf(cdp, "${e.params["frameId"]}")
+            .then((tab) => (tab, name), onError: (_) => (null, name));
+      } else if (e.method == "Browser.downloadProgress") {
+        final state = e.params["state"];
+        if (state == "inProgress") return;
+        final download = begun.remove(guid);
+        if (download == null) return;
+        unawaited(download.then((d) => state == "completed"
+            ? _deliver(guid, d.$1, d.$2)
+            : d.$1?._note("The download of ${d.$2} was cancelled.")));
+      }
+    });
+    try {
+      final staging = Directory(_staging);
+      // What is left here is a download no tab could be found for, kept
+      // until the next start.
+      if (await staging.exists()) await staging.delete(recursive: true);
+      await staging.create(recursive: true);
+      await cdp.send("Browser.setDownloadBehavior", params: {
+        "behavior": "allowAndName",
+        "downloadPath": _staging,
+        "eventsEnabled": true,
+      });
+    } catch (e) {
+      logFailure(_tag, "downloads could not be routed", e);
+    }
+  }
+
+  /// The tab [frameId] is in: its main frame (whose id is the tab's), a
+  /// frame inside it, or a popup it opened to download from.
+  Future<_CdpTab?> _tabOf(CdpConnection cdp, String frameId) async {
+    _CdpTab? byTarget(String? target) => _tabs.values
+        .where((tab) => tab._page != null && tab._page!.target == target)
+        .firstOrNull;
+    final direct = byTarget(frameId);
+    if (direct != null) return direct;
+    final targets = await cdp.send("Target.getTargets");
+    for (final info in (targets["targetInfos"] as List? ?? const []).cast<Map>()) {
+      if (info["targetId"] == frameId) {
+        final opener = byTarget(info["openerId"] as String?);
+        if (opener != null) return opener;
+      }
+    }
+    bool holds(Map frame) =>
+        (frame["frame"] as Map?)?["id"] == frameId ||
+        (frame["childFrames"] as List? ?? const []).cast<Map>().any(holds);
+    for (final tab in _tabs.values) {
+      final page = tab._page;
+      if (page == null) continue;
+      try {
+        final tree =
+            await cdp.send("Page.getFrameTree", sessionId: page.session);
+        if (holds(tree["frameTree"] as Map? ?? const {})) return tab;
+      } on CdpException {
+        // That tab is closing; the download is not from it.
+      }
+    }
+    return null;
+  }
+
+  /// Move a finished download out of [_staging] under its own name, made
+  /// unique beside what is already there.
+  Future<void> _deliver(String guid, _CdpTab? tab, String suggested) async {
+    final dir = tab?.downloadDir;
+    final from = File(p.join(_staging, guid));
+    if (tab == null || dir == null) {
+      logFailure(_tag, "a download has no chat to go to; left at ${from.path}");
+      return;
+    }
+    try {
+      await Directory(dir).create(recursive: true);
+      final name = p.basename(suggested.trim()).isEmpty
+          ? "download"
+          : p.basename(suggested.trim());
+      var to = p.join(dir, name);
+      for (var n = 1; await File(to).exists() || await Directory(to).exists(); n++) {
+        to = p.join(dir, "${p.basenameWithoutExtension(name)} ($n)${p.extension(name)}");
+      }
+      try {
+        await from.rename(to);
+      } on FileSystemException {
+        // The cache and the workspace may be on different filesystems.
+        await from.copy(to);
+        await from.delete();
+      }
+      tab._note("A download finished: ${p.basename(to)}, saved to "
+          "downloads/${p.basename(to)} in your workspace.");
+    } catch (e) {
+      logFailure(_tag, "a download could not be moved into ${tab.chatId}'s "
+          "workspace", e);
+    }
   }
 
   /// One entry per name, the first that exists: a browser on `PATH` as both
@@ -1372,6 +1480,35 @@ class _CdpTab implements BrowserTab {
     await live.cdp.send("Input.insertText",
         params: {"text": text}, sessionId: live.session);
     _handled = true;
+  }
+
+  @override
+  String? downloadDir;
+
+  /// A field's selection is not the document's, so the focused one is asked
+  /// first. Not through [_eval], which would start a closed browser.
+  @override
+  Future<String?> selectedText() async {
+    final live = _live;
+    if (live == null) return null;
+    final result = await live.cdp.send("Runtime.evaluate",
+        params: {
+          "expression": """(() => {
+  const a = document.activeElement;
+  if (a && /^(INPUT|TEXTAREA)\$/.test(a.tagName) && a.type !== "password") {
+    try {
+      if (typeof a.selectionStart === "number") {
+        return a.value.slice(a.selectionStart, a.selectionEnd);
+      }
+    } catch (_) {}
+  }
+  return String(getSelection());
+})()""",
+          "returnByValue": true,
+        },
+        sessionId: live.session);
+    final text = (result["result"] as Map?)?["value"];
+    return text is String && text.isNotEmpty ? text : null;
   }
 
   /// The screencast: Chrome sends a frame whenever the page repaints, hidden

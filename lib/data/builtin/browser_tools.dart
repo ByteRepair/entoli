@@ -66,7 +66,9 @@ const browserClickTool = LlmTool(
   description: "Click an element by its number from the last page "
       "description, or a point by x and y in viewport pixels (what a "
       "screenshot shows). Use x and y for what has no number, such as the "
-      "inside of a frame.",
+      "inside of a frame. A file the page downloads is saved into "
+      "`downloads/` in your workspace, and a later browser result says when "
+      "it has arrived.",
   schema: {
     "type": "object",
     "properties": {

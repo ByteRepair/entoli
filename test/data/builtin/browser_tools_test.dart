@@ -52,6 +52,12 @@ class FakeBrowserTab implements BrowserTab {
   Future<void> insertText(String text) async {}
 
   @override
+  Future<String?> selectedText() async => null;
+
+  @override
+  String? downloadDir;
+
+  @override
   final ValueNotifier<BrowserHold?> hold = ValueNotifier(null);
 
   @override

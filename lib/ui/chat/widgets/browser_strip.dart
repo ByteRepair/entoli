@@ -378,6 +378,19 @@ class _BrowserCardState extends State<BrowserCard> {
   bool _moving = false;
   BrowserPointer? _nextMove;
 
+  /// A right press opened the card's menu rather than reaching the page, so
+  /// its release does not either.
+  bool _menuPress = false;
+
+  /// A finger on the frame: a tap is a click, a drag scrolls the page and a
+  /// hold opens the menu, as on a phone's own browser. Sent as a mouse, a
+  /// drag would select text instead.
+  Offset? _touchStart;
+  Offset _touchLast = Offset.zero;
+  bool _touchScrolled = false;
+  bool _touchHeld = false;
+  Timer? _holdTimer;
+
   @override
   void initState() {
     super.initState();
@@ -410,6 +423,7 @@ class _BrowserCardState extends State<BrowserCard> {
   void dispose() {
     widget.tab.page.removeListener(_follow);
     unawaited(_sub?.cancel());
+    _holdTimer?.cancel();
     _focus.dispose();
     super.dispose();
   }
@@ -432,10 +446,132 @@ class _BrowserCardState extends State<BrowserCard> {
     );
   }
 
+  static bool get _mac => defaultTargetPlatform == TargetPlatform.macOS;
+
   bool get _shortcut {
     final keys = HardwareKeyboard.instance;
-    final mac = defaultTargetPlatform == TargetPlatform.macOS;
-    return mac ? keys.isMetaPressed : keys.isControlPressed;
+    return _mac ? keys.isMetaPressed : keys.isControlPressed;
+  }
+
+  /// The page's selection onto the user's clipboard. Asked before anything
+  /// else is sent, so a cut sent after still finds it selected.
+  void _copySelection() {
+    final text = widget.tab.selectedText();
+    _send(() async {
+      final selected = await text;
+      if (selected != null) await Clipboard.setData(ClipboardData(text: selected));
+    });
+  }
+
+  /// The user's clipboard typed at the caret, the page's not being theirs.
+  void _paste() => _send(() async {
+        final text = (await Clipboard.getData(Clipboard.kTextPlain))?.text;
+        if (text != null && text.isNotEmpty) await widget.tab.insertText(text);
+      });
+
+  /// Press and release the platform's shortcut for [letter], with the
+  /// editing command it names.
+  void _shortcutKey(String letter) {
+    final down = browserShortcut(letter, mac: _mac);
+    _send(() async {
+      await widget.tab.key(down);
+      await widget.tab.key(browserKeyUp(down, modifiers: down.modifiers));
+    });
+  }
+
+  /// The menu a right click or a held finger opens: what the page's own
+  /// would offer for editing, against the user's clipboard. Chrome draws its
+  /// menu nowhere a hidden browser or the screencast could show it.
+  Future<void> _menu(Offset global) async {
+    final overlay =
+        Overlay.of(context).context.findRenderObject()! as RenderBox;
+    final choice = await showMenu<String>(
+      context: context,
+      position: RelativeRect.fromRect(
+          global & Size.zero, Offset.zero & overlay.size),
+      items: const [
+        PopupMenuItem(value: "cut", child: Text("Cut")),
+        PopupMenuItem(value: "copy", child: Text("Copy")),
+        PopupMenuItem(value: "paste", child: Text("Paste")),
+        PopupMenuDivider(),
+        PopupMenuItem(value: "selectAll", child: Text("Select all")),
+      ],
+    );
+    if (!mounted || choice == null) return;
+    _focus.requestFocus();
+    switch (choice) {
+      case "cut":
+        _copySelection();
+        _shortcutKey("x");
+      case "copy":
+        _copySelection();
+        _shortcutKey("c");
+      case "paste":
+        _paste();
+      case "selectAll":
+        _shortcutKey("a");
+    }
+  }
+
+  void _wheel(Offset at, Offset delta) =>
+      _send(() => widget.tab.pointer(BrowserPointer(
+            BrowserPointerKind.wheel,
+            x: at.dx,
+            y: at.dy,
+            deltaX: delta.dx,
+            deltaY: delta.dy,
+            modifiers: _modifiers,
+          )));
+
+  void _touchDown(PointerDownEvent event) {
+    _touchStart = event.localPosition;
+    _touchLast = event.localPosition;
+    _touchScrolled = false;
+    _touchHeld = false;
+    _holdTimer?.cancel();
+    _holdTimer = Timer(kLongPressTimeout, () {
+      _touchHeld = true;
+      unawaited(_menu(event.position));
+    });
+  }
+
+  void _touchMove(PointerMoveEvent event, Size drawn) {
+    final start = _touchStart;
+    if (start == null || _touchHeld) return;
+    if (!_touchScrolled &&
+        (event.localPosition - start).distance < kTouchSlop) {
+      return;
+    }
+    _touchScrolled = true;
+    _holdTimer?.cancel();
+    // The page moves with the finger, so the wheel turns against it.
+    final delta = _toPage(_touchLast - event.localPosition, drawn);
+    _touchLast = event.localPosition;
+    _wheel(_toPage(event.localPosition, drawn), delta);
+  }
+
+  void _touchUp(PointerUpEvent event, Size drawn) {
+    _holdTimer?.cancel();
+    final tapped = _touchStart != null && !_touchScrolled && !_touchHeld;
+    _touchStart = null;
+    if (!tapped) return;
+    _focus.requestFocus();
+    final at = _toPage(event.localPosition, drawn);
+    for (final kind in [BrowserPointerKind.down, BrowserPointerKind.up]) {
+      _send(() => widget.tab.pointer(BrowserPointer(
+            kind,
+            x: at.dx,
+            y: at.dy,
+            button: "left",
+            buttons: kind == BrowserPointerKind.down ? kPrimaryMouseButton : 0,
+            clickCount: 1,
+          )));
+    }
+  }
+
+  void _touchCancel() {
+    _holdTimer?.cancel();
+    _touchStart = null;
   }
 
   /// A point on the drawn frame, in the page's CSS pixels.
@@ -469,7 +605,13 @@ class _BrowserCardState extends State<BrowserCard> {
               : "none";
 
   void _down(PointerDownEvent event, Size drawn) {
+    if (event.kind == PointerDeviceKind.touch) return _touchDown(event);
     _focus.requestFocus();
+    if (event.buttons & kSecondaryMouseButton != 0) {
+      _menuPress = true;
+      unawaited(_menu(event.position));
+      return;
+    }
     final at = _toPage(event.localPosition, drawn);
     final now = DateTime.now();
     _clicks = now.difference(_lastDown) < const Duration(milliseconds: 500) &&
@@ -491,6 +633,11 @@ class _BrowserCardState extends State<BrowserCard> {
   }
 
   void _up(PointerUpEvent event, Size drawn) {
+    if (event.kind == PointerDeviceKind.touch) return _touchUp(event, drawn);
+    if (_menuPress) {
+      _menuPress = false;
+      return;
+    }
     final at = _toPage(event.localPosition, drawn);
     _send(() => widget.tab.pointer(BrowserPointer(
           BrowserPointerKind.up,
@@ -516,18 +663,20 @@ class _BrowserCardState extends State<BrowserCard> {
     ));
   }
 
+  /// Claimed through the resolver, so a wheel over the page does not also
+  /// scroll whatever is behind the card.
   void _scroll(PointerSignalEvent event, Size drawn) {
     if (event is! PointerScrollEvent) return;
-    final at = _toPage(event.localPosition, drawn);
-    _send(() => widget.tab.pointer(BrowserPointer(
-          BrowserPointerKind.wheel,
-          x: at.dx,
-          y: at.dy,
-          deltaX: event.scrollDelta.dx,
-          deltaY: event.scrollDelta.dy,
-          modifiers: _modifiers,
-        )));
+    GestureBinding.instance.pointerSignalResolver.register(event, (event) {
+      final scroll = event as PointerScrollEvent;
+      _wheel(_toPage(scroll.localPosition, drawn),
+          _toPage(scroll.scrollDelta, drawn));
+    });
   }
+
+  /// Two fingers on a trackpad, which arrive as a pan rather than a wheel.
+  void _pan(PointerPanZoomUpdateEvent event, Size drawn) => _wheel(
+      _toPage(event.localPosition, drawn), -_toPage(event.localPanDelta, drawn));
 
   /// Every key goes to the page while the viewport has focus — Tab and Escape
   /// included, which would otherwise move focus or close the card.
@@ -542,13 +691,16 @@ class _BrowserCardState extends State<BrowserCard> {
     final shortcut = _shortcut;
     // Paste is the user's clipboard, not the page's.
     if (shortcut && event.logicalKey == LogicalKeyboardKey.keyV) {
-      if (event is KeyDownEvent) {
-        _send(() async {
-          final text = (await Clipboard.getData(Clipboard.kTextPlain))?.text;
-          if (text != null && text.isNotEmpty) await widget.tab.insertText(text);
-        });
-      }
+      if (event is KeyDownEvent) _paste();
       return KeyEventResult.handled;
+    }
+    // Copy and cut fill the user's clipboard too, and still reach the page,
+    // whose own handlers (an editor drawn on a canvas) may be all there is.
+    if (shortcut &&
+        event is KeyDownEvent &&
+        (event.logicalKey == LogicalKeyboardKey.keyC ||
+            event.logicalKey == LogicalKeyboardKey.keyX)) {
+      _copySelection();
     }
     final key = browserKeyDown(event, modifiers: _modifiers, shortcut: shortcut);
     if (key == null) return KeyEventResult.handled;
@@ -716,12 +868,19 @@ class _BrowserCardState extends State<BrowserCard> {
                                   onPointerDown:
                                       open ? (e) => _down(e, drawn) : null,
                                   onPointerUp: open ? (e) => _up(e, drawn) : null,
-                                  onPointerMove:
-                                      open ? (e) => _hover(e, drawn) : null,
+                                  onPointerMove: open
+                                      ? (e) => e.kind == PointerDeviceKind.touch
+                                          ? _touchMove(e, drawn)
+                                          : _hover(e, drawn)
+                                      : null,
+                                  onPointerCancel:
+                                      open ? (_) => _touchCancel() : null,
                                   onPointerHover:
                                       open ? (e) => _hover(e, drawn) : null,
                                   onPointerSignal:
                                       open ? (e) => _scroll(e, drawn) : null,
+                                  onPointerPanZoomUpdate:
+                                      open ? (e) => _pan(e, drawn) : null,
                                   child: Image.memory(
                                     frame.jpeg,
                                     gaplessPlayback: true,

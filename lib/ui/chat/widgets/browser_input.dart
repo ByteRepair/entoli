@@ -110,6 +110,16 @@ BrowserKey _printable(
   );
 }
 
+/// The press of the platform's shortcut for [letter] — Ctrl, or Cmd on a Mac —
+/// as the card's menu sends it: `c` copies, `x` cuts, `a` selects all.
+BrowserKey browserShortcut(String letter, {required bool mac}) => _printable(
+      letter,
+      modifiers: browserModifiers(
+          alt: false, control: !mac, meta: mac, shift: false),
+      shortcut: true,
+      shift: false,
+    );
+
 /// The release of a press: the same key, inserting nothing.
 BrowserKey browserKeyUp(BrowserKey down, {required int modifiers}) => BrowserKey(
       down: false,
