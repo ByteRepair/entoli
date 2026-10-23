@@ -697,7 +697,11 @@ taken. The AppImage variables are stripped from its environment, as from a
 command's: Helium's own AppImage runtime would read ours. A launch that exits
 0 at once is a browser handing off to a copy already open on that profile, and
 is said as that. Settings > Agent Browser's Quit is `close()`: `Browser.close`
-over the protocol, then a kill if it has not gone in five seconds.
+over the protocol, then a kill if it has not gone in five seconds. Its Delete
+browser data is `clearData()`: a launch in flight is waited out, the browser
+quit, then the profile deleted whole — one profile whichever browser is
+picked, so one button signs the agent out of everything. The Helium download
+beside it is its own Delete.
 
 **Hidden by default** (`agentBrowserVisible` off, written only when on): the
 browser runs `--headless=new`, which is the real browser with no window, and

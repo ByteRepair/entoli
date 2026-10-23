@@ -175,6 +175,17 @@ class CdpBrowser extends AgentBrowser {
     await _quit(why);
   }
 
+  /// A launch in flight is waited out first, or it would come up on the
+  /// profile being deleted; Windows will not delete a file a browser holds.
+  @override
+  Future<void> clearData() async {
+    await _starting?.then((_) {}, onError: (_) {});
+    await close(why: "The user deleted the browser's data: every site is "
+        "signed out.");
+    final profile = Directory(_profile);
+    if (await profile.exists()) await profile.delete(recursive: true);
+  }
+
   /// The browser is gone rather than restarting: the window it was shown
   /// in, what a sign-in typed, and a hide nobody gave back go with it.
   void _ended() {

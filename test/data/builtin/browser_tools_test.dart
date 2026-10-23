@@ -870,6 +870,26 @@ void main() {
     await declined;
   });
 
+  test("deleting the browser's data takes the profile, not the download",
+      () async {
+    final dir = Directory.systemTemp.createTempSync("agent-browser-clear");
+    addTearDown(() => dir.deleteSync(recursive: true));
+    File("${dir.path}/profile/Default/Cookies").createSync(recursive: true);
+    File("${dir.path}/download/kept").createSync(recursive: true);
+    final browser = CdpBrowser(
+      browserDir: dir.path,
+      picked: () => null,
+      embedded: HeliumDownload(dir.path),
+      visible: () => false,
+    );
+    final tab = browser.tab("chat-1");
+    tab.hide(const BrowserHold(reason: "Sign in to Google"));
+    await browser.clearData();
+    expect(Directory("${dir.path}/profile").existsSync(), isFalse);
+    expect(File("${dir.path}/download/kept").existsSync(), isTrue);
+    expect(tab.hold.value, isNull);
+  });
+
   test("Helium's assets are named as its releases name them", () {
     expect(heliumAsset(HeliumOs.linux, "0.20.1.1", arm: false),
         "helium-0.20.1.1-x86_64.AppImage");
