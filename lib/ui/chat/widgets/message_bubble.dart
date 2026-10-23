@@ -49,6 +49,7 @@ class MessageBubble extends StatefulWidget {
     this.onSpeak,
     this.isSpeaking = false,
     this.onTapLink,
+    this.steerKey,
   });
 
   /// Which chat's `resources/` the attachments are read back from.
@@ -116,6 +117,10 @@ class MessageBubble extends StatefulWidget {
 
   /// Open a link tapped in the rendered markdown. Receives the `href`.
   final ValueChanged<String>? onTapLink;
+
+  /// The key for the bubble of a steer read into this reply, by the steer's
+  /// id: what the chapter rail finds it by.
+  final GlobalKey Function(String id)? steerKey;
 
   @override
   State<MessageBubble> createState() => _MessageBubbleState();
@@ -670,6 +675,7 @@ class _MessageBubbleState extends State<MessageBubble> {
           flushRun();
           closeBubble();
           rows.add(Align(
+            key: widget.steerKey?.call(message.id),
             alignment: Alignment.centerRight,
             child: Column(
               mainAxisSize: MainAxisSize.min,

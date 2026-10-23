@@ -8,29 +8,56 @@ import "../../../domain/models.dart";
 
 /// One thing the user said, as a place in the conversation to go back to.
 typedef Chapter = ({
-  /// The prompt's message id, which is what the page scrolls to.
+  /// The message id of what was said, which is what the page scrolls to: a
+  /// prompt's, or a steer's inside the reply it was read into.
   String id,
+
+  /// The message whose row it is in: the prompt itself, or the reply a steer
+  /// was read into.
+  String row,
 
   /// Its first line, for the rail's tooltip, cut to [_previewLength].
   String preview,
 
   /// How many threads were written somewhere in this turn — at the prompt (an
-  /// edit) or at a reply under it (a regenerate). One where nothing branched.
+  /// edit) or at a reply under it (a regenerate). One where nothing branched,
+  /// and on a steer, which is not where a turn starts.
   int threads,
 });
 
-/// The chapters of the thread being read: every prompt, oldest first. A turn
-/// is the prompt and what answered it, up to the next prompt, so a branch at
-/// any message in it marks the prompt's chapter.
+/// The chapters of the thread being read: every prompt, and every steer said
+/// over a turn, oldest first. A turn is the prompt and what answered it, up
+/// to the next prompt, so a branch at any message in it marks the prompt's
+/// chapter.
 List<Chapter> chaptersOf(Chat chat) {
   final chapters = <Chapter>[];
+  int? prompt;
   for (final message in chat.messages) {
     final threads = chat.threadsAt(message.id).length;
     if (message.role == MessageRole.user) {
-      chapters.add((id: message.id, preview: _firstLine(message.plainText), threads: threads));
-    } else if (chapters.isNotEmpty && threads > chapters.last.threads) {
-      final last = chapters.removeLast();
-      chapters.add((id: last.id, preview: last.preview, threads: threads));
+      prompt = chapters.length;
+      chapters.add((
+        id: message.id,
+        row: message.id,
+        preview: _firstLine(message.plainText),
+        threads: threads,
+      ));
+      continue;
+    }
+    final at = prompt;
+    if (at != null && threads > chapters[at].threads) {
+      final p = chapters[at];
+      chapters[at] = (id: p.id, row: p.row, preview: p.preview, threads: threads);
+    }
+    for (final part in message.parts) {
+      if (part case SteerPart(message: final said)) {
+        chapters.add((
+          id: said.id,
+          row: message.id,
+          preview: _firstLine(said.plainText),
+          threads: 1,
+        ));
+      }
     }
   }
   return chapters;

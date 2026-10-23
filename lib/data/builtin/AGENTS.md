@@ -696,7 +696,12 @@ to `DevToolsActivePort` in the profile — nothing is guessed, so nothing can be
 taken. The AppImage variables are stripped from its environment, as from a
 command's: Helium's own AppImage runtime would read ours. A launch that exits
 0 at once is a browser handing off to a copy already open on that profile, and
-is said as that. Settings > Agent Browser's Quit is `close()`: `Browser.close`
+is said as that. One that exits 21 is a browser already holding the profile's
+lock, which a quit app used to leave behind (it was never closed at exit, and
+an AppImage's browser outlives its parent): the session's dispose now closes
+it, and every launch first quits whatever process the lock names if it was
+started on this very profile (`reapLostBrowser`) — a crash leaves one too.
+Settings > Agent Browser's Quit is `close()`: `Browser.close`
 over the protocol, then a kill if it has not gone in five seconds. Its Delete
 browser data is `clearData()`: a launch in flight is waited out, the browser
 quit, then the profile deleted whole — one profile whichever browser is

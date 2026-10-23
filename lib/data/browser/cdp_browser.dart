@@ -385,12 +385,55 @@ Future<void> _stop(_Running running) async {
   });
 }
 
+/// Quit a browser still running on [profile] that nothing here drives: one an
+/// app that quit or crashed left behind holds the profile's lock, and every
+/// launch after it exits 21 until it goes. The lock is Chromium's
+/// `SingletonLock`, a symlink to `<host>-<pid>` on Linux and macOS; Windows
+/// has none to read. Only a process launched on this very profile is touched,
+/// so the user's own browser never is.
+Future<void> reapLostBrowser(String profile) async {
+  if (Platform.isWindows) return;
+  final lock = Link(p.join(profile, "SingletonLock"));
+  final String held;
+  try {
+    held = await lock.target();
+  } on FileSystemException {
+    return;
+  }
+  final dash = held.lastIndexOf("-");
+  if (dash < 0) return;
+  final pid = int.tryParse(held.substring(dash + 1));
+  if (pid == null || held.substring(0, dash) != Platform.localHostname) return;
+  if (!(await _commandLine(pid)).contains("--user-data-dir=$profile")) return;
+  logFailure(_tag, "quitting browser $pid left running on the profile");
+  Process.killPid(pid);
+  // A browser deletes its lock as it quits; a stale one it can take over.
+  for (var i = 0; i < 50 && await _commandLine(pid) != ""; i++) {
+    await Future<void>.delayed(const Duration(milliseconds: 100));
+  }
+  if (await _commandLine(pid) != "") Process.killPid(pid, ProcessSignal.sigkill);
+}
+
+/// [pid]'s command line, or empty where there is no such process.
+Future<String> _commandLine(int pid) async {
+  try {
+    if (Platform.isLinux) {
+      return (await File("/proc/$pid/cmdline").readAsString()).replaceAll("\x00", " ");
+    }
+    final ps = await Process.run("ps", ["-p", "$pid", "-o", "command="]);
+    return ps.exitCode == 0 ? (ps.stdout as String).trim() : "";
+  } catch (_) {
+    return "";
+  }
+}
+
 /// Start [exe] on [profile] with a DevTools port of its choosing, and connect.
 /// The port is read from `DevToolsActivePort`, which the browser writes into
 /// the profile once it listens: no port is guessed, so none can be taken.
 Future<_Running> _launch(String exe, String profile,
     {bool headless = false, String? userAgent}) async {
   await Directory(profile).create(recursive: true);
+  await reapLostBrowser(profile);
   final portFile = File(p.join(profile, "DevToolsActivePort"));
   if (await portFile.exists()) await portFile.delete();
   final process = await Process.start(

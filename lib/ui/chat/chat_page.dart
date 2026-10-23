@@ -825,15 +825,29 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
   /// and a glide per tick would trail behind the pointer.
   void _goToChapter(int i, {bool scrubbing = false}) {
     if (!_scroll.hasClients || !_list.isAttached || i >= _chapters.length) return;
-    final row = _outline.value.rows.indexOf(_chapters[i].id);
+    final chapter = _chapters[i];
+    final row = _outline.value.rows.indexOf(chapter.row);
     if (row < 0 || row >= _list.numberOfItems) return;
     _follow.detach();
-    void land() => _list.jumpToItem(index: row, scrollController: _scroll, alignment: 0);
+    // A steer is inside its reply's row: the row gets it built, and then its
+    // own bubble is where to stop.
+    final steer = chapter.id != chapter.row;
+    void land() {
+      _list.jumpToItem(index: row, scrollController: _scroll, alignment: 0);
+      if (!steer) return;
+      _afterLayout((position) {
+        final offset = _revealOffset(chapter.id);
+        if (offset == null) return;
+        position.jumpTo(offset.clamp(position.minScrollExtent, position.maxScrollExtent));
+      });
+    }
+
     if (scrubbing) {
       _stopGlide();
       land();
     } else {
-      _glideTo(() => _offsetOf(row), landed: () => _afterLayout((_) => land()));
+      _glideTo(() => (steer ? _revealOffset(chapter.id) : null) ?? _offsetOf(row),
+          landed: () => _afterLayout((_) => land()));
     }
   }
 
@@ -1279,6 +1293,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
                               ? () => readAloud(context, ref, message.id, message.plainText)
                               : null,
                           isSpeaking: reading == message.id,
+                          steerKey: (id) => _chapterKeys.putIfAbsent(id, GlobalKey.new),
                         ),
                       ),
                     ),
