@@ -338,6 +338,8 @@ class AppSession {
     // Before the container goes: each is a subprocess holding a gigabyte of the
     // phone's memory, and nothing else would ever kill them.
     await container.read(localLlmProvider).stopAll();
+    // Left running, it holds the profile the next launch's browser needs.
+    await container.read(agentBrowserProvider).close(why: "The app quit.");
     container.dispose();
   }
 }

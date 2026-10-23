@@ -9,7 +9,7 @@ import "package:fs_shim/fs_io.dart" show fileSystemIo;
 import "package:path/path.dart" as p;
 
 import "package:agent_chat/data/browser/cdp_browser.dart"
-    show CdpBrowser, challengeNote, looksLikeChallenge, pageAddress;
+    show CdpBrowser, challengeNote, looksLikeChallenge, pageAddress, reapLostBrowser;
 import "package:agent_chat/data/browser/helium.dart";
 import "package:agent_chat/data/builtin/browser_tools.dart";
 import "package:agent_chat/data/builtin/builtin_agent.dart";
@@ -891,6 +891,34 @@ void main() {
     expect(tab.credentialRequest.value, isNull);
     await declined;
   });
+
+  test("a browser left running on the profile is quit before a launch",
+      () async {
+    final dir = Directory.systemTemp.createTempSync("agent-browser-lost");
+    addTearDown(() => dir.deleteSync(recursive: true));
+    final profile = p.join(dir.path, "profile");
+    // `; :` keeps the shell from exec'ing sleep, which would drop the flag.
+    Future<Process> holder(String flag) =>
+        Process.start("sh", ["-c", "sleep 30; :", "sh", flag]);
+    final lost = await holder("--user-data-dir=$profile");
+    final other = await holder("--user-data-dir=${dir.path}/elsewhere");
+    addTearDown(other.kill);
+    final lock = Link(p.join(profile, "SingletonLock"))
+      ..createSync("${Platform.localHostname}-${lost.pid}", recursive: true);
+
+    await reapLostBrowser(profile);
+    expect(await lost.exitCode.timeout(const Duration(seconds: 5)), isNot(0));
+
+    lock
+      ..deleteSync()
+      ..createSync("${Platform.localHostname}-${other.pid}");
+    await reapLostBrowser(profile);
+    expect(
+        await other.exitCode
+            .then<int?>((code) => code)
+            .timeout(const Duration(milliseconds: 300), onTimeout: () => null),
+        isNull);
+  }, skip: Platform.isWindows);
 
   test("deleting the browser's data takes the profile, not the download",
       () async {
