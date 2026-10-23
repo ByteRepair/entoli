@@ -7,6 +7,7 @@ import "package:flutter/material.dart";
 import "package:flutter/rendering.dart" show RenderAbstractViewport;
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:flutter_riverpod/misc.dart" show ProviderListenable;
+import "package:super_sliver_list/super_sliver_list.dart";
 
 import "../../domain/agent_backend.dart";
 import "../../domain/chat_meta.dart";
@@ -594,8 +595,8 @@ List<ConversationEntry> entriesOf(Chat chat) {
 }
 
 /// The conversation as the chapter rail reads it: its prompts, and every row
-/// by message id — null where a row is not a message — which is what going
-/// to a prompt the list has not built estimates its place in.
+/// by message id — null where a row is not a message — which is how going to
+/// a prompt finds its row.
 class _Outline {
   const _Outline(this.chapters, this.rows);
 
@@ -621,7 +622,20 @@ class _Outline {
   int get hashCode => Object.hash(Object.hashAll(chapters), Object.hashAll(rows));
 }
 
-class _ChatBodyState extends ConsumerState<_ChatBody> {
+/// Measure every row of a conversation up front, a frame's budget at a time,
+/// so the scrollbar is sized by real extents rather than estimates. Past a
+/// few hundred rows one row's error no longer moves the thumb, and measuring
+/// them all is work nobody sees.
+class _MeasureAll extends ExtentPrecalculationPolicy {
+  @override
+  bool shouldPrecalculateExtents(ExtentPrecalculationContext context) =>
+      context.numberOfItems <= 400;
+}
+
+final _measureAll = _MeasureAll();
+
+class _ChatBodyState extends ConsumerState<_ChatBody>
+    with SingleTickerProviderStateMixin {
   /// How far off the end still counts as reading the latest: inside it a turn
   /// keeps the view pinned, outside it the jump button appears.
   static const _slack = 200.0;
@@ -632,6 +646,22 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
   final GlobalKey<ComposerState> _composer = GlobalKey();
   late final ScrollController _scroll = ScrollController();
   late final ScrollFollow _follow = ScrollFollow(_scroll);
+
+  /// What the list knows of rows it has not built: an extent for each, the
+  /// measured one once it has been laid out. A plain `ListView` guesses from
+  /// what is on screen, so its extent — and the scrollbar with it — shifted on
+  /// every row scrolled in, and a jump to an unbuilt row landed on a guess.
+  final ListController _list = ListController();
+
+  /// The one move the page makes on its own: to a chapter, or to the latest.
+  /// One controller, so a second press takes over from the first rather than
+  /// both pulling at the view.
+  late final AnimationController _glide = AnimationController(vsync: this)
+    ..addListener(_glideTick)
+    ..addStatusListener(_glideStatus);
+  double _glideFrom = 0;
+  double Function()? _glideTarget;
+  VoidCallback? _glideLanded;
 
   /// A notifier rather than a field: only the jump button reads it, and a
   /// `setState` mid-drag would rebuild every visible bubble to swap it.
@@ -732,6 +762,8 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
     _memoryNotes?.cancel();
     _scroll.removeListener(_readPosition);
     _controller.dispose();
+    _glide.dispose();
+    _list.dispose();
     _scroll.dispose();
     _atBottom.dispose();
     _chapter.dispose();
@@ -787,33 +819,70 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
     return RenderAbstractViewport.of(box).getOffsetToReveal(box, 0).offset;
   }
 
-  /// Bring chapter [i] to the top. The list builds only what shows, so a
-  /// prompt off screen has no offset to scroll to: jump to where it would be
-  /// if every row were the same height, and look again once that has laid
-  /// out, until it is built.
+  /// Bring chapter [i] to the top.
   ///
-  /// A scrub along the rail jumps rather than animates: it is one move of many,
-  /// and an animation per tick would trail behind the pointer.
-  void _goToChapter(int i, {bool scrubbing = false, int tries = 8}) {
-    if (!_scroll.hasClients || i >= _chapters.length) return;
+  /// A scrub along the rail jumps rather than glides: it is one move of many,
+  /// and a glide per tick would trail behind the pointer.
+  void _goToChapter(int i, {bool scrubbing = false}) {
+    if (!_scroll.hasClients || !_list.isAttached || i >= _chapters.length) return;
+    final row = _outline.value.rows.indexOf(_chapters[i].id);
+    if (row < 0 || row >= _list.numberOfItems) return;
     _follow.detach();
-    final offset = _revealOffset(_chapters[i].id);
-    if (offset != null) {
-      final to = offset.clamp(0.0, _scroll.position.maxScrollExtent);
-      if (scrubbing) {
-        _scroll.jumpTo(to);
-      } else {
-        _scroll.animateTo(to,
-            duration: const Duration(milliseconds: 250), curve: Curves.easeOut);
-      }
-      return;
+    void land() => _list.jumpToItem(index: row, scrollController: _scroll, alignment: 0);
+    if (scrubbing) {
+      _stopGlide();
+      land();
+    } else {
+      _glideTo(() => _offsetOf(row), landed: () => _afterLayout((_) => land()));
     }
-    if (tries == 0) return;
-    final rows = _outline.value.rows;
-    final row = rows.indexOf(_chapters[i].id);
-    if (row < 0) return;
-    _scroll.jumpTo(_scroll.position.maxScrollExtent * row / rows.length);
-    _afterLayout((_) => _goToChapter(i, scrubbing: scrubbing, tries: tries - 1));
+  }
+
+  /// Where row [index] starts: the extents above it, measured or estimated.
+  /// Read again on every tick of a glide, since the rows it passes are laid
+  /// out on the way and the estimate gets better as it goes.
+  double _offsetOf(int index) {
+    var offset = MediaQuery.paddingOf(context).top;
+    for (var i = 0; i < index; i++) {
+      offset += _list.extentForIndex(i).$1;
+    }
+    return offset;
+  }
+
+  /// Glide from where the view is to [target]. Longer trips take a little
+  /// longer, never past half a second; the direction is known from the start,
+  /// so the view never runs the wrong way first.
+  void _glideTo(double Function() target, {VoidCallback? landed}) {
+    _glide.stop();
+    final position = _scroll.position;
+    _glideFrom = position.pixels;
+    _glideTarget = target;
+    _glideLanded = landed;
+    final screens = (target() - _glideFrom).abs() / math.max(position.viewportDimension, 1);
+    _glide.duration = Duration(milliseconds: (220 + 90 * math.min(screens, 3)).round());
+    _glide.forward(from: 0);
+  }
+
+  void _glideTick() {
+    final target = _glideTarget;
+    if (target == null || !_scroll.hasClients) return;
+    final position = _scroll.position;
+    final to = target().clamp(position.minScrollExtent, position.maxScrollExtent);
+    final t = Curves.easeInOutCubic.transform(_glide.value);
+    _scroll.jumpTo(_glideFrom + (to - _glideFrom) * t);
+  }
+
+  void _glideStatus(AnimationStatus status) {
+    if (status != AnimationStatus.completed) return;
+    final landed = _glideLanded;
+    _stopGlide();
+    landed?.call();
+  }
+
+  /// A hand on the list takes over from a glide in progress.
+  void _stopGlide() {
+    _glideTarget = null;
+    _glideLanded = null;
+    _glide.stop();
   }
 
   /// Once the list has been laid out, which is the first moment its extent is
@@ -831,8 +900,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
   /// estimate, and a single jump lands short of the last message.
   ///
   /// Both ways down want this. A chat opens at its latest message; Jump to
-  /// latest animates for the travel and then finishes the trip here, since the
-  /// extent it read at the moment of the press was the estimate.
+  /// latest glides for the travel and then finishes the trip here.
   void _settleAtBottom([int tries = 8]) => _afterLayout((position) {
         if (position.pixels >= position.maxScrollExtent) return;
         _scroll.jumpTo(position.maxScrollExtent);
@@ -1160,56 +1228,62 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
     final mutable = editing != null && !view.isRunning;
     return Stack(
       children: [
-        NotificationListener<ScrollNotification>(
-          onNotification: _follow.onNotification,
-          child: ListView.builder(
-              controller: _scroll,
-              itemCount: entries.length,
-              itemBuilder: (context, i) => switch (entries[i]) {
-                SectionEntry(:final omada) => ConversationSeparator(
-                    text: omada ? "Omada is turned on" : "Omada is turned off"),
-                CompactionEntry(:final summary) => ConversationSeparator(
-                    text: "Compact Conversation",
-                    body: MessageText(
-                      text: summary,
-                      isError: false,
-                      isWaiting: false,
-                      caret: false,
-                      onTapLink: (href) => _openLink(context, href),
-                    )),
-                MessageEntry(:final message, :final inOmadaSection, :final last) =>
-                  KeyedSubtree(
-                    key: message.role == MessageRole.user
-                        ? _chapterKeys.putIfAbsent(message.id, GlobalKey.new)
-                        : null,
-                    child: ActivitySource(
-                      live: source.select((v) => _liveMessage(v, message.id)),
-                      child: MessageBubble(
-                        chatId: widget.chatId,
-                        message: message,
-                        avatar: _avatarOf(chat, message),
-                        entoli: inOmadaSection,
-                        isWaiting: view.isRunning && last,
-                        waitingNotice: view.retry,
-                        waitingStatus: view.status,
-                        shellOutput: view.shellOutput[message.id],
+        Listener(
+          onPointerDown: (_) => _stopGlide(),
+          onPointerSignal: (_) => _stopGlide(),
+          child: NotificationListener<ScrollNotification>(
+            onNotification: _follow.onNotification,
+            child: SuperListView.builder(
+                controller: _scroll,
+                listController: _list,
+                extentPrecalculationPolicy: _measureAll,
+                itemCount: entries.length,
+                itemBuilder: (context, i) => switch (entries[i]) {
+                  SectionEntry(:final omada) => ConversationSeparator(
+                      text: omada ? "Omada is turned on" : "Omada is turned off"),
+                  CompactionEntry(:final summary) => ConversationSeparator(
+                      text: "Compact Conversation",
+                      body: MessageText(
+                        text: summary,
+                        isError: false,
+                        isWaiting: false,
+                        caret: false,
                         onTapLink: (href) => _openLink(context, href),
-                        threads: editing == null ? null : chat.branches[message.id],
-                        onThreadStep:
-                            mutable ? (step) => editing.stepThread(message.id, step) : null,
-                        onDelete: mutable ? () => editing.deleteThread(message.id) : null,
-                        onEdit: mutable && message.role == MessageRole.user
-                            ? (text) => editing.editAndResend(message.id, text)
-                            : null,
-                        onRegenerate: mutable ? () => editing.regenerate(message.id) : null,
-                        onSpeak: speechReady && message.hasText
-                            ? () => readAloud(context, ref, message.id, message.plainText)
-                            : null,
-                        isSpeaking: reading == message.id,
+                      )),
+                  MessageEntry(:final message, :final inOmadaSection, :final last) =>
+                    KeyedSubtree(
+                      key: message.role == MessageRole.user
+                          ? _chapterKeys.putIfAbsent(message.id, GlobalKey.new)
+                          : null,
+                      child: ActivitySource(
+                        live: source.select((v) => _liveMessage(v, message.id)),
+                        child: MessageBubble(
+                          chatId: widget.chatId,
+                          message: message,
+                          avatar: _avatarOf(chat, message),
+                          entoli: inOmadaSection,
+                          isWaiting: view.isRunning && last,
+                          waitingNotice: view.retry,
+                          waitingStatus: view.status,
+                          shellOutput: view.shellOutput[message.id],
+                          onTapLink: (href) => _openLink(context, href),
+                          threads: editing == null ? null : chat.branches[message.id],
+                          onThreadStep:
+                              mutable ? (step) => editing.stepThread(message.id, step) : null,
+                          onDelete: mutable ? () => editing.deleteThread(message.id) : null,
+                          onEdit: mutable && message.role == MessageRole.user
+                              ? (text) => editing.editAndResend(message.id, text)
+                              : null,
+                          onRegenerate: mutable ? () => editing.regenerate(message.id) : null,
+                          onSpeak: speechReady && message.hasText
+                              ? () => readAloud(context, ref, message.id, message.plainText)
+                              : null,
+                          isSpeaking: reading == message.id,
+                        ),
                       ),
                     ),
-                  ),
-              }),
+                }),
+          ),
         ),
         // Only once the reader has left the end: up there a turn no longer
         // follows itself, and this is the way back.
@@ -1223,13 +1297,8 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
             child: FloatingActionButton.small(
               heroTag: null,
               tooltip: "Jump to latest",
-              onPressed: () => _scroll
-                  .animateTo(
-                    _scroll.position.maxScrollExtent,
-                    duration: const Duration(milliseconds: 200),
-                    curve: Curves.easeOut,
-                  )
-                  .then((_) => _settleAtBottom()),
+              onPressed: () => _glideTo(() => _scroll.position.maxScrollExtent,
+                  landed: _settleAtBottom),
               child: const Icon(Icons.arrow_downward),
             ),
           ),
