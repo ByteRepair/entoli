@@ -38,6 +38,7 @@ class TurnSurface extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final chat = view.chat;
+    final restore = onWithdrawn;
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -54,13 +55,12 @@ class TurnSurface extends StatelessWidget {
         SteerStrip(
           steering: view.steering,
           onQueue: notifier.queueSteer,
-          onWithdraw: switch (onWithdrawn) {
-            null => null,
-            final restore => (id) async {
-                final said = await notifier.withdrawSteer(id);
-                if (said != null) restore(said);
-              },
-          },
+          onWithdraw: restore == null
+              ? null
+              : (id) async {
+                  final said = await notifier.withdrawSteer(id);
+                  if (said != null) restore(said);
+                },
         ),
         // Not turn-scoped like the strips above: the tab outlives the turn
         // that opened it, so the chip shows for as long as the tab is open.

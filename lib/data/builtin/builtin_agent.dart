@@ -1009,6 +1009,7 @@ class BuiltinAgent {
   /// words it; its images are loaded first, since the rebuild is synchronous.
   Stream<AgentEvent> _steered() async* {
     final said = steers?.take() ?? const <Message>[];
+    if (said.isEmpty) return;
     final loaded =
         await Future.wait(said.map((s) => attachmentsOf(s, loadResource)));
     for (final images in loaded) {

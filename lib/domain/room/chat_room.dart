@@ -10,7 +10,6 @@ import "../chat_repository.dart";
 import "../models.dart";
 import "../project_settings.dart" show OmadaOrdering;
 import "../prompt_library.dart" show nameOf;
-import "../shell.dart" show shellBypassCommand;
 import "../turn_recorder.dart";
 import "../wired_skill.dart";
 import "agent.dart";
@@ -280,12 +279,11 @@ class ChatRoom {
 
   /// Whether [text], sent now, would steer a running turn rather than wait
   /// for it: the composer asks, to offer the choice only where there is one.
-  bool steers(String text) =>
-      state.isRunning && _steeredBy(_composeSay(text, const [])) != null;
+  bool steers(String text) => _steeredBy(_composeSay(text, const [])) != null;
 
   _RunningTurn? _steeredBy(Message say) {
     final chat = state.chat;
-    if (chat == null || shellBypassCommand(say.plainText) != null) return null;
+    if (chat == null || isCommand(say.plainText)) return null;
     if (say.addressees.length > 1) return null;
     final to = _roster(chat).answering(say);
     return _turns.values.firstWhereOrNull((t) => t.agent.handle == to);

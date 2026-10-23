@@ -1812,6 +1812,7 @@ void main() {
       // What the composer asks before offering the choice: a command waits.
       expect(controller.steers("keep this for later"), isTrue);
       expect(controller.steers("!ls"), isFalse);
+      expect(controller.steers("/compact"), isFalse);
 
       await controller.send("keep this for later");
       final picture = Attachment(

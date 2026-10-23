@@ -5,6 +5,7 @@ import "package:flutter_test/flutter_test.dart";
 
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/domain/prompt_library.dart";
+import "package:agent_chat/domain/room/roster.dart" show isCommand;
 import "package:agent_chat/ui/chat/widgets/composer.dart";
 
 import "../data/builtin/builtin_fakes.dart";
@@ -47,7 +48,7 @@ void main() {
                 sentAttachments.add(attachments);
               },
               onQueue: (text, _) => queued.add(text),
-              steers: steers,
+              steers: steers ?? (text) => !isCommand(text),
               onAbort: () {},
               workspace: workspace,
               workspaceHome: workspaceHome,

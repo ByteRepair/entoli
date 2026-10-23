@@ -64,8 +64,8 @@ class Composer extends ConsumerStatefulWidget {
   final SendCallback? onQueue;
 
   /// Whether what is typed would steer the running turn: the room's rule,
-  /// asked rather than copied, since only it knows who is speaking. Null
-  /// takes everything but a command to steer.
+  /// asked rather than copied, since only it knows who is speaking. Given
+  /// with [onQueue]; without it the queue button never shows.
   final bool Function(String text)? steers;
 
   /// The project the composer is in, so the `/` and `@` menus offer what it
@@ -108,13 +108,14 @@ class ComposerState extends ConsumerState<Composer> {
   /// it, not from the turn that follows.
   bool _wired = false;
 
-  /// Whether Send steers the running turn, so the queue button is on offer
-  /// beside it once something is typed.
-  bool _queues = false;
-
   /// Whether Send would do anything. Kept here so only the button redraws when
   /// the answer flips, which is about twice a message.
   final ValueNotifier<bool> _canSend = ValueNotifier(false);
+
+  /// Whether what is typed would steer the running turn, so the queue button
+  /// is on offer beside Send. A notifier for the reason [_canSend] is.
+  final ValueNotifier<bool> _queues = ValueNotifier(false);
+  late final Listenable _sendState = Listenable.merge([_canSend, _queues]);
 
   @override
   void initState() {
@@ -128,15 +129,17 @@ class ComposerState extends ConsumerState<Composer> {
     if (oldWidget.controller != widget.controller) {
       oldWidget.controller.removeListener(_sync);
       widget.controller.addListener(_sync);
-      _canSend.value = _worthSending;
+      _refresh();
+    } else if (oldWidget.agentSpeaking != widget.agentSpeaking) {
+      _refresh();
     }
-    _queues = _queuesFor(shell: _shell, wired: _wired);
   }
 
   @override
   void dispose() {
     widget.controller.removeListener(_sync);
     _canSend.dispose();
+    _queues.dispose();
     super.dispose();
   }
 
@@ -144,30 +147,32 @@ class ComposerState extends ConsumerState<Composer> {
     // Its own notifier rather than a `setState`, because this build resolves
     // the field's decoration and the buttons either side of it, and that has no
     // business re-running because Send went live.
-    _canSend.value = _worthSending;
+    _refresh();
     final shell = shellBypassCommand(widget.controller.text) != null;
     final wired = wiredSkillFromText(widget.controller.text) != null;
-    final queues = _queuesFor(shell: shell, wired: wired);
-    if (shell == _shell && wired == _wired && queues == _queues) return;
+    if (shell == _shell && wired == _wired) return;
     setState(() {
       _shell = shell;
       _wired = wired;
-      _queues = queues;
     });
   }
 
-  bool _queuesFor({required bool shell, required bool wired}) =>
-      widget.agentSpeaking &&
-      widget.onQueue != null &&
-      !shell &&
-      !wired &&
-      (widget.steers?.call(widget.controller.text) ?? true);
+  void _refresh() {
+    final canSend = _worthSending;
+    _canSend.value = canSend;
+    // Only asked with something typed: the room composes a message to answer,
+    // and a streaming reply rebuilds this page every frame.
+    _queues.value = canSend &&
+        widget.agentSpeaking &&
+        widget.onQueue != null &&
+        (widget.steers?.call(widget.controller.text) ?? false);
+  }
 
   Future<void> _attach(AttachmentKind kind) async {
     final picked = await ref.read(attachmentPickerProvider).pick(kind);
     if (picked.isEmpty || !mounted) return;
     setState(() => _attachments.addAll(picked));
-    _canSend.value = _worthSending;
+    _refresh();
   }
 
   /// Put back a message that was sent and taken back, ahead of whatever has
@@ -178,7 +183,7 @@ class ComposerState extends ConsumerState<Composer> {
     widget.controller.text =
         typed.isEmpty || text.isEmpty ? "$text$typed" : "$text\n$typed";
     setState(() => _attachments.insertAll(0, attachments));
-    _canSend.value = _worthSending;
+    _refresh();
   }
 
   /// A file on its own is worth sending, and whitespace on its own is not.
@@ -189,11 +194,11 @@ class ComposerState extends ConsumerState<Composer> {
     // The button is dead when this is false, but Ctrl/Cmd+Enter reaches here
     // without passing it.
     if (!_worthSending) return;
-    final send = queue && _queues ? widget.onQueue! : widget.onSend;
+    final send = queue && _queues.value ? widget.onQueue! : widget.onSend;
     send(widget.controller.text.trim(), List.of(_attachments));
     widget.controller.clear();
     setState(_attachments.clear);
-    _canSend.value = _worthSending;
+    _refresh();
   }
 
   @override
@@ -297,11 +302,11 @@ class ComposerState extends ConsumerState<Composer> {
                   // running turn, in the slot the voice button gives up:
                   // outlined beside the filled Send, which steers.
                   ValueListenableBuilder<bool>(
-                    valueListenable: _canSend,
-                    builder: (context, canSend, _) => AnimatedSize(
+                    valueListenable: _queues,
+                    builder: (context, queues, _) => AnimatedSize(
                       duration: const Duration(milliseconds: 180),
                       curve: Curves.easeOut,
-                      child: canSend && _queues
+                      child: queues
                           ? Padding(
                               padding: const EdgeInsets.only(left: 4),
                               child: IconButton.outlined(
@@ -318,17 +323,17 @@ class ComposerState extends ConsumerState<Composer> {
                   // typed is Send, which the turn reads at its next step —
                   // the room's rule is the controller's, and the button
                   // only names which of the two is on offer.
-                  ValueListenableBuilder<bool>(
-                    valueListenable: _canSend,
-                    builder: (context, canSend, _) => widget.agentSpeaking &&
-                            !canSend
+                  ListenableBuilder(
+                    listenable: _sendState,
+                    builder: (context, _) => widget.agentSpeaking &&
+                            !_canSend.value
                         ? IconButton.filled(
                             onPressed: widget.onAbort,
                             icon: const Icon(Icons.stop),
                             tooltip: "Stop",
                           )
                          : IconButton.filled(
-                             onPressed: canSend ? _submit : null,
+                             onPressed: _canSend.value ? _submit : null,
                              icon: Icon(
                                  _shell
                                      ? Icons.play_arrow
@@ -339,7 +344,7 @@ class ComposerState extends ConsumerState<Composer> {
                                  ? "Run"
                                  : _wired
                                      ? "Compact"
-                                     : canSend && _queues
+                                     : _queues.value
                                          ? "Send now, read at its next step"
                                          : "Send",
                            ),
