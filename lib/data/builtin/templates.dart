@@ -219,6 +219,11 @@ String turnPrompt({
         "too, and a\nrepository cloned or a package installed by one "
         "conversation is already\nthere for the next.";
   }
+  // Models write scratch to a literal /tmp out of habit unless told
+  // otherwise. The sandbox's TMPDIR is this same directory.
+  final tmp = "\n\n"
+      "Temporary and intermediate files go in $workspaceDisplay/.entoli-tmp "
+      "(make it\nif it is not there), never in `/tmp`.";
   final parts = [
     if (canRunCommands)
       """
@@ -226,7 +231,7 @@ String turnPrompt({
 
 Your shell starts in this conversation's own workspace: $workspaceDisplay
 It is yours; the files in it survive between turns, and nothing else writes
-there. $scope$shared${home()}""",
+there. $scope$tmp$shared${home()}""",
     if (instructions != null && instructions.isNotEmpty)
       "## Workspace instructions\n\n$instructions",
     if (pinned != null && pinned.isNotEmpty)
