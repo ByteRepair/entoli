@@ -49,6 +49,7 @@ void main() {
     MemoryStore? memoryStore,
     String? memoryChat,
     SandboxHelper? sandboxHelper,
+    SteerInbox? steers,
   }) {
     final tempDir = Directory.systemTemp.createTempSync("agent-test");
     final testProjectWorkspace = p.join(tempDir.path, "project-workspace");
@@ -81,6 +82,7 @@ void main() {
       memoryStore: memoryStore,
       memoryChat: memoryChat,
       sandboxHelper: sandboxHelper,
+      steers: steers,
     );
   }
 
@@ -214,6 +216,39 @@ void main() {
 
       expect(shell.ran, ["ls"]);
       expect(events.whereType<TextDelta>().map((e) => e.text), ["Found three files."]);
+    });
+  });
+
+  group("steering", () {
+    test("a say waiting at a step boundary is read after the results", () async {
+      final steers = SteerInbox()..offer(userMessage("use the other file"));
+      final client = FakeLlmClient([
+        [bashCall("ls")],
+        [finish],
+      ]);
+      final events =
+          await agentOver(client, steers: steers).run(userMessage("hi")).toList();
+
+      expect(events.whereType<SteerEvent>().map((e) => e.message.plainText),
+          ["use the other file"]);
+      // Not before the first call: the prompt had only just gone.
+      expect(client.sent[0].where((m) => m.text.contains("other file")), isEmpty);
+      final second = client.sent[1];
+      expect(second[second.length - 2].role, LlmRole.tool);
+      expect(second.last.role, LlmRole.user);
+      expect(second.last.text, contains("use the other file"));
+    });
+
+    test("a turn that runs no tools leaves what was said unread", () async {
+      final steers = SteerInbox()..offer(userMessage("later"));
+      final client = FakeLlmClient([
+        [finish],
+      ]);
+      final events =
+          await agentOver(client, steers: steers).run(userMessage("hi")).toList();
+
+      expect(events.whereType<SteerEvent>(), isEmpty);
+      expect(steers.close().map((m) => m.plainText), ["later"]);
     });
   });
 

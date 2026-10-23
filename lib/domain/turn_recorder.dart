@@ -137,6 +137,8 @@ class TurnRecorder {
         addPart(MessagePart.skillInstall(installId: installId, title: title));
       case ImageEvent(:final part):
         addPart(part);
+      case SteerEvent(:final message):
+        addPart(MessagePart.steer(message: message));
       case InstructionsReadEvent(:final files):
         // The backend claims against the history for a main-agent turn, so
         // this records the conversation's first read of each file. The
@@ -381,6 +383,7 @@ class TurnRecorder {
         SkillInstallPart() ||
         ApprovalPart() ||
         InstructionsPart() ||
+        SteerPart() ||
         ErrorPart() =>
           part,
       };

@@ -17,11 +17,17 @@ class _SendIntent extends Intent {
   const _SendIntent();
 }
 
+class _QueueIntent extends Intent {
+  const _QueueIntent();
+}
+
 typedef SendCallback = void Function(String text, List<Attachment> attachments);
 
 /// Message composer with send/abort toggle. Calls onSend with the typed text
 /// and whatever is attached, then clears both; calls onAbort when a turn is
-/// running. Typing `/` or `@` opens a menu of the app's commands or agents
+/// running. While one runs, Send steers it and [onQueue] — the outlined
+/// button beside Send, or Alt+Enter — holds the message for after it.
+/// Typing `/` or `@` opens a menu of the app's commands or agents
 /// above the field — that is [CompletionField]'s — and the `+` button also
 /// attaches files.
 ///
@@ -36,6 +42,7 @@ class Composer extends ConsumerStatefulWidget {
     required this.agentSpeaking,
     required this.onSend,
     required this.onAbort,
+    this.onQueue,
     this.project,
     this.device,
     this.onVoice,
@@ -50,6 +57,10 @@ class Composer extends ConsumerStatefulWidget {
   final bool agentSpeaking;
   final SendCallback onSend;
   final VoidCallback onAbort;
+
+  /// Send for after the running turn rather than into it. Null where the
+  /// composer has no turn to wait on.
+  final SendCallback? onQueue;
 
   /// The project the composer is in, so the `/` and `@` menus offer what it
   /// offers. Null is the default, the way it is everywhere a project is named.
@@ -73,10 +84,10 @@ class Composer extends ConsumerStatefulWidget {
   final String? workspaceHome;
 
   @override
-  ConsumerState<Composer> createState() => _ComposerState();
+  ConsumerState<Composer> createState() => ComposerState();
 }
 
-class _ComposerState extends ConsumerState<Composer> {
+class ComposerState extends ConsumerState<Composer> {
   final GlobalKey<CompletionFieldState> _field = GlobalKey();
   final List<Attachment> _attachments = [];
 
@@ -102,10 +113,10 @@ class _ComposerState extends ConsumerState<Composer> {
   }
 
   @override
-  void didUpdateWidget(Composer old) {
-    super.didUpdateWidget(old);
-    if (old.controller != widget.controller) {
-      old.controller.removeListener(_sync);
+  void didUpdateWidget(Composer oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.controller != widget.controller) {
+      oldWidget.controller.removeListener(_sync);
       widget.controller.addListener(_sync);
       _canSend.value = _worthSending;
     }
@@ -139,15 +150,35 @@ class _ComposerState extends ConsumerState<Composer> {
     _canSend.value = _worthSending;
   }
 
+  /// Put back a message that was sent and taken back, ahead of whatever has
+  /// been typed or attached since.
+  void restore(String text, List<Attachment> attachments) {
+    final typed = widget.controller.text;
+    widget.controller.text =
+        typed.isEmpty || text.isEmpty ? "$text$typed" : "$text\n$typed";
+    setState(() => _attachments.insertAll(0, attachments));
+    _canSend.value = _worthSending;
+  }
+
   /// A file on its own is worth sending, and whitespace on its own is not.
   bool get _worthSending =>
       widget.controller.text.trim().isNotEmpty || _attachments.isNotEmpty;
 
-  void _submit() {
+  /// Whether the queue button is up: something typed while a turn runs. Not
+  /// for a command, which no turn can read and so always waits.
+  bool _queues(bool canSend) =>
+      widget.agentSpeaking &&
+      widget.onQueue != null &&
+      canSend &&
+      !_wired &&
+      !_shell;
+
+  void _submit({bool queue = false}) {
     // The button is dead when this is false, but Ctrl/Cmd+Enter reaches here
     // without passing it.
     if (!_worthSending) return;
-    widget.onSend(widget.controller.text.trim(), List.of(_attachments));
+    final send = queue && _queues(true) ? widget.onQueue! : widget.onSend;
+    send(widget.controller.text.trim(), List.of(_attachments));
     widget.controller.clear();
     setState(_attachments.clear);
     _canSend.value = _worthSending;
@@ -183,9 +214,12 @@ class _ComposerState extends ConsumerState<Composer> {
           shortcuts: const {
             SingleActivator(LogicalKeyboardKey.enter, control: true): _SendIntent(),
             SingleActivator(LogicalKeyboardKey.enter, meta: true): _SendIntent(),
+            SingleActivator(LogicalKeyboardKey.enter, alt: true): _QueueIntent(),
           },
           actions: {
             _SendIntent: CallbackAction<_SendIntent>(onInvoke: (_) => _submit()),
+            _QueueIntent: CallbackAction<_QueueIntent>(
+                onInvoke: (_) => _submit(queue: true)),
           },
           // The menu spans the composer rather than the field, so what it
           // offers is not squeezed by the buttons either side.
@@ -247,11 +281,31 @@ class _ComposerState extends ConsumerState<Composer> {
                           : child,
                     ),
                   ),
+                  // The quieter of the two ways to say something over a
+                  // running turn, in the slot the voice button gives up:
+                  // outlined beside the filled Send, which steers.
+                  ValueListenableBuilder<bool>(
+                    valueListenable: _canSend,
+                    builder: (context, canSend, _) => AnimatedSize(
+                      duration: const Duration(milliseconds: 180),
+                      curve: Curves.easeOut,
+                      child: _queues(canSend)
+                          ? Padding(
+                              padding: const EdgeInsets.only(left: 4),
+                              child: IconButton.outlined(
+                                onPressed: () => _submit(queue: true),
+                                icon: const Icon(Icons.schedule_send),
+                                tooltip: "Send after this turn (Alt+Enter)",
+                              ),
+                            )
+                          : const SizedBox.shrink(),
+                    ),
+                  ),
                   const SizedBox(width: 8),
                   // Empty field while the agent speaks is Stop; anything
-                  // typed is Send, which queues what is said for the
-                  // settle — the room's rule is the controller's, and the
-                  // button only names which of the two is on offer.
+                  // typed is Send, which the turn reads at its next step —
+                  // the room's rule is the controller's, and the button
+                  // only names which of the two is on offer.
                   ValueListenableBuilder<bool>(
                     valueListenable: _canSend,
                     builder: (context, canSend, _) => widget.agentSpeaking &&
@@ -273,7 +327,9 @@ class _ComposerState extends ConsumerState<Composer> {
                                  ? "Run"
                                  : _wired
                                      ? "Compact"
-                                     : "Send",
+                                     : _queues(canSend)
+                                         ? "Send now, read at its next step"
+                                         : "Send",
                            ),
                   ),
                 ],

@@ -1177,7 +1177,8 @@ class _Turns implements RemoteTurns {
   final answered = <(String, String, List<String?>)>[];
 
   @override
-  void prompt(String chatId, String text, {List<Attachment> attachments = const []}) {
+  void prompt(String chatId, String text,
+      {List<Attachment> attachments = const [], bool queue = false}) {
     prompts.add((chatId, text));
     attached.add(attachments);
   }

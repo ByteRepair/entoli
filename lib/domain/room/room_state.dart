@@ -14,6 +14,7 @@ class ChatViewState {
     this.status,
     this.unfinishedNotice,
     this.shellOutput = const {},
+    this.steering = const [],
   });
   final Chat? chat;
   final bool isRunning;
@@ -53,6 +54,10 @@ class ChatViewState {
   /// keeps, so the block is gone the moment the pair completes.
   final Map<String, String> shellOutput;
 
+  /// What the user said to a running turn that it has not read yet, oldest
+  /// first. Not on the log until it is read, when it lands in the reply.
+  final List<Message> steering;
+
   /// Who may speak now — see [RoomPhase], whose facts "The room's phase is
   /// one answer" in `lib/domain/room/AGENTS.md` owns.
   RoomPhase get roomPhase => questions.values.any((q) => q.isNotEmpty)
@@ -74,6 +79,7 @@ class ChatViewState {
     String? unfinishedNotice,
     bool clearUnfinishedNotice = false,
     Map<String, String>? shellOutput,
+    List<Message>? steering,
   }) =>
       ChatViewState(
         chat: chat ?? this.chat,
@@ -87,6 +93,7 @@ class ChatViewState {
             ? null
             : (unfinishedNotice ?? this.unfinishedNotice),
         shellOutput: shellOutput ?? this.shellOutput,
+        steering: steering ?? this.steering,
       );
 }
 

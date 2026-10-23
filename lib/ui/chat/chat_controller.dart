@@ -19,7 +19,16 @@ import "../../providers.dart";
 /// paired peer — the widgets between them are the same either way, and only
 /// where the work happens differs.
 abstract interface class TurnDriver {
-  Future<void> send(String text, {List<Attachment> attachments});
+  /// While a turn runs, [text] steers it unless [queue] holds it for after.
+  Future<void> send(String text, {List<Attachment> attachments, bool queue});
+
+  /// A say still waiting for its turn to read it, sent after the turn instead.
+  Future<void> queueSteer(String id);
+
+  /// Take back a say its turn has not read yet: what it was sent with, or
+  /// null where the turn already has it.
+  Future<Draft?> withdrawSteer(String id);
+
   Future<void> resume();
   Future<void> abort();
   Future<void> respondApproval(String approvalId, ApprovalResponse r,
@@ -124,8 +133,15 @@ class ChatController extends Notifier<ChatViewState>
   void applyTitle(String title) => _room.applyTitle(title);
 
   @override
-  Future<void> send(String text, {List<Attachment> attachments = const []}) =>
-      _room.send(text, attachments: attachments);
+  Future<void> send(String text,
+          {List<Attachment> attachments = const [], bool queue = false}) =>
+      _room.send(text, attachments: attachments, queue: queue);
+
+  @override
+  Future<void> queueSteer(String id) => _room.queueSteer(id);
+
+  @override
+  Future<Draft?> withdrawSteer(String id) => _room.withdrawSteer(id);
 
   @override
   Future<void> resume() => _room.resume();

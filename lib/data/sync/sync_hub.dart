@@ -78,7 +78,8 @@ class MirrorChat {
 /// `ChatController`'s and the hub has no way to reach one — the same reason
 /// the repository arrives through [SyncHub.attach].
 abstract interface class RemoteTurns {
-  void prompt(String chatId, String text, {List<Attachment> attachments});
+  void prompt(String chatId, String text,
+      {List<Attachment> attachments, bool queue});
   void resume(String chatId);
   void abort(String chatId);
   void approve(String chatId, String approvalId, bool allow);
@@ -636,10 +637,19 @@ class SyncHub implements ArtifactBytes, RemoteChats {
         await _serveMemories(peer, call);
 
       // -- serving: a paired device driving one of this device's chats
-      case SyncPromptSend(:final requestId, :final chatId, :final text, :final files):
+      case SyncPromptSend(
+          :final requestId,
+          :final chatId,
+          :final text,
+          :final files,
+          :final queue
+        ):
         final turns = remoteTurns;
         final ok = turns != null && _follows(peer, chatId);
-        if (ok) turns.prompt(chatId, text, attachments: _attachments(files));
+        if (ok) {
+          turns.prompt(chatId, text,
+              attachments: _attachments(files), queue: queue);
+        }
         await peer.send(SyncMessage.reply(requestId: requestId, ok: ok));
       case SyncTurnResume(:final chatId):
         if (_follows(peer, chatId)) remoteTurns?.resume(chatId);
@@ -1208,12 +1218,16 @@ class SyncHub implements ArtifactBytes, RemoteChats {
   /// Drive a turn on the chat's home device, which runs it. Null where the
   /// device is away or did not answer.
   Future<SyncReply?> sendRemotePrompt(String chatId, String text,
-      {List<Attachment> attachments = const []}) async {
+      {List<Attachment> attachments = const [], bool queue = false}) async {
     return _ask(
         _peerHosting(chatId),
         "a prompt in $chatId",
         (id) => SyncMessage.promptSend(
-            requestId: id, chatId: chatId, text: text, files: _files(attachments)));
+            requestId: id,
+            chatId: chatId,
+            text: text,
+            files: _files(attachments),
+            queue: queue));
   }
 
   static List<SyncFile> _files(List<Attachment> attachments) => [

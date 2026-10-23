@@ -120,6 +120,34 @@ void main() {
     expect(projected[3].toolCalls, isEmpty);
   });
 
+  test("a say steered into a turn goes back after the results it arrived behind",
+      () async {
+    final steer = Message(
+        id: "s1",
+        role: MessageRole.user,
+        createdAt: at,
+        parts: const [MessagePart.text(text: "the other file")]);
+    final projected = await project([
+      asked("list the files"),
+      said(MessageRole.assistant, [
+        call("c1", "bash", '{"command":"ls"}', response: "r1"),
+        ran("c1", "notes.txt"),
+        MessagePart.steer(message: steer),
+        const MessagePart.text(text: "reading the other one", responseId: "r2"),
+      ]),
+    ]);
+
+    expect(projected.map((m) => m.role), [
+      LlmRole.user,
+      LlmRole.assistant,
+      LlmRole.tool,
+      LlmRole.user,
+      LlmRole.assistant,
+    ]);
+    expect(projected[3].text, steerTurnText("the other file", at: at));
+    expect(projected[4].text, "reading the other one");
+  });
+
   test("a result is worded the way the agent worded it when it ran", () async {
     final projected = await project([
       said(MessageRole.assistant, [

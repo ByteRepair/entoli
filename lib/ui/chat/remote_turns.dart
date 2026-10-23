@@ -130,8 +130,9 @@ class RemoteTurnDriver implements RemoteTurns {
   }
 
   @override
-  void prompt(String chatId, String text, {List<Attachment> attachments = const []}) =>
-      _of(chatId).send(text, attachments: attachments);
+  void prompt(String chatId, String text,
+          {List<Attachment> attachments = const [], bool queue = false}) =>
+      _of(chatId).send(text, attachments: attachments, queue: queue);
 
   @override
   void resume(String chatId) => _of(chatId).resume();

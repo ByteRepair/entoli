@@ -627,6 +627,9 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
   static const _slack = 200.0;
 
   final TextEditingController _controller = TextEditingController();
+
+  /// What a steer taken back is put back into, attachments and all.
+  final GlobalKey<ComposerState> _composer = GlobalKey();
   late final ScrollController _scroll = ScrollController();
   late final ScrollFollow _follow = ScrollFollow(_scroll);
 
@@ -1076,35 +1079,45 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
     VoidCallback? onVoice,
     String? workspace,
     String? workspaceHome,
-  }) =>
-      Column(
+  }) {
+    Future<void> send(String text, List<Attachment> attachments,
+        {bool queue = false}) async {
+      // Something said over an upload waiting on the user is their answer to
+      // it: the page's chooser is cancelled, as dismissing its dialog would,
+      // and the agent is told.
+      final browser = ref.read(agentBrowserProvider);
+      if (browser.available && browser.configured) {
+        browser.tab(widget.chatId).cancelUpload(
+            why: "The user sent a message instead of choosing a file.");
+      }
+      try {
+        await driver.send(text, attachments: attachments, queue: queue);
+      } on Undelivered catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context)
+              .showSnackBar(SnackBar(content: Text(e.message)));
+        }
+      }
+    }
+
+    return Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          TurnSurface(view: view, notifier: driver),
+          TurnSurface(
+            view: view,
+            notifier: driver,
+            onWithdrawn: (text, attachments) =>
+                _composer.currentState?.restore(text, attachments),
+          ),
           switch (view.roomPhase) {
             RoomPhase.waitingOnYou => TurnQuestions(view: view, notifier: driver),
             _ => Composer(
+                key: _composer,
                 controller: _controller,
                 agentSpeaking: view.roomPhase == RoomPhase.agentSpeaking,
-                onSend: (text, attachments) async {
-                  // Something said over an upload waiting on the user is
-                  // their answer to it: the page's chooser is cancelled, as
-                  // dismissing its dialog would, and the agent is told.
-                  final browser = ref.read(agentBrowserProvider);
-                  if (browser.available && browser.configured) {
-                    browser.tab(widget.chatId).cancelUpload(
-                        why: "The user sent a message instead of choosing "
-                            "a file.");
-                  }
-                  try {
-                    await driver.send(text, attachments: attachments);
-                  } on Undelivered catch (e) {
-                    if (mounted) {
-                      ScaffoldMessenger.of(context)
-                          .showSnackBar(SnackBar(content: Text(e.message)));
-                    }
-                  }
-                },
+                onSend: send,
+                onQueue: (text, attachments) =>
+                    send(text, attachments, queue: true),
                 onAbort: driver.abort,
                 project: project,
                 device: device,
@@ -1115,6 +1128,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
           },
         ],
       );
+  }
 
   /// The one link-opening rule, both renderers of model-written markdown — a
   /// reply and a compaction summary — share it.

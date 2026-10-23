@@ -446,6 +446,7 @@ class BuiltinAgent {
     this.onShellOutput,
     this.onUsage,
     this.loadResource = noResources,
+    this.steers,
     this.memory = MemorySettings.off,
     this.instructions = const [],
     this.recall = "",
@@ -588,6 +589,10 @@ class BuiltinAgent {
   /// projected. Defaulted because a sub-agent has no chat under it to read
   /// from; `BuiltinBackend` passes the store's.
   final ResourceLoader loadResource;
+
+  /// What the user says to this turn while it runs, read between steps. Null
+  /// for a sub-agent, which nobody talks to.
+  final SteerInbox? steers;
 
   /// What this turn reads and remembers. Only the `nested` half is consulted
   /// here: the instructions block was loaded by the backend before the agent
@@ -961,6 +966,10 @@ class BuiltinAgent {
   Stream<AgentEvent> _loop() async* {
     for (var step = 0; step < options.stepLimit; step++) {
       if (_cancelled) break;
+      // Only after a step that ran tools: before the first, the prompt has
+      // just gone, and a reply that ran none ends the turn, leaving what was
+      // said to be queued as a turn of its own.
+      if (step > 0) yield* _steered();
       _sayWhatWasSaid();
 
       // One response per step, named before it starts: what streams out of it
@@ -994,6 +1003,15 @@ class BuiltinAgent {
     }
 
     yield const DoneEvent();
+  }
+
+  /// What the user said since the last step, recorded so the rebuild below
+  /// words it; its images are loaded first, since the rebuild is synchronous.
+  Stream<AgentEvent> _steered() async* {
+    for (final said in steers?.take() ?? const <Message>[]) {
+      _images.addAll(await attachmentsOf(said, loadResource));
+      yield SteerEvent(said);
+    }
   }
 
   Future<void> _openTurn(

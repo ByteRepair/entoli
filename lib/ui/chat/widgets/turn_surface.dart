@@ -6,8 +6,10 @@ import "../../../domain/room/room_state.dart";
 import "../chat_controller.dart";
 import "approval_banner.dart";
 import "browser_strip.dart";
+import "composer.dart" show SendCallback;
 import "question_panel.dart";
 import "resume_bar.dart";
+import "steer_strip.dart";
 import "sub_agent_strip.dart";
 
 /// Everything a running turn puts on screen above whatever is used to answer
@@ -24,10 +26,15 @@ import "sub_agent_strip.dart";
 /// nothing useful to type until it is answered, while the voice screen keeps
 /// the circle above it — but how it is wired does not.
 class TurnSurface extends StatelessWidget {
-  const TurnSurface({super.key, required this.view, required this.notifier});
+  const TurnSurface(
+      {super.key, required this.view, required this.notifier, this.onWithdrawn});
 
   final ChatViewState view;
   final TurnDriver notifier;
+
+  /// Where a say taken back from the turn goes: the composer it was typed in.
+  /// Null where there is none, as on the voice screen.
+  final SendCallback? onWithdrawn;
 
   @override
   Widget build(BuildContext context) {
@@ -45,6 +52,14 @@ class TurnSurface extends StatelessWidget {
           ),
         for (final agents in view.runningSubAgents.values)
           SubAgentStrip(agents: agents),
+        SteerStrip(
+          steering: view.steering,
+          onQueue: notifier.queueSteer,
+          onWithdraw: (id) async {
+            final said = await notifier.withdrawSteer(id);
+            if (said != null) onWithdrawn?.call(said.text, said.attachments);
+          },
+        ),
         // Not turn-scoped like the strips above: the tab outlives the turn
         // that opened it, so the chip shows for as long as the tab is open.
         if (chat != null) BrowserStrip(chatId: chat.state.id),

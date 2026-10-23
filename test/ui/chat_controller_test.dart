@@ -1,6 +1,7 @@
 import "dart:io";
 
 import "dart:async";
+import "dart:typed_data";
 
 import "package:flutter_test/flutter_test.dart";
 
@@ -1664,9 +1665,10 @@ void main() {
           await startTurn("hello @explore, take your time", project: "team");
       await waitFor(() => app.backend.prompts.isNotEmpty, what: "the turn");
 
-      // Said to the member who is already speaking. It lands on the log,
-      // and it waits: the room schedules it, the settle dispatches it.
-      await controller.send("again @explore, one more thing");
+      // Said to the member who is already speaking, held for after. It lands
+      // on the log, and it waits: the room schedules it, the settle
+      // dispatches it.
+      await controller.send("again @explore, one more thing", queue: true);
       final chat = app.container.read(chatControllerProvider(id)).chat!;
       final said = chat.messages
           .where((m) => textOf(m) == "again @explore, one more thing")
@@ -1709,7 +1711,7 @@ void main() {
       final (id, controller) = await startTurn("hello, take your time");
       await waitFor(() => app.backend.prompts.isNotEmpty, what: "the turn");
 
-      await controller.send("one more thing");
+      await controller.send("one more thing", queue: true);
 
       // No second turn opens while the first still has the floor.
       final end = DateTime.now().add(const Duration(milliseconds: 500));
@@ -1735,6 +1737,111 @@ void main() {
       expect(app.backend.prompts[1].prompt.id, said.id);
       expect(messagesOf(id).where((m) => textOf(m) == "one more thing"),
           hasLength(1));
+    });
+
+    test("a say over a running turn steers it, landing in its reply",
+        () async {
+      app.backend.hold = Completer<void>();
+      app.backend.scriptedEvents = const [TextDelta("looking")];
+      addTearDown(() => app.backend.hold?.complete());
+      final (id, controller) = await startTurn("hello, take your time");
+      await waitFor(() => app.backend.prompts.isNotEmpty, what: "the turn");
+
+      await controller.send("use the other file");
+
+      // Waiting for the turn's next step: not on the log, and no turn of
+      // its own.
+      var view = app.container.read(chatControllerProvider(id));
+      expect(view.steering.map(textOf), ["use the other file"]);
+      expect(view.chat!.messages.where((m) => textOf(m) == "use the other file"),
+          isEmpty);
+
+      app.backend.deliverSteers();
+      await waitFor(
+          () => app.container.read(chatControllerProvider(id)).steering.isEmpty,
+          what: "the steer read");
+      app.backend.hold?.complete();
+      app.backend.hold = null;
+      await waitIdle(id, limit: const Duration(seconds: 5));
+
+      expect(app.backend.prompts, hasLength(1));
+      view = app.container.read(chatControllerProvider(id));
+      final reply = view.chat!.messages.last;
+      expect(reply.role, MessageRole.assistant);
+      expect(reply.parts.whereType<SteerPart>().map((p) => textOf(p.message)),
+          ["use the other file"]);
+      // A reload reads the same reply.
+      final logged = messagesOf(id).last;
+      expect(logged.parts.whereType<SteerPart>(), hasLength(1));
+    });
+
+    test("a steer the turn never read is said after it", () async {
+      app.backend.hold = Completer<void>();
+      app.backend.scriptedRounds = [
+        const [TextDelta("thinking")],
+        const [TextDelta("later, done"), DoneEvent()],
+      ];
+      addTearDown(() => app.backend.hold?.complete());
+      final (id, controller) = await startTurn("hello, take your time");
+      await waitFor(() => app.backend.prompts.isNotEmpty, what: "the turn");
+
+      await controller.send("one more thing");
+      app.backend.hold?.complete();
+      app.backend.hold = null;
+      await waitFor(() => app.backend.prompts.length >= 2,
+          what: "the unread steer", limit: const Duration(seconds: 5));
+      await waitIdle(id, limit: const Duration(seconds: 5));
+
+      final said = messagesOf(id).where((m) => textOf(m) == "one more thing");
+      expect(said, hasLength(1));
+      expect(said.single.role, MessageRole.user);
+      expect(app.backend.prompts[1].prompt.id, said.single.id);
+      expect(app.container.read(chatControllerProvider(id)).steering, isEmpty);
+    });
+
+    test("a waiting steer can be sent after the turn, or taken back",
+        () async {
+      app.backend.hold = Completer<void>();
+      app.backend.scriptedRounds = [
+        const [TextDelta("thinking")],
+        const [TextDelta("later, done"), DoneEvent()],
+      ];
+      addTearDown(() => app.backend.hold?.complete());
+      final (id, controller) = await startTurn("hello, take your time");
+      await waitFor(() => app.backend.prompts.isNotEmpty, what: "the turn");
+
+      await controller.send("keep this for later");
+      final picture = Attachment(
+          filename: "shot.png",
+          mimeType: "image/png",
+          bytes: Uint8List.fromList([1, 2, 3]));
+      await controller.send("never mind", attachments: [picture]);
+      final steering = app.container.read(chatControllerProvider(id)).steering;
+      await controller.queueSteer(steering.first.id);
+      // Back as the composer held it, the file read back off the chat.
+      final back = await controller.withdrawSteer(steering.last.id);
+      expect(back?.text, "never mind");
+      expect(back?.attachments.single.filename, "shot.png");
+      expect(back?.attachments.single.bytes, [1, 2, 3]);
+
+      // Neither is the turn's to read any more; the queued one is on the log.
+      expect(app.container.read(chatControllerProvider(id)).steering, isEmpty);
+      expect(app.backend.steers!.take(), isEmpty);
+      expect(
+          app.container
+              .read(chatControllerProvider(id))
+              .chat!
+              .messages
+              .map(textOf),
+          contains("keep this for later"));
+
+      app.backend.hold?.complete();
+      app.backend.hold = null;
+      await waitFor(() => app.backend.prompts.length >= 2,
+          what: "the queued say", limit: const Duration(seconds: 5));
+      await waitIdle(id, limit: const Duration(seconds: 5));
+      expect(app.backend.prompts, hasLength(2));
+      expect(messagesOf(id).map(textOf), isNot(contains("never mind")));
     });
 
     test("a handoff survives a settle the schedule holds something", () async {

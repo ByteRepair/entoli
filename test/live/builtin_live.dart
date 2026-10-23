@@ -141,6 +141,8 @@ void main() {
           log("skill offered: $title");
         case ImageEvent(:final part):
           log("image: ${part.filename}");
+        case SteerEvent(:final message):
+          log("steered: ${_oneLine(message.plainText)}");
         case RetryEvent(:final attempt, :final message):
           log("retry $attempt: $message");
         // Drawn as a row beside the spinner in the app; here it is one line per

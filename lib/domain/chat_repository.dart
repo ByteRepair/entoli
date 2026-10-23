@@ -335,14 +335,16 @@ class ChatRepository {
       {List<Message> history = const [],
       List<ConversationCompaction> compactions = const [],
       bool replaces = false,
-      String? omadaMember}) async* {
+      String? omadaMember,
+      SteerInbox? steers}) async* {
     if (replaces) {
       await _backend.resetSession(chatId, history: history, compactions: compactions);
     }
     yield* _backend.sendPrompt(chatId, prompt,
         history: history,
         compactions: compactions,
-        settings: await _turnSettings(chatId, omadaMember: omadaMember));
+        settings: await _turnSettings(chatId, omadaMember: omadaMember),
+        steers: steers);
   }
 
   /// Carry on the turn [history] ends in — see `AgentBackend.resumeTurn`. It
@@ -351,11 +353,13 @@ class ChatRepository {
   Stream<AgentEvent> resumeTurn(String chatId,
       {List<Message> history = const [],
       List<ConversationCompaction> compactions = const [],
-      String? omadaMember}) async* {
+      String? omadaMember,
+      SteerInbox? steers}) async* {
     yield* _backend.resumeTurn(chatId,
         history: history,
         compactions: compactions,
-        settings: await _turnSettings(chatId, omadaMember: omadaMember));
+        settings: await _turnSettings(chatId, omadaMember: omadaMember),
+        steers: steers);
   }
 
   /// Summarize the conversation through the backend, resolved under the same

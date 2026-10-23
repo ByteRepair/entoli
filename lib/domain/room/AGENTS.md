@@ -159,18 +159,56 @@ worded into any other participant's session, and it shows no running label.
 It does not clear what siblings handed off — silence is nothing said, not a
 veto.
 
-**A say is not refused, it is queued.** While a turn runs, the user's send
+**A say is not refused: it steers, or it is queued.** See "Steering a turn"
+below for the default. A queued say — `send(queue: true)`, the outlined
+button beside Send or Alt+Enter, and every say no running turn can read —
 lands on the log the moment it is said (`_sayLater` — the log is the queue)
-and dispatches when the room settles. The composer names which is on offer:
-an empty field while the agent speaks shows Stop; anything typed shows Send,
-which queues. Where the say lands after the settle already read the queue —
-the turn was finishing while it was typed — `_sayLater` dispatches it itself
-rather than waiting for a settle that already happened. Nothing is injected
-into a turn mid-flight, which is what protects the projection-prefix
-invariant; and a say whose members are named schedules them through the same
-ordering anything else takes. Under relay the settle part of that rule
-shrinks to the member's: a say dispatches while the room is still busy, and
-the per-lane check is what keeps a say for a busy member on their FIFO.
+and dispatches when the room settles. The composer names what is on offer:
+an empty field while the agent speaks shows Stop; anything typed shows Send
+and the queue button. Where the say lands after the settle already read the
+queue — the turn was finishing while it was typed — `_sayLater` dispatches
+it itself rather than waiting for a settle that already happened. A say
+whose members are named schedules them through the same ordering anything
+else takes. Under relay the settle part of that rule shrinks to the
+member's: a say dispatches while the room is still busy, and the per-lane
+check is what keeps a say for a busy member on their FIFO.
+
+### Steering a turn
+
+**Send over a running turn steers it.** `_steer` hands the say to the
+running turn it addresses — the house's for an unaddressed say, a member's
+for a say naming that one member — through the turn's `SteerInbox`, and the
+composer shows it in a strip above the field until the turn reads it
+(`ChatViewState.steering`). It is not on the log yet. The agent takes the
+inbox at each step boundary after a step that ran tools, never before the
+first (the prompt has just gone), and reports each say as a `SteerEvent`;
+the recorder writes it into the reply as a `SteerPart`, and the projection
+words it as a user message after the results it arrived behind
+(`steerTurnText`). So the parity holds: the live session and a reload build
+the same messages from the same parts. Anthropic folds it into the
+tool-results message, which is what Claude Code does too.
+
+**Inside the reply, not a message of its own.** A message between the
+turn's halves would split one reply in two in the log, and the turn, its
+`turnEnd`, Continue and Regenerate all treat a reply as one message. The
+cost is that regenerating the reply drops what was steered into it, and
+another participant's view of the reply (`_saidText`) does not include it.
+
+**What the turn never reads is queued after it.** A reply with no tool
+calls ends the turn without another step, and so does the step limit; at
+the turn's true end `_endTurn` closes the inbox and lands what is left as
+queued says, ahead of anything sent while it closes. They dispatch at the
+settle like any queued say, or stay on the log unsent where the round was
+stopped. A `!` command, a say naming several members, or one whose
+addressee is not speaking is queued from the start. The strip's buttons are
+`queueSteer` (send it after the turn instead) and `withdrawSteer` (take it
+back into the composer, its files read back from the chat's `resources/`
+where sending saved them, ahead of anything typed since).
+
+A mirror sends the queue flag with the prompt (`SyncPromptSend.queue`); an
+older home device ignores it and queues everything. The strip is the home
+device's view state and is not sent, so on a mirror a steer shows nothing
+until it lands in the reply.
 
 **Abort stops the round whole.** Every running turn is ended `aborted`, the
 queue of unsaid says is dropped, and the schedule is cleared — an aborted
