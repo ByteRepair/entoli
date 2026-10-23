@@ -4,6 +4,7 @@ import "dart:io";
 import "package:http/http.dart" as http;
 
 import "../core/tls.dart";
+import "../domain/app_update.dart" show latestReleaseUrl, latestTagOf;
 import "../domain/download.dart";
 
 /// Fetching something big onto the disk, reported as it goes and abandoned
@@ -115,4 +116,36 @@ class DownloadRun {
 
   /// How far the bar moves before it is worth saying so.
   static const _reportEvery = 1 << 20;
+}
+
+/// [repo]'s newest release tag, read off the redirect its `releases/latest`
+/// page answers with — no API call, no rate limit, and the tag in the one
+/// header GitHub has always put there.
+Future<String> latestReleaseTag(http.Client client, String repo,
+    {Duration timeout = const Duration(seconds: 30)}) async {
+  final request = http.Request("GET", latestReleaseUrl(repo))
+    ..followRedirects = false
+    ..maxRedirects = 0;
+  final response = await client.send(request).timeout(timeout);
+  try {
+    if (response.statusCode >= 400) {
+      throw HttpException(
+          "${response.statusCode} for the latest release of $repo");
+    }
+    final location = response.headers["location"];
+    final tag = location == null ? null : latestTagOf(Uri.parse(location));
+    if (tag == null) {
+      throw FormatException(
+          "the latest release of $repo points at $location, which names no "
+          "tag");
+    }
+    return tag;
+  } finally {
+    // A redirect's body is nothing, but a body nobody reads holds the
+    // socket until the client is closed. A body that errors while it is
+    // drained says nothing about the tag, which is already in hand.
+    try {
+      await response.stream.drain<void>();
+    } catch (_) {}
+  }
 }

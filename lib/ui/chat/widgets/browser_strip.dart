@@ -24,9 +24,9 @@ class BrowserStrip extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final browser = ref.watch(agentBrowserProvider);
-    if (!browser.available ||
-        !browser.configured ||
-        ref.watch(isMirroredChatProvider(chatId))) {
+    // Not `configured`: that reads the disk, this rebuilds per streamed
+    // delta, and a tab with nothing to show draws nothing below anyway.
+    if (!browser.available || ref.watch(isMirroredChatProvider(chatId))) {
       return const SizedBox.shrink();
     }
     final tab = browser.tab(chatId);

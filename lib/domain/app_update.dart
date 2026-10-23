@@ -8,7 +8,8 @@ library;
 /// redirect whose target names the newest release tag.
 const updateRepo = "ByteRepair/entoli";
 
-Uri latestReleaseUrl() => Uri.https("github.com", "/$updateRepo/releases/latest");
+Uri latestReleaseUrl([String repo = updateRepo]) =>
+    Uri.https("github.com", "/$repo/releases/latest");
 
 /// The release assets, named after the app rather than the version — a
 /// person is what downloads them and the tag is where a version lives — so

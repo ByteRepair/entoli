@@ -10,6 +10,18 @@ import "../../core/log.dart";
 import "../../domain/file_tools.dart";
 import "../../domain/shell.dart";
 
+const _appImageVars = {"APPIMAGE", "APPDIR", "ARGV0", "OWD"};
+
+/// This process's environment without the AppImage runtime's variables, which
+/// describe this app rather than what it starts: a command inheriting
+/// `APPDIR` or `ARGV0` misreads both, and Helium's own AppImage would read
+/// ours as its own. Dart cannot unset an inherited variable, so the rest is
+/// copied.
+Map<String, String> environmentWithoutAppImage() => {
+      for (final e in Platform.environment.entries)
+        if (!_appImageVars.contains(e.key)) e.key: e.value,
+    };
+
 /// Runs commands under the [ShellDriver] it is given, in one persistent shell
 /// per chat; a sandboxed or `oneShot` command gets a fresh subshell. See
 /// "Running the commands" in `lib/data/builtin/AGENTS.md`.
@@ -51,16 +63,9 @@ class LocalShell extends Shell {
     // workingDirectory fails with ENOENT that names neither, so make it.
     Directory(cwd).createSync(recursive: true);
     final argv = command.skip(1).toList();
-    // The AppImage runtime's own variables describe the app, not the user's
-    // machine, and a command inheriting `APPDIR` or `ARGV0` misreads both.
-    // Dart cannot unset an inherited variable, so the parent's is copied here.
     if (includeParentEnvironment &&
         _appImageVars.any(Platform.environment.containsKey)) {
-      env = {
-        for (final e in Platform.environment.entries)
-          if (!_appImageVars.contains(e.key)) e.key: e.value,
-        ...env,
-      };
+      env = {...environmentWithoutAppImage(), ...env};
       includeParentEnvironment = false;
     }
     if (_hasSetsid != false && !Platform.isWindows) {
@@ -81,8 +86,6 @@ class LocalShell extends Shell {
         includeParentEnvironment: includeParentEnvironment);
     return (process: process, ownsGroup: false);
   }
-
-  static const _appImageVars = {"APPIMAGE", "APPDIR", "ARGV0", "OWD"};
 
   /// One persistent shell per chat, keyed by the directory it starts in —
   /// which is the chat's own, so it is unique to the chat.
