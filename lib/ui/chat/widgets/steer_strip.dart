@@ -69,8 +69,10 @@ class SteerStrip extends StatelessWidget {
     );
   }
 
+  static final _space = RegExp(r"\s+");
+
   static String _line(Message say) {
-    final text = say.plainText.trim().replaceAll(RegExp(r"\s+"), " ");
+    final text = say.plainText.trim().replaceAll(_space, " ");
     if (text.isNotEmpty) return text;
     return say.files.map((f) => f.filename).join(", ");
   }

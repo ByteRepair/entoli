@@ -237,12 +237,13 @@ class SteerInbox {
     return true;
   }
 
+  /// What the turn has not read yet.
+  List<Message> get pending => List.unmodifiable(_pending);
+
   /// Takes [id] back where the turn has not read it yet.
-  bool withdraw(String id) {
+  Message? withdraw(String id) {
     final at = _pending.indexWhere((m) => m.id == id);
-    if (at < 0) return false;
-    _pending.removeAt(at);
-    return true;
+    return at < 0 ? null : _pending.removeAt(at);
   }
 
   List<Message> take() {

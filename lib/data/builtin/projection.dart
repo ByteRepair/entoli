@@ -96,7 +96,7 @@ Future<List<LlmMessage>> projectionOf(
   // A reply's are the images its tools made, which ride their results.
   final files = await Future.wait(messages.asMap().entries.map((e) =>
       e.key >= from && _filesOf(e.value).isNotEmpty
-          ? _attachments(e.value, load)
+          ? attachmentsOf(e.value, load)
           : _noFiles));
   final projected = <LlmMessage>[];
   // Whether the viewer's first mail has gone by: the dress is once per walk.
@@ -206,14 +206,15 @@ String _userText(Message message) {
 final Future<Map<String, LlmAttachment>> _noFiles = Future.value(const {});
 
 /// A message's own files, and those of what the user said into it mid-turn.
-Iterable<FilePart> _filesOf(Message message) => [
-      ...message.files,
-      for (final steer in message.parts.whereType<SteerPart>())
-        ...steer.message.files,
-    ];
+Iterable<FilePart> _filesOf(Message message) sync* {
+  yield* message.files;
+  for (final steer in message.parts.whereType<SteerPart>()) {
+    yield* steer.message.files;
+  }
+}
 
 /// By resource name, which is how a reply's [FilePart] finds its bytes.
-Future<Map<String, LlmAttachment>> _attachments(Message message, ResourceLoader load) async {
+Future<Map<String, LlmAttachment>> attachmentsOf(Message message, ResourceLoader load) async {
   final loaded = await Future.wait(_filesOf(message).map((file) async {
     final bytes = await load(file.resource);
     return bytes == null

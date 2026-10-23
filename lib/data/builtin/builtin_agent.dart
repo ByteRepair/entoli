@@ -1009,12 +1009,7 @@ class BuiltinAgent {
   /// words it; its images are loaded first, since the rebuild is synchronous.
   Stream<AgentEvent> _steered() async* {
     for (final said in steers?.take() ?? const <Message>[]) {
-      for (final file in said.files) {
-        final bytes = await loadResource(file.resource);
-        if (bytes == null) continue;
-        _images[file.resource] = LlmAttachment(
-            filename: file.filename, mimeType: file.mimeType, bytes: bytes);
-      }
+      _images.addAll(await attachmentsOf(said, loadResource));
       yield SteerEvent(said);
     }
   }

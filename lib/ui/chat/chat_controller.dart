@@ -27,8 +27,7 @@ abstract interface class TurnDriver {
 
   /// Take back a say its turn has not read yet: what it was sent with, or
   /// null where the turn already has it.
-  Future<({String text, List<Attachment> attachments})?> withdrawSteer(
-      String id);
+  Future<Draft?> withdrawSteer(String id);
 
   Future<void> resume();
   Future<void> abort();
@@ -142,9 +141,7 @@ class ChatController extends Notifier<ChatViewState>
   Future<void> queueSteer(String id) => _room.queueSteer(id);
 
   @override
-  Future<({String text, List<Attachment> attachments})?> withdrawSteer(
-          String id) =>
-      _room.withdrawSteer(id);
+  Future<Draft?> withdrawSteer(String id) => _room.withdrawSteer(id);
 
   @override
   Future<void> resume() => _room.resume();

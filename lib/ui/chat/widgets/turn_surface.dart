@@ -6,6 +6,7 @@ import "../../../domain/room/room_state.dart";
 import "../chat_controller.dart";
 import "approval_banner.dart";
 import "browser_strip.dart";
+import "composer.dart" show SendCallback;
 import "question_panel.dart";
 import "resume_bar.dart";
 import "steer_strip.dart";
@@ -33,7 +34,7 @@ class TurnSurface extends StatelessWidget {
 
   /// Where a say taken back from the turn goes: the composer it was typed in.
   /// Null where there is none, as on the voice screen.
-  final void Function(String text, List<Attachment> attachments)? onWithdrawn;
+  final SendCallback? onWithdrawn;
 
   @override
   Widget build(BuildContext context) {

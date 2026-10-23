@@ -279,9 +279,14 @@ class ChatRoom {
     final to = roster.answering(say);
     final turn = _turns.values.firstWhereOrNull((t) => t.agent.handle == to);
     if (turn == null || !turn.steers.offer(say)) return false;
-    _view = state.copyWith(steering: [...state.steering, say]);
+    _showSteering();
     return true;
   }
+
+  /// The strip, read off the inboxes rather than kept beside them.
+  void _showSteering() => _view = state.copyWith(steering: [
+        for (final t in _turns.values) ...t.steers.pending,
+      ]);
 
   /// Send a say still waiting for its turn to read it after the turn instead.
   Future<void> queueSteer(String id) async {
@@ -292,8 +297,7 @@ class ChatRoom {
   /// Take back a say its turn has not read yet, as the composer held it: its
   /// text and its files, read back from where sending saved them. Null where
   /// the turn already has it; a file whose resource has gone is left out.
-  Future<({String text, List<Attachment> attachments})?> withdrawSteer(
-      String id) async {
+  Future<Draft?> withdrawSteer(String id) async {
     final say = _unsteer(id);
     if (say == null) return null;
     final attachments = await Future.wait(say.files.map((f) async {
@@ -306,35 +310,29 @@ class ChatRoom {
   }
 
   Message? _unsteer(String id) {
-    final say = state.steering.firstWhereOrNull((m) => m.id == id);
-    if (say == null || !_turns.values.any((t) => t.steers.withdraw(id))) {
-      return null;
-    }
-    _view = state.copyWith(steering: [
-      for (final m in state.steering)
-        if (m.id != id) m,
-    ]);
+    final say =
+        _turns.values.map((t) => t.steers.withdraw(id)).nonNulls.firstOrNull;
+    if (say != null) _showSteering();
     return say;
   }
 
   Future<void> _sayLater(Message say) async {
-    await _land(say);
-    if (state.chat == null) return;
-    _said.add(say);
-    _drainSaid();
+    await _land([say]);
+    if (state.chat != null) _drainSaid();
   }
 
-  /// Put [say] on the log and on screen, after whatever is there. It goes
-  /// through the room's one append funnel; state is re-read after the write,
-  /// so what changed in flight is not ours to revert.
-  Future<void> _land(Message say) async {
-    await _append(recordsOf([say]));
+  /// Put [says] on the log and on screen, after whatever is there, left to
+  /// be said. It goes through the room's one append funnel; state is re-read
+  /// after the write, so what changed in flight is not ours to revert.
+  Future<void> _land(List<Message> says) async {
+    await _append(recordsOf(says));
     final chat = state.chat;
     if (chat == null) return;
     _view = state.copyWith(
         chat: chat.copyWith(
-            messages: [...chat.messages, say],
+            messages: [...chat.messages, ...says],
             state: chat.state.copyWith(updatedAt: DateTime.now())));
+    _said.addAll(says);
   }
 
   /// What was said while a turn ran, in the order it was said: schedule each,
@@ -764,12 +762,9 @@ class ChatRoom {
       case ImageEvent():
       case InstructionsReadEvent():
         break;
-      case SteerEvent(:final message):
+      case SteerEvent():
         // Read: it is the reply's from here, drawn where it landed.
-        _view = state.copyWith(steering: [
-          for (final m in state.steering)
-            if (m.id != message.id) m,
-        ]);
+        _showSteering();
       case ToolResultEvent():
       case ShellRunEvent():
         // The pair completing is the live block's end: the result and the
@@ -936,14 +931,8 @@ class ChatRoom {
     // this queues behind it.
     final unread = turn.steers.close();
     if (unread.isNotEmpty) {
-      _view = state.copyWith(steering: [
-        for (final m in state.steering)
-          if (!unread.contains(m)) m,
-      ]);
-      for (final say in unread) {
-        await _land(say);
-        _said.add(say);
-      }
+      _showSteering();
+      await _land(unread);
       if (_disposed) return;
     }
     _turns.remove(turn.replyId);
