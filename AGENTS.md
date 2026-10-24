@@ -227,7 +227,8 @@ unlocks it first.
 What it stops is an accident: on the machine itself the same user can `chmod`
 it back. The guests are the reason it matters — proot's fake root and iSH's
 root would otherwise write straight through — and each is patched to leave
-these modes alone; see "Running the commands" in `lib/data/builtin/AGENTS.md`.
+these modes alone; see "A whole Linux under proot" in `lib/data/local/AGENTS.md`
+and "The workspace inside the guest" in `ios/AGENTS.md`.
 
 ### Migrations
 
