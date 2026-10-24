@@ -1300,23 +1300,48 @@ class _CdpTab implements BrowserTab {
   }
 
   @override
-  Future<String> scroll({bool up = false}) async {
+  Future<String> scroll(
+      {bool up = false, int? ref, double? x, double? y}) async {
     final before = await _snapshot(all: false);
     final page = await _attach();
     _lastClick = null;
-    final x = before.width / 2, y = before.view / 2;
-    await _moveTo(x, y);
+    // A wheel scrolls the innermost scroller under it, frames included, so
+    // where it turns is what picks the target.
+    var at = (x: x ?? before.width / 2, y: y ?? before.view / 2);
+    var screen = before.view;
+    // Bringing a ref into view may move the page before the wheel does.
+    var from = before.scrollY;
+    if (ref != null) {
+      final rect = await _rect(ref);
+      final left = rect["left"] as num, top = rect["top"] as num;
+      final width = rect["width"] as num, height = rect["height"] as num;
+      // An element taller than the viewport is centred on it, its middle on
+      // screen; clamped anyway, since a wheel off screen lands on nothing.
+      at = (
+        x: (left + width / 2).clamp(0, before.width - 1).toDouble(),
+        y: (top + height / 2).clamp(0, before.view - 1).toDouble(),
+      );
+      screen = min(height.toDouble(), screen);
+      from = (rect["scrollY"] as num).round();
+    }
+    await _moveTo(at.x, at.y);
     await page.cdp.send("Input.dispatchMouseEvent",
         params: {
           "type": "mouseWheel",
-          "x": x,
-          "y": y,
+          "x": at.x,
+          "y": at.y,
           "deltaX": 0,
-          "deltaY": (up ? -1 : 1) * before.view * 0.85,
+          "deltaY": (up ? -1 : 1) * screen * 0.85,
         },
         sessionId: page.session);
     await Future<void>.delayed(const Duration(milliseconds: 500));
-    return _describeView();
+    final moved = (await _snapshot(all: false)).scrollY != from;
+    final view = await _describeView();
+    if (moved) return view;
+    // The position the view reports is the page's, so an inner panel that
+    // moved, or nothing having moved, would otherwise read the same.
+    return "The page itself did not move; a panel or frame under the wheel "
+        "may have. A screenshot shows which.\n\n$view";
   }
 
   @override

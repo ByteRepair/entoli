@@ -1526,8 +1526,13 @@ class BuiltinAgent {
         run = () => tab.drag(from, to);
       case browserScrollToolName:
         final up = args["direction"] == "up";
-        label = up ? "up" : "down";
-        run = () => tab.scroll(up: up);
+        final at = ref();
+        final x = number(args["x"]), y = number(args["y"]);
+        label = [
+          up ? "up" : "down",
+          if (at != null) "in [$at]" else if (x != null && y != null) "at ($x, $y)",
+        ].join(" ");
+        run = () => tab.scroll(up: up, ref: at, x: x, y: y);
       case browserBackToolName:
         label = "back";
         run = tab.back;
