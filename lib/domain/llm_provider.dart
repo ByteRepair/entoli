@@ -53,6 +53,14 @@ class LlmProviderConfig {
 
   String get displayName => label ?? id;
 
+  /// Whether this endpoint takes a PDF as a block. Anthropic's API does, and
+  /// OpenAI's own `/chat/completions` does as a `file` part; the compatible
+  /// servers mostly reject that part, and Gemini's compatibility layer does
+  /// not document one, so a model that reads PDFs is still not sent one there.
+  bool get takesPdfs =>
+      api == LlmApi.anthropic ||
+      (Uri.tryParse(baseUrl)?.host == "api.openai.com");
+
   /// [lookup] reads the app's own environment and whatever settings adds, so a
   /// key can be named there instead of pasted here.
   String? resolveKeyWith(String? Function(String name) lookup) {

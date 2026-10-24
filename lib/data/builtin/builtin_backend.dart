@@ -35,7 +35,7 @@ import "memory/store.dart";
 import "llm/gated_client.dart";
 import "llm/llm_client.dart";
 import "llm/openai_client.dart";
-import "llm/text_only_client.dart";
+import "llm/readable_client.dart";
 import "llm/llm_registry.dart";
 import "llm/rate_limit_gate.dart";
 import "permission_classifier.dart";
@@ -466,7 +466,8 @@ class BuiltinBackend implements AgentBackend {
             ? (browser.tab(chatId)
               ..downloadDir = config.fs.path.join(workspace, "downloads"))
             : null,
-        seesImages: target.info?.readsImages ?? true,
+        seesImages: target.images,
+        seesPdfs: target.pdfs,
         browserHidden: browser.hidden,
         browserUploads: AppSettings.load(config).agentBrowserUploads,
         browserApprove: switch (AppSettings.load(config).agentBrowserApproval) {
@@ -1300,11 +1301,16 @@ class BuiltinBackend implements AgentBackend {
     // Here rather than at each request: everything that asks the model
     // resolves it through this, the compaction's one-shot read included.
     // Unknown passes images through: a model only the endpoint lists is
-    // trusted as it was before there was a catalog to ask.
+    // trusted as it was before there was a catalog to ask. Not PDFs, which
+    // most endpoints refuse outright whatever the model.
+    final images = info?.readsImages ?? true;
+    final pdfs = (info?.readsPdfs ?? false) && config.takesPdfs;
     return (
-      client: info?.readsImages ?? true ? client : TextOnlyClient(client),
+      client: ReadableClient(client, images: images, pdfs: pdfs),
       modelId: modelId,
       info: info,
+      images: images,
+      pdfs: pdfs,
     );
   }
 
@@ -1553,4 +1559,10 @@ class _RunningTurns extends ValueNotifier<Set<String>> {
 }
 
 /// A model resolved to ask: the client, the id, and what the catalog knows.
-typedef _Target = ({LlmClient client, String modelId, ModelInfo? info});
+typedef _Target = ({
+  LlmClient client,
+  String modelId,
+  ModelInfo? info,
+  bool images,
+  bool pdfs,
+});

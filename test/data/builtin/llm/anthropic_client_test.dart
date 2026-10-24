@@ -265,6 +265,30 @@ void main() {
       expect(blocks[1]["source"]["media_type"], "image/png");
       expect(blocks[1]["source"]["data"], base64Encode(const [1, 2, 3]));
     });
+
+    test("a PDF goes as a document block, ahead of the text", () async {
+      await clientStreaming([]).stream([
+        LlmMessage(
+          role: LlmRole.user,
+          text: "summarise",
+          attachments: [
+            LlmAttachment(
+                filename: "a.pdf", mimeType: "application/pdf", bytes: bytesOf([1, 2])),
+          ],
+        ),
+      ], model: "claude-test").toList();
+
+      final blocks = (sentBody()["messages"] as List).single["content"] as List;
+      expect(blocks[0], {
+        "type": "document",
+        "source": {
+          "type": "base64",
+          "media_type": "application/pdf",
+          "data": base64Encode(const [1, 2]),
+        },
+      });
+      expect(blocks[1], {"type": "text", "text": "summarise"});
+    });
   });
 
   group("listing models", () {
@@ -305,5 +329,20 @@ void main() {
     final result = ((sentBody()["messages"] as List).last["content"] as List).single as Map;
     expect(result["type"], "tool_result");
     expect((result["content"] as List).map((b) => b["type"]), ["text", "image"]);
+  });
+
+  test("a tool result's PDF goes inside it as a document", () async {
+    await clientStreaming([{"type": "message_stop"}]).stream([
+      const LlmMessage(role: LlmRole.user, text: "read it"),
+      const LlmMessage(role: LlmRole.assistant, toolCalls: [
+        LlmToolCall(id: "c1", name: "read", argumentsJson: "{}"),
+      ]),
+      LlmMessage(role: LlmRole.tool, toolCallId: "c1", text: "PDF a.pdf attached.", attachments: [
+        LlmAttachment(filename: "a.pdf", mimeType: "application/pdf", bytes: Uint8List.fromList([1])),
+      ]),
+    ], model: "claude-test").toList();
+
+    final result = ((sentBody()["messages"] as List).last["content"] as List).single as Map;
+    expect((result["content"] as List).map((b) => b["type"]), ["text", "document"]);
   });
 }

@@ -33,6 +33,7 @@ import "file_tools.dart" as file_tool_defs;
 import "image_tool.dart";
 import "llm/llm_client.dart";
 import "llm/rate_limit_gate.dart";
+import "llm/readable_client.dart" show pdfBudgetBytes;
 import "../prompts/skill_import.dart" show SkillImportException;
 import "participants_tool.dart";
 import "skill_create_tool.dart";
@@ -431,6 +432,7 @@ class BuiltinAgent {
     this.webSearch,
     this.browser,
     this.seesImages = true,
+    this.seesPdfs = false,
     this.browserHidden = false,
     this.browserApprove = ApproveMode.never,
     this.browserUploads = BrowserUploadPolicy.classifier,
@@ -735,6 +737,10 @@ class BuiltinAgent {
   /// Whether the model reads images, which is what offers the browser's
   /// screenshot: one that cannot would be sent each one as nothing.
   final bool seesImages;
+
+  /// Whether a PDF reaches the model as a document, which is what `read`
+  /// answers one with.
+  final bool seesPdfs;
 
   /// Whether the browser runs with no window, which offers `browser_show`.
   final bool browserHidden;
@@ -1840,16 +1846,45 @@ class BuiltinAgent {
     // or gated read never ran, so it pulled nothing in — and it stands in
     // for null, so nothing downstream has to test for it.
     var nested = const <InstructionFile>[];
+    // An image or PDF read, saved the way a screenshot is so it rides this
+    // call's result on every reading of the conversation.
+    ImageEvent? attached;
+    Future<ShellResult> attach(String type, Uint8List bytes) async {
+      final pdf = type == "application/pdf";
+      if (!(pdf ? seesPdfs : seesImages) || saveResource == null) {
+        return ShellResult.failed(pdf
+            ? "${args.path} is a PDF, which this model cannot read directly "
+                "here. Extract its text with a command instead, such as "
+                "`pdftotext`."
+            : "${args.path} is an image, which this model cannot view.");
+      }
+      String megabytes(int n) => "${(n / 1000000).toStringAsFixed(1)} MB";
+      final limit = pdf ? pdfBudgetBytes : file_tool_defs.maxReadImageBytes;
+      if (bytes.length > limit) {
+        return ShellResult.failed("${args.path} is ${megabytes(bytes.length)}, "
+            "over the ${megabytes(limit)} a request can carry. "
+            "${pdf ? "Split it" : "Downscale it"} with a command, then read the result.");
+      }
+      attached = await _saved(LlmAttachment(
+          filename: fs.path.basename(path), mimeType: type, bytes: bytes));
+      return ShellResult(
+          returnCode: 0,
+          output: "${pdf ? "PDF" : "Image"} ${args.path} attached.");
+    }
+
     Future<ShellResult> run() async {
       final file = fs.file(path);
       if (!await file.exists()) {
         return ShellResult(
             returnCode: -1, output: "", exceptionInfo: "File not found: ${args.path}");
       }
+      final bytes = await file.readAsBytes();
+      final type = file_tool_defs.readBlockTypeOf(bytes);
+      if (type != null) return attach(type, bytes);
       String content;
       try {
-        content = await file.readAsString();
-      } on FileSystemException {
+        content = utf8.decode(bytes);
+      } on FormatException {
         return ShellResult(
             returnCode: -1,
             output: "",
@@ -1883,7 +1918,11 @@ class BuiltinAgent {
           : "$result\n\n${renderInstructions(nested)}";
       return ShellResult(returnCode: 0, output: output);
     }
-    yield* _runFileTool(call, path, readToolName, run);
+    yield* _gatedPath(call, path, readToolName, run, granted: _grantedDirs);
+    // Between the call and its result, which is where the projection looks
+    // for a tool's files.
+    if (attached != null) yield attached!;
+    yield ToolResultEvent(_ran(call, _commandResult!));
     // A successful read reports what it reached here, the claim deciding
     // which of the findings are this conversation's first.
     if (nested.isNotEmpty) {

@@ -1,4 +1,5 @@
 import "dart:convert";
+import "dart:typed_data";
 
 import "package:flutter_test/flutter_test.dart";
 import "package:http/http.dart" as http;
@@ -286,7 +287,7 @@ void main() {
       expect(content[1]["image_url"]["url"], startsWith("data:image/png;base64,"));
     });
 
-    test("anything else is named rather than sent", () async {
+    test("a PDF goes as a file part, as a data URL", () async {
       await clientStreaming(["[DONE]"]).stream([
         LlmMessage(
           role: LlmRole.user,
@@ -295,6 +296,32 @@ void main() {
             LlmAttachment(
               filename: "report.pdf",
               mimeType: "application/pdf",
+              bytes: bytesOf([1, 2]),
+            ),
+          ],
+        ),
+      ], model: "gpt-test").toList();
+
+      final content = (sentBody()["messages"] as List).single["content"] as List;
+      expect(content[0], {"type": "text", "text": "have a look"});
+      expect(content[1], {
+        "type": "file",
+        "file": {
+          "filename": "report.pdf",
+          "file_data": "data:application/pdf;base64,${base64Encode(const [1, 2])}",
+        },
+      });
+    });
+
+    test("anything else is named rather than sent", () async {
+      await clientStreaming(["[DONE]"]).stream([
+        LlmMessage(
+          role: LlmRole.user,
+          text: "have a look",
+          attachments: [
+            LlmAttachment(
+              filename: "data.zip",
+              mimeType: "application/zip",
               bytes: bytesOf([0]),
             ),
           ],
@@ -302,7 +329,7 @@ void main() {
       ], model: "gpt-test").toList();
 
       final content = (sentBody()["messages"] as List).single["content"] as String;
-      expect(content, contains("(attached: report.pdf, application/pdf)"));
+      expect(content, contains("(attached: data.zip, application/zip)"));
     });
   });
 
@@ -473,6 +500,21 @@ void main() {
       expect(sent.map((m) => m["role"]), ["assistant", "tool", "tool", "user"]);
       expect(sent[1]["content"], "made");
       expect((sent.last["content"] as List).last["image_url"]["url"], png);
+    });
+
+    test("a tool result's PDF follows the results as a file part", () async {
+      await clientStreaming(["[DONE]"]).stream([
+        const LlmMessage(role: LlmRole.assistant, toolCalls: [
+          LlmToolCall(id: "c1", name: "read", argumentsJson: "{}"),
+        ]),
+        LlmMessage(role: LlmRole.tool, toolCallId: "c1", text: "PDF a.pdf attached.", attachments: [
+          LlmAttachment(filename: "a.pdf", mimeType: "application/pdf", bytes: Uint8List(1)),
+        ]),
+      ], model: "gpt-test").toList();
+
+      final sent = (sentBody()["messages"] as List).cast<Map<String, dynamic>>();
+      expect(sent.map((m) => m["role"]), ["assistant", "tool", "user"]);
+      expect((sent.last["content"] as List).last["type"], "file");
     });
 
     test("quality is sent as the Images API names it", () async {

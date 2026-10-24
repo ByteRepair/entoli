@@ -603,6 +603,7 @@ class _AddModelPageState extends ConsumerState<AddModelPage> {
   late var _toolCall = widget.role == ModelRole.agent;
   var _reasoning = false;
   var _readsImages = false;
+  var _readsPdfs = false;
   late var _makesImages = widget.role == ModelRole.image;
 
   @override
@@ -629,6 +630,7 @@ class _AddModelPageState extends ConsumerState<AddModelPage> {
             toolCall: _toolCall,
             reasoning: _reasoning,
             readsImages: _readsImages,
+            readsPdfs: _readsPdfs,
             makesImages: _makesImages,
           ),
         );
@@ -724,6 +726,13 @@ class _AddModelPageState extends ConsumerState<AddModelPage> {
               subtitle: const Text("Images are sent to it rather than named"),
               value: _readsImages,
               onChanged: (v) => setState(() => _readsImages = v),
+            ),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text("Reads PDFs"),
+              subtitle: const Text("PDFs are sent to it, where the provider takes them"),
+              value: _readsPdfs,
+              onChanged: (v) => setState(() => _readsPdfs = v),
             ),
             SwitchListTile(
               contentPadding: EdgeInsets.zero,

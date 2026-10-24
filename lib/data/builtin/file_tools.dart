@@ -1,3 +1,7 @@
+import "dart:typed_data";
+
+import "package:mime/mime.dart";
+
 import "../../domain/file_tools.dart";
 import "llm/llm_client.dart";
 
@@ -10,6 +14,8 @@ const readTool = LlmTool(
       "`project:` to read from the project workspace; an absolute path reads "
       "the machine directly, and the user is asked before it runs. Use "
       "`offset` and `limit` (1-indexed) to read a slice of a large file. "
+      "An image or a PDF comes back as itself, for you to look at, where "
+      "this model can take one. "
       "Any AGENTS.md in the directories above the file comes back with it: "
       "follow those instructions.",
   schema: {
@@ -33,6 +39,31 @@ const readTool = LlmTool(
     "required": ["path"],
   },
 );
+
+/// The types `read` hands to the model as the file itself rather than decoding
+/// it as text: the images every provider takes, and PDFs.
+const readBlockTypes = {
+  "image/png",
+  "image/jpeg",
+  "image/gif",
+  "image/webp",
+  "application/pdf",
+};
+
+/// Over this an image fails the whole request: Anthropic's limit is 5 MB, and
+/// that is of the base64.
+const maxReadImageBytes = 3750000;
+
+/// What [bytes] are, where they are one of [readBlockTypes]. By their magic
+/// number alone: a name says `.png` of a file that is not one just as easily,
+/// and a block a provider cannot decode fails every request it stays in.
+String? readBlockTypeOf(Uint8List bytes) {
+  final type = lookupMimeType("",
+      headerBytes: bytes.length > defaultMagicNumbersMaxLength
+          ? Uint8List.sublistView(bytes, 0, defaultMagicNumbersMaxLength)
+          : bytes);
+  return readBlockTypes.contains(type) ? type : null;
+}
 
 /// Write a file to the workspace. Creates or overwrites. No append or merge.
 const writeTool = LlmTool(

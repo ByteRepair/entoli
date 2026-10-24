@@ -256,33 +256,38 @@ class AnthropicClient implements LlmClient {
 
   List<Map<String, dynamic>> _userBlocks(LlmMessage message) {
     if (message.role == LlmRole.tool) {
-      final images = message.attachments.where((a) => a.isImage);
+      final files = message.attachments.where(_isBlock);
       return [
         {
           "type": "tool_result",
           "tool_use_id": message.toolCallId ?? "",
-          "content": images.isEmpty
+          "content": files.isEmpty
               ? message.text
               : [
                   {"type": "text", "text": message.text},
-                  ...images.map(_imageBlock),
+                  ...files.map(_block),
                 ],
         },
       ];
     }
     final text = inlineText(message);
     return [
+      // Documents ahead of the text that asks about them, as Anthropic
+      // recommends; images after it, where they have always gone.
+      ...message.attachments.where((a) => a.isPdf).map(_block),
       if (text.isNotEmpty) {"type": "text", "text": text},
-      ...message.attachments.where((a) => a.isImage).map(_imageBlock),
+      ...message.attachments.where((a) => a.isImage).map(_block),
     ];
   }
 
-  Map<String, dynamic> _imageBlock(LlmAttachment image) => {
-        "type": "image",
+  static bool _isBlock(LlmAttachment a) => a.isImage || a.isPdf;
+
+  Map<String, dynamic> _block(LlmAttachment file) => {
+        "type": file.isPdf ? "document" : "image",
         "source": {
           "type": "base64",
-          "media_type": image.mimeType,
-          "data": image.base64,
+          "media_type": file.mimeType,
+          "data": file.base64,
         },
       };
 

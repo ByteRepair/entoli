@@ -1,4 +1,5 @@
 import "dart:async";
+import "dart:convert";
 import "dart:io";
 import "dart:typed_data";
 
@@ -50,6 +51,8 @@ void main() {
     String? memoryChat,
     SandboxHelper? sandboxHelper,
     SteerInbox? steers,
+    bool seesImages = true,
+    bool seesPdfs = false,
   }) {
     final tempDir = Directory.systemTemp.createTempSync("agent-test");
     final testProjectWorkspace = p.join(tempDir.path, "project-workspace");
@@ -83,6 +86,8 @@ void main() {
       memoryChat: memoryChat,
       sandboxHelper: sandboxHelper,
       steers: steers,
+      seesImages: seesImages,
+      seesPdfs: seesPdfs,
     );
   }
 
@@ -968,6 +973,67 @@ void main() {
   });
 
   group("file tools", () {
+    group("read of an image or a PDF", () {
+      final png = Uint8List.fromList([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0]);
+      final pdf = Uint8List.fromList(utf8.encode("%PDF-1.4\n"));
+
+      Future<List<AgentEvent>> read(String name, Uint8List bytes,
+          {bool seesImages = true, bool seesPdfs = true, bool canSave = true}) {
+        final agent = agentOver(
+          FakeLlmClient([
+            [readCall(name)],
+            [finish],
+          ]),
+          seesImages: seesImages,
+          seesPdfs: seesPdfs,
+          saveResource: canSave ? (filename, _) async => "res-$filename" : null,
+        );
+        File(p.join(agent.workspace, name)).writeAsBytesSync(bytes);
+        return agent.run(userMessage("look")).toList();
+      }
+
+      test("comes back as the file, between the call and its result", () async {
+        for (final (name, bytes, type) in [
+          ("shot.png", png, "image/png"),
+          ("spec.pdf", pdf, "application/pdf"),
+        ]) {
+          final events = await read(name, bytes);
+          final image = events.whereType<ImageEvent>().single;
+          expect(image.part.resource, "res-$name");
+          expect(image.part.mimeType, type);
+          expect(events.indexOf(image),
+              lessThan(events.indexWhere((e) => e is ToolResultEvent)));
+          final result = events.whereType<ToolResultEvent>().single.result;
+          expect(result.returnCode, 0);
+          expect(result.output, contains("attached"));
+        }
+      });
+
+      test("is known by its bytes, not its name", () async {
+        final events = await read("shot.txt", png);
+        expect(events.whereType<ImageEvent>().single.part.mimeType, "image/png");
+        final named = await read("notes.png", Uint8List.fromList(utf8.encode("hi")));
+        expect(named.whereType<ImageEvent>(), isEmpty);
+        expect(named.whereType<ToolResultEvent>().single.result.output, contains("hi"));
+      });
+
+      test("fails saying why where the model cannot take it", () async {
+        Future<String?> refused(String name, Uint8List bytes,
+            {bool seesImages = true, bool seesPdfs = true, bool canSave = true}) async {
+          final events = await read(name, bytes,
+              seesImages: seesImages, seesPdfs: seesPdfs, canSave: canSave);
+          expect(events.whereType<ImageEvent>(), isEmpty);
+          return events.whereType<ToolResultEvent>().single.result.exceptionInfo;
+        }
+
+        expect(await refused("spec.pdf", pdf, seesPdfs: false), contains("pdftotext"));
+        expect(await refused("shot.png", png, seesImages: false), contains("cannot view"));
+        expect(await refused("shot.png", png, canSave: false), contains("cannot view"));
+        final huge = Uint8List(4000000)..setAll(0, png);
+        expect(await refused("huge.png", huge), contains("Downscale"));
+      });
+    });
+
     test("write creates a file and read reads it back", () async {
       final client = FakeLlmClient([
         [writeCall("hello.txt", "hello world")],
@@ -1196,11 +1262,11 @@ void main() {
     test("a tool that throws is a failed result, not a thrown one", () async {
       // Reading a binary: refused with what it found, killing no stream.
       final read = FakeLlmClient([
-        [readCall("image.png")],
+        [readCall("data.bin")],
         [finish],
       ]);
       final reads = agentOver(read);
-      File(p.join(reads.workspace, "image.png")).writeAsBytesSync(onePixelPng);
+      File(p.join(reads.workspace, "data.bin")).writeAsBytesSync([0xFF, 0xFE, 0x00, 0x80]);
 
       final readEvents = await reads.run(userMessage("read it")).toList();
 
@@ -1208,7 +1274,7 @@ void main() {
       final readResult = readEvents.whereType<ToolResultEvent>().single.result;
       expect(readResult.returnCode, -1);
       expect(readResult.exceptionInfo, contains("binary"));
-      expect(readResult.exceptionInfo, contains("image.png"));
+      expect(readResult.exceptionInfo, contains("data.bin"));
 
       // Writing over a file: the throw is the failed result.
       final write = FakeLlmClient([

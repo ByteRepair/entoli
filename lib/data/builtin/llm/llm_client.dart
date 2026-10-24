@@ -30,8 +30,9 @@ class LlmToolCall {
 }
 
 /// A file the user attached, as the provider takes it. Text is inlined into
-/// the prompt; an image goes as its own block; anything else is named, because
-/// a model that cannot read it is better told it exists than handed bytes.
+/// the prompt; an image or a PDF goes as its own block; anything else is
+/// named, because a model that cannot read it is better told it exists than
+/// handed bytes.
 class LlmAttachment {
   LlmAttachment({required this.filename, required this.mimeType, required this.bytes});
 
@@ -40,6 +41,16 @@ class LlmAttachment {
   final Uint8List bytes;
 
   bool get isImage => mimeType.startsWith("image/");
+
+  bool get isPdf => mimeType == "application/pdf";
+
+  /// Roughly: page objects counted in the raw bytes. One kept in a compressed
+  /// object stream is invisible to this, so a file showing none is guessed at
+  /// a page per 100 KB instead.
+  late final int pdfPages = () {
+    final pages = _pageObject.allMatches(latin1.decode(bytes)).length;
+    return pages > 0 ? pages : bytes.length ~/ 100000 + 1;
+  }();
 
   bool get isText => mimeType.startsWith("text/") || mimeType == "application/json";
 
@@ -64,6 +75,8 @@ class LlmAttachment {
   int get hashCode =>
       Object.hash(filename, mimeType, const ListEquality<int>().hash(bytes));
 }
+
+final _pageObject = RegExp(r"/Type\s*/Page(?![a-zA-Z])");
 
 class LlmMessage {
   const LlmMessage({
