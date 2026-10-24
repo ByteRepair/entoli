@@ -282,6 +282,7 @@ class BuiltinBackend implements AgentBackend {
       // A chat from before attachments were read-only, or one whose files a
       // restore or a sync wrote, is locked before the agent can reach it.
       await store.lockResources(chatId);
+      final readOnly = await _readOnlyFor(chatId, project);
       final workspace = config.workspaceDir(chatId, project: project);
       final projectWorkspace = _projectWorkspaceFor(
           workspace: workspace,
@@ -326,6 +327,7 @@ class BuiltinBackend implements AgentBackend {
         sharedWorkspace: settings.sharedWorkspace,
         permissions: settings.permissions,
         writableDirs: settings.writableDirs,
+        readOnlyDirs: readOnly,
         project: project,
         tone: settings.tone,
         citations: settings.citations,
@@ -518,6 +520,7 @@ class BuiltinBackend implements AgentBackend {
         saveResource: (filename, bytes) =>
             store.saveResource(chatId, filename, bytes),
         attachmentsDir: config.resourcesDir(chatId, project: project),
+        readOnlyDirs: readOnly,
         registerTrigger: triggerRegistry?.call(chatId, project),
         editSettings: editSettings,
         packageSkill: (path, name) async {
@@ -662,7 +665,7 @@ class BuiltinBackend implements AgentBackend {
         project: project,
         // The agent's commands and this share the chat's shell, which
         // respawns where the binds differ.
-        readOnly: [config.resourcesDir(chatId, project: project)]);
+        readOnly: await _readOnlyFor(chatId, project));
     // Before the wait, so Stop kills the command rather than only closing the
     // stream over it.
     _running.replace(stopKey, run.kill);
@@ -875,6 +878,26 @@ class BuiltinBackend implements AgentBackend {
   /// Where this chat's attachment bytes come from, for the projection.
   ResourceLoader _resourcesOf(String chatId) =>
       (resource) => store.readResource(chatId, resource);
+
+  /// What a command in this chat may read and must not write: its own
+  /// attachments, and the skills directories its project reaches — the
+  /// default's, which every project inherits, and its own. One list for every
+  /// shell, so proot and iSH guard the same places. Only those that exist:
+  /// proot refuses a bind whose host path is missing, and a project's skills
+  /// directories appear only once it has some.
+  Future<List<String>> _readOnlyFor(String chatId, String? project) async {
+    final dirs = [
+      config.resourcesDir(chatId, project: project),
+      for (final tier in {null, project}) ...[
+        config.bundledSkillsDir(project: tier),
+        config.promptsDir(CompletionKind.skill, project: tier),
+      ],
+    ];
+    return [
+      for (final dir in dirs)
+        if (await config.fs.directory(dir).exists()) dir,
+    ];
+  }
 
   /// [messages] of this chat as the model reads them, the attachments read
   /// and named from its own `resources/`. The one way the backend projects,

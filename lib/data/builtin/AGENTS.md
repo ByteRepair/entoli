@@ -972,9 +972,12 @@ saw, and the workspace file may have changed or gone since.
 A chat's `resources/` is read-only to the agent (see "Read-only directories"
 in the root notes). The projection's note names each attachment with its path
 — `(attached, read-only: spec.pdf at <path>)` — and that path is the host's in
-every shell: proot binds the chat's `resources/` at its own host path (passed
-down as `Shell.start`'s `readOnly`), and iSH binds the whole data directory at
-its host path already. One path for every shell keeps the wording the same
+every shell: proot binds the chat's `resources/` at its own host path, and iSH
+mounts it read-only over the data-directory bind it has at its host path
+already. Both take it from `Shell.start`'s `readOnly`, which the backend builds
+once per turn (`_readOnlyFor`) as the chat's `resources/` plus every skills
+directory its project reaches, and hands to the agent, its sub-agents and a
+`!` command alike, so the guests guard the same places. One path for every shell keeps the wording the same
 whichever one a turn runs under, and needs no prefix of its own.
 
 `read` reads under it without asking, though it is outside the workspaces.

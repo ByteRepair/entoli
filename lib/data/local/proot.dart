@@ -50,13 +50,10 @@ ShellDriver prootDriver({
       "--kill-on-exit",
       "--link2symlink",
       "-0",
-      // The skills and what [readOnly] names are read-only on disk, and the
-      // fake root `-0` grants would otherwise write through that: our patch
-      // to proot keeps it from overriding a refusal, or a chmod, under these.
-      for (final dir in [...hostToGuest.keys, ...readOnly]) ...[
-        "--read-only",
-        dir,
-      ],
+      // What [readOnly] names is read-only on disk, and the fake root `-0`
+      // grants would otherwise write through that: our patch to proot keeps
+      // it from overriding a refusal, or a chmod, under these.
+      for (final dir in readOnly) ...["--read-only", dir],
       "-b", "/dev",
       "-b", "/proc",
       "-b", "/sys",
@@ -71,8 +68,10 @@ ShellDriver prootDriver({
       // skill and a project override are both reachable.
       ...binds,
       // At their own host paths, so the path the model is told of an
-      // attachment is one answer whichever shell it runs in.
-      for (final dir in readOnly) ...["-b", "$dir:$dir"],
+      // attachment is one answer whichever shell it runs in. A skills
+      // directory is bound at its clean path above already.
+      for (final dir in readOnly)
+        if (!hostToGuest.containsKey(dir)) ...["-b", "$dir:$dir"],
       "-b", "${proot.tmpDir}:/tmp",
       "-b", "${proot.resolvConf}:/etc/resolv.conf",
       // The guest path of the chat workspace, not "." — proot stores -w as

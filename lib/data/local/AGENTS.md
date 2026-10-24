@@ -243,9 +243,10 @@ only directories" in the root notes) were writable in the guest as if nothing
 had locked them. `tool/android/patches/proot-read-only.patch`, applied by
 `build.sh`, adds `--read-only PATH`: the hook skips anything under PATH, so the
 kernel's refusal reaches the guest, and a small extension refuses `chmod`,
-`fchmod` and `fchmodat` there with `EROFS`. The driver passes it for the skill
-directories and the chat's `resources/`, which it also binds at its own host
-path. Checked on a host build of the same tree: without the flag a guest root
+`fchmod` and `fchmodat` there with `EROFS`. The driver passes it for each of
+`Shell.start`'s `readOnly` — the chat's `resources/` and the skills
+directories, one list the backend builds for every shell — binding at its own
+host path whatever it has not bound at a clean one already. Checked on a host build of the same tree: without the flag a guest root
 overwrote, deleted, renamed and `chmod`ed a `0444` file in a `0555` directory;
 with it, each was refused and reads still worked.
 

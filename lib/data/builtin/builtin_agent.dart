@@ -439,6 +439,7 @@ class BuiltinAgent {
     this.seesImages = true,
     this.seesPdfs = false,
     this.attachmentsDir,
+    this.readOnlyDirs = const [],
     this.browserHidden = false,
     this.browserApprove = ApproveMode.never,
     this.browserUploads = BrowserUploadPolicy.classifier,
@@ -754,6 +755,11 @@ class BuiltinAgent {
   /// unasked, and `attachment_save` is how a copy that can change is made.
   /// Null where the agent has none, a sub-agent.
   final String? attachmentsDir;
+
+  /// What a command may read and must not write, every shell alike: the
+  /// chat's attachments and the skills directories. A guest binds and guards
+  /// them; on the machine they are read-only on disk already.
+  final List<String> readOnlyDirs;
 
   bool _inAttachments(String path) =>
       attachmentsDir != null && isUnder(fs, path, attachmentsDir!);
@@ -3122,7 +3128,7 @@ class BuiltinAgent {
         restart: args?["restart"] == true,
         project: project,
         sandbox: sandbox,
-        readOnly: [?attachmentsDir]);
+        readOnly: readOnlyDirs);
     _running = run;
     _runWatched(call, run);
     try {

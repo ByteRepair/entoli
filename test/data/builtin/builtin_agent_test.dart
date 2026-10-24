@@ -94,6 +94,7 @@ void main() {
       seesImages: seesImages,
       seesPdfs: seesPdfs,
       attachmentsDir: attachments ? attachmentsDir : null,
+      readOnlyDirs: attachments ? [attachmentsDir] : const [],
     );
   }
 

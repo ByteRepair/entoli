@@ -360,8 +360,10 @@ substituting Entoli's own view controller for the `currentTerminalViewController
 iSH's shell expects as the picker's presenter.
 
 **What the app keeps read-only stays read-only in the guest.** A chat's
-`resources/` is bound read-only at its own host path (`bind_read_only`, the
-list passed in `ish_session_init`'s `read_only`), over the data-directory bind
+`resources/` and the skills directories — `Shell.start`'s `readOnly`, the one
+list the backend builds for every shell — are bound read-only at their own
+host paths (`bind_read_only`, through `ish_session_init`'s `read_only`), over
+the data-directory bind
 that already reaches it: the longer mount point wins the lookup. Upstream
 records `MS_READONLY_` and only ever shows it in `/proc/mounts`;
 `tool/ios/ish/patches/read-only-mounts.patch`, applied by `build.sh` to the

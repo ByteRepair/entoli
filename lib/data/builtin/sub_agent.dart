@@ -47,6 +47,7 @@ class SubAgentRunner {
     this.citations = false,
     this.permissions = const [],
     this.writableDirs = const [],
+    this.readOnlyDirs = const [],
   });
 
   final LlmClient client;
@@ -81,6 +82,9 @@ class SubAgentRunner {
   /// What the sub-agent's sandboxed commands may write to beside the
   /// workspace, the parent's grant carried down.
   final List<String> writableDirs;
+
+  /// The parent's, so a worker's commands are kept from the same places.
+  final List<String> readOnlyDirs;
 
   /// The project this sub-agent's turn is in, inherited from the parent so the
   /// shell driver resolves the same rootfs instance.
@@ -178,6 +182,7 @@ class SubAgentRunner {
       citations: citations,
       permissions: permissions,
       writableDirs: writableDirs,
+      readOnlyDirs: readOnlyDirs,
       webSearch: webSearch,
       rateLimitGate: rateLimitGate,
     );
