@@ -658,7 +658,7 @@ class ChatRoom {
     turn.sub = stream.listen(
         (event) => _onEvent(turn, event),
         onDone: () => _finishTurn(turn),
-        onError: (Object e) => _onError(turn, e));
+        onError: (Object e, StackTrace trace) => _onError(turn, e, trace));
   }
 
   /// The user message that produced [messageId] — itself when it is one,
@@ -1097,11 +1097,11 @@ class ChatRoom {
   /// next dispatch.
   OmadaOrdering get _ordering => _host.ordering(state.chat?.state.project);
 
-  void _onError(_RunningTurn turn, Object e) {
+  void _onError(_RunningTurn turn, Object e, StackTrace trace) {
     turn.retryable = false;
     final message = e.toString();
     turn.errorLine = message.split("\n").first;
-    turn.recorder.handle(ErrorEvent(message));
+    turn.recorder.handle(ErrorEvent(message, trace: trace.toString()));
     _finishTurn(turn);
   }
 

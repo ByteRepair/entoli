@@ -874,6 +874,7 @@ class BuiltinAgent {
   /// and the turn is single-threaded.
   LlmCompletion? _completion;
   Object? _queryError;
+  StackTrace? _queryTrace;
   ShellResult? _commandResult;
 
   /// Stop the turn. Kills whatever is running: an aborted turn that leaves a
@@ -979,11 +980,13 @@ class BuiltinAgent {
 
       _completion = null;
       _queryError = null;
+      _queryTrace = null;
       yield* _query();
       if (_cancelled) break;
       if (_queryError != null) {
         yield ErrorEvent("$_queryError",
-            retryable: _queryError is LlmException && (_queryError as LlmException).retryable);
+            retryable: _queryError is LlmException && (_queryError as LlmException).retryable,
+            trace: _queryTrace?.toString());
         break;
       }
       final completion = _completion;
@@ -3374,8 +3377,9 @@ class BuiltinAgent {
         yield RetryEvent(attempt: attempt, message: e.toString());
         await Future<void>.delayed(options.retryBackoff * (1 << (attempt - 1)));
         attempt++;
-      } catch (e) {
+      } catch (e, trace) {
         _queryError = e;
+        _queryTrace = trace;
         return;
       }
     }

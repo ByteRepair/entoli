@@ -311,6 +311,18 @@ void main() {
     expect(stored.messages.last.parts.whereType<ErrorPart>(), hasLength(1));
   });
 
+  test("an error's stack trace is kept in the log", () async {
+    app.backend.scriptedEvents = const [
+      ErrorEvent("RangeError", trace: "#0 main (file.dart:1)"),
+      DoneEvent(),
+    ];
+    final (id, _) = await chatWithOneTurn("hello");
+
+    final stored = await app.repo.openChat(id);
+    expect(stored.messages.last.parts.whereType<ErrorPart>().single.trace,
+        "#0 main (file.dart:1)");
+  });
+
   test("the reply starting is what takes the status away", () async {
     app.backend.scriptedEvents = const [
       StatusEvent("Thinking"),
