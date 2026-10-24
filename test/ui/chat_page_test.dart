@@ -70,6 +70,7 @@ void main() {
     String? project,
     int messages = 40,
     bool finished = true,
+    String Function(int i)? text,
   }) =>
       io(tester, () async {
         final chat = await app.repo.createChat(title: title, project: project);
@@ -79,7 +80,7 @@ void main() {
               id: "m$i",
               role: i.isEven ? MessageRole.user : MessageRole.assistant,
               createdAt: DateTime(2026, 1, 1, 0, i),
-              parts: [TextPart(text: "line $i")],
+              parts: [TextPart(text: text?.call(i) ?? "line $i")],
             ),
         ];
         final full = chat.copyWith(messages: said);
@@ -510,6 +511,20 @@ void main() {
 
   ScrollPosition position(WidgetTester tester) =>
       tester.widget<Scrollable>(find.byType(Scrollable).first).controller!.position;
+
+  // The rows below the first view are measured over the frames after it, and
+  // the end moves down with them.
+  testWidgets("a chat of tall replies opens at its latest message", (tester) async {
+    useWindow(tester, const Size(1400, 900));
+    final tall = [for (var i = 0; i < 40; i++) "para $i"].join("\n\n");
+    final chat = await seedLongChat(tester,
+        messages: 6, text: (i) => i.isOdd ? tall : "p$i");
+
+    await open(tester, chat.state.id);
+
+    expect(position(tester).pixels, position(tester).maxScrollExtent);
+    expect(find.text("para 39").hitTestable(), findsOneWidget);
+  });
 
   testWidgets("a chat opens at its latest message", (tester) async {
     final chat = await seedLongChat(tester);
@@ -947,7 +962,19 @@ void main() {
       expect(find.text("steer here").hitTestable(), findsNothing);
 
       await tester.tap(find.byTooltip("steer here"));
+      // Once it has arrived it stays.
+      final seen = <double>[];
+      for (var i = 0; i < 60; i++) {
+        await tester.pump(const Duration(milliseconds: 16));
+        seen.add(position(tester).pixels);
+      }
       await tester.pumpAndSettle();
+      final end = position(tester).pixels;
+      final arrived = seen.indexWhere((p) => (p - end).abs() < 1);
+      expect(arrived, isNot(-1));
+      for (final p in seen.skip(arrived)) {
+        expect(p, closeTo(end, 1));
+      }
 
       final top = tester.getTopLeft(find.text("steer here")).dy;
       expect(top, inInclusiveRange(0, 200));
@@ -972,6 +999,31 @@ void main() {
       expect(tester.getTopLeft(find.text("line 10")).dy,
           lessThan(tester.getTopLeft(find.text("line 12")).dy));
       expect(find.text("line 10").hitTestable(), findsOneWidget);
+    });
+
+    // A row laid out at a height other than the one measured for it moves the
+    // view under the glide, which is to carry on from there.
+    testWidgets("a glide carries a correction the list makes under it",
+        (tester) async {
+      useWindow(tester, const Size(1400, 900));
+      final chat = await seedLongChat(tester);
+      await open(tester, chat.state.id);
+
+      await tester.tap(find.byTooltip("line 10"));
+      for (var i = 0; i < 6; i++) {
+        await tester.pump(const Duration(milliseconds: 16));
+      }
+      final before = position(tester).pixels;
+      await tester.pump(const Duration(milliseconds: 16));
+      final step = position(tester).pixels - before;
+      position(tester).correctBy(300);
+      final corrected = position(tester).pixels;
+      await tester.pump(const Duration(milliseconds: 16));
+      final next = position(tester).pixels - corrected;
+
+      expect(step, lessThan(0));
+      // Unfixed it is the step less the 300 put back.
+      expect(next, inInclusiveRange(step * 3, 0));
     });
   });
 
