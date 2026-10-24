@@ -186,8 +186,13 @@ class FakeBrowserTab implements BrowserTab {
   }
 
   @override
-  Future<String> scroll({bool up = false}) async {
-    calls.add(up ? "scroll up" : "scroll down");
+  Future<String> scroll(
+      {bool up = false, int? ref, double? x, double? y}) async {
+    calls.add([
+      up ? "scroll up" : "scroll down",
+      if (ref != null) "[$ref]",
+      if (x != null && y != null) "($x, $y)",
+    ].join(" "));
     return "scrolled";
   }
 
@@ -477,6 +482,19 @@ void main() {
       ).run(userMessage("read")).toList();
       expect(asked, isEmpty);
       expect(tab.calls, ["scroll up", "text 40"]);
+    });
+
+    test("a scroll goes to the element or point it names", () async {
+      final tab = FakeBrowserTab();
+      await agentOver(
+        FakeLlmClient([
+          [call(browserScrollToolName, {"direction": "up", "ref": 89})],
+          [call(browserScrollToolName, {"x": 900, "y": 500})],
+          [finish],
+        ]),
+        tab: tab,
+      ).run(userMessage("read")).toList();
+      expect(tab.calls, ["scroll up [89]", "scroll down (900.0, 500.0)"]);
     });
 
     test("showing the window is not gated", () async {

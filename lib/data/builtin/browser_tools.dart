@@ -141,7 +141,10 @@ const browserDragTool = LlmTool(
 const browserScrollTool = LlmTool(
   name: browserScrollToolName,
   description: "Scroll one screen down, or up, and return what is then in "
-      "view.",
+      "view. The wheel turns over the middle of the viewport and scrolls "
+      "whatever is under it. To scroll a panel or frame of its own, such as "
+      "a mail's body or a list beside the page, give its `ref`, or a point "
+      "inside it by x and y (what a screenshot shows).",
   schema: {
     "type": "object",
     "properties": {
@@ -149,6 +152,12 @@ const browserScrollTool = LlmTool(
         "type": "string",
         "enum": ["down", "up"],
       },
+      "ref": {
+        "type": "integer",
+        "description": "The number of the element to scroll inside.",
+      },
+      "x": {"type": "number"},
+      "y": {"type": "number"},
     },
   },
 );

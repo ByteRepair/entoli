@@ -748,6 +748,14 @@ one over `devicePixelRatio`, so a pixel in the image is a CSS pixel in the
 viewport and a point read off one clicks where it was read — on a HiDPI screen
 it would otherwise be off by the ratio.
 
+`browser_scroll` is a wheel, and a wheel scrolls the innermost scroller under
+it, so where it turns picks the target: the viewport's middle by default, a
+`ref`'s centre or an `x`, `y` to scroll a panel or frame of its own. A webmail
+body in an iframe was the case: with the wheel always at the middle, each
+scroll moved the page around the frame and never the message in it. The view's scroll position is the page's
+alone, so a scroll that leaves it where it was says so, pointing at a
+screenshot for what did move.
+
 `browser_screenshot` is offered only where the model reads images
 (`ModelInfo.readsImages`, unknown counting as yes, as the client does); its
 image rides the result the way a generated one does.

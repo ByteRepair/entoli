@@ -203,8 +203,9 @@ abstract class BrowserTab {
   /// [modifiers] held (`Control`, `Shift`, `Alt`, `Meta`).
   Future<String> press(String key, {Set<String> modifiers = const {}});
 
-  /// One viewport down, or up.
-  Future<String> scroll({bool up = false});
+  /// One screen down, or up, with the wheel over [ref] or the point [x], [y]
+  /// — what scrolls is whatever is under it — or the viewport's middle.
+  Future<String> scroll({bool up = false, int? ref, double? x, double? y});
 
   /// The whole page's text and elements, from character [offset] on.
   Future<String> pageText({int offset = 0});
