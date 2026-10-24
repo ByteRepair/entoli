@@ -15,12 +15,12 @@ import "data/local/file_trigger_store.dart";
 import "data/model_catalog.dart";
 import "data/local/file_selector_picker.dart";
 import "data/prompts/bundled_skills.dart";
+import "data/prompts/prompt_sources.dart" show promptDirsOf;
 import "data/sync/file_devices.dart";
 import "data/sync/sync_hub.dart";
 import "domain/app_restart.dart";
 import "domain/app_secrets.dart";
 import "domain/app_settings.dart" show AppSettings;
-import "domain/models.dart" show CompletionKind;
 import "domain/trigger_manager.dart" show TriggerRegistryFactory;
 import "domain/project.dart" show everyProject;
 import "domain/prompt_library.dart";
@@ -106,20 +106,18 @@ class AppSession {
     // The writes land inside the install, between its acquire and its
     // release: the previous launch left these directories read-only.
     final projects = everyProject(await config.projectNames());
-    await installBundledSkills(
-      config,
-      acquireWrite: platform.chmodWritable,
-      releaseWrite: platform.chmodReadOnly,
-    );
+    await installBundledSkills(config, platform.readOnlyDirs);
     // Read-only so a model running bash cannot unintentionally write to a
     // skill directory. Per project: each project's skills dirs are read-only
     // the way the default's are, since a `bash` command reaches any of them.
-    // The bundled roots were released read-only by the install's `finally`;
-    // this covers the user's `skills/` beside them.
-    await platform.chmodReadOnly([
-      for (final project in projects)
-        config.promptsDir(CompletionKind.skill, project: project),
-    ]);
+    // The bundled roots were locked by the install; this covers the user's
+    // `skills/` and `agents/` beside them, which the app writes only through
+    // their managers. Every project's tiers, the shared ones once.
+    await Future.wait({
+      for (final project in projects) ...promptDirsOf(config, project: project),
+    }.map((dir) => platform.readOnlyDirs
+        .of(dir.path, executable: dir.executable)
+        .lock()));
     final store = platform.createChatStore(config);
     // One library per project: the default's is the base set every other
     // project inherits, and a project's own overrides same-named default

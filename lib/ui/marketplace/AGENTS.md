@@ -133,7 +133,7 @@ it was written.
 the entry's directories. The page hands those bytes to `parseSkillPackage`
 and `installSkillPackage` — the same call a picked `.skill` file and a
 model-drafted one go through — under
-`withWritableDir` over `promptsDir(skill, project)`, replace-confirm first
+`ReadOnlyDir.write` over `promptsDir(skill, project)`, replace-confirm first
 where the name is taken, `reloadAllPromptLibraries` after, snack last. The
 parser strips the shallowest `SKILL.md`'s prefix, so the zip's top-level
 folder is not load-bearing.
@@ -145,7 +145,7 @@ a listing not naming the file answers it without a request): UTF-8 decode,
 the entry carries — `installName`, the slug for a local entry, an ext key's
 last segment for a remote one, whose remote directory is what the
 marketplace names an agent by — replace-confirm, then one
-`withWritableDir` block writing `agentFilePath` and, where served one,
+`ReadOnlyDir.write` block writing `agentFilePath` and, where served one,
 `agentPicturePath` beside it. The picture's invalidation is the shared
 `invalidateAgentPicture` (in `providers.dart`, under the provider itself):
 a global write (destination null) lands in the default project's directory

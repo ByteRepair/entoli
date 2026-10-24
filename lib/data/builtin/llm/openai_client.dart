@@ -250,35 +250,43 @@ class OpenAiClient implements LlmClient {
         },
       };
 
-  /// A tool message takes text alone, so the images on a run of results go
-  /// in one user message straight after it.
+  /// A tool message takes text alone, so the images and PDFs on a run of
+  /// results go in one user message straight after it.
   List<Map<String, dynamic>> _encodeAll(List<LlmMessage> messages) {
     final out = <Map<String, dynamic>>[];
-    final images = <LlmAttachment>[];
+    final files = <LlmAttachment>[];
     for (final (i, message) in messages.indexed) {
       out.add(_encodeMessage(message));
       if (message.role == LlmRole.tool) {
-        images.addAll(message.attachments.where((a) => a.isImage));
+        files.addAll(message.attachments.where((a) => a.isBlock));
       }
       final runEnds = i + 1 == messages.length || messages[i + 1].role != LlmRole.tool;
-      if (images.isNotEmpty && runEnds) {
+      if (files.isNotEmpty && runEnds) {
         out.add({
           "role": "user",
           "content": [
-            {"type": "text", "text": "The images the tool results above returned."},
-            ...images.map(_imageUrl),
+            {"type": "text", "text": "The files the tool results above returned."},
+            ...files.map(_block),
           ],
         });
-        images.clear();
+        files.clear();
       }
     }
     return out;
   }
 
-  Map<String, dynamic> _imageUrl(LlmAttachment image) => {
-        "type": "image_url",
-        "image_url": {"url": "data:${image.mimeType};base64,${image.base64}"},
-      };
+  Map<String, dynamic> _block(LlmAttachment file) => file.isPdf
+      ? {
+          "type": "file",
+          "file": {
+            "filename": file.filename,
+            "file_data": "data:application/pdf;base64,${file.base64}",
+          },
+        }
+      : {
+          "type": "image_url",
+          "image_url": {"url": "data:${file.mimeType};base64,${file.base64}"},
+        };
 
   Map<String, dynamic> _encodeMessage(LlmMessage message) {
     switch (message.role) {
@@ -311,16 +319,16 @@ class OpenAiClient implements LlmClient {
     }
   }
 
-  /// A plain string unless there is an image to send: the array form is
+  /// A plain string unless there is an image or PDF to send: the array form is
   /// accepted by fewer of the compatible servers, so it is only used when it
   /// has to be.
   Object _encodeContent(LlmMessage message) {
     final text = inlineText(message);
-    final images = message.attachments.where((a) => a.isImage).toList();
-    if (images.isEmpty) return text;
+    final files = message.attachments.where((a) => a.isBlock).toList();
+    if (files.isEmpty) return text;
     return [
       if (text.isNotEmpty) {"type": "text", "text": text},
-      ...images.map(_imageUrl),
+      ...files.map(_block),
     ];
   }
 }
@@ -385,16 +393,17 @@ List<LlmMessage> mergeLeadingSystem(List<LlmMessage> messages) {
   ];
 }
 
-/// The message's text with its non-image attachments folded in. A text file is
-/// worth reading inline; anything else is named, so the model knows to open it
-/// off disk rather than wait for bytes that will not come.
+/// The message's text with the attachments that go as no block of their own
+/// folded in. A text file is worth reading inline; anything else is named, so
+/// the model knows to open it off disk rather than wait for bytes that will
+/// not come.
 String inlineText(LlmMessage message) {
   // The common case by far — every system message and every plain prompt — so
   // it does not pay for a buffer that would copy it back unchanged.
   if (message.attachments.isEmpty) return message.text;
   final buffer = StringBuffer(message.text);
   for (final attachment in message.attachments) {
-    if (attachment.isImage) continue;
+    if (attachment.isBlock) continue;
     buffer.write("\n\n");
     if (attachment.isText) {
       buffer.writeln("--- ${attachment.filename} ---");

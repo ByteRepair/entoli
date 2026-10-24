@@ -74,6 +74,10 @@ abstract class ChatStore {
   /// Remove what [saveResource] stored. Nothing where it is already gone.
   Future<void> deleteResource(String chatId, String resource);
 
+  /// Make `resources/` read-only, as [saveResource] leaves it: for a chat
+  /// whose attachments were saved before the directory was locked.
+  Future<void> lockResources(String chatId);
+
   /// Copy a workspace directory (or a single file's parent) into a new
   /// `artifacts/<id>/` and return the generated id. The [sourceDir] is an
   /// absolute path already resolved by the caller — the backend resolves
@@ -128,4 +132,13 @@ String resourceName(String filename) {
   safe = safe.replaceAll(RegExp(r"\.{2,}"), ".");
   if (safe.startsWith(".")) safe = safe.substring(1);
   return "${const Uuid().v4()}-$safe";
+}
+
+/// The name [resourceName] made [resource] from, without the prefix that
+/// made it unique: what a copy of it is called.
+String attachmentFilename(String resource) {
+  final unique = RegExp(
+          r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}-")
+      .firstMatch(resource);
+  return unique == null ? resource : resource.substring(unique.end);
 }

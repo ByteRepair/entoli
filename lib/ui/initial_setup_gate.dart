@@ -5,7 +5,7 @@ import "../domain/rootfs.dart";
 import "../providers.dart";
 import "settings/rootfs_downloads.dart";
 import "widgets/app_mark.dart";
-import "widgets/formatting.dart";
+import "../core/formatting.dart";
 
 /// Shows [InitialSetupPage] ahead of the welcome tour where a Linux can run —
 /// proot on Android, the emulator on iOS — so a phone's terminal is Alpine

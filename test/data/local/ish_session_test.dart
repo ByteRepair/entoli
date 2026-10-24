@@ -47,6 +47,31 @@ void main() {
       expect(notifier!.value, "/root/chats/x");
     });
 
+    test("what must stay read-only reaches the bridge, session and one-shot",
+        () {
+      fakeAsync((async) {
+        final fake = FakeIshTransport();
+        final shell = ishShell(fake);
+        const resources = "/data/projects/default/chats/x/resources";
+        shell.start("ls",
+            cwd: cwd,
+            home: home,
+            timeout: const Duration(minutes: 5),
+            readOnly: const [resources]);
+        shell.start("ls",
+            cwd: cwd,
+            home: home,
+            timeout: const Duration(minutes: 5),
+            oneShot: true,
+            readOnly: const [resources]);
+        async.flushMicrotasks();
+        expect(fake.initReadOnly, [
+          [resources],
+          [resources],
+        ]);
+      });
+    });
+
     test("a stop is delivered while the run is pending, and ends it", () {
       fakeAsync((async) {
         final fake = FakeIshTransport();
@@ -606,6 +631,7 @@ class FakeIshTransport implements IshTransport {
 
   final List<String> inits = [];
   final List<String> initHomes = [];
+  final List<List<String>> initReadOnly = [];
   final List<String> runs = [];
   final List<int> interrupts = [];
   final List<int> hangups = [];
@@ -637,10 +663,12 @@ class FakeIshTransport implements IshTransport {
     required String home,
     required String cwd,
     required Map<String, String> env,
+    List<String> readOnly = const [],
   }) async {
     if (initError != null) throw StateError(initError!);
     inits.add(cwd);
     initHomes.add(home);
+    initReadOnly.add(readOnly);
     _nextSession++;
     _nextHandle++;
     lastSession = _nextSession;

@@ -1,0 +1,288 @@
+diff --git a/src/GNUmakefile b/src/GNUmakefile
+index 5ade279..53daea5 100644
+--- a/src/GNUmakefile
++++ b/src/GNUmakefile
+@@ -88,6 +88,7 @@ OBJECTS += \
+ 	extension/sysvipc/sysvipc_sem.o \
+ 	extension/sysvipc/sysvipc_shm.o \
+ 	extension/link2symlink/link2symlink.o \
++	extension/read_only/read_only.o \
+ 	extension/fix_symlink_size/fix_symlink_size.o
+ 
+ define define_from_arch.h
+diff --git a/src/cli/proot.c b/src/cli/proot.c
+index eb92071..cb520ac 100644
+--- a/src/cli/proot.c
++++ b/src/cli/proot.c
+@@ -28,6 +28,7 @@
+ #include "cli/cli.h"
+ #include "cli/note.h"
+ #include "extension/extension.h"
++#include "extension/read_only/read_only.h"
+ #include "extension/sysvipc/sysvipc.h"
+ #include "path/binding.h"
+ #include "attribute.h"
+@@ -281,6 +282,23 @@ static int handle_option_S(Tracee *tracee, const Cli *cli, const char *value)
+ 	return 0;
+ }
+ 
++static int handle_option_read_only(Tracee *tracee, const Cli *cli UNUSED, const char *value)
++{
++	static bool initialized = false;
++	int status;
++
++	status = add_read_only_path(value);
++	if (status < 0)
++		return status;
++	if (initialized)
++		return 0;
++	initialized = true;
++	status = initialize_extension(tracee, read_only_callback, NULL);
++	if (status < 0)
++		note(tracee, WARNING, INTERNAL, "read_only not initialized");
++	return 0;
++}
++
+ static int handle_option_link2symlink(Tracee *tracee, const Cli *cli UNUSED, const char *value UNUSED)
+ {
+ 	int status;
+diff --git a/src/cli/proot.h b/src/cli/proot.h
+index 6ec5036..eb8f180 100644
+--- a/src/cli/proot.h
++++ b/src/cli/proot.h
+@@ -61,6 +61,7 @@ static int handle_option_i(Tracee *tracee, const Cli *cli, const char *value);
+ static int handle_option_R(Tracee *tracee, const Cli *cli, const char *value);
+ static int handle_option_S(Tracee *tracee, const Cli *cli, const char *value);
+ static int handle_option_link2symlink(Tracee *tracee, const Cli *cli, const char *value);
++static int handle_option_read_only(Tracee *tracee, const Cli *cli, const char *value);
+ #if defined(__ANDROID__) || defined(__BIONIC__)
+ static int handle_option_ashmem_memfd(Tracee *tracee, const Cli *cli, const char *value);
+ #endif /* defined(__ANDROID__) || defined(__BIONIC__) */
+@@ -243,6 +244,16 @@ Copyright (C) 2015 STMicroelectronics, licensed under GPL v2 or later.",
+ 	  .description = "Replace hard links with symlinks, pretending they are really hardlinks",
+ 	  .detail = "\tEmulates hard links with symbolic links when SELinux policies\n\
+ \tdo not allow hard links.",
++	},
++	{ .class = "Extension options",
++	  .arguments = {
++		{ .name = "--read-only", .separator = ' ', .value = "path" },
++		{ .name = NULL, .separator = '\0', .value = NULL } },
++	  .handler = handle_option_read_only,
++	  .description = "Keep the guest, faked root included, from changing anything under *path*.",
++	  .detail = "\tThe host path is expected read-only on disk already.  The faked\n\
++\troot of -0 does not override its modes, and chmod there fails with\n\
++\tEROFS.  May be given more than once.",
+ 	},
+ 	{ .class = "Extension options",
+ 	  .arguments = {
+diff --git a/src/extension/extension.h b/src/extension/extension.h
+index 827d9cf..b7e9797 100644
+--- a/src/extension/extension.h
++++ b/src/extension/extension.h
+@@ -213,6 +213,7 @@ extern int fake_id0_callback(Extension *extension, ExtensionEvent event, intptr_
+ extern int hidden_files_callback(Extension *extension, ExtensionEvent event, intptr_t d1, intptr_t d2);
+ extern int port_switch_callback(Extension *extension, ExtensionEvent event, intptr_t d1, intptr_t d2);
+ extern int link2symlink_callback(Extension *extension, ExtensionEvent event, intptr_t d1, intptr_t d2);
++extern int read_only_callback(Extension *extension, ExtensionEvent event, intptr_t d1, intptr_t d2);
+ extern int fix_symlink_size_callback(Extension *extension, ExtensionEvent event, intptr_t d1, intptr_t d2);
+ #if defined(__ANDROID__) || defined(__BIONIC__)
+ extern int ashmem_memfd_callback(Extension *extension, ExtensionEvent event, intptr_t d1, intptr_t d2);
+diff --git a/src/extension/fake_id0/fake_id0.c b/src/extension/fake_id0/fake_id0.c
+index 9bd8dad..8816827 100644
+--- a/src/extension/fake_id0/fake_id0.c
++++ b/src/extension/fake_id0/fake_id0.c
+@@ -50,6 +50,7 @@
+ #include "path/binding.h"
+ #include "path/f2fs-bug.h"
+ #include "arch.h"
++#include "extension/read_only/read_only.h"
+ 
+ #include "extension/fake_id0/chown.h"
+ #include "extension/fake_id0/chroot.h"
+@@ -412,6 +413,10 @@ static void override_permissions(const Tracee *tracee, const char *path, bool is
+ 	if (should_skip_file_access_due_to_f2fs_bug(tracee, path)) 
+ 		return;
+ 
++	/* Entoli: a read-only directory stays read-only to the faked root.  */
++	if (read_only_path(path))
++		return;
++
+ 	status = stat(path, &perms);
+ 	if (status < 0)
+ 		return;
+diff --git a/src/extension/read_only/read_only.c b/src/extension/read_only/read_only.c
+new file mode 100644
+index 0000000..252b452
+--- /dev/null
++++ b/src/extension/read_only/read_only.c
+@@ -0,0 +1,154 @@
++/*
++ * Entoli: directories the guest may read and must not change.
++ *
++ * The app keeps them read-only on disk (no write bits, files and
++ * directories alike), so the kernel already refuses a write there.
++ * Two things in proot would get past that: fake_id0 grants the owner
++ * read/write on every path a faked root touches, and the owner may
++ * chmod its own files whatever their mode.  The first is skipped for
++ * these paths (read_only_path(), called from fake_id0), the second is
++ * refused here with EROFS.
++ */
++
++#include <errno.h>
++#include <fcntl.h>
++#include <limits.h>
++#include <stdbool.h>
++#include <stdio.h>
++#include <stdlib.h>
++#include <string.h>
++#include <unistd.h>
++
++#include "extension/extension.h"
++#include "extension/read_only/read_only.h"
++#include "tracee/mem.h"
++#include "tracee/reg.h"
++#include "syscall/sysnum.h"
++#include "path/path.h"
++
++static char **paths = NULL;
++static size_t count = 0;
++
++/* The canonical host path, since that is what a translated path is: a
++ * binding's host side is canonicalized the same way.  */
++int add_read_only_path(const char *path)
++{
++	char resolved[PATH_MAX];
++	char **grown;
++
++	if (realpath(path, resolved) == NULL)
++		strncpy(resolved, path, PATH_MAX - 1), resolved[PATH_MAX - 1] = '\0';
++
++	grown = realloc(paths, (count + 1) * sizeof(char *));
++	if (grown == NULL)
++		return -ENOMEM;
++	paths = grown;
++	paths[count] = strdup(resolved);
++	if (paths[count] == NULL)
++		return -ENOMEM;
++	count++;
++	return 0;
++}
++
++bool read_only_path(const char *host_path)
++{
++	size_t i;
++
++	for (i = 0; i < count; i++) {
++		size_t length = strlen(paths[i]);
++		if (strncmp(host_path, paths[i], length) == 0
++		    && (host_path[length] == '\0' || host_path[length] == '/'))
++			return true;
++	}
++	return false;
++}
++
++/* The host path @fd names in the tracee, AT_FDCWD for its cwd.  */
++static int fd_path(const Tracee *tracee, int fd, char path[PATH_MAX])
++{
++	char link[64];
++	ssize_t length;
++
++	if (fd == AT_FDCWD)
++		snprintf(link, sizeof(link), "/proc/%d/cwd", tracee->pid);
++	else
++		snprintf(link, sizeof(link), "/proc/%d/fd/%d", tracee->pid, fd);
++	length = readlink(link, path, PATH_MAX - 1);
++	if (length < 0)
++		return -errno;
++	path[length] = '\0';
++	return 0;
++}
++
++/* The host path the (@dirfd, @path_reg) pair of a syscall names, read
++ * after proot translated it.  */
++static int at_path(const Tracee *tracee, int dirfd, Reg path_reg, char path[PATH_MAX])
++{
++	char relative[PATH_MAX];
++	int status;
++
++	status = read_string(tracee, relative, peek_reg(tracee, CURRENT, path_reg), PATH_MAX);
++	if (status < 0)
++		return status;
++	if (relative[0] == '/') {
++		strcpy(path, relative);
++		return 0;
++	}
++	status = fd_path(tracee, dirfd, path);
++	if (status < 0)
++		return status;
++	if (strlen(path) + 1 + strlen(relative) >= PATH_MAX)
++		return -ENAMETOOLONG;
++	strcat(path, "/");
++	strcat(path, relative);
++	return 0;
++}
++
++static int handle_enter_end(Tracee *tracee)
++{
++	char path[PATH_MAX];
++	int status;
++
++	switch (get_sysnum(tracee, ORIGINAL)) {
++	case PR_chmod:
++		status = at_path(tracee, AT_FDCWD, SYSARG_1, path);
++		break;
++	case PR_fchmodat:
++		status = at_path(tracee, (int) peek_reg(tracee, CURRENT, SYSARG_1), SYSARG_2, path);
++		break;
++	case PR_fchmod:
++		status = fd_path(tracee, (int) peek_reg(tracee, CURRENT, SYSARG_1), path);
++		break;
++	default:
++		return 0;
++	}
++	if (status < 0)
++		return 0;
++	return read_only_path(path) ? -EROFS : 0;
++}
++
++int read_only_callback(Extension *extension, ExtensionEvent event,
++		intptr_t data1 UNUSED, intptr_t data2 UNUSED)
++{
++	switch (event) {
++	case INITIALIZATION: {
++		static FilteredSysnum filtered_sysnums[] = {
++			{ PR_chmod,	0 },
++			{ PR_fchmod,	0 },
++			{ PR_fchmodat,	0 },
++			FILTERED_SYSNUM_END,
++		};
++		extension->filtered_sysnums = filtered_sysnums;
++		return 0;
++	}
++
++	case INHERIT_PARENT:
++		return 1;
++
++	case SYSCALL_ENTER_END:
++		return handle_enter_end(TRACEE(extension));
++
++	default:
++		return 0;
++	}
++}
+diff --git a/src/extension/read_only/read_only.h b/src/extension/read_only/read_only.h
+new file mode 100644
+index 0000000..60d799c
+--- /dev/null
++++ b/src/extension/read_only/read_only.h
+@@ -0,0 +1,10 @@
++#ifndef READ_ONLY_H
++#define READ_ONLY_H
++
++#include <stdbool.h>
++
++/* Entoli: see read_only.c.  */
++int add_read_only_path(const char *path);
++bool read_only_path(const char *host_path);
++
++#endif /* READ_ONLY_H */

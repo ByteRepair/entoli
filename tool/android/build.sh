@@ -112,6 +112,10 @@ echo "==> proot $PROOT_VERSION"
   # Upstream leaves out an include and clang refuses an implicit declaration.
   grep -q "string.h" src/extension/ashmem_memfd/ashmem_memfd.c ||
     sed -i "3i #include <string.h>" src/extension/ashmem_memfd/ashmem_memfd.c
+  # --read-only, which keeps -0's faked root from writing where the app made
+  # things read-only. Once per tree: a reused tree already has it.
+  [ -d src/extension/read_only ] ||
+    patch -p1 --quiet < "$here/patches/proot-read-only.patch"
   # Through the environment rather than as make arguments: the makefile appends
   # its own -I, -D_GNU_SOURCE and -ltalloc to all three, and a make argument
   # would replace them instead. Without _GNU_SOURCE proot silently loses

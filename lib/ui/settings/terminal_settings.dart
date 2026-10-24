@@ -5,7 +5,7 @@ import "../../domain/rootfs.dart";
 import "../../providers.dart";
 import "rootfs_downloads.dart";
 import "../widgets/catalog.dart";
-import "../widgets/formatting.dart";
+import "../../core/formatting.dart";
 import "../widgets/section_header.dart";
 import "../widgets/settings_warning_banner.dart";
 

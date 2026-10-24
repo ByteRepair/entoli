@@ -30,6 +30,7 @@ import "../../../domain/voice.dart";
 import "../../../domain/voice_model_store.dart";
 import "../../../domain/web_search.dart";
 import "../../config.dart";
+import "../../read_only_dirs.dart";
 import "signaling.dart";
 
 Shell platformShell({
@@ -172,13 +173,8 @@ Future<String?> deviceHostname() async => null;
 
 Future<String?> captureLoginPath() async => null;
 
-Future<void> chmodReadOnly(List<String> paths) async {}
-
-Future<void> chmodWritable(List<String> paths) async {}
-
-Future<T> withWritableDir<T>(
-        String path, Future<T> Function() action) async =>
-    await action();
+/// IndexedDB has no permissions to set, so every write goes straight through.
+final readOnlyDirs = ReadOnlyDirs.none();
 
 /// No rootfs here, so no proot stubs: a plain recursive delete.
 Future<void> deleteTree(String path) async {

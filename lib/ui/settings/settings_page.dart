@@ -25,7 +25,7 @@ import "../widgets/dialogs.dart";
 import "../widgets/editable_row.dart";
 import "../widgets/environment_section.dart";
 import "permissions_section.dart";
-import "../widgets/formatting.dart";
+import "../../core/formatting.dart";
 import "../widgets/nav_drawer.dart";
 import "../widgets/provider_dialog.dart";
 import "../widgets/model_picker.dart";

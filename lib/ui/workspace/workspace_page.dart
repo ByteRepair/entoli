@@ -7,7 +7,7 @@ import "../../providers.dart";
 import "../widgets/busy.dart";
 import "../widgets/dialogs.dart";
 import "../widgets/empty_pane.dart";
-import "../widgets/formatting.dart";
+import "../../core/formatting.dart";
 import "../widgets/settings_card.dart";
 import "text_viewer_page.dart";
 

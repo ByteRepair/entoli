@@ -235,6 +235,21 @@ so shipping proot and its loader as `lib*.so` in the native library directory,
 which is where "Bundled tools" above already puts executables, is the whole of
 the fix. Nothing is patched to make that true.
 
+**One patch, and it is ours: `--read-only`.** `-0` fakes root by handing the
+owner read and write on every path the guest touches, for the length of the
+syscall (`fake_id0`'s `HOST_PATH` hook), and the owner may `chmod` its own
+files whatever their mode. Between them the read-only directories (see "Read-
+only directories" in the root notes) were writable in the guest as if nothing
+had locked them. `tool/android/patches/proot-read-only.patch`, applied by
+`build.sh`, adds `--read-only PATH`: the hook skips anything under PATH, so the
+kernel's refusal reaches the guest, and a small extension refuses `chmod`,
+`fchmod` and `fchmodat` there with `EROFS`. The driver passes it for each of
+`Shell.start`'s `readOnly` — the chat's `resources/` and the skills and
+agents directories, one list the backend builds for every shell — binding at its own
+host path whatever it has not bound at a clean one already. Checked on a host build of the same tree: without the flag a guest root
+overwrote, deleted, renamed and `chmod`ed a `0444` file in a `0555` directory;
+with it, each was refused and reads still worked.
+
 **The distribution is Alpine, and one version of it.** `domain/rootfs.dart` is
 the catalog, const data like the voice models. Alpine is 4 MB against Debian's
 120, it is an official tarball rather than somebody's build of one, it is

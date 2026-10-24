@@ -208,6 +208,32 @@ any more; `core/platform/` builds both once.
 None of this is checked by loading a tab — see `test/AGENTS.md` for how the
 browser's filesystem is exercised on the VM instead.
 
+### Read-only directories
+
+Some directories are the app's to write and the agent's only to read: the
+skills (bundled and the user's), the agents, and a chat's `resources/`, each
+locked at launch or by the write that made it. They are read-only on disk
+between the app's own writes — write bits off, files and
+directories alike, so a command can neither change a file nor add or remove
+one — and every write goes through `ReadOnlyDirs` (`core/read_only_dirs.dart`):
+`readOnlyDirs.of(path).write(...)` unlocks, writes and relocks. Which prompt
+directories a project has is declared once, `promptDirsOf` beside the tier
+walk: launch locks every project's, and a turn's shells are kept from its
+own. One manager per
+path, because that is what serialises a path's writes; two overlapping would
+have the first relock under the second. A skills directory passes
+`executable: true`, since its scripts arrive from embedded data with no
+execute bit. The modes are set through libc's `chmod` and Windows' read-only
+attribute (`data/local/file_modes.dart`), not the `chmod` binary, which iOS
+will not spawn. A tree that holds one is deleted through `deleteTree`, which
+unlocks it first.
+
+What it stops is an accident: on the machine itself the same user can `chmod`
+it back. The guests are the reason it matters — proot's fake root and iSH's
+root would otherwise write straight through — and each is patched to leave
+these modes alone; see "A whole Linux under proot" in `lib/data/local/AGENTS.md`
+and "The workspace inside the guest" in `ios/AGENTS.md`.
+
 ### Migrations
 
 **A release that moves anything under `<dataDir>` carries a migration, in the

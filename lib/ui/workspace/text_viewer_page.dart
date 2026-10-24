@@ -14,7 +14,7 @@ import "../chat/widgets/reply_style.dart";
 import "../widgets/busy.dart";
 import "../widgets/dialogs.dart";
 import "../widgets/empty_pane.dart";
-import "../widgets/formatting.dart";
+import "../../core/formatting.dart";
 
 /// A text file from a workspace, read rather than handed to another app — see
 /// AGENTS.md, "The workspace explorer".

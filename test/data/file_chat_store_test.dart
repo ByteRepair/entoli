@@ -7,7 +7,9 @@ import "package:flutter_test/flutter_test.dart";
 import "package:path/path.dart" as p;
 
 import "package:agent_chat/core/config.dart";
-import "package:agent_chat/core/platform/io/platform.dart" show chmodReadOnly, deleteTree;
+import "package:agent_chat/core/platform/io/platform.dart" show deleteTree;
+import "package:agent_chat/data/local/file_modes.dart";
+import "package:agent_chat/core/read_only_dirs.dart";
 import "package:agent_chat/data/local/file_chat_store.dart";
 import "package:agent_chat/domain/chat_log.dart";
 import "package:agent_chat/domain/models.dart";
@@ -173,6 +175,29 @@ void main() {
     expect(await store.readResource("c5c", "missing.png"), isNull);
   });
 
+  group("resources", () {
+    test("are read-only between the store's own writes, and go with the chat",
+        () async {
+      final locked = FileChatStore(config,
+          deleteTree: deleteTree, readOnlyDirs: ReadOnlyDirs(setTreeWritable));
+      await writeChatTo(locked, Chat(state: makeState("r1"), messages: const []));
+      final first = await locked.saveResource("r1", "a.pdf", Uint8List.fromList([1]));
+      final second = await locked.saveResource("r1", "b.png", Uint8List.fromList([2]));
+      final dir = config.resourcesDir("r1");
+
+      expect(() => File(p.join(dir, first)).writeAsBytesSync([9]),
+          throwsA(isA<FileSystemException>()));
+      expect(() => File(p.join(dir, "planted")).writeAsStringSync("x"),
+          throwsA(isA<FileSystemException>()));
+      await locked.deleteResource("r1", second);
+      expect(await locked.readResource("r1", second), isNull);
+      expect(await locked.readResource("r1", first), [1]);
+
+      await locked.delete("r1");
+      expect(Directory(config.chatDir("r1")).existsSync(), isFalse);
+    }, skip: Platform.isWindows ? "modes are POSIX" : null);
+  });
+
   group("projects", () {
     test("a chat in one is written under it, not at the top level", () async {
       await store.saveState(makeState("p1", project: "work"));
@@ -225,7 +250,7 @@ void main() {
       final skill = Directory(p.join(config.projectDir(project: "work"), "skills", "s"))
         ..createSync(recursive: true);
       File(p.join(skill.path, "SKILL.md")).writeAsStringSync("x");
-      await chmodReadOnly([p.dirname(skill.path)]);
+      await setTreeWritable([p.dirname(skill.path)], writable: false);
 
       await FileChatStore(config, deleteTree: deleteTree).deleteProject("work");
 

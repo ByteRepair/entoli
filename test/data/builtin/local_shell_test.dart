@@ -7,7 +7,8 @@ import "package:agent_chat/data/builtin/local_shell.dart";
 import "package:agent_chat/data/local/landlock.dart";
 import "package:agent_chat/domain/shell.dart";
 
-List<String> _hostCommand(String _, String _) => const ["/bin/sh"];
+List<String> _hostCommand(String _, String _, {List<String> readOnly = const []}) =>
+    const ["/bin/sh"];
 
 /// Whether the shell here can own a process group, which is what the stop and
 /// timeout contract is a signal to — the shell is spawned under `setsid` where
@@ -434,7 +435,8 @@ void main() {
     /// these tests has: a prefix that really runs, ending in a shell.
     ShellDriver guest({Map<String, String> environment = const {}}) =>
         ShellDriver(
-          commandFor: (_, _) => ["/usr/bin/env", "IN_GUEST=yes", "/bin/sh"],
+          commandFor: (_, _, {readOnly = const []}) =>
+              ["/usr/bin/env", "IN_GUEST=yes", "/bin/sh"],
           environment: environment,
           projectHome: true,
           description: "Alpine Linux 3.24.1 (x86_64), in which apk installs "

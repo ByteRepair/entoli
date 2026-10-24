@@ -26,6 +26,7 @@ import "../../domain/sub_agent_log.dart";
 import "../../domain/tool_arg.dart";
 import "../../domain/web_search.dart";
 import "../local/file_sub_agent_log.dart";
+import "../prompts/prompt_sources.dart" show promptDirsOf;
 import "../prompts/skill_package.dart";
 import "builtin_agent.dart";
 import "customization_tools.dart" show SettingsEditor;
@@ -35,7 +36,7 @@ import "memory/store.dart";
 import "llm/gated_client.dart";
 import "llm/llm_client.dart";
 import "llm/openai_client.dart";
-import "llm/text_only_client.dart";
+import "llm/readable_client.dart";
 import "llm/llm_registry.dart";
 import "llm/rate_limit_gate.dart";
 import "permission_classifier.dart";
@@ -279,6 +280,10 @@ class BuiltinBackend implements AgentBackend {
 
       await config.ensureChatDirs(chatId, project: project);
       await config.ensureProjectDirs(project: project);
+      // A chat from before attachments were read-only, or one whose files a
+      // restore or a sync wrote, is locked before the agent can reach it.
+      await store.lockResources(chatId);
+      final readOnly = await _readOnlyFor(chatId, project);
       final workspace = config.workspaceDir(chatId, project: project);
       final projectWorkspace = _projectWorkspaceFor(
           workspace: workspace,
@@ -323,6 +328,7 @@ class BuiltinBackend implements AgentBackend {
         sharedWorkspace: settings.sharedWorkspace,
         permissions: settings.permissions,
         writableDirs: settings.writableDirs,
+        readOnlyDirs: readOnly,
         project: project,
         tone: settings.tone,
         citations: settings.citations,
@@ -466,7 +472,8 @@ class BuiltinBackend implements AgentBackend {
             ? (browser.tab(chatId)
               ..downloadDir = config.fs.path.join(workspace, "downloads"))
             : null,
-        seesImages: target.info?.readsImages ?? true,
+        seesImages: target.images,
+        seesPdfs: target.pdfs,
         browserHidden: browser.hidden,
         browserUploads: AppSettings.load(config).agentBrowserUploads,
         browserApprove: switch (AppSettings.load(config).agentBrowserApproval) {
@@ -513,6 +520,8 @@ class BuiltinBackend implements AgentBackend {
                 settings.imageQuality),
         saveResource: (filename, bytes) =>
             store.saveResource(chatId, filename, bytes),
+        attachmentsDir: config.resourcesDir(chatId, project: project),
+        readOnlyDirs: readOnly,
         registerTrigger: triggerRegistry?.call(chatId, project),
         editSettings: editSettings,
         packageSkill: (path, name) async {
@@ -654,7 +663,10 @@ class BuiltinBackend implements AgentBackend {
             sharedWorkspace: sharedWorkspace),
         timeout: options.commandTimeout,
         environment: environment,
-        project: project);
+        project: project,
+        // The agent's commands and this share the chat's shell, which
+        // respawns where the binds differ.
+        readOnly: await _readOnlyFor(chatId, project));
     // Before the wait, so Stop kills the command rather than only closing the
     // stream over it.
     _running.replace(stopKey, run.kill);
@@ -689,8 +701,7 @@ class BuiltinBackend implements AgentBackend {
     // every dispatch's — see [mayDress].
     final dress = mayDress(session, history, null);
     session.messages
-      ..addAll(await projectionOf([prompt],
-          first: dress, load: _resourcesOf(chatId)))
+      ..addAll(await _projected(chatId, [prompt], first: dress))
       ..addAll(assistantMessages([part]));
   }
 
@@ -725,8 +736,9 @@ class BuiltinBackend implements AgentBackend {
     final key = _memberKey(chatId, viewer);
     final session = _sessions.putIfAbsent(key, BuiltinSession.new);
     if (rebuild || session.isFresh) {
-      session.replaceWith(await projectionOf(history,
-          load: _resourcesOf(chatId), viewer: viewer, compactions: compactions));
+      session.replaceWith(await _projected(chatId, history,
+          viewer: viewer,
+          compactions: compactions));
       session.coveredBy(history);
       return session;
     }
@@ -792,10 +804,8 @@ class BuiltinBackend implements AgentBackend {
     for (final (index, message) in gained.indexed) {
       if (confirmed < tail.length) {
         final mine = addressedTo(message, viewer);
-        final entries = await projectionOf([message],
-            first: mine && !ownBefore,
-            viewer: viewer,
-            load: _resourcesOf(chatId));
+        final entries = await _projected(chatId, [message],
+            first: mine && !ownBefore, viewer: viewer);
         if (_sameSlice(tail, confirmed, entries)) {
           confirmed += entries.length;
           confirmedIds.add(message.id);
@@ -810,8 +820,8 @@ class BuiltinBackend implements AgentBackend {
       break;
     }
     if (fresh.isNotEmpty) {
-      final wordings = await projectionOf(fresh,
-          first: !ownBefore, viewer: viewer, load: _resourcesOf(chatId));
+      final wordings = await _projected(chatId, fresh,
+          first: !ownBefore, viewer: viewer);
       session.messages.addAll(wordings);
       confirmedIds.addAll([for (final message in fresh) message.id]);
       confirmed += wordings.length;
@@ -828,8 +838,7 @@ class BuiltinBackend implements AgentBackend {
       {required String? viewer}) async {
     final replayed = replayTree(await store.readRecords(chatId));
     if (replayed.messages.isEmpty) return;
-    session.replaceWith(await projectionOf(replayed.messages,
-        load: _resourcesOf(chatId),
+    session.replaceWith(await _projected(chatId, replayed.messages,
         viewer: viewer,
         compactions: replayed.compactions));
     session.coveredBy(replayed.messages);
@@ -870,6 +879,41 @@ class BuiltinBackend implements AgentBackend {
   /// Where this chat's attachment bytes come from, for the projection.
   ResourceLoader _resourcesOf(String chatId) =>
       (resource) => store.readResource(chatId, resource);
+
+  /// What a command in this chat may read and must not write: its own
+  /// attachments, and every prompt directory its project reads
+  /// ([promptDirsOf]). One list for every shell, so proot and iSH guard the
+  /// same places. Only those that exist: proot refuses a bind whose host path
+  /// is missing, and a project's skills directories appear only once it has
+  /// some.
+  Future<List<String>> _readOnlyFor(String chatId, String? project) async {
+    final dirs = [
+      config.resourcesDir(chatId, project: project),
+      for (final dir in promptDirsOf(config, project: project)) dir.path,
+    ];
+    final there =
+        await Future.wait(dirs.map((dir) => config.fs.directory(dir).exists()));
+    return [
+      for (final (i, dir) in dirs.indexed)
+        if (there[i]) dir,
+    ];
+  }
+
+  /// [messages] of this chat as the model reads them, the attachments read
+  /// and named from its own `resources/`. The one way the backend projects,
+  /// so no rebuild words an attachment's note differently from another.
+  Future<List<LlmMessage>> _projected(String chatId, List<Message> messages,
+          {bool first = true,
+          String? viewer,
+          List<ConversationCompaction> compactions = const [],
+          ResourceLoader? load}) async =>
+      projectionOf(messages,
+          first: first,
+          viewer: viewer,
+          compactions: compactions,
+          load: load ?? _resourcesOf(chatId),
+          resourcesDir: config.resourcesDir(chatId,
+              project: await store.projectOf(chatId)));
 
   /// Carry on the sub-agents the interrupted turn left in flight. A `task`
   /// call whose result never landed is answered by reviving the sub-agent that
@@ -1007,7 +1051,7 @@ class BuiltinBackend implements AgentBackend {
     // Loop-invariant: the markers do not change across the ladder.
     final priorSummary = compactions.lastOrNull?.summary;
     for (var attempt = 0; attempt < 3; attempt++) {
-      final projected = await projectionOf(span,
+      final projected = await _projected(chatId, span,
           load: loader, compactions: compactions);
       if (projected.isEmpty) return null;
       final cut = CompactPrompt.build(
@@ -1028,7 +1072,7 @@ class BuiltinBackend implements AgentBackend {
         if (summary != null) {
           final marker = ConversationCompaction(
               upToMessageId: span.last.id, summary: summary);
-          final after = await projectionOf(history,
+          final after = await _projected(chatId, history,
               load: loader, compactions: [...compactions, marker]);
           return marker.copyWith(chatTokens: estimateTokens(after));
         }
@@ -1300,11 +1344,16 @@ class BuiltinBackend implements AgentBackend {
     // Here rather than at each request: everything that asks the model
     // resolves it through this, the compaction's one-shot read included.
     // Unknown passes images through: a model only the endpoint lists is
-    // trusted as it was before there was a catalog to ask.
+    // trusted as it was before there was a catalog to ask. Not PDFs, which
+    // most endpoints refuse outright whatever the model.
+    final images = info?.readsImages ?? true;
+    final pdfs = (info?.readsPdfs ?? false) && config.takesPdfs;
     return (
-      client: info?.readsImages ?? true ? client : TextOnlyClient(client),
+      client: ReadableClient(client, images: images, pdfs: pdfs),
       modelId: modelId,
       info: info,
+      images: images,
+      pdfs: pdfs,
     );
   }
 
@@ -1431,8 +1480,8 @@ class BuiltinBackend implements AgentBackend {
       List<ConversationCompaction> compactions = const []}) async {
     await _running.stopAll(chatId);
     final house = _sessions.putIfAbsent(chatId, BuiltinSession.new);
-    house.replaceWith(await projectionOf(history,
-        load: _resourcesOf(chatId), compactions: compactions));
+    house.replaceWith(
+        await _projected(chatId, history, compactions: compactions));
     house.coveredBy(history);
     // The room's other participants read on their own dispatches, which the
     // sync fills from wherever the log now is: a session worded for them
@@ -1553,4 +1602,10 @@ class _RunningTurns extends ValueNotifier<Set<String>> {
 }
 
 /// A model resolved to ask: the client, the id, and what the catalog knows.
-typedef _Target = ({LlmClient client, String modelId, ModelInfo? info});
+typedef _Target = ({
+  LlmClient client,
+  String modelId,
+  ModelInfo? info,
+  bool images,
+  bool pdfs,
+});

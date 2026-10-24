@@ -2,7 +2,7 @@ import "package:flutter/material.dart";
 
 import "../../domain/download.dart";
 import "dialogs.dart";
-import "formatting.dart";
+import "../../core/formatting.dart";
 import "resettable_field.dart";
 
 // What both catalogs on the settings pages are made of: a row per thing that

@@ -6,6 +6,7 @@ class ModelInfo {
     required this.id,
     this.name,
     this.readsImages = false,
+    this.readsPdfs = false,
     this.makesImages = false,
     this.context,
     this.output,
@@ -32,6 +33,7 @@ class ModelInfo {
       id: id,
       name: json["name"] is String ? json["name"] as String : null,
       readsImages: has("input", "image"),
+      readsPdfs: has("input", "pdf"),
       makesImages: has("output", "image"),
       talks: has("input", "text") && has("output", "text"),
       context: positive(limit["context"]),
@@ -49,6 +51,10 @@ class ModelInfo {
   /// Whether an image may be sent to it. A listed model that does not say is
   /// false, since an image a model cannot take fails the whole request.
   final bool readsImages;
+
+  /// Whether a PDF may be sent to it, which is the model's half of the
+  /// question: the endpoint has to take one too (`LlmProviderConfig.takesPdfs`).
+  final bool readsPdfs;
   final bool makesImages;
 
   /// The context window in tokens, null where unknown — read as
@@ -78,7 +84,11 @@ class ModelInfo {
         "reasoning": reasoning,
         "tool_call": toolCall,
         "modalities": {
-          "input": [if (talks) "text", if (readsImages) "image"],
+          "input": [
+            if (talks) "text",
+            if (readsImages) "image",
+            if (readsPdfs) "pdf",
+          ],
           "output": [if (talks) "text", if (makesImages) "image"],
         },
         "limit": {"context": ?context, "output": ?output},

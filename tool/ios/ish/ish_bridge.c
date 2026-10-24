@@ -89,7 +89,8 @@ void ish_boot(const char *rootfs_dir) {
 // lands on it, so each component is made the way init.c makes /dev/pts; a
 // component that is already there is fine (EEXIST), and a mount that did not
 // land is not fatal — the shell still runs, from a workspace it cannot see.
-static int bind_host_dir(const char *host_dir, const char *point) {
+// [flags] are the mount's: MS_READONLY_ for one the guest must not change.
+static int bind_host_dir(const char *host_dir, const char *point, int flags) {
     char made[PATH_MAX];
     snprintf(made, sizeof(made), "%s", point);
     // mkdir -p, in the guest, one component at a time: do_mount wants the
@@ -104,7 +105,7 @@ static int bind_host_dir(const char *host_dir, const char *point) {
     generic_mkdirat(AT_PWD, made, 0777);
     // do_mount walks the mount list, which wants mounts_lock (kernel/fs.h).
     lock(&mounts_lock);
-    int err = do_mount(&realfs, host_dir, made, "", 0);
+    int err = do_mount(&realfs, host_dir, made, "", flags);
     unlock(&mounts_lock);
     if (err < 0) {
         printk("ish: could not bind %s at %s\n", host_dir, made);
@@ -120,8 +121,29 @@ static int bind_host_dir(const char *host_dir, const char *point) {
 static void bind_data_dir(const char *data_dir) {
     static bool bound = false;
     if (bound) return;
-    bind_host_dir(data_dir, data_dir);
+    bind_host_dir(data_dir, data_dir, 0);
     bound = true;
+}
+
+// Bind each of [dirs] read-only at its own host path, over the data-dir bind
+// that already reaches it writable: the longer mount point wins the lookup.
+// What the app keeps read-only on disk (a chat's attachments) the guest's
+// root could otherwise chmod back. Once per path for the process, the way
+// the data dir is: the mount table is the guest's, not a session's.
+static void bind_read_only(const char **dirs, int32_t count) {
+    static char **bound = NULL;
+    static int32_t bound_count = 0;
+    for (int32_t i = 0; i < count; i++) {
+        bool already = false;
+        for (int32_t j = 0; j < bound_count && !already; j++)
+            already = strcmp(bound[j], dirs[i]) == 0;
+        if (already) continue;
+        if (bind_host_dir(dirs[i], dirs[i], MS_READONLY_) < 0) continue;
+        char **grown = realloc(bound, (bound_count + 1) * sizeof(char *));
+        if (grown == NULL) continue;
+        bound = grown;
+        bound[bound_count++] = strdup(dirs[i]);
+    }
 }
 
 // Bind the project workspace at /root — the clean guest path proot gives it
@@ -140,7 +162,7 @@ static void bind_workspace(const char *workspace) {
         unlock(&mounts_lock);
         bound_home[0] = '\0';
     }
-    if (bind_host_dir(workspace, "/root") == 0) {
+    if (bind_host_dir(workspace, "/root", 0) == 0) {
         snprintf(bound_home, sizeof(bound_home), "%s", workspace);
     }
 }
@@ -154,6 +176,8 @@ ish_session *ish_session_init(
     const char *token,
     const char **env,
     int32_t env_count,
+    const char **read_only,
+    int32_t read_only_count,
     const char **error)
 {
     // [home] is bound at /root by bind_workspace below, and [cwd] is where
@@ -169,6 +193,7 @@ ish_session *ish_session_init(
     }
     if (data_dir[0] != '\0') {
         bind_data_dir(data_dir);
+        bind_read_only(read_only, read_only_count);
     }
     if (home[0] != '\0' && cwd[0] != '\0') {
         bind_workspace(home);

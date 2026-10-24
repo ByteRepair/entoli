@@ -117,6 +117,10 @@ int estimateTokens(List<LlmMessage> messages) {
         // An image is worth a fixed thousand tokens rather than its base64
         // length, which would read an eight-megabyte photo as two million.
         chars += 4000;
+      } else if (attachment.isPdf) {
+        // A provider reads each page as its text and an image of it, which
+        // is nothing like the file's compressed length.
+        chars += attachment.pdfPages * 12000;
       } else {
         chars += attachment.bytes.length;
       }

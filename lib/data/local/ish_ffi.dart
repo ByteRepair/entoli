@@ -26,6 +26,8 @@ typedef IshInitC = Pointer<Void> Function(
     Pointer<Utf8> token,
     Pointer<Pointer<Utf8>> env,
     Int32 envCount,
+    Pointer<Pointer<Utf8>> readOnly,
+    Int32 readOnlyCount,
     Pointer<Pointer<Utf8>> error);
 typedef IshInitDart = IshSessionPtr Function(
     Pointer<Utf8> rootfsDir,
@@ -36,6 +38,8 @@ typedef IshInitDart = IshSessionPtr Function(
     Pointer<Utf8> token,
     Pointer<Pointer<Utf8>> env,
     int envCount,
+    Pointer<Pointer<Utf8>> readOnly,
+    int readOnlyCount,
     Pointer<Pointer<Utf8>> error);
 
 typedef IshDrainWakeC = Void Function(IshSessionPtr session);

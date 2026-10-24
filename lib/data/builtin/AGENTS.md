@@ -932,15 +932,62 @@ messages take text alone. An image made by the chat model itself, with no call
 before it, is not sent back: an assistant message cannot carry one.
 
 **Whether a model gets images is decided at send time**, by `_resolveModel`
-wrapping the client in `TextOnlyClient` where the catalog says the model does
-not read them (`ModelInfo.readsImages`); every image is then a line naming it.
-A model the catalog does not know passes images through, as before there was a
-catalog: a self-hosted endpoint's vision model would otherwise lose them with
-no way to say so. At send time rather than in the projection because a
-session outlives its model: switch a chat to a text-only one and a projection
-made earlier would still carry the images, and a provider rejects the whole
-request over one — after which every later turn fails the same way, the image
-being in the history. One rule for the user's attachments and the tools'.
+wrapping every client in `ReadableClient`, which names instead of sends what
+the model cannot read: images where the catalog says it does not read them
+(`ModelInfo.readsImages`), each then a line naming it. A model the catalog
+does not know passes images through, as before there was a catalog: a
+self-hosted endpoint's vision model would otherwise lose them with no way to
+say so. At send time rather than in the projection because a session outlives
+its model: switch a chat to a text-only one and a projection made earlier
+would still carry the images, and a provider rejects the whole request over
+one — after which every later turn fails the same way, the image being in the
+history. One rule for the user's attachments and the tools'.
+
+**PDFs follow the same path, with two more conditions.** A PDF is a block of
+its own — a `document` on Anthropic, a `file` part on the OpenAI shape — where
+the model reads one (`readsPdfs`, models.dev's `pdf` input) *and* the endpoint
+takes one (`LlmProviderConfig.takesPdfs`: Anthropic's API and OpenAI's own).
+The second is because the model is not the endpoint: Gemini reads PDFs and
+its OpenAI-compatible layer documents no way to send one, and most compatible
+servers reject the part outright. Unknown is no here, unlike images, for the
+same reason. Elsewhere a PDF is named with a pointer to a command. And every
+request resends every PDF in the conversation, so they are kept newest first
+up to `pdfBudgetBytes` and the older ones named: a request over Anthropic's
+32 MB would otherwise fail every turn after it.
+
+**`read` answers an image or a PDF with the file itself**, saved to
+`resources/` and recorded as an `ImageEvent` between the call and its result,
+so the projection hangs it on that result as it does a screenshot. The type
+comes from the magic number alone (`readBlockTypeOf`), never the name: a block
+the provider cannot decode is one more request that fails every turn it stays
+in. Where the model cannot take it, or the agent has no `saveResource` (a
+sub-agent), the read succeeds with the path and a pointer to a command, since
+the file is there and the path is what a command needs; over the size a
+request can carry, it fails saying how to shrink it. The chip it leaves in the
+reply is the cost of the record: a reload has to find the same bytes the model
+saw, and the workspace file may have changed or gone since.
+
+## Attachments (`attachment_save`)
+
+A chat's `resources/` is read-only to the agent (see "Read-only directories"
+in the root notes). The projection's note names each attachment with its path
+— `(attached, read-only: spec.pdf at <path>)` — and that path is the host's in
+every shell: proot binds the chat's `resources/` at its own host path, and iSH
+mounts it read-only over the data-directory bind it has at its host path
+already. Both take it from `Shell.start`'s `readOnly`, which the backend builds
+once per turn (`_readOnlyFor`) as the chat's `resources/` plus every prompt
+directory its project reads (`promptDirsOf`, over the same tiers as the
+library, My Team's included where the project runs Omada), and hands to the agent, its sub-agents and a
+`!` command alike, so the guests guard the same places. One path for every shell keeps the wording the same
+whichever one a turn runs under, and needs no prefix of its own.
+
+`read` reads under it without asking, though it is outside the workspaces.
+`write` and `edit` refuse it outright rather than gate it, pointing at
+`attachment_save`, which copies an attachment to `attachments/<its name>` in
+the chat workspace (or `dest`) as a new file the agent can change. A tool and
+not `cp` because a copy of a read-only file comes out read-only. A turn locks
+its chat's `resources/` as it starts (`ChatStore.lockResources`), for chats
+whose files were saved before the lock existed or arrived by restore or sync.
 
 ## Skills (the `skill` tool)
 
@@ -995,7 +1042,7 @@ itself: it is offered on a top-level turn (the backend hands the agent the
 packager), and dropped for a sub-agent (no callback, so the tool is not on the
 list), the same `one value decides what the prompt names and what the tool list
 carries` rule. The install and the settings page's import and delete write
-through `withWritableDir`, because the skills directories are read-only — see
+through `ReadOnlyDir.write`, because the skills directories are read-only — see
 the root notes, "On-disk layout".
 
 ## The room's roster (the `list_participants` tool)

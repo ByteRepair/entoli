@@ -1,10 +1,10 @@
 import "dart:typed_data";
 
 import "package:file_selector/file_selector.dart";
-import "package:mime/mime.dart";
 
 import "../../domain/attachment_picker.dart";
 import "../../domain/models.dart";
+import "../mime.dart";
 
 /// The platform's own file chooser, through `file_selector` — one plugin
 /// covering Linux, Android and the web, the three the app runs on.
@@ -40,8 +40,7 @@ class FileSelectorPicker implements AttachmentPicker {
 /// throws away the one fact that matters — whether the bytes read as text. No
 /// NUL in the first few KB is the usual test for that.
 String _mimeOf(XFile file, Uint8List bytes) {
-  final declared = file.mimeType ??
-      lookupMimeType(file.name, headerBytes: bytes.take(defaultMagicNumbersMaxLength).toList());
+  final declared = file.mimeType ?? sniffMime(bytes, name: file.name);
   if (declared != null && declared != "application/octet-stream") return declared;
   return bytes.take(4096).contains(0) ? "application/octet-stream" : "text/plain";
 }

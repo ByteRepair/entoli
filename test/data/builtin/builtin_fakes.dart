@@ -120,6 +120,9 @@ class FakeShell extends Shell {
   /// The `HOME` each of [ran] was given, in step with it.
   final List<String> homes = [];
 
+  /// The directories each command was told it must not write.
+  final List<List<String>> readOnlys = [];
+
   /// The timeout each of [ran] was given, in step with it.
   final List<Duration> timeouts = [];
 
@@ -173,8 +176,10 @@ class FakeShell extends Shell {
       bool oneShot = false,
       bool restart = false,
       String? project,
-      CommandSandbox? sandbox}) {
+      CommandSandbox? sandbox,
+      List<String> readOnly = const []}) {
     ran.add(command);
+    readOnlys.add(readOnly);
     cwds.add(cwd);
     homes.add(home);
     timeouts.add(timeout);

@@ -211,9 +211,11 @@ class ShellDriver {
 
   /// The executable and its arguments, ending in the shell a command runs in,
   /// built for the chat's own [cwd] and [home]. A guest driver binds the
-  /// workspace at a clean path and sets `-w` to the guest path; a host driver
-  /// returns the same list regardless.
-  final List<String> Function(String cwd, String home) commandFor;
+  /// workspace at a clean path and sets `-w` to the guest path, and binds
+  /// each of `readOnly` at its own host path, its root kept from writing
+  /// there; a host driver returns the same list regardless.
+  final List<String> Function(String cwd, String home,
+      {List<String> readOnly}) commandFor;
 
   /// The environment the shell starts with, below the app's and the project's
   /// variables, which still win over it. A guest's, where [commandFor] reaches
@@ -308,6 +310,10 @@ abstract class Shell {
   /// driver offers one and the caller wants it — null runs the command as the
   /// shell itself runs, which is what a session shell does with its state,
   /// and what a platform with no confinement to offer is handed.
+  ///
+  /// [readOnly] are host directories the command may read and must not
+  /// write, the chat's attachments among them: a guest binds them in, and
+  /// they are read-only on disk already wherever the machine is the shell.
   ShellRun start(String command,
       {required String cwd,
       required String home,
@@ -316,7 +322,8 @@ abstract class Shell {
       bool oneShot = false,
       bool restart = false,
       String? project,
-      CommandSandbox? sandbox});
+      CommandSandbox? sandbox,
+      List<String> readOnly = const []});
 
   /// What the model is told it is operating on, e.g. `Linux 6.11.0 x86_64`.
   /// The agent's system prompt names it, so a command can be written for the
@@ -419,7 +426,8 @@ class UnavailableShell extends Shell {
           bool oneShot = false,
           bool restart = false,
           String? project,
-          CommandSandbox? sandbox}) =>
+          CommandSandbox? sandbox,
+          List<String> readOnly = const []}) =>
       const _Unavailable();
 }
 

@@ -36,8 +36,6 @@ export "io/platform.dart" if (dart.library.js_interop) "web/platform.dart"
         byteRepairBinDir,
         cacheDir,
         captureLoginPath,
-        chmodReadOnly,
-        chmodWritable,
         createAgentBrowser,
         createAppleFm,
         createAppUpdateHost,
@@ -60,9 +58,9 @@ export "io/platform.dart" if (dart.library.js_interop) "web/platform.dart"
         installBundledTools,
         persist,
         registerRecorder,
+        readOnlyDirs,
         registerVoiceLicences,
-        setupComplete,
-        withWritableDir;
+        setupComplete;
 
 // The app's platform seam: everything platform-varying is resolved here or
 // re-exported from the side that answers it.
@@ -210,6 +208,8 @@ LocalPrefill? createLocalPrefill(
            // no memory tools; a turn with them misses the cache rather than
            // the cache serving a list no turn sends.
            offerMemory: false,
+           // Every top-level chat has a `resources/` to copy out of.
+           attachments: true,
          ),
       );
     },
@@ -279,7 +279,7 @@ Future<String?> appVersion() async {
 }
 
 ChatStore createChatStore(AppConfig config) =>
-    FileChatStore(config, deleteTree: deleteTree);
+    FileChatStore(config, deleteTree: deleteTree, readOnlyDirs: readOnlyDirs);
 
 FileHandoff createFileHandoff(AppConfig config) => platformFileHandoff(config.fs);
 

@@ -7,7 +7,7 @@ import "../../providers.dart";
 import "../voice/read_aloud.dart";
 import "voice_models.dart";
 import "../widgets/catalog.dart";
-import "../widgets/formatting.dart";
+import "../../core/formatting.dart";
 import "../widgets/resettable_field.dart";
 import "../widgets/section_header.dart";
 

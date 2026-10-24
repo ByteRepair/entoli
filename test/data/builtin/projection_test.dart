@@ -309,6 +309,19 @@ void main() {
     expect(projected.single.attachments.single.bytes, [1, 2, 3]);
   });
 
+  test("where the attachments are known, each is named with its path, "
+      "read-only", () async {
+    final projected = await projectionOf([
+      said(MessageRole.user, const [
+        MessagePart.file(resource: "u1-spec.pdf", filename: "spec.pdf", mimeType: "application/pdf"),
+        MessagePart.text(text: "read this"),
+      ]),
+    ], load: (resource) async => null, resourcesDir: "/data/chats/c/resources");
+
+    expect(projected.single.text,
+        contains("(attached, read-only: spec.pdf at /data/chats/c/resources/u1-spec.pdf)"));
+  });
+
   test("an image a tool made rides that tool's result", () async {
     final turn = [
       call("c1", "image_generation", '{"prompt":"a cat"}', response: "r1"),

@@ -91,7 +91,9 @@ class _SkillInstallPreviewPageState
         return;
       }
     }
-    await platform.withWritableDir(skillsDir, () async {
+    await platform.readOnlyDirs
+        .skills(skillsDir)
+        .write(() async {
       await installSkillPackage(config, pkg, project: target);
     });
     await reloadAllPromptLibraries(ref);
