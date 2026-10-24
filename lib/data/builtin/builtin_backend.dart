@@ -598,8 +598,8 @@ class BuiltinBackend implements AgentBackend {
         ).then((_) => _consolidateMemories(
             target: writer, store: memoryStore, chatId: chatId)));
       }
-    } catch (e) {
-      _fail(controller, "$e");
+    } catch (e, trace) {
+      _fail(controller, "$e", trace: trace);
     } finally {
       _clearApprovals(chatId);
       _clearQuestions(chatId);
@@ -929,9 +929,10 @@ class BuiltinBackend implements AgentBackend {
     ];
   }
 
-  void _fail(StreamController<AgentEvent> controller, String message) {
+  void _fail(StreamController<AgentEvent> controller, String message,
+      {StackTrace? trace}) {
     if (controller.isClosed) return;
-    controller.add(ErrorEvent(message));
+    controller.add(ErrorEvent(message, trace: trace?.toString()));
     controller.add(const DoneEvent());
   }
 

@@ -427,7 +427,10 @@ sealed class MessagePart with _$MessagePart {
     required String filename,
     required String mimeType,
   }) = FilePart;
-  const factory MessagePart.error({required String message}) = ErrorPart;
+  /// [trace] is the stack of an exception nothing expected, kept for whoever
+  /// reads `conv.jsonl` after the fact; nothing on screen shows it.
+  const factory MessagePart.error({required String message, String? trace}) =
+      ErrorPart;
 
   /// An HTML page the model rendered, saved under the chat's `artifacts/` dir
   /// and viewable in the app. The [artifactId] is the subdir name; [entryFile]

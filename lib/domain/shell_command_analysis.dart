@@ -7,6 +7,8 @@
 /// the model can rewrite around it.
 library;
 
+import "../core/log.dart" show logFailure;
+
 /// One command's parse. [isWindows] is the answer of a platform whose shell
 /// this does not model: nothing is classified there statically, which is what
 /// a driver without a parse owes the user (issue #248 carries the real one).
@@ -28,6 +30,22 @@ class ShellCommandAnalysis {
       );
     }
 
+    try {
+      return ShellCommandAnalysis._parse(command);
+    } catch (e, trace) {
+      // A bug in this parser must not take the turn down with it: a command
+      // it cannot answer for is refused, which is the safe side.
+      logFailure("shell", "command parse failed", "$e\n$trace");
+      return ShellCommandAnalysis._(
+        modelable: false,
+        unmodelableReasons: ["the command parser failed on it ($e)"],
+        escalationReasons: const [],
+        command: command,
+      );
+    }
+  }
+
+  factory ShellCommandAnalysis._parse(String command) {
     final reasons = <String>[];
     final escalations = <String>[];
     final tokens = _tokenize(command, reasons);
@@ -317,6 +335,10 @@ class _Pipeline {
     var expectWord = false;
 
     void endCommand() {
+      // A redirect the separator cut off before its target (`>|`, or a
+      // here-document body full of `>` and `|`) keeps its null target, which
+      // escalates; the next command's first word is not it.
+      expectWord = false;
       if (current.words.isNotEmpty ||
           current.redirects.isNotEmpty ||
           current.assignments.isNotEmpty) {

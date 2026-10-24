@@ -105,6 +105,17 @@ void main() {
     expect(a.escalationReasons, isEmpty);
   });
 
+  test("a redirect cut off by a separator escalates rather than throwing", () {
+    for (final command in [
+      "echo a >| out",
+      "echo a > ; b",
+      "echo a > && b",
+      "cat >> f.html <<'EOF'\n<pre>| Back | Front |</pre>\nEOF",
+    ]) {
+      expect(parse(command).escalationReasons, isNotEmpty, reason: command);
+    }
+  });
+
   test("a removal is not a redirect target — the sandbox answers for it", () {
     final a = parse("rm -rf /tmp/evil");
     expect(a.escalationReasons, isEmpty,

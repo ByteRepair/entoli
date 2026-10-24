@@ -873,7 +873,7 @@ class BuiltinAgent {
   /// out-parameters because an `async*` method has no return value of its own,
   /// and the turn is single-threaded.
   LlmCompletion? _completion;
-  Object? _queryError;
+  ({Object error, StackTrace? trace})? _queryError;
   ShellResult? _commandResult;
 
   /// Stop the turn. Kills whatever is running: an aborted turn that leaves a
@@ -981,9 +981,10 @@ class BuiltinAgent {
       _queryError = null;
       yield* _query();
       if (_cancelled) break;
-      if (_queryError != null) {
-        yield ErrorEvent("$_queryError",
-            retryable: _queryError is LlmException && (_queryError as LlmException).retryable);
+      if (_queryError case (:final error, :final trace)?) {
+        yield ErrorEvent("$error",
+            retryable: error is LlmException && error.retryable,
+            trace: trace?.toString());
         break;
       }
       final completion = _completion;
@@ -3342,11 +3343,11 @@ class BuiltinAgent {
         // resets.
         if (produced) {
           rateLimitGate?.onSuccess();
-          _queryError = e;
+          _queryError = (error: e, trace: null);
           return;
         }
         if (!e.retryable) {
-          _queryError = e;
+          _queryError = (error: e, trace: null);
           return;
         }
 
@@ -3355,7 +3356,7 @@ class BuiltinAgent {
         if (e.statusCode == 429 && rateLimitGate != null) {
           final gate = rateLimitGate!;
           if (gate.retryBudgetExhausted()) {
-            _queryError = e;
+            _queryError = (error: e, trace: null);
             return;
           }
           gate.onRateLimited();
@@ -3368,14 +3369,14 @@ class BuiltinAgent {
 
         // Other retryables — per-agent backoff, maxAttempts unchanged.
         if (attempt >= options.maxAttempts) {
-          _queryError = e;
+          _queryError = (error: e, trace: null);
           return;
         }
         yield RetryEvent(attempt: attempt, message: e.toString());
         await Future<void>.delayed(options.retryBackoff * (1 << (attempt - 1)));
         attempt++;
-      } catch (e) {
-        _queryError = e;
+      } catch (e, trace) {
+        _queryError = (error: e, trace: trace);
         return;
       }
     }

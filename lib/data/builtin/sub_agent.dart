@@ -219,7 +219,8 @@ class SubAgentRunner {
             break;
         }
       }
-    } catch (e) {
+    } catch (e, trace) {
+      recorder?.handle(ErrorEvent("$e", trace: "$trace"));
       return ShellResult.failed("$e");
     } finally {
       _active.remove(agent);

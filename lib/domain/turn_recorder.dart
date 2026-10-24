@@ -148,8 +148,8 @@ class TurnRecorder {
         // stacks two identical read records.
         final part = MessagePart.instructions(files: files);
         if (!_parts.contains(part)) addPart(part);
-      case ErrorEvent(:final message):
-        _appendError(message);
+      case ErrorEvent(:final message, :final trace):
+        _appendError(message, trace);
       case StepLimitEvent():
         outcome ??= TurnEnd.stepLimit;
       // Turn-scoped view state, or the turn's own end. Listed rather than
@@ -345,7 +345,7 @@ class TurnRecorder {
     checkpoint();
   }
 
-  void _appendError(String message) {
+  void _appendError(String message, String? trace) {
     if (_messageId == null) return;
     outcome ??= TurnEnd.error;
     flushDeltas();
@@ -356,10 +356,11 @@ class TurnRecorder {
     // the only thing that can follow one is the next round's — the stream
     // closes after the event. Superseding writes the same index, which is how
     // every part that changes is written.
+    final part = MessagePart.error(message: message, trace: trace);
     if (last is ErrorPart) {
-      parts[parts.length - 1] = MessagePart.error(message: message);
+      parts[parts.length - 1] = part;
     } else {
-      parts.add(MessagePart.error(message: message));
+      parts.add(part);
     }
     _publish(parts);
     checkpoint();

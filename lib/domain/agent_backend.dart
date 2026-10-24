@@ -204,8 +204,11 @@ class RetryEvent extends AgentEvent {
 }
 
 class ErrorEvent extends AgentEvent {
-  const ErrorEvent(this.message, {this.retryable = false});
+  const ErrorEvent(this.message, {this.retryable = false, this.trace});
   final String message;
+
+  /// The stack of an exception a catch-all caught; see [ErrorPart.trace].
+  final String? trace;
 
   /// Whether carrying the turn on could plausibly succeed — a connection that
   /// dropped, a provider that hiccuped — as opposed to one nothing retries
