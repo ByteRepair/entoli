@@ -356,10 +356,11 @@ class TurnRecorder {
     // the only thing that can follow one is the next round's — the stream
     // closes after the event. Superseding writes the same index, which is how
     // every part that changes is written.
+    final part = MessagePart.error(message: message, trace: trace);
     if (last is ErrorPart) {
-      parts[parts.length - 1] = MessagePart.error(message: message, trace: trace);
+      parts[parts.length - 1] = part;
     } else {
-      parts.add(MessagePart.error(message: message, trace: trace));
+      parts.add(part);
     }
     _publish(parts);
     checkpoint();
