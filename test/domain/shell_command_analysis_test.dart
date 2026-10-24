@@ -151,10 +151,26 @@ void main() {
       expect(a.escalationReasons, isEmpty);
     });
 
+    test("a body goes back on the segment whose << it feeds", () {
+      expect(parse("cat <<'EOF' | head\nx | y\nEOF").modelableSegments,
+          ["cat <<'EOF'\nx | y\nEOF", "head"]);
+      // The pipe carries on past the body, so what follows is its own
+      // segment and a rule on it still sees it.
+      expect(parse("cat <<'EOF' |\nx\nEOF\nrm -rf /tmp/a").modelableSegments,
+          ["cat <<'EOF'\nx\nEOF", "rm -rf /tmp/a"]);
+    });
+
     test("a body that never closes is not modeled", () {
       expect(parse("cat > f <<'EOF'\nbody").modelable, isFalse);
       expect(parse("cat > f <<").modelable, isFalse);
     });
+  });
+
+  test("segments are cut where the parse cuts commands", () {
+    expect(parse(r"echo $a; ls").modelableSegments, [r"echo $a", "ls"]);
+    expect(parse("ls &> f; cmd 2>&1 | head").modelableSegments,
+        ["ls &> f", "cmd 2>&1", "head"]);
+    expect(parse("a &&\nb").modelableSegments, ["a", "b"]);
   });
 
   test("a newline ends a command", () {
