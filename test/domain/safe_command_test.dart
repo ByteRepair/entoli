@@ -101,6 +101,35 @@ void main() {
     });
   });
 
+  group("here-documents", () {
+    test("a body is input, not part of the command", () {
+      for (final segment in [
+        "cat <<'EOF'\n<p>Don't | stop</p> > x\nEOF",
+        "grep -n x <<'EOF'\n\$5 `y`\nEOF",
+        "cat <<EOF\n<td>\$name</td>\nEOF",
+        "ls # > not a redirect",
+      ]) {
+        expect(
+          profileSegment(segment).reach,
+          SegmentReach.nonModifying,
+          reason: segment,
+        );
+      }
+    });
+
+    test("the command line still decides", () {
+      expect(
+        profileSegment("cat > f.html <<'EOF'\n<p>x</p>\nEOF").reach,
+        SegmentReach.other,
+      );
+      // An unquoted body runs its substitutions.
+      expect(
+        profileSegment("cat <<EOF\n\$(rm x)\nEOF").modelable,
+        isFalse,
+      );
+    });
+  });
+
   group("the fetch family", () {
     test("a plain curl is a network segment with a host", () {
       final profile = profileSegment("curl https://example.com/data.json");

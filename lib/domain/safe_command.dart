@@ -8,6 +8,8 @@
 /// the banner path rather than being guessed at.
 library;
 
+import "shell_command_analysis.dart" show plainWords;
+
 /// Programs whose every flag is a read, so any invocation of one is
 /// non-modifying apart from its redirects. Deliberately small: anything with
 /// a mode-set, output-file or execute-capable flag is guarded or absent.
@@ -214,10 +216,11 @@ class SegmentProfile {
   final String? url;
 }
 
-/// Classifies [segment]. Reads the surface shape only — quotes and the
-/// operators — and stands down on everything its words cannot name.
+/// Classifies [segment]. Reads the words the whole-command parse's own
+/// tokenizer gives ([plainWords]), so a quote or a here-document means the
+/// same here as there, and stands down on everything they cannot name.
 SegmentProfile profileSegment(String segment) {
-  final parsed = _read(segment);
+  final parsed = plainWords(segment);
   if (parsed == null) {
     return const SegmentProfile.unmodeled();
   }
@@ -355,65 +358,4 @@ String? _urlOf(List<String> words) {
     }
   }
   return null;
-}
-
-/// `_read` of a segment: its words. Null where the words cannot be named
-/// plainly — an expansion, a substitution, a backtick, a quote left open, a
-/// grouping — the segment is one the deterministic layer answers for
-/// nothing, the same answer the whole-command parse gives its own shapes.
-List<String>? _read(String segment) {
-  final words = <String>[];
-  final current = StringBuffer();
-  String? quote;
-  void flush() {
-    final text = current.toString();
-    if (text.trim().isNotEmpty) words.add(text.trim());
-    current.clear();
-  }
-
-  for (var i = 0; i < segment.length; i++) {
-    final c = segment[i];
-    if (quote != null) {
-      if (c == quote) {
-        quote = null;
-      } else if (quote == '"' && c == r"$") {
-        // Double quotes hide the operator from the shell's tokenizer but
-        // not the expansion from the shell: the word inside is still one
-        // the parse cannot name.
-        return null;
-      } else {
-        current.write(c);
-      }
-      continue;
-    }
-    switch (c) {
-      case "'":
-        quote = "'";
-      case '"':
-        quote = '"';
-      case r"$" || "(" || ")" || "`":
-        return null;
-      case "\\":
-        if (i + 1 < segment.length) current.write(segment[++i]);
-      case " " || "\t":
-        flush();
-      case ">" || "<" || "&" || "|":
-        // Operators become words of their own, with the target word after
-        // them, so the redirect check reads `ls > /tmp/x` and `ls >/tmp/x`
-        // the same. `>>` stays one op; `&` `|` mean nothing outside quotes
-        // at this layer and are kept as the words they would glue into.
-        if (c == ">" && i + 1 < segment.length && segment[i + 1] == ">") {
-          flush();
-          words.add(">>");
-          i++;
-        } else {
-          flush();
-          words.add(c);
-        }
-      default:
-        current.write(c);
-    }
-  }
-  flush();
-  return words;
 }

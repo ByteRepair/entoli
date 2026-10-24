@@ -212,6 +212,37 @@ List<String> _segmentsOf(String command, List<_Tok> tokens) {
   return [for (final text in texts) if (text.isNotEmpty) text];
 }
 
+/// [segment]'s words as plain text, for the read-only tier: an operator is a
+/// word of its own, split to its characters but for `>>`, so `2>&1` reads
+/// `2` `>` `&` `1`; a here-document body is not there at all. Null where a
+/// word is not plain — an expansion, a substitution, a group — or the
+/// segment does not tokenize, the same answer the whole-command parse gives.
+List<String>? plainWords(String segment) {
+  final reasons = <String>[];
+  final tokens = _tokenize(segment, reasons);
+  if (reasons.isNotEmpty) return null;
+  final words = <String>[];
+  for (final tok in tokens) {
+    switch (tok.kind) {
+      case _TokKind.word:
+        final text = _plainOf(tok);
+        if (text == null) return null;
+        words.add(text);
+      case _TokKind.op when tok.text == "(" || tok.text == ")":
+        return null;
+      case _TokKind.op when tok.text == ">>":
+        words.add(">>");
+      case _TokKind.op when tok.text == "\n":
+        break;
+      case _TokKind.op:
+        words.addAll(tok.text.split(""));
+      case _TokKind.body:
+        break;
+    }
+  }
+  return words;
+}
+
 /// Whether [command] reads or writes a file the way the file tools would:
 /// `cat`, `head`, `tail`, `nl`, `less` or `more` naming a file rather than
 /// filtering a pipe, `sed` given a file or `-i`, or `echo`, `printf` or `cat`
