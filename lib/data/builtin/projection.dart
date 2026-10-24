@@ -1,6 +1,7 @@
 import "dart:typed_data";
 
 import "package:collection/collection.dart";
+import "package:path/path.dart" as p;
 
 import "../../domain/ask.dart";
 import "../../domain/end_turn.dart";
@@ -58,6 +59,10 @@ import "templates.dart";
 /// is what it costs to hand a model the image it was sent rather than the name
 /// of it.
 ///
+/// [resourcesDir] is where the chat's attachments are, at the path a command
+/// reaches them by — every shell binds them at their host path — so the note
+/// naming a file says where to find it. Null names them alone.
+///
 /// [compactions] are the markers on the thread [messages] walks — the last one
 /// is what the model reads instead of everything before its boundary, the
 /// earlier ones being shadows an earlier compaction left. A marker whose
@@ -71,6 +76,7 @@ Future<List<LlmMessage>> projectionOf(
   List<Message> messages, {
   bool first = true,
   required ResourceLoader load,
+  String? resourcesDir,
   String? viewer,
   List<ConversationCompaction> compactions = const [],
 }) async {
@@ -111,7 +117,7 @@ Future<List<LlmMessage>> projectionOf(
     if (index < from) continue;
     switch (message.role) {
       case MessageRole.user:
-        final text = _userText(message);
+        final text = _userText(message, resourcesDir);
         if (text.isEmpty) break;
         // The dress is the viewer's first mail: in [first], once. A call
         // that worded a delta or a live prompt already decided it is that
@@ -164,7 +170,7 @@ Future<List<LlmMessage>> projectionOf(
           // viewer reads what was said, not the commands behind it.
           continue;
         }
-        projected.addAll(_assistant(message, files[index]));
+        projected.addAll(_assistant(message, files[index], resourcesDir));
       case MessageRole.system:
       case MessageRole.tool:
         // The system prompt is rewritten every turn, and a result is a part of
@@ -195,12 +201,19 @@ Message unloggedMessage(MessageRole role, DateTime at, List<MessagePart> parts) 
 /// decoration into the middle of the command's template.
 ///
 /// Files are named as well as sent: the bytes carry no filename, and one whose
-/// resource has gone is left with nothing but its name.
-String _userText(Message message) {
+/// resource has gone is left with nothing but its name. Where [resourcesDir]
+/// is known each also says where it is, for a command, and that it is not to
+/// be written: `attachment_save` makes the copy that can be.
+String _userText(Message message, String? resourcesDir) {
   final text = expandedPrompt(message.plainText, message.documents).trim();
-  final files = message.files.map((f) => f.filename).join(", ");
-  if (files.isEmpty) return text;
-  return text.isEmpty ? "(attached: $files)" : "$text\n\n(attached: $files)";
+  if (message.files.isEmpty) return text;
+  final files = message.files
+      .map((f) => resourcesDir == null
+          ? f.filename
+          : "${f.filename} at ${p.join(resourcesDir, f.resource)}")
+      .join(", ");
+  final note = resourcesDir == null ? "(attached: $files)" : "(attached, read-only: $files)";
+  return text.isEmpty ? note : "$text\n\n$note";
 }
 
 final Future<Map<String, LlmAttachment>> _noFiles = Future.value(const {});
@@ -233,8 +246,9 @@ Future<Map<String, LlmAttachment>> attachmentsOf(Message message, ResourceLoader
 /// [files] are the bytes of the reply's [FilePart]s by resource, which a live
 /// turn holds already and a reload reads first.
 Iterable<LlmMessage> assistantMessages(List<MessagePart> parts,
-        {Map<String, LlmAttachment> files = const {}}) =>
-    _assistant(unloggedMessage(MessageRole.assistant, _noDate, parts), files);
+        {Map<String, LlmAttachment> files = const {}, String? resourcesDir}) =>
+    _assistant(unloggedMessage(MessageRole.assistant, _noDate, parts), files,
+        resourcesDir);
 
 /// What another participant said in a reply, worded for a different viewer:
 /// the plain text of it, which is what one agent owes another. Thinking and
@@ -249,8 +263,8 @@ String? _saidText(Message message) {
 /// assembled has none to give.
 final _noDate = DateTime.fromMillisecondsSinceEpoch(0);
 
-Iterable<LlmMessage> _assistant(
-    Message message, Map<String, LlmAttachment> files) sync* {
+Iterable<LlmMessage> _assistant(Message message,
+    Map<String, LlmAttachment> files, String? resourcesDir) sync* {
   // Over the whole message rather than per response: a result is paired to its
   // call by id, and one that landed in a later response than the call it
   // answers must not be read as missing.
@@ -353,7 +367,7 @@ Iterable<LlmMessage> _assistant(
     }
 
     if (reasoning.isEmpty && text.isEmpty && calls.isEmpty) {
-      yield* _steered(steers, files);
+      yield* _steered(steers, files, resourcesDir);
       continue;
     }
 
@@ -381,15 +395,15 @@ Iterable<LlmMessage> _assistant(
         attachments: images[call.id] ?? const [],
       );
     }
-    yield* _steered(steers, files);
+    yield* _steered(steers, files, resourcesDir);
   }
 }
 
-Iterable<LlmMessage> _steered(
-        List<Message> steers, Map<String, LlmAttachment> files) =>
+Iterable<LlmMessage> _steered(List<Message> steers,
+        Map<String, LlmAttachment> files, String? resourcesDir) =>
     steers.map((said) => LlmMessage(
           role: LlmRole.user,
-          text: steerTurnText(_userText(said), at: said.createdAt),
+          text: steerTurnText(_userText(said, resourcesDir), at: said.createdAt),
           attachments: [
             for (final file in said.files) ?files[file.resource],
           ],

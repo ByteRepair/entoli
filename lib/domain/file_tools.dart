@@ -8,6 +8,7 @@ import "workspace.dart";
 /// draws tool labels from them, so one source for each.
 const readToolName = "read";
 const writeToolName = "write";
+const attachmentSaveToolName = "attachment_save";
 const editToolName = "edit";
 
 /// What a `read` call's arguments hold. [path] is required; [offset] and

@@ -961,10 +961,29 @@ so the projection hangs it on that result as it does a screenshot. The type
 comes from the magic number alone (`readBlockTypeOf`), never the name: a block
 the provider cannot decode is one more request that fails every turn it stays
 in. Where the model cannot take it, or the agent has no `saveResource` (a
-sub-agent), or it is over the size a request can carry, the read fails saying
-which and what to do instead. The chip it leaves in the reply is the cost of
-the record: a reload has to find the same bytes the model saw, and the
-workspace file may have changed or gone since.
+sub-agent), the read succeeds with the path and a pointer to a command, since
+the file is there and the path is what a command needs; over the size a
+request can carry, it fails saying how to shrink it. The chip it leaves in the
+reply is the cost of the record: a reload has to find the same bytes the model
+saw, and the workspace file may have changed or gone since.
+
+## Attachments (`attachment_save`)
+
+A chat's `resources/` is read-only to the agent (see "Read-only directories"
+in the root notes). The projection's note names each attachment with its path
+— `(attached, read-only: spec.pdf at <path>)` — and that path is the host's in
+every shell: proot binds the chat's `resources/` at its own host path (passed
+down as `Shell.start`'s `readOnly`), and iSH binds the whole data directory at
+its host path already. One path for every shell keeps the wording the same
+whichever one a turn runs under, and needs no prefix of its own.
+
+`read` reads under it without asking, though it is outside the workspaces.
+`write` and `edit` refuse it outright rather than gate it, pointing at
+`attachment_save`, which copies an attachment to `attachments/<its name>` in
+the chat workspace (or `dest`) as a new file the agent can change. A tool and
+not `cp` because a copy of a read-only file comes out read-only. A turn locks
+its chat's `resources/` as it starts (`ChatStore.lockResources`), for chats
+whose files were saved before the lock existed or arrived by restore or sync.
 
 ## Skills (the `skill` tool)
 

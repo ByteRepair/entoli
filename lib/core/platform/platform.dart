@@ -208,6 +208,8 @@ LocalPrefill? createLocalPrefill(
            // no memory tools; a turn with them misses the cache rather than
            // the cache serving a list no turn sends.
            offerMemory: false,
+           // Every top-level chat has a `resources/` to copy out of.
+           attachments: true,
          ),
       );
     },

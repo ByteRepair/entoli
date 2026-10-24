@@ -10,6 +10,7 @@ import "../../domain/agent_backend.dart";
 import "../../domain/agent_browser.dart";
 import "../../domain/artifact.dart";
 import "../../domain/ask.dart";
+import "../../domain/chat_store.dart" show attachmentFilename;
 import "../../domain/command_grants.dart";
 import "../../domain/date_words.dart" show describeFire;
 import "../../domain/file_tools.dart";
@@ -25,6 +26,7 @@ import "../../domain/tone.dart";
 import "../../domain/tool_arg.dart";
 import "../../domain/turn_recorder.dart";
 import "../../domain/web_search.dart";
+import "../../domain/workspace.dart" show isUnder;
 import "ask_tool.dart";
 import "browser_tools.dart";
 import "artifact_tool.dart";
@@ -343,6 +345,7 @@ List<LlmTool> agentTools({
   List<PromptDocument>? participants,
   bool member = false,
   bool customizing = false,
+  bool attachments = false,
 }) =>
     [
       file_tool_defs.readTool,
@@ -396,6 +399,7 @@ List<LlmTool> agentTools({
               ? null
               : browserUpload,
         ),
+      if (attachments) file_tool_defs.attachmentSaveTool,
     ];
 
 /// The agent loop: ask the model, run the command it asked for, show it the
@@ -433,6 +437,7 @@ class BuiltinAgent {
     this.browser,
     this.seesImages = true,
     this.seesPdfs = false,
+    this.attachmentsDir,
     this.browserHidden = false,
     this.browserApprove = ApproveMode.never,
     this.browserUploads = BrowserUploadPolicy.classifier,
@@ -742,6 +747,16 @@ class BuiltinAgent {
   /// answers one with.
   final bool seesPdfs;
 
+  /// The chat's `resources/`, what the user attached and the tools saved, at
+  /// the path every shell reaches it by. Read-only to the agent: a command
+  /// gets it bound read-only, `write` and `edit` refuse it, `read` reads it
+  /// unasked, and `attachment_save` is how a copy that can change is made.
+  /// Null where the agent has none, a sub-agent.
+  final String? attachmentsDir;
+
+  bool _inAttachments(String path) =>
+      attachmentsDir != null && isUnder(fs, path, attachmentsDir!);
+
   /// Whether the browser runs with no window, which offers `browser_show`.
   final bool browserHidden;
 
@@ -860,6 +875,7 @@ class BuiltinAgent {
         participants: roomParticipants,
         member: viewer != null,
         customizing: _customizing,
+        attachments: attachmentsDir != null,
       );
 
   bool _cancelled = false;
@@ -943,7 +959,9 @@ class BuiltinAgent {
         final from = session.messages.length;
         void sayWhatWasSaid() {
           said.flushDeltas();
-          session.replaceTurn(from, assistantMessages(said.parts, files: _images));
+          session.replaceTurn(from,
+              assistantMessages(said.parts,
+                  files: _images, resourcesDir: attachmentsDir));
         }
 
         _sayWhatWasSaid = sayWhatWasSaid;
@@ -1036,7 +1054,10 @@ class BuiltinAgent {
     // first own mail dresses, and a whole-span walk decides the same first;
     // see "The room and its participants".
     session.messages.addAll(await projectionOf([prompt],
-        first: mayDress, viewer: viewer, load: loadResource));
+        first: mayDress,
+        viewer: viewer,
+        load: loadResource,
+        resourcesDir: attachmentsDir));
   }
 
   /// The system prompt is rewritten every turn rather than once, so an
@@ -1122,6 +1143,7 @@ class BuiltinAgent {
         readToolName => _read,
         writeToolName => _write,
         editToolName => _edit,
+        attachmentSaveToolName when attachmentsDir != null => _attachmentSave,
         askToolName => _ask,
         skillToolName => _skill,
         listParticipantsToolName when roomParticipants != null =>
@@ -1851,12 +1873,17 @@ class BuiltinAgent {
     ImageEvent? attached;
     Future<ShellResult> attach(String type, Uint8List bytes) async {
       final pdf = type == "application/pdf";
+      // Not a failure: the file is there, and its path is what a command
+      // needs to do what this model cannot.
       if (!(pdf ? seesPdfs : seesImages) || saveResource == null) {
-        return ShellResult.failed(pdf
-            ? "${args.path} is a PDF, which this model cannot read directly "
-                "here. Extract its text with a command instead, such as "
-                "`pdftotext`."
-            : "${args.path} is an image, which this model cannot view.");
+        return ShellResult(
+            returnCode: 0,
+            output: pdf
+                ? "${args.path} is a PDF, which this model cannot read "
+                    "directly. Read it with a command at that path instead, "
+                    "such as `pdftotext`."
+                : "${args.path} is an image, which this model cannot view. "
+                    "A command can work with it at that path.");
       }
       String megabytes(int n) => "${(n / 1000000).toStringAsFixed(1)} MB";
       final limit = pdf ? pdfBudgetBytes : file_tool_defs.maxReadImageBytes;
@@ -1918,7 +1945,8 @@ class BuiltinAgent {
           : "$result\n\n${renderInstructions(nested)}";
       return ShellResult(returnCode: 0, output: output);
     }
-    yield* _gatedPath(call, path, readToolName, run, granted: _grantedDirs);
+    yield* _gatedPath(call, path, readToolName, run,
+        granted: [..._grantedDirs, ?attachmentsDir]);
     // Between the call and its result, which is where the projection looks
     // for a tool's files.
     if (attached != null) yield attached!;
@@ -1934,6 +1962,58 @@ class BuiltinAgent {
     }
   }
 
+  String _readOnlyAttachment(String path) =>
+      "$path is an attachment, and attachments are read-only. Copy it with "
+      "$attachmentSaveToolName and change the copy.";
+
+  /// Copy an attachment into the workspace as a file that can change. Read
+  /// whole and written new, which is what makes the copy writable: a copy
+  /// that kept the source's mode would be as read-only as the attachment.
+  Stream<AgentEvent> _attachmentSave(LlmToolCall call) async* {
+    final source = stringArg(call.argumentsJson, "path");
+    if (source == null) {
+      yield* _reject(call,
+          'The $attachmentSaveToolName tool takes {"path": "..."}; that '
+          "argument was missing.");
+      return;
+    }
+    final from = _resolvePath(source);
+    if (!_inAttachments(from)) {
+      yield* _reject(call,
+          "$source is not an attachment. $attachmentSaveToolName copies "
+          "the files attached to this chat; copy anything else with a "
+          "command.");
+      return;
+    }
+    final name = attachmentFilename(fs.path.basename(from));
+    final asked = stringArg(call.argumentsJson, "dest");
+    final dest = asked ?? fs.path.join("attachments", name);
+    final to = _resolvePath(dest);
+    if (_inAttachments(to)) {
+      yield* _reject(call, _readOnlyAttachment(dest));
+      return;
+    }
+    yield _called(call, source);
+    Future<ShellResult> run() async {
+      final file = fs.file(from);
+      if (!await file.exists()) {
+        return ShellResult.failed("File not found: $source");
+      }
+      if (await fs.file(to).exists()) {
+        return ShellResult.failed(
+            "$dest already exists. Pass another dest, or change that one.");
+      }
+      await fs.directory(fs.path.dirname(to)).create(recursive: true);
+      await fs.file(to).writeAsBytes(await file.readAsBytes());
+      // Copied, so read as far as the edit tools are concerned: changing it
+      // next needs no read of a file the model has not seen as text.
+      await _stamp(to);
+      return ShellResult(
+          returnCode: 0, output: "Copied $source to $dest, which you can change.");
+    }
+    yield* _runFileTool(call, to, attachmentSaveToolName, run);
+  }
+
   /// Write a file, creating or overwriting. The same gate as [read]: the
   /// workspaces run, the machine is asked.
   Stream<AgentEvent> _write(LlmToolCall call) async* {
@@ -1945,6 +2025,10 @@ class BuiltinAgent {
       return;
     }
     final path = _resolvePath(args.path);
+    if (_inAttachments(path)) {
+      yield* _reject(call, _readOnlyAttachment(args.path));
+      return;
+    }
     // Asked before the gate too, so a refusal raises no banner first.
     if (await _unread(path, args.path, writeToolName) case final problem?) {
       yield* _reject(call, problem);
@@ -1974,6 +2058,10 @@ class BuiltinAgent {
       return;
     }
     final path = _resolvePath(args.path);
+    if (_inAttachments(path)) {
+      yield* _reject(call, _readOnlyAttachment(args.path));
+      return;
+    }
     if (await _unread(path, args.path, editToolName) case final problem?) {
       yield* _reject(call, problem);
       return;
@@ -3033,7 +3121,8 @@ class BuiltinAgent {
         oneShot: oneShot,
         restart: args?["restart"] == true,
         project: project,
-        sandbox: sandbox);
+        sandbox: sandbox,
+        readOnly: [?attachmentsDir]);
     _running = run;
     _runWatched(call, run);
     try {

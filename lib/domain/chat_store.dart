@@ -133,3 +133,12 @@ String resourceName(String filename) {
   if (safe.startsWith(".")) safe = safe.substring(1);
   return "${const Uuid().v4()}-$safe";
 }
+
+/// The name [resourceName] made [resource] from, without the prefix that
+/// made it unique: what a copy of it is called.
+String attachmentFilename(String resource) {
+  final unique = RegExp(
+          r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}-")
+      .firstMatch(resource);
+  return unique == null ? resource : resource.substring(unique.end);
+}

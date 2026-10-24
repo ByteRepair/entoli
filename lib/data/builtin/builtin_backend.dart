@@ -279,6 +279,9 @@ class BuiltinBackend implements AgentBackend {
 
       await config.ensureChatDirs(chatId, project: project);
       await config.ensureProjectDirs(project: project);
+      // A chat from before attachments were read-only, or one whose files a
+      // restore or a sync wrote, is locked before the agent can reach it.
+      await store.lockResources(chatId);
       final workspace = config.workspaceDir(chatId, project: project);
       final projectWorkspace = _projectWorkspaceFor(
           workspace: workspace,
@@ -514,6 +517,7 @@ class BuiltinBackend implements AgentBackend {
                 settings.imageQuality),
         saveResource: (filename, bytes) =>
             store.saveResource(chatId, filename, bytes),
+        attachmentsDir: config.resourcesDir(chatId, project: project),
         registerTrigger: triggerRegistry?.call(chatId, project),
         editSettings: editSettings,
         packageSkill: (path, name) async {
@@ -655,7 +659,10 @@ class BuiltinBackend implements AgentBackend {
             sharedWorkspace: sharedWorkspace),
         timeout: options.commandTimeout,
         environment: environment,
-        project: project);
+        project: project,
+        // The agent's commands and this share the chat's shell, which
+        // respawns where the binds differ.
+        readOnly: [config.resourcesDir(chatId, project: project)]);
     // Before the wait, so Stop kills the command rather than only closing the
     // stream over it.
     _running.replace(stopKey, run.kill);
@@ -691,7 +698,9 @@ class BuiltinBackend implements AgentBackend {
     final dress = mayDress(session, history, null);
     session.messages
       ..addAll(await projectionOf([prompt],
-          first: dress, load: _resourcesOf(chatId)))
+          first: dress,
+          load: _resourcesOf(chatId),
+          resourcesDir: await _resourcesDirOf(chatId)))
       ..addAll(assistantMessages([part]));
   }
 
@@ -727,7 +736,10 @@ class BuiltinBackend implements AgentBackend {
     final session = _sessions.putIfAbsent(key, BuiltinSession.new);
     if (rebuild || session.isFresh) {
       session.replaceWith(await projectionOf(history,
-          load: _resourcesOf(chatId), viewer: viewer, compactions: compactions));
+          load: _resourcesOf(chatId),
+          resourcesDir: await _resourcesDirOf(chatId),
+          viewer: viewer,
+          compactions: compactions));
       session.coveredBy(history);
       return session;
     }
@@ -796,7 +808,8 @@ class BuiltinBackend implements AgentBackend {
         final entries = await projectionOf([message],
             first: mine && !ownBefore,
             viewer: viewer,
-            load: _resourcesOf(chatId));
+            load: _resourcesOf(chatId),
+            resourcesDir: await _resourcesDirOf(chatId));
         if (_sameSlice(tail, confirmed, entries)) {
           confirmed += entries.length;
           confirmedIds.add(message.id);
@@ -812,7 +825,10 @@ class BuiltinBackend implements AgentBackend {
     }
     if (fresh.isNotEmpty) {
       final wordings = await projectionOf(fresh,
-          first: !ownBefore, viewer: viewer, load: _resourcesOf(chatId));
+          first: !ownBefore,
+          viewer: viewer,
+          load: _resourcesOf(chatId),
+          resourcesDir: await _resourcesDirOf(chatId));
       session.messages.addAll(wordings);
       confirmedIds.addAll([for (final message in fresh) message.id]);
       confirmed += wordings.length;
@@ -831,6 +847,7 @@ class BuiltinBackend implements AgentBackend {
     if (replayed.messages.isEmpty) return;
     session.replaceWith(await projectionOf(replayed.messages,
         load: _resourcesOf(chatId),
+        resourcesDir: await _resourcesDirOf(chatId),
         viewer: viewer,
         compactions: replayed.compactions));
     session.coveredBy(replayed.messages);
@@ -871,6 +888,10 @@ class BuiltinBackend implements AgentBackend {
   /// Where this chat's attachment bytes come from, for the projection.
   ResourceLoader _resourcesOf(String chatId) =>
       (resource) => store.readResource(chatId, resource);
+
+  /// Where this chat's attachments are, for the note that names them.
+  Future<String> _resourcesDirOf(String chatId) async =>
+      config.resourcesDir(chatId, project: await store.projectOf(chatId));
 
   /// Carry on the sub-agents the interrupted turn left in flight. A `task`
   /// call whose result never landed is answered by reviving the sub-agent that
@@ -1003,13 +1024,14 @@ class BuiltinBackend implements AgentBackend {
     final read = <String, Future<Uint8List?>>{};
     Future<Uint8List?> loader(String resource) =>
         read.putIfAbsent(resource, () => _resourcesOf(chatId)(resource));
+    final resourcesDir = await _resourcesDirOf(chatId);
     List<Message> span = history;
     List<Message> halve() => span.sublist((span.length / 2).ceil());
     // Loop-invariant: the markers do not change across the ladder.
     final priorSummary = compactions.lastOrNull?.summary;
     for (var attempt = 0; attempt < 3; attempt++) {
       final projected = await projectionOf(span,
-          load: loader, compactions: compactions);
+          load: loader, resourcesDir: resourcesDir, compactions: compactions);
       if (projected.isEmpty) return null;
       final cut = CompactPrompt.build(
         conversation: projected,
@@ -1030,7 +1052,9 @@ class BuiltinBackend implements AgentBackend {
           final marker = ConversationCompaction(
               upToMessageId: span.last.id, summary: summary);
           final after = await projectionOf(history,
-              load: loader, compactions: [...compactions, marker]);
+              load: loader,
+              resourcesDir: resourcesDir,
+              compactions: [...compactions, marker]);
           return marker.copyWith(chatTokens: estimateTokens(after));
         }
         logFailure("compact", "empty summary for $chatId");
@@ -1438,7 +1462,9 @@ class BuiltinBackend implements AgentBackend {
     await _running.stopAll(chatId);
     final house = _sessions.putIfAbsent(chatId, BuiltinSession.new);
     house.replaceWith(await projectionOf(history,
-        load: _resourcesOf(chatId), compactions: compactions));
+        load: _resourcesOf(chatId),
+        resourcesDir: await _resourcesDirOf(chatId),
+        compactions: compactions));
     house.coveredBy(history);
     // The room's other participants read on their own dispatches, which the
     // sync fills from wherever the log now is: a session worded for them

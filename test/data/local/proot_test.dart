@@ -82,6 +82,18 @@ void main() {
     expect(driver.hostToGuestPaths[defaultUserSkills], "/opt/skills");
   });
 
+  test("a read-only dir is bound at its own path, and every read-only dir is "
+      "kept from the fake root", () {
+    const resources = "$dataDir/projects/default/chats/abc-123/resources";
+    final command = build().commandFor(cwd, home, readOnly: [resources]);
+
+    expect(valuesOf(command, "-b"), contains("$resources:$resources"));
+    expect(valuesOf(command, "--read-only"),
+        containsAll([resources, defaultSkillsBundled, defaultUserSkills]));
+    expect(command.indexOf("--read-only"), greaterThan(command.indexOf("-0")),
+        reason: "beside the fake root it qualifies");
+  });
+
   test("a project's own skills dirs are bound beside the default's", () {
     const projectSkillsBundled = "$dataDir/projects/byte-repair/skills-bundled";
     const projectUserSkills = "$dataDir/projects/byte-repair/skills";

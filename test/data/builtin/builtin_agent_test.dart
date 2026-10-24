@@ -16,6 +16,7 @@ import "package:agent_chat/data/builtin/llm/llm_client.dart";
 import "package:agent_chat/domain/agent_backend.dart";
 import "package:agent_chat/domain/artifact.dart";
 import "package:agent_chat/domain/ask.dart";
+import "package:agent_chat/domain/file_tools.dart" show attachmentSaveToolName;
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/domain/permission.dart";
 import "package:agent_chat/domain/plan.dart";
@@ -53,8 +54,12 @@ void main() {
     SteerInbox? steers,
     bool seesImages = true,
     bool seesPdfs = false,
+    bool attachments = false,
   }) {
     final tempDir = Directory.systemTemp.createTempSync("agent-test");
+    // Beside the workspaces, the way the layout keeps `chats/<id>/resources`.
+    final attachmentsDir = p.join(tempDir.path, "chat-1", "resources");
+    if (attachments) Directory(attachmentsDir).createSync(recursive: true);
     final testProjectWorkspace = p.join(tempDir.path, "project-workspace");
     // Nested the way the layout is: the chat's own workspace is a folder
     // inside its project's, which is the bound the nested walk stops at.
@@ -88,6 +93,7 @@ void main() {
       steers: steers,
       seesImages: seesImages,
       seesPdfs: seesPdfs,
+      attachmentsDir: attachments ? attachmentsDir : null,
     );
   }
 
@@ -973,6 +979,99 @@ void main() {
   });
 
   group("file tools", () {
+    group("attachments", () {
+      const resource = "0b6f2e0a-1c4d-4f6e-9a1b-2c3d4e5f6a7b-spec.txt";
+
+      BuiltinAgent over(List<List<LlmChunk>> turns,
+          {List<ApprovalResponse> approvals = const []}) {
+        final agent = agentOver(FakeLlmClient(turns),
+            attachments: true, approvals: approvals);
+        File(p.join(agent.attachmentsDir!, resource)).writeAsStringSync("the spec");
+        return agent;
+      }
+
+      String attached(BuiltinAgent agent) => p.join(agent.attachmentsDir!, resource);
+
+      test("are read without asking, though outside the workspaces", () async {
+        late BuiltinAgent agent;
+        agent = over([
+          [readCall("PLACEHOLDER")],
+          [finish],
+        ], approvals: [ApprovalResponse.deny]);
+        (agent.client as FakeLlmClient).turns[0] = [readCall(attached(agent))];
+        final events = await agent.run(userMessage("read it")).toList();
+        final result = events.whereType<ToolResultEvent>().single.result;
+        expect(result.returnCode, 0);
+        expect(result.output, contains("the spec"));
+      });
+
+      test("are refused to write and edit, pointing at attachment_save", () async {
+        final agent = over([
+          [writeCall("PLACEHOLDER", "x")],
+          [editCall("PLACEHOLDER", "the", "a")],
+          [finish],
+        ]);
+        final client = agent.client as FakeLlmClient;
+        client.turns[0] = [writeCall(attached(agent), "x")];
+        client.turns[1] = [editCall(attached(agent), "the", "a")];
+        final events = await agent.run(userMessage("change it")).toList();
+        for (final result in events.whereType<ToolResultEvent>()) {
+          expect(result.result.exceptionInfo, contains(attachmentSaveToolName));
+        }
+        expect(File(attached(agent)).readAsStringSync(), "the spec");
+      });
+
+      test("are copied by attachment_save into the chat workspace, writable",
+          () async {
+        final agent = over([
+          [fileCall(attachmentSaveToolName, {"path": "PLACEHOLDER"})],
+          [finish],
+        ]);
+        (agent.client as FakeLlmClient).turns[0] = [
+          fileCall(attachmentSaveToolName, {"path": attached(agent)}),
+        ];
+        final events = await agent.run(userMessage("copy it")).toList();
+
+        final copy = File(p.join(agent.workspace, "attachments", "spec.txt"));
+        expect(events.whereType<ToolResultEvent>().single.result.returnCode, 0);
+        expect(copy.readAsStringSync(), "the spec");
+        copy.writeAsStringSync("changed");
+        expect(copy.readAsStringSync(), "changed");
+      });
+
+      test("attachment_save copies nothing that is not one", () async {
+        final agent = over([
+          [fileCall(attachmentSaveToolName, {"path": "notes.txt"})],
+          [finish],
+        ]);
+        File(p.join(agent.workspace, "notes.txt")).writeAsStringSync("x");
+        final events = await agent.run(userMessage("copy it")).toList();
+        expect(events.whereType<ToolResultEvent>().single.result.exceptionInfo,
+            contains("not an attachment"));
+      });
+
+      test("a command is told not to write them", () async {
+        final agent = over([
+          [bashCall("ls")],
+          [finish],
+        ]);
+        await agent.run(userMessage("look")).toList();
+        expect(shell.readOnlys.single, [agent.attachmentsDir]);
+      });
+
+      test("attachment_save is offered only where there are attachments",
+          () async {
+        final withThem = FakeLlmClient([[finish]]);
+        await agentOver(withThem, attachments: true).run(userMessage("hi")).toList();
+        final without = FakeLlmClient([[finish]]);
+        await agentOver(without).run(userMessage("hi")).toList();
+        expect(withThem.calls.first.tools.map((t) => t.name),
+            contains(attachmentSaveToolName));
+        expect(without.calls.first.tools.map((t) => t.name),
+            isNot(contains(attachmentSaveToolName)));
+      });
+    });
+
     group("read of an image or a PDF", () {
       final png = Uint8List.fromList([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0]);
       final pdf = Uint8List.fromList(utf8.encode("%PDF-1.4\n"));
@@ -1017,20 +1116,24 @@ void main() {
         expect(named.whereType<ToolResultEvent>().single.result.output, contains("hi"));
       });
 
-      test("fails saying why where the model cannot take it", () async {
-        Future<String?> refused(String name, Uint8List bytes,
+      test("answers with its path where the model cannot take it", () async {
+        Future<ToolResult> answered(String name, Uint8List bytes,
             {bool seesImages = true, bool seesPdfs = true, bool canSave = true}) async {
           final events = await read(name, bytes,
               seesImages: seesImages, seesPdfs: seesPdfs, canSave: canSave);
           expect(events.whereType<ImageEvent>(), isEmpty);
-          return events.whereType<ToolResultEvent>().single.result.exceptionInfo;
+          return events.whereType<ToolResultEvent>().single.result;
         }
 
-        expect(await refused("spec.pdf", pdf, seesPdfs: false), contains("pdftotext"));
-        expect(await refused("shot.png", png, seesImages: false), contains("cannot view"));
-        expect(await refused("shot.png", png, canSave: false), contains("cannot view"));
+        final pdfAnswer = await answered("spec.pdf", pdf, seesPdfs: false);
+        expect(pdfAnswer.returnCode, 0);
+        expect(pdfAnswer.output, allOf(contains("spec.pdf"), contains("pdftotext")));
+        expect((await answered("shot.png", png, seesImages: false)).output,
+            contains("cannot view"));
+        expect((await answered("shot.png", png, canSave: false)).output,
+            contains("cannot view"));
         final huge = Uint8List(4000000)..setAll(0, png);
-        expect(await refused("huge.png", huge), contains("Downscale"));
+        expect((await answered("huge.png", huge)).exceptionInfo, contains("Downscale"));
       });
     });
 

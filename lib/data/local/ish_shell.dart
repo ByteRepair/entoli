@@ -120,9 +120,13 @@ class IshShell extends Shell {
       bool oneShot = false,
       bool restart = false,
       String? project,
-      CommandSandbox? sandbox}) {
+      CommandSandbox? sandbox,
+      List<String> readOnly = const []}) {
     // `project` exists so a shell can resolve a per-project driver; the
-    // emulator is its own environment and has no driver to pick.
+    // emulator is its own environment and has no driver to pick. `readOnly`
+    // needs no bind of its own: the bridge binds the whole data directory at
+    // its host path, and the bridge keeps the guest's root from writing in
+    // what the app made read-only.
     //
     // There is no confinement to offer inside the guest — its rootfs is the
     // boundary, the way a proot guest's is — so a sandboxed command fails

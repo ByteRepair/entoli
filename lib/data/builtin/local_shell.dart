@@ -185,7 +185,7 @@ class LocalShell extends Shell {
                 "a Linux from the Terminal settings gives you both"
             : where;
     return ShellDriver(
-      commandFor: (_, _) => [path],
+      commandFor: (_, _, {readOnly = const []}) => [path],
       environment: {...?environment0, ...?tools?.environment},
       projectHome: projectHome,
       description: description,
@@ -228,7 +228,8 @@ class LocalShell extends Shell {
       bool oneShot = false,
       bool restart = false,
       String? project,
-      CommandSandbox? sandbox}) {
+      CommandSandbox? sandbox,
+      List<String> readOnly = const []}) {
     // A sandboxed command runs in a confined subshell of its own, whatever
     // the caller asked for: the session shell is the conversation's shared
     // state, and a boundary asked for per command cannot be attached to it
@@ -241,7 +242,7 @@ class LocalShell extends Shell {
       return _OneShotRun(
         // The driver's shell, built for this chat's cwd and home, or nothing
         // where there is no driver at all.
-        command: driver?.commandFor(cwd, home) ?? const [],
+        command: driver?.commandFor(cwd, home, readOnly: readOnly) ?? const [],
         script: command,
         cwd: cwd,
         timeout: timeout,
@@ -254,7 +255,8 @@ class LocalShell extends Shell {
     }
     return _sessions
         .putIfAbsent(cwd, () => _Session(this, cwd, home, project: project))
-        .start(command, timeout, environment: environment, restart: restart);
+        .start(command, timeout,
+            environment: environment, restart: restart, readOnly: readOnly);
   }
 
   /// What a command runs under, with the layers in the order they win. The
@@ -483,10 +485,12 @@ class _Session {
   static const _grace = Duration(seconds: 1);
 
   ShellRun start(String command, Duration timeout,
-       {Map<String, String>? environment, bool restart = false}) {
+       {Map<String, String>? environment,
+       bool restart = false,
+       List<String> readOnly = const []}) {
     final run = _SessionRun(_RunState(timeout), this);
     _queue = _queue.then((_) => _execute(run, command, timeout,
-        environment: environment, restart: restart));
+        environment: environment, restart: restart, readOnly: readOnly));
     return run;
   }
 
@@ -496,9 +500,13 @@ class _Session {
     Duration timeout, {
     Map<String, String>? environment,
     bool restart = false,
+    List<String> readOnly = const [],
   }) async {
     final driver = _shell._driver(project: _project);
-    final command0 = driver?.commandFor(_cwdPath, _home) ?? const [];
+    // A change in what is bound changes the fingerprint below, so the shell
+    // respawns with it rather than standing in the old binds.
+    final command0 =
+        driver?.commandFor(_cwdPath, _home, readOnly: readOnly) ?? const [];
     if (command0.isEmpty) {
       run.state.complete(const ShellResult.failed(
           "No shell was found on this device to execute commands in."));

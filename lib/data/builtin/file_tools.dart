@@ -130,3 +130,30 @@ const editTool = LlmTool(
   },
 );
 
+/// Copy an attachment out of the read-only `resources/` into the workspace, as
+/// a file that can be changed. A tool rather than `cp` because the copy has
+/// to come out writable, and a copy of a read-only file does not.
+const attachmentSaveTool = LlmTool(
+  name: attachmentSaveToolName,
+  description: "Copy an attachment into the workspace so it can be changed. "
+      "Attachments are read-only: change nothing at their paths, with this "
+      "tool or any command. `path` is the attachment's path as the "
+      "conversation gave it. The copy goes to `dest`, by default "
+      "`attachments/<its name>` in the chat workspace, and is yours to edit.",
+  schema: {
+    "type": "object",
+    "properties": {
+      "path": {
+        "type": "string",
+        "description": "The attachment's path, as the conversation gave it.",
+      },
+      "dest": {
+        "type": "string",
+        "description": "Where the copy goes: workspace-relative, or "
+            "`project:` + path for the project workspace. Defaults to "
+            "`attachments/<its name>`.",
+      },
+    },
+    "required": ["path"],
+  },
+);
