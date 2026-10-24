@@ -317,6 +317,10 @@ class _Pipeline {
     var expectWord = false;
 
     void endCommand() {
+      // A redirect the separator cut off before its target (`>|`, or a
+      // here-document body full of `>` and `|`) keeps its null target, which
+      // escalates; the next command's first word is not it.
+      expectWord = false;
       if (current.words.isNotEmpty ||
           current.redirects.isNotEmpty ||
           current.assignments.isNotEmpty) {
