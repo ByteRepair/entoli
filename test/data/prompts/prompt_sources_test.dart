@@ -520,4 +520,25 @@ void main() {
       expect(await readAgentPicture(config, "scout", tiers), isNull);
     });
   });
+
+  test("a project's prompt directories are every tier's, My Team's where it "
+      "runs Omada", () async {
+    final config = tempConfig();
+    await seedProject(config, "on-team", omada: true);
+    await seedProject(config, "off-team", omada: false);
+    List<String> agents(String project) => [
+          for (final dir in promptDirsOf(config, project: project))
+            if (!dir.executable) dir.path,
+        ];
+
+    expect(agents("on-team"), [
+      config.promptsDir(CompletionKind.agent),
+      config.promptsDir(CompletionKind.agent, project: "my-team"),
+      config.promptsDir(CompletionKind.agent, project: "on-team"),
+    ]);
+    expect(agents("off-team"), [
+      config.promptsDir(CompletionKind.agent),
+      config.promptsDir(CompletionKind.agent, project: "off-team"),
+    ]);
+  });
 }

@@ -31,6 +31,21 @@ List<String> promptTiers({required String? project, required AppConfig? config})
       ),
     );
 
+/// Where [project]'s prompts are read from on disk, every tier's: the bundled
+/// skills, the user's skills and the user's agents. Nothing but the app writes
+/// them, so this is what launch locks read-only and what a command is kept
+/// from, one list for both. [executable] is a skills directory's, whose
+/// scripts run.
+List<({String path, bool executable})> promptDirsOf(AppConfig config,
+        {String? project}) =>
+    [
+      for (final tier in promptTiers(project: project, config: config)) ...[
+        (path: config.bundledSkillsDir(project: tier), executable: true),
+        (path: config.promptsDir(CompletionKind.skill, project: tier), executable: true),
+        (path: config.promptsDir(CompletionKind.agent, project: tier), executable: false),
+      ],
+    ];
+
 List<String> tiersFor(String? project, {required bool omada}) => [
       defaultProjectDir,
       if (omada && omadaBaseProject != project) omadaBaseProject,

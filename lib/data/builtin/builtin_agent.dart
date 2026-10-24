@@ -757,7 +757,7 @@ class BuiltinAgent {
   final String? attachmentsDir;
 
   /// What a command may read and must not write, every shell alike: the
-  /// chat's attachments and the skills directories. A guest binds and guards
+  /// chat's attachments and the skills and agents directories. A guest binds and guards
   /// them; on the machine they are read-only on disk already.
   final List<String> readOnlyDirs;
 

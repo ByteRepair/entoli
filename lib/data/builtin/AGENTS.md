@@ -975,8 +975,9 @@ in the root notes). The projection's note names each attachment with its path
 every shell: proot binds the chat's `resources/` at its own host path, and iSH
 mounts it read-only over the data-directory bind it has at its host path
 already. Both take it from `Shell.start`'s `readOnly`, which the backend builds
-once per turn (`_readOnlyFor`) as the chat's `resources/` plus every skills
-and agents directory its project reaches, and hands to the agent, its sub-agents and a
+once per turn (`_readOnlyFor`) as the chat's `resources/` plus every prompt
+directory its project reads (`promptDirsOf`, over the same tiers as the
+library, My Team's included where the project runs Omada), and hands to the agent, its sub-agents and a
 `!` command alike, so the guests guard the same places. One path for every shell keeps the wording the same
 whichever one a turn runs under, and needs no prefix of its own.
 

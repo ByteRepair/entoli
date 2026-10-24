@@ -26,6 +26,7 @@ import "../../domain/sub_agent_log.dart";
 import "../../domain/tool_arg.dart";
 import "../../domain/web_search.dart";
 import "../local/file_sub_agent_log.dart";
+import "../prompts/prompt_sources.dart" show promptDirsOf;
 import "../prompts/skill_package.dart";
 import "builtin_agent.dart";
 import "customization_tools.dart" show SettingsEditor;
@@ -880,23 +881,21 @@ class BuiltinBackend implements AgentBackend {
       (resource) => store.readResource(chatId, resource);
 
   /// What a command in this chat may read and must not write: its own
-  /// attachments, and the skills and agents directories its project reaches —
-  /// the default's, which every project inherits, and its own. One list for every
-  /// shell, so proot and iSH guard the same places. Only those that exist:
-  /// proot refuses a bind whose host path is missing, and a project's skills
-  /// directories appear only once it has some.
+  /// attachments, and every prompt directory its project reads
+  /// ([promptDirsOf]). One list for every shell, so proot and iSH guard the
+  /// same places. Only those that exist: proot refuses a bind whose host path
+  /// is missing, and a project's skills directories appear only once it has
+  /// some.
   Future<List<String>> _readOnlyFor(String chatId, String? project) async {
     final dirs = [
       config.resourcesDir(chatId, project: project),
-      for (final tier in {null, project}) ...[
-        config.bundledSkillsDir(project: tier),
-        config.promptsDir(CompletionKind.skill, project: tier),
-        config.promptsDir(CompletionKind.agent, project: tier),
-      ],
+      for (final dir in promptDirsOf(config, project: project)) dir.path,
     ];
+    final there =
+        await Future.wait(dirs.map((dir) => config.fs.directory(dir).exists()));
     return [
-      for (final dir in dirs)
-        if (await config.fs.directory(dir).exists()) dir,
+      for (final (i, dir) in dirs.indexed)
+        if (there[i]) dir,
     ];
   }
 
