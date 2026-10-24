@@ -306,10 +306,11 @@ void main() {
       expect(client.sent.first[1].text, contains(config.workspaceDir(chatId)));
     });
 
-    test("a command is kept from the chat's attachments and every skills "
-        "directory there is", () async {
+    test("a command is kept from the chat's attachments and every skills and "
+        "agents directory there is", () async {
       Directory(config.bundledSkillsDir()).createSync(recursive: true);
       Directory(config.promptsDir(CompletionKind.skill)).createSync(recursive: true);
+      Directory(config.promptsDir(CompletionKind.agent)).createSync(recursive: true);
       final backend = backendOver([
         [bashCall("ls")],
         [finish],
@@ -320,6 +321,7 @@ void main() {
         config.resourcesDir(chatId),
         config.bundledSkillsDir(),
         config.promptsDir(CompletionKind.skill),
+        config.promptsDir(CompletionKind.agent),
       ]);
     });
 

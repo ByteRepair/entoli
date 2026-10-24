@@ -360,7 +360,8 @@ substituting Entoli's own view controller for the `currentTerminalViewController
 iSH's shell expects as the picker's presenter.
 
 **What the app keeps read-only stays read-only in the guest.** A chat's
-`resources/` and the skills directories — `Shell.start`'s `readOnly`, the one
+`resources/` and the skills and agents directories — `Shell.start`'s
+`readOnly`, the one
 list the backend builds for every shell — are bound read-only at their own
 host paths (`bind_read_only`, through `ish_session_init`'s `read_only`), over
 the data-directory bind

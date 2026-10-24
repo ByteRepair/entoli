@@ -111,10 +111,14 @@ class AppSession {
     // skill directory. Per project: each project's skills dirs are read-only
     // the way the default's are, since a `bash` command reaches any of them.
     // The bundled roots were locked by the install; this covers the user's
-    // `skills/` beside them.
+    // `skills/` and `agents/` beside them, which the app writes only through
+    // their managers.
     for (final project in projects) {
       await platform.readOnlyDirs
           .skills(config.promptsDir(CompletionKind.skill, project: project))
+          .lock();
+      await platform.readOnlyDirs
+          .of(config.promptsDir(CompletionKind.agent, project: project))
           .lock();
     }
     final store = platform.createChatStore(config);

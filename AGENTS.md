@@ -211,8 +211,9 @@ browser's filesystem is exercised on the VM instead.
 ### Read-only directories
 
 Some directories are the app's to write and the agent's only to read: the
-skills (bundled and the user's), the agents, and a chat's `resources/`. They
-are read-only on disk between the app's own writes — write bits off, files and
+skills (bundled and the user's), the agents, and a chat's `resources/`, each
+locked at launch or by the write that made it. They are read-only on disk
+between the app's own writes — write bits off, files and
 directories alike, so a command can neither change a file nor add or remove
 one — and every write goes through `ReadOnlyDirs` (`core/read_only_dirs.dart`):
 `readOnlyDirs.of(path).write(...)` unlocks, writes and relocks. One manager per

@@ -880,8 +880,8 @@ class BuiltinBackend implements AgentBackend {
       (resource) => store.readResource(chatId, resource);
 
   /// What a command in this chat may read and must not write: its own
-  /// attachments, and the skills directories its project reaches — the
-  /// default's, which every project inherits, and its own. One list for every
+  /// attachments, and the skills and agents directories its project reaches —
+  /// the default's, which every project inherits, and its own. One list for every
   /// shell, so proot and iSH guard the same places. Only those that exist:
   /// proot refuses a bind whose host path is missing, and a project's skills
   /// directories appear only once it has some.
@@ -891,6 +891,7 @@ class BuiltinBackend implements AgentBackend {
       for (final tier in {null, project}) ...[
         config.bundledSkillsDir(project: tier),
         config.promptsDir(CompletionKind.skill, project: tier),
+        config.promptsDir(CompletionKind.agent, project: tier),
       ],
     ];
     return [
