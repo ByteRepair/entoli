@@ -8,7 +8,7 @@
 /// the banner path rather than being guessed at.
 library;
 
-import "shell_command_analysis.dart" show plainWords;
+import "shell_command_analysis.dart" show plainCommand;
 
 /// Programs whose every flag is a read, so any invocation of one is
 /// non-modifying apart from its redirects. Deliberately small: anything with
@@ -216,18 +216,17 @@ class SegmentProfile {
   final String? url;
 }
 
-/// Classifies [segment]. Reads the words the whole-command parse's own
-/// tokenizer gives ([plainWords]), so a quote or a here-document means the
-/// same here as there, and stands down on everything they cannot name.
+/// Classifies [segment] as the whole-command parse reads it
+/// ([plainCommand]), so a quote, a redirect or a here-document means the same
+/// here as there, and stands down on everything it cannot name.
 SegmentProfile profileSegment(String segment) {
-  final parsed = plainWords(segment);
-  if (parsed == null) {
+  final read = plainCommand(segment);
+  if (read == null || read.words.isEmpty) {
     return const SegmentProfile.unmodeled();
   }
-  final words = parsed;
-  if (words.isEmpty) return const SegmentProfile.unmodeled();
+  final words = read.words;
   final program = words.first.toLowerCase();
-  if (_diskRedirect(words)) {
+  if (read.writes.any((target) => !_throwaway.contains(target))) {
     // A redirect to a file the segment names is a write this layer sees —
     // the exemptions are what every command throws output away through.
     return SegmentProfile._(true, SegmentReach.other, program, words, null);
@@ -309,34 +308,8 @@ SegmentProfile _gitProfile(String program, List<String> words) {
   );
 }
 
-/// Whether the segment's words carry a redirect whose target names a file:
-/// the ops the words keep — `>` and `>>` — are checked against the word
-/// that follows them. Not writes: the files every command throws output
-/// away through, and fd duplication — the tokenizer keeps the `&` as its
-/// own word, so `2>&1` reads `>`, `&`, `1`. Only a descriptor (or `-`)
-/// after the `&` is one: `>&file` writes the file. A bare `> 2` stays a
-/// write too: in the shell that is a file named `2`.
-bool _diskRedirect(List<String> words) {
-  for (var i = 0; i < words.length; i++) {
-    final w = words[i];
-    if (!(w == ">" || w == ">>")) continue;
-    var target = i + 1 < words.length ? words[i + 1].toLowerCase() : "";
-    if (target == "&") {
-      target = i + 2 < words.length ? words[i + 2] : "";
-      if (target == "-" || RegExp(r"^\d+$").hasMatch(target)) continue;
-    } else if (RegExp(r"^&\d+$").hasMatch(target)) {
-      continue;
-    }
-    if (target.isEmpty ||
-        target == "/dev/null" ||
-        target == "/dev/stdout" ||
-        target == "/dev/stderr") {
-      continue;
-    }
-    return true;
-  }
-  return false;
-}
+/// Output every command throws away through: no write.
+const _throwaway = {"/dev/null", "/dev/stdout", "/dev/stderr"};
 
 final _scheme = RegExp(r"^[a-zA-Z][a-zA-Z0-9+.-]*://");
 

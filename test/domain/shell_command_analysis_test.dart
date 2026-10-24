@@ -173,6 +173,11 @@ void main() {
     expect(parse("a &&\nb").modelableSegments, ["a", "b"]);
   });
 
+  test("a duplication's target is read: a descriptor, or a file it writes", () {
+    expect(parse(r"echo x >&$X").escalationReasons, isNotEmpty);
+    expect(parse("cmd 2>&1 | head").escalationReasons, isEmpty);
+  });
+
   test("a newline ends a command", () {
     expect(parse("echo a\nHOME=/tmp ls").escalationReasons, isNotEmpty);
     expect(isFileToolWork("git log |\nhead -5"), isFalse);

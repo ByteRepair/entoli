@@ -90,6 +90,26 @@ void main() {
       }
     });
 
+    test("redirects are not arguments", () {
+      for (final segment in [
+        "git branch 2>/dev/null",
+        "git tag > /dev/null",
+        "env 2>/dev/null",
+        "uniq < names.txt",
+        "uniq <<'EOF'\na\nEOF",
+      ]) {
+        expect(
+          profileSegment(segment).reach,
+          SegmentReach.nonModifying,
+          reason: segment,
+        );
+      }
+      expect(
+        profileSegment("curl -s example.com < body.json").url,
+        "http://example.com",
+      );
+    });
+
     test("anything the words cannot name stands down", () {
       for (final segment in [
         r'echo "$HOME"',

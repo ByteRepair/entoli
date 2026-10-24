@@ -212,35 +212,33 @@ List<String> _segmentsOf(String command, List<_Tok> tokens) {
   return [for (final text in texts) if (text.isNotEmpty) text];
 }
 
-/// [segment]'s words as plain text, for the read-only tier: an operator is a
-/// word of its own, split to its characters but for `>>`, so `2>&1` reads
-/// `2` `>` `&` `1`; a here-document body is not there at all. Null where a
-/// word is not plain — an expansion, a substitution, a group — or the
-/// segment does not tokenize, the same answer the whole-command parse gives.
-List<String>? plainWords(String segment) {
+/// [segment] as the read-only tier reads it: its words in order, leading
+/// assignments included, and the file each output redirect writes (null for
+/// one with no target), the redirects' own syntax and any here-document body
+/// left out of the words. Null where any of it is not plain text — an
+/// expansion, a substitution, a group — or the segment does not tokenize,
+/// the same answer the whole-command parse gives.
+({List<String> words, List<String?> writes})? plainCommand(String segment) {
   final reasons = <String>[];
   final tokens = _tokenize(segment, reasons);
-  if (reasons.isNotEmpty) return null;
-  final words = <String>[];
-  for (final tok in tokens) {
-    switch (tok.kind) {
-      case _TokKind.word:
-        final text = _plainOf(tok);
-        if (text == null) return null;
-        words.add(text);
-      case _TokKind.op when tok.text == "(" || tok.text == ")":
-        return null;
-      case _TokKind.op when tok.text == ">>":
-        words.add(">>");
-      case _TokKind.op when tok.text == "\n":
-        break;
-      case _TokKind.op:
-        words.addAll(tok.text.split(""));
-      case _TokKind.body:
-        break;
-    }
+  if (reasons.isNotEmpty ||
+      tokens.any((t) => t.kind == _TokKind.op && (t.text == "(" || t.text == ")"))) {
+    return null;
   }
-  return words;
+  final parsed = _Pipeline._of(tokens);
+  final words = <String>[];
+  for (final word in parsed.argv) {
+    final text = _plain(word);
+    if (text == null) return null;
+    words.add(text);
+  }
+  final writes = <String?>[];
+  for (final redirect in parsed.redirects) {
+    final target = redirect.target == null ? null : _plain(redirect.target!);
+    if (redirect.target != null && target == null) return null;
+    if (!redirect.fromInput && !redirect.fdOnly) writes.add(target);
+  }
+  return (words: words, writes: writes);
 }
 
 /// Whether [command] reads or writes a file the way the file tools would:
@@ -291,7 +289,7 @@ bool isFileToolWork(String command) {
       case ">" || ">>" || "&>" || "&>>":
         target = true;
         outTarget = true;
-      case "<" || "<<" || "<<<":
+      case "<" || "<<" || "<<<" || ">&" || "<&":
         target = true;
         outTarget = false;
     }
@@ -367,10 +365,11 @@ class _Substitution {
 /// One parsed pipeline: the commands a pipe/`;`/`&&`/`||` sequence separates,
 /// their redirects and their leading assignments.
 class _Pipeline {
-  _Pipeline._(this.words, this.redirects, this.assignments);
+  _Pipeline._(this.words, this.argv, this.redirects, this.assignments);
 
   factory _Pipeline._of(List<_Tok> tokens) {
     final words = <List<Object>>[];
+    final argv = <List<Object>>[];
     final redirects = <_Redirect>[];
     final assignments = <String, String>{};
     var current = _Simple();
@@ -385,6 +384,7 @@ class _Pipeline {
           current.redirects.isNotEmpty ||
           current.assignments.isNotEmpty) {
         words.addAll(current.words);
+        argv.addAll(current.argv);
         redirects.addAll(current.redirects);
         assignments.addAll(current.assignments);
         current = _Simple();
@@ -395,13 +395,20 @@ class _Pipeline {
       if (tok.kind == _TokKind.word) {
         if (expectWord) {
           final last = current.redirects.removeLast();
+          // A duplication names a descriptor, or `-` to close one; anything
+          // else after `>&` is a file it writes.
+          final fdOnly =
+              last.fdOnly && _descriptor.hasMatch(_plain(tok.pieces!) ?? "");
           current.redirects
-              .add(_Redirect(tok.pieces!, last.fromInput, last.fdOnly));
+              .add(_Redirect(tok.pieces!, last.fromInput, fdOnly));
           expectWord = false;
-        } else if (current.words.isEmpty &&
+          continue;
+        }
+        current.argv.add(tok.pieces!);
+        if (current.words.isEmpty &&
             current.redirects.isEmpty &&
-            _isAssignmentWord(_plainOf(tok) ?? "")) {
-          final text = _plainOf(tok)!;
+            _isAssignmentWord(_plain(tok.pieces!) ?? "")) {
+          final text = _plain(tok.pieces!)!;
           final eq = text.indexOf("=");
           assignments[text.substring(0, eq)] = text.substring(eq + 1);
         } else {
@@ -415,11 +422,13 @@ class _Pipeline {
             expectWord = true;
             current.redirects.add(_Redirect(null, false, false));
           case ">&":
+            expectWord = true;
             current.redirects.add(_Redirect(null, false, true));
           case "<" || "<<" || "<<<":
             expectWord = true;
             current.redirects.add(_Redirect(null, true, false));
           case "<&":
+            expectWord = true;
             current.redirects.add(_Redirect(null, true, true));
           default:
             // `(`, `)` and the rest: a group or subshell's insides are read
@@ -430,10 +439,15 @@ class _Pipeline {
       }
     }
     endCommand();
-    return _Pipeline._(words, redirects, assignments);
+    return _Pipeline._(words, argv, redirects, assignments);
   }
 
+  /// The command words, leading assignments taken out into [assignments].
   final List<List<Object>> words;
+
+  /// Every word that is not a redirect's target, assignments included, in
+  /// order: the command as the read-only tier reads it.
+  final List<List<Object>> argv;
   final List<_Redirect> redirects;
   final Map<String, String> assignments;
 }
@@ -449,6 +463,7 @@ class _Redirect {
 
 class _Simple {
   final words = <List<Object>>[];
+  final argv = <List<Object>>[];
   final redirects = <_Redirect>[];
   final assignments = <String, String>{};
 }
@@ -466,11 +481,12 @@ bool _isAssignmentWord(String word) {
 /// The word's whole text, where it has no substitutions in it. Null where it
 /// does, because an assignment whose value is a substitution is not read here
 /// as one — it is a word like any other.
-String? _plainOf(_Tok tok) {
-  final pieces = tok.pieces!;
-  if (pieces.any((piece) => piece is! String)) return null;
-  return pieces.join();
-}
+String? _plainOf(_Tok tok) => _plain(tok.pieces!);
+
+String? _plain(List<Object> pieces) =>
+    pieces.every((piece) => piece is String) ? pieces.join() : null;
+
+final _descriptor = RegExp(r"^(\d+|-)$");
 
 /// Splits [source] into words and operators. Incomplete — an unterminated
 /// quote, a `$( ` never closed — appends to [reasons] and stops: the caller
@@ -489,6 +505,15 @@ List<_Tok> _tokenize(String source, List<String> reasons) {
   var delimiterAt = 0;
   var dash = false;
   final pending = <_Heredoc>[];
+
+  // `2>`: the descriptor written against a redirect is the redirect's, not a
+  // word of the command.
+  void dropDescriptor() {
+    if (wordOpen && !quoted && RegExp(r"^\d+$").hasMatch(_plain(pieces) ?? "")) {
+      pieces = <Object>[];
+      wordOpen = false;
+    }
+  }
 
   void flush() {
     if (wordOpen) {
@@ -552,6 +577,7 @@ List<_Tok> _tokenize(String source, List<String> reasons) {
           i++;
         }
       case ">":
+        dropDescriptor();
         flush();
         if (i + 1 < source.length && source[i + 1] == ">") {
           tokens.add(_Tok.op(">>"));
@@ -564,6 +590,7 @@ List<_Tok> _tokenize(String source, List<String> reasons) {
           i++;
         }
       case "<":
+        dropDescriptor();
         flush();
         final two = i + 1 < source.length ? source[i + 1] : "";
         final three = i + 2 < source.length ? source[i + 2] : "";
