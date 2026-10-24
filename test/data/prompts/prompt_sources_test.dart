@@ -6,8 +6,8 @@ import "package:flutter_test/flutter_test.dart";
 import "package:path/path.dart" as p;
 
 import "package:agent_chat/core/config.dart";
-import "package:agent_chat/core/platform/io/platform.dart"
-    show chmodReadOnly, chmodWritable;
+import "package:agent_chat/core/read_only_dirs.dart";
+import "package:agent_chat/data/local/file_modes.dart";
 import "package:agent_chat/data/prompts/agent_pictures.dart";
 import "package:agent_chat/domain/bundled_prompt_file.dart";
 import "package:agent_chat/data/prompts/bundled_skill_data.dart";
@@ -19,20 +19,15 @@ import "package:agent_chat/domain/project_settings.dart";
 
 import "../../harness.dart";
 
-/// The chmod lock is a deliberate no-op where there is no bash for a model to
-/// write through — `chmodReadOnly` runs on Linux and Android alone —
-/// so the two assertions about the release and the write-through have nothing
-/// to assert on macOS and Windows.
-final _skipWithoutChmodLock = Platform.isLinux || Platform.isAndroid
-    ? null
-    : "the chmod lock is a no-op on this platform, so the read-only release "
-        "cannot be asserted";
+/// Windows' read-only is an attribute, not a mode, so the mode strings these
+/// assert have nothing to say there.
+final _skipWithoutModes =
+    Platform.isWindows ? "read-only is an attribute here, not a mode" : null;
 
-/// The install without the lock: a temp directory is never chmod'd 555.
+/// The install without the lock: a temp directory is never made read-only.
 Future<void> install(AppConfig config) => installBundledSkills(
     config,
-    acquireWrite: (_) async {},
-    releaseWrite: (_) async {});
+    ReadOnlyDirs((paths, {required writable, executable = false}) async {}));
 
 /// A project directory on disk with its `project.json` seeded the way the
 /// settings page writes it — through [ProjectSettings.save], which is
@@ -110,33 +105,29 @@ void main() {
         isFalse);
   });
 
-  test("the install acquires the roots writable and releases them read-only",
+  test("the install writes through the root and leaves it read-only",
       () async {
     final config = tempConfig();
     final root = Directory(config.bundledSkillsDir());
-    final acquired = <String>[];
-    final released = <String>[];
+    final calls = <(String, bool)>[];
 
     await installBundledSkills(
       config,
-      acquireWrite: (paths) async {
-        acquired.addAll(paths);
-        await chmodWritable(paths);
-      },
-      releaseWrite: (paths) async {
-        released.addAll(paths);
-        await chmodReadOnly(paths);
-      },
+      ReadOnlyDirs((paths, {required writable, executable = false}) async {
+        calls.addAll(paths.map((path) => (path, writable)));
+        await setTreeWritable(paths, writable: writable, executable: executable);
+      }),
     );
 
-    expect(acquired.single, root.path,
-        reason: "the default project's root is what is made writable");
-    expect(released.single, root.path);
-    expect(File(p.join(root.path, "artifact", "SKILL.md")).existsSync(),
-        isTrue);
+    expect(calls, [(root.path, true), (root.path, false)],
+        reason: "the default project's root is unlocked, written and relocked");
+    final skill = File(p.join(root.path, "artifact", "SKILL.md"));
+    expect(skill.existsSync(), isTrue);
     expect(root.statSync().modeString(), "r-xr-xr-x",
-        reason: "the release leaves the root read-only, as the launch does");
-  }, skip: _skipWithoutChmodLock);
+        reason: "the root is left read-only, as the launch does");
+    expect(skill.statSync().modeString(), "r-xr-xr-x",
+        reason: "a skill's files keep an execute bit for its scripts");
+  }, skip: _skipWithoutModes);
 
   test("the install writes through a root the previous launch left read-only",
       () async {
@@ -148,13 +139,9 @@ void main() {
     // is what makes the acquire load-bearing: with a no-op one, the edit
     // survives (the failed write is swallowed) and the content check fails.
     File(marker).writeAsStringSync("the user's edit");
-    Process.runSync("chmod", ["-R", "555", root.path]);
+    await setTreeWritable([root.path], writable: false, executable: true);
 
-    await installBundledSkills(
-      config,
-      acquireWrite: chmodWritable,
-      releaseWrite: chmodReadOnly,
-    );
+    await installBundledSkills(config, ReadOnlyDirs(setTreeWritable));
 
     final original = bundledSkillFiles
         .firstWhere((f) => f.name == "artifact" && f.relativePath == "SKILL.md")
@@ -162,7 +149,7 @@ void main() {
     expect(File(marker).readAsStringSync(), original,
         reason: "the acquire let the self-heal reach its repair");
     expect(root.statSync().modeString(), "r-xr-xr-x");
-  }, skip: _skipWithoutChmodLock);
+  }, skip: _skipWithoutModes);
 
   test("every skill dir in the source tree has entries in the embedded data",
       () async {

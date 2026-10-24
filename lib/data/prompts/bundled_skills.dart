@@ -14,6 +14,7 @@ import "package:flutter/foundation.dart";
 import "package:fs_shim/fs.dart";
 
 import "../../core/config.dart";
+import "../../core/read_only_dirs.dart";
 import "../../core/log.dart";
 import "bundled_skill_data.dart";
 
@@ -28,26 +29,15 @@ import "bundled_skill_data.dart";
 /// from the embedded const, not from this disk write, so even a self-heal
 /// failure leaves the library correct — this is purely for bash access.
 ///
-/// The directories it writes are locked read-only by the previous launch
-/// (`chmodReadOnly`), so [acquireWrite] is called for the project roots
-/// before the first write and [releaseWrite] after the last, whatever the
-/// body did. Both are no-ops on the web, where there is nothing to chmod.
-Future<void> installBundledSkills(
-  AppConfig config, {
-  required Future<void> Function(List<String>) acquireWrite,
-  required Future<void> Function(List<String>) releaseWrite,
-}) async {
+/// The directories it writes are read-only between writes (a skill's scripts
+/// run, so their files keep an execute bit), and each project's root is
+/// written through its [ReadOnlyDir] in [dirs].
+Future<void> installBundledSkills(AppConfig config, ReadOnlyDirs dirs) async {
   final projects = bundledSkillFiles.map((f) => f.project).toSet();
-  final roots = [
-    for (final project in projects) config.bundledSkillsDir(project: project),
-  ];
-  await acquireWrite(roots);
-  try {
-    for (final project in projects) {
-      await _installFor(config, project);
-    }
-  } finally {
-    await releaseWrite(roots);
+  for (final project in projects) {
+    await dirs
+        .of(config.bundledSkillsDir(project: project), executable: true)
+        .write(() => _installFor(config, project));
   }
 }
 

@@ -106,20 +106,18 @@ class AppSession {
     // The writes land inside the install, between its acquire and its
     // release: the previous launch left these directories read-only.
     final projects = everyProject(await config.projectNames());
-    await installBundledSkills(
-      config,
-      acquireWrite: platform.chmodWritable,
-      releaseWrite: platform.chmodReadOnly,
-    );
+    await installBundledSkills(config, platform.readOnlyDirs);
     // Read-only so a model running bash cannot unintentionally write to a
     // skill directory. Per project: each project's skills dirs are read-only
     // the way the default's are, since a `bash` command reaches any of them.
-    // The bundled roots were released read-only by the install's `finally`;
-    // this covers the user's `skills/` beside them.
-    await platform.chmodReadOnly([
-      for (final project in projects)
-        config.promptsDir(CompletionKind.skill, project: project),
-    ]);
+    // The bundled roots were locked by the install; this covers the user's
+    // `skills/` beside them.
+    for (final project in projects) {
+      await platform.readOnlyDirs
+          .of(config.promptsDir(CompletionKind.skill, project: project),
+              executable: true)
+          .lock();
+    }
     final store = platform.createChatStore(config);
     // One library per project: the default's is the base set every other
     // project inherits, and a project's own overrides same-named default

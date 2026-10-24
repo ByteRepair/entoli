@@ -177,9 +177,9 @@ class _AgentsSectionState extends ConsumerState<AgentsSection> {
       _guard(() async {
         final config = ref.read(appConfigProvider);
         final renames = removes != null && removes != name;
-        await platform.withWritableDir(
-          config.promptsDir(CompletionKind.agent, project: widget.project),
-          () async {
+        await platform.readOnlyDirs
+            .of(config.promptsDir(CompletionKind.agent, project: widget.project))
+            .write(() async {
             final file =
                 config.fs.file(agentFilePath(config, name, project: widget.project));
             await file.create(recursive: true);
@@ -202,8 +202,7 @@ class _AgentsSectionState extends ConsumerState<AgentsSection> {
                   .file(agentPicturePath(config, removes, project: widget.project));
               if (await oldImage.exists()) await oldImage.rename(image.path);
             }
-          },
-        );
+          });
         await _reload(widget.project);
         await _scan();
         _invalidatePicture(name);
@@ -224,17 +223,16 @@ class _AgentsSectionState extends ConsumerState<AgentsSection> {
 
     await _guard(() async {
       final config = ref.read(appConfigProvider);
-      await platform.withWritableDir(
-        config.promptsDir(CompletionKind.agent, project: widget.project),
-        () async {
+      await platform.readOnlyDirs
+          .of(config.promptsDir(CompletionKind.agent, project: widget.project))
+          .write(() async {
           await config.fs
               .file(agentFilePath(config, agent.name, project: widget.project))
               .delete();
           final image =
               config.fs.file(agentPicturePath(config, agent.name, project: widget.project));
           if (await image.exists()) await image.delete();
-        },
-      );
+        });
       await _reload(widget.project);
       await _scan();
       _invalidatePicture(agent.name);

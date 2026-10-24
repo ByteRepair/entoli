@@ -6,6 +6,7 @@ import "package:fs_shim/fs.dart";
 import "package:uuid/uuid.dart";
 
 import "../../core/config.dart";
+import "../../core/read_only_dirs.dart";
 import "../../core/log.dart";
 import "../../data/zip.dart" show archiveOf;
 import "../../domain/chat_log.dart";
@@ -22,15 +23,23 @@ import "../../domain/workspace.dart";
 /// directories on desktop and Android, IndexedDB in a browser. One
 /// implementation, because the layout is the same either way.
 class FileChatStore implements ChatStore {
-  FileChatStore(this.config, {this.deleteTree})
-      : _write = RenameWriter.fs(config.fs);
+  FileChatStore(this.config, {this.deleteTree, ReadOnlyDirs? readOnlyDirs})
+      : _write = RenameWriter.fs(config.fs),
+        _readOnly = readOnlyDirs ?? ReadOnlyDirs(_noModes);
 
   final AppConfig config;
 
-  /// The platform's tree delete, which gets past the read-only skills dirs
-  /// (`chmodReadOnly`) and proot's mode-0000 stubs a plain recursive delete
+  /// The platform's tree delete, which gets past the read-only directories
+  /// (`ReadOnlyDirs`) and proot's mode-0000 stubs a plain recursive delete
   /// dies on. Null where there are neither, such as the web.
   final Future<void> Function(String path)? deleteTree;
+
+  /// A chat's `resources/` is one of these: the agent reads its attachments
+  /// and never writes them.
+  final ReadOnlyDirs _readOnly;
+
+  static Future<void> _noModes(List<String> paths,
+      {required bool writable, bool executable = false}) async {}
 
   FileSystem get _fs => config.fs;
 
@@ -214,7 +223,10 @@ class FileChatStore implements ChatStore {
       config.workspaceDir(id, project: project),
     ]) {
       final dir = _fs.directory(path);
-      if (await dir.exists()) await dir.delete(recursive: true);
+      if (!await dir.exists()) continue;
+      // The tree delete gets past the locked `resources/` inside.
+      final delete = deleteTree;
+      delete != null ? await delete(path) : await dir.delete(recursive: true);
     }
     _projects.remove(id);
   }
@@ -224,12 +236,18 @@ class FileChatStore implements ChatStore {
     final project = await projectOf(chatId);
     await config.ensureChatDirs(chatId, project: project);
     final resource = resourceName(filename);
+    final dir = config.resourcesDir(chatId, project: project);
     // Bytes, not text: a browser's filesystem stores them as bytes too, and
     // base64 would cost a third of the quota that is actually scarce there.
-    await _fs
-        .file(_fs.path.join(config.resourcesDir(chatId, project: project), resource))
-        .writeAsBytes(bytes);
+    await _readOnly.of(dir).write(
+        () => _fs.file(_fs.path.join(dir, resource)).writeAsBytes(bytes));
     return resource;
+  }
+
+  @override
+  Future<void> lockResources(String chatId) async {
+    final dir = config.resourcesDir(chatId, project: await projectOf(chatId));
+    if (await _fs.directory(dir).exists()) await _readOnly.of(dir).lock();
   }
 
   @override
@@ -241,7 +259,8 @@ class FileChatStore implements ChatStore {
   @override
   Future<void> deleteResource(String chatId, String resource) async {
     final file = await _resourceFile(chatId, resource);
-    if (await file.exists()) await file.delete();
+    if (!await file.exists()) return;
+    await _readOnly.of(_fs.path.dirname(file.path)).write(file.delete);
   }
 
   Future<File> _resourceFile(String chatId, String resource) async {

@@ -25,6 +25,8 @@ import "../../../data/local/file_secret_store.dart";
 import "../../../data/local/ios_reminder_alarms.dart";
 import "../../../data/builtin/llm/local_kv_cache.dart";
 import "../../../data/local/file_kv_cache.dart";
+import "../../../data/local/file_modes.dart";
+import "../../read_only_dirs.dart";
 import "../../../data/local/file_local_model_store.dart";
 import "../../../data/local/file_rootfs_store.dart";
 import "../../../data/local/ish_ffi.dart";
@@ -563,36 +565,17 @@ Future<ProcessResult> _ishFakefsify(String archive, String into) =>
     }
   });
 
-/// `chmod -R 555` so a weak model's `bash` cannot write to a skill directory
-/// by accident (a deliberate `chmod u+w` still can). Linux and Android only.
-Future<void> chmodReadOnly(List<String> paths) => _chmodTree("555", paths);
-
-Future<void> chmodWritable(List<String> paths) => _chmodTree("u+w", paths);
-
-Future<void> _chmodTree(String mode, List<String> paths) async {
-  if (!Platform.isLinux && !Platform.isAndroid) return;
-  await Future.wait(paths.map((path) async {
-    try {
-      await Process.run("chmod", ["-R", mode, path]);
-    } catch (_) {}
-  }));
-}
-
-/// [path] writable for the app's own [action], read-only again after.
-Future<T> withWritableDir<T>(
-    String path, Future<T> Function() action) async {
-  await chmodWritable([path]);
-  try {
-    return await action();
-  } finally {
-    await chmodReadOnly([path]);
-  }
-}
+/// The app's read-only directories, one manager per path. See
+/// `core/read_only_dirs.dart`.
+final readOnlyDirs = ReadOnlyDirs(setTreeWritable);
 
 /// Deletes a tree that may hold proot's mode-0000 bind stubs, which a plain
 /// recursive delete cannot list. The restore clear needs it: the stubs sit
 /// deep inside `projects/<project>/rootfs/`.
 Future<void> deleteTree(String path) async {
+  // removeTree's own `chmod` is a process, which iOS refuses, and Windows'
+  // read-only attribute is not a mode at all.
+  await setTreeWritable([path], writable: true);
   final err = await removeTree(path);
   if (err != null) throw Exception("could not delete $path: $err");
 }

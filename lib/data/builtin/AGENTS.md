@@ -1019,7 +1019,7 @@ itself: it is offered on a top-level turn (the backend hands the agent the
 packager), and dropped for a sub-agent (no callback, so the tool is not on the
 list), the same `one value decides what the prompt names and what the tool list
 carries` rule. The install and the settings page's import and delete write
-through `withWritableDir`, because the skills directories are read-only — see
+through `ReadOnlyDir.write`, because the skills directories are read-only — see
 the root notes, "On-disk layout".
 
 ## The room's roster (the `list_participants` tool)

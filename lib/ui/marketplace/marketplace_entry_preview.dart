@@ -242,10 +242,9 @@ class _MarketplaceEntryPreviewPageState
       );
       if (!confirmed) return null;
     }
-    await platform.withWritableDir(
-      config.promptsDir(CompletionKind.skill, project: target),
-      () => installSkillPackage(config, pkg, project: target),
-    );
+    await platform.readOnlyDirs
+        .of(config.promptsDir(CompletionKind.skill, project: target), executable: true)
+        .write(() => installSkillPackage(config, pkg, project: target));
     await reloadAllPromptLibraries(ref);
     return pkg.name;
   }
@@ -290,9 +289,9 @@ class _MarketplaceEntryPreviewPageState
       if (!confirmed) return null;
     }
     final picture = preview!.picture;
-    await platform.withWritableDir(
-      config.promptsDir(CompletionKind.agent, project: target),
-      () async {
+    await platform.readOnlyDirs
+        .of(config.promptsDir(CompletionKind.agent, project: target))
+        .write(() async {
         final file = config.fs.file(agentFilePath(config, name, project: target));
         await file.create(recursive: true);
         await file.writeAsString(source);
@@ -301,8 +300,7 @@ class _MarketplaceEntryPreviewPageState
               .file(agentPicturePath(config, name, project: target))
               .writeAsBytes(picture);
         }
-      },
-    );
+      });
     // The picture the agent page draws is its own provider's read; the
     // null-destination case is the whole family, whose rule is written there.
     invalidateAgentPicture(ref, name, project: _destination);
