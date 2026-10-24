@@ -1,6 +1,7 @@
 import "package:fs_shim/fs.dart";
 
 import "safe_command.dart";
+import "shell_command_analysis.dart" show readableWords;
 
 /// The git subcommands a command grant policy vouches for: mutations whose
 /// writes are the repo's own metadata — refs, objects, the index, worktree
@@ -27,7 +28,14 @@ const vouchedGitSubcommands = {
 
 final _worktreeBoundary = RegExp(r"/\.git/worktrees(?:/|$)");
 final _gitdirLine = RegExp(r"^gitdir:\s*(.+)$", multiLine: true);
-final _spaces = RegExp(r"\s+");
+
+/// What moves the shell's own directory, wherever it stands in a segment:
+/// past the lead — `{ cd x; }`, `then cd x` — it is one the tracker does not
+/// follow.
+const _movers = {"cd", "pushd", "popd"};
+
+/// What runs a script in the shell itself, which may move it anywhere.
+const _sourcers = {"eval", "source", "."};
 
 /// What the grant layer answers for one command: the profile of each
 /// segment and, for every git segment warranted by the policy — the plain
@@ -100,17 +108,25 @@ Future<CommandGrants> commandGrantsFor(CommandGrantsInput input) async {
     if (lost) continue;
     if (!profile.modelable) {
       // A segment the words cannot name may still have moved the shell: a
-      // `cd` or `pushd` with an expansion inside it sends the directory
-      // somewhere unnameable, and no vouch survives standing on a directory
-      // the parse never named.
-      final lead = input.segments[i].trim().split(_spaces).first;
-      if (lead == "cd" || lead == "pushd" || lead == "popd") {
+      // `cd` with an expansion inside it sends the directory somewhere
+      // unnameable, and no vouch survives standing on a directory the parse
+      // never named.
+      final words = readableWords(input.segments[i]);
+      if (words.any(_movers.contains) ||
+          _sourcers.contains(words.firstOrNull)) {
         lost = true;
       }
       continue;
     }
     if (profile.words.isEmpty) continue;
     final lead = profile.words.first.toLowerCase();
+    if (_sourcers.contains(lead) ||
+        (lead != "cd" &&
+            lead != "pushd" &&
+            profile.words.any(_movers.contains))) {
+      lost = true;
+      continue;
+    }
     if (lead == "popd" || (lead == "pushd" && profile.words.length == 1)) {
       // A bare `pushd` swaps the tracker's stack, which this reads nothing
       // of, and `popd`'s destination is the same unknown.

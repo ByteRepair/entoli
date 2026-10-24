@@ -241,6 +241,15 @@ List<String> _segmentsOf(String command, List<_Tok> tokens) {
   return (words: words, writes: writes);
 }
 
+/// The plain words [segment] tokenizes to, as far as it tokenizes: a word
+/// with an expansion or a substitution in it is left out, and a segment that
+/// stops partway gives the words before the stop. For asking what a segment
+/// the parse cannot model still names.
+List<String> readableWords(String segment) => [
+      for (final tok in _tokenize(segment, <String>[]))
+        if (tok.kind == _TokKind.word) ?_plainOf(tok),
+    ];
+
 /// Whether [command] reads or writes a file the way the file tools would:
 /// `cat`, `head`, `tail`, `nl`, `less` or `more` naming a file rather than
 /// filtering a pipe, `sed` given a file or `-i`, or `echo`, `printf` or `cat`
