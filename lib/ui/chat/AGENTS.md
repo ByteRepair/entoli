@@ -850,7 +850,11 @@ guess and animate from there, which could land below the view and run back up;
 `_glideTo` instead lerps from where the view is to the sum of the extents above
 the row, read again on every tick as rows are measured on the way, and lands
 with `jumpToItem`. One `AnimationController` drives every glide, so a second
-press takes over the first, and a pointer down or wheel on the list stops it.
+press takes over the first, and a pointer down or wheel on the list stops it. A
+row laid out at a height other than the one measured for it moves the view
+under the glide, and the glide carries that move rather than undoing it on the
+next tick. Landing on a steer whose bubble is built goes straight to it: going
+by the reply's row first showed the reply's top for a frame.
 
 A chat opens at its latest message. `_settleAtBottom` jumps and then jumps
 again until the extent stops moving: a builder lays out only what shows, so the

@@ -660,6 +660,10 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
     ..addListener(_glideTick)
     ..addStatusListener(_glideStatus);
   double _glideFrom = 0;
+
+  /// Where the last tick put the view, to tell a correction the list made
+  /// under the glide from the glide's own move.
+  double? _glideAt;
   double Function()? _glideTarget;
   VoidCallback? _glideLanded;
 
@@ -832,13 +836,18 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
     // A steer is inside its reply's row: the row gets it built, and then its
     // own bubble is where to stop.
     final steer = chapter.id != chapter.row;
+    void reveal(ScrollPosition position, double offset) =>
+        position.jumpTo(offset.clamp(position.minScrollExtent, position.maxScrollExtent));
     void land() {
+      // Built already, which a glide's arrival always is: straight there. Via
+      // the row it showed the reply's top for a frame before the steer.
+      final built = steer ? _revealOffset(chapter.id) : null;
+      if (built != null) return reveal(_scroll.position, built);
       _list.jumpToItem(index: row, scrollController: _scroll, alignment: 0);
       if (!steer) return;
       _afterLayout((position) {
         final offset = _revealOffset(chapter.id);
-        if (offset == null) return;
-        position.jumpTo(offset.clamp(position.minScrollExtent, position.maxScrollExtent));
+        if (offset != null) reveal(position, offset);
       });
     }
 
@@ -869,6 +878,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
     _glide.stop();
     final position = _scroll.position;
     _glideFrom = position.pixels;
+    _glideAt = null;
     _glideTarget = target;
     _glideLanded = landed;
     final screens = (target() - _glideFrom).abs() / math.max(position.viewportDimension, 1);
@@ -880,9 +890,14 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
     final target = _glideTarget;
     if (target == null || !_scroll.hasClients) return;
     final position = _scroll.position;
+    // A row laid out at a height other than the one measured for it moves the
+    // view by the difference; carried, or the next tick puts the view back.
+    final at = _glideAt;
+    if (at != null) _glideFrom += position.pixels - at;
     final to = target().clamp(position.minScrollExtent, position.maxScrollExtent);
     final t = Curves.easeInOutCubic.transform(_glide.value);
     _scroll.jumpTo(_glideFrom + (to - _glideFrom) * t);
+    _glideAt = position.pixels;
   }
 
   void _glideStatus(AnimationStatus status) {
@@ -910,15 +925,20 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
   }
 
   /// Land at the end, and keep landing until the end stops moving. A builder
-  /// lays out only what shows, so the extent any one frame reports is an
-  /// estimate, and a single jump lands short of the last message.
+  /// lays out only what shows, and the rows it has not built are measured a
+  /// frame's budget at a time after it, so the extent any one frame reports
+  /// is an estimate. Being at it is not being at the end: a frame later the
+  /// rows below have been measured and the end is further down. A hand on the
+  /// list ends the settle.
   ///
   /// Both ways down want this. A chat opens at its latest message; Jump to
   /// latest glides for the travel and then finishes the trip here.
-  void _settleAtBottom([int tries = 8]) => _afterLayout((position) {
-        if (position.pixels >= position.maxScrollExtent) return;
-        _scroll.jumpTo(position.maxScrollExtent);
-        if (tries > 0) _settleAtBottom(tries - 1);
+  void _settleAtBottom([int tries = 60, double? lastMax]) =>
+      _afterLayout((position) {
+        if (position.isScrollingNotifier.value) return;
+        final max = position.maxScrollExtent;
+        if (position.pixels < max) _scroll.jumpTo(max);
+        if (tries > 0 && max != lastMax) _settleAtBottom(tries - 1, max);
       });
 
   /// Ask whether to keep an expired temporary chat (turning its TTL off) or
