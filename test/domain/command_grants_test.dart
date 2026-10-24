@@ -7,6 +7,7 @@ import "package:path/path.dart" as p;
 
 import "package:agent_chat/domain/command_grants.dart";
 import "package:agent_chat/domain/safe_command.dart";
+import "package:agent_chat/domain/shell_command_analysis.dart";
 
 FileSystem get fs => fileSystemIo;
 
@@ -181,6 +182,44 @@ void main() {
       final grants = await assess(command, cwd: repo);
       expect(grants.gitGrants, isEmpty, reason: command);
       expect(covered(grants), isFalse, reason: command);
+    }
+  });
+
+  test("a `cd` anywhere but the lead, or a sourced script, loses the vouch",
+      () async {
+    final repo = makeRepo(p.join(root.path, "repo"));
+    for (final command in [
+      r'"cd" $(x) && git commit -m x',
+      r"\cd $(x) && git commit -m x",
+      r"{ cd $(x); } && git commit -m x",
+      "{ cd /tmp; } && git commit -m x",
+      "if true; then cd /tmp; fi && git commit -m x",
+      "source env.sh && git commit -m x",
+      r"eval $(x) && git commit -m x",
+      r"$(echo cd) /tmp && git commit -m x",
+    ]) {
+      final segments = ShellCommandAnalysis.parse(command).modelableSegments!;
+      final grants = await commandGrantsFor(
+        CommandGrantsInput(
+            fs: fs, start: repo, home: root.path, segments: segments),
+      );
+      expect(grants.gitGrants, isEmpty, reason: command);
+    }
+  });
+
+  test("`cd` as an argument or a redirect target moves nothing", () async {
+    final repo = makeRepo(p.join(root.path, "repo"));
+    for (final command in [
+      "echo cd && git commit -m x",
+      "grep -rn source . && git commit -m x",
+      "git log > cd && git commit -m x",
+    ]) {
+      final segments = ShellCommandAnalysis.parse(command).modelableSegments!;
+      final grants = await commandGrantsFor(
+        CommandGrantsInput(
+            fs: fs, start: repo, home: root.path, segments: segments),
+      );
+      expect(grants.gitGrants, isNotEmpty, reason: command);
     }
   });
 

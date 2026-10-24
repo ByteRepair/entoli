@@ -90,6 +90,26 @@ void main() {
       }
     });
 
+    test("redirects are not arguments", () {
+      for (final segment in [
+        "git branch 2>/dev/null",
+        "git tag > /dev/null",
+        "env 2>/dev/null",
+        "uniq < names.txt",
+        "uniq <<'EOF'\na\nEOF",
+      ]) {
+        expect(
+          profileSegment(segment).reach,
+          SegmentReach.nonModifying,
+          reason: segment,
+        );
+      }
+      expect(
+        profileSegment("curl -s example.com < body.json").url,
+        "http://example.com",
+      );
+    });
+
     test("anything the words cannot name stands down", () {
       for (final segment in [
         r'echo "$HOME"',
@@ -98,6 +118,35 @@ void main() {
       ]) {
         expect(profileSegment(segment).modelable, isFalse, reason: segment);
       }
+    });
+  });
+
+  group("here-documents", () {
+    test("a body is input, not part of the command", () {
+      for (final segment in [
+        "cat <<'EOF'\n<p>Don't | stop</p> > x\nEOF",
+        "grep -n x <<'EOF'\n\$5 `y`\nEOF",
+        "cat <<EOF\n<td>\$name</td>\nEOF",
+        "ls # > not a redirect",
+      ]) {
+        expect(
+          profileSegment(segment).reach,
+          SegmentReach.nonModifying,
+          reason: segment,
+        );
+      }
+    });
+
+    test("the command line still decides", () {
+      expect(
+        profileSegment("cat > f.html <<'EOF'\n<p>x</p>\nEOF").reach,
+        SegmentReach.other,
+      );
+      // An unquoted body runs its substitutions.
+      expect(
+        profileSegment("cat <<EOF\n\$(rm x)\nEOF").modelable,
+        isFalse,
+      );
     });
   });
 

@@ -18,6 +18,7 @@ class ShellCommandAnalysis {
     required this.unmodelableReasons,
     required this.escalationReasons,
     required this.command,
+    this._tokens = const [],
   });
 
   factory ShellCommandAnalysis.parse(String command, {bool isWindows = false}) {
@@ -63,6 +64,7 @@ class ShellCommandAnalysis {
       unmodelableReasons: const [],
       escalationReasons: List.unmodifiable(escalations),
       command: command,
+      tokens: tokens,
     );
   }
 
@@ -105,15 +107,16 @@ class ShellCommandAnalysis {
   /// The top-level pieces the parse could see, where it got far enough to see
   /// them. Null where the tokenizer failed outright — an unterminated quote,
   /// a substitution never closed — there being nothing reliable to name.
-  /// Computed on first read: the segments are consumed by the refusal note
-  /// and by per-segment rule matching, never by a command that parsed clean.
+  /// Computed on first read, from the parse's own tokens.
   List<String>? get modelableSegments {
     if (unmodelableReasons.isNotEmpty) return null;
-    return _segments ??= _segmentsOf(command);
+    return _segments ??= _segmentsOf(command, _tokens);
   }
 
-  /// The command the parse ran over, kept for the lazy split above.
+  /// The command the parse ran over, and its tokens, kept for the lazy split
+  /// above.
   final String command;
+  final List<_Tok> _tokens;
   List<String>? _segments;
 }
 
@@ -161,59 +164,123 @@ bool _escalate(
   return true;
 }
 
-/// The top-level pieces [command] parses to, split on the operators the
-/// grammar takes and ignoring anything inside a quote or a substitution —
-/// those are one segment's own content. For the refusal note, naming what
-/// the model did write where the parse can see it.
-List<String> _segmentsOf(String command) {
-  final segments = <String>[];
-  final current = StringBuffer();
+/// The top-level pieces [command] parses to: cut at the separators [tokens]
+/// found outside a group, so a quote or a substitution stays in the segment
+/// it belongs to. A here-document body is cut out of wherever it lies and put
+/// back after the segment whose `<<` it feeds, so `cat <<EOF |` followed by a
+/// body and `rm x` is `rm x` to a rule, not the body. For the refusal note
+/// and per-segment rule matching.
+List<String> _segmentsOf(String command, List<_Tok> tokens) {
+  final texts = <String>[];
+  final starts = <int>[];
+  final bodies = <_Tok>[];
+  var current = StringBuffer();
+  var from = 0;
+  var start = 0;
   var depth = 0;
-  var quote = "";
-  for (var i = 0; i < command.length; i++) {
-    final c = command[i];
-    if (quote.isNotEmpty) {
-      current.write(c);
-      if (c == quote && (i == 0 || command[i - 1] != "\\")) quote = "";
-      continue;
-    }
-    if (c == "'" || c == "\"") {
-      quote = c;
-      current.write(c);
-      continue;
-    }
-    if (c == "(" || c == r"$") {
-      depth++;
-      current.write(c);
-      continue;
-    }
-    if (c == ")") {
-      depth--;
-      current.write(c);
-      continue;
-    }
-    if (depth == 0 && c == "\\") {
-      // A backslash escapes the next character; both belong to the segment.
-      current.write(c);
-      if (i + 1 < command.length) current.write(command[++i]);
-      continue;
-    }
-    if (depth == 0 && (c == "|" || c == "&" || c == ";" || c == "\n")) {
-      if (current.toString().trim().isNotEmpty) {
-        segments.add(current.toString().trim());
-      }
-      current.clear();
-      // `&&` and `||` swallow their second character.
-      if (i + 1 < command.length && command[i + 1] == c) i++;
-      continue;
-    }
-    current.write(c);
+  void cut(int end) {
+    texts.add((current..write(command.substring(from, end))).toString().trim());
+    starts.add(start);
+    current = StringBuffer();
   }
-  if (current.toString().trim().isNotEmpty) {
-    segments.add(current.toString().trim());
+
+  for (final tok in tokens) {
+    switch (tok.kind) {
+      case _TokKind.word:
+        continue;
+      case _TokKind.body:
+        current.write(command.substring(from, tok.at));
+        from = tok.end;
+        bodies.add(tok);
+      case _TokKind.op:
+        switch (tok.text) {
+          case "(":
+            depth++;
+          case ")":
+            depth--;
+          case "|" || "||" || "&&" || ";" || "&" || ";;" || "\n" when depth == 0:
+            cut(tok.at);
+            from = start = tok.end;
+        }
+    }
   }
-  return segments;
+  cut(command.length);
+  for (final body in bodies) {
+    final owner = starts.lastIndexWhere((at) => at <= body.owner);
+    texts[owner] += command.substring(body.at, body.end);
+  }
+  return [for (final text in texts) if (text.isNotEmpty) text];
 }
+
+/// [segment] as the read-only tier reads it: its words in order, leading
+/// assignments included, and the file each output redirect writes (null for
+/// one with no target), the redirects' own syntax and any here-document body
+/// left out of the words. Null where any of it is not plain text — an
+/// expansion, a substitution, a group — or the segment does not tokenize,
+/// the same answer the whole-command parse gives.
+({List<String> words, List<String?> writes})? plainCommand(String segment) {
+  final reasons = <String>[];
+  final tokens = _tokenize(segment, reasons);
+  if (reasons.isNotEmpty ||
+      tokens.any((t) => t.kind == _TokKind.op && (t.text == "(" || t.text == ")"))) {
+    return null;
+  }
+  final parsed = _Pipeline._of(tokens);
+  final words = <String>[];
+  for (final word in parsed.argv) {
+    final text = _plain(word);
+    if (text == null) return null;
+    words.add(text);
+  }
+  final writes = <String?>[];
+  for (final redirect in parsed.redirects) {
+    final target = redirect.target == null ? null : _plain(redirect.target!);
+    if (redirect.target != null && target == null) return null;
+    if (!redirect.fromInput && !redirect.fdOnly) writes.add(target);
+  }
+  return (words: words, writes: writes);
+}
+
+/// The words of [segment] that stand where a command does: the first, and
+/// the first after an operator, a reserved word (`{`, `then`, `do`, …), a
+/// leading assignment or `command`/`builtin` — so `cd` is one in `{ cd x; }`
+/// and not in `echo cd`. Null for one that is not plain text, whose command
+/// nothing can name. As far as [segment] tokenizes.
+List<String?> commandWords(String segment) {
+  final commands = <String?>[];
+  var head = true;
+  var target = false;
+  for (final tok in _tokenize(segment, <String>[])) {
+    switch (tok.kind) {
+      case _TokKind.body:
+        break;
+      case _TokKind.op:
+        if (_redirectOps.contains(tok.text)) {
+          target = true;
+        } else {
+          head = true;
+        }
+      case _TokKind.word:
+        if (target) {
+          target = false;
+        } else if (head) {
+          final text = _plainOf(tok);
+          commands.add(text);
+          head = text != null &&
+              (_commandPrefixes.contains(text) || _isAssignmentWord(text));
+        }
+    }
+  }
+  return commands;
+}
+
+const _redirectOps = {">", ">>", "&>", "&>>", ">&", "<", "<<", "<<<", "<&"};
+
+/// Words after which the next word is still the command.
+const _commandPrefixes = {
+  "{", "!", "if", "then", "elif", "else", "while", "until", "do", "time",
+  "command", "builtin",
+};
 
 /// Whether [command] reads or writes a file the way the file tools would:
 /// `cat`, `head`, `tail`, `nl`, `less` or `more` naming a file rather than
@@ -263,7 +330,7 @@ bool isFileToolWork(String command) {
       case ">" || ">>" || "&>" || "&>>":
         target = true;
         outTarget = true;
-      case "<" || "<<" || "<<<":
+      case "<" || "<<" || "<<<" || ">&" || "<&":
         target = true;
         outTarget = false;
     }
@@ -301,19 +368,33 @@ const writeTargetVars = {
 // anything outside this shape is an escalation, not a guess.
 // ---------------------------------------------------------------------------
 
-enum _TokKind { word, op }
+enum _TokKind { word, op, body }
 
 /// A word is a list of pieces: [String]s for the literal text and
 /// [_Substitution]s where a `$( … )` was read. Operators are their own text.
+/// A separator and a here-document body carry their span of the source, and
+/// a body the offset of the `<<` it belongs to: [_segmentsOf] cuts by them.
 class _Tok {
-  const _Tok.op(this.text)
+  const _Tok.op(this.text, [this.at = 0])
       : kind = _TokKind.op,
+        end = at + text.length,
+        owner = 0,
         pieces = null;
   const _Tok.word(this.pieces)
       : kind = _TokKind.word,
-        text = "";
+        text = "",
+        at = 0,
+        end = 0,
+        owner = 0;
+  const _Tok.body(this.at, this.end, this.owner)
+      : kind = _TokKind.body,
+        text = "",
+        pieces = null;
   final _TokKind kind;
   final String text;
+  final int at;
+  final int end;
+  final int owner;
   final List<Object>? pieces;
 }
 
@@ -325,10 +406,11 @@ class _Substitution {
 /// One parsed pipeline: the commands a pipe/`;`/`&&`/`||` sequence separates,
 /// their redirects and their leading assignments.
 class _Pipeline {
-  _Pipeline._(this.words, this.redirects, this.assignments);
+  _Pipeline._(this.words, this.argv, this.redirects, this.assignments);
 
   factory _Pipeline._of(List<_Tok> tokens) {
     final words = <List<Object>>[];
+    final argv = <List<Object>>[];
     final redirects = <_Redirect>[];
     final assignments = <String, String>{};
     var current = _Simple();
@@ -343,6 +425,7 @@ class _Pipeline {
           current.redirects.isNotEmpty ||
           current.assignments.isNotEmpty) {
         words.addAll(current.words);
+        argv.addAll(current.argv);
         redirects.addAll(current.redirects);
         assignments.addAll(current.assignments);
         current = _Simple();
@@ -353,13 +436,20 @@ class _Pipeline {
       if (tok.kind == _TokKind.word) {
         if (expectWord) {
           final last = current.redirects.removeLast();
+          // A duplication names a descriptor, or `-` to close one; anything
+          // else after `>&` is a file it writes.
+          final fdOnly =
+              last.fdOnly && _descriptor.hasMatch(_plain(tok.pieces!) ?? "");
           current.redirects
-              .add(_Redirect(tok.pieces!, last.fromInput, last.fdOnly));
+              .add(_Redirect(tok.pieces!, last.fromInput, fdOnly));
           expectWord = false;
-        } else if (current.words.isEmpty &&
+          continue;
+        }
+        current.argv.add(tok.pieces!);
+        if (current.words.isEmpty &&
             current.redirects.isEmpty &&
-            _isAssignmentWord(_plainOf(tok) ?? "")) {
-          final text = _plainOf(tok)!;
+            _isAssignmentWord(_plain(tok.pieces!) ?? "")) {
+          final text = _plain(tok.pieces!)!;
           final eq = text.indexOf("=");
           assignments[text.substring(0, eq)] = text.substring(eq + 1);
         } else {
@@ -373,11 +463,13 @@ class _Pipeline {
             expectWord = true;
             current.redirects.add(_Redirect(null, false, false));
           case ">&":
+            expectWord = true;
             current.redirects.add(_Redirect(null, false, true));
           case "<" || "<<" || "<<<":
             expectWord = true;
             current.redirects.add(_Redirect(null, true, false));
           case "<&":
+            expectWord = true;
             current.redirects.add(_Redirect(null, true, true));
           default:
             // `(`, `)` and the rest: a group or subshell's insides are read
@@ -388,10 +480,15 @@ class _Pipeline {
       }
     }
     endCommand();
-    return _Pipeline._(words, redirects, assignments);
+    return _Pipeline._(words, argv, redirects, assignments);
   }
 
+  /// The command words, leading assignments taken out into [assignments].
   final List<List<Object>> words;
+
+  /// Every word that is not a redirect's target, assignments included, in
+  /// order: the command as the read-only tier reads it.
+  final List<List<Object>> argv;
   final List<_Redirect> redirects;
   final Map<String, String> assignments;
 }
@@ -407,6 +504,7 @@ class _Redirect {
 
 class _Simple {
   final words = <List<Object>>[];
+  final argv = <List<Object>>[];
   final redirects = <_Redirect>[];
   final assignments = <String, String>{};
 }
@@ -424,38 +522,91 @@ bool _isAssignmentWord(String word) {
 /// The word's whole text, where it has no substitutions in it. Null where it
 /// does, because an assignment whose value is a substitution is not read here
 /// as one — it is a word like any other.
-String? _plainOf(_Tok tok) {
-  final pieces = tok.pieces!;
-  if (pieces.any((piece) => piece is! String)) return null;
-  return pieces.join();
-}
+String? _plainOf(_Tok tok) => _plain(tok.pieces!);
+
+String? _plain(List<Object> pieces) =>
+    pieces.every((piece) => piece is String) ? pieces.join() : null;
+
+final _descriptor = RegExp(r"^(\d+|-)$");
 
 /// Splits [source] into words and operators. Incomplete — an unterminated
 /// quote, a `$( ` never closed — appends to [reasons] and stops: the caller
 /// escalates rather than guessing what the rest meant.
+///
+/// A here-document's body is text, not shell: it is skipped, and only the
+/// substitutions an unquoted delimiter leaves live in it come out, as a word
+/// of the command it feeds, which ends after the body's closing line.
 List<_Tok> _tokenize(String source, List<String> reasons) {
   final tokens = <_Tok>[];
   var pieces = <Object>[];
   var wordOpen = false;
+  var quoted = false;
+  // Set by `<<`: the next word is a delimiter, its body read at the newline.
+  var delimiterNext = false;
+  var delimiterAt = 0;
+  var dash = false;
+  final pending = <_Heredoc>[];
+
+  // `2>`: the descriptor written against a redirect is the redirect's, not a
+  // word of the command.
+  void dropDescriptor() {
+    if (wordOpen && !quoted && RegExp(r"^\d+$").hasMatch(_plain(pieces) ?? "")) {
+      pieces = <Object>[];
+      wordOpen = false;
+    }
+  }
 
   void flush() {
-    if (wordOpen) tokens.add(_Tok.word(pieces));
+    if (wordOpen) {
+      final word = _Tok.word(pieces);
+      tokens.add(word);
+      if (delimiterNext) {
+        delimiterNext = false;
+        final delimiter = _plainOf(word);
+        if (delimiter == null) {
+          reasons.add("a here-document delimiter with an expansion in it");
+        }
+        pending.add(_Heredoc(delimiter ?? "",
+            at: delimiterAt, quoted: quoted, dash: dash));
+      }
+    }
     pieces = <Object>[];
     wordOpen = false;
+    quoted = false;
   }
 
   var i = 0;
   while (i < source.length) {
     final c = source[i];
     switch (c) {
-      case " " || "\t" || "\n" || "\r":
+      case " " || "\t" || "\r":
         flush();
         i++;
+      case "\n":
+        flush();
+        if (delimiterNext) {
+          reasons.add("a here-document with no delimiter");
+          return tokens;
+        }
+        // After an operator that wants more, or before anything, a newline is
+        // a line break rather than the end of a command.
+        final last = tokens.lastOrNull;
+        final carriesOn = last == null ||
+            (last.kind == _TokKind.op && _carriesOn.contains(last.text));
+        var end = i;
+        if (pending.isNotEmpty) {
+          final read = _readBodies(source, i + 1, pending, tokens, reasons);
+          if (read == null) return tokens;
+          pending.clear();
+          end = read;
+        }
+        if (!carriesOn && end < source.length) tokens.add(_Tok.op("\n", end));
+        i = end + 1;
       case ";" || "&" || "|" || "(" || ")":
         flush();
         final two = i + 1 < source.length ? source[i + 1] : "";
         if ((c == ";" || c == "&" || c == "|") && two == c) {
-          tokens.add(_Tok.op(c + c));
+          tokens.add(_Tok.op(c + c, i));
           i += 2;
         } else if (c == "&" && two == ">") {
           tokens.add(_Tok.op(i + 2 < source.length && source[i + 2] == ">"
@@ -463,10 +614,11 @@ List<_Tok> _tokenize(String source, List<String> reasons) {
               : "&>"));
           i += i + 2 < source.length && source[i + 2] == ">" ? 3 : 2;
         } else {
-          tokens.add(_Tok.op(c));
+          tokens.add(_Tok.op(c, i));
           i++;
         }
       case ">":
+        dropDescriptor();
         flush();
         if (i + 1 < source.length && source[i + 1] == ">") {
           tokens.add(_Tok.op(">>"));
@@ -479,13 +631,21 @@ List<_Tok> _tokenize(String source, List<String> reasons) {
           i++;
         }
       case "<":
+        dropDescriptor();
         flush();
-        if (i + 1 < source.length && source[i + 1] == "<") {
-          tokens.add(_Tok.op(i + 2 < source.length && source[i + 2] == "<"
-              ? "<<<"
-              : "<<"));
-          i += i + 2 < source.length && source[i + 2] == "<" ? 3 : 2;
-        } else if (i + 1 < source.length && source[i + 1] == "&") {
+        final two = i + 1 < source.length ? source[i + 1] : "";
+        final three = i + 2 < source.length ? source[i + 2] : "";
+        if (two == "<" && three == "<") {
+          tokens.add(const _Tok.op("<<<"));
+          i += 3;
+        } else if (two == "<") {
+          tokens.add(const _Tok.op("<<"));
+          delimiterNext = true;
+          delimiterAt = i;
+          // `<<-` strips leading tabs from the body and its closing line.
+          dash = three == "-";
+          i += dash ? 3 : 2;
+        } else if (two == "&") {
           tokens.add(_Tok.op("<&"));
           i += 2;
         } else {
@@ -494,6 +654,7 @@ List<_Tok> _tokenize(String source, List<String> reasons) {
         }
       case "\"":
         wordOpen = true;
+        quoted = true;
         i++;
         while (i < source.length && source[i] != "\"") {
           if (source[i] == "\\" && i + 1 < source.length) {
@@ -521,6 +682,7 @@ List<_Tok> _tokenize(String source, List<String> reasons) {
         i++;
       case "'":
         wordOpen = true;
+        quoted = true;
         i++;
         final end = source.indexOf("'", i);
         if (end < 0) {
@@ -551,8 +713,12 @@ List<_Tok> _tokenize(String source, List<String> reasons) {
           reasons.add("a trailing backslash");
           return tokens;
         }
-        wordOpen = true;
-        pieces.add(source[i + 1]);
+        // A line continuation joins the lines; it is no character at all.
+        if (source[i + 1] != "\n") {
+          wordOpen = true;
+          quoted = true;
+          pieces.add(source[i + 1]);
+        }
         i += 2;
       default:
         wordOpen = true;
@@ -561,7 +727,80 @@ List<_Tok> _tokenize(String source, List<String> reasons) {
     }
   }
   flush();
+  if (delimiterNext || pending.isNotEmpty) {
+    reasons.add("a here-document with no closing delimiter");
+  }
   return tokens;
+}
+
+/// What a newline after them continues rather than ends.
+const _carriesOn = {"|", "||", "&&", ";", "&", ";;", "(", "\n"};
+
+class _Heredoc {
+  const _Heredoc(this.delimiter,
+      {required this.at, required this.quoted, required this.dash});
+  final String delimiter;
+
+  /// Where its `<<` is, which decides the segment the body goes back on.
+  final int at;
+
+  /// A quoted delimiter leaves the body inert; an unquoted one still runs the
+  /// substitutions in it.
+  final bool quoted;
+  final bool dash;
+}
+
+/// Reads the bodies of [pending], in order, starting at [i]: the line after
+/// the one that named them. Returns the end of the last closing line, or null
+/// where one never closes. Each body goes into [tokens] as its span, from the
+/// newline before it to the end of its closing line; an unquoted body's
+/// substitutions follow it as one word, so the parse walks them like any
+/// other.
+int? _readBodies(String source, int i, List<_Heredoc> pending,
+    List<_Tok> tokens, List<String> reasons) {
+  for (final doc in pending) {
+    final start = i;
+    int? bodyEnd;
+    while (bodyEnd == null && i < source.length) {
+      final newline = source.indexOf("\n", i);
+      final lineEnd = newline < 0 ? source.length : newline;
+      var from = i;
+      while (doc.dash && from < lineEnd && source[from] == "\t") {
+        from++;
+      }
+      if (lineEnd - from == doc.delimiter.length &&
+          source.startsWith(doc.delimiter, from)) {
+        bodyEnd = i;
+      }
+      i = lineEnd + 1;
+    }
+    if (bodyEnd == null) {
+      reasons.add("a here-document with no closing ${doc.delimiter}");
+      return null;
+    }
+    tokens.add(_Tok.body(start - 1, i - 1, doc.at));
+    if (doc.quoted) continue;
+    final body = source.substring(start, bodyEnd);
+    final live = <Object>[];
+    for (var j = 0; j < body.length;) {
+      switch (body[j]) {
+        case "\\":
+          j += 2;
+        case "`":
+          reasons.add("a backtick substitution");
+          return null;
+        case "\$":
+          final read = _readExpansion(body, j, reasons);
+          if (read == null) return null;
+          if (read.$1 is _Substitution) live.add(read.$1);
+          j = read.$2;
+        default:
+          j++;
+      }
+    }
+    if (live.isNotEmpty) tokens.add(_Tok.word(live));
+  }
+  return i - 1;
 }
 
 /// Reads one `$…` starting at [i] (where the `\$` is). Returns the piece —
@@ -606,14 +845,12 @@ List<_Tok> _tokenize(String source, List<String> reasons) {
     // resolved.
     return (_Expansion.text(inner), end + 1);
   }
-  final rest = source.substring(i);
-  final name = RegExp(r"^[A-Za-z_][A-Za-z0-9_]*|^[0-9@*#?$!_-]").firstMatch(rest);
+  final name = _expansionName.matchAsPrefix(source, i);
   if (name == null) return ("", i + 1);
-  return (
-    _Expansion.text(source.substring(i, i + name.group(0)!.length)),
-    i + name.group(0)!.length,
-  );
+  return (_Expansion.text(name.group(0)!), name.end);
 }
+
+final _expansionName = RegExp(r"[A-Za-z_][A-Za-z0-9_]*|[0-9@*#?$!_-]");
 
 /// A plain `$NAME` / `${…}` expansion, carried as its own text.
 class _Expansion {
