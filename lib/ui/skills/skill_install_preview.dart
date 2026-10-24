@@ -92,7 +92,7 @@ class _SkillInstallPreviewPageState
       }
     }
     await platform.readOnlyDirs
-        .of(skillsDir, executable: true)
+        .skills(skillsDir)
         .write(() async {
       await installSkillPackage(config, pkg, project: target);
     });

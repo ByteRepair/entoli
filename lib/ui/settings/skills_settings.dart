@@ -172,7 +172,7 @@ class _SkillsSectionState extends ConsumerState<SkillsSection> {
     await _guard(() async {
       final config = ref.read(appConfigProvider);
       await platform.readOnlyDirs
-          .of(config.promptsDir(CompletionKind.skill, project: target), executable: true)
+          .skills(config.promptsDir(CompletionKind.skill, project: target))
           .write(() async {
         await installSkillPackage(config, package, project: target);
       });
@@ -197,7 +197,7 @@ class _SkillsSectionState extends ConsumerState<SkillsSection> {
     await _guard(() async {
       final config = ref.read(appConfigProvider);
       await platform.readOnlyDirs
-          .of(config.promptsDir(CompletionKind.skill, project: widget.project), executable: true)
+          .skills(config.promptsDir(CompletionKind.skill, project: widget.project))
           .write(() async {
         await config.fs
             .directory(skillDirectory(config, name, project: widget.project))

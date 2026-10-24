@@ -574,8 +574,11 @@ final readOnlyDirs = ReadOnlyDirs(setTreeWritable);
 /// deep inside `projects/<project>/rootfs/`.
 Future<void> deleteTree(String path) async {
   // removeTree's own `chmod` is a process, which iOS refuses, and Windows'
-  // read-only attribute is not a mode at all.
-  await setTreeWritable([path], writable: true);
+  // read-only attribute is not a mode at all; elsewhere it unlocks the tree
+  // itself, and a second walk would be one more pass over a whole rootfs.
+  if (Platform.isIOS || Platform.isWindows) {
+    await setTreeWritable([path], writable: true);
+  }
   final err = await removeTree(path);
   if (err != null) throw Exception("could not delete $path: $err");
 }

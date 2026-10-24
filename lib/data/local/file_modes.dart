@@ -24,6 +24,10 @@ void _walk(String root, {required bool writable, required bool executable}) {
   final top = Directory(root);
   if (!top.existsSync()) return;
   final windows = Platform.isWindows;
+  // A lock of a directory the last lock left read-only is a no-op, which is
+  // what makes a turn's lock of its chat's `resources/` cheap: every write
+  // relocks through here with the root writable, and a restore unpacks it so.
+  if (!writable && !windows && top.statSync().mode & 0x92 == 0) return;
   void set(FileSystemEntity entity, bool isDir) => windows
       ? _setWindows(entity.path, isDir: isDir, writable: writable)
       : _setPosix(entity.path,
@@ -68,18 +72,21 @@ typedef _SetAttrsDart = int Function(Pointer<Utf16>, int);
 const _readOnly = 0x1;
 const _invalid = 0xFFFFFFFF;
 
+final _kernel32 = DynamicLibrary.open("kernel32.dll");
+final _getAttrs =
+    _kernel32.lookupFunction<_GetAttrsC, _GetAttrsDart>("GetFileAttributesW");
+final _setAttrs =
+    _kernel32.lookupFunction<_SetAttrsC, _SetAttrsDart>("SetFileAttributesW");
+
 /// Files only: Windows reads a directory's read-only bit as "has a custom
 /// icon", and refuses no write for it.
 void _setWindows(String path, {required bool isDir, required bool writable}) {
   if (isDir) return;
-  final kernel = DynamicLibrary.open("kernel32.dll");
-  final get = kernel.lookupFunction<_GetAttrsC, _GetAttrsDart>("GetFileAttributesW");
-  final set = kernel.lookupFunction<_SetAttrsC, _SetAttrsDart>("SetFileAttributesW");
   final native = path.toNativeUtf16();
   try {
-    final attrs = get(native);
+    final attrs = _getAttrs(native);
     if (attrs == _invalid) return;
-    set(native, writable ? attrs & ~_readOnly : attrs | _readOnly);
+    _setAttrs(native, writable ? attrs & ~_readOnly : attrs | _readOnly);
   } finally {
     malloc.free(native);
   }

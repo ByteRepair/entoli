@@ -36,7 +36,7 @@ Future<void> installBundledSkills(AppConfig config, ReadOnlyDirs dirs) async {
   final projects = bundledSkillFiles.map((f) => f.project).toSet();
   for (final project in projects) {
     await dirs
-        .of(config.bundledSkillsDir(project: project), executable: true)
+        .skills(config.bundledSkillsDir(project: project))
         .write(() => _installFor(config, project));
   }
 }

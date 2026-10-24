@@ -258,7 +258,7 @@ class OpenAiClient implements LlmClient {
     for (final (i, message) in messages.indexed) {
       out.add(_encodeMessage(message));
       if (message.role == LlmRole.tool) {
-        files.addAll(message.attachments.where(_isBlock));
+        files.addAll(message.attachments.where((a) => a.isBlock));
       }
       final runEnds = i + 1 == messages.length || messages[i + 1].role != LlmRole.tool;
       if (files.isNotEmpty && runEnds) {
@@ -274,8 +274,6 @@ class OpenAiClient implements LlmClient {
     }
     return out;
   }
-
-  static bool _isBlock(LlmAttachment a) => a.isImage || a.isPdf;
 
   Map<String, dynamic> _block(LlmAttachment file) => file.isPdf
       ? {
@@ -326,7 +324,7 @@ class OpenAiClient implements LlmClient {
   /// has to be.
   Object _encodeContent(LlmMessage message) {
     final text = inlineText(message);
-    final files = message.attachments.where(_isBlock).toList();
+    final files = message.attachments.where((a) => a.isBlock).toList();
     if (files.isEmpty) return text;
     return [
       if (text.isNotEmpty) {"type": "text", "text": text},
@@ -405,7 +403,7 @@ String inlineText(LlmMessage message) {
   if (message.attachments.isEmpty) return message.text;
   final buffer = StringBuffer(message.text);
   for (final attachment in message.attachments) {
-    if (attachment.isImage || attachment.isPdf) continue;
+    if (attachment.isBlock) continue;
     buffer.write("\n\n");
     if (attachment.isText) {
       buffer.writeln("--- ${attachment.filename} ---");

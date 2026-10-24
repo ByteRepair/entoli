@@ -243,7 +243,7 @@ class _MarketplaceEntryPreviewPageState
       if (!confirmed) return null;
     }
     await platform.readOnlyDirs
-        .of(config.promptsDir(CompletionKind.skill, project: target), executable: true)
+        .skills(config.promptsDir(CompletionKind.skill, project: target))
         .write(() => installSkillPackage(config, pkg, project: target));
     await reloadAllPromptLibraries(ref);
     return pkg.name;

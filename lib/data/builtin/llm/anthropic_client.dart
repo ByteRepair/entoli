@@ -256,7 +256,7 @@ class AnthropicClient implements LlmClient {
 
   List<Map<String, dynamic>> _userBlocks(LlmMessage message) {
     if (message.role == LlmRole.tool) {
-      final files = message.attachments.where(_isBlock);
+      final files = message.attachments.where((a) => a.isBlock);
       return [
         {
           "type": "tool_result",
@@ -279,8 +279,6 @@ class AnthropicClient implements LlmClient {
       ...message.attachments.where((a) => a.isImage).map(_block),
     ];
   }
-
-  static bool _isBlock(LlmAttachment a) => a.isImage || a.isPdf;
 
   Map<String, dynamic> _block(LlmAttachment file) => {
         "type": file.isPdf ? "document" : "image",

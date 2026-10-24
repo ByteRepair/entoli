@@ -1,3 +1,5 @@
+import "dart:typed_data";
+
 import "package:mime/mime.dart";
 
 /// What a viewer is told a workspace file is — an `ACTION_VIEW` intent's type,
@@ -13,3 +15,10 @@ String viewerMime(String path) {
   if (looked != null && looked != "application/octet-stream") return looked;
   return "text/plain";
 }
+
+/// What [bytes] are by their magic number, then by [name]'s extension where
+/// one is given. Null where neither says.
+String? sniffMime(Uint8List bytes, {String name = ""}) => lookupMimeType(name,
+    headerBytes: bytes.length > defaultMagicNumbersMaxLength
+        ? Uint8List.sublistView(bytes, 0, defaultMagicNumbersMaxLength)
+        : bytes);

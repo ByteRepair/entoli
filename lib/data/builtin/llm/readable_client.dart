@@ -67,28 +67,34 @@ List<LlmMessage> readable(List<LlmMessage> messages,
       if (!m.attachments.any(unread))
         m
       else
-        LlmMessage(
-          role: m.role,
-          text: [
-            m.text,
-            if (m.attachments.any((a) => a.isImage && unread(a)))
-              "(Not shown, as this model cannot view images: "
-                  "${names(m.attachments.where((a) => a.isImage && unread(a)))})",
-            if (m.attachments.any((a) => a.isPdf && unread(a)))
-              pdfs
-                  ? "(Not sent, as the conversation's PDFs are over the size "
-                      "a request can carry: "
-                      "${names(m.attachments.where((a) => a.isPdf && unread(a)))}. "
-                      "Read it with a command instead.)"
-                  : "(Not sent, as this model cannot read PDFs here: "
-                      "${names(m.attachments.where((a) => a.isPdf && unread(a)))}. "
-                      "Read it with a command instead.)",
-          ].join("\n\n"),
-          toolCalls: m.toolCalls,
-          toolCallId: m.toolCallId,
-          reasoning: m.reasoning,
-          reasoningSignature: m.reasoningSignature,
-          attachments: [for (final a in m.attachments) if (!unread(a)) a],
-        ),
+        _named(m, m.attachments.where(unread).toList(), pdfs, names),
   ];
 }
+
+LlmMessage _named(LlmMessage m, List<LlmAttachment> unread, bool pdfs,
+    String Function(Iterable<LlmAttachment>) names) {
+  final hiddenImages = unread.where((a) => a.isImage);
+  final hiddenPdfs = unread.where((a) => a.isPdf);
+  final why = pdfs
+      ? "the conversation's PDFs are over the size a request can carry"
+      : "this model cannot read PDFs here";
+  return LlmMessage(
+    role: m.role,
+    text: [
+      m.text,
+      if (hiddenImages.isNotEmpty)
+        "(Not shown, as this model cannot view images: ${names(hiddenImages)})",
+      if (hiddenPdfs.isNotEmpty)
+        "(Not sent, as $why: ${names(hiddenPdfs)}. Read it with a command instead.)",
+    ].join("\n\n"),
+    toolCalls: m.toolCalls,
+    toolCallId: m.toolCallId,
+    reasoning: m.reasoning,
+    reasoningSignature: m.reasoningSignature,
+    attachments: [
+      for (final a in m.attachments)
+        if (!unread.any((u) => identical(u, a))) a,
+    ],
+  );
+}
+

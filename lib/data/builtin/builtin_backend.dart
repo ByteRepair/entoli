@@ -697,10 +697,7 @@ class BuiltinBackend implements AgentBackend {
     // every dispatch's — see [mayDress].
     final dress = mayDress(session, history, null);
     session.messages
-      ..addAll(await projectionOf([prompt],
-          first: dress,
-          load: _resourcesOf(chatId),
-          resourcesDir: await _resourcesDirOf(chatId)))
+      ..addAll(await _projected(chatId, [prompt], first: dress))
       ..addAll(assistantMessages([part]));
   }
 
@@ -735,9 +732,7 @@ class BuiltinBackend implements AgentBackend {
     final key = _memberKey(chatId, viewer);
     final session = _sessions.putIfAbsent(key, BuiltinSession.new);
     if (rebuild || session.isFresh) {
-      session.replaceWith(await projectionOf(history,
-          load: _resourcesOf(chatId),
-          resourcesDir: await _resourcesDirOf(chatId),
+      session.replaceWith(await _projected(chatId, history,
           viewer: viewer,
           compactions: compactions));
       session.coveredBy(history);
@@ -805,11 +800,8 @@ class BuiltinBackend implements AgentBackend {
     for (final (index, message) in gained.indexed) {
       if (confirmed < tail.length) {
         final mine = addressedTo(message, viewer);
-        final entries = await projectionOf([message],
-            first: mine && !ownBefore,
-            viewer: viewer,
-            load: _resourcesOf(chatId),
-            resourcesDir: await _resourcesDirOf(chatId));
+        final entries = await _projected(chatId, [message],
+            first: mine && !ownBefore, viewer: viewer);
         if (_sameSlice(tail, confirmed, entries)) {
           confirmed += entries.length;
           confirmedIds.add(message.id);
@@ -824,11 +816,8 @@ class BuiltinBackend implements AgentBackend {
       break;
     }
     if (fresh.isNotEmpty) {
-      final wordings = await projectionOf(fresh,
-          first: !ownBefore,
-          viewer: viewer,
-          load: _resourcesOf(chatId),
-          resourcesDir: await _resourcesDirOf(chatId));
+      final wordings = await _projected(chatId, fresh,
+          first: !ownBefore, viewer: viewer);
       session.messages.addAll(wordings);
       confirmedIds.addAll([for (final message in fresh) message.id]);
       confirmed += wordings.length;
@@ -845,9 +834,7 @@ class BuiltinBackend implements AgentBackend {
       {required String? viewer}) async {
     final replayed = replayTree(await store.readRecords(chatId));
     if (replayed.messages.isEmpty) return;
-    session.replaceWith(await projectionOf(replayed.messages,
-        load: _resourcesOf(chatId),
-        resourcesDir: await _resourcesDirOf(chatId),
+    session.replaceWith(await _projected(chatId, replayed.messages,
         viewer: viewer,
         compactions: replayed.compactions));
     session.coveredBy(replayed.messages);
@@ -889,9 +876,21 @@ class BuiltinBackend implements AgentBackend {
   ResourceLoader _resourcesOf(String chatId) =>
       (resource) => store.readResource(chatId, resource);
 
-  /// Where this chat's attachments are, for the note that names them.
-  Future<String> _resourcesDirOf(String chatId) async =>
-      config.resourcesDir(chatId, project: await store.projectOf(chatId));
+  /// [messages] of this chat as the model reads them, the attachments read
+  /// and named from its own `resources/`. The one way the backend projects,
+  /// so no rebuild words an attachment's note differently from another.
+  Future<List<LlmMessage>> _projected(String chatId, List<Message> messages,
+          {bool first = true,
+          String? viewer,
+          List<ConversationCompaction> compactions = const [],
+          ResourceLoader? load}) async =>
+      projectionOf(messages,
+          first: first,
+          viewer: viewer,
+          compactions: compactions,
+          load: load ?? _resourcesOf(chatId),
+          resourcesDir: config.resourcesDir(chatId,
+              project: await store.projectOf(chatId)));
 
   /// Carry on the sub-agents the interrupted turn left in flight. A `task`
   /// call whose result never landed is answered by reviving the sub-agent that
@@ -1024,14 +1023,13 @@ class BuiltinBackend implements AgentBackend {
     final read = <String, Future<Uint8List?>>{};
     Future<Uint8List?> loader(String resource) =>
         read.putIfAbsent(resource, () => _resourcesOf(chatId)(resource));
-    final resourcesDir = await _resourcesDirOf(chatId);
     List<Message> span = history;
     List<Message> halve() => span.sublist((span.length / 2).ceil());
     // Loop-invariant: the markers do not change across the ladder.
     final priorSummary = compactions.lastOrNull?.summary;
     for (var attempt = 0; attempt < 3; attempt++) {
-      final projected = await projectionOf(span,
-          load: loader, resourcesDir: resourcesDir, compactions: compactions);
+      final projected = await _projected(chatId, span,
+          load: loader, compactions: compactions);
       if (projected.isEmpty) return null;
       final cut = CompactPrompt.build(
         conversation: projected,
@@ -1051,10 +1049,8 @@ class BuiltinBackend implements AgentBackend {
         if (summary != null) {
           final marker = ConversationCompaction(
               upToMessageId: span.last.id, summary: summary);
-          final after = await projectionOf(history,
-              load: loader,
-              resourcesDir: resourcesDir,
-              compactions: [...compactions, marker]);
+          final after = await _projected(chatId, history,
+              load: loader, compactions: [...compactions, marker]);
           return marker.copyWith(chatTokens: estimateTokens(after));
         }
         logFailure("compact", "empty summary for $chatId");
@@ -1461,10 +1457,8 @@ class BuiltinBackend implements AgentBackend {
       List<ConversationCompaction> compactions = const []}) async {
     await _running.stopAll(chatId);
     final house = _sessions.putIfAbsent(chatId, BuiltinSession.new);
-    house.replaceWith(await projectionOf(history,
-        load: _resourcesOf(chatId),
-        resourcesDir: await _resourcesDirOf(chatId),
-        compactions: compactions));
+    house.replaceWith(
+        await _projected(chatId, history, compactions: compactions));
     house.coveredBy(history);
     // The room's other participants read on their own dispatches, which the
     // sync fills from wherever the log now is: a session worded for them

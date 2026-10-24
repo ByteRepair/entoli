@@ -1,8 +1,8 @@
 import "dart:typed_data";
 
-import "package:mime/mime.dart";
 
 import "../../domain/file_tools.dart";
+import "../mime.dart";
 import "llm/llm_client.dart";
 
 /// Read a file from the workspace. Returns the contents with line numbers.
@@ -58,10 +58,7 @@ const maxReadImageBytes = 3750000;
 /// number alone: a name says `.png` of a file that is not one just as easily,
 /// and a block a provider cannot decode fails every request it stays in.
 String? readBlockTypeOf(Uint8List bytes) {
-  final type = lookupMimeType("",
-      headerBytes: bytes.length > defaultMagicNumbersMaxLength
-          ? Uint8List.sublistView(bytes, 0, defaultMagicNumbersMaxLength)
-          : bytes);
+  final type = sniffMime(bytes);
   return readBlockTypes.contains(type) ? type : null;
 }
 

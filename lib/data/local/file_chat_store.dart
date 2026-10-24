@@ -25,7 +25,7 @@ import "../../domain/workspace.dart";
 class FileChatStore implements ChatStore {
   FileChatStore(this.config, {this.deleteTree, ReadOnlyDirs? readOnlyDirs})
       : _write = RenameWriter.fs(config.fs),
-        _readOnly = readOnlyDirs ?? ReadOnlyDirs(_noModes);
+        _readOnly = readOnlyDirs ?? ReadOnlyDirs.none();
 
   final AppConfig config;
 
@@ -37,9 +37,6 @@ class FileChatStore implements ChatStore {
   /// A chat's `resources/` is one of these: the agent reads its attachments
   /// and never writes them.
   final ReadOnlyDirs _readOnly;
-
-  static Future<void> _noModes(List<String> paths,
-      {required bool writable, bool executable = false}) async {}
 
   FileSystem get _fs => config.fs;
 

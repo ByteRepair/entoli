@@ -8,7 +8,7 @@ import "package:agent_chat/domain/workspace.dart";
 import "package:agent_chat/ui/chat/chat_settings_page.dart";
 import "package:agent_chat/ui/sidebar/project_settings_page.dart";
 import "package:agent_chat/ui/sidebar/sidebar.dart";
-import "package:agent_chat/ui/widgets/formatting.dart";
+import "package:agent_chat/core/formatting.dart";
 import "package:agent_chat/ui/workspace/workspace_page.dart";
 
 import "../fakes.dart";

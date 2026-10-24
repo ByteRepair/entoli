@@ -44,11 +44,14 @@ class LlmAttachment {
 
   bool get isPdf => mimeType == "application/pdf";
 
+  /// Sent as a block of its own rather than folded into the text.
+  bool get isBlock => isImage || isPdf;
+
   /// Roughly: page objects counted in the raw bytes. One kept in a compressed
   /// object stream is invisible to this, so a file showing none is guessed at
   /// a page per 100 KB instead.
   late final int pdfPages = () {
-    final pages = _pageObject.allMatches(latin1.decode(bytes)).length;
+    final pages = _pageObjects(bytes);
     return pages > 0 ? pages : bytes.length ~/ 100000 + 1;
   }();
 
@@ -76,7 +79,33 @@ class LlmAttachment {
       Object.hash(filename, mimeType, const ListEquality<int>().hash(bytes));
 }
 
-final _pageObject = RegExp(r"/Type\s*/Page(?![a-zA-Z])");
+/// `/Type /Page` and not `/Pages`, over the bytes as they are: a decode
+/// would copy the whole file to find a few dozen markers.
+int _pageObjects(Uint8List bytes) {
+  const type = [0x2f, 0x54, 0x79, 0x70, 0x65]; // /Type
+  const page = [0x2f, 0x50, 0x61, 0x67, 0x65]; // /Page
+  bool at(int i, List<int> word) {
+    if (i + word.length > bytes.length) return false;
+    for (var k = 0; k < word.length; k++) {
+      if (bytes[i + k] != word[k]) return false;
+    }
+    return true;
+  }
+
+  var count = 0;
+  for (var i = bytes.indexOf(0x2f); i >= 0; i = bytes.indexOf(0x2f, i + 1)) {
+    if (!at(i, type)) continue;
+    var j = i + type.length;
+    while (j < bytes.length && const [0x20, 0x0a, 0x0d, 0x09].contains(bytes[j])) {
+      j++;
+    }
+    if (!at(j, page)) continue;
+    final next = j + page.length;
+    final letter = next < bytes.length && (bytes[next] | 0x20) >= 0x61 && (bytes[next] | 0x20) <= 0x7a;
+    if (!letter) count++;
+  }
+  return count;
+}
 
 class LlmMessage {
   const LlmMessage({

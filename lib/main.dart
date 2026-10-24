@@ -114,8 +114,7 @@ class AppSession {
     // `skills/` beside them.
     for (final project in projects) {
       await platform.readOnlyDirs
-          .of(config.promptsDir(CompletionKind.skill, project: project),
-              executable: true)
+          .skills(config.promptsDir(CompletionKind.skill, project: project))
           .lock();
     }
     final store = platform.createChatStore(config);

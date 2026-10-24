@@ -174,8 +174,7 @@ Future<String?> deviceHostname() async => null;
 Future<String?> captureLoginPath() async => null;
 
 /// IndexedDB has no permissions to set, so every write goes straight through.
-final readOnlyDirs =
-    ReadOnlyDirs((paths, {required writable, executable = false}) async {});
+final readOnlyDirs = ReadOnlyDirs.none();
 
 /// No rootfs here, so no proot stubs: a plain recursive delete.
 Future<void> deleteTree(String path) async {

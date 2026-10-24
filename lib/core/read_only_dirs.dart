@@ -51,6 +51,13 @@ class ReadOnlyDir {
 class ReadOnlyDirs {
   ReadOnlyDirs(this._set);
 
+  /// Where there are no permissions to set, as on the web: every write goes
+  /// straight through.
+  ReadOnlyDirs.none() : _set = _none;
+
+  static Future<void> _none(List<String> paths,
+      {required bool writable, bool executable = false}) async {}
+
   final SetTreeWritable _set;
   final _dirs = <String, ReadOnlyDir>{};
 
@@ -58,6 +65,7 @@ class ReadOnlyDirs {
       _dirs.putIfAbsent(p.normalize(path),
           () => ReadOnlyDir._(p.normalize(path), _set, executable: executable));
 
-  /// [path] writable for good, before it is deleted or moved as a whole.
-  Future<void> release(String path) => _set([path], writable: true);
+  /// A skills directory: its files keep their execute bit, since a skill's
+  /// scripts arrive from embedded data with none.
+  ReadOnlyDir skills(String path) => of(path, executable: true);
 }

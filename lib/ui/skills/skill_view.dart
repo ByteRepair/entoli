@@ -11,7 +11,7 @@ import "../../data/prompts/skill_validate.dart";
 import "../../domain/frontmatter.dart";
 import "../../providers.dart";
 import "../chat/widgets/reply_style.dart";
-import "../widgets/formatting.dart" show formatSize;
+import "../../core/formatting.dart" show formatSize;
 import "../widgets/install_bar.dart";
 
 /// A full page showing one skill the library offers: its description, the

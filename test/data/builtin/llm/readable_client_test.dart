@@ -57,4 +57,15 @@ void main() {
     expect(sent[0].text, contains("old.pdf"));
     expect(identical(sent[1], messages[1]), isTrue);
   });
+
+  test("a PDF's pages are counted off its page objects, not its page tree",
+      () {
+    LlmAttachment pdf(String body) => LlmAttachment(
+        filename: "a.pdf",
+        mimeType: "application/pdf",
+        bytes: Uint8List.fromList(body.codeUnits));
+    expect(pdf("<</Type /Pages>> <</Type/Page>> <</Type\n/Page /X>>").pdfPages, 2);
+    expect(pdf("no markers here").pdfPages, 1,
+        reason: "one in a compressed stream is guessed at by size");
+  });
 }

@@ -6,6 +6,7 @@ import "package:fs_shim/fs.dart";
 import "package:flutter/foundation.dart" show visibleForTesting;
 import "package:uuid/uuid.dart";
 
+import "../../core/formatting.dart";
 import "../../domain/agent_backend.dart";
 import "../../domain/agent_browser.dart";
 import "../../domain/artifact.dart";
@@ -1885,11 +1886,10 @@ class BuiltinAgent {
                 : "${args.path} is an image, which this model cannot view. "
                     "A command can work with it at that path.");
       }
-      String megabytes(int n) => "${(n / 1000000).toStringAsFixed(1)} MB";
       final limit = pdf ? pdfBudgetBytes : file_tool_defs.maxReadImageBytes;
       if (bytes.length > limit) {
-        return ShellResult.failed("${args.path} is ${megabytes(bytes.length)}, "
-            "over the ${megabytes(limit)} a request can carry. "
+        return ShellResult.failed("${args.path} is ${formatSize(bytes.length)}, "
+            "over the ${formatSize(limit)} a request can carry. "
             "${pdf ? "Split it" : "Downscale it"} with a command, then read the result.");
       }
       attached = await _saved(LlmAttachment(

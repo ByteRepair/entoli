@@ -8,7 +8,7 @@ import "../../domain/local_model.dart";
 import "../../providers.dart";
 import "local_model_downloads.dart";
 import "../widgets/catalog.dart";
-import "../widgets/formatting.dart";
+import "../../core/formatting.dart";
 import "../widgets/resettable_field.dart";
 import "../widgets/section_header.dart";
 
