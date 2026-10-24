@@ -166,12 +166,22 @@ bool _escalate(
 /// those are one segment's own content. For the refusal note, naming what
 /// the model did write where the parse can see it.
 List<String> _segmentsOf(String command) {
+  final bodies = <int, int>{};
+  _tokenize(command, <String>[], bodies);
   final segments = <String>[];
   final current = StringBuffer();
   var depth = 0;
   var quote = "";
   for (var i = 0; i < command.length; i++) {
     final c = command[i];
+    // A here-document's body belongs to the command it feeds, whatever it
+    // holds.
+    if (bodies[i] case final end?) {
+      current.write(command.substring(i, end));
+      quote = "";
+      i = end - 1;
+      continue;
+    }
     if (quote.isNotEmpty) {
       current.write(c);
       if (c == quote && (i == 0 || command[i - 1] != "\\")) quote = "";
@@ -254,6 +264,8 @@ bool isFileToolWork(String command) {
       }
       continue;
     }
+    // A pipe or `&&` carries on across a line break.
+    if (tok.text == "\n" && words.isEmpty) continue;
     switch (tok.text) {
       case "|" || "||" || "&&" || ";" || "&" || ";;" || "\n":
         if (judge()) return true;
@@ -433,24 +445,62 @@ String? _plainOf(_Tok tok) {
 /// Splits [source] into words and operators. Incomplete — an unterminated
 /// quote, a `$( ` never closed — appends to [reasons] and stops: the caller
 /// escalates rather than guessing what the rest meant.
-List<_Tok> _tokenize(String source, List<String> reasons) {
+///
+/// A here-document's body is text, not shell: it is skipped, and only the
+/// substitutions an unquoted delimiter leaves live in it come out, as a word
+/// of the command it feeds. [bodies] gains each body's span, from the newline
+/// that opens it to the end of its closing line.
+List<_Tok> _tokenize(String source, List<String> reasons,
+    [Map<int, int>? bodies]) {
   final tokens = <_Tok>[];
   var pieces = <Object>[];
   var wordOpen = false;
+  var quoted = false;
+  // Set by `<<`: the next word is a delimiter, its body read at the newline.
+  var delimiterNext = false;
+  var dash = false;
+  final pending = <_Heredoc>[];
 
   void flush() {
-    if (wordOpen) tokens.add(_Tok.word(pieces));
+    if (wordOpen) {
+      tokens.add(_Tok.word(pieces));
+      if (delimiterNext) {
+        delimiterNext = false;
+        if (pieces.any((piece) => piece is! String)) {
+          reasons.add("a here-document delimiter with an expansion in it");
+        }
+        pending.add(_Heredoc(pieces.join(), quoted: quoted, dash: dash));
+      }
+    }
     pieces = <Object>[];
     wordOpen = false;
+    quoted = false;
   }
 
   var i = 0;
   while (i < source.length) {
     final c = source[i];
     switch (c) {
-      case " " || "\t" || "\n" || "\r":
+      case " " || "\t" || "\r":
         flush();
         i++;
+      case "\n":
+        flush();
+        if (delimiterNext) {
+          reasons.add("a here-document with no delimiter");
+          return tokens;
+        }
+        if (pending.isEmpty) {
+          tokens.add(const _Tok.op("\n"));
+          i++;
+          continue;
+        }
+        final end = _readBodies(source, i + 1, pending, tokens, reasons);
+        if (end == null) return tokens;
+        bodies?[i] = end;
+        pending.clear();
+        tokens.add(const _Tok.op("\n"));
+        i = end;
       case ";" || "&" || "|" || "(" || ")":
         flush();
         final two = i + 1 < source.length ? source[i + 1] : "";
@@ -480,11 +530,17 @@ List<_Tok> _tokenize(String source, List<String> reasons) {
         }
       case "<":
         flush();
-        if (i + 1 < source.length && source[i + 1] == "<") {
-          tokens.add(_Tok.op(i + 2 < source.length && source[i + 2] == "<"
-              ? "<<<"
-              : "<<"));
-          i += i + 2 < source.length && source[i + 2] == "<" ? 3 : 2;
+        if (i + 2 < source.length &&
+            source[i + 1] == "<" &&
+            source[i + 2] == "<") {
+          tokens.add(const _Tok.op("<<<"));
+          i += 3;
+        } else if (i + 1 < source.length && source[i + 1] == "<") {
+          tokens.add(const _Tok.op("<<"));
+          delimiterNext = true;
+          // `<<-` strips leading tabs from the body and its closing line.
+          dash = i + 2 < source.length && source[i + 2] == "-";
+          i += dash ? 3 : 2;
         } else if (i + 1 < source.length && source[i + 1] == "&") {
           tokens.add(_Tok.op("<&"));
           i += 2;
@@ -494,6 +550,7 @@ List<_Tok> _tokenize(String source, List<String> reasons) {
         }
       case "\"":
         wordOpen = true;
+        quoted = true;
         i++;
         while (i < source.length && source[i] != "\"") {
           if (source[i] == "\\" && i + 1 < source.length) {
@@ -521,6 +578,7 @@ List<_Tok> _tokenize(String source, List<String> reasons) {
         i++;
       case "'":
         wordOpen = true;
+        quoted = true;
         i++;
         final end = source.indexOf("'", i);
         if (end < 0) {
@@ -551,8 +609,12 @@ List<_Tok> _tokenize(String source, List<String> reasons) {
           reasons.add("a trailing backslash");
           return tokens;
         }
-        wordOpen = true;
-        pieces.add(source[i + 1]);
+        // A line continuation joins the lines; it is no character at all.
+        if (source[i + 1] != "\n") {
+          wordOpen = true;
+          quoted = true;
+          pieces.add(source[i + 1]);
+        }
         i += 2;
       default:
         wordOpen = true;
@@ -561,7 +623,73 @@ List<_Tok> _tokenize(String source, List<String> reasons) {
     }
   }
   flush();
+  if (delimiterNext || pending.isNotEmpty) {
+    reasons.add("a here-document with no closing delimiter");
+  }
   return tokens;
+}
+
+class _Heredoc {
+  const _Heredoc(this.delimiter, {required this.quoted, required this.dash});
+  final String delimiter;
+
+  /// A quoted delimiter leaves the body inert; an unquoted one still runs the
+  /// substitutions in it.
+  final bool quoted;
+  final bool dash;
+}
+
+/// Reads the bodies of [pending], in order, starting at [i]: the line after
+/// the one that named them. Returns the end of the last closing line, or null
+/// where one never closes. An unquoted body's substitutions are added to
+/// [tokens] as one word, so the parse walks them like any other.
+int? _readBodies(String source, int i, List<_Heredoc> pending,
+    List<_Tok> tokens, List<String> reasons) {
+  var end = i;
+  for (final doc in pending) {
+    final start = i;
+    var closed = false;
+    var bodyEnd = i;
+    while (i < source.length) {
+      final newline = source.indexOf("\n", i);
+      final lineEnd = newline < 0 ? source.length : newline;
+      var line = source.substring(i, lineEnd);
+      if (doc.dash) line = line.replaceFirst(RegExp(r"^\t+"), "");
+      if (line == doc.delimiter) {
+        closed = true;
+        bodyEnd = i;
+        end = lineEnd;
+        i = lineEnd + 1;
+        break;
+      }
+      i = lineEnd + 1;
+    }
+    if (!closed) {
+      reasons.add("a here-document with no closing ${doc.delimiter}");
+      return null;
+    }
+    if (doc.quoted) continue;
+    final body = source.substring(start, bodyEnd);
+    final live = <Object>[];
+    for (var j = 0; j < body.length;) {
+      switch (body[j]) {
+        case "\\":
+          j += 2;
+        case "`":
+          reasons.add("a backtick substitution");
+          return null;
+        case "\$":
+          final read = _readExpansion(body, j, reasons);
+          if (read == null) return null;
+          if (read.$1 is _Substitution) live.add(read.$1);
+          j = read.$2;
+        default:
+          j++;
+      }
+    }
+    if (live.isNotEmpty) tokens.add(_Tok.word(live));
+  }
+  return end;
 }
 
 /// Reads one `$…` starting at [i] (where the `\$` is). Returns the piece —

@@ -110,10 +110,56 @@ void main() {
       "echo a >| out",
       "echo a > ; b",
       "echo a > && b",
-      "cat >> f.html <<'EOF'\n<pre>| Back | Front |</pre>\nEOF",
     ]) {
       expect(parse(command).escalationReasons, isNotEmpty, reason: command);
     }
+  });
+
+  group("here-documents", () {
+    test("a quoted body is text, whatever it holds", () {
+      const body = "<pre>| Back | Front |</pre>\n<p>Don't</p> `x` \$(rm a) "
+          "\$HOME > b; # c";
+      for (final command in [
+        "cat >> f.html <<'EOF'\n$body\nEOF",
+        'cat > f <<"EOF"\n$body\nEOF',
+        "cat > f <<\\EOF\n$body\nEOF",
+      ]) {
+        final a = parse(command);
+        expect(a.modelable, isTrue, reason: command);
+        expect(a.escalationReasons, isEmpty, reason: command);
+      }
+    });
+
+    test("an unquoted body's substitutions are walked", () {
+      final a = parse("cat > f <<EOF\n<p>\$(echo x > \$HOME/y)</p>\nEOF");
+      expect(a.escalationReasons, isNotEmpty);
+      expect(parse("cat > f <<EOF\n<p>\$name | it's</p>\nEOF").escalationReasons,
+          isEmpty);
+      expect(parse("cat > f <<EOF\n`id`\nEOF").modelable, isFalse);
+    });
+
+    test("the command after the body is parsed on its own", () {
+      final a = parse("cat > f <<'EOF'\na | b\nEOF\nHOME=/tmp ls");
+      expect(a.escalationReasons, isNotEmpty);
+      expect(a.modelableSegments, ["cat > f <<'EOF'\na | b\nEOF", "HOME=/tmp ls"]);
+    });
+
+    test("<<- strips tabs, and two bodies are read in order", () {
+      expect(parse("cat <<-EOF\n\tx | y\n\tEOF").modelable, isTrue);
+      final a = parse("cat <<'A' - <<'B'\n'\nA\n'\nB\necho done");
+      expect(a.modelable, isTrue);
+      expect(a.escalationReasons, isEmpty);
+    });
+
+    test("a body that never closes is not modeled", () {
+      expect(parse("cat > f <<'EOF'\nbody").modelable, isFalse);
+      expect(parse("cat > f <<").modelable, isFalse);
+    });
+  });
+
+  test("a newline ends a command", () {
+    expect(parse("echo a\nHOME=/tmp ls").escalationReasons, isNotEmpty);
+    expect(isFileToolWork("git log |\nhead -5"), isFalse);
   });
 
   test("a removal is not a redirect target — the sandbox answers for it", () {
