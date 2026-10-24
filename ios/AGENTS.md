@@ -359,6 +359,20 @@ of that. It is reserved for a future optional feature, and reusing it would mean
 substituting Entoli's own view controller for the `currentTerminalViewController`
 iSH's shell expects as the picker's presenter.
 
+**What the app keeps read-only stays read-only in the guest.** A chat's
+`resources/` is bound read-only at its own host path (`bind_read_only`, the
+list passed in `ish_session_init`'s `read_only`), over the data-directory bind
+that already reaches it: the longer mount point wins the lookup. Upstream
+records `MS_READONLY_` and only ever shows it in `/proc/mounts`;
+`tool/ios/ish/patches/read-only-mounts.patch`, applied by `build.sh` to the
+submodule's working tree, makes the generic filesystem layer refuse a write,
+create, unlink, rename, link, mkdir, rmdir, `chmod` or truncate through such a
+mount with `EROFS`. The host's modes refuse most of that already, since a
+realfs mount calls the host's own `open`; what the mount adds is `chmod`, which
+the owner may always do and the guest's root otherwise would. Checked with
+`clang -fsyntax-only` against the pinned tree; nothing here runs iOS, so the
+behaviour is untested on a device.
+
 ## Triggers
 
 iOS refuses the process wake every other scheduling clock is — AlarmManager,

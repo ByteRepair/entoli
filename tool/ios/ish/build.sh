@@ -31,6 +31,13 @@ if [ ! -f "$src/kernel/calls.h" ]; then
     exit 1
 fi
 
+# Read-only mounts that refuse writes, which upstream records and never checks.
+# Applied to the submodule's working tree, so the pinned commit stays the one
+# named; a tree it is already applied to is left alone.
+if ! git -C "$src" apply --reverse --check "$here/patches/read-only-mounts.patch" 2>/dev/null; then
+    git -C "$src" apply "$here/patches/read-only-mounts.patch"
+fi
+
 # The source files the kernel=ish build compiles, taken from src/meson.build's
 # `src` list. Platform host is darwin (iOS is Darwin), so platform/darwin.c.
 kernel_src=(

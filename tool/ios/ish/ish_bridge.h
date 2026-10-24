@@ -77,7 +77,9 @@ void ish_boot(const char *rootfs_dir);
 // shell starts, in the guest's own words — /root plus the chat workspace's
 // suffix past the project workspace. /root names one project at a time: a
 // [home] other than the bound one rebinds it, which the caller does only
-// once no session of the other project is left running.
+// once no session of the other project is left running. [read_only] are host
+// directories bound read-only at their own paths (iSH patched to refuse a
+// write through a read-only mount), kept for the life of the process.
 //
 // Returns null and sets *error where the rootfs is not present or the shell
 // failed to start.
@@ -90,6 +92,8 @@ ish_session *ish_session_init(
     const char *token,
     const char **env,
     int32_t env_count,
+    const char **read_only,
+    int32_t read_only_count,
     const char **error);
 
 // Begin a command: first drain the wake pipe, then write the base64 command

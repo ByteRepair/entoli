@@ -124,9 +124,8 @@ class IshShell extends Shell {
       List<String> readOnly = const []}) {
     // `project` exists so a shell can resolve a per-project driver; the
     // emulator is its own environment and has no driver to pick. `readOnly`
-    // needs no bind of its own: the bridge binds the whole data directory at
-    // its host path, and the bridge keeps the guest's root from writing in
-    // what the app made read-only.
+    // reaches the bridge, which mounts each read-only at its own host path
+    // over the data-directory bind that reaches it already.
     //
     // There is no confinement to offer inside the guest — its rootfs is the
     // boundary, the way a proot guest's is — so a sandboxed command fails
@@ -166,6 +165,7 @@ class IshShell extends Shell {
         script: command,
         timeout: timeout,
         environment: _compose(extra: environment),
+        readOnly: readOnly,
         transport: _transportFor(),
       );
       run.result.then((_) => _liveOneShots--,
@@ -174,7 +174,8 @@ class IshShell extends Shell {
     }
     return _sessions
         .putIfAbsent(cwd, () => _IshSession(this, cwd, guestCwd, home))
-        .start(command, timeout, environment: environment, restart: restart);
+        .start(command, timeout,
+            environment: environment, restart: restart, readOnly: readOnly);
   }
 
   /// Point the guest's [guestHome] at [home]'s project, or say why not yet.
@@ -287,11 +288,13 @@ class _IshSession {
   bool get busy => _runs.any((r) => !r.state.done.isCompleted);
 
   ShellRun start(String command, Duration timeout,
-      {Map<String, String>? environment, bool restart = false}) {
+      {Map<String, String>? environment,
+      bool restart = false,
+      List<String> readOnly = const []}) {
     final run = _IshRun(this);
     _runs.add(run);
     _queue = _queue.then((_) => _execute(run, command, timeout,
-        environment: environment, restart: restart));
+        environment: environment, restart: restart, readOnly: readOnly));
     return run;
   }
 
@@ -301,6 +304,7 @@ class _IshSession {
     Duration timeout, {
     Map<String, String>? environment,
     bool restart = false,
+    List<String> readOnly = const [],
   }) async {
     // close() answered every run, this body's among them; nothing here may
     // boot the guest it dropped.
@@ -320,6 +324,7 @@ class _IshSession {
           home: _workspaceHome,
           cwd: _guestCwd,
           env: _shell._compose(extra: environment),
+          readOnly: readOnly,
         );
         // The transport's answer where iSH is not linked, which is a build
         // fault the user sees: taking the id would hang the session's whole
@@ -544,6 +549,7 @@ class _IshOneShotRun implements ShellRun {
     required this.script,
     required this.timeout,
     required this.environment,
+    this.readOnly = const [],
     required this.transport,
   }) {
     // The run owns its worker (sub-agent fan-out can overlap): it dies with
@@ -556,6 +562,9 @@ class _IshOneShotRun implements ShellRun {
 
   /// The host project workspace, which the bridge binds at the guest root.
   final String home;
+
+  /// Host directories the bridge binds read-only.
+  final List<String> readOnly;
 
   /// Where the one-shot shell starts, in the guest's own words.
   final String guestCwd;
@@ -610,6 +619,7 @@ class _IshOneShotRun implements ShellRun {
         home: home,
         cwd: guestCwd,
         env: environment,
+        readOnly: readOnly,
       );
       sessionId = session.sessionId;
       handle = session.handle;
@@ -664,6 +674,7 @@ abstract class IshTransport {
     required String home,
     required String cwd,
     required Map<String, String> env,
+    List<String> readOnly = const [],
   });
 
   /// Run one command in the session's persistent guest shell. Parking on the
@@ -1029,6 +1040,7 @@ class IshWorker implements IshTransport {
     required String home,
     required String cwd,
     required Map<String, String> env,
+    List<String> readOnly = const [],
   }) {
     final task = _ops.then((_) => _init(
           rootfsDir: rootfsDir,
@@ -1036,6 +1048,7 @@ class IshWorker implements IshTransport {
           home: home,
           cwd: cwd,
           env: env,
+          readOnly: readOnly,
         ));
     _ops = task.then((_) {}, onError: (_) {});
     return task;
@@ -1047,6 +1060,7 @@ class IshWorker implements IshTransport {
     required String home,
     required String cwd,
     required Map<String, String> env,
+    List<String> readOnly = const [],
   }) async {
     if (!ishLinked) return (sessionId: -1, handle: 0);
     await _ensure();
@@ -1060,6 +1074,7 @@ class IshWorker implements IshTransport {
       _kInit, replyId, sessionId, rootfsDir, dataDir, home, cwd,
       dispatcher, token,
       env.entries.map((e) => "${e.key}=${e.value}").toList(),
+      readOnly,
     ]);
     final handle = await reply.future as int;
     return (sessionId: sessionId, handle: handle);
@@ -1171,6 +1186,7 @@ class IshWorker implements IshTransport {
           final dispatcher = msg[7] as String;
           final token = msg[8] as String;
           final env = msg[9] as List;
+          final readOnly = msg[10] as List;
           final initFn = ishInitFn;
           if (initFn == null) {
             main.send([_kReply, replyId, "iSH is not linked", null]);
@@ -1190,6 +1206,10 @@ class IshWorker implements IshTransport {
           for (var i = 0; i < env.length; i++) {
             envPtrs[i] = (env[i] as String).toNativeUtf8();
           }
+          final readOnlyPtrs = calloc<Pointer<Utf8>>(readOnly.length);
+          for (var i = 0; i < readOnly.length; i++) {
+            readOnlyPtrs[i] = (readOnly[i] as String).toNativeUtf8();
+          }
           final errPtr = calloc<Pointer<Utf8>>();
           final handle = initFn(
             argPtrs[0],
@@ -1200,6 +1220,8 @@ class IshWorker implements IshTransport {
             argPtrs[5],
             envPtrs,
             env.length,
+            readOnlyPtrs,
+            readOnly.length,
             errPtr,
           );
           final error = errPtr.value.address == 0
@@ -1209,6 +1231,10 @@ class IshWorker implements IshTransport {
             calloc.free(envPtrs[i]);
           }
           calloc.free(envPtrs);
+          for (var i = 0; i < readOnly.length; i++) {
+            calloc.free(readOnlyPtrs[i]);
+          }
+          calloc.free(readOnlyPtrs);
           calloc.free(errPtr);
           for (final p in argPtrs) {
             calloc.free(p);
