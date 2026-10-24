@@ -1,7 +1,7 @@
 import "package:fs_shim/fs.dart";
 
 import "safe_command.dart";
-import "shell_command_analysis.dart" show readableWords;
+import "shell_command_analysis.dart" show commandWords;
 
 /// The git subcommands a command grant policy vouches for: mutations whose
 /// writes are the repo's own metadata — refs, objects, the index, worktree
@@ -29,13 +29,10 @@ const vouchedGitSubcommands = {
 final _worktreeBoundary = RegExp(r"/\.git/worktrees(?:/|$)");
 final _gitdirLine = RegExp(r"^gitdir:\s*(.+)$", multiLine: true);
 
-/// What moves the shell's own directory, wherever it stands in a segment:
-/// past the lead — `{ cd x; }`, `then cd x` — it is one the tracker does not
-/// follow.
-const _movers = {"cd", "pushd", "popd"};
-
-/// What runs a script in the shell itself, which may move it anywhere.
-const _sourcers = {"eval", "source", "."};
+/// Commands that move the shell's own directory, or run a script in the
+/// shell that may move it anywhere. One the tracker does not follow — past a
+/// `{` or a `then`, or named by an expansion — loses it.
+const _movers = {"cd", "pushd", "popd", "eval", "source", "."};
 
 /// What the grant layer answers for one command: the profile of each
 /// segment and, for every git segment warranted by the policy — the plain
@@ -106,25 +103,21 @@ Future<CommandGrants> commandGrantsFor(CommandGrantsInput input) async {
   for (var i = 0; i < profiles.length; i++) {
     final profile = profiles[i];
     if (lost) continue;
-    if (!profile.modelable) {
-      // A segment the words cannot name may still have moved the shell: a
-      // `cd` with an expansion inside it sends the directory somewhere
-      // unnameable, and no vouch survives standing on a directory the parse
-      // never named.
-      final words = readableWords(input.segments[i]);
-      if (words.any(_movers.contains) ||
-          _sourcers.contains(words.firstOrNull)) {
+    final commands = commandWords(input.segments[i]);
+    // The one shape the tracker follows: a segment that is a single plain
+    // `cd`, `pushd` or `popd`. Any other that moves the shell — with an
+    // expansion in it, inside a group, after a `then` — sends the directory
+    // somewhere unnameable, and no vouch survives standing on a directory
+    // the parse never named.
+    final lead = profile.modelable && commands.length == 1
+        ? profile.words.first.toLowerCase()
+        : null;
+    if (lead != "cd" && lead != "pushd" && lead != "popd") {
+      if (commands.any((c) => c == null || _movers.contains(c))) {
         lost = true;
+      } else if (profile.modelable) {
+        workDirs[i] = cwd;
       }
-      continue;
-    }
-    if (profile.words.isEmpty) continue;
-    final lead = profile.words.first.toLowerCase();
-    if (_sourcers.contains(lead) ||
-        (lead != "cd" &&
-            lead != "pushd" &&
-            profile.words.any(_movers.contains))) {
-      lost = true;
       continue;
     }
     if (lead == "popd" || (lead == "pushd" && profile.words.length == 1)) {
@@ -145,9 +138,7 @@ Future<CommandGrants> commandGrantsFor(CommandGrantsInput input) async {
       }
       cwd = next;
       workDirs[i] = cwd;
-      continue;
     }
-    workDirs[i] = cwd;
   }
   final gitGrants = <int, GitGrant>{};
   final walked = <String, GitGrant?>{};

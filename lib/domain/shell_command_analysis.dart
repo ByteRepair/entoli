@@ -241,14 +241,46 @@ List<String> _segmentsOf(String command, List<_Tok> tokens) {
   return (words: words, writes: writes);
 }
 
-/// The plain words [segment] tokenizes to, as far as it tokenizes: a word
-/// with an expansion or a substitution in it is left out, and a segment that
-/// stops partway gives the words before the stop. For asking what a segment
-/// the parse cannot model still names.
-List<String> readableWords(String segment) => [
-      for (final tok in _tokenize(segment, <String>[]))
-        if (tok.kind == _TokKind.word) ?_plainOf(tok),
-    ];
+/// The words of [segment] that stand where a command does: the first, and
+/// the first after an operator, a reserved word (`{`, `then`, `do`, …), a
+/// leading assignment or `command`/`builtin` — so `cd` is one in `{ cd x; }`
+/// and not in `echo cd`. Null for one that is not plain text, whose command
+/// nothing can name. As far as [segment] tokenizes.
+List<String?> commandWords(String segment) {
+  final commands = <String?>[];
+  var head = true;
+  var target = false;
+  for (final tok in _tokenize(segment, <String>[])) {
+    switch (tok.kind) {
+      case _TokKind.body:
+        break;
+      case _TokKind.op:
+        if (_redirectOps.contains(tok.text)) {
+          target = true;
+        } else {
+          head = true;
+        }
+      case _TokKind.word:
+        if (target) {
+          target = false;
+        } else if (head) {
+          final text = _plainOf(tok);
+          commands.add(text);
+          head = text != null &&
+              (_commandPrefixes.contains(text) || _isAssignmentWord(text));
+        }
+    }
+  }
+  return commands;
+}
+
+const _redirectOps = {">", ">>", "&>", "&>>", ">&", "<", "<<", "<<<", "<&"};
+
+/// Words after which the next word is still the command.
+const _commandPrefixes = {
+  "{", "!", "if", "then", "elif", "else", "while", "until", "do", "time",
+  "command", "builtin",
+};
 
 /// Whether [command] reads or writes a file the way the file tools would:
 /// `cat`, `head`, `tail`, `nl`, `less` or `more` naming a file rather than

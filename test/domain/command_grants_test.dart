@@ -196,6 +196,7 @@ void main() {
       "if true; then cd /tmp; fi && git commit -m x",
       "source env.sh && git commit -m x",
       r"eval $(x) && git commit -m x",
+      r"$(echo cd) /tmp && git commit -m x",
     ]) {
       final segments = ShellCommandAnalysis.parse(command).modelableSegments!;
       final grants = await commandGrantsFor(
@@ -203,6 +204,22 @@ void main() {
             fs: fs, start: repo, home: root.path, segments: segments),
       );
       expect(grants.gitGrants, isEmpty, reason: command);
+    }
+  });
+
+  test("`cd` as an argument or a redirect target moves nothing", () async {
+    final repo = makeRepo(p.join(root.path, "repo"));
+    for (final command in [
+      "echo cd && git commit -m x",
+      "grep -rn source . && git commit -m x",
+      "git log > cd && git commit -m x",
+    ]) {
+      final segments = ShellCommandAnalysis.parse(command).modelableSegments!;
+      final grants = await commandGrantsFor(
+        CommandGrantsInput(
+            fs: fs, start: repo, home: root.path, segments: segments),
+      );
+      expect(grants.gitGrants, isNotEmpty, reason: command);
     }
   });
 
