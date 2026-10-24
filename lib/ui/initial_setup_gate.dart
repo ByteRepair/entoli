@@ -30,7 +30,7 @@ class _InitialSetupGateState extends ConsumerState<InitialSetupGate> {
     final canHostALinux = ref.watch(prootAvailableProvider) ||
         ref.watch(deviceAbiProvider) == "ios";
     final pending = ref.watch(appSettingsProvider
-        .select((s) => !s.welcomeSeen && s.rootfsId == null));
+        .select((s) => !s.licenceAccepted && s.rootfsId == null));
     if (!canHostALinux || !pending || _skipped) return widget.child;
     return InitialSetupPage(onSkip: () => setState(() => _skipped = true));
   }

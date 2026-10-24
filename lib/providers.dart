@@ -796,8 +796,9 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
     ref.invalidate(availableModelsProvider);
   }
 
-  /// Whether the welcome tour has been finished, written by its Done.
-  Future<void> setWelcomeSeen(bool seen) => _update((s) => s.welcomeSeen = seen);
+  /// Written by the tour's Done, and cleared by unticking the licence.
+  Future<void> setLicenceAccepted(bool accepted) =>
+      _update((s) => s.licenceAccepted = accepted);
 
   /// Change a copy and publish it: the notifier compares by identity, so
   /// editing in place would save the file and update nothing on screen.

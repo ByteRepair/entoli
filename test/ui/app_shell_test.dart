@@ -22,7 +22,7 @@ void main() {
   // shell, so they all arrive past it.
   Future<void> pumpAt(WidgetTester tester, Size size) async {
     useWindow(tester, size);
-    await io(tester, () => app.seedSettings(AppSettings(welcomeSeen: true)));
+    await io(tester, () => app.seedSettings(AppSettings(licenceAccepted: true)));
     await app.pump(tester, const AppShell());
     await tester.pump();
   }
@@ -55,7 +55,7 @@ void main() {
     // Settings first: the chat's create reads the settings, which builds the
     // notifier against whatever is on disk at that moment.
     await io(tester, () async {
-      await app.seedSettings(AppSettings(welcomeSeen: true));
+      await app.seedSettings(AppSettings(licenceAccepted: true));
       await app.seedChat(title: "old chat");
     });
     await pumpAt(tester, const Size(500, 900));

@@ -27,6 +27,7 @@ import "domain/prompt_library.dart";
 import "domain/sync/identity.dart";
 import "providers.dart";
 import "ui/chat/remote_turns.dart";
+import "ui/app_licence.dart";
 import "ui/app_shell.dart";
 import "ui/initial_setup_gate.dart";
 import "ui/welcome_gate.dart";
@@ -45,6 +46,7 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   registerBundledFontLicences();
   registerBundledSkillLicences();
+  registerAppLicence();
   platform.registerVoiceLicences();
   platform.registerRecorder();
   await platform.persist();

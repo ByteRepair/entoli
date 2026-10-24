@@ -80,7 +80,7 @@ class AppSettings {
     this.autoCompact = defaultAutoCompact,
     this.autoCompactPercent = defaultAutoCompactPercent,
     this.totalContext = defaultTotalContext,
-    this.welcomeSeen = false,
+    this.licenceAccepted = false,
     this.autoUpdate = true,
     this.agentBrowser,
     this.agentBrowserVisible = false,
@@ -362,9 +362,11 @@ class AppSettings {
   /// and the check are one number.
   int totalContext;
 
-  /// Whether the welcome tour has been finished. It is what first launch reads
-  /// to decide whether to push the tour, and what its Done writes.
-  bool welcomeSeen;
+  /// Whether the welcome tour was finished with its licence ticked: what first
+  /// launch reads to decide whether to show the tour, and what its Done
+  /// writes. It replaced `welcomeSeen`, which a file from before still
+  /// carries and nothing reads, so those installs walk the tour once more.
+  bool licenceAccepted;
 
   /// Whether the app checks the latest release at startup and puts the newer
   /// build in place of this one, where the platform can do that — the three
@@ -522,7 +524,7 @@ class AppSettings {
             .clamp(10, 95),
         totalContext: (json["totalContext"] as int? ?? defaultTotalContext)
             .clamp(minTotalContext, maxTotalContext),
-        welcomeSeen: json["welcomeSeen"] as bool? ?? false,
+        licenceAccepted: json["licenceAccepted"] as bool? ?? false,
         // Written only when on is the default, so a file that predates it
         // says nothing and gets the on default — the same bargain the memory
         // gates are held to.
@@ -640,7 +642,7 @@ class AppSettings {
       if (autoCompactPercent != defaultAutoCompactPercent)
         "autoCompactPercent": autoCompactPercent,
       if (totalContext != defaultTotalContext) "totalContext": totalContext,
-      if (welcomeSeen) "welcomeSeen": welcomeSeen,
+      if (licenceAccepted) "licenceAccepted": licenceAccepted,
       if (!autoUpdate) "autoUpdate": autoUpdate,
       if (agentBrowser != null) "agentBrowser": agentBrowser,
       if (agentBrowserVisible) "agentBrowserVisible": agentBrowserVisible,

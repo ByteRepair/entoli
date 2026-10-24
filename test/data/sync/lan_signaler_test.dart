@@ -152,19 +152,21 @@ void main() {
         return http.Response(reply.body, reply.status, headers: reply.headers);
       }),
     );
-    host.allowReconnect("tok");
+    // A "." is outside base64url, so no nonce or proof can contain it.
+    const token = "the.token";
+    host.allowReconnect(token);
     answerWith("v=0 answer");
 
     final result = await client.exchange(
       addresses: ["192.168.1.8:47921", "192.168.1.9:47921", "192.168.1.5:47921"],
-      token: "tok",
+      token: token,
       offerSdp: "v=0 offer",
     );
 
     expect(result.address, "192.168.1.5:47921");
-    expect(bodies["192.168.1.8:47921"], isNot(contains("tok")));
-    expect(bodies["192.168.1.9:47921"], isNot(contains("tok")));
-    expect(bodies["192.168.1.5:47921"], contains("tok"));
+    expect(bodies["192.168.1.8:47921"], isNot(contains(token)));
+    expect(bodies["192.168.1.9:47921"], isNot(contains(token)));
+    expect(bodies["192.168.1.5:47921"], contains(token));
   });
 
   test("a peer too old to have the probe is a version mismatch", () async {

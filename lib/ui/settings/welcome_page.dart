@@ -1,5 +1,6 @@
 import "dart:async";
 
+import "package:flutter/foundation.dart" show LicenseParagraph;
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:uuid/uuid.dart";
@@ -12,7 +13,10 @@ import "../../domain/project.dart";
 import "../../providers.dart";
 import "../marketplace/marketplace_page.dart";
 import "../sidebar/sidebar.dart";
+import "../app_licence.dart";
 import "../widgets/app_mark.dart";
+import "../widgets/dialogs.dart";
+import "../widgets/scrolling.dart";
 import "llm_settings.dart";
 import "settings_page.dart";
 
@@ -42,9 +46,10 @@ class _WelcomeTourState extends ConsumerState<WelcomeTour> {
   final _controller = PageController();
   int _page = 0;
 
-  /// The last page's checkbox, which holds Done. Not stored: a replay from
-  /// settings asks again.
-  final _accepted = ValueNotifier(false);
+  /// The last page's checkbox, which holds Done. Seeded from the stored tick,
+  /// which Done writes.
+  late final _accepted =
+      ValueNotifier(ref.read(appSettingsProvider).licenceAccepted);
 
   late final _pageWidgets = <Widget>[
     _IntroPage(),
@@ -126,7 +131,7 @@ class _WelcomeTourState extends ConsumerState<WelcomeTour> {
     } catch (e) {
       logFailure("welcome", "could not start the welcome chat", e);
     }
-    await ref.read(appSettingsProvider.notifier).setWelcomeSeen(true);
+    await ref.read(appSettingsProvider.notifier).setLicenceAccepted(true);
     // Replayed from settings, Done leaves them for the chat.
     navigator.popUntil((route) => route.isFirst);
   }
@@ -592,34 +597,176 @@ class _IdeasPage extends StatelessWidget {
       );
 }
 
-/// The last page: the agent can be wrong, and what it is let do is the user's
-/// call. Done waits on the checkbox.
-class _ResponsibilityPage extends StatelessWidget {
+/// The last page: the agent can be wrong, what it is let do is the user's
+/// call, and the licence it comes under. The checkbox is at the end of the
+/// licence, so reaching it means scrolling past it; ticked, it is pinned under
+/// the licence. Done waits on it.
+class _ResponsibilityPage extends ConsumerStatefulWidget {
   const _ResponsibilityPage({required this.accepted});
 
   final ValueNotifier<bool> accepted;
 
   @override
-  Widget build(BuildContext context) => _Slide(
-        icon: Icons.fact_check_outlined,
-        title: "Check its work",
-        body: "AI can make mistakes. Review what it does, and the commands "
-            "you approve, before you rely on them.",
-        children: [
-          Card(
-            child: ValueListenableBuilder(
-              valueListenable: accepted,
-              builder: (context, value, _) => CheckboxListTile(
-                title: const Text(
-                    "I understand, and I take full responsibility for how I "
-                    "use Entoli and what I let it do."),
-                value: value,
-                onChanged: (v) => accepted.value = v ?? false,
+  ConsumerState<_ResponsibilityPage> createState() =>
+      _ResponsibilityPageState();
+}
+
+class _ResponsibilityPageState extends ConsumerState<_ResponsibilityPage> {
+  /// Unwrapped the way the licence page unwraps every entry, indents kept.
+  static final _licence = appLicence.paragraphs.toList();
+
+  final _scroll = ScrollController();
+
+  @override
+  void dispose() {
+    _scroll.dispose();
+    super.dispose();
+  }
+
+  /// Unticking a stored tick takes the tour back with it and builds the app
+  /// again, which stops what it was running and opens it on the tour.
+  Future<void> _set(bool accepted) async {
+    if (accepted || !ref.read(appSettingsProvider).licenceAccepted) {
+      widget.accepted.value = accepted;
+      return;
+    }
+    final restart = ref.read(appRestartProvider);
+    final ok = await confirm(
+      context,
+      title: "Untick the licence?",
+      message: "By unticking, the app will restart.",
+      confirmLabel: "Restart",
+      destructive: true,
+    );
+    if (!ok) return;
+    await ref.read(appSettingsProvider.notifier).setLicenceAccepted(false);
+    await restart.restart();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final muted = theme.colorScheme.onSurfaceVariant;
+    return ValueListenableBuilder(
+      valueListenable: widget.accepted,
+      builder: (context, accepted, _) {
+        final checkbox = CheckboxListTile(
+          title: const Text(
+              "I have read the licence, and I take full responsibility for "
+              "how I use Entoli and what I let it do."),
+          value: accepted,
+          onChanged: (v) => _set(v ?? false),
+        );
+        return Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 480),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    "Check its work",
+                    textAlign: TextAlign.center,
+                    style: theme.textTheme.headlineMedium,
+                  ),
+                  const SizedBox(height: 16),
+                  // Only the title and the box are outside the scroll, so a
+                  // short window still has room for the licence.
+                  Expanded(
+                    child: Card(
+                      clipBehavior: Clip.antiAlias,
+                      child: Scrollbar(
+                        controller: _scroll,
+                        // Not a ListView: a lazy list guesses its length from
+                        // what it has built, and the thumb jumps as the guess
+                        // changes.
+                        child: SingleChildScrollView(
+                          key: const ValueKey("licence"),
+                          controller: _scroll,
+                          padding: const EdgeInsets.all(16),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              Text(
+                                "AI can make mistakes. Review what it does, "
+                                "and the commands you approve, before you "
+                                "rely on them. Entoli comes under the "
+                                "licence below, with no warranty.",
+                                style: theme.textTheme.bodyLarge
+                                    ?.copyWith(color: muted),
+                              ),
+                              const SizedBox(height: 16),
+                              for (final p in _licence)
+                                Padding(
+                                  padding: EdgeInsets.only(
+                                    left: p.indent > 0 ? 16.0 * p.indent : 0,
+                                    bottom: 8,
+                                  ),
+                                  child: Text(
+                                    p.text,
+                                    textAlign: p.indent ==
+                                            LicenseParagraph.centeredIndent
+                                        ? TextAlign.center
+                                        : TextAlign.start,
+                                    style: theme.textTheme.bodySmall,
+                                  ),
+                                ),
+                              if (!accepted) checkbox,
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  if (accepted)
+                    Card(child: checkbox)
+                  else
+                    _ScrollHint(scroll: _scroll),
+                ],
               ),
             ),
           ),
-        ],
-      );
+        );
+      },
+    );
+  }
+}
+
+/// Says the checkbox is further down, until the licence is scrolled to it.
+class _ScrollHint extends StatelessWidget {
+  const _ScrollHint({required this.scroll});
+
+  final ScrollController scroll;
+
+  @override
+  Widget build(BuildContext context) {
+    final muted = Theme.of(context).colorScheme.onSurfaceVariant;
+    return ListenableBuilder(
+      listenable: scroll,
+      builder: (context, _) {
+        final atEnd = scroll.hasClients &&
+            scroll.position.hasContentDimensions &&
+            scroll.position.nearBottom(24);
+        return AnimatedOpacity(
+          opacity: atEnd ? 0 : 1,
+          duration: const Duration(milliseconds: 200),
+          child: Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.keyboard_double_arrow_down, size: 18, color: muted),
+                const SizedBox(width: 6),
+                Text("Scroll to the end to agree",
+                    style: TextStyle(color: muted)),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
 }
 
 /// A way into something set up elsewhere: a settings category pushed on its

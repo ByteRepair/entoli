@@ -83,7 +83,7 @@ void main() {
 
     app.dispose();
     app = TestApp.create(proot: true);
-    await io(tester, () => app.seedSettings(AppSettings(welcomeSeen: true)));
+    await io(tester, () => app.seedSettings(AppSettings(licenceAccepted: true)));
     await app.pump(tester, gate);
     await tester.pump();
     expect(find.text("tour"), findsOneWidget);

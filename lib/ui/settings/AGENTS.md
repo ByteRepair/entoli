@@ -49,7 +49,7 @@ tour rather than a list of sections — `welcome_page.dart`, not this file — s
 `ListView(children: _sectionsOf(...))`; its switch arm here is exhaustiveness
 only. It is the first-run screen too: a `WelcomeGate` wrapper in the home chain
 (around the shell, under the `Incoming*` wrappers, so what they open stays above
-the tour) shows `WelcomePage` instead of the shell while `welcomeSeen` in
+the tour) shows `WelcomePage` instead of the shell while `licenceAccepted` in
 `settings.json` is still false, and the tour's Done writes the flag through the
 notifier, which swaps the shell in. The tour is the home content, not a route
 over it, so the back key cannot skip it and there is no back arrow; the tour
@@ -65,8 +65,15 @@ which embeds `DefaultsSection` from `llm_settings.dart`, so a row added there is
 on the tour too — until a default is picked. The memory page is one switch,
 the Memory category's "Keep memories", the rest left at their defaults. The
 last page says AI can make mistakes and holds Done behind a checkbox taking
-responsibility for what the user lets it do — the tour's own state rather than
-a setting, so a replay from here asks again. Done, on
+responsibility for what the user lets it do, at the end of the AGPL text
+(`bundledLicence`, embedded from `LICENSE` by `tool/gen_licence.dart`), so
+reaching it means scrolling past the licence. The tick frees Done; Done is what
+stores it, as `licenceAccepted`, the flag both gates read. It replaced
+`welcomeSeen`, so an install from before walks the tour once more. Unticking on
+a replay confirms, clears it and restarts the app (`AppRestart`), which stops
+whatever the session was running and lands on the tour: a restart rather than a
+close, since iOS and the web cannot close themselves and Apple rejects apps
+that try. Done, on
 the first run or a replay, opens a "Welcome to Entoli" chat in the default
 project and leaves settings for it: its log is seeded with a
 `/entoli-welcome-party` message, composed like any `/skill` message so the
@@ -271,7 +278,8 @@ for an install time nothing shows, and refetches on the web with a cache buster
 — for one field of a file this reads directly.
 
 The libraries are Flutter's own `showLicensePage`, not a list kept here. The
-registry already holds every package that ships, and the app adds the bundled
+registry already holds every package that ships, and the app adds its own
+AGPL (`registerAppLicence`, the entry the welcome tour shows) and the bundled
 font and voice licences to it — see "How a reply is set" and "What listens and
 what speaks", both of which were written against a licence page that did not
 exist yet. The bundled skills join them one entry per skill that carries its

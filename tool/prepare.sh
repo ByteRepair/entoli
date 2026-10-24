@@ -14,6 +14,7 @@ dart run build_runner build
 dart run tool/gen_bundled_skills.dart
 dart run tool/gen_prompts.dart
 dart run tool/gen_privacy_policy.dart
+dart run tool/gen_licence.dart
 
 # `version.json` is a declared asset; About reads it on platforms whose
 # build tool does not write its own.
