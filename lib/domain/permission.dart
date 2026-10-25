@@ -212,13 +212,17 @@ class PermissionRule {
 
 /// The sandbox the rules set for one run of [segments]. The confinement is
 /// per run, not per segment, so the run is unconfined only where every
-/// segment matches an unconfined rule — one that does not would otherwise
-/// leave with it — and the extra writes are those of every rule that matched
-/// a segment. Only grants combine here: no rule can confine more than the
-/// turn does, so there is no stricter answer for a looser one to lose to.
+/// segment that could use the freedom matches an unconfined rule — one that
+/// does not would otherwise leave with it. A segment the parse proves reads
+/// only (`podman ps | head`) has nothing to use it for, so it does not hold
+/// the run confined; one must still match. The extra writes are those of
+/// every rule that matched a segment. Only grants combine here: no rule can
+/// confine more than the turn does, so there is no stricter answer for a
+/// looser one to lose to.
 ({bool unconfined, List<String> writes}) rulesSandbox(
     List<PermissionRule> rules, List<String> segments) {
-  var unconfined = segments.isNotEmpty;
+  var matched = false;
+  var unconfined = true;
   final writes = <String>{};
   for (final segment in segments) {
     var segmentUnconfined = false;
@@ -228,9 +232,18 @@ class PermissionRule {
       if (rule.unconfined) segmentUnconfined = true;
       writes.addAll(rule.writes);
     }
-    unconfined = unconfined && segmentUnconfined;
+    if (segmentUnconfined) {
+      matched = true;
+    } else if (!_readsOnly(segment)) {
+      unconfined = false;
+    }
   }
-  return (unconfined: unconfined, writes: writes.toList());
+  return (unconfined: matched && unconfined, writes: writes.toList());
+}
+
+bool _readsOnly(String segment) {
+  final profile = profileSegment(segment);
+  return profile.modelable && profile.reach == SegmentReach.nonModifying;
 }
 
 /// Reads a persisted rule list; entries that do not parse are skipped rather

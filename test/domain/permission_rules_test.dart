@@ -113,6 +113,29 @@ void main() {
     });
   });
 
+  group("rulesSandbox", () {
+    const podman = PermissionRule(
+        tool: "bash", pattern: "podman *", unconfined: true);
+
+    test("a read-only segment does not hold an unconfined run back", () {
+      expect(rulesSandbox([podman], ["podman ps", "head -5"]).unconfined, isTrue);
+      expect(
+          rulesSandbox([podman], ["podman version", "grep -i version"]).unconfined,
+          isTrue);
+    });
+
+    test("a segment that writes still does", () {
+      expect(rulesSandbox([podman], ["podman ps", "touch x"]).unconfined, isFalse);
+      expect(rulesSandbox([podman], ["podman ps", "echo hi > f"]).unconfined,
+          isFalse);
+    });
+
+    test("read-only segments alone unconfine nothing", () {
+      expect(rulesSandbox([podman], ["head -5 f", "grep x f"]).unconfined, isFalse);
+      expect(rulesSandbox([podman], const []).unconfined, isFalse);
+    });
+  });
+
   group("rulesDecide", () {
     final allowGit = PermissionRule(
       tool: "bash",
@@ -624,8 +647,9 @@ void main() {
           isTrue);
     });
 
-    test("one segment without an unconfined rule keeps the sandbox", () {
-      expect(rulesSandbox([unconfinedPodman], ["podman ps", "grep x"]).unconfined,
+    test("one writing segment without an unconfined rule keeps the sandbox",
+        () {
+      expect(rulesSandbox([unconfinedPodman], ["podman ps", "touch x"]).unconfined,
           isFalse);
       expect(rulesSandbox([unconfinedPodman], const []).unconfined, isFalse);
     });

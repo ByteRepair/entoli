@@ -334,7 +334,10 @@ that also unconfined would turn the banner's "Allow in Project" on
 decisions only; a sandbox override is the settings page's. The sandbox
 applies to the commands the rule matches and no others (`rulesSandbox`): the
 run is unconfined only when every segment matches an unconfined rule, since
-the confinement is the run's, and `writes` are the union of the matched
+the confinement is the run's — except a segment the parse proves reads only
+(`podman ps | head`), which has nothing to use the freedom for and would
+otherwise keep every piped podman command confined; at least one segment
+must still match. `writes` are the union of the matched
 rules'. Rules from before the split carried a `writes` key that granted the
 whole turn; it is not read. The turn's grant is the chat's workspace, its
 tmp, the project's workspace beside it, and the tiers' `writableDirs`.
