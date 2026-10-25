@@ -2,8 +2,7 @@
 /// before anything asks a model or a human. Where [ShellCommandAnalysis]
 /// answers "can this parse be answered for at all", this answers the narrower
 /// question the approval tiers want: is this segment provably non-modifying;
-/// is it a fetch the network rules cover; and if neither, is it one of the
-/// command families a grant policy vouches for. The safe side is the
+/// and is it a fetch the network rules cover. The safe side is the
 /// deterministic side, so any segment this cannot fully parse stands down to
 /// the banner path rather than being guessed at.
 library;
@@ -111,9 +110,7 @@ const _gitNonModifyingSubcommands = {
 };
 
 /// Git arguments that make a read-only-subcommand segment mutating: the
-/// sub-sub-commands and flags that write refs, config or the index. The
-/// grant policy reads the same table to keep its deletions and renames out
-/// of a vouch.
+/// sub-sub-commands and flags that write refs, config or the index.
 const gitGuardedArgs = {
   "branch": {
     "-d",
@@ -272,8 +269,7 @@ SegmentProfile profileSegment(String segment) {
 /// (configuration in the command decides what later git tools run), no
 /// guarded argument, and no bare name after `branch` or `tag` — `git branch
 /// feature` writes a ref as surely as `-d` deletes one, and the guard table
-/// cannot name a shape a flag never carries. The read-only tier and the
-/// grant policy's vouch both hold git to this.
+/// cannot name a shape a flag never carries.
 bool plainGitUse(List<String> words, Set<String> subcommands) {
   if (words.length < 2 || words[1] == "-c") return false;
   final sub = words[1].toLowerCase();

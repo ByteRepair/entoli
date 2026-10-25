@@ -199,8 +199,8 @@ void main() {
       () async {
     if (!landlockUsable) return;
     final home = Directory(p.join(cache.path, "home2"))..createSync();
-    // A denial report names the exact path the write touched — often a
-    // file, not a directory. The kernel refuses directory rights on a
+    // A writable directory can name a file. The kernel refuses directory
+    // rights on a
     // non-directory fd: every such grant used to fail with rc=91 and the
     // ruleset never came up, so the file gets the file rights alone.
     final file = File(p.join(home.path, "g.txt"))..writeAsStringSync("orig\n");
@@ -225,20 +225,6 @@ void main() {
     final fresh = await run0("touch ${file.path}.bak", sandboxOverride: s);
     expect(fresh.code, isNot(0),
         reason: "the file rights do not include creating one beside it");
-  });
-
-  // What the report shim interposes, pinned at source level: an LFS-built
-  // binary (git on this host, python) binds `open64`/`openat64` rather than
-  // the plain names, and a shim that wrapped those alone reported nothing
-  // for it — the denial the result then could not say. The wrapper list and
-  // the resolver have to stay in step; this is the tripwire for both.
-  test("the report shim interposes the large-file symbol names", () {
-    for (final symbol in ["open", "openat", "open64", "openat64"]) {
-      expect(reportShimSource, contains('dlsym(RTLD_NEXT, "$symbol")'),
-          reason: "$symbol is resolved");
-      expect(reportShimSource, contains('int $symbol('),
-          reason: "$symbol is wrapped");
-    }
   });
 }
 

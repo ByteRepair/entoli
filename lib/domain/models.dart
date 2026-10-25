@@ -40,8 +40,7 @@ enum PermissionSource {
   rerun,
 
   /// The command parse vouched for it — every segment provably
-  /// non-modifying, or mutations covered by a grant policy — decided before
-  /// any rule, model or person was asked.
+  /// non-modifying — decided before any rule, model or person was asked.
   parse,
 }
 

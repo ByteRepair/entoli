@@ -247,14 +247,14 @@ void main() {
 
     test("Landlock: the project's answer over the app's, unset is on",
         () async {
-      expect((await turnSettings("byte-repair")).standing.sandboxed, isTrue);
+      expect((await (await turnSettings("byte-repair")).policy()).sandboxed, isTrue);
       await config.documents
           .write(config.projectSettingsFile(), '{"sandbox": false}');
-      expect((await turnSettings("byte-repair")).standing.sandboxed, isFalse);
+      expect((await (await turnSettings("byte-repair")).policy()).sandboxed, isFalse);
       await config.documents.write(
           config.projectSettingsFile(project: "byte-repair"),
           '{"sandbox": true}');
-      expect((await turnSettings("byte-repair")).standing.sandboxed, isTrue);
+      expect((await (await turnSettings("byte-repair")).policy()).sandboxed, isTrue);
     });
 
     test("an Omada-on project drops the task tool; an off one keeps it", () async {
@@ -607,82 +607,28 @@ void main() {
     });
   });
 
-  group("permissions changed while a turn runs", () {
+  test("a turn's policy reads the settings as they are now, not as the turn "
+      "began", () async {
+    final repo = repoWith(AppSettings());
+    final chat = await repo.createChat(project: "work");
+    await writeChatVia(repo, chat);
+    await repo.sendPrompt(chat.state.id, userMessage("go")).toList();
+    final policy = backend.prompts.last.settings.policy;
+    expect((await policy()).permissions, isEmpty);
+
     const podman = PermissionRule(
         tool: "bash", pattern: "podman *", decision: PermissionDecision.allow);
+    await (ProjectSettings.load(config, project: "work")
+          ..permissions = [podman]
+          ..writableDirs = ["~/.local/share"])
+        .save(config, project: "work");
+    await (ProjectSettings.load(config)..sandbox = false).save(config);
 
-    test("a project's rules reach its running turns and no other project's",
-        () async {
-      final repo = repoWith(AppSettings());
-      final inWork = await repo.createChat(project: "work");
-      final elsewhere = await repo.createChat();
-      final idle = await repo.createChat(project: "work");
-      backend.runningTurns.value = {inWork.state.id, elsewhere.state.id};
-
-      await repo.saveProjectSettings(
-          ProjectSettings.load(config, project: "work")
-            ..permissions = [podman]
-            ..writableDirs = ["~/.local/share"],
-          project: "work");
-
-      final handed = backend.standings.single;
-      expect(handed.chatId, inWork.state.id);
-      expect(handed.standing.permissions, [podman]);
-      expect(handed.standing.permissions.single.origin, PermissionTier.project);
-      expect(handed.standing.writableDirs, ["~/.local/share"]);
-      expect(backend.standings.map((s) => s.chatId), isNot(contains(idle.state.id)),
-          reason: "a chat with no turn reads the settings when one starts");
-    });
-
-    test("the default project's rules reach every running turn", () async {
-      final repo = repoWith(AppSettings());
-      final inWork = await repo.createChat(project: "work");
-      final elsewhere = await repo.createChat();
-      backend.runningTurns.value = {inWork.state.id, elsewhere.state.id};
-
-      await repo.saveProjectSettings(
-          ProjectSettings.load(config)..permissions = [podman]);
-
-      expect(backend.standings.map((s) => s.chatId),
-          unorderedEquals([inWork.state.id, elsewhere.state.id]));
-      for (final s in backend.standings) {
-        expect(s.standing.permissions.map((r) => r.origin),
-            contains(PermissionTier.defaultProject));
-      }
-    });
-
-    test("a save that leaves the permissions alone hands nothing", () async {
-      final repo = repoWith(AppSettings());
-      final chat = await repo.createChat(project: "work");
-      backend.runningTurns.value = {chat.state.id};
-
-      await repo.saveProjectSettings(
-          ProjectSettings.load(config, project: "work")..description = "x",
-          project: "work");
-
-      expect(backend.standings, isEmpty);
-    });
-
-    test("\"Allow in Project\" reaches the project's other running chats",
-        () async {
-      final repo = repoWith(AppSettings());
-      final asking = await repo.createChat(project: "work");
-      final sibling = await repo.createChat(project: "work");
-      backend.runningTurns.value = {asking.state.id, sibling.state.id};
-
-      await repo.respondApproval(
-        asking.state.id,
-        "approval-p",
-        ApprovalResponse.alwaysAllowProject,
-        approval: const ToolApproval(
-            id: "approval-p", toolName: "bash", argumentsText: "podman ps"),
-      );
-
-      final handed = {
-        for (final s in backend.standings) s.chatId: s.standing.permissions
-      };
-      expect(handed[sibling.state.id]?.single.pattern, "podman ps *");
-    });
+    final now = await policy();
+    expect(now.permissions, [podman]);
+    expect(now.permissions.single.origin, PermissionTier.project);
+    expect(now.writableDirs, ["~/.local/share"]);
+    expect(now.sandboxed, isFalse);
   });
 
     group("a rule written from a banner answer", () {
@@ -804,8 +750,8 @@ void main() {
 
     test("add_directory's always answer lands in the tier's writableDirs",
         () async {
-      // The grant request carries its directory in `deniedDirs`, so the
-      // always answers ride the re-prompt's route: dirs, never a rule.
+      // The grant request carries its directory in `deniedDirs`: dirs,
+      // never a rule.
       final repo = repoWith(AppSettings());
       final chat = await savedChat(repo);
       await repo.respondApproval(chat.state.id, "ad-1",
@@ -874,7 +820,8 @@ void main() {
       await repo.sendPrompt(chat.state.id, userMessage("go")).toList();
 
       final byPattern = {
-        for (final r in backend.prompts.last.settings.standing.permissions) r.pattern: r,
+        for (final r in (await backend.prompts.last.settings.policy()).permissions)
+          r.pattern: r,
       };
       expect(byPattern["chat rule *"]!.origin, PermissionTier.chat);
       // The chat is in the default project, so its project settings and the
@@ -902,33 +849,12 @@ void main() {
       );
       await repo.sendPrompt(chat.state.id, userMessage("again")).toList();
 
-      final rules = backend.prompts.last.settings.standing.permissions;
+      final rules = (await backend.prompts.last.settings.policy()).permissions;
       expect(rules.map((r) => r.pattern), contains("git status *"));
     });
 
-    test("a re-prompt's denied FILE path lands in writableDirs", () async {
-      final repo = repoWith(AppSettings());
-      final chat = await savedChat(repo);
-      await repo.respondApproval(
-        chat.state.id,
-        "d-5",
-        ApprovalResponse.alwaysAllowProject,
-        approval: ToolApproval(
-            id: "d-5",
-            toolName: "bash",
-            argumentsText: "writing /etc/hosts",
-            deniedDirs: const ["/etc/hosts"]),
-      );
-      // A denial report names the exact path the write touched, often a
-      // file: the grant records it as it is, and the helper grants file
-      // rights on it.
-      final settings = ProjectSettings.load(config, project: chat.state.project);
-      expect(settings.writableDirs, ["/etc/hosts"]);
-    });
-
-    test("a re-prompt with no path to grant persists nothing", () async {
-      // Its text is the denial's wording, not a command: a rule derived
-      // from it would allow a command named "denied".
+    test("a sandbox re-prompt's Always writes a no-sandbox rule for the "
+        "command's words", () async {
       final repo = repoWith(AppSettings());
       final chat = await savedChat(repo);
       await repo.respondApproval(
@@ -938,13 +864,15 @@ void main() {
         approval: const ToolApproval(
             id: "d-6",
             toolName: "bash",
-            argumentsText: "denied (the sandbox refused something it could "
-                "not name)",
+            argumentsText: "podman version 2>&1 | head -5",
             rerun: true),
       );
       final settings = ProjectSettings.load(config, project: chat.state.project);
-      expect(settings.permissions, isEmpty);
-      expect(settings.writableDirs, isEmpty);
+      final rule = settings.permissions.single;
+      expect(rule.pattern, "podman version *");
+      expect(rule.unconfined, isTrue);
+      expect(rule.decision, isNull,
+          reason: "the asking is left to whatever already decides it");
     });
   });
 }

@@ -11,9 +11,8 @@ void main() {
       expect(globMatch("git status", "git status --short"), isFalse);
     });
 
-    test("* spans the arguments but stops at an operator", () {
+    test("* spans the arguments, and the bare command too", () {
       expect(globMatch("git checkout *", "git checkout -b foo"), isTrue);
-      expect(globMatch("git checkout *", "git checkout && evil"), isFalse);
       // The bare command the rule was derived from, arguments and all:
       // the pattern's trailing space is not a required one.
       expect(globMatch("git checkout *", "git checkout"), isTrue);
@@ -21,13 +20,19 @@ void main() {
       expect(globMatch("git status *", "git statusfoo"), isFalse);
     });
 
-    test("* spans a redirect's & but not && or a backgrounding &", () {
-      expect(globMatch("toolbox *", "toolbox run x esbmc --version 2>&1"), isTrue);
-      expect(globMatch("make *", "make all &>build.log"), isTrue);
-      expect(globMatch("cat *", "cat <&3"), isTrue);
-      expect(globMatch("make *", "make all && evil"), isFalse);
-      expect(globMatch("make *", "make all & evil"), isFalse);
-      expect(globMatch("git * --short", "git status 2>&1 --short"), isTrue);
+    test("a command is matched by its words: operators split it first, and "
+        "redirects are not words", () {
+      const make = PermissionRule(
+          tool: "bash", pattern: "make *", decision: PermissionDecision.allow);
+      RuleVerdict? decide(String command) => rulesDecideTraced([make], "bash",
+          segments: ShellCommandAnalysis.parse(command).modelableSegments);
+      expect(decide("make all 2>&1")?.decision, PermissionDecision.allow);
+      expect(decide("make all &>build.log")?.decision, PermissionDecision.allow);
+      expect(decide("make all && evil"), isNull,
+          reason: "evil is a segment of its own, and no rule covers it");
+      expect(decide("make all & evil"), isNull);
+      expect(decide(r"make $(evil)"), isNull,
+          reason: "words the parse cannot read are matched by no rule");
     });
 
     test("a rule's writes reach a command that redirects stderr", () {
@@ -43,8 +48,8 @@ void main() {
           ["/home/u/.local/share/containers/storage"]);
     });
 
-    test("** spans anything including operators", () {
-      expect(globMatch("echo**", "echo a && b"), isTrue);
+    test("** is * twice", () {
+      expect(globMatch("echo**", "echo a b"), isTrue);
     });
 
     test("matching ignores case and outer whitespace", () {
@@ -159,7 +164,7 @@ void main() {
         rulesDecideTraced(
           [allowGit],
           "bash",
-          command: "git status --short",
+          segments: ["git status --short"],
         )?.decision,
         PermissionDecision.allow,
       );
@@ -170,7 +175,7 @@ void main() {
         rulesDecideTraced(
           [allowGit, denyGit],
           "bash",
-          command: "git status",
+          segments: ["git status"],
         )?.decision,
         PermissionDecision.deny,
       );
@@ -178,7 +183,7 @@ void main() {
         rulesDecideTraced(
           [denyGit, allowGit],
           "bash",
-          command: "git status",
+          segments: ["git status"],
         )?.decision,
         PermissionDecision.deny,
       );
@@ -203,7 +208,7 @@ void main() {
       final verdict = rulesDecideTraced(
         [appAllow, chatAllow],
         "bash",
-        command: "git status",
+        segments: ["git status"],
       );
       expect(verdict?.decision, PermissionDecision.allow);
       expect(verdict?.tiers, [
@@ -213,8 +218,8 @@ void main() {
     });
 
     test("an uncovered command asks", () {
-      expect(rulesDecideTraced([allowGit], "bash", command: "git push"), null);
-      expect(rulesDecideTraced([], "bash", command: "anything"), null);
+      expect(rulesDecideTraced([allowGit], "bash", segments: ["git push"]), null);
+      expect(rulesDecideTraced([], "bash", segments: ["anything"]), null);
     });
 
     test("a deny on one segment refuses a compound with uncovered others", () {
@@ -229,8 +234,6 @@ void main() {
           ),
         ],
         "bash",
-        command:
-            "ls -ld /tmp/probe; rm -rf /tmp/probe 2>/dev/null || true; ls -ld /tmp/probe",
         segments: [
           "ls -ld /tmp/probe",
           "rm -rf /tmp/probe 2>/dev/null",
@@ -243,7 +246,7 @@ void main() {
 
     test("a rule for another tool is skipped", () {
       expect(
-        rulesDecideTraced([allowWriteTmp], "bash", command: "cat /tmp/x"),
+        rulesDecideTraced([allowWriteTmp], "bash", segments: ["cat /tmp/x"]),
         null,
       );
     });
@@ -519,7 +522,7 @@ void main() {
           ),
         ],
         "bash",
-        command: "git status",
+        segments: ["git status"],
       );
       expect(verdict!.decision, PermissionDecision.allow);
       expect(verdict.tiers, [PermissionTier.chat]);
@@ -542,7 +545,7 @@ void main() {
           ),
         ],
         "bash",
-        command: "git push",
+        segments: ["git push"],
       );
       expect(verdict!.decision, PermissionDecision.deny);
       expect(verdict.tiers, [PermissionTier.defaultProject]);
@@ -588,7 +591,7 @@ void main() {
           ),
         ],
         "bash",
-        command: "git push origin",
+        segments: ["git push origin"],
       );
       expect(verdict!.decision, PermissionDecision.deny);
       expect(verdict.tiers, [PermissionTier.project]);
@@ -604,7 +607,7 @@ void main() {
           ),
         ],
         "bash",
-        command: "git status",
+        segments: ["git status"],
       );
       expect(verdict!.decision, PermissionDecision.allow);
       expect(verdict.tiers, isEmpty);
@@ -636,7 +639,7 @@ void main() {
 
     test("a rule with no decision says nothing about asking", () {
       expect(
-          rulesDecideTraced([unconfinedPodman], "bash", command: "podman ps"),
+          rulesDecideTraced([unconfinedPodman], "bash", segments: ["podman ps"]),
           isNull);
     });
 

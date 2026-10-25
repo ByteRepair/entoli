@@ -1,7 +1,6 @@
 import "dart:async";
 import "dart:typed_data";
 
-import "package:collection/collection.dart" show ListEquality;
 import "package:uuid/uuid.dart";
 
 import "../core/config.dart";
@@ -459,7 +458,7 @@ class ChatRepository {
       omada: omada,
       // The project's own command variables, beside the app-level ones.
       environment: projectSettings.environment ?? const {},
-      standing: _standingOf(meta, projectSettings, project: project),
+      policy: () => _policyOf(chatId),
       turnMaxSteps:
           projectSettings.turnMaxSteps ?? settings.turnMaxSteps,
       // The project's wording answers over the app's, like the step limit.
@@ -472,10 +471,13 @@ class ChatRepository {
     );
   }
 
-  /// The permission half of [_turnSettings], which [refreshPermissions] also
-  /// reads, so a running turn is handed what its next turn would start with.
-  StandingPermissions _standingOf(ChatMeta meta, ProjectSettings projectSettings,
-      {required String? project}) {
+  /// [chatId]'s permissions as the settings say now, the reader a turn's gate
+  /// calls per call. Cheap: the project files are held in memory, and the
+  /// chat's meta is one small read.
+  Future<StandingPermissions> _policyOf(String chatId) async {
+    final meta = await loadMeta(chatId);
+    final project = await projectOf(chatId);
+    final projectSettings = ProjectSettings.load(_config, project: project);
     // The default project's rules and writable roots are the app tier: they
     // apply to every project before its own, invisibly.
     final defaultProjectSettings =
@@ -507,39 +509,6 @@ class ChatRepository {
       sandboxed: projectSettings.sandbox ?? defaultProjectSettings.sandbox ?? true,
     );
   }
-
-  /// Save [settings] as [project]'s. Every write of a project's settings
-  /// comes through here, because a running turn read its permissions as it
-  /// started: where what the permission pages set has changed, the turns it
-  /// reaches are handed the new answer, and a rule added to stop a banner
-  /// stops the next one.
-  Future<void> saveProjectSettings(ProjectSettings settings,
-      {String? project}) async {
-    final before = ProjectSettings.load(_config, project: project);
-    await settings.save(_config, project: project);
-    if (!_samePermissions(before, settings)) await _refreshPermissions(project);
-  }
-
-  static bool _samePermissions(ProjectSettings a, ProjectSettings b) =>
-      const ListEquality<PermissionRule>().equals(a.permissions, b.permissions) &&
-      const ListEquality<String>().equals(a.writableDirs, b.writableDirs) &&
-      a.sandbox == b.sandbox &&
-      a.sandboxReprompt == b.sandboxReprompt;
-
-  /// Hands the running turns in [project] what their settings now resolve
-  /// to — every running turn where [project] is the default, whose tier is
-  /// every project's.
-  Future<void> _refreshPermissions(String? project) =>
-      Future.wait(_backend.runningTurns.value.map((chatId) async {
-        if (_mirrored(chatId)) return;
-        final at = await projectOf(chatId);
-        if (project != null && at != project) return;
-        _backend.updatePermissions(
-            chatId,
-            _standingOf(await loadMeta(chatId),
-                ProjectSettings.load(_config, project: at),
-                project: at));
-      }));
 
   /// Which memories a turn reads and writes: the app-level gates over which
   /// project's store answers. A non-default project set to [Tristate.on]
@@ -711,15 +680,13 @@ class ChatRepository {
 
   /// Answer an approval banner. An "always" answer derives the standing rule
   /// from the approval — the command's leading words, the file's directory, or
-  /// the fetch's host — writes it to the tier the answer names, and forwards
-  /// the answer whole: the waiting turn derives the same rule for itself, so
-  /// the rest of it is covered before the persisted file is read again. The
-  /// `add_directory` banner rides the re-prompt's route instead: its approval
-  /// carries the directory in `deniedDirs`, so an "always" answer below
-  /// extends the tier's `writableDirs` and no rule is written — the tool asks
-  /// for the workspace's own permissions, which are not a rule on calls at
-  /// all. The project is the chat's own, read from the store — a UI snapshot
-  /// may be from before a move.
+  /// the fetch's host; for the sandbox re-prompt, a no-sandbox rule for the
+  /// same words — and writes it to the tier the answer names before the
+  /// answer reaches the turn, whose gate reads the policy live, so its next
+  /// call is covered. The `add_directory` banner carries its directory in
+  /// `deniedDirs` instead: an "always" answer extends the tier's
+  /// `writableDirs` and no rule is written. The project is the chat's own,
+  /// read from the store — a UI snapshot may be from before a move.
   Future<void> respondApproval(
     String chatId,
     String approvalId,
@@ -729,10 +696,9 @@ class ChatRepository {
     if (r == ApprovalResponse.alwaysAllowChat ||
         r == ApprovalResponse.alwaysAllowProject) {
       final deniedDirs = approval?.deniedDirs ?? const [];
-      // A re-prompt's "always" is the paths: they become the tier's writable
-      // directories. The command's prose is not recorded: it varies every
-      // turn and would claim to allow what it cannot name. Never over the
-      // app's own data either way — this door could outlive the turn.
+      // A directory grant's "always" is the path: it becomes the tier's
+      // writable directory. Never over the app's own data — this door could
+      // outlive the turn.
       final dirs = [
         for (final d in deniedDirs)
           if (!pathInside(_config.dataDir, d) && !pathInside(d, _config.dataDir)) d,
@@ -740,10 +706,7 @@ class ChatRepository {
       if (dirs.length < deniedDirs.length) {
         logFailure("perms", "refused a persisted grant over the app's data");
       }
-      // A re-prompt with no path to grant persists nothing.
-      final rule = deniedDirs.isEmpty && !(approval?.rerun ?? false)
-          ? ruleFromApproval(approval)
-          : null;
+      final rule = deniedDirs.isEmpty ? ruleFromApproval(approval) : null;
       if (rule != null || dirs.isNotEmpty) {
         if (r == ApprovalResponse.alwaysAllowChat) {
           // Read fresh: the running turn may have written the TTL since.
@@ -761,11 +724,10 @@ class ChatRepository {
           final grant =
               _grant(settings.permissions, settings.writableDirs, rule, dirs);
           if (grant != null) {
-            await saveProjectSettings(
-                settings
+            await (settings
                   ..permissions = grant.rules
-                  ..writableDirs = grant.dirs,
-                project: project);
+                  ..writableDirs = grant.dirs)
+                .save(_config, project: project);
           }
         }
       }

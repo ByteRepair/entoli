@@ -130,7 +130,8 @@ void main() {
                   provider: provider,
                   project: project,
                   approveMode: approveMode,
-                  standing: StandingPermissions(permissions: permissions),
+                  policy: () async =>
+                      StandingPermissions(permissions: permissions),
                   memory: memory,
                   sharedWorkspace: sharedWorkspace,
                   disabled: disabled,

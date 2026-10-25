@@ -12,7 +12,7 @@ import "../../domain/agent_browser.dart";
 import "../../domain/artifact.dart";
 import "../../domain/ask.dart";
 import "../../domain/chat_store.dart" show attachmentFilename;
-import "../../domain/command_grants.dart";
+import "../../domain/safe_command.dart" show SegmentReach, profileSegment;
 import "../../domain/date_words.dart" show describeFire;
 import "../../domain/file_tools.dart";
 import "../../domain/models.dart";
@@ -20,7 +20,6 @@ import "../../domain/permission.dart";
 import "../../domain/plan.dart";
 import "../../domain/profile.dart";
 import "../../domain/prompt_library.dart";
-import "../../domain/safe_command.dart" show SegmentReach;
 import "../../domain/shell.dart";
 import "../../domain/shell_command_analysis.dart";
 import "../../domain/tone.dart";
@@ -464,7 +463,7 @@ class BuiltinAgent {
     this.memoryStore,
     this.memoryChat,
     this.sandboxHelper,
-    this._standing = const StandingPermissions(),
+    this.policy = noPolicy,
     this.dataDir,
     this.claimInstruction,
   });
@@ -492,37 +491,29 @@ class BuiltinAgent {
   final SandboxHelper? sandboxHelper;
 
   /// What the permission pages set, merged chat over project over app by
-  /// the repository: the rules [_runGated] consults before the classifier
-  /// and the banner, the directories [sandboxFor] grants beside the
-  /// workspace, and the re-prompt and Landlock switches. Replaced whole by
-  /// [updateStanding] when the user edits a tier while the turn runs.
-  StandingPermissions get standing => _standing;
-  StandingPermissions _standing;
+  /// the repository, read afresh at every gated call: a rule saved while the
+  /// turn runs — a banner's "always" included — covers the next call.
+  final PolicyReader policy;
 
-  /// Takes the tiers as the settings now say, for the next call the gate
-  /// reads: the call already running keeps what it was decided under, and
-  /// the banner answers granted this turn stay in front.
-  void updateStanding(StandingPermissions standing) {
-    _standing = standing;
-    _rulesCache = null;
-    _dirsCache = null;
-    subAgentRunner?.updateStanding(standing);
+  /// [policy] as this call reads it: `~` read the way a file-tool path is,
+  /// so a rule is in the same words as the call it is matched against,
+  /// guest or host; and this turn's own directory grants beside the
+  /// writable ones.
+  Future<StandingPermissions> _policy() async {
+    final read = await policy();
+    return StandingPermissions(
+      permissions: [for (final rule in read.permissions) rule.withPaths(_tilde)],
+      writableDirs: [
+        for (final dir in read.writableDirs) _tilde(dir),
+        ..._runtimeDirs,
+      ],
+      sandboxReprompt: read.sandboxReprompt,
+      sandboxed: read.sandboxed,
+    );
   }
 
-  /// [path] with a leading `~` read the way a file-tool path is, so what the
-  /// user typed into a rule is in the same words as the call it is matched
-  /// against, guest or host.
   String _tilde(String path) =>
       path == "~" || path.startsWith("~/") ? _resolvePath(path) : path;
-
-  /// Every rule this turn reads, banner grants first, with `~` read. Cached:
-  /// the gate reads it twice a command, and it changes only by a grant or
-  /// an update.
-  List<PermissionRule> get _rules => _rulesCache ??= List.unmodifiable([
-        for (final rule in [..._runtimeRules, ..._standing.permissions])
-          rule.withPaths(_tilde),
-      ]);
-  List<PermissionRule>? _rulesCache;
 
   /// The app's own data directory — settings, secrets, chats. The one shape
   /// [addDirectoryTool] refuses outright: the data directory itself, or
@@ -530,18 +521,6 @@ class BuiltinAgent {
   /// inside the grant. Null only where the answer has nothing to name —
   /// a test that does not exercise the refusal — and nothing is held back then.
   final String? dataDir;
-
-  /// Rules granted mid-turn by a banner answer. They sit in front of the
-  /// standing list — the user answered while watching this exact call — and
-  /// die with the turn, the standing copies being persisted by the backend.
-  final List<PermissionRule> _runtimeRules = [];
-
-  /// Adds a rule at the front of the evaluation, from a banner answer this
-  /// turn is still running under, stamped as this turn's own.
-  void grantRuntimeRule(PermissionRule rule) {
-    _runtimeRules.insert(0, rule.copyWith(origin: PermissionTier.runtime));
-    _rulesCache = null;
-  }
 
   /// What decided the call whose result is being composed, the tiers that
   /// spoke, and the verdict itself — set by every decision site in the gate
@@ -552,29 +531,13 @@ class BuiltinAgent {
           PermissionDecision decided})?
       _decision;
 
-  /// Directories a re-prompt banner agreed to, live for the rest of the
-  /// turn — [sandboxFor] composes them into every command's grant, so an
-  /// "Allow in Chat" on a denial covers the next command without a banner.
-  /// The durable copies are the repository's to persist.
+  /// Directories an `add_directory` banner agreed to for this turn alone —
+  /// a mirrored chat's plain Allow, which writes no tier. [_policy] lists
+  /// them beside the writable ones.
   final Set<String> _runtimeDirs = {};
 
   /// Grants [dirs] for the rest of this turn.
-  void grantRuntimeDirs(Iterable<String> dirs) {
-    _runtimeDirs.addAll(dirs);
-    _dirsCache = null;
-  }
-
-  /// The writable set this turn covers beside the workspaces — the standing
-  /// grants the repository composed plus what a banner answer added mid-turn.
-  /// One store, two readers: [sandboxFor] composes it into every command's
-  /// confinement and the file tools' workspace gate reads the same list, so a
-  /// granted directory carries the chat workspace's own permissions by
-  /// command or by file tool alike.
-  List<String> get _grantedDirs => _dirsCache ??= List.unmodifiable([
-        for (final dir in _standing.writableDirs) _tilde(dir),
-        ..._runtimeDirs,
-      ]);
-  List<String>? _dirsCache;
+  void grantRuntimeDirs(Iterable<String> dirs) => _runtimeDirs.addAll(dirs);
 
   /// The confinement a command runs under, from the shell's driver. Read per
   /// turn rather than held: the driver is resolved per command in the shell,
@@ -585,8 +548,8 @@ class BuiltinAgent {
   /// The project's workspace is granted beside the chat's own: it is where
   /// work another conversation should find goes, and the file tools and
   /// `writable_directories` already treat it as writable.
-  CommandSandbox? sandboxFor() {
-    if (!_standing.sandboxed) return null;
+  CommandSandbox? sandboxFor(StandingPermissions policy) {
+    if (!policy.sandboxed) return null;
     final helper = sandboxHelper ?? shell.driverSandboxHelper;
     if (helper == null) return null;
     final tmp = shell.tmpDirFor(workspace);
@@ -596,7 +559,7 @@ class BuiltinAgent {
       home: shell.machineHome,
       extraWrites: [
         if (projectWorkspace != workspace) projectWorkspace,
-        ..._grantedDirs,
+        ...policy.writableDirs,
       ],
     );
   }
@@ -1978,7 +1941,7 @@ class BuiltinAgent {
       return ShellResult(returnCode: 0, output: output);
     }
     yield* _gatedPath(call, path, readToolName, run,
-        granted: [..._grantedDirs, ?attachmentsDir]);
+        granted: [...(await _policy()).writableDirs, ?attachmentsDir]);
     // Between the call and its result, which is where the projection looks
     // for a tool's files.
     if (attached != null) yield attached!;
@@ -2381,7 +2344,7 @@ class BuiltinAgent {
   Stream<AgentEvent> _writableDirectories(LlmToolCall call) async* {
     yield _called(call);
     final dirs = [
-      for (final dir in _grantedDirs.toSet())
+      for (final dir in (await _policy()).writableDirs.toSet())
         if (outsideWorkspaces(fs, dir, workspace, projectWorkspace)) dir,
     ]..sort();
     final home = shell.homeFor(projectWorkspace);
@@ -2802,8 +2765,7 @@ class BuiltinAgent {
   /// Run [run] gated by the rules, then [approveMode]. Rules are the standing
   /// decision, so they are consulted first in every mode: an allow runs, a
   /// deny refuses without running or asking, an ask escalates — and no match
-  /// falls through to what the mode answers. A banner answer granted mid-turn
-  /// sits in front of the standing list.
+  /// falls through to what the mode answers.
   ///
   /// The rule's reach stops where the parse's does: a command with findings —
   /// one the static layer cannot model — is escalated to the banner even
@@ -2823,11 +2785,10 @@ class BuiltinAgent {
     ShellCommandAnalysis? analysis,
     ApproveMode? mode,
   }) async* {
-    final rules = _rules;
+    final rules = (await _policy()).permissions;
     final verdict = rulesDecideTraced(
       rules,
       toolName,
-      command: argumentsText,
       path: toolName == readToolName ||
               toolName == writeToolName ||
               toolName == editToolName
@@ -2872,27 +2833,17 @@ class BuiltinAgent {
     }
     // Where the rules left the command uncovered, the deterministic tiers
     // answer before any mode does: a segment the parse proves
-    // non-modifying, a fetch the network rules allow, or a git mutation a
-    // grant policy vouches for — every segment covered, or none is. An
-    // "always show me" ask rule on any segment outranks the tier that would
-    // cover it, the banner being what the user asked for there.
+    // non-modifying, or a fetch the network rules allow — every segment
+    // covered, or none is. An "always show me" ask rule on any segment
+    // outranks the tier that would cover it, the banner being what the user
+    // asked for there.
     if (toolName == "bash" && verdict == null && analysis != null) {
-      final tiered = await _deterministicBashVerdict(analysis, rules);
+      final tiered = _deterministicBashVerdict(analysis, rules);
       if (tiered != null) {
-        _decision = (
-          source: tiered.source,
-          tiers: tiered.tiers,
-          decided: tiered.decided,
-        );
-        if (tiered.decided == PermissionDecision.allow) {
-          // Consumed by this command's run, where the sandbox carries the
-          // grant the policy warranted; the re-run path and the
-          // rule-covered ones recompute their own.
-          _pendingGrantPaths = tiered.grantPaths;
-          _commandResult = await run();
-        } else {
-          _commandResult = const ShellResult.failed(_deniedByRule);
-        }
+        _decision = tiered;
+        _commandResult = tiered.decided == PermissionDecision.allow
+            ? await run()
+            : const ShellResult.failed(_deniedByRule);
         return;
       }
     }
@@ -2918,7 +2869,8 @@ class BuiltinAgent {
     String toolName,
     Future<ShellResult> Function() run,
   ) async* {
-    yield* _gatedPath(call, path, toolName, run, granted: _grantedDirs);
+    yield* _gatedPath(call, path, toolName, run,
+        granted: (await _policy()).writableDirs);
     yield ToolResultEvent(_ran(call, _commandResult!));
   }
 
@@ -2970,15 +2922,9 @@ class BuiltinAgent {
       argumentsText: argumentsText,
     );
     yield ApprovalRequestEvent(approval);
+    // An "always" answer's rule is written by the repository before the
+    // answer arrives, and the next call's policy read finds it.
     final answer = await approve(approval);
-    // An "always" answer is the standing rule arriving: it applies to the
-    // rest of this turn at once, ahead of the persisted copy the next turn
-    // reads.
-    if (answer == ApprovalResponse.alwaysAllowChat ||
-        answer == ApprovalResponse.alwaysAllowProject) {
-      final rule = ruleFromApproval(approval);
-      if (rule != null) grantRuntimeRule(rule);
-    }
     final allowed = answer.isAllow;
     _decision = (
       source: PermissionSource.human,
@@ -3024,7 +2970,7 @@ class BuiltinAgent {
           workspace: workspace,
           alsoWritable: [
             if (projectWorkspace != workspace) projectWorkspace,
-            ..._grantedDirs,
+            ...(await _policy()).writableDirs,
           ]),
       _stopped.future.then((_) => PermissionDecision.ask),
     ]);
@@ -3067,14 +3013,6 @@ class BuiltinAgent {
   /// person approved is the machine overriding its keeper.
   bool _humanDecided = false;
 
-  /// Directories the grant policy warranted for this call's command, read
-  /// and
-  /// cleared by the run — the sandbox carries them beside the workspaces,
-  /// the fallback to recompute covering every path that reaches [_execute]
-  /// without a tier decision ahead of it (rule allows, `never` mode, the
-  /// re-run). Set only by the tier arm, cleared only here.
-  List<String>? _pendingGrantPaths;
-
   Future<ShellResult> _execute(LlmToolCall call, String command,
       {bool unconfined = false, ShellCommandAnalysis? analysis}) async {
     if (_cancelled) {
@@ -3106,7 +3044,8 @@ class BuiltinAgent {
     // banner, not the mode, is what carries that — auto mode reaches the
     // banner through the classifier's ask — so the gate reads the flag the
     // run itself sets.
-    var sandbox = unconfined ? null : sandboxFor();
+    final policy = await _policy();
+    var sandbox = unconfined ? null : sandboxFor(policy);
     final parsed = unconfined
         ? null
         : analysis ??
@@ -3116,7 +3055,7 @@ class BuiltinAgent {
                     command, isWindows: platformIsWindows));
     // The rules' own word on the sandbox, whoever decided the command runs.
     if (sandbox != null) {
-      final ruled = rulesSandbox(_rules,
+      final ruled = rulesSandbox(policy.permissions,
           parsed!.modelableSegments ?? const []);
       if (ruled.unconfined) {
         sandbox = null;
@@ -3129,31 +3068,6 @@ class BuiltinAgent {
       final note = parsed!.escalationNote;
       if (note != null) {
         return ShellResult.failed(note);
-      }
-    }
-    // The grant the tier vouched this command with, consumed here; every
-    // path that arrives without one recomputes, the assessment being a pure
-    // function of the same inputs the gate used.
-    final vouched = _pendingGrantPaths;
-    _pendingGrantPaths = null;
-    if (sandbox != null) {
-      final grantPaths = vouched ??
-          [
-            for (final grant
-                in (await commandGrantsFor(
-                        CommandGrantsInput(
-                          fs: fs,
-                          start:
-                              shell.sessionCwdInHostWords(workspace) ??
-                              workspace,
-                          home: shell.machineHome,
-                          segments: parsed!.modelableSegments ?? const [],
-                        )))
-                  .gitGrants
-                  .values) ...grant.paths,
-          ];
-      if (grantPaths.isNotEmpty) {
-        sandbox = sandbox.copyWith(extraWrites: [...sandbox.extraWrites, ...grantPaths]);
       }
     }
     final run = shell.start(command,
@@ -3176,50 +3090,35 @@ class BuiltinAgent {
   }
 
   /// The deterministic bash tiers the rules leave standing: every segment
-  /// covered by a rule allow, proven non-modifying by its own text, allowed
-  /// by the network rules as a fetch, or vouched for by a grant policy with
-  /// a grant the sandbox will carry. Null where any segment is uncovered,
-  /// and where an ask rule wanted to see any of it — the mode's own path
-  /// decides those, every time. A deny from the network rules is returned
-  /// as one, refusal being what the rule said.
-  Future<
-      ({
-        PermissionSource source,
-        List<PermissionTier> tiers,
-        PermissionDecision decided,
-        List<String> grantPaths,
-      })?> _deterministicBashVerdict(
+  /// covered by a rule allow, proven non-modifying by its own text, or
+  /// allowed by the network rules as a fetch. Null where any segment is
+  /// uncovered, and where an ask rule wanted to see any of it — the mode's own
+  /// path decides those, every time. A deny from the network rules is
+  /// returned as one, refusal being what the rule said.
+  ({PermissionSource source, List<PermissionTier> tiers,
+      PermissionDecision decided})? _deterministicBashVerdict(
     ShellCommandAnalysis analysis,
     List<PermissionRule> rules,
-  ) async {
+  ) {
     final segments = analysis.modelableSegments;
     if (segments == null || segments.isEmpty) return null;
-    // The host's own words for where the command runs: a guest's are the
-    // only ones the shell's live report carries, and a walk of the machine
-    // has no directory at that name to start from.
-    final cwd = shell.sessionCwdInHostWords(workspace) ?? workspace;
-    final grants = await commandGrantsFor(CommandGrantsInput(
-        fs: fs, start: cwd, home: shell.machineHome, segments: segments));
     final tiers = <PermissionTier>{};
     var ruled = false;
-    for (var i = 0; i < segments.length; i++) {
-      final segment = segments[i];
-      final profile = grants.profiles[i];
+    for (final segment in segments) {
+      final profile = profileSegment(segment);
       if (!profile.modelable) return null;
-      final segmentVerdict =
-          rulesDecideTraced(rules, "bash", command: segment);
-      switch (segmentVerdict?.decision) {
+      final verdict = segmentVerdict(rules, segment);
+      switch (verdict?.decision) {
         case PermissionDecision.deny:
           return (
             source: PermissionSource.rule,
-            tiers: segmentVerdict!.tiers.toList(),
+            tiers: verdict!.tiers.toList(),
             decided: PermissionDecision.deny,
-            grantPaths: const <String>[],
           );
         case PermissionDecision.ask:
           return null;
         case PermissionDecision.allow:
-          tiers.addAll(segmentVerdict!.tiers);
+          tiers.addAll(verdict!.tiers);
           ruled = true;
           continue;
         case null:
@@ -3241,7 +3140,6 @@ class BuiltinAgent {
                 source: PermissionSource.rule,
                 tiers: network!.tiers.toList(),
                 decided: PermissionDecision.deny,
-                grantPaths: const <String>[],
               );
             case PermissionDecision.allow:
               tiers.addAll(network!.tiers);
@@ -3252,17 +3150,13 @@ class BuiltinAgent {
               return null;
           }
         case SegmentReach.other:
-          if (!grants.gitGrants.containsKey(i)) return null;
-          continue;
+          return null;
       }
     }
     return (
       source: ruled ? PermissionSource.rule : PermissionSource.parse,
       tiers: ruled ? tiers.toList() : const <PermissionTier>[],
       decided: PermissionDecision.allow,
-      grantPaths: [
-        for (final grant in grants.gitGrants.values) ...grant.paths,
-      ],
     );
   }
 
@@ -3283,21 +3177,12 @@ class BuiltinAgent {
     ShellResult result,
   ) async* {
     if (result.violations.isEmpty ||
-        !_standing.sandboxReprompt ||
-        approveMode == ApproveMode.never) {
+        approveMode == ApproveMode.never ||
+        !(await _policy()).sandboxReprompt) {
       return;
     }
-    // What an "always" answer grants. A denial the shim could not name has
-    // no path here, and its banner offers no "always".
-    final deniedDirs = [
-      for (final violation in result.violations)
-        if (violation.startsWith("writing /"))
-          violation.substring("writing ".length),
-    ];
-    // The re-prompt's approval carries what it is agreeing to: the denied
-    // directories. An "always" answer becomes a directory grant — runtime
-    // for the turn here, persisted by the repository — never a command-prose
-    // rule, which would match nothing next turn while claiming to.
+    // The command itself is what is agreed to, so an "always" answer writes
+    // a no-sandbox rule for its leading words (see `ruleFromApproval`).
     //
     // Its id is the call's own plus a suffix, deliberately not the call id:
     // the ask banner and this banner are two questions about one call, and
@@ -3309,16 +3194,11 @@ class BuiltinAgent {
       id: "${call.id}-reprompt",
       toolName: "bash",
       argumentsJson: call.argumentsJson,
-      argumentsText: result.violations.join("; "),
-      deniedDirs: deniedDirs,
+      argumentsText: command,
       rerun: true,
     );
     yield ApprovalRequestEvent(approval);
     final answer = await approve(approval);
-    if (answer == ApprovalResponse.alwaysAllowChat ||
-        answer == ApprovalResponse.alwaysAllowProject) {
-      grantRuntimeDirs(deniedDirs);
-    }
     final allowed = answer.isAllow;
     _decision = (
       source: allowed ? PermissionSource.rerun : PermissionSource.human,

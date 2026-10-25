@@ -45,7 +45,7 @@ class SubAgentRunner {
     this.project,
     this.tone = Tone.none,
     this.citations = false,
-    this.standing = const StandingPermissions(),
+    this.policy = noPolicy,
     this.readOnlyDirs = const [],
   });
 
@@ -72,20 +72,11 @@ class SubAgentRunner {
   /// chat's own there, and claiming it is shared would be a lie.
   final bool sharedWorkspace;
 
-  /// The turn's permissions, handed down so a sub-agent's commands gate and
-  /// confine the same way. A sub-agent has no banner — nobody is there to
-  /// answer one — so only rule-allow and rule-deny reach its commands; an
-  /// ask-shaped call is refused.
-  StandingPermissions standing;
-
-  /// The parent's [BuiltinAgent.updateStanding], carried to the workers
-  /// running now and the ones spawned after.
-  void updateStanding(StandingPermissions next) {
-    standing = next;
-    for (final agent in _active) {
-      agent.updateStanding(next);
-    }
-  }
+  /// The turn's permissions, read live like the parent's, so a sub-agent's
+  /// commands gate and confine the same way. A sub-agent has no banner —
+  /// nobody is there to answer one — so only rule-allow and rule-deny reach
+  /// its commands; an ask-shaped call is refused.
+  final PolicyReader policy;
 
   /// The parent's, so a worker's commands are kept from the same places.
   final List<String> readOnlyDirs;
@@ -184,7 +175,7 @@ class SubAgentRunner {
       project: project,
       tone: tone,
       citations: citations,
-      standing: standing,
+      policy: policy,
       readOnlyDirs: readOnlyDirs,
       webSearch: webSearch,
       rateLimitGate: rateLimitGate,

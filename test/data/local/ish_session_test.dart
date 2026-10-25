@@ -185,32 +185,6 @@ void main() {
       });
     });
 
-    test("the gate's ask is answered in the host's words, not the guest's",
-        () async {
-      final fake = FakeIshTransport();
-      final shell = ishShell(fake);
-      Future<void> settle(String command, ShellResult result) async {
-        final run = shell.start(command,
-            cwd: cwd, home: home, timeout: const Duration(minutes: 5));
-        await Future<void>.delayed(Duration.zero);
-        fake._settle(fake.pendingSessions.single, result);
-        await run.result;
-      }
-
-      // No session yet: nothing of the shell's to map, and the gate falls
-      // back to the workspace it was handed.
-      expect(shell.sessionCwdInHostWords(cwd), isNull);
-
-      await settle("pwd",
-          const ShellResult(returnCode: 0, output: "", cwd: "/root/chats/cb764c2a"));
-      expect(shell.sessionCwdInHostWords(cwd), "/ws/chats/cb764c2a");
-
-      // A `cd` outside the binding names no place on the host to walk from.
-      await settle("cd /tmp; pwd",
-          const ShellResult(returnCode: 0, output: "", cwd: "/tmp"));
-      expect(shell.sessionCwdInHostWords(cwd), isNull);
-    });
-
     test("a command's output is streamed while it runs", () {
       fakeAsync((async) {
         final fake = FakeIshTransport();

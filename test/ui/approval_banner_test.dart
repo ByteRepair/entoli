@@ -238,7 +238,7 @@ void main() {
       expect(find.text("Deny"), findsOneWidget);
     });
 
-    testWidgets("a re-prompt with no path to grant hides them",
+    testWidgets("a sandbox re-prompt offers them, asking about the command",
         (tester) async {
       tester.view.physicalSize = const Size(1400, 1200);
       tester.view.devicePixelRatio = 1.0;
@@ -248,13 +248,15 @@ void main() {
           const ToolApproval(
             id: "call-1-reprompt",
             toolName: "bash",
-            argumentsText: "denied (the sandbox refused something it could "
-                "not name)",
+            argumentsText: "podman ps",
             rerun: true,
           ));
 
-      expect(find.text("Always in chat"), findsNothing);
-      expect(find.text("Always in project"), findsNothing);
+      // Always writes a no-sandbox rule for these words.
+      expect(find.text("Run it again without the sandbox?"), findsOneWidget);
+      expect(find.text("podman ps"), findsOneWidget);
+      expect(find.text("Always in chat"), findsOneWidget);
+      expect(find.text("Always in project"), findsOneWidget);
       expect(find.text("Allow"), findsOneWidget);
     });
   });

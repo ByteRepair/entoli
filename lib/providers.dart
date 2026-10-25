@@ -1444,7 +1444,7 @@ class ProjectSettingsNotifier extends Notifier<ProjectSettings> {
   Future<void> replace(ProjectSettings next) async {
     final ttlChanged = next.tempChatTtl != state.tempChatTtl;
     state = next.copy();
-    await ref.read(chatRepositoryProvider).saveProjectSettings(state, project: project);
+    await state.save(_config, project: project);
     if (ttlChanged) {
       await ref.read(chatRepositoryProvider).reanchorProjectTtl(project);
       ref.invalidate(chatListProvider);
@@ -1455,7 +1455,7 @@ class ProjectSettingsNotifier extends Notifier<ProjectSettings> {
     final next = state.copy();
     change(next);
     state = next;
-    await ref.read(chatRepositoryProvider).saveProjectSettings(next, project: project);
+    await next.save(_config, project: project);
   }
 }
 

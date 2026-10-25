@@ -295,7 +295,7 @@ void main() {
       browserHidden: hidden,
       browserApprove: browserApprove,
       browserUploads: uploads,
-      standing: StandingPermissions(permissions: permissions),
+      policy: () async => StandingPermissions(permissions: permissions),
       oneShot: oneShot,
       classifier: classifier,
       webSearch: webSearch ?? FakeWebSearch(),

@@ -1,12 +1,11 @@
 import "dart:io";
 
-import "package:flutter/foundation.dart" show ValueNotifier;
 import "package:flutter_test/flutter_test.dart";
 import "package:fs_shim/fs_io.dart" show fileSystemIo;
 import "package:path/path.dart" as p;
 
 import "package:agent_chat/data/builtin/builtin_agent.dart";
-import "package:agent_chat/data/builtin/local_shell.dart" show unnamedViolation;
+import "package:agent_chat/data/builtin/local_shell.dart" show sandboxDenial;
 import "package:agent_chat/data/builtin/llm/llm_client.dart";
 import "package:agent_chat/domain/agent_backend.dart";
 import "package:agent_chat/domain/models.dart";
@@ -23,6 +22,10 @@ void main() {
   /// Where the chat's own workspace is — set by `agentOver` beside `shell`,
   /// so the tests can lay files beside what the agent operates on.
   late String workspaceDir;
+
+  /// The rules the agent's policy reader answers with, live: a test edits
+  /// them mid-turn the way a settings page does.
+  late List<PermissionRule> liveRules;
 
   setUp(() => session = BuiltinSession());
 
@@ -57,6 +60,7 @@ void main() {
     shell = FakeShell(respond ?? (_) => ok(""),
         canRunCommands: true, home: "/home/u");
     final allowed = [...approvals];
+    liveRules = [...permissions];
     return BuiltinAgent(
       session: session,
       client: client,
@@ -66,12 +70,22 @@ void main() {
       projectWorkspace: project,
       model: "fake-model",
       approveMode: approveMode,
-      approve: (_) async =>
-          allowed.isEmpty ? ApprovalResponse.allow : allowed.removeAt(0),
+      approve: (approval) async {
+        final answer =
+            allowed.isEmpty ? ApprovalResponse.allow : allowed.removeAt(0);
+        // What the repository does before an "always" answer reaches the
+        // turn: the derived rule is written where the next read finds it.
+        if (answer == ApprovalResponse.alwaysAllowChat ||
+            answer == ApprovalResponse.alwaysAllowProject) {
+          final rule = ruleFromApproval(approval);
+          if (rule != null) liveRules.add(rule);
+        }
+        return answer;
+      },
       answer: (request) => Future.value(request.unanswered),
       sandboxHelper: _StubHelper(),
-      standing: StandingPermissions(
-        permissions: permissions,
+      policy: () async => StandingPermissions(
+        permissions: liveRules,
         writableDirs: writableDirs,
         sandboxReprompt: sandboxReprompt,
         sandboxed: sandboxed,
@@ -207,24 +221,6 @@ void main() {
           .join();
       expect(text.toLowerCase(), contains("cannot be checked as one piece"));
       expect(shell.ran, isEmpty);
-    });
-
-    test("a runtime rule granted mid-turn covers the next command", () async {
-      final client = FakeLlmClient([
-        [bashCall("cmd-a")],
-        [bashCall("cmd-b")], [finish],
-      ]);
-      final agent = agentOver(
-        client,
-        approveMode: ApproveMode.ask,
-        approvals: [ApprovalResponse.deny],
-      );
-      agent.grantRuntimeRule(const PermissionRule(
-          tool: "bash", pattern: "cmd-b", decision: PermissionDecision.allow));
-      await agent.run(userMessage("go")).toList();
-      // The first command waited for the banner and was denied; the second
-      // ran on the runtime grant alone.
-      expect(shell.ran, ["cmd-b"]);
     });
 
     test("a bare command an Always answer covered is not asked again",
@@ -609,19 +605,6 @@ void main() {
   });
 
   group("the deterministic tiers", () {
-    /// A git repository beside the workspace, with the shell standing in it:
-    /// the case the grant policy is for — a repo the workspaces do not hold.
-    void makeRepo() {
-      final repo = p.join(workspaceDir, "..", "repo");
-      Directory(p.join(repo, ".git", "objects")).createSync(recursive: true);
-      Directory(p.join(repo, ".git", "refs")).createSync();
-      Directory(p.join(repo, ".git", "hooks")).createSync();
-      File(p.join(repo, ".git", "HEAD")).writeAsStringSync("ref: refs/heads/master\n");
-      File(p.join(repo, ".git", "index")).writeAsStringSync("");
-      File(p.join(repo, ".git", "config")).writeAsStringSync("[core]\n");
-      shell.sessionCwdValue = ValueNotifier(p.normalize(File(repo).path));
-    }
-
     test("a read-only command runs without a banner in ask mode", () async {
       final client = FakeLlmClient([
         [bashCall("ls -la")], [finish],
@@ -662,39 +645,11 @@ void main() {
       expect(events.whereType<ApprovalRequestEvent>(), isEmpty);
     });
 
-    test("a vouched git command runs with its repo's .git beside the grant",
-        () async {
-      final client = FakeLlmClient([
-        [bashCall("git commit -m x")], [finish],
-      ]);
-      // The workspace the harness lays out must exist before makeRepo names
-      // the directory beside it.
-      final agent = agentOver(
-        client,
-        approveMode: ApproveMode.never,
-        sandboxHelper: _StubHelper(),
-      );
-      makeRepo();
-      final events = await agent.run(userMessage("go")).toList();
-      expect(shell.ran, hasLength(1));
-      expect(events.whereType<ApprovalRequestEvent>(), isEmpty);
-      final sandbox = shell.sandboxes.last!;
-      final repo = p.normalize(p.join(workspaceDir, "..", "repo"));
-      // The directory itself: git's transient writes (`index.lock` under a
-      // ref-refresh) are new files made in `.git`'s root, and a child-only
-      // enumeration cannot cover them.
-      expect(sandbox.extraWrites, contains(p.join(repo, ".git")));
-      // The decision the result records says what covered it.
-      final result = events.whereType<ToolResultEvent>().single.result;
-      expect(result.decided, PermissionDecision.allow);
-    });
-
     test("a push stays on the banner path", () async {
       final client = FakeLlmClient([
         [bashCall("git push")], [finish],
       ]);
       final agent = agentOver(client, approveMode: ApproveMode.ask);
-      makeRepo();
       final events = await agent.run(userMessage("go")).toList();
       expect(events.whereType<ApprovalRequestEvent>(), hasLength(1));
       // The harness's default answers the banner; what the test pins is that
@@ -702,32 +657,9 @@ void main() {
       expect(shell.ran, hasLength(1));
     });
 
-    test("a read-only git command runs silently and carries the grant too",
-        () async {
-      // The chat's shape: `git status` refreshes the index (writing
-      // `.git/index.lock`), which the sandbox denies unless the grant rides
-      // with the read-only tier's allow. Banner-free is the whole point.
+    test("a read-only git command runs without a banner", () async {
       final client = FakeLlmClient([[bashCall("git status && git diff --stat")], [finish]]);
-      final agent = agentOver(client, approveMode: ApproveMode.never);
-      makeRepo();
-      final events = await agent.run(userMessage("go")).toList();
-      expect(shell.ran, hasLength(1));
-      expect(events.whereType<ApprovalRequestEvent>(), isEmpty);
-      final sandbox = shell.sandboxes.last!;
-      final repo = p.normalize(p.join(workspaceDir, "..", "repo"));
-      expect(sandbox.extraWrites, contains(p.join(repo, ".git")));
-    });
-
-    test("a compound is covered when each of its parts is", () async {
-      final client = FakeLlmClient([
-        [bashCall("git status && git commit -m x")], [finish],
-      ]);
-      final agent = agentOver(
-        client,
-        approveMode: ApproveMode.never,
-        sandboxHelper: _StubHelper(),
-      );
-      makeRepo();
+      final agent = agentOver(client, approveMode: ApproveMode.ask);
       final events = await agent.run(userMessage("go")).toList();
       expect(shell.ran, hasLength(1));
       expect(events.whereType<ApprovalRequestEvent>(), isEmpty);
@@ -861,7 +793,8 @@ void main() {
 
     test("rules saved while a turn runs reach its next command", () async {
       final client = FakeLlmClient([
-        [bashCall("podman ps")], [bashCall("podman ps")], [finish],
+        [bashCall("podman ps")], [bashCall("podman ps 2>&1 | head -3")],
+        [finish],
       ]);
       final agent = agentOver(
         client,
@@ -873,16 +806,16 @@ void main() {
         events.add(event);
         // The user adds the rule from settings once the first banner is up.
         if (event is ApprovalRequestEvent) {
-          agent.updateStanding(const StandingPermissions(permissions: [
-            PermissionRule(
-                tool: "bash",
-                pattern: "{podman,toolbox} *",
-                decision: PermissionDecision.allow),
-          ]));
+          liveRules.add(const PermissionRule(
+              tool: "bash",
+              pattern: "{podman,toolbox} *",
+              decision: PermissionDecision.allow));
         }
       }
-      expect(events.whereType<ApprovalRequestEvent>(), hasLength(1));
-      expect(shell.ran, ["podman ps", "podman ps"]);
+      expect(events.whereType<ApprovalRequestEvent>(), hasLength(1),
+          reason: "the second call reads the saved rule; its redirect and "
+              "read-only pipe change nothing");
+      expect(shell.ran, ["podman ps", "podman ps 2>&1 | head -3"]);
     });
   });
 
@@ -909,15 +842,17 @@ void main() {
       // one worded by the denial.
       final approvals = events.whereType<ApprovalRequestEvent>().toList();
       expect(approvals, hasLength(2));
-      expect(approvals.last.approval.argumentsText, contains("/etc/hosts"));
+      // The command is what the re-prompt asks about: nothing names the
+      // path, and the answer is about running it without the sandbox.
+      expect(approvals.last.approval.argumentsText, "python3 build.py");
+      expect(approvals.last.approval.rerun, isTrue);
       // Distinct ids: the plumbing keys approvals by id, and two banners
       // over one call sharing an id made the second inherit the first's
       // answer and vanish before it was answered.
       expect(approvals.first.approval.id, isNot(approvals.last.approval.id));
     });
 
-    test("a denial the shim could not name is rerun unconfined, with no "
-        "path to grant", () async {
+    test("a denial is rerun unconfined, with no path to grant", () async {
       final client = FakeLlmClient([
         [bashCall("static-tool --out /etc/x")], [finish],
       ]);
@@ -928,7 +863,7 @@ void main() {
         respond: (_) => const ShellResult(
             returnCode: 1,
             output: "static-tool: /etc/x: Permission denied",
-            violations: [unnamedViolation]),
+            violations: [sandboxDenial]),
       ).run(userMessage("go")).toList();
       // A confined rerun would only be refused again.
       expect(shell.ran, hasLength(2));
@@ -988,41 +923,42 @@ void main() {
       expect(shell.ran, hasLength(1));
     });
 
-    test("the re-prompt's Always widens the grant for the next command",
+    test("the re-prompt's Always writes a no-sandbox rule for those words",
         () async {
       final client = FakeLlmClient([
         [bashCall("python3 build.py")],
+        [bashCall("python3 build.py --fast")],
         [bashCall("python3 check.py")], [finish],
       ]);
-      final events = await agentOver(
+      await agentOver(
         client,
         approveMode: ApproveMode.ask,
-        approvals: [ApprovalResponse.allow, ApprovalResponse.alwaysAllowChat],
+        approvals: [
+          ApprovalResponse.allow,
+          ApprovalResponse.alwaysAllowChat,
+          ApprovalResponse.allow,
+          ApprovalResponse.allow,
+        ],
         respond: (command) => command == "python3 build.py"
             ? const ShellResult(
                 returnCode: 1,
-                output:
-                    "PermissionError: [Errno 13] Permission denied: '/etc/hosts'",
-                violations: ["writing /etc/hosts"])
+                output: "Permission denied",
+                violations: [sandboxDenial])
             : ok("clean"),
       ).run(userMessage("go")).toList();
-      // The rerun after the Always answer is unconfined — a write denial is
-      // what the human just read and answered. The grant shows on the NEXT
-      // command, which runs confined with the denied path beside the
-      // workspace: what a persisted grant would arrive as next turn.
-      expect(shell.ran,
-          ["python3 build.py", "python3 build.py", "python3 check.py"]);
-      final sandboxes = shell.sandboxes.whereType<CommandSandbox>().toList();
-      expect(sandboxes, hasLength(2));
-      expect(sandboxes.first.extraWrites, isNot(contains("/etc/hosts")));
-      expect(sandboxes.last.extraWrites, contains("/etc/hosts"));
-      // The banner named what it was agreeing to, and the answer carried it.
-      // Three banners in all: the ask for build.py, its re-prompt, and the
-      // ask for check.py, which runs before any persisted grant is read —
-      // the re-prompt's own carries the denied dirs.
-      final approvals = events.whereType<ApprovalRequestEvent>().toList();
-      expect(approvals, hasLength(3));
-      expect(approvals[1].approval.deniedDirs, ["/etc/hosts"]);
+      expect(shell.ran, [
+        "python3 build.py",
+        "python3 build.py",
+        "python3 build.py --fast",
+        "python3 check.py",
+      ]);
+      // Confined, the unconfined rerun, the same words now unconfined by
+      // the rule, and a different command confined as ever.
+      expect(shell.sandboxes, [isA<CommandSandbox>(), isNull, isNull,
+          isA<CommandSandbox>()]);
+      expect(liveRules.single.unconfined, isTrue);
+      expect(liveRules.single.decision, isNull,
+          reason: "the asking is left to what already decides it");
     });
 
     test("the turn's writableDirs reach the sandbox, files included",
@@ -1036,8 +972,8 @@ void main() {
         writableDirs: ["/etc/hosts", "/var/log/entoli"],
       ).run(userMessage("go")).toList();
       // The project's workspace, then the persisted tier's grant —
-      // directories and the file paths a denial report names alike — is
-      // what the command's confinement carries.
+      // directories and files alike — is what the command's confinement
+      // carries.
       expect(shell.sandboxes.single!.extraWrites, [
         p.dirname(p.dirname(workspaceDir)),
         "/etc/hosts",
@@ -1073,11 +1009,6 @@ class _StubHelper implements SandboxHelper {
   Future<List<String>?> prefixFor(CommandSandbox sandbox) async =>
       ["/bin/entoli-landlock", "exec", "--workspace", sandbox.workspace, "--"];
 
-  @override
-  String? reportPathFor(CommandSandbox sandbox) => null;
-
-  @override
-  String? get reportShimPath => null;
 }
 
 /// A classifier that has already made up its mind.
