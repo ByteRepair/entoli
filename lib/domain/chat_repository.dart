@@ -1,6 +1,7 @@
 import "dart:async";
 import "dart:typed_data";
 
+import "package:collection/collection.dart" show ListEquality;
 import "package:uuid/uuid.dart";
 
 import "../core/config.dart";
@@ -432,10 +433,6 @@ class ChatRepository {
     final instructions = builtIn != null
         ? builtIn.turnInstructions(omada: omada)
         : BuiltinProject.turnInstructionsForUserProject(omada: omada);
-    // The default project's rules and writable roots are the app tier: they
-    // apply to every project before its own, invisibly.
-    final defaultProjectSettings =
-        project == null ? projectSettings : ProjectSettings.load(_config);
     return TurnSettings(
       model: meta.model ?? settings.defaultModelId,
       provider: meta.model != null ? meta.provider : settings.defaultProviderId,
@@ -462,6 +459,28 @@ class ChatRepository {
       omada: omada,
       // The project's own command variables, beside the app-level ones.
       environment: projectSettings.environment ?? const {},
+      standing: _standingOf(meta, projectSettings, project: project),
+      turnMaxSteps:
+          projectSettings.turnMaxSteps ?? settings.turnMaxSteps,
+      // The project's wording answers over the app's, like the step limit.
+      tone: projectSettings.tone ?? settings.tone,
+      citations: projectSettings.citations ?? settings.citations,
+
+      // The answering member is the caller's fact, not the chat's — it is
+      // about the message the turn runs, not the settings it runs under.
+      omadaMember: omadaMember,
+    );
+  }
+
+  /// The permission half of [_turnSettings], which [refreshPermissions] also
+  /// reads, so a running turn is handed what its next turn would start with.
+  StandingPermissions _standingOf(ChatMeta meta, ProjectSettings projectSettings,
+      {required String? project}) {
+    // The default project's rules and writable roots are the app tier: they
+    // apply to every project before its own, invisibly.
+    final defaultProjectSettings =
+        project == null ? projectSettings : ProjectSettings.load(_config);
+    return StandingPermissions(
       // Chat rules first, then the project's, then the default project's:
       // a later rule wins only by strength (deny over ask over allow), and
       // the tiers break the tie. Each rule is stamped with the tier it was
@@ -482,20 +501,45 @@ class ChatRepository {
         ...projectSettings.writableDirs,
         ...defaultProjectSettings.writableDirs,
       ],
-      sandboxReprompt:
-          projectSettings.sandboxReprompt ?? defaultProjectSettings.sandboxReprompt,
-      sandbox: projectSettings.sandbox ?? defaultProjectSettings.sandbox ?? true,
-      turnMaxSteps:
-          projectSettings.turnMaxSteps ?? settings.turnMaxSteps,
-      // The project's wording answers over the app's, like the step limit.
-      tone: projectSettings.tone ?? settings.tone,
-      citations: projectSettings.citations ?? settings.citations,
-
-      // The answering member is the caller's fact, not the chat's — it is
-      // about the message the turn runs, not the settings it runs under.
-      omadaMember: omadaMember,
+      sandboxReprompt: projectSettings.sandboxReprompt ??
+          defaultProjectSettings.sandboxReprompt ??
+          true,
+      sandboxed: projectSettings.sandbox ?? defaultProjectSettings.sandbox ?? true,
     );
   }
+
+  /// Save [settings] as [project]'s. Every write of a project's settings
+  /// comes through here, because a running turn read its permissions as it
+  /// started: where what the permission pages set has changed, the turns it
+  /// reaches are handed the new answer, and a rule added to stop a banner
+  /// stops the next one.
+  Future<void> saveProjectSettings(ProjectSettings settings,
+      {String? project}) async {
+    final before = ProjectSettings.load(_config, project: project);
+    await settings.save(_config, project: project);
+    if (!_samePermissions(before, settings)) await _refreshPermissions(project);
+  }
+
+  static bool _samePermissions(ProjectSettings a, ProjectSettings b) =>
+      const ListEquality<PermissionRule>().equals(a.permissions, b.permissions) &&
+      const ListEquality<String>().equals(a.writableDirs, b.writableDirs) &&
+      a.sandbox == b.sandbox &&
+      a.sandboxReprompt == b.sandboxReprompt;
+
+  /// Hands the running turns in [project] what their settings now resolve
+  /// to — every running turn where [project] is the default, whose tier is
+  /// every project's.
+  Future<void> _refreshPermissions(String? project) =>
+      Future.wait(_backend.runningTurns.value.map((chatId) async {
+        if (_mirrored(chatId)) return;
+        final at = await projectOf(chatId);
+        if (project != null && at != project) return;
+        _backend.updatePermissions(
+            chatId,
+            _standingOf(await loadMeta(chatId),
+                ProjectSettings.load(_config, project: at),
+                project: at));
+      }));
 
   /// Which memories a turn reads and writes: the app-level gates over which
   /// project's store answers. A non-default project set to [Tristate.on]
@@ -717,10 +761,11 @@ class ChatRepository {
           final grant =
               _grant(settings.permissions, settings.writableDirs, rule, dirs);
           if (grant != null) {
-            await (settings
+            await saveProjectSettings(
+                settings
                   ..permissions = grant.rules
-                  ..writableDirs = grant.dirs)
-                .save(_config, project: project);
+                  ..writableDirs = grant.dirs,
+                project: project);
           }
         }
       }

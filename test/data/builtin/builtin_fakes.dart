@@ -108,9 +108,15 @@ class ConcurrentFakeLlmClient implements LlmClient {
 
 /// A shell that answers from a table instead of running anything.
 class FakeShell extends Shell {
-  FakeShell(this.respond, {this.canRunCommands = true});
+  FakeShell(this.respond, {this.canRunCommands = true, this.home});
 
   final ShellResult Function(String command) respond;
+
+  /// The machine user's home, where a test needs a `~` to land somewhere.
+  final String? home;
+
+  @override
+  String? get machineHome => home;
 
   final List<String> ran = [];
 

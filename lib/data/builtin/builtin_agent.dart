@@ -464,10 +464,7 @@ class BuiltinAgent {
     this.memoryStore,
     this.memoryChat,
     this.sandboxHelper,
-    this.permissions = const [],
-    this.writableDirs = const [],
-    this.sandboxReprompt = true,
-    this.sandboxed = true,
+    this._standing = const StandingPermissions(),
     this.dataDir,
     this.claimInstruction,
   });
@@ -494,26 +491,38 @@ class BuiltinAgent {
   @visibleForTesting
   final SandboxHelper? sandboxHelper;
 
-  /// The turn's standing rules, merged chat over project over app by the
-  /// repository. Consulted in [_runGated] before the classifier and the
-  /// banner; grown at runtime by an "Allow in Chat" or "Allow in Project"
-  /// banner answer, through [grantRuntimeRule].
-  List<PermissionRule> permissions;
+  /// What the permission pages set, merged chat over project over app by
+  /// the repository: the rules [_runGated] consults before the classifier
+  /// and the banner, the directories [sandboxFor] grants beside the
+  /// workspace, and the re-prompt and Landlock switches. Replaced whole by
+  /// [updateStanding] when the user edits a tier while the turn runs.
+  StandingPermissions get standing => _standing;
+  StandingPermissions _standing;
 
-  /// What this turn's sandboxed commands may additionally write to, beside
-  /// the workspace — the tiers' writableDirs. A rule's own writes are not
-  /// here: they reach only the commands it matches, through [rulesSandbox]. Read
-  /// by [sandboxFor] per command, so a mid-turn grant reaches the next run.
-  final List<String> writableDirs;
+  /// Takes the tiers as the settings now say, for the next call the gate
+  /// reads: the call already running keeps what it was decided under, and
+  /// the banner answers granted this turn stay in front.
+  void updateStanding(StandingPermissions standing) {
+    _standing = standing;
+    _rulesCache = null;
+    _dirsCache = null;
+    subAgentRunner?.updateStanding(standing);
+  }
 
-  /// Whether a sandbox-denied write is offered back as an approval. Off
-  /// reports the denial and moves on.
-  final bool sandboxReprompt;
+  /// [path] with a leading `~` read the way a file-tool path is, so what the
+  /// user typed into a rule is in the same words as the call it is matched
+  /// against, guest or host.
+  String _tilde(String path) =>
+      path == "~" || path.startsWith("~/") ? _resolvePath(path) : path;
 
-  /// Whether commands run under Landlock where the machine offers it. Off
-  /// is the settings' answer for a project, not a per-command one: the
-  /// rules' `unconfined` is that.
-  final bool sandboxed;
+  /// Every rule this turn reads, banner grants first, with `~` read. Cached:
+  /// the gate reads it twice a command, and it changes only by a grant or
+  /// an update.
+  List<PermissionRule> get _rules => _rulesCache ??= List.unmodifiable([
+        for (final rule in [..._runtimeRules, ..._standing.permissions])
+          rule.withPaths(_tilde),
+      ]);
+  List<PermissionRule>? _rulesCache;
 
   /// The app's own data directory — settings, secrets, chats. The one shape
   /// [addDirectoryTool] refuses outright: the data directory itself, or
@@ -529,8 +538,10 @@ class BuiltinAgent {
 
   /// Adds a rule at the front of the evaluation, from a banner answer this
   /// turn is still running under, stamped as this turn's own.
-  void grantRuntimeRule(PermissionRule rule) =>
-      _runtimeRules.insert(0, rule.copyWith(origin: PermissionTier.runtime));
+  void grantRuntimeRule(PermissionRule rule) {
+    _runtimeRules.insert(0, rule.copyWith(origin: PermissionTier.runtime));
+    _rulesCache = null;
+  }
 
   /// What decided the call whose result is being composed, the tiers that
   /// spoke, and the verdict itself — set by every decision site in the gate
@@ -548,7 +559,10 @@ class BuiltinAgent {
   final Set<String> _runtimeDirs = {};
 
   /// Grants [dirs] for the rest of this turn.
-  void grantRuntimeDirs(Iterable<String> dirs) => _runtimeDirs.addAll(dirs);
+  void grantRuntimeDirs(Iterable<String> dirs) {
+    _runtimeDirs.addAll(dirs);
+    _dirsCache = null;
+  }
 
   /// The writable set this turn covers beside the workspaces — the standing
   /// grants the repository composed plus what a banner answer added mid-turn.
@@ -556,7 +570,11 @@ class BuiltinAgent {
   /// confinement and the file tools' workspace gate reads the same list, so a
   /// granted directory carries the chat workspace's own permissions by
   /// command or by file tool alike.
-  List<String> get _grantedDirs => [...writableDirs, ..._runtimeDirs];
+  List<String> get _grantedDirs => _dirsCache ??= List.unmodifiable([
+        for (final dir in _standing.writableDirs) _tilde(dir),
+        ..._runtimeDirs,
+      ]);
+  List<String>? _dirsCache;
 
   /// The confinement a command runs under, from the shell's driver. Read per
   /// turn rather than held: the driver is resolved per command in the shell,
@@ -568,7 +586,7 @@ class BuiltinAgent {
   /// work another conversation should find goes, and the file tools and
   /// `writable_directories` already treat it as writable.
   CommandSandbox? sandboxFor() {
-    if (!sandboxed) return null;
+    if (!_standing.sandboxed) return null;
     final helper = sandboxHelper ?? shell.driverSandboxHelper;
     if (helper == null) return null;
     final tmp = shell.tmpDirFor(workspace);
@@ -2805,7 +2823,7 @@ class BuiltinAgent {
     ShellCommandAnalysis? analysis,
     ApproveMode? mode,
   }) async* {
-    final rules = [..._runtimeRules, ...permissions];
+    final rules = _rules;
     final verdict = rulesDecideTraced(
       rules,
       toolName,
@@ -3098,7 +3116,7 @@ class BuiltinAgent {
                     command, isWindows: platformIsWindows));
     // The rules' own word on the sandbox, whoever decided the command runs.
     if (sandbox != null) {
-      final ruled = rulesSandbox([..._runtimeRules, ...permissions],
+      final ruled = rulesSandbox(_rules,
           parsed!.modelableSegments ?? const []);
       if (ruled.unconfined) {
         sandbox = null;
@@ -3252,7 +3270,7 @@ class BuiltinAgent {
   /// unconfined, rather than leaving the denial for the model to discover.
   /// Every violation is a write the sandbox refused — the ruleset reads
   /// everywhere — so unconfined is the one rerun that can go differently.
-  /// Off under [sandboxReprompt] false and in `never` mode, where nobody is
+  /// Off under the standing re-prompt switch and in `never` mode, where nobody is
   /// there to ask. The rerun is not offered again: it runs unconfined.
   ///
   /// Streaming, because the banner is where the answer comes from; the caller
@@ -3265,7 +3283,7 @@ class BuiltinAgent {
     ShellResult result,
   ) async* {
     if (result.violations.isEmpty ||
-        !sandboxReprompt ||
+        !_standing.sandboxReprompt ||
         approveMode == ApproveMode.never) {
       return;
     }

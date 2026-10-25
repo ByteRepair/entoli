@@ -29,6 +29,67 @@ void main() {
     });
   });
 
+  group("braces", () {
+    test("name the alternatives a pattern covers", () {
+      expect(expandBraces("{podman,toolbox} *"), ["podman *", "toolbox *"]);
+      expect(expandBraces("{a,b}{1,2}"), ["a1", "a2", "b1", "b2"]);
+      expect(expandBraces("git {push,pull{,--rebase}} *"),
+          ["git push *", "git pull *", "git pull--rebase *"]);
+    });
+
+    test("with no comma, or left open, are literal", () {
+      expect(expandBraces("find . -exec rm {} ;"), ["find . -exec rm {} ;"]);
+      expect(expandBraces("echo {a,b"), ["echo {a,b"]);
+    });
+
+    test("a rule matches any of them, per segment", () {
+      const rule = PermissionRule(
+          tool: "bash",
+          pattern: "{podman,toolbox} *",
+          decision: PermissionDecision.allow);
+      RuleVerdict? decide(List<String> segments) =>
+          rulesDecideTraced([rule], "bash", segments: segments);
+      expect(decide(["podman ps"])?.decision, PermissionDecision.allow);
+      expect(decide(["toolbox run -c x make"])?.decision,
+          PermissionDecision.allow);
+      expect(decide(["docker ps"]), isNull);
+      expect(decide(["podman ps", "rm -rf x"]), isNull,
+          reason: "the braces do not widen a segment past its operator");
+    });
+
+    test("cover hosts and paths too", () {
+      const host = PermissionRule(
+          tool: "webfetch",
+          pattern: "{github.com,gitlab.com}",
+          decision: PermissionDecision.allow);
+      expect(rulesDecideTraced([host], "webfetch", url: "https://api.github.com/x")
+          ?.decision, PermissionDecision.allow);
+      expect(rulesDecideTraced([host], "webfetch", url: "https://example.com"),
+          isNull);
+    });
+  });
+
+  group("a rule's paths", () {
+    String home(String path) => path.replaceFirst("~", "/home/u");
+
+    test("are its writes and a file tool's pattern", () {
+      const rule = PermissionRule(
+          tool: "write",
+          pattern: "~/Projects/x",
+          decision: PermissionDecision.allow);
+      expect(rule.withPaths(home).pattern, "/home/u/Projects/x");
+      const bash = PermissionRule(
+          tool: "bash", pattern: "podman *", writes: ["~/.local/share"]);
+      expect(bash.withPaths(home).writes, ["/home/u/.local/share"]);
+    });
+
+    test("leave a command's pattern, which matches what was typed", () {
+      const rule = PermissionRule(
+          tool: "bash", pattern: "~/bin/build *", decision: PermissionDecision.allow);
+      expect(rule.withPaths(home).pattern, "~/bin/build *");
+    });
+  });
+
   group("rulesDecide", () {
     final allowGit = PermissionRule(
       tool: "bash",

@@ -2087,7 +2087,7 @@ group("a banner answer through the controller", () {
       await controller2.send("again");
       await waitIdle(id);
 
-      final resolved = app.backend.prompts.last.settings.permissions
+      final resolved = app.backend.prompts.last.settings.standing.permissions
           .map((r) => r.pattern)
           .toList();
       expect(resolved, containsAll(["chat rule *", "project rule *"]));

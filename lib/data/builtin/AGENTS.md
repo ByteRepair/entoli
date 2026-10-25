@@ -307,6 +307,22 @@ the command into — so a compound command must find an allow for every segment,
 and a command the parse cannot model is escalated to the banner even under an
 allow rule (refused in `never`, where nobody can answer).
 
+A pattern names alternatives with shell braces, `{podman,toolbox} *`, for
+every tool (`expandBraces`): not `|`, which is the pipe the segment split
+reads, and not a bare comma, which real arguments carry. A `~` in a rule's
+writes, a file tool's pattern or a tier's `writableDirs` is read by the
+agent's own file-tool resolver before the sandbox or the match sees it, so a
+rule is in the same words as the path it is matched with, guest or host — the
+Landlock helper takes a path as given, and a literal `~/x` failed every
+command.
+
+A turn reads the tiers as it starts, so every write of a project's settings
+goes through `ChatRepository.saveProjectSettings`: where the permission half
+changed, it resolves what the next turn would start with and
+`AgentBackend.updatePermissions` hands it to the running agents, which pass it
+to their sub-agents, from the call after the one in flight. The settings
+notifier and a banner's "Allow in Project" both save through it.
+
 A rule answers two questions, separately: its `decision` is whether a match
 is asked about, `unconfined` and `writes` what a matching `bash` run may
 touch — no Landlock at all, or extra directories beside the turn's grant. Either may stand
@@ -461,7 +477,8 @@ and everything else the sandbox is the only boundary behind.
 arguments JSON under it at two lines and an ellipsis, which is a consent dialog
 asking to be waved through: what is being agreed to is the command, and the
 command was the half that got cut. It sits in mono on a plain surface inside the
-tinted banner, capped at `ApprovalBanner.mostHeight` and scrolling past it, so a
+banner, selectable so it can be copied into a terminal or a rule, capped at
+`ApprovalBanner.mostHeight` and scrolling past it, so a
 command of any length is readable without the banner burying the conversation it
 is asking about.
 

@@ -45,9 +45,7 @@ class SubAgentRunner {
     this.project,
     this.tone = Tone.none,
     this.citations = false,
-    this.permissions = const [],
-    this.writableDirs = const [],
-    this.sandboxed = true,
+    this.standing = const StandingPermissions(),
     this.readOnlyDirs = const [],
   });
 
@@ -74,18 +72,20 @@ class SubAgentRunner {
   /// chat's own there, and claiming it is shared would be a lie.
   final bool sharedWorkspace;
 
-  /// The turn's rules and writable roots, handed down so a sub-agent's
-  /// commands gate the same way. A sub-agent has no banner — nobody is there
-  /// to answer one — so only rule-allow and rule-deny reach its commands;
-  /// an ask-shaped call is refused.
-  final List<PermissionRule> permissions;
+  /// The turn's permissions, handed down so a sub-agent's commands gate and
+  /// confine the same way. A sub-agent has no banner — nobody is there to
+  /// answer one — so only rule-allow and rule-deny reach its commands; an
+  /// ask-shaped call is refused.
+  StandingPermissions standing;
 
-  /// What the sub-agent's sandboxed commands may write to beside the
-  /// workspace, the parent's grant carried down.
-  final List<String> writableDirs;
-
-  /// Whether the parent's commands run under Landlock; a worker's do alike.
-  final bool sandboxed;
+  /// The parent's [BuiltinAgent.updateStanding], carried to the workers
+  /// running now and the ones spawned after.
+  void updateStanding(StandingPermissions next) {
+    standing = next;
+    for (final agent in _active) {
+      agent.updateStanding(next);
+    }
+  }
 
   /// The parent's, so a worker's commands are kept from the same places.
   final List<String> readOnlyDirs;
@@ -184,9 +184,7 @@ class SubAgentRunner {
       project: project,
       tone: tone,
       citations: citations,
-      permissions: permissions,
-      writableDirs: writableDirs,
-      sandboxed: sandboxed,
+      standing: standing,
       readOnlyDirs: readOnlyDirs,
       webSearch: webSearch,
       rateLimitGate: rateLimitGate,

@@ -326,9 +326,7 @@ class BuiltinBackend implements AgentBackend {
         log: subAgentLog,
         caps: caps,
         sharedWorkspace: settings.sharedWorkspace,
-        permissions: settings.permissions,
-        writableDirs: settings.writableDirs,
-        sandboxed: settings.sandbox,
+        standing: settings.standing,
         readOnlyDirs: readOnly,
         project: project,
         tone: settings.tone,
@@ -502,10 +500,7 @@ class BuiltinBackend implements AgentBackend {
         memoryChat: settings.memory.agentTool ? chatId : null,
         caps: caps,
         sharedWorkspace: settings.sharedWorkspace,
-        permissions: settings.permissions,
-        writableDirs: settings.writableDirs,
-        sandboxReprompt: settings.sandboxReprompt ?? true,
-        sandboxed: settings.sandbox,
+        standing: settings.standing,
         dataDir: config.dataDir,
         project: project,
         saveArtifact: (path, entryFile, {artifactId}) async {
@@ -546,7 +541,7 @@ class BuiltinBackend implements AgentBackend {
         },
       );
       // The real kill replaces the placeholder.
-      _running.replace(stopKey, agent.cancel);
+      _running.replace(stopKey, agent.cancel, agent: agent);
 
       // A resumed turn has no prompt of its own to read `@agent` mentions out
       // of, so they come off the message that started it. A member turn is
@@ -1441,6 +1436,13 @@ class BuiltinBackend implements AgentBackend {
   }
 
   @override
+  void updatePermissions(String chatId, StandingPermissions standing) {
+    for (final agent in _running.agentsOf(chatId)) {
+      agent.updateStanding(standing);
+    }
+  }
+
+  @override
   Future<void> respondQuestions(
       String chatId, String requestId, List<String?> answers) async {
     _questions[chatId]?.removeWhere((r) => r.id == requestId);
@@ -1550,10 +1552,13 @@ class _RunningTurns extends ValueNotifier<Set<String>> {
 
   /// How to stop each, rather than what is running it: an agent's own `cancel`
   /// for a turn the model is driving, the command's `kill` for a `!` one, and
-  /// nothing here has to tell them apart. Keyed by chat **and a token**, not
-  /// the chat alone — a parallel round runs several turns of one chat at
-  /// once, and a second registration must not drop the first's kill.
-  final Map<String, Future<void> Function()> _stops = {};
+  /// nothing here has to tell them apart. Beside it the agent, where a model
+  /// drives the turn, for what the settings hand a running turn. Keyed by
+  /// chat **and a token**, not the chat alone — a parallel round runs several
+  /// turns of one chat at once, and a second registration must not drop the
+  /// first's kill.
+  final Map<String, ({Future<void> Function() stop, BuiltinAgent? agent})>
+      _turns = {};
 
   var _token = 0;
 
@@ -1561,14 +1566,14 @@ class _RunningTurns extends ValueNotifier<Set<String>> {
   /// removes.
   String add(String chatId, Future<void> Function() stop) {
     final key = "$chatId\u0000${_token++}";
-    _stops[key] = stop;
+    _turns[key] = (stop: stop, agent: null);
     value = chats;
     return key;
   }
 
   /// Swaps what [key] stops, without a second publish.
-  void replace(String key, Future<void> Function() stop) {
-    _stops[key] = stop;
+  void replace(String key, Future<void> Function() stop, {BuiltinAgent? agent}) {
+    _turns[key] = (stop: stop, agent: agent);
   }
 
   /// The turn [key] registered finished on its own; the chat keeps any
@@ -1576,28 +1581,31 @@ class _RunningTurns extends ValueNotifier<Set<String>> {
   /// removed — a `Set` compares by identity, so a fresh one would notify
   /// every time and cost a round trip to the platform.
   void removeKey(String key) {
-    if (_stops.remove(key) != null) value = chats;
+    if (_turns.remove(key) != null) value = chats;
   }
 
   /// The chats with a turn in flight — what [runningTurns] publishes.
   Set<String> get chats =>
-      {for (final key in _stops.keys) key.substring(0, key.indexOf("\u0000"))};
+      {for (final key in _turns.keys) key.substring(0, key.indexOf("\u0000"))};
+
+  Iterable<String> _keysOf(String chatId) =>
+      _turns.keys.where((k) => k.startsWith("$chatId\u0000"));
 
   /// Whether [chatId] holds a turn in flight — the guard a background call
   /// checks before it runs, since the session it would summarize is being
   /// rewritten underneath it while one does. Keys rather than the set: the
   /// answer is one `startsWith`, no materialized copy of the chats.
-  bool any(String chatId) =>
-      _stops.keys.any((k) => k.startsWith("$chatId\u0000"));
+  bool any(String chatId) => _keysOf(chatId).isNotEmpty;
+
+  /// The agents driving [chatId]'s turns.
+  Iterable<BuiltinAgent> agentsOf(String chatId) =>
+      _keysOf(chatId).map((k) => _turns[k]!.agent).nonNulls;
 
   /// Kills every stop [chatId] holds, in the order they were registered.
   Future<void> stopAll(String chatId) async {
-    final keys = [
-      for (final key in _stops.keys)
-        if (key.startsWith("$chatId\u0000")) key
-    ];
+    final keys = _keysOf(chatId).toList();
     for (final key in keys) {
-      await _stops.remove(key)?.call();
+      await _turns.remove(key)?.stop();
     }
     if (keys.isNotEmpty) value = chats;
   }

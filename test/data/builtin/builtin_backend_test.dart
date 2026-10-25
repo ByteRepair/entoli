@@ -130,7 +130,7 @@ void main() {
                   provider: provider,
                   project: project,
                   approveMode: approveMode,
-                  permissions: permissions,
+                  standing: StandingPermissions(permissions: permissions),
                   memory: memory,
                   sharedWorkspace: sharedWorkspace,
                   disabled: disabled,

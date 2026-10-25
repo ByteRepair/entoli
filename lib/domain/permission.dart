@@ -175,6 +175,22 @@ class PermissionRule {
         origin: origin ?? this.origin,
       );
 
+  /// This rule with [resolve] applied wherever it names a path: the sandbox
+  /// [writes], and the pattern of a file tool. A command's pattern is left
+  /// alone — it is matched against the command as the model wrote it.
+  PermissionRule withPaths(String Function(String path) resolve) =>
+      PermissionRule(
+        tool: tool,
+        pattern: switch (tool) {
+          "read" || "write" || "edit" => resolve(pattern),
+          _ => pattern,
+        },
+        decision: decision,
+        unconfined: unconfined,
+        writes: [for (final w in writes) resolve(w)],
+        origin: origin,
+      );
+
   /// The same rule whatever tier it was read from: [origin] is not part of it.
   @override
   bool operator ==(Object other) =>
@@ -355,11 +371,52 @@ PermissionDecision? _stronger(PermissionDecision? a, PermissionDecision b) =>
     a == null || b.index > a.index ? b : a;
 
 bool _ruleMatches(PermissionRule rule, String toolName, String subject) =>
-    switch (toolName) {
-      "bash" => globMatch(rule.pattern, subject),
-      "webfetch" => _hostMatch(rule.pattern, subject),
-      _ => pathInside(subject, rule.pattern) || globMatch(rule.pattern, subject),
-    };
+    expandBraces(rule.pattern).any((pattern) => switch (toolName) {
+          "bash" => globMatch(pattern, subject),
+          "webfetch" => _hostMatch(pattern, subject),
+          _ => pathInside(subject, pattern) || globMatch(pattern, subject),
+        });
+
+/// The alternatives a pattern names with shell brace syntax:
+/// `{podman,toolbox} *` is `podman *` and `toolbox *`. Braces rather than
+/// `|`, which is a pipe to the segment split, or a bare comma, which real
+/// arguments carry. A brace with no comma in it, or one left open, is
+/// literal, as it is to bash.
+List<String> expandBraces(String pattern) => pattern.contains("{")
+    ? _braceCache.putIfAbsent(pattern, () => _expandBraces(pattern))
+    : [pattern];
+
+final _braceCache = <String, List<String>>{};
+
+List<String> _expandBraces(String pattern) {
+  for (var open = pattern.indexOf("{");
+      open >= 0;
+      open = pattern.indexOf("{", open + 1)) {
+    var depth = 0;
+    final commas = <int>[];
+    int? close;
+    for (var i = open; i < pattern.length; i++) {
+      final c = pattern[i];
+      if (c == "{") depth++;
+      if (c == "}" && --depth == 0) {
+        close = i;
+        break;
+      }
+      if (c == "," && depth == 1) commas.add(i);
+    }
+    if (close == null) return [pattern];
+    if (commas.isEmpty) continue;
+    final head = pattern.substring(0, open);
+    final tail = pattern.substring(close + 1);
+    final cuts = [open, ...commas, close];
+    return [
+      for (var k = 0; k + 1 < cuts.length; k++)
+        ..._expandBraces(
+            "$head${pattern.substring(cuts[k] + 1, cuts[k + 1])}$tail"),
+    ];
+  }
+  return [pattern];
+}
 
 /// The host of [url], as the fetch itself would parse it. Null where the
 /// string names none — a scheme-less or malformed URL matches nothing.

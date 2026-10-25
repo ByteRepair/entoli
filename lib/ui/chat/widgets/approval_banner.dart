@@ -52,73 +52,96 @@ class ApprovalBanner extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
     final detail = approval.argumentsText ?? approval.argumentsJson;
+    final (icon, title) = _heading(approval.toolName);
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 10),
       decoration: BoxDecoration(
-        color: theme.colorScheme.tertiaryContainer,
-        borderRadius: BorderRadius.circular(14),
+        color: scheme.surfaceContainerHigh,
+        border: Border.all(color: scheme.outlineVariant),
+        borderRadius: BorderRadius.circular(16),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Row(
             children: [
-              Icon(Icons.shield_outlined,
-                  size: 18, color: theme.colorScheme.onTertiaryContainer),
-              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: scheme.primaryContainer,
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(icon, size: 16, color: scheme.onPrimaryContainer),
+              ),
+              const SizedBox(width: 10),
               Expanded(
                 child: Text(
-                  "Allow ${approval.toolName}?",
-                  style: theme.textTheme.titleSmall?.copyWith(
-                    color: theme.colorScheme.onTertiaryContainer,
-                    fontWeight: FontWeight.w600,
-                  ),
+                  title,
+                  style: theme.textTheme.titleSmall
+                      ?.copyWith(fontWeight: FontWeight.w600),
+                ),
+              ),
+              Text(
+                approval.toolName,
+                style: theme.textTheme.labelSmall?.copyWith(
+                  fontFamily: monoFamily,
+                  color: scheme.onSurfaceVariant,
                 ),
               ),
             ],
           ),
           if (detail != null) ...[
-            const SizedBox(height: 8),
+            const SizedBox(height: 10),
             Container(
               width: double.infinity,
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
               decoration: BoxDecoration(
-                color: theme.colorScheme.surface,
-                borderRadius: BorderRadius.circular(8),
+                color: scheme.surfaceContainerLowest,
+                border: Border.all(color: scheme.outlineVariant),
+                borderRadius: BorderRadius.circular(10),
               ),
               child: ConstrainedBox(
                 constraints: const BoxConstraints(maxHeight: mostHeight),
                 child: SingleChildScrollView(
-                  child: Text(
+                  // Selectable so a command can be copied out and tried, or
+                  // a path pasted into a rule, before answering.
+                  child: SelectableText(
                     detail,
                     style: theme.textTheme.bodySmall?.copyWith(
                       fontFamily: monoFamily,
-                      color: theme.colorScheme.onSurface,
-                      height: 1.4,
+                      color: scheme.onSurface,
+                      height: 1.45,
                     ),
                   ),
                 ),
               ),
             ),
           ],
-          const SizedBox(height: 8),
+          const SizedBox(height: 10),
           // A Wrap, not a Row: four actions on a narrow window overflow a Row
           // past the edge, and the buttons past it are drawn but untappable —
           // how the two always answers went missing in the tests. Wrapped,
           // the overflow rows sit beside the conversation.
           Wrap(
             alignment: WrapAlignment.end,
+            crossAxisAlignment: WrapCrossAlignment.center,
             spacing: 8,
+            runSpacing: 4,
             children: [
-              TextButton(onPressed: onDeny, child: const Text("Deny")),
+              TextButton(
+                onPressed: onDeny,
+                style: TextButton.styleFrom(foregroundColor: scheme.error),
+                child: const Text("Deny"),
+              ),
               if (onAlwaysAllowChat != null)
-                TextButton(
+                OutlinedButton(
                     onPressed: onAlwaysAllowChat,
                     child: const Text("Always in chat")),
               if (onAlwaysAllowProject != null)
-                TextButton(
+                OutlinedButton(
                     onPressed: onAlwaysAllowProject,
                     child: const Text("Always in project")),
               if (onAllow != null)
@@ -129,4 +152,16 @@ class ApprovalBanner extends StatelessWidget {
       ),
     );
   }
+
+  /// What the banner asks, in words for the tools whose call is a thing the
+  /// user does every day; anything else is asked by name.
+  static (IconData, String) _heading(String tool) => switch (tool) {
+        "bash" => (Icons.terminal, "Run this command?"),
+        "webfetch" => (Icons.public, "Fetch this page?"),
+        "read" => (Icons.description_outlined, "Read this file?"),
+        "write" || "edit" => (Icons.edit_outlined, "Change this file?"),
+        "add_directory" => (Icons.create_new_folder_outlined,
+            "Let the agent write here?"),
+        _ => (Icons.shield_outlined, "Allow $tool?"),
+      };
 }
