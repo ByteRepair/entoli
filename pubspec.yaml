@@ -61,6 +61,8 @@ dependencies:
   # web, in-app webview on Android.
   url_launcher: ^6.3.2
   webview_flutter: ^4.14.1
+  # Hybrid composition, which the platform-neutral API cannot ask for.
+  webview_flutter_android: ^4.14.1
 
   # Voice mode. sherpa-onnx is speech recognition, speech synthesis and voice
   # activity detection from one dependency: `record` opens the microphone and

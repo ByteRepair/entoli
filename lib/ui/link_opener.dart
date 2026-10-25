@@ -2,6 +2,7 @@ import "package:flutter/foundation.dart";
 import "package:flutter/material.dart";
 import "package:url_launcher/url_launcher.dart";
 import "package:webview_flutter/webview_flutter.dart";
+import "package:webview_flutter_android/webview_flutter_android.dart";
 
 import "../core/log.dart";
 import "../core/platform/form_factor.dart";
@@ -180,6 +181,19 @@ class PlatformLinkOpener implements LinkOpener {
   }
 }
 
+/// The plugin's Android default draws the WebView into a texture Flutter
+/// composites, which lags scrolling by a frame and makes flings stutter;
+/// hybrid composition puts the native view on screen to scroll by itself.
+Widget _webView(WebViewController controller) {
+  final params = PlatformWebViewWidgetCreationParams(controller: controller.platform);
+  return WebViewWidget.fromPlatformCreationParams(
+    params: controller.platform is AndroidWebViewController
+        ? AndroidWebViewWidgetCreationParams.fromPlatformWebViewWidgetCreationParams(
+            params, displayWithHybridComposition: true)
+        : params,
+  );
+}
+
 /// A full-screen webview for browsing a web page on Android, so a link tap
 /// keeps the user in the app rather than bouncing them out to the browser.
 /// The back button walks webview history first and only then pops the route.
@@ -251,7 +265,7 @@ class _WebViewPageState extends State<_WebViewPage> {
               ),
             ],
           ),
-          body: WebViewWidget(controller: _controller),
+          body: _webView(_controller),
         ),
       );
 }
@@ -338,7 +352,7 @@ class _ArtifactWebViewPageState extends State<_ArtifactWebViewPage> {
         appBar: AppBar(
           title: Text(_title, overflow: TextOverflow.ellipsis),
         ),
-        body: WebViewWidget(controller: controller),
+        body: _webView(controller),
       ),
     );
   }
