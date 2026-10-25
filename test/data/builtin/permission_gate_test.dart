@@ -43,6 +43,7 @@ void main() {
     ApproveMode approveMode = ApproveMode.never,
     SandboxHelper? sandboxHelper,
     bool sandboxReprompt = true,
+    bool sandboxed = true,
     ShellResult Function(String)? respond,
     PermissionClassifier? classifier,
     FakeWebSearch? webSearch,
@@ -72,6 +73,7 @@ void main() {
       permissions: permissions,
       writableDirs: writableDirs,
       sandboxReprompt: sandboxReprompt,
+      sandboxed: sandboxed,
       classifier: classifier,
       webSearch: webSearch,
     );
@@ -772,6 +774,70 @@ void main() {
       final result = results(events);
       expect(result.returnCode, -1);
       expect(result.exceptionInfo, contains("Denied by a permission rule"));
+    });
+  });
+
+  test("a turn with Landlock off runs nothing confined", () async {
+    final client = FakeLlmClient([
+      [bashCall("touch /etc/x")], [finish],
+    ]);
+    await agentOver(client, sandboxed: false).run(userMessage("go")).toList();
+    expect(shell.ran, ["touch /etc/x"]);
+    expect(shell.sandboxes, [isNull]);
+  });
+
+  group("a rule's sandbox", () {
+    const unconfinedPodman = PermissionRule(
+        tool: "bash", pattern: "podman *", unconfined: true);
+
+    test("an unconfined rule runs its command outside the sandbox", () async {
+      final client = FakeLlmClient([
+        [bashCall("podman ps")], [finish],
+      ]);
+      await agentOver(client, permissions: [unconfinedPodman])
+          .run(userMessage("go"))
+          .toList();
+      expect(shell.ran, ["podman ps"]);
+      expect(shell.sandboxes, [isNull]);
+    });
+
+    test("with no decision of its own, the mode still asks", () async {
+      final client = FakeLlmClient([
+        [bashCall("podman ps")], [finish],
+      ]);
+      final events = await agentOver(client,
+              approveMode: ApproveMode.ask,
+              approvals: [ApprovalResponse.allow],
+              permissions: [unconfinedPodman])
+          .run(userMessage("go"))
+          .toList();
+      expect(events.whereType<ApprovalRequestEvent>(), hasLength(1));
+      expect(shell.sandboxes, [isNull]);
+    });
+
+    test("a segment the rule does not match keeps the run confined",
+        () async {
+      final client = FakeLlmClient([
+        [bashCall("podman ps && touch x")], [finish],
+      ]);
+      await agentOver(client, permissions: [unconfinedPodman])
+          .run(userMessage("go"))
+          .toList();
+      expect(shell.sandboxes.single, isA<CommandSandbox>());
+    });
+
+    test("a rule's writes reach only the commands it matches", () async {
+      final client = FakeLlmClient([
+        [bashCall("make all")], [bashCall("touch x")], [finish],
+      ]);
+      await agentOver(client, permissions: [
+        const PermissionRule(
+            tool: "bash",
+            pattern: "make *",
+            writes: ["/opt/out"]),
+      ]).run(userMessage("go")).toList();
+      expect(shell.sandboxes[0]!.extraWrites, contains("/opt/out"));
+      expect(shell.sandboxes[1]!.extraWrites, isNot(contains("/opt/out")));
     });
   });
 

@@ -824,6 +824,11 @@ void main() {
           ws, ["writing /etc"], false),
       ([], "some-static-binary: /etc/hosts: Permission denied", ws,
           [unnamed], true),
+      // Go's wording is lowercase, and a Go binary makes no libc call the
+      // shim could report.
+      ([],
+          "Error: open /run/user/1000/libpod/tmp/alive.lck: permission denied",
+          ws, [unnamed], true),
       ([], "all went fine", ws, [], false),
     ];
     for (final (report, output, sandbox, violations, unreported) in cases) {

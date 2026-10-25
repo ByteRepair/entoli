@@ -47,6 +47,7 @@ class SubAgentRunner {
     this.citations = false,
     this.permissions = const [],
     this.writableDirs = const [],
+    this.sandboxed = true,
     this.readOnlyDirs = const [],
   });
 
@@ -82,6 +83,9 @@ class SubAgentRunner {
   /// What the sub-agent's sandboxed commands may write to beside the
   /// workspace, the parent's grant carried down.
   final List<String> writableDirs;
+
+  /// Whether the parent's commands run under Landlock; a worker's do alike.
+  final bool sandboxed;
 
   /// The parent's, so a worker's commands are kept from the same places.
   final List<String> readOnlyDirs;
@@ -182,6 +186,7 @@ class SubAgentRunner {
       citations: citations,
       permissions: permissions,
       writableDirs: writableDirs,
+      sandboxed: sandboxed,
       readOnlyDirs: readOnlyDirs,
       webSearch: webSearch,
       rateLimitGate: rateLimitGate,

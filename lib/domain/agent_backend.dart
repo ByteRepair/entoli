@@ -454,13 +454,16 @@ class TurnSettings {
   final List<PermissionRule> permissions;
 
   /// Directories this turn's sandboxed commands may additionally write to,
-  /// beside the workspace: the rules' own writes plus the project's
-  /// writableDirs, composed by the repository.
+  /// beside the workspace: the tiers' writableDirs, composed by the
+  /// repository.
   final List<String> writableDirs;
 
   /// Whether a command the sandbox denied writes to is offered back as an
   /// approval. Null means the app default decides.
   final bool? sandboxReprompt;
+
+  /// Whether this turn's commands run under Landlock.
+  final bool sandbox;
 
   const TurnSettings({
     this.memory = MemorySettings.off,
@@ -487,6 +490,7 @@ class TurnSettings {
     this.permissions = const [],
     this.writableDirs = const [],
     this.sandboxReprompt,
+    this.sandbox = true,
   });
 }
 

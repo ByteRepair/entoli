@@ -83,7 +83,8 @@ class PermissionRule {
   const PermissionRule({
     required this.tool,
     required this.pattern,
-    required this.decision,
+    this.decision,
+    this.unconfined = false,
     this.writes = const [],
     this.origin,
   });
@@ -102,15 +103,31 @@ class PermissionRule {
   /// - `webfetch`: a host name, matching itself and subdomains.
   final String pattern;
 
-  /// What a matching call does.
-  final PermissionDecision decision;
+  /// Whether a matching call is asked about. Null where the rule speaks only
+  /// to [sandbox], leaving the asking to the other rules and the mode.
+  final PermissionDecision? decision;
 
-  /// Directories a rule-allowed `bash` command may additionally write to,
-  /// inside the Landlock grant — the extra writable roots the sandbox grants
-  /// when this rule allows the command. Empty otherwise; other tools ignore
-  /// it. This is what makes "allow, and write there" a single answer rather
-  /// than an allow the kernel then refuses.
+  /// What a matching `bash` command may touch once it runs, whoever decided
+  /// it runs: no Landlock at all, or the turn's grant plus [writes] — for the
+  /// commands this rule matches and no others. Independent of [decision]: an
+  /// allow stops the asking, and the sandbox matters most for exactly the
+  /// runs nobody watches. Other tools ignore both.
+  final bool unconfined;
   final List<String> writes;
+
+  /// Whether a rule for [tool] can shape the sandbox: only a command runs in
+  /// one.
+  static bool takesSandbox(String tool) => tool == "bash" || tool == "*";
+
+  /// Whether [unconfined] and [writes] mean anything here: a blocked command
+  /// never runs.
+  bool get setsSandbox =>
+      takesSandbox(tool) && decision != PermissionDecision.deny;
+
+  /// Whether this rule changes nothing — no decision, and no sandbox that
+  /// applies.
+  bool get saysNothing =>
+      decision == null && !(setsSandbox && (unconfined || writes.isNotEmpty));
 
   /// Which tier carried this rule, stamped by the repository when it
   /// composes a turn's settings and by the agent for a runtime grant. Not
@@ -120,12 +137,17 @@ class PermissionRule {
   /// hand or read back alone.
   final PermissionTier? origin;
 
+  // The old `writes` key granted every command in the turn, not the rule's
+  // own; it is not read, rules from before being reset rather than migrated.
   factory PermissionRule.fromJson(Map<String, dynamic> json) => PermissionRule(
         tool: json["tool"] as String? ?? "*",
         pattern: json["pattern"] as String? ?? "",
-        decision: _decision(json["decision"] as String?),
+        decision: json["decision"] == null
+            ? null
+            : _decision(json["decision"] as String?),
+        unconfined: json["unconfined"] == true,
         writes: [
-          for (final w in (json["writes"] as List<dynamic>? ?? const []))
+          for (final w in (json["sandboxWrites"] as List<dynamic>? ?? const []))
             if (w is String) w,
         ],
       );
@@ -136,8 +158,9 @@ class PermissionRule {
   Map<String, dynamic> toJson() => {
         "tool": tool,
         "pattern": pattern,
-        "decision": decision.name,
-        if (writes.isNotEmpty) "writes": writes,
+        if (decision != null) "decision": decision!.name,
+        if (unconfined) "unconfined": true,
+        if (writes.isNotEmpty) "sandboxWrites": writes,
       };
 
   /// This rule with [origin] stamped — the one field a rule gains after it
@@ -147,12 +170,51 @@ class PermissionRule {
         tool: tool,
         pattern: pattern,
         decision: decision,
+        unconfined: unconfined,
         writes: writes,
         origin: origin ?? this.origin,
       );
 
+  /// The same rule whatever tier it was read from: [origin] is not part of it.
   @override
-  String toString() => "$decision $tool $pattern";
+  bool operator ==(Object other) =>
+      other is PermissionRule &&
+      other.tool == tool &&
+      other.pattern == pattern &&
+      other.decision == decision &&
+      other.unconfined == unconfined &&
+      other.writes.length == writes.length &&
+      other.writes.toSet().containsAll(writes);
+
+  @override
+  int get hashCode => Object.hash(tool, pattern, decision, unconfined);
+
+  @override
+  String toString() =>
+      "$decision${unconfined ? " unconfined" : ""} $tool $pattern";
+}
+
+/// The sandbox the rules set for one run of [segments]. The confinement is
+/// per run, not per segment, so the run is unconfined only where every
+/// segment matches an unconfined rule — one that does not would otherwise
+/// leave with it — and the extra writes are those of every rule that matched
+/// a segment. Only grants combine here: no rule can confine more than the
+/// turn does, so there is no stricter answer for a looser one to lose to.
+({bool unconfined, List<String> writes}) rulesSandbox(
+    List<PermissionRule> rules, List<String> segments) {
+  var unconfined = segments.isNotEmpty;
+  final writes = <String>{};
+  for (final segment in segments) {
+    var segmentUnconfined = false;
+    for (final rule in rules) {
+      if (!rule.setsSandbox) continue;
+      if (!_ruleMatches(rule, "bash", segment)) continue;
+      if (rule.unconfined) segmentUnconfined = true;
+      writes.addAll(rule.writes);
+    }
+    unconfined = unconfined && segmentUnconfined;
+  }
+  return (unconfined: unconfined, writes: writes.toList());
 }
 
 /// Reads a persisted rule list; entries that do not parse are skipped rather
@@ -270,15 +332,17 @@ RuleVerdict? _strongestTraced(
   PermissionDecision? verdict;
   final tiers = <PermissionTier>{};
   for (final rule in rules) {
+    final decision = rule.decision;
+    if (decision == null) continue;
     if (rule.tool != "*" && rule.tool != toolName) continue;
     if (!_ruleMatches(rule, toolName, subject)) continue;
-    if (_stronger(verdict, rule.decision) != verdict) {
+    if (_stronger(verdict, decision) != verdict) {
       // A strictly stronger decision clears the weaker tiers: they did not
       // decide this.
       tiers.clear();
-      verdict = rule.decision;
+      verdict = decision;
     }
-    if (rule.decision == verdict && rule.origin != null) tiers.add(rule.origin!);
+    if (decision == verdict && rule.origin != null) tiers.add(rule.origin!);
   }
   return verdict == null ? null : (decision: verdict, tiers: tiers.toList());
 }

@@ -307,8 +307,10 @@ void main() {
       await pumpSettings(tester, app, SettingsCategory.general);
       await scrollTo(tester, find.text("Permissions"));
 
-      expect(find.textContaining("DENY bash git *"), findsOneWidget);
-      expect(find.textContaining("ALLOW read /home/x/doc"), findsOneWidget);
+      expect(find.text("Shell commands (bash): git *"), findsOneWidget);
+      expect(find.text("Block it"), findsOneWidget);
+      expect(find.text("Reading files (read): /home/x/doc"), findsOneWidget);
+      expect(find.text("Run without asking"), findsOneWidget);
     });
 
     testWidgets("the sandbox re-prompt switch reads and writes the tier",
@@ -331,6 +333,47 @@ void main() {
           ProjectSettings.load(app.config, project: null).sandboxReprompt,
           isFalse,
           reason: "the switch writes the default project's own answer");
+    });
+
+    testWidgets("a rule can set the sandbox and leave asking to the mode",
+        (tester) async {
+      await pumpSettings(tester, app, SettingsCategory.general);
+      await scrollTo(tester, find.text("Add rule"));
+      await tester.tap(find.text("Add rule"));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(
+          find.widgetWithText(TextField, "Command"), "podman *");
+      await tester.pump();
+      await tester.tap(find.text("Run without asking").last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text("Default (the approval mode decides)").last);
+      await tester.pumpAndSettle();
+      // Both questions on Default: the rule would say nothing.
+      expect(find.textContaining("would change nothing"), findsOneWidget);
+      expect(
+          tester.widget<FilledButton>(find.widgetWithText(FilledButton, "Save"))
+              .onPressed,
+          isNull);
+      await tester.ensureVisible(find.text("Default (workspaces only)"));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text("Default (workspaces only)").last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text("Anywhere (no sandbox)").last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text("Save"));
+      await io(tester, () async {});
+      await settleIo(tester);
+      await scrollTo(tester, find.text("Shell commands (bash): podman *"));
+
+      final rule = ProjectSettings.load(app.config, project: null)
+          .permissions
+          .single;
+      expect(rule.pattern, "podman *");
+      expect(rule.decision, isNull);
+      expect(rule.unconfined, isTrue);
+      expect(find.text("Shell commands (bash): podman *"), findsOneWidget);
+      expect(find.text("No sandbox"), findsOneWidget);
     });
   });
 

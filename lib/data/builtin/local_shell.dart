@@ -1139,9 +1139,12 @@ class _OneShotRun implements ShellRun {
   // The prose cross-check. The denial words are few and stable — what the
   // kernel's refusals read like in C — and only a report that named nothing
   // while they appear is a channel problem; a line about shell plumbing
-  // explains nothing and does not count.
-  final proseDenied = RegExp(r"Permission denied|Read-only file system|"
-      r"Operation not permitted");
+  // explains nothing and does not count. Case-blind because Go prints them
+  // lowercase, and a Go binary (podman, gh) makes its syscalls past the shim,
+  // so the prose is the only channel it has.
+  final proseDenied = RegExp(
+      r"Permission denied|Read-only file system|Operation not permitted",
+      caseSensitive: false);
   final unreported = proseDenied.hasMatch(outputText) && !explained;
 
   return (

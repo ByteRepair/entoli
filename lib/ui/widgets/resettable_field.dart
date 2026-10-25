@@ -108,10 +108,14 @@ class InheritableSwitch extends StatelessWidget {
     required this.inherited,
     required this.onChanged,
     this.subtitle,
+    this.enabled = true,
   });
 
   final String title;
   final String? subtitle;
+
+  /// Whether the switch can be flipped; the reset stays live, as everywhere.
+  final bool enabled;
 
   /// The setting currently held; null names [inherited] and the reset
   /// restores it.
@@ -130,7 +134,7 @@ class InheritableSwitch extends StatelessWidget {
           title: Text(title),
           subtitle: subtitle == null ? null : Text(subtitle!),
           value: value ?? inherited,
-          onChanged: onChanged,
+          onChanged: enabled ? onChanged : null,
         ),
       ),
     );

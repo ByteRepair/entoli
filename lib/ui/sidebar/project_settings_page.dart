@@ -184,7 +184,7 @@ class ProjectSettingsPage extends ConsumerWidget {
                   const Divider(),
                   SettingsCardRow(children: [
                     _EnvironmentCard(at: at),
-                    if (builtIn == null) _PermissionsCard(at: at),
+                    _PermissionsCard(at: at),
                   ]),
                   const Divider(),
                   if (builtIn == null) ...[
@@ -620,6 +620,9 @@ class _ProjectPermissionsPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final settings = ref.watch(projectSettingsOf(at));
+    final app = ref.watch(projectSettingsOf((device: at.device, project: null)));
+    final notifier = ref.read(projectSettingsOf(at).notifier);
+    final sandboxed = settings.sandbox ?? app.sandbox ?? true;
     return Scaffold(
       appBar: AppBar(title: const Text("Permissions")),
       body: ListView(children: [
@@ -634,9 +637,9 @@ class _ProjectPermissionsPage extends ConsumerWidget {
         const SizedBox(height: 4),
         PermissionsSection(
           rules: settings.permissions,
-          description: "Standing rules for this project's chats. Writes "
-              "outside the workspaces that a rule grants are also where the "
-              "sandbox's write grant widens.",
+          description: "Standing rules for this project's chats: whether a "
+              "matching command is asked about, and what it may touch once "
+              "it runs.",
           onSaved: (rules) => ref
               .read(projectSettingsOf(at).notifier)
               .setProjectPermissions(rules),
@@ -651,39 +654,25 @@ class _ProjectPermissionsPage extends ConsumerWidget {
               .setWritableDirs(dirs),
         ),
         const Divider(),
-        _SandboxRepromptRow(at: at),
+        // Each overrides the app's answer for this project's chats.
+        InheritableSwitch(
+          title: "Sandbox commands (Landlock)",
+          subtitle: sandboxed
+              ? null
+              : "Off: commands write wherever you can.",
+          value: settings.sandbox,
+          inherited: app.sandbox ?? true,
+          onChanged: notifier.setProjectSandbox,
+        ),
+        InheritableSwitch(
+          title: "Offer to rerun sandbox-denied commands",
+          value: settings.sandboxReprompt,
+          inherited: app.sandboxReprompt ?? true,
+          // Nothing is denied where nothing is sandboxed.
+          enabled: sandboxed,
+          onChanged: notifier.setProjectSandboxReprompt,
+        ),
       ]),
-    );
-  }
-}
-
-/// Whether a sandbox-denied write is offered back here, over the app
-/// default. Null inherits; the row says what the effective answer is and a
-/// switch puts this project's own in place — the same
-/// inherit-then-override shape the TTL row keeps.
-class _SandboxRepromptRow extends ConsumerWidget {
-  const _SandboxRepromptRow({required this.at});
-
-  final ProjectRef at;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final override = ref.watch(
-        projectSettingsOf(at).select((s) => s.sandboxReprompt));
-    final inherited = ref.watch(
-        projectSettingsOf((device: at.device, project: null)).select((s) => s.sandboxReprompt ?? true));
-    return SwitchListTile(
-      title: const Text("Offer to rerun sandbox-denied commands"),
-      subtitle: Text(override == null
-          ? "Default (${inherited ? "on" : "off"}). A switch here overrides "
-              "the app's default for this project's chats."
-          : override
-              ? "On for this project's chats."
-              : "Off for this project's chats."),
-      value: override ?? inherited,
-      onChanged: (value) => ref
-          .read(projectSettingsOf(at).notifier)
-          .setProjectSandboxReprompt(value),
     );
   }
 }
