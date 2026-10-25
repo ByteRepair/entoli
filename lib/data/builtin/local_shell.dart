@@ -932,9 +932,8 @@ class _OneShotRun implements ShellRun {
       await drained.timeout(_drainGrace, onTimeout: () {});
       await reading.cancel();
       final text = output.toString();
-      final violations = sandboxDenials(text, sandbox);
       if (!_killed && timer.isActive) {
-        return ShellResult(returnCode: code, output: text, violations: violations);
+        return ShellResult(returnCode: code, output: text);
       }
       return ShellResult(
         returnCode: -1,
@@ -943,7 +942,6 @@ class _OneShotRun implements ShellRun {
             ? "The command was interrupted and killed."
             : "The command timed out after ${_word(timeout)} and was killed. "
                 "Anything it printed before that is above.",
-        violations: violations,
       );
     } on ShellUnavailable catch (e) {
       // Fail-closed has its own words: a confinement that did not happen is
@@ -1023,21 +1021,3 @@ class _OneShotRun implements ShellRun {
     notifier.value = _emitted;
   }
 }
-
-/// Whether a confined run's output says something was refused. Nothing names
-/// which path: the kernel does not tell the process tree, and the tools that
-/// hit it most (podman, toolbox — Go binaries) bypass anything libc-side. So
-/// one line in the result, and the re-prompt offers the run without the
-/// sandbox. The exit code is not asked: a pipe into `head` exits 0.
-/// shortcut: a file's own permissions read the same, so their denial is
-/// offered a rerun that fails alike; upgrade if that prompt becomes noise.
-List<String> sandboxDenials(String output, CommandSandbox? sandbox) =>
-    sandbox != null && _denied.hasMatch(output) ? const [sandboxDenial] : const [];
-
-final _denied = RegExp(
-    r"Permission denied|Operation not permitted|Read-only file system",
-    caseSensitive: false);
-
-/// The violation a confined run that printed a denial carries.
-const sandboxDenial = "denied (the sandbox may have refused a write; the "
-    "command's own output says what failed)";

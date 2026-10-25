@@ -664,14 +664,6 @@ class _ProjectPermissionsPage extends ConsumerWidget {
           inherited: app.sandbox ?? true,
           onChanged: notifier.setProjectSandbox,
         ),
-        InheritableSwitch(
-          title: "Offer to rerun sandbox-denied commands",
-          value: settings.sandboxReprompt,
-          inherited: app.sandboxReprompt ?? true,
-          // Nothing is denied where nothing is sandboxed.
-          enabled: sandboxed,
-          onChanged: notifier.setProjectSandboxReprompt,
-        ),
       ]),
     );
   }

@@ -503,9 +503,6 @@ class ChatRepository {
         ...projectSettings.writableDirs,
         ...defaultProjectSettings.writableDirs,
       ],
-      sandboxReprompt: projectSettings.sandboxReprompt ??
-          defaultProjectSettings.sandboxReprompt ??
-          true,
       sandboxed: projectSettings.sandbox ?? defaultProjectSettings.sandbox ?? true,
     );
   }

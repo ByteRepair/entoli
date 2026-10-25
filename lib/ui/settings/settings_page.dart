@@ -858,21 +858,6 @@ class _DefaultPermissionsSection extends ConsumerWidget {
               .read(projectSettingsProvider(null).notifier)
               .setProjectSandbox(value),
         ),
-        SwitchListTile(
-          title: const Text("Offer to rerun sandbox-denied commands"),
-          subtitle: Text((settings.sandboxReprompt ?? true)
-              ? "When the sandbox denies a write, one banner offers to rerun "
-                  "it unconfined, or to widen the grant to the denied "
-                  "directory. A project can override this."
-              : "Off: a denial is reported to the model and the turn moves "
-                  "on. A project can override this."),
-          value: settings.sandboxReprompt ?? true,
-          onChanged: sandboxed
-              ? (value) => ref
-                  .read(projectSettingsProvider(null).notifier)
-                  .setProjectSandboxReprompt(value)
-              : null,
-        ),
       ],
     );
   }

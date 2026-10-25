@@ -36,7 +36,8 @@ enum PermissionSource {
   /// The approve mode ran it itself — `never`, including a sub-agent's.
   mode,
 
-  /// A sandbox-denied command, rerun after the human answered.
+  /// A sandbox-denied command, rerun after the human answered. Only old
+  /// records carry it; kept so they still parse.
   rerun,
 
   /// The command parse vouched for it — every segment provably
@@ -580,9 +581,9 @@ abstract class ToolApproval with _$ToolApproval {
     /// "always" answer derives a command rule instead.
     @Default([]) List<String> deniedDirs,
 
-    /// Whether this is the sandbox's re-prompt: an offer to rerun a call
-    /// unconfined, whose "always" is [deniedDirs] and never a command rule.
-    @Default(false) bool rerun,
+    /// Whether the call asks to run outside the sandbox (`bash`'s
+    /// `unsandboxed`): its "always" is a no-sandbox rule for the command.
+    @Default(false) bool unsandboxed,
   }) = _ToolApproval;
 
   factory ToolApproval.fromJson(Map<String, dynamic> json) => _$ToolApprovalFromJson(json);

@@ -493,7 +493,6 @@ class StandingPermissions {
   const StandingPermissions({
     this.permissions = const [],
     this.writableDirs = const [],
-    this.sandboxReprompt = true,
     this.sandboxed = true,
   });
 
@@ -504,10 +503,6 @@ class StandingPermissions {
   /// Directories sandboxed commands may additionally write to, beside the
   /// workspace: the tiers' writableDirs.
   final List<String> writableDirs;
-
-  /// Whether a command the sandbox denied writes to is offered back as an
-  /// approval.
-  final bool sandboxReprompt;
 
   /// Whether commands run under Landlock.
   final bool sandboxed;

@@ -5,7 +5,7 @@ import "package:fs_shim/fs_io.dart" show fileSystemIo;
 import "package:path/path.dart" as p;
 
 import "package:agent_chat/data/builtin/builtin_agent.dart";
-import "package:agent_chat/data/builtin/local_shell.dart" show sandboxDenial;
+import "package:agent_chat/data/builtin/templates.dart" show AgentCapabilities;
 import "package:agent_chat/data/builtin/llm/llm_client.dart";
 import "package:agent_chat/domain/agent_backend.dart";
 import "package:agent_chat/domain/models.dart";
@@ -45,7 +45,6 @@ void main() {
     List<ApprovalResponse> approvals = const [],
     ApproveMode approveMode = ApproveMode.never,
     SandboxHelper? sandboxHelper,
-    bool sandboxReprompt = true,
     bool sandboxed = true,
     ShellResult Function(String)? respond,
     PermissionClassifier? classifier,
@@ -87,7 +86,6 @@ void main() {
       policy: () async => StandingPermissions(
         permissions: liveRules,
         writableDirs: writableDirs,
-        sandboxReprompt: sandboxReprompt,
         sandboxed: sandboxed,
       ),
       classifier: classifier,
@@ -391,24 +389,6 @@ void main() {
       ).run(userMessage("go")).toList();
       final result = results(events);
       expect(result.decidedBy, PermissionSource.classifier);
-      expect(result.decidedTier, isEmpty);
-    });
-
-    test("a rerun after the re-prompt records the rerun", () async {
-      final client = FakeLlmClient([
-        [bashCall("python3 build.py")], [finish],
-      ]);
-      final events = await agentOver(
-        client,
-        approveMode: ApproveMode.ask,
-        approvals: [ApprovalResponse.allow, ApprovalResponse.alwaysAllowChat],
-        respond: (_) => const ShellResult(
-            returnCode: 1,
-            output: "PermissionError: [Errno 13] Permission denied: '/etc/hosts'",
-            violations: ["writing /etc/hosts"]),
-      ).run(userMessage("go")).toList();
-      final result = results(events);
-      expect(result.decidedBy, PermissionSource.rerun);
       expect(result.decidedTier, isEmpty);
     });
   });
@@ -819,146 +799,111 @@ void main() {
     });
   });
 
-  group("the sandbox re-prompt", () {
-    test("a violating write command is offered back and rerun unconfined",
+  group("leaving the sandbox", () {
+    LlmCompletion unsandboxed(String command) =>
+        bashCall(command, extra: {"unsandboxed": true});
+
+    test("is asked about, and runs outside the sandbox once allowed",
         () async {
-      final client = FakeLlmClient([
-        [bashCall("python3 build.py")], [finish],
-      ]);
+      final client = FakeLlmClient([[unsandboxed("podman ps")], [finish]]);
       final events = await agentOver(
         client,
         approveMode: ApproveMode.ask,
-        approvals: [ApprovalResponse.allow, ApprovalResponse.allow],
-        respond: (command) => command == "python3 build.py"
-            ? const ShellResult(
-                returnCode: 1,
-                output: "PermissionError: [Errno 13] Permission denied: '/etc/hosts'",
-                violations: ["writing /etc/hosts"])
-            : ok("rerun ok"),
+        approvals: [ApprovalResponse.allow],
       ).run(userMessage("go")).toList();
-      expect(shell.ran, hasLength(2),
-          reason: "the rerun goes through the banner the user answered");
-      // One banner for the run, one for the re-prompt; the second is the
-      // one worded by the denial.
-      final approvals = events.whereType<ApprovalRequestEvent>().toList();
-      expect(approvals, hasLength(2));
-      // The command is what the re-prompt asks about: nothing names the
-      // path, and the answer is about running it without the sandbox.
-      expect(approvals.last.approval.argumentsText, "python3 build.py");
-      expect(approvals.last.approval.rerun, isTrue);
-      // Distinct ids: the plumbing keys approvals by id, and two banners
-      // over one call sharing an id made the second inherit the first's
-      // answer and vanish before it was answered.
-      expect(approvals.first.approval.id, isNot(approvals.last.approval.id));
+      final approval = events.whereType<ApprovalRequestEvent>().single.approval;
+      expect(approval.unsandboxed, isTrue);
+      expect(approval.argumentsText, "podman ps");
+      expect(shell.sandboxes, [isNull]);
     });
 
-    test("a denial is rerun unconfined, with no path to grant", () async {
-      final client = FakeLlmClient([
-        [bashCall("static-tool --out /etc/x")], [finish],
-      ]);
-      final events = await agentOver(
+    test("an allow rule does not cover it; a no-sandbox rule does", () async {
+      const allowPodman = PermissionRule(
+          tool: "bash", pattern: "podman *", decision: PermissionDecision.allow);
+      final client = FakeLlmClient([[unsandboxed("podman ps")], [finish]]);
+      var events = await agentOver(
         client,
         approveMode: ApproveMode.ask,
-        approvals: [ApprovalResponse.allow, ApprovalResponse.allow],
-        respond: (_) => const ShellResult(
-            returnCode: 1,
-            output: "static-tool: /etc/x: Permission denied",
-            violations: [sandboxDenial]),
+        approvals: [ApprovalResponse.allow],
+        permissions: [allowPodman],
       ).run(userMessage("go")).toList();
-      // A confined rerun would only be refused again.
-      expect(shell.ran, hasLength(2));
-      expect(shell.sandboxes, [isA<CommandSandbox>(), isNull]);
-      final reprompt = events.whereType<ApprovalRequestEvent>().last.approval;
-      expect(reprompt.rerun, isTrue);
-      expect(reprompt.deniedDirs, isEmpty);
-    });
+      expect(events.whereType<ApprovalRequestEvent>(), hasLength(1),
+          reason: "allowing a command is not allowing it out of the sandbox");
 
-    test("an approved command that is then denied is still offered back",
-        () async {
-      // The banner answered the command; the denial is news to the human,
-      // and the second banner is the one asking about it.
-      final client = FakeLlmClient([
-        [bashCall("python3 build.py")], [finish],
-      ]);
-      final events = await agentOver(
-        client,
+      final again = FakeLlmClient([[unsandboxed("podman ps 2>&1 | head")], [finish]]);
+      events = await agentOver(
+        again,
         approveMode: ApproveMode.ask,
-        approvals: [ApprovalResponse.allow, ApprovalResponse.allow],
-        respond: (_) => const ShellResult(
-            returnCode: 1, output: "", violations: ["writing /etc"]),
-      ).run(userMessage("go")).toList();
-      expect(events.whereType<ApprovalRequestEvent>(), hasLength(2));
-      expect(shell.sandboxes, [isA<CommandSandbox>(), isNull]);
-    });
-
-    test("the re-prompt is gated by the setting", () async {
-      final client = FakeLlmClient([
-        [bashCall("python3 build.py")], [finish],
-      ]);
-      await agentOver(
-        client,
-        approveMode: ApproveMode.never,
-        sandboxReprompt: false,
-        respond: (_) => const ShellResult(
-            returnCode: 1, output: "", violations: ["writing /etc/hosts"]),
-      ).run(userMessage("go")).toList();
-      expect(shell.ran, hasLength(1), reason: "no rerun without the gate");
-    });
-
-    test("the re-prompt is bounded to one per call", () async {
-      final client = FakeLlmClient([
-        [bashCall("python3 build.py")], [finish],
-      ]);
-      await agentOver(
-        client,
-        approveMode: ApproveMode.ask,
-        approvals: [ApprovalResponse.allow, ApprovalResponse.deny],
-        respond: (_) => const ShellResult(
-            returnCode: 1,
-            output: "PermissionError: [Errno 13] Permission denied: '/x'",
-            violations: ["writing /x"]),
-      ).run(userMessage("go")).toList();
-      // One rerun at most: the second banner's deny ends it, the denial
-      // cannot loop the banner again.
-      expect(shell.ran, hasLength(1));
-    });
-
-    test("the re-prompt's Always writes a no-sandbox rule for those words",
-        () async {
-      final client = FakeLlmClient([
-        [bashCall("python3 build.py")],
-        [bashCall("python3 build.py --fast")],
-        [bashCall("python3 check.py")], [finish],
-      ]);
-      await agentOver(
-        client,
-        approveMode: ApproveMode.ask,
-        approvals: [
-          ApprovalResponse.allow,
-          ApprovalResponse.alwaysAllowChat,
-          ApprovalResponse.allow,
-          ApprovalResponse.allow,
+        permissions: [
+          allowPodman,
+          const PermissionRule(
+              tool: "bash", pattern: "podman *", unconfined: true),
         ],
-        respond: (command) => command == "python3 build.py"
-            ? const ShellResult(
-                returnCode: 1,
-                output: "Permission denied",
-                violations: [sandboxDenial])
-            : ok("clean"),
       ).run(userMessage("go")).toList();
-      expect(shell.ran, [
-        "python3 build.py",
-        "python3 build.py",
-        "python3 build.py --fast",
-        "python3 check.py",
+      expect(events.whereType<ApprovalRequestEvent>(), isEmpty);
+      expect(shell.sandboxes, [isNull]);
+    });
+
+    test("auto mode asks the classifier first", () async {
+      var asked = 0;
+      final client = FakeLlmClient([[unsandboxed("podman ps")], [finish]]);
+      final events = await agentOver(
+        client,
+        approveMode: ApproveMode.auto,
+        classifier: _SpyClassifier(() => asked++),
+      ).run(userMessage("go")).toList();
+      expect(asked, 1);
+      expect(events.whereType<ApprovalRequestEvent>(), isEmpty,
+          reason: "the classifier allowed it");
+      expect(shell.sandboxes, [isNull]);
+    });
+
+    test("never mode refuses it without a rule", () async {
+      final client = FakeLlmClient([[unsandboxed("podman ps")], [finish]]);
+      final events = await agentOver(client, approveMode: ApproveMode.never)
+          .run(userMessage("go"))
+          .toList();
+      expect(shell.ran, isEmpty,
+          reason: "the sandbox is the one guard an unwatched turn has");
+      expect(results(events).exceptionInfo, contains("approval"));
+    });
+
+    test("Always writes a no-sandbox rule for the command's words", () async {
+      final client = FakeLlmClient([
+        [unsandboxed("podman ps")],
+        [unsandboxed("podman ps -a")], [finish],
       ]);
-      // Confined, the unconfined rerun, the same words now unconfined by
-      // the rule, and a different command confined as ever.
-      expect(shell.sandboxes, [isA<CommandSandbox>(), isNull, isNull,
-          isA<CommandSandbox>()]);
+      final events = await agentOver(
+        client,
+        approveMode: ApproveMode.ask,
+        approvals: [ApprovalResponse.alwaysAllowChat, ApprovalResponse.allow],
+      ).run(userMessage("go")).toList();
+      expect(liveRules.single.pattern, "podman ps *");
       expect(liveRules.single.unconfined, isTrue);
       expect(liveRules.single.decision, isNull,
-          reason: "the asking is left to what already decides it");
+          reason: "the asking stays with whatever already decides it");
+      // The second call's way out is covered; the command itself is still
+      // the mode's to ask about.
+      final approvals = events.whereType<ApprovalRequestEvent>().toList();
+      expect(approvals, hasLength(2));
+      expect(approvals.last.approval.unsandboxed, isFalse);
+      expect(shell.sandboxes, [isNull, isNull]);
+    });
+
+    test("is offered only where a sandbox is enforced, and never to a "
+        "sub-agent", () {
+      bool offers(List<LlmTool> tools) =>
+          ((tools.firstWhere((t) => t.name == "bash").schema["properties"]
+                  as Map)
+              .containsKey("unsandboxed"));
+      const caps = AgentCapabilities.full;
+      expect(offers(agentTools(caps: caps, offerMemory: false, sandboxed: true)),
+          isTrue);
+      expect(offers(agentTools(caps: caps, offerMemory: false)), isFalse);
+      expect(
+          offers(agentTools(
+              caps: caps, offerMemory: false, sandboxed: true, oneShot: true)),
+          isFalse);
     });
 
     test("the turn's writableDirs reach the sandbox, files included",

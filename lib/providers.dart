@@ -1415,11 +1415,6 @@ class ProjectSettingsNotifier extends Notifier<ProjectSettings> {
   Future<void> setWritableDirs(List<String> value) =>
       _update((s) => s.writableDirs = value);
 
-  /// Whether a sandbox-denied write is offered back as an approval. Null
-  /// inherits the app default.
-  Future<void> setProjectSandboxReprompt(bool? value) =>
-      _update((s) => s.sandboxReprompt = value);
-
   /// Whether this project's commands run under Landlock. Null inherits the
   /// app default.
   Future<void> setProjectSandbox(bool? value) =>

@@ -853,7 +853,7 @@ void main() {
       expect(rules.map((r) => r.pattern), contains("git status *"));
     });
 
-    test("a sandbox re-prompt's Always writes a no-sandbox rule for the "
+    test("Always on leaving the sandbox writes a no-sandbox rule for the "
         "command's words", () async {
       final repo = repoWith(AppSettings());
       final chat = await savedChat(repo);
@@ -865,7 +865,7 @@ void main() {
             id: "d-6",
             toolName: "bash",
             argumentsText: "podman version 2>&1 | head -5",
-            rerun: true),
+            unsandboxed: true),
       );
       final settings = ProjectSettings.load(config, project: chat.state.project);
       final rule = settings.permissions.single;

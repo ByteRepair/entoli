@@ -354,25 +354,28 @@ rules.
 Landlock itself is a setting, `sandbox` in `project.json`: the default
 project's is the app's answer, a project's own overrides it, and unset is on.
 Off, `sandboxFor` answers null for the whole turn and its sub-agents, which
-also stands down the parse gate and the re-prompt.
+also stands down the parse gate.
 
-**Nothing names what the sandbox denied.** The kernel does not tell the
-process tree, and the tools that hit it most — podman, toolbox — are Go
-binaries no libc-side interposer sees. So a confined run whose output says
-`Permission denied`, `Operation not permitted` or `Read-only file system`
-(any case) carries one violation (`sandboxDenials`), and — where
-`sandboxReprompt` is on and the mode is not `never` — one offer to run it
-again unconfined is made, whether or not a human approved the command first:
-the approval was for the command, the denial is news. The exit code is not
-asked, since a pipe into `head` exits 0. A file's own permissions read the
-same, so their denial is offered a rerun that fails alike; that is the
-price of the one regex. The re-prompt asks about the command
-(`ToolApproval.rerun`), and its "always" writes a no-sandbox rule for the
-command's leading words with no decision of its own — the asking stays with
-whatever already decides it. Rootless podman is the case that shaped this:
-it cannot run under Landlock at all, since joining its pause process means
-opening another process's namespace, which Landlock refuses, so a folder
-grant could never have been the answer.
+**Leaving the sandbox is something the model asks for.** Where the
+environment enforces one, `bash` carries an `unsandboxed` argument
+(`bashToolSandboxed`; never a sub-agent's, which has nobody to approve it),
+and its description says what a sandboxed write outside the grant looks like
+when it fails. Nothing scans the output: a confined command that cannot
+write fails like any command, and the model reads the error and calls again
+with `unsandboxed: true`. The gate treats that as part of the call — an
+allow rule and the read-only check do not cover it, a no-sandbox rule for
+every segment does, and the rest goes to the mode: the classifier in auto
+mode (its rubric judges an unsandboxed call as writing past the workspace),
+the banner in ask mode ("Run without the sandbox?", `ToolApproval.unsandboxed`),
+and a refusal in never mode, where the sandbox is the one guard an unwatched
+turn has. Its "always" writes a no-sandbox rule for the command's leading
+words with no decision of its own, so the asking stays with whatever already
+decides it. This replaced a deny-report shim and then a regex over the
+output, both of which guessed after the fact; rootless podman is the case
+that settled it, since it cannot run under Landlock at all (joining its pause
+process means opening another process's namespace, which Landlock refuses),
+so no folder grant could have been the answer. A result from before carries
+`violations` and a `rerun` decision, still worded for old logs.
 
 The two "always" banner answers on an ordinary banner write the derived rule:
 `ruleFromApproval` reads the command's leading words, the file's directory or

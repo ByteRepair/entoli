@@ -687,7 +687,6 @@ class BuiltinBackend implements AgentBackend {
       output: result.output,
       exceptionInfo: result.exceptionInfo,
       cwd: result.cwd,
-      violations: result.violations,
     );
     controller.add(ShellRunEvent(part));
     if (!_stopping.contains(controller)) controller.add(const DoneEvent());

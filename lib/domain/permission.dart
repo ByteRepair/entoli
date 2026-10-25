@@ -463,7 +463,7 @@ PermissionRule? ruleFromApproval(ToolApproval? approval) {
     case "bash":
       final command = approval.argumentsText ?? "";
       if (command.trim().isEmpty) return null;
-      if (approval.rerun) {
+      if (approval.unsandboxed) {
         return PermissionRule(
           tool: "bash",
           pattern: _commandPrefix(command.trim()),

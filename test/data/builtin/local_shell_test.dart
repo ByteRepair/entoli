@@ -617,7 +617,7 @@ void main() {
           cacheDir: Directory.systemTemp.createTempSync("agent_chat_ll_").path);
     });
 
-    test("runs confined and collects what was denied", () async {
+    test("runs confined, and a write outside the grant fails", () async {
       final sandbox = CommandSandbox(workspace: workspace.path);
       final driver = LocalShell.hostDriver(sandboxHelper: helper);
       final shell = LocalShell(driver: ({String? project}) => driver);
@@ -630,12 +630,7 @@ void main() {
           .result;
       if (Platform.isLinux && await helper.prefixFor(sandbox) != null) {
         expect(result.returnCode, isNot(0),
-            reason: "out=${result.output} info=${result.exceptionInfo} "
-                "viol=${result.violations}");
-        expect(result.violations, isNotEmpty,
-            reason: "rc=${result.returnCode} out=${result.output} "
-                "info=${result.exceptionInfo}");
-        expect(result.violations, [sandboxDenial]);
+            reason: "out=${result.output} info=${result.exceptionInfo}");
         expect(File(outside).readAsStringSync(), "keep\n");
       } else {
         // Fail closed: no sandbox, no run.
@@ -644,7 +639,7 @@ void main() {
       }
     });
 
-    test("a read runs confined without a violation", () async {
+    test("a read runs confined", () async {
       final sandbox = CommandSandbox(workspace: workspace.path);
       final driver = LocalShell.hostDriver(sandboxHelper: helper);
       final shell = LocalShell(driver: ({String? project}) => driver);
@@ -656,7 +651,6 @@ void main() {
               timeout: const Duration(seconds: 10), sandbox: sandbox)
           .result;
       expect(result.output, "confined\n");
-      expect(result.violations, isEmpty);
     });
 
     test("does not touch the session shell's state", () async {
@@ -697,26 +691,11 @@ void main() {
               timeout: const Duration(seconds: 10), sandbox: sandbox)
           .result;
       expect(result.returnCode, 0,
-          reason: "out=${result.output} info=${result.exceptionInfo} "
-              "viol=${result.violations}");
+          reason: "out=${result.output} info=${result.exceptionInfo}");
       expect(result.output, contains('TMPDIR=${sandbox.tmp}'),
           reason: "the command learns the scratch the sandbox granted it");
       expect(Directory(sandbox.tmp!).existsSync(), isTrue,
           reason: "the tmp is made for the confined run");
     });
-  });
-
-  test("a confined run that printed a denial carries one violation", () {
-    const ws = CommandSandbox(workspace: "/home/u/ws");
-    // Go's wording is lowercase, and a Go binary is what hits it most.
-    expect(sandboxDenials(
-            "Error: open /run/user/1000/libpod/tmp/alive.lck: permission denied",
-            ws),
-        [sandboxDenial]);
-    expect(sandboxDenials("touch: cannot touch 'x': Read-only file system", ws),
-        [sandboxDenial]);
-    expect(sandboxDenials("all went fine", ws), isEmpty);
-    expect(sandboxDenials("Permission denied", null), isEmpty,
-        reason: "an unconfined run's denial is not the sandbox's");
   });
 }

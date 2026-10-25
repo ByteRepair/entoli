@@ -108,22 +108,53 @@ const _bashCommonArgs = {
   },
 };
 
+const _bashDescription =
+    "Execute a bash command in the chat's persistent shell, which starts in "
+    "the workspace directory and keeps its state between commands: a `cd` or "
+    "an export made by one command is still there for the next.";
+
+const _bashRestartArg = {
+  "restart": {
+    "type": "boolean",
+    "description":
+        "Restart the shell before running, discarding any directory a "
+        "`cd` moved it to and anything an export gave it. Use it when a "
+        "command's failure looks like the shell's state is the problem.",
+  },
+};
+
 const bashTool = LlmTool(
   name: bashToolName,
-  description:
-      "Execute a bash command in the chat's persistent shell, which starts in "
-      "the workspace directory and keeps its state between commands: a `cd` or "
-      "an export made by one command is still there for the next.",
+  description: _bashDescription,
+  schema: {
+    "type": "object",
+    "properties": {..._bashCommonArgs, ..._bashRestartArg},
+    "required": ["command"],
+  },
+);
+
+/// [bashTool] where the terminal environment enforces a sandbox: the one
+/// place leaving it means anything, so the one place it is offered.
+const bashToolSandboxed = LlmTool(
+  name: bashToolName,
+  description: _bashDescription,
   schema: {
     "type": "object",
     "properties": {
       ..._bashCommonArgs,
-      "restart": {
+      ..._bashRestartArg,
+      "unsandboxed": {
         "type": "boolean",
         "description":
-            "Restart the shell before running, discarding any directory a "
-            "`cd` moved it to and anything an export gave it. Use it when a "
-            "command's failure looks like the shell's state is the problem.",
+            "Run this command outside the sandbox. Commands normally run "
+            "sandboxed: they can write only to the workspaces and the folders "
+            "the user granted, and a write anywhere else fails with "
+            "\"Permission denied\" or \"Operation not permitted\". When a "
+            "command needs to write elsewhere (container tools like podman or "
+            "toolbox, installers, caches under ~), call it again with this "
+            "set. The user is asked to approve it unless a rule already "
+            "allows it. Never set it to get around a failure the sandbox did "
+            "not cause.",
       },
     },
     "required": ["command"],
@@ -342,6 +373,7 @@ List<LlmTool> agentTools({
   bool browserShow = false,
   BrowserUploadPolicy? browserUpload,
   bool oneShot = false,
+  bool sandboxed = false,
   List<PromptDocument>? participants,
   bool member = false,
   bool customizing = false,
@@ -351,7 +383,13 @@ List<LlmTool> agentTools({
       file_tool_defs.readTool,
       file_tool_defs.writeTool,
       file_tool_defs.editTool,
-      if (caps.commands) (oneShot ? bashToolOneShot : bashTool),
+      // A sub-agent is not offered a way out: it has nobody to approve one.
+      if (caps.commands)
+        oneShot
+            ? bashToolOneShot
+            : sandboxed
+                ? bashToolSandboxed
+                : bashTool,
       if (caps.ask) askTool,
       if (caps.task) taskTool,
       if (caps.webSearch) ...[websearchTool, webfetchTool],
@@ -507,7 +545,6 @@ class BuiltinAgent {
         for (final dir in read.writableDirs) _tilde(dir),
         ..._runtimeDirs,
       ],
-      sandboxReprompt: read.sandboxReprompt,
       sandboxed: read.sandboxed,
     );
   }
@@ -868,6 +905,7 @@ class BuiltinAgent {
         browserShow: browserHidden,
         browserUpload: browserUploads,
         oneShot: oneShot,
+        sandboxed: (sandboxHelper ?? shell.driverSandboxHelper) != null,
         participants: roomParticipants,
         member: viewer != null,
         customizing: _customizing,
@@ -1220,17 +1258,21 @@ class BuiltinAgent {
       return;
     }
     // One parse carried the whole way: the rule gate reads its segments, the
-    // deterministic tier its answer, and the run's confinement the grant the
-    // tier vouched with.
+    // deterministic tier its answer, and the run's confinement its words.
     final analysis = ShellCommandAnalysis.parse(command,
         isWindows: platformIsWindows);
     yield _called(call, command);
+    // Leaving the sandbox is part of what is asked: where one would confine
+    // the run and no no-sandbox rule covers it, the call goes to the mode.
+    final leave = decodeArgs(call.argumentsJson)?["unsandboxed"] == true;
+    final policy = await _policy();
+    final escaping = leave &&
+        sandboxFor(policy) != null &&
+        !rulesSandbox(policy.permissions, analysis.modelableSegments ?? const [])
+            .unconfined;
     yield* _runGated(call, bashToolName,
-        () => _execute(call, command, analysis: analysis),
-        argumentsText: command, analysis: analysis);
-    // A denied write is offered back once between the result and its report,
-    // the rerun's outcome replacing the denial.
-    yield* sandboxRepromptIfNeeded(call, command, _commandResult!);
+        () => _execute(call, command, analysis: analysis, unconfined: leave),
+        argumentsText: command, analysis: analysis, unsandboxed: escaping);
     yield ToolResultEvent(_ran(call, _commandResult!));
   }
 
@@ -1319,7 +1361,6 @@ class BuiltinAgent {
       output: result.output,
       exceptionInfo: result.exceptionInfo,
       cwd: result.cwd,
-      violations: result.violations,
       decidedBy: decision?.source,
       decidedTier: decision?.tiers ?? const [],
       decided: decision?.decided,
@@ -2784,6 +2825,7 @@ class BuiltinAgent {
     String? argumentsText,
     ShellCommandAnalysis? analysis,
     ApproveMode? mode,
+    bool unsandboxed = false,
   }) async* {
     final rules = (await _policy()).permissions;
     final verdict = rulesDecideTraced(
@@ -2807,6 +2849,8 @@ class BuiltinAgent {
         _commandResult = const ShellResult.failed(_deniedByRule);
         return;
       case PermissionDecision.allow:
+        // Allowing a command is not allowing it out of the sandbox.
+        if (unsandboxed) break;
         // An allow rule is a standing decision, but only for commands the
         // parse can vouch for: a compound command whose later segments the
         // rule does not cover runs with them unanswered. Findings here are a
@@ -2837,7 +2881,10 @@ class BuiltinAgent {
     // covered, or none is. An "always show me" ask rule on any segment
     // outranks the tier that would cover it, the banner being what the user
     // asked for there.
-    if (toolName == "bash" && verdict == null && analysis != null) {
+    if (toolName == "bash" &&
+        verdict == null &&
+        analysis != null &&
+        !unsandboxed) {
       final tiered = _deterministicBashVerdict(analysis, rules);
       if (tiered != null) {
         _decision = tiered;
@@ -2849,9 +2896,15 @@ class BuiltinAgent {
     }
     switch (mode ?? approveMode) {
       case ApproveMode.ask:
-        yield* _askAndExecute(call, toolName, run, argumentsText);
+        yield* _askAndExecute(call, toolName, run, argumentsText,
+            unsandboxed: unsandboxed);
       case ApproveMode.auto:
-        yield* _autoClassifyAndExecute(call, toolName, run, argumentsText);
+        yield* _autoClassifyAndExecute(call, toolName, run, argumentsText,
+            unsandboxed: unsandboxed);
+      case ApproveMode.never when unsandboxed:
+        // Nobody to ask, and the sandbox is the one guard an unwatched turn
+        // has: only a rule takes it away.
+        _commandResult = const ShellResult.failed(_unsandboxedRefused);
       case ApproveMode.never:
         _decision = (
           source: PermissionSource.mode,
@@ -2913,13 +2966,15 @@ class BuiltinAgent {
     LlmToolCall call,
     String toolName,
     Future<ShellResult> Function() run,
-    String? argumentsText,
-  ) async* {
+    String? argumentsText, {
+    bool unsandboxed = false,
+  }) async* {
     final approval = ToolApproval(
       id: call.id,
       toolName: toolName,
       argumentsJson: call.argumentsJson,
       argumentsText: argumentsText,
+      unsandboxed: unsandboxed,
     );
     yield ApprovalRequestEvent(approval);
     // An "always" answer's rule is written by the repository before the
@@ -2946,6 +3001,10 @@ class BuiltinAgent {
   static const _deniedByUser = "The user denied this command. Ask them what "
       "to do instead, or try something else.";
 
+  static const _unsandboxedRefused = "Running this outside the sandbox needs "
+      "the user's approval, and nobody is here to give it. Do it inside the "
+      "workspaces, or tell the user what needs to run unsandboxed.";
+
   static const _deniedByRule = "Denied by a permission rule you set. Do not "
       "retry this command; tell the user what you were trying to do and let "
       "them decide.";
@@ -2956,10 +3015,12 @@ class BuiltinAgent {
     LlmToolCall call,
     String toolName,
     Future<ShellResult> Function() run,
-    String? argumentsText,
-  ) async* {
+    String? argumentsText, {
+    bool unsandboxed = false,
+  }) async* {
     if (_autoPaused) {
-      yield* _askAndExecute(call, toolName, run, argumentsText);
+      yield* _askAndExecute(call, toolName, run, argumentsText,
+          unsandboxed: unsandboxed);
       return;
     }
 
@@ -3002,7 +3063,8 @@ class BuiltinAgent {
           yield InfoEvent("Auto mode paused: too many uncertain commands. "
               "Asking for every command for the rest of this turn.");
         }
-        yield* _askAndExecute(call, toolName, run, argumentsText);
+        yield* _askAndExecute(call, toolName, run, argumentsText,
+            unsandboxed: unsandboxed);
     }
   }
 
@@ -3158,56 +3220,6 @@ class BuiltinAgent {
       tiers: ruled ? tiers.toList() : const <PermissionTier>[],
       decided: PermissionDecision.allow,
     );
-  }
-
-  /// After a command the confinement denied: one offer to rerun it
-  /// unconfined, rather than leaving the denial for the model to discover.
-  /// Every violation is a write the sandbox refused — the ruleset reads
-  /// everywhere — so unconfined is the one rerun that can go differently.
-  /// Off under the standing re-prompt switch and in `never` mode, where nobody is
-  /// there to ask. The rerun is not offered again: it runs unconfined.
-  ///
-  /// Streaming, because the banner is where the answer comes from; the caller
-  /// yields this between the first result and its report, and reads
-  /// [_commandResult] after — set by the rerun, still the denial where none
-  /// was asked for.
-  Stream<AgentEvent> sandboxRepromptIfNeeded(
-    LlmToolCall call,
-    String command,
-    ShellResult result,
-  ) async* {
-    if (result.violations.isEmpty ||
-        approveMode == ApproveMode.never ||
-        !(await _policy()).sandboxReprompt) {
-      return;
-    }
-    // The command itself is what is agreed to, so an "always" answer writes
-    // a no-sandbox rule for its leading words (see `ruleFromApproval`).
-    //
-    // Its id is the call's own plus a suffix, deliberately not the call id:
-    // the ask banner and this banner are two questions about one call, and
-    // the approval plumbing keys by id — one completer, one view-state entry,
-    // one removal. Sharing the id made the second banner inherit the first's
-    // answer and vanish the moment the first was answered, which read as the
-    // whole chain executing on a prompt that was never given.
-    final approval = ToolApproval(
-      id: "${call.id}-reprompt",
-      toolName: "bash",
-      argumentsJson: call.argumentsJson,
-      argumentsText: command,
-      rerun: true,
-    );
-    yield ApprovalRequestEvent(approval);
-    final answer = await approve(approval);
-    final allowed = answer.isAllow;
-    _decision = (
-      source: allowed ? PermissionSource.rerun : PermissionSource.human,
-      tiers: allowed ? const [] : [PermissionTier.once],
-      decided: allowed ? PermissionDecision.allow : PermissionDecision.deny,
-    );
-    _commandResult = allowed
-        ? await _execute(call, command, unconfined: true)
-        : const ShellResult.failed(_deniedByUser);
   }
 
   /// Reports [run]'s output as it prints, each change no more than

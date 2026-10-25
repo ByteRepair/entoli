@@ -26,13 +26,11 @@ class ShellResult {
     required this.output,
     this.exceptionInfo,
     this.cwd,
-    this.violations = const [],
   });
 
   const ShellResult.failed(this.exceptionInfo, {this.output = ""})
       : returnCode = -1,
-        cwd = null,
-        violations = const [];
+        cwd = null;
 
   final int returnCode;
   final String output;
@@ -43,11 +41,6 @@ class ShellResult {
   /// no such state to report: a one-shot subshell is gone with the command,
   /// and a command that was killed or never ran left no directory to read.
   final String? cwd;
-
-  /// What the sandbox denied while the command ran, appended to the tool
-  /// result the model reads, so it rewrites instead of retrying blind. Empty
-  /// where nothing was denied or where the command ran with no sandbox.
-  final List<String> violations;
 }
 
 /// What this build ships beside the machine's own commands: the environment a
@@ -103,7 +96,8 @@ class CommandSandbox {
   /// Granted the full write set the workspace gets.
   final List<String> extraWrites;
 
-  /// The sentence the tool result carries when this sandbox denied something.
+  /// The sentence a result from before the sandbox stopped naming its
+  /// denials carries — old logs still hold them.
   static String violationsNote(List<String> violations) =>
       "\n\nDenied by the sandbox: ${violations.join("; ")}. The command "
       "carried on; what it printed above is what it could reach.";

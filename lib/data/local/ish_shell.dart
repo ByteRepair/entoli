@@ -353,7 +353,6 @@ class _IshSession {
               returnCode: result.returnCode,
               output: result.output,
               cwd: result.cwd,
-              violations: result.violations,
               exceptionInfo: run.state.byTimeout
                   ? "The command timed out after ${timeout.inSeconds}s and "
                       "was interrupted. Anything it printed before that is "
