@@ -272,13 +272,18 @@ RegExp _compileGlob(String glob) {
   }
   final head = spaced.group(1)!;
   return RegExp(
-      "^${_plainGlobBody(head)}(?:\\s[^;|&]*)?\$",
+      "^${_plainGlobBody(head)}(?:\\s$_star)?\$",
       caseSensitive: false);
 }
 
 String _plainGlobBody(String glob) =>
     RegExp.escape(glob).replaceAllMapped(RegExp(r"\\\*\\\*|\\\*"),
-        (m) => m[0]!.length == 4 ? ".*" : "[^;|&]*");
+        (m) => m[0]!.length == 4 ? ".*" : _star);
+
+/// What `*` spans: anything but a shell operator. A redirect's `&` — `2>&1`,
+/// `<&3`, `&>log` — is not one, and a command that names one is the same
+/// command; only `&&` and a backgrounding `&` stop it.
+const _star = r"(?:[^;|&]|[<>]&|&>)*";
 
 RegExp _plainGlob(String glob) => RegExp(
     "^${_plainGlobBody(glob)}\$",
