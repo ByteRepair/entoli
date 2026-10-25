@@ -185,12 +185,12 @@ class PlatformLinkOpener implements LinkOpener {
 /// composites, which lags scrolling by a frame and makes flings stutter;
 /// hybrid composition puts the native view on screen to scroll by itself.
 Widget _webView(WebViewController controller) {
-  final params = PlatformWebViewWidgetCreationParams(controller: controller.platform);
+  final platform = controller.platform;
   return WebViewWidget.fromPlatformCreationParams(
-    params: controller.platform is AndroidWebViewController
-        ? AndroidWebViewWidgetCreationParams.fromPlatformWebViewWidgetCreationParams(
-            params, displayWithHybridComposition: true)
-        : params,
+    params: platform is AndroidWebViewController
+        ? AndroidWebViewWidgetCreationParams(
+            controller: platform, displayWithHybridComposition: true)
+        : PlatformWebViewWidgetCreationParams(controller: platform),
   );
 }
 
