@@ -551,6 +551,17 @@ void main() {
       expect(rulesSandbox([makeWrites], ["npm install"]).writes, isEmpty);
     });
 
+    test("a rule that changes nothing says so", () {
+      expect(const PermissionRule(tool: "bash", pattern: "x").saysNothing,
+          isTrue);
+      // A sandbox on a tool that never runs in one is nothing either.
+      expect(
+          const PermissionRule(tool: "read", pattern: "/x", unconfined: true)
+              .saysNothing,
+          isTrue);
+      expect(unconfinedPodman.saysNothing, isFalse);
+    });
+
     test("a deny rule's sandbox is not applied", () {
       const denied = PermissionRule(
         tool: "bash",

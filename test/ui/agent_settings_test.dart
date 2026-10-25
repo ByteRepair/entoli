@@ -308,9 +308,9 @@ void main() {
       await scrollTo(tester, find.text("Permissions"));
 
       expect(find.text("Shell commands (bash): git *"), findsOneWidget);
-      expect(find.text("Blocked"), findsOneWidget);
+      expect(find.text("Block it"), findsOneWidget);
       expect(find.text("Reading files (read): /home/x/doc"), findsOneWidget);
-      expect(find.text("Runs without asking"), findsOneWidget);
+      expect(find.text("Run without asking"), findsOneWidget);
     });
 
     testWidgets("the sandbox re-prompt switch reads and writes the tier",

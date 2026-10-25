@@ -3,6 +3,7 @@ import "package:flutter/material.dart";
 import "../../domain/permission.dart";
 import "../widgets/add_button_row.dart";
 import "../widgets/editable_row.dart";
+import "../widgets/resettable_field.dart" show defaultOptionLabel;
 import "../widgets/section_header.dart";
 
 /// The permission rules one tier holds: a row per rule, tool and pattern on
@@ -57,14 +58,17 @@ class _PermissionsSectionState extends State<PermissionsSection> {
         SectionHeader("Permissions", description: widget.description),
         for (final (index, rule) in rules.indexed)
           EditableRow(
-            title: "${_tools[rule.tool] ?? rule.tool}: ${rule.pattern}",
+            title: "${_tools[rule.tool]?.name ?? rule.tool}: ${rule.pattern}",
             subtitle: [
-              if (rule.decision != null) _decisions[rule.decision]!.short,
-              if (_shapesSandbox(rule.tool) &&
-                  _scopeOf(rule) != _Scope.workspaces)
-                _scopes[_scopeOf(rule)]!.short +
-                    (rule.unconfined ? "" : ": ${rule.writes.join(", ")}"),
-            ].join(" · "),
+              if (rule.decision case final decision?)
+                _decisions[decision]!.label,
+              if (rule.setsSandbox)
+                switch (_scopeOf(rule)) {
+                  _Scope.workspaces => null,
+                  _Scope.folders => "Also writes to: ${rule.writes.join(", ")}",
+                  _Scope.anywhere => "No sandbox",
+                },
+            ].nonNulls.join(" · "),
             removeLabel: "Remove rule",
             onTap: () => _edit(rule: rule, index: index),
             onRemove: () => _remove(index),
@@ -81,36 +85,37 @@ class _PermissionsSectionState extends State<PermissionsSection> {
   }
 }
 
-/// What the rule's tool is called, with the tool's own name beside it.
-const _tools = {
-  "bash": "Shell commands (bash)",
-  "read": "Reading files (read)",
-  "write": "Writing files (write)",
-  "edit": "Editing files (edit)",
-  "webfetch": "Web fetches (webfetch)",
-  "*": "Every tool (*)",
+/// Per tool: what it is called, with its own name beside it, and what the
+/// pattern field matches for it — a command, a path or a host.
+typedef _Tool = ({String name, String field, String hint});
+
+const Map<String, _Tool> _tools = {
+  "bash": (
+    name: "Shell commands (bash)",
+    field: "Command",
+    hint: "podman *   (* matches any arguments)",
+  ),
+  "read": (name: "Reading files (read)", field: "File or folder", hint: "~/Projects/x"),
+  "write": (name: "Writing files (write)", field: "File or folder", hint: "~/Projects/x"),
+  "edit": (name: "Editing files (edit)", field: "File or folder", hint: "~/Projects/x"),
+  "webfetch": (
+    name: "Web fetches (webfetch)",
+    field: "Domain",
+    hint: "example.com   (subdomains included)",
+  ),
+  "*": (
+    name: "Every tool (*)",
+    field: "Pattern",
+    hint: "a command, a path or a domain",
+  ),
 };
 
-/// The pattern field's label and example, per tool: the same field matches
-/// a command, a path or a host.
-const _patterns = {
-  "bash": ("Command", "podman *   (* matches any arguments)"),
-  "read": ("File or folder", "~/Projects/x"),
-  "write": ("File or folder", "~/Projects/x"),
-  "edit": ("File or folder", "~/Projects/x"),
-  "webfetch": ("Domain", "example.com   (subdomains included)"),
-  "*": ("Pattern", "a command, a path or a domain"),
-};
-
-bool _shapesSandbox(String tool) => tool == "bash" || tool == "*";
-
-typedef _Option = ({String label, String short, String help});
+typedef _Option = ({String label, String help});
 
 /// Null is the rule saying nothing, so the approval mode decides.
 const Map<PermissionDecision?, _Option> _decisions = {
   null: (
-    label: "Default (the approval mode decides)",
-    short: "Default approval",
+    label: "$defaultOptionLabel (the approval mode decides)",
     help: "This rule doesn't change it: the approval mode in Settings "
         "decides, as for any other command (ask every time, let the "
         "classifier decide, or run everything). Pick this when the rule is "
@@ -118,19 +123,16 @@ const Map<PermissionDecision?, _Option> _decisions = {
   ),
   PermissionDecision.allow: (
     label: "Run without asking",
-    short: "Runs without asking",
     help: "Runs straight away, without the approval banner or the "
         "classifier.",
   ),
   PermissionDecision.ask: (
     label: "Ask me first",
-    short: "Asks first",
     help: "Always shows the approval banner, even where the classifier or "
         "another rule would have let it through.",
   ),
   PermissionDecision.deny: (
     label: "Block it",
-    short: "Blocked",
     help: "Never runs. The agent is told the call was blocked by a rule.",
   ),
 };
@@ -147,8 +149,7 @@ _Scope _scopeOf(PermissionRule rule) => rule.unconfined
 
 const Map<_Scope, _Option> _scopes = {
   _Scope.workspaces: (
-    label: "Default (workspaces only)",
-    short: "Workspaces only",
+    label: "$defaultOptionLabel (workspaces only)",
     help: "This rule doesn't change it: the command can write inside the "
         "chat and project workspaces and the project's writable "
         "directories. Everywhere else is read-only. Reading is never "
@@ -156,13 +157,11 @@ const Map<_Scope, _Option> _scopes = {
   ),
   _Scope.folders: (
     label: "Workspaces and these folders",
-    short: "Also writes to",
     help: "The default, plus the folders below, for the commands this rule "
         "matches only.",
   ),
   _Scope.anywhere: (
     label: "Anywhere (no sandbox)",
-    short: "No sandbox",
     help: "Runs with your full user permissions, as in your own terminal. "
         "For tools like podman or toolbox that write to system or runtime "
         "folders.",
@@ -200,31 +199,31 @@ class _RuleDialogState extends State<_RuleDialog> {
     super.dispose();
   }
 
-  _Scope get _effectiveScope =>
-      _shapesSandbox(_tool) ? _scope : _Scope.workspaces;
+  /// Whether the write question applies: a command, and not a blocked one.
+  /// [_scope] is kept while it does not, so switching back restores it.
+  bool get _asksScope =>
+      PermissionRule.takesSandbox(_tool) && _decision != PermissionDecision.deny;
 
   List<String> get _folderList => [
         for (final dir in _folders.text.split(","))
           if (dir.trim().isNotEmpty) dir.trim(),
       ];
 
-  /// Why Save is off, or null where the rule can be saved.
-  String? get _problem {
-    if (_pattern.text.trim().isEmpty) return null;
-    final scope = _effectiveScope;
-    if (scope == _Scope.folders && _folderList.isEmpty) {
-      return "Add at least one folder, or pick another option.";
-    }
-    if (_decision == null && scope == _Scope.workspaces) {
+  bool get _foldersMissing =>
+      _asksScope && _scope == _Scope.folders && _folderList.isEmpty;
+
+  /// Why Save is off, or null where it is on. Empty where a field already
+  /// says so, or where there is nothing to say yet.
+  String? _problem(PermissionRule rule) {
+    if (rule.pattern.isEmpty || _foldersMissing) return "";
+    if (rule.saysNothing) {
       return "With both on Default, this rule would change nothing.";
     }
     return null;
   }
 
-  bool get _canSave => _pattern.text.trim().isNotEmpty && _problem == null;
-
   PermissionRule _rule() {
-    final scope = _effectiveScope;
+    final scope = _asksScope ? _scope : _Scope.workspaces;
     return PermissionRule(
       tool: _tool,
       pattern: _pattern.text.trim(),
@@ -235,13 +234,14 @@ class _RuleDialogState extends State<_RuleDialog> {
   }
 
   void _save() {
-    if (_canSave) Navigator.pop(context, _rule());
+    final rule = _rule();
+    if (_problem(rule) == null) Navigator.pop(context, rule);
   }
 
   @override
   Widget build(BuildContext context) {
-    final (patternLabel, patternHint) = _patterns[_tool]!;
-    final problem = _problem;
+    final tool = _tools[_tool]!;
+    final problem = _problem(_rule());
     return AlertDialog(
       title: Text(widget.rule == null ? "Add rule" : "Edit rule"),
       content: SizedBox(
@@ -258,7 +258,7 @@ class _RuleDialogState extends State<_RuleDialog> {
                 decoration: const InputDecoration(labelText: "Tool"),
                 items: [
                   for (final MapEntry(:key, :value) in _tools.entries)
-                    DropdownMenuItem(value: key, child: Text(value)),
+                    DropdownMenuItem(value: key, child: Text(value.name)),
                 ],
                 onChanged: (value) => setState(() => _tool = value ?? "bash"),
               ),
@@ -267,8 +267,8 @@ class _RuleDialogState extends State<_RuleDialog> {
                 controller: _pattern,
                 autofocus: widget.rule == null,
                 decoration: InputDecoration(
-                  labelText: patternLabel,
-                  hintText: patternHint,
+                  labelText: tool.field,
+                  hintText: tool.hint,
                 ),
                 onChanged: (_) => setState(() {}),
                 onSubmitted: (_) => _save(),
@@ -279,7 +279,7 @@ class _RuleDialogState extends State<_RuleDialog> {
                 options: _decisions,
                 onChanged: (value) => setState(() => _decision = value),
               ),
-              if (_shapesSandbox(_tool)) ...[
+              if (_asksScope) ...[
                 const _Question("What it can write to"),
                 _OptionField<_Scope>(
                   value: _scope,
@@ -291,17 +291,20 @@ class _RuleDialogState extends State<_RuleDialog> {
                   const SizedBox(height: 12),
                   TextField(
                     controller: _folders,
-                    decoration: const InputDecoration(
+                    decoration: InputDecoration(
                       labelText: "Folders",
                       hintText: "/run/user/1000/libpod, ~/.cache/x",
                       helperText: "Separate folders with commas.",
+                      errorText: _foldersMissing
+                          ? "Add at least one folder, or pick another option."
+                          : null,
                     ),
                     onChanged: (_) => setState(() {}),
                     onSubmitted: (_) => _save(),
                   ),
                 ],
               ],
-              if (problem != null) ...[
+              if (problem != null && problem.isNotEmpty) ...[
                 const SizedBox(height: 16),
                 Text(
                   problem,
@@ -317,7 +320,8 @@ class _RuleDialogState extends State<_RuleDialog> {
             onPressed: () => Navigator.pop(context),
             child: const Text("Cancel")),
         FilledButton(
-            onPressed: _canSave ? _save : null, child: const Text("Save")),
+            onPressed: problem == null ? _save : null,
+            child: const Text("Save")),
       ],
     );
   }

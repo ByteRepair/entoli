@@ -115,6 +115,20 @@ class PermissionRule {
   final bool unconfined;
   final List<String> writes;
 
+  /// Whether a rule for [tool] can shape the sandbox: only a command runs in
+  /// one.
+  static bool takesSandbox(String tool) => tool == "bash" || tool == "*";
+
+  /// Whether [unconfined] and [writes] mean anything here: a blocked command
+  /// never runs.
+  bool get setsSandbox =>
+      takesSandbox(tool) && decision != PermissionDecision.deny;
+
+  /// Whether this rule changes nothing — no decision, and no sandbox that
+  /// applies.
+  bool get saysNothing =>
+      decision == null && !(setsSandbox && (unconfined || writes.isNotEmpty));
+
   /// Which tier carried this rule, stamped by the repository when it
   /// composes a turn's settings and by the agent for a runtime grant. Not
   /// persisted — the tier is a fact of the file a rule was read from, not
@@ -193,8 +207,7 @@ class PermissionRule {
   for (final segment in segments) {
     var segmentUnconfined = false;
     for (final rule in rules) {
-      if (rule.tool != "*" && rule.tool != "bash") continue;
-      if (rule.decision == PermissionDecision.deny) continue;
+      if (!rule.setsSandbox) continue;
       if (!_ruleMatches(rule, "bash", segment)) continue;
       if (rule.unconfined) segmentUnconfined = true;
       writes.addAll(rule.writes);
