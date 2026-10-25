@@ -1,6 +1,7 @@
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
+import "../../domain/confinement.dart";
 import "../../domain/rootfs.dart";
 import "../../providers.dart";
 import "rootfs_downloads.dart";
@@ -38,6 +39,7 @@ class TerminalSection extends ConsumerWidget {
       );
     }
     final installed = ref.watch(installedRootfsProvider);
+    final host = ref.watch(hostConfinementProvider);
     final selected = ref.watch(appSettingsProvider.select((s) => s.rootfsId));
     // Android is the only platform whose ABI with no proot beside it is this
     // device's build shipping without it — a fault of the APK. iOS carries no
@@ -76,17 +78,53 @@ class TerminalSection extends ConsumerWidget {
           // rather than a hint: the host is where commands ran before any of
           // this and where they go back to. An installed rootfs is offered
           // wherever a Linux can run at all — proot on Android, the emulator
-          // on iOS.
-          none: "Host",
+          // on iOS. Each says what keeps its commands in, so the choice is
+          // made knowing it.
+          none: "Host · ${host.label}",
           options: {
             for (final rootfs in rootfsCatalog)
               if ((available || abi == "ios") && installed.contains(rootfs.id))
-                rootfs.id: rootfs.name,
+                rootfs.id: "${rootfs.name} · ${Confinement.guest.label}",
           },
           value: selected,
           onPick: (id) => ref.read(appSettingsProvider.notifier).setRootfs(id),
         ),
+        _ConfinementNote(
+            selected == null || !installed.contains(selected)
+                ? host
+                : Confinement.guest),
       ],
+    );
+  }
+}
+
+/// Whether the picked environment enforces the sandbox settings, under the
+/// picker. A warning where commands end up with the user's full permissions —
+/// a desktop that implements no sandbox, or Landlock switched off by the
+/// policy — since that is the case a user would otherwise assume away.
+class _ConfinementNote extends ConsumerWidget {
+  const _ConfinementNote(this.confinement);
+
+  final Confinement confinement;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final scheme = Theme.of(context).colorScheme;
+    // The default project's switch is the app's answer; a project can still
+    // turn it back on or off for itself.
+    final switchedOff = confinement.enforcesSandbox &&
+        ref.watch(projectSettingsProvider(null).select((s) => s.sandbox)) ==
+            false;
+    final exposed = confinement == Confinement.none || switchedOff;
+    return SettingsWarningBanner(
+      icon: exposed ? Icons.warning_amber_rounded : Icons.shield_outlined,
+      color: exposed ? scheme.error : scheme.primary,
+      text: switchedOff
+          ? "Can enforce your sandbox settings with Landlock, but the sandbox "
+              "is switched off in Settings > General, so commands run with "
+              "your full user permissions. A project can turn it back on for "
+              "itself."
+          : confinement.summary,
     );
   }
 }

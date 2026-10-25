@@ -19,6 +19,7 @@ import "domain/agent_backend.dart";
 import "domain/app_restart.dart";
 import "domain/app_secrets.dart";
 import "domain/app_settings.dart";
+import "domain/confinement.dart";
 import "domain/agent_browser.dart";
 import "domain/app_update.dart";
 import "domain/app_theme.dart";
@@ -315,6 +316,11 @@ final appVersionProvider = Provider<String?>((ref) => null);
 /// on an Android whose APK was built without it, which the Terminal page says
 /// rather than describing a device that cannot run one.
 final prootAvailableProvider = Provider<bool>((ref) => false);
+
+/// What keeps the host shell's commands in, from the platform. Overridden in
+/// `main` beside the rest of the platform ports.
+final hostConfinementProvider =
+    Provider<Confinement>((ref) => Confinement.none);
 
 /// What this build can do about a newer release of itself: the three desktops
 /// answer with the real platform half, everything else is the one that cannot.

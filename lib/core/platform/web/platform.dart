@@ -16,6 +16,7 @@ import "../../../data/web/web_file_handoff.dart";
 import "../../../domain/agent_browser.dart";
 import "../../../domain/app_update.dart";
 import "../../../domain/assistant_launch.dart";
+import "../../../domain/confinement.dart";
 import "../../../domain/backup_handoff.dart";
 import "../../../domain/file_handoff.dart";
 import "../../../domain/local_llm.dart";
@@ -64,6 +65,9 @@ ShellDriver? platformDriver({
 /// A page cannot drive another browser.
 AgentBrowser createAgentBrowser(AppConfig config, String cacheDir) =>
     const UnavailableAgentBrowser();
+
+/// A page runs no commands, so nothing keeps them in.
+Confinement hostConfinement() => Confinement.none;
 
 /// The site carries the newest build already; a reload is the update.
 AppUpdateHost createAppUpdateHost(String cacheDir) =>

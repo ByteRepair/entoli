@@ -254,6 +254,7 @@ class AppSession {
         deviceAbiProvider.overrideWithValue(await abi),
         appVersionProvider.overrideWithValue(await version),
         prootAvailableProvider.overrideWithValue(toolset?.proot != null),
+        hostConfinementProvider.overrideWithValue(platform.hostConfinement()),
         appUpdateHostProvider
             .overrideWithValue(platform.createAppUpdateHost(cache)),
         agentBrowserProvider.overrideWithValue(browser),

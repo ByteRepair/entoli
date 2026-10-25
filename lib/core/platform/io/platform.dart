@@ -55,6 +55,7 @@ import "../../../domain/agent_browser.dart";
 import "../../../domain/app_update.dart";
 import "../../../core/log.dart";
 import "../../../domain/assistant_launch.dart";
+import "../../../domain/confinement.dart";
 import "../../../domain/backup_handoff.dart";
 import "../../../domain/builtin_project.dart";
 import "../../../domain/file_handoff.dart";
@@ -193,6 +194,14 @@ String? _projectRootfsDir(AppConfig config, String project, String rootfsId) {
 /// x86, not the device's arm64), null on the desktops, which have no catalog.
 Future<String?> deviceAbi() =>
     Platform.isIOS ? Future.value("ios") : BundledTools.abi();
+
+/// What keeps the host shell's commands in. Linux's is the Landlock helper
+/// [hostDriver] is built with; a phone's is the OS's own app sandbox.
+Confinement hostConfinement() => Platform.isLinux
+    ? Confinement.landlock
+    : Platform.isAndroid || Platform.isIOS
+        ? Confinement.appSandbox
+        : Confinement.none;
 
 AppUpdateHost createAppUpdateHost(String cacheDir) {
   final flavour = Platform.isLinux

@@ -339,6 +339,18 @@ rules'. Rules from before the split carried a `writes` key that granted the
 whole turn; it is not read. The turn's grant is the chat's workspace, its
 tmp, the project's workspace beside it, and the tiers' `writableDirs`.
 
+**The rules are policy; the terminal environment enforces them or says it
+does not.** The rules, their sandbox half and the switch below are set
+globally and per project whatever runs the commands, and they stay set when
+the environment changes. The approval half is the app's own gate and holds
+everywhere; the sandbox half is the driver's to enforce, and today only
+Linux's host driver can (its `sandboxHelper`). Every environment declares
+which it is as a `Confinement` (`lib/domain/confinement.dart`), and the
+Terminal page names it on each option and explains the picked one, so a user
+on macOS, Windows, a phone or a guest is not left assuming a sandbox that
+nothing implements. A new driver that enforces the sandbox half is a new
+`SandboxHelper` and a `Confinement` that says so — not a change to the rules.
+
 Landlock itself is a setting, `sandbox` in `project.json`: the default
 project's is the app's answer, a project's own overrides it, and unset is on.
 Off, `sandboxFor` answers null for the whole turn and its sub-agents, which
