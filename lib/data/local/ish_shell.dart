@@ -407,11 +407,6 @@ class _IshSession {
     if (id != null) _transport.destroy(id);
   }
 
-  /// Where the session stands, in the host's own words: the guest path its
-  /// own record names, mapped back through the binding the bridge makes,
-  /// /root at this session's home, [guestWorkspacePath]'s other direction.
-  /// [pathInside] because the record can name a `cd` outside the workspace,
-  /// which the machine has no host path to name either.
   Future<void> close() {
     // Every run this session still holds is answered, not just the current
     // one: a queued run whose result nobody would complete is a turn that

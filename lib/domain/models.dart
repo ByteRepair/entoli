@@ -62,7 +62,7 @@ enum PermissionTier {
   defaultProject,
 
   /// A rule granted for the rest of the running turn, by an "always"
-  /// banner answer.
+  /// banner answer. Only old records carry it; kept so they still parse.
   runtime,
 }
 

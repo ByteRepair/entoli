@@ -155,8 +155,6 @@ class FakeShell extends Shell {
   /// What a hung command had printed by the time it was killed.
   String killedOutput = "";
 
-
-
   @override
   void closeSession(String cwd) => closedSessions.add(cwd);
 

@@ -130,7 +130,7 @@ class PermissionRule {
       decision == null && !(setsSandbox && (unconfined || writes.isNotEmpty));
 
   /// Which tier carried this rule, stamped by the repository when it
-  /// composes a turn's settings and by the agent for a runtime grant. Not
+  /// composes a turn's settings. Not
   /// persisted — the tier is a fact of the file a rule was read from, not
   /// of the rule itself — so a rule moved between files is stamped anew
   /// rather than lying about where it came from. Null on a rule written by
@@ -227,11 +227,12 @@ class PermissionRule {
   for (final segment in segments) {
     var segmentUnconfined = false;
     final subject = _subjectOf(segment);
-    for (final rule in rules) {
-      if (subject == null || !rule.setsSandbox) continue;
-      if (!_ruleMatches(rule, "bash", subject)) continue;
-      if (rule.unconfined) segmentUnconfined = true;
-      writes.addAll(rule.writes);
+    if (subject != null) {
+      for (final rule in rules) {
+        if (!rule.setsSandbox || !_ruleMatches(rule, "bash", subject)) continue;
+        if (rule.unconfined) segmentUnconfined = true;
+        writes.addAll(rule.writes);
+      }
     }
     if (segmentUnconfined) {
       matched = true;
@@ -273,11 +274,16 @@ List<Map<String, dynamic>> permissionRulesToJson(List<PermissionRule> rules) =>
 final _globCache = <String, RegExp>{};
 
 bool globMatch(String glob, String text) =>
-    _globCache.putIfAbsent(glob, () {
-      final body = RegExp.escape(glob.trim()).replaceAll(RegExp(r"(\\\*)+"), ".*");
-      return RegExp("^${body.endsWith(" .*") ? "${body.substring(0, body.length - 3)}(?: .*)?" : body}\$",
-          caseSensitive: false);
-    }).hasMatch(text.trim());
+    _globCache.putIfAbsent(glob, () => _compileGlob(glob)).hasMatch(text.trim());
+
+RegExp _compileGlob(String glob) {
+  const anyArgs = " .*";
+  var body = RegExp.escape(glob.trim()).replaceAll(RegExp(r"(\\\*)+"), ".*");
+  if (body.endsWith(anyArgs)) {
+    body = "${body.substring(0, body.length - anyArgs.length)}(?: .*)?";
+  }
+  return RegExp("^$body\$", caseSensitive: false);
+}
 
 /// What the rules say about one tool call, deny first — a deny is the user's
 /// explicit no, an ask their "always show me", an allow the standing yes.
@@ -308,20 +314,18 @@ RuleVerdict? rulesDecideTraced(
     PermissionDecision? verdict;
     final tiers = <PermissionTier>{};
     for (final segment in segments) {
-      final subject = _subjectOf(segment);
-      final segmentVerdict =
-          subject == null ? null : _strongestTraced(rules, "bash", subject);
-      final d = segmentVerdict?.decision;
+      final found = segmentVerdict(rules, segment);
+      final d = found?.decision;
       if (d == PermissionDecision.deny) {
         return (decision: PermissionDecision.deny,
-            tiers: segmentVerdict!.tiers.toList());
+            tiers: found!.tiers.toList());
       }
       if (d == null) {
         verdict = PermissionDecision.ask;
         continue;
       }
       verdict = _stronger(verdict, d);
-      tiers.addAll(segmentVerdict!.tiers);
+      tiers.addAll(found!.tiers);
     }
     return verdict == PermissionDecision.ask
         ? null
@@ -454,7 +458,8 @@ bool _hostMatch(String pattern, String host) {
 /// tool's path becomes its directory's scope, a fetch URL becomes the host.
 /// Null where the call carries nothing matchable.
 ///
-/// The sandbox re-prompt's "always" is about the sandbox, not the asking: it
+/// The "always" on a call leaving the sandbox is about the sandbox, not the
+/// asking: it
 /// writes a no-sandbox rule for the same leading words and leaves the
 /// decision to whatever already made it.
 PermissionRule? ruleFromApproval(ToolApproval? approval) {

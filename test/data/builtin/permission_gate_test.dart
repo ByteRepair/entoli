@@ -953,7 +953,6 @@ class _StubHelper implements SandboxHelper {
   @override
   Future<List<String>?> prefixFor(CommandSandbox sandbox) async =>
       ["/bin/entoli-landlock", "exec", "--workspace", sandbox.workspace, "--"];
-
 }
 
 /// A classifier that has already made up its mind.

@@ -495,8 +495,8 @@ class ChatRepository {
         ...defaultProjectSettings.permissions
             .map((r) => r.copyWith(origin: PermissionTier.defaultProject)),
       ],
-      // The project's writable roots and the chat's own grants, where a
-      // re-prompt's always answers land. A rule's writes are the agent's to
+      // The project's writable roots and the chat's own grants, where an
+      // `add_directory` always answer lands. A rule's writes are the agent's to
       // apply, to the commands that rule matches.
       writableDirs: [
         ...meta.writableDirs,
@@ -677,7 +677,7 @@ class ChatRepository {
 
   /// Answer an approval banner. An "always" answer derives the standing rule
   /// from the approval — the command's leading words, the file's directory, or
-  /// the fetch's host; for the sandbox re-prompt, a no-sandbox rule for the
+  /// the fetch's host; for a call leaving the sandbox, a no-sandbox rule for the
   /// same words — and writes it to the tier the answer names before the
   /// answer reaches the turn, whose gate reads the policy live, so its next
   /// call is covered. The `add_directory` banner carries its directory in

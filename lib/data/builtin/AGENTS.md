@@ -370,12 +370,11 @@ the banner in ask mode ("Run without the sandbox?", `ToolApproval.unsandboxed`),
 and a refusal in never mode, where the sandbox is the one guard an unwatched
 turn has. Its "always" writes a no-sandbox rule for the command's leading
 words with no decision of its own, so the asking stays with whatever already
-decides it. This replaced a deny-report shim and then a regex over the
-output, both of which guessed after the fact; rootless podman is the case
-that settled it, since it cannot run under Landlock at all (joining its pause
-process means opening another process's namespace, which Landlock refuses),
-so no folder grant could have been the answer. A result from before carries
-`violations` and a `rerun` decision, still worded for old logs.
+decides it. Nothing guesses from the output after the fact: rootless podman
+cannot run under Landlock at all (joining its pause process means opening
+another process's namespace, which Landlock refuses), so no folder grant
+could have been the answer. Old results carry `violations` and a `rerun`
+decision, still worded so their logs read.
 
 The two "always" banner answers on an ordinary banner write the derived rule:
 `ruleFromApproval` reads the command's leading words, the file's directory or

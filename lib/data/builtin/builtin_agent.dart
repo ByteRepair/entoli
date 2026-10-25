@@ -91,6 +91,13 @@ String? runningTool(String name) => switch (name) {
       _ => null,
     };
 
+/// What decided a call, the tiers that spoke, and the verdict.
+typedef _Decision = ({
+  PermissionSource source,
+  List<PermissionTier> tiers,
+  PermissionDecision decided,
+});
+
 /// Named beside the tool the way every other tool's is, so that matching on it
 /// is compiler-linked to the name the model is actually told.
 const bashToolName = "bash";
@@ -533,11 +540,14 @@ class BuiltinAgent {
   /// turn runs — a banner's "always" included — covers the next call.
   final PolicyReader policy;
 
-  /// [policy] as this call reads it: `~` read the way a file-tool path is,
-  /// so a rule is in the same words as the call it is matched against,
-  /// guest or host; and this turn's own directory grants beside the
-  /// writable ones.
-  Future<StandingPermissions> _policy() async {
+  /// [policy] as this call reads it: once per tool call, so the gate and the
+  /// run it decides see one answer; `~` read the way a file-tool path is, so
+  /// a rule is in the same words as the call it is matched against, guest or
+  /// host; and this turn's own directory grants beside the writable ones.
+  Future<StandingPermissions> _policy() => _callPolicy ??= _readPolicy();
+  Future<StandingPermissions>? _callPolicy;
+
+  Future<StandingPermissions> _readPolicy() async {
     final read = await policy();
     return StandingPermissions(
       permissions: [for (final rule in read.permissions) rule.withPaths(_tilde)],
@@ -564,17 +574,19 @@ class BuiltinAgent {
   /// and read by [_ran] onto the result it reports. Null where the mode's
   /// default posture put the call behind the banner: the banner's own part
   /// is the record then, and the answer that follows stamps it anew.
-  ({PermissionSource source, List<PermissionTier> tiers,
-          PermissionDecision decided})?
-      _decision;
+  _Decision? _decision;
 
-  /// Directories an `add_directory` banner agreed to for this turn alone —
-  /// a mirrored chat's plain Allow, which writes no tier. [_policy] lists
-  /// them beside the writable ones.
+  /// Directories an `add_directory` banner agreed to, for the rest of this
+  /// turn — the tier's copy of an "always" is read too, and a mirrored
+  /// chat's plain Allow writes none. [_policy] lists them beside the
+  /// writable ones.
   final Set<String> _runtimeDirs = {};
 
   /// Grants [dirs] for the rest of this turn.
-  void grantRuntimeDirs(Iterable<String> dirs) => _runtimeDirs.addAll(dirs);
+  void grantRuntimeDirs(Iterable<String> dirs) {
+    _runtimeDirs.addAll(dirs);
+    _callPolicy = null;
+  }
 
   /// The confinement a command runs under, from the shell's driver. Read per
   /// turn rather than held: the driver is resolved per command in the shell,
@@ -585,10 +597,11 @@ class BuiltinAgent {
   /// The project's workspace is granted beside the chat's own: it is where
   /// work another conversation should find goes, and the file tools and
   /// `writable_directories` already treat it as writable.
+  SandboxHelper? get _helper => sandboxHelper ?? shell.driverSandboxHelper;
+
   CommandSandbox? sandboxFor(StandingPermissions policy) {
     if (!policy.sandboxed) return null;
-    final helper = sandboxHelper ?? shell.driverSandboxHelper;
-    if (helper == null) return null;
+    if (_helper == null) return null;
     final tmp = shell.tmpDirFor(workspace);
     return CommandSandbox(
       workspace: workspace,
@@ -599,6 +612,22 @@ class BuiltinAgent {
         ...policy.writableDirs,
       ],
     );
+  }
+
+  /// The sandbox [analysis]'s command runs under once the rules have their
+  /// word on it — none where a no-sandbox rule covers every segment that
+  /// could write, the rules' own folders added where they match. One answer
+  /// for the gate asking whether leaving it is being asked for, and the run.
+  CommandSandbox? _confinementOf(
+      StandingPermissions policy, ShellCommandAnalysis analysis) {
+    final sandbox = sandboxFor(policy);
+    if (sandbox == null) return null;
+    final ruled =
+        rulesSandbox(policy.permissions, analysis.modelableSegments ?? const []);
+    if (ruled.unconfined) return null;
+    return ruled.writes.isEmpty
+        ? sandbox
+        : sandbox.copyWith(extraWrites: [...sandbox.extraWrites, ...ruled.writes]);
   }
 
   /// Whether this build's host platform models its shell as POSIX. Windows
@@ -905,7 +934,7 @@ class BuiltinAgent {
         browserShow: browserHidden,
         browserUpload: browserUploads,
         oneShot: oneShot,
-        sandboxed: (sandboxHelper ?? shell.driverSandboxHelper) != null,
+        sandboxed: _helper != null,
         participants: roomParticipants,
         member: viewer != null,
         customizing: _customizing,
@@ -1163,6 +1192,7 @@ class BuiltinAgent {
       if (fanOut && call.name == taskToolName) continue;
       // What decided an earlier call is that call's, read or not.
       _decision = null;
+      _callPolicy = null;
       if (_cancelled) {
         // The call as well as the answer: a result whose call is not in the
         // parts is a result the projection has nothing to pair it to.
@@ -1264,12 +1294,8 @@ class BuiltinAgent {
     yield _called(call, command);
     // Leaving the sandbox is part of what is asked: where one would confine
     // the run and no no-sandbox rule covers it, the call goes to the mode.
-    final leave = decodeArgs(call.argumentsJson)?["unsandboxed"] == true;
-    final policy = await _policy();
-    final escaping = leave &&
-        sandboxFor(policy) != null &&
-        !rulesSandbox(policy.permissions, analysis.modelableSegments ?? const [])
-            .unconfined;
+    final leave = boolArg(call.argumentsJson, "unsandboxed");
+    final escaping = leave && _confinementOf(await _policy(), analysis) != null;
     yield* _runGated(call, bashToolName,
         () => _execute(call, command, analysis: analysis, unconfined: leave),
         argumentsText: command, analysis: analysis, unsandboxed: escaping);
@@ -1848,7 +1874,7 @@ class BuiltinAgent {
   /// the user in the chat, as a generated image is.
   Stream<AgentEvent> _browserScreenshot(LlmToolCall call) async* {
     final ref = intArg(call.argumentsJson, "ref");
-    final markClick = decodeArgs(call.argumentsJson)?["last_click"] == true;
+    final markClick = boolArg(call.argumentsJson, "last_click");
     if (browser!.hold.value != null) {
       yield* _reject(call, _noted(_hidden));
       return;
@@ -2273,8 +2299,7 @@ class BuiltinAgent {
 
   /// The directory grant request. The banner is the whole grant: the model
   /// names a directory, the user answers on the ordinary approval banner,
-  /// and the answer rides the plumbing the sandbox re-prompt already rides —
-  /// [ToolApproval.deniedDirs] carries the directory, so an "always" answer
+  /// and [ToolApproval.deniedDirs] carries the directory, so an "always" answer
   /// lands in the named tier's `writableDirs` in `ChatRepository
   /// .respondApproval` with no branch of its own, and the rest of this turn
   /// is covered by [grantRuntimeDirs].
@@ -3083,7 +3108,6 @@ class BuiltinAgent {
     // The model's own bound for this command, capped at what the chat allows:
     // a small model's estimate of a build is as likely to be too short as too
     // long, and a cap is the only one that is never wrong.
-    final args = decodeArgs(call.argumentsJson);
     final requested = intArg(call.argumentsJson, "timeout");
     final timeout = Duration(
       milliseconds: requested == null || requested <= 0
@@ -3106,28 +3130,12 @@ class BuiltinAgent {
     // banner, not the mode, is what carries that — auto mode reaches the
     // banner through the classifier's ask — so the gate reads the flag the
     // run itself sets.
-    final policy = await _policy();
-    var sandbox = unconfined ? null : sandboxFor(policy);
-    final parsed = unconfined
-        ? null
-        : analysis ??
-            (sandbox == null
-                ? null
-                : ShellCommandAnalysis.parse(
-                    command, isWindows: platformIsWindows));
-    // The rules' own word on the sandbox, whoever decided the command runs.
-    if (sandbox != null) {
-      final ruled = rulesSandbox(policy.permissions,
-          parsed!.modelableSegments ?? const []);
-      if (ruled.unconfined) {
-        sandbox = null;
-      } else if (ruled.writes.isNotEmpty) {
-        sandbox = sandbox.copyWith(
-            extraWrites: [...sandbox.extraWrites, ...ruled.writes]);
-      }
-    }
+    final parsed =
+        analysis ?? ShellCommandAnalysis.parse(command, isWindows: platformIsWindows);
+    final sandbox =
+        unconfined ? null : _confinementOf(await _policy(), parsed);
     if (sandbox != null && !_humanDecided) {
-      final note = parsed!.escalationNote;
+      final note = parsed.escalationNote;
       if (note != null) {
         return ShellResult.failed(note);
       }
@@ -3138,7 +3146,7 @@ class BuiltinAgent {
         timeout: timeout,
         environment: environment,
         oneShot: oneShot,
-        restart: args?["restart"] == true,
+        restart: boolArg(call.argumentsJson, "restart"),
         project: project,
         sandbox: sandbox,
         readOnly: readOnlyDirs);
@@ -3157,8 +3165,7 @@ class BuiltinAgent {
   /// uncovered, and where an ask rule wanted to see any of it — the mode's own
   /// path decides those, every time. A deny from the network rules is
   /// returned as one, refusal being what the rule said.
-  ({PermissionSource source, List<PermissionTier> tiers,
-      PermissionDecision decided})? _deterministicBashVerdict(
+  _Decision? _deterministicBashVerdict(
     ShellCommandAnalysis analysis,
     List<PermissionRule> rules,
   ) {
