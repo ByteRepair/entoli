@@ -1414,6 +1414,11 @@ class ProjectSettingsNotifier extends Notifier<ProjectSettings> {
   Future<void> setProjectSandboxReprompt(bool? value) =>
       _update((s) => s.sandboxReprompt = value);
 
+  /// Whether this project's commands run under Landlock. Null inherits the
+  /// app default.
+  Future<void> setProjectSandbox(bool? value) =>
+      _update((s) => s.sandbox = value);
+
   /// What the new-chat screen asks over this project's badge. Null is the
   /// app default; empty is the screen asking nothing.
   Future<void> setDescription(String? value) =>

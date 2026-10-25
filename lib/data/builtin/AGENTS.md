@@ -305,11 +305,35 @@ deny outranks ask outranks allow whatever tier wrote it. For `bash` the
 pattern is a glob matched per segment — the pieces a top-level `|;&&` splits
 the command into — so a compound command must find an allow for every segment,
 and a command the parse cannot model is escalated to the banner even under an
-allow rule (refused in `never`, where nobody can answer). A rule-allow carries
-`writes`, the directories the sandbox grants beside the workspace — the same
-`writableDirs` a project sets — so an allow is one answer to "may it run *and*
-write there". The grant is the chat's workspace, its tmp, the project's
-workspace beside it, and those directories. What the sandbox denied while a
+allow rule (refused in `never`, where nobody can answer).
+
+A rule answers two questions, separately: its `decision` is whether a match
+is asked about, its `sandbox` what a matching `bash` run may touch — inherit,
+`writes` (extra directories), or `unconfined` (no Landlock). Either may stand
+alone: `decision` is optional, so "ask, but run podman unconfined once
+answered" is one rule. They are separate because an allow stops the asking,
+and the sandbox matters most for exactly the runs nobody watches; an allow
+that also unconfined would turn the banner's "Allow in Project" on
+`python3 x.py` into every Python script running free. The banners write
+decisions only; a sandbox override is the settings page's. The sandbox
+applies to the commands the rule matches and no others (`rulesSandbox`): the
+run is unconfined only when every segment matches an unconfined rule, since
+the confinement is the run's, and `writes` are the union of the matched
+rules'. Rules from before the split carried a `writes` key that granted the
+whole turn; it is not read. The turn's grant is the chat's workspace, its
+tmp, the project's workspace beside it, and the tiers' `writableDirs`.
+
+Landlock itself is a setting, `sandbox` in `project.json`: the default
+project's is the app's answer, a project's own overrides it, and unset is on.
+Off, `sandboxFor` answers null for the whole turn and its sub-agents, which
+also stands down the parse gate and the re-prompt — nothing is denied to offer
+back. It exists because the machine's two drivers made two policies: a guest
+(proot's Alpine, iSH) is already a boundary the model cannot see past, so
+the host on Linux was the only place every command paid the workspace
+restriction, and for a user whose work is containers and toolchains outside
+it, that was a prompt per command. A built-in project's rules, writable
+directories and this switch are its own `project.json`'s like anyone's;
+only the page used to hide them. What the sandbox denied while a
 command ran rides the result as `violations`, and — where `sandboxReprompt` is
 on and the mode is not `never` — one offer to rerun it unconfined is made,
 whether or not a human approved the command first: the approval was for the
@@ -334,7 +358,9 @@ inside the grant is the file's own permissions, explains the output's
 unconfined — a confined one would be refused again.
 
 The prose is only a cross-check — a `Permission denied` in the command's
-output with nothing in the report (a static binary bypassing the shim) is the
+output with nothing in the report (a static binary bypassing the shim, or a
+Go one, which makes its syscalls past libc and words the error lowercase,
+hence the match is case-blind) is the
 unnamed violation and a `logFailure` line, so a blind channel is visible
 rather than silent. Its banner offers no "always", having no path to persist
 (`ToolApproval.rerun`); a shim that cannot work at all degrades to that same

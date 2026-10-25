@@ -75,6 +75,7 @@ class ProjectSettings {
       this.permissions = const [],
       this.writableDirs = const [],
       this.sandboxReprompt,
+      this.sandbox,
       this.description});
 
   /// How long a temporary chat in this project lives. Null means inherit the
@@ -136,6 +137,11 @@ class ProjectSettings {
   /// inherits the app default.
   bool? sandboxReprompt;
 
+  /// Whether commands on the machine run under Landlock at all. Null inherits
+  /// the app default, which is on. A guest's rootfs is its own boundary and
+  /// this does not reach it.
+  bool? sandbox;
+
   static ProjectSettings load(AppConfig config, {String? project}) {
     final text = config.documents.read(config.projectSettingsFile(project: project));
     if (text == null) return ProjectSettings();
@@ -172,6 +178,7 @@ class ProjectSettings {
             if (w is String) w,
         ],
         sandboxReprompt: json["sandboxReprompt"] as bool?,
+        sandbox: json["sandbox"] as bool?,
         description: json["description"] as String?,
       );
   }
@@ -193,6 +200,7 @@ class ProjectSettings {
         "permissions": permissionRulesToJson(permissions),
       if (writableDirs.isNotEmpty) "writableDirs": writableDirs,
       if (sandboxReprompt != null) "sandboxReprompt": sandboxReprompt,
+      if (sandbox != null) "sandbox": sandbox,
       // Empty is written as it stands: the screen asking nothing is a value
       // here, where an absent key is the app default.
       if (description != null) "description": description,

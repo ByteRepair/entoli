@@ -199,93 +199,128 @@ Future<bool> confirm(
 }
 
 /// Ask for one permission rule: the tool it names, the pattern it matches on,
-/// the decision it takes and — for bash rules — the directories it grants the
-/// sandbox beside the workspace. Returns null if dismissed or the pattern was
-/// left blank.
+/// whether a match is asked about and — for bash rules — the sandbox a match
+/// runs in. Returns null if dismissed, the pattern was left blank, or the
+/// rule would say nothing.
 Future<PermissionRule?> promptForDecision(
   BuildContext context, {
   required String title,
   required String tool,
   required String pattern,
-  required PermissionDecision decision,
+  required PermissionDecision? decision,
+  RuleSandbox sandbox = RuleSandbox.inherit,
   String writes = "",
 }) {
   final patternField = TextEditingController(text: pattern);
   final writesField = TextEditingController(text: writes);
   var toolPicked = tool;
   var picked = decision;
+  var sandboxPicked = sandbox;
+
+  bool shapesSandbox() => toolPicked == "bash" || toolPicked == "*";
 
   PermissionRule? submit() {
     final subject = patternField.text.trim();
     if (subject.isEmpty) return null;
+    final ruleSandbox = shapesSandbox() ? sandboxPicked : RuleSandbox.inherit;
+    if (picked == null && ruleSandbox == RuleSandbox.inherit) return null;
     return PermissionRule(
       tool: toolPicked,
       pattern: subject,
       decision: picked,
-      writes: [
-        for (final dir in writesField.text.split(","))
-          if (dir.trim().isNotEmpty) dir.trim(),
-      ],
+      sandbox: ruleSandbox,
+      writes: ruleSandbox != RuleSandbox.writes
+          ? const []
+          : [
+              for (final dir in writesField.text.split(","))
+                if (dir.trim().isNotEmpty) dir.trim(),
+            ],
     );
   }
 
   return showDialog<PermissionRule>(
     context: context,
-    builder: (context) => AlertDialog(
-      title: Text(title),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          DropdownButtonFormField<String>(
-            initialValue: toolPicked,
-            decoration: const InputDecoration(labelText: "Tool"),
-            items: [
-              for (final t in ["bash", "read", "write", "edit", "webfetch", "*"])
-                DropdownMenuItem(value: t, child: Text(t)),
-            ],
-            onChanged: (value) => toolPicked = value ?? "bash",
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: patternField,
-            autofocus: pattern.isEmpty,
-            decoration: const InputDecoration(
-              labelText: "Pattern",
-              hintText: "git status *  ·  ~/Projects/x  ·  example.com",
+    builder: (context) => StatefulBuilder(
+      builder: (context, setState) => AlertDialog(
+        title: Text(title),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            DropdownButtonFormField<String>(
+              initialValue: toolPicked,
+              decoration: const InputDecoration(labelText: "Tool"),
+              items: [
+                for (final t in ["bash", "read", "write", "edit", "webfetch", "*"])
+                  DropdownMenuItem(value: t, child: Text(t)),
+              ],
+              onChanged: (value) =>
+                  setState(() => toolPicked = value ?? "bash"),
             ),
-            onSubmitted: (_) => Navigator.pop(context, submit()),
-          ),
-          const SizedBox(height: 12),
-          DropdownButtonFormField<PermissionDecision>(
-            initialValue: picked,
-            decoration: const InputDecoration(labelText: "Decision"),
-            items: const [
-              DropdownMenuItem(
-                  value: PermissionDecision.allow, child: Text("Allow")),
-              DropdownMenuItem(
-                  value: PermissionDecision.ask, child: Text("Ask")),
-              DropdownMenuItem(
-                  value: PermissionDecision.deny, child: Text("Deny")),
-            ],
-            onChanged: (value) => picked = value ?? PermissionDecision.allow,
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: writesField,
-            decoration: const InputDecoration(
-              labelText: "Extra writable dirs (bash, comma-separated)",
+            const SizedBox(height: 12),
+            TextField(
+              controller: patternField,
+              autofocus: pattern.isEmpty,
+              decoration: const InputDecoration(
+                labelText: "Pattern",
+                hintText: "git status *  ·  ~/Projects/x  ·  example.com",
+              ),
+              onSubmitted: (_) => Navigator.pop(context, submit()),
             ),
-            onSubmitted: (_) => Navigator.pop(context, submit()),
-          ),
+            const SizedBox(height: 12),
+            // Keyed by name: a null item is the dropdown's "no selection".
+            DropdownButtonFormField<String>(
+              initialValue: picked?.name ?? "mode",
+              decoration: const InputDecoration(labelText: "Approval"),
+              items: const [
+                DropdownMenuItem(value: "allow", child: Text("Allow")),
+                DropdownMenuItem(value: "ask", child: Text("Ask")),
+                DropdownMenuItem(value: "deny", child: Text("Deny")),
+                DropdownMenuItem(
+                    value: "mode", child: Text("Leave to the approval mode")),
+              ],
+              onChanged: (value) => setState(() =>
+                  picked = PermissionDecision.values.asNameMap()[value]),
+            ),
+            if (shapesSandbox()) ...[
+              const SizedBox(height: 12),
+              DropdownButtonFormField<RuleSandbox>(
+                initialValue: sandboxPicked,
+                decoration: const InputDecoration(labelText: "Sandbox"),
+                items: const [
+                  DropdownMenuItem(
+                      value: RuleSandbox.inherit, child: Text("Sandboxed")),
+                  DropdownMenuItem(
+                      value: RuleSandbox.writes,
+                      child: Text("Sandboxed, with extra writable dirs")),
+                  DropdownMenuItem(
+                      value: RuleSandbox.unconfined,
+                      child: Text("Unconfined (no sandbox)")),
+                ],
+                onChanged: (value) => setState(
+                    () => sandboxPicked = value ?? RuleSandbox.inherit),
+              ),
+              if (sandboxPicked == RuleSandbox.writes) ...[
+                const SizedBox(height: 12),
+                TextField(
+                  controller: writesField,
+                  decoration: const InputDecoration(
+                    labelText: "Extra writable dirs (comma-separated)",
+                  ),
+                  onSubmitted: (_) => Navigator.pop(context, submit()),
+                ),
+              ],
+            ],
+          ],
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text("Cancel")),
+          FilledButton(
+              onPressed: () => Navigator.pop(context, submit()),
+              child: const Text("Save")),
         ],
       ),
-      actions: [
-        TextButton(
-            onPressed: () => Navigator.pop(context), child: const Text("Cancel")),
-        FilledButton(
-            onPressed: () => Navigator.pop(context, submit()),
-            child: const Text("Save")),
-      ],
     ),
   );
 }

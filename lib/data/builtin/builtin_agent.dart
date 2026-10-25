@@ -467,6 +467,7 @@ class BuiltinAgent {
     this.permissions = const [],
     this.writableDirs = const [],
     this.sandboxReprompt = true,
+    this.sandboxed = true,
     this.dataDir,
     this.claimInstruction,
   });
@@ -500,13 +501,19 @@ class BuiltinAgent {
   List<PermissionRule> permissions;
 
   /// What this turn's sandboxed commands may additionally write to, beside
-  /// the workspace — the rules' writes plus the project's writableDirs. Read
+  /// the workspace — the tiers' writableDirs. A rule's own writes are not
+  /// here: they reach only the commands it matches, through [rulesSandbox]. Read
   /// by [sandboxFor] per command, so a mid-turn grant reaches the next run.
   final List<String> writableDirs;
 
   /// Whether a sandbox-denied write is offered back as an approval. Off
   /// reports the denial and moves on.
   final bool sandboxReprompt;
+
+  /// Whether commands run under Landlock where the machine offers it. Off
+  /// is the settings' answer for a project, not a per-command one: the
+  /// rules' `unconfined` is that.
+  final bool sandboxed;
 
   /// The app's own data directory — settings, secrets, chats. The one shape
   /// [addDirectoryTool] refuses outright: the data directory itself, or
@@ -561,6 +568,7 @@ class BuiltinAgent {
   /// work another conversation should find goes, and the file tools and
   /// `writable_directories` already treat it as writable.
   CommandSandbox? sandboxFor() {
+    if (!sandboxed) return null;
     final helper = sandboxHelper ?? shell.driverSandboxHelper;
     if (helper == null) return null;
     final tmp = shell.tmpDirFor(workspace);
@@ -3088,6 +3096,17 @@ class BuiltinAgent {
                 ? null
                 : ShellCommandAnalysis.parse(
                     command, isWindows: platformIsWindows));
+    // The rules' own word on the sandbox, whoever decided the command runs.
+    if (sandbox != null) {
+      final ruled = rulesSandbox([..._runtimeRules, ...permissions],
+          parsed!.modelableSegments ?? const []);
+      if (ruled.unconfined) {
+        sandbox = null;
+      } else if (ruled.writes.isNotEmpty) {
+        sandbox = sandbox.copyWith(
+            extraWrites: [...sandbox.extraWrites, ...ruled.writes]);
+      }
+    }
     if (sandbox != null && !_humanDecided) {
       final note = parsed!.escalationNote;
       if (note != null) {

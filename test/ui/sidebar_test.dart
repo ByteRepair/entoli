@@ -1014,6 +1014,31 @@ void main() {
       final settings = ProjectSettings.load(app.config, project: "research");
       expect(settings.writableDirs, ["/mnt/data"]);
     });
+
+    testWidgets("a built-in project has them too", (tester) async {
+      await open(tester, "byte-repair");
+
+      expect(find.text("Add rule"), findsOneWidget);
+    });
+
+    testWidgets("the Landlock switch overrides the app default, and the "
+        "re-prompt goes with it", (tester) async {
+      await io(tester, () => app.repo.createProject("research"));
+      await open(tester, "research");
+
+      final row = find.text("Sandbox commands (Landlock)");
+      await tester.scrollUntilVisible(row, 200,
+          scrollable: find.byType(Scrollable).last);
+      await tester.tap(row);
+      await settleIo(tester, least: 10);
+
+      expect(ProjectSettings.load(app.config, project: "research").sandbox,
+          isFalse);
+      final reprompt = tester.widget<SwitchListTile>(find.ancestor(
+          of: find.text("Offer to rerun sandbox-denied commands"),
+          matching: find.byType(SwitchListTile)));
+      expect(reprompt.onChanged, isNull);
+    });
   });
 
 }

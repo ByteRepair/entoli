@@ -350,18 +350,41 @@ void main() {
           pattern: "git *",
           decision: PermissionDecision.deny,
         ),
-        PermissionRule(
-          tool: "write",
-          pattern: "/tmp/x",
+        const PermissionRule(
+          tool: "bash",
+          pattern: "make *",
           decision: PermissionDecision.allow,
-          writes: const ["/tmp/x"],
+          sandbox: RuleSandbox.writes,
+          writes: ["/tmp/x"],
+        ),
+        const PermissionRule(
+          tool: "bash",
+          pattern: "podman *",
+          sandbox: RuleSandbox.unconfined,
         ),
       ];
       final back = permissionRulesFromJson(permissionRulesToJson(rules));
-      expect(back.length, 2);
+      expect(back.length, 3);
       expect(back[0].tool, "bash");
       expect(back[0].decision, PermissionDecision.deny);
+      expect(back[0].sandbox, RuleSandbox.inherit);
+      expect(back[1].sandbox, RuleSandbox.writes);
       expect(back[1].writes, ["/tmp/x"]);
+      expect(back[2].decision, isNull);
+      expect(back[2].sandbox, RuleSandbox.unconfined);
+    });
+
+    test("the old writes key is not read", () {
+      final back = permissionRulesFromJson([
+        {
+          "tool": "bash",
+          "pattern": "git *",
+          "decision": "allow",
+          "writes": ["/home/u/.gitconfig"],
+        },
+      ]);
+      expect(back.single.sandbox, RuleSandbox.inherit);
+      expect(back.single.writes, isEmpty);
     });
 
     test("the origin is not persisted", () {
@@ -490,6 +513,55 @@ void main() {
       ]);
       expect(back.length, 1);
       expect(back.single.pattern, "ls *");
+    });
+  });
+
+  group("rulesSandbox", () {
+    const unconfinedPodman = PermissionRule(
+      tool: "bash",
+      pattern: "podman *",
+      sandbox: RuleSandbox.unconfined,
+    );
+    const makeWrites = PermissionRule(
+      tool: "bash",
+      pattern: "make *",
+      decision: PermissionDecision.allow,
+      sandbox: RuleSandbox.writes,
+      writes: ["/opt/out"],
+    );
+
+    test("a rule with no decision says nothing about asking", () {
+      expect(
+          rulesDecideTraced([unconfinedPodman], "bash", command: "podman ps"),
+          isNull);
+    });
+
+    test("every segment unconfined runs unconfined", () {
+      expect(
+          rulesSandbox([unconfinedPodman], ["podman ps", "podman images"])
+              .unconfined,
+          isTrue);
+    });
+
+    test("one segment without an unconfined rule keeps the sandbox", () {
+      expect(rulesSandbox([unconfinedPodman], ["podman ps", "grep x"]).unconfined,
+          isFalse);
+      expect(rulesSandbox([unconfinedPodman], const []).unconfined, isFalse);
+    });
+
+    test("writes reach only the commands their rule matches", () {
+      expect(rulesSandbox([makeWrites], ["make all"]).writes, ["/opt/out"]);
+      expect(rulesSandbox([makeWrites], ["npm install"]).writes, isEmpty);
+    });
+
+    test("a deny rule's sandbox is not applied", () {
+      const denied = PermissionRule(
+        tool: "bash",
+        pattern: "podman *",
+        decision: PermissionDecision.deny,
+        sandbox: RuleSandbox.unconfined,
+      );
+      expect(rulesSandbox([denied], ["podman ps"]).unconfined, isFalse);
     });
   });
 }

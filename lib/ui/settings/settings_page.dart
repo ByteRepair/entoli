@@ -825,8 +825,7 @@ class _AgentSection extends ConsumerWidget {
 
 /// The default project's permissions, which is what General holds: the tier
 /// every other project inherits before its own. The project settings page
-/// edits the same file for its own project; built-ins read it and add
-/// nothing.
+/// edits the same file for its own project, built-ins included.
 class _DefaultPermissionsSection extends ConsumerWidget {
   const _DefaultPermissionsSection();
 
@@ -846,6 +845,19 @@ class _DefaultPermissionsSection extends ConsumerWidget {
               .setProjectPermissions(rules),
         ),
         SwitchListTile(
+          title: const Text("Sandbox commands (Landlock)"),
+          subtitle: Text((settings.sandbox ?? true)
+              ? "Commands on this machine may write only to the workspaces "
+                  "and the directories granted. Linux only; a Linux guest "
+                  "is its own sandbox. A project can override this."
+              : "Off: commands on this machine write wherever you can. A "
+                  "project can override this."),
+          value: settings.sandbox ?? true,
+          onChanged: (value) => ref
+              .read(projectSettingsProvider(null).notifier)
+              .setProjectSandbox(value),
+        ),
+        SwitchListTile(
           title: const Text("Offer to rerun sandbox-denied commands"),
           subtitle: Text((settings.sandboxReprompt ?? true)
               ? "When the sandbox denies a write, one banner offers to rerun "
@@ -854,9 +866,11 @@ class _DefaultPermissionsSection extends ConsumerWidget {
               : "Off: a denial is reported to the model and the turn moves "
                   "on. A project can override this."),
           value: settings.sandboxReprompt ?? true,
-          onChanged: (value) => ref
-              .read(projectSettingsProvider(null).notifier)
-              .setProjectSandboxReprompt(value),
+          onChanged: (settings.sandbox ?? true)
+              ? (value) => ref
+                  .read(projectSettingsProvider(null).notifier)
+                  .setProjectSandboxReprompt(value)
+              : null,
         ),
       ],
     );

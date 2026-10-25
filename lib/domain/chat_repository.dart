@@ -474,23 +474,17 @@ class ChatRepository {
         ...defaultProjectSettings.permissions
             .map((r) => r.copyWith(origin: PermissionTier.defaultProject)),
       ],
-      // The project's writable roots, the chat's own grants, and what the
-      // rules themselves grant — a re-prompt's always answers land in the
-      // two lists, and a rule that allows writing somewhere carries the
-      // sandbox grant with it.
+      // The project's writable roots and the chat's own grants, where a
+      // re-prompt's always answers land. A rule's writes are the agent's to
+      // apply, to the commands that rule matches.
       writableDirs: [
         ...meta.writableDirs,
         ...projectSettings.writableDirs,
         ...defaultProjectSettings.writableDirs,
-        for (final rule in [
-          ...meta.permissions,
-          ...projectSettings.permissions,
-          ...defaultProjectSettings.permissions,
-        ])
-          ...rule.writes,
       ],
       sandboxReprompt:
           projectSettings.sandboxReprompt ?? defaultProjectSettings.sandboxReprompt,
+      sandbox: projectSettings.sandbox ?? defaultProjectSettings.sandbox,
       turnMaxSteps:
           projectSettings.turnMaxSteps ?? settings.turnMaxSteps,
       // The project's wording answers over the app's, like the step limit.
@@ -747,6 +741,7 @@ class ChatRepository {
             r.tool == rule.tool &&
             r.pattern == rule.pattern &&
             r.decision == rule.decision &&
+            r.sandbox == rule.sandbox &&
             r.writes.length == rule.writes.length &&
             r.writes.toSet().containsAll(rule.writes));
     final fresh = [for (final d in newDirs) if (!dirs.contains(d)) d];

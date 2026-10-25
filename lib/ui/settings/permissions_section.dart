@@ -38,7 +38,8 @@ class _PermissionsSectionState extends State<PermissionsSection> {
       title: rule == null ? "Add rule" : "Edit rule",
       tool: rule?.tool ?? "bash",
       pattern: rule?.pattern ?? "",
-      decision: rule?.decision ?? PermissionDecision.allow,
+      decision: rule == null ? PermissionDecision.allow : rule.decision,
+      sandbox: rule?.sandbox ?? RuleSandbox.inherit,
       writes: (rule?.writes ?? const []).join(", "),
     );
     if (decision == null || !mounted) return;
@@ -62,9 +63,14 @@ class _PermissionsSectionState extends State<PermissionsSection> {
         SectionHeader("Permissions", description: widget.description),
         for (final (index, rule) in rules.indexed)
           EditableRow(
-            title: "${rule.decision.name.toUpperCase()} ${rule.tool} "
-                "${rule.pattern}",
-            subtitle: rule.writes.isEmpty ? "" : "writes: ${rule.writes.join(", ")}",
+            title: "${rule.decision?.name.toUpperCase() ?? "MODE"} "
+                "${rule.tool} ${rule.pattern}",
+            subtitle: switch (rule.sandbox) {
+              RuleSandbox.inherit => "",
+              RuleSandbox.writes =>
+                "sandboxed, also writes: ${rule.writes.join(", ")}",
+              RuleSandbox.unconfined => "unconfined",
+            },
             removeLabel: "Remove rule",
             onTap: () => _edit(rule: rule, index: index),
             onRemove: () => _remove(index),

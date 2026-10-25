@@ -245,6 +245,18 @@ void main() {
       expect(def.includesUserInstructions, isFalse);
     });
 
+    test("Landlock: the project's answer over the app's, unset is on",
+        () async {
+      expect((await turnSettings("byte-repair")).sandbox, isNull);
+      await config.documents
+          .write(config.projectSettingsFile(), '{"sandbox": false}');
+      expect((await turnSettings("byte-repair")).sandbox, isFalse);
+      await config.documents.write(
+          config.projectSettingsFile(project: "byte-repair"),
+          '{"sandbox": true}');
+      expect((await turnSettings("byte-repair")).sandbox, isTrue);
+    });
+
     test("an Omada-on project drops the task tool; an off one keeps it", () async {
       await repoWith(AppSettings()).createProject("team");
       // What the project settings page writes when Omada is flipped on.

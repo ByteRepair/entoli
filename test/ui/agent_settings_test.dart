@@ -332,6 +332,37 @@ void main() {
           isFalse,
           reason: "the switch writes the default project's own answer");
     });
+
+    testWidgets("a rule can set the sandbox and leave asking to the mode",
+        (tester) async {
+      await pumpSettings(tester, app, SettingsCategory.general);
+      await scrollTo(tester, find.text("Add rule"));
+      await tester.tap(find.text("Add rule"));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(
+          find.widgetWithText(TextField, "Pattern"), "podman *");
+      await tester.tap(find.text("Allow").last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text("Leave to the approval mode").last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text("Sandboxed").last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text("Unconfined (no sandbox)").last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text("Save"));
+      await io(tester, () async {});
+      await settleIo(tester);
+
+      final rule = ProjectSettings.load(app.config, project: null)
+          .permissions
+          .single;
+      expect(rule.pattern, "podman *");
+      expect(rule.decision, isNull);
+      expect(rule.sandbox, RuleSandbox.unconfined);
+      expect(find.textContaining("MODE bash podman *"), findsOneWidget);
+      expect(find.text("unconfined"), findsOneWidget);
+    });
   });
 
 }
