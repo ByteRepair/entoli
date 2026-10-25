@@ -334,7 +334,10 @@ that also unconfined would turn the banner's "Allow in Project" on
 decisions only; a sandbox override is the settings page's. The sandbox
 applies to the commands the rule matches and no others (`rulesSandbox`): the
 run is unconfined only when every segment matches an unconfined rule, since
-the confinement is the run's, and `writes` are the union of the matched
+the confinement is the run's — except a segment the parse proves reads only
+(`podman ps | head`), which has nothing to use the freedom for and would
+otherwise keep every piped podman command confined; at least one segment
+must still match. `writes` are the union of the matched
 rules'. Rules from before the split carried a `writes` key that granted the
 whole turn; it is not read. The turn's grant is the chat's workspace, its
 tmp, the project's workspace beside it, and the tiers' `writableDirs`.
@@ -378,7 +381,12 @@ output with nothing in the report (a static binary bypassing the shim, or a
 Go one, which makes its syscalls past libc and words the error lowercase,
 hence the match is case-blind) is the
 unnamed violation and a `logFailure` line, so a blind channel is visible
-rather than silent. Its banner offers no "always", having no path to persist
+rather than silent. A report line explains the prose only where the output
+names its path: toolbox's refused read of `/proc/<pid>/ns/user` once stood in
+for podman's unseen denial, and the agent went hunting SELinux. That read is
+also why rootless podman cannot run sandboxed at all — Landlock refuses opening
+another process's namespace, which podman needs to join its pause process — so
+its unnamed violation says to run it unconfined. Its banner offers no "always", having no path to persist
 (`ToolApproval.rerun`); a shim that cannot work at all degrades to that same
 cross-check, never to a broken command. The two "always" banner answers write
 the derived rule: `ruleFromApproval` reads the command's leading words, the

@@ -785,6 +785,7 @@ void main() {
   test("sandbox violations are read off the report, cross-checked by prose", () {
     const ws = CommandSandbox(workspace: "/home/u/ws");
     const unnamed = "unreported";
+    const namespace = "namespace";
     // (report, output, sandbox, violations, unreported)
     final cases = <(List<String>, String, CommandSandbox, List<String>, bool)>[
       // A write, make or remove outside the grant is a violation.
@@ -830,6 +831,14 @@ void main() {
           "Error: open /run/user/1000/libpod/tmp/alive.lck: permission denied",
           ws, [unnamed], true),
       ([], "all went fine", ws, [], false),
+      // A line the prose does not mention explains nothing: toolbox's read
+      // of a namespace link is not podman's denied lock.
+      (["write\t/dev/tty", "read\t/proc/2811829/ns/user"],
+          "Error: acquiring runtime init lock: open "
+          "/run/user/1000/libpod/tmp/alive.lck: permission denied",
+          ws, [namespace], true),
+      (["read\t/etc/motd"], "Error: open /run/x.lck: permission denied", ws,
+          [unnamed], true),
     ];
     for (final (report, output, sandbox, violations, unreported) in cases) {
       final verdict = sandboxViolations(report, output, sandbox);
@@ -837,8 +846,13 @@ void main() {
       expect(verdict.unreported, unreported, reason: reason);
       expect(verdict.violations, hasLength(violations.length), reason: reason);
       for (var i = 0; i < violations.length; i++) {
-        expect(verdict.violations[i],
-            violations[i] == unnamed ? contains("could not name") : violations[i],
+        expect(
+            verdict.violations[i],
+            switch (violations[i]) {
+              unnamed => contains("could not name"),
+              namespace => contains("namespace"),
+              final named => named,
+            },
             reason: reason);
       }
     }

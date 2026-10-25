@@ -1114,6 +1114,7 @@ class _OneShotRun implements ShellRun {
   const writeOps = {"write", "make", "remove"};
   final found = <String>{};
   var explained = false;
+  var namespace = false;
   for (final line in reportLines) {
     final tab = line.indexOf("\t");
     if (tab < 0) continue;
@@ -1128,7 +1129,11 @@ class _OneShotRun implements ShellRun {
     // shell's own terminal plumbing — denials there are not what the
     // command was about.
     if (path == "/dev/null" || path == "/dev/tty") continue;
-    explained = true;
+    // A line explains the prose only where the prose is about it: a process
+    // the shim does see can be refused something unrelated, and taking that
+    // as the explanation hid a Go binary's own denial behind it.
+    if (outputText.contains(path)) explained = true;
+    if (op == "read" && _namespaceLink.hasMatch(path)) namespace = true;
     if (!writeOps.contains(op)) continue;
     if (path.startsWith("/") && granted.any((dir) => pathInside(path, dir))) {
       continue;
@@ -1150,13 +1155,23 @@ class _OneShotRun implements ShellRun {
   return (
     violations: [
       for (final path in found) "writing $path",
-      if (unreported) unnamedViolation,
+      if (unreported) namespace ? namespaceViolation : unnamedViolation,
     ],
     unreported: unreported,
   );
 }
 
+/// Another process's namespace link. Landlock refuses opening one outside the
+/// sandbox, and rootless podman has to, to join its pause process.
+final _namespaceLink = RegExp(r"^/proc/\d+/ns/");
+
 /// The violation a denial the report did not name is worded as.
 const unnamedViolation = "denied (the sandbox refused something it could "
     "not name; the command's own output says so above)";
+
+/// The unnamed denial where the command also reached for another process's
+/// namespace, which no folder grant can allow.
+const namespaceViolation = "denied (the sandbox kept it from joining another "
+    "process's namespace, which rootless podman and toolbox need: they cannot "
+    "run sandboxed, only unconfined)";
 
