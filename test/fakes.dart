@@ -676,6 +676,13 @@ class FakeBackend implements AgentBackend {
     runningTurns.value = runningTurns.value.difference({chatId});
   }
 
+  /// What [updatePermissions] handed each chat, newest last.
+  final List<({String chatId, StandingPermissions standing})> standings = [];
+
+  @override
+  void updatePermissions(String chatId, StandingPermissions standing) =>
+      standings.add((chatId: chatId, standing: standing));
+
   final List<({String approvalId, ApprovalResponse response})> approvals = [];
 
   @override

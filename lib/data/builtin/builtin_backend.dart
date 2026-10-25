@@ -146,6 +146,9 @@ class BuiltinBackend implements AgentBackend {
   /// settings' global guess.
   final Map<String, int?> _windows = {};
   final _RunningTurns _running = _RunningTurns();
+
+  /// How to hand each running turn new permissions, keyed as [_running] is.
+  final Map<String, void Function(StandingPermissions)> _standing = {};
   /// Every open turn stream per chat: a parallel round runs several at once.
   final Map<String, Set<StreamController<AgentEvent>>> _controllers = {};
 
@@ -547,6 +550,10 @@ class BuiltinBackend implements AgentBackend {
       );
       // The real kill replaces the placeholder.
       _running.replace(stopKey, agent.cancel);
+      _standing[stopKey] = (standing) {
+        agent.updateStanding(standing);
+        subAgentRunner.updateStanding(standing);
+      };
 
       // A resumed turn has no prompt of its own to read `@agent` mentions out
       // of, so they come off the message that started it. A member turn is
@@ -627,6 +634,7 @@ class BuiltinBackend implements AgentBackend {
       // Android's hold on the process, and the listener is still writing the
       // turn's closing records when the agent itself has stopped.
       _running.removeKey(stopKey);
+      _standing.remove(stopKey);
     }
   }
 
@@ -1438,6 +1446,13 @@ class BuiltinBackend implements AgentBackend {
     // from the approval it holds and grants it for the rest of the turn.
     final completer = _pending[approvalId];
     if (completer != null && !completer.isCompleted) completer.complete(response);
+  }
+
+  @override
+  void updatePermissions(String chatId, StandingPermissions standing) {
+    for (final MapEntry(:key, :value) in _standing.entries) {
+      if (key.startsWith("$chatId\u0000")) value(standing);
+    }
   }
 
   @override

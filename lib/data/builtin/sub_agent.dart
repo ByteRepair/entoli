@@ -78,14 +78,25 @@ class SubAgentRunner {
   /// commands gate the same way. A sub-agent has no banner — nobody is there
   /// to answer one — so only rule-allow and rule-deny reach its commands;
   /// an ask-shaped call is refused.
-  final List<PermissionRule> permissions;
+  List<PermissionRule> permissions;
 
   /// What the sub-agent's sandboxed commands may write to beside the
   /// workspace, the parent's grant carried down.
-  final List<String> writableDirs;
+  List<String> writableDirs;
 
   /// Whether the parent's commands run under Landlock; a worker's do alike.
-  final bool sandboxed;
+  bool sandboxed;
+
+  /// The parent's [BuiltinAgent.updateStanding], carried to the workers
+  /// running now and the ones spawned after.
+  void updateStanding(StandingPermissions standing) {
+    permissions = standing.permissions;
+    writableDirs = standing.writableDirs;
+    sandboxed = standing.sandboxed;
+    for (final agent in _active) {
+      agent.updateStanding(standing);
+    }
+  }
 
   /// The parent's, so a worker's commands are kept from the same places.
   final List<String> readOnlyDirs;

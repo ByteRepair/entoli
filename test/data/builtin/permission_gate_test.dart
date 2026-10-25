@@ -55,7 +55,7 @@ void main() {
     addTearDown(() => tempDir.deleteSync(recursive: true));
     workspaceDir = chat;
     shell = FakeShell(respond ?? (_) => ok(""),
-        canRunCommands: true);
+        canRunCommands: true, home: "/home/u");
     final allowed = [...approvals];
     return BuiltinAgent(
       session: session,
@@ -838,6 +838,49 @@ void main() {
       ]).run(userMessage("go")).toList();
       expect(shell.sandboxes[0]!.extraWrites, contains("/opt/out"));
       expect(shell.sandboxes[1]!.extraWrites, isNot(contains("/opt/out")));
+    });
+
+    test("a ~ the user typed is their home by the time the sandbox reads it",
+        () async {
+      final client = FakeLlmClient([
+        [bashCall("podman ps")], [finish],
+      ]);
+      await agentOver(client, writableDirs: [
+        "~/.cache/x",
+      ], permissions: [
+        const PermissionRule(
+            tool: "bash", pattern: "podman *", writes: ["~/.local/share"]),
+      ]).run(userMessage("go")).toList();
+      expect(shell.sandboxes.single!.extraWrites,
+          containsAll(["/home/u/.cache/x", "/home/u/.local/share"]));
+      expect(shell.sandboxes.single!.extraWrites.where((w) => w.startsWith("~")),
+          isEmpty);
+    });
+
+    test("rules saved while a turn runs reach its next command", () async {
+      final client = FakeLlmClient([
+        [bashCall("podman ps")], [bashCall("podman ps")], [finish],
+      ]);
+      final agent = agentOver(
+        client,
+        approveMode: ApproveMode.ask,
+        approvals: [ApprovalResponse.allow],
+      );
+      final events = <AgentEvent>[];
+      await for (final event in agent.run(userMessage("go"))) {
+        events.add(event);
+        // The user adds the rule from settings once the first banner is up.
+        if (event is ApprovalRequestEvent) {
+          agent.updateStanding(const StandingPermissions(permissions: [
+            PermissionRule(
+                tool: "bash",
+                pattern: "{podman,toolbox} *",
+                decision: PermissionDecision.allow),
+          ]));
+        }
+      }
+      expect(events.whereType<ApprovalRequestEvent>(), hasLength(1));
+      expect(shell.ran, ["podman ps", "podman ps"]);
     });
   });
 

@@ -492,6 +492,31 @@ class TurnSettings {
     this.sandboxReprompt,
     this.sandbox = true,
   });
+
+  /// The half of these settings the user can change under a running turn.
+  StandingPermissions get standing => StandingPermissions(
+        permissions: permissions,
+        writableDirs: writableDirs,
+        sandboxReprompt: sandboxReprompt ?? true,
+        sandboxed: sandbox,
+      );
+}
+
+/// What the permission pages set, as one chat's turn reads it: the merged
+/// tiers of [TurnSettings], resolved the same way, so a page saved while a
+/// turn runs can hand the turn what its next turn would have started with.
+class StandingPermissions {
+  const StandingPermissions({
+    this.permissions = const [],
+    this.writableDirs = const [],
+    this.sandboxReprompt = true,
+    this.sandboxed = true,
+  });
+
+  final List<PermissionRule> permissions;
+  final List<String> writableDirs;
+  final bool sandboxReprompt;
+  final bool sandboxed;
 }
 
 /// What runs a turn, and the app's one route to a provider. `BuiltinBackend`
@@ -606,6 +631,11 @@ abstract class AgentBackend {
   Future<void> shutdown();
 
   Future<void> abort(String chatId);
+
+  /// Hands [chatId]'s running turns, and their sub-agents, the permissions
+  /// the settings now resolve to. A chat with no turn running is left alone:
+  /// its next turn reads the settings afresh.
+  void updatePermissions(String chatId, StandingPermissions standing);
 
   Future<void> respondApproval(
       String chatId, String approvalId, ApprovalResponse response);

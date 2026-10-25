@@ -497,23 +497,45 @@ class BuiltinAgent {
   /// The turn's standing rules, merged chat over project over app by the
   /// repository. Consulted in [_runGated] before the classifier and the
   /// banner; grown at runtime by an "Allow in Chat" or "Allow in Project"
-  /// banner answer, through [grantRuntimeRule].
+  /// banner answer, through [grantRuntimeRule]. Replaced whole by
+  /// [updateStanding] when the user edits a tier while the turn runs.
   List<PermissionRule> permissions;
 
   /// What this turn's sandboxed commands may additionally write to, beside
   /// the workspace — the tiers' writableDirs. A rule's own writes are not
   /// here: they reach only the commands it matches, through [rulesSandbox]. Read
   /// by [sandboxFor] per command, so a mid-turn grant reaches the next run.
-  final List<String> writableDirs;
+  List<String> writableDirs;
 
   /// Whether a sandbox-denied write is offered back as an approval. Off
   /// reports the denial and moves on.
-  final bool sandboxReprompt;
+  bool sandboxReprompt;
 
   /// Whether commands run under Landlock where the machine offers it. Off
   /// is the settings' answer for a project, not a per-command one: the
   /// rules' `unconfined` is that.
-  final bool sandboxed;
+  bool sandboxed;
+
+  /// Takes the tiers as the settings now say, for the next call the gate
+  /// reads: the call already running keeps what it was decided under, and
+  /// the banner answers granted this turn stay in front.
+  void updateStanding(StandingPermissions standing) {
+    permissions = standing.permissions;
+    writableDirs = standing.writableDirs;
+    sandboxReprompt = standing.sandboxReprompt;
+    sandboxed = standing.sandboxed;
+  }
+
+  /// Where a `~` the user typed into a rule or a writable directory points:
+  /// the home a command's `~` lands in, the project workspace where the
+  /// driver gives commands no home of their own.
+  String get _home => shell.homeFor(projectWorkspace) ?? projectWorkspace;
+
+  /// Every rule this turn reads, banner grants first, with `~` read.
+  List<PermissionRule> get _rules => [
+        for (final rule in [..._runtimeRules, ...permissions])
+          rule.withHome(_home),
+      ];
 
   /// The app's own data directory — settings, secrets, chats. The one shape
   /// [addDirectoryTool] refuses outright: the data directory itself, or
@@ -556,7 +578,8 @@ class BuiltinAgent {
   /// confinement and the file tools' workspace gate reads the same list, so a
   /// granted directory carries the chat workspace's own permissions by
   /// command or by file tool alike.
-  List<String> get _grantedDirs => [...writableDirs, ..._runtimeDirs];
+  List<String> get _grantedDirs =>
+      [for (final dir in writableDirs) expandHome(dir, _home), ..._runtimeDirs];
 
   /// The confinement a command runs under, from the shell's driver. Read per
   /// turn rather than held: the driver is resolved per command in the shell,
@@ -2805,7 +2828,7 @@ class BuiltinAgent {
     ShellCommandAnalysis? analysis,
     ApproveMode? mode,
   }) async* {
-    final rules = [..._runtimeRules, ...permissions];
+    final rules = _rules;
     final verdict = rulesDecideTraced(
       rules,
       toolName,
@@ -3098,7 +3121,7 @@ class BuiltinAgent {
                     command, isWindows: platformIsWindows));
     // The rules' own word on the sandbox, whoever decided the command runs.
     if (sandbox != null) {
-      final ruled = rulesSandbox([..._runtimeRules, ...permissions],
+      final ruled = rulesSandbox(_rules,
           parsed!.modelableSegments ?? const []);
       if (ruled.unconfined) {
         sandbox = null;

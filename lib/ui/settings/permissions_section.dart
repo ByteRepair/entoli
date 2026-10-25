@@ -93,7 +93,7 @@ const Map<String, _Tool> _tools = {
   "bash": (
     name: "Shell commands (bash)",
     field: "Command",
-    hint: "podman *   (* matches any arguments)",
+    hint: "{podman,toolbox} *   (* any arguments, {a,b} either)",
   ),
   "read": (name: "Reading files (read)", field: "File or folder", hint: "~/Projects/x"),
   "write": (name: "Writing files (write)", field: "File or folder", hint: "~/Projects/x"),

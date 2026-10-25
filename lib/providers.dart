@@ -1439,6 +1439,7 @@ class ProjectSettingsNotifier extends Notifier<ProjectSettings> {
     final ttlChanged = next.tempChatTtl != state.tempChatTtl;
     state = next.copy();
     await state.save(_config, project: project);
+    await _refreshTurns();
     if (ttlChanged) {
       await ref.read(chatRepositoryProvider).reanchorProjectTtl(project);
       ref.invalidate(chatListProvider);
@@ -1450,7 +1451,14 @@ class ProjectSettingsNotifier extends Notifier<ProjectSettings> {
     change(next);
     state = next;
     await next.save(_config, project: project);
+    await _refreshTurns();
   }
+
+  /// A running turn read its permissions as it started; this hands it the
+  /// ones just saved. The default project's are every project's.
+  Future<void> _refreshTurns() => ref
+      .read(chatRepositoryProvider)
+      .refreshPermissions(project: project, everyProject: project == null);
 }
 
 /// The same setters over a paired device's project: each change is sent there

@@ -32,7 +32,7 @@ void main() {
   testWidgets("the command is what the banner shows", (tester) async {
     await asking(tester, bash);
 
-    expect(find.text("Allow bash?"), findsOneWidget);
+    expect(find.text("Run this command?"), findsOneWidget);
     expect(find.text("rm -rf build && cmake --build ."), findsOneWidget);
   });
 
@@ -177,7 +177,7 @@ void main() {
             onAlwaysAllowProject: () => seen = reprompt,
           ));
 
-      expect(find.text("Allow bash?"), findsOneWidget);
+      expect(find.text("Run this command?"), findsOneWidget);
       expect(find.text("writing /home/yiannis/Projects/x"), findsOneWidget);
       await tester.tap(find.text("Always in project"));
       await tester.pump();

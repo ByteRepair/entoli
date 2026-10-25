@@ -307,6 +307,20 @@ the command into — so a compound command must find an allow for every segment,
 and a command the parse cannot model is escalated to the banner even under an
 allow rule (refused in `never`, where nobody can answer).
 
+A pattern names alternatives with shell braces, `{podman,toolbox} *`, for
+every tool (`expandBraces`): not `|`, which is the pipe the segment split
+reads, and not a bare comma, which real arguments carry. A `~` in a rule's
+writes, a file tool's pattern or a tier's `writableDirs` is the user's home,
+read by the agent before the sandbox or the match sees it — the Landlock
+helper takes a path as given, and a literal `~/x` failed every command.
+
+A turn reads the tiers as it starts, so a page saved while one runs hands it
+the new ones: `ChatRepository.refreshPermissions` resolves what the next turn
+would start with and `AgentBackend.updatePermissions` gives it to the running
+agent and its sub-agents, from the call after the one in flight. The
+project's settings notifier does this on every save, and so does a banner's
+"Allow in Project", for the project's other running chats.
+
 A rule answers two questions, separately: its `decision` is whether a match
 is asked about, `unconfined` and `writes` what a matching `bash` run may
 touch — no Landlock at all, or extra directories beside the turn's grant. Either may stand
@@ -461,7 +475,8 @@ and everything else the sandbox is the only boundary behind.
 arguments JSON under it at two lines and an ellipsis, which is a consent dialog
 asking to be waved through: what is being agreed to is the command, and the
 command was the half that got cut. It sits in mono on a plain surface inside the
-tinted banner, capped at `ApprovalBanner.mostHeight` and scrolling past it, so a
+banner, selectable so it can be copied into a terminal or a rule, capped at
+`ApprovalBanner.mostHeight` and scrolling past it, so a
 command of any length is readable without the banner burying the conversation it
 is asking about.
 

@@ -607,6 +607,72 @@ void main() {
     });
   });
 
+  group("permissions changed while a turn runs", () {
+    const podman = PermissionRule(
+        tool: "bash", pattern: "podman *", decision: PermissionDecision.allow);
+
+    test("a project's rules reach its running turns and no other project's",
+        () async {
+      final repo = repoWith(AppSettings());
+      final inWork = await repo.createChat(project: "work");
+      final elsewhere = await repo.createChat();
+      final idle = await repo.createChat(project: "work");
+      backend.runningTurns.value = {inWork.state.id, elsewhere.state.id};
+
+      await ((ProjectSettings.load(config, project: "work"))
+            ..permissions = [podman]
+            ..writableDirs = ["~/.local/share"])
+          .save(config, project: "work");
+      await repo.refreshPermissions(project: "work");
+
+      final handed = backend.standings.single;
+      expect(handed.chatId, inWork.state.id);
+      expect(handed.standing.permissions, [podman]);
+      expect(handed.standing.permissions.single.origin, PermissionTier.project);
+      expect(handed.standing.writableDirs, ["~/.local/share"]);
+      expect(backend.standings.map((s) => s.chatId), isNot(contains(idle.state.id)),
+          reason: "a chat with no turn reads the settings when one starts");
+    });
+
+    test("the default project's rules reach every running turn", () async {
+      final repo = repoWith(AppSettings());
+      final inWork = await repo.createChat(project: "work");
+      final elsewhere = await repo.createChat();
+      backend.runningTurns.value = {inWork.state.id, elsewhere.state.id};
+
+      await (ProjectSettings.load(config)..permissions = [podman]).save(config);
+      await repo.refreshPermissions(everyProject: true);
+
+      expect(backend.standings.map((s) => s.chatId),
+          unorderedEquals([inWork.state.id, elsewhere.state.id]));
+      for (final s in backend.standings) {
+        expect(s.standing.permissions.map((r) => r.origin),
+            contains(PermissionTier.defaultProject));
+      }
+    });
+
+    test("\"Allow in Project\" reaches the project's other running chats",
+        () async {
+      final repo = repoWith(AppSettings());
+      final asking = await repo.createChat(project: "work");
+      final sibling = await repo.createChat(project: "work");
+      backend.runningTurns.value = {asking.state.id, sibling.state.id};
+
+      await repo.respondApproval(
+        asking.state.id,
+        "approval-p",
+        ApprovalResponse.alwaysAllowProject,
+        approval: const ToolApproval(
+            id: "approval-p", toolName: "bash", argumentsText: "podman ps"),
+      );
+
+      final handed = {
+        for (final s in backend.standings) s.chatId: s.standing.permissions
+      };
+      expect(handed[sibling.state.id]?.single.pattern, "podman ps *");
+    });
+  });
+
     group("a rule written from a banner answer", () {
     test("\"Allow in Chat\" writes the derived rule on the chat's meta.json",
         () async {
