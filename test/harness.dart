@@ -21,6 +21,7 @@ import "package:agent_chat/data/local/file_byte_repair_store.dart";
 import "package:agent_chat/data/sync/peers.dart" show PeerState, PeerStatus;
 import "package:agent_chat/data/sync/sync_hub.dart"
     show RemoteChatEntry, RemoteProject, SyncHub;
+import "package:agent_chat/domain/confinement.dart";
 import "package:agent_chat/domain/sync/devices.dart";
 import "package:agent_chat/domain/sync/identity.dart";
 import "package:agent_chat/domain/sync/relay_signaling.dart";
@@ -170,6 +171,7 @@ class TestApp {
     bool assistantGesture = true,
     Set<String> linuxes = const {},
     bool proot = false,
+    Confinement hostConfinement = Confinement.none,
     String? byteRepairInstallDir = guestEsbmcInstallDir,
     List<String> byteRepairBrewPaths = const [],
     Set<String> localModels = const {},
@@ -287,6 +289,7 @@ class TestApp {
           // answers for the ABI where a test did not bother to.
           deviceAbiProvider.overrideWithValue(abi ?? (proot ? "arm64-v8a" : null)),
           prootAvailableProvider.overrideWithValue(proot),
+          hostConfinementProvider.overrideWithValue(hostConfinement),
           appVersionProvider.overrideWithValue(testAppVersion),
           backgroundWorkProvider.overrideWithValue(work),
           if (hub != null) syncHubProvider.overrideWithValue(hub),

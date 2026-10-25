@@ -55,6 +55,7 @@ export "io/platform.dart" if (dart.library.js_interop) "web/platform.dart"
         deleteTree,
         deviceAbi,
         deviceHostname,
+        hostConfinement,
         installBundledTools,
         persist,
         registerRecorder,

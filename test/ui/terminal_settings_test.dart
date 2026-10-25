@@ -4,6 +4,7 @@ import "package:flutter/material.dart";
 import "package:flutter_test/flutter_test.dart";
 
 import "package:agent_chat/data/builtin/local_shell.dart";
+import "package:agent_chat/domain/confinement.dart";
 import "package:agent_chat/providers.dart";
 import "package:agent_chat/ui/settings/settings_page.dart";
 
@@ -11,6 +12,11 @@ import "../harness.dart";
 
 void main() {
   late TestApp app;
+
+  // What the picker names each environment: its name and whether it enforces
+  // the sandbox settings. The tests' host enforces nothing unless told.
+  final host = "Host · ${Confinement.none.label}";
+  final alpine = "Alpine Linux · ${Confinement.guest.label}";
 
   tearDown(() => app.dispose());
 
@@ -37,7 +43,7 @@ void main() {
 
     expect(find.textContaining("no proot in it for arm64-v8a"), findsOneWidget);
     expect(find.textContaining("tool/android/build.sh arm64-v8a"), findsOneWidget);
-    expect(find.text("Host"), findsOneWidget);
+    expect(find.text(host), findsOneWidget);
     expect(find.textContaining("What driver to use"), findsOneWidget);
     expect(find.text("Alpine Linux 3.24.1"), findsNothing);
   });
@@ -55,8 +61,8 @@ void main() {
 
     // Nothing installed yet, so nothing to pick: commands run on the host.
     expect(find.text("Commands run on"), findsOneWidget);
-    expect(find.text("Host"), findsOneWidget);
-    expect(find.text("Alpine Linux"), findsNothing);
+    expect(find.text(host), findsOneWidget);
+    expect(find.text(alpine), findsNothing);
   });
 
   testWidgets("an architecture this build has no image for is said rather than "
@@ -83,18 +89,18 @@ void main() {
     // Installed is not the same as chosen: what commands run on is the user's
     // to say, and a download is not that.
     expect(app.container.read(appSettingsProvider).rootfsId, isNull);
-    await tester.tap(find.text("Host"));
+    await tester.tap(find.text(host));
     await settleIo(tester);
-    expect(find.text("Alpine Linux"), findsWidgets);
+    expect(find.text(alpine), findsWidgets);
   });
 
   testWidgets("picking one is what makes commands run inside it", (tester) async {
     app = TestApp.create(proot: true, linuxes: const {"alpine"});
     await pumpTerminal(tester);
 
-    await tester.tap(find.text("Host"));
+    await tester.tap(find.text(host));
     await settleIo(tester);
-    await tester.tap(find.text("Alpine Linux").last);
+    await tester.tap(find.text(alpine).last);
     await settleIo(tester);
 
     expect(app.container.read(appSettingsProvider).rootfsId, "alpine");
@@ -144,11 +150,61 @@ void main() {
     await pumpTerminal(tester);
 
     expect(find.text("Commands run on"), findsOneWidget);
-    expect(find.text("Host"), findsOneWidget);
+    expect(find.text(host), findsOneWidget);
     expect(find.textContaining("What driver to use"), findsOneWidget);
     // No proot, so no catalog and no build-fault warning.
     expect(find.text("Alpine Linux 3.24.1"), findsNothing);
     expect(find.textContaining("tool/android/build.sh"), findsNothing);
     expect(find.byTooltip("Download"), findsNothing);
+  });
+
+  group("whether the environment enforces the sandbox settings", () {
+    testWidgets("a host that implements no sandbox says the settings are not "
+        "enforced", (tester) async {
+      app = TestApp.create(shell: LocalShell(environment: () => const {}));
+      await pumpTerminal(tester);
+
+      expect(find.textContaining("kept but not enforced here: nothing on this "
+          "platform implements them"), findsOneWidget);
+      expect(find.byIcon(Icons.warning_amber_rounded), findsOneWidget);
+    });
+
+    testWidgets("Linux's host says Landlock enforces them", (tester) async {
+      app = TestApp.create(
+          shell: LocalShell(environment: () => const {}),
+          hostConfinement: Confinement.landlock);
+      await pumpTerminal(tester);
+
+      expect(find.text("Host · ${Confinement.landlock.label}"), findsOneWidget);
+      expect(find.textContaining("Enforces your sandbox settings with Landlock"),
+          findsOneWidget);
+      expect(find.byIcon(Icons.shield_outlined), findsOneWidget);
+    });
+
+    testWidgets("Landlock switched off by the policy is a warning",
+        (tester) async {
+      app = TestApp.create(
+          shell: LocalShell(environment: () => const {}),
+          hostConfinement: Confinement.landlock);
+      await io(tester,
+          () => app.container
+              .read(projectSettingsProvider(null).notifier)
+              .setProjectSandbox(false));
+      await pumpTerminal(tester);
+
+      expect(find.textContaining("switched off in Settings > General"),
+          findsOneWidget);
+      expect(find.byIcon(Icons.warning_amber_rounded), findsOneWidget);
+    });
+
+    testWidgets("a picked Linux says it does not enforce them", (tester) async {
+      app = TestApp.create(proot: true, linuxes: const {"alpine"});
+      await io(tester,
+          () => app.container.read(appSettingsProvider.notifier).setRootfs("alpine"));
+      await pumpTerminal(tester);
+
+      expect(find.textContaining("run inside the downloaded Linux"),
+          findsOneWidget);
+    });
   });
 }
