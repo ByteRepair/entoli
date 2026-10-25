@@ -247,14 +247,14 @@ void main() {
 
     test("Landlock: the project's answer over the app's, unset is on",
         () async {
-      expect((await turnSettings("byte-repair")).sandbox, isTrue);
+      expect((await turnSettings("byte-repair")).standing.sandboxed, isTrue);
       await config.documents
           .write(config.projectSettingsFile(), '{"sandbox": false}');
-      expect((await turnSettings("byte-repair")).sandbox, isFalse);
+      expect((await turnSettings("byte-repair")).standing.sandboxed, isFalse);
       await config.documents.write(
           config.projectSettingsFile(project: "byte-repair"),
           '{"sandbox": true}');
-      expect((await turnSettings("byte-repair")).sandbox, isTrue);
+      expect((await turnSettings("byte-repair")).standing.sandboxed, isTrue);
     });
 
     test("an Omada-on project drops the task tool; an off one keeps it", () async {
@@ -619,11 +619,11 @@ void main() {
       final idle = await repo.createChat(project: "work");
       backend.runningTurns.value = {inWork.state.id, elsewhere.state.id};
 
-      await ((ProjectSettings.load(config, project: "work"))
+      await repo.saveProjectSettings(
+          ProjectSettings.load(config, project: "work")
             ..permissions = [podman]
-            ..writableDirs = ["~/.local/share"])
-          .save(config, project: "work");
-      await repo.refreshPermissions(project: "work");
+            ..writableDirs = ["~/.local/share"],
+          project: "work");
 
       final handed = backend.standings.single;
       expect(handed.chatId, inWork.state.id);
@@ -640,8 +640,8 @@ void main() {
       final elsewhere = await repo.createChat();
       backend.runningTurns.value = {inWork.state.id, elsewhere.state.id};
 
-      await (ProjectSettings.load(config)..permissions = [podman]).save(config);
-      await repo.refreshPermissions(everyProject: true);
+      await repo.saveProjectSettings(
+          ProjectSettings.load(config)..permissions = [podman]);
 
       expect(backend.standings.map((s) => s.chatId),
           unorderedEquals([inWork.state.id, elsewhere.state.id]));
@@ -649,6 +649,18 @@ void main() {
         expect(s.standing.permissions.map((r) => r.origin),
             contains(PermissionTier.defaultProject));
       }
+    });
+
+    test("a save that leaves the permissions alone hands nothing", () async {
+      final repo = repoWith(AppSettings());
+      final chat = await repo.createChat(project: "work");
+      backend.runningTurns.value = {chat.state.id};
+
+      await repo.saveProjectSettings(
+          ProjectSettings.load(config, project: "work")..description = "x",
+          project: "work");
+
+      expect(backend.standings, isEmpty);
     });
 
     test("\"Allow in Project\" reaches the project's other running chats",
@@ -862,7 +874,7 @@ void main() {
       await repo.sendPrompt(chat.state.id, userMessage("go")).toList();
 
       final byPattern = {
-        for (final r in backend.prompts.last.settings.permissions) r.pattern: r,
+        for (final r in backend.prompts.last.settings.standing.permissions) r.pattern: r,
       };
       expect(byPattern["chat rule *"]!.origin, PermissionTier.chat);
       // The chat is in the default project, so its project settings and the
@@ -890,7 +902,7 @@ void main() {
       );
       await repo.sendPrompt(chat.state.id, userMessage("again")).toList();
 
-      final rules = backend.prompts.last.settings.permissions;
+      final rules = backend.prompts.last.settings.standing.permissions;
       expect(rules.map((r) => r.pattern), contains("git status *"));
     });
 

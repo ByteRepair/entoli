@@ -69,23 +69,24 @@ void main() {
     });
   });
 
-  group("a rule's ~", () {
-    test("is the home in its writes and in a file tool's pattern", () {
+  group("a rule's paths", () {
+    String home(String path) => path.replaceFirst("~", "/home/u");
+
+    test("are its writes and a file tool's pattern", () {
       const rule = PermissionRule(
           tool: "write",
           pattern: "~/Projects/x",
           decision: PermissionDecision.allow);
-      expect(rule.withHome("/home/u").pattern, "/home/u/Projects/x");
+      expect(rule.withPaths(home).pattern, "/home/u/Projects/x");
       const bash = PermissionRule(
-          tool: "bash", pattern: "podman *", writes: ["~/.local/share", "~", "/tmp/~x"]);
-      expect(bash.withHome("/home/u").writes,
-          ["/home/u/.local/share", "/home/u", "/tmp/~x"]);
+          tool: "bash", pattern: "podman *", writes: ["~/.local/share"]);
+      expect(bash.withPaths(home).writes, ["/home/u/.local/share"]);
     });
 
-    test("is left in a command's pattern, which matches what was typed", () {
+    test("leave a command's pattern, which matches what was typed", () {
       const rule = PermissionRule(
           tool: "bash", pattern: "~/bin/build *", decision: PermissionDecision.allow);
-      expect(rule.withHome("/home/u").pattern, "~/bin/build *");
+      expect(rule.withPaths(home).pattern, "~/bin/build *");
     });
   });
 

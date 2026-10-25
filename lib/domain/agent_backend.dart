@@ -449,21 +449,8 @@ class TurnSettings {
   /// is the floor this can only name a value for, not widen.
   final int? turnMaxSteps;
 
-  /// The turn's standing permission rules, merged chat first, then project,
-  /// then app — consulted before the classifier and the banner in every mode.
-  final List<PermissionRule> permissions;
-
-  /// Directories this turn's sandboxed commands may additionally write to,
-  /// beside the workspace: the tiers' writableDirs, composed by the
-  /// repository.
-  final List<String> writableDirs;
-
-  /// Whether a command the sandbox denied writes to is offered back as an
-  /// approval. Null means the app default decides.
-  final bool? sandboxReprompt;
-
-  /// Whether this turn's commands run under Landlock.
-  final bool sandbox;
+  /// What the permission pages set, merged over the tiers by the repository.
+  final StandingPermissions standing;
 
   const TurnSettings({
     this.memory = MemorySettings.off,
@@ -487,24 +474,13 @@ class TurnSettings {
     this.turnMaxSteps,
     this.tone = Tone.none,
     this.citations = false,
-    this.permissions = const [],
-    this.writableDirs = const [],
-    this.sandboxReprompt,
-    this.sandbox = true,
+    this.standing = const StandingPermissions(),
   });
-
-  /// The half of these settings the user can change under a running turn.
-  StandingPermissions get standing => StandingPermissions(
-        permissions: permissions,
-        writableDirs: writableDirs,
-        sandboxReprompt: sandboxReprompt ?? true,
-        sandboxed: sandbox,
-      );
 }
 
-/// What the permission pages set, as one chat's turn reads it: the merged
-/// tiers of [TurnSettings], resolved the same way, so a page saved while a
-/// turn runs can hand the turn what its next turn would have started with.
+/// What the permission pages set, as one chat's turn reads it. One value so a
+/// page saved while a turn runs can hand the turn, whole, what its next turn
+/// would have started with.
 class StandingPermissions {
   const StandingPermissions({
     this.permissions = const [],
@@ -513,9 +489,19 @@ class StandingPermissions {
     this.sandboxed = true,
   });
 
+  /// The rules, merged chat first, then project, then app — consulted before
+  /// the classifier and the banner in every mode.
   final List<PermissionRule> permissions;
+
+  /// Directories sandboxed commands may additionally write to, beside the
+  /// workspace: the tiers' writableDirs.
   final List<String> writableDirs;
+
+  /// Whether a command the sandbox denied writes to is offered back as an
+  /// approval.
   final bool sandboxReprompt;
+
+  /// Whether commands run under Landlock.
   final bool sandboxed;
 }
 

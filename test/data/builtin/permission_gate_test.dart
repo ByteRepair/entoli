@@ -70,10 +70,12 @@ void main() {
           allowed.isEmpty ? ApprovalResponse.allow : allowed.removeAt(0),
       answer: (request) => Future.value(request.unanswered),
       sandboxHelper: _StubHelper(),
-      permissions: permissions,
-      writableDirs: writableDirs,
-      sandboxReprompt: sandboxReprompt,
-      sandboxed: sandboxed,
+      standing: StandingPermissions(
+        permissions: permissions,
+        writableDirs: writableDirs,
+        sandboxReprompt: sandboxReprompt,
+        sandboxed: sandboxed,
+      ),
       classifier: classifier,
       webSearch: webSearch,
     );

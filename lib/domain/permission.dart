@@ -175,18 +175,19 @@ class PermissionRule {
         origin: origin ?? this.origin,
       );
 
-  /// This rule with `~` read as [home] wherever it names a path: the sandbox
+  /// This rule with [resolve] applied wherever it names a path: the sandbox
   /// [writes], and the pattern of a file tool. A command's pattern is left
-  /// alone — a `~` there is matched against the command as the model wrote it.
-  PermissionRule withHome(String? home) => PermissionRule(
+  /// alone — it is matched against the command as the model wrote it.
+  PermissionRule withPaths(String Function(String path) resolve) =>
+      PermissionRule(
         tool: tool,
         pattern: switch (tool) {
-          "read" || "write" || "edit" => expandHome(pattern, home),
+          "read" || "write" || "edit" => resolve(pattern),
           _ => pattern,
         },
         decision: decision,
         unconfined: unconfined,
-        writes: [for (final w in writes) expandHome(w, home)],
+        writes: [for (final w in writes) resolve(w)],
         origin: origin,
       );
 
@@ -381,8 +382,9 @@ bool _ruleMatches(PermissionRule rule, String toolName, String subject) =>
 /// `|`, which is a pipe to the segment split, or a bare comma, which real
 /// arguments carry. A brace with no comma in it, or one left open, is
 /// literal, as it is to bash.
-List<String> expandBraces(String pattern) =>
-    _braceCache.putIfAbsent(pattern, () => _expandBraces(pattern));
+List<String> expandBraces(String pattern) => pattern.contains("{")
+    ? _braceCache.putIfAbsent(pattern, () => _expandBraces(pattern))
+    : [pattern];
 
 final _braceCache = <String, List<String>>{};
 
@@ -414,16 +416,6 @@ List<String> _expandBraces(String pattern) {
     ];
   }
   return [pattern];
-}
-
-/// [path] with a leading `~` read as [home], the way the shell reads it.
-/// Rules and writable directories are typed by the user, who means their
-/// own home; the sandbox helper and the path match take the path as given.
-String expandHome(String path, String? home) {
-  if (home == null) return path;
-  if (path == "~") return home;
-  if (path.startsWith("~/")) return "$home${path.substring(1)}";
-  return path;
 }
 
 /// The host of [url], as the fetch itself would parse it. Null where the

@@ -77,7 +77,7 @@ void main() {
       approve: (_) async =>
           allowed.isEmpty ? ApprovalResponse.allow : allowed.removeAt(0),
       answer: (request) => Future.value(request.unanswered),
-      writableDirs: writableDirs,
+      standing: StandingPermissions(writableDirs: writableDirs),
       dataDir: dataDir,
     );
   }

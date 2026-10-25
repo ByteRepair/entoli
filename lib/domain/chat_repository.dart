@@ -1,6 +1,7 @@
 import "dart:async";
 import "dart:typed_data";
 
+import "package:collection/collection.dart" show ListEquality;
 import "package:uuid/uuid.dart";
 
 import "../core/config.dart";
@@ -432,7 +433,6 @@ class ChatRepository {
     final instructions = builtIn != null
         ? builtIn.turnInstructions(omada: omada)
         : BuiltinProject.turnInstructionsForUserProject(omada: omada);
-    final standing = _standingOf(meta, projectSettings, project: project);
     return TurnSettings(
       model: meta.model ?? settings.defaultModelId,
       provider: meta.model != null ? meta.provider : settings.defaultProviderId,
@@ -459,10 +459,7 @@ class ChatRepository {
       omada: omada,
       // The project's own command variables, beside the app-level ones.
       environment: projectSettings.environment ?? const {},
-      permissions: standing.permissions,
-      writableDirs: standing.writableDirs,
-      sandboxReprompt: standing.sandboxReprompt,
-      sandbox: standing.sandboxed,
+      standing: _standingOf(meta, projectSettings, project: project),
       turnMaxSteps:
           projectSettings.turnMaxSteps ?? settings.turnMaxSteps,
       // The project's wording answers over the app's, like the step limit.
@@ -511,21 +508,38 @@ class ChatRepository {
     );
   }
 
-  /// Hands the running turns the permissions their settings now resolve to:
-  /// those in [project], or every chat's where [project] is null — the
-  /// default project's tier is every project's. A turn otherwise reads the
-  /// rules once, as it starts, and a rule added to stop a banner would not
-  /// stop the next one.
-  Future<void> refreshPermissions({String? project, bool everyProject = false}) async {
-    for (final chatId in _backend.runningTurns.value) {
-      if (_mirrored(chatId)) continue;
-      final at = await projectOf(chatId);
-      if (!everyProject && at != project) continue;
-      final settings = ProjectSettings.load(_config, project: at);
-      _backend.updatePermissions(
-          chatId, _standingOf(await loadMeta(chatId), settings, project: at));
-    }
+  /// Save [settings] as [project]'s. Every write of a project's settings
+  /// comes through here, because a running turn read its permissions as it
+  /// started: where what the permission pages set has changed, the turns it
+  /// reaches are handed the new answer, and a rule added to stop a banner
+  /// stops the next one.
+  Future<void> saveProjectSettings(ProjectSettings settings,
+      {String? project}) async {
+    final before = ProjectSettings.load(_config, project: project);
+    await settings.save(_config, project: project);
+    if (!_samePermissions(before, settings)) await _refreshPermissions(project);
   }
+
+  static bool _samePermissions(ProjectSettings a, ProjectSettings b) =>
+      const ListEquality<PermissionRule>().equals(a.permissions, b.permissions) &&
+      const ListEquality<String>().equals(a.writableDirs, b.writableDirs) &&
+      a.sandbox == b.sandbox &&
+      a.sandboxReprompt == b.sandboxReprompt;
+
+  /// Hands the running turns in [project] what their settings now resolve
+  /// to — every running turn where [project] is the default, whose tier is
+  /// every project's.
+  Future<void> _refreshPermissions(String? project) =>
+      Future.wait(_backend.runningTurns.value.map((chatId) async {
+        if (_mirrored(chatId)) return;
+        final at = await projectOf(chatId);
+        if (project != null && at != project) return;
+        _backend.updatePermissions(
+            chatId,
+            _standingOf(await loadMeta(chatId),
+                ProjectSettings.load(_config, project: at),
+                project: at));
+      }));
 
   /// Which memories a turn reads and writes: the app-level gates over which
   /// project's store answers. A non-default project set to [Tristate.on]
@@ -747,13 +761,11 @@ class ChatRepository {
           final grant =
               _grant(settings.permissions, settings.writableDirs, rule, dirs);
           if (grant != null) {
-            await (settings
+            await saveProjectSettings(
+                settings
                   ..permissions = grant.rules
-                  ..writableDirs = grant.dirs)
-                .save(_config, project: project);
-            // The project's other running chats would ask again otherwise.
-            await refreshPermissions(
-                project: project, everyProject: project == null);
+                  ..writableDirs = grant.dirs,
+                project: project);
           }
         }
       }
