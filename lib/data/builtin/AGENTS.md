@@ -308,8 +308,8 @@ and a command the parse cannot model is escalated to the banner even under an
 allow rule (refused in `never`, where nobody can answer).
 
 A rule answers two questions, separately: its `decision` is whether a match
-is asked about, its `sandbox` what a matching `bash` run may touch — inherit,
-`writes` (extra directories), or `unconfined` (no Landlock). Either may stand
+is asked about, `unconfined` and `writes` what a matching `bash` run may
+touch — no Landlock at all, or extra directories beside the turn's grant. Either may stand
 alone: `decision` is optional, so "ask, but run podman unconfined once
 answered" is one rule. They are separate because an allow stops the asking,
 and the sandbox matters most for exactly the runs nobody watches; an allow

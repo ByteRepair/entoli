@@ -354,24 +354,22 @@ void main() {
           tool: "bash",
           pattern: "make *",
           decision: PermissionDecision.allow,
-          sandbox: RuleSandbox.writes,
           writes: ["/tmp/x"],
         ),
         const PermissionRule(
           tool: "bash",
           pattern: "podman *",
-          sandbox: RuleSandbox.unconfined,
+          unconfined: true,
         ),
       ];
       final back = permissionRulesFromJson(permissionRulesToJson(rules));
       expect(back.length, 3);
       expect(back[0].tool, "bash");
       expect(back[0].decision, PermissionDecision.deny);
-      expect(back[0].sandbox, RuleSandbox.inherit);
-      expect(back[1].sandbox, RuleSandbox.writes);
+      expect(back[0].unconfined, isFalse);
       expect(back[1].writes, ["/tmp/x"]);
       expect(back[2].decision, isNull);
-      expect(back[2].sandbox, RuleSandbox.unconfined);
+      expect(back[2].unconfined, isTrue);
     });
 
     test("the old writes key is not read", () {
@@ -383,7 +381,7 @@ void main() {
           "writes": ["/home/u/.gitconfig"],
         },
       ]);
-      expect(back.single.sandbox, RuleSandbox.inherit);
+      expect(back.single.unconfined, isFalse);
       expect(back.single.writes, isEmpty);
     });
 
@@ -520,13 +518,12 @@ void main() {
     const unconfinedPodman = PermissionRule(
       tool: "bash",
       pattern: "podman *",
-      sandbox: RuleSandbox.unconfined,
+      unconfined: true,
     );
     const makeWrites = PermissionRule(
       tool: "bash",
       pattern: "make *",
       decision: PermissionDecision.allow,
-      sandbox: RuleSandbox.writes,
       writes: ["/opt/out"],
     );
 
@@ -559,7 +556,7 @@ void main() {
         tool: "bash",
         pattern: "podman *",
         decision: PermissionDecision.deny,
-        sandbox: RuleSandbox.unconfined,
+        unconfined: true,
       );
       expect(rulesSandbox([denied], ["podman ps"]).unconfined, isFalse);
     });

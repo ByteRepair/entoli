@@ -788,7 +788,7 @@ void main() {
 
   group("a rule's sandbox", () {
     const unconfinedPodman = PermissionRule(
-        tool: "bash", pattern: "podman *", sandbox: RuleSandbox.unconfined);
+        tool: "bash", pattern: "podman *", unconfined: true);
 
     test("an unconfined rule runs its command outside the sandbox", () async {
       final client = FakeLlmClient([
@@ -834,7 +834,6 @@ void main() {
         const PermissionRule(
             tool: "bash",
             pattern: "make *",
-            sandbox: RuleSandbox.writes,
             writes: ["/opt/out"]),
       ]).run(userMessage("go")).toList();
       expect(shell.sandboxes[0]!.extraWrites, contains("/opt/out"));

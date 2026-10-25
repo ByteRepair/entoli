@@ -359,7 +359,7 @@ void main() {
           .single;
       expect(rule.pattern, "podman *");
       expect(rule.decision, isNull);
-      expect(rule.sandbox, RuleSandbox.unconfined);
+      expect(rule.unconfined, isTrue);
       expect(find.textContaining("MODE bash podman *"), findsOneWidget);
       expect(find.text("unconfined"), findsOneWidget);
     });

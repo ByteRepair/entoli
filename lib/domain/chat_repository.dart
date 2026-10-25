@@ -484,7 +484,7 @@ class ChatRepository {
       ],
       sandboxReprompt:
           projectSettings.sandboxReprompt ?? defaultProjectSettings.sandboxReprompt,
-      sandbox: projectSettings.sandbox ?? defaultProjectSettings.sandbox,
+      sandbox: projectSettings.sandbox ?? defaultProjectSettings.sandbox ?? true,
       turnMaxSteps:
           projectSettings.turnMaxSteps ?? settings.turnMaxSteps,
       // The project's wording answers over the app's, like the step limit.
@@ -736,14 +736,7 @@ class ChatRepository {
       List<String> dirs,
       PermissionRule? rule,
       List<String> newDirs) {
-    final addRule = rule != null &&
-        !rules.any((r) =>
-            r.tool == rule.tool &&
-            r.pattern == rule.pattern &&
-            r.decision == rule.decision &&
-            r.sandbox == rule.sandbox &&
-            r.writes.length == rule.writes.length &&
-            r.writes.toSet().containsAll(rule.writes));
+    final addRule = rule != null && !rules.contains(rule);
     final fresh = [for (final d in newDirs) if (!dirs.contains(d)) d];
     if (!addRule && fresh.isEmpty) return null;
     return (rules: [...rules, if (addRule) rule], dirs: [...dirs, ...fresh]);

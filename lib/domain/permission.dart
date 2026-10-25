@@ -84,7 +84,7 @@ class PermissionRule {
     required this.tool,
     required this.pattern,
     this.decision,
-    this.sandbox = RuleSandbox.inherit,
+    this.unconfined = false,
     this.writes = const [],
     this.origin,
   });
@@ -108,13 +108,11 @@ class PermissionRule {
   final PermissionDecision? decision;
 
   /// What a matching `bash` command may touch once it runs, whoever decided
-  /// it runs. Independent of [decision]: an allow stops the asking, and the
-  /// sandbox matters most for exactly the runs nobody watches. Other tools
-  /// ignore it.
-  final RuleSandbox sandbox;
-
-  /// The directories [RuleSandbox.writes] adds to the grant, for the
-  /// commands this rule matches and no others.
+  /// it runs: no Landlock at all, or the turn's grant plus [writes] — for the
+  /// commands this rule matches and no others. Independent of [decision]: an
+  /// allow stops the asking, and the sandbox matters most for exactly the
+  /// runs nobody watches. Other tools ignore both.
+  final bool unconfined;
   final List<String> writes;
 
   /// Which tier carried this rule, stamped by the repository when it
@@ -133,8 +131,7 @@ class PermissionRule {
         decision: json["decision"] == null
             ? null
             : _decision(json["decision"] as String?),
-        sandbox: RuleSandbox.values.asNameMap()[json["sandbox"]] ??
-            RuleSandbox.inherit,
+        unconfined: json["unconfined"] == true,
         writes: [
           for (final w in (json["sandboxWrites"] as List<dynamic>? ?? const []))
             if (w is String) w,
@@ -148,9 +145,8 @@ class PermissionRule {
         "tool": tool,
         "pattern": pattern,
         if (decision != null) "decision": decision!.name,
-        if (sandbox != RuleSandbox.inherit) "sandbox": sandbox.name,
-        if (sandbox == RuleSandbox.writes && writes.isNotEmpty)
-          "sandboxWrites": writes,
+        if (unconfined) "unconfined": true,
+        if (writes.isNotEmpty) "sandboxWrites": writes,
       };
 
   /// This rule with [origin] stamped — the one field a rule gains after it
@@ -160,25 +156,28 @@ class PermissionRule {
         tool: tool,
         pattern: pattern,
         decision: decision,
-        sandbox: sandbox,
+        unconfined: unconfined,
         writes: writes,
         origin: origin ?? this.origin,
       );
 
+  /// The same rule whatever tier it was read from: [origin] is not part of it.
   @override
-  String toString() => "$decision $sandbox $tool $pattern";
-}
+  bool operator ==(Object other) =>
+      other is PermissionRule &&
+      other.tool == tool &&
+      other.pattern == pattern &&
+      other.decision == decision &&
+      other.unconfined == unconfined &&
+      other.writes.length == writes.length &&
+      other.writes.toSet().containsAll(writes);
 
-/// What a rule does to the sandbox of the `bash` commands it matches.
-enum RuleSandbox {
-  /// Nothing: the turn's own grant.
-  inherit,
+  @override
+  int get hashCode => Object.hash(tool, pattern, decision, unconfined);
 
-  /// The turn's grant plus the rule's `writes`.
-  writes,
-
-  /// No Landlock at all.
-  unconfined,
+  @override
+  String toString() =>
+      "$decision${unconfined ? " unconfined" : ""} $tool $pattern";
 }
 
 /// The sandbox the rules set for one run of [segments]. The confinement is
@@ -195,11 +194,10 @@ enum RuleSandbox {
     var segmentUnconfined = false;
     for (final rule in rules) {
       if (rule.tool != "*" && rule.tool != "bash") continue;
-      if (rule.sandbox == RuleSandbox.inherit) continue;
       if (rule.decision == PermissionDecision.deny) continue;
-      if (!globMatch(rule.pattern, segment)) continue;
-      if (rule.sandbox == RuleSandbox.unconfined) segmentUnconfined = true;
-      if (rule.sandbox == RuleSandbox.writes) writes.addAll(rule.writes);
+      if (!_ruleMatches(rule, "bash", segment)) continue;
+      if (rule.unconfined) segmentUnconfined = true;
+      writes.addAll(rule.writes);
     }
     unconfined = unconfined && segmentUnconfined;
   }

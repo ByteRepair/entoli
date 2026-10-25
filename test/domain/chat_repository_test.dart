@@ -247,7 +247,7 @@ void main() {
 
     test("Landlock: the project's answer over the app's, unset is on",
         () async {
-      expect((await turnSettings("byte-repair")).sandbox, isNull);
+      expect((await turnSettings("byte-repair")).sandbox, isTrue);
       await config.documents
           .write(config.projectSettingsFile(), '{"sandbox": false}');
       expect((await turnSettings("byte-repair")).sandbox, isFalse);

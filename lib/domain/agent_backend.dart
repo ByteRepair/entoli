@@ -462,8 +462,8 @@ class TurnSettings {
   /// approval. Null means the app default decides.
   final bool? sandboxReprompt;
 
-  /// Whether this turn's commands run under Landlock. Null means on.
-  final bool? sandbox;
+  /// Whether this turn's commands run under Landlock.
+  final bool sandbox;
 
   const TurnSettings({
     this.memory = MemorySettings.off,
@@ -490,7 +490,7 @@ class TurnSettings {
     this.permissions = const [],
     this.writableDirs = const [],
     this.sandboxReprompt,
-    this.sandbox,
+    this.sandbox = true,
   });
 }
 

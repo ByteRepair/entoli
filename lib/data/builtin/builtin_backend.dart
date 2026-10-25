@@ -328,7 +328,7 @@ class BuiltinBackend implements AgentBackend {
         sharedWorkspace: settings.sharedWorkspace,
         permissions: settings.permissions,
         writableDirs: settings.writableDirs,
-        sandboxed: settings.sandbox ?? true,
+        sandboxed: settings.sandbox,
         readOnlyDirs: readOnly,
         project: project,
         tone: settings.tone,
@@ -505,7 +505,7 @@ class BuiltinBackend implements AgentBackend {
         permissions: settings.permissions,
         writableDirs: settings.writableDirs,
         sandboxReprompt: settings.sandboxReprompt ?? true,
-        sandboxed: settings.sandbox ?? true,
+        sandboxed: settings.sandbox,
         dataDir: config.dataDir,
         project: project,
         saveArtifact: (path, entryFile, {artifactId}) async {

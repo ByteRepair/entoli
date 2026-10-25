@@ -198,6 +198,8 @@ Future<bool> confirm(
   return answer ?? false;
 }
 
+enum _SandboxScope { sandboxed, writes, unconfined }
+
 /// Ask for one permission rule: the tool it names, the pattern it matches on,
 /// whether a match is asked about and — for bash rules — the sandbox a match
 /// runs in. Returns null if dismissed, the pattern was left blank, or the
@@ -208,33 +210,39 @@ Future<PermissionRule?> promptForDecision(
   required String tool,
   required String pattern,
   required PermissionDecision? decision,
-  RuleSandbox sandbox = RuleSandbox.inherit,
+  bool unconfined = false,
   String writes = "",
 }) {
   final patternField = TextEditingController(text: pattern);
   final writesField = TextEditingController(text: writes);
   var toolPicked = tool;
   var picked = decision;
-  var sandboxPicked = sandbox;
+  var scope = unconfined
+      ? _SandboxScope.unconfined
+      : writes.isEmpty
+          ? _SandboxScope.sandboxed
+          : _SandboxScope.writes;
 
   bool shapesSandbox() => toolPicked == "bash" || toolPicked == "*";
 
   PermissionRule? submit() {
     final subject = patternField.text.trim();
     if (subject.isEmpty) return null;
-    final ruleSandbox = shapesSandbox() ? sandboxPicked : RuleSandbox.inherit;
-    if (picked == null && ruleSandbox == RuleSandbox.inherit) return null;
+    final ruleScope = shapesSandbox() ? scope : _SandboxScope.sandboxed;
+    final dirs = ruleScope != _SandboxScope.writes
+        ? const <String>[]
+        : [
+            for (final dir in writesField.text.split(","))
+              if (dir.trim().isNotEmpty) dir.trim(),
+          ];
+    final unconfined = ruleScope == _SandboxScope.unconfined;
+    if (picked == null && !unconfined && dirs.isEmpty) return null;
     return PermissionRule(
       tool: toolPicked,
       pattern: subject,
       decision: picked,
-      sandbox: ruleSandbox,
-      writes: ruleSandbox != RuleSandbox.writes
-          ? const []
-          : [
-              for (final dir in writesField.text.split(","))
-                if (dir.trim().isNotEmpty) dir.trim(),
-            ],
+      unconfined: unconfined,
+      writes: dirs,
     );
   }
 
@@ -267,39 +275,40 @@ Future<PermissionRule?> promptForDecision(
               onSubmitted: (_) => Navigator.pop(context, submit()),
             ),
             const SizedBox(height: 12),
-            // Keyed by name: a null item is the dropdown's "no selection".
-            DropdownButtonFormField<String>(
-              initialValue: picked?.name ?? "mode",
+            DropdownButtonFormField<PermissionDecision?>(
+              initialValue: picked,
               decoration: const InputDecoration(labelText: "Approval"),
               items: const [
-                DropdownMenuItem(value: "allow", child: Text("Allow")),
-                DropdownMenuItem(value: "ask", child: Text("Ask")),
-                DropdownMenuItem(value: "deny", child: Text("Deny")),
                 DropdownMenuItem(
-                    value: "mode", child: Text("Leave to the approval mode")),
+                    value: PermissionDecision.allow, child: Text("Allow")),
+                DropdownMenuItem(
+                    value: PermissionDecision.ask, child: Text("Ask")),
+                DropdownMenuItem(
+                    value: PermissionDecision.deny, child: Text("Deny")),
+                DropdownMenuItem(
+                    value: null, child: Text("Leave to the approval mode")),
               ],
-              onChanged: (value) => setState(() =>
-                  picked = PermissionDecision.values.asNameMap()[value]),
+              onChanged: (value) => setState(() => picked = value),
             ),
             if (shapesSandbox()) ...[
               const SizedBox(height: 12),
-              DropdownButtonFormField<RuleSandbox>(
-                initialValue: sandboxPicked,
+              DropdownButtonFormField<_SandboxScope>(
+                initialValue: scope,
                 decoration: const InputDecoration(labelText: "Sandbox"),
                 items: const [
                   DropdownMenuItem(
-                      value: RuleSandbox.inherit, child: Text("Sandboxed")),
+                      value: _SandboxScope.sandboxed, child: Text("Sandboxed")),
                   DropdownMenuItem(
-                      value: RuleSandbox.writes,
+                      value: _SandboxScope.writes,
                       child: Text("Sandboxed, with extra writable dirs")),
                   DropdownMenuItem(
-                      value: RuleSandbox.unconfined,
+                      value: _SandboxScope.unconfined,
                       child: Text("Unconfined (no sandbox)")),
                 ],
                 onChanged: (value) => setState(
-                    () => sandboxPicked = value ?? RuleSandbox.inherit),
+                    () => scope = value ?? _SandboxScope.sandboxed),
               ),
-              if (sandboxPicked == RuleSandbox.writes) ...[
+              if (scope == _SandboxScope.writes) ...[
                 const SizedBox(height: 12),
                 TextField(
                   controller: writesField,

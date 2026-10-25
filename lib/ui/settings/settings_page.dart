@@ -832,6 +832,7 @@ class _DefaultPermissionsSection extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final settings = ref.watch(projectSettingsProvider(null));
+    final sandboxed = settings.sandbox ?? true;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -846,13 +847,13 @@ class _DefaultPermissionsSection extends ConsumerWidget {
         ),
         SwitchListTile(
           title: const Text("Sandbox commands (Landlock)"),
-          subtitle: Text((settings.sandbox ?? true)
+          subtitle: Text(sandboxed
               ? "Commands on this machine may write only to the workspaces "
                   "and the directories granted. Linux only; a Linux guest "
                   "is its own sandbox. A project can override this."
               : "Off: commands on this machine write wherever you can. A "
                   "project can override this."),
-          value: settings.sandbox ?? true,
+          value: sandboxed,
           onChanged: (value) => ref
               .read(projectSettingsProvider(null).notifier)
               .setProjectSandbox(value),
@@ -866,7 +867,7 @@ class _DefaultPermissionsSection extends ConsumerWidget {
               : "Off: a denial is reported to the model and the turn moves "
                   "on. A project can override this."),
           value: settings.sandboxReprompt ?? true,
-          onChanged: (settings.sandbox ?? true)
+          onChanged: sandboxed
               ? (value) => ref
                   .read(projectSettingsProvider(null).notifier)
                   .setProjectSandboxReprompt(value)
