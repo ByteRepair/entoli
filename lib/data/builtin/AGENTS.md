@@ -378,7 +378,12 @@ output with nothing in the report (a static binary bypassing the shim, or a
 Go one, which makes its syscalls past libc and words the error lowercase,
 hence the match is case-blind) is the
 unnamed violation and a `logFailure` line, so a blind channel is visible
-rather than silent. Its banner offers no "always", having no path to persist
+rather than silent. A report line explains the prose only where the output
+names its path: toolbox's refused read of `/proc/<pid>/ns/user` once stood in
+for podman's unseen denial, and the agent went hunting SELinux. That read is
+also why rootless podman cannot run sandboxed at all — Landlock refuses opening
+another process's namespace, which podman needs to join its pause process — so
+its unnamed violation says to run it unconfined. Its banner offers no "always", having no path to persist
 (`ToolApproval.rerun`); a shim that cannot work at all degrades to that same
 cross-check, never to a broken command. The two "always" banner answers write
 the derived rule: `ruleFromApproval` reads the command's leading words, the
