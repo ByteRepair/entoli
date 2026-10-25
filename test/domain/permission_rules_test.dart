@@ -2,6 +2,7 @@ import "package:flutter_test/flutter_test.dart";
 
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/domain/permission.dart";
+import "package:agent_chat/domain/shell_command_analysis.dart";
 
 void main() {
   group("globMatch", () {
@@ -18,6 +19,28 @@ void main() {
       expect(globMatch("git checkout *", "git checkout"), isTrue);
       expect(globMatch("git status *", "git status"), isTrue);
       expect(globMatch("git status *", "git statusfoo"), isFalse);
+    });
+
+    test("* spans a redirect's & but not && or a backgrounding &", () {
+      expect(globMatch("toolbox *", "toolbox run x esbmc --version 2>&1"), isTrue);
+      expect(globMatch("make *", "make all &>build.log"), isTrue);
+      expect(globMatch("cat *", "cat <&3"), isTrue);
+      expect(globMatch("make *", "make all && evil"), isFalse);
+      expect(globMatch("make *", "make all & evil"), isFalse);
+      expect(globMatch("git * --short", "git status 2>&1 --short"), isTrue);
+    });
+
+    test("a rule's writes reach a command that redirects stderr", () {
+      const rule = PermissionRule(
+          tool: "bash",
+          pattern: "{podman,toolbox} *",
+          decision: PermissionDecision.allow,
+          writes: ["/home/u/.local/share/containers/storage"]);
+      final segments = ShellCommandAnalysis.parse(
+              "toolbox run esbmc-dev esbmc --version 2>&1 | head -3")
+          .modelableSegments!;
+      expect(rulesSandbox([rule], segments).writes,
+          ["/home/u/.local/share/containers/storage"]);
     });
 
     test("** spans anything including operators", () {
