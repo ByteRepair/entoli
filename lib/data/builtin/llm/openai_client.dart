@@ -43,9 +43,15 @@ class OpenAiClient implements LlmClient {
   @override
   void close() => _http.close();
 
+  /// Gemini's list is models.dev's under a `models/` prefix, plus retired and
+  /// non-chat models, so models.dev stands in for it.
   @override
-  Future<List<String>> listModels() =>
-      listModelIds(_http, under(baseUrl, "models"), headers: _auth);
+  Future<List<String>> listModels() async => _isGemini
+      ? const []
+      : listModelIds(_http, under(baseUrl, "models"), headers: _auth);
+
+  static const geminiRetired =
+      "Google has retired this model, please select a newer model.";
 
   @override
   Stream<LlmChunk> stream(
@@ -76,6 +82,10 @@ class OpenAiClient implements LlmClient {
         "temperature": ?temperature,
         "reasoning_effort": ?reasoningEffort,
       },
+    ).onError<LlmException>(
+      // By status alone: the wording is Google's to change.
+      (_, _) => throw const LlmException(geminiRetired),
+      test: (e) => _isGemini && e.statusCode == 404,
     );
 
     final text = StringBuffer();

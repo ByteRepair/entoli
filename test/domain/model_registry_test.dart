@@ -138,6 +138,20 @@ void main() {
           ["gpt-x", "ft:gpt-x:acme", "gpt-image-x", "whisper-x"]);
     });
 
+    test("a model Google has retired is not offered", () {
+      ModelCatalog.notifier.value = ModelCatalog.parse(jsonEncode({
+        "google": {
+          "models": {"gemini-2.5-flash": {}, "gemini-3.8-flash": {}},
+        },
+      }));
+      const google = LlmProviderConfig(
+          id: "google",
+          api: LlmApi.openai,
+          baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai");
+      expect(ModelCatalog.current.modelsOf(google).map((m) => m.id),
+          ["gemini-3.8-flash"]);
+    });
+
     test("the trimmed copy reads back the same and carries when it was fetched", () {
       final at = DateTime.utc(2026, 10, 19);
       final text = ModelCatalog.current.fetchedAt(at).toJsonText();
