@@ -282,7 +282,7 @@ RegExp _compileGlob(String glob) {
   if (body.endsWith(anyArgs)) {
     body = "${body.substring(0, body.length - anyArgs.length)}(?: .*)?";
   }
-  return RegExp("^$body\$", caseSensitive: false);
+  return RegExp("^$body\$", caseSensitive: false, dotAll: true);
 }
 
 /// What the rules say about one tool call, deny first — a deny is the user's
