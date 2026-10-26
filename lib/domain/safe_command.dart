@@ -29,6 +29,7 @@ const nonModifyingPrograms = {
   "echo",
   "printf",
   "true",
+  "sleep",
   "uname",
   "whoami",
   "id",
@@ -59,15 +60,82 @@ const nonModifyingPrograms = {
   "tac",
   "rev",
   "whereis",
+  // Guarded below.
+  "sort",
+  "find",
+  "file",
+  "date",
+  "shuf",
+  "rg",
+  "fd",
+  "dmesg",
+  "false",
+  "test",
+  "seq",
+  "expr",
+  "nproc",
+  "uptime",
+  "arch",
+  "groups",
+  "tty",
+  "locale",
+  "getconf",
+  "ps",
+  "pgrep",
+  "lsof",
+  "who",
+  "od",
+  "hexdump",
+  "strings",
+  "base64",
+  "base32",
+  "sha224sum",
+  "sha384sum",
+  "b2sum",
+  "sum",
+  "column",
+  "fold",
+  "fmt",
+  "expand",
+  "unexpand",
+  "join",
+  "numfmt",
+  "jq",
+  "nm",
+  "objdump",
+  "readelf",
+  "size",
+  "locate",
+  "lsmod",
+  "lspci",
+  "lsusb",
+  "cal",
 };
 
 /// Programs non-modifying only when none of these words appear among their
 /// arguments — the write-, execute- or set-capable flags of otherwise safe
 /// tools. A listed flag present means the segment is not proven read-only.
 const guardedFlags = <String, Set<String>>{
-  "sort": {"-o", "--output"},
+  "sort": {"-o", "--output", "--compress-program"},
   "tree": {"-o"},
   "file": {"-m", "--magic-file", "-f", "--files-from", "-C", "--compile"},
+  "date": {"-s", "--set"},
+  "shuf": {"-o", "--output"},
+  // Each runs a program it is handed.
+  "rg": {"--pre"},
+  "fd": {"-x", "--exec", "-X", "--exec-batch"},
+  "dmesg": {
+    "-c",
+    "-C",
+    "--clear",
+    "--read-clear",
+    "-D",
+    "--console-off",
+    "-E",
+    "--console-on",
+    "-n",
+    "--console-level",
+  },
   "find": {
     "-delete",
     "-exec",
@@ -154,10 +222,9 @@ const gitGuardedArgs = {
 /// tables, so the flag tables cannot mean two things to two callers.
 bool anyGuardedArg(Set<String>? guards, Iterable<String> args) {
   if (guards == null) return false;
-  return args.any((w) {
-    final lower = w.toLowerCase();
-    return guards.contains(lower) || guards.any((g) => lower.startsWith("$g="));
-  });
+  return args.any(
+    (w) => guards.contains(w) || guards.any((g) => w.startsWith("$g=")),
+  );
 }
 
 /// The fetcher family: shell programs whose work is reaching a host, so a

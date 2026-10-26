@@ -15,6 +15,16 @@ void main() {
         "git remote -v",
         "git worktree list",
         "git rev-parse HEAD",
+        "sleep 2",
+        "sort -u names.txt",
+        "find . -name '*.dart'",
+        "file a.png",
+        "date +%F",
+        "rg -n needle lib",
+        "fd -e dart",
+        "ps aux",
+        "jq .name package.json",
+        "test -f pubspec.yaml",
       ]) {
         expect(
           profileSegment(segment).reach,
@@ -54,6 +64,12 @@ void main() {
         "uniq names.txt /tmp/evil",
         "git show --output=/tmp/evil",
         "git branch --set-upstream-to=origin/x",
+        "sort --compress-program=sh names.txt",
+        "date -s 2000-01-01",
+        "shuf -o /tmp/evil names.txt",
+        "rg --pre ./run needle",
+        "fd -x rm",
+        "dmesg -C",
       ]) {
         expect(
           profileSegment(segment).reach,
