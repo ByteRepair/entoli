@@ -2819,6 +2819,7 @@ class BuiltinAgent {
         name: call.name,
         argumentsJson: call.argumentsJson,
         argumentsText: text,
+        signature: call.signature,
       ));
 
   static ToolResultEvent _ok(LlmToolCall call, String output) =>

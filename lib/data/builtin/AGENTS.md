@@ -927,9 +927,13 @@ agent's browser, on screen" in `lib/ui/chat/AGENTS.md`.
 Offered only when Settings > Image Generation names an image model (its "Off"
 entry is the switch) and that model resolves to an OpenAI-shaped provider; Anthropic makes no images, so it is not
 offered there. `OpenAiClient.generateImage` asks `gpt-image*`/`dall-e*` through
-the Images API and anything else (OpenRouter) through `/chat/completions` with
-`modalities: ["image", "text"]`. The quality setting reaches only the Images
-API (DALL·E's two grades mapped from it); the chat shape has no such field. A
+the Images API, any model on Gemini's host through Gemini's native
+`models/<model>:generateContent`, and anything else (OpenRouter) through
+`/chat/completions` with `modalities: ["image", "text"]`. Gemini is native
+because neither compat route takes all its image models: chat 400s on the
+image it made, `/images/generations` 404s on a model it does not list. The
+quality setting reaches only the Images API (DALL·E's two grades mapped from
+it). A
 chat model that streams `images` back unasked is read too. Either way the bytes
 go to the chat's `resources/` and an `ImageEvent` records a `FilePart` on the
 reply, which the bubble draws where it was made.

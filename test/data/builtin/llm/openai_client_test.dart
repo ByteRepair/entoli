@@ -244,6 +244,68 @@ void main() {
     });
   });
 
+  group("Gemini's thought signatures", () {
+    test("are read off the call and handed back on it", () async {
+      final chunks = await clientStreaming([
+        delta({
+          "tool_calls": [
+            {
+              "index": 0,
+              "id": "c1",
+              "function": {"name": "bash", "arguments": "{}"},
+              "extra_content": {
+                "google": {"thought_signature": "sig-1"},
+              },
+            },
+          ],
+        }),
+        "[DONE]",
+      ]).stream(const [], model: "gemini-test").toList();
+      final call = chunks.whereType<LlmCompletion>().single.message.toolCalls.single;
+      expect(call.signature, "sig-1");
+
+      await clientStreaming(["[DONE]"]).stream([
+        LlmMessage(role: LlmRole.assistant, toolCalls: [call]),
+      ], model: "gemini-test").toList();
+      final sent = (sentBody()["messages"] as List).single["tool_calls"][0];
+      expect(sent["extra_content"], {
+        "google": {"thought_signature": "sig-1"},
+      });
+    });
+
+    test("an unsigned call is sent as it was to anyone but Gemini", () async {
+      await clientStreaming(["[DONE]"]).stream(const [
+        LlmMessage(
+          role: LlmRole.assistant,
+          toolCalls: [LlmToolCall(id: "c1", name: "bash", argumentsJson: "{}")],
+        ),
+      ], model: "gpt-test").toList();
+      final sent = (sentBody()["messages"] as List).single["tool_calls"][0] as Map;
+      expect(sent.containsKey("extra_content"), isFalse);
+    });
+
+    test("Gemini gets the placeholder on the first of an unsigned reply's calls", () async {
+      requests = [];
+      final client = OpenAiClient(
+        baseUrl: Uri.parse("https://generativelanguage.googleapis.com/v1beta/openai"),
+        httpClient: MockClient.streaming((request, _) async {
+          requests.add(request);
+          return sseResponse(["[DONE]"]);
+        }),
+      );
+      await client.stream(const [
+        LlmMessage(role: LlmRole.assistant, toolCalls: [
+          LlmToolCall(id: "c1", name: "bash", argumentsJson: "{}"),
+          LlmToolCall(id: "c2", name: "bash", argumentsJson: "{}"),
+        ]),
+      ], model: "gemini-test").toList();
+      final calls = (sentBody()["messages"] as List).single["tool_calls"] as List;
+      expect(calls[0]["extra_content"]["google"]["thought_signature"],
+          "skip_thought_signature_validator");
+      expect((calls[1] as Map).containsKey("extra_content"), isFalse);
+    });
+  });
+
   group("attachments", () {
     test("a text file is inlined so the model can just read it", () async {
       await clientStreaming(["[DONE]"]).stream([
@@ -536,6 +598,41 @@ void main() {
       final sent = (sentBody()["messages"] as List).cast<Map<String, dynamic>>();
       expect(sent.map((m) => m["role"]), ["assistant", "tool", "user"]);
       expect((sent.last["content"] as List).last["type"], "file");
+    });
+
+    test("a Gemini image model is asked natively, and its JPEG kept", () async {
+      const jpeg = "/9j/4AAQSkZJRgABAQ==";
+      requests = [];
+      final images = await OpenAiClient(
+        baseUrl: Uri.parse("https://generativelanguage.googleapis.com/v1beta/openai"),
+        apiKey: "g-key",
+        httpClient: MockClient.streaming((request, _) async {
+          requests.add(request);
+          return http.StreamedResponse(
+              Stream.value(utf8.encode(jsonEncode({
+                "candidates": [
+                  {
+                    "content": {
+                      "parts": [
+                        {"text": "here"},
+                        {
+                          "inlineData": {"mimeType": "image/jpeg", "data": jpeg},
+                        },
+                      ],
+                    },
+                  },
+                ],
+              }))),
+              200);
+        }),
+      ).generateImage("a cat", model: "gemini-image", quality: "high");
+
+      final sent = requests.single;
+      expect(sent.url.path, "/v1beta/models/gemini-image:generateContent");
+      expect(sent.headers["x-goog-api-key"], "g-key");
+      expect(sentBody()["contents"][0]["parts"][0]["text"], "a cat");
+      expect(images.single.mimeType, "image/jpeg");
+      expect(images.single.filename, "image-0.jpeg");
     });
 
     test("quality is sent as the Images API names it", () async {

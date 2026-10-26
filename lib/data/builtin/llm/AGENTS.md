@@ -25,6 +25,14 @@ enabled, Anthropic rejects a tool-use turn whose thinking was dropped, so
 `signature` for no other reason — see "The projection". Enabling thinking also
 pins the temperature at 1, so the two are never sent together.
 
+Gemini's equivalent is on the tool call rather than the thinking: its OpenAI
+shape puts `extra_content.google.thought_signature` on the first call of a
+reply and answers 400 to a replay without it. `LlmToolCall.signature` and
+`ToolCall.signature` carry it through the log for the same reason. A reply
+with no signature at all — logged before they were kept, or made by another
+model — goes to Gemini's host with LiteLLM's placeholder
+`skip_thought_signature_validator` on its first call.
+
 Providers are configured in `settings.json` under `llmProviders` — id, API
 shape, base URL, an optional model list — and `llmProviderPresets` fills in
 the endpoints worth naming so that adding one is a key rather than a URL

@@ -505,11 +505,15 @@ abstract class InstructionRef with _$InstructionRef {
 
 @freezed
 abstract class ToolCall with _$ToolCall {
+  /// [signature] is Gemini's `thought_signature`, the one its OpenAI shape puts
+  /// on a tool call: it rejects a replayed call that comes back without it, so
+  /// the log keeps it for the projection to hand back. Nothing else reads it.
   const factory ToolCall({
     required String id,
     required String name,
     String? argumentsJson,
     String? argumentsText,
+    String? signature,
   }) = _ToolCall;
 
   factory ToolCall.fromJson(Map<String, dynamic> json) => _$ToolCallFromJson(json);
