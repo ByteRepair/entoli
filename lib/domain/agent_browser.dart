@@ -14,9 +14,13 @@ import "download.dart";
 abstract class AgentBrowser {
   const AgentBrowser();
 
-  /// Whether this platform can drive a browser at all. False on the phones
-  /// and the web; the settings category is not drawn there.
+  /// Whether this platform can drive a browser at all. False on iOS and the
+  /// web; the settings category is not drawn there.
   bool get available;
+
+  /// Whether the browser is the app's own WebView (Android): nothing to pick
+  /// or download, and no window to open.
+  bool get inApp;
 
   /// Whether a browser is picked and there to launch: what offers the tools.
   /// Asked per turn, so a pick reaches the next turn without a restart.
@@ -456,6 +460,9 @@ class BrowserShot {
 /// an executable's path.
 const embeddedBrowserId = "embedded";
 
+/// The setting's value where the browser is the app's own WebView.
+const webViewBrowserId = "webview";
+
 /// Where there is no browser to drive: the phones and the web.
 class UnavailableAgentBrowser extends AgentBrowser {
   const UnavailableAgentBrowser();
@@ -465,6 +472,9 @@ class UnavailableAgentBrowser extends AgentBrowser {
 
   @override
   bool get configured => false;
+
+  @override
+  bool get inApp => false;
 
   static final _notRunning = ValueNotifier(false);
 

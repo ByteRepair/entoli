@@ -28,10 +28,14 @@ object BrowserChannel {
     // WebView whose window is not visible stops answering even clicks, and the
     // activity's window is not visible while a turn runs with the app in the
     // background. The frames go into a reader that throws each one away.
-    private var display: VirtualDisplay? = null
-    private var reader: ImageReader? = null
-    private var presentation: Presentation? = null
-    private var holder: FrameLayout? = null
+    private class Offscreen(
+        val reader: ImageReader,
+        val display: VirtualDisplay,
+        val presentation: Presentation,
+        val frame: FrameLayout,
+    )
+
+    private var offscreen: Offscreen? = null
 
     fun register(context: Context, messenger: BinaryMessenger) {
         val appContext = context.applicationContext
@@ -64,9 +68,14 @@ object BrowserChannel {
         }
     }
 
+    // Dart asks only for a page it has lost, so a view still here for the
+    // chat is stale and is replaced rather than found by its first address.
     private fun open(context: Context, chat: String) {
-        if (views.containsKey(chat)) return
-        val frame = holder ?: show(context)
+        val frame = (offscreen ?: show(context).also { offscreen = it }).frame
+        views.remove(chat)?.let {
+            frame.removeView(it)
+            it.destroy()
+        }
         val view = WebView(frame.context).apply {
             settings.javaScriptEnabled = true
             settings.domStorageEnabled = true
@@ -78,7 +87,7 @@ object BrowserChannel {
     }
 
     // The phone's own screen size, so a page lays out as it would for the user.
-    private fun show(context: Context): FrameLayout {
+    private fun show(context: Context): Offscreen {
         val metrics = context.resources.displayMetrics
         val reader = ImageReader.newInstance(
             metrics.widthPixels, metrics.heightPixels, PixelFormat.RGBA_8888, 2)
@@ -91,23 +100,18 @@ object BrowserChannel {
         val frame = FrameLayout(presentation.context)
         presentation.setContentView(frame)
         presentation.show()
-        this.reader = reader
-        this.display = display
-        this.presentation = presentation
-        holder = frame
-        return frame
+        return Offscreen(reader, display, presentation, frame)
     }
 
     private fun close() {
         views.values.forEach { it.destroy() }
         views.clear()
-        presentation?.dismiss()
-        display?.release()
-        reader?.close()
-        presentation = null
-        display = null
-        reader = null
-        holder = null
+        offscreen?.run {
+            presentation.dismiss()
+            display.release()
+            reader.close()
+        }
+        offscreen = null
         WebView.setWebContentsDebuggingEnabled(false)
     }
 }

@@ -1,8 +1,7 @@
 import "dart:async";
 import "dart:convert";
 
-import "package:flutter/foundation.dart"
-    show ValueListenable, ValueNotifier, debugDefaultTargetPlatformOverride;
+import "package:flutter/foundation.dart" show ValueListenable, ValueNotifier;
 import "package:flutter/gestures.dart";
 import "package:flutter/material.dart";
 import "package:flutter/services.dart";
@@ -121,6 +120,9 @@ class _Browser implements AgentBrowser {
   bool get configured => true;
 
   @override
+  bool inApp = false;
+
+  @override
   BrowserTab tab(String chatId) => tabs.putIfAbsent(chatId, _Tab.new);
 
   @override
@@ -133,8 +135,9 @@ class _Browser implements AgentBrowser {
 void main() {
   late _Browser browser;
 
-  Future<_Tab> pumpStrip(WidgetTester tester, {bool mirrored = false}) async {
-    browser = _Browser();
+  Future<_Tab> pumpStrip(WidgetTester tester,
+      {bool mirrored = false, bool inApp = false}) async {
+    browser = _Browser()..inApp = inApp;
     await tester.pumpWidget(ProviderScope(
       overrides: [
         agentBrowserProvider.overrideWithValue(browser),
@@ -206,8 +209,8 @@ void main() {
   });
 
   /// The card open over a tab drawing a 1280×800 page.
-  Future<_Tab> openCard(WidgetTester tester) async {
-    final tab = await pumpStrip(tester);
+  Future<_Tab> openCard(WidgetTester tester, {bool inApp = false}) async {
+    final tab = await pumpStrip(tester, inApp: inApp);
     tab.page.value = const BrowserPage(url: "https://example.com", opened: 1);
     await tester.pump();
     await tester.tap(find.byType(ActionChip));
@@ -464,22 +467,17 @@ void main() {
       expect(find.byType(ActionChip), findsNothing);
     });
 
-    // A desktop's alone: Android's WebView has no window to open.
     testWidgets("the card opens the browser in a window, as the user",
         (tester) async {
-      debugDefaultTargetPlatformOverride = TargetPlatform.linux;
-      try {
-        final tab = await openCard(tester);
-        await tester.tap(find.byTooltip("Open in a window"));
-        await tester.pump();
-        expect(tab.done, ["window"]);
-      } finally {
-        debugDefaultTargetPlatformOverride = null;
-      }
+      final tab = await openCard(tester);
+      await tester.tap(find.byTooltip("Open in a window"));
+      await tester.pump();
+      expect(tab.done, ["window"]);
     });
 
-    testWidgets("Android's card has no window to open", (tester) async {
-      await openCard(tester);
+    testWidgets("an in-app browser's card has no window to open",
+        (tester) async {
+      await openCard(tester, inApp: true);
       expect(find.byTooltip("Open in a window"), findsNothing);
     });
 

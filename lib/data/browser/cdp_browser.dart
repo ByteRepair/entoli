@@ -52,7 +52,9 @@ class CdpBrowser extends AgentBrowser {
 
   String? get _executable {
     final value = picked();
-    if (value == null || webViews != null) return value;
+    if (value == null) return null;
+    // A desktop's path, from a restored backup, is not a pick here.
+    if (webViews != null) return value == webViewBrowserId ? value : null;
     if (value == embeddedBrowserId) return embedded.executable;
     return File(value).existsSync() ? value : null;
   }
@@ -63,8 +65,8 @@ class CdpBrowser extends AgentBrowser {
   @override
   bool get configured => _executable != null;
 
-  /// Android's WebView has no window to be without.
-  bool get _hidden => webViews == null && !visible();
+  @override
+  bool get inApp => webViews != null;
 
   final _isRunning = ValueNotifier(false);
 
@@ -126,7 +128,8 @@ class CdpBrowser extends AgentBrowser {
         (throw const CdpException(
             "No browser is picked, or the picked one is gone: see Settings > "
             "Agent Browser."));
-    final windowed = !_hidden || _shown;
+    // Android's WebView has no window to be without.
+    final windowed = inApp || visible() || _shown;
     final running = _running;
     if (running != null &&
         running.executable == exe &&
@@ -186,22 +189,27 @@ class CdpBrowser extends AgentBrowser {
         type: InternetAddressType.unix);
     final client = HttpClient()
       ..connectionFactory = (_, _, _) => Socket.startConnect(socket, 0);
-    for (var attempt = 0;; attempt++) {
-      try {
-        final request =
-            await client.getUrl(Uri.parse("http://localhost/json/version"));
-        final version = jsonDecode(
-            await (await request.close()).transform(utf8.decoder).join()) as Map;
-        final url = Uri.parse(version["webSocketDebuggerUrl"] as String);
-        return _Running(picked, null,
-            await CdpConnection.connect(url, client: client),
-            windowed: true);
-      } on SocketException {
-        // The server starts with the first WebView, a moment after debugging
-        // is turned on.
-        if (attempt >= 20) rethrow;
-        await Future<void>.delayed(const Duration(milliseconds: 250));
+    try {
+      for (var attempt = 0;; attempt++) {
+        try {
+          final request =
+              await client.getUrl(Uri.parse("http://localhost/json/version"));
+          final version = jsonDecode(
+              await (await request.close()).transform(utf8.decoder).join()) as Map;
+          final url = Uri.parse(version["webSocketDebuggerUrl"] as String);
+          return _Running(picked, null,
+              await CdpConnection.connect(url, client: client),
+              windowed: true);
+        } on SocketException {
+          // The server comes up on a thread of its own a moment after
+          // debugging is turned on: about 20 ms on an emulator.
+          if (attempt >= 40) rethrow;
+          await Future<void>.delayed(const Duration(milliseconds: 50));
+        }
       }
+    } finally {
+      // The upgraded socket is the WebSocket's own; the client's pool is not.
+      client.close();
     }
   }
 
@@ -255,7 +263,6 @@ class CdpBrowser extends AgentBrowser {
 
   /// Quit the hidden browser so the next start comes up with a window.
   Future<void> _showWindow(_CdpTab by) async {
-    if (_running?.windowed ?? false) return;
     await _quit("The browser restarted to open a window.", quietly: by);
     _shown = true;
   }
@@ -722,6 +729,8 @@ class _CdpTab implements BrowserTab {
       // The protocol's virtual authenticators with no UI stand in: the
       // request waits silently, and the page stays the user's. A windowed
       // browser keeps the real dialog, which is how a passkey is used.
+      // Android's WebView needs neither: it has no WebAuthn unless the app
+      // opts in, so a request is rejected at once and the page falls back.
       if (!running.windowed) {
         try {
           await cdp.send("WebAuthn.enable",

@@ -830,12 +830,18 @@ background or the screen off. The display is the app's own and needs no
 permission. All of this was checked on an emulator: clicks, screenshots and
 the screencast with the app backgrounded and with the screen off.
 
-Settings > Agent Browser is a switch (`agentBrowser` is `webview` or null),
-with no window toggle and no Helium. The chat's browser card is the user's
-view of the page, and its "Open in a window" is not drawn. What it lacks: downloads (a WebView's go to a
-`DownloadListener`, not the protocol), passkeys, and uBlock Origin. It also
-identifies itself as a WebView (`; wv` in the user agent, `X-Requested-With`),
-so it meets more human checks than Helium does.
+`AgentBrowser.inApp` is what the UI reads, not the platform: Settings > Agent
+Browser is then a switch (`agentBrowser` is `webViewBrowserId` or null; any
+other value, a desktop's path from a restored backup, is off), with no window
+toggle and no Helium, and the chat's browser card, the user's view of the page,
+draws no "Open in a window". What it lacks: downloads (a WebView's go to a
+`DownloadListener`, not the protocol) and uBlock Origin. Passkeys are
+rejected rather than missing: WebView has no WebAuthn unless the app opts in,
+so `PublicKeyCredential` is undefined and `navigator.credentials.get` and
+`create` fail at once with `NotSupportedError`, and a sign-in page falls back
+to its other ways (checked on an emulator). It also identifies itself as a
+WebView (`; wv` in the user agent, `X-Requested-With`), so it meets more human
+checks than Helium does.
 
 ### Uploads (the `browser_upload` tool)
 

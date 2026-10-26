@@ -1,4 +1,3 @@
-import "package:flutter/foundation.dart";
 import "package:flutter/services.dart";
 import "package:flutter_test/flutter_test.dart";
 import "package:path/path.dart" as p;
@@ -20,34 +19,29 @@ void main() {
   // no window to show and no Helium to download.
   testWidgets("Android turns the WebView on and off rather than picking a "
       "browser", (tester) async {
-    debugDefaultTargetPlatformOverride = TargetPlatform.android;
-    try {
-      app = TestApp.create(
-        browser: (config) => CdpBrowser(
-          browserDir: p.join(config.dataDir, "browser"),
-          picked: () => AppSettings.load(config).agentBrowser,
-          visible: () => AppSettings.load(config).agentBrowserVisible,
-          embedded: HeliumDownload(p.join(config.dataDir, "browser")),
-          webViews: const MethodChannel("agent_chat/browser"),
-        ),
-      );
-      useWindow(tester, const Size(1200, 1600));
-      await pumpSettings(tester, app, SettingsCategory.agentBrowser);
+    app = TestApp.create(
+      browser: (config) => CdpBrowser(
+        browserDir: p.join(config.dataDir, "browser"),
+        picked: () => AppSettings.load(config).agentBrowser,
+        visible: () => AppSettings.load(config).agentBrowserVisible,
+        embedded: HeliumDownload(p.join(config.dataDir, "browser")),
+        webViews: const MethodChannel("agent_chat/browser"),
+      ),
+    );
+    useWindow(tester, const Size(1200, 1600));
+    await pumpSettings(tester, app, SettingsCategory.agentBrowser);
 
-      expect(find.text("Show the browser window"), findsNothing);
-      expect(find.text("Embedded browser"), findsNothing);
-      final browser = app.container.read(agentBrowserProvider);
-      expect(browser.configured, isFalse);
+    expect(find.text("Show the browser window"), findsNothing);
+    expect(find.text("Embedded browser"), findsNothing);
+    final browser = app.container.read(agentBrowserProvider);
+    expect(browser.configured, isFalse);
 
-      await tester.tap(find.text("Let the agent use a browser"));
-      await tester.pumpAndSettle();
-      expect(browser.configured, isTrue);
+    await tester.tap(find.text("Let the agent use a browser"));
+    await tester.pumpAndSettle();
+    expect(browser.configured, isTrue);
 
-      await tester.tap(find.text("Let the agent use a browser"));
-      await tester.pumpAndSettle();
-      expect(browser.configured, isFalse);
-    } finally {
-      debugDefaultTargetPlatformOverride = null;
-    }
+    await tester.tap(find.text("Let the agent use a browser"));
+    await tester.pumpAndSettle();
+    expect(browser.configured, isFalse);
   });
 }
