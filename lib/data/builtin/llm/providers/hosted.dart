@@ -5,7 +5,7 @@ import "provider.dart";
 /// they are.
 
 class GroqProvider extends OpenAiCompatibleProvider {
-  const GroqProvider([super.config = preset]);
+  const GroqProvider([LlmProviderConfig config = preset]) : super(config, _terms);
 
   static const preset = LlmProviderConfig(
     id: "groq",
@@ -17,19 +17,18 @@ class GroqProvider extends OpenAiCompatibleProvider {
     defaultLightModelId: "openai/gpt-oss-20b",
   );
 
-  @override
-  PresetTerms get terms => const PresetTerms(
-        blurb: "Open models on fast hardware.",
-        prompts: PromptUse.notTrained,
-        policy: "https://groq.com/privacy-policy",
-        keyUrl: "https://console.groq.com/keys",
-      );
+  static const _terms = PresetTerms(
+    blurb: "Open models on fast hardware.",
+    prompts: PromptUse.notTrained,
+    policy: "https://groq.com/privacy-policy",
+    keyUrl: "https://console.groq.com/keys",
+  );
 }
 
 // shortcut: not known to keep a model list behind the key; its light default
 // is free, so the completion costs nothing.
 class ZaiProvider extends OpenAiCompatibleProvider with ChecksKeyByCompletion {
-  const ZaiProvider([super.config = preset]);
+  const ZaiProvider([LlmProviderConfig config = preset]) : super(config, _terms);
 
   static const preset = LlmProviderConfig(
     id: "zai",
@@ -42,21 +41,20 @@ class ZaiProvider extends OpenAiCompatibleProvider with ChecksKeyByCompletion {
     defaultLightModelId: "glm-4.5-flash",
   );
 
-  @override
-  PresetTerms get terms => const PresetTerms(
-        blurb: "GLM models, some of them free.",
-        prompts: PromptUse.unstated,
-        freeTier: "The GLM Flash models are free. Z.ai's terms do not say how "
-            "prompts sent to the free models are handled, so treat them as not "
-            "private.",
-        policy: "https://docs.z.ai/legal-agreement/privacy-policy",
-        keyUrl: "https://z.ai/manage-apikey/apikey-list",
-      );
+  static const _terms = PresetTerms(
+    blurb: "GLM models, some of them free.",
+    prompts: PromptUse.unstated,
+    freeTier: "The GLM Flash models are free. Z.ai's terms do not say how "
+        "prompts sent to the free models are handled, so treat them as not "
+        "private.",
+    policy: "https://docs.z.ai/legal-agreement/privacy-policy",
+    keyUrl: "https://z.ai/manage-apikey/apikey-list",
+  );
 }
 
 // shortcut: not known to keep a model list behind the key.
 class OllamaCloudProvider extends OpenAiCompatibleProvider with ChecksKeyByCompletion {
-  const OllamaCloudProvider([super.config = preset]);
+  const OllamaCloudProvider([LlmProviderConfig config = preset]) : super(config, _terms);
 
   static const preset = LlmProviderConfig(
     id: "ollama-cloud",
@@ -69,11 +67,10 @@ class OllamaCloudProvider extends OpenAiCompatibleProvider with ChecksKeyByCompl
     defaultLightModelId: "nemotron-3-nano:30b",
   );
 
-  @override
-  PresetTerms get terms => const PresetTerms(
-        blurb: "Open models, hosted by Ollama.",
-        prompts: PromptUse.notTrained,
-        policy: "https://ollama.com/privacy",
-        keyUrl: "https://ollama.com/settings/keys",
-      );
+  static const _terms = PresetTerms(
+    blurb: "Open models, hosted by Ollama.",
+    prompts: PromptUse.notTrained,
+    policy: "https://ollama.com/privacy",
+    keyUrl: "https://ollama.com/settings/keys",
+  );
 }

@@ -1,22 +1,14 @@
-import "package:http/http.dart" as http;
-
 import "../../../../domain/llm_provider.dart";
 import "provider.dart";
 
 /// A model server the user runs on this machine. Nothing there checks a key,
 /// so any key is a yes.
-abstract class LocalServerProvider extends OpenAiCompatibleProvider {
-  const LocalServerProvider(super.config);
-
-  @override
-  bool get needsKey => false;
-
-  @override
-  Future<bool> checkKey(String apiKey, {http.Client? httpClient}) async => true;
+abstract class LocalServerProvider extends OpenAiCompatibleProvider with KeyFree {
+  const LocalServerProvider(super.config, [super.terms]);
 }
 
 class OllamaProvider extends LocalServerProvider {
-  const OllamaProvider([super.config = preset]);
+  const OllamaProvider([LlmProviderConfig config = preset]) : super(config, _terms);
 
   static const preset = LlmProviderConfig(
     id: "ollama",
@@ -27,15 +19,14 @@ class OllamaProvider extends LocalServerProvider {
     defaultLightModelId: "nemotron-3-nano:30b",
   );
 
-  @override
-  PresetTerms get terms => const PresetTerms(
-        blurb: "Models you run yourself with Ollama.",
-        prompts: PromptUse.local,
-      );
+  static const _terms = PresetTerms(
+    blurb: "Models you run yourself with Ollama.",
+    prompts: PromptUse.local,
+  );
 }
 
 class LmStudioProvider extends LocalServerProvider {
-  const LmStudioProvider([super.config = preset]);
+  const LmStudioProvider([LlmProviderConfig config = preset]) : super(config, _terms);
 
   static const preset = LlmProviderConfig(
     id: "lmstudio",
@@ -46,9 +37,8 @@ class LmStudioProvider extends LocalServerProvider {
     defaultLightModelId: "nemotron-3-nano:30b",
   );
 
-  @override
-  PresetTerms get terms => const PresetTerms(
-        blurb: "Models you run yourself with LM Studio.",
-        prompts: PromptUse.local,
-      );
+  static const _terms = PresetTerms(
+    blurb: "Models you run yourself with LM Studio.",
+    prompts: PromptUse.local,
+  );
 }

@@ -364,12 +364,12 @@ ModelChoice voiceSpeechChoice(AppSettings s) => (
       modelId: s.voiceSpeechModelId,
     );
 
-/// Whether [provider] is configured and speaks OpenAI's audio endpoints. Read
-/// off the settings alone: asking the backend builds a client, and the
-/// registry it builds from reads `settings.json` again, which the readiness
-/// gates would do on every settings write.
+/// Whether [provider] is configured and has audio endpoints. Read off the
+/// settings alone: asking the backend builds a client, and the registry it
+/// builds from reads `settings.json` again, which the readiness gates would do
+/// on every settings write.
 bool _answersAudio(AppSettings settings, String provider) =>
-    settings.llmProviders.any((p) => p.id == provider && p.api == LlmApi.openai);
+    settings.llmProviders.any((p) => p.id == provider && providerOf(p).answersAudio);
 
 /// What a voice session is started with. Null halves are nothing usable: no
 /// pick, a provider no longer configured or with no audio endpoints, or a

@@ -2,7 +2,7 @@ import "../../../../domain/llm_provider.dart";
 import "provider.dart";
 
 class OpenRouterProvider extends OpenAiCompatibleProvider {
-  const OpenRouterProvider([super.config = preset]);
+  const OpenRouterProvider([LlmProviderConfig config = preset]) : super(config, _terms);
 
   static const preset = LlmProviderConfig(
     id: "openrouter",
@@ -14,13 +14,12 @@ class OpenRouterProvider extends OpenAiCompatibleProvider {
     defaultLightModelId: "nvidia/nemotron-3-nano-30b-a3b",
   );
 
-  @override
-  PresetTerms get terms => const PresetTerms(
-        blurb: "One key for hundreds of models from many providers.",
-        prompts: PromptUse.dependsOnRoute,
-        policy: "https://openrouter.ai/privacy",
-        keyUrl: "https://openrouter.ai/settings/keys",
-      );
+  static const _terms = PresetTerms(
+    blurb: "One key for hundreds of models from many providers.",
+    prompts: PromptUse.dependsOnRoute,
+    policy: "https://openrouter.ai/privacy",
+    keyUrl: "https://openrouter.ai/settings/keys",
+  );
 
   @override
   String get imageModel => "google/gemini-2.5-flash-image";

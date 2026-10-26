@@ -2,7 +2,7 @@ import "../../../../domain/llm_provider.dart";
 import "provider.dart";
 
 class OpenAiProvider extends OpenAiCompatibleProvider {
-  const OpenAiProvider([super.config = preset]);
+  const OpenAiProvider([LlmProviderConfig config = preset]) : super(config, _terms);
 
   static const preset = LlmProviderConfig(
     id: "openai",
@@ -14,13 +14,12 @@ class OpenAiProvider extends OpenAiCompatibleProvider {
     defaultLightModelId: "gpt-5.6-luna",
   );
 
-  @override
-  PresetTerms get terms => const PresetTerms(
-        blurb: "GPT models, and gpt-image for pictures.",
-        prompts: PromptUse.notTrained,
-        policy: "https://openai.com/enterprise-privacy",
-        keyUrl: "https://platform.openai.com/api-keys",
-      );
+  static const _terms = PresetTerms(
+    blurb: "GPT models, and gpt-image for pictures.",
+    prompts: PromptUse.notTrained,
+    policy: "https://openai.com/enterprise-privacy",
+    keyUrl: "https://platform.openai.com/api-keys",
+  );
 
   /// As a `file` part, which OpenAI's own `/chat/completions` takes.
   @override

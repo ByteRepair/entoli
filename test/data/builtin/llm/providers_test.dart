@@ -35,6 +35,31 @@ void main() {
     });
   });
 
+  group("capabilities", () {
+    test("an OpenAI-shaped provider makes images and has audio endpoints", () {
+      const openai = OpenAiProvider();
+      final client = openai.client(null);
+      expect(openai.answersAudio, isTrue);
+      expect(openai.imageGenerator(client, "gpt-image-1"), isNotNull);
+      expect(openai.transcriber(client, "whisper-1"), isNotNull);
+      expect(openai.synthesizer(client, "tts-1"), isNotNull);
+    });
+
+    test("Anthropic offers chat alone", () {
+      const anthropic = AnthropicProvider();
+      final client = anthropic.client(null);
+      expect(anthropic.answersAudio, isFalse);
+      expect(anthropic.imageGenerator(client, "any"), isNull);
+      expect(anthropic.transcriber(client, "any"), isNull);
+      expect(anthropic.synthesizer(client, "any"), isNull);
+    });
+
+    test("a local server asks for no key", () {
+      expect(const OllamaProvider().needsKey, isFalse);
+      expect(const OpenAiProvider().needsKey, isTrue);
+    });
+  });
+
   group("checkKey", () {
     late List<http.Request> requests;
 

@@ -5,6 +5,7 @@ import "package:http/http.dart" as http;
 import "../../../../core/tls.dart";
 import "../../../../domain/llm_provider.dart";
 import "../../../../domain/model_registry.dart";
+import "../../../../domain/voice.dart" show Synthesize, Transcribe;
 import "../http_stream.dart";
 import "../llm_client.dart";
 import "../openai_client.dart";
@@ -17,9 +18,13 @@ import "../openai_client.dart";
 ///
 /// Which class a config is read as is `providerOf`'s to decide.
 abstract class LlmProvider {
-  const LlmProvider(this.config);
+  const LlmProvider(this.config, [this.terms]);
 
   final LlmProviderConfig config;
+
+  /// What the Add provider list says beside it. Null for an endpoint typed in
+  /// by hand.
+  final PresetTerms? terms;
 
   String get id => config.id;
   String get displayName => config.displayName;
@@ -27,10 +32,6 @@ abstract class LlmProvider {
 
   /// False for a server nothing guards, whose key the dialog does not ask for.
   bool get needsKey => true;
-
-  /// What the Add provider list says beside it. Null for an endpoint typed in
-  /// by hand.
-  PresetTerms? get terms => null;
 
   /// Whether a PDF goes to it as a block. Most compatible servers reject the
   /// `file` part outright, so it is off unless the provider is known to take
@@ -49,6 +50,21 @@ abstract class LlmProvider {
   /// Whether the provider accepts [apiKey]. Throws an [LlmException] where it
   /// could not be asked, which is not a no.
   Future<bool> checkKey(String apiKey, {http.Client? httpClient});
+
+  /// Whether it has speech-to-text and text-to-speech endpoints. Read where no
+  /// client should be built for it: the voice readiness gates run on every
+  /// settings write.
+  bool get answersAudio;
+
+  /// [model] making one image from a prompt, over [client] — the one [client]
+  /// built. Null where the provider makes no images.
+  ImageGenerator? imageGenerator(LlmClient client, String model, {String? quality});
+
+  /// [model] hearing a WAV, over [client]. Null where [answersAudio] is false.
+  Transcribe? transcriber(LlmClient client, String model);
+
+  /// [model] speaking text, over [client]. Null where [answersAudio] is false.
+  Synthesize? synthesizer(LlmClient client, String model, {String? voice});
 
   /// Every model it offers: its own, then models.dev's entry for it less what
   /// it has retired.
@@ -85,13 +101,57 @@ abstract class LlmProvider {
   }
 }
 
-/// Anything that copied OpenAI's `/chat/completions`, and what an endpoint
-/// typed in by hand is read as.
-class OpenAiCompatibleProvider extends LlmProvider {
-  const OpenAiCompatibleProvider(super.config);
+typedef ImageGenerator = Future<List<LlmAttachment>> Function(String prompt);
+
+/// A provider that makes no images and has no audio endpoints.
+mixin ChatOnly on LlmProvider {
+  @override
+  bool get answersAudio => false;
 
   @override
-  LlmClient client(String? apiKey) => OpenAiClient(baseUrl: baseUrl, apiKey: apiKey);
+  ImageGenerator? imageGenerator(LlmClient client, String model, {String? quality}) =>
+      null;
+
+  @override
+  Transcribe? transcriber(LlmClient client, String model) => null;
+
+  @override
+  Synthesize? synthesizer(LlmClient client, String model, {String? voice}) => null;
+}
+
+/// A server nothing guards: no key is asked for, and any key is a yes.
+mixin KeyFree on LlmProvider {
+  @override
+  bool get needsKey => false;
+
+  @override
+  Future<bool> checkKey(String apiKey, {http.Client? httpClient}) async => true;
+}
+
+/// Anything that copied OpenAI's `/chat/completions`, and what an endpoint
+/// typed in by hand is read as. The image and audio endpoints are OpenAI's
+/// shape too, so they are offered wherever an image or speech model is picked.
+class OpenAiCompatibleProvider extends LlmProvider {
+  const OpenAiCompatibleProvider(super.config, [super.terms]);
+
+  @override
+  OpenAiClient client(String? apiKey) => OpenAiClient(baseUrl: baseUrl, apiKey: apiKey);
+
+  @override
+  bool get answersAudio => true;
+
+  @override
+  ImageGenerator? imageGenerator(LlmClient client, String model, {String? quality}) =>
+      (prompt) => (client as OpenAiClient)
+          .generateImage(prompt, model: model, quality: quality);
+
+  @override
+  Transcribe? transcriber(LlmClient client, String model) =>
+      (wav) => (client as OpenAiClient).transcribe(wav, model: model);
+
+  @override
+  Synthesize? synthesizer(LlmClient client, String model, {String? voice}) =>
+      (text) => (client as OpenAiClient).speak(text, model: model, voice: voice);
 
   /// What the key is asked about: the model list, which most of these keep
   /// behind it.

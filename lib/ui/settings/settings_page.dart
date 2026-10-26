@@ -981,7 +981,7 @@ class _RecommendedProviderState extends ConsumerState<_RecommendedProvider> {
   static final _signUp = Uri.parse("https://signin.ollama.com/sign-up");
 
   static const _ollamaCloud = OllamaCloudProvider();
-  static final _privacy = Uri.parse(_ollamaCloud.terms.policy!);
+  static final _privacy = Uri.parse(_ollamaCloud.terms!.policy!);
 
   final _apiKey = TextEditingController();
 

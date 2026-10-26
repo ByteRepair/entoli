@@ -62,7 +62,15 @@ reply from the light default.
 rather than a URL nobody remembers. It and `providerOf`'s lookups are built
 from one list of classes, `_kinds`, so a new provider is its class and one
 entry there. A provider nothing guards — a local server, the on-device ones —
-says so with `needsKey`, which is what the dialog and the provider list read. A key can be left out and named as
+takes `KeyFree`, whose `needsKey` is what the dialog and the provider list
+read.
+
+**What a provider can do beyond chat is its own to say.** `LlmProvider`
+declares `imageGenerator`, `transcriber`, `synthesizer` and `answersAudio`
+unimplemented; `OpenAiCompatibleProvider` answers them over its client's
+image and audio endpoints, and `ChatOnly` answers none, for Anthropic and the
+on-device providers. The backend and the voice gates ask the provider, never
+the client's type. A key can be left out and named as
 `apiKeyEnv` instead, which is how one already exported stays out of the file.
 `LlmRegistry` builds a client per provider and rebuilds it when the URL or key
 changes; a provider that lists no models is asked, and one that cannot answer

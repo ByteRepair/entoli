@@ -951,8 +951,8 @@ agent's browser, on screen" in `lib/ui/chat/AGENTS.md`.
 ## Images (the `image_generation` tool)
 
 Offered only when Settings > Image Generation names an image model (its "Off"
-entry is the switch) and that model resolves to an OpenAI-shaped provider; Anthropic makes no images, so it is not
-offered there. `OpenAiClient.generateImage` asks `gpt-image*`/`dall-e*` through
+entry is the switch) and that model's provider answers `imageGenerator`;
+Anthropic makes no images, so it is not offered there. `OpenAiClient.generateImage` asks `gpt-image*`/`dall-e*` through
 the Images API, any model on Gemini's host through Gemini's native
 `models/<model>:generateContent`, and anything else (OpenRouter) through
 `/chat/completions` with `modalities: ["image", "text"]`. Gemini is native

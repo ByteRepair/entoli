@@ -1,7 +1,6 @@
 import "dart:async";
 
 import "package:flutter/services.dart";
-import "package:http/http.dart" as http;
 
 import "../../domain/local_model.dart";
 import "../../domain/llm_provider.dart";
@@ -113,20 +112,13 @@ class AppleFm {
   LlmProvider get endpoint => AppleFmProvider(provider, probe);
 }
 
-class AppleFmProvider extends LlmProvider {
+class AppleFmProvider extends LlmProvider with KeyFree, ChatOnly {
   const AppleFmProvider(super.config, this.probe);
 
   final AppleFmProbe probe;
 
   @override
-  bool get needsKey => false;
-
-  @override
   LlmClient client(String? apiKey) => AppleFmClient(probe);
-
-  /// The OS's own model: there is no key.
-  @override
-  Future<bool> checkKey(String apiKey, {http.Client? httpClient}) async => true;
 }
 
 /// Everything the channel says, broadcast — the `NativeVoiceBridge` shape:

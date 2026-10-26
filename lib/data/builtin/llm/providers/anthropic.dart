@@ -7,9 +7,10 @@ import "../llm_client.dart";
 import "provider.dart";
 
 /// Anything that speaks Anthropic's `/messages`: Anthropic itself, and a
-/// gateway in front of it.
-class AnthropicCompatibleProvider extends LlmProvider {
-  const AnthropicCompatibleProvider(super.config);
+/// gateway in front of it. Anthropic makes no images and has no audio
+/// endpoints.
+class AnthropicCompatibleProvider extends LlmProvider with ChatOnly {
+  const AnthropicCompatibleProvider(super.config, [super.terms]);
 
   @override
   bool get takesPdfs => true;
@@ -26,7 +27,7 @@ class AnthropicCompatibleProvider extends LlmProvider {
 }
 
 class AnthropicProvider extends AnthropicCompatibleProvider {
-  const AnthropicProvider([super.config = preset]);
+  const AnthropicProvider([LlmProviderConfig config = preset]) : super(config, _terms);
 
   static const preset = LlmProviderConfig(
     id: "anthropic",
@@ -38,11 +39,10 @@ class AnthropicProvider extends AnthropicCompatibleProvider {
     defaultLightModelId: "claude-haiku-4-5",
   );
 
-  @override
-  PresetTerms get terms => const PresetTerms(
-        blurb: "Claude models.",
-        prompts: PromptUse.notTrained,
-        policy: "https://www.anthropic.com/legal/commercial-terms",
-        keyUrl: "https://platform.claude.com/settings/keys",
-      );
+  static const _terms = PresetTerms(
+    blurb: "Claude models.",
+    prompts: PromptUse.notTrained,
+    policy: "https://www.anthropic.com/legal/commercial-terms",
+    keyUrl: "https://platform.claude.com/settings/keys",
+  );
 }

@@ -1,5 +1,3 @@
-import "package:http/http.dart" as http;
-
 import "../../../domain/app_settings.dart";
 import "../../../domain/local_llm.dart";
 import "llm_client.dart";
@@ -43,7 +41,7 @@ extension LocalPoolCaching on LocalPoolOptions {
 
 /// The on-device models as a provider: an entry the user never configures,
 /// whose client is the pool below. No key reaches it.
-class LocalPoolProvider extends LlmProvider {
+class LocalPoolProvider extends LlmProvider with KeyFree, ChatOnly {
   const LocalPoolProvider(super.config, this._llm, this._options, {LocalKvCache? kvCache})
       : _kv = kvCache;
 
@@ -52,13 +50,7 @@ class LocalPoolProvider extends LlmProvider {
   final LocalKvCache? _kv;
 
   @override
-  bool get needsKey => false;
-
-  @override
   LlmClient client(String? apiKey) => LocalPoolClient(_llm, _options, kvCache: _kv);
-
-  @override
-  Future<bool> checkKey(String apiKey, {http.Client? httpClient}) async => true;
 }
 
 /// The on-device provider, as one client over however many servers are running.
