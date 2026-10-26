@@ -20,6 +20,11 @@ void main() {
       expect(globMatch("git status *", "git statusfoo"), isFalse);
     });
 
+    test("* spans a newline in a quoted script", () {
+      expect(globMatch("toolbox *", "toolbox run bash -lc echo a\necho b"),
+          isTrue);
+    });
+
     test("a command is matched by its words: operators split it first, and "
         "redirects are not words", () {
       const make = PermissionRule(
