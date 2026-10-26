@@ -18,6 +18,7 @@ import "package:agent_chat/domain/app_restart.dart";
 import "package:agent_chat/domain/agent_backend.dart";
 import "package:agent_chat/domain/attachment_picker.dart";
 import "package:agent_chat/domain/backup_handoff.dart";
+import "package:agent_chat/domain/shell_job.dart";
 import "package:agent_chat/domain/background_work.dart";
 import "package:agent_chat/domain/chat_log.dart";
 import "package:agent_chat/domain/chat_meta.dart";
@@ -504,6 +505,24 @@ class FakeFileHandoff implements FileHandoff {
 IncomingBytes incomingFile(String path, [String text = "hi"]) =>
     IncomingBytes(path, Uint8List.fromList(text.codeUnits));
 
+/// A chat's background jobs as a test sets them.
+class FakeShellJobs implements ChatShellJobs {
+  @override
+  final ValueNotifier<List<ShellJob>> jobs = ValueNotifier(const []);
+
+  /// What each job's log reads, by id.
+  final Map<int, String> logs = {};
+
+  /// The jobs [stop] was asked to stop.
+  final List<int> stopped = [];
+
+  @override
+  Future<void> stop(int id) async => stopped.add(id);
+
+  @override
+  Stream<String> log(ShellJob job) => Stream.value(logs[job.id] ?? "");
+}
+
 class FakeBackend implements AgentBackend {
   var _created = 0;
 
@@ -524,6 +543,13 @@ class FakeBackend implements AgentBackend {
   /// would.
   @override
   final SubAgentFeed subAgents = SubAgentFeed();
+
+  /// Each chat's background jobs, set by a test the way the backend would.
+  final Map<String, FakeShellJobs> jobs = {};
+
+  @override
+  FakeShellJobs jobsOf(String chatId) =>
+      jobs.putIfAbsent(chatId, FakeShellJobs.new);
 
   @override
   Future<Chat> createChat({String? title}) async {

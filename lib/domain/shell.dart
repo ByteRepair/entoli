@@ -246,6 +246,8 @@ class ShellDriver {
 /// A command already running. Separate from its result so an aborted turn can
 /// [kill] a build that would otherwise carry on for minutes.
 abstract class ShellRun {
+  const ShellRun();
+
   /// Completes when the command does or when it is killed, whichever comes
   /// first. The agent awaits it with no bound of its own, so an implementation
   /// that waits on a handle it cannot close is a turn that can never end.
@@ -263,6 +265,12 @@ abstract class ShellRun {
   /// only the remainder of a possible one, and [result]'s [ShellResult.output]
   /// is still the whole of what the command printed.
   ValueListenable<String?>? get output => null;
+
+  /// The process the command runs in, once it has started: the leader of its
+  /// group where the shell starts one. Null where there is none to name — a
+  /// run that never started, or a shell whose processes are not the
+  /// machine's.
+  Future<int?> get pid async => null;
 
   Future<void> kill();
 }
@@ -318,6 +326,11 @@ abstract class Shell {
   /// Without that, a browser could never finish a turn — submitting is itself
   /// a command.
   bool get canRunCommands => true;
+
+  /// Whether a `oneShot` run may be left running past the call that started
+  /// it: its [ShellRun.pid] names a process the machine can signal, and it
+  /// lives as long as the app does. What `bash`'s `background` is offered on.
+  bool get canRunInBackground => false;
 
   /// Whether a command's `HOME` is the workspace rather than the machine's
   /// own, because the driver that runs it takes one — a guest's home is one
@@ -404,7 +417,7 @@ class UnavailableShell extends Shell {
       const _Unavailable();
 }
 
-class _Unavailable implements ShellRun {
+class _Unavailable extends ShellRun {
   const _Unavailable();
 
   @override

@@ -111,6 +111,9 @@ class LocalShell extends Shell {
   @override
   bool get canRunCommands => _driver() != null;
 
+  @override
+  bool get canRunInBackground => canRunCommands;
+
   /// Where this shell reaches a guest or Android: the home is one directory
   /// every project would share, so a command gets the project workspace as
   /// its `HOME` and one project is one environment. On a desktop it is false,
@@ -801,7 +804,7 @@ class _RunState {
   Timer? escalateTimer;
 }
 
-class _SessionRun implements ShellRun {
+class _SessionRun extends ShellRun {
   _SessionRun(this.state, this._session);
 
   final _RunState state;
@@ -838,7 +841,7 @@ class ShellUnavailable implements Exception {
 /// What a `oneShot` command is: today's contract, a fresh subshell per
 /// command, kept for sub-agents and for the platforms a persistent shell
 /// would only complicate.
-class _OneShotRun implements ShellRun {
+class _OneShotRun extends ShellRun {
   _OneShotRun({
     required this.command,
     required this.script,
@@ -888,6 +891,10 @@ class _OneShotRun implements ShellRun {
       _notifier ??= ValueNotifier<String?>(null);
 
   @override
+  Future<int?> get pid => _pid.future;
+  final _pid = Completer<int?>();
+
+  @override
   Future<void> kill() async {
     _killed = true;
     _killTree();
@@ -895,6 +902,7 @@ class _OneShotRun implements ShellRun {
 
   Future<ShellResult> _run() async {
     if (command.isEmpty) {
+      _pid.complete(null);
       return const ShellResult.failed(
           "No shell was found on this device to execute commands in.");
     }
@@ -903,6 +911,7 @@ class _OneShotRun implements ShellRun {
     try {
       _process = await _spawn();
       final process = _process!;
+      _pid.complete(process.pid);
       // Merged in the shell rather than here: two Dart streams arrive in
       // whatever order the pipes flush, and a compiler's errors interleaved
       // with its progress is the whole value of reading them.
@@ -957,6 +966,7 @@ class _OneShotRun implements ShellRun {
       );
     } finally {
       timer?.cancel();
+      if (!_pid.isCompleted) _pid.complete(null);
     }
   }
 

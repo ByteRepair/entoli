@@ -211,6 +211,7 @@ LocalPrefill? createLocalPrefill(
            offerMemory: false,
            // Every top-level chat has a `resources/` to copy out of.
            attachments: true,
+           background: shell.canRunInBackground,
          ),
       );
     },
