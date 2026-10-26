@@ -18,6 +18,7 @@ import "package:agent_chat/domain/app_restart.dart";
 import "package:agent_chat/domain/agent_backend.dart";
 import "package:agent_chat/domain/attachment_picker.dart";
 import "package:agent_chat/domain/backup_handoff.dart";
+import "package:agent_chat/domain/shell_job.dart";
 import "package:agent_chat/domain/background_work.dart";
 import "package:agent_chat/domain/chat_log.dart";
 import "package:agent_chat/domain/chat_meta.dart";
@@ -524,6 +525,36 @@ class FakeBackend implements AgentBackend {
   /// would.
   @override
   final SubAgentFeed subAgents = SubAgentFeed();
+
+  /// Each chat's background jobs, set by a test the way the backend would.
+  final Map<String, ValueNotifier<List<ShellJob>>> jobs = {};
+
+  /// What each job's log reads, by id.
+  final Map<int, String> jobLogs = {};
+
+  /// The jobs [stopBackgroundJob] was asked to stop.
+  final List<int> stoppedJobs = [];
+
+  ValueNotifier<List<ShellJob>> _jobsOf(String chatId) =>
+      jobs.putIfAbsent(chatId, () => ValueNotifier(const []));
+
+  @override
+  ValueListenable<List<ShellJob>> backgroundJobs(String chatId) =>
+      _jobsOf(chatId);
+
+  @override
+  Future<void> stopBackgroundJob(String chatId, int id) async =>
+      stoppedJobs.add(id);
+
+  @override
+  void dismissBackgroundJob(String chatId, int id) {
+    final list = _jobsOf(chatId);
+    list.value = [for (final j in list.value) if (j.id != id) j];
+  }
+
+  @override
+  Stream<String> backgroundJobLog(String chatId, int id) =>
+      Stream.value(jobLogs[id] ?? "");
 
   @override
   Future<Chat> createChat({String? title}) async {

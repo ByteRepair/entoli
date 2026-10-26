@@ -488,6 +488,9 @@ class _IshUnavailableRun implements ShellRun {
   ValueListenable<String?>? get output => null;
 
   @override
+  Future<int?> get pid async => null;
+
+  @override
   Future<void> kill() async {}
 }
 
@@ -504,6 +507,8 @@ class _IshRun implements ShellRun {
     state.watched = true;
     return state.output;
   }
+  @override
+  Future<int?> get pid async => null;
   @override
   Future<void> kill() async => _session._interrupt(this, byTimeout: false);
 }
@@ -557,6 +562,9 @@ class _IshOneShotRun implements ShellRun {
     _state.watched = true;
     return _state.output;
   }
+
+  @override
+  Future<int?> get pid async => null;
 
   @override
   Future<void> kill() async => _stop();

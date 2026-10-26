@@ -4,6 +4,7 @@ import "package:flutter/foundation.dart" show ValueListenable;
 
 import "../domain/app_settings.dart" show ImageQuality;
 import "../domain/ask.dart";
+import "../domain/shell_job.dart";
 import "../domain/builtin_project.dart";
 import "../domain/chat_log.dart";
 import "../domain/models.dart";
@@ -533,6 +534,19 @@ abstract class AgentBackend {
   /// The running sub-agents' transcripts, as they are written. See
   /// [SubAgentFeed].
   SubAgentFeed get subAgents;
+
+  /// [chatId]'s background jobs as they start and end, the ended ones until
+  /// they are dismissed. See [ShellJob].
+  ValueListenable<List<ShellJob>> backgroundJobs(String chatId);
+
+  /// Stop a running job. One already over is left as it is.
+  Future<void> stopBackgroundJob(String chatId, int id);
+
+  /// Take an ended job off the list.
+  void dismissBackgroundJob(String chatId, int id);
+
+  /// The end of a job's log, as it grows, until the job ends.
+  Stream<String> backgroundJobLog(String chatId, int id);
 
   /// What the chat's model last reported a request cost, in context tokens —
   /// the auto-compact threshold's input. Null where nothing has reported:

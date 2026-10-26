@@ -26,8 +26,8 @@ named in a cross-reference is findable from this list.
   agents, Resending a message, Attachments, Reminders
 - `lib/ui/sidebar/AGENTS.md` — The sidebar's list, Pinned chats
 - `lib/ui/marketplace/AGENTS.md` — The marketplace page
-- `lib/data/builtin/AGENTS.md` — The agent loop, Running the commands, Running a
-  command yourself, Approvals, Questions, Sub-agents, Their own transcripts,
+- `lib/data/builtin/AGENTS.md` — The agent loop, Running the commands, Background
+  jobs, Running a command yourself, Approvals, Questions, Sub-agents, Their own transcripts,
    Carrying one on, Web search, The browser, Images, Skills, The plan, Memory
 - `lib/data/builtin/llm/AGENTS.md` — Reaching a provider, Errors, and how long
   the UI waits
@@ -52,7 +52,7 @@ named in a cross-reference is findable from this list.
 - `lib/domain/room/AGENTS.md` — The room and its participants, The contract
   between direct and Omada chats, When a turn is over, Automatic retry rounds
 - `lib/ui/chat/AGENTS.md` — What the turn's extraction kept, Thinking and tool runs,
-  The agent's browser, on screen,
+  Background jobs, on screen, The agent's browser, on screen,
   Selecting a reply, and copying it, How a reply is set, Code blocks, A command
   the user ran, The plan, on screen, A chat whose home device is elsewhere, The chat page
 - `lib/data/voice/AGENTS.md` — Voice mode, What listens and what speaks, The

@@ -507,6 +507,18 @@ them under the project it left. Messages already composed keep what their
 `/skill` and `@agent` references meant when they were sent — the records are
 on the message, not looked up per turn.
 
+## Background jobs, on screen
+
+`JobStrip` sits in `TurnSurface` under the browser chip and, like it, is not
+turn-scoped: a pill per background job the chat holds (see "Background jobs"
+in `lib/data/builtin/AGENTS.md`), spinning while it runs and saying how it
+ended after. It reads the backend's list directly, not the controller's view
+state, and draws nothing on a mirrored chat. A pill opens `JobSheet`: the
+command, the pid or the exit, and the end of the log as it grows
+(`backgroundJobLog`, re-read every half second until the job ends), with Stop
+for a running job and Dismiss for an ended one, which is the only thing that
+takes a pill away.
+
 ## The agent's browser, on screen
 
 The sidebar's spinner (and the project palette's) reads `busyChatsProvider`,

@@ -234,6 +234,30 @@ the pair completes, the conversation keeping only the pair. Nothing here is
 persisted and a sub-agent's commands are not watched, the callback being null
 where the agent is one.
 
+### Background jobs
+
+`bash` with `background: true` answers as soon as the command has started
+and leaves it running: a server, a watcher, anything that does not exit on
+its own. It was added because `&` could not do this: a child backgrounded
+inside `toolbox run` keeps `podman exec` attached through its inherited
+stdin, so the call never came back. A job is a one-shot run, gated and
+sandboxed like any call, whose script first points its own streams at
+`.entoli-jobs/<id>.log` in the chat workspace and at `/dev/null`
+(`backgroundScript`), so nothing it leaves behind holds a pipe of the app's.
+The answer gives the job's number, its pid (the group leader, so
+`kill -- -<pid>` takes everything it started) and the log, which the model
+reads with `tail` or `read`.
+
+`BackgroundJobs` holds them per chat on the backend, so a job outlives its
+turn. How one ended is a note at the head of the agent's next tool result in
+that chat, this turn or a later one, as the browser's notes are. At most
+`maxRunning` per chat at once, each killed after `timeout`. Deleting the chat
+or quitting the app kills them, and ids are never reused while the app runs,
+since an id names its log. Offered where `Shell.canRunInBackground` (the
+machine's shell, a guest under proot included), never to a sub-agent: nobody
+would hear how its job ended. The chat page draws them as pills; see "Background
+jobs, on screen" in `lib/ui/chat/AGENTS.md`.
+
 ### Running a command yourself
 
 A message that starts with `!` is a command, and `BuiltinBackend._runBypass`
