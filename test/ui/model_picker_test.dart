@@ -3,6 +3,7 @@ import "dart:convert";
 import "package:flutter/material.dart";
 import "package:flutter_test/flutter_test.dart";
 
+import "package:agent_chat/data/builtin/llm/providers/presets.dart";
 import "package:agent_chat/domain/llm_provider.dart";
 import "package:agent_chat/domain/local_model.dart" show appleModelId, appleProviderId;
 import "package:agent_chat/domain/model_registry.dart";
@@ -195,14 +196,14 @@ void main() {
         },
       },
     }));
-    await pump(tester, role: ModelRole.image, defaultOf: LlmProviderConfig.imageDefaultOf);
+    await pump(tester, role: ModelRole.image, defaultOf: (config) => providerOf(config).imageModel);
     await openModelCatalog(tester);
     // The listed models are not guessed to make images.
     expect(cards(tester), ["Test · painter"]);
   });
 
   testWidgets("an image picker over providers that make no images says so", (tester) async {
-    await pump(tester, role: ModelRole.image, defaultOf: LlmProviderConfig.imageDefaultOf);
+    await pump(tester, role: ModelRole.image, defaultOf: (config) => providerOf(config).imageModel);
     await openModelCatalog(tester);
     expect(find.text("No image models"), findsOneWidget);
   });

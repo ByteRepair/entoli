@@ -2,6 +2,7 @@ import "package:flutter/material.dart";
 import "package:flutter/services.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
+import "../../data/builtin/llm/providers/presets.dart";
 import "../../domain/llm_provider.dart";
 import "../../domain/local_model.dart" show isTitleOnlyModel, localProviderId;
 import "../../domain/model_registry.dart";
@@ -107,7 +108,7 @@ List<CatalogEntry> catalogEntries(
   final known = <(String, String)>{};
   return [
     for (final p in providers)
-      for (final m in catalog.modelsOf(p))
+      for (final m in providerOf(p).models(catalog))
         if (known.add((p.id, m.id)) && role.offers(m))
           CatalogEntry(p.id, p.displayName, m,
               custom: p.customModels.any((c) => c.id == m.id)),

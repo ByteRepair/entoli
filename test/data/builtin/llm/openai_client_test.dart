@@ -5,6 +5,7 @@ import "package:flutter_test/flutter_test.dart";
 import "package:http/http.dart" as http;
 import "package:http/testing.dart";
 
+import "package:agent_chat/data/builtin/llm/gemini_client.dart";
 import "package:agent_chat/data/builtin/llm/llm_client.dart";
 import "package:agent_chat/data/builtin/llm/openai_client.dart";
 
@@ -286,7 +287,7 @@ void main() {
 
     test("Gemini gets the placeholder on the first of an unsigned reply's calls", () async {
       requests = [];
-      final client = OpenAiClient(
+      final client = GeminiClient(
         baseUrl: Uri.parse("https://generativelanguage.googleapis.com/v1beta/openai"),
         httpClient: MockClient.streaming((request, _) async {
           requests.add(request);
@@ -603,7 +604,7 @@ void main() {
     test("a Gemini image model is asked natively, and its JPEG kept", () async {
       const jpeg = "/9j/4AAQSkZJRgABAQ==";
       requests = [];
-      final images = await OpenAiClient(
+      final images = await GeminiClient(
         baseUrl: Uri.parse("https://generativelanguage.googleapis.com/v1beta/openai"),
         apiKey: "g-key",
         httpClient: MockClient.streaming((request, _) async {
@@ -666,7 +667,7 @@ void main() {
   });
 
   group("Gemini", () {
-    OpenAiClient geminiRejecting(int status) => OpenAiClient(
+    GeminiClient geminiRejecting(int status) => GeminiClient(
           baseUrl: Uri.parse("https://generativelanguage.googleapis.com/v1beta/openai"),
           httpClient: MockClient.streaming((_, _) async => errorResponse(status, {
                 "error": {"message": "whatever Google says this week"},
@@ -677,7 +678,7 @@ void main() {
       await expectLater(
         geminiRejecting(404).stream(const [], model: "gemini-2.5-flash").toList(),
         throwsA(isA<LlmException>()
-            .having((e) => e.toString(), "text", OpenAiClient.geminiRetired)
+            .having((e) => e.toString(), "text", GeminiClient.retired)
             .having((e) => e.retryable, "retryable", isFalse)),
       );
     });

@@ -1339,7 +1339,7 @@ class BuiltinBackend implements AgentBackend {
     bool title = false,
   }) {
     if (provider == null) return null;
-    final endpoint = registry.endpointFor(provider);
+    final endpoint = registry.providerFor(provider);
     if (endpoint == null) return null;
     final config = endpoint.config;
     final modelId = model ?? defaultOf(config);
@@ -1353,7 +1353,7 @@ class BuiltinBackend implements AgentBackend {
     // trusted as it was before there was a catalog to ask. Not PDFs, which
     // most endpoints refuse outright whatever the model.
     final images = info?.readsImages ?? true;
-    final pdfs = (info?.readsPdfs ?? false) && config.takesPdfs;
+    final pdfs = (info?.readsPdfs ?? false) && endpoint.takesPdfs;
     return (
       client: ReadableClient(client, images: images, pdfs: pdfs),
       modelId: modelId,
@@ -1380,9 +1380,9 @@ class BuiltinBackend implements AgentBackend {
   /// not speak the OpenAI shape: Anthropic makes no images.
   Future<List<LlmAttachment>> Function(String prompt)? _imageGenerator(
       String? provider, String? model, ImageQuality quality) {
-    final endpoint = provider == null ? null : registry.endpointFor(provider);
+    final endpoint = provider == null ? null : registry.providerFor(provider);
     if (endpoint == null) return null;
-    final modelId = model ?? LlmProviderConfig.imageDefaultOf(endpoint.config);
+    final modelId = model ?? endpoint.imageModel;
     final client = registry.clientOf(endpoint);
     if (modelId == null || client is! OpenAiClient) return null;
     return (prompt) => client.generateImage(prompt,

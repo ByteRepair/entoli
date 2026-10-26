@@ -20,7 +20,7 @@ class AnthropicClient implements LlmClient {
   final String? apiKey;
   final http.Client _http;
 
-  static const _version = "2023-06-01";
+  static const version = "2023-06-01";
 
   /// Room for the reply itself, on top of any thinking budget.
   static const _maxTokens = 8192;
@@ -35,7 +35,7 @@ class AnthropicClient implements LlmClient {
   };
 
   Map<String, String> get _auth => {
-        "anthropic-version": _version,
+        "anthropic-version": version,
         if (apiKey != null && apiKey!.isNotEmpty) "x-api-key": apiKey!,
       };
 

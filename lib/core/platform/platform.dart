@@ -10,6 +10,7 @@ import "../../data/builtin/llm/llm_registry.dart";
 import "../../data/builtin/llm/local_kv_cache.dart";
 import "../../data/builtin/llm/local_pool_client.dart";
 import "../../data/builtin/llm/local_prefill.dart";
+import "../../data/builtin/llm/providers/presets.dart";
 import "../../data/local/file_chat_store.dart";
 import "../../data/local/byte_repair_store.dart" show ByteRepairStore;
 import "../../data/prompts/prompt_sources.dart";
@@ -232,7 +233,7 @@ LocalPrefill? createLocalPrefill(
 /// the app's name, and so is `appleProviderId` — a `settings.json` that
 /// happens to use either is shadowed rather than allowed to take the
 /// models' own endpoint away from them.
-List<LlmEndpoint> llmEndpoints(
+List<LlmProvider> llmEndpoints(
   AppSettings Function() settings,
   LocalLlm localLlm,
   LocalKvCache? kvCache,
@@ -245,13 +246,13 @@ List<LlmEndpoint> llmEndpoints(
   // rather than allowed to take the models' own endpoint away.
   return [
     if (local != null)
-      LlmEndpoint(local, build: (config, apiKey) => LocalPoolClient(localLlm, () {
-            // Read here rather than above: this client outlives any one turn,
-            // and the settings page edits these between them.
-            return poolOptions(settings());
-          }, kvCache: kvCache)),
+      LocalPoolProvider(local, localLlm, () {
+        // Read here rather than above: this client outlives any one turn,
+        // and the settings page edits these between them.
+        return poolOptions(settings());
+      }, kvCache: kvCache),
     if (appleFm != null) appleFm.endpoint,
-    for (final config in settings().llmProviders) LlmEndpoint(config),
+    for (final config in settings().llmProviders) providerOf(config),
   ];
 }
 

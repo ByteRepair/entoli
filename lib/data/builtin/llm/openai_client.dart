@@ -2,6 +2,7 @@ import "dart:async";
 import "dart:convert";
 import "dart:typed_data";
 
+import "package:flutter/foundation.dart" show protected;
 import "package:http/http.dart" as http;
 
 import "../../../core/tls.dart";
@@ -12,7 +13,9 @@ import "llm_client.dart";
 /// `/chat/completions` — OpenAI's shape, and everything that copied it:
 /// OpenRouter, Groq, Together, ollama, LM Studio, vLLM. The base URL and the
 /// key are the whole of what differs between them; [returnProgress] is the one
-/// knob that is not about a provider but about llama.cpp in particular.
+/// knob that is not about a provider but about llama.cpp in particular. A host
+/// that bends the shape is a subclass overriding the protected hooks — see
+/// `GeminiClient`.
 class OpenAiClient implements LlmClient {
   OpenAiClient({
     required this.baseUrl,
@@ -31,6 +34,9 @@ class OpenAiClient implements LlmClient {
 
   final http.Client _http;
 
+  @protected
+  http.Client get httpClient => _http;
+
   Map<String, String> get _auth =>
       {if (apiKey != null && apiKey!.isNotEmpty) "authorization": "Bearer $apiKey"};
 
@@ -43,15 +49,19 @@ class OpenAiClient implements LlmClient {
   @override
   void close() => _http.close();
 
-  /// Gemini's list is models.dev's under a `models/` prefix, plus retired and
-  /// non-chat models, so models.dev stands in for it.
   @override
-  Future<List<String>> listModels() async => _isGemini
-      ? const []
-      : listModelIds(_http, under(baseUrl, "models"), headers: _auth);
+  Future<List<String>> listModels() =>
+      listModelIds(_http, under(baseUrl, "models"), headers: _auth);
 
-  static const geminiRetired =
-      "Google has retired this model, please select a newer model.";
+  /// What a refused request reports. A host whose status means something more
+  /// specific than its message says rewrites it here.
+  @protected
+  LlmException refused(LlmException e) => e;
+
+  /// Put on the first tool call of a replayed reply that carries no signature
+  /// of its own, for a host that refuses one unsigned. Null sends none.
+  @protected
+  String? get unsignedCallSignature => null;
 
   @override
   Stream<LlmChunk> stream(
@@ -82,11 +92,7 @@ class OpenAiClient implements LlmClient {
         "temperature": ?temperature,
         "reasoning_effort": ?reasoningEffort,
       },
-    ).onError<LlmException>(
-      // By status alone: the wording is Google's to change.
-      (_, _) => throw const LlmException(geminiRetired),
-      test: (e) => _isGemini && e.statusCode == 404,
-    );
+    ).onError<LlmException>((e, _) => throw refused(e));
 
     final text = StringBuffer();
     final reasoning = StringBuffer();
@@ -202,15 +208,13 @@ class OpenAiClient implements LlmClient {
   }
 
   /// One image from [prompt]. OpenAI's own image models answer only the
-  /// Images API; Gemini's are asked natively (see [_geminiImage]); everything
-  /// else that makes images through this shape (OpenRouter's) answers
+  /// Images API; everything else that makes images through this shape (OpenRouter's) answers
   /// `/chat/completions` asked for the image modality.
   ///
   /// [quality] is `low`, `medium` or `high`, null for the provider's default.
   /// Only the Images API takes one; the chat shape has no such field.
   Future<List<LlmAttachment>> generateImage(String prompt,
       {required String model, String? quality}) async {
-    if (_isGemini) return _geminiImage(prompt, model);
     final dallE = model.startsWith("dall-e");
     final imagesApi = model.startsWith("gpt-image") || dallE;
     final response = await postStream(
@@ -256,48 +260,6 @@ class OpenAiClient implements LlmClient {
     return message is Map ? imagesIn(message["images"]) : const [];
   }
 
-  /// Native, because neither compat route takes every Gemini image model.
-  Future<List<LlmAttachment>> _geminiImage(String prompt, String model) async {
-    final native = baseUrl.replace(
-        path: baseUrl.path.replaceFirst(RegExp(r"/openai/?$"), ""));
-    final response = await postStream(
-      _http,
-      under(native, "models/$model:generateContent"),
-      headers: {"content-type": "application/json", "x-goog-api-key": ?apiKey},
-      body: {
-        "contents": [
-          {
-            "parts": [
-              {"text": prompt},
-            ],
-          },
-        ],
-        "generationConfig": {
-          "responseModalities": ["TEXT", "IMAGE"],
-        },
-      },
-    );
-    final json = jsonDecode(await response.stream.bytesToString());
-    final candidates = json is Map ? json["candidates"] : null;
-    final content = candidates is List && candidates.isNotEmpty
-        ? (candidates.first as Map)["content"]
-        : null;
-    final parts = content is Map ? content["parts"] : null;
-    final out = <LlmAttachment>[];
-    for (final part in parts is List ? parts : const []) {
-      final data = part is Map ? part["inlineData"] : null;
-      if (data is Map && data["data"] is String && data["mimeType"] is String) {
-        final mime = data["mimeType"] as String;
-        out.add(LlmAttachment(
-          filename: "image-${out.length}.${mime.split("/").last}",
-          mimeType: mime,
-          bytes: base64Decode(data["data"] as String),
-        ));
-      }
-    }
-    return out;
-  }
-
   /// What [wav] says, through `/audio/transcriptions`.
   Future<String> transcribe(Uint8List wav, {required String model}) async {
     final request = http.MultipartRequest("POST", under(baseUrl, "audio/transcriptions"))
@@ -327,12 +289,6 @@ class OpenAiClient implements LlmClient {
     );
     return response.stream.toBytes();
   }
-
-  bool get _isGemini => baseUrl.host == "generativelanguage.googleapis.com";
-
-  // shortcut: the placeholder is LiteLLM's, not in Google's docs; replace it
-  // if Google documents one or stops taking it.
-  static const _skipSignature = "skip_thought_signature_validator";
 
   Map<String, dynamic> _encodeTool(LlmTool tool) => {
         "type": "function",
@@ -390,10 +346,9 @@ class OpenAiClient implements LlmClient {
           "content": message.text,
         };
       case LlmRole.assistant:
-        // Gemini signs the first call of a reply and refuses the reply back
-        // unsigned. One with none — logged before signatures were kept, or
-        // made by another model — gets the placeholder Gemini accepts instead.
-        final unsigned = _isGemini && message.toolCalls.every((c) => c.signature == null);
+        final placeholder = message.toolCalls.every((c) => c.signature == null)
+            ? unsignedCallSignature
+            : null;
         return {
           "role": "assistant",
           "content": message.text,
@@ -404,7 +359,7 @@ class OpenAiClient implements LlmClient {
                   "id": call.id,
                   "type": "function",
                   "function": {"name": call.name, "arguments": call.argumentsJson},
-                  if ((call.signature ?? (unsigned && i == 0 ? _skipSignature : null))
+                  if ((call.signature ?? (i == 0 ? placeholder : null))
                       case final signature?)
                     "extra_content": {
                       "google": {"thought_signature": signature},

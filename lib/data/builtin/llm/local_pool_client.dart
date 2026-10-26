@@ -1,8 +1,11 @@
+import "package:http/http.dart" as http;
+
 import "../../../domain/app_settings.dart";
 import "../../../domain/local_llm.dart";
 import "llm_client.dart";
 import "local_kv_cache.dart";
 import "openai_client.dart";
+import "providers/provider.dart";
 
 /// How the pool is to be run, read fresh for every call.
 ///
@@ -36,6 +39,23 @@ extension LocalPoolCaching on LocalPoolOptions {
   /// Whether the KV cache is on, the one place null-means-ten and zero-means-off
   /// is read as a yes/no rather than spelled out at each site that gates on it.
   bool get kvCacheOn => kvCachePrompts > 0;
+}
+
+/// The on-device models as a provider: an entry the user never configures,
+/// whose client is the pool below. No key reaches it.
+class LocalPoolProvider extends LlmProvider {
+  const LocalPoolProvider(super.config, this._llm, this._options, {LocalKvCache? kvCache})
+      : _kv = kvCache;
+
+  final LocalLlm _llm;
+  final LocalPoolOptions Function() _options;
+  final LocalKvCache? _kv;
+
+  @override
+  LlmClient client(String? apiKey) => LocalPoolClient(_llm, _options, kvCache: _kv);
+
+  @override
+  Future<bool> checkKey(String apiKey, {http.Client? httpClient}) async => true;
 }
 
 /// The on-device provider, as one client over however many servers are running.

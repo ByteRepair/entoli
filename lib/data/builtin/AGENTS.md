@@ -987,7 +987,7 @@ history. One rule for the user's attachments and the tools'.
 **PDFs follow the same path, with two more conditions.** A PDF is a block of
 its own — a `document` on Anthropic, a `file` part on the OpenAI shape — where
 the model reads one (`readsPdfs`, models.dev's `pdf` input) *and* the endpoint
-takes one (`LlmProviderConfig.takesPdfs`: Anthropic's API and OpenAI's own).
+takes one (`LlmProvider.takesPdfs`: Anthropic's API and OpenAI's own).
 The second is because the model is not the endpoint: Gemini reads PDFs and
 its OpenAI-compatible layer documents no way to send one, and most compatible
 servers reject the part outright. Unknown is no here, unlike images, for the

@@ -1,34 +1,16 @@
 import "../../../core/log.dart";
 import "../../../domain/llm_provider.dart";
 import "../../../domain/models.dart";
-import "anthropic_client.dart";
 import "llm_client.dart";
-import "openai_client.dart";
+import "providers/provider.dart";
 
-/// An endpoint the registry can reach, and — where reaching it is not the
-/// ordinary thing — how.
-///
-/// [build] is null for everything in `settings.json`, which is every endpoint
-/// that is only a URL and a key. The one that is not is the server running on
-/// this device: an ordinary OpenAI endpoint that may not be answering yet, so
-/// it carries the client that waits for it.
-///
-/// Carried by the endpoint rather than decided by the registry, because the
-/// alternative was comparing a provider id against a name the registry had to
-/// be told was reserved — a special case in the one place that should know
-/// nothing about who its endpoints are, and one more `==` arm for every
-/// endpoint that ever needs decorating.
-class LlmEndpoint {
-  const LlmEndpoint(this.config, {this.build});
-
-  final LlmProviderConfig config;
-
-  final LlmClient Function(LlmProviderConfig config, String? apiKey)? build;
-}
-
-/// Turns the configured endpoints into clients, and answers what they can run.
+/// Turns the configured providers into clients, and answers what they can run.
 /// Both inputs are read when used rather than captured: the settings page
 /// edits them, and it does so long after this was built.
+///
+/// What a provider builds a client *with* is its own business: the on-device
+/// server's "may not be answering yet" arrives as a provider class whose
+/// client waits, without the registry knowing there is such a thing.
 class LlmRegistry {
   LlmRegistry({
     required this.endpoints,
@@ -36,7 +18,7 @@ class LlmRegistry {
     required this.lookupKey,
   });
 
-  final List<LlmEndpoint> Function() endpoints;
+  final List<LlmProvider> Function() endpoints;
 
   /// One variable at a time, rather than a whole environment: the only use is
   /// finding a named key, and building a map of the process environment to
@@ -50,9 +32,9 @@ class LlmRegistry {
 
   final _clients = LlmClientCache();
 
-  LlmEndpoint? endpointFor(String providerId) {
-    for (final endpoint in endpoints()) {
-      if (endpoint.config.id == providerId) return endpoint;
+  LlmProvider? providerFor(String providerId) {
+    for (final provider in endpoints()) {
+      if (provider.id == providerId) return provider;
     }
     return null;
   }
@@ -60,15 +42,15 @@ class LlmRegistry {
   /// Null when nothing is configured under that name — the caller says so,
   /// rather than a request failing against a guessed endpoint.
   LlmClient? clientFor(String providerId) {
-    final endpoint = endpointFor(providerId);
-    return endpoint == null ? null : clientOf(endpoint);
+    final provider = providerFor(providerId);
+    return provider == null ? null : clientOf(provider);
   }
 
   /// For an endpoint already in hand. Callers that have just read the list use
-  /// this rather than going back through [endpointFor], which would read and
+  /// this rather than going back through [providerFor], which would read and
   /// parse `settings.json` all over again.
-  LlmClient clientOf(LlmEndpoint endpoint) {
-    final config = endpoint.config;
+  LlmClient clientOf(LlmProvider provider) {
+    final config = provider.config;
     final key = resolveKeyFor(config);
     // A URL or key edited in settings has to reach the next turn, so a cached
     // client built from the old one is dropped rather than reused. The
@@ -78,7 +60,7 @@ class LlmRegistry {
     return _clients.of(
       config.id,
       "${config.api.name}|${config.baseUrl}|$key",
-      () => (endpoint.build ?? _defaultBuild)(config, key),
+      () => provider.client(key),
     );
   }
 
@@ -114,25 +96,16 @@ class LlmRegistry {
   /// Bounded: an endpoint configured but unreachable — a stale localhost, a
   /// host that drops packets — would otherwise hold the model picker for the
   /// whole OS connect timeout.
-  Future<List<String>> _listFrom(LlmEndpoint endpoint) async {
+  Future<List<String>> _listFrom(LlmProvider provider) async {
     try {
-      return await clientOf(endpoint)
+      return await clientOf(provider)
           .listModels()
           .timeout(const Duration(seconds: 10), onTimeout: () => const []);
     } catch (e) {
-      logFailure("llm", "listing ${endpoint.config.id}'s models failed", e);
+      logFailure("llm", "listing ${provider.id}'s models failed", e);
       return const [];
     }
   }
 
   void close() => _clients.close();
-
-  /// What an endpoint gets when it names no builder of its own, which is every
-  /// endpoint that is a URL and a key.
-  static LlmClient _defaultBuild(LlmProviderConfig config, String? apiKey) =>
-      switch (config.api) {
-        LlmApi.anthropic =>
-          AnthropicClient(baseUrl: Uri.parse(config.baseUrl), apiKey: apiKey),
-        LlmApi.openai => OpenAiClient(baseUrl: Uri.parse(config.baseUrl), apiKey: apiKey),
-      };
 }

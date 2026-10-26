@@ -2,6 +2,7 @@ import "dart:convert";
 
 import "package:flutter_test/flutter_test.dart";
 
+import "package:agent_chat/data/builtin/llm/providers/presets.dart";
 import "package:agent_chat/data/local/apple_fm.dart" show mlxModels;
 import "package:agent_chat/domain/llm_provider.dart";
 import "package:agent_chat/domain/local_model.dart";
@@ -134,7 +135,7 @@ void main() {
         const ModelInfo(id: "ft:gpt-x:acme", toolCall: true),
       ]);
       expect(modelInfoOf(custom, "gpt-x")?.name, "Mine");
-      expect(ModelCatalog.current.modelsOf(custom).map((m) => m.id),
+      expect(providerOf(custom).models(ModelCatalog.current).map((m) => m.id),
           ["gpt-x", "ft:gpt-x:acme", "gpt-image-x", "whisper-x"]);
     });
 
@@ -148,7 +149,7 @@ void main() {
           id: "google",
           api: LlmApi.openai,
           baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai");
-      expect(ModelCatalog.current.modelsOf(google).map((m) => m.id),
+      expect(providerOf(google).models(ModelCatalog.current).map((m) => m.id),
           ["gemini-3.8-flash"]);
     });
 

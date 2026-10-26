@@ -6,6 +6,7 @@ import "../../domain/app_theme.dart";
 import "../../domain/corner_radius.dart";
 import "../../domain/theme_colour.dart";
 import "../../data/backup.dart";
+import "../../data/builtin/llm/providers/presets.dart";
 import "../../core/platform/platform.dart" as platform;
 import "../../domain/llm_provider.dart";
 import "../../domain/permission.dart";
@@ -980,8 +981,7 @@ class _RecommendedProviderState extends ConsumerState<_RecommendedProvider> {
   static final _signUp = Uri.parse("https://signin.ollama.com/sign-up");
   static final _privacy = Uri.parse("https://ollama.com/privacy");
 
-  static final _ollamaCloud =
-      llmProviderPresets.firstWhere((p) => p.id == "ollama-cloud");
+  static const _ollamaCloud = OllamaCloudProvider.preset;
 
   final _apiKey = TextEditingController();
 

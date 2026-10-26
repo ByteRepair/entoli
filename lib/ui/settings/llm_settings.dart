@@ -1,6 +1,7 @@
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
+import "../../data/builtin/llm/providers/presets.dart";
 import "../../domain/app_settings.dart";
 import "../../domain/llm_provider.dart";
 import "../../providers.dart";
@@ -74,7 +75,7 @@ class ImageSection extends ConsumerWidget {
           label: "Image LLM",
           child: ModelPicker(
             nullLabel: "Off",
-            defaultOf: LlmProviderConfig.imageDefaultOf,
+            defaultOf: (config) => providerOf(config).imageModel,
             role: ModelRole.image,
             helperOffText: "Lets the agent make images, shown in the chat. "
                 "Each one is a paid request to the image model. OpenAI and "

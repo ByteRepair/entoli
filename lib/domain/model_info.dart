@@ -63,7 +63,7 @@ class ModelInfo {
   final bool readsImages;
 
   /// Whether a PDF may be sent to it, which is the model's half of the
-  /// question: the endpoint has to take one too (`LlmProviderConfig.takesPdfs`).
+  /// question: the endpoint has to take one too (`LlmProvider.takesPdfs`).
   final bool readsPdfs;
   final bool makesImages;
 
