@@ -44,10 +44,7 @@ class _Tab implements BrowserTab {
   Future<void> historyBack() async => done.add("back");
 
   @override
-  Future<String> show({bool byUser = false}) async {
-    done.add(byUser ? "window, by the user" : "window");
-    return "";
-  }
+  Future<void> show() async => done.add("window");
 
   @override
   Future<void> forward() async => done.add("forward");
@@ -123,6 +120,9 @@ class _Browser implements AgentBrowser {
   bool get configured => true;
 
   @override
+  bool inApp = false;
+
+  @override
   BrowserTab tab(String chatId) => tabs.putIfAbsent(chatId, _Tab.new);
 
   @override
@@ -135,8 +135,9 @@ class _Browser implements AgentBrowser {
 void main() {
   late _Browser browser;
 
-  Future<_Tab> pumpStrip(WidgetTester tester, {bool mirrored = false}) async {
-    browser = _Browser();
+  Future<_Tab> pumpStrip(WidgetTester tester,
+      {bool mirrored = false, bool inApp = false}) async {
+    browser = _Browser()..inApp = inApp;
     await tester.pumpWidget(ProviderScope(
       overrides: [
         agentBrowserProvider.overrideWithValue(browser),
@@ -208,8 +209,8 @@ void main() {
   });
 
   /// The card open over a tab drawing a 1280×800 page.
-  Future<_Tab> openCard(WidgetTester tester) async {
-    final tab = await pumpStrip(tester);
+  Future<_Tab> openCard(WidgetTester tester, {bool inApp = false}) async {
+    final tab = await pumpStrip(tester, inApp: inApp);
     tab.page.value = const BrowserPage(url: "https://example.com", opened: 1);
     await tester.pump();
     await tester.tap(find.byType(ActionChip));
@@ -471,7 +472,13 @@ void main() {
       final tab = await openCard(tester);
       await tester.tap(find.byTooltip("Open in a window"));
       await tester.pump();
-      expect(tab.done, ["window, by the user"]);
+      expect(tab.done, ["window"]);
+    });
+
+    testWidgets("an in-app browser's card has no window to open",
+        (tester) async {
+      await openCard(tester, inApp: true);
+      expect(find.byTooltip("Open in a window"), findsNothing);
     });
 
     testWidgets("the card hides the browser from the agent, and gives it back",

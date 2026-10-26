@@ -5,7 +5,7 @@ import "dart:isolate";
 
 import "package:ffi/ffi.dart";
 import "package:flutter/foundation.dart";
-import "package:flutter/services.dart" show rootBundle;
+import "package:flutter/services.dart" show MethodChannel, rootBundle;
 import "package:record_platform_interface/record_platform_interface.dart"
     show RecordPlatform;
 import "package:fs_shim/fs.dart" hide File, Directory;
@@ -216,19 +216,19 @@ AppUpdateHost createAppUpdateHost(String cacheDir) {
       : DesktopUpdater(flavour: flavour, cacheDir: cacheDir);
 }
 
-/// The browser the agent drives, on the three desktops: whatever Settings >
-/// Agent Browser picked, under `<cache>/browser/`. The phones' webview is not
-/// one yet.
+/// The browser the agent drives: on the three desktops whatever Settings >
+/// Agent Browser picked, under `<cache>/browser/`; on Android the app's own
+/// WebViews. iOS's WKWebView speaks no DevTools Protocol.
 AgentBrowser createAgentBrowser(AppConfig config, String cacheDir) {
-  if (!(Platform.isLinux || Platform.isMacOS || Platform.isWindows)) {
-    return const UnavailableAgentBrowser();
-  }
+  if (Platform.isIOS) return const UnavailableAgentBrowser();
   final dir = p.join(cacheDir, "browser");
   return CdpBrowser(
     browserDir: dir,
     picked: () => AppSettings.load(config).agentBrowser,
     visible: () => AppSettings.load(config).agentBrowserVisible,
     embedded: HeliumDownload(dir, client: tlsClient),
+    webViews:
+        Platform.isAndroid ? const MethodChannel("agent_chat/browser") : null,
   );
 }
 

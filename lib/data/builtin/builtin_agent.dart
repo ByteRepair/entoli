@@ -80,7 +80,6 @@ String? runningTool(String name) => switch (name) {
       browserPageTextToolName => "Reading the page",
       browserScreenshotToolName => "Taking a screenshot",
       browserTypeToolName || browserPressToolName => "Typing",
-      browserShowToolName => "Opening the browser window",
       browserUploadToolName => "Uploading",
       browserCredentialsPromptToolName => "Waiting for you to sign in",
       browserCredentialsHideToolName => "Waiting for you to hand the browser back",
@@ -407,7 +406,6 @@ List<LlmTool> agentTools({
   required bool offerMemory,
   bool offerImage = false,
   bool browserScreenshot = false,
-  bool browserShow = false,
   BrowserUploadPolicy? browserUpload,
   bool oneShot = false,
   bool sandboxed = false,
@@ -465,7 +463,6 @@ List<LlmTool> agentTools({
       if (caps.browser && !oneShot)
         ...browserTools(
           screenshot: browserScreenshot,
-          show: browserShow,
           // Both park the turn on the user, so they ride `ask` as
           // `present_plan` does: a headless turn has nobody to answer.
           credentials: caps.ask,
@@ -515,7 +512,6 @@ class BuiltinAgent {
     this.seesPdfs = false,
     this.attachmentsDir,
     this.readOnlyDirs = const [],
-    this.browserHidden = false,
     this.browserApprove = ApproveMode.never,
     this.browserUploads = BrowserUploadPolicy.classifier,
     this.profile,
@@ -851,9 +847,6 @@ class BuiltinAgent {
   bool _inAttachments(String path) =>
       attachmentsDir != null && isUnder(fs, path, attachmentsDir!);
 
-  /// Whether the browser runs with no window, which offers `browser_show`.
-  final bool browserHidden;
-
   /// The mode the browser's navigation and actions are gated by, in place
   /// of [approveMode]: Settings > Agent Browser's own answer, since a turn
   /// asking at every click is no use and picking a browser is the consent.
@@ -967,7 +960,6 @@ class BuiltinAgent {
         offerMemory: memoryStore != null,
         offerImage: generateImage != null && saveResource != null,
         browserScreenshot: seesImages && saveResource != null,
-        browserShow: browserHidden,
         browserUpload: browserUploads,
         oneShot: oneShot,
         sandboxed: _helper != null,
@@ -1261,8 +1253,7 @@ class BuiltinAgent {
         browserDragToolName ||
         browserScrollToolName ||
         browserBackToolName ||
-        browserPageTextToolName ||
-        browserShowToolName when _offered.browser =>
+        browserPageTextToolName when _offered.browser =>
           _browser,
         browserScreenshotToolName
             when _offered.browser && seesImages && saveResource != null =>
@@ -1684,9 +1675,6 @@ class BuiltinAgent {
       case browserBackToolName:
         label = "back";
         run = tab.back;
-      case browserShowToolName:
-        label = "window";
-        run = () => tab.show();
       default:
         final offset = number(args["offset"])?.toInt() ?? 0;
         label = offset == 0 ? "page" : "from $offset";

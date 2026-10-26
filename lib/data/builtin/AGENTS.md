@@ -709,9 +709,10 @@ browser off still read pages.
 A real browser window, with a profile of its own under `<cache>/browser/profile/`
 so a login the agent makes is kept, driven over the Chrome DevTools Protocol.
 `AgentBrowser` is the port (`lib/domain/agent_browser.dart`), `CdpBrowser` the
-desktops' implementation (`lib/data/browser/`), `UnavailableAgentBrowser` the
-phones' and the web's — the phones' webview is not one yet, and the settings
-category is not drawn where `available` is false. Settings > Agent Browser
+desktops' and Android's implementation (`lib/data/browser/`),
+`UnavailableAgentBrowser` iOS's and the web's (WKWebView speaks no DevTools
+Protocol), and the settings category is not drawn where `available` is false.
+Settings > Agent Browser
 writes `agentBrowser`: null off, `embedded` for the downloaded Helium, or a
 Chromium-family executable's path, detected or picked with a file picker and
 launched once to prove it answers before it is saved. Firefox is not offered:
@@ -754,9 +755,11 @@ string with `Chrome` in its place; by flag rather than per tab, so a
 cross-site frame and a worker send it too. Every launch, window or none,
 passes `--disable-blink-features=AutomationControlled`: remote debugging alone
 sets `navigator.webdriver`, the second thing such a check reads. A hidden
-browser has no window to hand a check to the user in, so `browser_show` —
-offered only while hidden — quits it and starts it again with one, on the same
-profile and page; it is hidden again from its next quit, idle or by hand.
+browser is shown only when the user asks, from the chat's browser card ("Open
+in a window"): it quits and starts again with a window, on the same profile and
+page, and is hidden again from its next quit, idle or by hand. The agent has
+no tool for it; whether the browser is on screen is the user's choice, and the
+card already shows the page.
 
 **One tab per chat**, so two turns at once do not navigate each other; a tab
 the user closes is opened again on the next call, and is brought to the front
@@ -829,8 +832,42 @@ is therefore put under the protocol's virtual authenticators with their UI off
 (`WebAuthn.enable`, `enableUI: false`): the request waits silently with no
 authenticator to answer it, and the page stays clickable. A windowed browser
 keeps the real dialog, which is how a passkey is actually used, so the card's
-"Open in a window" (`show(byUser: true)`, noted to the agent since the restart
-reloads the page) is the way to sign in with one.
+"Open in a window" (`show()`, noted to the agent since the restart reloads
+the page) is the way to sign in with one.
+
+### On Android
+
+There is no browser to launch, so the browser is the app's own WebView (the
+same Chromium), one per chat, made by `BrowserChannel.kt`. With debugging on,
+WebView serves the protocol on the abstract socket
+`@webview_devtools_remote_<pid>`, which Chromium lets the app's own user
+connect to. `CdpBrowser` with `webViews` set connects there rather than
+launching, and the rest of the tab code is unchanged, trusted
+`Input.dispatchMouseEvent` clicks included. Debugging is on only while the
+browser runs, since adb's shell can reach the socket too. The protocol cannot
+create a WebView (`Target.createTarget` fails), so the channel makes one on
+`about:blank?entoli=<chat>` and the tab finds its target by that address.
+
+**The WebViews live on a private `VirtualDisplay`**, in a `Presentation`
+whose frames go into an `ImageReader` that throws them away. A WebView whose
+window is not visible stops answering clicks as well as screenshots, and the
+activity's window is not visible while a turn runs with the app in the
+background or the screen off. The display is the app's own and needs no
+permission. All of this was checked on an emulator: clicks, screenshots and
+the screencast with the app backgrounded and with the screen off.
+
+`AgentBrowser.inApp` is what the UI reads, not the platform: Settings > Agent
+Browser is then a switch (`agentBrowser` is `webViewBrowserId` or null; any
+other value, a desktop's path from a restored backup, is off), with no window
+toggle and no Helium, and the chat's browser card, the user's view of the page,
+draws no "Open in a window". What it lacks: downloads (a WebView's go to a
+`DownloadListener`, not the protocol) and uBlock Origin. Passkeys are
+rejected rather than missing: WebView has no WebAuthn unless the app opts in,
+so `PublicKeyCredential` is undefined and `navigator.credentials.get` and
+`create` fail at once with `NotSupportedError`, and a sign-in page falls back
+to its other ways (checked on an emulator). It also identifies itself as a
+WebView (`; wv` in the user agent, `X-Requested-With`), so it meets more human
+checks than Helium does.
 
 ### Uploads (the `browser_upload` tool)
 
@@ -887,8 +924,8 @@ leaves no note, it being the agent's own move), reload, hiding and giving
 back (the agent's own hide is not noted back to it), the quit with who quit
 it (`close(why:)`: the user, the idle timer; the window closed by hand or a
 crash, which `cdp.done` turns into the same quit), a restart (the settings
-changed, or another chat's `browser_show`, which every chat's tab but the
-showing one hears of), and one
+changed, or the user opening a window from another chat's card, which every
+chat's tab but the showing one hears of), and one
 "clicked or typed in the page" however much the user did — never what they
 typed. A note is scrubbed of sign-in values as it is written, since the quit
 it may describe drops them. A note waits for the agent's next browser call,

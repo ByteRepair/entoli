@@ -32,7 +32,8 @@ class BrowserStrip extends ConsumerWidget {
     final tab = browser.tab(chatId);
     void open() => showDialog<void>(
           context: context,
-          builder: (_) => BrowserCard(tab: tab, onQuit: browser.close),
+          builder: (_) => BrowserCard(
+              tab: tab, onQuit: browser.close, window: !browser.inApp),
         );
     return ListenableBuilder(
       listenable: Listenable.merge(
@@ -341,9 +342,14 @@ String _where(BrowserPage page) {
 /// the page itself under the user's mouse and keyboard. Listens again when the
 /// tab is reopened under it.
 class BrowserCard extends StatefulWidget {
-  const BrowserCard({super.key, required this.tab, required this.onQuit});
+  const BrowserCard(
+      {super.key, required this.tab, required this.onQuit, this.window = true});
 
   final BrowserTab tab;
+
+  /// Whether the browser can open a window; Android's WebView cannot, and
+  /// this card is its view.
+  final bool window;
 
   /// Quit the whole browser, every chat's tab with it.
   final Future<void> Function() onQuit;
@@ -772,13 +778,14 @@ class _BrowserCardState extends State<BrowserCard> {
                       ),
                     ),
                   ),
-                  IconButton(
-                    tooltip: "Open in a window",
-                    icon: const Icon(Icons.open_in_new),
-                    onPressed: open
-                        ? () => _send(() => widget.tab.show(byUser: true))
-                        : null,
-                  ),
+                  if (widget.window)
+                    IconButton(
+                      tooltip: "Open in a window",
+                      icon: const Icon(Icons.open_in_new),
+                      onPressed: open
+                          ? () => _send(() => widget.tab.show())
+                          : null,
+                    ),
                   ValueListenableBuilder<BrowserHold?>(
                     valueListenable: widget.tab.hold,
                     builder: (context, hold, _) => hold == null
