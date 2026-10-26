@@ -212,10 +212,7 @@ class FakeBrowserTab implements BrowserTab {
   ({double x, double y})? lastClick;
 
   @override
-  Future<String> show({bool byUser = false}) async {
-    calls.add("show");
-    return "shown";
-  }
+  Future<void> show() async => calls.add("show");
 
   @override
   Future<String> describeTarget({int? ref, double? x, double? y}) async =>
@@ -254,7 +251,6 @@ void main() {
     BrowserTab? tab,
     bool browser = true,
     bool seesImages = true,
-    bool hidden = false,
     bool oneShot = false,
     bool noAsk = false,
     ApproveMode browserApprove = ApproveMode.never,
@@ -292,7 +288,6 @@ void main() {
           browser: browser),
       browser: tab,
       seesImages: seesImages,
-      browserHidden: hidden,
       browserApprove: browserApprove,
       browserUploads: uploads,
       policy: () async => StandingPermissions(permissions: permissions),
@@ -322,20 +317,6 @@ void main() {
           .toList();
       expect(offered(blind), contains(browserGotoToolName));
       expect(offered(blind), isNot(contains(browserScreenshotToolName)));
-    });
-
-    test("showing the window is offered only where it is hidden", () async {
-      final hidden = FakeLlmClient([[finish]]);
-      await agentOver(hidden, tab: FakeBrowserTab(), hidden: true)
-          .run(userMessage("hi"))
-          .toList();
-      expect(offered(hidden), contains(browserShowToolName));
-
-      final shown = FakeLlmClient([[finish]]);
-      await agentOver(shown, tab: FakeBrowserTab())
-          .run(userMessage("hi"))
-          .toList();
-      expect(offered(shown), isNot(contains(browserShowToolName)));
     });
 
     test("the prompt says how to use it only where it is offered", () {
@@ -497,22 +478,6 @@ void main() {
       expect(tab.calls, ["scroll up [89]", "scroll down (900.0, 500.0)"]);
     });
 
-    test("showing the window is not gated", () async {
-      final tab = FakeBrowserTab();
-      final asked = <ToolApproval>[];
-      await agentOver(
-        FakeLlmClient([
-          [call(browserShowToolName, {})],
-          [finish],
-        ]),
-        tab: tab,
-        hidden: true,
-        approveMode: ApproveMode.ask,
-        asked: asked,
-      ).run(userMessage("show")).toList();
-      expect(asked, isEmpty);
-      expect(tab.calls, ["show"]);
-    });
   });
 
   group("private input", () {

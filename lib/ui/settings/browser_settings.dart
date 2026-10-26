@@ -150,6 +150,18 @@ class _AgentBrowserSectionState extends ConsumerState<AgentBrowserSection> {
               "with a profile of its own, so what it logs into stays logged in "
               "and your own browser's profile is never touched.",
         ),
+        // Android's is the app's own WebView: on or off, nothing to pick.
+        if (browser.inApp)
+          SwitchListTile(
+            title: const Text("Let the agent use a browser"),
+            subtitle: const Text("A WebView kept off screen. The chat's "
+                "browser card shows its page."),
+            value: picked != null,
+            onChanged: (on) => ref
+                .read(appSettingsProvider.notifier)
+                .setAgentBrowser(on ? webViewBrowserId : null),
+          )
+        else ...[
         FutureBuilder<List<FoundBrowser>>(
           future: _found,
           builder: (context, snapshot) {
@@ -214,6 +226,7 @@ class _AgentBrowserSectionState extends ConsumerState<AgentBrowserSection> {
                     "whether it shows a window.");
           },
         ),
+        ],
         LabelledField(
           label: "Before the agent acts",
           child: DropdownButtonFormField<BrowserApproval>(
@@ -294,6 +307,7 @@ class _AgentBrowserSectionState extends ConsumerState<AgentBrowserSection> {
             child: const Text("Delete"),
           ),
         ),
+        if (!browser.inApp) ...[
         const Divider(),
         const SectionHeader(
           "Embedded browser",
@@ -350,6 +364,7 @@ class _AgentBrowserSectionState extends ConsumerState<AgentBrowserSection> {
             ],
           ),
         ),
+        ],
       ],
     );
   }

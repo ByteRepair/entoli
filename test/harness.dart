@@ -26,6 +26,7 @@ import "package:agent_chat/domain/sync/devices.dart";
 import "package:agent_chat/domain/sync/identity.dart";
 import "package:agent_chat/domain/sync/relay_signaling.dart";
 import "package:agent_chat/domain/agent_backend.dart";
+import "package:agent_chat/domain/agent_browser.dart";
 import "package:agent_chat/domain/app_secrets.dart";
 import "package:agent_chat/domain/app_settings.dart";
 import "package:agent_chat/domain/app_update.dart";
@@ -185,6 +186,7 @@ class TestApp {
     SyncHub? hub,
     Clock? clock,
     http.Client? marketplaceClient,
+    AgentBrowser Function(AppConfig config)? browser,
   }) {
     final config = tempConfig();
     seedCatalog(testProviderModels);
@@ -244,6 +246,7 @@ class TestApp {
           shellProvider.overrideWithValue(
               shell ?? _defaultShell(proot, abi)),
           appConfigProvider.overrideWithValue(config),
+          if (browser != null) agentBrowserProvider.overrideWithValue(browser(config)),
           appSecretsProvider.overrideWithValue(appSecrets),
           attachmentPickerProvider.overrideWithValue(picker),
           promptLibraryProvider.overrideWith2(
