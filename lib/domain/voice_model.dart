@@ -293,10 +293,9 @@ const recognitionModels = <RecognitionModel>[
   ),
 ];
 
-/// What speaks. Kokoro is the only multilingual one there is at this size —
-/// Piper covers thirty languages one model at a time, which is a language
-/// picker rather than a multilingual model, and everything genuinely
-/// multilingual beyond it is far too big for a phone.
+/// What speaks. Kokoro is the only multilingual one here — Piper covers over
+/// fifty languages one model at a time, which is a language picker rather
+/// than a multilingual model.
 const speechModels = <SpeechModel>[
   SpeechModel(
     id: "piper-en_US-amy",
@@ -334,7 +333,7 @@ const speechModels = <SpeechModel>[
     languages: "English, Chinese",
     multilingual: true,
     note: "The best of these by some way, and the only one that speaks more "
-        "than one language.",
+        "than one language. Of its 103 voices, three are English.",
     model: "model.int8.onnx",
     voices: "voices.bin",
     tokens: "tokens.txt",

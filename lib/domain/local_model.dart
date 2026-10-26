@@ -168,8 +168,7 @@ const localModelCatalog = <LocalModel>[
     contextLength: 262144,
     kvBytesPerToken: 49152,
     licence: "Apache-2.0",
-    note: "The one to try first: it fits on any phone that can run one at all, "
-        "and it answers rather than thinking first.",
+    note: "The one to try first: it fits on any phone that can run one at all.",
   ),
   LocalModel(
     id: "qwen3.5-4b-q4_0",
@@ -181,8 +180,7 @@ const localModelCatalog = <LocalModel>[
     contextLength: 262144,
     kvBytesPerToken: 131072,
     licence: "Apache-2.0",
-    note: "The pick on a phone with 8 GB or more. It thinks before it answers, "
-        "which is slow here and is most of why it is better at a long turn.",
+    note: "The pick on a phone with 8 GB or more.",
   ),
   LocalModel(
     id: "qwen3.5-9b-q4_0",

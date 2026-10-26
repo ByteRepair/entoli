@@ -102,10 +102,11 @@ abstract class MicrophoneListener implements Listener {
   static const _levelFall = 0.8;
 
   /// An utterance, transcribed — emitted only if it was loud enough to have
-  /// been meant for the phone.
-  void heard(String text) {
+  /// been meant for the phone. [judged] is an utterance the gate already let
+  /// through when it ended, before it was sent away to be transcribed.
+  void heard(String text, {bool judged = false}) {
     if (closed) return;
-    final spoken = gate.spoken();
+    final spoken = judged || gate.spoken();
     final words = text.trim();
     // A cough is a speech segment to a detector and nothing to a conversation.
     if (words.isEmpty) return;

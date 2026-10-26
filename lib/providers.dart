@@ -351,28 +351,90 @@ final busyChatsProvider = Provider<ValueListenable<Set<String>>>((ref) {
   return busy;
 });
 
+/// What voice mode listens and speaks with, as the catalog page offers it:
+/// an on-device model under [localProviderId], a provider's under its id.
+ModelChoice voiceRecognitionChoice(AppSettings s) => (
+      providerId: s.voiceRecognitionModelId == null ? null : s.voiceRecognitionProviderId,
+      modelId: s.voiceRecognitionModelId,
+    );
+
+ModelChoice voiceSpeechChoice(AppSettings s) => (
+      providerId: s.voiceSpeechModelId == null ? null : s.voiceSpeechProviderId,
+      modelId: s.voiceSpeechModelId,
+    );
+
+/// Whether [provider] is configured and speaks OpenAI's audio endpoints. Read
+/// off the settings alone: asking the backend builds a client, and the
+/// registry it builds from reads `settings.json` again, which the readiness
+/// gates would do on every settings write.
+bool _answersAudio(AppSettings settings, String provider) =>
+    settings.llmProviders.any((p) => p.id == provider && p.api == LlmApi.openai);
+
+/// What a voice session is started with. Null halves are nothing usable: no
+/// pick, a provider no longer configured or with no audio endpoints, or a
+/// provider's listening where this platform cannot.
+({Hearing? hearing, Speaking? speaking}) voicePicks(
+        AppSettings settings, AgentBackend backend, Voice voice) =>
+    (hearing: _hearing(settings, backend, voice), speaking: _speaking(settings, backend));
+
+Hearing? _hearing(AppSettings settings, AgentBackend backend, Voice voice) {
+  final model = settings.voiceRecognitionModelId;
+  final provider = settings.voiceRecognitionProviderId;
+  if (model == null) return null;
+  if (provider == localProviderId) {
+    final recognition = voiceModelOf<RecognitionModel>(model);
+    return recognition == null ? null : HearOnDevice(recognition);
+  }
+  if (!voice.hasModelCatalog) return null;
+  final transcribe = backend.transcriber(provider, model);
+  return transcribe == null ? null : HearThrough(transcribe);
+}
+
+Speaking? _speaking(AppSettings settings, AgentBackend backend) {
+  final model = settings.voiceSpeechModelId;
+  final provider = settings.voiceSpeechProviderId;
+  if (model == null) return null;
+  if (provider == localProviderId) {
+    final speech = voiceModelOf<SpeechModel>(model);
+    return speech == null ? null : SpeakOnDevice(speech);
+  }
+  final synthesize = backend.synthesizer(provider, model, voice: settings.voiceSpeechVoice);
+  return synthesize == null ? null : SpeakThrough(synthesize);
+}
+
 /// Whether a message can be read out: a platform that can speak, and a speech
-/// model picked and installed. Half of [voiceReadyProvider], because reading a
-/// message out needs nothing to hear with.
+/// model picked and either installed or a configured provider's. Half of
+/// [voiceReadyProvider], because reading a message out needs nothing to hear
+/// with.
 final speechReadyProvider = Provider<bool>((ref) {
   if (!ref.watch(voiceProvider).available) return false;
   final settings = ref.watch(appSettingsProvider);
+  final model = settings.voiceSpeechModelId;
+  if (settings.voiceSpeechProviderId != localProviderId) {
+    return model != null && _answersAudio(settings, settings.voiceSpeechProviderId);
+  }
   // `contains` takes an `Object?`, so a setting naming nothing is simply not
   // in the set. A sentinel is in it only where the device has the engine, so
   // a settings file carried off a phone does not light up read-aloud on a
   // machine that cannot speak.
-  return ref.watch(installedVoiceModelsProvider).contains(
-      voiceModelOf<SpeechModel>(settings.voiceSpeechModelId)?.id);
+  return ref.watch(installedVoiceModelsProvider)
+      .contains(voiceModelOf<SpeechModel>(model)?.id);
 });
 
 /// Whether the composer draws its voice button: a platform that can listen, and
-/// two models picked and installed. Anything less and pressing it could only
+/// two models picked and usable. Anything less and pressing it could only
 /// lead to an apology.
 final voiceReadyProvider = Provider<bool>((ref) {
   if (!ref.watch(speechReadyProvider)) return false;
   final settings = ref.watch(appSettingsProvider);
-  return ref.watch(installedVoiceModelsProvider).contains(
-      voiceModelOf<RecognitionModel>(settings.voiceRecognitionModelId)?.id);
+  final model = settings.voiceRecognitionModelId;
+  if (settings.voiceRecognitionProviderId != localProviderId) {
+    return model != null &&
+        ref.watch(voiceProvider).hasModelCatalog &&
+        _answersAudio(settings, settings.voiceRecognitionProviderId);
+  }
+  return ref.watch(installedVoiceModelsProvider)
+      .contains(voiceModelOf<RecognitionModel>(model)?.id);
 });
 
 /// The languages the device's own engines offer. A future rather than
@@ -647,17 +709,30 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
   Future<void> setAssistantView(AssistantView view) =>
       _update((s) => s.assistantView = view);
 
-  Future<void> setVoiceRecognitionModel(String? id) =>
-      _update((s) => s.voiceRecognitionModelId = id);
+  /// A pick from the model catalog; nothing picked is the device's.
+  Future<void> setVoiceRecognition(ModelChoice choice) => _update((s) => s
+    ..voiceRecognitionProviderId = choice.providerId ?? localProviderId
+    ..voiceRecognitionModelId = choice.modelId);
 
   /// Picking a different voice resets which of its speakers is used: speaker 40
   /// of Kokoro is nobody in a model with eight.
-  Future<void> setVoiceSpeechModel(String? id) => _update((s) => s
-    ..voiceSpeechModelId = id
+  Future<void> setVoiceSpeech(ModelChoice choice) => _update((s) => s
+    ..voiceSpeechProviderId = choice.providerId ?? localProviderId
+    ..voiceSpeechModelId = choice.modelId
     ..voiceSpeaker = 0);
+
+  /// An on-device model, by catalog id.
+  Future<void> setVoiceRecognitionModel(String? id) =>
+      setVoiceRecognition((providerId: localProviderId, modelId: id));
+
+  Future<void> setVoiceSpeechModel(String? id) =>
+      setVoiceSpeech((providerId: localProviderId, modelId: id));
 
   Future<void> setVoiceSpeaker(int speaker) =>
       _update((s) => s.voiceSpeaker = speaker);
+
+  Future<void> setVoiceSpeechVoice(String? voice) =>
+      _update((s) => s.voiceSpeechVoice = voice);
 
   /// Which language the system engines are asked for, or null for the
   /// device's. It reaches the next session rather than the one running: the

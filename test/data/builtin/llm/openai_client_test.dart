@@ -472,6 +472,27 @@ void main() {
       );
     }
 
+    test("speech is transcribed through the audio endpoint", () async {
+      final text = await clientAnswering({"text": "hello"})
+          .transcribe(Uint8List.fromList([1, 2]), model: "whisper-x");
+
+      final sent = requests.single as http.MultipartRequest;
+      expect(sent.url.path, "/v1/audio/transcriptions");
+      expect(sent.fields["model"], "whisper-x");
+      expect(sent.files.single.filename, "speech.wav");
+      expect(text, "hello");
+    });
+
+    test("a sentence is spoken as WAV, with the voice only where named", () async {
+      final client = clientAnswering({});
+      await client.speak("hi", model: "tts-x");
+      expect(requests.single.url.path, "/v1/audio/speech");
+      expect(sentBody(), {"model": "tts-x", "input": "hi", "response_format": "wav"});
+
+      await clientAnswering({}).speak("hi", model: "tts-x", voice: "alloy");
+      expect(sentBody()["voice"], "alloy");
+    });
+
     test("an OpenAI image model is asked through the Images API", () async {
       final images = await clientAnswering({
         "data": [

@@ -86,6 +86,31 @@ void main() {
       expect(ModelInfo.fromJson("bare", const {}).talks, isTrue);
     });
 
+    test("a speech model is told from a chat model that also hears", () {
+      ModelInfo info(List<String> input, List<String> output) => ModelInfo.fromJson("m", {
+            "modalities": {"input": input, "output": output},
+          });
+      expect(info(["audio"], ["text"]).transcribes, isTrue);
+      expect(info(["text"], ["audio"]).speaks, isTrue);
+      // Gemini and gpt-audio answer chat completions, not the audio endpoints.
+      expect(info(["text", "audio"], ["text"]).transcribes, isFalse);
+      expect(info(["text", "audio"], ["text", "audio"]).speaks, isFalse);
+    });
+
+    test("the speech flags survive the trimmed cache", () {
+      final cached = ModelCatalog.parse(ModelCatalog.parse(jsonEncode({
+        "openai": {
+          "models": {
+            "stt": {"modalities": {"input": ["audio"], "output": ["text"]}},
+            "tts": {"modalities": {"input": ["text"], "output": ["audio"]}},
+          },
+        },
+      })).toJsonText());
+      expect(cached.lookup(_openai, "stt")!.transcribes, isTrue);
+      expect(cached.lookup(_openai, "tts")!.speaks, isTrue);
+      expect(cached.lookup(_openai, "tts")!.talks, isFalse);
+    });
+
     test("a turn wants tools and talk, nothing else", () {
       expect(const ModelInfo(id: "a", toolCall: true).answersTurns, isTrue);
       expect(const ModelInfo(id: "b").answersTurns, isFalse);

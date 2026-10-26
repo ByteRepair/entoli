@@ -263,7 +263,11 @@ under the entries that store less than a model — the null entry and each
 provider's Default. What a picker is offered is its `ModelRole`'s: the chat
 LLM only models that talk (text in, text out) and call tools, since the agent
 works through tools; title, classifier and memory any model that talks, being
-plain completions; the image model only models that make images.
+plain completions; the image model only models that make images; the transcription and speech
+models only what models.dev says transcribes or speaks, beside the installed
+on-device voice models under `localProviderId` — see "A provider's models" in
+`lib/data/voice/AGENTS.md`. An endpoint's own listing is offered to the chat
+roles alone, since nothing says one of its models is anything else.
 
 `ModelInfo` holds only the models.dev fields something reads, and the cache and
 the built-in snapshot are trimmed to those. Structured output went for that

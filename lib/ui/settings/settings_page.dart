@@ -234,21 +234,21 @@ List<Widget> _sectionsOf(SettingsCategory category) => switch (category) {
       // page. Where a model runs is also a machine question rather than a
       // question about models — the LLMs category is what a chat is answered
       // by, and a model here appears there like any other.
+      // Every download, text and speech: Voice and LLMs only pick, and offer
+      // what is here beside the providers' models.
       SettingsCategory.onDevice => const [
           LocalModelSection(),
           // Draws its own divider, since a build with no server in it has no
           // catalog to put under one.
           LocalModelCatalogSection(),
+          // The same, for a platform with no voice catalog.
+          VoiceCatalogSections(),
         ],
-      // Its own category rather than a section under General: the two pickers
-      // are two lines and the catalog under them is the rest of the page.
-      // Neither the assistant section nor the catalog draws at all where the
-      // platform has no gesture / nothing to download, and each opens its own
-      // divider, so a page of two rows is not left hairlines around nothing.
+      // The assistant section draws nothing where the platform has no
+      // gesture, and opens its own divider.
       SettingsCategory.voice => const [
           VoiceSection(),
           AssistantSection(),
-          VoiceCatalogSections(),
         ],
       // Says so and offers nothing where there is no clock to schedule with —
       // see the section itself.

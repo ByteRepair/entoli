@@ -1,3 +1,5 @@
+import "dart:typed_data";
+
 import "package:flutter/foundation.dart"
     show ValueListenable, debugPrint, kDebugMode;
 
@@ -27,6 +29,43 @@ void voiceLog(String Function() action) {
   if (kDebugMode) debugPrint("voice: ${action()}");
 }
 
+/// What a WAV of one utterance says, asked of a provider's transcription model.
+typedef Transcribe = Future<String> Function(Uint8List wav);
+
+/// A sentence as audio, asked of a provider's speech model: WAV where the
+/// provider honours the request for it, whatever it sent otherwise.
+typedef Synthesize = Future<Uint8List> Function(String text);
+
+/// What a session listens with: a model on the device, or a provider's.
+sealed class Hearing {
+  const Hearing();
+}
+
+class HearOnDevice extends Hearing {
+  const HearOnDevice(this.model);
+  final RecognitionModel model;
+}
+
+class HearThrough extends Hearing {
+  const HearThrough(this.transcribe);
+  final Transcribe transcribe;
+}
+
+/// What a session speaks with, the same way.
+sealed class Speaking {
+  const Speaking();
+}
+
+class SpeakOnDevice extends Speaking {
+  const SpeakOnDevice(this.model);
+  final SpeechModel model;
+}
+
+class SpeakThrough extends Speaking {
+  const SpeakThrough(this.synthesize);
+  final Synthesize synthesize;
+}
+
 /// Listening and speaking, on whatever this platform can do it with. Like
 /// [Shell] for commands: desktop and Android have the models and the
 /// microphone, a browser has neither, and [available] is the whole of the
@@ -54,6 +93,10 @@ abstract class Voice {
   /// and speak, which is what takes the pickers and the download lists off
   /// the settings page: a picker of one says nothing, and a catalogue with
   /// nothing to fetch is a lie.
+  ///
+  /// It is also whether a provider's transcription model can listen here:
+  /// both are sherpa, which cuts the microphone into utterances. Speaking
+  /// through a provider needs only a player, and is wherever [available] is.
   bool get hasModelCatalog => true;
 
   /// The native picks this platform's engines stand for — what a true answer
@@ -79,7 +122,7 @@ abstract class Voice {
   /// installed or will not load, which the caller shows rather than swallows —
   /// a voice screen that opens silent is worse than one that says why.
   ///
-  /// **With no [recognition] model there is nothing to listen with**: no
+  /// **With no [hearing] there is nothing to listen with**: no
   /// microphone is opened and the session only speaks. That is the button
   /// under a message, which reads one message out and is not voice mode.
   ///
@@ -92,8 +135,8 @@ abstract class Voice {
   /// [language] is a BCP-47 tag the system engines are asked to hear and speak
   /// in, null being whatever the device is set to. See [systemLanguages].
   Future<VoiceSession> start({
-    RecognitionModel? recognition,
-    required SpeechModel speech,
+    Hearing? hearing,
+    required Speaking speaking,
     int speaker = 0,
     String? language,
   });
@@ -207,8 +250,8 @@ class UnavailableVoice extends Voice {
 
   @override
   Future<VoiceSession> start({
-    RecognitionModel? recognition,
-    required SpeechModel speech,
+    Hearing? hearing,
+    required Speaking speaking,
     int speaker = 0,
     String? language,
   }) async =>

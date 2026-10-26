@@ -2,18 +2,23 @@ import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../domain/app_settings.dart";
+import "../../domain/local_model.dart" show localProviderId;
+import "../../domain/models.dart" show ModelChoice;
 import "../../domain/voice_model.dart";
 import "../../providers.dart";
 import "../voice/read_aloud.dart";
 import "voice_models.dart";
 import "../widgets/catalog.dart";
+import "../widgets/dialogs.dart";
+import "../widgets/model_picker.dart";
 import "../../core/formatting.dart";
 import "../widgets/resettable_field.dart";
 import "../widgets/section_header.dart";
 
-/// Which two models voice mode uses, over the catalog they are picked from.
-/// Both pickers offer only what is downloaded, so the list below is not a menu
-/// of things that might work — it is what the app has.
+/// Which two models voice mode uses, picked on the same catalog page as every
+/// other model: what is on the device under "On device", and each provider's
+/// transcription and speech models beside it. Downloading is Settings >
+/// On-device's.
 class VoiceSection extends ConsumerWidget {
   const VoiceSection({super.key});
 
@@ -25,6 +30,7 @@ class VoiceSection extends ConsumerWidget {
     final canListen = voice.available;
     final settings = ref.watch(appSettingsProvider);
     final installed = ref.watch(installedVoiceModelsProvider);
+    final notifier = ref.read(appSettingsProvider.notifier);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -32,35 +38,114 @@ class VoiceSection extends ConsumerWidget {
         SectionHeader(
           "Voice mode",
           description: canListen
-              ? "What listens and what speaks. Both run on this device: nothing "
-                  "said out loud is sent anywhere the typed conversation is not."
-              : "Voice mode needs a microphone and models on disk, and a "
-                  "browser has neither.",
+              ? "What listens and what speaks. A model on this device keeps "
+                  "what is said here; a provider's is sent the recording, or "
+                  "the reply, to turn into the other."
+              : "Voice mode needs a microphone, and a browser has none.",
         ),
-        // Hidden whole where the device's own engines are everything: a
-        // picker of one is a control that says nothing.
-        if (voice.hasModelCatalog) ...[
-          InstalledPicker(
-            label: "Recognition model",
-            options:
-                _offer(const [nativeRecognition, ...recognitionModels], installed),
-            value: settings.voiceRecognitionModelId,
-            onPick: (id) =>
-                ref.read(appSettingsProvider.notifier).setVoiceRecognitionModel(id),
-          ),
-          InstalledPicker(
+        if (canListen) ...[
+          // Where neither a download nor a provider can listen, the system's
+          // engine is the only answer, and a picker of one says nothing.
+          if (voice.hasModelCatalog)
+            _VoicePicker(
+              label: "Recognition model",
+              role: ModelRole.transcription,
+              off: "Nothing to listen with: voice mode stays off. Read-aloud "
+                  "needs only a speech model.",
+              choice: voiceRecognitionChoice(settings),
+              onChanged: notifier.setVoiceRecognition,
+            ),
+          _VoicePicker(
             label: "Speech model",
-            options: _offer(const [nativeSpeech, ...speechModels], installed),
-            value: settings.voiceSpeechModelId,
-            onPick: (id) =>
-                ref.read(appSettingsProvider.notifier).setVoiceSpeechModel(id),
+            role: ModelRole.speech,
+            off: "Nothing to speak with: replies are not read out.",
+            choice: voiceSpeechChoice(settings),
+            onChanged: notifier.setVoiceSpeech,
           ),
         ],
         _SpeakerField(settings: settings),
+        _VoiceNameField(settings: settings),
         _LanguageField(settings: settings),
         if (canListen) const _TouchToSpeak(),
         if (voice.hasEngineInstalls) _MissingEngines(installed: installed),
       ],
+    );
+  }
+}
+
+/// One half's picker. No provider recommends a voice model, so no Default
+/// entry.
+class _VoicePicker extends StatelessWidget {
+  const _VoicePicker({
+    required this.label,
+    required this.role,
+    required this.off,
+    required this.choice,
+    required this.onChanged,
+  });
+
+  final String label;
+  final ModelRole role;
+  final String off;
+  final ModelChoice choice;
+  final ValueChanged<ModelChoice> onChanged;
+
+  @override
+  Widget build(BuildContext context) => LabelledField(
+        label: label,
+        child: ModelPicker(
+          role: role,
+          nullLabel: "None",
+          defaultOf: (_) => null,
+          helperOffText: off,
+          choice: choice,
+          onChanged: onChanged,
+        ),
+      );
+}
+
+/// The provider's name for the voice its speech model reads in. Free text:
+/// models.dev lists no voices, and each provider names its own.
+class _VoiceNameField extends ConsumerWidget {
+  const _VoiceNameField({required this.settings});
+
+  final AppSettings settings;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    if (settings.voiceSpeechProviderId == localProviderId) return const SizedBox.shrink();
+    final name = settings.voiceSpeechVoice;
+    final playing = ref.watch(readAloudProvider) == previewId;
+    return LabelledField(
+      label: "Voice",
+      child: ListTile(
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+        title: Text(name ?? "None sent"),
+        subtitle: const Text("The provider's own name for one, such as alloy "
+            "for OpenAI. Some providers refuse a request without one."),
+        onTap: () async {
+          final text = await promptForText(
+            context,
+            title: "Voice",
+            initial: name ?? "",
+            hint: "As the provider names it",
+            confirmLabel: "Save",
+            allowBlank: true,
+          );
+          if (text == null) return;
+          final voice = text.trim();
+          await ref
+              .read(appSettingsProvider.notifier)
+              .setVoiceSpeechVoice(voice.isEmpty ? null : voice);
+        },
+        trailing: IconButton(
+          onPressed: ref.watch(speechReadyProvider)
+              ? () => readAloud(context, ref, previewId, previewSpeech)
+              : null,
+          icon: Icon(playing ? Icons.stop_circle_outlined : Icons.play_circle_outline),
+          tooltip: playing ? "Stop" : "Hear this voice",
+        ),
+      ),
     );
   }
 }
@@ -91,9 +176,9 @@ class _TouchToSpeak extends ConsumerWidget {
   }
 }
 
-/// Both catalogs, where there is one to draw. iOS has no sherpa and no
-/// downloads, so the port's own answer takes the whole thing off the page
-/// rather than leaving lists with nothing to fetch in them.
+/// Both voice catalogs, on the On-device page beside the text models. iOS has
+/// no sherpa and no downloads, so the port's own answer takes the whole thing
+/// off the page rather than leaving lists with nothing to fetch in them.
 class VoiceCatalogSections extends ConsumerWidget {
   const VoiceCatalogSections({super.key});
 
@@ -120,14 +205,15 @@ class VoiceCatalogSections extends ConsumerWidget {
 /// single list of eight would leave the reader working out which ones speak.
 class _VoiceCatalogSection extends StatelessWidget {
   const _VoiceCatalogSection.recognition()
-      : title = "Recognition models",
-        description = "Bigger is more accurate and slower. Everything here "
-            "runs on this device.",
+      : title = "Speech recognition",
+        description = "What listens, for voice mode. Bigger is more accurate "
+            "and slower. Everything here runs on this device.",
         models = recognitionModels;
 
   const _VoiceCatalogSection.speech()
-      : title = "Speech models",
-        description = "One voice each, except where the model says otherwise.",
+      : title = "Speech synthesis",
+        description = "What speaks, for voice mode and reading a reply out. "
+            "One voice each, except where the model says otherwise.",
         models = speechModels;
 
   final String title;
@@ -249,7 +335,7 @@ class _MissingEngines extends StatelessWidget {
                 "recognizer the microphone only where it is the one set as the "
                 "system's voice-input service — set one there "
                 "(Settings → Apps → Default apps → Digital assistant app → "
-                "Voice input), or pick a downloaded model below."),
+                "Voice input), or download a model in Settings > On-device."),
           if (!speaks)
             mutedParagraph(
                 context,
@@ -290,15 +376,6 @@ class _EngineLink extends ConsumerWidget {
   }
 }
 
-/// The models of one kind that are actually there, as the picker takes them.
-/// The sentinel is filtered by the same set as everything else, which holds it
-/// only where the device has the engine — so nothing here knows which platform
-/// it is on.
-Map<String, String> _offer(List<VoiceModel> models, Set<String> installed) => {
-      for (final model in models)
-        if (installed.contains(model.id)) model.id: model.name,
-    };
-
 /// Which of a speech model's voices is used.
 class _SpeakerField extends ConsumerWidget {
   const _SpeakerField({required this.settings});
@@ -307,8 +384,10 @@ class _SpeakerField extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final speech = voiceModelOf<SpeechModel>(settings.voiceSpeechModelId);
-    // Nothing picked, or the system synthesiser — whose voice is the user's,
+    final speech = settings.voiceSpeechProviderId == localProviderId
+        ? voiceModelOf<SpeechModel>(settings.voiceSpeechModelId)
+        : null;
+    // Nothing picked, a provider's, or the system synthesiser — whose voice is the user's,
     // set in the OS, so there is no list of them here to offer.
     if (speech == null || speech.isNative) return const SizedBox.shrink();
     // Otherwise drawn even where the model has one voice, which is most of
@@ -363,9 +442,10 @@ class _LanguageField extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final native =
-        voiceModelOf<RecognitionModel>(settings.voiceRecognitionModelId)?.isNative ==
+    final native = settings.voiceRecognitionProviderId == localProviderId &&
+            voiceModelOf<RecognitionModel>(settings.voiceRecognitionModelId)?.isNative ==
                 true ||
+        settings.voiceSpeechProviderId == localProviderId &&
             voiceModelOf<SpeechModel>(settings.voiceSpeechModelId)?.isNative == true;
     if (!native) return const SizedBox.shrink();
     final offered = ref.watch(systemVoiceLanguagesProvider).value ?? const [];

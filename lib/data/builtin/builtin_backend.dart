@@ -25,6 +25,7 @@ import "../../domain/shell.dart";
 import "../../domain/sub_agent_log.dart";
 import "../../domain/tool_arg.dart";
 import "../../domain/web_search.dart";
+import "../../domain/voice.dart" show Synthesize, Transcribe;
 import "../local/file_sub_agent_log.dart";
 import "../prompts/prompt_sources.dart" show promptDirsOf;
 import "../prompts/skill_package.dart";
@@ -1533,6 +1534,22 @@ class BuiltinBackend implements AgentBackend {
 
   @override
   Future<List<ModelOption>> models() => registry.models();
+
+  @override
+  Transcribe? transcriber(String providerId, String modelId) {
+    final client = registry.clientFor(providerId);
+    return client is OpenAiClient
+        ? (wav) => client.transcribe(wav, model: modelId)
+        : null;
+  }
+
+  @override
+  Synthesize? synthesizer(String providerId, String modelId, {String? voice}) {
+    final client = registry.clientFor(providerId);
+    return client is OpenAiClient
+        ? (text) => client.speak(text, model: modelId, voice: voice)
+        : null;
+  }
 }
 
 /// The turns in flight, and which chats they belong to as that changes. One

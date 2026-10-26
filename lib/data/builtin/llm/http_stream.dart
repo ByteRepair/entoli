@@ -62,14 +62,19 @@ Future<http.StreamedResponse> postStream(
   final request = http.Request("POST", url)
     ..headers.addAll(headers)
     ..body = jsonEncode(body);
+  return sendChecked(client, request);
+}
 
+/// [postStream] for a request already built — a multipart upload.
+Future<http.StreamedResponse> sendChecked(
+    http.Client client, http.BaseRequest request) async {
   final http.StreamedResponse response;
   try {
     response = await client.send(request);
   } catch (e) {
     // No status to judge by: a connection that never opened is worth another
     // try, and a provider that is genuinely down will exhaust the attempts.
-    throw LlmException("Could not reach $url: $e", retryable: true);
+    throw LlmException("Could not reach ${request.url}: $e", retryable: true);
   }
 
   if (response.statusCode == 200) return response;

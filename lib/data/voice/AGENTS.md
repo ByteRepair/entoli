@@ -1,8 +1,9 @@
 # Voice mode
 
 A circle for what the microphone hears and five scrolling lines of what has
-been said, over a chat that was already open. Everything runs on the device,
-and which device decides how: **the desktops run `sherpa_onnx`** — speech
+been said, over a chat that was already open. It runs on the device unless the
+user picks a provider's model for a half (see "A provider's models"), and
+which device decides how: **the desktops run `sherpa_onnx`** — speech
 recognition, speech synthesis and voice activity detection from one dependency,
 with the models downloaded from the settings page rather than shipped — while
 **Android and iOS run the system's own engines** and have no models at all,
@@ -92,13 +93,14 @@ the progress bar has an "Unpacking" phase of its own; the work is in an isolate
 so the bar can keep moving. `dart:io`'s native gzip would be twenty times
 faster, and upstream publishes no `.tar.gz`.
 
-**Kokoro is the only multilingual speech model there is at this size**, and it
-is worth writing down why the list looks thin. Piper covers thirty languages one
-model at a time, which is a language picker rather than a multilingual model;
-MMS covers a thousand at rough quality and one model each; everything genuinely
-multilingual beyond them is far too big for a phone. Whisper hears 99 languages
-and Kokoro answers in two, and the honest fix for a third is one more const
-entry.
+**Kokoro is the only multilingual speech model in the catalog**, and it is
+worth writing down why the list looks thin. Piper covers over fifty languages
+one model at a time, which is a language picker rather than a multilingual
+model; MMS covers a thousand at rough quality and one model each. sherpa-onnx
+does ship smaller multilingual ones — Supertonic, 85 MB for five languages —
+that nobody has wired an engine for yet. Whisper hears 99 languages and Kokoro
+answers in two (three of its 103 voices are English), and the honest fix for a
+third is one more const entry.
 
 Silero's detector is the exception that ships: 644 KB, an asset rather than a
 catalog entry, because voice mode that cannot start until a second and invisible
@@ -112,6 +114,42 @@ is fine — it would not be for a permissively licensed app, and it is the sort 
 thing that is invisible until it is a problem. Upstream is removing espeak in
 2.0, which will want lexicon-based models instead; the constraint is pinned at
 `^1.13.6` until then.
+
+## A provider's models
+
+Either half can be a configured provider's model instead: a transcription
+model (`/audio/transcriptions`) or a speech model (`/audio/speech`), OpenAI's
+shape, which Groq, Ollama and the rest copied. models.dev says which models
+these are by their modalities — audio in and text out with no text in, or text
+in and audio out with no text out — and `ModelInfo.transcribes`/`speaks` read
+exactly that, so a chat model that also hears is not offered. models.dev's own
+`openai` entry lists neither whisper-1 nor tts-1; "Add model" has a kind for
+each.
+
+A pick is a provider id beside the model id it always was, `localProviderId`
+being the on-device catalog, as every picker already names it —
+`voiceRecognitionProviderId`, `voiceSpeechProviderId`, absent from a file that
+predates them and so read as on-device. The picker is the same
+`ModelCatalogPage` every model is picked on, with the installed set offered
+under that id; the downloads themselves are Settings > On-device's, beside the
+text models. The readiness gates answer from the settings alone — a provider
+configured, in OpenAI's shape — since asking the backend builds a client from a
+registry that reads `settings.json` again, on every settings write.
+
+**The port knows no HTTP.** `Voice.start` takes one `Hearing` and one
+`Speaking`, each a model on the device or a provider's call (`Transcribe`,
+`Synthesize`) that the backend builds from its registry the way it builds the
+image generator; `voicePicks` is where settings become them. A provider's
+speaker is `RemoteSpeaker`: a request per sentence, one at a time — so they
+play in order, and a long reply is not a burst into a rate limit — through
+the play queue `SherpaSpeaker` shares (`PlayingSpeaker`). A provider's listener
+is `SherpaListener` with no model: Silero still cuts the microphone into
+utterances on the device, the worker hands each back as a WAV, and it is
+judged by the gate *when it ends*
+— a sentence the gate would refuse is not paid for, and the room measured
+while the request is out is not the room it was said in. That needs sherpa, so
+iOS (`hasModelCatalog` false) can speak through a provider but not
+listen through one.
 
 ## The system engines
 

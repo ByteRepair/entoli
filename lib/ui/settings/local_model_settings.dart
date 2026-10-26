@@ -428,7 +428,7 @@ class LocalModelCatalogSection extends ConsumerWidget {
       children: [
         const Divider(),
         const SectionHeader(
-          "Available",
+          "Text models",
           description: "Downloaded once and kept outside the app's data, so a "
               "backup does not carry it and a restore does not delete it. All "
               "of them are Q4_0 — the one quantisation an NPU can be handed "

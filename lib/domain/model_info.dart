@@ -13,6 +13,8 @@ class ModelInfo {
     this.reasoning = false,
     this.toolCall = false,
     this.talks = true,
+    this.transcribes = false,
+    this.speaks = false,
     this.inputCost,
     this.outputCost,
   });
@@ -36,6 +38,14 @@ class ModelInfo {
       readsPdfs: has("input", "pdf"),
       makesImages: has("output", "image"),
       talks: has("input", "text") && has("output", "text"),
+      // Speech in, text out, and nothing else in: a chat model that also hears
+      // (Gemini, gpt-audio) answers chat completions, not transcriptions.
+      transcribes: has("input", "audio") &&
+          !has("input", "text") &&
+          has("output", "text"),
+      speaks: has("output", "audio") &&
+          !has("output", "text") &&
+          has("input", "text"),
       context: positive(limit["context"]),
       output: positive(limit["output"]),
       reasoning: json["reasoning"] == true,
@@ -68,6 +78,12 @@ class ModelInfo {
   /// transcription or image-only one.
   final bool talks;
 
+  /// Answers `/audio/transcriptions`: speech in, text out.
+  final bool transcribes;
+
+  /// Answers `/audio/speech`: text in, speech out.
+  final bool speaks;
+
   /// US dollars per million tokens.
   final double? inputCost;
   final double? outputCost;
@@ -85,11 +101,16 @@ class ModelInfo {
         "tool_call": toolCall,
         "modalities": {
           "input": [
-            if (talks) "text",
+            if (talks || speaks) "text",
+            if (transcribes) "audio",
             if (readsImages) "image",
             if (readsPdfs) "pdf",
           ],
-          "output": [if (talks) "text", if (makesImages) "image"],
+          "output": [
+            if (talks || transcribes) "text",
+            if (speaks) "audio",
+            if (makesImages) "image",
+          ],
         },
         "limit": {"context": ?context, "output": ?output},
         if (inputCost != null || outputCost != null)
