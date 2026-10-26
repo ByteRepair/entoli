@@ -632,7 +632,7 @@ void main() {
       expect(sent.headers["x-goog-api-key"], "g-key");
       expect(sentBody()["contents"][0]["parts"][0]["text"], "a cat");
       expect(images.single.mimeType, "image/jpeg");
-      expect(images.single.filename, "image-0.jpg");
+      expect(images.single.filename, "image-0.jpeg");
     });
 
     test("quality is sent as the Images API names it", () async {

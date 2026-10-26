@@ -1670,8 +1670,7 @@ class BuiltinAgent {
       LlmToolCall(
           id: call.id,
           name: call.name,
-          argumentsJson: jsonEncode({"action": described}),
-          signature: call.signature);
+          argumentsJson: jsonEncode({"action": described}));
 
   static Future<ShellResult> Function() _attempt(
           Future<String> Function() run) =>

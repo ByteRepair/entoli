@@ -5,7 +5,6 @@ import "dart:typed_data";
 import "package:http/http.dart" as http;
 
 import "../../../core/tls.dart";
-import "../../mime.dart";
 
 import "http_stream.dart";
 import "llm_client.dart";
@@ -234,7 +233,11 @@ class OpenAiClient implements LlmClient {
         if (data is List)
           for (final (i, item) in data.indexed)
             if (item is Map && item["b64_json"] is String)
-              _image(i, base64Decode(item["b64_json"] as String)),
+              LlmAttachment(
+                filename: "image-$i.png",
+                mimeType: "image/png",
+                bytes: base64Decode(item["b64_json"] as String),
+              ),
       ];
     }
     final choices = json["choices"];
@@ -243,10 +246,7 @@ class OpenAiClient implements LlmClient {
     return message is Map ? imagesIn(message["images"]) : const [];
   }
 
-  /// Gemini's own `generateContent`, beside the compatibility layer. Neither
-  /// compat route takes every Gemini image model: chat 400s on the image it
-  /// made, and `/images/generations` sends any model it does not list to
-  /// Imagen's `predict`, which 404s.
+  /// Native, because neither compat route takes every Gemini image model.
   Future<List<LlmAttachment>> _geminiImage(String prompt, String model) async {
     final native = baseUrl.replace(
         path: baseUrl.path.replaceFirst(RegExp(r"/openai/?$"), ""));
@@ -276,8 +276,13 @@ class OpenAiClient implements LlmClient {
     final out = <LlmAttachment>[];
     for (final part in parts is List ? parts : const []) {
       final data = part is Map ? part["inlineData"] : null;
-      if (data is Map && data["data"] is String) {
-        out.add(_image(out.length, base64Decode(data["data"] as String)));
+      if (data is Map && data["data"] is String && data["mimeType"] is String) {
+        final mime = data["mimeType"] as String;
+        out.add(LlmAttachment(
+          filename: "image-${out.length}.${mime.split("/").last}",
+          mimeType: mime,
+          bytes: base64Decode(data["data"] as String),
+        ));
       }
     }
     return out;
@@ -313,19 +318,10 @@ class OpenAiClient implements LlmClient {
     return response.stream.toBytes();
   }
 
-  /// Named by its bytes: Gemini answers JPEG where OpenAI answers PNG.
-  static LlmAttachment _image(int i, Uint8List bytes) {
-    final mime = sniffMime(bytes) ?? "image/png";
-    return LlmAttachment(
-      filename: "image-$i.${mime.split("/").last.replaceFirst("jpeg", "jpg")}",
-      mimeType: mime,
-      bytes: bytes,
-    );
-  }
-
   bool get _isGemini => baseUrl.host == "generativelanguage.googleapis.com";
 
-  /// Gemini's documented bypass for a call it did not sign.
+  // shortcut: the placeholder is LiteLLM's, not in Google's docs; replace it
+  // if Google documents one or stops taking it.
   static const _skipSignature = "skip_thought_signature_validator";
 
   Map<String, dynamic> _encodeTool(LlmTool tool) => {
