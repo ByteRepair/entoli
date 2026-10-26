@@ -40,7 +40,7 @@ class JobStrip extends ConsumerWidget {
                   job: job,
                   onPressed: () => showDialog<void>(
                     context: context,
-                    builder: (_) => JobSheet(jobs: jobs, id: job.id),
+                    builder: (_) => JobSheet(jobs: jobs, job: job),
                   ),
                 ),
             ],
@@ -60,28 +60,24 @@ class _JobPill extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final failed = !job.running && job.exitCode != 0;
-    final (fg, bg) = job.running
-        ? (scheme.onPrimaryContainer, scheme.primaryContainer)
-        : failed
-            ? (scheme.onErrorContainer, scheme.errorContainer)
-            : (scheme.onSurfaceVariant, scheme.surfaceContainer);
     return ConstrainedBox(
       constraints: const BoxConstraints(maxWidth: 360),
       child: ActionChip(
-        avatar: job.running
-            ? SizedBox(
-                width: 12,
-                height: 12,
-                child: CircularProgressIndicator(strokeWidth: 1.5, color: fg),
-              )
-            : Icon(failed ? Icons.error_outline : Icons.check, size: 16, color: fg),
-        label: Text(
-          "${firstLine(job.command)}${job.running ? "" : " · ${exitWords(job)}"}",
-          overflow: TextOverflow.ellipsis,
-          style: TextStyle(fontFamily: monoFamily, fontSize: 12, color: fg),
+        avatar: SizedBox(
+          width: 12,
+          height: 12,
+          child: CircularProgressIndicator(
+              strokeWidth: 1.5, color: scheme.onPrimaryContainer),
         ),
-        backgroundColor: bg,
+        label: Text(
+          firstLine(job.command),
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(
+              fontFamily: monoFamily,
+              fontSize: 12,
+              color: scheme.onPrimaryContainer),
+        ),
+        backgroundColor: scheme.primaryContainer,
         side: BorderSide.none,
         shape: const StadiumBorder(),
         visualDensity: VisualDensity.compact,
@@ -92,15 +88,13 @@ class _JobPill extends StatelessWidget {
   }
 }
 
-String exitWords(ShellJob job) =>
-    job.exitCode == -1 ? "stopped" : "exit ${job.exitCode}";
-
-/// One job: the command, how it stands, and the end of its log as it grows.
+/// One job: the command, whether it still runs, and the end of its log as it
+/// grows.
 class JobSheet extends StatefulWidget {
-  const JobSheet({super.key, required this.jobs, required this.id});
+  const JobSheet({super.key, required this.jobs, required this.job});
 
   final ChatShellJobs jobs;
-  final int id;
+  final ShellJob job;
 
   @override
   State<JobSheet> createState() => _JobSheetState();
@@ -108,16 +102,17 @@ class JobSheet extends StatefulWidget {
 
 class _JobSheetState extends State<JobSheet> {
   // Once, not per build: a new stream per rebuild would restart the tail.
-  late final Stream<String> _log = widget.jobs.log(widget.id);
+  late final Stream<String> _log = widget.jobs.log(widget.job);
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final job = widget.job;
     return ValueListenableBuilder<List<ShellJob>>(
       valueListenable: widget.jobs.jobs,
       builder: (context, list, _) {
-        final job = list.where((j) => j.id == widget.id).firstOrNull;
-        if (job == null) return const SizedBox.shrink();
+        // An ended job leaves the list; the sheet keeps its last log.
+        final running = list.any((j) => j.id == job.id);
         return AlertDialog(
           title: Text("Background job ${job.id}"),
           content: SizedBox(
@@ -129,9 +124,9 @@ class _JobSheetState extends State<JobSheet> {
                 ShellCommandText(command: job.command),
                 const SizedBox(height: 8),
                 Text(
-                  job.running
+                  running
                       ? "Running${job.pid == null ? "" : " · pid ${job.pid}"}"
-                      : "Ended · ${exitWords(job)}",
+                      : "Ended",
                   style: theme.textTheme.labelMedium
                       ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
                 ),
@@ -150,19 +145,11 @@ class _JobSheetState extends State<JobSheet> {
             ),
           ),
           actions: [
-            if (job.running)
+            if (running)
               TextButton(
                 onPressed: () =>
                     catchAndSay(context, () => widget.jobs.stop(job.id)),
                 child: const Text("Stop"),
-              )
-            else
-              TextButton(
-                onPressed: () {
-                  widget.jobs.dismiss(job.id);
-                  Navigator.of(context).pop();
-                },
-                child: const Text("Dismiss"),
               ),
             TextButton(
               onPressed: () => Navigator.of(context).pop(),

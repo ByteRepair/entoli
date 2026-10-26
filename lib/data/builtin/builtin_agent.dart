@@ -3225,11 +3225,6 @@ class BuiltinAgent {
   /// `toolbox run` or a server in it stop holding anything open.
   Future<ShellResult> _startBackground(
       ChatJobs jobs, String command, CommandSandbox? sandbox) async {
-    if (jobs.running >= BackgroundJobs.maxRunning) {
-      return const ShellResult.failed(
-          "${BackgroundJobs.maxRunning} background jobs are already running "
-          "in this chat. Stop one you no longer need first.");
-    }
     final job = await jobs.start(command,
         workspace: workspace,
         spawn: (script) => shell.start(script,
@@ -3246,10 +3241,8 @@ class BuiltinAgent {
     final pid = job.pid;
     final stop = pid == null
         ? ""
-        : platformIsWindows
-            ? " Its process id is $pid: `kill $pid` stops it."
-            : " Its process id is $pid, the leader of its group: "
-                "`kill -- -$pid` stops it and everything it started.";
+        : " Its process id is $pid, the leader of its group: "
+            "`kill -- -$pid` stops it and everything it started.";
     return ShellResult(
         returnCode: 0,
         output: "Started in the background as job ${job.id}.$stop Its output "

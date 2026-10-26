@@ -11,15 +11,11 @@ import "../fakes.dart";
 void main() {
   late FakeBackend backend;
 
-  ShellJob job(int id, String command, {int? exitCode}) => ShellJob(
-        id: id,
-        command: command,
-        logPath: "/w/.entoli-jobs/$id.log",
-        pid: 4000 + id,
-        exitCode: exitCode,
-      );
+  ShellJob job(int id, String command) => ShellJob(
+      id: id, command: command, logPath: "/w/.entoli-jobs/$id.log", pid: 4000 + id);
 
-  Future<void> pumpStrip(WidgetTester tester, {bool mirrored = false}) async {
+  Future<FakeShellJobs> pumpStrip(WidgetTester tester,
+      {bool mirrored = false}) async {
     backend = FakeBackend();
     await tester.pumpWidget(ProviderScope(
       overrides: [
@@ -30,57 +26,62 @@ void main() {
         home: Scaffold(body: JobStrip(chatId: "chat-1")),
       ),
     ));
+    return backend.jobsOf("chat-1");
   }
 
-  void seed(List<ShellJob> jobs) => backend.jobsOf("chat-1").jobs.value = jobs;
+  // A running pill spins, so nothing here settles: pump through the
+  // dialog's entrance instead.
+  Future<void> open(WidgetTester tester, String pill) async {
+    await tester.tap(find.text(pill));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+  }
 
-  testWidgets("a pill per job, the ended ones saying how", (tester) async {
-    await pumpStrip(tester);
+  testWidgets("a pill per running job", (tester) async {
+    final jobs = await pumpStrip(tester);
     expect(find.byType(ActionChip), findsNothing);
 
-    seed([job(1, "npm run dev"), job(2, "make test", exitCode: 2)]);
+    jobs.jobs.value = [job(1, "npm run dev"), job(2, "make watch")];
     await tester.pump();
-    expect(find.text("npm run dev"), findsOneWidget);
-    expect(find.text("make test · exit 2"), findsOneWidget);
+    expect(find.byType(ActionChip), findsNWidgets(2));
   });
 
   testWidgets("a pill opens the command and its log, and Stop stops it",
       (tester) async {
-    await pumpStrip(tester);
-    seed([job(1, "npm run dev")]);
-    backend.jobsOf("chat-1").logs[1] = "listening on :3000\n";
+    final jobs = await pumpStrip(tester);
+    jobs.jobs.value = [job(1, "npm run dev")];
+    jobs.logs[1] = "listening on :3000\n";
     await tester.pump();
 
-    // A running pill spins, so nothing here settles: pump through the
-    // dialog's entrance instead.
-    await tester.tap(find.text("npm run dev"));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 300));
+    await open(tester, "npm run dev");
     expect(find.text("Background job 1"), findsOneWidget);
     expect(find.text("listening on :3000"), findsOneWidget);
     expect(find.text("Running · pid 4001"), findsOneWidget);
 
     await tester.tap(find.text("Stop"));
     await tester.pump();
-    expect(backend.jobsOf("chat-1").stopped, [1]);
+    expect(jobs.stopped, [1]);
   });
 
-  testWidgets("an ended job is dismissed from its sheet", (tester) async {
-    await pumpStrip(tester);
-    seed([job(1, "make", exitCode: 0)]);
+  testWidgets("a sheet whose job ends keeps its log and loses Stop",
+      (tester) async {
+    final jobs = await pumpStrip(tester);
+    jobs.jobs.value = [job(1, "make")];
+    jobs.logs[1] = "built\n";
     await tester.pump();
+    await open(tester, "make");
 
-    await tester.tap(find.text("make · exit 0"));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text("Dismiss"));
-    await tester.pumpAndSettle();
-    expect(find.byType(ActionChip), findsNothing);
+    jobs.jobs.value = const [];
+    await tester.pump();
+    expect(find.text("Ended"), findsOneWidget);
+    expect(find.text("built"), findsOneWidget);
+    expect(find.text("Stop"), findsNothing);
   });
 
   testWidgets("a mirrored chat has no pills: its jobs are elsewhere",
       (tester) async {
-    await pumpStrip(tester, mirrored: true);
-    seed([job(1, "npm run dev")]);
+    final jobs = await pumpStrip(tester, mirrored: true);
+    jobs.jobs.value = [job(1, "npm run dev")];
     await tester.pump();
     expect(find.byType(ActionChip), findsNothing);
   });

@@ -520,11 +520,7 @@ class FakeShellJobs implements ChatShellJobs {
   Future<void> stop(int id) async => stopped.add(id);
 
   @override
-  void dismiss(int id) =>
-      jobs.value = [for (final j in jobs.value) if (j.id != id) j];
-
-  @override
-  Stream<String> log(int id) => Stream.value(logs[id] ?? "");
+  Stream<String> log(ShellJob job) => Stream.value(logs[job.id] ?? "");
 }
 
 class FakeBackend implements AgentBackend {

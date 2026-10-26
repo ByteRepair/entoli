@@ -78,7 +78,6 @@ void main() {
     expect(output, contains("chat:.entoli-jobs/1.log"));
 
     final job = jobs.forChat("chat-1").jobs.value.single;
-    expect(job.running, isTrue);
     expect(job.pid, 4000);
     expect(job.logPath, p.join(workspace, ".entoli-jobs", "1.log"));
   });
@@ -106,38 +105,21 @@ void main() {
 
     final [started, second, third] = results(events);
     expect(started.notes, isEmpty);
-    expect(second.notes, ["Background job 1 (`serve`) was stopped by the user."]);
+    expect(second.notes, ["Background job 1 (`serve`) was stopped."]);
     expect(second.output, "output");
     expect(third.notes, isEmpty);
-    expect(jobs.forChat("chat-1").jobs.value.single.running, isFalse);
+    expect(jobs.forChat("chat-1").jobs.value, isEmpty);
   });
 
-  test("no more than the cap run at once", () async {
-    final calls = [
-      for (var i = 1; i <= BackgroundJobs.maxRunning + 1; i++)
-        bashCall("job$i", id: "c$i", extra: {"background": true}),
-    ];
-    final client = FakeLlmClient([for (final c in calls) [c], [finish]]);
-    final agent = agentOver(client);
-    for (var i = 1; i <= BackgroundJobs.maxRunning + 1; i++) {
-      shell.hang.add(backgroundScript(i, "job$i"));
-    }
-    final events = await agent.run(userMessage("go")).toList();
-    final last = results(events).last;
-    expect(last.returnCode, isNot(0));
-    expect(last.exceptionInfo, contains("already running"));
-    expect(shell.ran, hasLength(BackgroundJobs.maxRunning));
-  });
-
-  test("a job's id is not reused after it is dismissed", () async {
+  test("a job's id is not reused after it ends", () async {
     jobs = BackgroundJobs(fileSystemIo);
     shell = FakeShell((_) => ok(""), canRunInBackground: true);
     final chat = jobs.forChat("chat-1");
     ShellRun spawn(String script) => shell.start(script,
         cwd: "/w", home: "/w", timeout: Duration.zero);
-    final first = await chat.start("a", workspace: "/w", spawn: spawn);
+    await chat.start("a", workspace: "/w", spawn: spawn);
     await pumpEventQueue();
-    chat.dismiss(first.id);
+    expect(chat.jobs.value, isEmpty);
     final second = await chat.start("b", workspace: "/w", spawn: spawn);
     expect(second.id, 2);
   });
@@ -164,12 +146,12 @@ void main() {
       ..writeAsStringSync("hello\n");
     shell = FakeShell((_) => ok(""), canRunInBackground: true);
     final chat = jobs.forChat("c");
-    await chat.start("x",
+    final job = await chat.start("x",
         workspace: tempDir.path,
         spawn: (script) => shell.start(script,
             cwd: tempDir.path, home: tempDir.path, timeout: Duration.zero));
     // The fake run has already ended, so the tail is read once and closes.
     await pumpEventQueue();
-    expect(await chat.log(1).toList(), ["hello\n"]);
+    expect(await chat.log(job).toList(), ["hello\n"]);
   });
 }

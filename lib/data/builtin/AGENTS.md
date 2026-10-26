@@ -242,9 +242,8 @@ its own. It was added because `&` could not do this: a child backgrounded
 inside `toolbox run` inherits `podman exec`'s output, which is the app's
 pipe, so the call never came back. A job is a one-shot run, gated and
 sandboxed like any call, whose script first points its output at
-`.entoli-jobs/<id>.log` in the chat workspace (`backgroundScript`), so
-nothing it leaves behind holds a pipe of the app's. Every one-shot run's
-input is `/dev/null`, as a session command's is.
+`.entoli-jobs/<id>.log` in the chat workspace and its input at `/dev/null`
+(`backgroundScript`), so nothing it leaves behind holds a pipe of the app's.
 The answer gives the job's number, its pid (the group leader, so
 `kill -- -<pid>` takes everything it started) and the log, which the model
 reads with `tail` or `read`.
@@ -253,8 +252,8 @@ reads with `tail` or `read`.
 turn. How one ended rides the agent's next tool result in that chat, this
 turn or a later one, as `ToolResult.notes`: beside the output rather than in
 it, since an answered question's output is data, and the projection words
-the notes ahead of the result for every tool. At most
-`maxRunning` per chat at once, each killed after `timeout`. Deleting the chat
+the notes ahead of the result for every tool.
+Each is killed after `timeout`; deleting the chat
 or quitting the app kills them, and ids are never reused while the app runs,
 since an id names its log. Offered where `Shell.canRunInBackground` (the
 machine's shell, a guest under proot included), never to a sub-agent: nobody

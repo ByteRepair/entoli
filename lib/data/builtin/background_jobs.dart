@@ -19,10 +19,6 @@ class BackgroundJobs {
 
   final FileSystem fs;
 
-  /// How many may run at once in one chat: enough for a server and a build
-  /// beside it, few enough that a model looping on `background` stops.
-  static const maxRunning = 4;
-
   /// How long one may run before it is killed. A job nobody stopped is still
   /// a process the user did not ask to keep forever.
   static const timeout = Duration(hours: 12);
@@ -43,12 +39,12 @@ class BackgroundJobs {
 /// Job [id]'s log, relative to the chat workspace it starts in.
 String backgroundLog(int id) => ".entoli-jobs/$id.log";
 
-/// What a job's shell runs: its output pointed at its log before [command]
-/// starts, so a child it leaves behind holds no pipe of the app's, then
-/// [command] as written. A log that cannot be opened ends the job there
-/// rather than letting it print into the app.
+/// What a job's shell runs: its streams pointed at its log and at nothing
+/// before [command] starts, so a child it leaves behind holds no pipe of the
+/// app's, then [command] as written. A log that cannot be opened ends the
+/// job there rather than letting it print into the app.
 String backgroundScript(int id, String command) =>
-    "mkdir -p .entoli-jobs; exec >${backgroundLog(id)} 2>&1 || exit 1\n"
+    "mkdir -p .entoli-jobs; exec >${backgroundLog(id)} 2>&1 </dev/null || exit 1\n"
     "$command";
 
 /// One chat's jobs.
@@ -61,13 +57,10 @@ class ChatJobs implements ChatShellJobs {
   final ValueNotifier<List<ShellJob>> jobs = ValueNotifier(const []);
   final _runs = <int, ShellRun>{};
   final _notes = <String>[];
-  final _stoppedByUser = <int>{};
 
-  /// Never reused while the app runs, dismissed jobs included: the number
-  /// names the log, and a reused one would write over a log still being read.
+  /// Never reused while the app runs: the number names the log, and a reused
+  /// one would write over a log a sheet may still be showing.
   int _count = 0;
-
-  int get running => _runs.length;
 
   /// Start [command] as the next job, [spawn] running the script it is
   /// wrapped in from [workspace], where its log lands.
@@ -90,14 +83,8 @@ class ChatJobs implements ChatShellJobs {
 
   void _end(ShellJob job, int code) {
     if (_runs.remove(job.id) == null) return;
-    jobs.value = [
-      for (final j in jobs.value) j.id == job.id ? j.ended(code) : j,
-    ];
-    final how = _stoppedByUser.remove(job.id)
-        ? "was stopped by the user"
-        : code == -1
-            ? "was stopped (killed, or out of time)"
-            : "exited with code $code";
+    jobs.value = [for (final j in jobs.value) if (j.id != job.id) j];
+    final how = code == -1 ? "was stopped" : "exited with code $code";
     _notes.add("Background job ${job.id} (`${firstLine(job.command)}`) $how.");
   }
 
@@ -109,27 +96,14 @@ class ChatJobs implements ChatShellJobs {
   }
 
   @override
-  Future<void> stop(int id) async {
-    final run = _runs[id];
-    if (run == null) return;
-    _stoppedByUser.add(id);
-    await run.kill();
-  }
-
-  @override
-  void dismiss(int id) => jobs.value = [
-        for (final j in jobs.value)
-          if (j.id != id || j.running) j,
-      ];
+  Future<void> stop(int id) async => _runs[id]?.kill();
 
   static const _tailBytes = 32 * 1024;
 
   @override
-  Stream<String> log(int id,
+  Stream<String> log(ShellJob job,
       {Duration every = const Duration(milliseconds: 500)}) {
-    final path = jobs.value.where((j) => j.id == id).firstOrNull?.logPath;
-    if (path == null) return const Stream.empty();
-    final file = _fs.file(path);
+    final file = _fs.file(job.logPath);
     late final StreamController<String> out;
     Timer? timer;
     var busy = false;
@@ -140,8 +114,7 @@ class ChatJobs implements ChatShellJobs {
     Future<void> tick() async {
       if (busy || out.isClosed) return;
       busy = true;
-      final ended = !(jobs.value.where((j) => j.id == id).firstOrNull?.running ??
-          false);
+      final ended = !_runs.containsKey(job.id);
       final stat = await file.stat();
       final now = (stat.size, stat.modified);
       if (stat.type != FileSystemEntityType.notFound && now != seen) {

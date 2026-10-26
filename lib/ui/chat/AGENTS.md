@@ -510,14 +510,13 @@ on the message, not looked up per turn.
 ## Background jobs, on screen
 
 `JobStrip` sits in `TurnSurface` under the browser chip and, like it, is not
-turn-scoped: a pill per background job the chat holds (see "Background jobs"
-in `lib/data/builtin/AGENTS.md`), spinning while it runs and saying how it
-ended after. It reads the backend's list directly, not the controller's view
-state, and draws nothing on a mirrored chat. A pill opens `JobSheet`: the
-command, the pid or the exit, and the end of the log as it grows
-(`backgroundJobLog`, re-read every half second until the job ends), with Stop
-for a running job and Dismiss for an ended one, which is the only thing that
-takes a pill away.
+turn-scoped: a pill per background job the chat is running (see "Background
+jobs" in `lib/data/builtin/AGENTS.md`), gone when the job ends, since the
+agent hears how it ended. It reads the backend's list directly, not the
+controller's view state, and draws nothing on a mirrored chat. A pill opens
+`JobSheet`: the command, the pid, and the end of the log as it grows (re-read
+every half second while the file changes), with Stop. A sheet left open when
+its job ends keeps the last of the log and loses the button.
 
 ## The agent's browser, on screen
 
