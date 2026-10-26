@@ -239,18 +239,21 @@ where the agent is one.
 `bash` with `background: true` answers as soon as the command has started
 and leaves it running: a server, a watcher, anything that does not exit on
 its own. It was added because `&` could not do this: a child backgrounded
-inside `toolbox run` keeps `podman exec` attached through its inherited
-stdin, so the call never came back. A job is a one-shot run, gated and
-sandboxed like any call, whose script first points its own streams at
-`.entoli-jobs/<id>.log` in the chat workspace and at `/dev/null`
-(`backgroundScript`), so nothing it leaves behind holds a pipe of the app's.
+inside `toolbox run` inherits `podman exec`'s output, which is the app's
+pipe, so the call never came back. A job is a one-shot run, gated and
+sandboxed like any call, whose script first points its output at
+`.entoli-jobs/<id>.log` in the chat workspace (`backgroundScript`), so
+nothing it leaves behind holds a pipe of the app's. Every one-shot run's
+input is `/dev/null`, as a session command's is.
 The answer gives the job's number, its pid (the group leader, so
 `kill -- -<pid>` takes everything it started) and the log, which the model
 reads with `tail` or `read`.
 
 `BackgroundJobs` holds them per chat on the backend, so a job outlives its
-turn. How one ended is a note at the head of the agent's next tool result in
-that chat, this turn or a later one, as the browser's notes are. At most
+turn. How one ended rides the agent's next tool result in that chat, this
+turn or a later one, as `ToolResult.notes`: beside the output rather than in
+it, since an answered question's output is data, and the projection words
+the notes ahead of the result for every tool. At most
 `maxRunning` per chat at once, each killed after `timeout`. Deleting the chat
 or quitting the app kills them, and ids are never reused while the app runs,
 since an id names its log. Offered where `Shell.canRunInBackground` (the

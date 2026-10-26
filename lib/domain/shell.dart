@@ -246,6 +246,8 @@ class ShellDriver {
 /// A command already running. Separate from its result so an aborted turn can
 /// [kill] a build that would otherwise carry on for minutes.
 abstract class ShellRun {
+  const ShellRun();
+
   /// Completes when the command does or when it is killed, whichever comes
   /// first. The agent awaits it with no bound of its own, so an implementation
   /// that waits on a handle it cannot close is a turn that can never end.
@@ -415,7 +417,7 @@ class UnavailableShell extends Shell {
       const _Unavailable();
 }
 
-class _Unavailable implements ShellRun {
+class _Unavailable extends ShellRun {
   const _Unavailable();
 
   @override
@@ -424,9 +426,6 @@ class _Unavailable implements ShellRun {
 
   @override
   ValueListenable<String?>? get output => null;
-
-  @override
-  Future<int?> get pid async => null;
 
   @override
   Future<void> kill() async {}

@@ -505,6 +505,28 @@ class FakeFileHandoff implements FileHandoff {
 IncomingBytes incomingFile(String path, [String text = "hi"]) =>
     IncomingBytes(path, Uint8List.fromList(text.codeUnits));
 
+/// A chat's background jobs as a test sets them.
+class FakeShellJobs implements ChatShellJobs {
+  @override
+  final ValueNotifier<List<ShellJob>> jobs = ValueNotifier(const []);
+
+  /// What each job's log reads, by id.
+  final Map<int, String> logs = {};
+
+  /// The jobs [stop] was asked to stop.
+  final List<int> stopped = [];
+
+  @override
+  Future<void> stop(int id) async => stopped.add(id);
+
+  @override
+  void dismiss(int id) =>
+      jobs.value = [for (final j in jobs.value) if (j.id != id) j];
+
+  @override
+  Stream<String> log(int id) => Stream.value(logs[id] ?? "");
+}
+
 class FakeBackend implements AgentBackend {
   var _created = 0;
 
@@ -527,34 +549,11 @@ class FakeBackend implements AgentBackend {
   final SubAgentFeed subAgents = SubAgentFeed();
 
   /// Each chat's background jobs, set by a test the way the backend would.
-  final Map<String, ValueNotifier<List<ShellJob>>> jobs = {};
-
-  /// What each job's log reads, by id.
-  final Map<int, String> jobLogs = {};
-
-  /// The jobs [stopBackgroundJob] was asked to stop.
-  final List<int> stoppedJobs = [];
-
-  ValueNotifier<List<ShellJob>> _jobsOf(String chatId) =>
-      jobs.putIfAbsent(chatId, () => ValueNotifier(const []));
+  final Map<String, FakeShellJobs> jobs = {};
 
   @override
-  ValueListenable<List<ShellJob>> backgroundJobs(String chatId) =>
-      _jobsOf(chatId);
-
-  @override
-  Future<void> stopBackgroundJob(String chatId, int id) async =>
-      stoppedJobs.add(id);
-
-  @override
-  void dismissBackgroundJob(String chatId, int id) {
-    final list = _jobsOf(chatId);
-    list.value = [for (final j in list.value) if (j.id != id) j];
-  }
-
-  @override
-  Stream<String> backgroundJobLog(String chatId, int id) =>
-      Stream.value(jobLogs[id] ?? "");
+  FakeShellJobs jobsOf(String chatId) =>
+      jobs.putIfAbsent(chatId, FakeShellJobs.new);
 
   @override
   Future<Chat> createChat({String? title}) async {

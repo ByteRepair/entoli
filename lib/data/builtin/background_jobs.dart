@@ -1,17 +1,19 @@
 import "dart:async";
 import "dart:convert";
 import "dart:math";
+import "dart:typed_data";
 
 import "package:flutter/foundation.dart";
 import "package:fs_shim/fs.dart";
 
-import "../../domain/shell_job.dart";
 import "../../domain/shell.dart";
+import "../../domain/shell_job.dart";
 
 /// Every chat's background jobs, held by the backend so a job outlives the
-/// turn that started it. The agent starts them through [ChatJobs]; the chat
-/// page lists them through [of]; the next tool call the agent makes in that
-/// chat, this turn or a later one, hears how the finished ones ended.
+/// turn that started it. The agent starts them through a chat's [ChatJobs];
+/// the chat page reaches the same object as a [ChatShellJobs]; the next tool
+/// call the agent makes in that chat, this turn or a later one, hears how the
+/// ended ones ended.
 class BackgroundJobs {
   BackgroundJobs(this.fs);
 
@@ -25,159 +27,155 @@ class BackgroundJobs {
   /// a process the user did not ask to keep forever.
   static const timeout = Duration(hours: 12);
 
-  final _jobs = <String, ValueNotifier<List<ShellJob>>>{};
-  final _runs = <String, Map<int, ShellRun>>{};
-  final _notes = <String, List<String>>{};
-  final _stopped = <String, Set<int>>{};
-  final _counts = <String, int>{};
+  final _chats = <String, ChatJobs>{};
 
-  ValueListenable<List<ShellJob>> of(String chatId) => _list(chatId);
-
-  ValueNotifier<List<ShellJob>> _list(String chatId) =>
-      _jobs.putIfAbsent(chatId, () => ValueNotifier(const []));
-
-  /// [chatId]'s face for the agent.
-  ChatJobs forChat(String chatId) => ChatJobs._(this, chatId);
-
-  Future<ShellJob> _start(String chatId,
-      {required int id,
-      required String command,
-      required String logPath,
-      required ShellRun run}) async {
-    final job = ShellJob(
-      id: id,
-      command: command,
-      logPath: logPath,
-      startedAt: DateTime.now(),
-      pid: await run.pid,
-    );
-    (_runs[chatId] ??= {})[id] = run;
-    final list = _list(chatId);
-    list.value = [...list.value, job];
-    unawaited(run.result.then((r) => _end(chatId, id, r.returnCode)));
-    return job;
-  }
-
-  void _end(String chatId, int id, int code) {
-    _runs[chatId]?.remove(id);
-    final list = _jobs[chatId];
-    if (list == null) return;
-    final job = list.value.firstWhere((j) => j.id == id);
-    list.value = [
-      for (final j in list.value) j.id == id ? j.ended(code, DateTime.now()) : j,
-    ];
-    final byUser = _stopped[chatId]?.remove(id) ?? false;
-    final how = byUser
-        ? "was stopped by the user"
-        : code == -1
-            ? "was stopped (killed, or out of time)"
-            : "exited with code $code";
-    (_notes[chatId] ??= []).add(
-        "Background job ${job.id} (`${_short(job.command)}`) $how.");
-  }
-
-  /// Stop a running job, from the chat page.
-  Future<void> stop(String chatId, int id) async {
-    final run = _runs[chatId]?[id];
-    if (run == null) return;
-    (_stopped[chatId] ??= {}).add(id);
-    await run.kill();
-  }
-
-  /// Take a finished job off the chat page.
-  void dismiss(String chatId, int id) {
-    final list = _jobs[chatId];
-    if (list == null) return;
-    list.value = [
-      for (final j in list.value)
-        if (j.id != id || j.running) j,
-    ];
-  }
-
-  /// The end of [id]'s log, read again every [every] until the stream is
-  /// cancelled: what the pill's sheet shows.
-  Stream<String> tail(String chatId, int id,
-      {Duration every = const Duration(milliseconds: 500)}) async* {
-    final job = _jobs[chatId]?.value.where((j) => j.id == id).firstOrNull;
-    if (job == null) return;
-    String? last;
-    while (true) {
-      final text = await _tailOf(job.logPath);
-      if (text != last) yield last = text;
-      final still = _jobs[chatId]?.value.where((j) => j.id == id).firstOrNull;
-      if (still == null || !still.running) {
-        // Once more after the end, for what it printed last.
-        final end = await _tailOf(job.logPath);
-        if (end != last) yield end;
-        return;
-      }
-      await Future<void>.delayed(every);
-    }
-  }
-
-  static const _tailBytes = 32 * 1024;
-
-  Future<String> _tailOf(String path) async {
-    final file = fs.file(path);
-    if (!await file.exists()) return "";
-    final size = (await file.stat()).size;
-    final start = max(0, size - _tailBytes);
-    final bytes = await file
-        .openRead(start, size)
-        .fold<List<int>>([], (all, chunk) => all..addAll(chunk));
-    return utf8.decode(bytes, allowMalformed: true);
-  }
+  ChatJobs forChat(String chatId) =>
+      _chats.putIfAbsent(chatId, () => ChatJobs._(fs));
 
   /// Kill [chatId]'s jobs and forget them: the chat is being deleted.
-  Future<void> closeChat(String chatId) async {
-    final runs = _runs.remove(chatId)?.values ?? const <ShellRun>[];
-    _jobs.remove(chatId)?.dispose();
-    _notes.remove(chatId);
-    _stopped.remove(chatId);
-    _counts.remove(chatId);
-    await Future.wait(runs.map((r) => r.kill()));
-  }
+  Future<void> closeChat(String chatId) async =>
+      _chats.remove(chatId)?._close();
 
   /// Kill every job: the app is going.
-  Future<void> close() => Future.wait([..._jobs.keys].map(closeChat));
-
-  static String _short(String command) {
-    final line = command.trim().split("\n").first;
-    return line.length <= 80 ? line : "${line.substring(0, 79)}…";
-  }
+  Future<void> close() => Future.wait([..._chats.keys].map(closeChat));
 }
 
 /// Job [id]'s log, relative to the chat workspace it starts in.
 String backgroundLog(int id) => ".entoli-jobs/$id.log";
 
-/// What a job's shell runs: its streams pointed at its log and at nothing
-/// before [command] starts, so a child it leaves behind holds no pipe of the
-/// app's, then [command] as written.
+/// What a job's shell runs: its output pointed at its log before [command]
+/// starts, so a child it leaves behind holds no pipe of the app's, then
+/// [command] as written. A log that cannot be opened ends the job there
+/// rather than letting it print into the app.
 String backgroundScript(int id, String command) =>
-    "mkdir -p .entoli-jobs && exec >${backgroundLog(id)} 2>&1 </dev/null\n"
+    "mkdir -p .entoli-jobs; exec >${backgroundLog(id)} 2>&1 || exit 1\n"
     "$command";
 
-/// One chat's jobs, as the agent sees them.
-class ChatJobs {
-  ChatJobs._(this._jobs, this.chatId);
+/// One chat's jobs.
+class ChatJobs implements ChatShellJobs {
+  ChatJobs._(this._fs);
 
-  final BackgroundJobs _jobs;
-  final String chatId;
+  final FileSystem _fs;
 
-  int get running => _jobs.of(chatId).value.where((j) => j.running).length;
+  @override
+  final ValueNotifier<List<ShellJob>> jobs = ValueNotifier(const []);
+  final _runs = <int, ShellRun>{};
+  final _notes = <String>[];
+  final _stoppedByUser = <int>{};
 
   /// Never reused while the app runs, dismissed jobs included: the number
   /// names the log, and a reused one would write over a log still being read.
-  int get nextId => _jobs._counts[chatId] = (_jobs._counts[chatId] ?? 0) + 1;
+  int _count = 0;
 
-  Future<ShellJob> start(
-          {required int id,
-          required String command,
-          required String logPath,
-          required ShellRun run}) =>
-      _jobs._start(chatId,
-          id: id, command: command, logPath: logPath, run: run);
+  int get running => _runs.length;
+
+  /// Start [command] as the next job, [spawn] running the script it is
+  /// wrapped in from [workspace], where its log lands.
+  Future<ShellJob> start(String command,
+      {required String workspace,
+      required ShellRun Function(String script) spawn}) async {
+    final id = ++_count;
+    final run = spawn(backgroundScript(id, command));
+    _runs[id] = run;
+    final job = ShellJob(
+      id: id,
+      command: command,
+      logPath: _fs.path.join(workspace, backgroundLog(id)),
+      pid: await run.pid,
+    );
+    jobs.value = [...jobs.value, job];
+    unawaited(run.result.then((r) => _end(job, r.returnCode)));
+    return job;
+  }
+
+  void _end(ShellJob job, int code) {
+    if (_runs.remove(job.id) == null) return;
+    jobs.value = [
+      for (final j in jobs.value) j.id == job.id ? j.ended(code) : j,
+    ];
+    final how = _stoppedByUser.remove(job.id)
+        ? "was stopped by the user"
+        : code == -1
+            ? "was stopped (killed, or out of time)"
+            : "exited with code $code";
+    _notes.add("Background job ${job.id} (`${firstLine(job.command)}`) $how.");
+  }
 
   /// How the jobs that ended since the last call ended, once each.
-  List<String> takeNotes() => _jobs._notes.remove(chatId) ?? const [];
+  List<String> takeNotes() {
+    final notes = [..._notes];
+    _notes.clear();
+    return notes;
+  }
+
+  @override
+  Future<void> stop(int id) async {
+    final run = _runs[id];
+    if (run == null) return;
+    _stoppedByUser.add(id);
+    await run.kill();
+  }
+
+  @override
+  void dismiss(int id) => jobs.value = [
+        for (final j in jobs.value)
+          if (j.id != id || j.running) j,
+      ];
+
+  static const _tailBytes = 32 * 1024;
+
+  @override
+  Stream<String> log(int id,
+      {Duration every = const Duration(milliseconds: 500)}) {
+    final path = jobs.value.where((j) => j.id == id).firstOrNull?.logPath;
+    if (path == null) return const Stream.empty();
+    final file = _fs.file(path);
+    late final StreamController<String> out;
+    Timer? timer;
+    var busy = false;
+    (int, DateTime)? seen;
+    String? last;
+    // Read again only where the file changed; close once a read after the
+    // job ended has had what it printed last.
+    Future<void> tick() async {
+      if (busy || out.isClosed) return;
+      busy = true;
+      final ended = !(jobs.value.where((j) => j.id == id).firstOrNull?.running ??
+          false);
+      final stat = await file.stat();
+      final now = (stat.size, stat.modified);
+      if (stat.type != FileSystemEntityType.notFound && now != seen) {
+        seen = now;
+        final text = await _tail(file, stat.size);
+        if (text != last && !out.isClosed) out.add(last = text);
+      }
+      busy = false;
+      if (ended) {
+        timer?.cancel();
+        await out.close();
+      }
+    }
+
+    out = StreamController<String>(
+      onListen: () {
+        unawaited(tick());
+        timer = Timer.periodic(every, (_) => unawaited(tick()));
+      },
+      onCancel: () => timer?.cancel(),
+    );
+    return out.stream;
+  }
+
+  Future<String> _tail(File file, int size) async {
+    final bytes = BytesBuilder(copy: false);
+    await file.openRead(max(0, size - _tailBytes), size).forEach(bytes.add);
+    return utf8.decode(bytes.takeBytes(), allowMalformed: true);
+  }
+
+  Future<void> _close() async {
+    final runs = [..._runs.values];
+    _runs.clear();
+    jobs.dispose();
+    await Future.wait(runs.map((r) => r.kill()));
+  }
 }

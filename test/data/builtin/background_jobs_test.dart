@@ -9,6 +9,7 @@ import "package:agent_chat/data/builtin/builtin_agent.dart";
 import "package:agent_chat/domain/agent_backend.dart";
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/domain/permission.dart";
+import "package:agent_chat/domain/shell.dart";
 
 import "../../fakes.dart";
 import "builtin_fakes.dart";
@@ -76,7 +77,7 @@ void main() {
     expect(output, contains("kill -- -4000"));
     expect(output, contains("chat:.entoli-jobs/1.log"));
 
-    final job = jobs.of("chat-1").value.single;
+    final job = jobs.forChat("chat-1").jobs.value.single;
     expect(job.running, isTrue);
     expect(job.pid, 4000);
     expect(job.logPath, p.join(workspace, ".entoli-jobs", "1.log"));
@@ -98,18 +99,17 @@ void main() {
       events.add(event);
       if (!stopped && event is ToolResultEvent) {
         stopped = true;
-        await jobs.stop("chat-1", 1);
+        await jobs.forChat("chat-1").stop(1);
         await pumpEventQueue();
       }
     }
 
     final [started, second, third] = results(events);
-    expect(started.output, isNot(contains("stopped by the user")));
-    expect(second.output,
-        startsWith("Background job 1 (`serve`) was stopped by the user."));
-    expect(second.output, endsWith("output"));
-    expect(third.output, "output");
-    expect(jobs.of("chat-1").value.single.running, isFalse);
+    expect(started.notes, isEmpty);
+    expect(second.notes, ["Background job 1 (`serve`) was stopped by the user."]);
+    expect(second.output, "output");
+    expect(third.notes, isEmpty);
+    expect(jobs.forChat("chat-1").jobs.value.single.running, isFalse);
   });
 
   test("no more than the cap run at once", () async {
@@ -131,9 +131,15 @@ void main() {
 
   test("a job's id is not reused after it is dismissed", () async {
     jobs = BackgroundJobs(fileSystemIo);
+    shell = FakeShell((_) => ok(""), canRunInBackground: true);
     final chat = jobs.forChat("chat-1");
-    expect(chat.nextId, 1);
-    expect(chat.nextId, 2);
+    ShellRun spawn(String script) => shell.start(script,
+        cwd: "/w", home: "/w", timeout: Duration.zero);
+    final first = await chat.start("a", workspace: "/w", spawn: spawn);
+    await pumpEventQueue();
+    chat.dismiss(first.id);
+    final second = await chat.start("b", workspace: "/w", spawn: spawn);
+    expect(second.id, 2);
   });
 
   test("closing a chat kills its jobs", () async {
@@ -146,20 +152,24 @@ void main() {
     await agent.run(userMessage("go")).toList();
     await jobs.closeChat("chat-1");
     expect(shell.killed, [backgroundScript(1, "serve")]);
-    expect(jobs.of("chat-1").value, isEmpty);
+    expect(jobs.forChat("chat-1").jobs.value, isEmpty);
   });
 
   test("the log tail reads the end of the file", () async {
     jobs = BackgroundJobs(fileSystemIo);
     final tempDir = Directory.systemTemp.createTempSync("background-log");
     addTearDown(() => tempDir.deleteSync(recursive: true));
-    final log = File(p.join(tempDir.path, "1.log"))..writeAsStringSync("hello\n");
+    File(p.join(tempDir.path, backgroundLog(1)))
+      ..createSync(recursive: true)
+      ..writeAsStringSync("hello\n");
     shell = FakeShell((_) => ok(""), canRunInBackground: true);
-    await jobs.forChat("c").start(
-        id: 1, command: "x", logPath: log.path, run: shell.start("x",
+    final chat = jobs.forChat("c");
+    await chat.start("x",
+        workspace: tempDir.path,
+        spawn: (script) => shell.start(script,
             cwd: tempDir.path, home: tempDir.path, timeout: Duration.zero));
     // The fake run has already ended, so the tail is read once and closes.
     await pumpEventQueue();
-    expect(await jobs.tail("c", 1).toList(), ["hello\n"]);
+    expect(await chat.log(1).toList(), ["hello\n"]);
   });
 }

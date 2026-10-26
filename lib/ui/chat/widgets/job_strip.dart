@@ -4,6 +4,8 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 import "../../../domain/shell_job.dart";
 import "../../../providers.dart";
 import "../../fonts.dart";
+import "../../widgets/dialogs.dart";
+import "shell_run.dart";
 
 /// The chat's background jobs as pills, each opening the command and the end
 /// of its log. Not turn-scoped: a job outlives the turn that started it. Not
@@ -16,11 +18,11 @@ class JobStrip extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     if (ref.watch(isMirroredChatProvider(chatId))) return const SizedBox.shrink();
-    final backend = ref.watch(agentBackendProvider);
+    final jobs = ref.watch(agentBackendProvider).jobsOf(chatId);
     return ValueListenableBuilder<List<ShellJob>>(
-      valueListenable: backend.backgroundJobs(chatId),
-      builder: (context, jobs, _) {
-        if (jobs.isEmpty) return const SizedBox.shrink();
+      valueListenable: jobs.jobs,
+      builder: (context, list, _) {
+        if (list.isEmpty) return const SizedBox.shrink();
         final theme = Theme.of(context);
         return Container(
           margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
@@ -33,12 +35,12 @@ class JobStrip extends ConsumerWidget {
             spacing: 8,
             runSpacing: 4,
             children: [
-              for (final job in jobs)
+              for (final job in list)
                 _JobPill(
                   job: job,
                   onPressed: () => showDialog<void>(
                     context: context,
-                    builder: (_) => JobSheet(chatId: chatId, id: job.id),
+                    builder: (_) => JobSheet(jobs: jobs, id: job.id),
                   ),
                 ),
             ],
@@ -64,55 +66,57 @@ class _JobPill extends StatelessWidget {
         : failed
             ? (scheme.onErrorContainer, scheme.errorContainer)
             : (scheme.onSurfaceVariant, scheme.surfaceContainer);
-    return ActionChip(
-      avatar: job.running
-          ? SizedBox(
-              width: 12,
-              height: 12,
-              child: CircularProgressIndicator(strokeWidth: 1.5, color: fg),
-            )
-          : Icon(failed ? Icons.error_outline : Icons.check, size: 16, color: fg),
-      label: Text(
-        "${firstLine(job.command)}${job.running ? "" : " · ${exitWords(job)}"}",
-        overflow: TextOverflow.ellipsis,
-        style: TextStyle(fontFamily: monoFamily, fontSize: 12, color: fg),
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 360),
+      child: ActionChip(
+        avatar: job.running
+            ? SizedBox(
+                width: 12,
+                height: 12,
+                child: CircularProgressIndicator(strokeWidth: 1.5, color: fg),
+              )
+            : Icon(failed ? Icons.error_outline : Icons.check, size: 16, color: fg),
+        label: Text(
+          "${firstLine(job.command)}${job.running ? "" : " · ${exitWords(job)}"}",
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(fontFamily: monoFamily, fontSize: 12, color: fg),
+        ),
+        backgroundColor: bg,
+        side: BorderSide.none,
+        shape: const StadiumBorder(),
+        visualDensity: VisualDensity.compact,
+        tooltip: "Background job ${job.id}",
+        onPressed: onPressed,
       ),
-      backgroundColor: bg,
-      side: BorderSide.none,
-      shape: const StadiumBorder(),
-      visualDensity: VisualDensity.compact,
-      tooltip: "Background job ${job.id}",
-      onPressed: onPressed,
     );
   }
-}
-
-/// A command's first line, cut to fit a pill.
-String firstLine(String command) {
-  final line = command.trim().split("\n").first;
-  return line.length <= 40 ? line : "${line.substring(0, 39)}…";
 }
 
 String exitWords(ShellJob job) =>
     job.exitCode == -1 ? "stopped" : "exit ${job.exitCode}";
 
 /// One job: the command, how it stands, and the end of its log as it grows.
-class JobSheet extends ConsumerWidget {
-  const JobSheet({super.key, required this.chatId, required this.id});
+class JobSheet extends StatefulWidget {
+  const JobSheet({super.key, required this.jobs, required this.id});
 
-  final String chatId;
+  final ChatShellJobs jobs;
   final int id;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final backend = ref.watch(agentBackendProvider);
+  State<JobSheet> createState() => _JobSheetState();
+}
+
+class _JobSheetState extends State<JobSheet> {
+  // Once, not per build: a new stream per rebuild would restart the tail.
+  late final Stream<String> _log = widget.jobs.log(widget.id);
+
+  @override
+  Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final mono = TextStyle(fontFamily: monoFamily, fontSize: 12.5,
-        color: theme.colorScheme.onSurface);
     return ValueListenableBuilder<List<ShellJob>>(
-      valueListenable: backend.backgroundJobs(chatId),
-      builder: (context, jobs, _) {
-        final job = jobs.where((j) => j.id == id).firstOrNull;
+      valueListenable: widget.jobs.jobs,
+      builder: (context, list, _) {
+        final job = list.where((j) => j.id == widget.id).firstOrNull;
         if (job == null) return const SizedBox.shrink();
         return AlertDialog(
           title: Text("Background job ${job.id}"),
@@ -122,15 +126,7 @@ class JobSheet extends ConsumerWidget {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: theme.colorScheme.surfaceContainerHighest,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: SelectableText(job.command, style: mono),
-                ),
+                ShellCommandText(command: job.command),
                 const SizedBox(height: 8),
                 Text(
                   job.running
@@ -142,28 +138,11 @@ class JobSheet extends ConsumerWidget {
                 const SizedBox(height: 8),
                 Flexible(
                   child: StreamBuilder<String>(
-                    // Keyed on the run, so the stream is not restarted by every
-                    // rebuild the job list causes.
-                    key: ValueKey(job.running),
-                    stream: backend.backgroundJobLog(chatId, id),
+                    stream: _log,
                     builder: (context, log) {
                       final text = log.data ?? "";
-                      return Container(
-                        width: double.infinity,
-                        constraints: const BoxConstraints(minHeight: 120),
-                        padding: const EdgeInsets.all(10),
-                        decoration: BoxDecoration(
-                          color: theme.colorScheme.surfaceContainer,
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: SingleChildScrollView(
-                          reverse: true,
-                          child: SelectableText(
-                            text.isEmpty ? "(nothing printed yet)" : text,
-                            style: mono,
-                          ),
-                        ),
-                      );
+                      return LiveShellOutput(
+                          code: text.isEmpty ? "(nothing printed yet)" : text);
                     },
                   ),
                 ),
@@ -173,13 +152,14 @@ class JobSheet extends ConsumerWidget {
           actions: [
             if (job.running)
               TextButton(
-                onPressed: () => backend.stopBackgroundJob(chatId, id),
+                onPressed: () =>
+                    catchAndSay(context, () => widget.jobs.stop(job.id)),
                 child: const Text("Stop"),
               )
             else
               TextButton(
                 onPressed: () {
-                  backend.dismissBackgroundJob(chatId, id);
+                  widget.jobs.dismiss(job.id);
                   Navigator.of(context).pop();
                 },
                 child: const Text("Dismiss"),

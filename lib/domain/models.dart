@@ -528,6 +528,10 @@ abstract class ToolResult with _$ToolResult {
     String? exceptionInfo,
     String? cwd,
     @Default([]) List<String> violations,
+    /// What happened since the last call that the model should hear — a
+    /// background job ending — beside the result rather than inside
+    /// [output], which for some tools is data a reader parses back.
+    @Default([]) List<String> notes,
     /// What decided this call's fate before it ran, and the tiers that
     /// spoke — a compound covered from two tiers carries both. Null on a
     /// result from before the field existed, and null where nothing stood

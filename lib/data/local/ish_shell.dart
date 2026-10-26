@@ -476,7 +476,7 @@ class _IshRunState {
 /// sandbox in the guest for a confined command, or no Linux installed for
 /// anything. Completes failed instead of leaving the caller's
 /// `await run.result` waiting on a run that never started.
-class _IshUnavailableRun implements ShellRun {
+class _IshUnavailableRun extends ShellRun {
   _IshUnavailableRun(this.message);
 
   final String message;
@@ -488,13 +488,10 @@ class _IshUnavailableRun implements ShellRun {
   ValueListenable<String?>? get output => null;
 
   @override
-  Future<int?> get pid async => null;
-
-  @override
   Future<void> kill() async {}
 }
 
-class _IshRun implements ShellRun {
+class _IshRun extends ShellRun {
   _IshRun(this._session);
   final _IshSession _session;
   final _IshRunState state = _IshRunState();
@@ -508,12 +505,10 @@ class _IshRun implements ShellRun {
     return state.output;
   }
   @override
-  Future<int?> get pid async => null;
-  @override
   Future<void> kill() async => _session._interrupt(this, byTimeout: false);
 }
 
-class _IshOneShotRun implements ShellRun {
+class _IshOneShotRun extends ShellRun {
   _IshOneShotRun({
     required this.rootfsDir,
     required this.dataDir,
@@ -562,9 +557,6 @@ class _IshOneShotRun implements ShellRun {
     _state.watched = true;
     return _state.output;
   }
-
-  @override
-  Future<int?> get pid async => null;
 
   @override
   Future<void> kill() async => _stop();

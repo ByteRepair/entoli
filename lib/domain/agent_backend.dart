@@ -535,18 +535,8 @@ abstract class AgentBackend {
   /// [SubAgentFeed].
   SubAgentFeed get subAgents;
 
-  /// [chatId]'s background jobs as they start and end, the ended ones until
-  /// they are dismissed. See [ShellJob].
-  ValueListenable<List<ShellJob>> backgroundJobs(String chatId);
-
-  /// Stop a running job. One already over is left as it is.
-  Future<void> stopBackgroundJob(String chatId, int id);
-
-  /// Take an ended job off the list.
-  void dismissBackgroundJob(String chatId, int id);
-
-  /// The end of a job's log, as it grows, until the job ends.
-  Stream<String> backgroundJobLog(String chatId, int id);
+  /// [chatId]'s background jobs. See [ShellJob].
+  ChatShellJobs jobsOf(String chatId);
 
   /// What the chat's model last reported a request cost, in context tokens —
   /// the auto-compact threshold's input. Null where nothing has reported:

@@ -455,8 +455,11 @@ String? _responseIdOf(MessagePart part) => switch (part) {
 /// user talking, not a command reporting. One that failed does not: the reason
 /// is in `exceptionInfo` and the answers are empty, so it reads as any other
 /// failure would.
-String _toolResultText(String tool, ToolResult result) =>
-    tool == askToolName && result.returnCode == 0 ? result.output : _observed(result);
+String _toolResultText(String tool, ToolResult result) {
+  final text =
+      tool == askToolName && result.returnCode == 0 ? result.output : _observed(result);
+  return result.notes.isEmpty ? text : "${result.notes.join("\n")}\n\n$text";
+}
 
 /// [observation] of a result, memoised on the result itself. A running turn
 /// re-words its whole reply after every step — see "One accumulation" — and

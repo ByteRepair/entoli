@@ -267,6 +267,19 @@ void main() {
           .readAsStringSync(), "started\n");
     });
 
+    test("a one-shot command that reads its input reads nothing", () async {
+      final result = await shell
+          .start("cat; echo after",
+              cwd: workspace.path,
+              home: home.path,
+              timeout: const Duration(seconds: 10),
+              oneShot: true)
+          .result
+          .timeout(const Duration(seconds: 5));
+      expect(result.returnCode, 0);
+      expect(result.output, "after\n");
+    });
+
     test("closing a session closes the shell with it", () async {
       final cwd = shell.sessionCwd(workspace.path);
       await start("cd sub").result;

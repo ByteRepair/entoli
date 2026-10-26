@@ -128,18 +128,7 @@ class BuiltinBackend implements AgentBackend {
   late final BackgroundJobs _jobs = BackgroundJobs(config.fs);
 
   @override
-  ValueListenable<List<ShellJob>> backgroundJobs(String chatId) =>
-      _jobs.of(chatId);
-
-  @override
-  Future<void> stopBackgroundJob(String chatId, int id) => _jobs.stop(chatId, id);
-
-  @override
-  void dismissBackgroundJob(String chatId, int id) => _jobs.dismiss(chatId, id);
-
-  @override
-  Stream<String> backgroundJobLog(String chatId, int id) =>
-      _jobs.tail(chatId, id);
+  ChatShellJobs jobsOf(String chatId) => _jobs.forChat(chatId);
 
   /// Limits and timeouts for every turn.
   final BuiltinOptions options;

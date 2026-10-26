@@ -15,10 +15,8 @@ void main() {
         id: id,
         command: command,
         logPath: "/w/.entoli-jobs/$id.log",
-        startedAt: DateTime(2026),
         pid: 4000 + id,
         exitCode: exitCode,
-        endedAt: exitCode == null ? null : DateTime(2026),
       );
 
   Future<void> pumpStrip(WidgetTester tester, {bool mirrored = false}) async {
@@ -34,9 +32,7 @@ void main() {
     ));
   }
 
-  void seed(List<ShellJob> jobs) =>
-      (backend.backgroundJobs("chat-1") as ValueNotifier<List<ShellJob>>)
-          .value = jobs;
+  void seed(List<ShellJob> jobs) => backend.jobsOf("chat-1").jobs.value = jobs;
 
   testWidgets("a pill per job, the ended ones saying how", (tester) async {
     await pumpStrip(tester);
@@ -52,7 +48,7 @@ void main() {
       (tester) async {
     await pumpStrip(tester);
     seed([job(1, "npm run dev")]);
-    backend.jobLogs[1] = "listening on :3000\n";
+    backend.jobsOf("chat-1").logs[1] = "listening on :3000\n";
     await tester.pump();
 
     // A running pill spins, so nothing here settles: pump through the
@@ -61,12 +57,12 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
     expect(find.text("Background job 1"), findsOneWidget);
-    expect(find.text("listening on :3000\n"), findsOneWidget);
+    expect(find.text("listening on :3000"), findsOneWidget);
     expect(find.text("Running · pid 4001"), findsOneWidget);
 
     await tester.tap(find.text("Stop"));
     await tester.pump();
-    expect(backend.stoppedJobs, [1]);
+    expect(backend.jobsOf("chat-1").stopped, [1]);
   });
 
   testWidgets("an ended job is dismissed from its sheet", (tester) async {

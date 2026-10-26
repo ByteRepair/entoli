@@ -184,8 +184,9 @@ const _bashBackgroundArg = {
   },
 };
 
-/// [tool] with [_bashBackgroundArg], where the shell can leave a run going.
-LlmTool _withBackground(LlmTool tool) => LlmTool(
+/// [tool] with [_bashBackgroundArg] where [on]: the shell can leave a run
+/// going.
+LlmTool _withBackground(LlmTool tool, bool on) => !on ? tool : LlmTool(
       name: tool.name,
       description: tool.description,
       schema: {
@@ -425,9 +426,8 @@ List<LlmTool> agentTools({
       if (caps.commands)
         oneShot
             ? bashToolOneShot
-            : switch (sandboxed ? bashToolSandboxed : bashTool) {
-                final tool => background ? _withBackground(tool) : tool,
-              },
+            : _withBackground(
+                sandboxed ? bashToolSandboxed : bashTool, background),
       if (caps.ask) askTool,
       if (caps.task) taskTool,
       if (caps.webSearch) ...[websearchTool, webfetchTool],
@@ -1298,11 +1298,11 @@ class BuiltinAgent {
         bashToolName => _bash,
         _ => null,
       };
-      yield* _withJobNotes(
-          call,
-          tool == null
-              ? _reject(call, unknownTool(call.name, _tools.map((t) => t.name)))
-              : tool(call));
+      final ran = tool == null
+          ? _reject(call, unknownTool(call.name, _tools.map((t) => t.name)))
+          : tool(call);
+      final jobs = backgroundJobs;
+      yield* jobs == null ? ran : _withJobNotes(jobs, call, ran);
     }
 
     if (taskCalls.isEmpty) return;
@@ -1342,21 +1342,15 @@ class BuiltinAgent {
   }
 
   /// [events] with how the background jobs that ended since the last call
-  /// ended put at the head of [call]'s result, as the browser's notes are:
-  /// on the result, so a reload words it the same. Not on an answered
-  /// question, which is worded from its answers and would drop them.
+  /// ended carried on [call]'s result: on the result, so a reload words it
+  /// the same.
   Stream<AgentEvent> _withJobNotes(
-      LlmToolCall call, Stream<AgentEvent> events) async* {
+      ChatJobs jobs, LlmToolCall call, Stream<AgentEvent> events) async* {
     await for (final event in events) {
-      if (event is ToolResultEvent &&
-          event.result.callId == call.id &&
-          call.name != askToolName &&
-          call.name != presentPlanToolName) {
-        final notes = backgroundJobs?.takeNotes() ?? const [];
+      if (event is ToolResultEvent && event.result.callId == call.id) {
+        final notes = jobs.takeNotes();
         if (notes.isNotEmpty) {
-          final output = event.result.output;
-          yield ToolResultEvent(event.result.copyWith(
-              output: "${notes.join("\n")}${output.isEmpty ? "" : "\n\n$output"}"));
+          yield ToolResultEvent(event.result.copyWith(notes: notes));
           continue;
         }
       }
@@ -3236,21 +3230,18 @@ class BuiltinAgent {
           "${BackgroundJobs.maxRunning} background jobs are already running "
           "in this chat. Stop one you no longer need first.");
     }
-    final id = jobs.nextId;
-    final run = shell.start(backgroundScript(id, command),
-        cwd: workspace,
-        home: projectWorkspace,
-        timeout: BackgroundJobs.timeout,
-        environment: environment,
-        oneShot: true,
-        project: project,
-        sandbox: sandbox,
-        readOnly: readOnlyDirs);
-    final job = await jobs.start(
-        id: id,
-        command: command,
-        logPath: fs.path.join(workspace, backgroundLog(id)),
-        run: run);
+    final job = await jobs.start(command,
+        workspace: workspace,
+        spawn: (script) => shell.start(script,
+            cwd: workspace,
+            home: projectWorkspace,
+            timeout: BackgroundJobs.timeout,
+            environment: environment,
+            oneShot: true,
+            project: project,
+            sandbox: sandbox,
+            readOnly: readOnlyDirs));
+    final log = backgroundLog(job.id);
     final where = shell.guestRoot == null ? " (${job.logPath})" : "";
     final pid = job.pid;
     final stop = pid == null
@@ -3261,10 +3252,10 @@ class BuiltinAgent {
                 "`kill -- -$pid` stops it and everything it started.";
     return ShellResult(
         returnCode: 0,
-        output: "Started in the background as job $id.$stop Its output goes "
-            "to ${backgroundLog(id)} in the chat workspace$where: read it with "
-            "`tail` or the read tool at chat:${backgroundLog(id)}. Your next "
-            "call after it exits says how it ended.");
+        output: "Started in the background as job ${job.id}.$stop Its output "
+            "goes to $log in the chat workspace$where: read it with `tail` or "
+            "the read tool at chat:$log. Your next call after it exits says "
+            "how it ended.");
   }
 
   /// The deterministic bash tiers the rules leave standing: every segment
