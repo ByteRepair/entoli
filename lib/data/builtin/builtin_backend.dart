@@ -474,7 +474,6 @@ class BuiltinBackend implements AgentBackend {
             : null,
         seesImages: target.images,
         seesPdfs: target.pdfs,
-        browserHidden: browser.hidden,
         browserUploads: AppSettings.load(config).agentBrowserUploads,
         browserApprove: switch (AppSettings.load(config).agentBrowserApproval) {
           BrowserApproval.never => ApproveMode.never,

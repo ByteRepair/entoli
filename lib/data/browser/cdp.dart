@@ -10,8 +10,8 @@ class CdpConnection {
         onDone: _finish, onError: (_) => _finish(), cancelOnError: true);
   }
 
-  static Future<CdpConnection> connect(Uri url) async =>
-      CdpConnection._(await WebSocket.connect(url.toString())
+  static Future<CdpConnection> connect(Uri url, {HttpClient? client}) async =>
+      CdpConnection._(await WebSocket.connect(url.toString(), customClient: client)
           .timeout(const Duration(seconds: 15)));
 
   final WebSocket _socket;

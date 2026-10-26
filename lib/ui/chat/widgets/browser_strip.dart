@@ -772,11 +772,13 @@ class _BrowserCardState extends State<BrowserCard> {
                       ),
                     ),
                   ),
+                  // Android's WebView has no window; this card is the view.
+                  if (defaultTargetPlatform != TargetPlatform.android)
                   IconButton(
                     tooltip: "Open in a window",
                     icon: const Icon(Icons.open_in_new),
                     onPressed: open
-                        ? () => _send(() => widget.tab.show(byUser: true))
+                        ? () => _send(() => widget.tab.show())
                         : null,
                   ),
                   ValueListenableBuilder<BrowserHold?>(

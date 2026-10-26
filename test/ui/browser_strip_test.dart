@@ -1,7 +1,8 @@
 import "dart:async";
 import "dart:convert";
 
-import "package:flutter/foundation.dart" show ValueListenable, ValueNotifier;
+import "package:flutter/foundation.dart"
+    show ValueListenable, ValueNotifier, debugDefaultTargetPlatformOverride;
 import "package:flutter/gestures.dart";
 import "package:flutter/material.dart";
 import "package:flutter/services.dart";
@@ -44,10 +45,7 @@ class _Tab implements BrowserTab {
   Future<void> historyBack() async => done.add("back");
 
   @override
-  Future<String> show({bool byUser = false}) async {
-    done.add(byUser ? "window, by the user" : "window");
-    return "";
-  }
+  Future<void> show() async => done.add("window");
 
   @override
   Future<void> forward() async => done.add("forward");
@@ -466,12 +464,23 @@ void main() {
       expect(find.byType(ActionChip), findsNothing);
     });
 
+    // A desktop's alone: Android's WebView has no window to open.
     testWidgets("the card opens the browser in a window, as the user",
         (tester) async {
-      final tab = await openCard(tester);
-      await tester.tap(find.byTooltip("Open in a window"));
-      await tester.pump();
-      expect(tab.done, ["window, by the user"]);
+      debugDefaultTargetPlatformOverride = TargetPlatform.linux;
+      try {
+        final tab = await openCard(tester);
+        await tester.tap(find.byTooltip("Open in a window"));
+        await tester.pump();
+        expect(tab.done, ["window"]);
+      } finally {
+        debugDefaultTargetPlatformOverride = null;
+      }
+    });
+
+    testWidgets("Android's card has no window to open", (tester) async {
+      await openCard(tester);
+      expect(find.byTooltip("Open in a window"), findsNothing);
     });
 
     testWidgets("the card hides the browser from the agent, and gives it back",

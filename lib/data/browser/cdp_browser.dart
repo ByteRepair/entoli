@@ -4,6 +4,7 @@ import "dart:io";
 import "dart:math";
 
 import "package:flutter/foundation.dart" show ValueListenable, ValueNotifier;
+import "package:flutter/services.dart" show MethodChannel;
 import "package:path/path.dart" as p;
 
 import "../../core/log.dart";
@@ -26,7 +27,12 @@ class CdpBrowser extends AgentBrowser {
     required this.embedded,
     required this.visible,
     this.idle = const Duration(minutes: 10),
+    this.webViews,
   });
+
+  /// Android's own WebViews, made one per chat by `BrowserChannel.kt`, in
+  /// place of a launched browser. Null on the desktops.
+  final MethodChannel? webViews;
 
   /// `<cache>/browser`: the download, the profile and the probes under it.
   final String browserDir;
@@ -46,7 +52,7 @@ class CdpBrowser extends AgentBrowser {
 
   String? get _executable {
     final value = picked();
-    if (value == null) return null;
+    if (value == null || webViews != null) return value;
     if (value == embeddedBrowserId) return embedded.executable;
     return File(value).existsSync() ? value : null;
   }
@@ -57,8 +63,8 @@ class CdpBrowser extends AgentBrowser {
   @override
   bool get configured => _executable != null;
 
-  @override
-  bool get hidden => !visible();
+  /// Android's WebView has no window to be without.
+  bool get _hidden => webViews == null && !visible();
 
   final _isRunning = ValueNotifier(false);
 
@@ -120,7 +126,7 @@ class CdpBrowser extends AgentBrowser {
         (throw const CdpException(
             "No browser is picked, or the picked one is gone: see Settings > "
             "Agent Browser."));
-    final windowed = _shown || visible();
+    final windowed = !_hidden || _shown;
     final running = _running;
     if (running != null &&
         running.executable == exe &&
@@ -132,7 +138,9 @@ class CdpBrowser extends AgentBrowser {
       await _quit("The browser restarted: its settings changed.");
     }
     return _starting ??= _start(exe, windowed: windowed).then((started) async {
-      await _watchDownloads(started);
+      // shortcut: a WebView's downloads go to a DownloadListener, not the
+      // protocol, so Android has none; route them through one when wanted.
+      if (webViews == null) await _watchDownloads(started);
       _running = started;
       _isRunning.value = true;
       // The user closed its window, or it crashed: a quit like any other.
@@ -150,6 +158,7 @@ class CdpBrowser extends AgentBrowser {
   /// for its own and launches again with the word taken out — by flag rather
   /// than per tab, so a cross-site frame and a worker send it too.
   Future<_Running> _start(String exe, {required bool windowed}) async {
+    if (webViews != null) return _connectWebViews(exe);
     if (windowed) return _launch(exe, _profile);
     final known = _userAgents[exe];
     if (known != null) {
@@ -168,9 +177,37 @@ class CdpBrowser extends AgentBrowser {
     return _launch(exe, _profile, headless: true, userAgent: fixed);
   }
 
+  /// Debugging on, the WebViews serve the protocol on an abstract socket
+  /// named for this process, which Chromium lets only this app's own user
+  /// (and adb's shell) connect to.
+  Future<_Running> _connectWebViews(String picked) async {
+    await webViews!.invokeMethod<void>("start");
+    final socket = InternetAddress("@webview_devtools_remote_$pid",
+        type: InternetAddressType.unix);
+    final client = HttpClient()
+      ..connectionFactory = (_, _, _) => Socket.startConnect(socket, 0);
+    for (var attempt = 0;; attempt++) {
+      try {
+        final request =
+            await client.getUrl(Uri.parse("http://localhost/json/version"));
+        final version = jsonDecode(
+            await (await request.close()).transform(utf8.decoder).join()) as Map;
+        final url = Uri.parse(version["webSocketDebuggerUrl"] as String);
+        return _Running(picked, null,
+            await CdpConnection.connect(url, client: client),
+            windowed: true);
+      } on SocketException {
+        // The server starts with the first WebView, a moment after debugging
+        // is turned on.
+        if (attempt >= 20) rethrow;
+        await Future<void>.delayed(const Duration(milliseconds: 250));
+      }
+    }
+  }
+
   /// Quit; the next start is hidden again if that is the setting. What a
-  /// sign-in typed goes too — not on [_quit] alone, which `browser_show`'s
-  /// restart runs before reopening the very address that may carry it.
+  /// sign-in typed goes too — not on [_quit] alone, which the card's "Open in
+  /// a window" restart runs before reopening the very address that may carry it.
   @override
   Future<void> close({String why = "The user quit the browser."}) async {
     _ended();
@@ -184,6 +221,7 @@ class CdpBrowser extends AgentBrowser {
     await _starting?.then((_) {}, onError: (_) {});
     await close(why: "The user deleted the browser's data: every site is "
         "signed out.");
+    await webViews?.invokeMethod<void>("clearData");
     final profile = Directory(_profile);
     if (await profile.exists()) await profile.delete(recursive: true);
   }
@@ -212,6 +250,7 @@ class CdpBrowser extends AgentBrowser {
       tab._lose(identical(tab, quietly) ? null : why);
     }
     if (running != null) await _stop(running);
+    await webViews?.invokeMethod<void>("close");
   }
 
   /// Quit the hidden browser so the next start comes up with a window.
@@ -365,22 +404,25 @@ class _Running {
   _Running(this.executable, this.process, this.cdp, {required this.windowed});
 
   final String executable;
-  final Process process;
+
+  /// Null for Android's WebViews, which are this app's own.
+  final Process? process;
   final CdpConnection cdp;
   final bool windowed;
 }
 
 /// Ask the browser to quit, and kill it where it will not.
 Future<void> _stop(_Running running) async {
+  final process = running.process;
+  if (process == null) return running.cdp.close();
   try {
     await running.cdp.send("Browser.close", timeout: const Duration(seconds: 5));
   } catch (_) {
     // Gone already, or not answering: the kill below covers both.
   }
   await running.cdp.close();
-  await running.process.exitCode
-      .timeout(const Duration(seconds: 5), onTimeout: () {
-    running.process.kill(ProcessSignal.sigkill);
+  await process.exitCode.timeout(const Duration(seconds: 5), onTimeout: () {
+    process.kill(ProcessSignal.sigkill);
     return -1;
   });
 }
@@ -666,9 +708,10 @@ class _CdpTab implements BrowserTab {
     final cdp = running.cdp;
     var page = _page;
     if (page == null) {
-      final created =
-          await cdp.send("Target.createTarget", params: {"url": "about:blank"});
-      final target = created["targetId"] as String;
+      final target = _browser.webViews == null
+          ? (await cdp.send("Target.createTarget",
+              params: {"url": "about:blank"}))["targetId"] as String
+          : await _webView(cdp);
       final attached = await cdp.send("Target.attachToTarget",
           params: {"targetId": target, "flatten": true});
       final session = attached["sessionId"] as String;
@@ -713,8 +756,27 @@ class _CdpTab implements BrowserTab {
       });
     }
     // In front, or Chrome throttles it and a screenshot of it never comes.
-    await cdp.send("Target.activateTarget", params: {"targetId": page.target});
+    if (_browser.webViews == null) {
+      await cdp.send("Target.activateTarget", params: {"targetId": page.target});
+    }
     return (cdp: cdp, target: page.target, session: page.session);
+  }
+
+  /// This chat's WebView, which the protocol cannot create: the app makes it
+  /// on a first address naming the chat, and it is found by that.
+  Future<String> _webView(CdpConnection cdp) async {
+    await _browser.webViews!.invokeMethod<void>("open", {"chat": chatId});
+    for (var attempt = 0; attempt < 40; attempt++) {
+      final targets = await cdp.send("Target.getTargets");
+      for (final info
+          in (targets["targetInfos"] as List? ?? const []).cast<Map>()) {
+        if (info["url"] == "about:blank?entoli=$chatId") {
+          return info["targetId"] as String;
+        }
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 250));
+    }
+    throw const CdpException("The browser's page did not open.");
   }
 
   Future<dynamic> _eval(String expression) async {
@@ -1379,10 +1441,10 @@ class _CdpTab implements BrowserTab {
   /// raise, so it is quit and started again with one, on the same profile —
   /// the cookies a check leaves are kept for when it is hidden again.
   @override
-  Future<String> show({bool byUser = false}) async {
+  Future<void> show() async {
     if (_browser._running?.windowed ?? false) {
       await _attach();
-      return "The browser window is open.";
+      return;
     }
     String? url;
     if (_page != null) {
@@ -1393,15 +1455,12 @@ class _CdpTab implements BrowserTab {
       }
     }
     await _browser._showWindow(this);
-    if (byUser) {
-      _note("The user opened the browser in a window, which reloaded the "
-          "page.");
-    }
+    _note("The user opened the browser in a window, which reloaded the page.");
     if (url == null || url == "about:blank") {
       await _attach();
-      return "The browser window is open.";
+    } else {
+      await goto(url);
     }
-    return goto(url);
   }
 
   @override
@@ -1762,6 +1821,5 @@ const challengeNote = "This looks like a human-verification check. Its "
     "widget is usually a frame listed above, which has no numbered elements "
     "of its own: where you can take a screenshot, do, then click or drag "
     "where it shows by x and y, checking with a last_click screenshot that "
-    "the click hit it. If it will not pass after a few tries, call "
-    "browser_show if the browser is hidden, ask the user to complete it in "
-    "the window, then carry on.";
+    "the click hit it. If it will not pass after a few tries, ask the user to "
+    "complete it from the chat's browser card, then carry on.";

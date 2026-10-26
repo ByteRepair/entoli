@@ -22,10 +22,6 @@ abstract class AgentBrowser {
   /// Asked per turn, so a pick reaches the next turn without a restart.
   bool get configured;
 
-  /// Whether it runs with no window: the setting's default. A hidden browser
-  /// can still be shown for the user to finish a check, until it next quits.
-  bool get hidden;
-
   /// Whether a browser process is up, for the settings page's Quit.
   ValueListenable<bool> get running;
 
@@ -210,12 +206,11 @@ abstract class BrowserTab {
   /// The whole page's text and elements, from character [offset] on.
   Future<String> pageText({int offset = 0});
 
-  /// Bring the browser up with a window on this page, for the user to finish
-  /// what the agent cannot — a passkey is one, its dialog having nowhere to
-  /// draw in a hidden browser. It goes back to hidden the next time it quits.
-  /// Nothing where it has a window already. [byUser] notes it to the agent:
-  /// the restart reloads the page.
-  Future<String> show({bool byUser = false});
+  /// The user's own: bring the browser up with a window on this page, to
+  /// finish what the agent cannot — a passkey is one, its dialog having
+  /// nowhere to draw in a hidden browser. It goes back to hidden the next
+  /// time it quits. Noted to the agent, since the restart reloads the page.
+  Future<void> show();
 
   /// The viewport, or the element [ref] alone, as a PNG at CSS-pixel scale.
   /// [markClick] draws a red dot where the last click on this page landed.
@@ -470,9 +465,6 @@ class UnavailableAgentBrowser extends AgentBrowser {
 
   @override
   bool get configured => false;
-
-  @override
-  bool get hidden => true;
 
   static final _notRunning = ValueNotifier(false);
 
