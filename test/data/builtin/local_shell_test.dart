@@ -3,6 +3,7 @@ import "dart:io";
 import "package:flutter_test/flutter_test.dart";
 import "package:path/path.dart" as p;
 
+import "package:agent_chat/data/builtin/background_jobs.dart" show backgroundScript;
 import "package:agent_chat/data/builtin/local_shell.dart";
 import "package:agent_chat/data/local/landlock.dart";
 import "package:agent_chat/domain/shell.dart";
@@ -259,6 +260,24 @@ void main() {
           .timeout(const Duration(seconds: 5));
       expect(result.returnCode, 0);
       expect(result.output, "after\n");
+    });
+
+    test("a background script writes its log, names its pid, and a child "
+        "it leaves behind holds nothing of the run's", () async {
+      final run = shell.start(
+          backgroundScript(1, "sleep 30 &\necho started"),
+          cwd: workspace.path,
+          home: home.path,
+          timeout: const Duration(seconds: 10),
+          oneShot: true);
+      final pid = await run.pid;
+      final result = await run.result.timeout(const Duration(seconds: 5));
+
+      expect(pid, isNotNull);
+      expect(result.returnCode, 0);
+      expect(result.output, isEmpty);
+      expect(File(p.join(workspace.path, ".entoli-jobs", "1.log"))
+          .readAsStringSync(), "started\n");
     });
 
     test("closing a session closes the shell with it", () async {

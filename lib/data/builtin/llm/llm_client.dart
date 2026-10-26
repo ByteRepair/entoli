@@ -9,11 +9,16 @@ import "package:collection/collection.dart";
 enum LlmRole { system, user, assistant, tool }
 
 class LlmToolCall {
-  const LlmToolCall({required this.id, required this.name, required this.argumentsJson});
+  const LlmToolCall(
+      {required this.id, required this.name, required this.argumentsJson, this.signature});
 
   final String id;
   final String name;
   final String argumentsJson;
+
+  /// Gemini's thought signature for the call, which it rejects the call's
+  /// replay without. See [ToolCall.signature].
+  final String? signature;
 
   /// By field: the session's wordings are built twice over the same records
   /// (live, and read back), and every parity check between them compares
@@ -23,10 +28,11 @@ class LlmToolCall {
       other is LlmToolCall &&
       id == other.id &&
       name == other.name &&
-      argumentsJson == other.argumentsJson;
+      argumentsJson == other.argumentsJson &&
+      signature == other.signature;
 
   @override
-  int get hashCode => Object.hash(id, name, argumentsJson);
+  int get hashCode => Object.hash(id, name, argumentsJson, signature);
 }
 
 /// A file the user attached, as the provider takes it. Text is inlined into

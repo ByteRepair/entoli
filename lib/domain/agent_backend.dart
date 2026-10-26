@@ -4,6 +4,7 @@ import "package:flutter/foundation.dart" show ValueListenable;
 
 import "../domain/app_settings.dart" show ImageQuality;
 import "../domain/ask.dart";
+import "../domain/shell_job.dart";
 import "../domain/builtin_project.dart";
 import "../domain/chat_log.dart";
 import "../domain/models.dart";
@@ -533,6 +534,9 @@ abstract class AgentBackend {
   /// The running sub-agents' transcripts, as they are written. See
   /// [SubAgentFeed].
   SubAgentFeed get subAgents;
+
+  /// [chatId]'s background jobs. See [ShellJob].
+  ChatShellJobs jobsOf(String chatId);
 
   /// What the chat's model last reported a request cost, in context tokens —
   /// the auto-compact threshold's input. Null where nothing has reported:

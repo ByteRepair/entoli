@@ -12,6 +12,7 @@ import "../../domain/agent_browser.dart";
 import "../../domain/trigger_manager.dart" show TriggerRegistryFactory;
 import "../../domain/app_settings.dart";
 import "../../domain/ask.dart";
+import "../../domain/shell_job.dart";
 import "../../domain/chat_log.dart" show replayTree;
 import "../../domain/chat_store.dart";
 import "../../domain/file_tools.dart";
@@ -29,6 +30,7 @@ import "../../domain/voice.dart" show Synthesize, Transcribe;
 import "../local/file_sub_agent_log.dart";
 import "../prompts/prompt_sources.dart" show promptDirsOf;
 import "../prompts/skill_package.dart";
+import "background_jobs.dart";
 import "builtin_agent.dart";
 import "customization_tools.dart" show SettingsEditor;
 import "compact_prompt.dart";
@@ -122,6 +124,11 @@ class BuiltinBackend implements AgentBackend {
 
   @override
   final SubAgentFeed subAgents = SubAgentFeed();
+
+  late final BackgroundJobs _jobs = BackgroundJobs(config.fs);
+
+  @override
+  ChatShellJobs jobsOf(String chatId) => _jobs.forChat(chatId);
 
   /// Limits and timeouts for every turn.
   final BuiltinOptions options;
@@ -521,6 +528,8 @@ class BuiltinBackend implements AgentBackend {
         attachmentsDir: config.resourcesDir(chatId, project: project),
         readOnlyDirs: readOnly,
         registerTrigger: triggerRegistry?.call(chatId, project),
+        backgroundJobs:
+            shell.canRunInBackground ? _jobs.forChat(chatId) : null,
         editSettings: editSettings,
         packageSkill: (path, name) async {
           final resolved = resolvePath(path);
@@ -1503,6 +1512,7 @@ class BuiltinBackend implements AgentBackend {
     final project = await store.projectOf(chatId);
     shell.closeSession(config.workspaceDir(chatId, project: project));
     await abort(chatId);
+    await _jobs.closeChat(chatId);
     _sessions.remove(chatId);
     _usage.remove(chatId);
     _windows.remove(chatId);
@@ -1524,6 +1534,7 @@ class BuiltinBackend implements AgentBackend {
   @override
   Future<void> shutdown() async {
     await Future.wait(_running.value.toList().map(abort));
+    await _jobs.close();
     _sessions.clear();
     registry.close();
     webSearch.close();

@@ -28,6 +28,7 @@ import "../../domain/turn_recorder.dart";
 import "../../domain/web_search.dart";
 import "../../domain/workspace.dart" show isUnder;
 import "ask_tool.dart";
+import "background_jobs.dart";
 import "browser_tools.dart";
 import "artifact_tool.dart";
 import "compact_prompt.dart" show estimateTokens;
@@ -167,6 +168,35 @@ const bashToolSandboxed = LlmTool(
     "required": ["command"],
   },
 );
+
+const _bashBackgroundArg = {
+  "background": {
+    "type": "boolean",
+    "description":
+        "Start the command and answer at once, leaving it running: for a "
+        "server, a watcher, or anything that does not exit on its own. It runs "
+        "in a fresh shell that starts in the chat workspace (an earlier `cd` "
+        "does not apply) with no input, and everything it prints goes to a log "
+        "file the answer names: read it with `tail` or the read tool. The "
+        "answer gives its process id to stop it with, and your next call after "
+        "it exits says how it ended. Use this rather than `&`, `nohup` or "
+        "`setsid`, which leave a command holding the call open.",
+  },
+};
+
+/// [tool] with [_bashBackgroundArg] where [on]: the shell can leave a run
+/// going.
+LlmTool _withBackground(LlmTool tool, bool on) => !on ? tool : LlmTool(
+      name: tool.name,
+      description: tool.description,
+      schema: {
+        ...tool.schema,
+        "properties": {
+          ...tool.schema["properties"] as Map<String, dynamic>,
+          ..._bashBackgroundArg,
+        },
+      },
+    );
 
 /// [bashTool] as a sub-agent is offered it: the commands run one-shot, so
 /// there is no state the `restart` could drop and none the description could
@@ -381,6 +411,7 @@ List<LlmTool> agentTools({
   BrowserUploadPolicy? browserUpload,
   bool oneShot = false,
   bool sandboxed = false,
+  bool background = false,
   List<PromptDocument>? participants,
   bool member = false,
   bool customizing = false,
@@ -390,13 +421,13 @@ List<LlmTool> agentTools({
       file_tool_defs.readTool,
       file_tool_defs.writeTool,
       file_tool_defs.editTool,
-      // A sub-agent is not offered a way out: it has nobody to approve one.
+      // A sub-agent is not offered a way out: it has nobody to approve one,
+      // nor a background job: nobody would hear how it ended.
       if (caps.commands)
         oneShot
             ? bashToolOneShot
-            : sandboxed
-                ? bashToolSandboxed
-                : bashTool,
+            : _withBackground(
+                sandboxed ? bashToolSandboxed : bashTool, background),
       if (caps.ask) askTool,
       if (caps.task) taskTool,
       if (caps.webSearch) ...[websearchTool, webfetchTool],
@@ -495,6 +526,7 @@ class BuiltinAgent {
     this.saveResource,
     this.packageSkill,
     this.registerTrigger,
+    this.backgroundJobs,
     this.editSettings,
     this.onShellOutput,
     this.onUsage,
@@ -892,6 +924,10 @@ class BuiltinAgent {
   /// fire sends into *this* chat, which is one a worker is not.
   final TriggerRegistry? registerTrigger;
 
+  /// This chat's background jobs, or null, which withholds `bash`'s
+  /// `background`: a sub-agent, or a shell that cannot leave a run going.
+  final ChatJobs? backgroundJobs;
+
   /// What the customization tools write through, or null, which withholds
   /// them — as it does on a sub-agent.
   final SettingsEditor? editSettings;
@@ -935,6 +971,7 @@ class BuiltinAgent {
         browserUpload: browserUploads,
         oneShot: oneShot,
         sandboxed: _helper != null,
+        background: backgroundJobs != null,
         participants: roomParticipants,
         member: viewer != null,
         customizing: _customizing,
@@ -1261,9 +1298,11 @@ class BuiltinAgent {
         bashToolName => _bash,
         _ => null,
       };
-      yield* tool == null
+      final ran = tool == null
           ? _reject(call, unknownTool(call.name, _tools.map((t) => t.name)))
           : tool(call);
+      final jobs = backgroundJobs;
+      yield* jobs == null ? ran : _withJobNotes(jobs, call, ran);
     }
 
     if (taskCalls.isEmpty) return;
@@ -1300,6 +1339,23 @@ class BuiltinAgent {
         () => _execute(call, command, analysis: analysis, unconfined: leave),
         argumentsText: command, analysis: analysis, unsandboxed: escaping);
     yield ToolResultEvent(_ran(call, _commandResult!));
+  }
+
+  /// [events] with how the background jobs that ended since the last call
+  /// ended carried on [call]'s result: on the result, so a reload words it
+  /// the same.
+  Stream<AgentEvent> _withJobNotes(
+      ChatJobs jobs, LlmToolCall call, Stream<AgentEvent> events) async* {
+    await for (final event in events) {
+      if (event is ToolResultEvent && event.result.callId == call.id) {
+        final notes = jobs.takeNotes();
+        if (notes.isNotEmpty) {
+          yield ToolResultEvent(event.result.copyWith(notes: notes));
+          continue;
+        }
+      }
+      yield event;
+    }
   }
 
   /// Run a batch of `task` calls concurrently, capped to
@@ -2819,6 +2875,7 @@ class BuiltinAgent {
         name: call.name,
         argumentsJson: call.argumentsJson,
         argumentsText: text,
+        signature: call.signature,
       ));
 
   static ToolResultEvent _ok(LlmToolCall call, String output) =>
@@ -3140,6 +3197,10 @@ class BuiltinAgent {
         return ShellResult.failed(note);
       }
     }
+    final jobs = backgroundJobs;
+    if (jobs != null && boolArg(call.argumentsJson, "background")) {
+      return _startBackground(jobs, command, sandbox);
+    }
     final run = shell.start(command,
         cwd: workspace,
         home: projectWorkspace,
@@ -3157,6 +3218,38 @@ class BuiltinAgent {
     } finally {
       _running = null;
     }
+  }
+
+  /// Start [command] as a background job and answer with where it went. A
+  /// one-shot run, so its own shell is all it holds, under the sandbox the
+  /// gate decided; its streams are its log and nothing, which is what lets a
+  /// `toolbox run` or a server in it stop holding anything open.
+  Future<ShellResult> _startBackground(
+      ChatJobs jobs, String command, CommandSandbox? sandbox) async {
+    final job = await jobs.start(command,
+        workspace: workspace,
+        spawn: (script) => shell.start(script,
+            cwd: workspace,
+            home: projectWorkspace,
+            timeout: BackgroundJobs.timeout,
+            environment: environment,
+            oneShot: true,
+            project: project,
+            sandbox: sandbox,
+            readOnly: readOnlyDirs));
+    final log = backgroundLog(job.id);
+    final where = shell.guestRoot == null ? " (${job.logPath})" : "";
+    final pid = job.pid;
+    final stop = pid == null
+        ? ""
+        : " Its process id is $pid, the leader of its group: "
+            "`kill -- -$pid` stops it and everything it started.";
+    return ShellResult(
+        returnCode: 0,
+        output: "Started in the background as job ${job.id}.$stop Its output "
+            "goes to $log in the chat workspace$where: read it with `tail` or "
+            "the read tool at chat:$log. Your next call after it exits says "
+            "how it ended.");
   }
 
   /// The deterministic bash tiers the rules leave standing: every segment

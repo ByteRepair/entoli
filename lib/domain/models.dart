@@ -505,11 +505,15 @@ abstract class InstructionRef with _$InstructionRef {
 
 @freezed
 abstract class ToolCall with _$ToolCall {
+  /// [signature] is Gemini's `thought_signature`, the one its OpenAI shape puts
+  /// on a tool call: it rejects a replayed call that comes back without it, so
+  /// the log keeps it for the projection to hand back. Nothing else reads it.
   const factory ToolCall({
     required String id,
     required String name,
     String? argumentsJson,
     String? argumentsText,
+    String? signature,
   }) = _ToolCall;
 
   factory ToolCall.fromJson(Map<String, dynamic> json) => _$ToolCallFromJson(json);
@@ -528,6 +532,10 @@ abstract class ToolResult with _$ToolResult {
     String? exceptionInfo,
     String? cwd,
     @Default([]) List<String> violations,
+    /// What happened since the last call that the model should hear — a
+    /// background job ending — beside the result rather than inside
+    /// [output], which for some tools is data a reader parses back.
+    @Default([]) List<String> notes,
     /// What decided this call's fate before it ran, and the tiers that
     /// spoke — a compound covered from two tiers carries both. Null on a
     /// result from before the field existed, and null where nothing stood

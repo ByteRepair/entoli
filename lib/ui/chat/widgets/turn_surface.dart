@@ -6,6 +6,7 @@ import "../../../domain/room/room_state.dart";
 import "../chat_controller.dart";
 import "approval_banner.dart";
 import "browser_strip.dart";
+import "job_strip.dart";
 import "question_panel.dart";
 import "resume_bar.dart";
 import "steer_strip.dart";
@@ -65,6 +66,8 @@ class TurnSurface extends StatelessWidget {
         // Not turn-scoped like the strips above: the tab outlives the turn
         // that opened it, so the chip shows for as long as the tab is open.
         if (chat != null) BrowserStrip(chatId: chat.state.id),
+        // The same: a job runs on past the turn that started it.
+        if (chat != null) JobStrip(chatId: chat.state.id),
         for (final approvals in view.approvals.values)
           for (final approval in approvals)
             ApprovalBanner(

@@ -202,7 +202,8 @@ const llmProviderPresets = <LlmProviderConfig>[
     // Gemini's OpenAI-compatible surface, not its native one.
     baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai",
     apiKeyEnv: "GEMINI_API_KEY",
-    defaultModelId: "gemini-flash-latest",
+    // Lite for both: the free tier refuses Flash.
+    defaultModelId: "gemini-flash-lite-latest",
     defaultLightModelId: "gemini-flash-lite-latest",
   ),
   LlmProviderConfig(

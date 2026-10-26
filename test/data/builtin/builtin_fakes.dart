@@ -108,7 +108,8 @@ class ConcurrentFakeLlmClient implements LlmClient {
 
 /// A shell that answers from a table instead of running anything.
 class FakeShell extends Shell {
-  FakeShell(this.respond, {this.canRunCommands = true, this.home});
+  FakeShell(this.respond,
+      {this.canRunCommands = true, this.home, this.canRunInBackground = false});
 
   final ShellResult Function(String command) respond;
 
@@ -162,6 +163,12 @@ class FakeShell extends Shell {
   final bool canRunCommands;
 
   @override
+  final bool canRunInBackground;
+
+  /// The pid every run reports, counting up from here.
+  int nextPid = 4000;
+
+  @override
   String get platformDescription => "TestOS 1.0 test";
 
   @override
@@ -184,17 +191,18 @@ class FakeShell extends Shell {
     oneShots.add(oneShot);
     restarts.add(restart);
     sandboxes.add(sandbox);
-    return _FakeRun(this, command);
+    return _FakeRun(this, command, nextPid++);
   }
 }
 
 class _FakeRun implements ShellRun {
-  _FakeRun(this.shell, this.command) {
+  _FakeRun(this.shell, this.command, this._pid) {
     if (!shell.hang.contains(command)) _done.complete(shell.respond(command));
   }
 
   final FakeShell shell;
   final String command;
+  final int _pid;
   final Completer<ShellResult> _done = Completer();
 
   @override
@@ -202,6 +210,9 @@ class _FakeRun implements ShellRun {
 
   @override
   ValueListenable<String?>? get output => null;
+
+  @override
+  Future<int?> get pid async => _pid;
 
   @override
   Future<void> kill() async {
