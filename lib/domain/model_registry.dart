@@ -59,25 +59,15 @@ class ModelCatalog {
   final Map<String, Map<String, ModelInfo>> _providers;
   final Map<String, String> _apis;
 
-  Map<String, ModelInfo>? _of(LlmProviderConfig provider) =>
+  /// models.dev's entry for [provider]: the same id, or failing that the same
+  /// base URL. Which of them a provider offers is its class's to decide — see
+  /// `LlmProvider.models`.
+  Map<String, ModelInfo>? entryOf(LlmProviderConfig provider) =>
       _providers[provider.id] ?? _providers[_apis[_normalUrl(provider.baseUrl)]];
 
   ModelInfo? lookup(LlmProviderConfig provider, String model) =>
       provider.customModels.where((m) => m.id == model).firstOrNull ??
-      _of(provider)?[model];
-
-  /// Every model [provider] offers: its own, then the catalog's less what the
-  /// provider has retired.
-  List<ModelInfo> modelsOf(LlmProviderConfig provider) {
-    final own = {for (final m in provider.customModels) m.id: m};
-    final retired = provider.retiredModels;
-    return [
-      ...own.values,
-      ...?_of(provider)
-          ?.values
-          .where((m) => !own.containsKey(m.id) && !retired.contains(m.id)),
-    ];
-  }
+      entryOf(provider)?[model];
 
   /// This catalog, as fetched from models.dev at [at].
   ModelCatalog fetchedAt(DateTime at) => ModelCatalog._(_providers, _apis, at);

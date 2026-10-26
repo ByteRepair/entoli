@@ -182,7 +182,17 @@ See `lib/data/sync/AGENTS.md` for the threat model and
 handshake. **Providers** is the endpoints — and the keys, which are not in
 `settings.json` at all: a key typed into the provider dialog (or the
 recommended-provider card) goes to the secret store, under the provider's id,
-and the row says "key stored" rather than showing any of it. The dialog's key
+and the row says "Connected" rather than showing any of it — "Needs a key"
+where neither a stored key nor its named variable is there, "On this computer"
+for a local server, and an endpoint typed in by hand carries its address in
+front. A preset's dialog is written for someone who has never seen a base URL:
+what a key is and a link to make one, the key field as "Access key", and the
+provider's privacy policy, with the technical fields — name, API, base URL,
+models, the named variable — folded under Advanced; an endpoint typed in by
+hand opens on those alone. Which is which is `providerOf(config).terms`. A
+typed key is put to the provider's own `checkKey` (`keyCheckProvider`) before
+the dialog closes: a no keeps it open with Save anyway, and a provider that
+could not be asked is saved, since no answer is not a no. The dialog's key
 field is tri-state — typed text stores, an empty field over a stored key
 keeps it, and the explicit remove clears it — because an empty field alone
 cannot say keep from clear once the field no longer echoes what is stored.

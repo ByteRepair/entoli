@@ -38,7 +38,7 @@ import "memory/instructions.dart";
 import "memory/store.dart";
 import "llm/gated_client.dart";
 import "llm/llm_client.dart";
-import "llm/openai_client.dart";
+import "llm/providers/provider.dart" show ImageGenerator;
 import "llm/readable_client.dart";
 import "llm/llm_registry.dart";
 import "llm/rate_limit_gate.dart";
@@ -1338,7 +1338,7 @@ class BuiltinBackend implements AgentBackend {
     bool title = false,
   }) {
     if (provider == null) return null;
-    final endpoint = registry.endpointFor(provider);
+    final endpoint = registry.providerFor(provider);
     if (endpoint == null) return null;
     final config = endpoint.config;
     final modelId = model ?? defaultOf(config);
@@ -1352,7 +1352,7 @@ class BuiltinBackend implements AgentBackend {
     // trusted as it was before there was a catalog to ask. Not PDFs, which
     // most endpoints refuse outright whatever the model.
     final images = info?.readsImages ?? true;
-    final pdfs = (info?.readsPdfs ?? false) && config.takesPdfs;
+    final pdfs = (info?.readsPdfs ?? false) && endpoint.takesPdfs;
     return (
       client: ReadableClient(client, images: images, pdfs: pdfs),
       modelId: modelId,
@@ -1375,17 +1375,14 @@ class BuiltinBackend implements AgentBackend {
     return LlmClassifier(client: target.client, model: target.modelId);
   }
 
-  /// Null, and so no tool, where the image model is off or its provider does
-  /// not speak the OpenAI shape: Anthropic makes no images.
-  Future<List<LlmAttachment>> Function(String prompt)? _imageGenerator(
+  /// Null, and so no tool, where the image model is off or its provider makes
+  /// no images.
+  ImageGenerator? _imageGenerator(
       String? provider, String? model, ImageQuality quality) {
-    final endpoint = provider == null ? null : registry.endpointFor(provider);
-    if (endpoint == null) return null;
-    final modelId = model ?? LlmProviderConfig.imageDefaultOf(endpoint.config);
-    final client = registry.clientOf(endpoint);
-    if (modelId == null || client is! OpenAiClient) return null;
-    return (prompt) => client.generateImage(prompt,
-        model: modelId,
+    final endpoint = provider == null ? null : registry.providerFor(provider);
+    final modelId = model ?? endpoint?.imageModel;
+    if (endpoint == null || modelId == null) return null;
+    return endpoint.imageGenerator(registry.clientOf(endpoint), modelId,
         quality: quality == ImageQuality.auto ? null : quality.name);
   }
 
@@ -1547,18 +1544,14 @@ class BuiltinBackend implements AgentBackend {
 
   @override
   Transcribe? transcriber(String providerId, String modelId) {
-    final client = registry.clientFor(providerId);
-    return client is OpenAiClient
-        ? (wav) => client.transcribe(wav, model: modelId)
-        : null;
+    final provider = registry.providerFor(providerId);
+    return provider?.transcriber(registry.clientOf(provider), modelId);
   }
 
   @override
   Synthesize? synthesizer(String providerId, String modelId, {String? voice}) {
-    final client = registry.clientFor(providerId);
-    return client is OpenAiClient
-        ? (text) => client.speak(text, model: modelId, voice: voice)
-        : null;
+    final provider = registry.providerFor(providerId);
+    return provider?.synthesizer(registry.clientOf(provider), modelId, voice: voice);
   }
 }
 

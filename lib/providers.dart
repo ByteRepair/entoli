@@ -10,7 +10,8 @@ import "package:uuid/uuid.dart";
 import "../core/config.dart";
 import "domain/file_tools.dart" show resolveWorkspacePath;
 import "../core/platform/platform.dart"
-    show createFileWatches, createPromptSources, setupComplete;
+    show createFileWatches, createPromptSources, processEnv, setupComplete;
+import "data/builtin/llm/providers/presets.dart" show providerOf;
 import "data/builtin/builtin_backend.dart";
 import "data/local/file_trigger_store.dart";
 import "data/prompts/agent_pictures.dart";
@@ -363,12 +364,12 @@ ModelChoice voiceSpeechChoice(AppSettings s) => (
       modelId: s.voiceSpeechModelId,
     );
 
-/// Whether [provider] is configured and speaks OpenAI's audio endpoints. Read
-/// off the settings alone: asking the backend builds a client, and the
-/// registry it builds from reads `settings.json` again, which the readiness
-/// gates would do on every settings write.
+/// Whether [provider] is configured and has audio endpoints. Read off the
+/// settings alone: asking the backend builds a client, and the registry it
+/// builds from reads `settings.json` again, which the readiness gates would do
+/// on every settings write.
 bool _answersAudio(AppSettings settings, String provider) =>
-    settings.llmProviders.any((p) => p.id == provider && p.api == LlmApi.openai);
+    settings.llmProviders.any((p) => p.id == provider && providerOf(p).answersAudio);
 
 /// What a voice session is started with. Null halves are nothing usable: no
 /// pick, a provider no longer configured or with no audio endpoints, or a
@@ -923,6 +924,17 @@ final linkOpenerProvider =
 /// `FakeSecretStore`.
 final appSecretsProvider =
     Provider<AppSecrets>((ref) => throw UnimplementedError());
+
+typedef KeyCheck = Future<bool> Function(LlmProviderConfig config, String apiKey);
+
+/// Whether a provider accepts a key, asked of the provider itself. Throws where
+/// it could not be asked.
+final keyCheckProvider = Provider<KeyCheck>(
+    (ref) => (config, apiKey) => providerOf(config).checkKey(apiKey));
+
+/// The process environment, where a provider's named key is looked for after
+/// the settings' own.
+final processEnvProvider = Provider<String? Function(String name)>((ref) => processEnv);
 
 final backgroundWorkProvider =
     Provider<BackgroundWork>((ref) => throw UnimplementedError());

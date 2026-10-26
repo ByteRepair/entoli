@@ -1,6 +1,7 @@
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
+import "../../data/builtin/llm/providers/presets.dart";
 import "../../domain/llm_provider.dart";
 import "../../providers.dart";
 
@@ -24,30 +25,29 @@ class _PresetPicker extends ConsumerWidget {
   Future<void> _choose(
     BuildContext context,
     WidgetRef ref,
-    LlmProviderConfig preset,
-    PresetTerms? terms,
+    LlmProvider preset,
   ) async {
+    final terms = preset.terms;
     final warning = terms?.freeTier;
     if (warning != null &&
         !await _acceptFreeTier(context, ref, preset, terms!, warning)) {
       return;
     }
-    if (context.mounted) Navigator.pop(context, (preset: preset));
+    if (context.mounted) Navigator.pop(context, (preset: preset.config));
   }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final offered = [
       for (final p in llmProviderPresets)
-        if (!configured.contains(p.id))
-          (preset: p, terms: PresetTerms.of(p.id)),
+        if (!configured.contains(p.id)) p,
     ];
-    bool free(PresetTerms? t) => t?.freeTier != null;
-    bool local(PresetTerms? t) => t?.prompts == PromptUse.local;
+    bool free(LlmProvider p) => p.terms?.freeTier != null;
+    bool local(LlmProvider p) => p.terms?.prompts == PromptUse.local;
     final groups = [
-      ("Paid", offered.where((o) => !free(o.terms) && !local(o.terms))),
-      ("Free, at a cost to privacy", offered.where((o) => free(o.terms))),
-      ("On this machine", offered.where((o) => local(o.terms))),
+      ("Paid", offered.where((p) => !free(p) && !local(p))),
+      ("Free, at a cost to privacy", offered.where(free)),
+      ("On this machine", offered.where(local)),
     ];
 
     return AlertDialog(
@@ -64,11 +64,10 @@ class _PresetPicker extends ConsumerWidget {
               for (final (heading, entries) in groups)
                 if (entries.isNotEmpty) ...[
                   _GroupHeading(heading),
-                  for (final o in entries)
+                  for (final p in entries)
                     _PresetTile(
-                      preset: o.preset,
-                      terms: o.terms,
-                      onTap: () => _choose(context, ref, o.preset, o.terms),
+                      preset: p,
+                      onTap: () => _choose(context, ref, p),
                     ),
                 ],
               const Divider(),
@@ -98,7 +97,7 @@ class _PresetPicker extends ConsumerWidget {
 Future<bool> _acceptFreeTier(
   BuildContext context,
   WidgetRef ref,
-  LlmProviderConfig preset,
+  LlmProvider preset,
   PresetTerms terms,
   String warning,
 ) async {
@@ -161,17 +160,15 @@ class _GroupHeading extends StatelessWidget {
 class _PresetTile extends StatelessWidget {
   const _PresetTile({
     required this.preset,
-    required this.terms,
     required this.onTap,
   });
 
-  final LlmProviderConfig preset;
-  final PresetTerms? terms;
+  final LlmProvider preset;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    final terms = this.terms;
+    final terms = preset.terms;
     final colors = Theme.of(context).colorScheme;
     final local = terms?.prompts == PromptUse.local;
     return ListTile(
@@ -193,7 +190,7 @@ class _PresetTile extends StatelessWidget {
               if (terms?.freeTier != null)
                 _Tag(Icons.warning_amber_rounded, "Free", tone: _Tone.warn),
               if (terms != null) _promptsTag(terms.prompts),
-              if (LlmProviderConfig.imageDefaultOf(preset) != null)
+              if (preset.imageModel != null)
                 const _Tag(Icons.image_outlined, "Images"),
             ],
           ),

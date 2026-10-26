@@ -438,12 +438,11 @@ the honest cost of one, and the reason to raise it.
 **The client is what routes**, not the registry. `LocalPoolClient` reads the
 model out of the request, serves it, and hands the call to a `OpenAiClient` on
 that server's port — one per model, dropped when the port changes, the same
-signature check `LlmRegistry` makes. **It rides on the endpoint rather than on
-the registry**: an `LlmEndpoint` is a config and, where reaching it is not the
-ordinary thing, the client to reach it with. The first version had the registry
-comparing a provider id against a name it had to be told was reserved, which is
-a special case in the one place that should know nothing about who its endpoints
-are — and one more `==` arm for every endpoint that ever needs decorating. A
+signature check `LlmRegistry` makes. **It rides on the provider rather than on
+the registry**: `LocalPoolProvider` is an `LlmProvider` whose `client` is the
+pool, as `AppleFmProvider`'s is the framework's channel, so the registry never
+compares a provider id against a reserved name — it knows nothing about who
+its providers are. A
 turn sent at a loading model waits; a turn sent at a model that will never load
 gets the server's own last words as an `LlmException`, which for a model too
 large to fit is the only place that is said at all.

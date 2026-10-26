@@ -988,8 +988,8 @@ agent's browser, on screen" in `lib/ui/chat/AGENTS.md`.
 ## Images (the `image_generation` tool)
 
 Offered only when Settings > Image Generation names an image model (its "Off"
-entry is the switch) and that model resolves to an OpenAI-shaped provider; Anthropic makes no images, so it is not
-offered there. `OpenAiClient.generateImage` asks `gpt-image*`/`dall-e*` through
+entry is the switch) and that model's provider answers `imageGenerator`;
+Anthropic makes no images, so it is not offered there. `OpenAiClient.generateImage` asks `gpt-image*`/`dall-e*` through
 the Images API, any model on Gemini's host through Gemini's native
 `models/<model>:generateContent`, and anything else (OpenRouter) through
 `/chat/completions` with `modalities: ["image", "text"]`. Gemini is native
@@ -1024,7 +1024,7 @@ history. One rule for the user's attachments and the tools'.
 **PDFs follow the same path, with two more conditions.** A PDF is a block of
 its own — a `document` on Anthropic, a `file` part on the OpenAI shape — where
 the model reads one (`readsPdfs`, models.dev's `pdf` input) *and* the endpoint
-takes one (`LlmProviderConfig.takesPdfs`: Anthropic's API and OpenAI's own).
+takes one (`LlmProvider.takesPdfs`: Anthropic's API and OpenAI's own).
 The second is because the model is not the endpoint: Gemini reads PDFs and
 its OpenAI-compatible layer documents no way to send one, and most compatible
 servers reject the part outright. Unknown is no here, unlike images, for the

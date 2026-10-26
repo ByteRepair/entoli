@@ -73,16 +73,16 @@ void main() {
       options: options,
       registry: LlmRegistry(
         endpoints: () => [
-          for (final p in providers) LlmEndpoint(p, build: (_, _) => client),
+          for (final p in providers) FakeProvider(p, (_, _) => client),
           if (judge != null)
-            LlmEndpoint(
+            FakeProvider(
                 const LlmProviderConfig(
                     id: "judge",
                     api: LlmApi.openai,
                     baseUrl: "https://judge.test/v1",
                     models: ["judge-model"],
                     defaultModelId: "judge-model"),
-                build: (_, _) => judge),
+                (_, _) => judge),
         ],
         lookupEnv: (_) => null,
         lookupKey: (_) => null,

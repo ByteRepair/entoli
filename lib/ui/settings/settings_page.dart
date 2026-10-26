@@ -6,6 +6,7 @@ import "../../domain/app_theme.dart";
 import "../../domain/corner_radius.dart";
 import "../../domain/theme_colour.dart";
 import "../../data/backup.dart";
+import "../../data/builtin/llm/providers/presets.dart";
 import "../../core/platform/platform.dart" as platform;
 import "../../domain/llm_provider.dart";
 import "../../domain/permission.dart";
@@ -978,10 +979,9 @@ class _RecommendedProvider extends ConsumerStatefulWidget {
 
 class _RecommendedProviderState extends ConsumerState<_RecommendedProvider> {
   static final _signUp = Uri.parse("https://signin.ollama.com/sign-up");
-  static final _privacy = Uri.parse("https://ollama.com/privacy");
 
-  static final _ollamaCloud =
-      llmProviderPresets.firstWhere((p) => p.id == "ollama-cloud");
+  static const _ollamaCloud = OllamaCloudProvider();
+  static final _privacy = Uri.parse(_ollamaCloud.terms!.policy!);
 
   final _apiKey = TextEditingController();
 
@@ -998,7 +998,7 @@ class _RecommendedProviderState extends ConsumerState<_RecommendedProvider> {
     // frame, and the save must outlive it rather than resume on a defunct
     // ref. The key goes to the store (setKey), never onto the config.
     final notifier = ref.read(appSettingsProvider.notifier);
-    await notifier.upsertProvider(_ollamaCloud, setKey: key);
+    await notifier.upsertProvider(_ollamaCloud.config, setKey: key);
   }
 
   @override
@@ -1071,6 +1071,8 @@ class _ProvidersEditor extends ConsumerWidget {
       storedKey: initial == null ? null : secrets.providerKey(initial.id),
       encrypted: secrets.encrypted,
       title: title,
+      openLink: ref.read(linkOpenerProvider).open,
+      checkKey: ref.read(keyCheckProvider),
     );
     if (saved == null) return;
     // A renamed provider is a move: the stored key follows the new id and the
@@ -1104,8 +1106,7 @@ class _ProvidersEditor extends ConsumerWidget {
         for (final provider in providers)
           EditableRow(
             title: provider.displayName,
-            subtitle: _describe(provider,
-                storedKey: ref.read(appSecretsProvider).providerKey(provider.id)),
+            subtitle: _describe(ref, provider),
             removeLabel: "Remove ${provider.id}",
             onTap: () => _upsert(context, ref,
                 initial: provider, title: "Edit ${provider.displayName}"),
@@ -1126,19 +1127,28 @@ class _ProvidersEditor extends ConsumerWidget {
     // One already configured is edited from its row rather than added again.
     final chosen = await pickProviderPreset(context, configured: configured);
     if (chosen != null && context.mounted) {
-      await _upsert(context, ref, initial: chosen.preset);
+      final preset = chosen.preset;
+      await _upsert(context, ref,
+          initial: preset,
+          title: preset == null ? "Add provider" : "Connect ${preset.displayName}");
     }
   }
 
-  String _describe(LlmProviderConfig provider, {String? storedKey}) {
-    final key = storedKey != null
-        ? "key stored"
-        : provider.apiKeyEnv != null
-            ? "\$${provider.apiKeyEnv}"
-            : "no key";
-    final models =
-        provider.models.isEmpty ? "models from endpoint" : "${provider.models.length} models";
-    return "${provider.baseUrl} · $key · $models";
+  /// Whether it can answer, in plain words for a preset. An endpoint typed in
+  /// by hand is told apart by its address, which its owner knows.
+  String _describe(WidgetRef ref, LlmProviderConfig config) {
+    final provider = providerOf(config);
+    final environment = ref.read(appSettingsProvider).environment;
+    final processEnv = ref.read(processEnvProvider);
+    final stored = ref.read(appSecretsProvider).providerKey(config.id);
+    final hasKey = (stored != null && stored.isNotEmpty) ||
+        config.resolveKeyWith((name) => environment[name] ?? processEnv(name)) != null;
+    final status = !provider.needsKey
+        ? "On this computer"
+        : hasKey
+            ? "Connected"
+            : "Needs a key";
+    return provider.terms == null ? "${config.baseUrl} · $status" : status;
   }
 }
 

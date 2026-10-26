@@ -871,9 +871,9 @@ non-required camera feature for it, and iOS's `Info.plist` the
   three; the Sync page says so rather than pretending otherwise.
 
 `encrypted` says which a build got. The provider settings read it: the
-provider dialog words its helper text by it, since "OS keyring" and "app
-secret store" are different promises to make. The Sync page still does not
-say so on the web, where the keys sit in ordinary IndexedDB.
+provider dialog's Advanced key field words its helper text by it, since "OS
+keyring" and "app secret store" are different promises to make. The Sync page
+does not say so on the web, where the keys sit in ordinary IndexedDB.
 
 Sync is not the only tenant. `AppSecrets` (`lib/domain/app_secrets.dart`)
 holds the provider API keys (`provider-keys`, one JSON map under one item —

@@ -19,6 +19,7 @@ import "package:agent_chat/data/builtin/builtin_agent.dart";
 import "package:agent_chat/data/builtin/builtin_backend.dart";
 import "package:agent_chat/data/builtin/duckduckgo_search.dart";
 import "package:agent_chat/data/builtin/llm/llm_registry.dart";
+import "package:agent_chat/data/builtin/llm/providers/presets.dart";
 import "package:agent_chat/data/builtin/local_shell.dart";
 import "package:agent_chat/data/local/file_chat_store.dart";
 import "package:agent_chat/data/prompts/prompt_sources.dart";
@@ -62,7 +63,7 @@ void main() {
       // Live means live: it runs what the model asks for.
       options: const BuiltinOptions(stepLimit: 12),
       registry: LlmRegistry(
-        endpoints: () => [LlmEndpoint(provider)],
+        endpoints: () => [providerOf(provider)],
           lookupEnv: (name) => Platform.environment[name],
           lookupKey: (_) => null,
         ),

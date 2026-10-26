@@ -4,6 +4,7 @@ import "dart:io";
 import "package:flutter_test/flutter_test.dart";
 
 import "package:agent_chat/data/builtin/llm/llm_registry.dart";
+import "package:agent_chat/data/builtin/llm/providers/presets.dart";
 import "package:agent_chat/domain/app_settings.dart";
 import "package:agent_chat/domain/llm_provider.dart";
 import "package:agent_chat/domain/models.dart";
@@ -97,7 +98,7 @@ void main() {
     test("cover the endpoints worth naming, each with a versioned root", () {
       expect(llmProviderPresets.map((p) => p.id),
           containsAll(["anthropic", "openai", "openrouter", "ollama-cloud", "ollama"]));
-      for (final preset in llmProviderPresets) {
+      for (final preset in llmProviderPresets.map((p) => p.config)) {
         expect(preset.baseUrl, contains(RegExp(r"/v\d")), reason: preset.id);
         // A preset names a variable, never key material: nothing shipped
         // carries a credential.
@@ -106,7 +107,7 @@ void main() {
     });
 
     test("Ollama Cloud is the hosted one, and reads the key Ollama's own tools do", () {
-      final cloud = llmProviderPresets.firstWhere((p) => p.id == "ollama-cloud");
+      const cloud = OllamaCloudProvider.preset;
 
       expect(cloud.baseUrl, "https://ollama.com/v1");
       expect(cloud.api, LlmApi.openai);
@@ -189,7 +190,7 @@ void main() {
       return LlmRegistry(
         endpoints: () => [
           for (final provider in providers)
-            LlmEndpoint(provider, build: (config, key) {
+            FakeProvider(provider, (config, key) {
               built.add("${config.id}:$key");
               return FakeLlmClient(const []);
             }),
@@ -270,7 +271,7 @@ void main() {
                 apiKeyEnv: "FAKE_API_KEY",
               ),
             ])
-              LlmEndpoint(provider, build: (config, key) => FakeLlmClient(const [])),
+              FakeProvider(provider, (config, key) => FakeLlmClient(const [])),
           ],
           lookupEnv: (name) => name == "FAKE_API_KEY" ? "sk-env" : null,
           lookupKey: (id) => stored[id],
@@ -303,9 +304,8 @@ void main() {
       final stored = <String, String>{"fake": "sk-1"};
       final registry = LlmRegistry(
         endpoints: () => [
-          const LlmEndpoint(
-              LlmProviderConfig(
-                  id: "fake", api: LlmApi.openai, baseUrl: "https://fake.test/v1")),
+          providerOf(const LlmProviderConfig(
+              id: "fake", api: LlmApi.openai, baseUrl: "https://fake.test/v1")),
         ],
         lookupEnv: (_) => null,
         lookupKey: (id) => stored[id],

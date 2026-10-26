@@ -53,23 +53,6 @@ class LlmProviderConfig {
 
   String get displayName => label ?? id;
 
-  /// Whether this endpoint takes a PDF as a block. Anthropic's API does, and
-  /// OpenAI's own `/chat/completions` does as a `file` part; the compatible
-  /// servers mostly reject that part, and Gemini's compatibility layer does
-  /// not document one, so a model that reads PDFs is still not sent one there.
-  bool get takesPdfs =>
-      api == LlmApi.anthropic ||
-      (Uri.tryParse(baseUrl)?.host == "api.openai.com");
-
-  /// Models the provider has retired but models.dev still lists, kept out of
-  /// the picker. By hand: nothing Google answers says which they are.
-  Set<String> get retiredModels =>
-      Uri.tryParse(baseUrl)?.host == "generativelanguage.googleapis.com"
-          ? _googleRetired
-          : const {};
-
-  static const _googleRetired = {"gemini-2.5-flash"};
-
   /// [lookup] reads the app's own environment and whatever settings adds, so a
   /// key can be named there instead of pasted here.
   String? resolveKeyWith(String? Function(String name) lookup) {
@@ -90,14 +73,6 @@ class LlmProviderConfig {
 
   static String? lightDefaultOf(LlmProviderConfig config) =>
       config.defaultLightModelId;
-
-  /// Keyed by preset id rather than stored on the config, so a provider added
-  /// before image generation existed gets one too. Only the presets whose API
-  /// answers an image request are here.
-  static String? imageDefaultOf(LlmProviderConfig config) => const {
-        "openai": "gpt-image-1",
-        "openrouter": "google/gemini-2.5-flash-image",
-      }[config.id];
 
   LlmProviderConfig copyWith({
     String? id,
@@ -164,95 +139,6 @@ class LlmProviderConfig {
   }
 }
 
-/// The endpoints worth offering by name, so configuring one is a key rather
-/// than a URL nobody remembers. Not a whitelist: any OpenAI-compatible server
-/// can be added by hand.
-const llmProviderPresets = <LlmProviderConfig>[
-  LlmProviderConfig(
-    id: "anthropic",
-    label: "Anthropic",
-    api: LlmApi.anthropic,
-    baseUrl: "https://api.anthropic.com/v1",
-    apiKeyEnv: "ANTHROPIC_API_KEY",
-    defaultModelId: "claude-sonnet-5",
-    defaultLightModelId: "claude-haiku-4-5",
-  ),
-  LlmProviderConfig(
-    id: "openai",
-    label: "OpenAI",
-    api: LlmApi.openai,
-    baseUrl: "https://api.openai.com/v1",
-    apiKeyEnv: "OPENAI_API_KEY",
-    defaultModelId: "gpt-5.6-terra",
-    defaultLightModelId: "gpt-5.6-luna",
-  ),
-  LlmProviderConfig(
-    id: "openrouter",
-    label: "OpenRouter",
-    api: LlmApi.openai,
-    baseUrl: "https://openrouter.ai/api/v1",
-    apiKeyEnv: "OPENROUTER_API_KEY",
-    defaultModelId: "z-ai/glm-5.3-flash",
-    defaultLightModelId: "nvidia/nemotron-3-nano-30b-a3b",
-  ),
-  LlmProviderConfig(
-    id: "groq",
-    label: "Groq",
-    api: LlmApi.openai,
-    baseUrl: "https://api.groq.com/openai/v1",
-    apiKeyEnv: "GROQ_API_KEY",
-    defaultModelId: "openai/gpt-oss-120b",
-    defaultLightModelId: "openai/gpt-oss-20b",
-  ),
-  LlmProviderConfig(
-    id: "google",
-    label: "Google Gemini",
-    api: LlmApi.openai,
-    // Gemini's OpenAI-compatible surface, not its native one.
-    baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai",
-    apiKeyEnv: "GEMINI_API_KEY",
-    // Lite for both: the free tier refuses Flash.
-    defaultModelId: "gemini-flash-lite-latest",
-    defaultLightModelId: "gemini-flash-lite-latest",
-  ),
-  LlmProviderConfig(
-    id: "zai",
-    label: "Z.ai",
-    api: LlmApi.openai,
-    baseUrl: "https://api.z.ai/api/paas/v4",
-    apiKeyEnv: "ZAI_API_KEY",
-    // The free ones, so the preset costs nothing until the user picks otherwise.
-    defaultModelId: "glm-4.7-flash",
-    defaultLightModelId: "glm-4.5-flash",
-  ),
-  LlmProviderConfig(
-    id: "ollama-cloud",
-    label: "Ollama Cloud",
-    api: LlmApi.openai,
-    // The same OpenAI-compatible surface the local server exposes, hosted.
-    baseUrl: "https://ollama.com/v1",
-    apiKeyEnv: "OLLAMA_API_KEY",
-    defaultModelId: "glm-5.3-flash",
-    defaultLightModelId: "nemotron-3-nano:30b",
-  ),
-  LlmProviderConfig(
-    id: "ollama",
-    label: "Ollama (local)",
-    api: LlmApi.openai,
-    baseUrl: "http://localhost:11434/v1",
-    defaultModelId: "glm-5.3-flash",
-    defaultLightModelId: "nemotron-3-nano:30b",
-  ),
-  LlmProviderConfig(
-    id: "lmstudio",
-    label: "LM Studio (local)",
-    api: LlmApi.openai,
-    baseUrl: "http://localhost:1234/v1",
-    defaultModelId: "glm-5.3-flash",
-    defaultLightModelId: "nemotron-3-nano:30b",
-  ),
-];
-
 /// What a provider's terms say happens to the prompts sent to it.
 enum PromptUse {
   /// Never leaves the machine.
@@ -272,15 +158,16 @@ enum PromptUse {
   unstated,
 }
 
-/// What the Add provider list says about a preset, beside its name. Keyed by
-/// preset id like [LlmProviderConfig.imageDefaultOf], so it is never written
-/// into `settings.json` and a policy change is a release, not a migration.
+/// What the Add provider list says about a preset, beside its name. Held by the
+/// provider's class rather than its config, so it is never written into
+/// `settings.json` and a policy change is a release, not a migration.
 class PresetTerms {
   const PresetTerms({
     required this.blurb,
     required this.prompts,
     this.freeTier,
     this.policy,
+    this.keyUrl,
   });
 
   final String blurb;
@@ -292,58 +179,6 @@ class PresetTerms {
 
   final String? policy;
 
-  static PresetTerms? of(String id) => _presetTerms[id];
+  /// The provider's own page for making a key, null where none is needed.
+  final String? keyUrl;
 }
-
-const _presetTerms = <String, PresetTerms>{
-  "anthropic": PresetTerms(
-    blurb: "Claude models.",
-    prompts: PromptUse.notTrained,
-    policy: "https://www.anthropic.com/legal/commercial-terms",
-  ),
-  "openai": PresetTerms(
-    blurb: "GPT models, and gpt-image for pictures.",
-    prompts: PromptUse.notTrained,
-    policy: "https://openai.com/enterprise-privacy",
-  ),
-  "openrouter": PresetTerms(
-    blurb: "One key for hundreds of models from many providers.",
-    prompts: PromptUse.dependsOnRoute,
-    policy: "https://openrouter.ai/privacy",
-  ),
-  "google": PresetTerms(
-    blurb: "Gemini models, with a free tier.",
-    prompts: PromptUse.trainedWhenFree,
-    freeTier: "On Google's free tier, your prompts and the replies are used "
-        "to improve Google's products, and people at Google may read them. "
-        "Do not send anything private, confidential or personal. A key with "
-        "billing turned on is not used this way.",
-    policy: "https://ai.google.dev/gemini-api/terms",
-  ),
-  "zai": PresetTerms(
-    blurb: "GLM models, some of them free.",
-    prompts: PromptUse.unstated,
-    freeTier: "The GLM Flash models are free. Z.ai's terms do not say how "
-        "prompts sent to the free models are handled, so treat them as not "
-        "private.",
-    policy: "https://docs.z.ai/legal-agreement/privacy-policy",
-  ),
-  "groq": PresetTerms(
-    blurb: "Open models on fast hardware.",
-    prompts: PromptUse.notTrained,
-    policy: "https://groq.com/privacy-policy",
-  ),
-  "ollama-cloud": PresetTerms(
-    blurb: "Open models, hosted by Ollama.",
-    prompts: PromptUse.notTrained,
-    policy: "https://ollama.com/privacy",
-  ),
-  "ollama": PresetTerms(
-    blurb: "Models you run yourself with Ollama.",
-    prompts: PromptUse.local,
-  ),
-  "lmstudio": PresetTerms(
-    blurb: "Models you run yourself with LM Studio.",
-    prompts: PromptUse.local,
-  ),
-};

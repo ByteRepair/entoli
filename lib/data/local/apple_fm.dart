@@ -5,7 +5,7 @@ import "package:flutter/services.dart";
 import "../../domain/local_model.dart";
 import "../../domain/llm_provider.dart";
 import "../builtin/llm/llm_client.dart";
-import "../builtin/llm/llm_registry.dart" show LlmEndpoint;
+import "../builtin/llm/providers/provider.dart";
 
 // The ids live in the domain beside `localProviderId`, exported here for the
 // tests and the pages that name the model.
@@ -17,7 +17,7 @@ export "../../domain/local_model.dart" show appleProviderId, appleModelId;
 /// There is no server: `SystemLanguageModel` is the OS's own, reached
 /// through the Foundation Models framework (iOS 26 and later) behind a
 /// method channel — `AppleFmChannel.swift`, beside `VoiceChannel.swift`. The
-/// port surface is an [LlmEndpoint] carrying its own client, composed into
+/// port surface is an [AppleFmProvider] carrying its own client, composed into
 /// `llmEndpoints` beside the llama pool, so the registry, the pickers, a
 /// chat's pinned model and every tool the agent has see a provider like any
 /// other. None of the machine questions the pool answers (devices, threads,
@@ -109,8 +109,16 @@ class AppleFm {
         defaultModelId: appleModelId,
       );
 
-  LlmEndpoint get endpoint =>
-      LlmEndpoint(provider, build: (config, apiKey) => AppleFmClient(probe));
+  LlmProvider get endpoint => AppleFmProvider(provider, probe);
+}
+
+class AppleFmProvider extends LlmProvider with KeyFree, ChatOnly {
+  const AppleFmProvider(super.config, this.probe);
+
+  final AppleFmProbe probe;
+
+  @override
+  LlmClient client(String? apiKey) => AppleFmClient(probe);
 }
 
 /// Everything the channel says, broadcast — the `NativeVoiceBridge` shape:

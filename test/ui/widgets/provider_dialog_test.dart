@@ -70,7 +70,7 @@ void main() {
           id: "a", api: LlmApi.openai, baseUrl: "https://a.test/v1",
         ), storedKey: "sk-old");
     expect(find.textContaining("Leave empty to keep"), findsOneWidget);
-    expect(find.text("Remove stored key"), findsOneWidget);
+    expect(find.text("Remove saved key"), findsOneWidget);
 
     await tester.tap(find.text("Save"));
     await tester.pumpAndSettle();
@@ -83,7 +83,7 @@ void main() {
           id: "a", api: LlmApi.openai, baseUrl: "https://a.test/v1",
         ), storedKey: "sk-old");
 
-    await tester.tap(find.text("Remove stored key"));
+    await tester.tap(find.text("Remove saved key"));
     await tester.pumpAndSettle();
     await tester.tap(find.text("Save"));
     await tester.pumpAndSettle();
@@ -97,7 +97,7 @@ void main() {
           id: "a", api: LlmApi.openai, baseUrl: "https://a.test/v1",
         ), storedKey: "sk-old");
 
-    await tester.tap(find.text("Remove stored key"));
+    await tester.tap(find.text("Remove saved key"));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField).at(2), "sk-new");
     await tester.tap(find.text("Save"));

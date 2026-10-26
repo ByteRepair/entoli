@@ -5,7 +5,7 @@
 import "dart:convert";
 import "dart:io";
 
-import "package:agent_chat/domain/llm_provider.dart";
+import "package:agent_chat/data/builtin/llm/providers/presets.dart";
 
 import "gen_common.dart";
 
@@ -13,9 +13,9 @@ Future<void> main() async {
   final wanted = {
     for (final p in llmProviderPresets)
       p.id: {
-        ?p.defaultModelId,
-        ?p.defaultLightModelId,
-        ?LlmProviderConfig.imageDefaultOf(p),
+        ?p.config.defaultModelId,
+        ?p.config.defaultLightModelId,
+        ?p.imageModel,
       },
   }..removeWhere((_, ids) => ids.isEmpty);
 

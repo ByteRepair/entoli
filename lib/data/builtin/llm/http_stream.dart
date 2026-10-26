@@ -65,18 +65,23 @@ Future<http.StreamedResponse> postStream(
   return sendChecked(client, request);
 }
 
-/// [postStream] for a request already built — a multipart upload.
-Future<http.StreamedResponse> sendChecked(
+/// [request] sent, whatever its status. A connection that never opened is an
+/// [LlmException].
+Future<http.StreamedResponse> sendOrUnreachable(
     http.Client client, http.BaseRequest request) async {
-  final http.StreamedResponse response;
   try {
-    response = await client.send(request);
+    return await client.send(request);
   } catch (e) {
     // No status to judge by: a connection that never opened is worth another
     // try, and a provider that is genuinely down will exhaust the attempts.
     throw LlmException("Could not reach ${request.url}: $e", retryable: true);
   }
+}
 
+/// [postStream] for a request already built — a multipart upload.
+Future<http.StreamedResponse> sendChecked(
+    http.Client client, http.BaseRequest request) async {
+  final response = await sendOrUnreachable(client, request);
   if (response.statusCode == 200) return response;
   final text = await response.stream.bytesToString();
   throw LlmException(

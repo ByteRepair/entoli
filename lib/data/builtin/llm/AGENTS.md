@@ -2,7 +2,7 @@
 
 ## Reaching a provider
 
-`LlmClient` has two implementations: `OpenAiClient` (`/chat/completions` — and
+`LlmClient` has two wire implementations: `OpenAiClient` (`/chat/completions` — and
 so also OpenRouter, Groq, Ollama Cloud, ollama, LM Studio, vLLM) and
 `AnthropicClient` (`/messages`). Anthropic is not reachable through the first
 one: its system prompt is a parameter rather than a message, tool results ride
@@ -25,7 +25,8 @@ enabled, Anthropic rejects a tool-use turn whose thinking was dropped, so
 `signature` for no other reason — see "The projection". Enabling thinking also
 pins the temperature at 1, so the two are never sent together.
 
-Gemini's equivalent is on the tool call rather than the thinking: its OpenAI
+Gemini's equivalent is on the tool call rather than the thinking (in
+`GeminiClient`, an `OpenAiClient` subclass over its protected hooks): its OpenAI
 shape puts `extra_content.google.thought_signature` on the first call of a
 reply and answers 400 to a replay without it. `LlmToolCall.signature` and
 `ToolCall.signature` carry it through the log for the same reason. A reply
@@ -35,20 +36,48 @@ model — goes to Gemini's host with LiteLLM's placeholder
 
 Google retires a model for new accounts while its own list and models.dev
 still name it, so nothing says in advance which are gone: a Gemini 404 reads
-as "retired", and `LlmProviderConfig.retiredModels` is kept by hand.
+as "retired", and `GoogleProvider.retiredModels` is kept by hand.
 
 Providers are configured in `settings.json` under `llmProviders` — id, API
-shape, base URL, an optional model list — and `llmProviderPresets` fills in
-the endpoints worth naming so that adding one is a key rather than a URL
-nobody remembers. A key can be left out and named as `apiKeyEnv` instead,
-which is how one already exported stays out of the file. `LlmRegistry` builds
-a client per endpoint and rebuilds it when the URL or key changes; a provider
-that lists no models is asked, and one that cannot answer contributes nothing
-rather than failing the whole list. What it builds a client *with* is the
-endpoint's own business: an `LlmEndpoint` is a config and, where reaching it
-is not the ordinary thing, the client to reach it with — which is how the
-on-device server's "may not be answering yet" arrives without the registry
-knowing there is such a thing. See "Running a model on the device" in
+shape, base URL, an optional model list — and that config is data only. **What
+differs by who runs an endpoint is a class**: `LlmProvider`
+(`providers/provider.dart`) and one subclass per provider, each holding its
+preset, its terms, its image model, whether it takes PDFs, its retired models,
+which client it speaks through, how a key is checked (`checkKey`) and which of
+models.dev's models it offers (`models`). A wire format is a client — a
+provider has one rather than being one, since half of them speak the same
+protocol. `providerOf` reads a config as its class: by host, so an entry
+renamed by hand keeps its server's quirks; then by preset id; then by wire
+format alone (`OpenAiCompatibleProvider`, `AnthropicCompatibleProvider`), which
+is what an endpoint typed in by hand is.
+
+`checkKey` is a yes or no only where the provider said so: success, a spent
+balance or a rate limit is a key it accepted, a 401 or 403 (Google's 400) one it
+did not, and anything else throws rather than guess. Most ask the model list,
+which they keep behind the key; OpenRouter's is public, so it asks `/key`, and
+Z.ai and Ollama Cloud are not known to keep one, so they ask for a one-token
+reply from the light default.
+
+`llmProviderPresets` is the list of preset instances, so adding one is a key
+rather than a URL nobody remembers. It and `providerOf`'s lookups are built
+from one list of classes, `_kinds`, so a new provider is its class and one
+entry there. A provider nothing guards — a local server, the on-device ones —
+takes `KeyFree`, whose `needsKey` is what the dialog and the provider list
+read.
+
+**What a provider can do beyond chat is its own to say.** `LlmProvider`
+declares `imageGenerator`, `transcriber`, `synthesizer` and `answersAudio`
+unimplemented; `OpenAiCompatibleProvider` answers them over its client's
+image and audio endpoints, and `ChatOnly` answers none, for Anthropic and the
+on-device providers. The backend and the voice gates ask the provider, never
+the client's type. A key can be left out and named as
+`apiKeyEnv` instead, which is how one already exported stays out of the file.
+`LlmRegistry` builds a client per provider and rebuilds it when the URL or key
+changes; a provider that lists no models is asked, and one that cannot answer
+contributes nothing rather than failing the whole list. The on-device server
+and Apple's model are providers too, whose `client` is the pool or the channel —
+which is how "may not be answering yet" arrives without the registry knowing
+there is such a thing. See "Running a model on the device" in
 `lib/data/local/AGENTS.md`.
 
 **The key is resolved in one order, by `resolveKeyFor`**: the key stored for

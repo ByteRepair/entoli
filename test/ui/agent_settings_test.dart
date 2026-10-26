@@ -1,6 +1,7 @@
 import "package:flutter/material.dart";
 import "package:flutter_test/flutter_test.dart";
 
+import "package:agent_chat/data/builtin/llm/llm_client.dart" show LlmException;
 import "package:agent_chat/domain/app_settings.dart";
 import "package:agent_chat/domain/llm_provider.dart";
 import "package:agent_chat/domain/permission.dart";
@@ -46,20 +47,39 @@ void main() {
       expect(find.textContaining("cannot answer until one is added"), findsOneWidget);
     });
 
-    testWidgets("a preset arrives filled in, so only the key is left to type", (tester) async {
+    testWidgets("a preset asks for the key alone, its endpoint filled in under Advanced",
+        (tester) async {
       await pumpSettings(tester, app, SettingsCategory.providers);
       await addProvider(tester, "Ollama Cloud");
 
+      expect(find.text("Get a key from Ollama Cloud"), findsOneWidget);
+      expect(find.text("Ollama Cloud's privacy policy"), findsOneWidget);
+      expect(dialogField("Base URL"), findsNothing);
+      expect(dialogField("API key"), findsNothing);
+
+      await tester.tap(find.text("Advanced"));
+      await tester.pumpAndSettle();
       expect(find.text("ollama-cloud"), findsOneWidget);
       expect(find.text("https://ollama.com/v1"), findsOneWidget);
 
-      await tester.enterText(dialogField("API key"), "sk-ollama");
+      await tester.enterText(dialogField("Access key"), "sk-ollama");
       await saveDialog(tester);
 
       expect(saved().single.id, "ollama-cloud");
       expect(saved().single.baseUrl, "https://ollama.com/v1");
       // The key went to the store; no config carries one.
       expect(app.secrets.providerKey("ollama-cloud"), "sk-ollama");
+    });
+
+    testWidgets("a local preset asks for nothing", (tester) async {
+      await pumpSettings(tester, app, SettingsCategory.providers);
+      await addProvider(tester, "Ollama (local)");
+
+      expect(find.textContaining("nothing to type"), findsOneWidget);
+      expect(dialogField("Access key"), findsNothing);
+      await saveDialog(tester);
+
+      expect(saved().single.id, "ollama");
     });
 
     testWidgets("a custom endpoint starts empty and is typed in", (tester) async {
@@ -90,20 +110,86 @@ void main() {
     testWidgets("the key is never shown back on the page", (tester) async {
       await pumpSettings(tester, app, SettingsCategory.providers);
       await addProvider(tester, "Anthropic");
-      await tester.enterText(dialogField("API key"), "sk-ant-secret");
+      await tester.enterText(dialogField("Access key"), "sk-ant-secret");
       await saveDialog(tester);
 
       expect(find.text("sk-ant-secret"), findsNothing);
-      // The row says a key is stored, never which.
-      expect(find.textContaining("key stored"), findsOneWidget);
+      // The row says it can answer, never with which key.
+      expect(find.text("Connected"), findsOneWidget);
     });
 
-    testWidgets("one with no key of its own says which variable it reads", (tester) async {
+    testWidgets("one with no key says it needs one", (tester) async {
       await pumpSettings(tester, app, SettingsCategory.providers);
       await addProvider(tester, "Anthropic");
       await saveDialog(tester);
 
-      expect(find.textContaining(r"$ANTHROPIC_API_KEY"), findsOneWidget);
+      expect(find.text("Needs a key"), findsOneWidget);
+    });
+
+    testWidgets("one reading its key from the settings' environment is connected",
+        (tester) async {
+      await pumpSettings(tester, app, SettingsCategory.providers);
+      await io(tester, () => app.container
+          .read(appSettingsProvider.notifier)
+          .setEnvironment(const {"ANTHROPIC_API_KEY": "sk-env"}));
+      await addProvider(tester, "Anthropic");
+      await saveDialog(tester);
+
+      expect(find.text("Connected"), findsOneWidget);
+    });
+
+    testWidgets("an endpoint typed in by hand is told apart by its address", (tester) async {
+      await pumpSettings(tester, app, SettingsCategory.providers);
+      await addProvider(tester, "Custom…");
+      await tester.enterText(dialogField("Name"), "vllm");
+      await tester.enterText(dialogField("Base URL"), "http://gpu.local:8000/v1");
+      await saveDialog(tester);
+
+      expect(find.text("http://gpu.local:8000/v1 · Needs a key"), findsOneWidget);
+    });
+
+    testWidgets("a key the provider refuses keeps the dialog open, and can be saved anyway",
+        (tester) async {
+      app.dispose();
+      app = TestApp.create(acceptsKey: (key) async => key == "sk-good");
+      await pumpSettings(tester, app, SettingsCategory.providers);
+      await addProvider(tester, "OpenAI");
+      await tester.enterText(dialogField("Access key"), "sk-typo");
+      await saveDialog(tester);
+
+      expect(find.textContaining("did not accept this key"), findsOneWidget);
+      expect(saved(), isEmpty);
+
+      await tester.tap(find.text("Save anyway"));
+      await settleIo(tester);
+      expect(app.secrets.providerKey("openai"), "sk-typo");
+    });
+
+    testWidgets("typing again after a refusal checks the new key", (tester) async {
+      app.dispose();
+      app = TestApp.create(acceptsKey: (key) async => key == "sk-good");
+      await pumpSettings(tester, app, SettingsCategory.providers);
+      await addProvider(tester, "OpenAI");
+      await tester.enterText(dialogField("Access key"), "sk-typo");
+      await saveDialog(tester);
+      await tester.enterText(dialogField("Access key"), "sk-good");
+      await tester.pump();
+      expect(find.text("Save anyway"), findsNothing);
+      await saveDialog(tester);
+
+      expect(app.secrets.providerKey("openai"), "sk-good");
+    });
+
+    testWidgets("a provider that could not be asked does not stop the save", (tester) async {
+      app.dispose();
+      app = TestApp.create(
+          acceptsKey: (_) async => throw const LlmException("offline", retryable: true));
+      await pumpSettings(tester, app, SettingsCategory.providers);
+      await addProvider(tester, "OpenAI");
+      await tester.enterText(dialogField("Access key"), "sk-o");
+      await saveDialog(tester);
+
+      expect(app.secrets.providerKey("openai"), "sk-o");
     });
 
     testWidgets("a preset already configured is not offered twice", (tester) async {
@@ -126,13 +212,13 @@ void main() {
       expect(find.textContaining("free tier is not private"), findsOneWidget);
       await tester.tap(find.text("Cancel").last);
       await settleIo(tester);
-      expect(dialogField("API key"), findsNothing);
+      expect(dialogField("Access key"), findsNothing);
 
       await tester.tap(find.text("Google Gemini").last);
       await settleIo(tester);
       await tester.tap(find.text("I understand, add it"));
       await settleIo(tester);
-      await tester.enterText(dialogField("API key"), "gm-secret");
+      await tester.enterText(dialogField("Access key"), "gm-secret");
       await saveDialog(tester);
 
       expect(saved().single.id, "google");
@@ -143,7 +229,7 @@ void main() {
       await addProvider(tester, "Anthropic");
 
       expect(find.textContaining("free tier is not private"), findsNothing);
-      expect(dialogField("API key"), findsOneWidget);
+      expect(dialogField("Access key"), findsOneWidget);
     });
 
     testWidgets("editing one replaces it rather than adding another", (tester) async {
@@ -153,6 +239,8 @@ void main() {
 
       await tester.tap(find.text("OpenAI"));
       await settleIo(tester);
+      await tester.tap(find.text("Advanced"));
+      await tester.pumpAndSettle();
       await tester.enterText(dialogField("Base URL"), "https://proxy.local/v1");
       await saveDialog(tester);
 
@@ -188,7 +276,7 @@ void main() {
     testWidgets("removing one takes its stored key with it", (tester) async {
       await pumpSettings(tester, app, SettingsCategory.providers);
       await addProvider(tester, "OpenAI");
-      await tester.enterText(dialogField("API key"), "sk-o");
+      await tester.enterText(dialogField("Access key"), "sk-o");
       await saveDialog(tester);
       expect(app.secrets.providerKey("openai"), "sk-o");
 
@@ -203,7 +291,7 @@ void main() {
         (tester) async {
       await pumpSettings(tester, app, SettingsCategory.providers);
       await addProvider(tester, "OpenAI");
-      await tester.enterText(dialogField("API key"), "sk-o");
+      await tester.enterText(dialogField("Access key"), "sk-o");
       await saveDialog(tester);
 
       await tester.tap(find.text("OpenAI"));

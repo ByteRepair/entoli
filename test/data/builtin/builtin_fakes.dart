@@ -2,13 +2,29 @@ import "dart:async";
 import "dart:convert";
 
 import "package:agent_chat/data/builtin/llm/llm_client.dart";
+import "package:agent_chat/data/builtin/llm/providers/provider.dart";
 import "package:agent_chat/domain/artifact.dart";
 import "package:agent_chat/domain/ask.dart";
 import "package:agent_chat/domain/permission.dart";
 import "package:agent_chat/domain/shell.dart";
+import "package:agent_chat/domain/llm_provider.dart";
 import "package:agent_chat/domain/web_search.dart";
 import "package:flutter/foundation.dart"
     show ValueListenable;
+import "package:http/http.dart" as http;
+
+/// A provider whose client is whatever the test builds.
+class FakeProvider extends LlmProvider with ChatOnly {
+  FakeProvider(super.config, this.build);
+
+  final LlmClient Function(LlmProviderConfig config, String? apiKey) build;
+
+  @override
+  LlmClient client(String? apiKey) => build(config, apiKey);
+
+  @override
+  Future<bool> checkKey(String apiKey, {http.Client? httpClient}) async => true;
+}
 
 /// A model that says whatever the test scripted, one list of chunks per call.
 class FakeLlmClient implements LlmClient {
