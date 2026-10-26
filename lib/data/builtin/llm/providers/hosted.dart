@@ -1,5 +1,3 @@
-import "package:http/http.dart" as http;
-
 import "../../../../domain/llm_provider.dart";
 import "provider.dart";
 
@@ -28,7 +26,9 @@ class GroqProvider extends OpenAiCompatibleProvider {
       );
 }
 
-class ZaiProvider extends OpenAiCompatibleProvider {
+// shortcut: not known to keep a model list behind the key; its light default
+// is free, so the completion costs nothing.
+class ZaiProvider extends OpenAiCompatibleProvider with ChecksKeyByCompletion {
   const ZaiProvider([super.config = preset]);
 
   static const preset = LlmProviderConfig(
@@ -52,15 +52,10 @@ class ZaiProvider extends OpenAiCompatibleProvider {
         policy: "https://docs.z.ai/legal-agreement/privacy-policy",
         keyUrl: "https://z.ai/manage-apikey/apikey-list",
       );
-
-  // shortcut: not known to keep a model list behind the key; the light
-  // default is free, so the completion costs nothing.
-  @override
-  Future<bool> checkKey(String apiKey, {http.Client? httpClient}) =>
-      checkKeyByCompletion(apiKey, httpClient: httpClient);
 }
 
-class OllamaCloudProvider extends OpenAiCompatibleProvider {
+// shortcut: not known to keep a model list behind the key.
+class OllamaCloudProvider extends OpenAiCompatibleProvider with ChecksKeyByCompletion {
   const OllamaCloudProvider([super.config = preset]);
 
   static const preset = LlmProviderConfig(
@@ -81,9 +76,4 @@ class OllamaCloudProvider extends OpenAiCompatibleProvider {
         policy: "https://ollama.com/privacy",
         keyUrl: "https://ollama.com/settings/keys",
       );
-
-  // shortcut: not known to keep a model list behind the key.
-  @override
-  Future<bool> checkKey(String apiKey, {http.Client? httpClient}) =>
-      checkKeyByCompletion(apiKey, httpClient: httpClient);
 }

@@ -37,8 +37,10 @@ class OpenAiClient implements LlmClient {
   @protected
   http.Client get httpClient => _http;
 
-  Map<String, String> get _auth =>
-      {if (apiKey != null && apiKey!.isNotEmpty) "authorization": "Bearer $apiKey"};
+  Map<String, String> get _auth => authOf(apiKey);
+
+  static Map<String, String> authOf(String? apiKey) =>
+      {if (apiKey != null && apiKey.isNotEmpty) "authorization": "Bearer $apiKey"};
 
   Map<String, String> get _headers => {
         "content-type": "application/json",

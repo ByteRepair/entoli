@@ -119,6 +119,9 @@ class AppleFmProvider extends LlmProvider {
   final AppleFmProbe probe;
 
   @override
+  bool get needsKey => false;
+
+  @override
   LlmClient client(String? apiKey) => AppleFmClient(probe);
 
   /// The OS's own model: there is no key.

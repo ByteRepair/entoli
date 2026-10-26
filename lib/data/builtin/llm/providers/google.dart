@@ -1,8 +1,5 @@
-import "package:http/http.dart" as http;
-
 import "../../../../domain/llm_provider.dart";
 import "../gemini_client.dart";
-import "../http_stream.dart";
 import "../llm_client.dart";
 import "provider.dart";
 
@@ -41,10 +38,5 @@ class GoogleProvider extends OpenAiCompatibleProvider {
 
   /// Google answers a key it does not know with 400, not 401.
   @override
-  Future<bool> checkKey(String apiKey, {http.Client? httpClient}) => LlmProvider.askWith(
-        http.Request("GET", under(baseUrl, "models"))
-          ..headers["authorization"] = "Bearer $apiKey",
-        httpClient: httpClient,
-        rejecting: const {400, 401, 403},
-      );
+  Set<int> get refusingStatuses => const {400, 401, 403};
 }

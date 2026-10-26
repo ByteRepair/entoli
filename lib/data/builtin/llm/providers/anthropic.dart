@@ -15,16 +15,12 @@ class AnthropicCompatibleProvider extends LlmProvider {
   bool get takesPdfs => true;
 
   @override
-  LlmClient client(String? apiKey) =>
-      AnthropicClient(baseUrl: Uri.parse(config.baseUrl), apiKey: apiKey);
+  LlmClient client(String? apiKey) => AnthropicClient(baseUrl: baseUrl, apiKey: apiKey);
 
   @override
   Future<bool> checkKey(String apiKey, {http.Client? httpClient}) => LlmProvider.askWith(
-        http.Request("GET", under(Uri.parse(config.baseUrl), "models"))
-          ..headers.addAll({
-            "x-api-key": apiKey,
-            "anthropic-version": AnthropicClient.version,
-          }),
+        http.Request("GET", under(baseUrl, "models"))
+          ..headers.addAll(AnthropicClient.authOf(apiKey)),
         httpClient: httpClient,
       );
 }

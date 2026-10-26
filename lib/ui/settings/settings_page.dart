@@ -979,9 +979,9 @@ class _RecommendedProvider extends ConsumerStatefulWidget {
 
 class _RecommendedProviderState extends ConsumerState<_RecommendedProvider> {
   static final _signUp = Uri.parse("https://signin.ollama.com/sign-up");
-  static final _privacy = Uri.parse("https://ollama.com/privacy");
 
-  static const _ollamaCloud = OllamaCloudProvider.preset;
+  static const _ollamaCloud = OllamaCloudProvider();
+  static final _privacy = Uri.parse(_ollamaCloud.terms.policy!);
 
   final _apiKey = TextEditingController();
 
@@ -998,7 +998,7 @@ class _RecommendedProviderState extends ConsumerState<_RecommendedProvider> {
     // frame, and the save must outlive it rather than resume on a defunct
     // ref. The key goes to the store (setKey), never onto the config.
     final notifier = ref.read(appSettingsProvider.notifier);
-    await notifier.upsertProvider(_ollamaCloud, setKey: key);
+    await notifier.upsertProvider(_ollamaCloud.config, setKey: key);
   }
 
   @override
@@ -1138,13 +1138,12 @@ class _ProvidersEditor extends ConsumerWidget {
   /// by hand is told apart by its address, which its owner knows.
   String _describe(WidgetRef ref, LlmProviderConfig config) {
     final provider = providerOf(config);
-    final env = config.apiKeyEnv;
-    final hasKey = ref.read(appSecretsProvider).providerKey(config.id) != null ||
-        env != null &&
-            (ref.read(appSettingsProvider).environment[env] ??
-                    ref.read(processEnvProvider)(env)) !=
-                null;
-    final status = provider.terms?.prompts == PromptUse.local
+    final environment = ref.read(appSettingsProvider).environment;
+    final processEnv = ref.read(processEnvProvider);
+    final stored = ref.read(appSecretsProvider).providerKey(config.id);
+    final hasKey = (stored != null && stored.isNotEmpty) ||
+        config.resolveKeyWith((name) => environment[name] ?? processEnv(name)) != null;
+    final status = !provider.needsKey
         ? "On this computer"
         : hasKey
             ? "Connected"

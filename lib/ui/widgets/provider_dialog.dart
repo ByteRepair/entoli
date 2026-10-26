@@ -80,8 +80,9 @@ class _ProviderDialogState extends State<_ProviderDialog> {
   /// Non-null for a provider with a class of its own, which opens on the key
   /// alone; a custom endpoint is nothing but the technical fields, so it opens
   /// on them.
-  late final _terms =
-      widget.initial == null ? null : providerOf(widget.initial!).terms;
+  late final _provider = widget.initial == null ? null : providerOf(widget.initial!);
+  late final _terms = _provider?.terms;
+  late final _keyless = _provider?.needsKey == false;
   late var _advanced = _terms == null;
 
   var _checking = false;
@@ -143,16 +144,14 @@ class _ProviderDialogState extends State<_ProviderDialog> {
   /// the key, where to get one, and where the provider says what it does
   /// with the prompts. No technical word here; those are under Advanced.
   List<Widget> _basic(BuildContext context, PresetTerms terms) {
-    final name = widget.initial!.displayName;
     final textTheme = Theme.of(context).textTheme;
-    final local = terms.prompts == PromptUse.local;
     return [
       Text(
-        local
-            ? "$name runs on this computer, so there is nothing to type. "
-                "Start $name before you chat."
-            : "Entoli needs an access key from your $name account to talk "
-                "to it. Create one on $name's website, copy it, and paste it "
+        _keyless
+            ? "$_name runs on this computer, so there is nothing to type. "
+                "Start $_name before you chat."
+            : "Entoli needs an access key from your $_name account to talk "
+                "to it. Create one on $_name's website, copy it, and paste it "
                 "below.",
         style: textTheme.bodyMedium,
       ),
@@ -160,11 +159,11 @@ class _ProviderDialogState extends State<_ProviderDialog> {
         const SizedBox(height: 12),
         FilledButton.tonalIcon(
           icon: const Icon(Icons.open_in_new, size: 18),
-          label: Text("Get a key from $name"),
+          label: Text("Get a key from $_name"),
           onPressed: () => _open(terms.keyUrl!),
         ),
       ],
-      if (!local) ...[
+      if (!_keyless) ...[
         const SizedBox(height: 16),
         _keyField(
           label: "Access key",
@@ -178,7 +177,7 @@ class _ProviderDialogState extends State<_ProviderDialog> {
         TextButton(
           style: TextButton.styleFrom(padding: EdgeInsets.zero),
           onPressed: () => _open(terms.policy!),
-          child: Text("$name's privacy policy"),
+          child: Text("$_name's privacy policy"),
         ),
       ],
     ];
@@ -199,14 +198,14 @@ class _ProviderDialogState extends State<_ProviderDialog> {
           labelText: label,
           helperText: helper,
           errorText: _rejected
-              ? "${_name ?? "The provider"} did not accept this key. Check "
+              ? "$_name did not accept this key. Check "
                   "it was copied whole."
               : null,
           errorMaxLines: 2,
         ),
       );
 
-  String? get _name => widget.initial?.displayName;
+  String get _name => widget.initial?.displayName ?? "The provider";
 
   Future<void> _save() async {
     final edit = _submit();
@@ -247,8 +246,8 @@ class _ProviderDialogState extends State<_ProviderDialog> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              if (terms != null) ..._basic(context, terms),
-              if (terms != null)
+              if (terms != null) ...[
+                ..._basic(context, terms),
                 Align(
                   alignment: Alignment.centerLeft,
                   child: TextButton.icon(
@@ -258,7 +257,8 @@ class _ProviderDialogState extends State<_ProviderDialog> {
                     onPressed: () => setState(() => _advanced = !_advanced),
                   ),
                 ),
-              if (_advanced) ..._technical(hasStoredKey, showKey: terms == null),
+              ],
+              if (_advanced) ..._technical(hasStoredKey),
               if (hasStoredKey) ...[
                 const SizedBox(height: 8),
                 TextButton(
@@ -289,8 +289,7 @@ class _ProviderDialogState extends State<_ProviderDialog> {
   /// The whole entry, in the terms the endpoint itself uses. A preset's key
   /// field is above it, under its plain name, unless the preset is local — a
   /// local server can sit behind a key, so it is offered here.
-  List<Widget> _technical(bool hasStoredKey, {required bool showKey}) {
-    final local = _terms?.prompts == PromptUse.local;
+  List<Widget> _technical(bool hasStoredKey) {
     return [
       TextField(
         controller: _id,
@@ -319,7 +318,7 @@ class _ProviderDialogState extends State<_ProviderDialog> {
           helperText: "The versioned root, e.g. https://api.openai.com/v1",
         ),
       ),
-      if (showKey || local) ...[
+      if (_terms == null || _keyless) ...[
         const SizedBox(height: 16),
         _keyField(
           label: "API key",

@@ -52,6 +52,9 @@ class LocalPoolProvider extends LlmProvider {
   final LocalKvCache? _kv;
 
   @override
+  bool get needsKey => false;
+
+  @override
   LlmClient client(String? apiKey) => LocalPoolClient(_llm, _options, kvCache: _kv);
 
   @override

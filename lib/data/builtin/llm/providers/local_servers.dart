@@ -9,6 +9,9 @@ abstract class LocalServerProvider extends OpenAiCompatibleProvider {
   const LocalServerProvider(super.config);
 
   @override
+  bool get needsKey => false;
+
+  @override
   Future<bool> checkKey(String apiKey, {http.Client? httpClient}) async => true;
 }
 

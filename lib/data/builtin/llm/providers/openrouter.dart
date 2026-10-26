@@ -1,7 +1,4 @@
-import "package:http/http.dart" as http;
-
 import "../../../../domain/llm_provider.dart";
-import "../http_stream.dart";
 import "provider.dart";
 
 class OpenRouterProvider extends OpenAiCompatibleProvider {
@@ -30,9 +27,5 @@ class OpenRouterProvider extends OpenAiCompatibleProvider {
 
   /// `/key` describes the key it is asked with; the model list is public.
   @override
-  Future<bool> checkKey(String apiKey, {http.Client? httpClient}) => LlmProvider.askWith(
-        http.Request("GET", under(baseUrl, "key"))
-          ..headers["authorization"] = "Bearer $apiKey",
-        httpClient: httpClient,
-      );
+  String get keyCheckPath => "key";
 }

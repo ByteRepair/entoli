@@ -23,6 +23,10 @@ abstract class LlmProvider {
 
   String get id => config.id;
   String get displayName => config.displayName;
+  Uri get baseUrl => Uri.parse(config.baseUrl);
+
+  /// False for a server nothing guards, whose key the dialog does not ask for.
+  bool get needsKey => true;
 
   /// What the Add provider list says beside it. Null for an endpoint typed in
   /// by hand.
@@ -69,12 +73,7 @@ abstract class LlmProvider {
   }) async {
     final client = httpClient ?? tlsClient();
     try {
-      final http.StreamedResponse response;
-      try {
-        response = await client.send(request);
-      } catch (e) {
-        throw LlmException("Could not reach ${request.url}: $e", retryable: true);
-      }
+      final response = await sendOrUnreachable(client, request);
       final status = response.statusCode;
       await response.stream.drain<void>();
       if (status >= 200 && status < 300 || status == 402 || status == 429) return true;
@@ -91,29 +90,37 @@ abstract class LlmProvider {
 class OpenAiCompatibleProvider extends LlmProvider {
   const OpenAiCompatibleProvider(super.config);
 
-  Uri get baseUrl => Uri.parse(config.baseUrl);
-
   @override
   LlmClient client(String? apiKey) => OpenAiClient(baseUrl: baseUrl, apiKey: apiKey);
 
-  /// The model list, which most of these keep behind the key.
+  /// What the key is asked about: the model list, which most of these keep
+  /// behind it.
+  String get keyCheckPath => "models";
+
+  /// The statuses that mean the key was refused.
+  Set<int> get refusingStatuses => const {401, 403};
+
   @override
   Future<bool> checkKey(String apiKey, {http.Client? httpClient}) => LlmProvider.askWith(
-        http.Request("GET", under(baseUrl, "models"))
-          ..headers["authorization"] = "Bearer $apiKey",
+        http.Request("GET", under(baseUrl, keyCheckPath))
+          ..headers.addAll(OpenAiClient.authOf(apiKey)),
         httpClient: httpClient,
+        rejecting: refusingStatuses,
       );
+}
 
-  /// A one-token reply from the light model, for a provider whose model list
-  /// is public or not there: a completion is the one thing every one of them
-  /// keeps behind the key.
-  Future<bool> checkKeyByCompletion(String apiKey, {http.Client? httpClient}) {
+/// A one-token reply from the light model, for a provider whose model list is
+/// public or not there: a completion is the one thing every one of them keeps
+/// behind the key.
+mixin ChecksKeyByCompletion on OpenAiCompatibleProvider {
+  @override
+  Future<bool> checkKey(String apiKey, {http.Client? httpClient}) {
     final model = config.defaultLightModelId ?? config.defaultModelId;
-    if (model == null) return checkKey(apiKey, httpClient: httpClient);
+    if (model == null) return super.checkKey(apiKey, httpClient: httpClient);
     return LlmProvider.askWith(
       http.Request("POST", under(baseUrl, "chat/completions"))
         ..headers.addAll({
-          "authorization": "Bearer $apiKey",
+          ...OpenAiClient.authOf(apiKey),
           "content-type": "application/json",
         })
         ..body = jsonEncode({
