@@ -11,7 +11,6 @@ import "../../domain/models.dart";
 import "../../domain/room/room_state.dart";
 import "../../domain/speech_text.dart";
 import "../../domain/voice.dart";
-import "../../domain/voice_model.dart";
 import "../../providers.dart";
 import "../chat/chat_controller.dart";
 import "../sidebar/sidebar.dart";
@@ -260,10 +259,10 @@ class VoiceController extends Notifier<VoiceViewState> {
     // Re-opens what a previous [stop] closed; a no-op on the way in.
     _listenToChat();
     final settings = ref.read(appSettingsProvider);
-    final recognition =
-        voiceModelOf<RecognitionModel>(settings.voiceRecognitionModelId);
-    final speech = voiceModelOf<SpeechModel>(settings.voiceSpeechModelId);
-    if (recognition == null || speech == null) {
+    final picks = voicePicks(
+        settings, ref.read(agentBackendProvider), ref.read(voiceProvider));
+    final (:hearing, :speaking) = picks;
+    if (hearing == null || speaking == null) {
       voiceFailed("no models picked");
       return _show(VoiceStatus.failed,
           error: "Pick a recognition model and a speech model in Settings first.");
@@ -285,8 +284,8 @@ class VoiceController extends Notifier<VoiceViewState> {
       // A session opens shut, and [_holdMicrophone] lets it open on the
       // `listening` below like any other transition.
       final session = await ref.read(voiceProvider).start(
-            recognition: recognition,
-            speech: speech,
+            hearing: hearing,
+            speaking: speaking,
             speaker: settings.voiceSpeaker,
             language: settings.voiceLanguage,
           );

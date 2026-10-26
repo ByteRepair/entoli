@@ -6,6 +6,7 @@ import "../../domain/loudness.dart";
 import "../../domain/voice.dart";
 import "../../domain/voice_model.dart";
 import "../../domain/voice_model_store.dart";
+import "remote_speaker.dart";
 import "sherpa_voice.dart";
 import "voice_strategies.dart";
 
@@ -45,22 +46,20 @@ class AndroidVoice extends Voice {
 
   @override
   Future<VoiceSession> start({
-    RecognitionModel? recognition,
-    required SpeechModel speech,
+    Hearing? hearing,
+    required Speaking speaking,
     int speaker = 0,
     String? language,
   }) async {
     Listener? listener;
-    if (recognition != null) {
-      if (recognition.isNative) {
-        // Asked for even where nothing is about to listen: the grant is what
-        // makes the Talk button work, and a permission sheet on the first press
-        // is one nobody expected.
-        (await openMicrophone()).dispose();
-        listener = NativeSpeechRecognizer(language: language);
-      } else {
-        listener = await _sherpa.sherpaListener(recognition);
-      }
+    if (hearing case HearOnDevice(:final model) when model.isNative) {
+      // Asked for even where nothing is about to listen: the grant is what
+      // makes the Talk button work, and a permission sheet on the first press
+      // is one nobody expected.
+      (await openMicrophone()).dispose();
+      listener = NativeSpeechRecognizer(language: language);
+    } else if (hearing != null) {
+      listener = await _sherpa.sherpaListener(hearing);
     }
     // `speaker` is the sherpa catalog's idea of which voice in a model file to
     // use, and the system synthesiser has no such thing — the voice is the
@@ -70,9 +69,12 @@ class AndroidVoice extends Voice {
     // model speaks the language it was trained on.
     return composeSession(
       listener,
-      speech.isNative
-          ? Future.value(NativeTextToSpeech(language: language))
-          : _sherpa.sherpaSpeaker(speech, speaker),
+      switch (speaking) {
+        SpeakOnDevice(:final model) when model.isNative =>
+          Future.value(NativeTextToSpeech(language: language)),
+        SpeakOnDevice(:final model) => _sherpa.sherpaSpeaker(model, speaker),
+        SpeakThrough(:final synthesize) => Future.value(RemoteSpeaker(synthesize)),
+      },
     );
   }
 

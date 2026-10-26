@@ -3,6 +3,7 @@ import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../domain/llm_provider.dart";
+import "../../domain/local_model.dart" show localProviderId;
 import "../../domain/model_registry.dart";
 import "../../domain/models.dart";
 import "../../providers.dart";
@@ -66,6 +67,9 @@ class ModelPicker extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final providers = ref.watch(appSettingsProvider.select((s) => s.llmProviders));
     final listed = ref.watch(sortedModelsProvider).value ?? const <ModelOption>[];
+    final onDevice = role.voice
+        ? onDeviceVoiceEntries(role, ref.watch(installedVoiceModelsProvider))
+        : const <CatalogEntry>[];
     final none = choice.providerId == null && choice.modelId == null;
     final nullEntry =
         inherited == null ? nullLabel : "$nullLabel (${_name(providers, listed, inherited!)})";
@@ -98,7 +102,7 @@ class ModelPicker extends ConsumerWidget {
             helperMaxLines: 3,
             suffixIcon: const Icon(Icons.chevron_right),
           ),
-          child: Text(_label(providers, listed),
+          child: Text(_label(providers, listed, onDevice),
               maxLines: 1, overflow: TextOverflow.ellipsis),
         ),
       ),
@@ -112,7 +116,16 @@ class ModelPicker extends ConsumerWidget {
   /// default, has nothing to resolve to and reads as the null entry, whose
   /// helper names what it inherits; a model
   /// is named by what the catalog calls it, its id where nothing does.
-  String _label(List<LlmProviderConfig> providers, List<ModelOption> listed) {
+  String _label(List<LlmProviderConfig> providers, List<ModelOption> listed,
+      List<CatalogEntry> onDevice) {
+    // Named from what the catalog page offers, since no endpoint lists them.
+    if (role.voice && choice.providerId == localProviderId) {
+      return onDevice
+              .firstWhereOrNull((e) => e.info.id == choice.modelId)
+              ?.info
+              .displayName ??
+          nullLabel;
+    }
     final provider = providers.firstWhereOrNull((p) => p.id == choice.providerId);
     if (choice.modelId == null) {
       final model = provider == null ? null : defaultOf(provider);

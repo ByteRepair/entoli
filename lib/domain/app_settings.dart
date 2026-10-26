@@ -8,6 +8,7 @@ import "assistant_view.dart";
 import "corner_radius.dart";
 import "llm_provider.dart";
 import "local_llm.dart";
+import "local_model.dart" show localProviderId;
 import "permission.dart";
 import "profile.dart";
 import "project_settings.dart";
@@ -56,6 +57,9 @@ class AppSettings {
     this.voiceRecognitionModelId,
     this.voiceSpeechModelId,
     this.voiceSpeaker = 0,
+    this.voiceRecognitionProviderId = localProviderId,
+    this.voiceSpeechProviderId = localProviderId,
+    this.voiceSpeechVoice,
     this.voiceLanguage,
     this.voicePushToTalk = false,
     this.assistantProject,
@@ -205,14 +209,23 @@ class AppSettings {
   /// temporary chats are off — chats live forever.
   TempChatTtl tempChatTtl;
 
-  /// Which voice models listen and speak, by catalog id, and which of a
-  /// multi-voice model's speakers is used. App-level only, like the icon and
+  /// Which voice models listen and speak, and which of a multi-voice model's
+  /// speakers is used. A model id is the on-device catalog's where its
+  /// provider is [localProviderId], as a picker offers it, and that
+  /// provider's own otherwise. App-level only, like the icon and
   /// the theme: a voice is the app's, not a conversation's. Either being null
   /// is voice mode not set up yet, which is what takes the button off the
   /// composer.
   String? voiceRecognitionModelId;
   String? voiceSpeechModelId;
   int voiceSpeaker;
+
+  String voiceRecognitionProviderId;
+  String voiceSpeechProviderId;
+
+  /// The provider's own name for the voice its speech model reads in, sent as
+  /// is. Null sends none, which some providers refuse.
+  String? voiceSpeechVoice;
 
   /// Which language the device's own engines are asked to hear and speak in,
   /// as a BCP-47 tag. Null is the device's own — see `Voice.systemLanguages`.
@@ -489,6 +502,12 @@ class AppSettings {
         voiceRecognitionModelId: _orNull(json["voiceRecognitionModelId"] as String?),
         voiceSpeechModelId: _orNull(json["voiceSpeechModelId"] as String?),
         voiceSpeaker: json["voiceSpeaker"] as int? ?? 0,
+        // Absent in a file from before providers could listen and speak.
+        voiceRecognitionProviderId:
+            _orNull(json["voiceRecognitionProviderId"] as String?) ?? localProviderId,
+        voiceSpeechProviderId:
+            _orNull(json["voiceSpeechProviderId"] as String?) ?? localProviderId,
+        voiceSpeechVoice: _orNull(json["voiceSpeechVoice"] as String?),
         voiceLanguage: _orNull(json["voiceLanguage"] as String?),
         voicePushToTalk: json["voicePushToTalk"] as bool? ?? false,
         assistantProject: _orNull(json["assistantProject"] as String?),
@@ -613,6 +632,11 @@ class AppSettings {
         "voiceRecognitionModelId": voiceRecognitionModelId,
       if (voiceSpeechModelId != null) "voiceSpeechModelId": voiceSpeechModelId,
       if (voiceSpeaker != 0) "voiceSpeaker": voiceSpeaker,
+      if (voiceRecognitionProviderId != localProviderId)
+        "voiceRecognitionProviderId": voiceRecognitionProviderId,
+      if (voiceSpeechProviderId != localProviderId)
+        "voiceSpeechProviderId": voiceSpeechProviderId,
+      "voiceSpeechVoice": ?voiceSpeechVoice,
       if (voiceLanguage != null) "voiceLanguage": voiceLanguage,
       if (voicePushToTalk) "voicePushToTalk": voicePushToTalk,
       if (assistantProject != null) "assistantProject": assistantProject,

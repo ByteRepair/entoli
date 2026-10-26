@@ -2,7 +2,6 @@ import "dart:async";
 import "dart:io";
 import "dart:isolate";
 import "dart:math" as math;
-import "package:audioplayers/audioplayers.dart";
 import "package:flutter/foundation.dart";
 import "package:flutter/services.dart" show rootBundle;
 import "package:path/path.dart" as p;
@@ -14,6 +13,8 @@ import "../../domain/voice.dart";
 import "../../domain/voice_model.dart";
 import "../../domain/voice_model_store.dart";
 import "pcm.dart";
+import "played_speaker.dart";
+import "remote_speaker.dart";
 import "voice_strategies.dart";
 import "wav.dart";
 
@@ -35,26 +36,36 @@ class SherpaVoice extends Voice {
 
   @override
   Future<VoiceSession> start({
-    RecognitionModel? recognition,
-    required SpeechModel speech,
+    Hearing? hearing,
+    required Speaking speaking,
     int speaker = 0,
     String? language,
-  }) async {
-    final listener =
-        recognition == null ? null : await sherpaListener(recognition);
-    return composeSession(listener, sherpaSpeaker(speech, speaker));
-  }
+  }) async =>
+      composeSession(
+        hearing == null ? null : await sherpaListener(hearing),
+        switch (speaking) {
+          SpeakOnDevice(:final model) => sherpaSpeaker(model, speaker),
+          SpeakThrough(:final synthesize) => Future.value(RemoteSpeaker(synthesize)),
+        },
+      );
 
-  /// The sherpa listening half for one recognition model; `AndroidVoice` uses
-  /// it too. Everything that can refuse runs before the worker is spawned,
-  /// which would otherwise load a hundred megabytes only to free them.
-  Future<SherpaListener> sherpaListener(RecognitionModel recognition) async {
-    final listenDir = await _store.directoryOf(recognition);
-    if (listenDir == null) throw StateError("${recognition.name} is not downloaded.");
+  /// The sherpa listening half; `AndroidVoice` uses it too. A provider's
+  /// model listens through the same microphone and Silero, with each
+  /// utterance sent away whole rather than decoded here. Everything that can
+  /// refuse runs before the worker is spawned, which would otherwise load a
+  /// hundred megabytes only to free them.
+  Future<SherpaListener> sherpaListener(Hearing hearing) async {
+    (RecognitionModel, String)? model;
+    if (hearing case HearOnDevice(model: final recognition)) {
+      final dir = await _store.directoryOf(recognition);
+      if (dir == null) throw StateError("${recognition.name} is not downloaded.");
+      model = (recognition, dir);
+    }
     final recorder = await openMicrophone();
     final vad = await _vadPath();
-    final worker = await Worker.spawn(_listenWorker, (vad, recognition, listenDir));
-    return SherpaListener(recorder, worker);
+    final worker = await Worker.spawn(_listenWorker, (vad, model));
+    return SherpaListener(recorder, worker,
+        transcribe: hearing is HearThrough ? hearing.transcribe : null);
   }
 
   /// The sherpa speaking half for one speech model, for the same reason as
@@ -80,13 +91,6 @@ class SherpaVoice extends Voice {
   }
 }
 
-/// Where a spoken sentence is written on its way to the player. Genuinely
-/// disposable, so the system's own temporary directory rather than the cache
-/// the models are unpacked into — which on Android is deliberately the
-/// *non*-evictable one, so that a downloaded model is never thrown away, and is
-/// the wrong home for a WAV that lives for a sentence.
-String get _speechDir => p.join(Directory.systemTemp.path, "entoli-speech");
-
 /// The sherpa listening half: a microphone, Silero VAD, and an offline
 /// recognizer, in one worker isolate. The gate, the level and the event stream
 /// are [MicrophoneListener]'s; what is here is the recorder and the worker.
@@ -94,12 +98,20 @@ String get _speechDir => p.join(Directory.systemTemp.path, "entoli-speech");
 /// Silero says whether it is a voice, not whose, so this feeds the gate one
 /// [decibels] reading per 32 ms detector window.
 class SherpaListener extends MicrophoneListener {
-  SherpaListener(this._recorder, this._worker) : super(LoudnessGate()) {
+  SherpaListener(this._recorder, this._worker, {this._transcribe})
+      : super(LoudnessGate()) {
     _worker.messages.listen(_fromWorker);
   }
 
   final AudioRecorder _recorder;
   final Worker _worker;
+
+  /// Where the worker holds no recognizer and sends utterances back whole.
+  final Transcribe? _transcribe;
+
+  /// The last utterance sent off, so the next waits for it: one at a time is
+  /// what keeps them in the order they were said.
+  Future<void> _sent = Future.value();
 
   StreamSubscription<Uint8List>? _mic;
 
@@ -174,9 +186,29 @@ class SherpaListener extends MicrophoneListener {
     switch (message) {
       case ("heard", final String text):
         heard(text);
+      case ("segment", final Uint8List wav):
+        _send(wav);
       case ("failed", final String message):
         fail(message);
     }
+  }
+
+  /// Only a worker spawned with no model sends segments, and only for a
+  /// listener given [_transcribe].
+  void _send(Uint8List wav) {
+    if (closed) return;
+    // Judged now, against the room it was said in: by the time the provider
+    // answers, more of the room has been measured. Refused here, a sentence
+    // the gate would drop is not paid for.
+    if (!gate.spoken()) return voiceFailed("utterance refused: too quiet for this room");
+    _sent = _sent.then((_) async {
+      if (closed) return;
+      try {
+        heard(await _transcribe!(wav), judged: true);
+      } catch (e) {
+        fail("Transcription failed: $e");
+      }
+    });
   }
 
   @override
@@ -193,180 +225,37 @@ class SherpaListener extends MicrophoneListener {
   static const _windowSize = 512;
 }
 
-/// The sherpa speaking half: an offline TTS in one worker isolate, WAVs written
-/// to a temp directory and played through `audioplayers`. [SpeechSilent] is
-/// emitted when the queue has drained and nothing is pending; [SpeechFailed]
-/// once the engine rather than the sentence is what failed — see
-/// [SpeechFailures].
-class SherpaSpeaker implements Speaker {
+/// The sherpa speaking half: an offline TTS in one worker isolate, its
+/// samples played by [PlayingSpeaker].
+class SherpaSpeaker extends PlayingSpeaker {
   SherpaSpeaker(this._worker) {
     _worker.messages.listen(_fromWorker);
-    _player.onPlayerComplete.listen((_) => unawaited(_playNext()));
-    unawaited(_open());
   }
 
   final Worker _worker;
-  final _player = AudioPlayer();
-  final _signals = StreamController<SpeechSignal>();
-
-  /// Generated audio waiting its turn, and what is playing now. Speech is
-  /// generated a sentence ahead of being heard, so there is always a queue.
-  final _queue = <String>[];
-  var _playing = false;
-
-  /// The file being played, kept until something else is. `play` returns when
-  /// playback *starts*, so deleting it there deleted a file still being read.
-  String? _played;
-
-  /// Bumped by [stop]. Audio generated before it is dropped rather than played
-  /// into a silence the user asked for.
-  var _generation = 0;
-
-  /// Sentences handed to the worker that have not come back as audio yet.
-  var _pending = 0;
-
-  /// See [SpeechFailures]: one sentence lost is not a broken engine.
-  final _failures = SpeechFailures();
-
-  var _closed = false;
-  var _failed = false;
-
-  /// Nothing generating, nothing queued, nothing playing — which is what there
-  /// is to report as silence, and what the controller puts the microphone back
-  /// on the strength of.
-  bool get _silent => _pending == 0 && _queue.isEmpty && !_playing;
-
-  Future<void> _open() async {
-    // Once per session rather than once per sentence, and emptied on the way
-    // in: a session killed mid-reply leaves its wavs behind, and nothing else
-    // ever comes back for them.
-    final speech = Directory(_speechDir);
-    if (await speech.exists()) await speech.delete(recursive: true);
-    await speech.create(recursive: true);
-  }
-
-  @override
-  Stream<SpeechSignal> get signals => _signals.stream;
 
   @override
   Future<void> speak(String text) async {
-    if (_closed || _failed || text.trim().isEmpty) return;
-    _pending++;
-    _worker.send(("speak", _generation, text));
+    if (!usable || text.trim().isEmpty) return;
+    _worker.send(("speak", queued(), text));
   }
 
   void _fromWorker(Object? message) {
-    if (_closed || _failed) return;
     switch (message) {
-      case ("audio", final int generation, final Float32List samples, final int rate):
-        if (generation != _generation) return;
-        _pending--;
-        _failures.spoke();
-        unawaited(_enqueue(samples, rate));
-      // The voice would not say that sentence, or said it in no samples at all.
-      // Named by the batch it was queued under, so one arriving after a stop is
-      // not counted against the batch that replaced it.
+      case ("audio", final int generation, final Uint8List wav):
+        generated(generation, wav);
       case ("dropped", final int generation):
-        if (generation != _generation) return;
-        _dropped();
-      // The engine itself: the model would not load, and nothing outstanding is
-      // coming. Left counted, the session would never say it had finished.
+        lost(generation);
+      // The model would not load.
       case ("failed", final String message):
-        _fatal(message);
+        broke(message);
     }
-  }
-
-  /// The engine is gone. Everything held or playing is dead, and what arrives
-  /// later belongs to an engine this side will never see.
-  void _fatal(String message) {
-    if (_failed || _closed) return;
-    _failed = true;
-    _pending = 0;
-    for (final path in _queue) {
-      unawaited(_discard(path));
-    }
-    _queue.clear();
-    _playing = false;
-    unawaited(_player.stop());
-    _signals.add(SpeechFailed(message));
-  }
-
-  /// One sentence will not be heard. The session still has to be told when the
-  /// rest of the reply has been.
-  void _dropped() {
-    if (_pending > 0) _pending--;
-    if (_failures.dropped()) {
-      _fatal("Speech playback keeps failing.");
-    } else if (_silent) {
-      _signals.add(const SpeechSilent());
-    }
-  }
-
-  Future<void> _enqueue(Float32List samples, int rate) async {
-    final path = p.join(_speechDir, "${DateTime.now().microsecondsSinceEpoch}.wav");
-    await File(path).writeAsBytes(wavOf(samples, rate));
-    _queue.add(path);
-    if (!_playing) await _playNext();
-  }
-
-  Future<void> _playNext() async {
-    if (_closed || _failed) return;
-    await _discardPlayed();
-    if (_queue.isEmpty) {
-      if (_playing) {
-        _playing = false;
-        if (_pending == 0) _signals.add(const SpeechSilent());
-      }
-      return;
-    }
-    final next = _queue.removeAt(0);
-    _playing = true;
-    _played = next;
-    try {
-      await _player.play(DeviceFileSource(next));
-    } catch (_) {
-      // One wav the player would not take is one sentence rather than the
-      // engine, and the rest of the reply is still worth hearing.
-      _playing = false;
-      _dropped();
-      if (!_failed) await _playNext();
-    }
-  }
-
-  Future<void> _discardPlayed() async {
-    final done = _played;
-    _played = null;
-    if (done != null) await _discard(done);
-  }
-
-  @override
-  Future<void> stop() async {
-    _generation++;
-    _pending = 0;
-    // A reply the user cut off is not a run of sentences the engine lost.
-    _failures.spoke();
-    for (final path in _queue) {
-      unawaited(_discard(path));
-    }
-    _queue.clear();
-    _playing = false;
-    await _player.stop();
-    await _discardPlayed();
-  }
-
-  Future<void> _discard(String path) async {
-    try {
-      await File(path).delete();
-    } catch (_) {}
   }
 
   @override
   Future<void> dispose() async {
-    _closed = true;
-    await _player.stop();
-    await _player.dispose();
+    await super.dispose();
     _worker.close();
-    await _signals.close();
   }
 }
 
@@ -423,9 +312,10 @@ class Worker {
 const sampleRate = 16000;
 
 /// The listening half: voice activity, then the words. Runs until it is told to
-/// close.
-void _listenWorker((SendPort, (String, RecognitionModel, String)) init) async {
-  final (reply, (vadPath, model, dir)) = init;
+/// close. With no model, each utterance is sent back as samples for a provider
+/// to transcribe.
+void _listenWorker((SendPort, (String, (RecognitionModel, String)?)) init) async {
+  final (reply, (vadPath, model)) = init;
   final port = ReceivePort();
   reply.send(port.sendPort);
 
@@ -433,6 +323,11 @@ void _listenWorker((SendPort, (String, RecognitionModel, String)) init) async {
   sherpa.OfflineRecognizer? recognizer;
   try {
     sherpa.initBindings();
+    // Before the detector, so a model that will not load leaves it null and
+    // the loop below idle.
+    if (model case (final model, final dir)) {
+      recognizer = sherpa.OfflineRecognizer(_recognizerConfig(model, dir));
+    }
     vad = sherpa.VoiceActivityDetector(
       config: sherpa.VadModelConfig(
         sileroVad: sherpa.SileroVadModelConfig(model: vadPath, minSilenceDuration: 0.4),
@@ -441,15 +336,18 @@ void _listenWorker((SendPort, (String, RecognitionModel, String)) init) async {
       ),
       bufferSizeInSeconds: 30,
     );
-    recognizer = sherpa.OfflineRecognizer(_recognizerConfig(model, dir));
   } catch (e) {
     reply.send(("failed", "$e"));
   }
 
-  void drain(sherpa.VoiceActivityDetector vad, sherpa.OfflineRecognizer engine) {
+  void drain(sherpa.VoiceActivityDetector vad, sherpa.OfflineRecognizer? engine) {
     while (!vad.isEmpty()) {
       final segment = vad.front();
       vad.pop();
+      if (engine == null) {
+        reply.send(("segment", wavOf(segment.samples, sampleRate)));
+        continue;
+      }
       final stream = engine.createStream();
       stream.acceptWaveform(samples: segment.samples, sampleRate: sampleRate);
       engine.decode(stream);
@@ -463,7 +361,7 @@ void _listenWorker((SendPort, (String, RecognitionModel, String)) init) async {
 
   await for (final message in port) {
     if (message case ("close",)) break;
-    if (vad == null || recognizer == null) continue;
+    if (vad == null) continue;
     if (message case ("audio", final Float32List frame)) {
       vad.acceptWaveform(frame);
       drain(vad, recognizer);
@@ -508,7 +406,8 @@ void _speakWorker((SendPort, (SpeechModel, String, int)) init) async {
         if (audio.samples.isEmpty) {
           reply.send(("dropped", generation));
         } else {
-          reply.send(("audio", generation, audio.samples, audio.sampleRate));
+          // Encoded here rather than on the UI isolate.
+          reply.send(("audio", generation, wavOf(audio.samples, audio.sampleRate)));
         }
       } catch (_) {
         // One sentence this voice will not say, rather than a voice that has

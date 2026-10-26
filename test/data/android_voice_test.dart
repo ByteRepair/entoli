@@ -270,12 +270,14 @@ void main() {
   testWidgets("a pick is the store's to answer, either half", (tester) async {
     final voice = AndroidVoice(FakeVoiceModelStore(), "/cache");
     await expectLater(
-        voice.start(recognition: sherpaRecognition, speech: nativeSpeech),
+        voice.start(
+            hearing: HearOnDevice(sherpaRecognition),
+            speaking: const SpeakOnDevice(nativeSpeech)),
         throwsA(isA<StateError>()
             .having((e) => e.message, "message", contains("not downloaded"))));
     // The speech half consults the same store.
     await expectLater(
-        voice.start(recognition: null, speech: sherpaSpeech),
+        voice.start(speaking: SpeakOnDevice(sherpaSpeech)),
         throwsA(isA<StateError>()
             .having((e) => e.message, "message", contains("not downloaded"))));
   });

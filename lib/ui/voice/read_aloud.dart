@@ -5,7 +5,6 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../domain/speech_text.dart";
 import "../../domain/voice.dart";
-import "../../domain/voice_model.dart";
 import "../../providers.dart";
 
 /// What the preview in settings says, and the id it is read under. A question
@@ -46,8 +45,10 @@ class ReadAloud extends Notifier<String?> {
     if (reading == id) return null;
 
     final settings = ref.read(appSettingsProvider);
-    final speech = voiceModelOf<SpeechModel>(settings.voiceSpeechModelId);
-    if (speech == null) return "No speech model is picked.";
+    final speaking = voicePicks(
+            settings, ref.read(agentBackendProvider), ref.read(voiceProvider))
+        .speaking;
+    if (speaking == null) return "No speech model is picked.";
     final text = speakable(said);
     if (text.trim().isEmpty) return null;
 
@@ -58,7 +59,7 @@ class ReadAloud extends Notifier<String?> {
       final session = await ref
           .read(voiceProvider)
           .start(
-            speech: speech,
+            speaking: speaking,
             speaker: settings.voiceSpeaker,
             language: settings.voiceLanguage,
           );

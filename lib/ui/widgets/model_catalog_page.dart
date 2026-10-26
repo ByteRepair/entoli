@@ -3,9 +3,10 @@ import "package:flutter/services.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../domain/llm_provider.dart";
-import "../../domain/local_model.dart" show isTitleOnlyModel;
+import "../../domain/local_model.dart" show isTitleOnlyModel, localProviderId;
 import "../../domain/model_registry.dart";
 import "../../domain/models.dart";
+import "../../domain/voice_model.dart";
 import "../../providers.dart";
 import "../fonts.dart";
 
@@ -36,23 +37,69 @@ enum ModelRole {
   title,
 
   /// Answers `image_generation`: only models that make images.
-  image;
+  image,
+
+  /// Voice mode's ears through a provider: only models that transcribe.
+  transcription,
+
+  /// Voice mode's voice through a provider: only models that speak.
+  speech;
 
   bool offers(ModelInfo m) => switch (this) {
         agent => m.answersTurns,
         text || title => m.talks,
         image => m.makesImages,
+        transcription => m.transcribes,
+        speech => m.speaks,
+      };
+
+  /// Whether its models are chat models: the ones only an endpoint's own list
+  /// names are offered, being taken for chat models since nothing says
+  /// otherwise, and whether one sees images is worth filtering on.
+  bool get chat => this == agent || this == text || this == title;
+
+  bool get voice => this == transcription || this == speech;
+
+  /// What the picker's page is called, and what its empty list says.
+  String get noun => switch (this) {
+        image => "image model",
+        transcription => "transcription model",
+        speech => "speech model",
+        _ => "model",
       };
 }
 
+/// The on-device voice models a voice role offers, under [localProviderId]:
+/// what is downloaded, and the system engines where the device has them —
+/// [installed] is the set every voice gate asks.
+List<CatalogEntry> onDeviceVoiceEntries(ModelRole role, Set<String> installed) => [
+      for (final m in voiceCatalog)
+        if (installed.contains(m.id) &&
+            (role == ModelRole.transcription && m is RecognitionModel ||
+                role == ModelRole.speech && m is SpeechModel))
+          CatalogEntry(
+            localProviderId,
+            "On device",
+            ModelInfo(
+              id: m.id,
+              name: m.name,
+              talks: false,
+              transcribes: m is RecognitionModel,
+              speaks: m is SpeechModel,
+            ),
+          ),
+    ];
+
 /// What a picker offers: each configured provider's models from the catalog
 /// that [role] can use, then whatever the endpoints list that the catalog does
-/// not know — a self-hosted server's models, the on-device ones.
+/// not know — a self-hosted server's models, the on-device ones — and the
+/// voice models of [installed], which the catalog cannot know either.
 List<CatalogEntry> catalogEntries(
   ModelCatalog catalog,
   List<LlmProviderConfig> providers,
   List<ModelOption> listed, {
   required ModelRole role,
+  Set<String> installed = const {},
 }) {
   // Same-named models — one model through two providers — keep the order the
   // providers are configured in.
@@ -66,11 +113,12 @@ List<CatalogEntry> catalogEntries(
               custom: p.customModels.any((c) => c.id == m.id)),
     // Named by their own listing — `<endpoint> · <model>` — and taken to be
     // chat models, since nothing says otherwise: no image model is guessed.
-    if (role != ModelRole.image)
+    if (role.chat)
       for (final o in listed)
         if (!known.contains((o.providerId, o.modelId)) &&
             (role == ModelRole.title || !isTitleOnlyModel(o.providerId, o.modelId)))
           _listedEntry(o),
+    ...onDeviceVoiceEntries(role, installed),
   ]..sort((a, b) {
       final byName =
           a.info.displayName.toLowerCase().compareTo(b.info.displayName.toLowerCase());
@@ -129,12 +177,13 @@ class _ModelCatalogPageState extends ConsumerState<ModelCatalogPage> {
   Object? _entriesKey;
   var _entries = const <CatalogEntry>[];
 
-  List<CatalogEntry> _entriesOf(
-      ModelCatalog catalog, List<LlmProviderConfig> providers, List<ModelOption> listed) {
-    final key = (catalog, providers, listed);
+  List<CatalogEntry> _entriesOf(ModelCatalog catalog, List<LlmProviderConfig> providers,
+      List<ModelOption> listed, Set<String> installed) {
+    final key = (catalog, providers, listed, installed);
     if (key != _entriesKey) {
       _entriesKey = key;
-      _entries = catalogEntries(catalog, providers, listed, role: widget.role);
+      _entries =
+          catalogEntries(catalog, providers, listed, role: widget.role, installed: installed);
     }
     return _entries;
   }
@@ -164,12 +213,21 @@ class _ModelCatalogPageState extends ConsumerState<ModelCatalogPage> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final providers = ref.watch(appSettingsProvider.select((s) => s.llmProviders));
+    final configured = ref.watch(appSettingsProvider.select((s) => s.llmProviders));
+    // A provider's transcription model needs the device to cut the microphone
+    // into utterances, which not every platform can.
+    final providers = widget.role == ModelRole.transcription &&
+            !ref.watch(voiceProvider).hasModelCatalog
+        ? const <LlmProviderConfig>[]
+        : configured;
     final listed = ref.watch(sortedModelsProvider).value ?? const <ModelOption>[];
+    final installed = widget.role.voice
+        ? ref.watch(installedVoiceModelsProvider)
+        : const <String>{};
     return ValueListenableBuilder(
       valueListenable: ModelCatalog.notifier,
       builder: (context, catalog, _) {
-        final all = _entriesOf(catalog, providers, listed);
+        final all = _entriesOf(catalog, providers, listed, installed);
         final words = _search.text.toLowerCase().split(RegExp(r"\s+"))
           ..removeWhere((w) => w.isEmpty);
         final shown = all.where((e) => _matches(e, words)).toList();
@@ -180,7 +238,7 @@ class _ModelCatalogPageState extends ConsumerState<ModelCatalogPage> {
         final searching = _search.text.isNotEmpty;
         return Scaffold(
           appBar: AppBar(
-            title: Text(widget.role == ModelRole.image ? "Choose an image model" : "Choose a model"),
+            title: Text("Choose a ${widget.role.noun}"),
             bottom: PreferredSize(
               preferredSize: const Size.fromHeight(112),
               child: _Readable(Padding(
@@ -211,7 +269,7 @@ class _ModelCatalogPageState extends ConsumerState<ModelCatalogPage> {
                         children: [
                           _Filter("Reasoning", Icons.psychology_alt_outlined, _reasoning,
                               (v) => setState(() => _reasoning = v)),
-                          if (widget.role != ModelRole.image)
+                          if (widget.role.chat)
                             _Filter("Sees images", Icons.image_search, _seesImages,
                                 (v) => setState(() => _seesImages = v)),
                           if (names.length > 1)
@@ -275,7 +333,7 @@ class _ModelCatalogPageState extends ConsumerState<ModelCatalogPage> {
                 SliverFillRemaining(
                   hasScrollBody: false,
                   child: _Empty(
-                      images: widget.role == ModelRole.image && !searching,
+                      role: searching ? null : widget.role,
                       onAdd: providers.isEmpty ? null : _addModel),
                 )
               else
@@ -444,6 +502,8 @@ class _ModelCard extends StatelessWidget {
                   if (info.reasoning) _Tag(Icons.psychology_alt_outlined, "Reasoning"),
                   if (info.readsImages) _Tag(Icons.image_search, "Sees images"),
                   if (info.makesImages) _Tag(Icons.brush_outlined, "Makes images"),
+                  if (info.transcribes) _Tag(Icons.hearing, "Transcribes"),
+                  if (info.speaks) _Tag(Icons.record_voice_over_outlined, "Speaks"),
                   if (entry.custom) _Tag(Icons.edit_outlined, "Added by you"),
                 ],
               ),
@@ -529,12 +589,25 @@ class _Monogram extends StatelessWidget {
 }
 
 class _Empty extends StatelessWidget {
-  const _Empty({required this.images, required this.onAdd});
+  const _Empty({required this.role, required this.onAdd});
 
-  /// The image picker with nothing to offer at all, which is most often a
-  /// provider that makes no images rather than a model missing from the list.
-  final bool images;
+  /// The picker with nothing to offer at all, null while searching. For a
+  /// media role that is most often a provider without such models rather than
+  /// a model missing from the list.
+  final ModelRole? role;
   final VoidCallback? onAdd;
+
+  String? get _media => switch (role) {
+        ModelRole.image => "None of your providers makes images. OpenAI and "
+            "OpenRouter do: add one in Settings > Providers.",
+        ModelRole.transcription => "Nothing here can listen yet. Download a "
+            "model in Settings > On-device, or add a provider with one: Groq "
+            "has Whisper, and OpenAI's whisper-1 can be added by hand.",
+        ModelRole.speech => "Nothing here can speak yet. Download a model in "
+            "Settings > On-device, or add a provider with one: Groq and Google "
+            "have them, and OpenAI's tts-1 can be added by hand.",
+        _ => null,
+      };
 
   @override
   Widget build(BuildContext context) {
@@ -546,16 +619,14 @@ class _Empty extends StatelessWidget {
         children: [
           Icon(Icons.travel_explore, size: 48, color: theme.colorScheme.onSurfaceVariant),
           const SizedBox(height: 12),
-          Text(images ? "No image models" : "No model matches",
+          Text(_media != null ? "No ${role!.noun}s" : "No model matches",
               style: theme.textTheme.titleMedium),
           const SizedBox(height: 4),
           Text(
-            onAdd == null
+            onAdd == null && role?.voice != true
                 ? "Add a provider in Settings > Providers to see its models."
-                : images
-                    ? "None of your providers makes images. OpenAI and "
-                        "OpenRouter do: add one in Settings > Providers."
-                    : "Not every model is in the catalog. A fine-tune or a "
+                : _media ??
+                    "Not every model is in the catalog. A fine-tune or a "
                         "private deployment can be added by hand.",
             textAlign: TextAlign.center,
             style: theme.textTheme.bodyMedium
@@ -606,6 +677,13 @@ class _AddModelPageState extends ConsumerState<AddModelPage> {
   var _readsPdfs = false;
   late var _makesImages = widget.role == ModelRole.image;
 
+  /// What the model is: a chat model, or one of the two speech kinds, which
+  /// answer endpoints of their own and take none of the chat toggles.
+  late var _kind = switch (widget.role) {
+    ModelRole.transcription || ModelRole.speech => widget.role,
+    _ => ModelRole.text,
+  };
+
   @override
   void dispose() {
     for (final c in [_id, _name, _context, _output, _inputCost, _outputCost]) {
@@ -618,6 +696,7 @@ class _AddModelPageState extends ConsumerState<AddModelPage> {
     if (!_form.currentState!.validate()) return;
     final id = _id.text.trim();
     String? text(TextEditingController c) => c.text.trim().isEmpty ? null : c.text.trim();
+    final chat = _kind == ModelRole.text;
     await ref.read(appSettingsProvider.notifier).addCustomModel(
           _provider!,
           ModelInfo(
@@ -627,11 +706,14 @@ class _AddModelPageState extends ConsumerState<AddModelPage> {
             output: int.tryParse(text(_output) ?? ""),
             inputCost: double.tryParse(text(_inputCost) ?? ""),
             outputCost: double.tryParse(text(_outputCost) ?? ""),
-            toolCall: _toolCall,
-            reasoning: _reasoning,
-            readsImages: _readsImages,
-            readsPdfs: _readsPdfs,
-            makesImages: _makesImages,
+            talks: chat,
+            transcribes: _kind == ModelRole.transcription,
+            speaks: _kind == ModelRole.speech,
+            toolCall: chat && _toolCall,
+            reasoning: chat && _reasoning,
+            readsImages: chat && _readsImages,
+            readsPdfs: chat && _readsPdfs,
+            makesImages: chat && _makesImages,
           ),
         );
     if (mounted) Navigator.of(context).pop(id);
@@ -706,49 +788,72 @@ class _AddModelPageState extends ConsumerState<AddModelPage> {
               ],
             ),
             const SizedBox(height: 24),
-            Text("What it can do", style: theme.textTheme.titleSmall),
-            SwitchListTile(
-              contentPadding: EdgeInsets.zero,
-              title: const Text("Tool calling"),
-              subtitle: _required(theme, _toolCall),
-              value: _toolCall,
-              onChanged: (v) => setState(() => _toolCall = v),
+            SegmentedButton<ModelRole>(
+              segments: const [
+                ButtonSegment(value: ModelRole.text, label: Text("Chat")),
+                ButtonSegment(value: ModelRole.transcription, label: Text("Transcribes")),
+                ButtonSegment(value: ModelRole.speech, label: Text("Speaks")),
+              ],
+              selected: {_kind},
+              onSelectionChanged: (v) => setState(() => _kind = v.single),
             ),
-            SwitchListTile(
-              contentPadding: EdgeInsets.zero,
-              title: const Text("Reasoning"),
-              value: _reasoning,
-              onChanged: (v) => setState(() => _reasoning = v),
-            ),
-            SwitchListTile(
-              contentPadding: EdgeInsets.zero,
-              title: const Text("Sees images"),
-              subtitle: const Text("Images are sent to it rather than named"),
-              value: _readsImages,
-              onChanged: (v) => setState(() => _readsImages = v),
-            ),
-            SwitchListTile(
-              contentPadding: EdgeInsets.zero,
-              title: const Text("Reads PDFs"),
-              subtitle: const Text("PDFs are sent to it, where the provider takes them"),
-              value: _readsPdfs,
-              onChanged: (v) => setState(() => _readsPdfs = v),
-            ),
-            SwitchListTile(
-              contentPadding: EdgeInsets.zero,
-              title: const Text("Makes images"),
-              value: _makesImages,
-              onChanged: (v) => setState(() => _makesImages = v),
-            ),
-            if (widget.role == ModelRole.image && !_makesImages)
+            if (_kind != ModelRole.text)
               Padding(
                 padding: const EdgeInsets.only(top: 8),
                 child: Text(
-                  "It will not be offered as an image model unless it makes images.",
+                  _kind == ModelRole.transcription
+                      ? "Called at /audio/transcriptions, for voice mode's listening."
+                      : "Called at /audio/speech, for voice mode's speaking.",
                   style: theme.textTheme.bodySmall
-                      ?.copyWith(color: theme.colorScheme.error),
+                      ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
                 ),
               ),
+            if (_kind == ModelRole.text) ...[
+              const SizedBox(height: 24),
+              Text("What it can do", style: theme.textTheme.titleSmall),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text("Tool calling"),
+                subtitle: _required(theme, _toolCall),
+                value: _toolCall,
+                onChanged: (v) => setState(() => _toolCall = v),
+              ),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text("Reasoning"),
+                value: _reasoning,
+                onChanged: (v) => setState(() => _reasoning = v),
+              ),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text("Sees images"),
+                subtitle: const Text("Images are sent to it rather than named"),
+                value: _readsImages,
+                onChanged: (v) => setState(() => _readsImages = v),
+              ),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text("Reads PDFs"),
+                subtitle: const Text("PDFs are sent to it, where the provider takes them"),
+                value: _readsPdfs,
+                onChanged: (v) => setState(() => _readsPdfs = v),
+              ),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text("Makes images"),
+                value: _makesImages,
+                onChanged: (v) => setState(() => _makesImages = v),
+              ),
+              if (widget.role == ModelRole.image && !_makesImages)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Text(
+                    "It will not be offered as an image model unless it makes images.",
+                    style: theme.textTheme.bodySmall
+                        ?.copyWith(color: theme.colorScheme.error),
+                  ),
+                ),
+            ],
           ],
         ),
       ),

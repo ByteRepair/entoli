@@ -1,5 +1,6 @@
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
+import "../../domain/local_model.dart" show localProviderId;
 import "../../domain/voice_model.dart";
 import "../../providers.dart";
 import "downloads.dart";
@@ -33,10 +34,11 @@ class VoiceModels extends Downloads<VoiceModel> {
   @override
   Future<void> unpick(VoiceModel model) async {
     final settings = ref.read(appSettingsProvider.notifier);
-    if (ref.read(appSettingsProvider).voiceRecognitionModelId == model.id) {
+    final picked = (providerId: localProviderId, modelId: model.id);
+    if (voiceRecognitionChoice(ref.read(appSettingsProvider)) == picked) {
       await settings.setVoiceRecognitionModel(null);
     }
-    if (ref.read(appSettingsProvider).voiceSpeechModelId == model.id) {
+    if (voiceSpeechChoice(ref.read(appSettingsProvider)) == picked) {
       await settings.setVoiceSpeechModel(null);
     }
   }

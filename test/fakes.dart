@@ -715,6 +715,18 @@ class FakeBackend implements AgentBackend {
 
   @override
   Future<List<ModelOption>> models() async => modelList;
+
+  /// The providers whose audio endpoints answer.
+  final Set<String> listeners = {};
+  final Set<String> speakers = {};
+
+  @override
+  Transcribe? transcriber(String providerId, String modelId) =>
+      listeners.contains(providerId) ? (_) async => "" : null;
+
+  @override
+  Synthesize? synthesizer(String providerId, String modelId, {String? voice}) =>
+      speakers.contains(providerId) ? (_) async => Uint8List(0) : null;
 }
 
 /// A `ChatStore` that keeps everything in memory, for the tests whose subject
@@ -950,15 +962,19 @@ class FakeVoice extends Voice {
   @override
   Future<List<VoiceLanguage>> systemLanguages() async => languages;
 
+  /// What the last [start] was asked to speak with.
+  Speaking? speakingWith;
+
   @override
   Future<VoiceSession> start({
-    RecognitionModel? recognition,
-    required SpeechModel speech,
+    Hearing? hearing,
+    required Speaking speaking,
     int speaker = 0,
     String? language,
   }) async {
     if (refusal != null) throw StateError(refusal!);
-    listeningWith = recognition;
+    listeningWith = hearing is HearOnDevice ? hearing.model : null;
+    speakingWith = speaking;
     startedIn = language;
     return session = FakeVoiceSession();
   }

@@ -38,6 +38,29 @@ void main() {
     expect(offered(ModelRole.title), unorderedEquals([appleModelId, "qwen"]));
   });
 
+  test("a voice role offers its own kind, and what is on the device", () {
+    final catalog = ModelCatalog.parse(jsonEncode({
+      testProviderId: {
+        "models": {
+          "chat": {"tool_call": true},
+          "stt": {"modalities": {"input": ["audio"], "output": ["text"]}},
+          "tts": {"modalities": {"input": ["text"], "output": ["audio"]}},
+        },
+      },
+    }));
+    const listed = [ModelOption(providerId: testProviderId, modelId: "my-finetune")];
+    const installed = {"whisper-tiny", "piper-en_US-amy"};
+    List<String> offered(ModelRole role) => [
+          for (final e in catalogEntries(catalog, const [testProvider], listed,
+              role: role, installed: installed))
+            "${e.providerId}/${e.info.id}",
+        ];
+
+    // An endpoint's own listing is taken for chat, never for speech.
+    expect(offered(ModelRole.transcription), ["test/stt", "on-device/whisper-tiny"]);
+    expect(offered(ModelRole.speech), ["on-device/piper-en_US-amy", "test/tts"]);
+  });
+
   setUp(() => app = TestApp.create());
   tearDown(() => app.dispose());
 

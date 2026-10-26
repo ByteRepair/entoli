@@ -1,6 +1,7 @@
 import "android_voice.dart";
 import "../../domain/voice.dart";
 import "../../domain/voice_model.dart";
+import "remote_speaker.dart";
 import "voice_strategies.dart";
 
 /// Voice mode on iOS: Apple's own engines behind the same native contract
@@ -43,28 +44,38 @@ class IosVoice extends Voice {
 
   @override
   Future<VoiceSession> start({
-    RecognitionModel? recognition,
-    required SpeechModel speech,
+    Hearing? hearing,
+    required Speaking speaking,
     int speaker = 0,
     String? language,
   }) async {
-    if (recognition?.isNative == false || !speech.isNative) {
+    // A provider's speech model needs only a player; its transcription model
+    // needs Silero, which is sherpa's — see [Voice.hasModelCatalog].
+    final hears = switch (hearing) {
+      null => true,
+      HearOnDevice(:final model) => model.isNative,
+      HearThrough() => false,
+    };
+    final speaks = switch (speaking) {
+      SpeakOnDevice(:final model) => model.isNative,
+      SpeakThrough() => true,
+    };
+    if (!hears || !speaks) {
       throw StateError("iOS has no downloaded voice models.");
     }
     // The grants are asked on the first listening turn, the way Android's
     // microphone grant is: a permission sheet nobody was pressing a button
     // for is worse than one at the Talk button. A refusal arrives over the
     // channel as a recognition error, which is the voice screen's to show.
-    Listener? listener;
-    if (recognition != null) {
-      listener = NativeSpeechRecognizer(language: language);
-    }
     // `speaker` has no meaning on the system voice and `language` is the
     // picker the settings page draws instead — the same shapes Android's
     // native halves take.
     return composeSession(
-      listener,
-      Future.value(NativeTextToSpeech(language: language)),
+      hearing == null ? null : NativeSpeechRecognizer(language: language),
+      Future.value(switch (speaking) {
+        SpeakThrough(:final synthesize) => RemoteSpeaker(synthesize),
+        SpeakOnDevice() => NativeTextToSpeech(language: language),
+      }),
     );
   }
 }

@@ -1,5 +1,6 @@
 import "dart:async";
 import "dart:convert";
+import "dart:typed_data";
 
 import "package:http/http.dart" as http;
 
@@ -239,6 +240,36 @@ class OpenAiClient implements LlmClient {
     if (choices is! List || choices.isEmpty) return const [];
     final message = (choices.first as Map)["message"];
     return message is Map ? imagesIn(message["images"]) : const [];
+  }
+
+  /// What [wav] says, through `/audio/transcriptions`.
+  Future<String> transcribe(Uint8List wav, {required String model}) async {
+    final request = http.MultipartRequest("POST", under(baseUrl, "audio/transcriptions"))
+      ..headers.addAll(_auth)
+      ..fields["model"] = model
+      ..fields["response_format"] = "json"
+      ..files.add(http.MultipartFile.fromBytes("file", wav, filename: "speech.wav"));
+    final response = await sendChecked(_http, request);
+    final json = jsonDecode(await response.stream.bytesToString());
+    return json is Map && json["text"] is String ? json["text"] as String : "";
+  }
+
+  /// [text] spoken, through `/audio/speech`. WAV is asked for, since every
+  /// player here takes it; what comes back is whatever the server sent.
+  /// [voice] is the provider's own name for one, and null leaves it out.
+  Future<Uint8List> speak(String text, {required String model, String? voice}) async {
+    final response = await postStream(
+      _http,
+      under(baseUrl, "audio/speech"),
+      headers: {"content-type": "application/json", ..._auth},
+      body: {
+        "model": model,
+        "input": text,
+        "voice": ?voice,
+        "response_format": "wav",
+      },
+    );
+    return response.stream.toBytes();
   }
 
   Map<String, dynamic> _encodeTool(LlmTool tool) => {
