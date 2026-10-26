@@ -12,7 +12,7 @@ import "../../domain/agent_browser.dart";
 import "../../domain/artifact.dart";
 import "../../domain/ask.dart";
 import "../../domain/chat_store.dart" show attachmentFilename;
-import "../../domain/command_grants.dart";
+import "../../domain/safe_command.dart" show SegmentReach, profileSegment;
 import "../../domain/date_words.dart" show describeFire;
 import "../../domain/file_tools.dart";
 import "../../domain/models.dart";
@@ -20,7 +20,6 @@ import "../../domain/permission.dart";
 import "../../domain/plan.dart";
 import "../../domain/profile.dart";
 import "../../domain/prompt_library.dart";
-import "../../domain/safe_command.dart" show SegmentReach;
 import "../../domain/shell.dart";
 import "../../domain/shell_command_analysis.dart";
 import "../../domain/tone.dart";
@@ -92,6 +91,13 @@ String? runningTool(String name) => switch (name) {
       _ => null,
     };
 
+/// What decided a call, the tiers that spoke, and the verdict.
+typedef _Decision = ({
+  PermissionSource source,
+  List<PermissionTier> tiers,
+  PermissionDecision decided,
+});
+
 /// Named beside the tool the way every other tool's is, so that matching on it
 /// is compiler-linked to the name the model is actually told.
 const bashToolName = "bash";
@@ -109,22 +115,53 @@ const _bashCommonArgs = {
   },
 };
 
+const _bashDescription =
+    "Execute a bash command in the chat's persistent shell, which starts in "
+    "the workspace directory and keeps its state between commands: a `cd` or "
+    "an export made by one command is still there for the next.";
+
+const _bashRestartArg = {
+  "restart": {
+    "type": "boolean",
+    "description":
+        "Restart the shell before running, discarding any directory a "
+        "`cd` moved it to and anything an export gave it. Use it when a "
+        "command's failure looks like the shell's state is the problem.",
+  },
+};
+
 const bashTool = LlmTool(
   name: bashToolName,
-  description:
-      "Execute a bash command in the chat's persistent shell, which starts in "
-      "the workspace directory and keeps its state between commands: a `cd` or "
-      "an export made by one command is still there for the next.",
+  description: _bashDescription,
+  schema: {
+    "type": "object",
+    "properties": {..._bashCommonArgs, ..._bashRestartArg},
+    "required": ["command"],
+  },
+);
+
+/// [bashTool] where the terminal environment enforces a sandbox: the one
+/// place leaving it means anything, so the one place it is offered.
+const bashToolSandboxed = LlmTool(
+  name: bashToolName,
+  description: _bashDescription,
   schema: {
     "type": "object",
     "properties": {
       ..._bashCommonArgs,
-      "restart": {
+      ..._bashRestartArg,
+      "unsandboxed": {
         "type": "boolean",
         "description":
-            "Restart the shell before running, discarding any directory a "
-            "`cd` moved it to and anything an export gave it. Use it when a "
-            "command's failure looks like the shell's state is the problem.",
+            "Run this command outside the sandbox. Commands normally run "
+            "sandboxed: they can write only to the workspaces and the folders "
+            "the user granted, and a write anywhere else fails with "
+            "\"Permission denied\" or \"Operation not permitted\". When a "
+            "command needs to write elsewhere (container tools like podman or "
+            "toolbox, installers, caches under ~), call it again with this "
+            "set. The user is asked to approve it unless a rule already "
+            "allows it. Never set it to get around a failure the sandbox did "
+            "not cause.",
       },
     },
     "required": ["command"],
@@ -343,6 +380,7 @@ List<LlmTool> agentTools({
   bool browserShow = false,
   BrowserUploadPolicy? browserUpload,
   bool oneShot = false,
+  bool sandboxed = false,
   List<PromptDocument>? participants,
   bool member = false,
   bool customizing = false,
@@ -352,7 +390,13 @@ List<LlmTool> agentTools({
       file_tool_defs.readTool,
       file_tool_defs.writeTool,
       file_tool_defs.editTool,
-      if (caps.commands) (oneShot ? bashToolOneShot : bashTool),
+      // A sub-agent is not offered a way out: it has nobody to approve one.
+      if (caps.commands)
+        oneShot
+            ? bashToolOneShot
+            : sandboxed
+                ? bashToolSandboxed
+                : bashTool,
       if (caps.ask) askTool,
       if (caps.task) taskTool,
       if (caps.webSearch) ...[websearchTool, webfetchTool],
@@ -464,7 +508,7 @@ class BuiltinAgent {
     this.memoryStore,
     this.memoryChat,
     this.sandboxHelper,
-    this._standing = const StandingPermissions(),
+    this.policy = noPolicy,
     this.dataDir,
     this.claimInstruction,
   });
@@ -492,37 +536,31 @@ class BuiltinAgent {
   final SandboxHelper? sandboxHelper;
 
   /// What the permission pages set, merged chat over project over app by
-  /// the repository: the rules [_runGated] consults before the classifier
-  /// and the banner, the directories [sandboxFor] grants beside the
-  /// workspace, and the re-prompt and Landlock switches. Replaced whole by
-  /// [updateStanding] when the user edits a tier while the turn runs.
-  StandingPermissions get standing => _standing;
-  StandingPermissions _standing;
+  /// the repository, read afresh at every gated call: a rule saved while the
+  /// turn runs — a banner's "always" included — covers the next call.
+  final PolicyReader policy;
 
-  /// Takes the tiers as the settings now say, for the next call the gate
-  /// reads: the call already running keeps what it was decided under, and
-  /// the banner answers granted this turn stay in front.
-  void updateStanding(StandingPermissions standing) {
-    _standing = standing;
-    _rulesCache = null;
-    _dirsCache = null;
-    subAgentRunner?.updateStanding(standing);
+  /// [policy] as this call reads it: once per tool call, so the gate and the
+  /// run it decides see one answer; `~` read the way a file-tool path is, so
+  /// a rule is in the same words as the call it is matched against, guest or
+  /// host; and this turn's own directory grants beside the writable ones.
+  Future<StandingPermissions> _policy() => _callPolicy ??= _readPolicy();
+  Future<StandingPermissions>? _callPolicy;
+
+  Future<StandingPermissions> _readPolicy() async {
+    final read = await policy();
+    return StandingPermissions(
+      permissions: [for (final rule in read.permissions) rule.withPaths(_tilde)],
+      writableDirs: [
+        for (final dir in read.writableDirs) _tilde(dir),
+        ..._runtimeDirs,
+      ],
+      sandboxed: read.sandboxed,
+    );
   }
 
-  /// [path] with a leading `~` read the way a file-tool path is, so what the
-  /// user typed into a rule is in the same words as the call it is matched
-  /// against, guest or host.
   String _tilde(String path) =>
       path == "~" || path.startsWith("~/") ? _resolvePath(path) : path;
-
-  /// Every rule this turn reads, banner grants first, with `~` read. Cached:
-  /// the gate reads it twice a command, and it changes only by a grant or
-  /// an update.
-  List<PermissionRule> get _rules => _rulesCache ??= List.unmodifiable([
-        for (final rule in [..._runtimeRules, ..._standing.permissions])
-          rule.withPaths(_tilde),
-      ]);
-  List<PermissionRule>? _rulesCache;
 
   /// The app's own data directory — settings, secrets, chats. The one shape
   /// [addDirectoryTool] refuses outright: the data directory itself, or
@@ -531,50 +569,24 @@ class BuiltinAgent {
   /// a test that does not exercise the refusal — and nothing is held back then.
   final String? dataDir;
 
-  /// Rules granted mid-turn by a banner answer. They sit in front of the
-  /// standing list — the user answered while watching this exact call — and
-  /// die with the turn, the standing copies being persisted by the backend.
-  final List<PermissionRule> _runtimeRules = [];
-
-  /// Adds a rule at the front of the evaluation, from a banner answer this
-  /// turn is still running under, stamped as this turn's own.
-  void grantRuntimeRule(PermissionRule rule) {
-    _runtimeRules.insert(0, rule.copyWith(origin: PermissionTier.runtime));
-    _rulesCache = null;
-  }
-
   /// What decided the call whose result is being composed, the tiers that
   /// spoke, and the verdict itself — set by every decision site in the gate
   /// and read by [_ran] onto the result it reports. Null where the mode's
   /// default posture put the call behind the banner: the banner's own part
   /// is the record then, and the answer that follows stamps it anew.
-  ({PermissionSource source, List<PermissionTier> tiers,
-          PermissionDecision decided})?
-      _decision;
+  _Decision? _decision;
 
-  /// Directories a re-prompt banner agreed to, live for the rest of the
-  /// turn — [sandboxFor] composes them into every command's grant, so an
-  /// "Allow in Chat" on a denial covers the next command without a banner.
-  /// The durable copies are the repository's to persist.
+  /// Directories an `add_directory` banner agreed to, for the rest of this
+  /// turn — the tier's copy of an "always" is read too, and a mirrored
+  /// chat's plain Allow writes none. [_policy] lists them beside the
+  /// writable ones.
   final Set<String> _runtimeDirs = {};
 
   /// Grants [dirs] for the rest of this turn.
   void grantRuntimeDirs(Iterable<String> dirs) {
     _runtimeDirs.addAll(dirs);
-    _dirsCache = null;
+    _callPolicy = null;
   }
-
-  /// The writable set this turn covers beside the workspaces — the standing
-  /// grants the repository composed plus what a banner answer added mid-turn.
-  /// One store, two readers: [sandboxFor] composes it into every command's
-  /// confinement and the file tools' workspace gate reads the same list, so a
-  /// granted directory carries the chat workspace's own permissions by
-  /// command or by file tool alike.
-  List<String> get _grantedDirs => _dirsCache ??= List.unmodifiable([
-        for (final dir in _standing.writableDirs) _tilde(dir),
-        ..._runtimeDirs,
-      ]);
-  List<String>? _dirsCache;
 
   /// The confinement a command runs under, from the shell's driver. Read per
   /// turn rather than held: the driver is resolved per command in the shell,
@@ -585,10 +597,11 @@ class BuiltinAgent {
   /// The project's workspace is granted beside the chat's own: it is where
   /// work another conversation should find goes, and the file tools and
   /// `writable_directories` already treat it as writable.
-  CommandSandbox? sandboxFor() {
-    if (!_standing.sandboxed) return null;
-    final helper = sandboxHelper ?? shell.driverSandboxHelper;
-    if (helper == null) return null;
+  SandboxHelper? get _helper => sandboxHelper ?? shell.driverSandboxHelper;
+
+  CommandSandbox? sandboxFor(StandingPermissions policy) {
+    if (!policy.sandboxed) return null;
+    if (_helper == null) return null;
     final tmp = shell.tmpDirFor(workspace);
     return CommandSandbox(
       workspace: workspace,
@@ -596,9 +609,25 @@ class BuiltinAgent {
       home: shell.machineHome,
       extraWrites: [
         if (projectWorkspace != workspace) projectWorkspace,
-        ..._grantedDirs,
+        ...policy.writableDirs,
       ],
     );
+  }
+
+  /// The sandbox [analysis]'s command runs under once the rules have their
+  /// word on it — none where a no-sandbox rule covers every segment that
+  /// could write, the rules' own folders added where they match. One answer
+  /// for the gate asking whether leaving it is being asked for, and the run.
+  CommandSandbox? _confinementOf(
+      StandingPermissions policy, ShellCommandAnalysis analysis) {
+    final sandbox = sandboxFor(policy);
+    if (sandbox == null) return null;
+    final ruled =
+        rulesSandbox(policy.permissions, analysis.modelableSegments ?? const []);
+    if (ruled.unconfined) return null;
+    return ruled.writes.isEmpty
+        ? sandbox
+        : sandbox.copyWith(extraWrites: [...sandbox.extraWrites, ...ruled.writes]);
   }
 
   /// Whether this build's host platform models its shell as POSIX. Windows
@@ -905,6 +934,7 @@ class BuiltinAgent {
         browserShow: browserHidden,
         browserUpload: browserUploads,
         oneShot: oneShot,
+        sandboxed: _helper != null,
         participants: roomParticipants,
         member: viewer != null,
         customizing: _customizing,
@@ -1162,6 +1192,7 @@ class BuiltinAgent {
       if (fanOut && call.name == taskToolName) continue;
       // What decided an earlier call is that call's, read or not.
       _decision = null;
+      _callPolicy = null;
       if (_cancelled) {
         // The call as well as the answer: a result whose call is not in the
         // parts is a result the projection has nothing to pair it to.
@@ -1257,17 +1288,17 @@ class BuiltinAgent {
       return;
     }
     // One parse carried the whole way: the rule gate reads its segments, the
-    // deterministic tier its answer, and the run's confinement the grant the
-    // tier vouched with.
+    // deterministic tier its answer, and the run's confinement its words.
     final analysis = ShellCommandAnalysis.parse(command,
         isWindows: platformIsWindows);
     yield _called(call, command);
+    // Leaving the sandbox is part of what is asked: where one would confine
+    // the run and no no-sandbox rule covers it, the call goes to the mode.
+    final leave = boolArg(call.argumentsJson, "unsandboxed");
+    final escaping = leave && _confinementOf(await _policy(), analysis) != null;
     yield* _runGated(call, bashToolName,
-        () => _execute(call, command, analysis: analysis),
-        argumentsText: command, analysis: analysis);
-    // A denied write is offered back once between the result and its report,
-    // the rerun's outcome replacing the denial.
-    yield* sandboxRepromptIfNeeded(call, command, _commandResult!);
+        () => _execute(call, command, analysis: analysis, unconfined: leave),
+        argumentsText: command, analysis: analysis, unsandboxed: escaping);
     yield ToolResultEvent(_ran(call, _commandResult!));
   }
 
@@ -1356,7 +1387,6 @@ class BuiltinAgent {
       output: result.output,
       exceptionInfo: result.exceptionInfo,
       cwd: result.cwd,
-      violations: result.violations,
       decidedBy: decision?.source,
       decidedTier: decision?.tiers ?? const [],
       decided: decision?.decided,
@@ -1844,7 +1874,7 @@ class BuiltinAgent {
   /// the user in the chat, as a generated image is.
   Stream<AgentEvent> _browserScreenshot(LlmToolCall call) async* {
     final ref = intArg(call.argumentsJson, "ref");
-    final markClick = decodeArgs(call.argumentsJson)?["last_click"] == true;
+    final markClick = boolArg(call.argumentsJson, "last_click");
     if (browser!.hold.value != null) {
       yield* _reject(call, _noted(_hidden));
       return;
@@ -1978,7 +2008,7 @@ class BuiltinAgent {
       return ShellResult(returnCode: 0, output: output);
     }
     yield* _gatedPath(call, path, readToolName, run,
-        granted: [..._grantedDirs, ?attachmentsDir]);
+        granted: [...(await _policy()).writableDirs, ?attachmentsDir]);
     // Between the call and its result, which is where the projection looks
     // for a tool's files.
     if (attached != null) yield attached!;
@@ -2269,8 +2299,7 @@ class BuiltinAgent {
 
   /// The directory grant request. The banner is the whole grant: the model
   /// names a directory, the user answers on the ordinary approval banner,
-  /// and the answer rides the plumbing the sandbox re-prompt already rides —
-  /// [ToolApproval.deniedDirs] carries the directory, so an "always" answer
+  /// and [ToolApproval.deniedDirs] carries the directory, so an "always" answer
   /// lands in the named tier's `writableDirs` in `ChatRepository
   /// .respondApproval` with no branch of its own, and the rest of this turn
   /// is covered by [grantRuntimeDirs].
@@ -2381,7 +2410,7 @@ class BuiltinAgent {
   Stream<AgentEvent> _writableDirectories(LlmToolCall call) async* {
     yield _called(call);
     final dirs = [
-      for (final dir in _grantedDirs.toSet())
+      for (final dir in (await _policy()).writableDirs.toSet())
         if (outsideWorkspaces(fs, dir, workspace, projectWorkspace)) dir,
     ]..sort();
     final home = shell.homeFor(projectWorkspace);
@@ -2802,8 +2831,7 @@ class BuiltinAgent {
   /// Run [run] gated by the rules, then [approveMode]. Rules are the standing
   /// decision, so they are consulted first in every mode: an allow runs, a
   /// deny refuses without running or asking, an ask escalates — and no match
-  /// falls through to what the mode answers. A banner answer granted mid-turn
-  /// sits in front of the standing list.
+  /// falls through to what the mode answers.
   ///
   /// The rule's reach stops where the parse's does: a command with findings —
   /// one the static layer cannot model — is escalated to the banner even
@@ -2822,12 +2850,12 @@ class BuiltinAgent {
     String? argumentsText,
     ShellCommandAnalysis? analysis,
     ApproveMode? mode,
+    bool unsandboxed = false,
   }) async* {
-    final rules = _rules;
+    final rules = (await _policy()).permissions;
     final verdict = rulesDecideTraced(
       rules,
       toolName,
-      command: argumentsText,
       path: toolName == readToolName ||
               toolName == writeToolName ||
               toolName == editToolName
@@ -2846,6 +2874,8 @@ class BuiltinAgent {
         _commandResult = const ShellResult.failed(_deniedByRule);
         return;
       case PermissionDecision.allow:
+        // Allowing a command is not allowing it out of the sandbox.
+        if (unsandboxed) break;
         // An allow rule is a standing decision, but only for commands the
         // parse can vouch for: a compound command whose later segments the
         // rule does not cover runs with them unanswered. Findings here are a
@@ -2872,35 +2902,34 @@ class BuiltinAgent {
     }
     // Where the rules left the command uncovered, the deterministic tiers
     // answer before any mode does: a segment the parse proves
-    // non-modifying, a fetch the network rules allow, or a git mutation a
-    // grant policy vouches for — every segment covered, or none is. An
-    // "always show me" ask rule on any segment outranks the tier that would
-    // cover it, the banner being what the user asked for there.
-    if (toolName == "bash" && verdict == null && analysis != null) {
-      final tiered = await _deterministicBashVerdict(analysis, rules);
+    // non-modifying, or a fetch the network rules allow — every segment
+    // covered, or none is. An "always show me" ask rule on any segment
+    // outranks the tier that would cover it, the banner being what the user
+    // asked for there.
+    if (toolName == "bash" &&
+        verdict == null &&
+        analysis != null &&
+        !unsandboxed) {
+      final tiered = _deterministicBashVerdict(analysis, rules);
       if (tiered != null) {
-        _decision = (
-          source: tiered.source,
-          tiers: tiered.tiers,
-          decided: tiered.decided,
-        );
-        if (tiered.decided == PermissionDecision.allow) {
-          // Consumed by this command's run, where the sandbox carries the
-          // grant the policy warranted; the re-run path and the
-          // rule-covered ones recompute their own.
-          _pendingGrantPaths = tiered.grantPaths;
-          _commandResult = await run();
-        } else {
-          _commandResult = const ShellResult.failed(_deniedByRule);
-        }
+        _decision = tiered;
+        _commandResult = tiered.decided == PermissionDecision.allow
+            ? await run()
+            : const ShellResult.failed(_deniedByRule);
         return;
       }
     }
     switch (mode ?? approveMode) {
       case ApproveMode.ask:
-        yield* _askAndExecute(call, toolName, run, argumentsText);
+        yield* _askAndExecute(call, toolName, run, argumentsText,
+            unsandboxed: unsandboxed);
       case ApproveMode.auto:
-        yield* _autoClassifyAndExecute(call, toolName, run, argumentsText);
+        yield* _autoClassifyAndExecute(call, toolName, run, argumentsText,
+            unsandboxed: unsandboxed);
+      case ApproveMode.never when unsandboxed:
+        // Nobody to ask, and the sandbox is the one guard an unwatched turn
+        // has: only a rule takes it away.
+        _commandResult = const ShellResult.failed(_unsandboxedRefused);
       case ApproveMode.never:
         _decision = (
           source: PermissionSource.mode,
@@ -2918,7 +2947,8 @@ class BuiltinAgent {
     String toolName,
     Future<ShellResult> Function() run,
   ) async* {
-    yield* _gatedPath(call, path, toolName, run, granted: _grantedDirs);
+    yield* _gatedPath(call, path, toolName, run,
+        granted: (await _policy()).writableDirs);
     yield ToolResultEvent(_ran(call, _commandResult!));
   }
 
@@ -2961,24 +2991,20 @@ class BuiltinAgent {
     LlmToolCall call,
     String toolName,
     Future<ShellResult> Function() run,
-    String? argumentsText,
-  ) async* {
+    String? argumentsText, {
+    bool unsandboxed = false,
+  }) async* {
     final approval = ToolApproval(
       id: call.id,
       toolName: toolName,
       argumentsJson: call.argumentsJson,
       argumentsText: argumentsText,
+      unsandboxed: unsandboxed,
     );
     yield ApprovalRequestEvent(approval);
+    // An "always" answer's rule is written by the repository before the
+    // answer arrives, and the next call's policy read finds it.
     final answer = await approve(approval);
-    // An "always" answer is the standing rule arriving: it applies to the
-    // rest of this turn at once, ahead of the persisted copy the next turn
-    // reads.
-    if (answer == ApprovalResponse.alwaysAllowChat ||
-        answer == ApprovalResponse.alwaysAllowProject) {
-      final rule = ruleFromApproval(approval);
-      if (rule != null) grantRuntimeRule(rule);
-    }
     final allowed = answer.isAllow;
     _decision = (
       source: PermissionSource.human,
@@ -3000,6 +3026,10 @@ class BuiltinAgent {
   static const _deniedByUser = "The user denied this command. Ask them what "
       "to do instead, or try something else.";
 
+  static const _unsandboxedRefused = "Running this outside the sandbox needs "
+      "the user's approval, and nobody is here to give it. Do it inside the "
+      "workspaces, or tell the user what needs to run unsandboxed.";
+
   static const _deniedByRule = "Denied by a permission rule you set. Do not "
       "retry this command; tell the user what you were trying to do and let "
       "them decide.";
@@ -3010,10 +3040,12 @@ class BuiltinAgent {
     LlmToolCall call,
     String toolName,
     Future<ShellResult> Function() run,
-    String? argumentsText,
-  ) async* {
+    String? argumentsText, {
+    bool unsandboxed = false,
+  }) async* {
     if (_autoPaused) {
-      yield* _askAndExecute(call, toolName, run, argumentsText);
+      yield* _askAndExecute(call, toolName, run, argumentsText,
+          unsandboxed: unsandboxed);
       return;
     }
 
@@ -3024,7 +3056,7 @@ class BuiltinAgent {
           workspace: workspace,
           alsoWritable: [
             if (projectWorkspace != workspace) projectWorkspace,
-            ..._grantedDirs,
+            ...(await _policy()).writableDirs,
           ]),
       _stopped.future.then((_) => PermissionDecision.ask),
     ]);
@@ -3056,7 +3088,8 @@ class BuiltinAgent {
           yield InfoEvent("Auto mode paused: too many uncertain commands. "
               "Asking for every command for the rest of this turn.");
         }
-        yield* _askAndExecute(call, toolName, run, argumentsText);
+        yield* _askAndExecute(call, toolName, run, argumentsText,
+            unsandboxed: unsandboxed);
     }
   }
 
@@ -3067,14 +3100,6 @@ class BuiltinAgent {
   /// person approved is the machine overriding its keeper.
   bool _humanDecided = false;
 
-  /// Directories the grant policy warranted for this call's command, read
-  /// and
-  /// cleared by the run — the sandbox carries them beside the workspaces,
-  /// the fallback to recompute covering every path that reaches [_execute]
-  /// without a tier decision ahead of it (rule allows, `never` mode, the
-  /// re-run). Set only by the tier arm, cleared only here.
-  List<String>? _pendingGrantPaths;
-
   Future<ShellResult> _execute(LlmToolCall call, String command,
       {bool unconfined = false, ShellCommandAnalysis? analysis}) async {
     if (_cancelled) {
@@ -3083,7 +3108,6 @@ class BuiltinAgent {
     // The model's own bound for this command, capped at what the chat allows:
     // a small model's estimate of a build is as likely to be too short as too
     // long, and a cap is the only one that is never wrong.
-    final args = decodeArgs(call.argumentsJson);
     final requested = intArg(call.argumentsJson, "timeout");
     final timeout = Duration(
       milliseconds: requested == null || requested <= 0
@@ -3106,54 +3130,14 @@ class BuiltinAgent {
     // banner, not the mode, is what carries that — auto mode reaches the
     // banner through the classifier's ask — so the gate reads the flag the
     // run itself sets.
-    var sandbox = unconfined ? null : sandboxFor();
-    final parsed = unconfined
-        ? null
-        : analysis ??
-            (sandbox == null
-                ? null
-                : ShellCommandAnalysis.parse(
-                    command, isWindows: platformIsWindows));
-    // The rules' own word on the sandbox, whoever decided the command runs.
-    if (sandbox != null) {
-      final ruled = rulesSandbox(_rules,
-          parsed!.modelableSegments ?? const []);
-      if (ruled.unconfined) {
-        sandbox = null;
-      } else if (ruled.writes.isNotEmpty) {
-        sandbox = sandbox.copyWith(
-            extraWrites: [...sandbox.extraWrites, ...ruled.writes]);
-      }
-    }
+    final parsed =
+        analysis ?? ShellCommandAnalysis.parse(command, isWindows: platformIsWindows);
+    final sandbox =
+        unconfined ? null : _confinementOf(await _policy(), parsed);
     if (sandbox != null && !_humanDecided) {
-      final note = parsed!.escalationNote;
+      final note = parsed.escalationNote;
       if (note != null) {
         return ShellResult.failed(note);
-      }
-    }
-    // The grant the tier vouched this command with, consumed here; every
-    // path that arrives without one recomputes, the assessment being a pure
-    // function of the same inputs the gate used.
-    final vouched = _pendingGrantPaths;
-    _pendingGrantPaths = null;
-    if (sandbox != null) {
-      final grantPaths = vouched ??
-          [
-            for (final grant
-                in (await commandGrantsFor(
-                        CommandGrantsInput(
-                          fs: fs,
-                          start:
-                              shell.sessionCwdInHostWords(workspace) ??
-                              workspace,
-                          home: shell.machineHome,
-                          segments: parsed!.modelableSegments ?? const [],
-                        )))
-                  .gitGrants
-                  .values) ...grant.paths,
-          ];
-      if (grantPaths.isNotEmpty) {
-        sandbox = sandbox.copyWith(extraWrites: [...sandbox.extraWrites, ...grantPaths]);
       }
     }
     final run = shell.start(command,
@@ -3162,7 +3146,7 @@ class BuiltinAgent {
         timeout: timeout,
         environment: environment,
         oneShot: oneShot,
-        restart: args?["restart"] == true,
+        restart: boolArg(call.argumentsJson, "restart"),
         project: project,
         sandbox: sandbox,
         readOnly: readOnlyDirs);
@@ -3176,50 +3160,34 @@ class BuiltinAgent {
   }
 
   /// The deterministic bash tiers the rules leave standing: every segment
-  /// covered by a rule allow, proven non-modifying by its own text, allowed
-  /// by the network rules as a fetch, or vouched for by a grant policy with
-  /// a grant the sandbox will carry. Null where any segment is uncovered,
-  /// and where an ask rule wanted to see any of it — the mode's own path
-  /// decides those, every time. A deny from the network rules is returned
-  /// as one, refusal being what the rule said.
-  Future<
-      ({
-        PermissionSource source,
-        List<PermissionTier> tiers,
-        PermissionDecision decided,
-        List<String> grantPaths,
-      })?> _deterministicBashVerdict(
+  /// covered by a rule allow, proven non-modifying by its own text, or
+  /// allowed by the network rules as a fetch. Null where any segment is
+  /// uncovered, and where an ask rule wanted to see any of it — the mode's own
+  /// path decides those, every time. A deny from the network rules is
+  /// returned as one, refusal being what the rule said.
+  _Decision? _deterministicBashVerdict(
     ShellCommandAnalysis analysis,
     List<PermissionRule> rules,
-  ) async {
+  ) {
     final segments = analysis.modelableSegments;
     if (segments == null || segments.isEmpty) return null;
-    // The host's own words for where the command runs: a guest's are the
-    // only ones the shell's live report carries, and a walk of the machine
-    // has no directory at that name to start from.
-    final cwd = shell.sessionCwdInHostWords(workspace) ?? workspace;
-    final grants = await commandGrantsFor(CommandGrantsInput(
-        fs: fs, start: cwd, home: shell.machineHome, segments: segments));
     final tiers = <PermissionTier>{};
     var ruled = false;
-    for (var i = 0; i < segments.length; i++) {
-      final segment = segments[i];
-      final profile = grants.profiles[i];
+    for (final segment in segments) {
+      final profile = profileSegment(segment);
       if (!profile.modelable) return null;
-      final segmentVerdict =
-          rulesDecideTraced(rules, "bash", command: segment);
-      switch (segmentVerdict?.decision) {
+      final verdict = segmentVerdict(rules, segment);
+      switch (verdict?.decision) {
         case PermissionDecision.deny:
           return (
             source: PermissionSource.rule,
-            tiers: segmentVerdict!.tiers.toList(),
+            tiers: verdict!.tiers.toList(),
             decided: PermissionDecision.deny,
-            grantPaths: const <String>[],
           );
         case PermissionDecision.ask:
           return null;
         case PermissionDecision.allow:
-          tiers.addAll(segmentVerdict!.tiers);
+          tiers.addAll(verdict!.tiers);
           ruled = true;
           continue;
         case null:
@@ -3241,7 +3209,6 @@ class BuiltinAgent {
                 source: PermissionSource.rule,
                 tiers: network!.tiers.toList(),
                 decided: PermissionDecision.deny,
-                grantPaths: const <String>[],
               );
             case PermissionDecision.allow:
               tiers.addAll(network!.tiers);
@@ -3252,82 +3219,14 @@ class BuiltinAgent {
               return null;
           }
         case SegmentReach.other:
-          if (!grants.gitGrants.containsKey(i)) return null;
-          continue;
+          return null;
       }
     }
     return (
       source: ruled ? PermissionSource.rule : PermissionSource.parse,
       tiers: ruled ? tiers.toList() : const <PermissionTier>[],
       decided: PermissionDecision.allow,
-      grantPaths: [
-        for (final grant in grants.gitGrants.values) ...grant.paths,
-      ],
     );
-  }
-
-  /// After a command the confinement denied: one offer to rerun it
-  /// unconfined, rather than leaving the denial for the model to discover.
-  /// Every violation is a write the sandbox refused — the ruleset reads
-  /// everywhere — so unconfined is the one rerun that can go differently.
-  /// Off under the standing re-prompt switch and in `never` mode, where nobody is
-  /// there to ask. The rerun is not offered again: it runs unconfined.
-  ///
-  /// Streaming, because the banner is where the answer comes from; the caller
-  /// yields this between the first result and its report, and reads
-  /// [_commandResult] after — set by the rerun, still the denial where none
-  /// was asked for.
-  Stream<AgentEvent> sandboxRepromptIfNeeded(
-    LlmToolCall call,
-    String command,
-    ShellResult result,
-  ) async* {
-    if (result.violations.isEmpty ||
-        !_standing.sandboxReprompt ||
-        approveMode == ApproveMode.never) {
-      return;
-    }
-    // What an "always" answer grants. A denial the shim could not name has
-    // no path here, and its banner offers no "always".
-    final deniedDirs = [
-      for (final violation in result.violations)
-        if (violation.startsWith("writing /"))
-          violation.substring("writing ".length),
-    ];
-    // The re-prompt's approval carries what it is agreeing to: the denied
-    // directories. An "always" answer becomes a directory grant — runtime
-    // for the turn here, persisted by the repository — never a command-prose
-    // rule, which would match nothing next turn while claiming to.
-    //
-    // Its id is the call's own plus a suffix, deliberately not the call id:
-    // the ask banner and this banner are two questions about one call, and
-    // the approval plumbing keys by id — one completer, one view-state entry,
-    // one removal. Sharing the id made the second banner inherit the first's
-    // answer and vanish the moment the first was answered, which read as the
-    // whole chain executing on a prompt that was never given.
-    final approval = ToolApproval(
-      id: "${call.id}-reprompt",
-      toolName: "bash",
-      argumentsJson: call.argumentsJson,
-      argumentsText: result.violations.join("; "),
-      deniedDirs: deniedDirs,
-      rerun: true,
-    );
-    yield ApprovalRequestEvent(approval);
-    final answer = await approve(approval);
-    if (answer == ApprovalResponse.alwaysAllowChat ||
-        answer == ApprovalResponse.alwaysAllowProject) {
-      grantRuntimeDirs(deniedDirs);
-    }
-    final allowed = answer.isAllow;
-    _decision = (
-      source: allowed ? PermissionSource.rerun : PermissionSource.human,
-      tiers: allowed ? const [] : [PermissionTier.once],
-      decided: allowed ? PermissionDecision.allow : PermissionDecision.deny,
-    );
-    _commandResult = allowed
-        ? await _execute(call, command, unconfined: true)
-        : const ShellResult.failed(_deniedByUser);
   }
 
   /// Reports [run]'s output as it prints, each change no more than

@@ -1021,8 +1021,8 @@ void main() {
       expect(find.text("Add rule"), findsOneWidget);
     });
 
-    testWidgets("the Landlock switch overrides the app default, and the "
-        "re-prompt goes with it", (tester) async {
+    testWidgets("the Landlock switch overrides the app default",
+        (tester) async {
       await io(tester, () => app.repo.createProject("research"));
       await open(tester, "research");
 
@@ -1034,10 +1034,6 @@ void main() {
 
       expect(ProjectSettings.load(app.config, project: "research").sandbox,
           isFalse);
-      final reprompt = tester.widget<SwitchListTile>(find.ancestor(
-          of: find.text("Offer to rerun sandbox-denied commands"),
-          matching: find.byType(SwitchListTile)));
-      expect(reprompt.onChanged, isNull);
     });
   });
 

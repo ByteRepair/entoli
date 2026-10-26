@@ -33,3 +33,7 @@ int? intArg(String? json, String key) {
   final value = decoded[key];
   return value is int ? value : null;
 }
+
+/// Whether a boolean argument is set to true; anything else, missing or not
+/// a boolean, is false.
+bool boolArg(String? json, String key) => decodeArgs(json)?[key] == true;

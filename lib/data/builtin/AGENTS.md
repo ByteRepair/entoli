@@ -300,134 +300,103 @@ the banner), `auto` (a classifier model decides allow/ask/deny per command),
 
 Before the mode, the **rules** decide. `PermissionRule` (`lib/domain/permission.dart`)
 names a tool, a pattern and a decision, and the tiers merge chat over project
-over app (`meta.json`'s `permissions`, `project.json`'s, `settings.json`'s);
-deny outranks ask outranks allow whatever tier wrote it. For `bash` the
-pattern is a glob matched per segment — the pieces a top-level `|;&&` splits
-the command into — so a compound command must find an allow for every segment,
-and a command the parse cannot model is escalated to the banner even under an
-allow rule (refused in `never`, where nobody can answer).
+over app (`meta.json`'s `permissions`, `project.json`'s, the default
+project's); deny outranks ask outranks allow whatever tier wrote it.
 
-A pattern names alternatives with shell braces, `{podman,toolbox} *`, for
-every tool (`expandBraces`): not `|`, which is the pipe the segment split
-reads, and not a bare comma, which real arguments carry. A `~` in a rule's
-writes, a file tool's pattern or a tier's `writableDirs` is read by the
-agent's own file-tool resolver before the sandbox or the match sees it, so a
-rule is in the same words as the path it is matched with, guest or host — the
-Landlock helper takes a path as given, and a literal `~/x` failed every
-command.
+**A command is matched by its words, not its text.** The parse splits it at
+its top-level operators into segments, and each segment is matched as
+`plainCommand`'s words joined — its redirects already left out — so
+`podman ps 2>&1 | head` is the segments `podman ps` and `head`, and nothing in
+a pattern has to know shell syntax: `*` is anything, a trailing ` *` also
+covers the bare command, and braces name alternatives (`{podman,toolbox} *`;
+not `|`, which is the pipe, nor a bare comma, which arguments carry). Every
+segment must find an allow, so a compound whose tail no rule covers is not
+allowed by its head. A segment whose words are not plain text — an
+expansion, a substitution — is matched by no rule, and a command the parse
+cannot model at all goes to the banner even under an allow rule (refused in
+`never`, where nobody can answer).
 
-A turn reads the tiers as it starts, so every write of a project's settings
-goes through `ChatRepository.saveProjectSettings`: where the permission half
-changed, it resolves what the next turn would start with and
-`AgentBackend.updatePermissions` hands it to the running agents, which pass it
-to their sub-agents, from the call after the one in flight. The settings
-notifier and a banner's "Allow in Project" both save through it.
+**The policy is read, not held.** The repository hands a turn a
+`PolicyReader` (`TurnSettings.policy`), and the agent calls it at every gated
+call: a rule saved from a settings page while a turn runs, or written by a
+banner's "always", covers the turn's next call with nothing pushed anywhere.
+It is cheap — the project files are held in memory — and the agent reads `~`
+in a rule's writes, a file tool's pattern and the `writableDirs` with its
+own file-tool resolver, so a rule is in the words of the path it meets,
+guest or host. A sub-agent is handed the same reader.
 
 A rule answers two questions, separately: its `decision` is whether a match
 is asked about, `unconfined` and `writes` what a matching `bash` run may
-touch — no Landlock at all, or extra directories beside the turn's grant. Either may stand
-alone: `decision` is optional, so "ask, but run podman unconfined once
-answered" is one rule. They are separate because an allow stops the asking,
-and the sandbox matters most for exactly the runs nobody watches; an allow
-that also unconfined would turn the banner's "Allow in Project" on
-`python3 x.py` into every Python script running free. The banners write
-decisions only; a sandbox override is the settings page's. The sandbox
-applies to the commands the rule matches and no others (`rulesSandbox`): the
-run is unconfined only when every segment matches an unconfined rule, since
-the confinement is the run's — except a segment the parse proves reads only
-(`podman ps | head`), which has nothing to use the freedom for and would
-otherwise keep every piped podman command confined; at least one segment
-must still match. `writes` are the union of the matched
-rules'. Rules from before the split carried a `writes` key that granted the
-whole turn; it is not read. The turn's grant is the chat's workspace, its
-tmp, the project's workspace beside it, and the tiers' `writableDirs`.
+touch — no Landlock at all, or extra directories beside the turn's grant.
+Either may stand alone: `decision` is optional, so "ask, but run podman
+unconfined" is one rule. They are separate because an allow stops the
+asking, and the sandbox matters most for exactly the runs nobody watches. The
+sandbox half applies to the commands the rule matches and no others
+(`rulesSandbox`): a run is unconfined where every segment that could write
+matches an unconfined rule — a segment the parse proves reads only
+(`podman ps | head`) has nothing to use the freedom for and does not hold it
+back, and at least one segment must match — and `writes` are the union of
+the matched rules'. The turn's grant is the chat's workspace, its tmp, the
+project's workspace beside it, and the tiers' `writableDirs`.
 
 **The rules are policy; the terminal environment enforces them or says it
 does not.** The rules, their sandbox half and the switch below are set
 globally and per project whatever runs the commands, and they stay set when
 the environment changes. The approval half is the app's own gate and holds
-everywhere; the sandbox half is the driver's to enforce, and today only
-Linux's host driver can (its `sandboxHelper`). Every environment declares
-which it is as a `Confinement` (`lib/domain/confinement.dart`), and the
-Terminal page names it on each option and explains the picked one, so a user
-on macOS, Windows, a phone or a guest is not left assuming a sandbox that
-nothing implements. A new driver that enforces the sandbox half is a new
-`SandboxHelper` and a `Confinement` that says so — not a change to the rules.
+everywhere, the classifier with it; the sandbox half is the driver's to
+enforce, and only Linux's host driver can (its `sandboxHelper`) — a phone
+needs none, its app sandbox being the OS's. Every environment declares which
+it is as a `Confinement` (`lib/domain/confinement.dart`), and the Terminal
+page names it on each option and explains the picked one. A new enforcer is
+a new `SandboxHelper` and a `Confinement` that says so — not a change to the
+rules.
 
 Landlock itself is a setting, `sandbox` in `project.json`: the default
 project's is the app's answer, a project's own overrides it, and unset is on.
 Off, `sandboxFor` answers null for the whole turn and its sub-agents, which
-also stands down the parse gate and the re-prompt — nothing is denied to offer
-back. It exists because the machine's two drivers made two policies: a guest
-(proot's Alpine, iSH) is already a boundary the model cannot see past, so
-the host on Linux was the only place every command paid the workspace
-restriction, and for a user whose work is containers and toolchains outside
-it, that was a prompt per command. A built-in project's rules, writable
-directories and this switch are its own `project.json`'s like anyone's;
-only the page used to hide them. What the sandbox denied while a
-command ran rides the result as `violations`, and — where `sandboxReprompt` is
-on and the mode is not `never` — one offer to rerun it unconfined is made,
-whether or not a human approved the command first: the approval was for the
-command, the denial is news. What the sandbox denied is *reported*,
-not scraped: the confinement exports an `LD_PRELOAD` shim beside the helper
-(`entoli-deny-report.so`, compiled with it, best-effort) that records every
-syscall the kernel refused — `op\tpath`, one line, into a file under the
-grant — and the result reads that report, filters it against the grant, and
-words it. No wording table, no quote marks to chase: the denial is the
-syscall's, whatever the failing tool chose to print about it.
+also stands down the parse gate.
 
-The path is absolute and is what Landlock checked: the file for a content
-`write`, the directory for an entry a `make` or `remove` touched. Both halves
-matter. `mkdir -p` changes into each parent and makes the next by its bare
-name, so a path taken as given was resolved against the wrong directory, read
-as inside the grant, and dropped; and a granted path that does not exist yet
-fails the helper at startup, so an "always" over a new file must name the
-directory it goes in. The ruleset reads everywhere, so a write outside the
-grant is the only denial the sandbox can make: a read, an exec, or anything
-inside the grant is the file's own permissions, explains the output's
-`Permission denied`, and is not a violation. That is why the rerun is always
-unconfined — a confined one would be refused again.
+**Leaving the sandbox is something the model asks for.** Where the
+environment enforces one, `bash` carries an `unsandboxed` argument
+(`bashToolSandboxed`; never a sub-agent's, which has nobody to approve it),
+and its description says what a sandboxed write outside the grant looks like
+when it fails. Nothing scans the output: a confined command that cannot
+write fails like any command, and the model reads the error and calls again
+with `unsandboxed: true`. The gate treats that as part of the call — an
+allow rule and the read-only check do not cover it, a no-sandbox rule for
+every segment does, and the rest goes to the mode: the classifier in auto
+mode (its rubric judges an unsandboxed call as writing past the workspace),
+the banner in ask mode ("Run without the sandbox?", `ToolApproval.unsandboxed`),
+and a refusal in never mode, where the sandbox is the one guard an unwatched
+turn has. Its "always" writes a no-sandbox rule for the command's leading
+words with no decision of its own, so the asking stays with whatever already
+decides it. Nothing guesses from the output after the fact: rootless podman
+cannot run under Landlock at all (joining its pause process means opening
+another process's namespace, which Landlock refuses), so no folder grant
+could have been the answer. Old results carry `violations` and a `rerun`
+decision, still worded so their logs read.
 
-The prose is only a cross-check — a `Permission denied` in the command's
-output with nothing in the report (a static binary bypassing the shim, or a
-Go one, which makes its syscalls past libc and words the error lowercase,
-hence the match is case-blind) is the
-unnamed violation and a `logFailure` line, so a blind channel is visible
-rather than silent. A report line explains the prose only where the output
-names its path: toolbox's refused read of `/proc/<pid>/ns/user` once stood in
-for podman's unseen denial, and the agent went hunting SELinux. That read is
-also why rootless podman cannot run sandboxed at all — Landlock refuses opening
-another process's namespace, which podman needs to join its pause process — so
-its unnamed violation says to run it unconfined. Its banner offers no "always", having no path to persist
-(`ToolApproval.rerun`); a shim that cannot work at all degrades to that same
-cross-check, never to a broken command. The two "always" banner answers write
-the derived rule: `ruleFromApproval` reads the command's leading words, the
-file's directory or the fetch's host, and the repository persists it to the
-tier the answer named.
+The two "always" banner answers on an ordinary banner write the derived rule:
+`ruleFromApproval` reads the command's leading words, the file's directory or
+the fetch's host, and the repository persists it to the tier the answer
+named before the answer reaches the turn.
 
-The directory grant is the re-prompt's route carrying a tool's name:
-`add_directory` (`lib/data/builtin/directory_tools.dart`) is the model's ask
-for write access to a directory outside the workspaces, and its banner — the
-ordinary one less its plain Allow — is the whole grant. The model asks because
-the work there recurs, and a this-turn-only grant lapsed at the next turn,
-re-raising every write; a mirrored chat, which has no always answers, keeps
-it. An always answer joins the directory to the turn's runtime grant and
-reaches the repository with it in `deniedDirs`, so it lands in the named
+The directory grant is `add_directory` (`lib/data/builtin/directory_tools.dart`):
+the model's ask for write access to a directory outside the workspaces, and
+its banner — the ordinary one less its plain Allow — is the whole grant. The
+model asks because the work there recurs; a mirrored chat, which has no
+always answers, keeps a this-turn grant. An always answer reaches the
+repository with the directory in `deniedDirs`, so it lands in the named
 tier's `writableDirs` and no rule is written. `writable_directories` lists the
 workspaces and what was granted beside them. The file tools read the same
-store — `outsideWorkspaces` carries the turn's writable set — so a granted
+list — `outsideWorkspaces` carries the turn's writable set — so a granted
 directory behaves the same by command or by file tool; and auto mode's
-classifier is handed it as `alsoWritable`, beside the project workspace, since
-a rubric anchored on the chat's workspace alone read every write in a granted
-directory as one past it and asked. One store, three readers.
+classifier is handed it as `alsoWritable`, beside the project workspace.
 The app's data directory refuses in both directions — anything beneath it, or
 anything containing it, would make the app's own settings, secrets and chats
 writable from inside its own permit. The tool's door refuses before any
-banner; the repository's persistence route drops the same paths where a
-re-prompt's answer would have persisted them. The tool rides `ask` and runs
-top-level only, having
-nobody to answer the banner otherwise; the description is the only thing that
-tells the model it exists.
+banner, and the repository drops the same paths. The tool rides `ask` and
+runs top-level only, having nobody to answer the banner otherwise.
 
 In `auto` mode, a `PermissionClassifier` (the `LlmClassifier` impl, or
 `NoClassifier` when no classifier model is configured) is asked before each
@@ -455,43 +424,22 @@ with one outstanding denies it.
 `ApprovalBanner` carries four actions: Deny, Allow, **Allow in Chat** and
 **Allow in Project** — the prompt is where the decision lives, since nobody
 opens a settings page to pre-approve each chat. The two always-answers write
-the derived rule (see "Approvals" above) and hand a runtime copy to the
-running turn, so the rest of it is covered before the persisted file is read
-again. They are offered where rules are writable — not a mirrored chat, where
-the banner is being answered from the other device and the home device's
-banner asks the question.
+the derived rule, which the running turn's next policy read finds. They are
+offered where rules are writable — not a mirrored chat, where the banner is
+being answered from the other device and the home device's banner asks the
+question.
 
 **The deterministic tiers answer before any mode does.** Where the rules
 leave a `bash` command uncovered, the parse is consulted per segment, and
 every segment must find a cover before anything runs without asking: a
 segment the parse proves **non-modifying** (`safe_command.dart` — the
-read-only programs, their guarded write-capable flags, the redirects;
-anything its words cannot name stands down), or a mutation a **grant
-policy** vouches for (`command_grants.dart`), which is the sandbox grant the
-vouch answers with. The network half is one family: a `webfetch` call and a
-`curl` or `wget` segment share one decision, and the webfetch banner's
-standing answer writes a `webfetch *` rule covering both carriers, the
-per-domain rules being the settings page's to write. The git half is the
-grant: a git segment the classification lets past the banner — the vouched
-mutations (`add`, `commit`, `fetch`, `merge`, ...) and the plain read-only
-ones alike, git's reads being writes at the kernel (a `status` refreshes the
-index; a fetch takes locks) — runs with its repository's git dir joined to
-the sandbox **wholesale**. The directory itself, not a child listing: git
-makes new files in `.git`'s own root (`index.lock` under every ref refresh,
-`COMMIT_EDITMSG` under a commit), and creating one needs rights on the
-parent no enumeration of the children gives. Landlock has no deny to carve
-a child back out of a granted parent, so `config` and `hooks` are not the
-sandbox's to protect inside it: the commands that write them (`config`,
-`remote`, `submodule`, and `init` with `--template`) are kept off the vouch
-list, and what slips past both layers stands into the mode's own gate. The
-vouch and the grant are one
-computation read twice, so nothing the sandbox carries a grant for is
-without the gate having read it as coverage, and no coverage claims a grant
-the grant layer does not have; a `cd` the command carries moves the repo
-the grant answers for, and a `cd` the tracker cannot name loses the cover.
-What the tiers do
-not cover asks, in every mode: pushes, resets, config and remote writes,
-and everything else the sandbox is the only boundary behind.
+read-only programs, git's read-only subcommands, their guarded
+write-capable flags, the redirects; anything its words cannot name stands
+down), or a fetch the network rules cover: a `webfetch` call and a `curl` or
+`wget` segment share one decision, and the webfetch banner's standing answer
+writes a `webfetch *` rule covering both carriers. What the tiers do not
+cover asks, in every mode — a git commit outside the workspaces included,
+which a rule answers for where it recurs.
 
 `ApprovalBanner` shows **the call, not the tool**. It named the tool and put the
 arguments JSON under it at two lines and an ellipsis, which is a consent dialog

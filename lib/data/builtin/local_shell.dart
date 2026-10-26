@@ -852,10 +852,6 @@ class _OneShotRun implements ShellRun {
     result = _run();
   }
 
-  /// The file the confinement's denials were reported to, or null where the
-  /// helper offers no channel. Read after the run; deleted with it.
-  String? _reportPath;
-
   /// What to run, ending in a shell. `-c` and the script go on the end of it,
   /// so a guest's shell reached through proot and the machine's own are the
   /// same thing to everything below here.
@@ -936,9 +932,8 @@ class _OneShotRun implements ShellRun {
       await drained.timeout(_drainGrace, onTimeout: () {});
       await reading.cancel();
       final text = output.toString();
-      final violations = await _violations(text);
       if (!_killed && timer.isActive) {
-        return ShellResult(returnCode: code, output: text, violations: violations);
+        return ShellResult(returnCode: code, output: text);
       }
       return ShellResult(
         returnCode: -1,
@@ -947,7 +942,6 @@ class _OneShotRun implements ShellRun {
             ? "The command was interrupted and killed."
             : "The command timed out after ${_word(timeout)} and was killed. "
                 "Anything it printed before that is above.",
-        violations: violations,
       );
     } on ShellUnavailable catch (e) {
       // Fail-closed has its own words: a confinement that did not happen is
@@ -963,47 +957,6 @@ class _OneShotRun implements ShellRun {
       );
     } finally {
       timer?.cancel();
-    }
-  }
-
-  /// What the confinement denied, from the report the shim wrote — the
-  /// syscalls the kernel refused, not the prose a tool chose to print. The
-  /// output text is the cross-check: a denial word it holds that no report
-  /// line explains is a blind spot in the channel (a static binary making
-  /// raw syscalls), logged and worded generically rather than lost.
-  Future<List<String>> _violations(String text) async {
-    final reportPath = _reportPath;
-    final report = reportPath == null
-        ? const <String>[]
-        : await _readReport(reportPath);
-    final verdict = sandboxViolations(report, text, sandbox);
-    // The output named a denial the report did not: the shim missed this
-    // process. No path in the line.
-    if (verdict.unreported) {
-      logFailure("sandbox",
-          "denial in command output the report did not name; "
-          "the process bypassed the report shim");
-    }
-    return verdict.violations;
-  }
-
-  static Future<List<String>> _readReport(String path) async {
-    try {
-      final file = File(path);
-      if (!await file.exists()) return const [];
-      final text = await file.readAsString();
-      try {
-        await file.delete();
-      } on Exception {
-        // A report left behind is a file in the sandboxed tmp; the next
-        // run overwrites it.
-      }
-      return text
-          .split("\n")
-          .where((line) => line.trim().isNotEmpty)
-          .toList();
-    } on Exception {
-      return const [];
     }
   }
 
@@ -1037,21 +990,6 @@ class _OneShotRun implements ShellRun {
         Directory(tmp).createSync(recursive: true);
         confined = {...environment, "TMPDIR": tmp};
       }
-      // The report channel, beside the confinement: the shim writes one line
-      // per refused syscall there, and the result reads it back. Under the
-      // grant — the sandboxed tmp made above, else the workspace — or the
-      // shim could not report what it saw.
-      final reportPath = sandboxHelper?.reportPathFor(sandbox!);
-      final shimPath = sandboxHelper?.reportShimPath;
-      if (reportPath != null && shimPath != null) {
-        _reportPath = reportPath;
-        File(reportPath).writeAsStringSync("", flush: true);
-        confined = {
-          ...confined,
-          "ENTOLI_REPORT_PATH": reportPath,
-          "ENTOLI_REPORT_SO": shimPath,
-        };
-      }
       // The helper's prefix, then the driver's whole shell argv: the shell is
       // confined from its first instruction and `-c` with the script goes on
       // the end of it, the shape the helper's usage line takes.
@@ -1083,95 +1021,3 @@ class _OneShotRun implements ShellRun {
     notifier.value = _emitted;
   }
 }
-
-/// What the confinement denied, read off the report the shim wrote: one
-/// line per refused syscall, `op\tpath`, the path absolute and naming what
-/// Landlock checked — the file a write went to, the directory an entry was
-/// made in or removed from. The ruleset reads everywhere and writes the
-/// grant, so a `write`, `make` or `remove` outside the grant is the only
-/// denial the sandbox can have made, and each is a `writing <path>`
-/// violation. Any other line — a read, an exec, a write inside the grant —
-/// is the file's own permissions, which the command's output already says.
-/// Nothing is capped: one entry per path is what bounds the list.
-///
-/// [outputText] is the cross-check: a denial word in the command's own
-/// output with no report line at all beside it means the process bypassed
-/// the shim (a static binary making raw syscalls), and that is an unnamed
-/// violation rather than silence — the model sees that something was taken,
-/// and the log says the channel was blind.
-({List<String> violations, bool unreported}) sandboxViolations(
-  List<String> reportLines,
-  String outputText,
-  CommandSandbox? sandbox,
-) {
-  if (sandbox == null) return (violations: const [], unreported: false);
-  final granted = [
-    sandbox.workspace,
-    if (sandbox.tmp != null) sandbox.tmp!,
-    ...sandbox.extraWrites,
-  ];
-
-  const writeOps = {"write", "make", "remove"};
-  final found = <String>{};
-  var explained = false;
-  var namespace = false;
-  for (final line in reportLines) {
-    final tab = line.indexOf("\t");
-    if (tab < 0) continue;
-    final op = line.substring(0, tab).trim();
-    final raw = line.substring(tab + 1).trim();
-    if (raw.isEmpty) continue;
-    // A path the shim could not make absolute (its cwd was deleted) is
-    // reported as given; it cannot be placed against the grant, so it is
-    // kept rather than guessed inside.
-    final path = raw.startsWith("/") ? p.normalize(raw) : raw;
-    // /dev/null is where commands throw output away and /dev/tty is the
-    // shell's own terminal plumbing — denials there are not what the
-    // command was about.
-    if (path == "/dev/null" || path == "/dev/tty") continue;
-    // A line explains the prose only where the prose is about it: a process
-    // the shim does see can be refused something unrelated, and taking that
-    // as the explanation hid a Go binary's own denial behind it.
-    if (outputText.contains(path)) explained = true;
-    if (op == "read" && _namespaceLink.hasMatch(path)) namespace = true;
-    if (!writeOps.contains(op)) continue;
-    if (path.startsWith("/") && granted.any((dir) => pathInside(path, dir))) {
-      continue;
-    }
-    found.add(path);
-  }
-
-  // The prose cross-check. The denial words are few and stable — what the
-  // kernel's refusals read like in C — and only a report that named nothing
-  // while they appear is a channel problem; a line about shell plumbing
-  // explains nothing and does not count. Case-blind because Go prints them
-  // lowercase, and a Go binary (podman, gh) makes its syscalls past the shim,
-  // so the prose is the only channel it has.
-  final proseDenied = RegExp(
-      r"Permission denied|Read-only file system|Operation not permitted",
-      caseSensitive: false);
-  final unreported = proseDenied.hasMatch(outputText) && !explained;
-
-  return (
-    violations: [
-      for (final path in found) "writing $path",
-      if (unreported) namespace ? namespaceViolation : unnamedViolation,
-    ],
-    unreported: unreported,
-  );
-}
-
-/// Another process's namespace link. Landlock refuses opening one outside the
-/// sandbox, and rootless podman has to, to join its pause process.
-final _namespaceLink = RegExp(r"^/proc/\d+/ns/");
-
-/// The violation a denial the report did not name is worded as.
-const unnamedViolation = "denied (the sandbox refused something it could "
-    "not name; the command's own output says so above)";
-
-/// The unnamed denial where the command also reached for another process's
-/// namespace, which no folder grant can allow.
-const namespaceViolation = "denied (the sandbox kept it from joining another "
-    "process's namespace, which rootless podman and toolbox need: they cannot "
-    "run sandboxed, only unconfined)";
-

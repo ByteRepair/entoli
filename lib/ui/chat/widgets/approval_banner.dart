@@ -54,7 +54,9 @@ class ApprovalBanner extends StatelessWidget {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final detail = approval.argumentsText ?? approval.argumentsJson;
-    final (icon, title) = _heading(approval.toolName);
+    final (icon, title) = approval.unsandboxed
+        ? (Icons.shield_outlined, "Run without the sandbox?")
+        : _heading(approval.toolName);
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       padding: const EdgeInsets.fromLTRB(14, 12, 14, 10),

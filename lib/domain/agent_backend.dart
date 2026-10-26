@@ -449,8 +449,9 @@ class TurnSettings {
   /// is the floor this can only name a value for, not widen.
   final int? turnMaxSteps;
 
-  /// What the permission pages set, merged over the tiers by the repository.
-  final StandingPermissions standing;
+  /// What the permission pages set, read whenever the gate asks rather than
+  /// copied here: a rule saved mid-turn applies to the next call.
+  final PolicyReader policy;
 
   const TurnSettings({
     this.memory = MemorySettings.off,
@@ -474,18 +475,24 @@ class TurnSettings {
     this.turnMaxSteps,
     this.tone = Tone.none,
     this.citations = false,
-    this.standing = const StandingPermissions(),
+    this.policy = noPolicy,
   });
 }
 
-/// What the permission pages set, as one chat's turn reads it. One value so a
-/// page saved while a turn runs can hand the turn, whole, what its next turn
-/// would have started with.
+/// Reads one chat's [StandingPermissions] as the settings say now.
+typedef PolicyReader = Future<StandingPermissions> Function();
+
+/// No rules, no extra folders, the sandbox on: what a test or a turn with no
+/// repository behind it runs under.
+Future<StandingPermissions> noPolicy() async => const StandingPermissions();
+
+/// What the permission pages set, merged over the chat, project and app tiers.
+/// Policy only: the terminal environment enforces the sandbox half or says it
+/// does not (see `Confinement`).
 class StandingPermissions {
   const StandingPermissions({
     this.permissions = const [],
     this.writableDirs = const [],
-    this.sandboxReprompt = true,
     this.sandboxed = true,
   });
 
@@ -496,10 +503,6 @@ class StandingPermissions {
   /// Directories sandboxed commands may additionally write to, beside the
   /// workspace: the tiers' writableDirs.
   final List<String> writableDirs;
-
-  /// Whether a command the sandbox denied writes to is offered back as an
-  /// approval.
-  final bool sandboxReprompt;
 
   /// Whether commands run under Landlock.
   final bool sandboxed;
@@ -617,11 +620,6 @@ abstract class AgentBackend {
   Future<void> shutdown();
 
   Future<void> abort(String chatId);
-
-  /// Hands [chatId]'s running turns, and their sub-agents, the permissions
-  /// the settings now resolve to. A chat with no turn running is left alone:
-  /// its next turn reads the settings afresh.
-  void updatePermissions(String chatId, StandingPermissions standing);
 
   Future<void> respondApproval(
       String chatId, String approvalId, ApprovalResponse response);

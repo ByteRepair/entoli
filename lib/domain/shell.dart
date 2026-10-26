@@ -26,13 +26,11 @@ class ShellResult {
     required this.output,
     this.exceptionInfo,
     this.cwd,
-    this.violations = const [],
   });
 
   const ShellResult.failed(this.exceptionInfo, {this.output = ""})
       : returnCode = -1,
-        cwd = null,
-        violations = const [];
+        cwd = null;
 
   final int returnCode;
   final String output;
@@ -43,11 +41,6 @@ class ShellResult {
   /// no such state to report: a one-shot subshell is gone with the command,
   /// and a command that was killed or never ran left no directory to read.
   final String? cwd;
-
-  /// What the sandbox denied while the command ran, appended to the tool
-  /// result the model reads, so it rewrites instead of retrying blind. Empty
-  /// where nothing was denied or where the command ran with no sandbox.
-  final List<String> violations;
 }
 
 /// What this build ships beside the machine's own commands: the environment a
@@ -103,14 +96,14 @@ class CommandSandbox {
   /// Granted the full write set the workspace gets.
   final List<String> extraWrites;
 
-  /// The sentence the tool result carries when this sandbox denied something.
+  /// The sentence a result from before the sandbox stopped naming its
+  /// denials carries — old logs still hold them.
   static String violationsNote(List<String> violations) =>
       "\n\nDenied by the sandbox: ${violations.join("; ")}. The command "
       "carried on; what it printed above is what it could reach.";
 
-  /// This one with [extraWrites] replacing its own — the grant policy's
-  /// addition composed on the run's sandbox, where the granted paths ride
-  /// beside the workspaces rather than a rebuild of the whole shape.
+  /// This one with [extraWrites] replacing its own — the rules' folders
+  /// composed on the run's sandbox.
   CommandSandbox copyWith({List<String>? extraWrites}) => CommandSandbox(
         workspace: workspace,
         tmp: tmp,
@@ -147,17 +140,6 @@ abstract class SandboxHelper {
   /// the session's `cd` and exports live *inside* the confined shell, which
   /// is the shape that keeps the state a session exists to keep.
   Future<List<String>?> prefixFor(CommandSandbox sandbox);
-
-  /// The file the confinement's denials are reported to, one line per
-  /// refused syscall, or null where this helper has no report channel. The
-  /// caller reads it after the run and words what it holds; it lives under
-  /// the grant so the confined command could write it. Null is honest —
-  /// the prose cross-check takes over — never a wrong report.
-  String? reportPathFor(CommandSandbox sandbox) => null;
-
-  /// The shim library that writes the report, exported to the confined
-  /// command beside [reportPathFor]'s file. Null together with it.
-  String? get reportShimPath => null;
 }
 
 /// Everything needed to run a command inside a downloaded Linux, bar the Linux.
@@ -370,15 +352,6 @@ abstract class Shell {
   /// a shell that shows nothing in the guest for [cwd] before the guest has
   /// spoken seeds nothing. The composer's bar is what asks.
   ValueListenable<String?>? sessionCwd(String cwd, {String? home}) => null;
-
-  /// Where the session for [cwd] stands, in the host's own words: what a walk
-  /// of the machine's filesystem — the command gate's repo discovery among
-  /// them — starts from. [sessionCwd]'s notifier carries the shell's own
-  /// words for where it stands, and a guest's words name nothing on the
-  /// host, so the two answers part company where this shell runs a guest.
-  /// Null where the session has not reported yet, which the caller falls
-  /// back to [cwd] itself for.
-  String? sessionCwdInHostWords(String cwd) => sessionCwd(cwd)?.value;
 
   /// End [cwd]'s persistent shell, where this one runs them. A no-op where it
   /// does not. Called when the chat the shell belongs to is deleted or leaves

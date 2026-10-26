@@ -1,7 +1,6 @@
 // The directory grant tools. The model asks for write access to a directory
 // outside the workspaces with `add_directory`, the user answers on the
-// approval banner, and the answer rides the plumbing the sandbox re-prompt
-// already has: the directory joins the turn's runtime grant through
+// approval banner: the directory joins the turn's runtime grant through
 // [BuiltinAgent.grantRuntimeDirs], and an "always" answer lands in the named
 // tier's `writableDirs` — [ChatRepository.respondApproval] persists
 // `ToolApproval.deniedDirs` there, so the tool carries its directory in that

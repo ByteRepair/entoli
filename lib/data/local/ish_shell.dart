@@ -222,15 +222,6 @@ class IshShell extends Shell {
     _sessions.remove(cwd)?.close();
   }
 
-  /// Where the session's own report names, mapped back through the binding:
-  /// the gate's repo discovery walks the host, not the guest, and the shell's
-  /// live words for where it stands are the guest's.
-  @override
-  String? sessionCwdInHostWords(String cwd) {
-    final session = _sessions[cwd];
-    return session?._hostWords();
-  }
-
   Map<String, String> _compose({
     Map<String, String>? extra,
   }) =>
@@ -270,12 +261,6 @@ class _IshSession {
   /// worker cannot deliver either while it is parked in its read.
   int _handle = 0;
 
-  /// Where the guest says the shell is standing, in the guest's own words:
-  /// the session's record, not [IshShell.sessionCwd]'s — that notifier
-  /// exists only where something (the composer) asked, and this session's
-  /// writes to it are no-ops where nobody did. Started at init, moved by
-  /// each run's marker; what [sessionCwdInHostWords] maps back.
-  String? _standing;
   Future<void> _queue = Future.value();
   _IshRun? _current;
   final List<_IshRun> _runs = [];
@@ -337,7 +322,6 @@ class _IshSession {
         }
         _sessionId = sessionId;
         _handle = handle;
-        _standing = _guestCwd;
         _shell._cwds[_cwdPath]?.value = _guestCwd;
       } catch (e) {
         run.state.complete(ShellResult.failed(
@@ -360,7 +344,6 @@ class _IshSession {
       _current = null;
       run.state.timeoutTimer?.cancel();
       run.state.escalateTimer?.cancel();
-      _standing = result.cwd ?? _guestCwd;
       _shell._cwds[_cwdPath]?.value = result.cwd ?? _guestCwd;
       // The model is told a stop or a timeout happened, as LocalShell's
       // session tells it; a hung-up run already says it did not complete.
@@ -370,7 +353,6 @@ class _IshSession {
               returnCode: result.returnCode,
               output: result.output,
               cwd: result.cwd,
-              violations: result.violations,
               exceptionInfo: run.state.byTimeout
                   ? "The command timed out after ${timeout.inSeconds}s and "
                       "was interrupted. Anything it printed before that is "
@@ -423,20 +405,6 @@ class _IshSession {
     // away rather than never. The handle's freeing stays the destroy's.
     if (handle != 0) _transport.hangup(handle);
     if (id != null) _transport.destroy(id);
-  }
-
-  /// Where the session stands, in the host's own words: the guest path its
-  /// own record names, mapped back through the binding the bridge makes,
-  /// /root at this session's home, [guestWorkspacePath]'s other direction.
-  /// [pathInside] because the record can name a `cd` outside the workspace,
-  /// which the machine has no host path to name either.
-  String? _hostWords() {
-    final standing = _standing;
-    if (standing == null) return null;
-    final root = _shell.guestRoot;
-    if (root == null || !pathInside(standing, root)) return null;
-    final suffix = standing == root ? "" : standing.substring(root.length);
-    return "$_workspaceHome$suffix";
   }
 
   Future<void> close() {

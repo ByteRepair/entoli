@@ -74,7 +74,6 @@ class ProjectSettings {
       this.citations,
       this.permissions = const [],
       this.writableDirs = const [],
-      this.sandboxReprompt,
       this.sandbox,
       this.description});
 
@@ -133,10 +132,6 @@ class ProjectSettings {
   /// that are not the workspaces.
   List<String> writableDirs;
 
-  /// Whether a sandbox-denied write is offered back as an approval. Null
-  /// inherits the app default.
-  bool? sandboxReprompt;
-
   /// Whether commands on the machine run under Landlock at all. Null inherits
   /// the app default, which is on. A guest's rootfs is its own boundary and
   /// this does not reach it.
@@ -177,7 +172,6 @@ class ProjectSettings {
           for (final w in (json["writableDirs"] as List<dynamic>? ?? const []))
             if (w is String) w,
         ],
-        sandboxReprompt: json["sandboxReprompt"] as bool?,
         sandbox: json["sandbox"] as bool?,
         description: json["description"] as String?,
       );
@@ -199,7 +193,6 @@ class ProjectSettings {
       if (permissions.isNotEmpty)
         "permissions": permissionRulesToJson(permissions),
       if (writableDirs.isNotEmpty) "writableDirs": writableDirs,
-      if (sandboxReprompt != null) "sandboxReprompt": sandboxReprompt,
       if (sandbox != null) "sandbox": sandbox,
       // Empty is written as it stands: the screen asking nothing is a value
       // here, where an absent key is the app default.

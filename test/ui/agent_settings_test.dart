@@ -313,28 +313,6 @@ void main() {
       expect(find.text("Run without asking"), findsOneWidget);
     });
 
-    testWidgets("the sandbox re-prompt switch reads and writes the tier",
-        (tester) async {
-      await pumpSettings(tester, app, SettingsCategory.general);
-      await scrollTo(tester, find.text("Permissions"));
-
-      final row = find.text("Offer to rerun sandbox-denied commands");
-      expect(row, findsOneWidget);
-      expect(
-          tester.widget<SwitchListTile>(find.ancestor(
-              of: row, matching: find.byType(SwitchListTile))).value,
-          isTrue,
-          reason: "the default project's answer is null, which inherits on");
-
-      await tester.tap(row);
-      await io(tester, () async {});
-      await settleIo(tester);
-      expect(
-          ProjectSettings.load(app.config, project: null).sandboxReprompt,
-          isFalse,
-          reason: "the switch writes the default project's own answer");
-    });
-
     testWidgets("a rule can set the sandbox and leave asking to the mode",
         (tester) async {
       await pumpSettings(tester, app, SettingsCategory.general);

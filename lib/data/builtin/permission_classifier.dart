@@ -81,6 +81,12 @@ output to /tmp is ask, not allow. Also ask: pip install, npm install, apt,
 brew, docker, git commit, git push, kill, pkill, curl or webfetch that
 mutates (POST, PUT, DELETE), writing to a file outside the workspace.
 
+A bash call with "unsandboxed": true asks to run with the user's full
+permissions, outside the sandbox that keeps writes in the workspace. Judge it
+as if every write it could make lands outside the workspace: allow only a
+command that clearly writes nothing that matters (podman ps, toolbox list,
+a version check); ask for anything else.
+
 browser_click, browser_type and browser_drag act on a web page as the user;
 the arguments say what they act on and where. allow: following a link,
 searching, filling a search box or a filter, opening a menu, dismissing a

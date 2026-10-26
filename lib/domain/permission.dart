@@ -2,7 +2,7 @@ import "models.dart"
     show PermissionDecision, PermissionTier, ToolApproval;
 import "safe_command.dart" show SegmentReach, profileSegment;
 import "shell.dart" show pathInside;
-import "shell_command_analysis.dart" show ShellCommandAnalysis;
+import "shell_command_analysis.dart" show ShellCommandAnalysis, plainCommand;
 
 export "models.dart" show PermissionDecision, PermissionSource, PermissionTier;
 
@@ -130,7 +130,7 @@ class PermissionRule {
       decision == null && !(setsSandbox && (unconfined || writes.isNotEmpty));
 
   /// Which tier carried this rule, stamped by the repository when it
-  /// composes a turn's settings and by the agent for a runtime grant. Not
+  /// composes a turn's settings. Not
   /// persisted — the tier is a fact of the file a rule was read from, not
   /// of the rule itself — so a rule moved between files is stamped anew
   /// rather than lying about where it came from. Null on a rule written by
@@ -226,11 +226,13 @@ class PermissionRule {
   final writes = <String>{};
   for (final segment in segments) {
     var segmentUnconfined = false;
-    for (final rule in rules) {
-      if (!rule.setsSandbox) continue;
-      if (!_ruleMatches(rule, "bash", segment)) continue;
-      if (rule.unconfined) segmentUnconfined = true;
-      writes.addAll(rule.writes);
+    final subject = _subjectOf(segment);
+    if (subject != null) {
+      for (final rule in rules) {
+        if (!rule.setsSandbox || !_ruleMatches(rule, "bash", subject)) continue;
+        if (rule.unconfined) segmentUnconfined = true;
+        writes.addAll(rule.writes);
+      }
     }
     if (segmentUnconfined) {
       matched = true;
@@ -262,45 +264,26 @@ List<PermissionRule> permissionRulesFromJson(List<dynamic>? json) {
 List<Map<String, dynamic>> permissionRulesToJson(List<PermissionRule> rules) =>
     [for (final r in rules) r.toJson()];
 
-/// Whether [text] matches [glob], where `*` spans any run of characters
-/// except a shell operator and `**` spans anything. Anchored at both ends.
-/// The compiled form is cached per glob — the patterns are few and repeat
-/// for the life of the process, where a regex build per match attempt would
-/// be the cost of every command.
+/// Whether [text] matches [glob], where `*` spans anything. Anchored at both
+/// ends, and a glob ending in ` *` — the shape every derived rule carries —
+/// also covers the bare prefix: `git status *` is the rule for `git status`.
+/// A command arrives as its words ([_subjectOf]), its operators and
+/// redirects already gone, so nothing here has to know shell syntax.
+/// Compiled once per glob: the patterns are few and repeat for the life of
+/// the process.
 final _globCache = <String, RegExp>{};
 
-bool globMatch(String glob, String text) {
-  final pattern = _globCache.putIfAbsent(glob, () => _compileGlob(glob));
-  return pattern.hasMatch(text.trim());
-}
+bool globMatch(String glob, String text) =>
+    _globCache.putIfAbsent(glob, () => _compileGlob(glob)).hasMatch(text.trim());
 
-/// Compiles one glob. A glob ending in ` *` — the shape every derived rule
-/// carries — covers the bare prefix too, not only the spaced arguments: the
-/// command `git status` with none is the same command the rule was written
-/// for, and asking again for it is the ask the rule was meant to end.
 RegExp _compileGlob(String glob) {
-  final spaced = RegExp(r"^(.*\S)\s\*$").firstMatch(glob.trim());
-  if (spaced == null) {
-    return _plainGlob(glob.trim());
+  const anyArgs = " .*";
+  var body = RegExp.escape(glob.trim()).replaceAll(RegExp(r"(\\\*)+"), ".*");
+  if (body.endsWith(anyArgs)) {
+    body = "${body.substring(0, body.length - anyArgs.length)}(?: .*)?";
   }
-  final head = spaced.group(1)!;
-  return RegExp(
-      "^${_plainGlobBody(head)}(?:\\s$_star)?\$",
-      caseSensitive: false);
+  return RegExp("^$body\$", caseSensitive: false);
 }
-
-String _plainGlobBody(String glob) =>
-    RegExp.escape(glob).replaceAllMapped(RegExp(r"\\\*\\\*|\\\*"),
-        (m) => m[0]!.length == 4 ? ".*" : _star);
-
-/// What `*` spans: anything but a shell operator. A redirect's `&` — `2>&1`,
-/// `<&3`, `&>log` — is not one, and a command that names one is the same
-/// command; only `&&` and a backgrounding `&` stop it.
-const _star = r"(?:[^;|&]|[<>]&|&>)*";
-
-RegExp _plainGlob(String glob) => RegExp(
-    "^${_plainGlobBody(glob)}\$",
-    caseSensitive: false);
 
 /// What the rules say about one tool call, deny first — a deny is the user's
 /// explicit no, an ask their "always show me", an allow the standing yes.
@@ -323,7 +306,6 @@ RegExp _plainGlob(String glob) => RegExp(
 RuleVerdict? rulesDecideTraced(
   List<PermissionRule> rules,
   String toolName, {
-  String? command,
   List<String>? segments,
   String? path,
   String? url,
@@ -332,30 +314,39 @@ RuleVerdict? rulesDecideTraced(
     PermissionDecision? verdict;
     final tiers = <PermissionTier>{};
     for (final segment in segments) {
-      final segmentVerdict = _strongestTraced(rules, "bash", segment);
-      final d = segmentVerdict?.decision;
+      final found = segmentVerdict(rules, segment);
+      final d = found?.decision;
       if (d == PermissionDecision.deny) {
         return (decision: PermissionDecision.deny,
-            tiers: segmentVerdict!.tiers.toList());
+            tiers: found!.tiers.toList());
       }
       if (d == null) {
         verdict = PermissionDecision.ask;
         continue;
       }
       verdict = _stronger(verdict, d);
-      tiers.addAll(segmentVerdict!.tiers);
+      tiers.addAll(found!.tiers);
     }
     return verdict == PermissionDecision.ask
         ? null
         : (decision: verdict!, tiers: tiers.toList());
   }
   final subject = switch (toolName) {
-    "bash" => command,
+    // A command the parse could not split is matched by no rule: the mode
+    // decides it.
+    "bash" => null,
     "webfetch" => _hostOf(url),
     _ => path,
   };
   if (subject == null) return null;
   return _strongestTraced(rules, toolName, subject);
+}
+
+/// What [rules] say of one command segment, an ask included: the
+/// deterministic tiers need to know a segment is one the user wants shown.
+RuleVerdict? segmentVerdict(List<PermissionRule> rules, String segment) {
+  final subject = _subjectOf(segment);
+  return subject == null ? null : _strongestTraced(rules, "bash", subject);
 }
 
 /// The verdict [rules] makes of one subject, with the tiers of the rules
@@ -387,6 +378,12 @@ typedef RuleVerdict = ({PermissionDecision decision, List<PermissionTier> tiers}
 
 PermissionDecision? _stronger(PermissionDecision? a, PermissionDecision b) =>
     a == null || b.index > a.index ? b : a;
+
+/// What a rule is matched against for one command segment: its words, the
+/// operators already split off by the parse and the redirects left out, so
+/// `podman ps 2>&1` is `podman ps`. Null where the words are not plain text
+/// (an expansion, a substitution): no rule speaks for what cannot be read.
+String? _subjectOf(String segment) => plainCommand(segment)?.words.join(" ");
 
 bool _ruleMatches(PermissionRule rule, String toolName, String subject) =>
     expandBraces(rule.pattern).any((pattern) => switch (toolName) {
@@ -461,17 +458,23 @@ bool _hostMatch(String pattern, String host) {
 /// tool's path becomes its directory's scope, a fetch URL becomes the host.
 /// Null where the call carries nothing matchable.
 ///
-/// A re-prompt banner's answer is not this function's — what the user agreed
-/// to there is the *paths*, and the prose a model wrapped them in varies
-/// every turn: those answers become directory grants (chat `writableDirs` /
-/// project `writableDirs`), not command rules. A command-prose rule derived
-/// from that banner would match nothing next turn while claiming to.
+/// The "always" on a call leaving the sandbox is about the sandbox, not the
+/// asking: it
+/// writes a no-sandbox rule for the same leading words and leaves the
+/// decision to whatever already made it.
 PermissionRule? ruleFromApproval(ToolApproval? approval) {
   if (approval == null) return null;
   switch (approval.toolName) {
     case "bash":
       final command = approval.argumentsText ?? "";
       if (command.trim().isEmpty) return null;
+      if (approval.unsandboxed) {
+        return PermissionRule(
+          tool: "bash",
+          pattern: _commandPrefix(command.trim()),
+          unconfined: true,
+        );
+      }
       // A command that is one fetch — reach network, the fetcher family
       // with a host the consult reads — is a network subject, not a
       // command-prefix one: the standing answer is the same `webfetch *` a

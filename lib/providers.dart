@@ -1415,11 +1415,6 @@ class ProjectSettingsNotifier extends Notifier<ProjectSettings> {
   Future<void> setWritableDirs(List<String> value) =>
       _update((s) => s.writableDirs = value);
 
-  /// Whether a sandbox-denied write is offered back as an approval. Null
-  /// inherits the app default.
-  Future<void> setProjectSandboxReprompt(bool? value) =>
-      _update((s) => s.sandboxReprompt = value);
-
   /// Whether this project's commands run under Landlock. Null inherits the
   /// app default.
   Future<void> setProjectSandbox(bool? value) =>
@@ -1444,7 +1439,7 @@ class ProjectSettingsNotifier extends Notifier<ProjectSettings> {
   Future<void> replace(ProjectSettings next) async {
     final ttlChanged = next.tempChatTtl != state.tempChatTtl;
     state = next.copy();
-    await ref.read(chatRepositoryProvider).saveProjectSettings(state, project: project);
+    await state.save(_config, project: project);
     if (ttlChanged) {
       await ref.read(chatRepositoryProvider).reanchorProjectTtl(project);
       ref.invalidate(chatListProvider);
@@ -1455,7 +1450,7 @@ class ProjectSettingsNotifier extends Notifier<ProjectSettings> {
     final next = state.copy();
     change(next);
     state = next;
-    await ref.read(chatRepositoryProvider).saveProjectSettings(next, project: project);
+    await next.save(_config, project: project);
   }
 }
 
