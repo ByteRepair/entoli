@@ -29,6 +29,7 @@ const nonModifyingPrograms = {
   "echo",
   "printf",
   "true",
+  "sleep",
   "uname",
   "whoami",
   "id",

@@ -15,6 +15,7 @@ void main() {
         "git remote -v",
         "git worktree list",
         "git rev-parse HEAD",
+        "sleep 2",
       ]) {
         expect(
           profileSegment(segment).reach,
