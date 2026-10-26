@@ -33,6 +33,10 @@ with no signature at all — logged before they were kept, or made by another
 model — goes to Gemini's host with LiteLLM's placeholder
 `skip_thought_signature_validator` on its first call.
 
+Google retires a model for new accounts while its own list and models.dev
+still name it, so nothing says in advance which are gone: a Gemini 404 reads
+as "retired", and `LlmProviderConfig.retiredModels` is kept by hand.
+
 Providers are configured in `settings.json` under `llmProviders` — id, API
 shape, base URL, an optional model list — and `llmProviderPresets` fills in
 the endpoints worth naming so that adding one is a key rather than a URL

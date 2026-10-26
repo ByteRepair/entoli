@@ -61,6 +61,15 @@ class LlmProviderConfig {
       api == LlmApi.anthropic ||
       (Uri.tryParse(baseUrl)?.host == "api.openai.com");
 
+  /// Models the provider has retired but models.dev still lists, kept out of
+  /// the picker. By hand: nothing Google answers says which they are.
+  Set<String> get retiredModels =>
+      Uri.tryParse(baseUrl)?.host == "generativelanguage.googleapis.com"
+          ? _googleRetired
+          : const {};
+
+  static const _googleRetired = {"gemini-2.5-flash"};
+
   /// [lookup] reads the app's own environment and whatever settings adds, so a
   /// key can be named there instead of pasted here.
   String? resolveKeyWith(String? Function(String name) lookup) {

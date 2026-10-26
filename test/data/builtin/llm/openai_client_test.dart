@@ -664,4 +664,33 @@ void main() {
       expect(images.single.mimeType, "image/png");
     });
   });
+
+  group("Gemini", () {
+    OpenAiClient geminiRejecting(int status) => OpenAiClient(
+          baseUrl: Uri.parse("https://generativelanguage.googleapis.com/v1beta/openai"),
+          httpClient: MockClient.streaming((_, _) async => errorResponse(status, {
+                "error": {"message": "whatever Google says this week"},
+              })),
+        );
+
+    test("a 404 says the model is retired, whatever Google's wording", () async {
+      await expectLater(
+        geminiRejecting(404).stream(const [], model: "gemini-2.5-flash").toList(),
+        throwsA(isA<LlmException>()
+            .having((e) => e.toString(), "text", OpenAiClient.geminiRetired)
+            .having((e) => e.retryable, "retryable", isFalse)),
+      );
+    });
+
+    test("any other failure is left as it was", () async {
+      await expectLater(
+        geminiRejecting(429).stream(const [], model: "gemini-3.8-flash").toList(),
+        throwsA(isA<LlmException>().having((e) => e.statusCode, "statusCode", 429)),
+      );
+    });
+
+    test("its own model list is not asked", () async {
+      expect(await geminiRejecting(500).listModels(), isEmpty);
+    });
+  });
 }

@@ -66,10 +66,17 @@ class ModelCatalog {
       provider.customModels.where((m) => m.id == model).firstOrNull ??
       _of(provider)?[model];
 
-  /// Every model [provider] offers: its own, then the catalog's.
+  /// Every model [provider] offers: its own, then the catalog's less what the
+  /// provider has retired.
   List<ModelInfo> modelsOf(LlmProviderConfig provider) {
     final own = {for (final m in provider.customModels) m.id: m};
-    return [...own.values, ...?_of(provider)?.values.where((m) => !own.containsKey(m.id))];
+    final retired = provider.retiredModels;
+    return [
+      ...own.values,
+      ...?_of(provider)
+          ?.values
+          .where((m) => !own.containsKey(m.id) && !retired.contains(m.id)),
+    ];
   }
 
   /// This catalog, as fetched from models.dev at [at].
