@@ -1355,7 +1355,7 @@ void main() {
     test("aborting says so on the way out, so the turn is not logged as done",
         () async {
       final backend = backendOver([
-        [bashCall("sleep 5")],
+        [bashCall("touch marker")],
       ]);
       final events = <AgentEvent>[];
       final turn = asking(backend, "hi", approveMode: ApproveMode.ask).listen(events.add);
@@ -2207,7 +2207,7 @@ void main() {
 
     test("an aborted turn writes nothing", () async {
       final backend = backendOver([
-        [bashCall("sleep 5")],
+        [bashCall("touch marker")],
         [saidOnly('{"memories": ["a fact"]}')],
       ]);
       final events = <AgentEvent>[];
