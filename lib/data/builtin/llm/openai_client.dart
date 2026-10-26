@@ -5,6 +5,7 @@ import "dart:typed_data";
 import "package:http/http.dart" as http;
 
 import "../../../core/tls.dart";
+import "../../mime.dart";
 
 import "http_stream.dart";
 import "llm_client.dart";
@@ -158,6 +159,7 @@ class OpenAiClient implements LlmClient {
           final index = (raw["index"] as num?)?.toInt() ?? 0;
           final call = calls.putIfAbsent(index, _PartialCall.new);
           if (raw["id"] is String) call.id = raw["id"] as String;
+          call.signature ??= _thoughtSignature(raw);
           final function = raw["function"] as Map<String, dynamic>?;
           if (function == null) continue;
           if (function["name"] is String) call.name = function["name"] as String;
@@ -183,6 +185,7 @@ class OpenAiClient implements LlmClient {
               id: calls[index]!.id ?? "call_$index",
               name: calls[index]!.name ?? "",
               argumentsJson: calls[index]!.arguments.toString(),
+              signature: calls[index]!.signature,
             ),
         ],
       ),
@@ -190,13 +193,15 @@ class OpenAiClient implements LlmClient {
   }
 
   /// One image from [prompt]. OpenAI's own image models answer only the
-  /// Images API; everything else that makes images through this shape
-  /// (OpenRouter's) answers `/chat/completions` asked for the image modality.
+  /// Images API; Gemini's are asked natively (see [_geminiImage]); everything
+  /// else that makes images through this shape (OpenRouter's) answers
+  /// `/chat/completions` asked for the image modality.
   ///
   /// [quality] is `low`, `medium` or `high`, null for the provider's default.
   /// Only the Images API takes one; the chat shape has no such field.
   Future<List<LlmAttachment>> generateImage(String prompt,
       {required String model, String? quality}) async {
+    if (_isGemini) return _geminiImage(prompt, model);
     final dallE = model.startsWith("dall-e");
     final imagesApi = model.startsWith("gpt-image") || dallE;
     final response = await postStream(
@@ -229,17 +234,53 @@ class OpenAiClient implements LlmClient {
         if (data is List)
           for (final (i, item) in data.indexed)
             if (item is Map && item["b64_json"] is String)
-              LlmAttachment(
-                filename: "image-$i.png",
-                mimeType: "image/png",
-                bytes: base64Decode(item["b64_json"] as String),
-              ),
+              _image(i, base64Decode(item["b64_json"] as String)),
       ];
     }
     final choices = json["choices"];
     if (choices is! List || choices.isEmpty) return const [];
     final message = (choices.first as Map)["message"];
     return message is Map ? imagesIn(message["images"]) : const [];
+  }
+
+  /// Gemini's own `generateContent`, beside the compatibility layer. Neither
+  /// compat route takes every Gemini image model: chat 400s on the image it
+  /// made, and `/images/generations` sends any model it does not list to
+  /// Imagen's `predict`, which 404s.
+  Future<List<LlmAttachment>> _geminiImage(String prompt, String model) async {
+    final native = baseUrl.replace(
+        path: baseUrl.path.replaceFirst(RegExp(r"/openai/?$"), ""));
+    final response = await postStream(
+      _http,
+      under(native, "models/$model:generateContent"),
+      headers: {"content-type": "application/json", "x-goog-api-key": ?apiKey},
+      body: {
+        "contents": [
+          {
+            "parts": [
+              {"text": prompt},
+            ],
+          },
+        ],
+        "generationConfig": {
+          "responseModalities": ["TEXT", "IMAGE"],
+        },
+      },
+    );
+    final json = jsonDecode(await response.stream.bytesToString());
+    final candidates = json is Map ? json["candidates"] : null;
+    final content = candidates is List && candidates.isNotEmpty
+        ? (candidates.first as Map)["content"]
+        : null;
+    final parts = content is Map ? content["parts"] : null;
+    final out = <LlmAttachment>[];
+    for (final part in parts is List ? parts : const []) {
+      final data = part is Map ? part["inlineData"] : null;
+      if (data is Map && data["data"] is String) {
+        out.add(_image(out.length, base64Decode(data["data"] as String)));
+      }
+    }
+    return out;
   }
 
   /// What [wav] says, through `/audio/transcriptions`.
@@ -271,6 +312,21 @@ class OpenAiClient implements LlmClient {
     );
     return response.stream.toBytes();
   }
+
+  /// Named by its bytes: Gemini answers JPEG where OpenAI answers PNG.
+  static LlmAttachment _image(int i, Uint8List bytes) {
+    final mime = sniffMime(bytes) ?? "image/png";
+    return LlmAttachment(
+      filename: "image-$i.${mime.split("/").last.replaceFirst("jpeg", "jpg")}",
+      mimeType: mime,
+      bytes: bytes,
+    );
+  }
+
+  bool get _isGemini => baseUrl.host == "generativelanguage.googleapis.com";
+
+  /// Gemini's documented bypass for a call it did not sign.
+  static const _skipSignature = "skip_thought_signature_validator";
 
   Map<String, dynamic> _encodeTool(LlmTool tool) => {
         "type": "function",
@@ -328,16 +384,25 @@ class OpenAiClient implements LlmClient {
           "content": message.text,
         };
       case LlmRole.assistant:
+        // Gemini signs the first call of a reply and refuses the reply back
+        // unsigned. One with none — logged before signatures were kept, or
+        // made by another model — gets the placeholder Gemini accepts instead.
+        final unsigned = _isGemini && message.toolCalls.every((c) => c.signature == null);
         return {
           "role": "assistant",
           "content": message.text,
           if (message.toolCalls.isNotEmpty)
             "tool_calls": [
-              for (final call in message.toolCalls)
+              for (final (i, call) in message.toolCalls.indexed)
                 {
                   "id": call.id,
                   "type": "function",
                   "function": {"name": call.name, "arguments": call.argumentsJson},
+                  if ((call.signature ?? (unsigned && i == 0 ? _skipSignature : null))
+                      case final signature?)
+                    "extra_content": {
+                      "google": {"thought_signature": signature},
+                    },
                 },
             ],
         };
@@ -391,9 +456,18 @@ List<LlmAttachment> imagesIn(Object? images, {int start = 0}) {
   return out;
 }
 
+/// `extra_content.google.thought_signature`, Gemini's addition to a tool call.
+String? _thoughtSignature(Map<String, dynamic> call) {
+  final extra = call["extra_content"];
+  final google = extra is Map ? extra["google"] : null;
+  final signature = google is Map ? google["thought_signature"] : null;
+  return signature is String && signature.isNotEmpty ? signature : null;
+}
+
 class _PartialCall {
   String? id;
   String? name;
+  String? signature;
   final StringBuffer arguments = StringBuffer();
 }
 

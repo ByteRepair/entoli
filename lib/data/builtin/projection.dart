@@ -323,6 +323,7 @@ Iterable<LlmMessage> _assistant(Message message,
             id: toolCall.id,
             name: toolCall.name,
             argumentsJson: toolCall.argumentsJson ?? "{}",
+            signature: toolCall.signature,
           ));
         case ShellRunPart():
           // The user's own command, worded as what the app did for them. It is
