@@ -249,6 +249,19 @@ void main() {
       expect(b.cwd, isNull);
     });
 
+    test("a one-shot command that reads its input reads nothing", () async {
+      final result = await shell
+          .start("cat; echo after",
+              cwd: workspace.path,
+              home: home.path,
+              timeout: const Duration(seconds: 10),
+              oneShot: true)
+          .result
+          .timeout(const Duration(seconds: 5));
+      expect(result.returnCode, 0);
+      expect(result.output, "after\n");
+    });
+
     test("a background script writes its log, names its pid, and a child "
         "it leaves behind holds nothing of the run's", () async {
       final run = shell.start(

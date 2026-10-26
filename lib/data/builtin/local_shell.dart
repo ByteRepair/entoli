@@ -971,12 +971,15 @@ class _OneShotRun extends ShellRun {
   }
 
   /// `exec 2>&1` redirects the shell's own error output and everything it goes
-  /// on to spawn, which is what makes the transcript read in order.
+  /// on to spawn, which is what makes the transcript read in order. Its input
+  /// is nothing, as a session command's is: a pipe nobody writes to never
+  /// ends, so a command that reads it waits for the timeout.
   ///
   /// Whether `setsid` exists is learned by trying it rather than by probing
   /// first: a failed spawn says the same thing without costing a subprocess.
   Future<Process> _spawn() async {
-    var argv = [...command.skip(1), "-c", "exec 2>&1\n$script"];
+    final body = "exec 2>&1 </dev/null\n$script";
+    var argv = [...command.skip(1), "-c", body];
     var head = command.first;
     // The sandboxed shape: the helper's prefix goes ahead of the shell, so
     // the subshell and everything it execs is confined from its first
@@ -1004,7 +1007,7 @@ class _OneShotRun extends ShellRun {
       // confined from its first instruction and `-c` with the script goes on
       // the end of it, the shape the helper's usage line takes.
       head = prefix.first;
-      argv = [...prefix.skip(1), ...command, "-c", "exec 2>&1\n$script"];
+      argv = [...prefix.skip(1), ...command, "-c", body];
     }
     final started = await LocalShell._spawnInGroup(
         [head, ...argv], cwd, confined,
