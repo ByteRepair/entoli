@@ -19,6 +19,7 @@ class OpenAiProvider extends OpenAiCompatibleProvider {
         blurb: "GPT models, and gpt-image for pictures.",
         prompts: PromptUse.notTrained,
         policy: "https://openai.com/enterprise-privacy",
+        keyUrl: "https://platform.openai.com/api-keys",
       );
 
   /// As a `file` part, which OpenAI's own `/chat/completions` takes.

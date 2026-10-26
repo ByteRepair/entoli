@@ -34,6 +34,7 @@ import "io/platform.dart" if (dart.library.js_interop) "web/platform.dart";
 
 export "io/platform.dart" if (dart.library.js_interop) "web/platform.dart"
     show
+        processEnv,
         byteRepairBinDir,
         cacheDir,
         captureLoginPath,

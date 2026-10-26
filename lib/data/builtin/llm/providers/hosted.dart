@@ -24,6 +24,7 @@ class GroqProvider extends OpenAiCompatibleProvider {
         blurb: "Open models on fast hardware.",
         prompts: PromptUse.notTrained,
         policy: "https://groq.com/privacy-policy",
+        keyUrl: "https://console.groq.com/keys",
       );
 }
 
@@ -49,6 +50,7 @@ class ZaiProvider extends OpenAiCompatibleProvider {
             "prompts sent to the free models are handled, so treat them as not "
             "private.",
         policy: "https://docs.z.ai/legal-agreement/privacy-policy",
+        keyUrl: "https://z.ai/manage-apikey/apikey-list",
       );
 
   // shortcut: not known to keep a model list behind the key; the light
@@ -77,6 +79,7 @@ class OllamaCloudProvider extends OpenAiCompatibleProvider {
         blurb: "Open models, hosted by Ollama.",
         prompts: PromptUse.notTrained,
         policy: "https://ollama.com/privacy",
+        keyUrl: "https://ollama.com/settings/keys",
       );
 
   // shortcut: not known to keep a model list behind the key.

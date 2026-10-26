@@ -22,6 +22,7 @@ class OpenRouterProvider extends OpenAiCompatibleProvider {
         blurb: "One key for hundreds of models from many providers.",
         prompts: PromptUse.dependsOnRoute,
         policy: "https://openrouter.ai/privacy",
+        keyUrl: "https://openrouter.ai/settings/keys",
       );
 
   @override

@@ -1071,6 +1071,8 @@ class _ProvidersEditor extends ConsumerWidget {
       storedKey: initial == null ? null : secrets.providerKey(initial.id),
       encrypted: secrets.encrypted,
       title: title,
+      openLink: ref.read(linkOpenerProvider).open,
+      checkKey: ref.read(keyCheckProvider),
     );
     if (saved == null) return;
     // A renamed provider is a move: the stored key follows the new id and the
@@ -1104,8 +1106,7 @@ class _ProvidersEditor extends ConsumerWidget {
         for (final provider in providers)
           EditableRow(
             title: provider.displayName,
-            subtitle: _describe(provider,
-                storedKey: ref.read(appSecretsProvider).providerKey(provider.id)),
+            subtitle: _describe(ref, provider),
             removeLabel: "Remove ${provider.id}",
             onTap: () => _upsert(context, ref,
                 initial: provider, title: "Edit ${provider.displayName}"),
@@ -1126,19 +1127,29 @@ class _ProvidersEditor extends ConsumerWidget {
     // One already configured is edited from its row rather than added again.
     final chosen = await pickProviderPreset(context, configured: configured);
     if (chosen != null && context.mounted) {
-      await _upsert(context, ref, initial: chosen.preset);
+      final preset = chosen.preset;
+      await _upsert(context, ref,
+          initial: preset,
+          title: preset == null ? "Add provider" : "Connect ${preset.displayName}");
     }
   }
 
-  String _describe(LlmProviderConfig provider, {String? storedKey}) {
-    final key = storedKey != null
-        ? "key stored"
-        : provider.apiKeyEnv != null
-            ? "\$${provider.apiKeyEnv}"
-            : "no key";
-    final models =
-        provider.models.isEmpty ? "models from endpoint" : "${provider.models.length} models";
-    return "${provider.baseUrl} · $key · $models";
+  /// Whether it can answer, in plain words for a preset. An endpoint typed in
+  /// by hand is told apart by its address, which its owner knows.
+  String _describe(WidgetRef ref, LlmProviderConfig config) {
+    final provider = providerOf(config);
+    final env = config.apiKeyEnv;
+    final hasKey = ref.read(appSecretsProvider).providerKey(config.id) != null ||
+        env != null &&
+            (ref.read(appSettingsProvider).environment[env] ??
+                    ref.read(processEnvProvider)(env)) !=
+                null;
+    final status = provider.terms?.prompts == PromptUse.local
+        ? "On this computer"
+        : hasKey
+            ? "Connected"
+            : "Needs a key";
+    return provider.terms == null ? "${config.baseUrl} · $status" : status;
   }
 }
 

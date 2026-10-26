@@ -167,6 +167,7 @@ class PresetTerms {
     required this.prompts,
     this.freeTier,
     this.policy,
+    this.keyUrl,
   });
 
   final String blurb;
@@ -177,4 +178,7 @@ class PresetTerms {
   final String? freeTier;
 
   final String? policy;
+
+  /// The provider's own page for making a key, null where none is needed.
+  final String? keyUrl;
 }

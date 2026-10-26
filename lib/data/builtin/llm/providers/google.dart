@@ -30,6 +30,7 @@ class GoogleProvider extends OpenAiCompatibleProvider {
             "Do not send anything private, confidential or personal. A key with "
             "billing turned on is not used this way.",
         policy: "https://ai.google.dev/gemini-api/terms",
+        keyUrl: "https://aistudio.google.com/apikey",
       );
 
   @override

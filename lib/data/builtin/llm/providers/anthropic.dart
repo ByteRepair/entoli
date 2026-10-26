@@ -47,5 +47,6 @@ class AnthropicProvider extends AnthropicCompatibleProvider {
         blurb: "Claude models.",
         prompts: PromptUse.notTrained,
         policy: "https://www.anthropic.com/legal/commercial-terms",
+        keyUrl: "https://platform.claude.com/settings/keys",
       );
 }
