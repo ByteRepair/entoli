@@ -26,6 +26,9 @@ class _Tab implements BrowserTab {
   @override
   final ValueNotifier<BrowserPage?> page = ValueNotifier(null);
 
+  @override
+  bool get trustedInput => true;
+
   final frames$ = StreamController<BrowserFrame>.broadcast();
   var listened = 0;
 

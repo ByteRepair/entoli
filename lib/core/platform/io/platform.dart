@@ -220,7 +220,6 @@ AppUpdateHost createAppUpdateHost(String cacheDir) {
 /// Agent Browser picked, under `<cache>/browser/`; on Android the app's own
 /// WebViews. iOS's WKWebView speaks no DevTools Protocol.
 AgentBrowser createAgentBrowser(AppConfig config, String cacheDir) {
-  if (Platform.isIOS) return const UnavailableAgentBrowser();
   final dir = p.join(cacheDir, "browser");
   return CdpBrowser(
     browserDir: dir,
@@ -228,7 +227,9 @@ AgentBrowser createAgentBrowser(AppConfig config, String cacheDir) {
     visible: () => AppSettings.load(config).agentBrowserVisible,
     embedded: HeliumDownload(dir, client: tlsClient),
     webViews:
-        Platform.isAndroid ? const MethodChannel("agent_chat/browser") : null,
+        Platform.isAndroid || Platform.isIOS
+            ? const MethodChannel("agent_chat/browser")
+            : null,
   );
 }
 

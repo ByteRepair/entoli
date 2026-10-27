@@ -13,6 +13,7 @@ import "../builtin/local_shell.dart" show environmentWithoutAppImage;
 import "cdp.dart";
 import "helium.dart";
 import "page_script.dart";
+import "webkit_connection.dart";
 
 const _tag = "browser";
 
@@ -30,9 +31,13 @@ class CdpBrowser extends AgentBrowser {
     this.webViews,
   });
 
-  /// Android's own WebViews, made one per chat by `BrowserChannel.kt`, in
-  /// place of a launched browser. Null on the desktops.
+  /// The app's own WebViews, made one per chat by `BrowserChannel.kt` on
+  /// Android and `BrowserChannel.swift` on iOS, in place of a launched
+  /// browser. Null on the desktops.
   final MethodChannel? webViews;
+
+  /// iOS's WKWebViews, which serve no protocol: `WebKitConnection` stands in.
+  bool get _webKit => webViews != null && Platform.isIOS;
 
   /// `<cache>/browser`: the download, the profile and the probes under it.
   final String browserDir;
@@ -161,6 +166,7 @@ class CdpBrowser extends AgentBrowser {
   /// for its own and launches again with the word taken out — by flag rather
   /// than per tab, so a cross-site frame and a worker send it too.
   Future<_Running> _start(String exe, {required bool windowed}) async {
+    if (_webKit) return _Running(exe, null, WebKitConnection(webViews!), windowed: true);
     if (webViews != null) return _connectWebViews(exe);
     if (windowed) return _launch(exe, _profile);
     final known = _userAgents[exe];
@@ -663,6 +669,9 @@ class _CdpTab implements BrowserTab {
 
   @override
   ValueListenable<BrowserPage?> get page => _shown;
+
+  @override
+  bool get trustedInput => !_browser._webKit;
 
   void _forget() {
     _page = null;
@@ -1451,6 +1460,12 @@ class _CdpTab implements BrowserTab {
   /// the cookies a check leaves are kept for when it is hidden again.
   @override
   Future<void> show() async {
+    // iOS's page is put on screen as it is, with no restart.
+    if (_browser._webKit) {
+      await _attach();
+      await _browser.webViews!.invokeMethod<void>("show", {"chat": chatId});
+      return;
+    }
     if (_browser._running?.windowed ?? false) {
       await _attach();
       return;
@@ -1778,7 +1793,7 @@ class _CdpTab implements BrowserTab {
         page.title, page.text, [...page.frames, ...foreign])) {
       out
         ..writeln()
-        ..writeln(challengeNote);
+        ..writeln(trustedInput ? challengeNote : challengeNoteUntrusted);
     }
     return _scrub(out.toString().trimRight());
   }
@@ -1832,3 +1847,11 @@ const challengeNote = "This looks like a human-verification check. Its "
     "where it shows by x and y, checking with a last_click screenshot that "
     "the click hit it. If it will not pass after a few tries, ask the user to "
     "complete it from the chat's browser card, then carry on.";
+
+/// Where a click is a script event, which no such check accepts.
+const challengeNoteUntrusted = "This looks like a human-verification check. "
+    "Your clicks here reach the page as script events, which these checks "
+    "refuse, so do not try to pass it yourself: call "
+    "browser_credentials_hide with a reason asking the user to open the "
+    "browser from the chat's browser card and complete the check, then carry "
+    "on. If you cannot ask, say that the page needs the user.";

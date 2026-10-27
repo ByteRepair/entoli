@@ -33,7 +33,9 @@ class BrowserStrip extends ConsumerWidget {
     void open() => showDialog<void>(
           context: context,
           builder: (_) => BrowserCard(
-              tab: tab, onQuit: browser.close, window: !browser.inApp),
+              tab: tab,
+              onQuit: browser.close,
+              window: !browser.inApp || !tab.trustedInput),
         );
     return ListenableBuilder(
       listenable: Listenable.merge(
@@ -348,7 +350,8 @@ class BrowserCard extends StatefulWidget {
   final BrowserTab tab;
 
   /// Whether the browser can open a window; Android's WebView cannot, and
-  /// this card is its view.
+  /// this card is its view. iOS's is put on screen, for the touches a
+  /// script's clicks cannot stand in for.
   final bool window;
 
   /// Quit the whole browser, every chat's tab with it.

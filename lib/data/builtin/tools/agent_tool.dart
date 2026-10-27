@@ -95,6 +95,7 @@ class ToolOffer {
     this.images = false,
     this.screenshots = false,
     this.uploads = BrowserUploadPolicy.classifier,
+    this.trustedInput = true,
     this.oneShot = false,
     this.sandboxed = false,
     this.background = false,
@@ -122,6 +123,10 @@ class ToolOffer {
 
   /// Who picks what `browser_upload` sends.
   final BrowserUploadPolicy uploads;
+
+  /// The browser's clicks reach a page as a person's: what a drag and a file
+  /// chooser need. Not iOS's, whose clicks are a script's.
+  final bool trustedInput;
 
   /// A sub-agent's turn: commands one-shot, no plan, no triggers, no browser.
   final bool oneShot;

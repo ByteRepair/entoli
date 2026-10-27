@@ -750,9 +750,9 @@ browser off still read pages.
 A real browser window, with a profile of its own under `<cache>/browser/profile/`
 so a login the agent makes is kept, driven over the Chrome DevTools Protocol.
 `AgentBrowser` is the port (`lib/domain/agent_browser.dart`), `CdpBrowser` the
-desktops' and Android's implementation (`lib/data/browser/`),
-`UnavailableAgentBrowser` iOS's and the web's (WKWebView speaks no DevTools
-Protocol), and the settings category is not drawn where `available` is false.
+implementation everywhere but the web (`lib/data/browser/`) — iOS's through a
+stand-in for the protocol, below — `UnavailableAgentBrowser` the web's, and
+the settings category is not drawn where `available` is false.
 Settings > Agent Browser
 writes `agentBrowser`: null off, `embedded` for the downloaded Helium, or a
 Chromium-family executable's path, detected or picked with a file picker and
@@ -909,6 +909,46 @@ so `PublicKeyCredential` is undefined and `navigator.credentials.get` and
 to its other ways (checked on an emulator). It also identifies itself as a
 WebView (`; wv` in the user agent, `X-Requested-With`), so it meets more human
 checks than Helium does.
+
+### On iOS
+
+The browser is a WKWebView per chat, made by `BrowserChannel.swift`, and the
+settings are Android's switch. WebKit serves no protocol an app can reach, so
+`WebKitConnection` answers the slice of it the tab sends — the tab is the
+same code — in terms of the channel: a script is `evaluateJavaScript` (the
+isolated world a named `WKContentWorld`; nothing the tab runs returns a
+promise, so the completion value is the answer), a screenshot or a screencast
+frame is `takeSnapshot` at one pixel per CSS pixel, the screencast a few
+snapshots a second, each waiting on the last one's ack. Cross-site frames are
+the subframe navigations the delegate saw, since a challenge's sits in a
+closed shadow root. Anything else the tab could send says it is not on iOS.
+
+**Input is the page's own events**, made in the isolated world: a click is
+pointer and mouse events and a `click` at the element under the point, a key
+a `KeyboardEvent` with what it would have done done after (`execCommand`), a
+wheel a `scrollBy` on the innermost scroller. iOS has no public way to inject
+a touch, so a page sees every one as untrusted and none reaches into a
+cross-site frame. `BrowserTab.trustedInput` is false, and that is what says
+so: it reaches the turn as `ToolOffer.trustedInput`, where `browser_drag` and
+`browser_upload` read it and are not offered, and a human check's
+note sends it to the user through `browser_credentials_hide` rather than
+suggesting a click. The card's "Open in a window" is `show()`, the real view
+presented full screen, where the user's touches are real.
+
+The views sit in a window of their own under the app's, visible so WebKit
+keeps drawing and running them, and never key. A script counts as a gesture
+to WebKit, so a focus the page script makes is a real one: in the app's own
+window it brought the keyboard up over the app and zoomed the page into the
+field. Each script is therefore followed by `endEditing` while the page is
+not shown — the page keeps its focus, so typing still lands. A page with no
+viewport tag is drawn at its 980 CSS pixels zoomed out, so a snapshot's rect
+is scaled by the view's zoom. All of this was found and checked on the
+simulator: typing, clicks, links, back, the screencast, screenshots of both
+kinds of page, and `show()` and its Done. The app is suspended in the background, so the browser
+works only while it is open, and a call made otherwise says so. What it
+lacks beyond Android's: drag, uploads and downloads (a download is a
+navigation WebKit cancels), and the user's card input is as untrusted as the
+agent's.
 
 ### Uploads (the `browser_upload` tool)
 
