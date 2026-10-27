@@ -14,12 +14,12 @@ import "download.dart";
 abstract class AgentBrowser {
   const AgentBrowser();
 
-  /// Whether this platform can drive a browser at all. False on iOS and the
-  /// web; the settings category is not drawn there.
+  /// Whether this platform can drive a browser at all. False on the web; the
+  /// settings category is not drawn there.
   bool get available;
 
-  /// Whether the browser is the app's own WebView (Android): nothing to pick
-  /// or download, and no window to open.
+  /// Whether the browser is the app's own WebView (Android, iOS): nothing to
+  /// pick or download.
   bool get inApp;
 
   /// Whether a browser is picked and there to launch: what offers the tools.
@@ -89,6 +89,12 @@ abstract class BrowserTab {
   /// The page while the browser has this tab open, null otherwise: what the
   /// chat's browser chip is drawn from.
   ValueListenable<BrowserPage?> get page;
+
+  /// Whether a click reaches the page as a person's would. False on iOS,
+  /// where it is a script's event: a page can tell, and it cannot reach into
+  /// a cross-site frame, so there is no drag or upload, and a human check
+  /// goes to the user, who has [show].
+  bool get trustedInput;
 
   /// What the tab draws, frame by frame, for as long as it is listened to —
   /// hidden or not. Ends when the tab closes; empty where it is not open.
@@ -463,7 +469,7 @@ const embeddedBrowserId = "embedded";
 /// The setting's value where the browser is the app's own WebView.
 const webViewBrowserId = "webview";
 
-/// Where there is no browser to drive: the phones and the web.
+/// Where there is no browser to drive: the web.
 class UnavailableAgentBrowser extends AgentBrowser {
   const UnavailableAgentBrowser();
 

@@ -645,6 +645,7 @@ class BuiltinAgent implements Turn {
         images: generateImage != null && saveResource != null,
         screenshots: seesImages && saveResource != null,
         uploads: browserUploads,
+        trustedInput: browser?.trustedInput ?? true,
         oneShot: oneShot,
         sandboxed: gate.helper != null,
         background: backgroundJobs != null,

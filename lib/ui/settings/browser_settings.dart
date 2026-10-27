@@ -150,7 +150,7 @@ class _AgentBrowserSectionState extends ConsumerState<AgentBrowserSection> {
               "with a profile of its own, so what it logs into stays logged in "
               "and your own browser's profile is never touched.",
         ),
-        // Android's is the app's own WebView: on or off, nothing to pick.
+        // The phones' is the app's own WebView: on or off, nothing to pick.
         if (browser.inApp)
           SwitchListTile(
             title: const Text("Let the agent use a browser"),

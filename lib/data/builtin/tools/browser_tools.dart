@@ -418,6 +418,9 @@ class BrowserDragTool extends PageTool {
   String get name => browserDragToolName;
 
   @override
+  bool get offered => super.offered && offer.trustedInput;
+
+  @override
   String get description => "Press at `from`, move, and release at `to`, in "
       "viewport pixels: for a slider.";
 
@@ -814,7 +817,8 @@ class BrowserUploadTool extends BrowserTool {
   String get name => browserUploadToolName;
 
   @override
-  bool get offered => super.offered && (!_byUser || offer.caps.ask);
+  bool get offered =>
+      super.offered && offer.trustedInput && (!_byUser || offer.caps.ask);
 
   @override
   String get runningLabel => "Uploading";

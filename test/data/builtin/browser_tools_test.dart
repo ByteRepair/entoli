@@ -35,6 +35,9 @@ class FakeBrowserTab implements BrowserTab {
   final page = ValueNotifier<BrowserPage?>(null);
 
   @override
+  bool trustedInput = true;
+
+  @override
   Stream<BrowserFrame> frames() => const Stream.empty();
 
   @override
@@ -318,6 +321,16 @@ void main() {
           .toList();
       expect(offered(blind), contains(browserGotoToolName));
       expect(offered(blind), isNot(contains(browserScreenshotToolName)));
+    });
+
+    test("no drag or upload where a click is a script's", () async {
+      final client = FakeLlmClient([[finish]]);
+      await agentOver(client, tab: FakeBrowserTab()..trustedInput = false)
+          .run(userMessage("hi"))
+          .toList();
+      expect(offered(client), contains(browserClickToolName));
+      expect(offered(client), isNot(contains(browserDragToolName)));
+      expect(offered(client), isNot(contains(browserUploadToolName)));
     });
 
     test("the prompt says how to use it only where it is offered", () {
