@@ -204,6 +204,8 @@ void main() {
   });
 
   group("project memory", () {
+    final toggle = find.widgetWithText(SwitchListTile, "Project memory");
+
     Future<void> openRow(WidgetTester tester) async {
       await openPage(tester);
       await scrollTo(tester, find.text("Project memory"));
@@ -212,7 +214,7 @@ void main() {
     testWidgets("a chat follows the project until it keeps out", (tester) async {
       await openRow(tester);
 
-      expect(tester.widget<SwitchListTile>(find.byType(SwitchListTile)).value,
+      expect(tester.widget<SwitchListTile>(toggle).value,
           isTrue);
       expect((await io(tester, () => app.savedMeta(_chatId))).memoryOff, isNull);
     });
@@ -220,7 +222,7 @@ void main() {
     testWidgets("keeping out stores the off, and it survives a save",
         (tester) async {
       await openRow(tester);
-      await tester.tap(find.byType(SwitchListTile));
+      await tester.tap(toggle);
       await settleIo(tester);
       await save(tester);
 
@@ -232,10 +234,10 @@ void main() {
       await seedMeta(tester, ChatMeta(memoryOff: true));
       await openRow(tester);
 
-      expect(tester.widget<SwitchListTile>(find.byType(SwitchListTile)).value,
+      expect(tester.widget<SwitchListTile>(toggle).value,
           isFalse);
 
-      await tester.tap(find.byType(SwitchListTile));
+      await tester.tap(toggle);
       await settleIo(tester);
       await save(tester);
 
@@ -247,10 +249,30 @@ void main() {
       await seedState(tester, project: "anonymous");
       await openRow(tester);
 
-      final tile = tester.widget<SwitchListTile>(find.byType(SwitchListTile));
+      final tile = tester.widget<SwitchListTile>(toggle);
       expect(find.text("This project keeps no memories."), findsOneWidget);
       expect(tile.value, isFalse);
       expect(tile.onChanged, isNull);
+    });
+  });
+
+  group("sandbox", () {
+    final toggle = find.descendant(
+        of: find.byType(InheritableSwitch),
+        matching: find.byType(SwitchListTile));
+
+    testWidgets("a chat can turn it off for itself, and that survives a save",
+        (tester) async {
+      await openPage(tester);
+      await scrollTo(tester, toggle);
+      expect(tester.widget<SwitchListTile>(toggle).value, isTrue);
+      expect((await io(tester, () => app.savedMeta(_chatId))).sandbox, isNull);
+
+      await tester.tap(toggle);
+      await settleIo(tester);
+      await save(tester);
+
+      expect((await io(tester, () => app.savedMeta(_chatId))).sandbox, isFalse);
     });
   });
 

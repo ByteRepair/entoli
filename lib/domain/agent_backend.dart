@@ -385,7 +385,9 @@ class TurnSettings {
   /// Which project's files the turn works in. Null is the default one.
   final String? project;
 
-  final ApproveMode approveMode;
+  /// A mode this turn keeps whatever the chat is set to; null reads the
+  /// chat's from [policy] at every call, so a change lands mid-turn.
+  final ApproveMode? approveMode;
 
   /// The model that classifies commands in auto mode. Null means auto mode
   /// falls back to asking.
@@ -464,7 +466,7 @@ class TurnSettings {
     this.model,
     this.provider,
     this.project,
-    this.approveMode = ApproveMode.ask,
+    this.approveMode,
     this.classifierProvider,
     this.classifierModel,
     this.imageProvider,
@@ -500,6 +502,7 @@ class StandingPermissions {
     this.permissions = const [],
     this.writableDirs = const [],
     this.sandboxed = true,
+    this.approveMode = ApproveMode.ask,
   });
 
   /// The rules, merged chat first, then project, then app — consulted before
@@ -512,6 +515,10 @@ class StandingPermissions {
 
   /// Whether commands run under Landlock.
   final bool sandboxed;
+
+  /// How a call the rules leave uncovered is decided: the chat's mode over
+  /// the app's.
+  final ApproveMode approveMode;
 }
 
 /// What runs a turn, and the app's one route to a provider. `BuiltinBackend`

@@ -357,10 +357,11 @@ from a model, in a chat that may have no provider at all.
 
 ## Approvals
 
-`approveMode` (`meta.json` over `settings.json`) is resolved once in
-`ChatRepository` and arrives with the prompt, so it is a `BuiltinAgent`
-parameter beside `approve` rather than part of `BuiltinOptions`, which holds
-only what is genuinely per-agent. Three modes: `ask` (every command waits for
+`approveMode` (`meta.json` over `settings.json`) is part of the policy the
+gate reads at every call (see "The policy is read, not held" below), so a
+mode changed while a turn runs decides its next call. A turn that keeps a
+mode of its own passes it to `BuiltinAgent`, and that wins: a sub-agent
+always runs `never`. Three modes: `ask` (every command waits for
 the banner), `auto` (a classifier model decides allow/ask/deny per command),
 `never` (run everything). An older file's `approveCommands` bool migrates:
 `true` → `ask`, `false` → `never`.
@@ -418,8 +419,9 @@ page names it on each option and explains the picked one. A new enforcer is
 a new `SandboxHelper` and a `Confinement` that says so — not a change to the
 rules.
 
-Landlock itself is a setting, `sandbox` in `project.json`: the default
-project's is the app's answer, a project's own overrides it, and unset is on.
+Landlock itself is a setting, `sandbox` in `project.json` and in a chat's
+`meta.json`: the default project's is the app's answer, a project's own
+overrides it, a chat's own overrides that, and unset is on.
 Off, the gate's sandbox is null for the whole turn and its sub-agents, which
 also stands down the parse gate.
 

@@ -15,6 +15,7 @@ class ChatMeta {
       this.permissions = const [],
       this.writableDirs = const [],
       this.memoryOff,
+      this.sandbox,
       this.headless});
 
   String? model;
@@ -41,6 +42,10 @@ class ChatMeta {
   /// back from here.
   bool? memoryOff;
 
+  /// Whether this chat's commands run under Landlock, over the project's
+  /// answer. Null means follow the project.
+  bool? sandbox;
+
   /// A chat nobody watches — a trigger's new one. Every turn on it drops `ask_user`
   /// and `task`, since nobody is there to answer or to need the fan-out, and
   /// suppresses the title model, since a trigger already named the chat. Null
@@ -58,6 +63,7 @@ class ChatMeta {
         ],
         tempChatTtl: TempChatTtl.values.asNameMap()[json["tempChatTtl"]],
         memoryOff: json["memoryOff"] as bool?,
+        sandbox: json["sandbox"] as bool?,
         headless: json["headless"] as bool?,
       );
 
@@ -97,6 +103,7 @@ class ChatMeta {
         if (writableDirs.isNotEmpty) "writableDirs": writableDirs,
         if (tempChatTtl != null) "tempChatTtl": tempChatTtl!.name,
         if (memoryOff != null) "memoryOff": memoryOff,
+        if (sandbox != null) "sandbox": sandbox,
         if (headless != null) "headless": headless,
       };
 
