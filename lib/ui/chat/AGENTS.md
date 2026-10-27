@@ -448,6 +448,24 @@ replaced. Auto-compact
 leaves the same trace with no turn around it: unawaited after a settled turn,
 the divider its only evidence, the way the memory extraction's note is.
 
+## Tools, on screen
+
+**How a tool's calls look is its `ToolUI`** (`tool_ui/`), the UI's half of
+the tool's class: what voice mode says of a call (`spoken`, null for
+nothing), the approval banner's icon and question, whether its label stands
+on a row of its own (`prominent` — a question, the plan put to the user), and
+the label itself, null for the generic `ToolLabel`. One class for each tool
+that shows anything of its own; `toolUIFor` gives every other name the
+defaults ("Used x", "Allow x?"). The bubble, the banner and the voice
+transcript ask it rather than switching on names.
+
+A call is matched by the name the log recorded, never by what this device
+offers, so a mirrored chat or an old one draws the same. A label whose
+content changes while the turn runs watches its own provider, as `PlanLabel`
+watches `planProvider`; the `ToolUI` itself holds no state. A test checks
+every `ToolUI` names a tool the registry has, since the two are paired by
+that string alone.
+
 ## The plan, on screen
 
 A `present_plan` call is drawn as the plan it put to the user (`PlanLabel`):

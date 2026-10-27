@@ -7,7 +7,7 @@ import "package:fs_shim/fs_io.dart" show fileSystemIo;
 
 import "package:agent_chat/data/builtin/builtin_agent.dart";
 import "package:agent_chat/data/builtin/llm/llm_client.dart";
-import "package:agent_chat/data/builtin/skill_create_tool.dart";
+import "package:agent_chat/data/builtin/tools/skill_create_tool.dart";
 import "package:agent_chat/data/prompts/skill_import.dart"
     show SkillImportException;
 import "package:agent_chat/domain/agent_backend.dart";

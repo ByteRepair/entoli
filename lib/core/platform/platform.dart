@@ -3,8 +3,9 @@ import "dart:convert";
 
 import "../../data/builtin/builtin_agent.dart";
 import "../../data/builtin/builtin_backend.dart";
-import "../../data/builtin/customization_tools.dart" show SettingsEditor;
-import "../../data/builtin/templates.dart";
+import "../../data/builtin/tools/customization_tools.dart" show SettingsEditor;
+import "../../data/builtin/tools/agent_tool.dart";
+import "../../data/builtin/tools/registry.dart";
 import "../../data/builtin/llm/llm_client.dart";
 import "../../data/builtin/llm/llm_registry.dart";
 import "../../data/builtin/llm/local_kv_cache.dart";
@@ -157,8 +158,9 @@ BuiltinBackend createBackend(
 /// The warm-up prompt is `systemPrompt` and nothing else — the body a real turn
 /// sends as its first system message, with the per-chat `turnPrompt` that
 /// follows it left off. That is what makes the warm-up's shortest key equal to
-/// every chat's: the two hash the same message. The tools are [agentTools] with
-/// the defaults a normal chat on this device has, for the same reason.
+/// every chat's: the two hash the same message. The tools and the prompt are read off
+/// one [ToolOffer] with the defaults a normal chat on this device has, for the
+/// same reason.
 LocalPrefill? createLocalPrefill(
   BuiltinBackend backend,
   LocalLlm localLlm,
@@ -183,38 +185,36 @@ LocalPrefill? createLocalPrefill(
       // reason: a project that pins its own in `project.json` sends a body
       // that differs here, and misses the prefix too — the app-level answer
       // is the one every chat shares.
-      final caps = AgentCapabilities.forTurn(
-        commands: shell.canRunCommands,
-        webSearch: backend.webSearch.available,
-        disabled: const {},
+      final offer = ToolOffer(
+        caps: AgentCapabilities.forTurn(
+          commands: shell.canRunCommands,
+          webSearch: backend.webSearch.available,
+          disabled: const {},
+        ),
+        // The same skills a turn's prompt lists, off the same library the
+        // backend holds — a warm-up built without them caches a prefix no
+        // chat ever sends.
+        skills: backend.libraryFor(null)?.entries(CompletionKind.skill) ?? const [],
+        // A default turn has auto-memory off, so the warmed prefix carries no
+        // memory tools; a turn with them misses the cache rather than the
+        // cache serving a list no turn sends. Every top-level chat has a
+        // `resources/` to copy out of.
+        attachments: true,
+        background: shell.canRunInBackground,
       );
       return (
         options: poolOptions(now),
         messages: [
-           agentSystemMessage(
-             platform: shell.platformDescription,
-             profile: now.profile,
-             tone: now.tone,
-             citations: now.citations,
-             caps: caps,
-             // The same skills a turn's prompt lists, off the same library the
-             // backend holds — a warm-up built without them caches a prefix no
-             // chat ever sends.
-             skills: backend.libraryFor(null)?.entries(CompletionKind.skill) ?? const [],
-           ),
+          agentSystemMessage(
+            platform: shell.platformDescription,
+            profile: now.profile,
+            tone: now.tone,
+            citations: now.citations,
+            offer: offer,
+          ),
           const LlmMessage(role: LlmRole.user, text: "Hello"),
         ],
-         tools: agentTools(
-            caps: caps,
-            skills: backend.libraryFor(null)?.entries(CompletionKind.skill) ?? const [],
-            // A default turn has auto-memory off, so the warmed prefix carries
-           // no memory tools; a turn with them misses the cache rather than
-           // the cache serving a list no turn sends.
-           offerMemory: false,
-           // Every top-level chat has a `resources/` to copy out of.
-           attachments: true,
-           background: shell.canRunInBackground,
-         ),
+        tools: [for (final tool in offeredTools(offer)) tool.definition],
       );
     },
   );

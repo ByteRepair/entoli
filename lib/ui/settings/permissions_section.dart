@@ -5,6 +5,8 @@ import "../widgets/add_button_row.dart";
 import "../widgets/editable_row.dart";
 import "../widgets/resettable_field.dart" show defaultOptionLabel;
 import "../widgets/section_header.dart";
+import "../../domain/shell.dart" show bashToolName;
+import "../../domain/web_search.dart" show webfetchToolName;
 
 /// The permission rules one tier holds: a row per rule, tool and pattern on
 /// it, and the add button under the list. Shared by the app-level Agent
@@ -90,7 +92,7 @@ class _PermissionsSectionState extends State<PermissionsSection> {
 typedef _Tool = ({String name, String field, String hint});
 
 const Map<String, _Tool> _tools = {
-  "bash": (
+  bashToolName: (
     name: "Shell commands (bash)",
     field: "Command",
     hint: "{podman,toolbox} *   (* any arguments, {a,b} either)",
@@ -98,7 +100,7 @@ const Map<String, _Tool> _tools = {
   "read": (name: "Reading files (read)", field: "File or folder", hint: "~/Projects/x"),
   "write": (name: "Writing files (write)", field: "File or folder", hint: "~/Projects/x"),
   "edit": (name: "Editing files (edit)", field: "File or folder", hint: "~/Projects/x"),
-  "webfetch": (
+  webfetchToolName: (
     name: "Web fetches (webfetch)",
     field: "Domain",
     hint: "example.com   (subdomains included)",
@@ -185,7 +187,7 @@ class _RuleDialogState extends State<_RuleDialog> {
   late final _pattern = TextEditingController(text: widget.rule?.pattern);
   late final _folders =
       TextEditingController(text: widget.rule?.writes.join(", "));
-  late var _tool = widget.rule?.tool ?? "bash";
+  late var _tool = widget.rule?.tool ?? bashToolName;
   late var _decision = widget.rule == null
       ? PermissionDecision.allow
       : widget.rule!.decision;
@@ -260,7 +262,7 @@ class _RuleDialogState extends State<_RuleDialog> {
                   for (final MapEntry(:key, :value) in _tools.entries)
                     DropdownMenuItem(value: key, child: Text(value.name)),
                 ],
-                onChanged: (value) => setState(() => _tool = value ?? "bash"),
+                onChanged: (value) => setState(() => _tool = value ?? bashToolName),
               ),
               const SizedBox(height: 12),
               TextField(

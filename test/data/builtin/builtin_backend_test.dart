@@ -15,7 +15,7 @@ import "package:agent_chat/data/builtin/llm/llm_registry.dart";
 import "package:agent_chat/data/builtin/memory/instructions.dart"
     show InstructionFile, renderInstructions;
 import "package:agent_chat/data/builtin/memory/store.dart";
-import "package:agent_chat/data/builtin/participants_tool.dart";
+import "package:agent_chat/data/builtin/tools/participants_tool.dart";
 import "package:agent_chat/data/local/file_chat_store.dart";
 import "package:agent_chat/data/local/file_sub_agent_log.dart";
 import "package:agent_chat/domain/agent_backend.dart";

@@ -32,7 +32,7 @@ import "../prompts/prompt_sources.dart" show promptDirsOf;
 import "../prompts/skill_package.dart";
 import "background_jobs.dart";
 import "builtin_agent.dart";
-import "customization_tools.dart" show SettingsEditor;
+import "tools/customization_tools.dart" show SettingsEditor;
 import "compact_prompt.dart";
 import "memory/instructions.dart";
 import "memory/store.dart";
@@ -45,8 +45,9 @@ import "llm/rate_limit_gate.dart";
 import "permission_classifier.dart";
 import "projection.dart";
 import "sub_agent.dart";
-import "task_tool.dart";
 import "templates.dart";
+import "tools/agent_tool.dart" show AgentCapabilities;
+import "tools/bash_tool.dart" show runningCommand;
 
 /// The built-in agent, running in this process. The loop is [BuiltinAgent];
 /// this is what Entoli talks to: it holds a session per chat, resolves which
@@ -676,7 +677,7 @@ class BuiltinBackend implements AgentBackend {
     // Before the wait, so Stop kills the command rather than only closing the
     // stream over it.
     _running.replace(stopKey, run.kill);
-    controller.add(StatusEvent(runningTool(bashToolName)));
+    controller.add(StatusEvent(runningCommand));
     _reportOutput(controller, run);
 
     // The session does not feed the command and the command does not feed it:

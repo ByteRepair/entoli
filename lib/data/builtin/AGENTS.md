@@ -43,16 +43,57 @@ conversation: upstream runs one task and exits, this is asked something else
 once the turn is over. A turn's prose streams into the bubble as `TextDelta`,
 its commands become tool labels, and a no-tool-call reply ends the turn.
 
+## Tools
+
+**A tool is one class, and everything about it is in it** (`tools/`): its
+name, description and schema, whether a turn is offered it, its spinner
+label, what it adds to the system prompt, and what it does. `AgentTool` is
+the base, every member a getter so a tool answers from a constant or works it
+out (`bash`'s description reads whether the turn is one-shot,
+`browser_upload`'s schema whether the user picks the files). A tool's file is
+named after it, and a group that shares one subject — the browser's, the
+plan's, the memory's — shares one file and, where it has one, a base class.
+
 **One value decides what the prompt names and what the tool list carries.**
-`AgentCapabilities` is the effective per-turn set — the platform's facts (a
-shell, web search) with the turn's `disabled` set folded out — and both the
-system prompt and `agentTools` read it, so a capability a turn is not offered
-is not advertised in the prompt either. The file tools are the floor and are
-not in the set: every turn can read, write and edit in its own workspace. What
-a turn *can run at all* is the platform's fact, which the set neither widens
-nor narrows — `bash` and the prompt around it change with the shell, not with
-the capabilities. Sub-agents read the same set through `unattended`, which
-zeroes `ask` and `task`: a worker has nothing to ask and nothing to fan out to.
+`ToolOffer` is everything that decides which tools a turn has and how each is
+worded: `AgentCapabilities` — the platform's facts (a shell, web search) with
+the turn's `disabled` set folded out, then narrowed by the agent to what it
+was handed — beside the facts no capability names (a memory store, a model
+that sees images, the room). Every tool is built over it and reads its own
+gate off it (`offered`). `registry.dart` lists them all, in the order the
+model is handed them; `offeredTools` is the ones a turn has, and three things
+read it: the request's tool list, the system prompt (each tool's `fragment`
+in the sentence about calling a tool, its `section` after, in registry
+order), and the dispatch — a call to a tool the turn was not offered is
+answered as one that does not exist. The prefill builds the default offer
+and reads the same three, so its warmed prefix is the one a turn sends.
+What a turn *can run at all* is the platform's fact, which the offer passes
+through — `bash` and the prompt around it change with the shell. Sub-agents
+read the parent's capabilities through `unattended`, which zeroes `ask` and
+`task`: a worker has nothing to ask and nothing to fan out to.
+
+**What a running tool may reach is `Turn`** (`tools/turn.dart`): the
+workspaces and the shell, the gate, the user (`approve`, `answer`), the
+collaborators a turn may or may not have been handed — a tool whose
+collaborator is missing is not offered, so it reads its own with `!` — and
+control (`cancelled`, `untilStopped`, `endTurn`). `BuiltinAgent` is the one
+implementation: it keeps the loop, the query and the session, and hands each
+call to its tool. A tool that answers `batched` — `task`, today — gets a
+message's calls to it together (`runAll`), after the message's other calls,
+so a fan-out is the tool's business rather than the loop's.
+
+**The gate is `ApprovalGate`** (`approval_gate.dart`), one per turn, holding
+what is the turn's: the policy as the current call reads it, the directories
+granted mid-turn, and auto mode's circuit breaker. It hands a call's outcome
+back on a `GateOutcome` the caller made — the result, what decided it, and
+whether a person answered a banner — rather than on state any other call
+could read. What a rule is matched against is the caller's to say: a subject
+(the path for the file tools, the URL for a fetch) or the parse for a command.
+
+Adding a tool is a class beside its kin and a line in the registry; where the
+chat should show it differently, a `ToolUI` too (see "Tools, on screen" in
+`lib/ui/chat/AGENTS.md`). A name the chat draws lives in `lib/domain`, beside
+what it is about, since the log records it and the UI reads it.
 
 One thing the prompt has to say explicitly, learned from watching a real model
 fail: that a command only runs when the `bash` tool is called (a model shown a
@@ -379,12 +420,12 @@ rules.
 
 Landlock itself is a setting, `sandbox` in `project.json`: the default
 project's is the app's answer, a project's own overrides it, and unset is on.
-Off, `sandboxFor` answers null for the whole turn and its sub-agents, which
+Off, the gate's sandbox is null for the whole turn and its sub-agents, which
 also stands down the parse gate.
 
 **Leaving the sandbox is something the model asks for.** Where the
 environment enforces one, `bash` carries an `unsandboxed` argument
-(`bashToolSandboxed`; never a sub-agent's, which has nobody to approve it),
+(`ToolOffer.sandboxed`; never a sub-agent's, which has nobody to approve it),
 and its description says what a sandboxed write outside the grant looks like
 when it fails. Nothing scans the output: a confined command that cannot
 write fails like any command, and the model reads the error and calls again
@@ -407,7 +448,7 @@ The two "always" banner answers on an ordinary banner write the derived rule:
 the fetch's host, and the repository persists it to the tier the answer
 named before the answer reaches the turn.
 
-The directory grant is `add_directory` (`lib/data/builtin/directory_tools.dart`):
+The directory grant is `add_directory` (`lib/data/builtin/tools/directory_tools.dart`):
 the model's ask for write access to a directory outside the workspaces, and
 its banner — the ordinary one less its plain Allow — is the whole grant. The
 model asks because the work there recurs; a mirrored chat, which has no
@@ -477,8 +518,8 @@ command of any length is readable without the banner burying the conversation it
 is asking about.
 
 What it shows is `ToolApproval.argumentsText`, which is the field `ToolCall`
-already carried and is now on both. The banner does not parse: `_bash` has the
-command in a local, `_webfetch` has the URL, and `_addDirectory` the resolved
+already carried and is now on both. The banner does not parse: `bash` has the
+command in a local, `webfetch` has the URL, and `add_directory` the resolved
 directory — each one line above the gate call that raises the approval, so the
 wording rides with it. Digging
 it back out of the JSON in the widget was the first version, and it meant a list
@@ -493,7 +534,7 @@ to live: it is not a message, and the turn is what is asking.
 
 `ask_user` is the one tool that runs nothing: the model puts questions to the
 user and the turn waits. Offered with or without a shell — a browser cannot
-run a command, but it can still ask — which is why `_tools` exists and
+run a command, but it can still ask — which is why the tools are offered per turn and
 `unknownTool` is told what was on offer rather than assuming `bash`.
 
 The call and its answers are an ordinary call/result pair, so `conv.jsonl` keeps
@@ -508,7 +549,7 @@ rejection the model was sent.
 Every call is reported and every call is answered, which is the invariant that
 keeps the next turn from being rejected — but nothing here answers one. A turn
 reports its result and the projection words it, so the report is the answer;
-`_ran` is only the ShellResult a command hands back, said as the result of the
+`toolRan` is only the ShellResult a command hands back, said as the result of the
 call that asked for it. See "One accumulation".
 
 `lib/domain/ask.dart` holds both directions of the format, `askAnswers` beside
@@ -591,7 +632,7 @@ one stops on a banner.
 
 `SubAgentRunner` holds the running agents so `cancel` reaches them — a turn
 aborted while sub-agents are running kills every one, not just the parent's
-loop. The parent's `_executeTasks` runs the calls concurrently, capped by
+loop. `TaskTool.runAll` runs the calls concurrently, capped by
 `BuiltinOptions.maxConcurrentSubAgents` (8 by default — deep-research can fan
 out to 75, and 8 concurrent keeps provider rate limits in view). Events
 stream out as each sub-agent resolves, but the session messages are answered
@@ -815,7 +856,7 @@ card's keyboard does.
 made a task unusable, and scoping by URL fails the tasks that cross sites;
 picking a browser is the consent. Settings > Agent Browser's "Before the
 agent acts" (`agentBrowserApproval`) is `never`, `classifier` or `always`,
-mapped onto `_runGated`'s modes and used *in place of* the turn's
+mapped onto the gate's modes and used *in place of* the turn's
 `approveMode` for the browser's tools alone. What it gates: opening a page, a
 `webfetch` of its URL so a host rule covers both, and a click, a typed field,
 a key or a drag, with the element and page it acts on as the banner's text
@@ -886,7 +927,7 @@ everything else. `classifier` is the default — the classifier is shown the
 files' whole resolved paths (where they come from is most of the question)
 and the element and page they go to, and its rubric denies keys, credential
 stores and profiles outright. `allow` asks nobody. `user` takes the paths
-out of the tool's schema altogether (`browserUploadByUserTool`): the call
+out of the tool's schema altogether (`BrowserUploadTool` reads the policy): the call
 opens the chooser and waits on the chat's `UploadPanel`, where the user picks
 with the system's own file picker and presses Upload. Cancel, or a message
 sent instead, is `cancelUpload`: the field gets a `cancel` event, which is
@@ -915,7 +956,7 @@ left in staging, logged, and cleared at the next start.
 The user moves the page from the card, hides and gives back the browser, and
 quits it, and the agent has to hear of it — but a turn is never handed a
 message mid-flight (see "The projection" in `lib/domain/AGENTS.md`). So the
-tab keeps notes, and `_noted` puts them at the head of the agent's next
+tab keeps notes, and `BrowserTool.noted` puts them at the head of the agent's next
 browser result, success or refusal, as "Since your last browser call:". A
 tool result is in the log, so the note is part of the conversation from then
 on and a reload words it the same. What is noted: the user's back and forward
@@ -1344,7 +1385,7 @@ answers with the hits' ids beside them, because the update and delete tools
 take one; `memory_save` is stamped with the chat id that made it, which is
 what the explorer's "added by you" line reads. They are offered while the
 agent tool gate is on and a store exists, and the prefill warm cache is built
-with `offerMemory: false` because the common turn has no store at all — a
+with no memory in its `ToolOffer` because the common turn has no store at all — a
 warm prefix that names tools the cold turn does not offer would be a prefix
 that misses.
 
@@ -1390,7 +1431,7 @@ directory that writes its own rules is a place the user meant to have them.
 The walk goes from the file's directory to `/`, not to the workspace root: the
 agent's real work is often a repository elsewhere on the machine, and its
 rules sit at that repository's root. An AGENTS.md read on purpose is not
-appended to itself. `_loadedInstructions` holds the paths already in front of
+appended to itself. `Turn.loadedInstructions` holds the paths already in front of
 the model so the same file is never injected twice. They render as
 "## Workspace instructions" — the one section of the second message with no
 preamble of its own, because these are the instructions.

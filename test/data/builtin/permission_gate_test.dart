@@ -5,7 +5,8 @@ import "package:fs_shim/fs_io.dart" show fileSystemIo;
 import "package:path/path.dart" as p;
 
 import "package:agent_chat/data/builtin/builtin_agent.dart";
-import "package:agent_chat/data/builtin/templates.dart" show AgentCapabilities;
+import "package:agent_chat/data/builtin/tools/agent_tool.dart" show ToolOffer;
+import "package:agent_chat/data/builtin/tools/bash_tool.dart" show BashTool;
 import "package:agent_chat/data/builtin/llm/llm_client.dart";
 import "package:agent_chat/domain/agent_backend.dart";
 import "package:agent_chat/domain/models.dart";
@@ -892,18 +893,11 @@ void main() {
 
     test("is offered only where a sandbox is enforced, and never to a "
         "sub-agent", () {
-      bool offers(List<LlmTool> tools) =>
-          ((tools.firstWhere((t) => t.name == "bash").schema["properties"]
-                  as Map)
-              .containsKey("unsandboxed"));
-      const caps = AgentCapabilities.full;
-      expect(offers(agentTools(caps: caps, offerMemory: false, sandboxed: true)),
-          isTrue);
-      expect(offers(agentTools(caps: caps, offerMemory: false)), isFalse);
-      expect(
-          offers(agentTools(
-              caps: caps, offerMemory: false, sandboxed: true, oneShot: true)),
-          isFalse);
+      bool offers(ToolOffer offer) =>
+          (BashTool(offer).schema["properties"] as Map).containsKey("unsandboxed");
+      expect(offers(const ToolOffer(sandboxed: true)), isTrue);
+      expect(offers(const ToolOffer()), isFalse);
+      expect(offers(const ToolOffer(sandboxed: true, oneShot: true)), isFalse);
     });
 
     test("the turn's writableDirs reach the sandbox, files included",

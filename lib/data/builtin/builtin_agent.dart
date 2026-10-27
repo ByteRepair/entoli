@@ -6,55 +6,35 @@ import "package:fs_shim/fs.dart";
 import "package:flutter/foundation.dart" show visibleForTesting;
 import "package:uuid/uuid.dart";
 
-import "../../core/formatting.dart";
 import "../../domain/agent_backend.dart";
 import "../../domain/agent_browser.dart";
-import "../../domain/artifact.dart";
 import "../../domain/ask.dart";
-import "../../domain/chat_store.dart" show attachmentFilename;
-import "../../domain/safe_command.dart" show SegmentReach, profileSegment;
-import "../../domain/date_words.dart" show describeFire;
 import "../../domain/file_tools.dart";
 import "../../domain/models.dart";
 import "../../domain/permission.dart";
-import "../../domain/plan.dart";
 import "../../domain/profile.dart";
 import "../../domain/prompt_library.dart";
 import "../../domain/shell.dart";
-import "../../domain/shell_command_analysis.dart";
 import "../../domain/tone.dart";
 import "../../domain/tool_arg.dart";
+import "../../domain/trigger_manager.dart" show TriggerRegistry;
 import "../../domain/turn_recorder.dart";
 import "../../domain/web_search.dart";
-import "../../domain/workspace.dart" show isUnder;
-import "ask_tool.dart";
+import "approval_gate.dart";
 import "background_jobs.dart";
-import "browser_tools.dart";
-import "artifact_tool.dart";
 import "compact_prompt.dart" show estimateTokens;
-import "file_tools.dart" as file_tool_defs;
-import "image_tool.dart";
 import "llm/llm_client.dart";
 import "llm/rate_limit_gate.dart";
-import "llm/readable_client.dart" show pdfBudgetBytes;
-import "../prompts/skill_import.dart" show SkillImportException;
-import "participants_tool.dart";
-import "skill_create_tool.dart";
-import "skill_tool.dart";
-import "sub_agent.dart";
-import "task_tool.dart";
-import "trigger_tool.dart";
-import "customization_tools.dart";
-import "../../domain/trigger.dart";
-import "../../domain/trigger_manager.dart" show TriggerRegistry;
-import "projection.dart";
-import "templates.dart";
 import "memory/instructions.dart";
 import "memory/store.dart";
-import "directory_tools.dart";
-import "memory_tools.dart";
-import "plan_tools.dart";
-import "websearch_tool.dart";
+import "projection.dart";
+import "sub_agent.dart";
+import "templates.dart";
+import "tools/agent_tool.dart";
+import "tools/customization_tools.dart";
+import "tools/registry.dart";
+import "tools/skill_tool.dart" show skillToolName;
+import "tools/turn.dart";
 
 /// What the spinner says while the model reads the prompt.
 ///
@@ -68,151 +48,6 @@ String readingPrompt(LlmPromptProgress progress) {
       ? "Reading the prompt"
       : "Reading the prompt · ${(fraction * 100).round()}%";
 }
-
-/// What the spinner says while a tool runs, or null for the ones that finish
-/// too fast to be worth naming — a file read is over before a frame is drawn,
-/// and a label that flashes is worse than none.
-String? runningTool(String name) => switch (name) {
-      bashToolName => "Running a command",
-      websearchToolName => "Searching the web",
-      webfetchToolName => "Fetching a page",
-      browserGotoToolName || browserSearchToolName => "Opening a page",
-      browserPageTextToolName => "Reading the page",
-      browserScreenshotToolName => "Taking a screenshot",
-      browserTypeToolName || browserPressToolName => "Typing",
-      browserUploadToolName => "Uploading",
-      browserCredentialsPromptToolName => "Waiting for you to sign in",
-      browserCredentialsHideToolName => "Waiting for you to hand the browser back",
-      taskToolName => "Working on a sub-task",
-      triggerSetName => "Setting a trigger",
-      artifactToolName => "Publishing the artifact",
-      imageGenerationToolName => "Generating an image",
-      presentPlanToolName => "Presenting the plan",
-      _ => null,
-    };
-
-/// What decided a call, the tiers that spoke, and the verdict.
-typedef _Decision = ({
-  PermissionSource source,
-  List<PermissionTier> tiers,
-  PermissionDecision decided,
-});
-
-/// Named beside the tool the way every other tool's is, so that matching on it
-/// is compiler-linked to the name the model is actually told.
-const bashToolName = "bash";
-
-/// The only tool for doing anything to the machine. Everything else — reading
-/// a file, editing it, running the tests — is a command.
-const _bashCommonArgs = {
-  "command": {"type": "string", "description": "The bash command to execute"},
-  "timeout": {
-    "type": "integer",
-    "description":
-        "How long the command may run, in milliseconds. Set this to give a "
-        "command a different deadline than the default 60000; values above "
-        "180000 (3 minutes) are capped to it.",
-  },
-};
-
-const _bashDescription =
-    "Execute a bash command in the chat's persistent shell, which starts in "
-    "the workspace directory and keeps its state between commands: a `cd` or "
-    "an export made by one command is still there for the next.";
-
-const _bashRestartArg = {
-  "restart": {
-    "type": "boolean",
-    "description":
-        "Restart the shell before running, discarding any directory a "
-        "`cd` moved it to and anything an export gave it. Use it when a "
-        "command's failure looks like the shell's state is the problem.",
-  },
-};
-
-const bashTool = LlmTool(
-  name: bashToolName,
-  description: _bashDescription,
-  schema: {
-    "type": "object",
-    "properties": {..._bashCommonArgs, ..._bashRestartArg},
-    "required": ["command"],
-  },
-);
-
-/// [bashTool] where the terminal environment enforces a sandbox: the one
-/// place leaving it means anything, so the one place it is offered.
-const bashToolSandboxed = LlmTool(
-  name: bashToolName,
-  description: _bashDescription,
-  schema: {
-    "type": "object",
-    "properties": {
-      ..._bashCommonArgs,
-      ..._bashRestartArg,
-      "unsandboxed": {
-        "type": "boolean",
-        "description":
-            "Run this command outside the sandbox. Commands normally run "
-            "sandboxed: they can write only to the workspaces and the folders "
-            "the user granted, and a write anywhere else fails with "
-            "\"Permission denied\" or \"Operation not permitted\". When a "
-            "command needs to write elsewhere (container tools like podman or "
-            "toolbox, installers, caches under ~), call it again with this "
-            "set. The user is asked to approve it unless a rule already "
-            "allows it. Never set it to get around a failure the sandbox did "
-            "not cause.",
-      },
-    },
-    "required": ["command"],
-  },
-);
-
-const _bashBackgroundArg = {
-  "background": {
-    "type": "boolean",
-    "description":
-        "Start the command and answer at once, leaving it running: for a "
-        "server, a watcher, or anything that does not exit on its own. It runs "
-        "in a fresh shell that starts in the chat workspace (an earlier `cd` "
-        "does not apply) with no input, and everything it prints goes to a log "
-        "file the answer names: read it with `tail` or the read tool. The "
-        "answer gives its process id to stop it with, and your next call after "
-        "it exits says how it ended. Use this rather than `&`, `nohup` or "
-        "`setsid`, which leave a command holding the call open.",
-  },
-};
-
-/// [tool] with [_bashBackgroundArg] where [on]: the shell can leave a run
-/// going.
-LlmTool _withBackground(LlmTool tool, bool on) => !on ? tool : LlmTool(
-      name: tool.name,
-      description: tool.description,
-      schema: {
-        ...tool.schema,
-        "properties": {
-          ...tool.schema["properties"] as Map<String, dynamic>,
-          ..._bashBackgroundArg,
-        },
-      },
-    );
-
-/// [bashTool] as a sub-agent is offered it: the commands run one-shot, so
-/// there is no state the `restart` could drop and none the description could
-/// promise.
-const bashToolOneShot = LlmTool(
-  name: bashToolName,
-  description:
-      "Execute a bash command. Every command runs in a fresh subshell that "
-      "starts in the workspace directory, so a `cd` or an export does not "
-      "carry over to the next command: prefix what it needs, or use absolute "
-      "paths.",
-  schema: {
-    "type": "object",
-    "properties": _bashCommonArgs,
-    "required": ["command"],
-  },
-);
 
 class BuiltinOptions {
   const BuiltinOptions({
@@ -364,19 +199,17 @@ class BuiltinSession {
 }
 
 /// The body of the system prompt as the message a turn sends, so the turn and
-/// the warm-up that caches it cannot build two different strings. One function
-/// for the reason [agentTools] is one: this message is the whole of what the
-/// prefill's key is over, and an argument added at one site and not the other
-/// leaves a warmed prefix no chat ever sends. The live turn is
-/// [BuiltinAgent._setSystemPrompt]; the cache is `createLocalPrefill`.
+/// the warm-up that caches it cannot build two different strings: this
+/// message is the whole of what the prefill's key is over, and an argument
+/// added at one site and not the other leaves a warmed prefix no chat ever
+/// sends. The live turn is [BuiltinAgent._setSystemPrompt]; the cache is
+/// `createLocalPrefill`.
 LlmMessage agentSystemMessage({
   required String platform,
   Profile? profile,
   Tone tone = Tone.none,
   bool citations = false,
-  required AgentCapabilities caps,
-  List<PromptDocument> skills = const [],
-  bool oneShot = false,
+  ToolOffer offer = const ToolOffer(),
 }) =>
     LlmMessage(
       role: LlmRole.system,
@@ -385,102 +218,16 @@ LlmMessage agentSystemMessage({
         profile: profile,
         tone: tone,
         citations: citations,
-        caps: caps,
-        skills: skills,
-        oneShot: oneShot,
+        offer: offer,
       ),
     );
-
-/// The tools a turn offers, given what this device and this agent allow. One
-/// function because the model's tool schemas are rendered into the prompt and
-/// so are part of what the prefill cache warms: a turn and its warm-up building
-/// two slightly different lists would cache a prefix no turn ever sends. The
-/// live turn is [BuiltinAgent._tools]; the cache is `LocalPrefill`.
-///
-/// [skills] is the whole library's skill list, not the model-invocable half:
-/// both halves of the flag are decided where they are read, so one caller
-/// passes one list.
-List<LlmTool> agentTools({
-  required AgentCapabilities caps,
-  List<PromptDocument> skills = const [],
-  required bool offerMemory,
-  bool offerImage = false,
-  bool browserScreenshot = false,
-  BrowserUploadPolicy? browserUpload,
-  bool oneShot = false,
-  bool sandboxed = false,
-  bool background = false,
-  List<PromptDocument>? participants,
-  bool member = false,
-  bool customizing = false,
-  bool attachments = false,
-}) =>
-    [
-      file_tool_defs.readTool,
-      file_tool_defs.writeTool,
-      file_tool_defs.editTool,
-      // A sub-agent is not offered a way out: it has nobody to approve one,
-      // nor a background job: nobody would hear how it ended.
-      if (caps.commands)
-        oneShot
-            ? bashToolOneShot
-            : _withBackground(
-                sandboxed ? bashToolSandboxed : bashTool, background),
-      if (caps.ask) askTool,
-      if (caps.task) taskTool,
-      if (caps.webSearch) ...[websearchTool, webfetchTool],
-      if (skills.any((s) => s.modelInvocable && !s.isCallback)) skillTool,
-      // The room's roster: an omada turn only, non-null being the one gate
-      // the tool list and the dispatch share — a call where the turn holds
-      // no room finds only `unknownTool`.
-      if (participants != null) listParticipantsTool,
-      if (participants != null && member) endTurnTool,
-      if (caps.artifact) artifactTool,
-      if (!oneShot) ...[planAddTool, planNextTool, planDoneTool],
-      // Presenting parks the turn on the panel's answer, so it rides `ask`:
-      // a headless turn's and a sub-agent's takes fold it out of caps.
-      if (caps.presentPlan) presentPlanTool,
-      if (caps.createSkill) createSkillTool,
-      // Triggers ride the turn itself: only a top-level turn is its own
-      // chat's, so only it may register.
-      if (caps.trigger && !oneShot) ...triggerToolDefs,
-      if (customizing) ...[setProfileTool, setToneTool],
-      if (offerMemory)
-        ...[
-          memorySaveTool,
-          memorySearchTool,
-          memoryUpdateTool,
-          memoryDeleteTool,
-        ],
-      // The directory grant: rides `ask` — a banner somebody answers — and
-      // only a top-level turn is its own chat's to cover; a headless or
-      // one-shot turn has neither. Listing what is granted is a read of
-      // the turn's own state, offered wherever a command list is. At the
-      // end of the list, both, so the list's older adjacencies stand.
-      if (caps.ask && !oneShot) addDirectoryTool,
-      writableDirectoriesTool,
-      if (offerImage) imageGenerationTool,
-      if (caps.browser && !oneShot)
-        ...browserTools(
-          screenshot: browserScreenshot,
-          // Both park the turn on the user, so they ride `ask` as
-          // `present_plan` does: a headless turn has nobody to answer.
-          credentials: caps.ask,
-          // Where the user chooses, the call waits on them: a turn with
-          // nobody to answer is not offered it at all.
-          upload: browserUpload == BrowserUploadPolicy.user && !caps.ask
-              ? null
-              : browserUpload,
-        ),
-      if (attachments) file_tool_defs.attachmentSaveTool,
-    ];
 
 /// The agent loop: ask the model, run the command it asked for, show it the
 /// result, repeat until it says it is done.
 ///
 /// The skeleton is mini-swe-agent's `DefaultAgent`, ported; the termination
 /// protocol is deliberately not — see AGENTS.md, "The agent loop".
-class BuiltinAgent {
+class BuiltinAgent implements Turn {
   BuiltinAgent({
     required this.session,
     this.viewer,
@@ -554,6 +301,7 @@ class BuiltinAgent {
   /// a file once. Null — every sub-agent's case, having no conversation to
   /// claim against and no events that reach the room — treats every finding
   /// as new, which its own transcript is free to say.
+  @override
   final bool Function(String path)? claimInstruction;
 
   /// The sandbox helper a test hands in, where the shell is a fake with no
@@ -568,105 +316,19 @@ class BuiltinAgent {
   /// turn runs — a banner's "always" included — covers the next call.
   final PolicyReader policy;
 
-  /// [policy] as this call reads it: once per tool call, so the gate and the
-  /// run it decides see one answer; `~` read the way a file-tool path is, so
-  /// a rule is in the same words as the call it is matched against, guest or
-  /// host; and this turn's own directory grants beside the writable ones.
-  Future<StandingPermissions> _policy() => _callPolicy ??= _readPolicy();
-  Future<StandingPermissions>? _callPolicy;
-
-  Future<StandingPermissions> _readPolicy() async {
-    final read = await policy();
-    return StandingPermissions(
-      permissions: [for (final rule in read.permissions) rule.withPaths(_tilde)],
-      writableDirs: [
-        for (final dir in read.writableDirs) _tilde(dir),
-        ..._runtimeDirs,
-      ],
-      sandboxed: read.sandboxed,
-    );
-  }
-
-  String _tilde(String path) =>
-      path == "~" || path.startsWith("~/") ? _resolvePath(path) : path;
-
   /// The app's own data directory — settings, secrets, chats. The one shape
-  /// [addDirectoryTool] refuses outright: the data directory itself, or
+  /// `add_directory` refuses outright: the data directory itself, or
   /// anything that contains it, would make the app's own data writable from
   /// inside the grant. Null only where the answer has nothing to name —
   /// a test that does not exercise the refusal — and nothing is held back then.
+  @override
   final String? dataDir;
-
-  /// What decided the call whose result is being composed, the tiers that
-  /// spoke, and the verdict itself — set by every decision site in the gate
-  /// and read by [_ran] onto the result it reports. Null where the mode's
-  /// default posture put the call behind the banner: the banner's own part
-  /// is the record then, and the answer that follows stamps it anew.
-  _Decision? _decision;
-
-  /// Directories an `add_directory` banner agreed to, for the rest of this
-  /// turn — the tier's copy of an "always" is read too, and a mirrored
-  /// chat's plain Allow writes none. [_policy] lists them beside the
-  /// writable ones.
-  final Set<String> _runtimeDirs = {};
-
-  /// Grants [dirs] for the rest of this turn.
-  void grantRuntimeDirs(Iterable<String> dirs) {
-    _runtimeDirs.addAll(dirs);
-    _callPolicy = null;
-  }
-
-  /// The confinement a command runs under, from the shell's driver. Read per
-  /// turn rather than held: the driver is resolved per command in the shell,
-  /// and the sandbox is only ever offered where the machine itself is the
-  /// driver — a guest's rootfs is already the boundary, and Android's
-  /// per-app sandbox is the OS's.
-  ///
-  /// The project's workspace is granted beside the chat's own: it is where
-  /// work another conversation should find goes, and the file tools and
-  /// `writable_directories` already treat it as writable.
-  SandboxHelper? get _helper => sandboxHelper ?? shell.driverSandboxHelper;
-
-  CommandSandbox? sandboxFor(StandingPermissions policy) {
-    if (!policy.sandboxed) return null;
-    if (_helper == null) return null;
-    final tmp = shell.tmpDirFor(workspace);
-    return CommandSandbox(
-      workspace: workspace,
-      tmp: tmp,
-      home: shell.machineHome,
-      extraWrites: [
-        if (projectWorkspace != workspace) projectWorkspace,
-        ...policy.writableDirs,
-      ],
-    );
-  }
-
-  /// The sandbox [analysis]'s command runs under once the rules have their
-  /// word on it — none where a no-sandbox rule covers every segment that
-  /// could write, the rules' own folders added where they match. One answer
-  /// for the gate asking whether leaving it is being asked for, and the run.
-  CommandSandbox? _confinementOf(
-      StandingPermissions policy, ShellCommandAnalysis analysis) {
-    final sandbox = sandboxFor(policy);
-    if (sandbox == null) return null;
-    final ruled =
-        rulesSandbox(policy.permissions, analysis.modelableSegments ?? const []);
-    if (ruled.unconfined) return null;
-    return ruled.writes.isEmpty
-        ? sandbox
-        : sandbox.copyWith(extraWrites: [...sandbox.extraWrites, ...ruled.writes]);
-  }
-
-  /// Whether this build's host platform models its shell as POSIX. Windows
-  /// `cmd` is not, and its commands are escalated rather than parsed; the
-  /// flag reaches the parse from the platform the shell names.
-  bool get platformIsWindows => shell.platformIsWindows;
 
   final BuiltinSession session;
 
   final LlmClient client;
 
+  @override
   final Shell shell;
 
   /// Whether the agent's commands run one-shot — each in a subshell that is
@@ -689,6 +351,7 @@ class BuiltinAgent {
   /// What this turn reads and remembers. Only the `nested` half is consulted
   /// here: the instructions block was loaded by the backend before the agent
   /// existed, and the rest of the subsystem is later work.
+  @override
   final MemorySettings memory;
 
   /// The AGENTS.md files loaded for this chat's workspaces, already read.
@@ -712,17 +375,20 @@ class BuiltinAgent {
   /// The project's memory store the memory tools talk to, or null where they
   /// are not offered: auto-memory off, the agent-tool gate off, or a sub-agent
   /// (which runs with none of the subsystem). Null also here is what takes the
-  /// tools off the list in [_tools].
+  /// tools off the list, through [offer].
+  @override
   final MemoryStore? memoryStore;
 
   /// What a saved memory is stamped with: the chat that wrote it. Beside
   /// [memoryStore] or neither.
+  @override
   final String? memoryChat;
 
   /// AGENTS.md paths already in front of the model, seeded from
   /// [instructions]. A nested file found on a read is added, so the same one
   /// is never injected twice into a turn.
-  Set<String> get _loadedInstructions =>
+  @override
+  Set<String> get loadedInstructions =>
       _loadedInstructionPaths ??= {
         for (final file in instructions) file.path,
       };
@@ -732,24 +398,29 @@ class BuiltinAgent {
   /// tool's path resolution operate on. The same one `AppConfig` holds, so it
   /// is `fileSystemIo` on desktop and Android, `fileSystemWeb` (IndexedDB) in
   /// a browser — and the file tools work everywhere, unlike `bash`.
+  @override
   final FileSystem fs;
 
   /// The chat's own directory, and where the shell starts.
+  @override
   final String workspace;
 
   /// The project's workspace: the one every chat in the project shares where
   /// one is shared, the chat's own where one is not, resolved by the caller.
   /// Not the working directory: what a turn puts here is what it means other
   /// chats to find.
+  @override
   final String projectWorkspace;
 
   /// The project's own command variables, layered over the app-level ones by
   /// the shell. The app-level ones are the shell's to read on each command,
   /// for the reason they are settings; these travel here because they were
   /// resolved where the project was, which is the backend's.
+  @override
   final Map<String, String> environment;
 
   final String model;
+  @override
   final BuiltinOptions options;
   final double? temperature;
   final String? reasoningEffort;
@@ -771,10 +442,12 @@ class BuiltinAgent {
 
   /// Puts the model's own questions to the user. One answer per question, null
   /// where they answered nothing.
+  @override
   final Future<List<String?>> Function(AskRequest request) answer;
 
   /// Spawns sub-agents for `task` calls. Null where the agent is itself a
   /// sub-agent: sub-agents do not spawn their own sub-agents.
+  @override
   final SubAgentRunner? subAgentRunner;
 
   /// Bounds in-flight `LlmClient.stream` calls across the parent and its
@@ -799,6 +472,7 @@ class BuiltinAgent {
   /// The project this agent's turn is in, so the shell driver can resolve a
   /// per-project rootfs instance for an isolated built-in. Null for the
   /// default project and user projects.
+  @override
   final String? project;
 
   /// The whole skill library, both invocation halves of it. The system prompt
@@ -817,19 +491,23 @@ class BuiltinAgent {
   /// Web search and fetch. Null where neither is reachable — a browser sees
   /// `UnavailableWebSearch` and the tools are dropped the way `bash` is when
   /// there is no shell.
+  @override
   final WebSearch? webSearch;
 
   /// This chat's tab in the browser Settings > Agent Browser picked. Null
   /// where none is picked, and for a sub-agent: a fan-out of workers on one
   /// window would navigate each other's pages.
+  @override
   final BrowserTab? browser;
 
   /// Whether the model reads images, which is what offers the browser's
   /// screenshot: one that cannot would be sent each one as nothing.
+  @override
   final bool seesImages;
 
   /// Whether a PDF reaches the model as a document, which is what `read`
   /// answers one with.
+  @override
   final bool seesPdfs;
 
   /// The chat's `resources/`, what the user attached and the tools saved, at
@@ -837,20 +515,20 @@ class BuiltinAgent {
   /// gets it bound read-only, `write` and `edit` refuse it, `read` reads it
   /// unasked, and `attachment_save` is how a copy that can change is made.
   /// Null where the agent has none, a sub-agent.
+  @override
   final String? attachmentsDir;
 
   /// What a command may read and must not write, every shell alike: the
   /// chat's attachments and the skills and agents directories. A guest binds and guards
   /// them; on the machine they are read-only on disk already.
+  @override
   final List<String> readOnlyDirs;
-
-  bool _inAttachments(String path) =>
-      attachmentsDir != null && isUnder(fs, path, attachmentsDir!);
 
   /// The mode the browser's navigation and actions are gated by, in place
   /// of [approveMode]: Settings > Agent Browser's own answer, since a turn
   /// asking at every click is no use and picking a browser is the consent.
   /// The standing rules still decide first, so a denied host stays denied.
+  @override
   final ApproveMode browserApprove;
 
   /// Who picks what `browser_upload` sends — its own scope, apart from
@@ -879,11 +557,13 @@ class BuiltinAgent {
   /// support) and copies the dir; the agent just passes the args through.
   /// [entryFile] is the file inside the copied dir the viewer opens, which
   /// the store styles at publish time.
+  @override
   final Future<String> Function(String path, String entryFile,
       {String? artifactId})? saveArtifact;
 
   /// Asks the image model for [prompt]. Null withholds `image_generation`:
   /// the setting is off, or the agent is a sub-agent.
+  @override
   final Future<List<LlmAttachment>> Function(String prompt)? generateImage;
 
   /// Saves bytes under the chat's `resources/` and returns the resource name.
@@ -893,6 +573,7 @@ class BuiltinAgent {
   /// Packages a skill drafted in the workspace and stages the `.skill` for the
   /// user to install. Null where the agent is a sub-agent: a worker does not
   /// offer skills for install. Returns the install id.
+  @override
   final Future<({String installId, String name})> Function(
       String path, String? name)? packageSkill;
 
@@ -915,14 +596,17 @@ class BuiltinAgent {
   /// trigger list — or null, which withholds the trio the way a missing
   /// [subAgentRunner] withholds `task`. Null on a sub-agent: a trigger's
   /// fire sends into *this* chat, which is one a worker is not.
+  @override
   final TriggerRegistry? registerTrigger;
 
   /// This chat's background jobs, or null, which withholds `bash`'s
   /// `background`: a sub-agent, or a shell that cannot leave a run going.
+  @override
   final ChatJobs? backgroundJobs;
 
   /// What the customization tools write through, or null, which withholds
   /// them — as it does on a sub-agent.
+  @override
   final SettingsEditor? editSettings;
 
   /// Whether this session has loaded [customizationSkill], the one gate the
@@ -949,20 +633,20 @@ class BuiltinAgent {
         browser: caps.browser && browser != null && !oneShot,
       );
 
-  /// What the model may call, and what the system prompt says. One value for
-  /// both, so the prompt cannot advertise a tool the list does not carry.
-  /// `skill` is dropped where no skill allows the model itself.
-  /// `read`/`write`/`edit` are always offered — they work on the `FileSystem`,
-  /// which exists on every platform.
-  List<LlmTool> get _tools => agentTools(
+
+  /// What this turn is offered: the one value the tool list, the dispatch
+  /// and the system prompt are all read from, so the prompt cannot advertise
+  /// a tool the list does not carry. Read per step: `customizing` turns on
+  /// mid-turn, once the skill that offers it is loaded.
+  ToolOffer get offer => ToolOffer(
         caps: _offered,
         skills: skills,
-        offerMemory: memoryStore != null,
-        offerImage: generateImage != null && saveResource != null,
-        browserScreenshot: seesImages && saveResource != null,
-        browserUpload: browserUploads,
+        memory: memoryStore != null,
+        images: generateImage != null && saveResource != null,
+        screenshots: seesImages && saveResource != null,
+        uploads: browserUploads,
         oneShot: oneShot,
-        sandboxed: _helper != null,
+        sandboxed: gate.helper != null,
         background: backgroundJobs != null,
         participants: roomParticipants,
         member: viewer != null,
@@ -970,25 +654,72 @@ class BuiltinAgent {
         attachments: attachmentsDir != null,
       );
 
+  /// What the model may call this step: worked out once at its head and read
+  /// by the request, the context count and the dispatch alike.
+  List<AgentTool> _tools = const [];
+
+  @override
+  late final ApprovalGate gate = ApprovalGate(
+    policy: policy,
+    approveMode: approveMode,
+    classifier: classifier,
+    approve: approve,
+    fs: fs,
+    workspace: workspace,
+    projectWorkspace: projectWorkspace,
+    shell: shell,
+    resolvePath: resolvePath,
+    cancelled: () => _cancelled,
+    stopped: _stopped.future,
+    sandboxHelper: sandboxHelper,
+  );
+
+  /// Resolve a file-tool path through the workspaces, the guest root and the
+  /// shell's home, so every call site carries the translation without
+  /// spelling it out.
+  @override
+  String resolvePath(String path) => resolveWorkspacePath(
+      fs, path, workspace, projectWorkspace,
+      guestRoot: shell.guestRoot, homePath: shell.homeFor(projectWorkspace));
+
+  @override
+  Map<String, FileStamp> get readFiles => session.readFiles;
+
   bool _cancelled = false;
   final Completer<void> _stopped = Completer();
 
+  @override
+  bool get cancelled => _cancelled;
+
+  @override
+  Future<T?> untilStopped<T>(Future<T> wait) =>
+      Future.any([wait, _stopped.future.then((_) => null)]);
+
   /// Set by an `end_turn` call: the loop stops after the batch it was in.
   bool _ended = false;
+
+  @override
+  void endTurn() => _ended = true;
+
   ShellRun? _running;
 
-  /// Circuit breaker for auto mode: too many escalations means the classifier
-  /// is not confident enough to be useful, so the turn falls back to asking.
-  int _consecutiveAsks = 0;
-  int _totalAsks = 0;
-  bool _autoPaused = false;
+  @override
+  Future<ShellResult> track(LlmToolCall call, ShellRun run) async {
+    _running = run;
+    final report = onShellOutput;
+    if (report != null) watchShellOutput(run, (text) => report(call.id, text));
+    try {
+      return await run.result;
+    } finally {
+      _running = null;
+    }
+  }
 
   /// One step's scratch: what the model call produced. Fields rather than
   /// out-parameters because an `async*` method has no return value of its own,
   /// and the turn is single-threaded.
   LlmCompletion? _completion;
   ({Object error, StackTrace? trace})? _queryError;
-  ShellResult? _commandResult;
 
   /// Stop the turn. Kills whatever is running: an aborted turn that leaves a
   /// build going is not aborted, and a fan-out of sub-agents is not either.
@@ -1095,6 +826,7 @@ class BuiltinAgent {
 
       _completion = null;
       _queryError = null;
+      _tools = offeredTools(offer);
       yield* _query();
       if (_cancelled) break;
       if (_queryError case (:final error, :final trace)?) {
@@ -1164,7 +896,7 @@ class BuiltinAgent {
   /// a chat template renders one system block, so `mergeLeadingSystem` joins
   /// them on the way out.
   void _setSystemPrompt(String? agentPrompt) {
-    final caps = _offered;
+    final offer = this.offer;
     final turn = turnPrompt(
       workspace: workspace,
       projectWorkspace: projectWorkspace,
@@ -1173,7 +905,7 @@ class BuiltinAgent {
       pinned: pinned,
       index: index,
       recall: recall,
-      canRunCommands: caps.commands,
+      canRunCommands: offer.caps.commands,
       sharedWorkspace: sharedWorkspace,
       projectHome: shell.projectHome,
       guestRoot: shell.guestRoot,
@@ -1185,9 +917,7 @@ class BuiltinAgent {
         profile: profile,
         tone: tone,
         citations: citations,
-        caps: caps,
-        skills: skills,
-        oneShot: oneShot,
+        offer: offer,
       ),
       if (turn.isNotEmpty) LlmMessage(role: LlmRole.system, text: turn),
     ];
@@ -1197,139 +927,42 @@ class BuiltinAgent {
   }
 
   /// Every call the model made gets an answer, including the ones we never ran:
-  /// a provider that sees a tool call with no result rejects the next turn.
+  /// a provider that sees a tool call with no result rejects the next turn —
+  /// and a call to a tool this turn was not offered is answered as one that
+  /// does not exist.
   ///
-  /// `task` calls run concurrently — the deep-research prompt fans out up to
-  /// 75 at once — capped by [BuiltinOptions.maxConcurrentSubAgents]. Every
-  /// other call runs in order, so a `bash` before a `task` is done first and
-  /// a `bash` after waits for the fan-out. The session messages are answered
-  /// in the calls' original order regardless, so the tool results pair up.
+  /// A batched tool's calls — `task`'s, which the deep-research prompt fans
+  /// out up to 75 at once — run together once every other call has, in
+  /// order, so a `bash` before a `task` is done first and a `bash` after
+  /// waits for the fan-out. The session messages are answered in the calls' original
+  /// order regardless, so the tool results pair up.
   Stream<AgentEvent> _executeAll(List<LlmToolCall> calls) async* {
-    // Where `task` is not offered, a call to it is answered as an unknown tool.
-    final fanOut = _offered.task;
-    final taskCalls = [
-      if (fanOut)
-        for (final call in calls)
-          if (call.name == taskToolName) call,
-    ];
-
-    // Run every non-`task` call in order first. A command before a fan-out
-    // has to be done before the fan-out starts, and one after has to wait for
-    // it — the alternative, interleaving, would race a sub-agent against a
-    // command it might depend on.
+    final tools = {for (final tool in _tools) tool.name: tool};
+    final batches = <AgentTool, List<LlmToolCall>>{};
     for (final call in calls) {
-      if (fanOut && call.name == taskToolName) continue;
-      // What decided an earlier call is that call's, read or not.
-      _decision = null;
-      _callPolicy = null;
+      final tool = tools[call.name];
+      if (tool != null && tool.batched) {
+        (batches[tool] ??= []).add(call);
+        continue;
+      }
+      gate.nextCall();
       if (_cancelled) {
         // The call as well as the answer: a result whose call is not in the
         // parts is a result the projection has nothing to pair it to.
-        yield* _reject(call, notExecuted);
+        yield* toolRejected(call, notExecuted);
         continue;
       }
-
-      final doing = runningTool(call.name);
-      if (doing != null) yield StatusEvent(doing);
-
-      final Stream<AgentEvent> Function(LlmToolCall)? tool = switch (call.name) {
-        readToolName => _read,
-        writeToolName => _write,
-        editToolName => _edit,
-        attachmentSaveToolName when attachmentsDir != null => _attachmentSave,
-        askToolName => _ask,
-        skillToolName => _skill,
-        listParticipantsToolName when roomParticipants != null =>
-          _listParticipants,
-        endTurnToolName when roomParticipants != null && viewer != null =>
-          _endTurn,
-        websearchToolName => _webSearch,
-        webfetchToolName => _webFetch,
-        browserGotoToolName ||
-        browserSearchToolName ||
-        browserClickToolName ||
-        browserTypeToolName ||
-        browserPressToolName ||
-        browserDragToolName ||
-        browserScrollToolName ||
-        browserBackToolName ||
-        browserPageTextToolName when _offered.browser =>
-          _browser,
-        browserScreenshotToolName
-            when _offered.browser && seesImages && saveResource != null =>
-          _browserScreenshot,
-        browserCredentialsPromptToolName when _offered.browser && caps.ask =>
-          _browserCredentials,
-        browserCredentialsHideToolName when _offered.browser && caps.ask =>
-          _browserHide,
-        browserUploadToolName
-            when _offered.browser &&
-                (browserUploads != BrowserUploadPolicy.user || caps.ask) =>
-          _browserUpload,
-        memorySaveToolName => _memorySave,
-        memorySearchToolName => _memorySearch,
-        memoryUpdateToolName => _memoryUpdate,
-        memoryDeleteToolName => _memoryDelete,
-        artifactToolName when saveArtifact != null => _artifact,
-        imageGenerationToolName
-            when generateImage != null && saveResource != null =>
-          _generateImage,
-        planAddToolName when !oneShot => _planAdd,
-        planNextToolName when !oneShot => _planNext,
-        planDoneToolName when !oneShot => _planDone,
-        presentPlanToolName when _offered.presentPlan => _presentPlan,
-        createSkillToolName when packageSkill != null => _createSkill,
-        triggerSetName when registerTrigger != null => _triggerSet,
-        triggerRemoveName when registerTrigger != null => _triggerRemove,
-        triggerListName when registerTrigger != null => _triggerList,
-        setProfileName when _customizing => _setProfile,
-        setToneName when _customizing => _setTone,
-        addDirectoryName when caps.ask && !oneShot => _addDirectory,
-        writableDirectoriesName => _writableDirectories,
-        bashToolName => _bash,
-        _ => null,
-      };
+      if (tool?.runningLabel case final label?) yield StatusEvent(label);
       final ran = tool == null
-          ? _reject(call, unknownTool(call.name, _tools.map((t) => t.name)))
-          : tool(call);
+          ? toolRejected(call, unknownTool(call.name, tools.keys))
+          : tool.run(call, this);
       final jobs = backgroundJobs;
       yield* jobs == null ? ran : _withJobNotes(jobs, call, ran);
     }
-
-    if (taskCalls.isEmpty) return;
-    if (_cancelled) {
-      // Answer the task calls that never ran, so the next turn is not rejected
-      // for missing results.
-      for (final call in taskCalls) {
-        yield* _reject(call, notStarted);
-      }
-      return;
+    for (final MapEntry(key: tool, value: batch) in batches.entries) {
+      if (tool.runningLabel case final label?) yield StatusEvent(label);
+      yield* tool.runAll(batch, this);
     }
-    yield* _executeTasks(taskCalls);
-  }
-
-  Stream<AgentEvent> _bash(LlmToolCall call) async* {
-    final command = stringArg(call.argumentsJson, "command");
-    if (command == null) {
-      yield* _reject(
-          call,
-          "The bash tool takes {\"command\": \"...\"}; that argument was missing "
-          "or was not valid JSON.");
-      return;
-    }
-    // One parse carried the whole way: the rule gate reads its segments, the
-    // deterministic tier its answer, and the run's confinement its words.
-    final analysis = ShellCommandAnalysis.parse(command,
-        isWindows: platformIsWindows);
-    yield _called(call, command);
-    // Leaving the sandbox is part of what is asked: where one would confine
-    // the run and no no-sandbox rule covers it, the call goes to the mode.
-    final leave = boolArg(call.argumentsJson, "unsandboxed");
-    final escaping = leave && _confinementOf(await _policy(), analysis) != null;
-    yield* _runGated(call, bashToolName,
-        () => _execute(call, command, analysis: analysis, unconfined: leave),
-        argumentsText: command, analysis: analysis, unsandboxed: escaping);
-    yield ToolResultEvent(_ran(call, _commandResult!));
   }
 
   /// [events] with how the background jobs that ended since the last call
@@ -1349,1965 +982,19 @@ class BuiltinAgent {
     }
   }
 
-  /// Run a batch of `task` calls concurrently, capped to
-  /// [BuiltinOptions.maxConcurrentSubAgents]. Results stream as each sub-agent
-  /// resolves; the projection pairs each back to its call by id, so finishing
-  /// out of order costs nothing.
-  Stream<AgentEvent> _executeTasks(List<LlmToolCall> calls) async* {
-    final parsed = [for (final call in calls) _taskArgsOf(call)];
-
-    // The calls up front, in the order the model made them. They are one
-    // message's worth of calls and the projection reads them back in the order
-    // their parts are in — emitted as each sub-agent resolved, they went into
-    // the log in finishing order, which is not an order the model ever chose.
-    for (var i = 0; i < calls.length; i++) {
-      final args = parsed[i];
-      yield _called(calls[i],
-          args == null ? null : "@${args.agent}: ${_truncate(args.prompt, 200)}");
-    }
-
-    final controller = StreamController<AgentEvent>();
-
-    Future<void> runOne(int index) async {
-      final call = calls[index];
-      final args = parsed[index];
-      if (_cancelled) {
-        controller.add(_failed(call, turnStopped));
-        return;
-      }
-      if (args == null) {
-        controller.add(_failed(call,
-            'The $taskToolName tool takes {"agent": "...", "prompt": "..."}.'));
-        return;
-      }
-      final (:agent, :prompt) = args;
-      controller.add(SubAgentStartEvent(
-          id: call.id, agent: agent, prompt: _truncate(prompt, 80)));
-      final result = await subAgentRunner!.run(agent, prompt, callId: call.id);
-      controller.add(SubAgentEndEvent(id: call.id, failed: result.returnCode != 0));
-      controller.add(ToolResultEvent(_ran(call, result)));
-    }
-
-    // A bounded fan-out: maxConcurrentSubAgents workers, each taking the next
-    // call as it finishes one.
-    var next = 0;
-    Future<void> worker() async {
-      while (next < calls.length) {
-        await runOne(next++);
-      }
-    }
-
-    final allDone = Future.wait([
-      for (var w = 0; w < options.maxConcurrentSubAgents && w < calls.length; w++)
-        worker(),
-    ]).whenComplete(controller.close);
-    yield* controller.stream;
-    await allDone;
-  }
-
-  /// Pull `agent` and `prompt` out of a `task` call's arguments, or null when
-  /// the JSON is not what the tool takes.
-  ({String agent, String prompt})? _taskArgsOf(LlmToolCall call) {
-    final agent = stringArg(call.argumentsJson, "agent");
-    final prompt = stringArg(call.argumentsJson, "prompt");
-    if (agent == null || prompt == null) return null;
-    return (agent: agent, prompt: prompt);
-  }
-
-  String _truncate(String text, int max) {
-    final t = text.trim().replaceAll("\n", " ");
-    return t.length <= max ? t : "${t.substring(0, max - 1)}…";
-  }
-
-  /// A command's outcome as the result of the call that asked for it: one that
-  /// ran, one that was refused, one that was never reached. The directory the
-  /// shell was left in rides on it as a fact; the projection words the change.
-  /// What the sandbox denied rides on it too, where one ran and denied
-  /// something — the wording is `observation`'s, so the model reads it beside
-  /// the output it belongs to.
-  ToolResult _ran(LlmToolCall call, ShellResult result) {
-    final decision = _decision;
-    _decision = null;
-    return ToolResult(
-      callId: call.id,
-      returnCode: result.returnCode,
-      output: result.output,
-      exceptionInfo: result.exceptionInfo,
-      cwd: result.cwd,
-      decidedBy: decision?.source,
-      decidedTier: decision?.tiers ?? const [],
-      decided: decision?.decided,
-    );
-  }
-
-  /// The model asking the user something. The call and its answers are a pair
-  /// like any other, so a finished chat still shows what was asked and picked.
-  Stream<AgentEvent> _ask(LlmToolCall call) async* {
-    final questions = askQuestionsFrom(call.argumentsJson);
-    if (questions.isEmpty) {
-      yield* _reject(call, askFormatError);
-      return;
-    }
-
-    yield _called(call);
-    final request = AskRequest(
-        id: call.id,
-        questions: questions,
-        argumentsJson: call.argumentsJson);
-    // Emitted before it is awaited, for the same reason an approval is: the
-    // panel is where the answers come from.
-    yield QuestionRequestEvent(request);
-    final answers = askAnswers(questions, await answer(request));
-
-    yield _ok(call, answers);
-  }
-
-  /// Load a skill. Read-only and instant, so no approval and no running label:
-  /// the answer is text the library already holds, and the turn's next step is
-  /// whatever the model does with it.
-  ///
-  /// The refusal for a `disable-model-invocation` skill is deliberate wording
-  /// rather than a plain no: the skill is *available*, just not to the model,
-  /// and one that is told only "no" will try the workflow by other means.
-  Stream<AgentEvent> _skill(LlmToolCall call) async* {
-    final name = stringArg(call.argumentsJson, "skill");
-    if (name == null) {
-      yield* _reject(call, skillFormatError);
-      return;
-    }
-    final arguments = stringArg(call.argumentsJson, "args") ?? "";
-    yield _called(call, arguments.isEmpty ? name : "$name $arguments");
-
-    final document = skills.where((s) => s.name == name).firstOrNull;
-    if (document == null) {
-      yield _failed(call, skillUnknown(name, [
-        for (final skill in skills)
-          if (skill.modelInvocable && !skill.isCallback) skill.name,
-      ]));
-      return;
-    }
-    // A callback's body is the user-facing note, never a procedure for the
-    // model to read — the same reason composition refuses to expand it.
-    if (!document.modelInvocable || document.isCallback) {
-      yield _failed(call, skillReserved(name));
-      return;
-    }
-    yield _ok(call, _skillOutput(document, arguments));
-  }
-
-  /// The skill body with its base directory translated to the guest's paths,
-  /// where the shell runs inside one, so the model can `cd` to it and run
-  /// its scripts.
-  String _skillOutput(PromptDocument document, String arguments) {
-    var body = skillPrompt(document, arguments);
-    for (final MapEntry(:key, :value) in shell.hostToGuestPaths.entries) {
-      body = body.replaceAll(key, value);
-    }
-    return body;
-  }
-
-  /// The room's roster. Read-only and instant, like `skill` — the answer is
-  /// what the project's library holds, and the tool takes no arguments.
-  Stream<AgentEvent> _listParticipants(LlmToolCall call) async* {
-    yield _called(call);
-    yield _ok(call, participantsListing(roomParticipants!));
-  }
-
-  /// Say nothing. The call and its result stay on the log, where the reason
-  /// is the record of why; the loop stops without asking the model again,
-  /// since a follow-up step would be the reply the call declined to write.
-  Stream<AgentEvent> _endTurn(LlmToolCall call) async* {
-    _ended = true;
-    yield _called(call);
-    yield _ok(call, "Turn ended.");
-  }
-
-  /// Search the web. Read-only, so no approval — the result is worded the same
-  /// way a command's is.
-  Stream<AgentEvent> _webSearch(LlmToolCall call) async* {
-    final query = stringArg(call.argumentsJson, "query");
-    if (query == null) {
-      yield* _reject(call,
-          'The $websearchToolName tool takes {"query": "..."}.');
-      return;
-    }
-    yield _called(call, query);
-    final result = await webSearch!.search(query);
-    yield ToolResultEvent(_ran(call, result));
-  }
-
-  /// Fetch a URL. The network rules answer for it — the same family a
-  /// `curl` or `wget` segment in a command consults — and the banner is
-  /// where one standing answer comes from.
-  Stream<AgentEvent> _webFetch(LlmToolCall call) async* {
-    final url = stringArg(call.argumentsJson, "url");
-    if (url == null) {
-      yield* _reject(call,
-          'The $webfetchToolName tool takes {"url": "..."}.');
-      return;
-    }
-    yield _called(call, url);
-    yield* _runGated(call, webfetchToolName,
-        () => webSearch!.fetch(url),
-        argumentsText: url);
-    final result = _commandResult!;
-    yield ToolResultEvent(_ran(call, _withBrowserHint(result)));
-  }
-
-  /// A fetch that met a wall a browser gets past: a refusal, a challenge, or
-  /// a page that is nothing until its script runs. Pointed at the browser
-  /// where this turn has one.
-  ShellResult _withBrowserHint(ShellResult result) {
-    if (!_offered.browser) return result;
-    final text = "${result.output}\n${result.exceptionInfo ?? ""}";
-    final walled = RegExp(r"HTTP (401|403|429|503)\b").hasMatch(text) ||
-        result.output == "The page has no readable text content." ||
-        RegExp(r"enable javascript|just a moment|verify you are human|captcha",
-                caseSensitive: false)
-            .hasMatch(text.length > 3000 ? text.substring(0, 3000) : text);
-    if (!walled) return result;
-    const hint = "\n\nThis page may need a real browser: try "
-        "`$browserGotoToolName` with the same URL.";
-    return result.returnCode == 0
-        ? ShellResult(returnCode: 0, output: "${result.output}$hint")
-        : ShellResult.failed("${result.exceptionInfo ?? result.output}$hint");
-  }
-
-  /// The browser tools but the screenshot. Opening a page is gated as a fetch
-  /// of the same URL, by the same network rules; a click, a typed field or a
-  /// drag as a command is, worded by what it acts on so the banner and the
-  /// classifier read an element rather than a number. Moving about a page
-  /// and reading it are not gated.
-  Stream<AgentEvent> _browser(LlmToolCall call) async* {
-    final tab = browser!;
-    if (tab.hold.value != null) {
-      yield* _reject(call, _noted(_hidden));
-      return;
-    }
-    final args = decodeArgs(call.argumentsJson) ?? const {};
-    int? ref() => args["ref"] is int ? args["ref"] as int : null;
-    double? number(Object? value) => value is num ? value.toDouble() : null;
-    ({double x, double y})? point(Object? value) {
-      if (value is! Map) return null;
-      final x = number(value["x"]), y = number(value["y"]);
-      return x == null || y == null ? null : (x: x, y: y);
-    }
-
-    final Future<String> Function() run;
-    String label;
-    String? navigate;
-    String? acting;
-    switch (call.name) {
-      case browserGotoToolName:
-        final url = stringArg(call.argumentsJson, "url");
-        if (url == null) {
-          yield* _reject(call, 'The $browserGotoToolName tool takes {"url": "..."}.');
-          return;
-        }
-        label = url;
-        navigate = url;
-        run = () => tab.goto(url);
-      case browserSearchToolName:
-        final query = stringArg(call.argumentsJson, "query");
-        if (query == null) {
-          yield* _reject(call, 'The $browserSearchToolName tool takes {"query": "..."}.');
-          return;
-        }
-        label = query;
-        run = () => tab.goto(
-            Uri.https("duckduckgo.com", "/", {"q": query}).toString());
-      case browserClickToolName:
-        final at = ref();
-        final x = number(args["x"]), y = number(args["y"]);
-        if (at == null && (x == null || y == null)) {
-          yield* _reject(call,
-              'The $browserClickToolName tool takes {"ref": n} or {"x": n, "y": n}.');
-          return;
-        }
-        label = at != null ? "[$at]" : "($x, $y)";
-        acting = "click";
-        run = () => tab.click(ref: at, x: x, y: y);
-      case browserTypeToolName:
-        final at = ref();
-        final text = args["text"];
-        if (text is! String) {
-          yield* _reject(call, 'The $browserTypeToolName tool takes '
-              '{"text": "..."}, and a "ref" to type into that field.');
-          return;
-        }
-        final submit = args["submit"] == true;
-        label = at == null ? text : "[$at] $text";
-        acting = submit ? "type \"$text\" and press Enter in" : "type \"$text\" in";
-        run = () => tab.type(at, text, submit: submit);
-      case browserPressToolName:
-        final key = stringArg(call.argumentsJson, "key");
-        if (key == null) {
-          yield* _reject(call, 'The $browserPressToolName tool takes '
-              '{"key": "Enter"}, and "modifiers": ["Control"] to hold any.');
-          return;
-        }
-        final held = {
-          for (final modifier in (args["modifiers"] as List? ?? const []))
-            if (modifier is String) modifier,
-        };
-        label = [...held, key].join("+");
-        acting = "press $label in";
-        run = () => tab.press(key, modifiers: held);
-      case browserDragToolName:
-        final from = point(args["from"]), to = point(args["to"]);
-        if (from == null || to == null) {
-          yield* _reject(call, 'The $browserDragToolName tool takes '
-              '{"from": {"x": n, "y": n}, "to": {"x": n, "y": n}}.');
-          return;
-        }
-        label = "(${from.x}, ${from.y}) → (${to.x}, ${to.y})";
-        acting = "drag from";
-        run = () => tab.drag(from, to);
-      case browserScrollToolName:
-        final up = args["direction"] == "up";
-        final at = ref();
-        final x = number(args["x"]), y = number(args["y"]);
-        label = [
-          up ? "up" : "down",
-          if (at != null) "in [$at]" else if (x != null && y != null) "at ($x, $y)",
-        ].join(" ");
-        run = () => tab.scroll(up: up, ref: at, x: x, y: y);
-      case browserBackToolName:
-        label = "back";
-        run = tab.back;
-      default:
-        final offset = number(args["offset"])?.toInt() ?? 0;
-        label = offset == 0 ? "page" : "from $offset";
-        run = () => tab.pageText(offset: offset);
-    }
-    yield _called(call, label);
-    final attempt = _attempt(run);
-    if (navigate != null) {
-      yield* _runGated(call, webfetchToolName, attempt,
-          argumentsText: navigate, mode: browserApprove);
-    } else if (acting != null) {
-      final String target;
-      try {
-        target = call.name == browserDragToolName
-            ? await tab.describeTarget(
-                x: number((args["from"] as Map)["x"]),
-                y: number((args["from"] as Map)["y"]))
-            : await tab.describeTarget(
-                ref: ref(), x: number(args["x"]), y: number(args["y"]));
-      } catch (e) {
-        yield _failed(call, "$e");
-        return;
-      }
-      final described = "$acting $target";
-      yield* _runGated(_described(call, described), call.name, attempt,
-          argumentsText: described, mode: browserApprove);
-    } else {
-      _commandResult = await attempt();
-    }
-    yield _browserResult(call);
-  }
-
-  /// [call] as the banner and the classifier read it: what it does to which
-  /// element on which page, which the model's own `{"ref": 12}` says
-  /// nothing about.
-  static LlmToolCall _described(LlmToolCall call, String described) =>
-      LlmToolCall(
-          id: call.id,
-          name: call.name,
-          argumentsJson: jsonEncode({"action": described}));
-
-  static Future<ShellResult> Function() _attempt(
-          Future<String> Function() run) =>
-      () async {
-        try {
-          return ShellResult(returnCode: 0, output: await run());
-        } catch (e) {
-          return ShellResult.failed("$e");
-        }
-      };
-
-  /// The gated browser call's result, under what happened since the last.
-  ToolResultEvent _browserResult(LlmToolCall call) {
-    final result = _commandResult!;
-    _commandResult = result.returnCode == 0
-        ? ShellResult(returnCode: 0, output: _noted(result.output))
-        : ShellResult.failed(_noted(result.exceptionInfo ?? result.output));
-    return ToolResultEvent(_ran(call, _commandResult!));
-  }
-
-  /// [text] under what happened in the browser that this agent did not do
-  /// since its last browser call — the user's back and forward, their hiding
-  /// and giving back, the browser quitting. A turn is never handed a
-  /// message mid-flight, so the next browser result is where the agent
-  /// hears of it, and the log keeps it there.
-  String _noted(String text) {
-    final notes = browser?.takeNotes() ?? const [];
-    if (notes.isEmpty) return text;
-    return "Since your last browser call:\n"
-        "${notes.map((note) => "- $note").join("\n")}\n\n$text";
-  }
-
-  static const _hidden = "The user has hidden the browser from you to do "
-      "something private in it, such as signing in. Do not retry yet: carry "
-      "on with something else, or ask the user and wait for them to say they "
-      "have handed it back.";
-
-  /// Wait on [wait] until it completes or the turn is stopped, whichever
-  /// is first; null where the stop came first.
-  Future<T?> _untilStopped<T>(Future<T> wait) =>
-      Future.any([wait, _stopped.future.then((_) => null)]);
-
-  /// Ask the user to fill in a sign-in. What they type goes from the
-  /// chat's panel to the tab and into the page; the model is told only that
-  /// it was done, and what the page then shows — passwords and the filled
-  /// fields redacted.
-  Stream<AgentEvent> _browserCredentials(LlmToolCall call) async* {
-    final tab = browser!;
-    final args = decodeArgs(call.argumentsJson) ?? const {};
-    final reason = stringArg(call.argumentsJson, "reason");
-    final fields = [
-      for (final field in (args["fields"] as List? ?? const []))
-        if (field is Map && field["ref"] is int && field["label"] is String)
-          CredentialField(
-            ref: field["ref"] as int,
-            label: field["label"] as String,
-            secret: field["secret"] == true,
-          ),
-    ];
-    if (reason == null || fields.isEmpty) {
-      yield* _reject(call, 'The $browserCredentialsPromptToolName tool takes '
-          '{"reason": "...", "fields": [{"ref": n, "label": "..."}], '
-          '"submit": [{"ref": n}]}.');
-      return;
-    }
-    if (tab.hold.value != null) {
-      yield* _reject(call, _noted(_hidden));
-      return;
-    }
-    final submit = [
-      for (final click in (args["submit"] as List? ?? const []))
-        if (click is Map)
-          (
-            ref: click["ref"] is int ? click["ref"] as int : null,
-            x: (click["x"] as num?)?.toDouble(),
-            y: (click["y"] as num?)?.toDouble(),
-          ),
-    ];
-    yield _called(call, reason);
-    final String? done;
-    try {
-      done = await _untilStopped(tab.requestCredentials(
-          CredentialRequest(reason: reason, fields: fields, submit: submit)));
-    } catch (e) {
-      yield _failed(call, "$e");
-      return;
-    }
-    if (done == null) {
-      tab.cancelCredentials();
-      yield _failed(call, notExecuted);
-      return;
-    }
-    yield _ok(call, _noted(done));
-  }
-
-  /// Upload through the page's file chooser. Where the user chooses, the
-  /// call opens the chooser and waits on the chat's panel; otherwise the
-  /// agent's own paths go in, past the classifier unless the user said not
-  /// to ask — described by the files' whole paths, so the classifier sees
-  /// where they come from, and the element and page they go to.
-  Stream<AgentEvent> _browserUpload(LlmToolCall call) async* {
-    final tab = browser!;
-    if (tab.hold.value != null) {
-      yield* _reject(call, _noted(_hidden));
-      return;
-    }
-    final ref = intArg(call.argumentsJson, "ref");
-    if (ref == null) {
-      yield* _reject(call, 'The $browserUploadToolName tool takes {"ref": n'
-          '${browserUploads == BrowserUploadPolicy.user ? "" : ', "paths": ["..."]'}}.');
-      return;
-    }
-    if (browserUploads == BrowserUploadPolicy.user) {
-      yield _called(call, "[$ref], chosen by the user");
-      final String? done;
-      try {
-        done = await _untilStopped(tab.requestUpload(ref));
-      } catch (e) {
-        yield _failed(call, _noted("$e"));
-        return;
-      }
-      if (done == null) {
-        tab.cancelUpload(why: "The turn was stopped.");
-        yield _failed(call, notExecuted);
-        return;
-      }
-      yield _ok(call, _noted(done));
-      return;
-    }
-    final paths = [
-      for (final path in (decodeArgs(call.argumentsJson)?["paths"] as List? ??
-          const []))
-        if (path is String && path.isNotEmpty) path,
-    ];
-    if (paths.isEmpty) {
-      yield* _reject(call, 'The $browserUploadToolName tool takes '
-          '{"ref": n, "paths": ["..."]}: which files to upload.');
-      return;
-    }
-    final resolved = [for (final path in paths) _resolvePath(path)];
-    for (var i = 0; i < resolved.length; i++) {
-      if (!await fs.file(resolved[i]).exists()) {
-        yield* _reject(call, "There is no file at ${paths[i]}.");
-        return;
-      }
-    }
-    yield _called(call, "[$ref] ${paths.join(", ")}");
-    final String target;
-    try {
-      target = await tab.describeTarget(ref: ref);
-    } catch (e) {
-      yield _failed(call, _noted("$e"));
-      return;
-    }
-    final described = "upload ${resolved.join(", ")} into $target";
-    yield* _runGated(_described(call, described), browserUploadToolName,
-        _attempt(() => tab.upload(ref, resolved)),
-        argumentsText: described,
-        mode: browserUploads == BrowserUploadPolicy.allow
-            ? ApproveMode.never
-            : ApproveMode.auto);
-    yield _browserResult(call);
-  }
-
-  /// Hand the browser to the user: every other browser tool refuses until
-  /// they give it back, which is what this waits for.
-  Stream<AgentEvent> _browserHide(LlmToolCall call) async* {
-    final tab = browser!;
-    final reason = stringArg(call.argumentsJson, "reason");
-    if (reason == null) {
-      yield* _reject(call,
-          'The $browserCredentialsHideToolName tool takes {"reason": "..."}.');
-      return;
-    }
-    yield _called(call, reason);
-    if (tab.hold.value == null) tab.hide(BrowserHold(reason: reason));
-    final back = Completer<bool>();
-    void given() {
-      if (tab.hold.value == null && !back.isCompleted) back.complete(true);
-    }
-
-    tab.hold.addListener(given);
-    try {
-      given();
-      if (await _untilStopped(back.future) == null) {
-        // Stopped: the browser stays the user's until they give it back.
-        yield _failed(call, notExecuted);
-        return;
-      }
-    } finally {
-      tab.hold.removeListener(given);
-    }
-    yield _ok(
-        call,
-        // The giving back is the note's to say.
-        _noted("Read the page again before acting on it: the user may have "
-            "moved on from where you left it."));
-  }
-
-  /// The viewport or one element, shown to the model on the result and to
-  /// the user in the chat, as a generated image is.
-  Stream<AgentEvent> _browserScreenshot(LlmToolCall call) async* {
-    final ref = intArg(call.argumentsJson, "ref");
-    final markClick = boolArg(call.argumentsJson, "last_click");
-    if (browser!.hold.value != null) {
-      yield* _reject(call, _noted(_hidden));
-      return;
-    }
-    yield _called(call, ref == null ? "viewport" : "[$ref]");
-    final BrowserShot shot;
-    final ImageEvent saved;
-    try {
-      shot = await browser!.screenshot(ref: ref, markClick: markClick);
-      saved = await _saved(LlmAttachment(
-          filename: "screenshot.png", mimeType: "image/png", bytes: shot.png));
-    } catch (e) {
-      yield _failed(call, "$e");
-      return;
-    }
-    yield saved;
-    final click = shot.click;
-    final marked = !markClick
-        ? ""
-        : click == null
-            ? " No click to mark: none since the page last loaded or scrolled."
-            : " The red dot is the last click, at "
-                "(${click.x.round()}, ${click.y.round()}) in the viewport.";
-    yield _ok(
-        call,
-        _noted(ref == null
-            ? "Screenshot of the viewport attached.$marked"
-            : "Screenshot of [$ref] attached. Its top-left corner is at "
-                "(${shot.left.round()}, ${shot.top.round()}) in the viewport: "
-                "add that to a point in it to click there.$marked"));
-  }
-
-  /// Resolve a file-tool path through the workspaces, the guest root and the
-  /// shell's home, so every call site carries the translation without
-  /// spelling it out.
-  String _resolvePath(String path) => resolveWorkspacePath(
-      fs, path, workspace, projectWorkspace,
-      guestRoot: shell.guestRoot, homePath: shell.homeFor(projectWorkspace));
-
-  /// Read a file. A path the workspaces hold runs without asking, the way
-  /// `bash` reads in `never` mode; one that reaches past them is offered to
-  /// the user first, on the same terms a command is.
-  Stream<AgentEvent> _read(LlmToolCall call) async* {
-    final args = readArgsFrom(call.argumentsJson);
-    if (args == null) {
-      yield* _reject(call,
-          'The $readToolName tool takes {"path": "..."}; that argument was missing.');
-      return;
-    }
-    final path = _resolvePath(args.path);
-    yield _called(call, args.path);
-    // Held beside the run rather than in it, for the event below: what the
-    // read pulled in, if anything. Empty is the honest "nothing" — a denied
-    // or gated read never ran, so it pulled nothing in — and it stands in
-    // for null, so nothing downstream has to test for it.
-    var nested = const <InstructionFile>[];
-    // An image or PDF read, saved the way a screenshot is so it rides this
-    // call's result on every reading of the conversation.
-    ImageEvent? attached;
-    Future<ShellResult> attach(String type, Uint8List bytes) async {
-      final pdf = type == "application/pdf";
-      // Not a failure: the file is there, and its path is what a command
-      // needs to do what this model cannot.
-      if (!(pdf ? seesPdfs : seesImages) || saveResource == null) {
-        return ShellResult(
-            returnCode: 0,
-            output: pdf
-                ? "${args.path} is a PDF, which this model cannot read "
-                    "directly. Read it with a command at that path instead, "
-                    "such as `pdftotext`."
-                : "${args.path} is an image, which this model cannot view. "
-                    "A command can work with it at that path.");
-      }
-      final limit = pdf ? pdfBudgetBytes : file_tool_defs.maxReadImageBytes;
-      if (bytes.length > limit) {
-        return ShellResult.failed("${args.path} is ${formatSize(bytes.length)}, "
-            "over the ${formatSize(limit)} a request can carry. "
-            "${pdf ? "Split it" : "Downscale it"} with a command, then read the result.");
-      }
-      attached = await _saved(LlmAttachment(
-          filename: fs.path.basename(path), mimeType: type, bytes: bytes));
-      return ShellResult(
-          returnCode: 0,
-          output: "${pdf ? "PDF" : "Image"} ${args.path} attached.");
-    }
-
-    Future<ShellResult> run() async {
-      final file = fs.file(path);
-      if (!await file.exists()) {
-        return ShellResult(
-            returnCode: -1, output: "", exceptionInfo: "File not found: ${args.path}");
-      }
-      final bytes = await file.readAsBytes();
-      final type = file_tool_defs.readBlockTypeOf(bytes);
-      if (type != null) return attach(type, bytes);
-      String content;
-      try {
-        content = utf8.decode(bytes);
-      } on FormatException {
-        return ShellResult(
-            returnCode: -1,
-            output: "",
-            exceptionInfo: "Not a UTF-8 text file (binary?): ${args.path}. "
-                "Inspect binary files with a command instead of $readToolName.");
-      }
-      final lines = content.split("\n");
-      final offset = (args.offset ?? 1).clamp(1, lines.length + 1);
-      final limit = args.limit ?? lines.length;
-      final end = (offset + limit - 1).clamp(1, lines.length);
-      final buf = StringBuffer();
-      for (var i = offset; i <= end; i++) {
-        buf.writeln("$i: ${lines[i - 1]}");
-      }
-      final result = buf.toString();
-      await _stamp(path);
-      nested = memory.nested
-          ? [
-              // An AGENTS.md read on purpose is already in front of the model.
-              for (final file in await findNestedInstructions(
-                fs,
-                path,
-                alreadyLoaded: _loadedInstructions,
-                excludes: memory.excludes,
-              ))
-                if (file.path != path) file,
-            ]
-          : const <InstructionFile>[];
-      final output = nested.isEmpty
-          ? (result.isEmpty ? "(empty file)" : result)
-          : "$result\n\n${renderInstructions(nested)}";
-      return ShellResult(returnCode: 0, output: output);
-    }
-    yield* _gatedPath(call, path, readToolName, run,
-        granted: [...(await _policy()).writableDirs, ?attachmentsDir]);
-    // Between the call and its result, which is where the projection looks
-    // for a tool's files.
-    if (attached != null) yield attached!;
-    yield ToolResultEvent(_ran(call, _commandResult!));
-    // A successful read reports what it reached here, the claim deciding
-    // which of the findings are this conversation's first.
-    if (nested.isNotEmpty) {
-      final fresh = [
-        for (final file in nested)
-          if (claimInstruction == null || claimInstruction!(file.path)) file.ref,
-      ];
-      if (fresh.isNotEmpty) yield InstructionsReadEvent(fresh);
-    }
-  }
-
-  String _readOnlyAttachment(String path) =>
-      "$path is an attachment, and attachments are read-only. Copy it with "
-      "$attachmentSaveToolName and change the copy.";
-
-  /// Copy an attachment into the workspace as a file that can change. Read
-  /// whole and written new, which is what makes the copy writable: a copy
-  /// that kept the source's mode would be as read-only as the attachment.
-  Stream<AgentEvent> _attachmentSave(LlmToolCall call) async* {
-    final source = stringArg(call.argumentsJson, "path");
-    if (source == null) {
-      yield* _reject(call,
-          'The $attachmentSaveToolName tool takes {"path": "..."}; that '
-          "argument was missing.");
-      return;
-    }
-    final from = _resolvePath(source);
-    if (!_inAttachments(from)) {
-      yield* _reject(call,
-          "$source is not an attachment. $attachmentSaveToolName copies "
-          "the files attached to this chat; copy anything else with a "
-          "command.");
-      return;
-    }
-    final name = attachmentFilename(fs.path.basename(from));
-    final asked = stringArg(call.argumentsJson, "dest");
-    final dest = asked ?? fs.path.join("attachments", name);
-    final to = _resolvePath(dest);
-    if (_inAttachments(to)) {
-      yield* _reject(call, _readOnlyAttachment(dest));
-      return;
-    }
-    yield _called(call, source);
-    Future<ShellResult> run() async {
-      final file = fs.file(from);
-      if (!await file.exists()) {
-        return ShellResult.failed("File not found: $source");
-      }
-      if (await fs.file(to).exists()) {
-        return ShellResult.failed(
-            "$dest already exists. Pass another dest, or change that one.");
-      }
-      await fs.directory(fs.path.dirname(to)).create(recursive: true);
-      await fs.file(to).writeAsBytes(await file.readAsBytes());
-      // Copied, so read as far as the edit tools are concerned: changing it
-      // next needs no read of a file the model has not seen as text.
-      await _stamp(to);
-      return ShellResult(
-          returnCode: 0, output: "Copied $source to $dest, which you can change.");
-    }
-    yield* _runFileTool(call, to, attachmentSaveToolName, run);
-  }
-
-  /// Write a file, creating or overwriting. The same gate as [read]: the
-  /// workspaces run, the machine is asked.
-  Stream<AgentEvent> _write(LlmToolCall call) async* {
-    final args = writeArgsFrom(call.argumentsJson);
-    if (args == null) {
-      yield* _reject(call,
-          'The $writeToolName tool takes {"path": "...", "content": "..."}; '
-          "those arguments were missing.");
-      return;
-    }
-    final path = _resolvePath(args.path);
-    if (_inAttachments(path)) {
-      yield* _reject(call, _readOnlyAttachment(args.path));
-      return;
-    }
-    // Asked before the gate too, so a refusal raises no banner first.
-    if (await _unread(path, args.path, writeToolName) case final problem?) {
-      yield* _reject(call, problem);
-      return;
-    }
-    yield _called(call, args.path);
-    Future<ShellResult> run() async {
-      if (await _unread(path, args.path, writeToolName) case final problem?) {
-        return ShellResult.failed(problem);
-      }
-      await fs.directory(fs.path.dirname(path)).create(recursive: true);
-      await fs.file(path).writeAsString(args.content);
-      await _stamp(path);
-      return ShellResult(
-          returnCode: 0, output: "Wrote ${args.content.length} bytes to ${args.path}");
-    }
-    yield* _runFileTool(call, path, writeToolName, run);
-  }
-
-  /// Edit a file by exact string replacement. The same gate as [read].
-  Stream<AgentEvent> _edit(LlmToolCall call) async* {
-    final args = editArgsFrom(call.argumentsJson);
-    if (args == null) {
-      yield* _reject(call,
-          'The $editToolName tool takes {"path": "...", "old_string": "...", '
-          '"new_string": "..."}; those arguments were missing.');
-      return;
-    }
-    final path = _resolvePath(args.path);
-    if (_inAttachments(path)) {
-      yield* _reject(call, _readOnlyAttachment(args.path));
-      return;
-    }
-    if (await _unread(path, args.path, editToolName) case final problem?) {
-      yield* _reject(call, problem);
-      return;
-    }
-    yield _called(call, args.path);
-    Future<ShellResult> run() async {
-      final file = fs.file(path);
-      if (!await file.exists()) {
-        return ShellResult(
-            returnCode: -1, output: "", exceptionInfo: "File not found: ${args.path}");
-      }
-      if (await _unread(path, args.path, editToolName) case final problem?) {
-        return ShellResult.failed(problem);
-      }
-      final content = await file.readAsString();
-      final count = content.split(args.oldString).length - 1;
-      if (count == 0) {
-        return ShellResult(returnCode: -1, output: "",
-            exceptionInfo: "old_string not found in ${args.path}");
-      }
-      if (!args.replaceAll && count > 1) {
-        return ShellResult(
-            returnCode: -1,
-            output: "",
-            exceptionInfo:
-                "old_string appears $count times in ${args.path}; "
-                "add context to make it unique or set replace_all.");
-      }
-      final updated = args.replaceAll
-          ? content.replaceAll(args.oldString, args.newString)
-          : content.replaceFirst(args.oldString, args.newString);
-      await file.writeAsString(updated);
-      await _stamp(path);
-      return ShellResult(
-          returnCode: 0, output: "Edited ${args.path}: replaced $count occurrence(s).");
-    }
-    yield* _runFileTool(call, path, editToolName, run);
-  }
-
-  Future<String?> _unread(String path, String shownPath, String toolName) =>
-      unreadFileProblem(fs, path,
-          shownPath: shownPath, toolName: toolName, readFiles: session.readFiles);
-
-  /// What the model wrote is what it has seen, so the next edit needs no read.
-  Future<void> _stamp(String path) async {
-    final stamp = await fileStampOf(fs, path);
-    if (stamp != null) session.readFiles[path] = stamp;
-  }
-
-  /// Register a trigger. The chat is the turn's own — a trigger fires into
-  /// the conversation that registered it — and the registration is watched
-  /// the moment the list lands. The model is told what it armed and when.
-  Stream<AgentEvent> _triggerSet(LlmToolCall call) async* {
-    final args = decodeArgs(call.argumentsJson);
-    if (args == null) {
-      yield* _reject(call, triggerSetProblem(null));
-      return;
-    }
-    final draft = triggerDraftFromArgs(args: args);
-    if (draft == null) {
-      yield* _reject(call, triggerSetProblem(stringArg(call.argumentsJson, "source")));
-      return;
-    }
-    // A file watch is never asked before it fires (and a fire's headless
-    // turn runs approveMode never), so the outside paths the read tool
-    // raises a banner over are refused here, where the call can still be
-    // answered — a watch over `~` or the machine is not a shape the tool
-    // takes.
-    if (draft.source is FileSource) {
-      final outside = [
-        for (final path in (draft.source as FileSource).paths)
-          if (outsideWorkspaces(fs, _resolvePath(path), workspace, projectWorkspace))
-            path,
-      ];
-      if (outside.isNotEmpty) {
-        yield* _reject(
-            call,
-            "A file trigger watches the workspaces: give workspace-relative "
-            "or project:-prefixed paths (${outside.join(", ")} reach past "
-            "them).");
-        return;
-      }
-    }
-    final label = [
-      if (draft.name.isNotEmpty) draft.name,
-      draft.source.describe(),
-    ].join(" — ");
-    yield _called(call, label);
-    try {
-      final stored = await registerTrigger!.register(
-          source: draft.source,
-          prompt: draft.prompt,
-          name: draft.name,
-          member: draft.member);
-      yield _ok(call, _triggerSetAnswer(stored));
-    } catch (e) {
-      yield _failed(call, "The trigger could not be set: $e");
-    }
-  }
-
-  /// What registration says back: the id every later call speaks, and the
-  /// source's own description — one wording of what was armed, shared with
-  /// the settings row and the fire's reason rather than a second here.
-  String _triggerSetAnswer(Trigger stored) =>
-      "Trigger ${stored.id} set. "
-      "${stored.member == null ? "" : "Fires addressed to @${stored.member}. "}"
-      "${stored.source.describe()}."
-      "${stored.source is FileSource ? " Fires only while the app is running." : ""}";
-
-  /// Remove one of this chat's own triggers. Another chat's is not here to
-  /// remove, and neither is a user-set one: the tools speak for the chat
-  /// that registered their targets.
-  Stream<AgentEvent> _triggerRemove(LlmToolCall call) async* {
-    final registry = registerTrigger!;
-    final id = stringArg(call.argumentsJson, "id");
-    if (id == null) {
-      yield* _reject(call,
-          'The $triggerRemoveName tool takes {"id": "<trigger id>"}; that '
-          "argument was missing.");
-      return;
-    }
-    yield _called(call, id);
-    final own = (await registry.own()).where((t) => t.id == id).toList();
-    if (own.isEmpty) {
-      yield _failed(call, "No trigger with that id was registered by this chat. "
-                "$triggerListName lists what may be removed.");
-      return;
-    }
-    await registry.remove(id);
-    yield _ok(call, "Trigger $id removed.");
-  }
-
-  Stream<AgentEvent> _setProfile(LlmToolCall call) async* {
-    yield _called(call);
-    String? error;
-    await editSettings!((s) {
-      final edited = editedProfile(s.profile, call.argumentsJson);
-      error = edited.error;
-      if (error == null) s.profile = edited.profile;
-    });
-    yield error == null ? _ok(call, "Profile saved.") : _failed(call, error!);
-  }
-
-  Stream<AgentEvent> _setTone(LlmToolCall call) async* {
-    final tone = toneArg(call.argumentsJson);
-    if (tone == null) {
-      yield* _reject(call, 'The $setToneName tool takes {"tone": '
-          '"default" | "direct" | "kind" | "formal"}.');
-      return;
-    }
-    yield _called(call, tone.label);
-    await editSettings!((s) => s.tone = tone);
-    yield _ok(call, "Tone set to ${tone.label}.");
-  }
-
-  /// This chat's own triggers, with what each is waiting for.
-  Stream<AgentEvent> _triggerList(LlmToolCall call) async* {
-    yield _called(call);
-    final own = await registerTrigger!.own();
-    if (own.isEmpty) {
-      yield _ok(call, "No triggers registered for this chat.");
-      return;
-    }
-    final lines = [
-      for (final trigger in own)
-        "- ${trigger.id}: ${trigger.name.isEmpty ? "(unnamed)" : trigger.name}"
-            "${trigger.member == null ? "" : " → @${trigger.member}"}"
-            " — ${trigger.source.describe()}"
-            "${_whenLine(trigger)}",
-    ];
-    yield _ok(call, lines.join("\n"));
-  }
-
-  /// The directory grant request. The banner is the whole grant: the model
-  /// names a directory, the user answers on the ordinary approval banner,
-  /// and [ToolApproval.deniedDirs] carries the directory, so an "always" answer
-  /// lands in the named tier's `writableDirs` in `ChatRepository
-  /// .respondApproval` with no branch of its own, and the rest of this turn
-  /// is covered by [grantRuntimeDirs].
-  ///
-  /// Three shapes refuse before any banner: the app's own data tree — the
-  /// data directory, anything beneath it, or anything containing it, which
-  /// would make the app's settings, secrets and chats writable from inside
-  /// its own permit — a path that names nothing, and a file where a
-  /// directory was asked for.
-  Stream<AgentEvent> _addDirectory(LlmToolCall call) async* {
-    final path = stringArg(call.argumentsJson, "path");
-    if (path == null) {
-      yield* _reject(
-          call,
-          'The $addDirectoryName tool takes {"path": "..."}; that argument '
-          "was missing.");
-      return;
-    }
-    yield _called(call, path);
-    final resolved = _resolvePath(path);
-    final type = await fs.type(resolved);
-    if (type == FileSystemEntityType.notFound) {
-      yield _failed(call, "Directory not found: $resolved. "
-          "Create it first, then ask again.");
-      return;
-    }
-    if (type != FileSystemEntityType.directory) {
-      yield _failed(call, "$resolved is not a directory. The grant covers a "
-          "directory and everything under it; ask again with the directory "
-          "the work belongs in.");
-      return;
-    }
-    if (!outsideWorkspaces(fs, resolved, workspace, projectWorkspace)) {
-      yield _ok(call, "$resolved is inside the workspaces, and writes there "
-          "are already allowed. Nothing was granted.");
-      return;
-    }
-    // The tree either way — beneath it is the app's own data, containing it
-    // hands those writes to the sandbox — answered after the workspaces,
-    // whose directories live beneath this tree and need no grant.
-    // shortcut: a symlink aliasing the data dir passes as its own name,
-    // until fs_shim grows link resolution to chase one with.
-    if (dataDir != null &&
-        (pathInside(dataDir!, resolved) || pathInside(resolved, dataDir!))) {
-      yield _failed(call, "$resolved holds this app's own data, or lies "
-          "inside it, which is not grantable. Choose a directory outside it.");
-      return;
-    }
-    // The banner names the resolved path — the real directory is what a yes
-    // agrees to — and carries it in `deniedDirs`, the field the repository's
-    // approval answer already persists on.
-    final approval = ToolApproval(
-      id: call.id,
-      toolName: addDirectoryName,
-      argumentsJson: call.argumentsJson,
-      argumentsText: resolved,
-      deniedDirs: [resolved],
-    );
-    yield ApprovalRequestEvent(approval);
-    final answer = await approve(approval);
-    if (!answer.isAllow) {
-      _decision = (
-        source: PermissionSource.human,
-        tiers: const [PermissionTier.once],
-        decided: PermissionDecision.deny,
-      );
-      yield ToolResultEvent(_ran(
-          call,
-          ShellResult.failed(
-              "Denied. Write access to $resolved was not granted; carry on "
-              "with the task — writes in that folder keep raising the "
-              "ordinary per-write approval. Do not call $addDirectoryName "
-              "again this turn.")));
-      return;
-    }
-    grantRuntimeDirs([resolved]);
-    final (tiers, wording) = switch (answer) {
-      ApprovalResponse.alwaysAllowChat => (
-          const [PermissionTier.chat],
-          "Allowed in this chat: the grant is saved with the conversation, so "
-              "writes in $resolved run without asking here.",
-        ),
-      ApprovalResponse.alwaysAllowProject => (
-          const [PermissionTier.project],
-          "Allowed for this project: the grant is saved with the project, so "
-              "writes in $resolved run without asking in the project's chats.",
-        ),
-      _ => (
-          const <PermissionTier>[],
-          "Allowed for the rest of this turn: writes in $resolved run without "
-              "asking until the turn ends.",
-        ),
-    };
-    _decision = (
-      source: PermissionSource.human,
-      tiers: tiers,
-      decided: PermissionDecision.allow,
-    );
-    yield ToolResultEvent(_ran(call, ShellResult(returnCode: 0, output: wording)));
-  }
-
-  /// `writable_directories` — the turn's writable set, named. The workspaces
-  /// stand first, every write in them being free; what [addDirectoryName]
-  /// granted, standing or mid-turn, after them — anything the workspaces
-  /// already hold is left out of that half, for being no grant at all; and
-  /// `~` is spelled out, since the tools and commands take that shorthand and
-  /// the grants are recorded absolute.
-  Stream<AgentEvent> _writableDirectories(LlmToolCall call) async* {
-    yield _called(call);
-    final dirs = [
-      for (final dir in (await _policy()).writableDirs.toSet())
-        if (outsideWorkspaces(fs, dir, workspace, projectWorkspace)) dir,
-    ]..sort();
-    final home = shell.homeFor(projectWorkspace);
-    final lines = [
-      "Workspace: $workspace",
-      "Project workspace: $projectWorkspace",
-      if (dirs.isEmpty)
-        "No directories beside the workspaces have been granted write access."
-      else ...[
-        "Also writable, granted beside the workspaces:",
-        for (final dir in dirs) "- $dir",
-      ],
-      if (home != null) "~ is $home.",
-    ];
-    yield _ok(call, lines.join("\n"));
-  }
-
-  /// The stored fire time, worded for the answer — what is armed now, not
-  /// the anchor a repeating source steps from, which goes stale as it fires
-  /// and would tell the model its own trigger is overdue.
-  String _whenLine(Trigger trigger) {
-    final at = trigger.nextFireAt;
-    return at == null ? "" : ". Next: ${_nextWording(at, trigger)}";
-  }
-
-  /// The source's own relative wording where it is on the clock ("in 30
-  /// minutes", "Sat 22 Aug, daily" from the *next* occurrence), the plain
-  /// moment otherwise. [describe] reads the anchor, so the schedule has to
-  /// be re-worded here against the stored time.
-  String _nextWording(DateTime at, Trigger trigger) {
-    final source = trigger.source;
-    return switch (source) {
-      ScheduleSource(:final repeat) =>
-        "${describeFire(at, DateTime.now())}"
-            "${repeat == ScheduleRepeat.off ? "" : ", ${repeat.label.toLowerCase()}"}",
-      _ => source.describe(),
-    };
-  }
-
-  /// A fact the model judged worth keeping. No approval: like `websearch`, it
-  /// reaches nothing and runs nothing — what it writes is a line in the app's
-  /// own store, and a memory nobody wants is a line the user deletes in the
-  /// explorer.
-  Stream<AgentEvent> _memorySave(LlmToolCall call) async* {
-    final text = stringArg(call.argumentsJson, "text");
-    final store = memoryStore;
-    if (text == null || store == null) {
-      yield* _reject(call, 'The $memorySaveToolName tool takes {"text": "..."}; '
-          "that argument was missing.");
-      return;
-    }
-    yield _called(call, text);
-    try {
-      await store.add(text, chat: memoryChat);
-    } catch (e) {
-      yield _failed(call, "The memory could not be saved: $e");
-      return;
-    }
-    yield _ok(call, "Memory saved. Later conversations are offered it when it "
-              "looks relevant.");
-  }
-
-  /// Read-only over the app's own store, so no approval: it runs nothing and
-  /// reaches nothing.
-  Stream<AgentEvent> _memorySearch(LlmToolCall call) async* {
-    final query = stringArg(call.argumentsJson, "query");
-    final store = memoryStore;
-    if (query == null || store == null) {
-      yield* _reject(call, 'The $memorySearchToolName tool takes {"query": "..."}; '
-          "that argument was missing.");
-      return;
-    }
-    yield _called(call, query);
-    final hits = await store.search(query);
-    // The ids ride with the hits: they are the update and delete tools'
-    // handles, and this is the only place the model sees them.
-    yield _ok(call,
-        hits.isEmpty ? "No memories match." : renderRecall(hits, withIds: true));
-  }
-
-  /// The correction half of the in-turn writing: the replacement stands where
-  /// the old fact was, so a memory the user corrected is not left to drift
-  /// beside its newer version.
-  Stream<AgentEvent> _memoryUpdate(LlmToolCall call) async* {
-    final id = stringArg(call.argumentsJson, "id");
-    final text = stringArg(call.argumentsJson, "text");
-    final store = memoryStore;
-    if (id == null || text == null || store == null) {
-      yield* _reject(call,
-          'The $memoryUpdateToolName tool takes {"id": "...", "text": "..."}; '
-          "that argument was missing.");
-      return;
-    }
-    yield _called(call, text);
-    try {
-      if (await store.update(id, text, chat: memoryChat) == null) {
-        yield _failed(call, "The memory could not be updated: no memory with "
-            "id $id. Search again for its current id.");
-        return;
-      }
-    } catch (e) {
-      yield _failed(call, "The memory could not be updated: $e");
-      return;
-    }
-    yield _ok(call, "Memory updated. The replacement stands where the old fact "
-              "was.");
-  }
-
-  /// The half that costs a line in the log, not a new one: a fact the model
-  /// judged wrong or spent, so a later recall does not carry it.
-  Stream<AgentEvent> _memoryDelete(LlmToolCall call) async* {
-    final id = stringArg(call.argumentsJson, "id");
-    final store = memoryStore;
-    if (id == null || store == null) {
-      yield* _reject(call,
-          'The $memoryDeleteToolName tool takes {"id": "..."}; that argument '
-          "was missing.");
-      return;
-    }
-    yield _called(call);
-    try {
-      await store.delete(id);
-    } catch (e) {
-      yield _failed(call, "The memory could not be deleted: $e");
-      return;
-    }
-    yield _ok(call, "Memory deleted, where it named an existing one.");
-  }
-
-  /// Publish an artifact from a workspace path. Copies the dir (or the file's
-  /// parent) into the chat's `artifacts/` dir. A path the workspaces hold
-  /// runs without asking; one that reaches past them is offered to the user
-  /// first, since publishing is what makes the file's bytes part of the chat.
-  Stream<AgentEvent> _artifact(LlmToolCall call) async* {
-    final parsed = artifactArgsFrom(call.argumentsJson);
-    if (parsed == null) {
-      yield* _reject(call,
-          'The $artifactToolName tool takes {"path": "..."}; that argument was missing.');
-      return;
-    }
-    final path = _resolvePath(parsed.path);
-    yield _called(call, parsed.title.isEmpty ? parsed.path : parsed.title);
-    String? artifactId;
-    yield* _gatedPath(call, path, artifactToolName, () async {
-      artifactId = await saveArtifact!(parsed.path, parsed.entryFile,
-          artifactId: parsed.artifactId);
-      return const ShellResult(returnCode: 0, output: "");
-    });
-    final id = artifactId;
-    if (_commandResult!.returnCode != 0 || id == null) {
-      yield ToolResultEvent(_ran(call, _commandResult!));
-      return;
-    }
-    yield ArtifactEvent(artifactId: id, entryFile: parsed.entryFile, title: parsed.title);
-    final label = parsed.title.isEmpty ? parsed.path : "'${parsed.title}'";
-    // One output, so the model is told how to update it on a reload too — the
-    // instructions used to be said to the model alone and were lost with the
-    // session.
-    yield ToolResultEvent(_ran(
-        call,
-        ShellResult(
-            returnCode: 0,
-            output: "Artifact $label published. The user can view it in the "
-                "app. It is saved with the chat. To update it, edit the files "
-                "and call artifact again with artifact_id: \"$id\".")));
-  }
-
-  /// Generate an image and show it in the reply. Not gated: it touches neither
-  /// the workspace nor the shell, and the setting is the user's consent.
-  Stream<AgentEvent> _generateImage(LlmToolCall call) async* {
-    final prompt = stringArg(call.argumentsJson, "prompt");
-    if (prompt == null) {
-      yield* _reject(call,
-          'The $imageGenerationToolName tool takes {"prompt": "..."}.');
-      return;
-    }
-    yield _called(call, prompt);
-    final List<ImageEvent> saved;
-    try {
-      final images = await generateImage!(prompt);
-      saved = [for (final image in images) await _saved(image)];
-    } catch (e) {
-      yield _failed(call, "$e");
-      return;
-    }
-    if (saved.isEmpty) {
-      yield _failed(call, "The image model returned no image.");
-      return;
-    }
-    for (final event in saved) {
-      yield event;
-    }
-    yield _ok(call, "Generated ${saved.length} image(s), attached below and "
-        "shown to the user in the chat.");
-  }
-
   /// Images saved this session, by resource: the bytes the projection hands
   /// back to the model on the result that made them, as a reload reads them.
   final _images = <String, LlmAttachment>{};
 
-  Future<ImageEvent> _saved(LlmAttachment image) async {
+  @override
+  bool get savesResources => saveResource != null;
+
+  @override
+  Future<ImageEvent> saved(LlmAttachment image) async {
     final resource = await saveResource!(image.filename, image.bytes);
     _images[resource] = image;
     return ImageEvent(FilePart(
         resource: resource, filename: image.filename, mimeType: image.mimeType));
-  }
-
-  /// Package a skill the model drafted in its workspace and offer it to the
-  /// user to install. Mirrors [_artifact]: the model writes files, calls the
-  /// tool, and a card appears in the chat. The user reviews and installs from
-  /// the card — the model cannot install it itself.
-  Stream<AgentEvent> _createSkill(LlmToolCall call) async* {
-    final args = createSkillArgsFrom(call.argumentsJson);
-    if (args == null) {
-      yield* _reject(call, createSkillFormatError);
-      return;
-    }
-    final path = _resolvePath(args.path);
-    yield _called(call, args.path);
-    String? installId;
-    String? skillName;
-    yield* _gatedPath(call, path, createSkillToolName, () async {
-      if (!await fs.directory(path).exists()) {
-        return ShellResult.failed(
-            "The directory '$path' does not exist. Write the skill there first "
-            "with write/edit, then call $createSkillToolName.");
-      }
-      if (!await fs.file(fs.path.join(path, "SKILL.md")).exists()) {
-        return ShellResult.failed(
-            "The directory '$path' has no SKILL.md. A skill needs one.");
-      }
-      try {
-        final result = await packageSkill!(args.path, args.name);
-        installId = result.installId;
-        skillName = result.name;
-      } on SkillImportException catch (e) {
-        return ShellResult.failed(
-            "SKILL.md does not conform to the Agent Skills spec: $e. "
-            "Fix the frontmatter and call $createSkillToolName again.");
-      }
-      return const ShellResult(returnCode: 0, output: "");
-    });
-    final id = installId;
-    if (_commandResult!.returnCode != 0 || id == null) {
-      yield ToolResultEvent(_ran(call, _commandResult!));
-      return;
-    }
-    final name = skillName ?? args.name ?? args.path;
-    yield SkillInstallEvent(installId: id, title: name);
-    yield _ok(call, "Skill '$name' packaged. "
-              "The user can review and install it from the card below.");
-  }
-
-  /// The plan file: where the model works, so the model can read it and edit
-  /// it around the tools. Resolved like a file-tool path but written through
-  /// `fs` directly — the tools own the plan's lines, and an `edit` against
-  /// them would be two writers on one file.
-  String get _planPath => fs.path.join(workspace, planFileName);
-
-  Future<String?> _readPlan() async {
-    final file = fs.file(_planPath);
-    if (!await file.exists()) return null;
-    return file.readAsString();
-  }
-
-  /// What a plan tool says when there is nothing to work from, or null where
-  /// the file is there with tasks in it.
-  String? _planMissing(String? plan) {
-    if (plan == null) {
-      return "There is no $planFileName in the workspace yet. Record the "
-          "first task with $planAddToolName.";
-    }
-    return planTasksFrom(plan).isEmpty
-        ? "$planFileName holds no tasks. Add them with $planAddToolName."
-        : null;
-  }
-
-  /// Record a task. The call is reported with the task as its text, so the
-  /// chat's label reads the plan growing.
-  Stream<AgentEvent> _planAdd(LlmToolCall call) async* {
-    final task = stringArg(call.argumentsJson, "task");
-    if (task == null) {
-      yield* _reject(call,
-          'The $planAddToolName tool takes {"task": "..."}; that argument '
-          "was missing.");
-      return;
-    }
-    final details = stringArg(call.argumentsJson, "details");
-    if (details == null) {
-      yield* _reject(call,
-          'The $planAddToolName tool takes {"task": "...", "details": "..."}; '
-          "the details were missing. Write the plan for this task: how it "
-          "will be done, what it touches, and how it will be verified.");
-      return;
-    }
-    final section = stringArg(call.argumentsJson, "section");
-    yield _called(call, task);
-    Future<ShellResult> run() async {
-      final updated = planAddTask(await _readPlan(), task,
-          section: section, details: details);
-      await fs.file(_planPath).writeAsString(updated);
-      return ShellResult(returnCode: 0, output: planAddResult(task, planProgress(updated)));
-    }
-    yield* _runFileTool(call, _planPath, planAddToolName, run);
-  }
-
-  /// Take the next task. Nothing to take is the answer, not a failure: the
-  /// plan being finished is exactly the moment the model calls present_plan.
-  Stream<AgentEvent> _planNext(LlmToolCall call) async* {
-    yield _called(call);
-    final plan = await _readPlan();
-    final missing = _planMissing(plan);
-    final next = planNext(plan);
-    if (next == null) {
-      yield _ok(call, missing ?? "All tasks done.");
-      return;
-    }
-    // The index came from the text just read, so the mark cannot miss.
-    final marked = planMark(plan, next.index, PlanTaskStatus.inProgress)!;
-    await fs.file(_planPath).writeAsString(marked);
-    yield _ok(call, planNextResult(next, planProgress(marked)));
-  }
-
-  /// Finish a task: by number or by enough of its text to identify it.
-  Stream<AgentEvent> _planDone(LlmToolCall call) async* {
-    final task = stringArg(call.argumentsJson, "task");
-    if (task == null) {
-      yield* _reject(call,
-          'The $planDoneToolName tool takes {"task": "..."} — the number '
-          "$planNextToolName reported, or the start of the task's text; that "
-          "argument was missing.");
-      return;
-    }
-    yield _called(call, task);
-    final plan = await _readPlan();
-    final missing = _planMissing(plan);
-    if (missing != null) {
-      yield _failed(call, missing);
-      return;
-    }
-    final found = planFind(plan, task);
-    if (found == null) {
-      final candidates = planCandidates(plan, task)
-          .map((t) => "${t.index}. ${t.text}")
-          .toList();
-      yield _failed(
-          call,
-          candidates.isEmpty
-              ? "No task matches \"$task\". Call $planNextToolName to take "
-                  "the next one, or read $planFileName."
-              : "\"$task\" matches more than one task: ${candidates.join("; ")}. "
-                  "Name it by number, or by more of its text.");
-      return;
-    }
-    // The index came from the text just read, so the mark cannot miss.
-    final marked = planMark(plan, found.index, PlanTaskStatus.done)!;
-    await fs.file(_planPath).writeAsString(marked);
-    yield _ok(call, planDoneResult(found, planProgress(marked)));
-  }
-
-  /// The plan, put to the user: the chat draws the present_plan call as the
-  /// plan itself, read off $planFileName, and the Go / changes question the
-  /// panel asks sits under it — one call, so the model cannot show the plan
-  /// without asking about it, or ask without showing it.
-  Stream<AgentEvent> _presentPlan(LlmToolCall call) async* {
-    final args = presentPlanArgsFrom(call.argumentsJson);
-    if (args == null) {
-      yield* _reject(call,
-          'The $presentPlanToolName tool takes no required arguments; "title" '
-          "is an optional string.");
-      return;
-    }
-    yield _called(call, args.title ?? planFileName);
-    final missing = _planMissing(await _readPlan());
-    if (missing != null) {
-      yield _failed(call, missing);
-      return;
-    }
-    // Emitted before it is awaited, for the same reason an approval is: the
-    // panel is where the verdict comes from. The verdict is then the tool's
-    // result, so the model reads it as the outcome of presenting rather than
-    // as the user's prose. The questions ride as the request's document —
-    // what another device reads the call's arguments back out of — since the
-    // call's own arguments name a title, not a question.
-    final request = AskRequest(
-      id: call.id,
-      questions: [planApprovalQuestion(args.title)],
-      argumentsJson: planApprovalQuestionsJson(args.title),
-    );
-    yield QuestionRequestEvent(request);
-    final answers = await answer(request);
-    yield _ok(call, planVerdict(answers.firstOrNull));
-  }
-
-  /// A call that could not be run at all: the UI still sees the pair, and the
-  /// model still gets told why.
-  Stream<AgentEvent> _reject(LlmToolCall call, String problem) async* {
-    yield _called(call);
-    yield _failed(call, problem);
-  }
-
-  /// [call] as reported, with [text] as what the label shows of it.
-  static ToolCallEvent _called(LlmToolCall call, [String? text]) =>
-      ToolCallEvent(ToolCall(
-        id: call.id,
-        name: call.name,
-        argumentsJson: call.argumentsJson,
-        argumentsText: text,
-        signature: call.signature,
-      ));
-
-  static ToolResultEvent _ok(LlmToolCall call, String output) =>
-      ToolResultEvent(ToolResult(callId: call.id, returnCode: 0, output: output));
-
-  static ToolResultEvent _failed(LlmToolCall call, String problem) =>
-      ToolResultEvent(ToolResult(
-          callId: call.id, returnCode: -1, output: "", exceptionInfo: problem));
-
-  /// Run [run] gated by the rules, then [approveMode]. Rules are the standing
-  /// decision, so they are consulted first in every mode: an allow runs, a
-  /// deny refuses without running or asking, an ask escalates — and no match
-  /// falls through to what the mode answers.
-  ///
-  /// The rule's reach stops where the parse's does: a command with findings —
-  /// one the static layer cannot model — is escalated to the banner even
-  /// under an allow rule, never silently run. In `never` mode there is nobody
-  /// to ask, so the findings refuse the command the way the veto always has.
-  /// [argumentsText] is what the banner shows: what this call does, worded
-  /// here where it is already in hand rather than parsed back out of the JSON
-  /// by whoever draws it.
-  ///
-  /// [analysis] is a bash command's parse, judged segment by segment: an allow
-  /// that covers the head but not the tail escalates the whole.
-  Stream<AgentEvent> _runGated(
-    LlmToolCall call,
-    String toolName,
-    Future<ShellResult> Function() run, {
-    String? argumentsText,
-    ShellCommandAnalysis? analysis,
-    ApproveMode? mode,
-    bool unsandboxed = false,
-  }) async* {
-    final rules = (await _policy()).permissions;
-    final verdict = rulesDecideTraced(
-      rules,
-      toolName,
-      path: toolName == readToolName ||
-              toolName == writeToolName ||
-              toolName == editToolName
-          ? argumentsText
-          : null,
-      url: toolName == webfetchToolName ? argumentsText : null,
-      segments: analysis?.modelableSegments,
-    );
-    switch (verdict?.decision) {
-      case PermissionDecision.deny:
-        _decision = (
-          source: PermissionSource.rule,
-          tiers: verdict!.tiers,
-          decided: PermissionDecision.deny,
-        );
-        _commandResult = const ShellResult.failed(_deniedByRule);
-        return;
-      case PermissionDecision.allow:
-        // Allowing a command is not allowing it out of the sandbox.
-        if (unsandboxed) break;
-        // An allow rule is a standing decision, but only for commands the
-        // parse can vouch for: a compound command whose later segments the
-        // rule does not cover runs with them unanswered. Findings here are a
-        // banner, in every mode but never — where nobody is watching.
-        final note = analysis?.escalationNote;
-        if (note != null) {
-          if (approveMode == ApproveMode.never) {
-            _commandResult = ShellResult.failed(note);
-            return;
-          }
-          yield* _askAndExecute(call, toolName, run, argumentsText);
-          return;
-        }
-        _decision = (
-          source: PermissionSource.rule,
-          tiers: verdict!.tiers,
-          decided: PermissionDecision.allow,
-        );
-        _commandResult = await run();
-        return;
-      case PermissionDecision.ask:
-      case null:
-        break;
-    }
-    // Where the rules left the command uncovered, the deterministic tiers
-    // answer before any mode does: a segment the parse proves
-    // non-modifying, or a fetch the network rules allow — every segment
-    // covered, or none is. An "always show me" ask rule on any segment
-    // outranks the tier that would cover it, the banner being what the user
-    // asked for there.
-    if (toolName == "bash" &&
-        verdict == null &&
-        analysis != null &&
-        !unsandboxed) {
-      final tiered = _deterministicBashVerdict(analysis, rules);
-      if (tiered != null) {
-        _decision = tiered;
-        _commandResult = tiered.decided == PermissionDecision.allow
-            ? await run()
-            : const ShellResult.failed(_deniedByRule);
-        return;
-      }
-    }
-    switch (mode ?? approveMode) {
-      case ApproveMode.ask:
-        yield* _askAndExecute(call, toolName, run, argumentsText,
-            unsandboxed: unsandboxed);
-      case ApproveMode.auto:
-        yield* _autoClassifyAndExecute(call, toolName, run, argumentsText,
-            unsandboxed: unsandboxed);
-      case ApproveMode.never when unsandboxed:
-        // Nobody to ask, and the sandbox is the one guard an unwatched turn
-        // has: only a rule takes it away.
-        _commandResult = const ShellResult.failed(_unsandboxedRefused);
-      case ApproveMode.never:
-        _decision = (
-          source: PermissionSource.mode,
-          tiers: const [],
-          decided: PermissionDecision.allow,
-        );
-        _commandResult = await run();
-    }
-  }
-
-  /// Run a file tool behind the workspace gate and report its result.
-  Stream<AgentEvent> _runFileTool(
-    LlmToolCall call,
-    String path,
-    String toolName,
-    Future<ShellResult> Function() run,
-  ) async* {
-    yield* _gatedPath(call, path, toolName, run,
-        granted: (await _policy()).writableDirs);
-    yield ToolResultEvent(_ran(call, _commandResult!));
-  }
-
-  /// Run [run] behind the workspace gate, into [_commandResult]: a path the
-  /// workspaces (or [granted]) hold runs straight, one past them is gated.
-  ///
-  /// A throw inside [run] is the tool failing, not the turn: it is answered as
-  /// a failed result the model reads — a decode failure on a binary file used
-  /// to end the turn.
-  Stream<AgentEvent> _gatedPath(
-    LlmToolCall call,
-    String path,
-    String toolName,
-    Future<ShellResult> Function() run, {
-    List<String> granted = const [],
-  }) async* {
-    if (outsideWorkspaces(fs, path, workspace, projectWorkspace,
-        granted: granted)) {
-      yield* _runGated(call, toolName, () => _guarded(run),
-          argumentsText: path);
-    } else {
-      _commandResult = await _guarded(run);
-    }
-  }
-
-  /// Answer what [run] throws as a failed result, so an unexpected failure —
-  /// a decode, a full disk, a write that could not land — is one the model
-  /// reads and works around rather than one that ends the turn.
-  Future<ShellResult> _guarded(Future<ShellResult> Function() run) async {
-    try {
-      return await run();
-    } catch (e) {
-      return ShellResult.failed("$e");
-    }
-  }
-
-  /// Emit the approval banner, wait for the user, and run [run] if allowed.
-  /// Sets [_commandResult] to the outcome.
-  Stream<AgentEvent> _askAndExecute(
-    LlmToolCall call,
-    String toolName,
-    Future<ShellResult> Function() run,
-    String? argumentsText, {
-    bool unsandboxed = false,
-  }) async* {
-    final approval = ToolApproval(
-      id: call.id,
-      toolName: toolName,
-      argumentsJson: call.argumentsJson,
-      argumentsText: argumentsText,
-      unsandboxed: unsandboxed,
-    );
-    yield ApprovalRequestEvent(approval);
-    // An "always" answer's rule is written by the repository before the
-    // answer arrives, and the next call's policy read finds it.
-    final answer = await approve(approval);
-    final allowed = answer.isAllow;
-    _decision = (
-      source: PermissionSource.human,
-      tiers: [
-        switch (answer) {
-          ApprovalResponse.alwaysAllowChat => PermissionTier.chat,
-          ApprovalResponse.alwaysAllowProject => PermissionTier.project,
-          _ => PermissionTier.once,
-        },
-      ],
-      decided: allowed ? PermissionDecision.allow : PermissionDecision.deny,
-    );
-    _humanDecided = true;
-    _commandResult =
-        allowed ? await run() : const ShellResult.failed(_deniedByUser);
-    _humanDecided = false;
-  }
-
-  static const _deniedByUser = "The user denied this command. Ask them what "
-      "to do instead, or try something else.";
-
-  static const _unsandboxedRefused = "Running this outside the sandbox needs "
-      "the user's approval, and nobody is here to give it. Do it inside the "
-      "workspaces, or tell the user what needs to run unsandboxed.";
-
-  static const _deniedByRule = "Denied by a permission rule you set. Do not "
-      "retry this command; tell the user what you were trying to do and let "
-      "them decide.";
-
-  /// Classify the call, then allow (run), deny (refuse), or ask (escalate to
-  /// the banner). Sets [_commandResult] to the outcome.
-  Stream<AgentEvent> _autoClassifyAndExecute(
-    LlmToolCall call,
-    String toolName,
-    Future<ShellResult> Function() run,
-    String? argumentsText, {
-    bool unsandboxed = false,
-  }) async* {
-    if (_autoPaused) {
-      yield* _askAndExecute(call, toolName, run, argumentsText,
-          unsandboxed: unsandboxed);
-      return;
-    }
-
-    // Raced with a stop: a turn outliving its abort ran on into the next
-    // turn, clearing its banner and rewriting the session under it.
-    final decision = await Future.any([
-      (classifier ?? const NoClassifier()).classify(toolName, call.argumentsJson,
-          workspace: workspace,
-          alsoWritable: [
-            if (projectWorkspace != workspace) projectWorkspace,
-            ...(await _policy()).writableDirs,
-          ]),
-      _stopped.future.then((_) => PermissionDecision.ask),
-    ]);
-    if (_cancelled) {
-      _commandResult = const ShellResult.failed(notExecuted);
-      return;
-    }
-
-    if (decision != PermissionDecision.ask) {
-      _consecutiveAsks = 0;
-      _decision = (
-        source: PermissionSource.classifier,
-        tiers: const [],
-        decided: decision,
-      );
-    }
-    switch (decision) {
-      case PermissionDecision.allow:
-        _commandResult = await run();
-      case PermissionDecision.deny:
-        _commandResult = const ShellResult.failed(
-            "Denied by auto mode as dangerous. Do not retry this command; "
-            "tell the user what you were trying to do and let them decide.");
-      case PermissionDecision.ask:
-        _consecutiveAsks++;
-        _totalAsks++;
-        if (_consecutiveAsks >= 3 || _totalAsks >= 20) {
-          _autoPaused = true;
-          yield InfoEvent("Auto mode paused: too many uncertain commands. "
-              "Asking for every command for the rest of this turn.");
-        }
-        yield* _askAndExecute(call, toolName, run, argumentsText,
-            unsandboxed: unsandboxed);
-    }
-  }
-
-  /// Whether the run this turn is composing sits behind an approval banner —
-  /// a human reads the call and answers before it goes. Set by the arms that
-  /// run after an approval, cleared by the arms that run without one: the
-  /// static gate reads it to stand down, because a parse vetoing what a
-  /// person approved is the machine overriding its keeper.
-  bool _humanDecided = false;
-
-  Future<ShellResult> _execute(LlmToolCall call, String command,
-      {bool unconfined = false, ShellCommandAnalysis? analysis}) async {
-    if (_cancelled) {
-      return const ShellResult.failed("The turn was stopped before this command ran.");
-    }
-    // The model's own bound for this command, capped at what the chat allows:
-    // a small model's estimate of a build is as likely to be too short as too
-    // long, and a cap is the only one that is never wrong.
-    final requested = intArg(call.argumentsJson, "timeout");
-    final timeout = Duration(
-      milliseconds: requested == null || requested <= 0
-          ? options.commandTimeout.inMilliseconds
-          : requested.clamp(0, options.commandTimeout.inMilliseconds),
-    );
-    // What the command parses to, decided before anything asks a model about
-    // it. The parse answers for the deterministic safe side — reads, and
-    // writes the workspace can hold — and refuses what it cannot answer for:
-    // a command that cannot be modeled is one the model decided the wording
-    // of, and one that assigns to a variable that rewrites where its own
-    // writes land is not answering for itself.
-    //
-    // The gate is on only where a sandbox exists to make the boundary hold:
-    // without one the parse has nothing to enforce, and refusing on its word
-    // would be trusting the same text-only read the sandbox exists to back.
-    // And it stands down where a person has decided: a run behind the
-    // approval banner was read and answered by a human, and a parse vetoing
-    // what the human approved is the machine overriding its keeper. The
-    // banner, not the mode, is what carries that — auto mode reaches the
-    // banner through the classifier's ask — so the gate reads the flag the
-    // run itself sets.
-    final parsed =
-        analysis ?? ShellCommandAnalysis.parse(command, isWindows: platformIsWindows);
-    final sandbox =
-        unconfined ? null : _confinementOf(await _policy(), parsed);
-    if (sandbox != null && !_humanDecided) {
-      final note = parsed.escalationNote;
-      if (note != null) {
-        return ShellResult.failed(note);
-      }
-    }
-    final jobs = backgroundJobs;
-    if (jobs != null && boolArg(call.argumentsJson, "background")) {
-      return _startBackground(jobs, command, sandbox);
-    }
-    final run = shell.start(command,
-        cwd: workspace,
-        home: projectWorkspace,
-        timeout: timeout,
-        environment: environment,
-        oneShot: oneShot,
-        restart: boolArg(call.argumentsJson, "restart"),
-        project: project,
-        sandbox: sandbox,
-        readOnly: readOnlyDirs);
-    _running = run;
-    _runWatched(call, run);
-    try {
-      return await run.result;
-    } finally {
-      _running = null;
-    }
-  }
-
-  /// Start [command] as a background job and answer with where it went. A
-  /// one-shot run, so its own shell is all it holds, under the sandbox the
-  /// gate decided; its streams are its log and nothing, which is what lets a
-  /// `toolbox run` or a server in it stop holding anything open.
-  Future<ShellResult> _startBackground(
-      ChatJobs jobs, String command, CommandSandbox? sandbox) async {
-    final job = await jobs.start(command,
-        workspace: workspace,
-        spawn: (script) => shell.start(script,
-            cwd: workspace,
-            home: projectWorkspace,
-            timeout: BackgroundJobs.timeout,
-            environment: environment,
-            oneShot: true,
-            project: project,
-            sandbox: sandbox,
-            readOnly: readOnlyDirs));
-    final log = backgroundLog(job.id);
-    final where = shell.guestRoot == null ? " (${job.logPath})" : "";
-    final pid = job.pid;
-    final stop = pid == null
-        ? ""
-        : " Its process id is $pid, the leader of its group: "
-            "`kill -- -$pid` stops it and everything it started.";
-    return ShellResult(
-        returnCode: 0,
-        output: "Started in the background as job ${job.id}.$stop Its output "
-            "goes to $log in the chat workspace$where: read it with `tail` or "
-            "the read tool at chat:$log. Your next call after it exits says "
-            "how it ended.");
-  }
-
-  /// The deterministic bash tiers the rules leave standing: every segment
-  /// covered by a rule allow, proven non-modifying by its own text, or
-  /// allowed by the network rules as a fetch. Null where any segment is
-  /// uncovered, and where an ask rule wanted to see any of it — the mode's own
-  /// path decides those, every time. A deny from the network rules is
-  /// returned as one, refusal being what the rule said.
-  _Decision? _deterministicBashVerdict(
-    ShellCommandAnalysis analysis,
-    List<PermissionRule> rules,
-  ) {
-    final segments = analysis.modelableSegments;
-    if (segments == null || segments.isEmpty) return null;
-    final tiers = <PermissionTier>{};
-    var ruled = false;
-    for (final segment in segments) {
-      final profile = profileSegment(segment);
-      if (!profile.modelable) return null;
-      final verdict = segmentVerdict(rules, segment);
-      switch (verdict?.decision) {
-        case PermissionDecision.deny:
-          return (
-            source: PermissionSource.rule,
-            tiers: verdict!.tiers.toList(),
-            decided: PermissionDecision.deny,
-          );
-        case PermissionDecision.ask:
-          return null;
-        case PermissionDecision.allow:
-          tiers.addAll(verdict!.tiers);
-          ruled = true;
-          continue;
-        case null:
-          break;
-      }
-      switch (profile.reach) {
-        case SegmentReach.nonModifying:
-          continue;
-        case SegmentReach.network:
-          // The same consult a `webfetch` call takes — one standing answer
-          // covers the tool and the fetcher commands alike — with the
-          // segment's host as the subject. A fetch whose host no rule speaks
-          // for is uncovered, wherever the mode asks about it next.
-          final network =
-              rulesDecideTraced(rules, "webfetch", url: profile.url);
-          switch (network?.decision) {
-            case PermissionDecision.deny:
-              return (
-                source: PermissionSource.rule,
-                tiers: network!.tiers.toList(),
-                decided: PermissionDecision.deny,
-              );
-            case PermissionDecision.allow:
-              tiers.addAll(network!.tiers);
-              ruled = true;
-              continue;
-            case PermissionDecision.ask:
-            case null:
-              return null;
-          }
-        case SegmentReach.other:
-          return null;
-      }
-    }
-    return (
-      source: ruled ? PermissionSource.rule : PermissionSource.parse,
-      tiers: ruled ? tiers.toList() : const <PermissionTier>[],
-      decided: PermissionDecision.allow,
-    );
   }
 
   /// Reports [run]'s output as it prints, each change no more than
@@ -3343,11 +1030,6 @@ class BuiltinAgent {
   }
 
   static const watchInterval = Duration(milliseconds: 100);
-
-  void _runWatched(LlmToolCall call, ShellRun run) {
-    if (onShellOutput == null) return;
-    watchShellOutput(run, (text) => onShellOutput!(call.id, text));
-  }
 
   /// What the request [completion] answered held, its reply counted in the
   /// chat so the estimate covers what the provider's count does.
@@ -3400,7 +1082,7 @@ class BuiltinAgent {
         await for (final chunk in client.stream(
           session.messages,
           model: model,
-          tools: _tools,
+          tools: [for (final tool in _tools) tool.definition],
           temperature: temperature,
           reasoningEffort: reasoningEffort,
         )) {
@@ -3471,7 +1153,7 @@ class BuiltinAgent {
               // A model that answers with images (OpenRouter's image models).
               if (saveResource != null) {
                 for (final image in chunk.message.attachments.where((a) => a.isImage)) {
-                  yield await _saved(image);
+                  yield await saved(image);
                 }
               }
               rateLimitGate?.onSuccess();
@@ -3531,5 +1213,4 @@ class BuiltinAgent {
         return;
       }
     }
-  }
-}
+  }}

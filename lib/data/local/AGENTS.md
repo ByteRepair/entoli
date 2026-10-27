@@ -720,11 +720,11 @@ is the foreground service, not a provider — and its notification is a visible
 one rather than the silent hold turns and downloads keep, since the user set it
 going and then left.
 
-The warm-up prompt and tools are built from the same `systemPrompt` and
-`agentTools` a turn uses, so the warmed prefix is the one those turns send —
-the tool booleans in `createLocalPrefill` are `BuiltinAgent`'s defaults for a
-top-level turn and have to stay in step with them, or the cache warms a prefix
-nothing reuses. The profile is in the prompt too: a chat with an unchanged
+The warm-up prompt and tools are built from one `ToolOffer`, read the way a
+turn reads its own, so the warmed prefix is the one those turns send — the
+offer in `createLocalPrefill` is a top-level turn's defaults and has to stay
+in step with `BuiltinAgent.offer`, or the cache warms a prefix nothing
+reuses. The profile is in the prompt too: a chat with an unchanged
 profile reuses it, and one after a profile edit reuses only the body above it
 and reprocesses the profile in its tail, which is small and self-heals on that
 first turn — so nothing rewarms on a profile change.

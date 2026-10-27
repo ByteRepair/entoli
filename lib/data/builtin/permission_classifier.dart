@@ -1,6 +1,9 @@
 import "../../domain/permission.dart";
 import "../../domain/tool_arg.dart";
 import "llm/llm_client.dart";
+import "../../domain/shell.dart" show bashToolName;
+import "../../domain/web_search.dart" show webfetchToolName;
+import "tools/browser_tools.dart";
 
 /// One-shot LLM classification of a tool call. Sends the tool name and its
 /// arguments to a configured model with a system prompt of allow/ask/deny
@@ -123,13 +126,13 @@ that must never run. A write you are merely unsure about is ask.
   /// back to the raw JSON.
   static String _pretty(String argumentsJson, String toolName) {
     final key = switch (toolName) {
-      "bash" => "command",
-      "webfetch" => "url",
-      "browser_click" ||
-      "browser_type" ||
-      "browser_press" ||
-      "browser_drag" ||
-      "browser_upload" =>
+      bashToolName => "command",
+      webfetchToolName => "url",
+      browserClickToolName ||
+      browserTypeToolName ||
+      browserPressToolName ||
+      browserDragToolName ||
+      browserUploadToolName =>
         "action",
       _ => null,
     };

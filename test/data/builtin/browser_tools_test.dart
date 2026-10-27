@@ -11,7 +11,7 @@ import "package:path/path.dart" as p;
 import "package:agent_chat/data/browser/cdp_browser.dart"
     show CdpBrowser, challengeNote, looksLikeChallenge, pageAddress, reapLostBrowser;
 import "package:agent_chat/data/browser/helium.dart";
-import "package:agent_chat/data/builtin/browser_tools.dart";
+import "package:agent_chat/data/builtin/tools/browser_tools.dart";
 import "package:agent_chat/data/builtin/builtin_agent.dart";
 import "package:agent_chat/data/builtin/llm/llm_client.dart";
 import "package:agent_chat/data/builtin/templates.dart";
@@ -22,6 +22,7 @@ import "package:agent_chat/domain/builtin_project.dart" show AgentCapability;
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/domain/permission.dart";
 import "package:agent_chat/domain/shell.dart";
+import "package:agent_chat/data/builtin/tools/agent_tool.dart";
 
 import "../../fakes.dart";
 import "builtin_fakes.dart";
@@ -322,9 +323,9 @@ void main() {
     test("the prompt says how to use it only where it is offered", () {
       AgentCapabilities caps(bool browser) => AgentCapabilities.forTurn(
           commands: true, webSearch: true, disabled: const {}, browser: browser);
-      expect(systemPrompt(platform: "linux", caps: caps(true)),
+      expect(systemPrompt(platform: "linux", offer: ToolOffer(caps: caps(true))),
           contains("## Using the browser"));
-      expect(systemPrompt(platform: "linux", caps: caps(false)),
+      expect(systemPrompt(platform: "linux", offer: ToolOffer(caps: caps(false))),
           isNot(contains("browser_")));
     });
 

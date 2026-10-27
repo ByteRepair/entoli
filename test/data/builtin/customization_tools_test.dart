@@ -5,9 +5,9 @@ import "package:flutter_test/flutter_test.dart";
 import "package:fs_shim/fs_io.dart" show fileSystemIo;
 
 import "package:agent_chat/data/builtin/builtin_agent.dart";
-import "package:agent_chat/data/builtin/customization_tools.dart";
+import "package:agent_chat/data/builtin/tools/customization_tools.dart";
 import "package:agent_chat/data/builtin/llm/llm_client.dart";
-import "package:agent_chat/data/builtin/skill_tool.dart";
+import "package:agent_chat/data/builtin/tools/skill_tool.dart";
 import "package:agent_chat/domain/app_settings.dart";
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/domain/permission.dart";

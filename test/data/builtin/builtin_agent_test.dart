@@ -8,10 +8,10 @@ import "package:fs_shim/fs_io.dart" show fileSystemIo;
 import "package:path/path.dart" as p;
 
 import "package:agent_chat/data/builtin/builtin_agent.dart";
-import "package:agent_chat/data/builtin/image_tool.dart";
+import "package:agent_chat/data/builtin/tools/image_tool.dart";
 import "package:agent_chat/data/builtin/memory/instructions.dart";
 import "package:agent_chat/data/builtin/memory/store.dart";
-import "package:agent_chat/data/builtin/memory_tools.dart";
+import "package:agent_chat/data/builtin/tools/memory_tools.dart";
 import "package:agent_chat/data/builtin/llm/llm_client.dart";
 import "package:agent_chat/domain/agent_backend.dart";
 import "package:agent_chat/domain/artifact.dart";

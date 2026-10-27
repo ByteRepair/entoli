@@ -1,18 +1,42 @@
-import "../../domain/ask.dart";
-import "llm/llm_client.dart";
+import "../../../domain/ask.dart";
+import "../../../domain/agent_backend.dart";
+import "../llm/llm_client.dart";
+import "../templates.dart" show substitute, systemProse;
+import "agent_tool.dart";
+import "turn.dart";
 
 /// The one tool that runs nothing: the agent puts questions to the user and
 /// waits. Offered whether or not there is a shell — a browser cannot run a
-/// command, but it can still ask.
-const askTool = LlmTool(
-  name: askToolName,
-  description: "Ask the user one or more questions and wait for their answers. "
+/// command, but it can still ask — and never where nobody is there to answer.
+/// The call and its answers are a pair like any other, so a finished chat
+/// still shows what was asked and picked.
+class AskTool extends AgentTool {
+  AskTool(super.offer);
+
+  @override
+  String get name => askToolName;
+
+  @override
+  bool get offered => offer.caps.ask;
+
+  @override
+  String get fragment => "`$askToolName` to put a question to the user";
+
+  @override
+  String get section =>
+      substitute(systemProse("asking"), {"ask_tool": askToolName});
+
+  @override
+  String get description =>
+      "Ask the user one or more questions and wait for their answers. "
       "Use it when the answer is theirs to give — a choice between directions, "
       "a preference, a detail only they know — and guessing would waste the "
       "turn. They answer by picking one of the options you offer, or by "
       "typing an answer of their own, which comes back as the answer text. "
-      "Do not add an \"other\" option; the panel always offers one.",
-  schema: {
+      "Do not add an \"other\" option; the panel always offers one.";
+
+  @override
+  Map<String, dynamic> get schema => const {
     "type": "object",
     "properties": {
       "questions": {
@@ -45,8 +69,24 @@ const askTool = LlmTool(
       },
     },
     "required": ["questions"],
-  },
-);
+  };
+
+  @override
+  Stream<AgentEvent> run(LlmToolCall call, Turn turn) async* {
+    final questions = askQuestionsFrom(call.argumentsJson);
+    if (questions.isEmpty) {
+      yield* toolRejected(call, askFormatError);
+      return;
+    }
+    yield toolCalled(call);
+    final request = AskRequest(
+        id: call.id, questions: questions, argumentsJson: call.argumentsJson);
+    // Emitted before it is awaited, for the same reason an approval is: the
+    // panel is where the answers come from.
+    yield QuestionRequestEvent(request);
+    yield toolOk(call, askAnswers(questions, await turn.answer(request)));
+  }
+}
 
 /// What the model is told when it called the tool with nothing askable in it.
 const askFormatError =
