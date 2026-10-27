@@ -615,6 +615,9 @@ void main() {
     await repo.sendPrompt(chat.state.id, userMessage("go")).toList();
     final policy = backend.prompts.last.settings.policy;
     expect((await policy()).permissions, isEmpty);
+    expect(backend.prompts.last.settings.approveMode, isNull,
+        reason: "nothing pins the mode, so the turn reads the chat's live");
+    expect((await policy()).approveMode, ApproveMode.auto);
 
     const podman = PermissionRule(
         tool: "bash", pattern: "podman *", decision: PermissionDecision.allow);
@@ -623,12 +626,18 @@ void main() {
           ..writableDirs = ["~/.local/share"])
         .save(config, project: "work");
     await (ProjectSettings.load(config)..sandbox = false).save(config);
+    await repo.saveMeta(chat.state.id, ChatMeta(approveMode: ApproveMode.never));
 
     final now = await policy();
     expect(now.permissions, [podman]);
     expect(now.permissions.single.origin, PermissionTier.project);
     expect(now.writableDirs, ["~/.local/share"]);
     expect(now.sandboxed, isFalse);
+    expect(now.approveMode, ApproveMode.never);
+
+    await repo.saveMeta(chat.state.id, ChatMeta(sandbox: true));
+    expect((await policy()).sandboxed, isTrue,
+        reason: "the chat's own answer is over the project's");
   });
 
     group("a rule written from a banner answer", () {

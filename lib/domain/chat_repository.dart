@@ -436,7 +436,6 @@ class ChatRepository {
       model: meta.model ?? settings.defaultModelId,
       provider: meta.model != null ? meta.provider : settings.defaultProviderId,
       project: project,
-      approveMode: meta.approveMode ?? settings.approveMode,
       classifierProvider: settings.classifierProviderId,
       classifierModel: settings.classifierModelId,
       imageProvider: settings.imageProviderId,
@@ -503,7 +502,11 @@ class ChatRepository {
         ...projectSettings.writableDirs,
         ...defaultProjectSettings.writableDirs,
       ],
-      sandboxed: projectSettings.sandbox ?? defaultProjectSettings.sandbox ?? true,
+      sandboxed: meta.sandbox ??
+          projectSettings.sandbox ??
+          defaultProjectSettings.sandbox ??
+          true,
+      approveMode: meta.approveMode ?? _settings().approveMode,
     );
   }
 

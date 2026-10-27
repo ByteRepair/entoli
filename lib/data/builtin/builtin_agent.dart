@@ -242,7 +242,7 @@ class BuiltinAgent implements Turn {
     required this.approve,
     required this.answer,
     this.options = const BuiltinOptions(),
-    this.approveMode = ApproveMode.ask,
+    this.approveMode,
     this.classifier,
     this.temperature,
     this.reasoningEffort,
@@ -425,10 +425,10 @@ class BuiltinAgent implements Turn {
   final double? temperature;
   final String? reasoningEffort;
 
-  /// How the agent handles a command before it runs. Per turn rather than part
-  /// of [options]: it is the chat's own setting, and it arrives with the
-  /// prompt.
-  final ApproveMode approveMode;
+  /// How the agent handles a command before it runs, where the turn keeps a
+  /// mode of its own (a sub-agent's); null reads the chat's live from
+  /// [policy], so a change lands at the next call.
+  final ApproveMode? approveMode;
 
   /// Classifies a command as safe enough to run without asking, when
   /// [approveMode] is [ApproveMode.auto]. Null falls back to asking for every

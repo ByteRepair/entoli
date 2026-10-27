@@ -239,6 +239,14 @@ class _ChatSettingsPageState extends ConsumerState<ChatSettingsPage> {
                   value: _meta!.approveMode,
                   onChanged: (v) => setState(() => _meta!.approveMode = v),
                 ),
+                // What it inherits is the home device's project, which a
+                // mirror cannot read.
+                if (!mirrored)
+                  _SandboxField(
+                    value: _meta!.sandbox,
+                    project: _project,
+                    onChanged: (v) => setState(() => _meta!.sandbox = v),
+                  ),
                 const Divider(),
                 _MemoryField(
                   value: _meta!.memoryOff,
@@ -326,6 +334,31 @@ class _LlmField extends ConsumerWidget {
 /// one stores the off. A project that has no memory of its own takes the
 /// subsystem away outright, and for that one the row says so and takes
 /// nothing.
+class _SandboxField extends ConsumerWidget {
+  const _SandboxField(
+      {required this.value, required this.project, required this.onChanged});
+
+  final bool? value;
+  final String? project;
+  final ValueChanged<bool?> onChanged;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final inherited = ref.watch(projectSettingsProvider(project)).sandbox ??
+        ref.watch(projectSettingsProvider(null)).sandbox ??
+        true;
+    return InheritableSwitch(
+      title: "Sandbox commands (Landlock)",
+      subtitle: (value ?? inherited)
+          ? null
+          : "Off: this chat's commands write wherever you can.",
+      value: value,
+      inherited: inherited,
+      onChanged: onChanged,
+    );
+  }
+}
+
 class _MemoryField extends StatelessWidget {
   const _MemoryField(
       {required this.value, required this.project, required this.onChanged});

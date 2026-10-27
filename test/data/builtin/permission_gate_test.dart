@@ -28,6 +28,9 @@ void main() {
   /// them mid-turn the way a settings page does.
   late List<PermissionRule> liveRules;
 
+  /// The chat's mode the policy reader answers with, live like the rules.
+  var liveMode = ApproveMode.ask;
+
   setUp(() => session = BuiltinSession());
 
   final finish = saidOnly("done");
@@ -44,7 +47,7 @@ void main() {
     List<PermissionRule> permissions = const [],
     List<String> writableDirs = const [],
     List<ApprovalResponse> approvals = const [],
-    ApproveMode approveMode = ApproveMode.never,
+    ApproveMode? approveMode = ApproveMode.never,
     SandboxHelper? sandboxHelper,
     bool sandboxed = true,
     ShellResult Function(String)? respond,
@@ -88,6 +91,7 @@ void main() {
         permissions: liveRules,
         writableDirs: writableDirs,
         sandboxed: sandboxed,
+        approveMode: liveMode,
       ),
       classifier: classifier,
       webSearch: webSearch,
@@ -798,6 +802,33 @@ void main() {
               "read-only pipe change nothing");
       expect(shell.ran, ["podman ps", "podman ps 2>&1 | head -3"]);
     });
+  });
+
+  test("a mode changed while a turn runs decides its next command", () async {
+    final client = FakeLlmClient([
+      [bashCall("make")], [bashCall("make install")], [finish],
+    ]);
+    liveMode = ApproveMode.ask;
+    // Pinned to nothing, as a top-level turn is: the chat's mode is read live.
+    final agent = agentOver(client, approveMode: null);
+    final events = <AgentEvent>[];
+    await for (final event in agent.run(userMessage("go"))) {
+      events.add(event);
+      // The user switches the chat to never once the first banner is up.
+      if (event is ApprovalRequestEvent) liveMode = ApproveMode.never;
+    }
+    expect(events.whereType<ApprovalRequestEvent>(), hasLength(1));
+    expect(shell.ran, ["make", "make install"]);
+  });
+
+  test("a turn that keeps its own mode is not moved by the chat's", () async {
+    final client = FakeLlmClient([[bashCall("make")], [finish]]);
+    liveMode = ApproveMode.ask;
+    final events = await agentOver(client, approveMode: ApproveMode.never)
+        .run(userMessage("go"))
+        .toList();
+    expect(events.whereType<ApprovalRequestEvent>(), isEmpty);
+    expect(shell.ran, ["make"]);
   });
 
   group("leaving the sandbox", () {

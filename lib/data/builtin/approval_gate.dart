@@ -41,7 +41,7 @@ class GateOutcome {
 class ApprovalGate {
   ApprovalGate({
     required this.policy,
-    required this.approveMode,
+    this.approveMode,
     required this.classifier,
     required this.approve,
     required this.fs,
@@ -59,8 +59,9 @@ class ApprovalGate {
   /// next call.
   final PolicyReader policy;
 
-  /// How a call the rules leave uncovered is decided.
-  final ApproveMode approveMode;
+  /// How a call the rules leave uncovered is decided, where the turn keeps
+  /// one of its own; null reads the chat's from [policy].
+  final ApproveMode? approveMode;
 
   /// Answers [ApproveMode.auto]; null asks for every call.
   final PermissionClassifier? classifier;
@@ -115,6 +116,7 @@ class ApprovalGate {
         ..._runtimeDirs,
       ],
       sandboxed: read.sandboxed,
+      approveMode: read.approveMode,
     );
   }
 
@@ -192,7 +194,9 @@ class ApprovalGate {
     ApproveMode? mode,
     bool unsandboxed = false,
   }) async* {
-    final rules = (await permissions()).permissions;
+    final policy = await permissions();
+    final rules = policy.permissions;
+    final turnMode = approveMode ?? policy.approveMode;
     final verdict = rulesDecideTraced(rules, toolName,
         path: ruleSubject,
         url: ruleSubject,
@@ -215,7 +219,7 @@ class ApprovalGate {
         // banner, in every mode but never — where nobody is watching.
         final note = analysis?.escalationNote;
         if (note != null) {
-          if (approveMode == ApproveMode.never) {
+          if (turnMode == ApproveMode.never) {
             outcome.result = ShellResult.failed(note);
             return;
           }
@@ -249,7 +253,7 @@ class ApprovalGate {
         return;
       }
     }
-    switch (mode ?? approveMode) {
+    switch (mode ?? turnMode) {
       case ApproveMode.ask:
         yield* _ask(call, toolName, run, outcome, argumentsText,
             unsandboxed: unsandboxed);
