@@ -68,14 +68,15 @@ Future<void> _stamp(Turn turn, String path) async {
 
 /// Run a file tool behind the workspace gate and answer [call] with how it
 /// went: the workspaces and what was granted run, the machine is asked.
-/// [rulePath] is whether the rules match the path, as they do for `read`,
-/// `write` and `edit`; for any other tool they match the tool alone.
+/// [ruleSubject] is what the rules match: the path, for `read`, `write` and
+/// `edit`; for any other tool they match the tool alone.
 Stream<AgentEvent> gatedFileRun(Turn turn, LlmToolCall call, String path,
     String tool, Future<ShellResult> Function() run,
-    {bool rulePath = true}) async* {
+    {String? ruleSubject}) async* {
   final outcome = GateOutcome();
   yield* turn.gate.path(call, path, tool, run, outcome,
-      granted: (await turn.gate.permissions()).writableDirs, rulePath: rulePath);
+      granted: (await turn.gate.permissions()).writableDirs,
+      ruleSubject: ruleSubject);
   yield ToolResultEvent(outcome.resultOf(call));
 }
 
@@ -226,7 +227,7 @@ class ReadTool extends AgentTool {
           ...(await turn.gate.permissions()).writableDirs,
           ?turn.attachmentsDir,
         ],
-        rulePath: true);
+        ruleSubject: path);
     // Between the call and its result, which is where the projection looks
     // for a tool's files.
     if (attached != null) yield attached!;
@@ -291,7 +292,8 @@ class WriteTool extends AgentTool {
     }
     yield toolCalled(call, args.path);
     final fs = turn.fs;
-    yield* gatedFileRun(turn, call, path, writeToolName, () async {
+    yield* gatedFileRun(turn, call, path, writeToolName, ruleSubject: path,
+        () async {
       if (await _unread(turn, path, args.path, writeToolName) case final problem?) {
         return ShellResult.failed(problem);
       }
@@ -362,7 +364,8 @@ class EditTool extends AgentTool {
       return;
     }
     yield toolCalled(call, args.path);
-    yield* gatedFileRun(turn, call, path, editToolName, () async {
+    yield* gatedFileRun(turn, call, path, editToolName, ruleSubject: path,
+        () async {
       final file = turn.fs.file(path);
       if (!await file.exists()) {
         return ShellResult(
@@ -460,8 +463,7 @@ class AttachmentSaveTool extends AgentTool {
       return;
     }
     yield toolCalled(call, source);
-    yield* gatedFileRun(turn, call, to, attachmentSaveToolName, rulePath: false,
-        () async {
+    yield* gatedFileRun(turn, call, to, attachmentSaveToolName, () async {
       final file = fs.file(from);
       if (!await file.exists()) {
         return ShellResult.failed("File not found: $source");

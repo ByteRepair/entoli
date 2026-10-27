@@ -5,33 +5,16 @@ import "../../../domain/plan.dart";
 import "../widgets/plan_view.dart" show PlanLabel;
 import "tool_ui.dart";
 
-/// The plan's own steps are not worth saying aloud: the plan presented is.
-abstract class _QuietPlanUI extends ToolUI {
-  const _QuietPlanUI();
+/// The plan's own steps — `plan_add`, `plan_next`, `plan_done` — are not
+/// worth saying aloud: the plan presented is.
+class QuietPlanUI extends ToolUI {
+  const QuietPlanUI(this.tool);
+
+  @override
+  final String tool;
 
   @override
   String? get spoken => null;
-}
-
-class PlanAddUI extends _QuietPlanUI {
-  const PlanAddUI();
-
-  @override
-  String get tool => planAddToolName;
-}
-
-class PlanNextUI extends _QuietPlanUI {
-  const PlanNextUI();
-
-  @override
-  String get tool => planNextToolName;
-}
-
-class PlanDoneUI extends _QuietPlanUI {
-  const PlanDoneUI();
-
-  @override
-  String get tool => planDoneToolName;
 }
 
 /// The plan put to the user is what the turn stopped to show, not activity on

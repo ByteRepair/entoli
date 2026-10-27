@@ -15,6 +15,7 @@ import "../../../domain/tool_arg.dart";
 import "../../../providers.dart";
 import "../sub_agent_transcript.dart" show subAgentLiveProvider;
 import "message_bubble.dart" show MessageBubble, StreamingCaret;
+import "../../../domain/web_search.dart" show websearchToolName;
 
 /// What the model did before it answered, on a line of its own above the
 /// reply: thinking, and tool runs. Frameless, so it reads as a label until it
@@ -700,7 +701,7 @@ class WebLabel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final search = call.name == "websearch";
+    final search = call.name == websearchToolName;
     final what = stringArg(call.argumentsJson, search ? "query" : "url") ?? "";
     final failed = (result?.returnCode ?? 0) != 0;
     final verb = search

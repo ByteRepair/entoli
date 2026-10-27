@@ -8,8 +8,6 @@ import "../llm/llm_client.dart";
 import "agent_tool.dart";
 import "turn.dart";
 
-export "../../../domain/shell.dart" show bashToolName;
-
 /// What the spinner says while a command runs, the user's `!` one included.
 const runningCommand = "Running a command";
 
@@ -131,8 +129,7 @@ class BashTool extends AgentTool {
     // Leaving the sandbox is part of what is asked: where one would confine
     // the run and no no-sandbox rule covers it, the call goes to the mode.
     final leave = boolArg(call.argumentsJson, "unsandboxed");
-    final escaping = leave &&
-        turn.gate.confinementOf(await turn.gate.permissions(), analysis) != null;
+    final escaping = leave && await turn.gate.confinementOf(analysis) != null;
     final outcome = GateOutcome();
     yield* turn.gate.decide(
         call,
@@ -176,9 +173,7 @@ class BashTool extends AgentTool {
     // banner, not the mode, is what carries that — auto mode reaches the
     // banner through the classifier's ask — so the gate reads what the
     // outcome says of the run.
-    final sandbox = unconfined
-        ? null
-        : turn.gate.confinementOf(await turn.gate.permissions(), analysis);
+    final sandbox = unconfined ? null : await turn.gate.confinementOf(analysis);
     if (sandbox != null && !outcome.byPerson) {
       final note = analysis.escalationNote;
       if (note != null) return ShellResult.failed(note);

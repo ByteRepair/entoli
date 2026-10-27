@@ -50,7 +50,14 @@ abstract class BrowserTool extends AgentTool {
   @override
   bool get offered => offer.caps.browser;
 
-  static const hidden = "The user has hidden the browser from you to do "
+  /// The refusal every browser tool answers with while the user holds the
+  /// browser, or null where it is the agent's.
+  static Stream<AgentEvent>? refusedWhileHeld(LlmToolCall call, Turn turn) =>
+      turn.browser!.hold.value == null
+          ? null
+          : toolRejected(call, noted(turn, _hidden));
+
+  static const _hidden = "The user has hidden the browser from you to do "
       "something private in it, such as signing in. Do not retry yet: carry "
       "on with something else, or ask the user and wait for them to say they "
       "have handed it back.";
@@ -148,8 +155,8 @@ abstract class PageTool extends BrowserTool {
   @override
   Stream<AgentEvent> run(LlmToolCall call, Turn turn) async* {
     final tab = turn.browser!;
-    if (tab.hold.value != null) {
-      yield* toolRejected(call, BrowserTool.noted(turn, BrowserTool.hidden));
+    if (BrowserTool.refusedWhileHeld(call, turn) case final refused?) {
+      yield* refused;
       return;
     }
     final step = this.step(decodeArgs(call.argumentsJson) ?? const {}, tab);
@@ -163,7 +170,7 @@ abstract class PageTool extends BrowserTool {
     final navigate = step.navigate, acting = step.acting;
     if (navigate != null) {
       yield* turn.gate.decide(call, webfetchToolName, attempt, outcome,
-          argumentsText: navigate, ruleUrl: navigate, mode: turn.browserApprove);
+          argumentsText: navigate, ruleSubject: navigate, mode: turn.browserApprove);
     } else if (acting != null) {
       final String target;
       try {
@@ -567,8 +574,8 @@ class BrowserScreenshotTool extends BrowserTool {
     final ref = intArg(call.argumentsJson, "ref");
     final markClick = boolArg(call.argumentsJson, "last_click");
     final tab = turn.browser!;
-    if (tab.hold.value != null) {
-      yield* toolRejected(call, BrowserTool.noted(turn, BrowserTool.hidden));
+    if (BrowserTool.refusedWhileHeld(call, turn) case final refused?) {
+      yield* refused;
       return;
     }
     yield toolCalled(call, ref == null ? "viewport" : "[$ref]");
@@ -693,8 +700,8 @@ class BrowserCredentialsPromptTool extends _AskingBrowserTool {
           '"submit": [{"ref": n}]}.');
       return;
     }
-    if (tab.hold.value != null) {
-      yield* toolRejected(call, BrowserTool.noted(turn, BrowserTool.hidden));
+    if (BrowserTool.refusedWhileHeld(call, turn) case final refused?) {
+      yield* refused;
       return;
     }
     final submit = [
@@ -844,8 +851,8 @@ class BrowserUploadTool extends BrowserTool {
   @override
   Stream<AgentEvent> run(LlmToolCall call, Turn turn) async* {
     final tab = turn.browser!;
-    if (tab.hold.value != null) {
-      yield* toolRejected(call, BrowserTool.noted(turn, BrowserTool.hidden));
+    if (BrowserTool.refusedWhileHeld(call, turn) case final refused?) {
+      yield* refused;
       return;
     }
     final ref = intArg(call.argumentsJson, "ref");

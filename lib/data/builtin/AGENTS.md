@@ -78,16 +78,17 @@ collaborators a turn may or may not have been handed — a tool whose
 collaborator is missing is not offered, so it reads its own with `!` — and
 control (`cancelled`, `untilStopped`, `endTurn`). `BuiltinAgent` is the one
 implementation: it keeps the loop, the query and the session, and hands each
-call to its tool. `task` is the one tool that runs as a batch (`runAll`),
-after the message's other calls.
+call to its tool. A tool that answers `batched` — `task`, today — gets a
+message's calls to it together (`runAll`), after the message's other calls,
+so a fan-out is the tool's business rather than the loop's.
 
 **The gate is `ApprovalGate`** (`approval_gate.dart`), one per turn, holding
 what is the turn's: the policy as the current call reads it, the directories
 granted mid-turn, and auto mode's circuit breaker. It hands a call's outcome
 back on a `GateOutcome` the caller made — the result, what decided it, and
 whether a person answered a banner — rather than on state any other call
-could read. What a rule is matched against is the caller's to say: a path for
-the file tools, a URL for a fetch, the parse for a command.
+could read. What a rule is matched against is the caller's to say: a subject
+(the path for the file tools, the URL for a fetch) or the parse for a command.
 
 Adding a tool is a class beside its kin and a line in the registry; where the
 chat should show it differently, a `ToolUI` too (see "Tools, on screen" in
@@ -419,7 +420,7 @@ rules.
 
 Landlock itself is a setting, `sandbox` in `project.json`: the default
 project's is the app's answer, a project's own overrides it, and unset is on.
-Off, `ApprovalGate.sandboxFor` answers null for the whole turn and its sub-agents, which
+Off, the gate's sandbox is null for the whole turn and its sub-agents, which
 also stands down the parse gate.
 
 **Leaving the sandbox is something the model asks for.** Where the

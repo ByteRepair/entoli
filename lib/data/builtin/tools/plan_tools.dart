@@ -107,8 +107,7 @@ class PlanAddTool extends _PlanTool {
     final section = stringArg(call.argumentsJson, "section");
     yield toolCalled(call, task);
     final path = _planPath(turn);
-    yield* gatedFileRun(turn, call, path, planAddToolName, rulePath: false,
-        () async {
+    yield* gatedFileRun(turn, call, path, planAddToolName, () async {
       final updated = planAddTask(await _readPlan(turn), task,
           section: section, details: details);
       await turn.fs.file(path).writeAsString(updated);

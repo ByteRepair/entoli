@@ -1,6 +1,7 @@
 import "package:flutter/material.dart";
 
 import "../../../domain/models.dart";
+import "../../../domain/plan.dart";
 import "artifact_ui.dart";
 import "ask_ui.dart";
 import "command_ui.dart";
@@ -58,9 +59,9 @@ const toolUIs = <ToolUI>[
   TaskUI(),
   AskUI(),
   ArtifactUI(),
-  PlanAddUI(),
-  PlanNextUI(),
-  PlanDoneUI(),
+  QuietPlanUI(planAddToolName),
+  QuietPlanUI(planNextToolName),
+  QuietPlanUI(planDoneToolName),
   PresentPlanUI(),
   AddDirectoryUI(),
 ];

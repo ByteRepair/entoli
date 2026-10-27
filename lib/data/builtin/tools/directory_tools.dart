@@ -18,9 +18,6 @@ import "../llm/llm_client.dart";
 import "agent_tool.dart";
 import "turn.dart";
 
-export "../../../domain/permission.dart"
-    show addDirectoryName, writableDirectoriesName;
-
 /// The directory grant request. The banner is the whole grant: the model
 /// names a directory, the user answers on the ordinary approval banner less
 /// its plain Allow, and the rest of this turn is covered by the gate's grant.
@@ -118,7 +115,7 @@ class AddDirectoryTool extends AgentTool {
       deniedDirs: [resolved],
     );
     yield ApprovalRequestEvent(approval);
-    final answer = await turn.approve(approval);
+    final answer = await turn.gate.approve(approval);
     if (!answer.isAllow) {
       yield ToolResultEvent(toolRan(
           call,

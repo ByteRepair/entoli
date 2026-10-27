@@ -135,7 +135,7 @@ class ApprovalGate {
   /// The sandbox a command runs in under [permissions]: the chat's workspace,
   /// its tmp, the project's workspace beside it — where work another
   /// conversation should find goes — and the granted directories.
-  CommandSandbox? sandboxFor(StandingPermissions permissions) {
+  CommandSandbox? _sandboxFor(StandingPermissions permissions) {
     if (!permissions.sandboxed) return null;
     if (helper == null) return null;
     return CommandSandbox(
@@ -153,9 +153,9 @@ class ApprovalGate {
   /// word on it — none where a no-sandbox rule covers every segment that
   /// could write, the rules' own folders added where they match. One answer
   /// for the gate asking whether leaving it is being asked for, and the run.
-  CommandSandbox? confinementOf(
-      StandingPermissions permissions, ShellCommandAnalysis analysis) {
-    final sandbox = sandboxFor(permissions);
+  Future<CommandSandbox?> confinementOf(ShellCommandAnalysis analysis) async {
+    final permissions = await this.permissions();
+    final sandbox = _sandboxFor(permissions);
     if (sandbox == null) return null;
     final ruled = rulesSandbox(
         permissions.permissions, analysis.modelableSegments ?? const []);
@@ -170,10 +170,11 @@ class ApprovalGate {
   /// allow runs, a deny refuses without running or asking, an ask escalates —
   /// and no match falls through to what the mode answers.
   ///
-  /// What a rule is matched against is the caller's to say: [rulePath] for a
-  /// file tool, [ruleUrl] for a fetch, [analysis] for a command, judged
-  /// segment by segment, so an allow that covers the head but not the tail
-  /// escalates the whole. The rule's reach stops where the parse's does: a
+  /// What a rule is matched against is the caller's to say: [ruleSubject] —
+  /// the path for a file tool, the URL for a fetch, null where the rules
+  /// match the tool alone — or [analysis] for a command, judged segment by
+  /// segment, so an allow that covers the head but not the tail escalates
+  /// the whole. The rule's reach stops where the parse's does: a
   /// command with findings is escalated to the banner even under an allow
   /// rule, and refused in `never` mode, where nobody is there to ask.
   ///
@@ -186,15 +187,16 @@ class ApprovalGate {
     Future<ShellResult> Function() run,
     GateOutcome outcome, {
     String? argumentsText,
-    String? rulePath,
-    String? ruleUrl,
+    String? ruleSubject,
     ShellCommandAnalysis? analysis,
     ApproveMode? mode,
     bool unsandboxed = false,
   }) async* {
     final rules = (await permissions()).permissions;
     final verdict = rulesDecideTraced(rules, toolName,
-        path: rulePath, url: ruleUrl, segments: analysis?.modelableSegments);
+        path: ruleSubject,
+        url: ruleSubject,
+        segments: analysis?.modelableSegments);
     switch (verdict?.decision) {
       case PermissionDecision.deny:
         outcome.decision = (
@@ -270,8 +272,7 @@ class ApprovalGate {
 
   /// Run [run] behind the workspace gate, into [outcome]: a [path] the
   /// workspaces (or [granted]) hold runs straight, one past them goes through
-  /// [decide]. [rulePath] is whether the rules match the path itself — the
-  /// file tools' — rather than the tool alone.
+  /// [decide], with [ruleSubject] as it takes one.
   ///
   /// A throw inside [run] is the tool failing, not the turn: it is answered
   /// as a failed result the model reads — a decode failure on a binary file
@@ -283,12 +284,12 @@ class ApprovalGate {
     Future<ShellResult> Function() run,
     GateOutcome outcome, {
     List<String> granted = const [],
-    bool rulePath = false,
+    String? ruleSubject,
   }) async* {
     if (outsideWorkspaces(fs, path, workspace, projectWorkspace,
         granted: granted)) {
       yield* decide(call, toolName, () => _guarded(run), outcome,
-          argumentsText: path, rulePath: rulePath ? path : null);
+          argumentsText: path, ruleSubject: ruleSubject);
     } else {
       outcome.result = await _guarded(run);
     }

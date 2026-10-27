@@ -4,7 +4,6 @@ import "../../../domain/agent_backend.dart";
 import "../../../domain/agent_browser.dart";
 import "../../../domain/ask.dart";
 import "../../../domain/file_tools.dart";
-import "../../../domain/models.dart";
 import "../../../domain/permission.dart" show ApproveMode;
 import "../../../domain/shell.dart";
 import "../../../domain/trigger_manager.dart" show TriggerRegistry;
@@ -63,9 +62,6 @@ abstract interface class Turn {
 
   /// The rules and the approval mode, between a call and its run.
   ApprovalGate get gate;
-
-  /// Raises a banner and waits for the user's answer.
-  Future<ApprovalResponse> Function(ToolApproval approval) get approve;
 
   /// Puts questions to the user; one answer per question, null where they
   /// answered nothing.

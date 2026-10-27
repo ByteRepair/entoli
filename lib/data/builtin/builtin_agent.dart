@@ -34,7 +34,6 @@ import "tools/agent_tool.dart";
 import "tools/customization_tools.dart";
 import "tools/registry.dart";
 import "tools/skill_tool.dart" show skillToolName;
-import "tools/task_tool.dart";
 import "tools/turn.dart";
 
 /// What the spinner says while the model reads the prompt.
@@ -439,7 +438,6 @@ class BuiltinAgent implements Turn {
 
   /// Asks the user whether a command may run. Called in [ApproveMode.ask], and
   /// in [ApproveMode.auto] when the classifier says [PermissionDecision.ask].
-  @override
   final Future<ApprovalResponse> Function(ToolApproval approval) approve;
 
   /// Puts the model's own questions to the user. One answer per question, null
@@ -656,8 +654,9 @@ class BuiltinAgent implements Turn {
         attachments: attachmentsDir != null,
       );
 
-  /// What the model may call this step.
-  List<AgentTool> get _tools => offeredTools(offer);
+  /// What the model may call this step: worked out once at its head and read
+  /// by the request, the context count and the dispatch alike.
+  List<AgentTool> _tools = const [];
 
   @override
   late final ApprovalGate gate = ApprovalGate(
@@ -827,6 +826,7 @@ class BuiltinAgent implements Turn {
 
       _completion = null;
       _queryError = null;
+      _tools = offeredTools(offer);
       yield* _query();
       if (_cancelled) break;
       if (_queryError case (:final error, :final trace)?) {
@@ -931,22 +931,20 @@ class BuiltinAgent implements Turn {
   /// and a call to a tool this turn was not offered is answered as one that
   /// does not exist.
   ///
-  /// `task` calls run as one batch, concurrently — the deep-research prompt
-  /// fans out up to 75 at once. Every other call runs in order first, so a
-  /// `bash` before a `task` is done first and a `bash` after waits for the
-  /// fan-out. The session messages are answered in the calls' original
+  /// A batched tool's calls — `task`'s, which the deep-research prompt fans
+  /// out up to 75 at once — run together once every other call has, in
+  /// order, so a `bash` before a `task` is done first and a `bash` after
+  /// waits for the fan-out. The session messages are answered in the calls' original
   /// order regardless, so the tool results pair up.
   Stream<AgentEvent> _executeAll(List<LlmToolCall> calls) async* {
     final tools = {for (final tool in _tools) tool.name: tool};
-    final fanOut = tools[taskToolName];
-    final tasks = [
-      if (fanOut is TaskTool)
-        for (final call in calls)
-          if (call.name == taskToolName) call,
-    ];
-
+    final batches = <AgentTool, List<LlmToolCall>>{};
     for (final call in calls) {
-      if (fanOut != null && call.name == taskToolName) continue;
+      final tool = tools[call.name];
+      if (tool != null && tool.batched) {
+        (batches[tool] ??= []).add(call);
+        continue;
+      }
       gate.nextCall();
       if (_cancelled) {
         // The call as well as the answer: a result whose call is not in the
@@ -954,7 +952,6 @@ class BuiltinAgent implements Turn {
         yield* toolRejected(call, notExecuted);
         continue;
       }
-      final tool = tools[call.name];
       if (tool?.runningLabel case final label?) yield StatusEvent(label);
       final ran = tool == null
           ? toolRejected(call, unknownTool(call.name, tools.keys))
@@ -962,10 +959,9 @@ class BuiltinAgent implements Turn {
       final jobs = backgroundJobs;
       yield* jobs == null ? ran : _withJobNotes(jobs, call, ran);
     }
-
-    if (fanOut is TaskTool && tasks.isNotEmpty) {
-      yield StatusEvent(fanOut.runningLabel);
-      yield* fanOut.runAll(tasks, this);
+    for (final MapEntry(key: tool, value: batch) in batches.entries) {
+      if (tool.runningLabel case final label?) yield StatusEvent(label);
+      yield* tool.runAll(batch, this);
     }
   }
 

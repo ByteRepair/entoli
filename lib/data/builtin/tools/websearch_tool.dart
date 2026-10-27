@@ -9,8 +9,6 @@ import "agent_tool.dart";
 import "browser_tools.dart" show browserGotoToolName;
 import "turn.dart";
 
-export "../../../domain/web_search.dart" show webfetchToolName, websearchToolName;
-
 /// Search the web via DuckDuckGo Lite — no API key. Returns titles, URLs, and
 /// snippets as readable text the model can extract URLs from. Read-only, so
 /// no approval. Offered with [WebFetchTool] wherever a [WebSearch] is
@@ -101,7 +99,7 @@ class WebFetchTool extends AgentTool {
     final outcome = GateOutcome();
     yield* turn.gate.decide(
         call, webfetchToolName, () => turn.webSearch!.fetch(url), outcome,
-        argumentsText: url, ruleUrl: url);
+        argumentsText: url, ruleSubject: url);
     outcome.result = _withBrowserHint(outcome.result!);
     yield ToolResultEvent(outcome.resultOf(call));
   }

@@ -191,6 +191,17 @@ abstract class AgentTool {
   /// the next turn.
   Stream<AgentEvent> run(LlmToolCall call, Turn turn);
 
+  /// Whether a message's calls to this tool run as one batch, after its other
+  /// calls, rather than in order among them: a fan-out that runs them at once.
+  bool get batched => false;
+
+  /// A message's calls to a [batched] tool, all of them answered.
+  Stream<AgentEvent> runAll(List<LlmToolCall> calls, Turn turn) async* {
+    for (final call in calls) {
+      yield* run(call, turn);
+    }
+  }
+
   /// The tool as the request carries it.
   LlmTool get definition =>
       LlmTool(name: name, description: description, schema: schema);

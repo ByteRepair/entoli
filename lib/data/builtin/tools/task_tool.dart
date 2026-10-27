@@ -7,16 +7,13 @@ import "../templates.dart" show notStarted, substitute, systemProse, turnStopped
 import "agent_tool.dart";
 import "turn.dart";
 
-export "../../../domain/agent_backend.dart" show taskToolName;
-
 /// Spawns a sub-agent that runs a task to completion and returns its final
 /// text. The sub-agent runs in its own session under the named `@agent`'s
 /// prompt, with the same model and workspace as the parent.
 ///
-/// The one tool that runs as a batch: every `task` call in a message runs
-/// concurrently, capped by [BuiltinOptions.maxConcurrentSubAgents], once the
-/// message's other calls are done — so a command before the fan-out is done
-/// before it starts, and one after waits for it. See [runAll].
+/// It runs as a batch: every `task` call in a message runs concurrently,
+/// capped by [BuiltinOptions.maxConcurrentSubAgents], once the message's
+/// other calls are done.
 class TaskTool extends AgentTool {
   TaskTool(super.offer);
 
@@ -64,12 +61,16 @@ class TaskTool extends AgentTool {
       };
 
   @override
+  bool get batched => true;
+
+  @override
   Stream<AgentEvent> run(LlmToolCall call, Turn turn) => runAll([call], turn);
 
   /// Run a batch of `task` calls concurrently, capped to
   /// [BuiltinOptions.maxConcurrentSubAgents]. Results stream as each
   /// sub-agent resolves; the projection pairs each back to its call by id, so
   /// finishing out of order costs nothing.
+  @override
   Stream<AgentEvent> runAll(List<LlmToolCall> calls, Turn turn) async* {
     if (turn.cancelled) {
       // Answered all the same, so the next turn is not rejected for missing
