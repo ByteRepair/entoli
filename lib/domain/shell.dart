@@ -6,6 +6,10 @@ library;
 
 import "package:flutter/foundation.dart" show ValueListenable;
 
+/// The command tool's name: the log records it, the chat draws it, and the
+/// permission rules are typed by it.
+const bashToolName = "bash";
+
 /// The command a message runs itself, or null where it is prose for the model.
 /// A leading `!` is the whole of the rule, and what follows it is the command —
 /// blank included, so the composer can say what it is about to do from the

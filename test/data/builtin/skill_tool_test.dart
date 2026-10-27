@@ -6,12 +6,12 @@ import "package:fs_shim/fs_io.dart" show fileSystemIo;
 
 import "package:agent_chat/data/builtin/builtin_agent.dart";
 import "package:agent_chat/data/builtin/llm/llm_client.dart";
-import "package:agent_chat/data/builtin/templates.dart";
-import "package:agent_chat/data/builtin/skill_tool.dart";
+import "package:agent_chat/data/builtin/tools/skill_tool.dart";
 import "package:agent_chat/domain/agent_backend.dart";
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/domain/permission.dart";
 import "package:agent_chat/domain/prompt_library.dart";
+import "package:agent_chat/data/builtin/tools/agent_tool.dart";
 
 import "../../fakes.dart";
 import "builtin_fakes.dart";
@@ -95,11 +95,10 @@ void main() {
     test("the system prompt lists the model-invocable skills, not the rest", () {
       final text = agentSystemMessage(
         platform: "test",
-        caps: AgentCapabilities.full,
-        skills: [
+        offer: ToolOffer(skills: [
           skillDoc("review", description: "look it over"),
           skillDoc("private", modelInvocable: false),
-        ],
+        ]),
       ).text;
 
       expect(text, contains("## Skills"));
@@ -108,8 +107,7 @@ void main() {
 
       // And with no skills, the section is left out of the prompt.
       final bare =
-          agentSystemMessage(platform: "test", caps: AgentCapabilities.full)
-              .text;
+          agentSystemMessage(platform: "test").text;
       expect(bare, isNot(contains("## Skills")));
     });
   });
@@ -181,7 +179,8 @@ void main() {
       expect(result.exceptionInfo, contains("review"));
       expect(result.exceptionInfo, contains("brief"));
 
-      // With none installed, the refusal says so rather than listing nothing.
+      // With none to load, the tool is not offered, and a call to it is a
+      // call to a tool that does not exist.
       final empty = FakeLlmClient([
         [skillCall("ghost")],
         [finish],
@@ -194,7 +193,7 @@ void main() {
           .firstWhere((e) => e.result.callId == "sk-1")
           .result;
       expect(noneResult.returnCode, -1);
-      expect(noneResult.exceptionInfo, contains("none are installed"));
+      expect(noneResult.exceptionInfo, contains("There is no tool called 'skill'"));
     });
 
     test("a user-only skill is refused, not worked around", () async {
@@ -203,9 +202,10 @@ void main() {
         [finish],
       ]);
       final events =
-          await agentWith(client, [skillDoc("private", modelInvocable: false)])
-              .run(userMessage("go"))
-              .toList();
+          await agentWith(client, [
+            skillDoc("review"),
+            skillDoc("private", modelInvocable: false),
+          ]).run(userMessage("go")).toList();
 
       final result = events
           .whereType<ToolResultEvent>()

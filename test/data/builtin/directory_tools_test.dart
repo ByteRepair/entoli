@@ -5,13 +5,13 @@ import "package:fs_shim/fs_io.dart" show fileSystemIo;
 import "package:path/path.dart" as p;
 
 import "package:agent_chat/data/builtin/builtin_agent.dart";
-import "package:agent_chat/data/builtin/directory_tools.dart";
-import "package:agent_chat/data/builtin/templates.dart";
 import "package:agent_chat/domain/agent_backend.dart";
 import "package:agent_chat/domain/builtin_project.dart" show AgentCapability;
 import "package:agent_chat/domain/file_tools.dart";
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/domain/permission.dart";
+import "package:agent_chat/data/builtin/tools/agent_tool.dart";
+import "package:agent_chat/data/builtin/tools/registry.dart";
 
 import "../../fakes.dart";
 import "builtin_fakes.dart";
@@ -309,20 +309,18 @@ void main() {
 
   group("offered where someone can answer", () {
     test("a one-shot turn takes the list, not the grant request", () {
-      final tools = agentTools(
-          caps: AgentCapabilities.full, offerMemory: false, oneShot: true);
+      final tools = offeredTools(const ToolOffer(oneShot: true));
       expect(tools.map((t) => t.name), isNot(contains(addDirectoryName)));
       expect(tools.map((t) => t.name), contains(writableDirectoriesName));
     });
 
     test("a headless turn takes neither grant request nor banner rides",
         () {
-      final tools = agentTools(
+      final tools = offeredTools(ToolOffer(
           caps: AgentCapabilities.forTurn(
               commands: true,
               webSearch: false,
-              disabled: {AgentCapability.ask}),
-          offerMemory: false);
+              disabled: {AgentCapability.ask})));
       expect(tools.map((t) => t.name), isNot(contains(addDirectoryName)));
       expect(tools.map((t) => t.name), contains(writableDirectoriesName));
     });

@@ -4,6 +4,7 @@ import "package:agent_chat/data/builtin/builtin_agent.dart";
 import "package:agent_chat/data/builtin/templates.dart";
 import "package:agent_chat/domain/profile.dart";
 import "package:agent_chat/domain/tone.dart";
+import "package:agent_chat/data/builtin/tools/agent_tool.dart";
 
 void main() {
   // The style prose is in the cacheable body under the capability sections, so
@@ -14,7 +15,6 @@ void main() {
         profile: null,
         tone: tone,
         citations: citations,
-        caps: AgentCapabilities.full,
       ).text;
 
   group("style", () {
@@ -32,13 +32,15 @@ void main() {
     test("the browser prompt carries it too", () {
       final text = systemPrompt(
         platform: "browser",
-        caps: AgentCapabilities(
-          commands: false,
-          webSearch: true,
-          ask: true,
-          task: false,
-          artifact: true,
-          createSkill: false,
+        offer: const ToolOffer(
+          caps: AgentCapabilities(
+            commands: false,
+            webSearch: true,
+            ask: true,
+            task: false,
+            artifact: true,
+            createSkill: false,
+          ),
         ),
       );
 
@@ -100,7 +102,6 @@ void main() {
         profile: const Profile(name: "Yiannis"),
         tone: Tone.direct,
         citations: true,
-        caps: AgentCapabilities.full,
       );
 
       expect(text, contains("## About the user"));

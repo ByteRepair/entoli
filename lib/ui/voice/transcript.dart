@@ -1,9 +1,7 @@
-import "../../domain/artifact.dart";
-import "../../domain/ask.dart";
-import "../../domain/file_tools.dart";
 import "../../domain/models.dart";
-import "../../domain/plan.dart";
 import "../../domain/speech_text.dart";
+import "../chat/tool_ui/command_ui.dart" show ranACommand;
+import "../chat/tool_ui/tool_ui.dart";
 
 /// Who a transcript line belongs to. Three rather than the issue's two: a turn
 /// can spend half a minute inside a sub-agent, and a screen that says nothing
@@ -85,14 +83,14 @@ List<VoiceLine> linesOf(MessageRole role, MessagePart part, [SpeakableText? grow
       final spoken = growing?.of(text) ?? speakable(text);
       return spoken.isEmpty ? const [] : [VoiceLine(VoiceLineKind.replied, spoken)];
     case ToolCallPart(:final toolCall):
-      final doing = _doing(toolCall.name);
+      final doing = toolUIFor(toolCall.name).spoken;
       return doing == null ? const [] : [VoiceLine(VoiceLineKind.activity, doing)];
     case ErrorPart(:final message):
       return [VoiceLine(VoiceLineKind.activity, message)];
     // Typed rather than said — a `!` message from before voice mode was
     // opened. It reads as what the agent's own command reads as.
     case ShellRunPart():
-      return const [VoiceLine(VoiceLineKind.activity, _ranACommand)];
+      return const [VoiceLine(VoiceLineKind.activity, ranACommand)];
     // The user's own words, where they landed in the reply.
     case SteerPart(:final message):
       return [for (final p in message.parts) ...linesOf(MessageRole.user, p)];
@@ -107,26 +105,3 @@ List<VoiceLine> linesOf(MessageRole role, MessagePart part, [SpeakableText? grow
   }
 }
 
-/// Read out for a command whoever ran it — the model through `bash`, or the
-/// user through `!`.
-const _ranACommand = "Ran a command";
-
-/// What a tool call reads as. The four spelled out are the agent's own, whose
-/// names live in `data/builtin` and are not `ui`'s to import.
-String? _doing(String tool) => switch (tool) {
-      "bash" => _ranACommand,
-      "websearch" => "Searched the web",
-      "webfetch" => "Read a page",
-      "task" => "Ran a sub-agent",
-      readToolName => "Read a file",
-      writeToolName => "Wrote a file",
-      editToolName => "Edited a file",
-      artifactToolName => "Made an artifact",
-      presentPlanToolName => "Presented the plan",
-      planAddToolName => null,
-      planNextToolName => null,
-      planDoneToolName => null,
-      // The panel below is where a question belongs, not a line above it.
-      askToolName => null,
-      _ => "Used $tool",
-    };

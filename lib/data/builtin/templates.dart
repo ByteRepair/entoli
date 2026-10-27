@@ -1,32 +1,29 @@
 import "dart:convert";
 
-import "../../domain/ask.dart";
 import "../../domain/bundled_prompt_file.dart";
 import "../../domain/bundled_project_prompts.dart" show bundledSystemPrompts;
-import "../../domain/builtin_project.dart";
 import "../../domain/file_tools.dart";
 import "../../domain/models.dart" show CompletionKind;
-import "../../domain/plan.dart";
 import "../../domain/profile.dart";
 import "../../domain/shell.dart" show CommandSandbox;
 import "../../domain/tone.dart";
 import "../../domain/prompt_library.dart";
-import "skill_tool.dart";
-import "task_tool.dart";
-import "trigger_tool.dart";
+import "tools/agent_tool.dart";
+import "tools/registry.dart";
 
-/// The prompt prose this file assembles, embedded at build time from
+/// The prompt prose, embedded at build time from
 /// `assets/prompts/projects/default/system/` (`tool/gen_prompts.dart`). The
-/// conditional assembly — what a capability turns on, the tool fragments, the
-/// `<system_information>` block — stays in Dart; only the static prose moved.
-String? _systemProse(String name) =>
-    bundledPromptFileOf(bundledSystemPrompts, "default", name)?.content;
+/// assembly — which tools a turn is offered, the `<system_information>`
+/// block — stays in Dart; only the static prose is there. A name with no
+/// file is a broken build, not a prompt.
+String systemProse(String name) =>
+    bundledPromptFileOf(bundledSystemPrompts, "default", name)!.content;
 
 /// Substitutes [values] into [content]'s `{{name}}` slots. Every placeholder
 /// in the markdown must be named here: one left over ships the literal
 /// `{{name}}` to the model, so an unknown name is a broken build, not a
 /// prompt.
-String _substitute(String content, Map<String, String> values) {
+String substitute(String content, Map<String, String> values) {
   var result = content;
   values.forEach((name, value) {
     result = result.replaceAll("{{$name}}", value);
@@ -38,123 +35,61 @@ String _substitute(String content, Map<String, String> values) {
   return result;
 }
 
-/// What a turn is offered, resolved from what this device can run minus what
-/// the turn is not offered. One value because the tool list and the system
-/// prompt are built from it: a prompt that advertises a tool the list does not
-/// carry is a call the model makes into silence, and one that withholds a tool
-/// the list offers is a refusal the model does not understand.
-class AgentCapabilities {
-  const AgentCapabilities({
-    required this.commands,
-    required this.webSearch,
-    required this.ask,
-    required this.task,
-    required this.artifact,
-    required this.createSkill,
-    this.trigger = false,
-    this.browser = false,
-  });
-
-  /// The full set, before the platform's facts or a project's takes away any
-  /// of it: what a top-level turn in a user's project is offered.
-  static const AgentCapabilities full = AgentCapabilities(
-    commands: true,
-    webSearch: true,
-    ask: true,
-    task: true,
-    artifact: true,
-    createSkill: true,
-    trigger: true,
-  );
-
-  /// Whether a command can run at all: the platform's fact, which a project
-  /// does not widen or narrow.
-  final bool commands;
-  final bool webSearch;
-  final bool ask;
-  final bool task;
-  final bool artifact;
-  final bool createSkill;
-  final bool trigger;
-
-  /// Whether the browser tools are offered: a browser picked in Settings >
-  /// Agent Browser, on a platform that can drive one. Off in [full], since
-  /// it is a pick rather than something every device has.
-  final bool browser;
-
-  /// What this device can offer, minus what [disabled] takes away — the
-  /// project's takes, and a headless turn's.
-  AgentCapabilities.forTurn({
-    required bool commands,
-    required bool webSearch,
-    required Set<AgentCapability> disabled,
-    bool browser = false,
-  }) : this(
-          commands: commands,
-          webSearch: webSearch && !disabled.contains(AgentCapability.webSearch),
-          ask: !disabled.contains(AgentCapability.ask),
-          task: !disabled.contains(AgentCapability.task),
-          artifact: !disabled.contains(AgentCapability.artifact),
-          createSkill: !disabled.contains(AgentCapability.createSkill),
-          trigger: !disabled.contains(AgentCapability.trigger),
-          browser: browser,
-        );
-
-  /// What a sub-agent runs under: unattended, so it asks nothing, fans out
-  /// nothing, and publishes nothing — there is no viewer to open what it made.
-  AgentCapabilities get unattended => AgentCapabilities(
-        commands: commands,
-        webSearch: webSearch,
-        ask: false,
-        task: false,
-        artifact: false,
-        createSkill: false,
-        trigger: false,
-      );
-
-  /// Whether `present_plan` is offered: it parks the turn on an answer, so it
-  /// rides `ask` rather than adding a capability of its own. One spelling of
-  /// the predicate, for the tool list, the prompt, and the dispatch to read.
-  bool get presentPlan => ask;
-}
-
 /// The rules the agent operates under. Ported from mini-swe-agent's `mini.yaml`
 /// and adapted for a conversation: upstream runs one task and exits, this is
 /// asked something else once the turn is over.
 ///
 /// **Nothing per-conversation is in here**, which is what makes it one string
-/// for a device and a set of [AgentCapabilities] and so one cacheable prefix.
-/// What is per-chat — the workspace, an `@agent`'s own instructions — is
+/// for a device and a [ToolOffer] and so one cacheable prefix. What is
+/// per-chat — the workspace, an `@agent`'s own instructions — is
 /// [turnPrompt], a second system message after this one. See "Prefilling the
-/// system prompt" in `lib/data/local/AGENTS.md` for what that buys. A
-/// capability the turn is not offered is not said: each section names only
-/// what [caps] holds.
+/// system prompt" in `lib/data/local/AGENTS.md` for what that buys.
+///
+/// What the turn can call is said by the tools it is offered: each one's
+/// fragment in the sentence about calling a tool, and each one's section in
+/// registry order, so a tool the turn is not offered is not named.
 String systemPrompt({
   required String platform,
   Profile? profile,
   Tone tone = Tone.none,
   bool citations = false,
-  required AgentCapabilities caps,
-  List<PromptDocument> skills = const [],
-  bool oneShot = false,
-}) =>
-    caps.commands
-        ? _withShell(
-            platform: platform,
-            profile: profile,
-            tone: tone,
-            citations: citations,
-            caps: caps,
-            skills: skills,
-            oneShot: oneShot,
-          )
-        : _withoutShell(
-            profile: profile,
-            tone: tone,
-            citations: citations,
-            caps: caps,
-            skills: skills,
-          );
+  ToolOffer offer = const ToolOffer(),
+}) {
+  final tools = offeredTools(offer);
+  final calls = _either([for (final tool in tools) ?tool.fragment]);
+  final sections = [
+    for (final tool in tools)
+      if (tool.section case final section? when section.isNotEmpty)
+        section.trim(),
+    systemProse("style"),
+  ];
+  final body = offer.caps.commands
+      ? substitute(systemProse("shell"), {
+          "tools": calls,
+          "shell": systemProse(
+              offer.oneShot ? "shell-oneshot" : "shell-persistent"),
+          "sections": [
+            ...sections,
+            systemProse("finish"),
+            "<system_information>\n$platform\n</system_information>",
+            systemProse("examples"),
+          ].join("\n\n"),
+        })
+      // No shell: the file tools still work on the workspace through the
+      // app's own filesystem, so a browser can still produce files and
+      // artifacts. The turn ends the same way, on a reply with no call.
+      : "You are a helpful assistant.\n\n"
+          "${substitute(systemProse("browser"), {"tools": calls})}\n\n"
+          "${sections.join("\n\n")}\n";
+  return body + profileSection(profile) + styleSection(tone, citations);
+}
+
+/// [items] as one sentence's list: "a", "a or b", "a, b, or c".
+String _either(List<String> items) {
+  if (items.length <= 1) return items.join();
+  final head = items.sublist(0, items.length - 1).join(", ");
+  return items.length == 2 ? "$head or ${items.last}" : "$head, or ${items.last}";
+}
 
 /// The half that changes: where this conversation's files are, and whatever an
 /// `@agent` mention added. Its own system message so the body above it is
@@ -346,185 +281,6 @@ String? memberPrompt(PromptLibrary? library, String member) {
 /// What the conversation calls the main agent wherever a viewer is named and
 /// the reply carries no author — the label, not a member handle.
 const mainAgentLabel = "(main agent)";
-
-/// Where there is no shell, the model cannot run commands. But it does have a
-/// filesystem: the `read`/`write`/`edit` tools work on the workspace via the
-/// same `FileSystem` the app uses, so a browser can still produce files and
-/// artifacts. The turn ends when it replies with text and calls no tool — the
-/// same termination signal the shell path uses.
-String _withoutShell({
-  Profile? profile,
-  Tone tone = Tone.none,
-  bool citations = false,
-  required AgentCapabilities caps,
-  List<PromptDocument> skills = const [],
-}) {
-  // The artifact is named in the browser's one sentence about its files, so a
-  // turn that is not offered it drops the phrase rather than the sentence.
-  final artifact = caps.artifact
-      ? ", and `artifact` to publish an HTML page the user can\nview"
-      : "";
-  // The browser turn is offered the plan tools the same list the shell turn
-  // is, so its prompt names them the same way the step-2 sentence does:
-  // appended to the files sentence, where the browser names what reaches a
-  // file. The trio is never withheld here — `oneShot` is a sub-agent's fact,
-  // and a sub-agent always has a shell — so only the presenter is gated.
-  final plan = caps.presentPlan
-      ? "\n\n`$presentPlanToolName` puts a plan ($planFileName in the "
-          "workspace) to the user for\napproval: it shows every task with its "
-          "details and asks for Go or the changes to make.\n"
-          "`$planAddToolName`/`$planNextToolName`/`$planDoneToolName` work "
-          "through it."
-      : "";
-  final skillsText = skillsSection(skills);
-  final sections = <String>[
-    _files,
-    _style,
-    if (caps.ask) _asking,
-    if (caps.artifact) _artifacts,
-    if (skillsText.isNotEmpty) skillsText,
-  ].join("\n");
-  return "You are a helpful assistant.\n\n"
-      "${_substitute(_systemProse("browser")!, {"artifact": artifact})}$plan\n\n"
-      "$sections\n"
-      "${profileSection(profile)}${styleSection(tone, citations)}";
-}
-
-/// The skills the model may load itself, as the system prompt lists them.
-/// Empty produces nothing, so a device with no skills keeps the prompt — and
-/// the warmed prefix over it — exactly as it was.
-String skillsSection(List<PromptDocument> skills) {
-  final usable =
-      skills.where((s) => s.modelInvocable && !s.isCallback).toList();
-  if (usable.isEmpty) return "";
-  final listed = [
-    for (final skill in usable)
-      "- ${skill.name}: ${skill.description ?? "(no description)"}",
-  ];
-  return """
-
-## Skills
-
-Skills are named procedures, packaged as instructions with whatever files they
-need. Available to you:
-
-${listed.join("\n")}
-
-Load one with the `$skillToolName` tool when the task suits it. The result
-carries its instructions and the base directory its files are in.""";
-}
-
-/// The one thing both prompts say, because asking is the one thing the agent
-/// can do with or without a machine under it. Deliberately only what the tool's
-/// own description does not already carry — it is resent on every model call of
-/// every turn, and the schema says when to reach for it and how.
-final String _asking =
-    _substitute(_systemProse("asking")!, {"ask_tool": askToolName});
-
-/// The one thing both prompts say about files, because the file tools are the
-/// one cross-platform way to reach the workspace — they work on every platform,
-/// unlike `bash`.
-final String _files = "\n${_systemProse("files")}";
-
-/// The one thing both prompts say about artifacts, because the viewer is
-/// available with or without a shell — a browser can still open a page.
-final String _artifacts = "\n${_systemProse("artifacts")}";
-
-/// The one thing both prompts say about how replies are worded and which tool
-/// reaches for a file, because neither depends on what the turn can run.
-final String _style = "\n${_systemProse("style")}";
-
-/// The step-2 sentence's list of what a call is for, one fragment per tool
-/// the turn is offered, in the order the sentence reads them. [oneShot] is
-/// the same fact the tool list reads — a sub-agent's — so a prompt names no
-/// tool the list does not carry.
-String _toolFragments(AgentCapabilities caps, {bool oneShot = false}) {
-  final acts = [
-    "`bash` to run a command",
-    "`read`/`write`/`edit`\n   to work with files in the workspace",
-    if (caps.task) "`$taskToolName`\n   to delegate a task to a sub-agent",
-    if (caps.ask) "`$askToolName` to put a question to the\n   user",
-    if (caps.webSearch) "`websearch` to search the web, `webfetch` to read a page",
-    if (caps.browser && !oneShot) "`browser_*` to use a web page in the browser",
-    if (caps.artifact) "`artifact`\n   to publish an HTML page the user can view",
-    if (!oneShot)
-      "`$planAddToolName`/`$planNextToolName`/`$planDoneToolName`"
-          "\n   to work through a plan ($planFileName in the workspace)",
-    if (caps.presentPlan)
-      "`$presentPlanToolName`\n   to put the plan to the user for approval",
-    if (caps.trigger && !oneShot)
-      "`$triggerSetName`/`$triggerListName`/`$triggerRemoveName`"
-          "\n   to set what sends a message into this chat later",
-  ];
-  if (acts.length == 1) return acts.single;
-  final head = acts.sublist(0, acts.length - 1).join(", ");
-  return acts.length == 2 ? "$head or ${acts.last}" : "$head, or ${acts.last}";
-}
-
-/// The shell contract the chat's own shell keeps: one per workspace, and what
-/// one command does to it stands for the next.
-final String _persistentShell = _systemProse("shell-persistent")!;
-
-/// The contract a sub-agent's commands run under instead: a fresh subshell
-/// each, since a fan-out of workers wants concurrency rather than a shell to
-/// race over.
-final String _oneShotShell = _systemProse("shell-oneshot")!;
-
-/// The sections the shell prompt is assembled from, each conditional on the
-/// capability that offers what it names. The prose bodies are the embedded
-/// files, bare of the spacing around them: the `\n` padding lives in the Dart
-/// that wraps each, and the assembled spacing it produces is the one the
-/// prompt has always carried.
-String _shellSections({
-  required AgentCapabilities caps,
-  required String platform,
-  required String skillsText,
-}) {
-  final task = caps.task
-      ? _substitute(_systemProse("task")!, {"task_tool": taskToolName})
-      : null;
-  final webSearch = caps.webSearch ? _systemProse("websearch") : null;
-  final browser = caps.browser ? _systemProse("agent-browser") : null;
-  final artifacts = caps.artifact ? _artifacts : null;
-  final ask = caps.ask ? _asking : null;
-  return [
-    ?task,
-    ?webSearch,
-    ?browser,
-    if (skillsText.isNotEmpty) skillsText,
-    _files,
-    _style,
-    ?artifacts,
-    _systemProse("finish")!,
-    ?ask,
-    "<system_information>\n$platform\n</system_information>",
-    _systemProse("examples")!,
-  ].join("\n\n");
-}
-String _withShell({
-  required String platform,
-  Profile? profile,
-  Tone tone = Tone.none,
-  bool citations = false,
-  required AgentCapabilities caps,
-  List<PromptDocument> skills = const [],
-  bool oneShot = false,
-}) {
-  final skillsText = skillsSection(skills);
-  final sections = _shellSections(
-    caps: caps,
-    platform: platform,
-    skillsText: skillsText,
-  );
-  final prose = _systemProse("shell")!;
-  return _substitute(prose, {
-    "tools": _toolFragments(caps, oneShot: oneShot),
-    "shell": oneShot ? _oneShotShell : _persistentShell,
-    "sections": sections,
-  }) +
-      profileSection(profile) +
-      styleSection(tone, citations);
-}
 
 /// The current moment, put at the top of a user turn so the model can date its
 /// answer. It rides on the message rather than the system prompt on purpose: a

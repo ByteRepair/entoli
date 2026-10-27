@@ -1,6 +1,6 @@
 import "package:flutter/material.dart";
 
-import "../../../data/builtin/directory_tools.dart";
+import "../../../domain/permission.dart" show addDirectoryName;
 import "../../../domain/models.dart";
 import "../../../domain/room/room_state.dart";
 import "../chat_controller.dart";

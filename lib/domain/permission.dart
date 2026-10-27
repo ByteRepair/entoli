@@ -1,10 +1,16 @@
 import "models.dart"
     show PermissionDecision, PermissionTier, ToolApproval;
 import "safe_command.dart" show SegmentReach, profileSegment;
-import "shell.dart" show pathInside;
+import "shell.dart" show bashToolName, pathInside;
 import "shell_command_analysis.dart" show ShellCommandAnalysis, plainCommand;
+import "web_search.dart" show webfetchToolName;
 
 export "models.dart" show PermissionDecision, PermissionSource, PermissionTier;
+
+/// The directory grant's tools, named here because the banner and the
+/// repository's answer to it read the name.
+const addDirectoryName = "add_directory";
+const writableDirectoriesName = "writable_directories";
 
 /// How a chat handles a command before it runs.
 enum ApproveMode {
@@ -117,7 +123,7 @@ class PermissionRule {
 
   /// Whether a rule for [tool] can shape the sandbox: only a command runs in
   /// one.
-  static bool takesSandbox(String tool) => tool == "bash" || tool == "*";
+  static bool takesSandbox(String tool) => tool == bashToolName || tool == "*";
 
   /// Whether [unconfined] and [writes] mean anything here: a blocked command
   /// never runs.
@@ -229,7 +235,7 @@ class PermissionRule {
     final subject = _subjectOf(segment);
     if (subject != null) {
       for (final rule in rules) {
-        if (!rule.setsSandbox || !_ruleMatches(rule, "bash", subject)) continue;
+        if (!rule.setsSandbox || !_ruleMatches(rule, bashToolName, subject)) continue;
         if (rule.unconfined) segmentUnconfined = true;
         writes.addAll(rule.writes);
       }
@@ -310,7 +316,7 @@ RuleVerdict? rulesDecideTraced(
   String? path,
   String? url,
 }) {
-  if (toolName == "bash" && segments != null && segments.isNotEmpty) {
+  if (toolName == bashToolName && segments != null && segments.isNotEmpty) {
     PermissionDecision? verdict;
     final tiers = <PermissionTier>{};
     for (final segment in segments) {
@@ -334,8 +340,8 @@ RuleVerdict? rulesDecideTraced(
   final subject = switch (toolName) {
     // A command the parse could not split is matched by no rule: the mode
     // decides it.
-    "bash" => null,
-    "webfetch" => _hostOf(url),
+    bashToolName => null,
+    webfetchToolName => _hostOf(url),
     _ => path,
   };
   if (subject == null) return null;
@@ -346,7 +352,7 @@ RuleVerdict? rulesDecideTraced(
 /// deterministic tiers need to know a segment is one the user wants shown.
 RuleVerdict? segmentVerdict(List<PermissionRule> rules, String segment) {
   final subject = _subjectOf(segment);
-  return subject == null ? null : _strongestTraced(rules, "bash", subject);
+  return subject == null ? null : _strongestTraced(rules, bashToolName, subject);
 }
 
 /// The verdict [rules] makes of one subject, with the tiers of the rules
@@ -387,8 +393,8 @@ String? _subjectOf(String segment) => plainCommand(segment)?.words.join(" ");
 
 bool _ruleMatches(PermissionRule rule, String toolName, String subject) =>
     expandBraces(rule.pattern).any((pattern) => switch (toolName) {
-          "bash" => globMatch(pattern, subject),
-          "webfetch" => _hostMatch(pattern, subject),
+          bashToolName => globMatch(pattern, subject),
+          webfetchToolName => _hostMatch(pattern, subject),
           _ => pathInside(subject, pattern) || globMatch(pattern, subject),
         });
 
@@ -465,12 +471,12 @@ bool _hostMatch(String pattern, String host) {
 PermissionRule? ruleFromApproval(ToolApproval? approval) {
   if (approval == null) return null;
   switch (approval.toolName) {
-    case "bash":
+    case bashToolName:
       final command = approval.argumentsText ?? "";
       if (command.trim().isEmpty) return null;
       if (approval.unsandboxed) {
         return PermissionRule(
-          tool: "bash",
+          tool: bashToolName,
           pattern: _commandPrefix(command.trim()),
           unconfined: true,
         );
@@ -486,13 +492,13 @@ PermissionRule? ruleFromApproval(ToolApproval? approval) {
           segments.length == 1 &&
           profileSegment(segments.single).reach == SegmentReach.network) {
         return const PermissionRule(
-          tool: "webfetch",
+          tool: webfetchToolName,
           pattern: "*",
           decision: PermissionDecision.allow,
         );
       }
       return PermissionRule(
-        tool: "bash",
+        tool: bashToolName,
         pattern: _commandPrefix(command.trim()),
         decision: PermissionDecision.allow,
       );
@@ -504,7 +510,7 @@ PermissionRule? ruleFromApproval(ToolApproval? approval) {
         pattern: path.trim(),
         decision: PermissionDecision.allow,
       );
-    case "webfetch":
+    case webfetchToolName:
       final host = _hostOf(approval.argumentsText);
       if (host == null) return null;
       // `*` rather than the registrable suffix: the standing answer covers
@@ -513,7 +519,7 @@ PermissionRule? ruleFromApproval(ToolApproval? approval) {
       // rules remain the settings page's to write, and an ask rule there
       // still outranks this for the domain it names.
       return const PermissionRule(
-        tool: "webfetch",
+        tool: webfetchToolName,
         pattern: "*",
         decision: PermissionDecision.allow,
       );

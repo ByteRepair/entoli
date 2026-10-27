@@ -16,7 +16,7 @@ import "builtin_agent.dart";
 import "llm/llm_client.dart";
 import "llm/rate_limit_gate.dart";
 import "projection.dart";
-import "templates.dart";
+import "tools/agent_tool.dart" show AgentCapabilities;
 
 /// Spawns sub-agents for `task` tool calls — the main agent scheduling
 /// delegated participant turns, each with its own [BuiltinSession] and a

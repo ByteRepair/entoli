@@ -2,6 +2,7 @@ import "package:flutter/material.dart";
 
 import "../../../domain/models.dart";
 import "../../fonts.dart";
+import "../tool_ui/tool_ui.dart";
 
 /// What the turn stops on: the agent wants to run something, and nothing moves
 /// until this is answered. It sits above the composer rather than in the
@@ -56,7 +57,7 @@ class ApprovalBanner extends StatelessWidget {
     final detail = approval.argumentsText ?? approval.argumentsJson;
     final (icon, title) = approval.unsandboxed
         ? (Icons.shield_outlined, "Run without the sandbox?")
-        : _heading(approval.toolName);
+        : toolUIFor(approval.toolName).approval;
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       padding: const EdgeInsets.fromLTRB(14, 12, 14, 10),
@@ -154,16 +155,4 @@ class ApprovalBanner extends StatelessWidget {
       ),
     );
   }
-
-  /// What the banner asks, in words for the tools whose call is a thing the
-  /// user does every day; anything else is asked by name.
-  static (IconData, String) _heading(String tool) => switch (tool) {
-        "bash" => (Icons.terminal, "Run this command?"),
-        "webfetch" => (Icons.public, "Fetch this page?"),
-        "read" => (Icons.description_outlined, "Read this file?"),
-        "write" || "edit" => (Icons.edit_outlined, "Change this file?"),
-        "add_directory" => (Icons.create_new_folder_outlined,
-            "Let the agent write here?"),
-        _ => (Icons.shield_outlined, "Allow $tool?"),
-      };
 }

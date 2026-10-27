@@ -1,5 +1,10 @@
 import "shell.dart";
 
+/// The tools a [WebSearch] answers, named here rather than beside them
+/// because the log records the name and the chat draws it.
+const websearchToolName = "websearch";
+const webfetchToolName = "webfetch";
+
 /// Web search and fetch, reached through DuckDuckGo Lite and plain HTTP. Like
 /// [Shell], the result is a [ShellResult] so the agent words it the same way as
 /// a command's outcome — the model reads one shape, whatever ran.

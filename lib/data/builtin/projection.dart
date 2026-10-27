@@ -9,7 +9,7 @@ import "../../domain/models.dart";
 import "../../domain/prompt_library.dart";
 import "../../domain/shell_command_analysis.dart" show isFileToolWork;
 import "../../domain/tool_arg.dart";
-import "builtin_agent.dart" show bashToolName;
+import "../../domain/shell.dart" show bashToolName;
 import "llm/llm_client.dart";
 import "templates.dart";
 

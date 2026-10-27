@@ -165,6 +165,10 @@ class DoneEvent extends AgentEvent {
 /// A sub-agent started running a delegated `task` call. Turn-scoped view
 /// state like [RetryEvent]: the call/result pair is what persists in
 /// `conv.jsonl`, and this exists only to drive the sub-agent activity strip.
+/// The tool that spawns a sub-agent: the chat draws its calls as the
+/// sub-agent's drawer.
+const taskToolName = "task";
+
 class SubAgentStartEvent extends AgentEvent {
   const SubAgentStartEvent({required this.id, required this.agent, required this.prompt});
   final String id;
