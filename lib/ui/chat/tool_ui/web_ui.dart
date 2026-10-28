@@ -3,7 +3,7 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../../domain/tool_arg.dart";
 import "../../../domain/web_search.dart";
-import "../widgets/activity_label.dart" show Run, RunDrawer, RunView;
+import "../activity/activity.dart";
 import "tool_ui.dart";
 
 class WebSearchUI extends ToolUI {
@@ -48,6 +48,7 @@ RunView _webView(Run run) {
     icon: search ? Icons.travel_explore_outlined : Icons.language_outlined,
     label: "$verb: $what",
     isError: (result?.returnCode ?? 0) != 0,
+    busy: run.going && result == null,
     drawer: (_) => RunDrawer(
       title: search ? "Web search" : "Web fetch",
       mono: true,

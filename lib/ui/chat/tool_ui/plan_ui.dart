@@ -1,7 +1,7 @@
 import "package:flutter/widgets.dart";
 
-import "../../../domain/models.dart";
 import "../../../domain/plan.dart";
+import "../activity/activity.dart";
 import "../widgets/plan_view.dart" show PlanLabel;
 import "tool_ui.dart";
 
@@ -29,10 +29,13 @@ class PresentPlanUI extends ToolUI {
   @override
   String get spoken => "Presented the plan";
 
-  @override
-  bool get prominent => true;
+  bool _failed(Run run) => (run.result?.returnCode ?? 0) != 0;
 
   @override
-  Widget? label(ToolCall call, ToolResult? result, {required String chatId}) =>
-      (result?.returnCode ?? 0) != 0 ? null : PlanLabel(chatId: chatId, call: call);
+  bool important(Run run) => !_failed(run);
+
+  @override
+  Widget build(Run run) => _failed(run) || run.call == null
+      ? super.build(run)
+      : PlanLabel(chatId: run.chatId, call: run.call!);
 }

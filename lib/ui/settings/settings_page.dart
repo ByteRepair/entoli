@@ -16,7 +16,7 @@ import "../../domain/project_settings.dart"
 import "../../domain/temp_chat_ttl.dart";
 import "../../domain/app_settings.dart";
 import "../../providers.dart";
-import "../chat/widgets/activity_label.dart";
+import "../chat/activity/format.dart";
 import "../sidebar/sidebar.dart";
 import "../theme.dart";
 import "../widgets/add_button_row.dart";

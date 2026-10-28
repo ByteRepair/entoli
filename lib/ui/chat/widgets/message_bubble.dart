@@ -19,8 +19,9 @@ import "../../widgets/agent_picture.dart" show AgentPictureImage;
 import "../../widgets/attachment_chip.dart";
 import "../../theme.dart" show onFillTheme;
 import "../../widgets/dialogs.dart";
-import "../tool_ui/tool_ui.dart";
-import "activity_label.dart";
+import "../activity/activities.dart";
+import "../activity/activity.dart" show Run;
+import "../activity/label.dart" show ActivityGroup;
 import "code_block.dart";
 import "reply_style.dart";
 import "selection_html.dart";
@@ -250,7 +251,7 @@ class _MessageBubbleState extends State<MessageBubble> {
   /// text rather than stored: `conv.jsonl` keeps the message as typed, so the
   /// bubble and the backend answer this from the same string.
   ///
-  /// Parsed once and kept, the way an `AskLabel`'s questions are: every visible
+  /// Parsed once and kept, the way an asked question's are: every visible
   /// message is rebuilt on every streamed delta, and what a prompt says does not
   /// change under one — an edit is a new message, with a new id.
   String? _command;
@@ -534,86 +535,56 @@ class _MessageBubbleState extends State<MessageBubble> {
       spoken.clear();
     }
 
-    // A run of consecutive non-important activity labels, gathered so two or
-    // more of them can sit behind one centered "Expand activities" toggle
-    // rather than stacking above the reply. What is important and so breaks a
-    // run: an artifact button, a failed tool run, an `ask_user` question, and
-    // the live label a running turn is working on. Text, errors and files are
-    // not labels and break a run too. A `ToolResultPart` whose call is present
-    // is drawn by that call's label, so it neither joins nor breaks a run.
-    List<Widget> run = [];
+    // A run of consecutive activities none of which is important, gathered so
+    // two or more of them can sit behind one centered "Expand activities"
+    // toggle rather than stacking above the reply. Text, errors and files are
+    // not activities and break a run too. A `ToolResultPart` whose call is
+    // present is drawn by that call's label, so it neither joins nor breaks one.
+    List<Widget> gathered = [];
     var runStart = -1;
 
     bool isLive(int i) => i == liveAt;
-    bool failedResult(String? callId) =>
-        callId != null && (results[callId]?.returnCode ?? 0) != 0;
 
     void flushRun() {
-      if (run.isEmpty) return;
+      if (gathered.isEmpty) return;
       closeBubble();
-      if (run.length >= 2) {
-        rows.add(ActivityGroup(key: ValueKey(runStart), children: run));
+      if (gathered.length >= 2) {
+        rows.add(ActivityGroup(key: ValueKey(runStart), children: gathered));
       } else {
-        rows.addAll(run);
+        rows.addAll(gathered);
       }
-      run = [];
+      gathered = [];
       runStart = -1;
     }
 
     for (var i = 0; i < parts.length; i++) {
       final part = parts[i];
       switch (part) {
-        case ReasoningPart():
-          // The block being written right now is what the turn is busy with.
-          if (isLive(i) && part.durationMs == null) {
-            flushRun();
-            rows.add(_label(ThinkingLabel(part: part, at: i, isLive: true)));
-            break;
-          }
-          if (runStart == -1) runStart = i;
-          run.add(_label(ThinkingLabel(part: part, at: i)));
-        case ToolCallPart(:final toolCall):
-          // What the turn stopped to show is important — a question to the
-          // user, the plan put to them; so is a live call and a call that
-          // came back non-zero. The rest join the run.
-          final result = results[toolCall.id];
-          final ui = toolUIFor(toolCall.name);
-          final drawn = ui.label(toolCall, result, chatId: widget.chatId);
-          final important = (ui.prominent && drawn != null) ||
-              isLive(i) ||
-              failedResult(toolCall.id);
-          final label = _label(drawn ??
-              RunLabel(
-                  view: ui.view,
-                  run: Run(
-                      chatId: widget.chatId,
-                      callId: toolCall.id,
-                      call: toolCall,
-                      result: result,
-                      going: isLive(i) && widget.message.hasText)));
+        case ToolResultPart(:final result) when calls.contains(result.callId):
+          // Drawn by the call it answers.
+          continue;
+        case ReasoningPart() ||
+              ToolCallPart() ||
+              ToolResultPart() ||
+              InstructionsPart() ||
+              ApprovalPart() ||
+              ArtifactPart() ||
+              SkillInstallPart():
+          final activity = activityFor(part)!;
+          final run = _runOf(part, i, results, live: isLive(i));
+          // What breaks a run of activities: one important of itself, the
+          // call the live turn is on, and a run that came back failed.
+          final important = activity.important(run) ||
+              (isLive(i) && part is ToolCallPart) ||
+              (run.result?.returnCode ?? 0) != 0;
+          final label = _label(activity.build(run));
           if (important) {
             flushRun();
             rows.add(label);
             break;
           }
           if (runStart == -1) runStart = i;
-          run.add(label);
-        case ToolResultPart(:final result):
-          // Already drawn by the call it answers, unless the call is gone. An
-          // orphaned failed result is important; an orphaned success joins the
-          // run for the same reason any other success would.
-          if (calls.contains(result.callId)) continue;
-          final label = _label(RunLabel(
-              view: genericRunView,
-              run: Run(
-                  chatId: widget.chatId, callId: result.callId, result: result)));
-          if (result.returnCode != 0) {
-            flushRun();
-            rows.add(label);
-          } else {
-            if (runStart == -1) runStart = i;
-            run.add(label);
-          }
+          gathered.add(label);
         case FilePart():
           if (isUser) continue;
           flushRun();
@@ -621,34 +592,6 @@ class _MessageBubbleState extends State<MessageBubble> {
           rows.add(AttachmentStrip(children: [
             AttachmentChip.sent(part, chatId: widget.chatId, size: 256),
           ]));
-        case ArtifactPart(:final artifactId, :final entryFile, :final title):
-          flushRun();
-          rows.add(ArtifactLabel(
-            chatId: widget.chatId,
-            artifactId: artifactId,
-            entryFile: entryFile,
-            title: title,
-          ));
-        case SkillInstallPart(:final installId, :final title):
-          flushRun();
-          rows.add(SkillInstallLabel(
-            chatId: widget.chatId,
-            installId: installId,
-            title: title,
-          ));
-        case ApprovalPart():
-          // A recorded permission: important by definition — it is the user's
-          // own decision, and a run of them collapses behind a toggle the
-          // reader will never expand.
-          flushRun();
-          rows.add(_label(ApprovalLabel(part: part, result: results[part.approvalId])));
-        case InstructionsPart():
-          // The first reach of an instruction file: important like a
-          // permission — it changed what the model is working from, it happens
-          // at most once per file, and a collapse would hide the one moment
-          // the turn grew.
-          flushRun();
-          rows.add(_label(InstructionsLabel(part: part)));
         case ShellRunPart():
           // Not a label: a command the user ran is the answer to their message
           // rather than something the turn did on its way to one.
@@ -706,6 +649,30 @@ class _MessageBubbleState extends State<MessageBubble> {
   /// seconds" on the clipboard. Its own drawer is a route and so is outside the
   /// region already.
   Widget _label(Widget child) => SelectionContainer.disabled(child: child);
+
+  /// What [part], at [at], is drawn from as an activity. [live] is the part
+  /// the turn is on.
+  Run _runOf(MessagePart part, int at, Map<String, ToolResult> results,
+          {required bool live}) =>
+      switch (part) {
+        ToolCallPart(:final toolCall) => Run(
+            chatId: widget.chatId,
+            callId: toolCall.id,
+            call: toolCall,
+            result: results[toolCall.id],
+            going: live && widget.message.hasText,
+          ),
+        ToolResultPart(:final result) =>
+          Run(chatId: widget.chatId, callId: result.callId, result: result),
+        ApprovalPart(:final approvalId) => Run(
+            chatId: widget.chatId, part: part, result: results[approvalId]),
+        ReasoningPart(:final durationMs) => Run(
+            chatId: widget.chatId,
+            part: part,
+            at: at,
+            going: live && durationMs == null),
+        _ => Run(chatId: widget.chatId, part: part, at: at),
+      };
 
   Widget _bubble(
     BuildContext context,

@@ -1,9 +1,9 @@
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
-import "../../../domain/models.dart";
 import "../../../domain/plan.dart";
-import "../widgets/activity_label.dart" show Run, RunView, toolRunView;
+import "../activity/activity.dart";
+import "../activity/tool_run.dart" show toolRunView;
 import "artifact_ui.dart";
 import "ask_ui.dart";
 import "command_ui.dart";
@@ -13,17 +13,17 @@ import "plan_ui.dart";
 import "task_ui.dart";
 import "web_ui.dart";
 
-/// How the chat shows one tool's calls: what voice mode says of one, what the
-/// approval banner asks, and the run the reply draws — its label and the
-/// drawer behind it, both from [view]. One class per tool that shows anything
-/// of its own; every other tool gets the defaults.
+/// How the chat shows one tool's calls: an [Activity] like any other above a
+/// reply — the label and the drawer behind it, from [view] — plus what voice
+/// mode says of a call and what the approval banner asks. One class per tool
+/// that shows anything of its own; every other tool gets the defaults.
 ///
 /// The chat draws from the log, so a call is matched to its UI by the name
 /// the log recorded — a mirrored chat, or an old one, draws whatever this
 /// device offers. Live data is the view's own business: it watches what it
 /// reads through the ref it is handed, as a job's state is, and what only the
-/// drawer shows only where `Run.card` says it is building one.
-abstract class ToolUI {
+/// drawer reads inside the drawer's builder.
+abstract class ToolUI extends LabelledActivity {
   const ToolUI();
 
   /// The tool's name, as the log records it.
@@ -35,18 +35,8 @@ abstract class ToolUI {
   /// The approval banner's icon and question for a call of this tool.
   (IconData, String) get approval => (Icons.shield_outlined, "Allow $tool?");
 
-  /// Whether the label stands on a row of its own rather than joining the
-  /// run of activity labels: what the turn stopped to show.
-  bool get prominent => false;
-
-  /// A run of this tool as the reply draws it, its label and the drawer
-  /// behind it, as the run stands now.
+  @override
   RunView view(WidgetRef ref, Run run) => toolRunView(run);
-
-  /// A label of the tool's own, for a call that is not drawn as a run — a
-  /// diff, a question, the plan — or null to draw [view].
-  Widget? label(ToolCall call, ToolResult? result, {required String chatId}) =>
-      null;
 }
 
 class _DefaultToolUI extends ToolUI {
@@ -75,6 +65,9 @@ const toolUIs = <ToolUI>[
 ];
 
 final _byName = {for (final ui in toolUIs) ui.tool: ui};
+
+/// A tool run no tool claims: a result whose call is gone.
+const genericToolUI = _DefaultToolUI("");
 
 /// How the chat shows a call of [tool].
 ToolUI toolUIFor(String tool) => _byName[tool] ?? _DefaultToolUI(tool);

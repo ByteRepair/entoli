@@ -111,7 +111,7 @@ could read. What a rule is matched against is the caller's to say: a subject
 (the path for the file tools, the URL for a fetch) or the parse for a command.
 
 Adding a tool is a class beside its kin and a line in the registry; where the
-chat should show it differently, a `ToolUI` too (see "Tools, on screen" in
+chat should show it differently, a `ToolUI` too (see "Activities, on screen" in
 `lib/ui/chat/AGENTS.md`). A name the chat draws lives in `lib/domain`, beside
 what it is about, since the log records it and the UI reads it.
 
@@ -571,7 +571,7 @@ run a command, but it can still ask — which is why the tools are offered per t
 
 The call and its answers are an ordinary call/result pair, so `conv.jsonl` keeps
 them with no new part type in it, a rewind carries them like anything else, and
-the chat draws an answered question back out of what was persisted. `AskLabel`
+the chat draws an answered question back out of what was persisted. `AskUI`
 is that: the question on a label, the answers behind the drawer, parsed once and
 kept — every visible message is rebuilt on every streamed delta. What it draws is
 decided by what parsed, not by the name that got it there: a call named

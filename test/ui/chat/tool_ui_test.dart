@@ -2,6 +2,7 @@ import "package:flutter_test/flutter_test.dart";
 
 import "package:agent_chat/data/builtin/tools/agent_tool.dart";
 import "package:agent_chat/data/builtin/tools/registry.dart";
+import "package:agent_chat/ui/chat/activity/activity.dart" show Run;
 import "package:agent_chat/ui/chat/tool_ui/tool_ui.dart";
 
 void main() {
@@ -23,6 +24,6 @@ void main() {
     final ui = toolUIFor("memory_save");
     expect(ui.spoken, "Used memory_save");
     expect(ui.approval.$2, "Allow memory_save?");
-    expect(ui.prominent, isFalse);
+    expect(ui.important(const Run(chatId: "c", callId: "x")), isFalse);
   });
 }

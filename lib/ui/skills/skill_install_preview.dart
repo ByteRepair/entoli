@@ -14,7 +14,7 @@ import "../widgets/install_bar.dart";
 import "../widgets/install_destination.dart";
 
 /// A full page that shows a skill the model drafted and packaged, with an
-/// Install button. Pushed from [SkillInstallLabel]'s tap; back gesture closes.
+/// Install button. Pushed from `SkillInstallActivity`'s card; back gesture closes.
 class SkillInstallPreviewPage extends ConsumerStatefulWidget {
   const SkillInstallPreviewPage({
     super.key,
