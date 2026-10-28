@@ -80,7 +80,19 @@ abstract class LocalLlm {
 
   /// [installed], as one provider. Null where nothing is downloaded, which is
   /// what keeps the entry out of every picker until there is something to pick.
-  LlmProviderConfig? get provider;
+  LlmProviderConfig? get provider => installed.isEmpty
+      ? null
+      : const LlmProviderConfig(
+          id: localProviderId,
+          label: "On-device",
+          api: LlmApi.openai,
+          // Empty, and it has to be: there is no one server behind this entry,
+          // and each model is its own process on a port of its own. The
+          // endpoint carries the client that routes between them, so nothing
+          // reads this — and an empty string keeps the registry's cache
+          // signature still while servers come and go under it.
+          baseUrl: "",
+        );
 }
 
 /// One running server: where it is, and what it will answer to.
@@ -195,7 +207,4 @@ class UnavailableLocalLlm extends LocalLlm {
 
   @override
   List<String> get installed => const [];
-
-  @override
-  LlmProviderConfig? get provider => null;
 }

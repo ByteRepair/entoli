@@ -16,13 +16,15 @@ class AnthropicCompatibleProvider extends LlmProvider with ChatOnly {
   bool get takesPdfs => true;
 
   @override
-  LlmClient client(String? apiKey) =>
-      AnthropicClient(baseUrl: baseUrl, apiKey: apiKey, modelsUrl: modelsUrl);
+  LlmClient client(String? apiKey) => AnthropicClient(baseUrl: baseUrl, apiKey: apiKey);
+
+  @override
+  Map<String, String> authOf(String? apiKey) => AnthropicClient.authOf(apiKey);
 
   @override
   Future<bool> checkKey(String apiKey, {http.Client? httpClient}) => LlmProvider.askWith(
         http.Request("GET", under(baseUrl, "models"))
-          ..headers.addAll(AnthropicClient.authOf(apiKey)),
+          ..headers.addAll(authOf(apiKey)),
         httpClient: httpClient,
       );
 }

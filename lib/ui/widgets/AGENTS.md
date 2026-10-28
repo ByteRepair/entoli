@@ -291,8 +291,9 @@ A provider's own list is asked only where the user names one: the dialog's
 Models endpoint (`LlmProviderConfig.modelsEndpoint`), empty by default. The
 hosted providers' `/models` add nothing to models.dev's entry — ids alone, plus
 retired and non-chat ones — so an empty field means the catalog alone, and a
-provider models.dev does not know offers nothing until one is named. The local
-server presets ship with theirs filled in, and the on-device providers list
-what is installed. What such a list has and the catalog does not know is
+provider models.dev does not know offers nothing until one is named. Listing is
+the provider's (`LlmProvider.listModels`), not the chat client's: a local
+server asks its own `/models` unless another is named, and the on-device
+providers list what is installed. What such a list has and the catalog does not know is
 offered as a chat model with nothing known of it; one the catalog does know is
 offered by what the catalog says.

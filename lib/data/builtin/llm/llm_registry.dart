@@ -59,7 +59,7 @@ class LlmRegistry {
     // and outlives any one server's port.
     return _clients.of(
       config.id,
-      "${config.api.name}|${config.baseUrl}|${config.modelsEndpoint}|$key",
+      "${config.api.name}|${config.baseUrl}|$key",
       () => provider.client(key),
     );
   }
@@ -96,8 +96,8 @@ class LlmRegistry {
   /// whole OS connect timeout.
   Future<List<String>> _listFrom(LlmProvider provider) async {
     try {
-      return await clientOf(provider)
-          .listModels()
+      return await provider
+          .listModels(resolveKeyFor(provider.config))
           .timeout(const Duration(seconds: 10), onTimeout: () => const []);
     } catch (e) {
       logFailure("llm", "listing ${provider.id}'s models failed", e);

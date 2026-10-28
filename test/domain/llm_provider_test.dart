@@ -233,20 +233,9 @@ void main() {
       expect(built, hasLength(2));
     });
 
-    test("a models endpoint edited in settings reaches the next listing", () {
-      final registry = registryOver();
-      registry.clientFor("fake");
-
-      providers = [
-        providers.single.copyWith(modelsEndpoint: "https://fake.test/v1/models"),
-      ];
-      registry.clientFor("fake");
-
-      expect(built, hasLength(2));
-    });
-
-    test("the model list is what each client lists", () async {
+    test("the model list is what each provider lists, with no client built", () async {
       expect((await registryOver().models()).single.modelId, "fake-model");
+      expect(built, isEmpty);
     });
 
     test("closing it closes what it opened", () {

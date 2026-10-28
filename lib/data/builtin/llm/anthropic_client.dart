@@ -13,15 +13,11 @@ import "openai_client.dart" show inlineText;
 /// the system prompt is a parameter rather than a message, tool results ride
 /// inside user turns, and thinking has to be handed back the way it came.
 class AnthropicClient implements LlmClient {
-  AnthropicClient(
-      {required this.baseUrl, this.apiKey, this.modelsUrl, http.Client? httpClient})
+  AnthropicClient({required this.baseUrl, this.apiKey, http.Client? httpClient})
       : _http = httpClient ?? tlsClient();
 
   final Uri baseUrl;
   final String? apiKey;
-
-  /// The provider's `modelsEndpoint`. Null lists nothing.
-  final Uri? modelsUrl;
   final http.Client _http;
 
   static const _version = "2023-06-01";
@@ -53,11 +49,6 @@ class AnthropicClient implements LlmClient {
 
   @override
   void close() => _http.close();
-
-  @override
-  Future<List<String>> listModels() async => modelsUrl == null
-      ? const []
-      : await listModelIds(_http, modelsUrl!, headers: _auth);
 
   @override
   Stream<LlmChunk> stream(

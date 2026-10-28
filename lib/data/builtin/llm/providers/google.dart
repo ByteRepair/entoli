@@ -33,8 +33,7 @@ class GoogleProvider extends OpenAiCompatibleProvider {
   Set<String> get retiredModels => const {"gemini-2.5-flash"};
 
   @override
-  OpenAiClient client(String? apiKey) =>
-      GeminiClient(baseUrl: baseUrl, apiKey: apiKey, modelsUrl: modelsUrl);
+  OpenAiClient client(String? apiKey) => GeminiClient(baseUrl: baseUrl, apiKey: apiKey);
 
   /// Google answers a key it does not know with 400, not 401.
   @override

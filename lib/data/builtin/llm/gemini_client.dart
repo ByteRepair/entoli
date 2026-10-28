@@ -7,7 +7,7 @@ import "openai_client.dart";
 /// Gemini through its OpenAI-compatible surface, and where that surface is not
 /// enough.
 class GeminiClient extends OpenAiClient {
-  GeminiClient({required super.baseUrl, super.apiKey, super.modelsUrl, super.httpClient});
+  GeminiClient({required super.baseUrl, super.apiKey, super.httpClient});
 
   static const retired =
       "Google has retired this model, please select a newer model.";

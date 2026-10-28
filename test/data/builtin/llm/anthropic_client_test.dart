@@ -291,31 +291,6 @@ void main() {
     });
   });
 
-  group("listing models", () {
-    test("reads the ids the models endpoint offers", () async {
-      final client = AnthropicClient(
-        baseUrl: Uri.parse("https://example.test/v1"),
-        apiKey: "sk-ant-test",
-        modelsUrl: Uri.parse("https://example.test/v1/models"),
-        httpClient: MockClient((request) async {
-          expect(request.url.path, "/v1/models");
-          expect(request.headers["x-api-key"], "sk-ant-test");
-          return http.Response(
-            jsonEncode({
-              "data": [
-                {"id": "claude-a"},
-                {"id": "claude-b"},
-              ],
-            }),
-            200,
-          );
-        }),
-      );
-
-      expect(await client.listModels(), ["claude-a", "claude-b"]);
-    });
-  });
-
   test("a tool result's images go inside it", () async {
     await clientStreaming([{"type": "message_stop"}]).stream([
       const LlmMessage(role: LlmRole.user, text: "draw"),

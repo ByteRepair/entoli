@@ -271,10 +271,6 @@ abstract class LlmClient {
     String? reasoningEffort,
   });
 
-  /// The models listed beyond models.dev's: the provider's models endpoint,
-  /// or what is on the device. Empty where neither applies.
-  Future<List<String>> listModels();
-
   void close();
 }
 

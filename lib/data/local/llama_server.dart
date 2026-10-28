@@ -6,7 +6,6 @@ import "dart:math";
 import "package:flutter/foundation.dart";
 import "package:http/http.dart" as http;
 
-import "../../domain/llm_provider.dart";
 import "../../domain/local_llm.dart";
 import "../../domain/local_model.dart";
 import "../../domain/local_model_store.dart";
@@ -254,22 +253,6 @@ class LlamaServerPool extends LocalLlm {
         for (final model in localModelCatalog)
           if (_store.fileOfSync(model) != null) model.id,
       ];
-
-  @override
-  LlmProviderConfig? get provider {
-    if (installed.isEmpty) return null;
-    return LlmProviderConfig(
-      id: localProviderId,
-      label: "On-device",
-      api: LlmApi.openai,
-      // Empty, and it has to be: there is no one server behind this entry, and
-      // each model is its own process on a port of its own. The endpoint
-      // carries the client that routes between them, so nothing reads this —
-      // and an empty string keeps the registry's cache signature still while
-      // servers come and go under it.
-      baseUrl: "",
-    );
-  }
 
   @override
   Future<LocalEndpoint> serve(

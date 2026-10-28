@@ -1245,16 +1245,6 @@ class FakeLocalLlm extends LocalLlm {
     stops++;
     running.value = const [];
   }
-
-  @override
-  LlmProviderConfig? get provider => installed.isEmpty
-      ? null
-      : LlmProviderConfig(
-          id: localProviderId,
-          label: "On-device",
-          api: LlmApi.openai,
-          baseUrl: "",
-        );
 }
 
 /// Models that are simply there, or simply are not. Downloading is tested
