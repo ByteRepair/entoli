@@ -68,7 +68,7 @@ to agree. Asked separately they did not: the spinner's question was
 said nothing by that test while its last part was already a `TextPart` — a
 spinner and a caret at once. `liveAt` is the same consolidation a level down,
 since "the part this turn is working on" was being spelled out for the caret and
-again, with a clause on the end, for `ThinkingLabel.isLive`.
+again, with a clause on the end, for a thinking block's `Run.going`.
 
 `durationMs` is what the label reads ("Thought for 12 seconds") and is null
 while the block is still being written — which is also how the UI knows to say
@@ -101,13 +101,14 @@ ends, and never written to `conv.jsonl`. What a `!` bubble draws once its turn
 is over is the ordinary `ShellRunBubble`, which is why the block does not
 hand anything over — the part lands and the reply is no longer empty.
 
-A run of two or more non-important activity labels collapses behind a single
+A run of two or more non-important activities collapses behind a single
 centered "Expand activities" toggle (`ActivityGroup`), default collapsed. What
-is important and so stays visible, breaking a run: an artifact button, a failed
-tool run, an `ask_user` question, an instructions record (`InstructionsLabel`,
-the first reach of an `AGENTS.md` — rare by construction, once per file), and
-the live label a running turn is working
-on. Text, errors and files are not labels and break a run too. A lone label is
+is important and so stays visible, breaking a run, is what an activity's
+`important` says — an artifact or skill card, an `ask_user` question, the plan
+put to the user, a permission answered, an instruction read (the first reach
+of an `AGENTS.md`, rare by construction, once per file), the thinking block
+being written — and, for every kind, a run that failed and the call the live
+turn is on. Text, errors and files are not labels and break a run too. A lone label is
 left where it is — a toggle for one label is noise. The decision is per-part in
 `_rows` (buffer into a pending run, flush at any break), and the length check
 lives at flush time so a run is never half-collapsed. State is per-run and
@@ -455,34 +456,45 @@ replaced. Auto-compact
 leaves the same trace with no turn around it: unawaited after a settled turn,
 the divider its only evidence, the way the memory extraction's note is.
 
-## Tools, on screen
+## Activities, on screen
 
-**How a tool's calls look is its `ToolUI`** (`tool_ui/`), the UI's half of
-the tool's class: what voice mode says of a call (`spoken`, null for
-nothing), the approval banner's icon and question, whether its label stands
-on a row of its own (`prominent` — a question, the plan put to the user), and
-how a run of it looks. One class for each tool that shows anything of its
-own; `toolUIFor` gives every other name the defaults ("Used x", "Allow x?").
-The bubble, the banner and the voice transcript ask it rather than switching
-on names.
+**Everything above a reply is an `Activity`** (`activity/`): a tool run, a
+thinking block, an instruction read, a permission answered, an artifact or
+skill card. One stateless class per kind; the bubble asks `activityFor(part)`
+which kind a part is, builds the `Run` it is drawn from — the call and its
+result, or the part and where it sits — and draws what `build` returns. It
+asks `important` whether the activity stands on its own row. Nothing in the
+bubble names a kind.
 
-**A run is one view.** `ToolUI.view(ref, run)` returns a `RunView`: the
-label's icon and line, and a `drawer` builder for the drawer's title,
-command, status line, sections, actions and what goes below them. `RunLabel`
-draws the label from it and `showRunCard` the drawer, so a tool's look is
-that one function. The drawer is a builder, called only by the drawer with
-its own ref, so what only it reads — a sub-agent's transcript, a job's log —
-is never watched for a label, which is rebuilt for every call in every
-visible reply. A `Run` is the call, its result, and `going`, which the label
-and the drawer each set and own: the label spins and the drawer keeps to the
-end of what arrives without a view saying so; a view says so only for what
-goes on past its call, as a job does.
-The default is `toolRunView`, the tool's name and its arguments and output;
-`BashUI` sets the command apart with the exit code under it, and draws a
-call that started a job as the job; `TaskUI` follows the sub-agent's
-transcript; the web tools show the query or URL and what came back. A tool
-whose call is not a run — a diff, a question, the plan — still draws a label
-of its own through `ToolUI.label`.
+**A labelled activity is one view.** A `LabelledActivity` returns a `RunView`
+from `view(ref, run)`: the label's icon and line, and a `drawer` builder for
+the drawer's title, command, status line, sections, actions and what goes
+below them. `RunLabel` draws the label from it and `open` the drawer, the one
+drawer every activity has. `follow` is how an open drawer re-reads its
+message as the turn runs: a tool run by its call, a thinking block by where
+it sits. The drawer is a builder, called only by the drawer with its own
+ref, so what only it reads — a sub-agent's transcript, a job's log — is never
+watched for a label, which is rebuilt for every activity in every visible
+reply. `Run.going` is set by the label and the drawer each: the label spins
+where the view says `busy`, and the drawer keeps to the end of what arrives;
+a view says `live` only for what goes on past its call, as a job does. A kind
+whose label is content — the diff of a small write or edit, a question, the
+plan — overrides `build` and still opens the same drawer; the artifact and
+skill cards are plain `Activity`s, opening what they stand for instead.
+
+**How a tool's calls look is its `ToolUI`** (`tool_ui/`), a `LabelledActivity`
+plus the rest of the UI's half of the tool's class: what voice mode says of a
+call (`spoken`, null for nothing) and the approval banner's icon and
+question. One class for each tool that shows anything of its own;
+`toolUIFor` gives every other name the defaults ("Used x", "Allow x?"). The
+bubble, the banner and the voice transcript ask it rather than switching on
+names. The default view is `toolRunView`, the tool's name and its arguments
+and output; `BashUI` sets the command apart with the exit code under it, and
+draws a call that started a job as a `JobActivity`; `TaskUI` is a
+`SubAgentActivity`, following the sub-agent's transcript; the web tools show
+the query or URL and what came back. `JobActivity` and `SubAgentActivity`
+hold what they are drawn from, so the running row's pills open the same
+drawer with no call in hand.
 
 A call is matched by the name the log recorded, never by what this device
 offers, so a mirrored chat or an old one draws the same. A view whose
@@ -580,7 +592,7 @@ so a mirrored chat draws none.
 
 ### Background jobs, in the reply
 
-The `bash` call that started a job is drawn as the job (`jobView`, from
+The `bash` call that started a job is drawn as the job (`JobActivity`, from
 `BashUI.view`), by its `JobState` from `ChatViewState.jobOf`: running, ended,
 or lost. Running, the label says "Running in the background" and the drawer
 has the command, "Running · pid" under the title, Stop beside the close

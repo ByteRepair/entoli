@@ -10,8 +10,9 @@ import "../../../providers.dart";
 import "../../widgets/dialogs.dart" show catchAndSay;
 import "../../widgets/text_file_page.dart";
 import "../mirror_controller.dart" show chatViewProvider;
-import "../widgets/activity_label.dart"
-    show ActivityStatus, Run, RunDrawer, RunView, showRunCard, toolRunView;
+import "../activity/activity.dart";
+import "../activity/card.dart" show ActivityStatus;
+import "../activity/tool_run.dart" show toolRunView;
 import "../widgets/running_pill.dart" show RunningThing;
 import "tool_ui.dart";
 
@@ -38,9 +39,10 @@ class BashUI extends ToolUI {
     final result = run.result;
     final jobId = result?.jobId;
     if (jobId != null) {
-      return jobView(ref, run,
-          command: stringArg(run.call?.argumentsJson, "command") ?? "",
-          jobId: jobId);
+      return JobActivity(
+              command: stringArg(run.call?.argumentsJson, "command") ?? "",
+              jobId: jobId)
+          .view(ref, run);
     }
     return toolRunView(run,
         commandArg: "command",
@@ -54,60 +56,69 @@ class BashUI extends ToolUI {
 /// call's, since the call was over the moment the job started. Running, the
 /// drawer tails its log and can stop it; ended, it says how, shows what the
 /// chat kept of the log, and opens the whole log while the workspace has it.
-RunView jobView(WidgetRef ref, Run run,
-    {required String command, required int jobId}) {
-  final (:state, :mirrored) = ref.watch(chatViewProvider(run.chatId)
-      .select((v) => (state: v.jobOf(run.callId), mirrored: v.mirrored)));
-  final line = firstLine(command);
-  final title = "Background job $jobId";
-  if (state case JobRunning(:final job)) {
-    return RunView(
-      icon: Icons.terminal,
-      label: "Running in the background: $line",
-      busy: true,
-      drawer: (ref) {
-        final log = ref.watch(jobLogProvider((chatId: run.chatId, job: job))).value;
-        return RunDrawer(
-          title: title,
-          command: command,
-          status: (
-            text: "Running${job.pid == null ? "" : " · pid ${job.pid}"}",
-            isError: false,
-          ),
-          actions: [_StopJob(chatId: run.chatId, jobId: job.id)],
-          mono: true,
-          live: true,
-          sections: [
-            (
-              label: "Output",
-              body: log == null || log.isEmpty ? "(nothing printed yet)" : log,
+/// Drawn for the call in the reply and for the job's pill alike.
+class JobActivity extends LabelledActivity {
+  const JobActivity({required this.command, required this.jobId});
+
+  final String command;
+  final int jobId;
+
+  @override
+  RunView view(WidgetRef ref, Run run) {
+    final callId = run.callId!;
+    final (:state, :mirrored) = ref.watch(chatViewProvider(run.chatId)
+        .select((v) => (state: v.jobOf(callId), mirrored: v.mirrored)));
+    final line = firstLine(command);
+    final title = "Background job $jobId";
+    if (state case JobRunning(:final job)) {
+      return RunView(
+        icon: Icons.terminal,
+        label: "Running in the background: $line",
+        busy: true,
+        drawer: (ref) {
+          final log = ref.watch(jobLogProvider((chatId: run.chatId, job: job))).value;
+          return RunDrawer(
+            title: title,
+            command: command,
+            status: (
+              text: "Running${job.pid == null ? "" : " · pid ${job.pid}"}",
               isError: false,
             ),
-          ],
-        );
-      },
+            actions: [_StopJob(chatId: run.chatId, jobId: job.id)],
+            mono: true,
+            live: true,
+            sections: [
+              (
+                label: "Output",
+                body: log == null || log.isEmpty ? "(nothing printed yet)" : log,
+                isError: false,
+              ),
+            ],
+          );
+        },
+      );
+    }
+    final end = switch (state) { JobEnded(:final end) => end, _ => null };
+    final status = switch (state) {
+      JobEnded(:final end) => _jobStatus(end),
+      JobUnheard() => (text: "Not heard from", isError: false),
+      _ => (text: "Ended with the app", isError: false),
+    };
+    return RunView(
+      icon: Icons.terminal,
+      label: "Background job ${status.text.toLowerCase()}: $line",
+      isError: status.isError,
+      drawer: (_) => RunDrawer(
+        title: title,
+        command: command,
+        status: status,
+        // A mirror's workspace, and the log in it, is the other device's.
+        actions: [if (!mirrored) _OpenLog(chatId: run.chatId, callId: callId)],
+        mono: true,
+        sections: [(label: "Output", body: end?.tail, isError: false)],
+      ),
     );
   }
-  final end = switch (state) { JobEnded(:final end) => end, _ => null };
-  final status = switch (state) {
-    JobEnded(:final end) => _jobStatus(end),
-    JobUnheard() => (text: "Not heard from", isError: false),
-    _ => (text: "Ended with the app", isError: false),
-  };
-  return RunView(
-    icon: Icons.terminal,
-    label: "Background job ${status.text.toLowerCase()}: $line",
-    isError: status.isError,
-    drawer: (_) => RunDrawer(
-      title: title,
-      command: command,
-      status: status,
-      // A mirror's workspace, and the log in it, is the other device's.
-      actions: [if (!mirrored) _OpenLog(chatId: run.chatId, callId: run.callId)],
-      mono: true,
-      sections: [(label: "Output", body: end?.tail, isError: false)],
-    ),
-  );
 }
 
 /// The background jobs running, a pill each, opening the job's drawer.
@@ -118,12 +129,8 @@ List<RunningThing> jobsRunning(WidgetRef ref, ChatViewState view, String chatId)
           label: firstLine(job.command),
           mono: true,
           tooltip: "Background job ${job.id}",
-          open: (context) => showRunCard(
-            context,
-            view: (ref, run) =>
-                jobView(ref, run, command: job.command, jobId: job.id),
-            run: Run(chatId: chatId, callId: job.callId),
-          ),
+          open: (context) => JobActivity(command: job.command, jobId: job.id)
+              .open(context, Run(chatId: chatId, callId: job.callId)),
         ),
     ];
 

@@ -8,7 +8,7 @@ import "../../domain/models.dart";
 import "../../domain/sub_agent_log.dart";
 import "../../providers.dart";
 import "mirror_controller.dart" show chatViewProvider;
-import "widgets/activity_label.dart" show LiveMessage;
+import "activity/card.dart" show LiveMessage;
 
 /// Which sub-agent: the chat, and the `task` call that spawned it.
 typedef SubAgentCall = ({String chatId, String callId});

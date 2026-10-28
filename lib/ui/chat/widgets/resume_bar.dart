@@ -1,6 +1,6 @@
 import "package:flutter/material.dart";
 
-import "activity_label.dart";
+import "../activity/format.dart";
 
 /// Offered under a turn that never finished. Above the composer rather than in
 /// the list, like the approval banner: scrolling back through the turn should

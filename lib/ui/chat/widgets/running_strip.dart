@@ -5,7 +5,7 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 import "../../../domain/room/room_state.dart" show ChatViewState;
 import "../tool_ui/command_ui.dart" show jobsRunning;
 import "../tool_ui/task_ui.dart" show subAgentsRunning;
-import "activity_label.dart" show plural;
+import "../activity/format.dart" show plural;
 import "browser_strip.dart" show browserRunning;
 import "running_pill.dart";
 

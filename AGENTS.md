@@ -54,7 +54,7 @@ named in a cross-reference is findable from this list.
 - `lib/ui/chat/AGENTS.md` — What the turn's extraction kept, Thinking and tool runs,
   What is running, on screen, The agent's browser, on screen,
   Selecting a reply, and copying it, How a reply is set, Code blocks, A command
-  the user ran, Tools, on screen, The plan, on screen, A chat whose home device is elsewhere, The chat page
+  the user ran, Activities, on screen, The plan, on screen, A chat whose home device is elsewhere, The chat page
 - `lib/data/voice/AGENTS.md` — Voice mode, What listens and what speaks, The
   Android system engines, Which language it is asked in, Ending the utterance,
   What counts as being spoken to, One listener, two engines, Mute is the user,

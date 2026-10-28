@@ -14,8 +14,8 @@ import "package:agent_chat/domain/chat_log.dart";
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/domain/theme_colour.dart";
 import "package:agent_chat/ui/theme.dart";
-import "package:agent_chat/ui/chat/widgets/activity_label.dart"
-    show ActivityGroup, ActivitySource, LiveMessage;
+import "package:agent_chat/ui/chat/activity/card.dart" show ActivitySource, LiveMessage;
+import "package:agent_chat/ui/chat/activity/label.dart" show ActivityGroup;
 import "package:agent_chat/ui/chat/widgets/message_bubble.dart";
 
 import "../fakes.dart";

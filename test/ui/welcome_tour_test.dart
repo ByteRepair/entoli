@@ -278,7 +278,9 @@ void main() {
       await replay(tester);
       await accept(tester);
       await tester.tap(button("Done"));
-      await settleIo(tester, least: 3);
+      // Done makes the welcome chat on disk before it leaves.
+      await settleUntil(tester, () => find.byType(WelcomeTour).evaluate().isEmpty,
+          what: "the tour leaving");
 
       expect(find.byType(WelcomeTour), findsNothing);
       expect(settings().licenceAccepted, isTrue);
@@ -305,7 +307,8 @@ void main() {
     await walkToLast(tester);
     await accept(tester);
     await tester.tap(button("Done"));
-    await settleIo(tester, least: 3);
+    await settleUntil(tester, () => find.byType(WelcomePage).evaluate().isEmpty,
+        what: "the tour leaving");
     expect(find.byType(WelcomePage), findsNothing);
     expect(settings().licenceAccepted, isTrue);
 

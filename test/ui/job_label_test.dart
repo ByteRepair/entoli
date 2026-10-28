@@ -5,7 +5,7 @@ import "package:agent_chat/domain/chat_log.dart";
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/domain/shell_job.dart";
 import "package:agent_chat/ui/chat/tool_ui/command_ui.dart";
-import "package:agent_chat/ui/chat/widgets/activity_label.dart";
+import "package:agent_chat/ui/chat/activity/activity.dart";
 
 import "../harness.dart";
 
@@ -48,7 +48,7 @@ void main() {
         tester,
         Scaffold(
             body: RunLabel(
-                view: const BashUI().view,
+                activity: const BashUI(),
                 run: Run(chatId: chatId, callId: "c1", call: call, result: result))));
     // Neither running nor ended: the app it ran under has gone.
     expect(find.text("Background job ended with the app: npm run dev"),
@@ -89,7 +89,7 @@ void main() {
         tester,
         Scaffold(
             body: RunLabel(
-                view: const BashUI().view,
+                activity: const BashUI(),
                 run: const Run(
                     chatId: "chat-1",
                     callId: "c1",

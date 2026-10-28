@@ -147,8 +147,9 @@ times per turn. One buffer carries both kinds of delta, so switching between
 thinking and reply flushes what it held — otherwise the two would fold into each
 other's part.
 
-`activity_label.dart` owns the labels and the drawer behind them; the bubble
-walks the parts and decides which of the two each one is.
+`lib/ui/chat/activity/` owns the activities above a reply and the drawer
+behind them; the bubble walks the parts and asks `activityFor` which each one
+is (see "Activities, on screen" in `lib/ui/chat/AGENTS.md`).
 
 `Composer` opens a menu above the field when the caret sits in a `/` or `@`
 token, over a library that is already loaded — so it takes no chat id, has no
