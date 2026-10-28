@@ -556,11 +556,11 @@ abstract class AgentBackend {
   /// the one that measures the session as it stands.
   int? usageFor(String chatId) => null;
 
-  /// The window that same request stood in, where the registry named one —
-  /// written where [usageFor] is written, so the threshold answers both
-  /// halves of itself from the backend with no `meta.json` read on the
-  /// settle path. Null is the app-wide guess's business at the caller.
-  int? contextWindowFor(String chatId) => null;
+  /// The window [choice] runs in, as the model catalog knows it, among the
+  /// endpoints a turn would reach — a null model being the provider's
+  /// default. Null where nothing is known, which is the app-wide guess's
+  /// business at the caller.
+  int? contextWindowOf(ModelChoice choice) => null;
 
   /// One question, answered in one call: no tools, no session, nothing kept.
   /// A model of null resolves to the provider's light default — the title
