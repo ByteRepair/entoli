@@ -696,7 +696,10 @@ class FakeBackend implements AgentBackend {
   final Map<String, int> usageHolder = {};
 
   @override
-  int? contextWindowFor(String chatId) => null;
+  int? contextWindowOf(ModelChoice choice) => windowHolder[choice.modelId];
+
+  /// What `contextWindowOf` answers, keyed by model id.
+  final Map<String?, int> windowHolder = {};
 
   @override
   Future<void> shutdown() async {}

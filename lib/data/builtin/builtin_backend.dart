@@ -150,14 +150,6 @@ class BuiltinBackend implements AgentBackend {
   /// controller reads everything else of the backend — through the callback
   /// that reported it.
   final Map<String, int> _usage = {};
-
-  /// The context window the chat's model stands in, as `modelInfoOf`
-  /// named it when the request beside this entry ran — written where the
-  /// usage is written, so the threshold answers both halves of itself from
-  /// one pair of maps with no `meta.json` read on the settle path. Null
-  /// where the registry knows nothing, which the caller reads as the
-  /// settings' global guess.
-  final Map<String, int?> _windows = {};
   final _RunningTurns _running = _RunningTurns();
   /// Every open turn stream per chat: a parallel round runs several at once.
   final Map<String, Set<StreamController<AgentEvent>>> _controllers = {};
@@ -556,10 +548,7 @@ class BuiltinBackend implements AgentBackend {
         },
         onShellOutput: (callId, text) =>
             controller.add(ShellOutputEvent(callId: callId, text: text)),
-        onUsage: (usage) {
-          _usage[chatId] = usage.contextTokens;
-          _windows[chatId] = target.info?.context;
-        },
+        onUsage: (usage) => _usage[chatId] = usage.contextTokens,
       );
       // The real kill replaces the placeholder.
       _running.replace(stopKey, agent.cancel);
@@ -1520,7 +1509,6 @@ class BuiltinBackend implements AgentBackend {
     await _jobs.closeChat(chatId);
     _sessions.remove(chatId);
     _usage.remove(chatId);
-    _windows.remove(chatId);
     _forgetMemberSessions(chatId);
   }
 
@@ -1528,7 +1516,14 @@ class BuiltinBackend implements AgentBackend {
   int? usageFor(String chatId) => _usage[chatId];
 
   @override
-  int? contextWindowFor(String chatId) => _windows[chatId];
+  int? contextWindowOf(ModelChoice choice) {
+    final provider = choice.providerId;
+    final endpoint = provider == null ? null : registry.providerFor(provider);
+    if (endpoint == null) return null;
+    return modelInfoOf(
+            endpoint.config, choice.modelId ?? LlmProviderConfig.chatDefaultOf(endpoint.config))
+        ?.context;
+  }
 
   @override
   void closeChatShell(String chatId, {required String? project}) =>
