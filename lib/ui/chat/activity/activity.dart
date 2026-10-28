@@ -6,11 +6,27 @@ import "../../../domain/models.dart";
 import "card.dart";
 import "label.dart";
 
+/// Which kind of activity each part of a message is drawn as. The reply asks
+/// it and knows none of the kinds: a reply is made of activities, and one of
+/// them, a sub-agent's, draws a reply of its own in its drawer — a composite,
+/// which only stays acyclic with the reply depending on this rather than on
+/// the kinds. `ChatActivities` answers, bound once where the app is assembled.
+abstract interface class ActivityCatalog {
+  /// The kind [part] is drawn as, or null for a part that is not one — text,
+  /// an error, a file, a command the user ran.
+  Activity? of(MessagePart part);
+}
+
+/// The [ActivityCatalog] the app draws replies with; `main` and the test
+/// harness bind it.
+final activityCatalogProvider = Provider<ActivityCatalog>(
+    (ref) => throw UnimplementedError("bound where the app is assembled"));
+
 /// Anything drawn among the activities above a reply: a tool run, a thinking
 /// block, an instruction file read, a permission answered, an artifact. One
 /// class per kind, holding no state; what one of them is drawn from is a
-/// [Run]. The reply asks `activityFor` which kind a part is and draws what
-/// [build] returns, so it knows none of them.
+/// [Run]. The reply asks the [ActivityCatalog] which kind a part is and draws
+/// what [build] returns.
 abstract class Activity {
   const Activity();
 

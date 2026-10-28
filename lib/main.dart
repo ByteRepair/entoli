@@ -26,6 +26,8 @@ import "domain/project.dart" show everyProject;
 import "domain/prompt_library.dart";
 import "domain/sync/identity.dart";
 import "providers.dart";
+import "ui/chat/activity/activities.dart" show ChatActivities;
+import "ui/chat/activity/activity.dart" show activityCatalogProvider;
 import "ui/chat/remote_turns.dart";
 import "ui/app_licence.dart";
 import "ui/app_shell.dart";
@@ -220,6 +222,7 @@ class AppSession {
       overrides: [
         chatStoreProvider.overrideWithValue(store),
         agentBackendProvider.overrideWithValue(backend),
+        activityCatalogProvider.overrideWithValue(const ChatActivities()),
         shellProvider.overrideWithValue(backend.shell),
         appConfigProvider.overrideWithValue(config),
         appSecretsProvider.overrideWithValue(secrets),

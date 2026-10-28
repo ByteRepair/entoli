@@ -1323,7 +1323,7 @@ the `oneShot` flag.
 question: it raises `QuestionRequestEvent` with Go, or changes typed into the
 panel's own answer field (see "Questions"), on the
 `answer` completer. It publishes nothing. The chat draws the call itself as
-the plan (`PlanLabel`, read off the file — see "The plan, on screen" in
+the plan (`PresentPlanUI`, read off the file — see "The plan, on screen" in
 `lib/ui/chat/AGENTS.md`), so the plan is on screen above the panel without a
 page to open. It used to render the plan into an artifact, which made a card
 of every plan whether a page helped or not; a diagram is now the model's call,

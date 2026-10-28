@@ -148,7 +148,7 @@ thinking and reply flushes what it held — otherwise the two would fold into ea
 other's part.
 
 `lib/ui/chat/activity/` owns the activities above a reply and the drawer
-behind them; the bubble walks the parts and asks `activityFor` which each one
+behind them; the bubble walks the parts and asks the `ActivityCatalog` which each one
 is (see "Activities, on screen" in `lib/ui/chat/AGENTS.md`).
 
 `Composer` opens a menu above the field when the caret sits in a `/` or `@`

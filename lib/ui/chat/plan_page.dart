@@ -48,3 +48,25 @@ class PlanPage extends ConsumerWidget {
     );
   }
 }
+
+/// The app bar's way to the plan, there only while the chat has one.
+class PlanButton extends ConsumerWidget {
+  const PlanButton({super.key, required this.chatId});
+
+  final String chatId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final sections = ref.watch(planProvider(chatId)).value;
+    if (sections == null) return const SizedBox.shrink();
+    final tasks = [for (final s in sections) ...s.tasks];
+    final done = tasks.where((t) => t.status == PlanTaskStatus.done).length;
+    return IconButton(
+      tooltip: "Plan, $done of ${tasks.length} done",
+      icon: const Icon(Icons.checklist),
+      onPressed: () => Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => PlanPage(chatId: chatId)),
+      ),
+    );
+  }
+}

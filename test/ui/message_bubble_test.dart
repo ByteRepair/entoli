@@ -17,6 +17,7 @@ import "package:agent_chat/ui/theme.dart";
 import "package:agent_chat/ui/chat/activity/card.dart" show ActivitySource, LiveMessage;
 import "package:agent_chat/ui/chat/activity/label.dart" show ActivityGroup;
 import "package:agent_chat/ui/chat/widgets/message_bubble.dart";
+import "package:agent_chat/ui/chat/widgets/message_text.dart";
 
 import "../fakes.dart";
 import "../harness.dart";

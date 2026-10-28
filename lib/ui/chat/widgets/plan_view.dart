@@ -1,13 +1,10 @@
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
-import "../../../domain/models.dart" show ToolCall;
 import "../../../domain/plan.dart";
-import "../../../domain/tool_arg.dart";
 import "../../../providers.dart";
 import "../mirror_controller.dart" show chatViewProvider;
-import "../plan_page.dart";
-import "message_bubble.dart" show MessageText;
+import "message_text.dart" show MessageText;
 
 /// The chat's `PLAN.md`, parsed; null where there is none or it could not be
 /// read. A mirrored chat's is asked of its home device over the sync channel.
@@ -23,83 +20,6 @@ final planProvider =
   final sections = planSectionsFrom(text);
   return sections.isEmpty ? null : sections;
 });
-
-/// The app bar's way to the plan, there only while the chat has one.
-class PlanButton extends ConsumerWidget {
-  const PlanButton({super.key, required this.chatId});
-
-  final String chatId;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final sections = ref.watch(planProvider(chatId)).value;
-    if (sections == null) return const SizedBox.shrink();
-    final tasks = [for (final s in sections) ...s.tasks];
-    final done = tasks.where((t) => t.status == PlanTaskStatus.done).length;
-    return IconButton(
-      tooltip: "Plan, $done of ${tasks.length} done",
-      icon: const Icon(Icons.checklist),
-      onPressed: () => Navigator.of(context).push(
-        MaterialPageRoute(builder: (_) => PlanPage(chatId: chatId)),
-      ),
-    );
-  }
-}
-
-/// A `present_plan` call, drawn as the plan it put to the user: every task,
-/// each opening to its details. Read off the file rather than the call, so
-/// it shows where the work stands now.
-class PlanLabel extends ConsumerWidget {
-  const PlanLabel({super.key, required this.chatId, required this.call});
-
-  final String chatId;
-  final ToolCall call;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
-    final title = stringArg(call.argumentsJson, "title") ?? "Plan";
-    final plan = ref.watch(planProvider(chatId));
-    final sections = plan.value;
-    // The whole width of the reply's column, like the reply itself: task
-    // details are prose, and a narrow card wrapped them into a ribbon.
-    return Card.outlined(
-      margin: const EdgeInsets.symmetric(vertical: 6),
-      clipBehavior: Clip.antiAlias,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          ListTile(
-            leading: const Icon(Icons.checklist),
-            title: Text(title, style: theme.textTheme.titleMedium),
-            subtitle: Text(switch (sections) {
-              final sections? => _progress(sections),
-              // A mirror's first read is a round trip to the home device.
-              null when plan.isLoading => "Reading the plan…",
-              null => "The plan could not be read.",
-            }),
-            trailing: sections == null
-                ? null
-                : IconButton(
-                    tooltip: "Open the plan",
-                    icon: const Icon(Icons.open_in_full),
-                    onPressed: () => Navigator.of(context).push(
-                      MaterialPageRoute(builder: (_) => PlanPage(chatId: chatId)),
-                    ),
-                  ),
-          ),
-          if (sections != null) PlanTaskList(sections: sections),
-        ],
-      ),
-    );
-  }
-}
-
-String _progress(List<PlanSection> sections) {
-  final tasks = [for (final s in sections) ...s.tasks];
-  final done = tasks.where((t) => t.status == PlanTaskStatus.done).length;
-  return "$done of ${tasks.length} tasks done";
-}
 
 /// The plan's tasks under their headings, each opening to its details. The
 /// headings show only where the plan has more than one.
