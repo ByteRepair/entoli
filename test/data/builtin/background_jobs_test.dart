@@ -123,7 +123,10 @@ void main() {
     final chat = jobs.forChat("chat-1");
     ShellRun spawn(String script) => shell.start(script,
         cwd: "/w", home: "/w", timeout: Duration.zero);
+    // Ended past reading its log, which is real I/O, and off the list after.
+    final ended = chat.ended.first;
     await chat.start("a", callId: "c1", workspace: "/w", spawn: spawn);
+    await ended;
     await pumpEventQueue();
     expect(chat.jobs.value, isEmpty);
     final second =
