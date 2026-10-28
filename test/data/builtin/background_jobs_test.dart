@@ -74,7 +74,10 @@ void main() {
     expect(shell.ran, [backgroundScript("call-1", "npm run dev")]);
     expect(shell.oneShots, [true]);
     expect(shell.timeouts, [BackgroundJobs.timeout]);
-    final output = results(events).single.output;
+    final result = results(events).single;
+    // The job rides on the result as a fact, for the reply to draw as one.
+    expect(result.jobId, 1);
+    final output = result.output;
     expect(output, contains("job 1"));
     expect(output, contains("kill -- -4000"));
     expect(output, contains("chat:.entoli-jobs/call-1.log"));
@@ -183,7 +186,6 @@ void main() {
     expect(callId, "c1");
     expect(end.jobId, 1);
     expect(end.exitCode, 3);
-    expect(end.log, ".entoli-jobs/c1.log");
     expect(end.tail, [for (var i = 6; i <= 15; i++) "line $i"].join("\n"));
   });
 

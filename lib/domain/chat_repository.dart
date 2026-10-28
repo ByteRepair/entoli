@@ -312,9 +312,8 @@ class ChatRepository {
   /// already is.
   Future<List<ChatRecord>> readRecords(String chatId) => _store.readRecords(chatId);
 
-  /// [chatId]'s background jobs as they end. See [ChatShellJobs.ended].
-  Stream<({String callId, JobEnd end})> jobEnds(String chatId) =>
-      _backend.jobsOf(chatId).ended;
+  /// [chatId]'s background jobs.
+  ChatShellJobs jobsOf(String chatId) => _backend.jobsOf(chatId);
 
   /// Every running sub-agent's appends to its transcript, as they land.
   Stream<SubAgentAppend> get subAgentAppends => _backend.subAgents.appends;

@@ -1,7 +1,9 @@
 import "package:flutter/material.dart";
+import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../../domain/models.dart";
 import "../../../domain/plan.dart";
+import "../widgets/activity_label.dart" show Run, RunView, toolRunView;
 import "artifact_ui.dart";
 import "ask_ui.dart";
 import "command_ui.dart";
@@ -12,14 +14,15 @@ import "task_ui.dart";
 import "web_ui.dart";
 
 /// How the chat shows one tool's calls: what voice mode says of one, what the
-/// approval banner asks, and the label the reply draws. One class per tool
-/// that shows anything of its own; every other tool gets the defaults.
+/// approval banner asks, and the run the reply draws — its label and the
+/// drawer behind it, both from [view]. One class per tool that shows anything
+/// of its own; every other tool gets the defaults.
 ///
 /// The chat draws from the log, so a call is matched to its UI by the name
 /// the log recorded — a mirrored chat, or an old one, draws whatever this
-/// device offers. Live data is the label's own business: one that changes as
-/// the turn runs is a `ConsumerWidget` watching its provider, as the plan's
-/// is.
+/// device offers. Live data is the view's own business: it watches what it
+/// reads through the ref it is handed, as a job's state is, and what only the
+/// drawer shows only where `Run.card` says it is building one.
 abstract class ToolUI {
   const ToolUI();
 
@@ -36,7 +39,12 @@ abstract class ToolUI {
   /// run of activity labels: what the turn stopped to show.
   bool get prominent => false;
 
-  /// The label the reply draws for [call], or null for the generic one.
+  /// A run of this tool as the reply draws it, its label and the drawer
+  /// behind it, as the run stands now.
+  RunView view(WidgetRef ref, Run run) => toolRunView(run);
+
+  /// A label of the tool's own, for a call that is not drawn as a run — a
+  /// diff, a question, the plan — or null to draw [view].
   Widget? label(ToolCall call, ToolResult? result, {required String chatId}) =>
       null;
 }

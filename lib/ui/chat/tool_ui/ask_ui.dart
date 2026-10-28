@@ -22,5 +22,5 @@ class AskUI extends ToolUI {
 
   @override
   Widget label(ToolCall call, ToolResult? result, {required String chatId}) =>
-      AskLabel(call: call, result: result);
+      AskLabel(chatId: chatId, call: call, result: result);
 }

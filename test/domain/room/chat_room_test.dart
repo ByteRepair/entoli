@@ -4,7 +4,8 @@ import "package:flutter_test/flutter_test.dart";
 
 import "package:agent_chat/domain/agent_backend.dart";
 import "package:agent_chat/domain/chat_log.dart";
-import "package:agent_chat/domain/models.dart" show JobEnd;
+import "package:agent_chat/domain/models.dart" show CallEvents, JobEnd, jobEndedEvent;
+import "package:agent_chat/domain/shell_job.dart";
 import "package:agent_chat/domain/project_settings.dart" show OmadaOrdering;
 import "package:agent_chat/domain/room/chat_room.dart";
 import "package:agent_chat/domain/room/room_state.dart";
@@ -104,14 +105,33 @@ void main() {
     final (room, host) = await openRoom();
     await room.send("hello");
     await room.turnDone;
-    final end = JobEnd(
-        jobId: 1, exitCode: 0, endedAt: DateTime.utc(2026), tail: "done", log: "l");
+    const end = JobEnd(jobId: 1, exitCode: 0, tail: "done");
     app.backend.jobsOf(room.chatId).endings.add((callId: "c1", end: end));
-    await waitFor(() => room.state.chat?.jobEnds["c1"] != null,
+    await waitFor(() => room.state.chat?.jobEndOf("c1") != null,
         what: "the end on the chat");
 
-    expect(host.states.last.chat!.jobEnds, {"c1": end});
+    expect(host.states.last.jobOf("c1"), const JobEnded(end));
     final records = await app.repo.readRecords(room.chatId);
-    expect(records.last, ChatRecord.jobEnd(callId: "c1", end: end));
+    expect(records.last,
+        ChatRecord.callEvent(callId: "c1", kind: jobEndedEvent, data: end.toJson()));
+  });
+
+  test("a job is running from when it starts until its end lands, even past "
+      "leaving the backend's list", () async {
+    final (room, host) = await openRoom();
+    final jobs = app.backend.jobsOf(room.chatId);
+    const job = ShellJob(id: 1, callId: "c1", command: "serve", logPath: "/l");
+    jobs.jobs.value = [job];
+    expect(room.state.jobOf("c1"), const JobRunning(job));
+
+    jobs.jobs.value = const [];
+    expect(room.state.jobOf("c1"), const JobRunning(job));
+
+    const end = JobEnd(jobId: 1, exitCode: 0, tail: "");
+    jobs.endings.add((callId: "c1", end: end));
+    await waitFor(() => room.state.jobOf("c1") is JobEnded,
+        what: "the end on the chat");
+    expect(room.state.runningJobs, isEmpty);
+    expect(host.states.last.jobOf("c1"), const JobEnded(end));
   });
 }

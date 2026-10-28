@@ -30,11 +30,13 @@ class ShellResult {
     required this.output,
     this.exceptionInfo,
     this.cwd,
+    this.jobId,
   });
 
   const ShellResult.failed(this.exceptionInfo, {this.output = ""})
       : returnCode = -1,
-        cwd = null;
+        cwd = null,
+        jobId = null;
 
   final int returnCode;
   final String output;
@@ -45,6 +47,9 @@ class ShellResult {
   /// no such state to report: a one-shot subshell is gone with the command,
   /// and a command that was killed or never ran left no directory to read.
   final String? cwd;
+
+  /// The background job the command started, where it started one.
+  final int? jobId;
 }
 
 /// What this build ships beside the machine's own commands: the environment a

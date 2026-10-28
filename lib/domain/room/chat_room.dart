@@ -8,6 +8,7 @@ import "../agent_backend.dart";
 import "../chat_log.dart";
 import "../chat_repository.dart";
 import "../models.dart";
+import "../shell_job.dart" show ChatShellJobs;
 import "../project_settings.dart" show OmadaOrdering;
 import "../prompt_library.dart" show nameOf;
 import "../turn_recorder.dart";
@@ -61,22 +62,44 @@ abstract interface class RoomHost {
 class ChatRoom {
   ChatRoom(this.chatId, this._repo, this._host) {
     _ready = _load();
-    _jobEnds = _repo.jobEnds(chatId).listen(_jobEnded);
+    _jobs.jobs.addListener(_jobsChanged);
+    _jobEnds = _jobs.ended.listen(_jobEnded);
+    // Not from here: the holder is still building on this call.
+    unawaited(_ready.then((_) => _jobsChanged()));
   }
 
+  late final ChatShellJobs _jobs = _repo.jobsOf(chatId);
   late final StreamSubscription<void> _jobEnds;
+
+  void _jobsChanged() {
+    if (_disposed) return;
+    final running = {for (final job in _jobs.jobs.value) job.callId: job};
+    // One that left the list is running until its end lands, so the chat
+    // never reads it as neither.
+    for (final job in state.runningJobs.values) {
+      running.putIfAbsent(job.callId, () => job);
+    }
+    _view = state.copyWith(runningJobs: running);
+  }
 
   /// A background job ended, likely between turns: kept on the log through
   /// the one queue every turn's writes take, and on the chat on screen.
   Future<void> _jobEnded(({String callId, JobEnd end}) ended) async {
     final (:callId, :end) = ended;
-    unawaited(_append([ChatRecord.jobEnd(callId: callId, end: end)]));
+    final data = end.toJson();
+    unawaited(_append(
+        [ChatRecord.callEvent(callId: callId, kind: jobEndedEvent, data: data)]));
     // After the load, which may have read the log before this line landed.
     await _ready;
+    if (_disposed) return;
     final chat = state.chat;
-    if (chat == null || _disposed) return;
     _view = state.copyWith(
-        chat: chat.copyWith(jobEnds: {...chat.jobEnds, callId: end}));
+      chat: chat?.copyWith(callEvents: {
+        ...chat.callEvents,
+        callId: {...?chat.callEvents[callId], jobEndedEvent: data},
+      }),
+      runningJobs: {...state.runningJobs}..remove(callId),
+    );
   }
 
   final String chatId;
@@ -103,6 +126,7 @@ class ChatRoom {
   /// the room still has in flight reaches it.
   void dispose() {
     _disposed = true;
+    _jobs.jobs.removeListener(_jobsChanged);
     unawaited(_jobEnds.cancel());
     for (final turn in _turns.values) {
       turn.sub?.cancel();

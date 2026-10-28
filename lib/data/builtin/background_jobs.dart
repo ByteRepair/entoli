@@ -104,9 +104,7 @@ class ChatJobs implements ChatShellJobs {
       end: JobEnd(
         jobId: job.id,
         exitCode: code == -1 ? null : code,
-        endedAt: DateTime.now(),
         tail: jobTail(log),
-        log: backgroundLog(job.callId),
       ),
     ));
   }

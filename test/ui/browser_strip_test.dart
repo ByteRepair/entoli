@@ -9,9 +9,12 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:flutter_test/flutter_test.dart";
 
 import "package:agent_chat/domain/agent_browser.dart";
+import "package:agent_chat/domain/models.dart";
+import "package:agent_chat/domain/room/room_state.dart";
 import "package:agent_chat/providers.dart";
 import "package:agent_chat/ui/chat/widgets/browser_input.dart";
 import "package:agent_chat/ui/chat/widgets/browser_strip.dart";
+import "package:agent_chat/ui/chat/widgets/running_strip.dart";
 
 import "../fakes.dart";
 import "../harness.dart" show clipboard;
@@ -146,11 +149,22 @@ void main() {
         agentBrowserProvider.overrideWithValue(browser),
         isMirroredChatProvider("chat-1").overrideWithValue(mirrored),
       ],
-      child: const MaterialApp(
+      child: MaterialApp(
         home: Scaffold(
           body: Column(children: [
-            BrowserPrompts(chatId: "chat-1"),
-            BrowserPill(chatId: "chat-1"),
+            const BrowserPrompts(chatId: "chat-1"),
+            RunningStrip(
+              view: ChatViewState(
+                chat: Chat(
+                  state: ChatState(
+                    id: "chat-1",
+                    title: "t",
+                    createdAt: DateTime.utc(2026),
+                    updatedAt: DateTime.utc(2026),
+                  ),
+                ),
+              ),
+            ),
           ]),
         ),
       ),

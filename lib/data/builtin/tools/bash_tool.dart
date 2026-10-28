@@ -2,7 +2,7 @@ import "../../../domain/agent_backend.dart";
 import "../../../domain/safe_command.dart" show readsOnly;
 import "../../../domain/shell.dart";
 import "../../../domain/shell_command_analysis.dart";
-import "../../../domain/shell_job.dart" show backgroundLog, backgroundStarted;
+import "../../../domain/shell_job.dart" show backgroundLog;
 import "../../../domain/tool_arg.dart";
 import "../approval_gate.dart";
 import "../background_jobs.dart";
@@ -240,7 +240,8 @@ class BashTool extends AgentTool {
             "`kill -- -$pid` stops it and everything it started.";
     return ShellResult(
         returnCode: 0,
-        output: "$backgroundStarted ${job.id}.$stop Its output "
+        jobId: job.id,
+        output: "Started in the background as job ${job.id}.$stop Its output "
             "goes to $log in the chat workspace$where: read it with `tail` or "
             "the read tool at chat:$log. Your next call after it exits says "
             "how it ended.");

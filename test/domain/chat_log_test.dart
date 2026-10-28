@@ -412,10 +412,10 @@ void main() {
       const ChatRecord.append(messageId: "m1", index: 0, text: " more"),
       ChatRecord.turnEnd(messageId: "m1", reason: TurnEnd.aborted),
       ChatRecord.rewind(messageId: "m1"),
-      ChatRecord.jobEnd(
+      const ChatRecord.callEvent(
           callId: "c1",
-          end: JobEnd(
-              jobId: 1, exitCode: 2, endedAt: at, tail: "boom", log: ".entoli-jobs/c1.log")),
+          kind: jobEndedEvent,
+          data: {"jobId": 1, "exitCode": 2, "tail": "boom"}),
     ];
 
     final back = records
@@ -426,19 +426,34 @@ void main() {
     expect(back, records);
   });
 
-  test("a job's end lands on the chat by the call that started it, "
-      "the last written winning", () {
-    JobEnd end(int? code) =>
-        JobEnd(jobId: 1, exitCode: code, endedAt: at, tail: "", log: "l");
+  test("a call's event lands on the chat by the call, the last of a kind "
+      "winning", () {
+    JobEnd end(int? code) => JobEnd(jobId: 1, exitCode: code, tail: "");
+    ChatRecord ended(int? code) => ChatRecord.callEvent(
+        callId: "c1", kind: jobEndedEvent, data: end(code).toJson());
     final chat = chatFrom(state(), [
       message("m1"),
-      ChatRecord.jobEnd(callId: "c1", end: end(null)),
-      ChatRecord.jobEnd(callId: "c1", end: end(0)),
+      ended(null),
+      ended(0),
       // A job can end after a rewind took its call away: kept, and harmless.
       ChatRecord.rewind(messageId: "m1"),
     ]);
     expect(chat.messages, isEmpty);
-    expect(chat.jobEnds, {"c1": end(0)});
+    expect(chat.jobEndOf("c1"), end(0));
+    expect(chat.jobEndOf("c2"), isNull);
+  });
+
+  test("a kind of call event this build does not know is kept, and the log "
+      "reads on past it", () {
+    final records = decodeLog([
+      jsonEncode(message("m1").toJson()),
+      jsonEncode(const ChatRecord.callEvent(
+          callId: "c1", kind: "fromTheFuture", data: {"x": 1}).toJson()),
+      jsonEncode(part("m1", 0, "after").toJson()),
+    ].join("\n"));
+    final chat = chatFrom(state(), records);
+    expect(chat.messages.single.parts.single, const MessagePart.text(text: "after"));
+    expect(chat.callEvents["c1"], {"fromTheFuture": {"x": 1}});
   });
 
   test("recordsOf writes a chat out as the log it would have", () {

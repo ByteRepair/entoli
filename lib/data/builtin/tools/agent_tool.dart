@@ -293,6 +293,7 @@ ToolResult toolRan(LlmToolCall call, ShellResult result, {Decision? decision}) =
       output: result.output,
       exceptionInfo: result.exceptionInfo,
       cwd: result.cwd,
+      jobId: result.jobId,
       decidedBy: decision?.source,
       decidedTier: decision?.tiers ?? const [],
       decided: decision?.decided,

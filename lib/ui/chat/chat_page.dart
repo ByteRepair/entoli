@@ -1037,7 +1037,6 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
       bottom: ref.watch(setupCompleteProvider(chat.state.project))
           ? _turnBar(
               view: view,
-              source: chatControllerProvider(widget.chatId),
               driver: notifier,
               project: chat.state.project,
               onVoice: ref.watch(voiceProvider).available
@@ -1091,7 +1090,6 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
       bottom: online
           ? _turnBar(
               view: view,
-              source: mirrorChatControllerProvider(widget.chatId),
               driver: driver,
               project: chat.state.project,
               device: deviceId,
@@ -1199,7 +1197,6 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
   /// beside it, what the bar's fallback words in the guest's vocabulary.
   Widget _turnBar({
     required ChatViewState view,
-    required ProviderListenable<ChatViewState> source,
     required TurnDriver driver,
     required String? project,
     String? device,
@@ -1233,7 +1230,6 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
           TurnSurface(
             view: view,
             notifier: driver,
-            source: source,
             onWithdrawn: (said) => _composer.currentState?.restore(said),
           ),
           switch (view.roomPhase) {

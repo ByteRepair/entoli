@@ -52,7 +52,7 @@ named in a cross-reference is findable from this list.
 - `lib/domain/room/AGENTS.md` — The room and its participants, The contract
   between direct and Omada chats, When a turn is over, Automatic retry rounds
 - `lib/ui/chat/AGENTS.md` — What the turn's extraction kept, Thinking and tool runs,
-  Background jobs, on screen, The agent's browser, on screen,
+  What is running, on screen, The agent's browser, on screen,
   Selecting a reply, and copying it, How a reply is set, Code blocks, A command
   the user ran, Tools, on screen, The plan, on screen, A chat whose home device is elsewhere, The chat page
 - `lib/data/voice/AGENTS.md` — Voice mode, What listens and what speaks, The

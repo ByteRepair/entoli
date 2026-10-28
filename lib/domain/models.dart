@@ -247,14 +247,32 @@ abstract class Chat with _$Chat {
     /// messages under it.
     @Default([]) List<ConversationCompaction> compactions,
 
-
-    /// How each background job the chat started ended, by the call that
-    /// started it. Derived by `replayTree` from the records; a job with no
-    /// entry is running, or ended with the app.
-    @Default({}) Map<String, JobEnd> jobEnds,
+    /// What happened to each call after its turn, by the call's id and then
+    /// the event's kind, the last of a kind standing. Derived by `replayTree`
+    /// from `callEvent` records, every kind kept whether this build reads it
+    /// or not; the typed reading is [CallEvents].
+    @Default({}) Map<String, Map<String, Map<String, dynamic>>> callEvents,
   }) = _Chat;
 
   factory Chat.fromJson(Map<String, dynamic> json) => _$ChatFromJson(json);
+}
+
+/// The `callEvent` kind saying a background job ended, its data a [JobEnd].
+const jobEndedEvent = "jobEnded";
+
+/// The call events this build reads, typed.
+extension CallEvents on Chat {
+  /// How the background job [callId] started ended, where the log says.
+  JobEnd? jobEndOf(String callId) {
+    final data = callEvents[callId]?[jobEndedEvent];
+    if (data == null) return null;
+    try {
+      return JobEnd.fromJson(data);
+    } on Object {
+      // Written by a build whose JobEnd had another shape: no end to show.
+      return null;
+    }
+  }
 }
 
 /// How a background job ended, as the chat keeps it: the job's log lives in
@@ -267,13 +285,9 @@ abstract class JobEnd with _$JobEnd {
 
     /// Null where it was stopped rather than exiting.
     int? exitCode,
-    required DateTime endedAt,
 
     /// The last lines of its log; see `jobTail`.
     required String tail,
-
-    /// The log, relative to the chat workspace.
-    required String log,
   }) = _JobEnd;
 
   factory JobEnd.fromJson(Map<String, dynamic> json) => _$JobEndFromJson(json);
@@ -558,6 +572,9 @@ abstract class ToolResult with _$ToolResult {
     required String output,
     String? exceptionInfo,
     String? cwd,
+    /// The background job the call started: a fact rather than the wording
+    /// of [output], which is the model's to read.
+    int? jobId,
     @Default([]) List<String> violations,
     /// What happened since the last call that the model should hear — a
     /// background job ending — beside the result rather than inside

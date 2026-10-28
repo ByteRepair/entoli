@@ -14,19 +14,11 @@ import "../../../domain/ask.dart";
 import "../../../domain/file_tools.dart";
 import "../../../domain/models.dart";
 import "../../../domain/room/room_state.dart" show ChatViewState;
-import "../../../domain/shell.dart" show bashToolName;
 import "../../../domain/tool_arg.dart";
 import "../../../providers.dart";
-import "../../../domain/shell_job.dart";
-import "../../workspace/text_viewer_page.dart";
-import "../chat_controller.dart" show chatControllerProvider;
-import "../mirror_controller.dart" show mirrorChatControllerProvider;
-import "../sub_agent_transcript.dart" show subAgentLiveProvider;
-import "running_strip.dart" show JobSheet;
 import "code_block.dart" show codeBlockDecoration, codeBlockStyle;
 import "message_bubble.dart" show MessageBubble, StreamingCaret;
 import "shell_run.dart" show ShellCommandText;
-import "../../../domain/web_search.dart" show websearchToolName;
 
 /// What the model did before it answered, on a line of its own above the
 /// reply: thinking, and tool runs. Frameless, so it reads as a label until it
@@ -62,7 +54,6 @@ class ThinkingLabel extends StatelessWidget {
     final live = now.running && part.durationMs == null;
     return (
       title: live ? "Thinking…" : "Thinking",
-      status: null,
       sections: [(label: null, body: part.text, isError: false)],
       live: live,
     );
@@ -149,107 +140,206 @@ class _ThoughtTail extends StatelessWidget {
   }
 }
 
-class ToolLabel extends StatelessWidget {
-  const ToolLabel({super.key, this.call, this.result, this.running = false})
-      : assert(call != null || result != null);
+/// One tool run, as its [RunView] is built from it: the call, its result once
+/// there is one, and how much of the turn around it is still going.
+class Run {
+  const Run({
+    required this.chatId,
+    required this.callId,
+    this.call,
+    this.result,
+    this.printing,
+    this.live = false,
+    this.current = false,
+    this.card = false,
+  });
 
+  final String chatId;
+  final String callId;
+
+  /// Null where the call is not to hand: a result whose call is gone, or a
+  /// running pill opening a drawer from what the room has.
   final ToolCall? call;
 
   /// Null while the tool is still running.
   final ToolResult? result;
 
-  /// Whether this label is for the tool the turn is currently running. Only
-  /// true for the live label of a waiting turn that has already said something
-  /// — the spinner below the message handles the no-text-yet case.
-  final bool running;
+  /// What a running command has printed so far, standing in for the output
+  /// it has not returned yet.
+  final String? printing;
 
-  bool get _failed =>
-      (result?.returnCode ?? 0) != 0 ||
-      (result?.violations.isNotEmpty ?? false);
+  /// A drawer following a turn that is still running this call.
+  final bool live;
+
+  /// The live label of a waiting turn that has already said something — the
+  /// spinner below the message handles the no-text-yet case.
+  final bool current;
+
+  /// Built for the drawer rather than the label: what only the drawer shows,
+  /// a transcript or a log, is watched for it alone, since a label is rebuilt
+  /// for every call in every visible reply.
+  final bool card;
+}
+
+/// A tool run on screen: the one-line label in the reply and the drawer
+/// behind it, as the run stands now. A tool's `ToolUI.view` builds it, and
+/// [RunLabel] and the drawer [showRunCard] opens draw it, so how a tool's run
+/// looks is that one function.
+class RunView {
+  const RunView({
+    required this.icon,
+    required this.label,
+    required this.title,
+    this.isError = false,
+    this.busy = false,
+    this.command,
+    this.status,
+    this.sections = const [],
+    this.actions = const [],
+    this.mono = false,
+    this.live = false,
+    this.below,
+  });
+
+  /// The tool's; a failed run's label says so with its own.
+  final IconData icon;
+  final String label;
+  final String title;
+  final bool isError;
+
+  /// The label spins rather than showing [icon].
+  final bool busy;
+
+  /// Set apart under the title the way a `!` message is.
+  final String? command;
+  final ActivityStatus? status;
+  final List<ActivitySection> sections;
+
+  /// Beside the drawer's close button.
+  final List<Widget> actions;
+  final bool mono;
+
+  /// The drawer keeps to the end of what is arriving.
+  final bool live;
+  final Widget? below;
+}
+
+/// A tool's view of a run, watching through [WidgetRef] whatever it reads
+/// beyond the run itself.
+typedef RunViewOf = RunView Function(WidgetRef ref, Run run);
+
+/// A tool run's label in the reply, drawn from [view].
+class RunLabel extends ConsumerWidget {
+  const RunLabel({super.key, required this.view, required this.run});
+
+  final RunViewOf view;
+  final Run run;
 
   @override
-  Widget build(BuildContext context) {
-    final name = call?.name;
-    final showSpinner = running && result == null;
-    final verb = result == null ? "Using tool" : "Used tool";
-    final outcome = result?.permissionOutcome;
+  Widget build(BuildContext context, WidgetRef ref) {
+    final now = view(ref, run);
     return _Label(
-      icon: _failed ? Icons.error_outline : Icons.terminal,
-      text: name == null
-          ? verb
-          : outcome == null
-              ? "$verb: $name"
-              : "$verb: $name — $outcome",
-      isError: _failed,
-      // A running tool gets a spinner instead of a static icon, so the turn
-      // shows it is busy even after the model has said something. The spinner
-      // below the message handles the no-text-yet case, so this only shows
-      // where that one doesn't.
-      iconWidget: showSpinner
-          ? Padding(
-              padding: const EdgeInsets.all(1),
-              child: CircularProgressIndicator(
-                strokeWidth: 2,
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
-              ),
-            )
-          : null,
-      onTap: () => showActivitySheet(
-        context,
-        title: name ?? "Tool",
-        icon: Icons.terminal,
-        mono: true,
-        command: _command(call),
-        status: _status(call, result),
-        sections: _sections(call, result, null),
-        follow: (now, _) {
-          final run = _runIn(now.message, call?.id ?? result!.callId);
-          if (run == null) return null;
-          final live = now.running && run.result == null;
-          return (
-            title: null,
-            status: _status(run.call ?? call, run.result),
-            sections: _sections(run.call ?? call, run.result, live ? now.shellOutput : null),
-            live: live,
-          );
-        },
-      ),
+      icon: now.isError ? Icons.error_outline : now.icon,
+      text: now.label,
+      isError: now.isError,
+      iconWidget: now.busy ? _labelSpinner(context) : null,
+      onTap: () => showRunCard(context, view: view, run: run),
     );
   }
+}
 
-  /// A `bash` call's command, set apart the way a `!` message is.
-  static String? _command(ToolCall? call) => call?.name == bashToolName
-      ? stringArg(call?.argumentsJson, "command")
-      : null;
+/// Opens [run]'s drawer, drawn from [view]. It follows the run's message
+/// through [source], or the [ActivitySource] above [context]; with neither it
+/// shows the run as it was opened.
+Future<void> showRunCard(
+  BuildContext context, {
+  required RunViewOf view,
+  required Run run,
+  ProviderListenable<LiveMessage>? source,
+}) {
+  final from = source ?? ActivitySource.of(context);
+  return showActivityCard<void>(
+      context, (_) => _RunCard(view: view, run: run, source: from));
+}
 
-  static ActivityStatus? _status(ToolCall? call, ToolResult? result) {
-    if (call?.name != bashToolName) return null;
-    if (result == null) return (text: "Running", isError: false);
-    return (text: "Exit code ${result.returnCode}", isError: result.returnCode != 0);
+class _RunCard extends ConsumerWidget {
+  const _RunCard({required this.view, required this.run, required this.source});
+
+  final RunViewOf view;
+  final Run run;
+  final ProviderListenable<LiveMessage>? source;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    var now = Run(
+        chatId: run.chatId,
+        callId: run.callId,
+        call: run.call,
+        result: run.result,
+        card: true);
+    final from = source;
+    if (from != null) {
+      final message = ref.watch(from);
+      final found = _runIn(message.message, run.callId);
+      if (found != null) {
+        final going = message.running && found.result == null;
+        now = Run(
+          chatId: run.chatId,
+          callId: run.callId,
+          call: found.call ?? run.call,
+          result: found.result,
+          printing: going ? message.shellOutput : null,
+          live: going,
+          card: true,
+        );
+      }
+    }
+    final shown = view(ref, now);
+    return ActivityCard(
+      title: shown.title,
+      icon: shown.icon,
+      command: shown.command,
+      status: shown.status,
+      actions: shown.actions,
+      sections: shown.sections,
+      mono: shown.mono,
+      live: shown.live,
+      below: shown.below,
+    );
   }
+}
 
-  static List<ActivitySection> _sections(
-      ToolCall? call, ToolResult? result, String? printing) {
-    final run = _runSections(call, result, printing: printing);
-    final command = _command(call);
-    return [
-      // The command is drawn above; what is left of the arguments, if any.
-      if (command != null) ...[
-        (label: "Arguments", body: _argsBesides(call, "command"), isError: false),
-        ...run.skip(1),
-      ] else
-        ...run,
+/// A tool run as any tool's is drawn: its name, and the arguments and output
+/// behind it. [commandArg] names the argument set apart as the command the
+/// call ran, and [status] is the line under the drawer's title.
+RunView toolRunView(Run run, {String? commandArg, ActivityStatus? status}) {
+  final call = run.call;
+  final result = run.result;
+  final name = call?.name;
+  final failed = (result?.returnCode ?? 0) != 0 ||
+      (result?.violations.isNotEmpty ?? false);
+  final verb = result == null ? "Using tool" : "Used tool";
+  final outcome = result?.permissionOutcome;
+  return RunView(
+    icon: Icons.terminal,
+    label: name == null
+        ? verb
+        : outcome == null
+            ? "$verb: $name"
+            : "$verb: $name — $outcome",
+    isError: failed,
+    busy: run.current && result == null,
+    title: name ?? "Tool",
+    command: commandArg == null ? null : stringArg(call?.argumentsJson, commandArg),
+    status: status,
+    mono: true,
+    live: run.live,
+    sections: [
+      ..._runSections(call, result, printing: run.printing, besides: commandArg),
       if (result != null && result.violations.isNotEmpty)
         (label: "Sandbox", body: result.violations.join("\n"), isError: true),
-    ];
-  }
-
-  static String? _argsBesides(ToolCall? call, String key) {
-    final args = decodeArgs(call?.argumentsJson);
-    if (args == null) return null;
-    final rest = {...args}..remove(key);
-    return rest.isEmpty ? null : jsonEncode(rest);
-  }
+    ],
+  );
 }
 
 /// The call [id] names in [message], if it has been written there yet.
@@ -274,8 +364,10 @@ ToolCall? toolCallIn(Message? message, String id) => _runIn(message, id)?.call;
 /// and the instructions block — the model's reading, not the file's — lives
 /// in its own record's drawer instead. Cut at the last occurrence, since the
 /// block is appended at the tail. [printing] is what a running command has
-/// printed so far, standing in for the output it has not returned yet.
-List<ActivitySection> _runSections(ToolCall? call, ToolResult? result, {String? printing}) {
+/// printed so far, standing in for the output it has not returned yet. The
+/// argument named [besides] is drawn above as the command, and left out here.
+List<ActivitySection> _runSections(ToolCall? call, ToolResult? result,
+    {String? printing, String? besides}) {
   final output = result?.output;
   String? shown = output ?? printing;
   if (output != null) {
@@ -283,11 +375,21 @@ List<ActivitySection> _runSections(ToolCall? call, ToolResult? result, {String? 
     if (at >= 0) shown = output.substring(0, at).trimRight();
   }
   return [
-    (label: "Arguments", body: call?.argumentsText ?? call?.argumentsJson, isError: false),
+    (label: "Arguments", body: _argsBesides(call, besides), isError: false),
     (label: "Output", body: shown, isError: false),
     (label: "Error", body: result?.exceptionInfo, isError: true),
     (label: "Outcome", body: result?.permissionOutcome, isError: false),
   ];
+}
+
+/// The call's arguments, less [key] where the drawer set that one apart.
+String? _argsBesides(ToolCall? call, String? key) {
+  final args = key == null ? null : decodeArgs(call?.argumentsJson);
+  if (args == null || !args.containsKey(key)) {
+    return call?.argumentsText ?? call?.argumentsJson;
+  }
+  final rest = {...args}..remove(key);
+  return rest.isEmpty ? null : jsonEncode(rest);
 }
 
 /// The instruction files a turn was the first to read into the model's
@@ -394,7 +496,7 @@ extension on ToolResult {
 /// where the change is small enough to read at a glance. The before/after
 /// comes from the call alone — the arguments carry it — so this draws from
 /// what conv.jsonl already holds and nothing is captured at execution time.
-/// Past the budget it declines (null), leaving the ordinary [ToolLabel].
+/// Past the budget it declines (null), leaving the ordinary [RunLabel].
 class DiffTextLabel extends StatelessWidget {
   static const budget = 20;
 
@@ -520,8 +622,9 @@ extension on List<String> {
 /// asked it is gone by then, so this reads the question back out of the call
 /// and the answer out of the result that closed it.
 class AskLabel extends StatefulWidget {
-  const AskLabel({super.key, required this.call, this.result});
+  const AskLabel({super.key, required this.chatId, required this.call, this.result});
 
+  final String chatId;
   final ToolCall call;
 
   /// Null while the panel is still on screen.
@@ -563,7 +666,13 @@ class _AskLabelState extends State<AskLabel> {
     // wrong and was told so, which is an ordinary failed tool run and carries
     // the reason a question label would drop.
     if (_questions.isEmpty) {
-      return ToolLabel(call: widget.call, result: widget.result);
+      return RunLabel(
+          view: (_, run) => toolRunView(run),
+          run: Run(
+              chatId: widget.chatId,
+              callId: widget.call.id,
+              call: widget.call,
+              result: widget.result));
     }
     return _Label(
       icon: Icons.help_outline,
@@ -659,271 +768,6 @@ class ApprovalLabel extends StatelessWidget {
   }
 }
 
-/// A `task` call: the sub-agent that ran, and behind the drawer its own
-/// transcript as it is written — the same labels a reply has — with the text
-/// it returned standing in where there is no transcript to show. Reads the
-/// agent name and prompt out of the call's arguments.
-class TaskLabel extends StatelessWidget {
-  const TaskLabel({super.key, required this.chatId, required this.call, this.result});
-
-  /// Whose `subagents/` the transcript is under.
-  final String chatId;
-
-  final ToolCall call;
-
-  /// Null while the sub-agent is still running.
-  final ToolResult? result;
-
-  @override
-  Widget build(BuildContext context) {
-    final agent = stringArg(call.argumentsJson, "agent") ?? "task";
-    final prompt = stringArg(call.argumentsJson, "prompt") ?? "";
-    final failed = (result?.returnCode ?? 0) != 0;
-    return _Label(
-      icon: failed ? Icons.error_outline : Icons.account_tree_outlined,
-      text: result == null
-          ? "Running sub-agent @$agent"
-          : "Sub-agent @$agent ${failed ? "failed" : "finished"}",
-      isError: failed,
-      onTap: () => showTaskSheet(context,
-          chatId: chatId,
-          callId: call.id,
-          agent: agent,
-          prompt: prompt,
-          result: result),
-    );
-  }
-}
-
-/// A sub-agent's drawer: its prompt, and its transcript as it is written,
-/// with the text it returned standing in where there is no transcript.
-/// Follows the run where [context] has an [ActivitySource] holding its call.
-Future<void> showTaskSheet(
-  BuildContext context, {
-  required String chatId,
-  required String callId,
-  required String agent,
-  required String prompt,
-  ToolResult? result,
-}) {
-  final sub = (chatId: chatId, callId: callId);
-  return showActivitySheet(
-    context,
-    title: "Sub-agent @$agent",
-    icon: Icons.account_tree_outlined,
-    sections: _taskSections(prompt, result, transcript: false),
-    follow: (now, ref) {
-      final run = _runIn(now.message, callId);
-      if (run == null) return null;
-      final transcript = ref.watch(subAgentLiveProvider(sub)).message;
-      return (
-        title: null,
-        status: null,
-        sections: _taskSections(prompt, run.result,
-            transcript: transcript?.parts.isNotEmpty ?? false),
-        live: now.running && run.result == null,
-      );
-    },
-    below: (ref) {
-      final live = ref.watch(subAgentLiveProvider(sub));
-      final message = live.message;
-      if (message == null || message.parts.isEmpty) return null;
-      return Padding(
-        padding: const EdgeInsets.only(top: 12),
-        // Its own source, so a label in the transcript opens a drawer
-        // that follows the sub-agent rather than the parent's reply.
-        child: ActivitySource(
-          live: subAgentLiveProvider(sub),
-          child: MessageBubble(
-            chatId: chatId,
-            message: message,
-            isWaiting: live.running,
-          ),
-        ),
-      );
-    },
-  );
-}
-
-/// The Output is the transcript's text joined, so it is left out where the
-/// transcript is drawn.
-List<ActivitySection> _taskSections(String prompt, ToolResult? result,
-        {required bool transcript}) =>
-    [
-      (label: "Prompt", body: prompt, isError: false),
-      if (!transcript) (label: "Output", body: result?.output, isError: false),
-      (label: "Error", body: result?.exceptionInfo, isError: true),
-    ];
-
-/// A `bash` call that started a background job: the job's state rather than
-/// the call's, since the call was over the moment the job started. Its drawer
-/// is the job's — the log as it grows while it runs, then what the chat kept
-/// of it and a way to the whole log while that is still in the workspace.
-class JobLabel extends ConsumerWidget {
-  const JobLabel({super.key, required this.chatId, required this.call});
-
-  final String chatId;
-  final ToolCall call;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final mirrored = ref.watch(isMirroredChatProvider(chatId));
-    final ProviderListenable<ChatViewState> chat = mirrored
-        ? mirrorChatControllerProvider(chatId)
-        : chatControllerProvider(chatId);
-    final end = ref.watch(chat.select((v) => v.chat?.jobEnds[call.id]));
-    final command = stringArg(call.argumentsJson, "command") ?? "";
-    final line = firstLine(command);
-    // A mirror's jobs are the other device's, and only their ends reach it.
-    final jobs = mirrored ? null : ref.watch(agentBackendProvider).jobsOf(chatId);
-
-    Widget ended() {
-      final status = jobStatus(end, mirrored: mirrored);
-      return _Label(
-        icon: status.isError ? Icons.error_outline : Icons.terminal,
-        text: "Background job ${status.text.toLowerCase()}: $line",
-        isError: status.isError,
-        onTap: () => showActivityCard<void>(
-          context,
-          (_) => ActivityCard(
-            title: end == null ? "Background job" : "Background job ${end.jobId}",
-            icon: Icons.terminal,
-            command: command,
-            status: status,
-            mono: true,
-            actions: [
-              if (!mirrored)
-                _OpenLog(
-                  path: ref.read(appConfigProvider).fs.path.join(
-                      ref.read(appConfigProvider).workspaceDir(chatId,
-                          project: ref.read(chat).chat?.state.project),
-                      end?.log ?? backgroundLog(call.id)),
-                ),
-            ],
-            sections: [
-              (label: "Output", body: end?.tail, isError: false),
-            ],
-          ),
-        ),
-      );
-    }
-
-    if (end != null || jobs == null) return ended();
-    return ValueListenableBuilder<List<ShellJob>>(
-      valueListenable: jobs.jobs,
-      builder: (context, list, _) {
-        final job = list.where((j) => j.callId == call.id).firstOrNull;
-        if (job == null) return ended();
-        return _Label(
-          icon: Icons.terminal,
-          text: "Running in the background: $line",
-          iconWidget: Padding(
-            padding: const EdgeInsets.all(1),
-            child: CircularProgressIndicator(
-              strokeWidth: 2,
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
-            ),
-          ),
-          onTap: () =>
-              showActivityCard<void>(context, (_) => JobSheet(jobs: jobs, job: job)),
-        );
-      },
-    );
-  }
-}
-
-/// How a job ended, for a card's status line. No [end] is a job that ended
-/// with the app, or on a [mirrored] chat, one whose end has not reached it.
-ActivityStatus jobStatus(JobEnd? end, {bool mirrored = false}) {
-  if (end == null) {
-    return (text: mirrored ? "Not heard from" : "Ended with the app", isError: false);
-  }
-  final code = end.exitCode;
-  if (code == null) return (text: "Stopped", isError: false);
-  return (text: "Exited with code $code", isError: code != 0);
-}
-
-/// Opens a job's whole log in the file viewer, while the workspace still has
-/// it.
-class _OpenLog extends StatelessWidget {
-  const _OpenLog({required this.path});
-
-  final String path;
-
-  @override
-  Widget build(BuildContext context) {
-    final fs = ProviderScope.containerOf(context).read(appConfigProvider).fs;
-    return FutureBuilder<bool>(
-      future: fs.file(path).exists(),
-      builder: (context, there) {
-        final has = there.data ?? false;
-        final button = TextButton(
-          onPressed: !has
-              ? null
-              : () => Navigator.of(context).push(MaterialPageRoute<void>(
-                  builder: (_) =>
-                      TextViewerPage(path: path, name: fs.path.basename(path)))),
-          child: const Text("Open log"),
-        );
-        if (has || there.connectionState != ConnectionState.done) return button;
-        return Tooltip(
-            message: "The log is no longer in the workspace", child: button);
-      },
-    );
-  }
-}
-
-/// A `websearch` or `webfetch` call, once it is history: the query or URL
-/// read out of the call's arguments, and what came back behind the drawer.
-class WebLabel extends StatelessWidget {
-  const WebLabel({super.key, required this.call, this.result});
-
-  final ToolCall call;
-  final ToolResult? result;
-
-  @override
-  Widget build(BuildContext context) {
-    final search = call.name == websearchToolName;
-    final what = stringArg(call.argumentsJson, search ? "query" : "url") ?? "";
-    final failed = (result?.returnCode ?? 0) != 0;
-    final verb = search
-        ? (result == null ? "Searching" : "Searched")
-        : (result == null ? "Fetching" : "Fetched");
-    return _Label(
-      icon: failed
-          ? Icons.error_outline
-          : search
-              ? Icons.travel_explore_outlined
-              : Icons.language_outlined,
-      text: "$verb: $what",
-      isError: failed,
-      onTap: () => showActivitySheet(
-        context,
-        title: search ? "Web search" : "Web fetch",
-        icon: search ? Icons.travel_explore_outlined : Icons.language_outlined,
-        mono: true,
-        sections: _sections(search, what, result),
-        follow: (now, _) {
-          final run = _runIn(now.message, call.id);
-          if (run == null) return null;
-          return (
-            title: null,
-            status: null,
-            sections: _sections(search, what, run.result),
-            live: now.running && run.result == null,
-          );
-        },
-      ),
-    );
-  }
-
-  static List<ActivitySection> _sections(bool search, String what, ToolResult? result) => [
-        (label: search ? "Query" : "URL", body: what, isError: false),
-        (label: search ? "Results" : "Content", body: result?.output, isError: false),
-        (label: "Error", body: result?.exceptionInfo, isError: true),
-      ];
-}
-
 /// A run of consecutive non-important activity labels (thinking and tool runs
 /// that are not artifacts, not failed, not [AskLabel], and not the live label of
 /// a running turn), gathered by [MessageBubble._rows] and shown behind a single
@@ -971,7 +815,7 @@ class _ActivityGroupState extends State<ActivityGroup> {
 
 /// An `artifact` call, once it is history: a prominent card the user taps to
 /// open the page the model rendered. Output the user came for rather than
-/// background activity, so not a slim [ToolLabel]. The artifact's identity is
+/// background activity, so not a slim [RunLabel]. The artifact's identity is
 /// in the part, not the tool call, so this reads an [ArtifactPart].
 class ArtifactLabel extends ConsumerWidget {
   const ArtifactLabel({
@@ -1126,6 +970,15 @@ class _OutputCard extends StatelessWidget {
   }
 }
 
+/// The icon of a label whose run is still going.
+Widget _labelSpinner(BuildContext context) => Padding(
+      padding: const EdgeInsets.all(1),
+      child: CircularProgressIndicator(
+        strokeWidth: 2,
+        color: Theme.of(context).colorScheme.onSurfaceVariant,
+      ),
+    );
+
 class _Label extends StatelessWidget {
   const _Label({
     required this.icon,
@@ -1208,12 +1061,7 @@ LiveMessage liveMessageOf(ChatViewState view, String id) => (
 
 /// What an open drawer shows, re-read from the [LiveMessage] each time it
 /// changes. A null [title] keeps the one it opened with.
-typedef ActivityView = ({
-  String? title,
-  ActivityStatus? status,
-  List<ActivitySection> sections,
-  bool live,
-});
+typedef ActivityView = ({String? title, List<ActivitySection> sections, bool live});
 
 /// Where a label's drawer reads its message from once it is open. The label
 /// cannot be: it is rebuilt per delta, folded into a collapsed run when its
@@ -1262,8 +1110,6 @@ Future<void> showActivitySheet(
   required List<ActivitySection> sections,
   IconData? icon,
   bool mono = false,
-  String? command,
-  ActivityStatus? status,
   ActivityView? Function(LiveMessage now, WidgetRef ref)? follow,
   Widget? Function(WidgetRef ref)? below,
 }) {
@@ -1275,8 +1121,6 @@ Future<void> showActivitySheet(
       icon: icon,
       sections: sections,
       mono: mono,
-      command: command,
-      status: status,
       view: source == null || follow == null
           ? null
           : (ref) => follow(ref.watch(source), ref),
@@ -1291,8 +1135,6 @@ class _ActivitySheet extends ConsumerWidget {
     required this.icon,
     required this.sections,
     required this.mono,
-    required this.command,
-    required this.status,
     required this.view,
     this.below,
   });
@@ -1301,8 +1143,6 @@ class _ActivitySheet extends ConsumerWidget {
   final IconData? icon;
   final List<ActivitySection> sections;
   final bool mono;
-  final String? command;
-  final ActivityStatus? status;
   final Widget? Function(WidgetRef ref)? below;
 
   /// What the drawer shows now, watched through the ref it is handed. Null
@@ -1315,8 +1155,6 @@ class _ActivitySheet extends ConsumerWidget {
     return ActivityCard(
       title: now?.title ?? title,
       icon: icon,
-      command: command,
-      status: now == null ? status : now.status,
       sections: now?.sections ?? sections,
       mono: mono,
       live: now?.live ?? false,

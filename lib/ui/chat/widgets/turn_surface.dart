@@ -1,5 +1,4 @@
 import "package:flutter/material.dart";
-import "package:flutter_riverpod/misc.dart" show ProviderListenable;
 
 import "../../../domain/permission.dart" show addDirectoryName;
 import "../../../domain/models.dart";
@@ -27,17 +26,10 @@ import "steer_strip.dart";
 /// the circle above it — but how it is wired does not.
 class TurnSurface extends StatelessWidget {
   const TurnSurface(
-      {super.key,
-      required this.view,
-      required this.notifier,
-      this.source,
-      this.onWithdrawn});
+      {super.key, required this.view, required this.notifier, this.onWithdrawn});
 
   final ChatViewState view;
   final TurnDriver notifier;
-
-  /// Where [view] comes from, so a drawer opened here follows the turn.
-  final ProviderListenable<ChatViewState>? source;
 
   /// Where a say taken back from the turn goes: the composer it was typed in.
   /// Null where there is none, as on the voice screen.
@@ -59,7 +51,7 @@ class TurnSurface extends StatelessWidget {
             notice: view.unfinishedNotice,
           ),
         if (chat != null) BrowserPrompts(chatId: chat.state.id),
-        RunningStrip(view: view, source: source),
+        RunningStrip(view: view),
         SteerStrip(
           steering: view.steering,
           onQueue: notifier.queueSteer,

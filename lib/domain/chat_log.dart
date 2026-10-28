@@ -156,15 +156,19 @@ sealed class ChatRecord with _$ChatRecord {
     int? chatTokens,
   }) = CompactionRecord;
 
-  /// The background job [callId] started has ended. Written when it ends,
-  /// which is often between turns, through the room's one append queue; keyed
-  /// by the call rather than placed as a part, so it cannot collide with a
-  /// turn still writing the reply that holds the call. Never projected: the
-  /// model hears how a job ended through `ToolResult.notes`.
-  const factory ChatRecord.jobEnd({
+  /// Something that happened to the call [callId] after its turn — a
+  /// background job it started ending — named by [kind] and said by [data].
+  /// Written when it happens, which is often between turns, through the
+  /// room's one append queue; keyed by the call rather than placed as a part,
+  /// so it cannot collide with a turn still writing the reply that holds the
+  /// call. Replay keeps every kind, so a log a newer build wrote reads whole
+  /// here. Never projected: the model hears of a job's end through
+  /// `ToolResult.notes`.
+  const factory ChatRecord.callEvent({
     required String callId,
-    required JobEnd end,
-  }) = JobEndRecord;
+    required String kind,
+    @Default({}) Map<String, dynamic> data,
+  }) = CallEventRecord;
 
   factory ChatRecord.fromJson(Map<String, dynamic> json) => _$ChatRecordFromJson(json);
 }
@@ -176,7 +180,7 @@ class Replayed {
     required this.messages,
     required this.branches,
     this.compactions = const [],
-    this.jobEnds = const {},
+    this.callEvents = const {},
   });
 
   /// The thread being read, oldest message first.
@@ -192,8 +196,8 @@ class Replayed {
   /// here: a marker the projection could not apply is not one to draw.
   final List<ConversationCompaction> compactions;
 
-  /// See [Chat.jobEnds].
-  final Map<String, JobEnd> jobEnds;
+  /// See [Chat.callEvents].
+  final Map<String, Map<String, Map<String, dynamic>>> callEvents;
 }
 
 /// Fold a log into the conversation it describes, and the thread of it to show.
@@ -208,7 +212,7 @@ Replayed replayTree(Iterable<ChatRecord> records) {
   final children = <String?, List<String>>{};
   final shown = <String?, String>{};
   final compactions = <String, ConversationCompaction>{};
-  final jobEnds = <String, JobEnd>{};
+  final callEvents = <String, Map<String, Map<String, dynamic>>>{};
 
   /// The child of [of] the thread runs through: the one last selected, or
   /// failing that the newest, since a thread just written is the one to read.
@@ -324,8 +328,8 @@ Replayed replayTree(Iterable<ChatRecord> records) {
               chatTokens: chatTokens);
         }
 
-      case JobEndRecord(:final callId, :final end):
-        jobEnds[callId] = end;
+      case CallEventRecord(:final callId, :final kind, :final data):
+        (callEvents[callId] ??= {})[kind] = data;
     }
   }
 
@@ -348,7 +352,7 @@ Replayed replayTree(Iterable<ChatRecord> records) {
       messages: messages,
       branches: branches,
       compactions: liveCompactions,
-      jobEnds: jobEnds);
+      callEvents: callEvents);
 }
 
 /// The thread a log describes. [replayTree] for the branches beside it.
@@ -365,7 +369,7 @@ Chat chatFrom(ChatState state, List<ChatRecord> records) {
     branches: replayed.branches,
     unfinished: endsUnfinished(replayed.messages, records),
     compactions: replayed.compactions,
-    jobEnds: replayed.jobEnds,
+    callEvents: replayed.callEvents,
   );
 }
 

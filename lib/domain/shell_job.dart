@@ -28,7 +28,49 @@ class ShellJob {
   final int? pid;
 }
 
-/// One chat's running background jobs, as the chat page reaches them.
+/// Where one job is, read by the call that started it: running, ended with
+/// what the chat kept of it, or lost — it ended with the app, or on a mirror,
+/// its end has not arrived. See `ChatViewState.jobOf`.
+sealed class JobState {
+  const JobState();
+}
+
+final class JobRunning extends JobState {
+  const JobRunning(this.job);
+
+  final ShellJob job;
+
+  @override
+  bool operator ==(Object other) =>
+      other is JobRunning && identical(other.job, job);
+
+  @override
+  int get hashCode => job.hashCode;
+}
+
+final class JobEnded extends JobState {
+  const JobEnded(this.end);
+
+  final JobEnd end;
+
+  @override
+  bool operator ==(Object other) => other is JobEnded && other.end == end;
+
+  @override
+  int get hashCode => end.hashCode;
+}
+
+final class JobLost extends JobState {
+  const JobLost();
+
+  @override
+  bool operator ==(Object other) => other is JobLost;
+
+  @override
+  int get hashCode => 0;
+}
+
+/// One chat's running background jobs, as the room reaches them.
 abstract class ChatShellJobs {
   /// The jobs still running; one leaves the list when it ends.
   ValueListenable<List<ShellJob>> get jobs;
@@ -43,11 +85,6 @@ abstract class ChatShellJobs {
   Stream<({String callId, JobEnd end})> get ended;
 }
 
-/// How a `bash` call that started a job answers, ahead of the job's number:
-/// what tells a job's call from one asking for the background where the
-/// shell had none, and ran in the foreground.
-const backgroundStarted = "Started in the background as job";
-
 /// The log of the job [callId] started, relative to the chat workspace. Named
 /// by the call rather than the job's number, which starts again with the app,
 /// so a chat's label never opens another job's log.
@@ -59,17 +96,15 @@ String backgroundLog(String callId) =>
 String jobTail(String log, {int lines = 10, int maxBytes = 1024}) {
   final all = log.trimRight().split("\n");
   var tail = all.skip(all.length > lines ? all.length - lines : 0).join("\n");
-  if (utf8.encode(tail).length <= maxBytes) return tail;
-  // Back from the end a code point at a time, so the cut is never inside one.
-  var bytes = 0;
-  var start = tail.length;
-  for (final rune in tail.runes.toList().reversed) {
-    final size = utf8.encode(String.fromCharCode(rune)).length;
-    if (bytes + size > maxBytes - 3) break;
-    bytes += size;
-    start -= rune > 0xFFFF ? 2 : 1;
+  final bytes = utf8.encode(tail);
+  if (bytes.length <= maxBytes) return tail;
+  // "…" is three bytes; the cut moves past continuation bytes so it is never
+  // inside a character.
+  var start = bytes.length - (maxBytes - 3);
+  while ((bytes[start] & 0xC0) == 0x80) {
+    start++;
   }
-  return "…${tail.substring(start)}";
+  return "…${utf8.decode(bytes.sublist(start))}";
 }
 
 /// A command's first line, cut to [max].
