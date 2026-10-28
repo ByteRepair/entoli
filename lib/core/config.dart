@@ -22,6 +22,7 @@ const instructionBlockHeader = "Workspace instructions are shown below";
 /// Layout:
 ///   `<dataDir>/settings.json`
 ///   `<dataDir>/reminders.json`
+///   `<dataDir>/instruction_files.json`
 ///   `<dataDir>/projects/<project>/`
 ///     `project.json`
 ///     `chats/<chat-id>/` — state.json, conv.jsonl, meta.json, resources/,
@@ -29,7 +30,7 @@ const instructionBlockHeader = "Workspace instructions are shown below";
 ///     `workspace/`, holding `chats/<chat-id>/`
 ///     `agents/*.md`, `skills/<name>/`, `skills-bundled/<name>/`
 ///
-/// Every path but the first two is a project's, and every project is a
+/// Every path but the first three is a project's, and every project is a
 /// directory under `projects/` — the default one included, under the name
 /// `defaultProjectDir`. The default project holds the base skills and agents
 /// every other project inherits; another project's own `agents/` and `skills/`
@@ -249,6 +250,12 @@ class AppConfig {
   /// The project's instructions, at its workspace root, shared by its chats.
   String projectInstructionsFile({String? project}) =>
       fs.path.join(projectWorkspaceDir(project: project), instructionFileName);
+
+  /// The instruction files the user linked from elsewhere on this machine,
+  /// and which projects switched each off. Paths into this machine alone, so
+  /// a backup leaves it out and a restore leaves it in place.
+  String get linkedInstructionsFile =>
+      fs.path.join(dataDir, "instruction_files.json");
 
   /// Not the app's version: it names the release whose migration last ran here,
   /// and a release that leaves the layout alone leaves this where it was. See

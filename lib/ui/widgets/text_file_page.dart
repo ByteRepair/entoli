@@ -11,27 +11,37 @@ import "../fonts.dart";
 import "../../providers.dart";
 import "../chat/widgets/code_block.dart";
 import "../chat/widgets/reply_style.dart";
-import "../widgets/busy.dart";
-import "../widgets/dialogs.dart";
-import "../widgets/empty_pane.dart";
+import "busy.dart";
+import "dialogs.dart";
+import "empty_pane.dart";
 import "../../core/formatting.dart";
 
-/// A text file from a workspace, read rather than handed to another app — see
-/// AGENTS.md, "The workspace explorer".
-class TextViewerPage extends ConsumerStatefulWidget {
-  const TextViewerPage({super.key, required this.path, required this.name});
+/// A text file, read and edited in the app rather than handed to another —
+/// a workspace file, or an instruction file the user linked. See
+/// `lib/ui/workspace/AGENTS.md`, "The workspace explorer".
+class TextFilePage extends ConsumerStatefulWidget {
+  const TextFilePage({
+    super.key,
+    required this.path,
+    required this.name,
+    this.popsBinary = true,
+  });
 
   final String path;
 
-  /// What the app bar says. The explorer already has it, and the page would
+  /// What the app bar says. The caller already has it, and the page would
   /// otherwise take it apart from the path again.
   final String name;
 
+  /// Whether a file whose bytes are not text pops `true` for the caller to
+  /// hand off, rather than saying so here.
+  final bool popsBinary;
+
   @override
-  ConsumerState<TextViewerPage> createState() => _TextViewerPageState();
+  ConsumerState<TextFilePage> createState() => _TextFilePageState();
 }
 
-class _TextViewerPageState extends ConsumerState<TextViewerPage> {
+class _TextFilePageState extends ConsumerState<TextFilePage> {
   WorkspaceText? _content;
   Object? _error;
   final _busy = ValueNotifier(false);
@@ -74,7 +84,10 @@ class _TextViewerPageState extends ConsumerState<TextViewerPage> {
       // The name said text and the bytes disagree. Popping `true` puts the
       // hand-off back on the explorer, which is what stays on screen to say so
       // if it fails.
-      if (content == null) return Navigator.of(context).pop(true);
+      if (content == null) {
+        if (widget.popsBinary) return Navigator.of(context).pop(true);
+        return setState(() => _error = "It is not a text file.");
+      }
       if (content.truncated) return setState(() => _content = content);
       final controller = CodeLineEditingController.fromText(
         content.text,

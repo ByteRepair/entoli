@@ -87,8 +87,11 @@ Future<Uint8List> writeBackup(AppConfig config) async {
     [config.dataDir],
     base: config.dataDir,
     // The half of a rename that a kill landed in. Nothing reads one, and a
-    // restore that put it back would put back a torn write.
-    skip: (path) => path.endsWith(writingSuffix),
+    // restore that put it back would put back a torn write. The linked
+    // instruction files are paths on this machine, meaningless on another.
+    skip: (path) =>
+        path.endsWith(writingSuffix) ||
+        config.fs.path.equals(path, config.linkedInstructionsFile),
     // The top-level `sync/` holds private keys, and restoring it would unpair
     // this device. A project's `rootfs/` is re-fetchable and holds proot's
     // mode-0000 stubs the walker cannot list (see `tree_ops.dart`). Matched by
@@ -164,13 +167,16 @@ Future<void> restoreBackup(
   Future<void> clear(String path) async =>
       deleteTree != null ? deleteTree(path) : fs.directory(path).delete(recursive: true);
 
-  // Listed whole first: deleting out of a stream deletes what it walks.
+  // Listed whole first: deleting out of a stream deletes what it walks. The
+  // linked instruction files stay: they are this machine's, and the backup
+  // left them out.
   final top = await fs.directory(config.dataDir).list().toList();
   await Future.wait([
     for (final entity in top)
       if (entity is Directory)
         clear(entity.path)
-      else if (entity is File)
+      else if (entity is File &&
+          !fs.path.equals(entity.path, config.linkedInstructionsFile))
         entity.delete(),
   ]);
 

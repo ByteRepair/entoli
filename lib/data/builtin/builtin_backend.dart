@@ -29,6 +29,7 @@ import "../../domain/tool_arg.dart";
 import "../../domain/web_search.dart";
 import "../../domain/voice.dart" show Synthesize, Transcribe;
 import "../local/file_sub_agent_log.dart";
+import "../local/linked_instructions_store.dart";
 import "../prompts/prompt_sources.dart" show promptDirsOf;
 import "../prompts/skill_package.dart";
 import "background_jobs.dart";
@@ -355,14 +356,24 @@ class BuiltinBackend implements AgentBackend {
       // loads are not a queue.
       final bundled = settings.bundledInstructions;
       final readFiles = bundled == null || settings.includesUserInstructions;
+      Future<List<InstructionFile>> readInstructions() async {
+        final linked = await LinkedInstructionsStore(config).load();
+        final global = config.globalInstructionsFile;
+        return loadInstructions(
+          config.fs,
+          projectWorkspace: projectWorkspace,
+          global: linked.isOn(project, global) ? global : null,
+          linked: [
+            for (final path in linked.files)
+              if (linked.isOn(project, path)) path,
+          ],
+          imports: settings.memory.imports,
+          excludes: settings.memory.excludes,
+        );
+      }
+
       final instructionsF = readFiles
-          ? loadInstructions(
-              config.fs,
-              projectWorkspace: projectWorkspace,
-              global: config.globalInstructionsFile,
-              imports: settings.memory.imports,
-              excludes: settings.memory.excludes,
-            )
+          ? readInstructions()
           : Future.value(const <InstructionFile>[]);
       // The project's memory store, when the subsystem runs at all. Which
       // project's is on the settings; the dir is never built twice for a

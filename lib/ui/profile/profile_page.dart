@@ -1,3 +1,4 @@
+import "package:file_selector/file_selector.dart" show openFiles;
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
@@ -7,6 +8,8 @@ import "../../domain/profile.dart";
 import "../../domain/tone.dart";
 import "../../providers.dart";
 import "../widgets/resettable_field.dart";
+import "../widgets/text_file_page.dart";
+import "linked_instructions.dart";
 
 /// Edits what a turn knows about the user. With no [project] this is the
 /// app-level page, shown from the sidebar: the identity fields, which the
@@ -47,6 +50,17 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
   bool _loaded = false;
   bool _saving = false;
 
+  /// The linked instruction files, in reading order — the app page's list.
+  List<String> _linked = [];
+
+  /// Of the global AGENTS.md and [_linked], what this project switched off.
+  Set<String> _off = {};
+
+  /// Which of them are not on disk, said on the row rather than dropped from
+  /// it: a file on a drive not mounted yet is still meant to be there.
+  Set<String> _missing = {};
+  bool _hasGlobal = false;
+
   /// The app's resolved answers, read once for the project page's `Default`
   /// entries to name.
   Tone _appTone = Tone.none;
@@ -66,6 +80,15 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
       if (await file.exists()) _instructions.text = await file.readAsString();
     } catch (_) {
       // A file that will not read is shown as empty; saving overwrites it.
+    }
+    if (linksInstructionFiles) {
+      final linked = await ref.read(linkedInstructionsStoreProvider).load();
+      _linked = [...linked.files];
+      if (widget.project != null) {
+        _off = {...?linked.off[widget.project]};
+        _hasGlobal = await config.fs.file(config.globalInstructionsFile).exists();
+      }
+      _missing = await _missingOf(_linked);
     }
     if (widget.project == null) {
       final settings = ref.read(appSettingsProvider);
@@ -94,6 +117,54 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
           ? config.globalInstructionsFile
           : config.projectInstructionsFile(project: widget.project);
 
+  Future<Set<String>> _missingOf(List<String> paths) async {
+    final fs = ref.read(appConfigProvider).fs;
+    return {
+      for (final path in paths)
+        if (!await fs.file(path).exists()) path,
+    };
+  }
+
+  String _nameOf(String path) => ref.read(appConfigProvider).fs.path.basename(path);
+
+  Future<void> _openFile(String path, {String? name}) async {
+    await Navigator.of(context).push(MaterialPageRoute<void>(
+      builder: (_) => TextFilePage(
+          path: path, name: name ?? _nameOf(path), popsBinary: false),
+    ));
+  }
+
+  Future<void> _addFiles() async {
+    final picked = await openFiles(confirmButtonText: "Add");
+    final config = ref.read(appConfigProvider);
+    final added = [
+      for (final file in picked)
+        if (!_linked.contains(file.path) &&
+            !config.fs.path.equals(file.path, config.globalInstructionsFile))
+          file.path,
+    ];
+    if (added.isEmpty || !mounted) return;
+    setState(() => _linked = [..._linked, ...added]);
+  }
+
+  void _reorder(int from, int to) => setState(() {
+        final path = _linked.removeAt(from);
+        _linked.insert(to, path);
+      });
+
+  Future<void> _saveLinked(AppConfig config) {
+    final store = ref.read(linkedInstructionsStoreProvider);
+    final project = widget.project;
+    final global = config.globalInstructionsFile;
+    if (project == null) {
+      return store.update((l) => l.withFiles(_linked, keep: global));
+    }
+    // Only what is still a row: a switch for a file unlinked since the page
+    // opened would be a switch for nothing.
+    return store.update((l) => l.withOff(
+        project, _off.where((p) => p == global || l.files.contains(p))));
+  }
+
   Profile _profile() => Profile(
         name: _blank(_name.text),
         dateOfBirth: _blank(_dob.text),
@@ -107,6 +178,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
     setState(() => _saving = true);
     final config = ref.read(appConfigProvider);
     await _writeInstructions(config, _instructionsPath(config), _instructions.text);
+    if (linksInstructionFiles) await _saveLinked(config);
     if (widget.project == null) {
       final profile = _profile();
       // One write of settings.json: three separate setters would be three
@@ -149,6 +221,11 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
     _religion.clear();
     _profession.clear();
     setState(() {
+      if (widget.project == null) {
+        _linked = [];
+      } else {
+        _off = {};
+      }
       _dobValue = null;
       _tone = widget.project == null ? Tone.none : null;
       _citations = widget.project == null ? false : null;
@@ -168,6 +245,55 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
       _dobValue = picked;
       _dob.text = _formatDate(picked);
     });
+  }
+
+  /// The app page lists the linked files, read after the general
+  /// instructions; a project's page switches each of the user's files.
+  List<Widget> _linkedSection(bool global) {
+    final config = ref.read(appConfigProvider);
+    final rows = [
+      if (_hasGlobal) (config.globalInstructionsFile, "General instructions"),
+      for (final path in _linked) (path, _nameOf(path)),
+    ];
+    if (!global && rows.isEmpty) return const [];
+    return [
+      Padding(
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
+        child: Text(
+          global
+              ? "Instruction files elsewhere on this computer, such as a "
+                  "CLAUDE.md, read after your general instructions in this "
+                  "order. Hold a row to move it."
+              : "Your instructions, as this project's chats read them.",
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+        ),
+      ),
+      if (global)
+        LinkedFileList(
+          files: _linked,
+          missing: _missing,
+          nameOf: _nameOf,
+          onOpen: _openFile,
+          onRemove: (path) =>
+              setState(() => _linked = [..._linked]..remove(path)),
+          onReorder: _reorder,
+          onAdd: _addFiles,
+        )
+      else
+        InstructionFileSwitches(
+          rows: rows,
+          off: _off,
+          missing: _missing,
+          onOpen: (path) => _openFile(path,
+              name: path == config.globalInstructionsFile
+                  ? "General instructions"
+                  : null),
+          onChanged: (path, on) => setState(
+              () => _off = on ? ({..._off}..remove(path)) : {..._off, path}),
+        ),
+    ];
   }
 
   @override
@@ -326,6 +452,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                     ),
                   ),
                 ),
+                if (linksInstructionFiles) ..._linkedSection(global),
                 const SizedBox(height: 24),
               ],
             ),

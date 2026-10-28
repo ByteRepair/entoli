@@ -1055,15 +1055,18 @@ class BuiltinAgent implements Turn {
   ContextUsage _contextOf(LlmCompletion completion) {
     final system =
         session.messages.takeWhile((m) => m.role == LlmRole.system).toList();
-    final profileTokens = profileSection(profile).length ~/ 4;
+    final profileTokens =
+        (profileSection(profile) + styleSection(tone, citations)).length ~/ 4;
+    final instructionTokens = userInstructionChars(instructions) ~/ 4;
     final tools = [
       for (final t in _tools)
         {"name": t.name, "description": t.description, "schema": t.schema},
     ];
     return ContextUsage(
-      system: estimateTokens(system) - profileTokens,
+      system: estimateTokens(system) - profileTokens - instructionTokens,
       tools: jsonEncode(tools).length ~/ 4,
       profile: profileTokens,
+      instructions: instructionTokens,
       chat: estimateTokens([...session.conversation, completion.message]),
       reported: completion.usage?.contextTokens,
     );

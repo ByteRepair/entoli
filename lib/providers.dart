@@ -14,6 +14,7 @@ import "../core/platform/platform.dart"
 import "data/builtin/llm/providers/presets.dart" show providerOf;
 import "data/builtin/builtin_backend.dart";
 import "data/local/file_trigger_store.dart";
+import "data/local/linked_instructions_store.dart";
 import "data/prompts/agent_pictures.dart";
 import "domain/app_icon.dart";
 import "domain/agent_backend.dart";
@@ -88,6 +89,11 @@ final chatShellCwdProvider = Provider.family<ValueListenable<String?>?,
       .sessionCwd(workspace, home: key.workspaceHome);
 });
 final appConfigProvider = Provider<AppConfig>((ref) => throw UnimplementedError());
+
+/// One per config, since the store's queue is what keeps two pages' saves
+/// from overwriting each other.
+final linkedInstructionsStoreProvider = Provider(
+    (ref) => LinkedInstructionsStore(ref.watch(appConfigProvider)));
 
 /// The client the marketplace's fetches ride. An override in tests, so the
 /// suite answers the URLs rather than the binding's all-400s stand-in.
