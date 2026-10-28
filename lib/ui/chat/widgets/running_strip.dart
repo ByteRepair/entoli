@@ -174,11 +174,12 @@ class _Group extends StatelessWidget {
             Text(label,
                 style: theme.textTheme.labelMedium
                     ?.copyWith(fontWeight: FontWeight.w500)),
+            // Points the way the pills open, and back once they have.
             AnimatedRotation(
               turns: open ? 0.5 : 0,
               duration: _duration,
               curve: _curve,
-              child: Icon(Icons.expand_more, size: 18, color: scheme.onSurfaceVariant),
+              child: Icon(Icons.chevron_right, size: 18, color: scheme.onSurfaceVariant),
             ),
           ],
         ),
@@ -190,31 +191,34 @@ class _Group extends StatelessWidget {
         color: scheme.surfaceContainerLowest,
         shape: StadiumBorder(side: BorderSide(color: scheme.outlineVariant)),
         clipBehavior: Clip.antiAlias,
-        child: AnimatedSize(
-          duration: _duration,
-          curve: _curve,
-          alignment: Alignment.centerLeft,
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              header,
-              if (open)
-                for (final child in children)
-                  Padding(
-                    padding: const EdgeInsets.only(right: 4),
-                    child: TweenAnimationBuilder<double>(
-                      tween: Tween(begin: 0, end: 1),
-                      duration: _duration,
-                      curve: _curve,
-                      builder: (context, t, child) => Opacity(
-                        opacity: t,
-                        child: Transform.scale(scale: 0.9 + 0.1 * t, child: child),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            header,
+            // Revealed from the left as the group widens, fading in at their
+            // own size, and the same way back.
+            TweenAnimationBuilder<double>(
+              tween: Tween(end: open ? 1 : 0),
+              duration: _duration,
+              curve: _curve,
+              builder: (context, t, pills) => t == 0
+                  ? const SizedBox.shrink()
+                  : ClipRect(
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        widthFactor: t,
+                        child: Opacity(opacity: t, child: pills),
                       ),
-                      child: child,
                     ),
-                  ),
-            ],
-          ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  for (final child in children)
+                    Padding(padding: const EdgeInsets.only(right: 4), child: child),
+                ],
+              ),
+            ),
+          ],
         ),
       ),
     );
