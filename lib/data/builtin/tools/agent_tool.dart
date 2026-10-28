@@ -1,4 +1,5 @@
 import "../../../domain/agent_backend.dart";
+import "../../../domain/agent_definition.dart";
 import "../../../domain/agent_browser.dart" show BrowserUploadPolicy;
 import "../../../domain/builtin_project.dart";
 import "../../../domain/models.dart";
@@ -103,10 +104,14 @@ class ToolOffer {
     this.member = false,
     this.customizing = false,
     this.attachments = false,
+    this.agent = AgentDefinition.main,
   });
 
   /// What the turn may have, already narrowed by what the agent was handed.
   final AgentCapabilities caps;
+
+  /// Who the turn runs as, which picks among the tools [caps] leaves.
+  final AgentDefinition agent;
 
   /// The whole skill library, both invocation halves: the `skill` tool reads
   /// the model-invocable half, and so does its section of the prompt.
@@ -151,6 +156,27 @@ class ToolOffer {
   final bool attachments;
 }
 
+/// The headings the agent editor groups the grantable tools under, in its
+/// order.
+enum ToolGroup {
+  files("Files"),
+  shell("Shell"),
+  web("Web"),
+  browser("Browser"),
+  skills("Skills"),
+  plan("Plan"),
+  memory("Memory"),
+  triggers("Triggers"),
+  artifacts("Artifacts"),
+  images("Images"),
+  directories("Directories"),
+  settings("Settings");
+
+  const ToolGroup(this.label);
+
+  final String label;
+}
+
 /// One tool the model can call: everything about it in one place — what the
 /// model is told, when it is offered, what it adds to the system prompt, and
 /// what it does. The tool list, the dispatch and the prompt are all read off
@@ -167,6 +193,19 @@ abstract class AgentTool {
 
   /// What the model calls it by, and what the log records.
   String get name;
+
+  /// What an agent's `tools:` names it by: [name], except where two tools
+  /// answer to one name and an agent picks between them.
+  String get id => name;
+
+  /// Where the agent editor lists it, or null for a tool that is not an
+  /// agent's to be granted — the turn's own machinery, which an agent's list
+  /// neither adds nor takes away.
+  ToolGroup? get group;
+
+  /// Whether an agent with no `tools:` list has it. False is a tool only the
+  /// agents that name it see, so nobody else's prompt carries it.
+  bool get onByDefault => true;
 
   String get description;
 

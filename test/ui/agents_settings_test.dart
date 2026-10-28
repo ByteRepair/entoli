@@ -6,7 +6,9 @@ import "package:flutter_test/flutter_test.dart";
 import "package:agent_chat/data/prompts/agent_pictures.dart"
     show readAgentPicture;
 import "package:agent_chat/data/prompts/prompt_sources.dart" show promptTiers;
+import "package:agent_chat/domain/agent_definition.dart";
 import "package:agent_chat/domain/models.dart";
+import "package:agent_chat/domain/prompt_library.dart";
 import "package:agent_chat/domain/project.dart" show localProject;
 import "package:agent_chat/providers.dart";
 import "package:agent_chat/ui/settings/settings_page.dart";
@@ -65,12 +67,50 @@ void main() {
       final file = File("$dir/researcher.md");
       expect(file.existsSync(), isTrue);
       expect(file.readAsStringSync(), contains("You are a research agent."));
+      // Tools left at their defaults write no list.
+      expect(file.readAsStringSync(), isNot(contains("tools:")));
       expect(File("$dir/researcher.png").readAsBytesSync(), onePixelPng);
 
       // The row shows the user agent with a remove button, not a Bundled tag.
       expect(find.text("researcher"), findsOneWidget);
       expect(find.byIcon(Icons.close), findsOneWidget);
       expect(find.byIcon(Icons.edit_outlined), findsOneWidget);
+    });
+
+    testWidgets("the tool switches write the agent's list: a group's switch "
+        "takes all of it, and the read-only shell replaces the full one",
+        (tester) async {
+      await pumpSettings(tester, app, SettingsCategory.agents);
+      await reloadLibrary(tester, app);
+
+      await tester.tap(find.text("Add agent"));
+      await settleIo(tester);
+      await tester.enterText(find.byType(TextField).at(0), "looker");
+      await tester.enterText(find.byType(TextField).at(2), "You look.");
+
+      Future<void> flip(String label) async {
+        final tile = find.widgetWithText(SwitchListTile, label);
+        await tester.scrollUntilVisible(tile, 200,
+            scrollable: find.byType(Scrollable).last);
+        await tester.tap(tile);
+        await tester.pump();
+      }
+
+      await flip("Files");
+      await flip("bash(readonly)");
+      await tester.tap(find.text("Save"));
+      await settleIo(tester, least: 15);
+
+      final source = File(
+              "${app.config.promptsDir(CompletionKind.agent)}/looker.md")
+          .readAsStringSync();
+      final tools = AgentDefinition.of(
+              PromptDocument.parse(CompletionKind.agent, "looker", source))
+          .tools!;
+      expect(tools, contains("bash(readonly)"));
+      expect(tools, contains("websearch"));
+      expect(tools, isNot(contains("bash")));
+      expect(tools.intersection({"read", "write", "edit"}), isEmpty);
     });
 
     testWidgets("editing a user agent rewrites its file", (tester) async {

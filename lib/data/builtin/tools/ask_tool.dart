@@ -14,6 +14,9 @@ class AskTool extends AgentTool {
   AskTool(super.offer);
 
   @override
+  ToolGroup? get group => null;
+
+  @override
   String get name => askToolName;
 
   @override

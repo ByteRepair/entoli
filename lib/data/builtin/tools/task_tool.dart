@@ -18,6 +18,9 @@ class TaskTool extends AgentTool {
   TaskTool(super.offer);
 
   @override
+  ToolGroup? get group => null;
+
+  @override
   String get name => taskToolName;
 
   @override

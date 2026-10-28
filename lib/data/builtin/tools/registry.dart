@@ -24,6 +24,7 @@ List<AgentTool> agentTools(ToolOffer offer) => [
       WriteTool(offer),
       EditTool(offer),
       BashTool(offer),
+      ReadOnlyBashTool(offer),
       AskTool(offer),
       TaskTool(offer),
       WebSearchTool(offer),
@@ -66,6 +67,16 @@ List<AgentTool> agentTools(ToolOffer offer) => [
     ];
 
 /// The tools [offer] holds: what the model is handed, what the prompt
-/// names, and the only ones a call reaches.
-List<AgentTool> offeredTools(ToolOffer offer) =>
-    [for (final tool in agentTools(offer)) if (tool.offered) tool];
+/// names, and the only ones a call reaches. The agent picks among the ones
+/// it may be granted; where it picked two of one name, the first wins.
+List<AgentTool> offeredTools(ToolOffer offer) {
+  final names = <String>{};
+  return [
+    for (final tool in agentTools(offer))
+      if (tool.offered &&
+          (tool.group == null ||
+              offer.agent.offers(tool.id, byDefault: tool.onByDefault)) &&
+          names.add(tool.name))
+        tool,
+  ];
+}

@@ -93,6 +93,9 @@ class ReadTool extends AgentTool {
   ReadTool(super.offer);
 
   @override
+  ToolGroup get group => ToolGroup.files;
+
+  @override
   String get name => readToolName;
 
   @override
@@ -250,6 +253,9 @@ class WriteTool extends AgentTool {
   WriteTool(super.offer);
 
   @override
+  ToolGroup get group => ToolGroup.files;
+
+  @override
   String get name => writeToolName;
 
   @override
@@ -309,6 +315,9 @@ class WriteTool extends AgentTool {
 /// Edit a file by exact string replacement. The same gate as `read`.
 class EditTool extends AgentTool {
   EditTool(super.offer);
+
+  @override
+  ToolGroup get group => ToolGroup.files;
 
   @override
   String get name => editToolName;
@@ -404,6 +413,9 @@ class EditTool extends AgentTool {
 /// and written new. Offered where the chat has attachments to copy.
 class AttachmentSaveTool extends AgentTool {
   AttachmentSaveTool(super.offer);
+
+  @override
+  ToolGroup get group => ToolGroup.files;
 
   @override
   String get name => attachmentSaveToolName;

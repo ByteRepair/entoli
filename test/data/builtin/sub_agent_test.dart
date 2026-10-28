@@ -625,4 +625,74 @@ void main() {
       expect(sub.calls, hasLength(4));
     });
   });
+
+  group("an agent's own tools", () {
+    SubAgentRunner runnerFor(FakeLlmClient client) {
+      shell = FakeShell((_) => ok("found"), canRunCommands: true);
+      return SubAgentRunner(
+        client: client,
+        shell: shell,
+        fs: fileSystemIo,
+        workspace: "/tmp/workspace",
+        projectWorkspace: "/tmp/project",
+        model: "fake-model",
+        library: PromptLibrary([
+          ...libraryWithGeneral().entries(CompletionKind.agent),
+          PromptDocument.parse(CompletionKind.agent, "looker",
+              "---\ntools: read, bash(readonly)\n---\nYou look."),
+        ]),
+      );
+    }
+
+    String systemOf(FakeLlmClient client) => [
+          for (final m in client.sent.first)
+            if (m.role == LlmRole.system) m.text,
+        ].join("\n");
+
+    test("are all a sub-agent is offered, and its prompt is built from them",
+        () async {
+      final client = FakeLlmClient([
+        [saidOnly("done")],
+      ]);
+      await runnerFor(client).run("looker", "look");
+
+      final tools = client.calls.first.tools;
+      expect([for (final tool in tools) tool.name], ["read", "bash"]);
+      expect(tools.last.description, contains("Read-only"));
+      expect(systemOf(client), contains("a command that only reads"));
+      expect(systemOf(client), contains("You look."));
+    });
+
+    test("a read-only shell runs what only reads and refuses the rest",
+        () async {
+      final client = FakeLlmClient([
+        [bashCall("ls | grep x", id: "c1")],
+        [bashCall("rm -rf src", id: "c2")],
+        [bashCall("grep x > out.txt", id: "c3")],
+        [saidOnly("done")],
+      ]);
+      await runnerFor(client).run("looker", "look");
+
+      expect(shell.ran, ["ls | grep x"]);
+      final results = [
+        for (final m in client.sent.last)
+          if (m.role == LlmRole.tool) m.text,
+      ];
+      expect(results, hasLength(3));
+      expect(results[1], contains("read-only"));
+      expect(results[2], contains("read-only"));
+    });
+
+    test("an agent with no list keeps the full shell and the file tools",
+        () async {
+      final client = FakeLlmClient([
+        [saidOnly("done")],
+      ]);
+      await runnerFor(client).run("general", "work");
+
+      final names = [for (final tool in client.calls.first.tools) tool.name];
+      expect(names, containsAll(["read", "write", "edit", "bash"]));
+      expect(systemOf(client), isNot(contains("only reads")));
+    });
+  });
 }

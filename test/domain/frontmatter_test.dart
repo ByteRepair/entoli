@@ -127,4 +127,12 @@ void main() {
     expect(parsed.metadata, {"a": "b"});
     expect(parsed.body, "Body.");
   });
+
+  test("only tools is read as a list; a list under any other key stays "
+      "dropped", () {
+    final parsed =
+        Frontmatter.parse("---\ntools: [read, bash]\ntags: [a, b]\n---\nB");
+    expect(parsed.scalars["tools"], "read, bash");
+    expect(parsed.scalars, isNot(contains("tags")));
+  });
 }

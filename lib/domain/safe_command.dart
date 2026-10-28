@@ -332,6 +332,13 @@ SegmentProfile profileSegment(String segment) {
   return SegmentProfile._(true, SegmentReach.other, program, words, null);
 }
 
+/// Whether [segment] is proven to read and write nothing: the one answer to
+/// "only reads" that the sandbox's rules and the read-only shell share.
+bool readsOnly(String segment) {
+  final profile = profileSegment(segment);
+  return profile.modelable && profile.reach == SegmentReach.nonModifying;
+}
+
 /// Whether `git` [words] are a plain use of one of [subcommands]: no `-c`
 /// (configuration in the command decides what later git tools run), no
 /// guarded argument, and no bare name after `branch` or `tag` — `git branch

@@ -781,6 +781,31 @@ the repository's `composeUserPrompt` resolves the project's library through
 `libraryFor`, so a message is composed against the same set the chat it lands
 in will offer.
 
+### Tools per agent
+
+**An agent owns what it may use.** `AgentDefinition` (`agent_definition.dart`)
+is an agent built over its `.md`: its instructions and its `tools:` list, the
+tool ids it is offered among the ones an agent can be granted. With no list,
+each tool's own default decides, which is what lets a tool exist for the agents
+that name it and stay out of every other prompt. The main agent is
+`AgentDefinition.main`, no file and every default, so nothing downstream asks
+whether there is an agent. `BuiltinAgent` holds one, and it is the same object
+whichever way the agent runs: the `task` runner and a member's turn each
+resolve it from the library and hand it over, and the offer narrows by it —
+the request's tools, the dispatch and the system prompt's tool sentences all
+read the one list, so an agent's prompt names only what it has. A mention in a
+direct chat is not the agent running, so it adds instructions and no tools.
+
+The list is one scalar, `tools: read, bash(readonly)`, because `PromptDocument`
+keeps scalars; a YAML list is read the same, comma-joined, and `tools: []` is
+none. `Frontmatter.listKeys` is the only place a list is read at all: a list
+under any other key is still dropped, so a skill carrying one does not start
+failing the spec's key check. The editor writes no key while the switches sit at the defaults, so a
+default added later reaches that agent, and keeps ids this build does not know.
+Writing goes through `AgentDefinition.toSource`, which writes back the
+frontmatter keys and `metadata:` it does not edit — a hand-written key survives
+an editor save.
+
 ## Resending a message
 
 Edit and regenerate run the turn again as another thread beside it, rather than

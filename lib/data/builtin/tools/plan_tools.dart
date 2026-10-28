@@ -20,6 +20,9 @@ abstract class _PlanTool extends AgentTool {
   _PlanTool(super.offer);
 
   @override
+  ToolGroup get group => ToolGroup.plan;
+
+  @override
   bool get offered => !offer.oneShot;
 }
 
@@ -225,6 +228,9 @@ class PlanDoneTool extends _PlanTool {
 /// answer, so it rides `ask`: a turn with nobody to answer is not offered it.
 class PresentPlanTool extends AgentTool {
   PresentPlanTool(super.offer);
+
+  @override
+  ToolGroup get group => ToolGroup.plan;
 
   @override
   String get name => presentPlanToolName;

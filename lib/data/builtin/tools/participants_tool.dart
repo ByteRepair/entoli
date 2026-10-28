@@ -24,6 +24,9 @@ class EndTurnTool extends AgentTool {
   EndTurnTool(super.offer);
 
   @override
+  ToolGroup? get group => null;
+
+  @override
   String get name => endTurnToolName;
 
   @override
@@ -63,6 +66,9 @@ const listParticipantsToolName = "list_participants";
 /// project's library holds, and the tool takes no arguments.
 class ListParticipantsTool extends AgentTool {
   ListParticipantsTool(super.offer);
+
+  @override
+  ToolGroup? get group => null;
 
   @override
   String get name => listParticipantsToolName;

@@ -253,6 +253,27 @@ void main() {
           contains("You are @explore, a member of this team.\n\nYou explore."));
     });
 
+    test("a member's turn is offered its own tools, and the main agent's "
+        "is not narrowed by them", () async {
+      final library = PromptLibrary([
+        PromptDocument.parse(CompletionKind.agent, "explore",
+            "---\ntools: read, bash(readonly)\n---\nYou explore."),
+      ]);
+      final room = backendOver([[finish], [finish]], library: library);
+      await send(room, "hi",
+          omada: true, project: "Team", omadaMember: "explore");
+      await send(room, "hi @explore",
+          documents: const {"@explore": "You explore."});
+
+      Set<String> offered(int call) =>
+          {for (final tool in client.calls[call].tools) tool.name};
+      expect(offered(0), containsAll(["read", "bash"]));
+      expect(offered(0), isNot(contains("write")));
+      expect(offered(1), containsAll(["read", "write", "bash"]));
+      expect(client.calls[1].tools.firstWhere((t) => t.name == "bash").description,
+          isNot(contains("Read-only")));
+    });
+
     test("a turn outside Omada still offers the task tool", () async {
       final backend = backendOver([
         [finish],

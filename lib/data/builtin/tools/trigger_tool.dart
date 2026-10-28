@@ -22,6 +22,9 @@ abstract class _TriggerTool extends AgentTool {
   _TriggerTool(super.offer);
 
   @override
+  ToolGroup get group => ToolGroup.triggers;
+
+  @override
   bool get offered => offer.caps.trigger && !offer.oneShot;
 }
 
