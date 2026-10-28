@@ -8,7 +8,7 @@ import "../../../domain/shell_job.dart";
 import "../../../domain/tool_arg.dart";
 import "../../../providers.dart";
 import "../../widgets/dialogs.dart" show catchAndSay;
-import "../../workspace/text_viewer_page.dart";
+import "../../widgets/text_file_page.dart";
 import "../mirror_controller.dart" show chatViewProvider;
 import "../widgets/activity_label.dart"
     show ActivityStatus, Run, RunDrawer, RunView, showRunCard, toolRunView;
@@ -185,7 +185,10 @@ class _OpenLogState extends ConsumerState<_OpenLog> {
               ? null
               : () => Navigator.of(context).push(MaterialPageRoute<void>(
                   builder: (_) =>
-                      TextViewerPage(path: _path, name: _fs.path.basename(_path)))),
+                      TextFilePage(
+                          path: _path,
+                          name: _fs.path.basename(_path),
+                          popsBinary: false))),
           child: const Text("Open log"),
         );
         if (has || there.connectionState != ConnectionState.done) return button;

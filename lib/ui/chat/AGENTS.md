@@ -587,7 +587,7 @@ has the command, "Running · pid" under the title, Stop beside the close
 button, and the end of the log as it grows (re-read every half second while
 the file changes). Ended, it says how, from the log's `jobEnded` call event
 (see "The conversation log" in `lib/domain/AGENTS.md`), with the last lines
-the chat kept and an Open log button to the whole log in `TextViewerPage`,
+the chat kept and an Open log button to the whole log in `TextFilePage`,
 disabled once the workspace no longer has the file and absent on a mirror,
 whose workspace is elsewhere. Lost, it ended with the app, or on a mirror,
 where only ends arrive, it is "not heard from". What marks a call as a job
