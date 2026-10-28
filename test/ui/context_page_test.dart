@@ -55,6 +55,25 @@ void main() {
         greaterThan(0));
   });
 
+  testWidgets("instructions are their own segment", (tester) async {
+    final id = await seed(tester, [
+      reply("a1", const ContextUsage(
+          system: 4000, tools: 6000, profile: 100, instructions: 3000, chat: 500)),
+    ]);
+    await app.pump(tester, ContextPage(chatId: id));
+    await settleIo(tester);
+
+    expect(find.byTooltip("Instructions: 3.0k tokens"), findsOneWidget);
+  });
+
+  test("a reply measured before instructions were counted reads as none", () {
+    final old = ContextUsage.fromJson(
+        {"system": 1, "tools": 2, "profile": 3, "chat": 4});
+
+    expect(old.instructions, 0);
+    expect(old.estimated, 10);
+  });
+
   testWidgets("a context past the window fills the bar without overflowing",
       (tester) async {
     final id = await seed(tester, [

@@ -51,10 +51,6 @@ class AnthropicClient implements LlmClient {
   void close() => _http.close();
 
   @override
-  Future<List<String>> listModels() =>
-      listModelIds(_http, under(baseUrl, "models"), headers: _auth);
-
-  @override
   Stream<LlmChunk> stream(
     List<LlmMessage> messages, {
     required String model,

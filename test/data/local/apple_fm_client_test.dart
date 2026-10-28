@@ -210,15 +210,14 @@ void main() {
     await expectation;
   });
 
-  test("the picker's rows are what the handshake announced", () {
-    final base =
-        AppleFm(const AppleFmProbe("available")).provider.models;
+  test("the picker's rows are what the handshake announced", () async {
+    final base = await AppleFm(const AppleFmProbe("available")).endpoint.listModels(null);
     expect(base, contains(appleModelId));
     expect(base, isNot(contains(mlxModels.first)),
         reason: "a build that links no MLX offers no MLX rows");
 
     final both =
-        AppleFm(const AppleFmProbe("available", mlx: true)).provider.models;
+        await AppleFm(const AppleFmProbe("available", mlx: true)).endpoint.listModels(null);
     expect(both, containsAll([appleModelId, mlxModels.single]));
   });
 

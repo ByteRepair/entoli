@@ -50,7 +50,6 @@ void main() {
         id: "fake",
         api: LlmApi.openai,
         baseUrl: "https://example.test/v1",
-        models: ["fake-model"],
         defaultModelId: "fake-model",
       ),
     ];
@@ -80,7 +79,6 @@ void main() {
                     id: "judge",
                     api: LlmApi.openai,
                     baseUrl: "https://judge.test/v1",
-                    models: ["judge-model"],
                     defaultModelId: "judge-model"),
                 (_, _) => judge),
         ],
@@ -176,7 +174,6 @@ void main() {
             id: appleProviderId,
             api: LlmApi.openai,
             baseUrl: "",
-            models: [appleModelId],
             defaultModelId: appleModelId),
       ];
       final backend = backendOver([
@@ -308,8 +305,7 @@ void main() {
         LlmProviderConfig(
             id: "fake",
             api: LlmApi.openai,
-            baseUrl: "https://example.test/v1",
-            models: ["fake-model"]),
+            baseUrl: "https://example.test/v1"),
       ];
       final backend = backendOver([]);
       final events = await send(backend, "hi", model: null);
@@ -2475,9 +2471,6 @@ class _Held implements LlmClient {
     if (inner.sent.length == 1) await gate;
     yield* Stream.fromIterable(chunks);
   }
-
-  @override
-  Future<List<String>> listModels() => inner.listModels();
 
   @override
   void close() {}

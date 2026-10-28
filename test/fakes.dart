@@ -1175,6 +1175,7 @@ class FakeLocalLlm extends LocalLlm {
   final List<LocalDevice> devicesFound;
   final bool ready;
   final String failure;
+  @override
   final List<String> installed;
 
   /// What the cores slider tops out at, and whether it is drawn at all. Null by
@@ -1251,17 +1252,6 @@ class FakeLocalLlm extends LocalLlm {
     stops++;
     running.value = const [];
   }
-
-  @override
-  LlmProviderConfig? get provider => installed.isEmpty
-      ? null
-      : LlmProviderConfig(
-          id: localProviderId,
-          label: "On-device",
-          api: LlmApi.openai,
-          baseUrl: "",
-          models: installed,
-        );
 }
 
 /// Models that are simply there, or simply are not. Downloading is tested

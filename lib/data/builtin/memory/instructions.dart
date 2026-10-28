@@ -48,24 +48,25 @@ class InstructionFile {
   final int depth;
 }
 
-/// The two files a turn loads up front — the global one where [global] names
-/// it, and the project's at its workspace root — outermost first, with `@path`
+/// The files a turn loads up front — the user's [global] ones in reading
+/// order (the data dir's AGENTS.md and any linked from elsewhere on the
+/// machine), then the project's at its workspace root — with `@path`
 /// references in the project's file expanded depth-first after it when
-/// [imports] is on. The global file's own references are left as text: it is
-/// the user's background for every project, and an import reaching only into
-/// one project's workspace would be a word in the model's mouth about the
+/// [imports] is on. The global files' own references are left as text: they
+/// are the user's background for every project, and an import reaching only
+/// into one project's workspace would be a word in the model's mouth about the
 /// other projects. A file whose path [excludes] names is skipped.
 Future<List<InstructionFile>> loadInstructions(
   FileSystem fs, {
   required String projectWorkspace,
-  String? global,
+  List<String> global = const [],
   bool imports = false,
   List<String> excludes = const [],
 }) async {
   final files = <InstructionFile>[];
   final loaded = <String>{};
-  if (global != null) {
-    await _readInto(fs, _norm(fs, global), InstructionKind.global, 0, files,
+  for (final path in global) {
+    await _readInto(fs, _norm(fs, path), InstructionKind.global, 0, files,
         loaded, excludes);
   }
   final before = files.length;
@@ -161,16 +162,21 @@ String renderInstructions(List<InstructionFile> files) {
       "the user. Follow them: where they disagree with anything earlier in "
       "this prompt, they take precedence, and where two of them disagree, "
       "the later one wins.";
-  return [
-    header,
-    for (final file in files)
-      // A bundled note has no file, so it is not dressed as one.
-      file.kind == InstructionKind.bundled
-          ? "From the app, about this kind of chat:\n\n${file.content.trim()}"
-          : "Contents of ${file.path} (${instructionKindPhrase(file.kind)}):"
-              "\n\n${file.content.trim()}",
-  ].join("\n\n");
+  return [header, for (final file in files) _entry(file)].join("\n\n");
 }
+
+/// How much of [renderInstructions]' block is the user's files rather than the
+/// app's header and note — the context page's Instructions segment.
+int userInstructionChars(List<InstructionFile> files) => files
+    .where((f) => f.kind != InstructionKind.bundled)
+    .fold(0, (sum, f) => sum + _entry(f).length + 2);
+
+String _entry(InstructionFile file) =>
+    // A bundled note has no file, so it is not dressed as one.
+    file.kind == InstructionKind.bundled
+        ? "From the app, about this kind of chat:\n\n${file.content.trim()}"
+        : "Contents of ${file.path} (${instructionKindPhrase(file.kind)}):"
+            "\n\n${file.content.trim()}";
 
 String _norm(FileSystem fs, String path) => fs.path.normalize(path);
 

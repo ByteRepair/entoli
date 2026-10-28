@@ -1,10 +1,15 @@
 import "../../../../domain/llm_provider.dart";
+import "../http_stream.dart";
 import "provider.dart";
 
 /// A model server the user runs on this machine. Nothing there checks a key,
-/// so any key is a yes.
+/// so any key is a yes, and models.dev does not know what it serves, so its
+/// own list is asked unless another is named.
 abstract class LocalServerProvider extends OpenAiCompatibleProvider with KeyFree {
   const LocalServerProvider(super.config, [super.terms]);
+
+  @override
+  Uri? get modelsUrl => super.modelsUrl ?? under(baseUrl, "models");
 }
 
 class OllamaProvider extends LocalServerProvider {

@@ -60,6 +60,9 @@ Future<void> deleteProject(
   if (settings.assistantProject == project) {
     await ref.read(appSettingsProvider.notifier).setAssistantProject(null);
   }
+  await ref
+      .read(linkedInstructionsStoreProvider)
+      .update((l) => l.withoutProject(project));
   ref.invalidate(projectListProvider);
   ref.invalidate(chatListProvider);
   if (context.mounted && popToRoot) Navigator.of(context).popUntil((r) => r.isFirst);

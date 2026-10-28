@@ -271,10 +271,6 @@ abstract class LlmClient {
     String? reasoningEffort,
   });
 
-  /// What the endpoint says it can run. Empty when it does not offer a list —
-  /// the provider's configured models stand in for it.
-  Future<List<String>> listModels();
-
   void close();
 }
 

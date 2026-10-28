@@ -353,6 +353,12 @@ cleared on the way in too — the same `removeTree` the rootfs stores use, so th
 one function that knows how to delete a stub-bearing tree is the one the
 restore reuses.
 
+`AppConfig.machineLocalFiles` are the top-level files a backup skips and a
+restore leaves where they are, one list both read so the two cannot drift.
+Today it is `instruction_files.json`, which holds paths on this machine (see
+"Workspace instructions" in `lib/data/builtin/AGENTS.md`) that name nothing on
+another; restoring an older backup should not unlink what was linked since.
+
 It was one JSON document holding every file first, and that is worse on every
 count that matters. Text in JSON is escaped inside a string inside an array,
 binary costs a third more as base64, and nothing compresses, where deflate takes

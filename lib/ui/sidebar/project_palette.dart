@@ -292,26 +292,27 @@ class _ProjectPaletteState extends ConsumerState<ProjectPalette> {
               ..add(const _Heading("Projects"))
               ..addAll(projects);
           }
-          final found = chatsMatching(chats, _query);
-          for (final group in groupChatsByDate(found, now: DateTime.now())) {
-            items.add(_Heading(group.heading));
-            for (final chat in group.chats) {
-              items.add(_Choice(
-                build: (active) => _Row(
-                  active: active,
-                  current: chat.id == selectedChat,
-                  running: runningIds.contains(chat.id),
-                  label: chat.title.orUntitled,
-                  trailing: _ProjectTag(projectLabel(chat.project)),
-                ),
-                // Into its project first: the sidebar lists one project, and
-                // a chat it does not list would be open with nothing saying so.
-                action: (context, ref) {
-                  selectProject(ref, localProject(chat.project));
-                  openChat(context, ref, chat.id);
-                },
-              ));
-            }
+        }
+
+        final found = chatsByRecency(chatsMatching(chats, _query), runningIds);
+        if (found.isNotEmpty) {
+          if (items.isNotEmpty) items.add(const _Rule());
+          for (final chat in found) {
+            items.add(_Choice(
+              build: (active) => _Row(
+                active: active,
+                current: chat.id == selectedChat,
+                running: runningIds.contains(chat.id),
+                label: chat.title.orUntitled,
+                trailing: _ProjectTag(projectLabel(chat.project)),
+              ),
+              // Into its project first: the sidebar lists one project, and
+              // a chat it does not list would be open with nothing saying so.
+              action: (context, ref) {
+                selectProject(ref, localProject(chat.project));
+                openChat(context, ref, chat.id);
+              },
+            ));
           }
         }
 
@@ -422,6 +423,15 @@ class _ProjectPaletteState extends ConsumerState<ProjectPalette> {
     );
   }
 }
+
+/// Running chats first, then the rest; most recently touched first in each.
+List<ChatState> chatsByRecency(Iterable<ChatState> chats, Set<String> running) =>
+    chats.toList()
+      ..sort((a, b) {
+        final byRunning = (running.contains(b.id) ? 1 : 0) -
+            (running.contains(a.id) ? 1 : 0);
+        return byRunning != 0 ? byRunning : b.updatedAt.compareTo(a.updatedAt);
+      });
 
 /// The default project and the built-ins sit above the rule, the user's
 /// below it.

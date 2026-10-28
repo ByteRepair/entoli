@@ -12,11 +12,6 @@ class GeminiClient extends OpenAiClient {
   static const retired =
       "Google has retired this model, please select a newer model.";
 
-  /// Gemini's list is models.dev's under a `models/` prefix, plus retired and
-  /// non-chat models, so models.dev stands in for it.
-  @override
-  Future<List<String>> listModels() async => const [];
-
   /// By status alone: the wording is Google's to change.
   @override
   LlmException refused(LlmException e) =>

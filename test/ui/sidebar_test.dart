@@ -7,6 +7,7 @@ import "package:flutter_test/flutter_test.dart";
 import "package:agent_chat/domain/app_settings.dart";
 import "package:agent_chat/domain/builtin_project.dart";
 import "package:agent_chat/domain/chat_meta.dart";
+import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/domain/project.dart";
 import "package:agent_chat/domain/project_settings.dart";
 import "package:agent_chat/domain/temp_chat_ttl.dart";
@@ -363,6 +364,29 @@ void main() {
               tester.getTopLeft(find.descendant(
                   of: palette, matching: find.text("work notes"))).dy,
           isTrue);
+    });
+
+    testWidgets("with nothing typed, chats follow the projects", (tester) async {
+      await io(tester, () => app.seedChat(title: "at work", project: "work"));
+      await pumpBeside(tester);
+      await openProjectMenu(tester);
+
+      final palette = find.byType(ProjectPalette);
+      final chat = find.descendant(of: palette, matching: find.text("at work"));
+      expect(chat, findsOneWidget);
+      expect(
+          tester.getTopLeft(find.descendant(
+                  of: palette, matching: find.text("work")).first).dy <
+              tester.getTopLeft(chat).dy,
+          isTrue);
+    });
+
+    test("running chats sort ahead of newer ones", () {
+      ChatState chat(String id, int year) => ChatState(
+          id: id, title: id, createdAt: DateTime(year), updatedAt: DateTime(year));
+      final sorted = chatsByRecency(
+          [chat("a", 2025), chat("b", 2023), chat("c", 2024)], {"b"});
+      expect(sorted.map((c) => c.id), ["b", "a", "c"]);
     });
 
     // A chat the sidebar does not list would be open with nothing saying so.

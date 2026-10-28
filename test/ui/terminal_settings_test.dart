@@ -82,7 +82,8 @@ void main() {
     await pumpTerminal(tester);
 
     await tester.tap(find.byTooltip("Download"));
-    await settleIo(tester);
+    await settleUntil(tester, () => app.container.read(installedRootfsProvider).isNotEmpty,
+        what: "the download");
 
     expect(app.container.read(installedRootfsProvider), {"alpine"});
     expect(find.byTooltip("Delete"), findsOneWidget);
@@ -101,7 +102,9 @@ void main() {
     await tester.tap(find.text(host));
     await settleIo(tester);
     await tester.tap(find.text(alpine).last);
-    await settleIo(tester);
+    await settleUntil(
+        tester, () => app.container.read(appSettingsProvider).rootfsId != null,
+        what: "the pick");
 
     expect(app.container.read(appSettingsProvider).rootfsId, "alpine");
   });
@@ -116,7 +119,9 @@ void main() {
     await tester.tap(find.byTooltip("Delete"));
     await settleIo(tester);
     await tester.tap(find.text("Delete").last);
-    await settleIo(tester);
+    // The rescan is the delete's last step, after the unpick's settings write.
+    await settleUntil(tester, () => app.container.read(installedRootfsProvider).isEmpty,
+        what: "the delete");
 
     expect(app.rootfs.deleted, ["alpine"]);
     // Unpicked in the same breath: a setting naming a deleted rootfs would

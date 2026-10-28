@@ -74,14 +74,12 @@ class LlmRegistry {
     return config.resolveKeyWith(lookupEnv);
   }
 
-  /// Every model the configured endpoints offer. One that lists its own is
-  /// taken at its word; otherwise it is asked — all of them at once, since one
-  /// slow host should not hold up the rest, and one that cannot answer
-  /// contributes nothing rather than failing the whole list.
+  /// Every model the configured endpoints list beyond models.dev's. All asked
+  /// at once, since one slow host should not hold up the rest, and one that
+  /// cannot answer contributes nothing rather than failing the whole list.
   Future<List<ModelOption>> models() async {
     final configured = endpoints();
-    final lists = await Future.wait(configured.map((e) =>
-        e.config.models.isNotEmpty ? Future.value(e.config.models) : _listFrom(e)));
+    final lists = await Future.wait(configured.map(_listFrom));
     return [
       for (var i = 0; i < configured.length; i++)
         for (final id in lists[i])
@@ -98,8 +96,8 @@ class LlmRegistry {
   /// whole OS connect timeout.
   Future<List<String>> _listFrom(LlmProvider provider) async {
     try {
-      return await clientOf(provider)
-          .listModels()
+      return await provider
+          .listModels(resolveKeyFor(provider.config))
           .timeout(const Duration(seconds: 10), onTimeout: () => const []);
     } catch (e) {
       logFailure("llm", "listing ${provider.id}'s models failed", e);

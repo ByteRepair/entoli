@@ -396,37 +396,6 @@ void main() {
     });
   });
 
-  group("listing models", () {
-    test("reads the ids the endpoint offers", () async {
-      final client = OpenAiClient(
-        baseUrl: Uri.parse("https://example.test/v1"),
-        httpClient: MockClient((request) async {
-          expect(request.url.path, "/v1/models");
-          return http.Response(
-            jsonEncode({
-              "data": [
-                {"id": "gpt-a"},
-                {"id": "gpt-b"},
-              ],
-            }),
-            200,
-          );
-        }),
-      );
-
-      expect(await client.listModels(), ["gpt-a", "gpt-b"]);
-    });
-
-    test("an endpoint that will not say contributes nothing", () async {
-      final client = OpenAiClient(
-        baseUrl: Uri.parse("https://example.test/v1"),
-        httpClient: MockClient((_) async => http.Response("nope", 404)),
-      );
-
-      expect(await client.listModels(), isEmpty);
-    });
-  });
-
   /// llama.cpp's own extension, and what lets a phone draw a prefill that takes
   /// minutes rather than a spinner that cannot be told apart from a hang.
   group("how far it has got through the prompt", () {
@@ -688,10 +657,6 @@ void main() {
         geminiRejecting(429).stream(const [], model: "gemini-3.8-flash").toList(),
         throwsA(isA<LlmException>().having((e) => e.statusCode, "statusCode", 429)),
       );
-    });
-
-    test("its own model list is not asked", () async {
-      expect(await geminiRejecting(500).listModels(), isEmpty);
     });
   });
 }

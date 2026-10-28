@@ -1,3 +1,5 @@
+import "dart:convert";
+
 import "package:flutter_test/flutter_test.dart";
 import "package:http/http.dart" as http;
 import "package:http/testing.dart";
@@ -118,6 +120,52 @@ void main() {
       expect(await const OllamaProvider().checkKey("", httpClient: answering(500)),
           isTrue);
       expect(requests, isEmpty);
+    });
+  });
+
+  group("listModels", () {
+    late List<http.Request> requests;
+
+    http.Client listing(List<String> ids) => MockClient((request) async {
+          requests.add(request);
+          return http.Response(
+              jsonEncode({
+                "data": [for (final id in ids) {"id": id}],
+              }),
+              200);
+        });
+
+    setUp(() => requests = []);
+
+    test("a provider with no models endpoint asks nothing", () async {
+      expect(await const OpenAiProvider().listModels("k", httpClient: listing(["x"])),
+          isEmpty);
+      expect(requests, isEmpty);
+    });
+
+    test("a models endpoint is asked with the provider's own header", () async {
+      final provider = AnthropicProvider(AnthropicProvider.preset
+          .copyWith(modelsEndpoint: "https://gateway.test/v1/models"));
+
+      expect(await provider.listModels("sk-ant", httpClient: listing(["claude-a"])),
+          ["claude-a"]);
+      expect(requests.single.url.toString(), "https://gateway.test/v1/models");
+      expect(requests.single.headers["x-api-key"], "sk-ant");
+    });
+
+    test("a local server lists its own unless another is named", () async {
+      await const OllamaProvider().listModels(null, httpClient: listing(["qwen3"]));
+      expect(requests.single.url.toString(), "http://localhost:11434/v1/models");
+    });
+
+    test("an endpoint that will not say contributes nothing", () async {
+      final provider = OpenAiProvider(OpenAiProvider.preset
+          .copyWith(modelsEndpoint: "https://example.test/v1/models"));
+
+      expect(
+          await provider.listModels("k",
+              httpClient: MockClient((_) async => http.Response("nope", 404))),
+          isEmpty);
     });
   });
 }

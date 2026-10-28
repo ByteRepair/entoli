@@ -23,6 +23,10 @@ class FakeProvider extends LlmProvider with ChatOnly {
   LlmClient client(String? apiKey) => build(config, apiKey);
 
   @override
+  Future<List<String>> listModels(String? apiKey, {http.Client? httpClient}) async =>
+      const ["fake-model"];
+
+  @override
   Future<bool> checkKey(String apiKey, {http.Client? httpClient}) async => true;
 }
 
@@ -74,9 +78,6 @@ class FakeLlmClient implements LlmClient {
   }
 
   @override
-  Future<List<String>> listModels() async => const ["fake-model"];
-
-  @override
   void close() => closed = true;
 }
 
@@ -114,9 +115,6 @@ class ConcurrentFakeLlmClient implements LlmClient {
       _inFlight--;
     }
   }
-
-  @override
-  Future<List<String>> listModels() => inner.listModels();
 
   @override
   void close() => inner.close();

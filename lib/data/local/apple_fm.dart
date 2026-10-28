@@ -1,6 +1,7 @@
 import "dart:async";
 
 import "package:flutter/services.dart";
+import "package:http/http.dart" as http;
 
 import "../../domain/local_model.dart";
 import "../../domain/llm_provider.dart";
@@ -102,10 +103,6 @@ class AppleFm {
         // registry's cache signature still. The shape rides out of habit
         // rather than need.
         baseUrl: "",
-        models: [
-          appleModelId,
-          if (probe.mlx) ...mlxModels,
-        ],
         defaultModelId: appleModelId,
       );
 
@@ -119,6 +116,10 @@ class AppleFmProvider extends LlmProvider with KeyFree, ChatOnly {
 
   @override
   LlmClient client(String? apiKey) => AppleFmClient(probe);
+
+  @override
+  Future<List<String>> listModels(String? apiKey, {http.Client? httpClient}) async =>
+      [appleModelId, if (probe.mlx) ...mlxModels];
 }
 
 /// Everything the channel says, broadcast — the `NativeVoiceBridge` shape:
@@ -153,10 +154,6 @@ class AppleFmClient implements LlmClient {
 
   @override
   void close() {}
-
-  @override
-  Future<List<String>> listModels() async =>
-      [appleModelId, if (probe.mlx) ...mlxModels];
 
   @override
   Stream<LlmChunk> stream(

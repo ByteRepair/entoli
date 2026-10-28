@@ -26,15 +26,17 @@ workspace — `../` is a name a folder can be asked for. Deleting looks each pat
 up rather than trusting what the listing said it was, since a selection is held
 as paths and the listing under it is re-read.
 
-A text file is the one thing a tap does not leave the app for. `TextViewerPage`
-reads it through the same `FileSystem` the listing came from, so it is one page
-on every platform rather than three. It opens as a preview: markdown rendered
+A text file is the one thing a tap does not leave the app for. `TextFilePage`
+(`lib/ui/widgets/`, since the profile page opens linked instruction files in
+it too) reads it through the same `FileSystem` the listing came from, so it is
+one page on every platform rather than three. It opens as a preview: markdown rendered
 with the reply's style sheet, anything else in `re_editor`'s `CodeEditor`,
 read-only and highlighted by the grammar `grammarOfFile` picks from the name —
 the same thirty-one `CodeBlockBuilder` registers, found by a grammar's alias the
 way a fence names one. Edit turns the editor writable (markdown switches to its
 source), and the save is a plain write rather than `writeThroughRename`, since a
-rename makes a new file and drops the mode an agent gave its script. Wrapping
+rename makes a new file and drops the mode an agent gave its script, and would
+replace a linked CLAUDE.md that is a symlink with a file of its own. Wrapping
 and text size belong to the reader rather than the file, so they are held for
 the session rather than per page.
 

@@ -29,6 +29,7 @@ import "../../domain/tool_arg.dart";
 import "../../domain/web_search.dart";
 import "../../domain/voice.dart" show Synthesize, Transcribe;
 import "../local/file_sub_agent_log.dart";
+import "../local/linked_instructions_store.dart";
 import "../prompts/prompt_sources.dart" show promptDirsOf;
 import "../prompts/skill_package.dart";
 import "background_jobs.dart";
@@ -70,6 +71,9 @@ class BuiltinBackend implements AgentBackend {
   final AppConfig config;
   final LlmRegistry registry;
   final Shell shell;
+
+  /// Read only here; the pages write through their own.
+  late final _linkedInstructions = LinkedInstructionsStore(config);
 
   /// The chat store, which the agent writes artifacts to. Held here rather
   /// than passed per-turn: the store resolves which project a chat is in.
@@ -356,13 +360,13 @@ class BuiltinBackend implements AgentBackend {
       final bundled = settings.bundledInstructions;
       final readFiles = bundled == null || settings.includesUserInstructions;
       final instructionsF = readFiles
-          ? loadInstructions(
-              config.fs,
-              projectWorkspace: projectWorkspace,
-              global: config.globalInstructionsFile,
-              imports: settings.memory.imports,
-              excludes: settings.memory.excludes,
-            )
+          ? _linkedInstructions.load().then((linked) => loadInstructions(
+                config.fs,
+                projectWorkspace: projectWorkspace,
+                global: linked.filesFor(project, config.globalInstructionsFile),
+                imports: settings.memory.imports,
+                excludes: settings.memory.excludes,
+              ))
           : Future.value(const <InstructionFile>[]);
       // The project's memory store, when the subsystem runs at all. Which
       // project's is on the settings; the dir is never built twice for a

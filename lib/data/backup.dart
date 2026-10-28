@@ -88,7 +88,8 @@ Future<Uint8List> writeBackup(AppConfig config) async {
     base: config.dataDir,
     // The half of a rename that a kill landed in. Nothing reads one, and a
     // restore that put it back would put back a torn write.
-    skip: (path) => path.endsWith(writingSuffix),
+    skip: (path) =>
+        path.endsWith(writingSuffix) || _isMachineLocal(config, path),
     // The top-level `sync/` holds private keys, and restoring it would unpair
     // this device. A project's `rootfs/` is re-fetchable and holds proot's
     // mode-0000 stubs the walker cannot list (see `tree_ops.dart`). Matched by
@@ -144,6 +145,9 @@ Backup parseBackup(Uint8List bytes) {
   );
 }
 
+bool _isMachineLocal(AppConfig config, String path) =>
+    config.machineLocalFiles.any((f) => config.fs.path.equals(path, f));
+
 /// Put a backup back. What is in the data directory now goes: a restore is what
 /// was backed up, not that plus whatever has happened since, and a merge would
 /// leave a chat deleted before the backup was made alive again beside one
@@ -170,7 +174,7 @@ Future<void> restoreBackup(
     for (final entity in top)
       if (entity is Directory)
         clear(entity.path)
-      else if (entity is File)
+      else if (entity is File && !_isMachineLocal(config, entity.path))
         entity.delete(),
   ]);
 

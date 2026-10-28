@@ -29,9 +29,6 @@ class ReadableClient implements LlmClient {
       );
 
   @override
-  Future<List<String>> listModels() => inner.listModels();
-
-  @override
   void close() => inner.close();
 }
 

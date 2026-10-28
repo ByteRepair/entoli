@@ -1,3 +1,5 @@
+import "package:http/http.dart" as http;
+
 import "../../../domain/app_settings.dart";
 import "../../../domain/local_llm.dart";
 import "llm_client.dart";
@@ -51,6 +53,12 @@ class LocalPoolProvider extends LlmProvider with KeyFree, ChatOnly {
 
   @override
   LlmClient client(String? apiKey) => LocalPoolClient(_llm, _options, kvCache: _kv);
+
+  /// Answered from what is on disk rather than by asking a server, since asking
+  /// would mean loading one.
+  @override
+  Future<List<String>> listModels(String? apiKey, {http.Client? httpClient}) async =>
+      _llm.installed;
 }
 
 /// The on-device provider, as one client over however many servers are running.
@@ -128,11 +136,6 @@ class LocalPoolClient implements LlmClient {
       );
     }
   }
-
-  /// Answered from what is on disk rather than by asking a server, since asking
-  /// would mean loading one — and this is what the model picker calls.
-  @override
-  Future<List<String>> listModels() async => _llm.provider?.models ?? const [];
 
   @override
   void close() => _clients.close();

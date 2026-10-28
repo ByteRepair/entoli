@@ -67,6 +67,7 @@ final List<_Segment> _segments = [
   (label: "System prompt", colour: Colors.grey.shade500, of: (u) => u.share(u.system)),
   (label: "Tool definitions", colour: Colors.orange.shade400, of: (u) => u.share(u.tools)),
   (label: "Profile", colour: Colors.green.shade500, of: (u) => u.share(u.profile)),
+  (label: "Instructions", colour: Colors.purple.shade300, of: (u) => u.share(u.instructions)),
   (label: "Chat", colour: Colors.blue.shade500, of: (u) => u.share(u.chat)),
 ];
 

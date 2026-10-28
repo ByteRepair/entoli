@@ -7,7 +7,6 @@ import "package:agent_chat/data/builtin/llm/llm_registry.dart";
 import "package:agent_chat/data/builtin/llm/providers/presets.dart";
 import "package:agent_chat/domain/app_settings.dart";
 import "package:agent_chat/domain/llm_provider.dart";
-import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/domain/permission.dart";
 
 import "../data/builtin/builtin_fakes.dart";
@@ -22,13 +21,13 @@ void main() {
         "baseUrl": "https://openrouter.ai/api/v1",
         "label": "OpenRouter",
         "apiKey": "sk-or-1",
-        "models": ["a", "b"],
+        "modelsEndpoint": "https://openrouter.ai/api/v1/models",
       });
 
       expect(provider!.id, "openrouter");
       expect(provider.api, LlmApi.openai);
       expect(provider.displayName, "OpenRouter");
-      expect(provider.models, ["a", "b"]);
+      expect(provider.modelsEndpoint, "https://openrouter.ai/api/v1/models");
       // The key is not the config's any more; nothing here carries one.
       expect(
           provider.resolveKeyWith((name) => name == "ANTHROPIC_API_KEY" ? "x" : null),
@@ -40,7 +39,7 @@ void main() {
           LlmProviderConfig.fromJson(const {"id": "x", "baseUrl": "https://x.test/v1"});
 
       expect(provider!.api, LlmApi.openai);
-      expect(provider.models, isEmpty);
+      expect(provider.modelsEndpoint, isNull);
       expect(provider.displayName, "x");
     });
 
@@ -56,7 +55,7 @@ void main() {
         api: LlmApi.anthropic,
         baseUrl: "https://api.anthropic.com/v1",
         apiKeyEnv: "ANTHROPIC_API_KEY",
-        models: ["claude-x"],
+        modelsEndpoint: "https://api.anthropic.com/v1/models",
       );
 
       final back = LlmProviderConfig.fromJson(jsonDecode(jsonEncode(original.toJson())))!;
@@ -65,7 +64,7 @@ void main() {
       expect(back.api, original.api);
       expect(back.baseUrl, original.baseUrl);
       expect(back.apiKeyEnv, original.apiKeyEnv);
-      expect(back.models, original.models);
+      expect(back.modelsEndpoint, original.modelsEndpoint);
     });
   });
 
@@ -207,7 +206,6 @@ void main() {
           id: "fake",
           api: LlmApi.openai,
           baseUrl: "https://fake.test/v1",
-          models: ["m1", "m2"],
         ),
       ];
     });
@@ -235,19 +233,9 @@ void main() {
       expect(built, hasLength(2));
     });
 
-    test("what a provider lists is taken at its word", () async {
-      expect(await registryOver().models(), [
-        const ModelOption(providerId: "fake", modelId: "m1", label: "fake · m1"),
-        const ModelOption(providerId: "fake", modelId: "m2", label: "fake · m2"),
-      ]);
-    });
-
-    test("a provider that lists none is asked", () async {
-      providers = const [
-        LlmProviderConfig(id: "fake", api: LlmApi.openai, baseUrl: "https://fake.test/v1"),
-      ];
-
+    test("the model list is what each provider lists, with no client built", () async {
       expect((await registryOver().models()).single.modelId, "fake-model");
+      expect(built, isEmpty);
     });
 
     test("closing it closes what it opened", () {

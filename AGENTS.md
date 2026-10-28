@@ -157,6 +157,10 @@ beside the sync identity (`AppSecrets`), which is what keeps them out of
 schedule, timer and file sources — one JSON list; the boot receiver reads it
 with no engine running, which is why writes go through a rename. The file name
 is the reminder's and stayed, a rename being a migration.
+`<dataDir>/instruction_files.json` is the instruction files a desktop user
+linked by path and which projects switched each off — out of backups and sync,
+being this machine's paths; see "Workspace instructions" in
+`lib/data/builtin/AGENTS.md`.
 `<dataDir>/models.json` is models.dev trimmed to what the app reads, a cache
 refetched daily — see "The model catalog" in `lib/ui/widgets/AGENTS.md`.
 Data dir: `$ENTOLI_CONFIG` if set, else `~/.config/entoli` (desktop),
