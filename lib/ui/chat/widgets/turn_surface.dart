@@ -1,4 +1,5 @@
 import "package:flutter/material.dart";
+import "package:flutter_riverpod/misc.dart" show ProviderListenable;
 
 import "../../../domain/permission.dart" show addDirectoryName;
 import "../../../domain/models.dart";
@@ -6,11 +7,10 @@ import "../../../domain/room/room_state.dart";
 import "../chat_controller.dart";
 import "approval_banner.dart";
 import "browser_strip.dart";
-import "job_strip.dart";
 import "question_panel.dart";
 import "resume_bar.dart";
+import "running_strip.dart";
 import "steer_strip.dart";
-import "sub_agent_strip.dart";
 
 /// Everything a running turn puts on screen above whatever is used to answer
 /// it: the offer to carry on an interrupted one, the sub-agents still going,
@@ -27,10 +27,17 @@ import "sub_agent_strip.dart";
 /// the circle above it — but how it is wired does not.
 class TurnSurface extends StatelessWidget {
   const TurnSurface(
-      {super.key, required this.view, required this.notifier, this.onWithdrawn});
+      {super.key,
+      required this.view,
+      required this.notifier,
+      this.source,
+      this.onWithdrawn});
 
   final ChatViewState view;
   final TurnDriver notifier;
+
+  /// Where [view] comes from, so a drawer opened here follows the turn.
+  final ProviderListenable<ChatViewState>? source;
 
   /// Where a say taken back from the turn goes: the composer it was typed in.
   /// Null where there is none, as on the voice screen.
@@ -51,8 +58,8 @@ class TurnSurface extends StatelessWidget {
             onContinue: notifier.resume,
             notice: view.unfinishedNotice,
           ),
-        for (final agents in view.runningSubAgents.values)
-          SubAgentStrip(agents: agents),
+        if (chat != null) BrowserPrompts(chatId: chat.state.id),
+        RunningStrip(view: view, source: source),
         SteerStrip(
           steering: view.steering,
           onQueue: notifier.queueSteer,
@@ -63,11 +70,6 @@ class TurnSurface extends StatelessWidget {
                   if (said != null) restore(said);
                 },
         ),
-        // Not turn-scoped like the strips above: the tab outlives the turn
-        // that opened it, so the chip shows for as long as the tab is open.
-        if (chat != null) BrowserStrip(chatId: chat.state.id),
-        // The same: a job runs on past the turn that started it.
-        if (chat != null) JobStrip(chatId: chat.state.id),
         for (final approvals in view.approvals.values)
           for (final approval in approvals)
             ApprovalBanner(

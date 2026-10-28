@@ -147,7 +147,12 @@ void main() {
         isMirroredChatProvider("chat-1").overrideWithValue(mirrored),
       ],
       child: const MaterialApp(
-        home: Scaffold(body: BrowserStrip(chatId: "chat-1")),
+        home: Scaffold(
+          body: Column(children: [
+            BrowserPrompts(chatId: "chat-1"),
+            BrowserPill(chatId: "chat-1"),
+          ]),
+        ),
       ),
     ));
     return browser.tab("chat-1") as _Tab;
