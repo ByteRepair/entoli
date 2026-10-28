@@ -528,6 +528,22 @@ Future<void> settleIo(WidgetTester tester, {int least = 6, int tries = 40}) asyn
   await tester.pumpAndSettle();
 }
 
+/// Pump until [done] holds, letting real file I/O run between frames, then
+/// settle. For a tap whose effect lands on disk: [settleIo]'s rounds are a
+/// guess at how long the I/O takes, and a loaded CI machine outlasts it. Bound
+/// by real time, and fails rather than returning, so a slow run waits and a
+/// broken one says what never came.
+Future<void> settleUntil(WidgetTester tester, bool Function() done,
+    {String what = "it", Duration limit = const Duration(seconds: 15)}) async {
+  final end = DateTime.now().add(limit);
+  while (!done()) {
+    if (DateTime.now().isAfter(end)) fail("$what never happened");
+    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 5)));
+    await tester.pump(const Duration(milliseconds: 16));
+  }
+  await tester.pumpAndSettle();
+}
+
 /// Run [body] where its file I/O can actually complete. A `testWidgets` body
 /// runs on a fake clock, and the store is asynchronous now — awaiting a save
 /// directly in one waits forever. Everything that reads or writes through the
