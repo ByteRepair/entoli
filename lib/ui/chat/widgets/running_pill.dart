@@ -86,13 +86,9 @@ class RunningThing {
   final void Function(BuildContext context) open;
 }
 
-/// A kind of thing a chat can have running. The row asks each source for
-/// what it has, in the order the sources are listed, and knows nothing of
-/// what they are.
-abstract class RunningSource {
-  const RunningSource();
-
-  /// What [chatId] has running now, watching through [ref] whatever it reads
-  /// beyond [view].
-  List<RunningThing> things(WidgetRef ref, ChatViewState view, String chatId);
-}
+/// A kind of thing a chat can have running: what [chatId] has of it now,
+/// watching through [ref] whatever it reads beyond [view]. The row asks each
+/// for what it has, in the order they are listed, and knows nothing of what
+/// they are.
+typedef RunningSource = List<RunningThing> Function(
+    WidgetRef ref, ChatViewState view, String chatId);

@@ -11,8 +11,8 @@ import "../../widgets/dialogs.dart" show catchAndSay;
 import "../../workspace/text_viewer_page.dart";
 import "../mirror_controller.dart" show chatViewProvider;
 import "../widgets/activity_label.dart"
-    show ActivityStatus, Run, RunView, showRunCard, toolRunView;
-import "../widgets/running_pill.dart" show RunningSource, RunningThing;
+    show ActivityStatus, Run, RunDrawer, RunView, showRunCard, toolRunView;
+import "../widgets/running_pill.dart" show RunningThing;
 import "tool_ui.dart";
 
 /// What voice mode says of a command, whoever ran it — the model through
@@ -38,12 +38,9 @@ class BashUI extends ToolUI {
     final result = run.result;
     final jobId = result?.jobId;
     if (jobId != null) {
-      return jobView(ref,
-          chatId: run.chatId,
-          callId: run.callId,
+      return jobView(ref, run,
           command: stringArg(run.call?.argumentsJson, "command") ?? "",
-          jobId: jobId,
-          card: run.card);
+          jobId: jobId);
     }
     return toolRunView(run,
         commandArg: "command",
@@ -57,86 +54,81 @@ class BashUI extends ToolUI {
 /// call's, since the call was over the moment the job started. Running, the
 /// drawer tails its log and can stop it; ended, it says how, shows what the
 /// chat kept of the log, and opens the whole log while the workspace has it.
-RunView jobView(
-  WidgetRef ref, {
-  required String chatId,
-  required String callId,
-  required String command,
-  required int jobId,
-  bool card = false,
-}) {
-  final state =
-      ref.watch(chatViewProvider(chatId).select((v) => v.jobOf(callId)));
+RunView jobView(WidgetRef ref, Run run,
+    {required String command, required int jobId}) {
+  final (:state, :mirrored) = ref.watch(chatViewProvider(run.chatId)
+      .select((v) => (state: v.jobOf(run.callId), mirrored: v.mirrored)));
   final line = firstLine(command);
   final title = "Background job $jobId";
   if (state case JobRunning(:final job)) {
-    final log = card ? ref.watch(jobLogProvider((chatId: chatId, job: job))).value : null;
     return RunView(
       icon: Icons.terminal,
       label: "Running in the background: $line",
       busy: true,
-      title: title,
-      command: command,
-      status: (text: "Running${job.pid == null ? "" : " · pid ${job.pid}"}", isError: false),
-      actions: [_StopJob(chatId: chatId, jobId: job.id)],
-      mono: true,
-      live: true,
-      sections: [
-        (
-          label: "Output",
-          body: log == null || log.isEmpty ? "(nothing printed yet)" : log,
-          isError: false,
-        ),
-      ],
+      drawer: (ref) {
+        final log = ref.watch(jobLogProvider((chatId: run.chatId, job: job))).value;
+        return RunDrawer(
+          title: title,
+          command: command,
+          status: (
+            text: "Running${job.pid == null ? "" : " · pid ${job.pid}"}",
+            isError: false,
+          ),
+          actions: [_StopJob(chatId: run.chatId, jobId: job.id)],
+          mono: true,
+          live: true,
+          sections: [
+            (
+              label: "Output",
+              body: log == null || log.isEmpty ? "(nothing printed yet)" : log,
+              isError: false,
+            ),
+          ],
+        );
+      },
     );
   }
-  // A mirror's jobs are the other device's, and only their ends reach it.
-  final mirrored = ref.watch(isMirroredChatProvider(chatId));
   final end = switch (state) { JobEnded(:final end) => end, _ => null };
-  final status = end == null
-      ? (text: mirrored ? "Not heard from" : "Ended with the app", isError: false)
-      : jobStatus(end);
+  final status = switch (state) {
+    JobEnded(:final end) => _jobStatus(end),
+    JobUnheard() => (text: "Not heard from", isError: false),
+    _ => (text: "Ended with the app", isError: false),
+  };
   return RunView(
     icon: Icons.terminal,
     label: "Background job ${status.text.toLowerCase()}: $line",
     isError: status.isError,
-    title: title,
-    command: command,
-    status: status,
-    actions: [if (!mirrored) _OpenLog(chatId: chatId, callId: callId)],
-    mono: true,
-    sections: [(label: "Output", body: end?.tail, isError: false)],
+    drawer: (_) => RunDrawer(
+      title: title,
+      command: command,
+      status: status,
+      // A mirror's workspace, and the log in it, is the other device's.
+      actions: [if (!mirrored) _OpenLog(chatId: run.chatId, callId: run.callId)],
+      mono: true,
+      sections: [(label: "Output", body: end?.tail, isError: false)],
+    ),
   );
 }
 
 /// The background jobs running, a pill each, opening the job's drawer.
-class JobsRunning extends RunningSource {
-  const JobsRunning();
-
-  @override
-  List<RunningThing> things(WidgetRef ref, ChatViewState view, String chatId) => [
-        for (final job in view.runningJobs.values)
-          RunningThing(
-            group: "background task",
-            label: firstLine(job.command),
-            mono: true,
-            tooltip: "Background job ${job.id}",
-            open: (context) => showRunCard(
-              context,
-              view: (ref, run) => jobView(ref,
-                  chatId: chatId,
-                  callId: job.callId,
-                  command: job.command,
-                  jobId: job.id,
-                  card: run.card),
-              run: Run(chatId: chatId, callId: job.callId),
-            ),
+List<RunningThing> jobsRunning(WidgetRef ref, ChatViewState view, String chatId) => [
+      for (final job in view.runningJobs.values)
+        RunningThing(
+          group: "background task",
+          label: firstLine(job.command),
+          mono: true,
+          tooltip: "Background job ${job.id}",
+          open: (context) => showRunCard(
+            context,
+            view: (ref, run) =>
+                jobView(ref, run, command: job.command, jobId: job.id),
+            run: Run(chatId: chatId, callId: job.callId),
           ),
-      ];
-}
+        ),
+    ];
 
 /// How a job ended, for a status line.
-ActivityStatus jobStatus(JobEnd end) {
+ActivityStatus _jobStatus(JobEnd end) {
   final code = end.exitCode;
   if (code == null) return (text: "Stopped", isError: false);
   return (text: "Exited with code $code", isError: code != 0);

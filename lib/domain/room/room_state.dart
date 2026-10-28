@@ -17,6 +17,7 @@ class ChatViewState {
     this.shellOutput = const {},
     this.steering = const [],
     this.runningJobs = const {},
+    this.mirrored = false,
   });
   final Chat? chat;
   final bool isRunning;
@@ -65,13 +66,17 @@ class ChatViewState {
   /// are the other device's.
   final Map<String, ShellJob> runningJobs;
 
+  /// A chat whose home is another device: its jobs and their logs are there.
+  final bool mirrored;
+
   /// Where the job [callId] started is: running here, or how the log says it
   /// ended, or neither. The one place the two meet.
   JobState jobOf(String callId) {
     final running = runningJobs[callId];
     if (running != null) return JobRunning(running);
     final end = chat?.jobEndOf(callId);
-    return end == null ? const JobLost() : JobEnded(end);
+    if (end != null) return JobEnded(end);
+    return mirrored ? const JobUnheard() : const JobLost();
   }
 
   /// Who may speak now — see [RoomPhase], whose facts "The room's phase is
@@ -112,6 +117,7 @@ class ChatViewState {
         shellOutput: shellOutput ?? this.shellOutput,
         steering: steering ?? this.steering,
         runningJobs: runningJobs ?? this.runningJobs,
+        mirrored: mirrored,
       );
 }
 

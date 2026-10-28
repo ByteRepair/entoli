@@ -320,7 +320,9 @@ it, since an answered question's output is data, and the projection words
 the notes ahead of the result for every tool. The same end goes to the chat
 as `ChatShellJobs.ended`, with the last lines of the log (`jobTail`: ten
 lines, cut from the top to a kilobyte), for the room to keep on the log as a
-`jobEnded` call event — not for the model, which already has the note. A job the app killed on its
+`jobEnded` call event — not for the model, which already has the note. It
+goes out synchronously and before the job leaves `jobs`, so the chat never
+sees a job neither running nor ended. A job the app killed on its
 way out has no end; that absence is what "ended with the app" reads.
 Each is killed after `timeout`; deleting the chat
 or quitting the app kills them, and ids are never reused while the app runs,

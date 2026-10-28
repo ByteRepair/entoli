@@ -45,7 +45,7 @@ class ThinkingLabel extends StatelessWidget {
     return ms == null ? "View thinking" : "Thought for ${formatThinkingTime(ms)}";
   }
 
-  ActivityView? _follow(LiveMessage now, WidgetRef _) {
+  ActivityView? _follow(LiveMessage now) {
     final parts = now.message?.parts;
     final at = this.at;
     if (parts == null || at == null || at >= parts.length) return null;
@@ -141,7 +141,7 @@ class _ThoughtTail extends StatelessWidget {
 }
 
 /// One tool run, as its [RunView] is built from it: the call, its result once
-/// there is one, and how much of the turn around it is still going.
+/// there is one, and whether it is still going where it is drawn.
 class Run {
   const Run({
     required this.chatId,
@@ -149,16 +149,14 @@ class Run {
     this.call,
     this.result,
     this.printing,
-    this.live = false,
-    this.current = false,
-    this.card = false,
+    this.going = false,
   });
 
   final String chatId;
   final String callId;
 
   /// Null where the call is not to hand: a result whose call is gone, or a
-  /// running pill opening a drawer from what the room has.
+  /// running pill opening a drawer before the call is followed.
   final ToolCall? call;
 
   /// Null while the tool is still running.
@@ -168,20 +166,13 @@ class Run {
   /// it has not returned yet.
   final String? printing;
 
-  /// A drawer following a turn that is still running this call.
-  final bool live;
-
-  /// The live label of a waiting turn that has already said something — the
-  /// spinner below the message handles the no-text-yet case.
-  final bool current;
-
-  /// Built for the drawer rather than the label: what only the drawer shows,
-  /// a transcript or a log, is watched for it alone, since a label is rebuilt
-  /// for every call in every visible reply.
-  final bool card;
+  /// Still going where it is drawn: the live label of a waiting turn that has
+  /// already said something — the spinner below the message handles the
+  /// no-text-yet case — or a drawer following a turn still running it.
+  final bool going;
 }
 
-/// A tool run on screen: the one-line label in the reply and the drawer
+/// A tool run on screen: the one-line label in the reply, and the drawer
 /// behind it, as the run stands now. A tool's `ToolUI.view` builds it, and
 /// [RunLabel] and the drawer [showRunCard] opens draw it, so how a tool's run
 /// looks is that one function.
@@ -189,9 +180,29 @@ class RunView {
   const RunView({
     required this.icon,
     required this.label,
-    required this.title,
+    required this.drawer,
     this.isError = false,
     this.busy = false,
+  });
+
+  /// The tool's; a failed run's label says so with its own.
+  final IconData icon;
+  final String label;
+  final bool isError;
+
+  /// Spinning though the run is not [Run.going] here, as a job is.
+  final bool busy;
+
+  /// What the drawer shows, built only for a drawer and watching through the
+  /// drawer's ref: a label is rebuilt for every call in every visible reply,
+  /// and what only the drawer reads — a log, a transcript — is not for it.
+  final RunDrawer Function(WidgetRef ref) drawer;
+}
+
+/// What a run's drawer draws; see [ActivityCard].
+class RunDrawer {
+  const RunDrawer({
+    required this.title,
     this.command,
     this.status,
     this.sections = const [],
@@ -201,25 +212,14 @@ class RunView {
     this.below,
   });
 
-  /// The tool's; a failed run's label says so with its own.
-  final IconData icon;
-  final String label;
   final String title;
-  final bool isError;
-
-  /// The label spins rather than showing [icon].
-  final bool busy;
-
-  /// Set apart under the title the way a `!` message is.
   final String? command;
   final ActivityStatus? status;
   final List<ActivitySection> sections;
-
-  /// Beside the drawer's close button.
   final List<Widget> actions;
   final bool mono;
 
-  /// The drawer keeps to the end of what is arriving.
+  /// Still arriving though the run is not [Run.going] here, as a job's log is.
   final bool live;
   final Widget? below;
 }
@@ -242,7 +242,9 @@ class RunLabel extends ConsumerWidget {
       icon: now.isError ? Icons.error_outline : now.icon,
       text: now.label,
       isError: now.isError,
-      iconWidget: now.busy ? _labelSpinner(context) : null,
+      iconWidget: now.busy || (run.going && run.result == null)
+          ? _labelSpinner(context)
+          : null,
       onTap: () => showRunCard(context, view: view, run: run),
     );
   }
@@ -271,39 +273,29 @@ class _RunCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    var now = Run(
-        chatId: run.chatId,
-        callId: run.callId,
-        call: run.call,
-        result: run.result,
-        card: true);
     final from = source;
-    if (from != null) {
-      final message = ref.watch(from);
-      final found = _runIn(message.message, run.callId);
-      if (found != null) {
-        final going = message.running && found.result == null;
-        now = Run(
-          chatId: run.chatId,
-          callId: run.callId,
-          call: found.call ?? run.call,
-          result: found.result,
-          printing: going ? message.shellOutput : null,
-          live: going,
-          card: true,
-        );
-      }
-    }
-    final shown = view(ref, now);
+    final message = from == null ? null : ref.watch(from);
+    final found = _runIn(message?.message, run.callId);
+    final going = found != null && message!.running && found.result == null;
+    final now = Run(
+      chatId: run.chatId,
+      callId: run.callId,
+      call: found?.call ?? run.call,
+      result: found == null ? run.result : found.result,
+      printing: going ? message.shellOutput : null,
+      going: going,
+    );
+    final drawn = view(ref, now);
+    final shown = drawn.drawer(ref);
     return ActivityCard(
       title: shown.title,
-      icon: shown.icon,
+      icon: drawn.icon,
       command: shown.command,
       status: shown.status,
       actions: shown.actions,
       sections: shown.sections,
       mono: shown.mono,
-      live: shown.live,
+      live: shown.live || going,
       below: shown.below,
     );
   }
@@ -316,8 +308,6 @@ RunView toolRunView(Run run, {String? commandArg, ActivityStatus? status}) {
   final call = run.call;
   final result = run.result;
   final name = call?.name;
-  final failed = (result?.returnCode ?? 0) != 0 ||
-      (result?.violations.isNotEmpty ?? false);
   final verb = result == null ? "Using tool" : "Used tool";
   final outcome = result?.permissionOutcome;
   return RunView(
@@ -327,23 +317,25 @@ RunView toolRunView(Run run, {String? commandArg, ActivityStatus? status}) {
         : outcome == null
             ? "$verb: $name"
             : "$verb: $name — $outcome",
-    isError: failed,
-    busy: run.current && result == null,
-    title: name ?? "Tool",
-    command: commandArg == null ? null : stringArg(call?.argumentsJson, commandArg),
-    status: status,
-    mono: true,
-    live: run.live,
-    sections: [
-      ..._runSections(call, result, printing: run.printing, besides: commandArg),
-      if (result != null && result.violations.isNotEmpty)
-        (label: "Sandbox", body: result.violations.join("\n"), isError: true),
-    ],
+    isError: (result?.returnCode ?? 0) != 0 ||
+        (result?.violations.isNotEmpty ?? false),
+    drawer: (_) => RunDrawer(
+      title: name ?? "Tool",
+      command:
+          commandArg == null ? null : stringArg(call?.argumentsJson, commandArg),
+      status: status,
+      mono: true,
+      sections: [
+        ..._runSections(call, result, printing: run.printing, besides: commandArg),
+        if (result != null && result.violations.isNotEmpty)
+          (label: "Sandbox", body: result.violations.join("\n"), isError: true),
+      ],
+    ),
   );
 }
 
-/// The call [id] names in [message], if it has been written there yet.
-ToolCall? toolCallIn(Message? message, String id) => _runIn(message, id)?.call;
+/// [toolRunView] as a [RunViewOf], for a run no tool claims.
+RunView genericRunView(WidgetRef _, Run run) => toolRunView(run);
 
 /// The call [id] names in [message] and the result answering it, as the
 /// message now stands. Null where neither is in it.
@@ -667,7 +659,7 @@ class _AskLabelState extends State<AskLabel> {
     // the reason a question label would drop.
     if (_questions.isEmpty) {
       return RunLabel(
-          view: (_, run) => toolRunView(run),
+          view: genericRunView,
           run: Run(
               chatId: widget.chatId,
               callId: widget.call.id,
@@ -1060,8 +1052,8 @@ LiveMessage liveMessageOf(ChatViewState view, String id) => (
     );
 
 /// What an open drawer shows, re-read from the [LiveMessage] each time it
-/// changes. A null [title] keeps the one it opened with.
-typedef ActivityView = ({String? title, List<ActivitySection> sections, bool live});
+/// changes.
+typedef ActivityView = ({String title, List<ActivitySection> sections, bool live});
 
 /// Where a label's drawer reads its message from once it is open. The label
 /// cannot be: it is rebuilt per delta, folded into a collapsed run when its
@@ -1101,17 +1093,13 @@ Future<T?> showActivityCard<T>(BuildContext context, WidgetBuilder builder) =>
 /// With [follow] it streams: what it shows is re-read from the message each
 /// time the message changes, and while [ActivityView.live] it keeps to the
 /// end of what is arriving until the reader scrolls back.
-///
-/// [below] is drawn under the sections and watched through the drawer's own
-/// ref, so what it watches keeps the drawer following too.
 Future<void> showActivitySheet(
   BuildContext context, {
   required String title,
   required List<ActivitySection> sections,
   IconData? icon,
   bool mono = false,
-  ActivityView? Function(LiveMessage now, WidgetRef ref)? follow,
-  Widget? Function(WidgetRef ref)? below,
+  ActivityView? Function(LiveMessage now)? follow,
 }) {
   final source = follow == null ? null : ActivitySource.of(context);
   return showActivityCard<void>(
@@ -1123,8 +1111,7 @@ Future<void> showActivitySheet(
       mono: mono,
       view: source == null || follow == null
           ? null
-          : (ref) => follow(ref.watch(source), ref),
-      below: below,
+          : (ref) => follow(ref.watch(source)),
     ),
   );
 }
@@ -1136,14 +1123,12 @@ class _ActivitySheet extends ConsumerWidget {
     required this.sections,
     required this.mono,
     required this.view,
-    this.below,
   });
 
   final String title;
   final IconData? icon;
   final List<ActivitySection> sections;
   final bool mono;
-  final Widget? Function(WidgetRef ref)? below;
 
   /// What the drawer shows now, watched through the ref it is handed. Null
   /// where there is nothing to follow.
@@ -1158,7 +1143,6 @@ class _ActivitySheet extends ConsumerWidget {
       sections: now?.sections ?? sections,
       mono: mono,
       live: now?.live ?? false,
-      below: below?.call(ref),
     );
   }
 }

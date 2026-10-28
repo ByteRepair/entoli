@@ -69,10 +69,12 @@ and a typed reading in `CallEvents`, not a new record. A turn's
 hears how a job ended through the next tool result's notes.
 
 The room is where a job's two halves meet. It holds the backend's running
-jobs as `ChatViewState.runningJobs`, keeping one that left the backend's
-list until its end lands, so a job is never read as neither, and
-`ChatViewState.jobOf` answers by the call: `JobRunning`, `JobEnded` from the
-call event, or `JobLost`.
+jobs as `ChatViewState.runningJobs`, and `ChatViewState.jobOf` answers by the
+call: `JobRunning`, `JobEnded` from the call event, `JobLost` with the app
+that ran it, or on a mirror `JobUnheard`. The backend sends a job's end,
+synchronously, before it drops the job from its list, and the room applies
+it at once, so a job is never read as neither. Both halves of the call event
+rule — replay's fold and the room's live write — are `withCallEvent`.
 
 Rewinding is a record rather than a truncation because shortening a log means
 rewriting it, which is the one thing the format exists to avoid. It is also the

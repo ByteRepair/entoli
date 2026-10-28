@@ -590,7 +590,7 @@ class _MessageBubbleState extends State<MessageBubble> {
                       callId: toolCall.id,
                       call: toolCall,
                       result: result,
-                      current: isLive(i) && widget.message.hasText)));
+                      going: isLive(i) && widget.message.hasText)));
           if (important) {
             flushRun();
             rows.add(label);
@@ -604,7 +604,7 @@ class _MessageBubbleState extends State<MessageBubble> {
           // run for the same reason any other success would.
           if (calls.contains(result.callId)) continue;
           final label = _label(RunLabel(
-              view: (_, run) => toolRunView(run),
+              view: genericRunView,
               run: Run(
                   chatId: widget.chatId, callId: result.callId, result: result)));
           if (result.returnCode != 0) {

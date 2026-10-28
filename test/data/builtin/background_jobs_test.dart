@@ -176,6 +176,10 @@ void main() {
     shell = FakeShell((_) => ShellResult(returnCode: 3, output: ""),
         canRunInBackground: true);
     final chat = jobs.forChat("c");
+    // Whether the job was still listed as its end went out: the chat must
+    // never read it as neither.
+    bool? listed;
+    chat.ended.listen((_) => listed = chat.jobs.value.isNotEmpty);
     final ended = chat.ended.first;
     await chat.start("x",
         callId: "c1",
@@ -187,6 +191,9 @@ void main() {
     expect(end.jobId, 1);
     expect(end.exitCode, 3);
     expect(end.tail, [for (var i = 6; i <= 15; i++) "line $i"].join("\n"));
+    expect(listed, isTrue);
+    await pumpEventQueue();
+    expect(chat.jobs.value, isEmpty);
   });
 
   group("jobTail", () {

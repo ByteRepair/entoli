@@ -212,7 +212,7 @@ Replayed replayTree(Iterable<ChatRecord> records) {
   final children = <String?, List<String>>{};
   final shown = <String?, String>{};
   final compactions = <String, ConversationCompaction>{};
-  final callEvents = <String, Map<String, Map<String, dynamic>>>{};
+  var callEvents = <String, Map<String, Map<String, dynamic>>>{};
 
   /// The child of [of] the thread runs through: the one last selected, or
   /// failing that the newest, since a thread just written is the one to read.
@@ -329,7 +329,7 @@ Replayed replayTree(Iterable<ChatRecord> records) {
         }
 
       case CallEventRecord(:final callId, :final kind, :final data):
-        (callEvents[callId] ??= {})[kind] = data;
+        callEvents = withCallEvent(callEvents, callId, kind, data);
     }
   }
 

@@ -58,8 +58,8 @@ so that it sits after the last word rather than under the paragraph.
 **A running tool label carries its own spinner** where the message has already
 said something, since the spinner below the message is gated on `!hasText` and
 a turn that says "Let me check that" before calling `bash` has text. A run's
-`Run.current` is true only for the live label of a waiting turn that has
-text, so the two spinners never double up: the message-level spinner handles
+label's `Run.going` is true only for the live label of a waiting turn that
+has text, so the two spinners never double up: the message-level spinner handles
 the no-text-yet case, the label-level spinner handles the has-text case.
 
 **Never both**, and that is one decision in `_rows` rather than two that happen
@@ -467,13 +467,16 @@ The bubble, the banner and the voice transcript ask it rather than switching
 on names.
 
 **A run is one view.** `ToolUI.view(ref, run)` returns a `RunView`: the
-label's icon and line, and the drawer's title, command, status line,
-sections, actions and what goes below them. `RunLabel` draws the label from
-it and `showRunCard` the drawer, so a tool's look is that one function. A
-`Run` is the call, its result, and how much is live: `current` for the
-label's spinner, `live` and `printing` for a drawer following its message,
-and `card` for what only the drawer reads — a sub-agent's transcript, a
-job's log — since a label is rebuilt for every call in every visible reply.
+label's icon and line, and a `drawer` builder for the drawer's title,
+command, status line, sections, actions and what goes below them. `RunLabel`
+draws the label from it and `showRunCard` the drawer, so a tool's look is
+that one function. The drawer is a builder, called only by the drawer with
+its own ref, so what only it reads — a sub-agent's transcript, a job's log —
+is never watched for a label, which is rebuilt for every call in every
+visible reply. A `Run` is the call, its result, and `going`, which the label
+and the drawer each set and own: the label spins and the drawer keeps to the
+end of what arrives without a view saying so; a view says so only for what
+goes on past its call, as a job does.
 The default is `toolRunView`, the tool's name and its arguments and output;
 `BashUI` sets the command apart with the exit code under it, and draws a
 call that started a job as the job; `TaskUI` follows the sub-agent's
@@ -551,8 +554,8 @@ on the message, not looked up per turn.
 ## What is running, on screen
 
 `RunningStrip` is one row in `TurnSurface` above the composer. What is on it
-comes from `runningSources`, a `RunningSource` per kind of thing a chat can
-have running — the browser's tab, background jobs, sub-agents — each
+comes from `runningSources`, a `RunningSource` function per kind of thing a
+chat can have running — the browser's tab, background jobs, sub-agents — each
 supplying `RunningThing`s: a label, an icon or none, the group it is
 gathered under, and how to open it. The strip knows nothing of what they
 are; a new kind is a source added to the list. Things with no group stand
@@ -598,7 +601,7 @@ The sidebar's spinner (and the project palette's) reads `busyChatsProvider`,
 a turn running *or* a browser tab open: a chat whose browser is up is active
 between turns, and with the browser hidden nothing else on screen says so.
 
-`BrowserRunning` is the first pill of `RunningStrip`, standing alone, for as
+`browserRunning` gives the first pill of `RunningStrip`, standing alone, for as
 long as the chat has a browser tab open — which is not turn-scoped: the tab outlives the turn
 that opened it, until the user or the idle timer quits the browser. It reads
 the tab straight off `agentBrowserProvider` rather than through the

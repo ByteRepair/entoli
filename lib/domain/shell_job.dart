@@ -29,8 +29,8 @@ class ShellJob {
 }
 
 /// Where one job is, read by the call that started it: running, ended with
-/// what the chat kept of it, or lost — it ended with the app, or on a mirror,
-/// its end has not arrived. See `ChatViewState.jobOf`.
+/// what the chat kept of it, lost with the app that ran it, or on a mirror,
+/// not heard of since. See `ChatViewState.jobOf`.
 sealed class JobState {
   const JobState();
 }
@@ -62,12 +62,11 @@ final class JobEnded extends JobState {
 
 final class JobLost extends JobState {
   const JobLost();
+}
 
-  @override
-  bool operator ==(Object other) => other is JobLost;
-
-  @override
-  int get hashCode => 0;
+/// On a mirror, whose jobs are the other device's: only their ends arrive.
+final class JobUnheard extends JobState {
+  const JobUnheard();
 }
 
 /// One chat's running background jobs, as the room reaches them.

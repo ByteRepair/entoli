@@ -62,11 +62,11 @@ void main() {
     await tester.pump();
     expect(find.text("Running in the background: npm run dev"), findsOneWidget);
 
-    jobs.jobs.value = const [];
     jobs.endings.add((
       callId: "c1",
       end: const JobEnd(jobId: 1, exitCode: 1, tail: "listening\nboom"),
     ));
+    jobs.jobs.value = const [];
     // The room applies it once its load is in, which is real I/O.
     await settleIo(tester);
     expect(find.text("Background job exited with code 1: npm run dev"),

@@ -260,6 +260,21 @@ abstract class Chat with _$Chat {
 /// The `callEvent` kind saying a background job ended, its data a [JobEnd].
 const jobEndedEvent = "jobEnded";
 
+/// [events] with [data] as the call [callId]'s event of [kind], the last of
+/// a kind standing: the one rule replay and a room writing live both fold by.
+Map<String, Map<String, Map<String, dynamic>>> withCallEvent(
+        Map<String, Map<String, Map<String, dynamic>>> events,
+        String callId,
+        String kind,
+        Map<String, dynamic> data) =>
+    {
+      ...events,
+      callId: {...?events[callId], kind: data},
+    };
+
+// Decoded once per event: a label reads its job's end on every streamed token.
+final _jobEnds = Expando<JobEnd>();
+
 /// The call events this build reads, typed.
 extension CallEvents on Chat {
   /// How the background job [callId] started ended, where the log says.
@@ -267,7 +282,7 @@ extension CallEvents on Chat {
     final data = callEvents[callId]?[jobEndedEvent];
     if (data == null) return null;
     try {
-      return JobEnd.fromJson(data);
+      return _jobEnds[data] ??= JobEnd.fromJson(data);
     } on Object {
       // Written by a build whose JobEnd had another shape: no end to show.
       return null;

@@ -113,16 +113,12 @@ void main() {
     await open(tester, "1 background task running");
     await open(tester, "make");
 
-    // Off the backend's list ahead of its end: still running here.
-    jobs.jobs.value = const [];
-    await tester.pump();
-    expect(find.text("Stop"), findsOneWidget);
-
+    // The end, then the backend dropping it, as the backend sends them.
     jobs.endings.add((
       callId: "c1",
       end: const JobEnd(jobId: 1, exitCode: 0, tail: "built"),
     ));
-    await tester.pump();
+    jobs.jobs.value = const [];
     await tester.pump();
     expect(find.text("Exited with code 0"), findsOneWidget);
     expect(find.text("built"), findsOneWidget);
@@ -134,27 +130,24 @@ void main() {
 
   testWidgets("sub-agents are a group beside the jobs, and a sub-agent's pill "
       "opens its drawer", (tester) async {
-    final app = TestApp.create();
-    addTearDown(app.dispose);
     final at = DateTime.utc(2026);
-    final chat = Chat(
-      state: ChatState(id: "chat-1", title: "t", createdAt: at, updatedAt: at),
-      messages: [
-        Message(
-          id: "r1",
-          role: MessageRole.assistant,
-          createdAt: at,
-          parts: const [
-            ToolCallPart(
-                toolCall: ToolCall(
-                    id: "c1",
-                    name: "task",
-                    argumentsJson:
-                        '{"agent":"explore","prompt":"find the parser"}')),
-          ],
-        ),
+    final reply = Message(
+      id: "r1",
+      role: MessageRole.assistant,
+      createdAt: at,
+      parts: const [
+        ToolCallPart(
+            toolCall: ToolCall(
+                id: "c1",
+                name: "task",
+                argumentsJson: '{"agent":"explore","prompt":"find the parser"}')),
       ],
     );
+    final (app, chatId, jobs) = await pumpStrip(tester, records: [
+      ...recordsOf([reply]),
+      ChatRecord.turnEnd(messageId: "r1", reason: TurnEnd.done),
+    ]);
+    final chat = (await io(tester, () => app.repo.openChat(chatId)));
     await app.pump(
         tester,
         Scaffold(
@@ -178,7 +171,7 @@ void main() {
     await open(tester, "1 sub-agent running");
     await open(tester, "@explore");
     expect(find.text("Sub-agent @explore"), findsOneWidget);
-    // The call's prompt, not the event's cut one.
+    // The call's prompt, followed from the reply, not the event's cut one.
     expect(find.text("find the parser"), findsOneWidget);
   });
 }

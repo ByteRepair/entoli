@@ -1363,7 +1363,6 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
       ],
     );
   }
-  /// A message as an open activity drawer reads it.
   /// What the bar says about the chat under its title, a line each. The
   /// conditions are here and nowhere else: [_barHeight] counts what this
   /// returns, so a line added here is one the bar makes room for.

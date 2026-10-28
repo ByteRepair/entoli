@@ -12,7 +12,7 @@ import "../../../domain/agent_browser.dart";
 import "../../../providers.dart";
 import "browser_input.dart";
 import "../../../domain/room/room_state.dart" show ChatViewState;
-import "running_pill.dart" show RunningSource, RunningThing;
+import "running_pill.dart" show RunningThing;
 
 /// The chat's browser tab and the card that watches it, where there is one to
 /// show. Not on a mirrored chat, whose browser is the other device's.
@@ -128,24 +128,20 @@ final _browserTabProvider = Provider.autoDispose.family<
 /// standing alone, opening a live view of the page. The view is the
 /// browser's own screencast, so it shows the page when the browser runs
 /// hidden too.
-class BrowserRunning extends RunningSource {
-  const BrowserRunning();
-
-  @override
-  List<RunningThing> things(WidgetRef ref, ChatViewState view, String chatId) {
-    final tab = ref.watch(_browserTabProvider(chatId));
-    if (tab == null) return const [];
-    final hold = tab.hold;
-    return [
-      RunningThing(
-        icon: hold == null ? Icons.travel_explore : Icons.visibility_off,
-        label: "Browser · ${_where(tab.page)}"
-            "${hold == null ? "" : " · hidden from the agent"}",
-        tooltip: "Watch the agent's browser",
-        open: tab.open,
-      ),
-    ];
-  }
+List<RunningThing> browserRunning(
+    WidgetRef ref, ChatViewState view, String chatId) {
+  final tab = ref.watch(_browserTabProvider(chatId));
+  if (tab == null) return const [];
+  final hold = tab.hold;
+  return [
+    RunningThing(
+      icon: hold == null ? Icons.travel_explore : Icons.visibility_off,
+      label: "Browser · ${_where(tab.page)}"
+          "${hold == null ? "" : " · hidden from the agent"}",
+      tooltip: "Watch the agent's browser",
+      open: tab.open,
+    ),
+  ];
 }
 
 /// A file chooser the page opened, waiting on the user: the agent is not

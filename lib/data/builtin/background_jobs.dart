@@ -56,7 +56,10 @@ class ChatJobs implements ChatShellJobs {
   final ValueNotifier<List<ShellJob>> jobs = ValueNotifier(const []);
   final _runs = <int, ShellRun>{};
   final _notes = <String>[];
-  final _ended = StreamController<({String callId, JobEnd end})>.broadcast();
+  // Synchronous, so a listener has the end before the list drops the job: the
+  // chat never reads a job as neither running nor ended.
+  final _ended =
+      StreamController<({String callId, JobEnd end})>.broadcast(sync: true);
 
   @override
   Stream<({String callId, JobEnd end})> get ended => _ended.stream;
@@ -88,7 +91,6 @@ class ChatJobs implements ChatShellJobs {
 
   Future<void> _end(ShellJob job, int code) async {
     if (_runs.remove(job.id) == null) return;
-    jobs.value = [for (final j in jobs.value) if (j.id != job.id) j];
     final how = code == -1 ? "was stopped" : "exited with code $code";
     _notes.add("Background job ${job.id} (`${firstLine(job.command)}`) $how.");
     var log = "";
@@ -98,15 +100,17 @@ class ChatJobs implements ChatShellJobs {
     } catch (e) {
       logFailure("jobs", "could not read the log of job ${job.id}", e);
     }
-    if (_ended.isClosed) return;
-    _ended.add((
-      callId: job.callId,
-      end: JobEnd(
-        jobId: job.id,
-        exitCode: code == -1 ? null : code,
-        tail: jobTail(log),
-      ),
-    ));
+    if (!_ended.isClosed) {
+      _ended.add((
+        callId: job.callId,
+        end: JobEnd(
+          jobId: job.id,
+          exitCode: code == -1 ? null : code,
+          tail: jobTail(log),
+        ),
+      ));
+    }
+    jobs.value = [for (final j in jobs.value) if (j.id != job.id) j];
   }
 
   /// How the jobs that ended since the last call ended, once each.

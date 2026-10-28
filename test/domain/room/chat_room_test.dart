@@ -116,21 +116,19 @@ void main() {
         ChatRecord.callEvent(callId: "c1", kind: jobEndedEvent, data: end.toJson()));
   });
 
-  test("a job is running from when it starts until its end lands, even past "
-      "leaving the backend's list", () async {
+  test("a job goes from running to ended with no step between, the end "
+      "landing before the backend drops it", () async {
     final (room, host) = await openRoom();
+    await waitFor(() => room.state.chat != null, what: "the room's load");
     final jobs = app.backend.jobsOf(room.chatId);
     const job = ShellJob(id: 1, callId: "c1", command: "serve", logPath: "/l");
     jobs.jobs.value = [job];
     expect(room.state.jobOf("c1"), const JobRunning(job));
 
-    jobs.jobs.value = const [];
-    expect(room.state.jobOf("c1"), const JobRunning(job));
-
     const end = JobEnd(jobId: 1, exitCode: 0, tail: "");
     jobs.endings.add((callId: "c1", end: end));
-    await waitFor(() => room.state.jobOf("c1") is JobEnded,
-        what: "the end on the chat");
+    jobs.jobs.value = const [];
+    expect(room.state.jobOf("c1"), const JobEnded(end));
     expect(room.state.runningJobs, isEmpty);
     expect(host.states.last.jobOf("c1"), const JobEnded(end));
   });

@@ -3,18 +3,18 @@ import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../../domain/room/room_state.dart" show ChatViewState;
-import "../tool_ui/command_ui.dart" show JobsRunning;
-import "../tool_ui/task_ui.dart" show SubAgentsRunning;
+import "../tool_ui/command_ui.dart" show jobsRunning;
+import "../tool_ui/task_ui.dart" show subAgentsRunning;
 import "activity_label.dart" show plural;
-import "browser_strip.dart" show BrowserRunning;
+import "browser_strip.dart" show browserRunning;
 import "running_pill.dart";
 
 /// Every kind of thing a chat can have running, in the order the row shows
 /// them: the browser's tab, standing alone, ahead of the groups.
 const runningSources = <RunningSource>[
-  BrowserRunning(),
-  JobsRunning(),
-  SubAgentsRunning(),
+  browserRunning,
+  jobsRunning,
+  subAgentsRunning,
 ];
 
 /// What the chat has running beside the reply, as one row of pills that
@@ -62,7 +62,7 @@ class _RunningStripState extends ConsumerState<RunningStrip> {
     final alone = <RunningThing>[];
     final groups = <String, List<RunningThing>>{};
     for (final source in runningSources) {
-      for (final thing in source.things(ref, view, chatId)) {
+      for (final thing in source(ref, view, chatId)) {
         final group = thing.group;
         group == null ? alone.add(thing) : (groups[group] ??= []).add(thing);
       }
