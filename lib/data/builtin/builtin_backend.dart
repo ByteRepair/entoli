@@ -34,7 +34,6 @@ import "../prompts/prompt_sources.dart" show promptDirsOf;
 import "../prompts/skill_package.dart";
 import "background_jobs.dart";
 import "builtin_agent.dart";
-import "tools/customization_tools.dart" show SettingsEditor;
 import "compact_prompt.dart";
 import "memory/instructions.dart";
 import "memory/store.dart";
@@ -49,6 +48,8 @@ import "projection.dart";
 import "sub_agent.dart";
 import "tools/agent_tool.dart" show AgentCapabilities;
 import "tools/bash_tool.dart" show runningCommand;
+import "builtin_options.dart";
+import "tools/turn.dart";
 
 /// The built-in agent, running in this process. The loop is [BuiltinAgent];
 /// this is what Entoli talks to: it holds a session per chat, resolves which

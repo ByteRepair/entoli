@@ -11,6 +11,7 @@ import "package:agent_chat/domain/prompt_library.dart";
 
 import "../../fakes.dart";
 import "builtin_fakes.dart";
+import "package:agent_chat/data/builtin/builtin_options.dart";
 
 /// A member as the library holds one: the frontmatter's description is the
 /// short description the roster answers with.

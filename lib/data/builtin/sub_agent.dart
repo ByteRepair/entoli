@@ -18,6 +18,8 @@ import "llm/llm_client.dart";
 import "llm/rate_limit_gate.dart";
 import "projection.dart";
 import "tools/agent_tool.dart" show AgentCapabilities;
+import "tools/turn.dart" show SubAgents;
+import "builtin_options.dart";
 
 /// Spawns sub-agents for `task` tool calls — the main agent scheduling
 /// delegated participant turns, each with its own [BuiltinSession] and a
@@ -25,7 +27,7 @@ import "tools/agent_tool.dart" show AgentCapabilities;
 /// the reply route: it runs to completion headless and never addresses the
 /// room — its final text returns as the tool result, readable by the main
 /// agent alone. See "Sub-agents" in `AGENTS.md` for the rest.
-class SubAgentRunner {
+class SubAgentRunner implements SubAgents {
   SubAgentRunner({
     required this.client,
     required this.shell,
@@ -111,6 +113,7 @@ class SubAgentRunner {
   /// that is not found falls back to `general`, and a missing `general` runs
   /// as the main agent would. The [prompt] is the sub-agent's whole task — it
   /// sees nothing else of the parent's conversation.
+  @override
   Future<ShellResult> run(String agentName, String prompt, {String? callId}) async {
     final session = BuiltinSession();
     // The task as a message, because that is what opens a turn now. A
@@ -283,6 +286,7 @@ class SubAgentRunner {
   }
 
   /// Cancel every running sub-agent. Called by the parent's [BuiltinAgent.cancel].
+  @override
   Future<void> cancel() async {
     await Future.wait(_active.map((a) => a.cancel()));
     _active.clear();

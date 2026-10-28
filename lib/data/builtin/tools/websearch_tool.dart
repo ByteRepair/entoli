@@ -8,6 +8,7 @@ import "../templates.dart" show systemProse;
 import "agent_tool.dart";
 import "browser_tools.dart" show browserGotoToolName;
 import "turn.dart";
+import "tool_outcome.dart";
 
 /// Search the web via DuckDuckGo Lite — no API key. Returns titles, URLs, and
 /// snippets as readable text the model can extract URLs from. Read-only, so

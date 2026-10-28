@@ -40,7 +40,9 @@ clients are the large half of the work.
 
 The prompts live in `templates.dart`, adapted from upstream's `mini.yaml` for a
 conversation: upstream runs one task and exits, this is asked something else
-once the turn is over. A turn's prose streams into the bubble as `TextDelta`,
+once the turn is over. `templates.dart` is text, below the tools, which use
+it; the system prompt's assembly, which lists the tools a turn is offered, is
+`system_prompt.dart`, above the registry. A turn's prose streams into the bubble as `TextDelta`,
 its commands become tool labels, and a no-tool-call reply ends the turn.
 
 ## Tools
@@ -664,7 +666,10 @@ one stops on a banner.
 
 `SubAgentRunner` holds the running agents so `cancel` reaches them — a turn
 aborted while sub-agents are running kills every one, not just the parent's
-loop. `TaskTool.runAll` runs the calls concurrently, capped by
+loop. It is reached through `SubAgents`, the interface beside `Turn`: the
+tools sit below the loop that spawns sub-agents, and a sub-agent is that loop
+again, so the tools and the turn hold the interface and the backend binds the
+runner. `TaskTool.runAll` runs the calls concurrently, capped by
 `BuiltinOptions.maxConcurrentSubAgents` (8 by default — deep-research can fan
 out to 75, and 8 concurrent keeps provider rate limits in view). Events
 stream out as each sub-agent resolves, but the session messages are answered

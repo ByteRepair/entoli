@@ -1,4 +1,3 @@
-import "../../../domain/app_settings.dart";
 import "../../../domain/profile.dart";
 import "../../../domain/tone.dart";
 import "../../../domain/tool_arg.dart";
@@ -15,9 +14,6 @@ const customizationSkill = "entoli-customization";
 const setProfileName = "set_profile";
 const setToneName = "set_tone";
 
-/// How the tools write: the settings notifier's own update, so a change lands
-/// in the state the app holds rather than under it.
-typedef SettingsEditor = Future<void> Function(void Function(AppSettings) change);
 
 const _profileFields = {
   "name": "The user's name.",

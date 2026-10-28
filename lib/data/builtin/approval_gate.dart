@@ -12,7 +12,7 @@ import "../../domain/shell_command_analysis.dart";
 import "../../domain/web_search.dart" show webfetchToolName;
 import "llm/llm_client.dart";
 import "templates.dart" show notExecuted;
-import "tools/agent_tool.dart";
+import "tools/tool_outcome.dart";
 
 /// How one gated call came out, filled in by the gate for the call that made
 /// it: what ran or refused it ([result]), what decided ([decision]), and

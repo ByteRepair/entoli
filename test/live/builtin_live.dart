@@ -15,7 +15,6 @@ import "package:flutter_test/flutter_test.dart";
 import "package:path/path.dart" as p;
 
 import "package:agent_chat/core/config.dart";
-import "package:agent_chat/data/builtin/builtin_agent.dart";
 import "package:agent_chat/data/builtin/builtin_backend.dart";
 import "package:agent_chat/data/builtin/duckduckgo_search.dart";
 import "package:agent_chat/data/builtin/llm/llm_registry.dart";
@@ -30,6 +29,7 @@ import "package:agent_chat/domain/permission.dart";
 import "package:agent_chat/domain/prompt_library.dart";
 
 import "../harness.dart";
+import "package:agent_chat/data/builtin/builtin_options.dart";
 
 const _providerId = "live";
 

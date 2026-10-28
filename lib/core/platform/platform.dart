@@ -3,7 +3,6 @@ import "dart:convert";
 
 import "../../data/builtin/builtin_agent.dart";
 import "../../data/builtin/builtin_backend.dart";
-import "../../data/builtin/tools/customization_tools.dart" show SettingsEditor;
 import "../../data/builtin/tools/agent_tool.dart";
 import "../../data/builtin/tools/registry.dart";
 import "../../data/builtin/llm/llm_client.dart";
@@ -32,6 +31,8 @@ import "../../domain/rootfs_store.dart";
 import "../../domain/shell.dart";
 import "../config.dart";
 import "io/platform.dart" if (dart.library.js_interop) "web/platform.dart";
+import "../../data/builtin/builtin_options.dart";
+import "../../data/builtin/tools/turn.dart";
 
 export "io/platform.dart" if (dart.library.js_interop) "web/platform.dart"
     show

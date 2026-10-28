@@ -14,7 +14,6 @@ import "package:agent_chat/data/browser/helium.dart";
 import "package:agent_chat/data/builtin/tools/browser_tools.dart";
 import "package:agent_chat/data/builtin/builtin_agent.dart";
 import "package:agent_chat/data/builtin/llm/llm_client.dart";
-import "package:agent_chat/data/builtin/templates.dart";
 import "package:agent_chat/domain/agent_backend.dart";
 import "package:agent_chat/domain/agent_browser.dart";
 import "package:agent_chat/domain/app_settings.dart";
@@ -26,6 +25,7 @@ import "package:agent_chat/data/builtin/tools/agent_tool.dart";
 
 import "../../fakes.dart";
 import "builtin_fakes.dart";
+import "package:agent_chat/data/builtin/system_prompt.dart";
 
 /// A tab that records what it was asked and answers with fixed text.
 class FakeBrowserTab implements BrowserTab {

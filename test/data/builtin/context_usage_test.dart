@@ -12,6 +12,7 @@ import "package:agent_chat/domain/profile.dart";
 
 import "../../fakes.dart";
 import "builtin_fakes.dart";
+import "package:agent_chat/data/builtin/builtin_options.dart";
 
 void main() {
   test("every request reports its segments, and the provider's count beside them",
