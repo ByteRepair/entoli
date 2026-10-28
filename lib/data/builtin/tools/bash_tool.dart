@@ -1,5 +1,5 @@
 import "../../../domain/agent_backend.dart";
-import "../../../domain/safe_command.dart" show SegmentReach, profileSegment;
+import "../../../domain/safe_command.dart" show readsOnly;
 import "../../../domain/shell.dart";
 import "../../../domain/shell_command_analysis.dart";
 import "../../../domain/tool_arg.dart";
@@ -53,6 +53,9 @@ class BashTool extends AgentTool {
   /// Whether a call may ask to leave the sandbox: only where there is one to
   /// leave, and a person to approve leaving it.
   bool get leavesSandbox => !offer.oneShot && offer.sandboxed;
+
+  /// Why [analysis] is not run at all, ahead of the gate; null runs it.
+  String? refusalOf(ShellCommandAnalysis analysis) => null;
 
   @override
   Map<String, dynamic> get schema => {
@@ -134,6 +137,10 @@ class BashTool extends AgentTool {
     final analysis = ShellCommandAnalysis.parse(command,
         isWindows: turn.shell.platformIsWindows);
     yield toolCalled(call, command);
+    if (refusalOf(analysis) case final refused?) {
+      yield toolFailed(call, refused);
+      return;
+    }
     // Leaving the sandbox is part of what is asked: where one would confine
     // the run and no no-sandbox rule covers it, the call goes to the mode.
     final leave = leavesSandbox && boolArg(call.argumentsJson, "unsandboxed");
@@ -239,8 +246,8 @@ class BashTool extends AgentTool {
 
 /// `bash` for an agent that only looks: a command runs only where the parse
 /// proves every segment changes nothing (`safe_command.dart`), and anything
-/// else is refused as the call's result. The refusal is the tool's, ahead of
-/// the gate, so no mode and no rule can let a write through — a sub-agent
+/// else is refused as the call's result. The refusal is the tool's, after the
+/// one parse and ahead of the gate, so no mode and no rule can let a write through — a sub-agent
 /// runs under `never`, and its prompt asking it not to write is all that
 /// would stand in the way otherwise.
 class ReadOnlyBashTool extends BashTool {
@@ -267,28 +274,15 @@ class ReadOnlyBashTool extends BashTool {
       "writes a file, installs, fetches or cannot be checked is refused.";
 
   @override
-  Stream<AgentEvent> run(LlmToolCall call, Turn turn) async* {
-    final command = stringArg(call.argumentsJson, "command");
-    final refused = command == null ? null : _refusal(command, turn);
-    if (refused == null) {
-      yield* super.run(call, turn);
-      return;
-    }
-    yield toolCalled(call, command);
-    yield toolFailed(call, refused);
-  }
-
-  String? _refusal(String command, Turn turn) {
-    final segments = ShellCommandAnalysis.parse(command,
-            isWindows: turn.shell.platformIsWindows)
-        .modelableSegments;
+  String? refusalOf(ShellCommandAnalysis analysis) {
+    final segments = analysis.modelableSegments;
     if (segments == null) {
       return "Not run: this shell is read-only and this command cannot be "
           "checked. Write it as plain commands, without substitutions or "
           "expansions.";
     }
     for (final segment in segments) {
-      if (profileSegment(segment).reach != SegmentReach.nonModifying) {
+      if (!readsOnly(segment)) {
         return "Not run: this shell is read-only, and `$segment` is not a "
             "command that only reads.";
       }

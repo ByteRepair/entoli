@@ -452,9 +452,7 @@ class BuiltinBackend implements AgentBackend {
       final agent = BuiltinAgent(
         session: session,
         viewer: settings.omadaMember,
-        agent: memberDoc == null
-            ? AgentDefinition.main
-            : AgentDefinition.of(memberDoc),
+        agent: AgentDefinition.of(memberDoc),
         loadResource: _resourcesOf(chatId),
         steers: steers,
         client: gatedClient,

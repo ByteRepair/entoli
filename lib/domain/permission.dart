@@ -1,6 +1,6 @@
 import "models.dart"
     show PermissionDecision, PermissionTier, ToolApproval;
-import "safe_command.dart" show SegmentReach, profileSegment;
+import "safe_command.dart" show SegmentReach, profileSegment, readsOnly;
 import "shell.dart" show bashToolName, pathInside;
 import "shell_command_analysis.dart" show ShellCommandAnalysis, plainCommand;
 import "web_search.dart" show webfetchToolName;
@@ -242,16 +242,11 @@ class PermissionRule {
     }
     if (segmentUnconfined) {
       matched = true;
-    } else if (!_readsOnly(segment)) {
+    } else if (!readsOnly(segment)) {
       unconfined = false;
     }
   }
   return (unconfined: matched && unconfined, writes: writes.toList());
-}
-
-bool _readsOnly(String segment) {
-  final profile = profileSegment(segment);
-  return profile.modelable && profile.reach == SegmentReach.nonModifying;
 }
 
 /// Reads a persisted rule list; entries that do not parse are skipped rather

@@ -11,10 +11,10 @@
 // would refuse; new content should be spec YAML, where the strict path wins.
 import "package:yaml/yaml.dart";
 
-/// One file's frontmatter and body: the top-level scalars (a list of them
-/// comma-joined), the nested `metadata:` map, and the text after the closing
-/// fence. Only what the menu and the tool gates need is read; everything else
-/// — lists of maps, deeper maps — is dropped.
+/// One file's frontmatter and body: the top-level scalars (an agent's
+/// `tools` list comma-joined into one), the nested `metadata:` map, and the
+/// text after the closing fence. Only what the menu and the tool gates need
+/// is read; everything else — other lists, deeper maps — is dropped.
 class Frontmatter {
   const Frontmatter(
       {this.scalars = const {}, this.metadata = const {}, this.body = ""});
@@ -32,6 +32,11 @@ class Frontmatter {
   String? get name => scalars["name"];
 
   String? get description => scalars["description"];
+
+  /// The keys whose value is a list, read as one comma-joined scalar. Only
+  /// these: a list under any other key stays dropped, which is what keeps a
+  /// skill's unknown list key out of the spec check.
+  static const listKeys = {"tools"};
 
   factory Frontmatter.parse(String source) {
     final text = source.replaceAll("\r\n", "\n");
@@ -125,10 +130,9 @@ class Frontmatter {
         });
         return;
       }
-      // A list of scalars is comma-joined, the form an agent's `tools:` is
-      // written in, so either spelling reads the same.
       if (valueNode is YamlList) {
-        if (valueNode.nodes.every((n) => n is YamlScalar)) {
+        if (listKeys.contains(key) &&
+            valueNode.nodes.every((n) => n is YamlScalar)) {
           scalars[key] = valueNode.nodes.map(_scalarString).join(", ");
         }
         return;
@@ -177,7 +181,13 @@ class Frontmatter {
       }
       inMetadata = false;
       if (key == "metadata") continue;
-      scalars[key] = _unquote(value.trim());
+      final scalar = _unquote(value.trim());
+      // A flow list the strict parse refused, as the strict path joins it.
+      scalars[key] = listKeys.contains(key) &&
+              scalar.startsWith("[") &&
+              scalar.endsWith("]")
+          ? scalar.substring(1, scalar.length - 1).trim()
+          : scalar;
     }
     return Frontmatter(scalars: scalars, metadata: metadata, body: body);
   }

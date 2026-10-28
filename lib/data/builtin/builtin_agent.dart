@@ -744,8 +744,8 @@ class BuiltinAgent implements Turn {
   /// the task — the viewer's first own mail, decided by the caller against
   /// the history it holds, the decision a whole-span walk would make.
   ///
-  /// [mentions] is what the message's `@agent` mentions stack on top of the
-  /// agent's own instructions.
+  /// [mentions] is what the message's `@agent` mentions add, for the main
+  /// agent's turn.
   Stream<AgentEvent> run(Message prompt,
       {String? mentions, bool mayDress = false}) async* {
     await _openTurn(prompt, mayDress, mentions);
@@ -909,16 +909,17 @@ class BuiltinAgent implements Turn {
   /// them on the way out.
   void _setSystemPrompt(String? mentions) {
     final offer = this.offer;
-    final own = agent.instructions.isEmpty
-        ? null
-        : viewer == null
-            ? agent.instructions
-            : memberInstructions(viewer!, agent.instructions);
-    final stacked = [?own, ?mentions];
+    // A member is told its handle whatever its file says; the main agent has
+    // no instructions of its own, and is the only one mentions reach.
+    final own = viewer != null && agent.document != null
+        ? memberInstructions(viewer!, agent.instructions)
+        : agent.instructions.isEmpty
+            ? null
+            : agent.instructions;
     final turn = turnPrompt(
       workspace: workspace,
       projectWorkspace: projectWorkspace,
-      agentPrompt: stacked.isEmpty ? null : stacked.join("\n\n"),
+      agentPrompt: own ?? mentions,
       instructions: renderInstructions(instructions),
       pinned: pinned,
       index: index,

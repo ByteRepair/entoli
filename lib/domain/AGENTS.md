@@ -798,7 +798,9 @@ direct chat is not the agent running, so it adds instructions and no tools.
 
 The list is one scalar, `tools: read, bash(readonly)`, because `PromptDocument`
 keeps scalars; a YAML list is read the same, comma-joined, and `tools: []` is
-none. The editor writes no key while the switches sit at the defaults, so a
+none. `Frontmatter.listKeys` is the only place a list is read at all: a list
+under any other key is still dropped, so a skill carrying one does not start
+failing the spec's key check. The editor writes no key while the switches sit at the defaults, so a
 default added later reaches that agent, and keeps ids this build does not know.
 Writing goes through `AgentDefinition.toSource`, which writes back the
 frontmatter keys and `metadata:` it does not edit — a hand-written key survives

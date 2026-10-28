@@ -108,7 +108,7 @@ class _AgentsSectionState extends ConsumerState<AgentsSection> {
     final result = await Navigator.of(context).push<AgentEdit>(
       MaterialPageRoute(
           builder: (_) => AgentEditorPage(
-              initial: AgentDefinition.named(""), isNew: true, project: widget.project)),
+              initial: AgentDefinition.main, isNew: true, project: widget.project)),
     );
     if (result == null || !mounted) return;
     await _save(result, previous: null);
@@ -512,14 +512,15 @@ class _AgentEditorPageState extends ConsumerState<AgentEditorPage> {
       if (tool.group != null) tool,
   ];
 
-  static final _defaults = {
-    for (final tool in _grantable)
-      if (tool.onByDefault) tool.id,
-  };
+  static final _known = {for (final tool in _grantable) tool.id};
 
   /// The ids switched on. Ids this build does not know stay in it, so a
   /// save keeps what a newer build's list named.
-  late final Set<String> _initialTools = widget.initial.tools ?? _defaults;
+  late final Set<String> _initialTools = widget.initial.tools ??
+      {
+        for (final tool in _grantable)
+          if (tool.onByDefault) tool.id,
+      };
   late final Set<String> _tools = {..._initialTools};
 
   /// What the picture row shows: what the agent had, what a pick brought in,
@@ -612,8 +613,7 @@ class _AgentEditorPageState extends ConsumerState<AgentEditorPage> {
     // An agent left at the defaults writes no list, so a default added later
     // reaches it.
     final unchanged =
-        widget.initial.tools == null && setEquals(_tools, _defaults);
-    final known = {for (final tool in _grantable) tool.id};
+        widget.initial.tools == null && setEquals(_tools, _initialTools);
     Navigator.of(context).pop(
       (
         agent: widget.initial.edited(
@@ -625,7 +625,7 @@ class _AgentEditorPageState extends ConsumerState<AgentEditorPage> {
               : {
                   for (final tool in _grantable)
                     if (_tools.contains(tool.id)) tool.id,
-                  ..._tools.difference(known),
+                  ..._tools.difference(_known),
                 },
         ),
         // Only what was touched: untouched bytes going back would have the
@@ -653,9 +653,8 @@ class _AgentEditorPageState extends ConsumerState<AgentEditorPage> {
 
   /// On is every name in [tools] on in one of its forms, and switching the
   /// group on picks each name's first.
-  bool _groupOn(List<AgentTool> tools) => tools.every((tool) =>
-      _tools.contains(tool.id) ||
-      tools.any((other) => other.name == tool.name && _tools.contains(other.id)));
+  bool _groupOn(List<AgentTool> tools) => tools.every((tool) => tools
+      .any((other) => other.name == tool.name && _tools.contains(other.id)));
 
   void _setGroup(List<AgentTool> tools, bool on) => setState(() {
         _tools.removeAll(tools.map((tool) => tool.id));
@@ -666,26 +665,30 @@ class _AgentEditorPageState extends ConsumerState<AgentEditorPage> {
         }
       });
 
-  List<Widget> _group(List<AgentTool> tools) => [
-        if (tools.isNotEmpty) ...[
-          SwitchListTile(
-            contentPadding: EdgeInsets.zero,
-            title: Text(tools.first.group!.label),
-            value: _groupOn(tools),
-            onChanged: (on) => _setGroup(tools, on),
-          ),
-          for (final tool in tools)
-            SwitchListTile(
-              dense: true,
-              contentPadding: const EdgeInsets.only(left: 16),
-              title: Text(tool.id),
-              subtitle: Text(tool.description,
-                  maxLines: 2, overflow: TextOverflow.ellipsis),
-              value: _tools.contains(tool.id),
-              onChanged: (on) => _setTool(tool, on),
-            ),
-        ],
-      ];
+  List<Widget> _group(ToolGroup group) {
+    final tools = [
+      for (final tool in _grantable)
+        if (tool.group == group) tool,
+    ];
+    return [
+      SwitchListTile(
+        contentPadding: EdgeInsets.zero,
+        title: Text(group.label),
+        value: _groupOn(tools),
+        onChanged: (on) => _setGroup(tools, on),
+      ),
+      for (final tool in tools)
+        SwitchListTile(
+          dense: true,
+          contentPadding: const EdgeInsets.only(left: 16),
+          title: Text(tool.id),
+          subtitle: Text(tool.description,
+              maxLines: 2, overflow: TextOverflow.ellipsis),
+          value: _tools.contains(tool.id),
+          onChanged: (on) => _setTool(tool, on),
+        ),
+    ];
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -794,11 +797,7 @@ class _AgentEditorPageState extends ConsumerState<AgentEditorPage> {
                   "What this agent can use when it runs as a sub-agent or a "
                   "team member. A tool this device cannot run stays off "
                   "whatever is set here."),
-              for (final group in ToolGroup.values)
-                ..._group([
-                  for (final tool in _grantable)
-                    if (tool.group == group) tool,
-                ]),
+              for (final group in ToolGroup.values) ..._group(group),
             ],
           ),
         ),

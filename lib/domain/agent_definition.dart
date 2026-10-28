@@ -19,14 +19,13 @@ class AgentDefinition {
   /// instructions of its own, and every tool at its default.
   static const main = AgentDefinition._(null, null);
 
-  factory AgentDefinition.of(PromptDocument document) =>
-      AgentDefinition._(document, _parse(document.frontmatter[toolsKey]));
+  /// The agent [document] is, or [main] where there is none — a name the
+  /// library no longer holds.
+  factory AgentDefinition.of(PromptDocument? document) => document == null
+      ? main
+      : AgentDefinition._(document, _parse(document.frontmatter[_toolsKey]));
 
-  /// A new agent, as the editor starts one.
-  factory AgentDefinition.named(String name) => AgentDefinition.of(PromptDocument(
-      kind: CompletionKind.agent, name: name, frontmatter: const {}, body: ""));
-
-  static const toolsKey = "tools";
+  static const _toolsKey = "tools";
 
   final PromptDocument? document;
 
@@ -52,7 +51,7 @@ class AgentDefinition {
     final desc = description.trim();
     final frontmatter = {...?document?.frontmatter}
       ..remove("description")
-      ..remove(toolsKey);
+      ..remove(_toolsKey);
     return AgentDefinition._(
       PromptDocument(
         kind: CompletionKind.agent,
@@ -60,7 +59,7 @@ class AgentDefinition {
         frontmatter: {
           if (desc.isNotEmpty) "description": desc,
           ...frontmatter,
-          if (tools != null) toolsKey: tools.join(", "),
+          if (tools != null) _toolsKey: tools.join(", "),
         },
         metadata: document?.metadata ?? const {},
         body: instructions.trim(),
@@ -76,7 +75,7 @@ class AgentDefinition {
     if (doc == null) return "";
     final lines = [
       for (final MapEntry(:key, :value) in doc.frontmatter.entries)
-        if (key == toolsKey)
+        if (key == _toolsKey)
           // An empty value would read back as a nested block, not an empty list.
           "$key: ${value.isEmpty ? "[]" : value}"
         else
@@ -93,16 +92,11 @@ class AgentDefinition {
   }
 
   /// Null where the key is absent. A YAML list reaches here comma-joined (see
-  /// `Frontmatter`); the brackets are the legacy parser's reading of `[]`.
-  static Set<String>? _parse(String? value) {
-    if (value == null) return null;
-    final bare = value.trim();
-    final inner = bare.startsWith("[") && bare.endsWith("]")
-        ? bare.substring(1, bare.length - 1)
-        : bare;
-    return {
-      for (final id in inner.split(","))
-        if (id.trim().isNotEmpty) id.trim(),
-    };
-  }
+  /// `Frontmatter.listKeys`).
+  static Set<String>? _parse(String? value) => value == null
+      ? null
+      : {
+          for (final id in value.split(","))
+            if (id.trim().isNotEmpty) id.trim(),
+        };
 }

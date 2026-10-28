@@ -134,13 +134,9 @@ class SubAgentRunner {
         (agent) => agent.resume());
   }
 
-  AgentDefinition _definitionOf(String name) {
-    final document = library?.find(CompletionKind.agent, name) ??
-        library?.find(CompletionKind.agent, "general");
-    return document == null
-        ? AgentDefinition.main
-        : AgentDefinition.of(document);
-  }
+  AgentDefinition _definitionOf(String name) => AgentDefinition.of(
+      library?.find(CompletionKind.agent, name) ??
+          library?.find(CompletionKind.agent, "general"));
 
   /// What running and carrying on have in common: the agent, its transcript,
   /// and reading a final answer out of what it said.
