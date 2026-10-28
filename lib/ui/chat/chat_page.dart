@@ -30,7 +30,7 @@ import "../widgets/scrolling.dart";
 import "chat_settings_page.dart";
 import "chat_controller.dart";
 import "mirror_controller.dart";
-import "widgets/activity_label.dart" show ActivitySource, LiveMessage, formatRemaining;
+import "widgets/activity_label.dart" show ActivitySource, formatRemaining, liveMessageOf;
 import "widgets/chapter_rail.dart";
 import "widgets/composer.dart";
 import "widgets/paired_project_badges.dart";
@@ -1312,7 +1312,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
                           ? _chapterKeys.putIfAbsent(message.id, GlobalKey.new)
                           : null,
                       child: ActivitySource(
-                        live: source.select((v) => _liveMessage(v, message.id)),
+                        live: source.select((v) => liveMessageOf(v, message.id)),
                         child: MessageBubble(
                           chatId: widget.chatId,
                           message: message,
@@ -1363,13 +1363,6 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
       ],
     );
   }
-  /// A message as an open activity drawer reads it.
-  static LiveMessage _liveMessage(ChatViewState view, String id) => (
-        message: view.chat?.messages.where((m) => m.id == id).firstOrNull,
-        shellOutput: view.shellOutput[id],
-        running: view.isRunning,
-      );
-
   /// What the bar says about the chat under its title, a line each. The
   /// conditions are here and nowhere else: [_barHeight] counts what this
   /// returns, so a line added here is one the bar makes room for.

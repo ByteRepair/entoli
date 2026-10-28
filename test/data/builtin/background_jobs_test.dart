@@ -1,3 +1,4 @@
+import "dart:convert";
 import "dart:io";
 
 import "package:flutter_test/flutter_test.dart";
@@ -10,6 +11,7 @@ import "package:agent_chat/domain/agent_backend.dart";
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/domain/permission.dart";
 import "package:agent_chat/domain/shell.dart";
+import "package:agent_chat/domain/shell_job.dart";
 
 import "../../fakes.dart";
 import "builtin_fakes.dart";
@@ -66,20 +68,24 @@ void main() {
       [finish],
     ]);
     final agent = agentOver(client);
-    shell.hang.add(backgroundScript(1, "npm run dev"));
+    shell.hang.add(backgroundScript("call-1", "npm run dev"));
     final events = await agent.run(userMessage("go")).toList();
 
-    expect(shell.ran, [backgroundScript(1, "npm run dev")]);
+    expect(shell.ran, [backgroundScript("call-1", "npm run dev")]);
     expect(shell.oneShots, [true]);
     expect(shell.timeouts, [BackgroundJobs.timeout]);
-    final output = results(events).single.output;
+    final result = results(events).single;
+    // The job rides on the result as a fact, for the reply to draw as one.
+    expect(result.jobId, 1);
+    final output = result.output;
     expect(output, contains("job 1"));
     expect(output, contains("kill -- -4000"));
-    expect(output, contains("chat:.entoli-jobs/1.log"));
+    expect(output, contains("chat:.entoli-jobs/call-1.log"));
 
     final job = jobs.forChat("chat-1").jobs.value.single;
     expect(job.pid, 4000);
-    expect(job.logPath, p.join(workspace, ".entoli-jobs", "1.log"));
+    expect(job.callId, "call-1");
+    expect(job.logPath, p.join(workspace, ".entoli-jobs", "call-1.log"));
   });
 
   test("the next call hears how a job ended, once", () async {
@@ -90,7 +96,7 @@ void main() {
       [finish],
     ]);
     final agent = agentOver(client);
-    shell.hang.add(backgroundScript(1, "serve"));
+    shell.hang.add(backgroundScript("c1", "serve"));
     // Stopped from the pill between the first call and the second.
     var stopped = false;
     final events = <AgentEvent>[];
@@ -117,10 +123,11 @@ void main() {
     final chat = jobs.forChat("chat-1");
     ShellRun spawn(String script) => shell.start(script,
         cwd: "/w", home: "/w", timeout: Duration.zero);
-    await chat.start("a", workspace: "/w", spawn: spawn);
+    await chat.start("a", callId: "c1", workspace: "/w", spawn: spawn);
     await pumpEventQueue();
     expect(chat.jobs.value, isEmpty);
-    final second = await chat.start("b", workspace: "/w", spawn: spawn);
+    final second =
+        await chat.start("b", callId: "c2", workspace: "/w", spawn: spawn);
     expect(second.id, 2);
   });
 
@@ -130,10 +137,13 @@ void main() {
       [finish],
     ]);
     final agent = agentOver(client);
-    shell.hang.add(backgroundScript(1, "serve"));
+    shell.hang.add(backgroundScript("call-1", "serve"));
+    final ended = jobs.forChat("chat-1").ended.toList();
     await agent.run(userMessage("go")).toList();
     await jobs.closeChat("chat-1");
-    expect(shell.killed, [backgroundScript(1, "serve")]);
+    expect(shell.killed, [backgroundScript("call-1", "serve")]);
+    // Killed with the chat: no end to record.
+    expect(await ended, isEmpty);
     expect(jobs.forChat("chat-1").jobs.value, isEmpty);
   });
 
@@ -141,17 +151,67 @@ void main() {
     jobs = BackgroundJobs(fileSystemIo);
     final tempDir = Directory.systemTemp.createTempSync("background-log");
     addTearDown(() => tempDir.deleteSync(recursive: true));
-    File(p.join(tempDir.path, backgroundLog(1)))
+    File(p.join(tempDir.path, backgroundLog("c1")))
       ..createSync(recursive: true)
       ..writeAsStringSync("hello\n");
     shell = FakeShell((_) => ok(""), canRunInBackground: true);
     final chat = jobs.forChat("c");
     final job = await chat.start("x",
+        callId: "c1",
         workspace: tempDir.path,
         spawn: (script) => shell.start(script,
             cwd: tempDir.path, home: tempDir.path, timeout: Duration.zero));
     // The fake run has already ended, so the tail is read once and closes.
     await pumpEventQueue();
     expect(await chat.log(job).toList(), ["hello\n"]);
+  });
+
+  test("a job that ends says how, with the end of its log", () async {
+    jobs = BackgroundJobs(fileSystemIo);
+    final tempDir = Directory.systemTemp.createTempSync("background-end");
+    addTearDown(() => tempDir.deleteSync(recursive: true));
+    File(p.join(tempDir.path, backgroundLog("c1")))
+      ..createSync(recursive: true)
+      ..writeAsStringSync([for (var i = 1; i <= 15; i++) "line $i"].join("\n"));
+    shell = FakeShell((_) => ShellResult(returnCode: 3, output: ""),
+        canRunInBackground: true);
+    final chat = jobs.forChat("c");
+    // Whether the job was still listed as its end went out: the chat must
+    // never read it as neither.
+    bool? listed;
+    chat.ended.listen((_) => listed = chat.jobs.value.isNotEmpty);
+    final ended = chat.ended.first;
+    await chat.start("x",
+        callId: "c1",
+        workspace: tempDir.path,
+        spawn: (script) => shell.start(script,
+            cwd: tempDir.path, home: tempDir.path, timeout: Duration.zero));
+    final (:callId, :end) = await ended;
+    expect(callId, "c1");
+    expect(end.jobId, 1);
+    expect(end.exitCode, 3);
+    expect(end.tail, [for (var i = 6; i <= 15; i++) "line $i"].join("\n"));
+    expect(listed, isTrue);
+    await pumpEventQueue();
+    expect(chat.jobs.value, isEmpty);
+  });
+
+  group("jobTail", () {
+    test("keeps the last ten lines", () {
+      expect(jobTail("a\nb\nc\n"), "a\nb\nc");
+      expect(jobTail([for (var i = 0; i < 20; i++) "$i"].join("\n")),
+          [for (var i = 10; i < 20; i++) "$i"].join("\n"));
+    });
+
+    test("cuts from the top past a kilobyte, never inside a character", () {
+      final tail = jobTail("é" * 2000);
+      expect(utf8.encode(tail).length, lessThanOrEqualTo(1024));
+      expect(tail, startsWith("…é"));
+      expect(tail, endsWith("é"));
+    });
+  });
+
+  test("a call id that is not a file name still names one log", () {
+    expect(backgroundLog("toolu_01/ab:c"), ".entoli-jobs/toolu_01_ab_c.log");
   });
 }

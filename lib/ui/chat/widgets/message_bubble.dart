@@ -583,8 +583,14 @@ class _MessageBubbleState extends State<MessageBubble> {
               isLive(i) ||
               failedResult(toolCall.id);
           final label = _label(drawn ??
-              ToolLabel(call: toolCall, result: result,
-                  running: isLive(i) && widget.message.hasText));
+              RunLabel(
+                  view: ui.view,
+                  run: Run(
+                      chatId: widget.chatId,
+                      callId: toolCall.id,
+                      call: toolCall,
+                      result: result,
+                      going: isLive(i) && widget.message.hasText)));
           if (important) {
             flushRun();
             rows.add(label);
@@ -597,7 +603,10 @@ class _MessageBubbleState extends State<MessageBubble> {
           // orphaned failed result is important; an orphaned success joins the
           // run for the same reason any other success would.
           if (calls.contains(result.callId)) continue;
-          final label = _label(ToolLabel(result: result));
+          final label = _label(RunLabel(
+              view: genericRunView,
+              run: Run(
+                  chatId: widget.chatId, callId: result.callId, result: result)));
           if (result.returnCode != 0) {
             flushRun();
             rows.add(label);

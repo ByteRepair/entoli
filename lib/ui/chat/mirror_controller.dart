@@ -48,9 +48,10 @@ class MirrorChatController extends Notifier<ChatViewState>
 
   ChatViewState _viewOf(SyncHub hub) {
     final mirror = hub.mirror(chatId);
-    if (mirror == null) return ChatViewState();
+    if (mirror == null) return ChatViewState(mirrored: true);
     final online = hub.isChatOnline(chatId);
     return ChatViewState(
+      mirrored: true,
       chat: chatFrom(mirror.state, mirror.records),
       isRunning: online && mirror.running,
       // A mirror sees one turn, the home device's — keyed by that turn's

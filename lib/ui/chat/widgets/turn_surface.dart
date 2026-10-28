@@ -6,11 +6,10 @@ import "../../../domain/room/room_state.dart";
 import "../chat_controller.dart";
 import "approval_banner.dart";
 import "browser_strip.dart";
-import "job_strip.dart";
 import "question_panel.dart";
 import "resume_bar.dart";
+import "running_strip.dart";
 import "steer_strip.dart";
-import "sub_agent_strip.dart";
 
 /// Everything a running turn puts on screen above whatever is used to answer
 /// it: the offer to carry on an interrupted one, the sub-agents still going,
@@ -51,8 +50,8 @@ class TurnSurface extends StatelessWidget {
             onContinue: notifier.resume,
             notice: view.unfinishedNotice,
           ),
-        for (final agents in view.runningSubAgents.values)
-          SubAgentStrip(agents: agents),
+        if (chat != null) BrowserPrompts(chatId: chat.state.id),
+        RunningStrip(view: view),
         SteerStrip(
           steering: view.steering,
           onQueue: notifier.queueSteer,
@@ -63,11 +62,6 @@ class TurnSurface extends StatelessWidget {
                   if (said != null) restore(said);
                 },
         ),
-        // Not turn-scoped like the strips above: the tab outlives the turn
-        // that opened it, so the chip shows for as long as the tab is open.
-        if (chat != null) BrowserStrip(chatId: chat.state.id),
-        // The same: a job runs on past the turn that started it.
-        if (chat != null) JobStrip(chatId: chat.state.id),
         for (final approvals in view.approvals.values)
           for (final approval in approvals)
             ApprovalBanner(

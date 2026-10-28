@@ -11,112 +11,137 @@ import "../../../core/log.dart";
 import "../../../domain/agent_browser.dart";
 import "../../../providers.dart";
 import "browser_input.dart";
+import "../../../domain/room/room_state.dart" show ChatViewState;
+import "running_pill.dart" show RunningThing;
 
-/// The chat's browser tab, while one is open: a chip beside the running
-/// sub-agents, and a live view of the page behind it. The view is the
-/// browser's own screencast, so it shows the page when the browser runs
-/// hidden too. Not on a mirrored chat, whose browser is the other device's.
-class BrowserStrip extends ConsumerWidget {
-  const BrowserStrip({super.key, required this.chatId});
+/// The chat's browser tab and the card that watches it, where there is one to
+/// show. Not on a mirrored chat, whose browser is the other device's.
+({BrowserTab tab, void Function(BuildContext context) open})? _browserOf(
+    AgentBrowser browser, bool mirrored, String chatId) {
+  // Not `configured`: that reads the disk, this rebuilds per streamed
+  // delta, and a tab with nothing to show draws nothing below anyway.
+  if (!browser.available || mirrored) return null;
+  final tab = browser.tab(chatId);
+  void open(BuildContext context) => showDialog<void>(
+        context: context,
+        builder: (_) => BrowserCard(
+            tab: tab,
+            onQuit: browser.close,
+            window: !browser.inApp || !tab.trustedInput),
+      );
+  return (tab: tab, open: open);
+}
+
+/// What the chat's browser is waiting on the user for, across the whole bar
+/// above the pills: a file to upload, a sign-in, or the agent's own words for
+/// what it needs done as the button that opens the browser to do it.
+class BrowserPrompts extends ConsumerWidget {
+  const BrowserPrompts({super.key, required this.chatId});
 
   final String chatId;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final browser = ref.watch(agentBrowserProvider);
-    // Not `configured`: that reads the disk, this rebuilds per streamed
-    // delta, and a tab with nothing to show draws nothing below anyway.
-    if (!browser.available || ref.watch(isMirroredChatProvider(chatId))) {
-      return const SizedBox.shrink();
-    }
-    final tab = browser.tab(chatId);
-    void open() => showDialog<void>(
-          context: context,
-          builder: (_) => BrowserCard(
-              tab: tab,
-              onQuit: browser.close,
-              window: !browser.inApp || !tab.trustedInput),
-        );
+    final of = _browserOf(ref.watch(agentBrowserProvider),
+        ref.watch(isMirroredChatProvider(chatId)), chatId);
+    if (of == null) return const SizedBox.shrink();
+    final tab = of.tab;
+    void open() => of.open(context);
     return ListenableBuilder(
-      listenable: Listenable.merge(
-          [tab.page, tab.hold, tab.credentialRequest, tab.uploadRequest]),
+      listenable:
+          Listenable.merge([tab.hold, tab.credentialRequest, tab.uploadRequest]),
       builder: (context, _) {
-        final page = tab.page.value;
-        final hold = tab.hold.value;
+        final reason = tab.hold.value?.reason;
         final request = tab.credentialRequest.value;
         final upload = tab.uploadRequest.value;
-        if (page == null && hold == null && request == null && upload == null) {
+        if (reason == null && request == null && upload == null) {
           return const SizedBox.shrink();
         }
         final theme = Theme.of(context);
-        return Container(
-          margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-          decoration: BoxDecoration(
-            color: theme.colorScheme.surfaceContainerHighest,
-            borderRadius: BorderRadius.circular(8),
-          ),
+        return Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             mainAxisSize: MainAxisSize.min,
             children: [
-              if (upload != null)
-                UploadPanel(
-                  key: ObjectKey(upload),
-                  request: upload,
-                  tab: tab,
-                  onWatch: open,
-                ),
-              if (request != null)
-                CredentialPanel(
-                  key: ObjectKey(request),
-                  request: request,
-                  tab: tab,
-                  onWatch: open,
-                ),
-              Wrap(
-                spacing: 8,
-                runSpacing: 4,
-                crossAxisAlignment: WrapCrossAlignment.center,
-                children: [
-                  if (page != null)
-                    ActionChip(
-                      avatar: Icon(
-                          hold == null ? Icons.travel_explore : Icons.visibility_off,
-                          size: 16,
-                          color: theme.colorScheme.onPrimaryContainer),
-                      label: Text(
-                        "Browser · ${_where(page)}"
-                        "${hold == null ? "" : " · hidden from the agent"}",
-                        overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.labelSmall?.copyWith(
-                          color: theme.colorScheme.onPrimaryContainer,
-                          fontWeight: FontWeight.w500,
+              if (upload != null || request != null)
+                Container(
+                  margin: const EdgeInsets.only(bottom: 4),
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.surfaceContainerHighest,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (upload != null)
+                        UploadPanel(
+                          key: ObjectKey(upload),
+                          request: upload,
+                          tab: tab,
+                          onWatch: open,
                         ),
-                      ),
-                      backgroundColor: theme.colorScheme.primaryContainer,
-                      side: BorderSide.none,
-                      shape: const StadiumBorder(),
-                      visualDensity: VisualDensity.compact,
-                      tooltip: "Watch the agent's browser",
-                      onPressed: open,
-                    ),
-                  // The agent's own words for what it needs done: the button
-                  // that opens the browser to do it.
-                  if (hold?.reason case final reason?)
-                    FilledButton.icon(
-                      icon: const Icon(Icons.login, size: 18),
-                      label: Text(reason),
-                      onPressed: open,
-                    ),
-                ],
-              ),
+                      if (request != null)
+                        CredentialPanel(
+                          key: ObjectKey(request),
+                          request: request,
+                          tab: tab,
+                          onWatch: open,
+                        ),
+                    ],
+                  ),
+                ),
+              if (reason != null)
+                FilledButton.icon(
+                  icon: const Icon(Icons.login, size: 18),
+                  label: Text(reason),
+                  onPressed: open,
+                ),
             ],
           ),
         );
       },
     );
   }
+}
+
+/// The chat's tab as the running row reads it: the page it is on and whether
+/// it is hidden from the agent, null with no tab open. Rebuilt as the tab
+/// changes, which it says through listenables rather than providers.
+final _browserTabProvider = Provider.autoDispose.family<
+    ({BrowserPage page, BrowserHold? hold, void Function(BuildContext) open})?,
+    String>((ref, chatId) {
+  final of = _browserOf(ref.watch(agentBrowserProvider),
+      ref.watch(isMirroredChatProvider(chatId)), chatId);
+  if (of == null) return null;
+  final changes = Listenable.merge([of.tab.page, of.tab.hold]);
+  changes.addListener(ref.invalidateSelf);
+  ref.onDispose(() => changes.removeListener(ref.invalidateSelf));
+  final page = of.tab.page.value;
+  if (page == null) return null;
+  return (page: page, hold: of.tab.hold.value, open: of.open);
+});
+
+/// The chat's browser tab, while one is open: the first of the running pills,
+/// standing alone, opening a live view of the page. The view is the
+/// browser's own screencast, so it shows the page when the browser runs
+/// hidden too.
+List<RunningThing> browserRunning(
+    WidgetRef ref, ChatViewState view, String chatId) {
+  final tab = ref.watch(_browserTabProvider(chatId));
+  if (tab == null) return const [];
+  final hold = tab.hold;
+  return [
+    RunningThing(
+      icon: hold == null ? Icons.travel_explore : Icons.visibility_off,
+      label: "Browser · ${_where(tab.page)}"
+          "${hold == null ? "" : " · hidden from the agent"}",
+      tooltip: "Watch the agent's browser",
+      open: tab.open,
+    ),
+  ];
 }
 
 /// A file chooser the page opened, waiting on the user: the agent is not

@@ -4,6 +4,8 @@ import "package:flutter_test/flutter_test.dart";
 
 import "package:agent_chat/domain/agent_backend.dart";
 import "package:agent_chat/domain/chat_log.dart";
+import "package:agent_chat/domain/models.dart" show CallEvents, JobEnd, jobEndedEvent;
+import "package:agent_chat/domain/shell_job.dart";
 import "package:agent_chat/domain/project_settings.dart" show OmadaOrdering;
 import "package:agent_chat/domain/room/chat_room.dart";
 import "package:agent_chat/domain/room/room_state.dart";
@@ -96,5 +98,38 @@ void main() {
 
     expect(room.state.chat, isNull);
     expect(host.states.last.chat, isNull);
+  });
+
+  test("a job that ends between turns is written to the log and the chat",
+      () async {
+    final (room, host) = await openRoom();
+    await room.send("hello");
+    await room.turnDone;
+    const end = JobEnd(jobId: 1, exitCode: 0, tail: "done");
+    app.backend.jobsOf(room.chatId).endings.add((callId: "c1", end: end));
+    await waitFor(() => room.state.chat?.jobEndOf("c1") != null,
+        what: "the end on the chat");
+
+    expect(host.states.last.jobOf("c1"), const JobEnded(end));
+    final records = await app.repo.readRecords(room.chatId);
+    expect(records.last,
+        ChatRecord.callEvent(callId: "c1", kind: jobEndedEvent, data: end.toJson()));
+  });
+
+  test("a job goes from running to ended with no step between, the end "
+      "landing before the backend drops it", () async {
+    final (room, host) = await openRoom();
+    await waitFor(() => room.state.chat != null, what: "the room's load");
+    final jobs = app.backend.jobsOf(room.chatId);
+    const job = ShellJob(id: 1, callId: "c1", command: "serve", logPath: "/l");
+    jobs.jobs.value = [job];
+    expect(room.state.jobOf("c1"), const JobRunning(job));
+
+    const end = JobEnd(jobId: 1, exitCode: 0, tail: "");
+    jobs.endings.add((callId: "c1", end: end));
+    jobs.jobs.value = const [];
+    expect(room.state.jobOf("c1"), const JobEnded(end));
+    expect(room.state.runningJobs, isEmpty);
+    expect(host.states.last.jobOf("c1"), const JobEnded(end));
   });
 }

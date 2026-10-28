@@ -11,7 +11,7 @@ import "../tool_ui/tool_ui.dart";
 /// The call itself is the point of it. A banner naming only the tool is asking
 /// to be waved through — what is being consented to is the command, so that is
 /// what the panel below shows, verbatim and in the bundled mono face. It comes
-/// worded from the agent as `argumentsText`, the same way `ToolLabel` takes it;
+/// worded from the agent as `argumentsText`, the same way `toolRunView` takes it;
 /// the raw JSON is the fallback for a tool that words nothing.
 ///
 /// Two answers write a rule as well as allowing: **Allow in Chat** onto the

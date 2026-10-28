@@ -1,8 +1,9 @@
 import "package:flutter/material.dart";
+import "package:flutter_riverpod/flutter_riverpod.dart";
 
-import "../../../domain/models.dart";
+import "../../../domain/tool_arg.dart";
 import "../../../domain/web_search.dart";
-import "../widgets/activity_label.dart" show WebLabel;
+import "../widgets/activity_label.dart" show Run, RunDrawer, RunView;
 import "tool_ui.dart";
 
 class WebSearchUI extends ToolUI {
@@ -15,8 +16,7 @@ class WebSearchUI extends ToolUI {
   String get spoken => "Searched the web";
 
   @override
-  Widget label(ToolCall call, ToolResult? result, {required String chatId}) =>
-      WebLabel(call: call, result: result);
+  RunView view(WidgetRef ref, Run run) => _webView(run);
 }
 
 class WebFetchUI extends ToolUI {
@@ -32,6 +32,30 @@ class WebFetchUI extends ToolUI {
   (IconData, String) get approval => (Icons.public, "Fetch this page?");
 
   @override
-  Widget label(ToolCall call, ToolResult? result, {required String chatId}) =>
-      WebLabel(call: call, result: result);
+  RunView view(WidgetRef ref, Run run) => _webView(run);
+}
+
+/// A `websearch` or `webfetch` call: the query or URL read out of the call's
+/// arguments, and what came back behind the drawer.
+RunView _webView(Run run) {
+  final search = run.call?.name == websearchToolName;
+  final what = stringArg(run.call?.argumentsJson, search ? "query" : "url") ?? "";
+  final result = run.result;
+  final verb = search
+      ? (result == null ? "Searching" : "Searched")
+      : (result == null ? "Fetching" : "Fetched");
+  return RunView(
+    icon: search ? Icons.travel_explore_outlined : Icons.language_outlined,
+    label: "$verb: $what",
+    isError: (result?.returnCode ?? 0) != 0,
+    drawer: (_) => RunDrawer(
+      title: search ? "Web search" : "Web fetch",
+      mono: true,
+      sections: [
+        (label: search ? "Query" : "URL", body: what, isError: false),
+        (label: search ? "Results" : "Content", body: result?.output, isError: false),
+        (label: "Error", body: result?.exceptionInfo, isError: true),
+      ],
+    ),
+  );
 }

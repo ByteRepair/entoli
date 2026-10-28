@@ -2,6 +2,7 @@ import "../../../domain/agent_backend.dart";
 import "../../../domain/safe_command.dart" show readsOnly;
 import "../../../domain/shell.dart";
 import "../../../domain/shell_command_analysis.dart";
+import "../../../domain/shell_job.dart" show backgroundLog;
 import "../../../domain/tool_arg.dart";
 import "../approval_gate.dart";
 import "../background_jobs.dart";
@@ -195,7 +196,7 @@ class BashTool extends AgentTool {
     }
     final jobs = turn.backgroundJobs;
     if (jobs != null && boolArg(call.argumentsJson, "background")) {
-      return _startBackground(turn, jobs, command, sandbox);
+      return _startBackground(turn, jobs, call.id, command, sandbox);
     }
     return turn.track(
         call,
@@ -216,8 +217,10 @@ class BashTool extends AgentTool {
   /// gate decided; its streams are its log and nothing, which is what lets a
   /// `toolbox run` or a server in it stop holding anything open.
   Future<ShellResult> _startBackground(
-      Turn turn, ChatJobs jobs, String command, CommandSandbox? sandbox) async {
+      Turn turn, ChatJobs jobs, String callId, String command,
+      CommandSandbox? sandbox) async {
     final job = await jobs.start(command,
+        callId: callId,
         workspace: turn.workspace,
         spawn: (script) => turn.shell.start(script,
             cwd: turn.workspace,
@@ -228,7 +231,7 @@ class BashTool extends AgentTool {
             project: turn.project,
             sandbox: sandbox,
             readOnly: turn.readOnlyDirs));
-    final log = backgroundLog(job.id);
+    final log = backgroundLog(callId);
     final where = turn.shell.guestRoot == null ? " (${job.logPath})" : "";
     final pid = job.pid;
     final stop = pid == null
@@ -237,6 +240,7 @@ class BashTool extends AgentTool {
             "`kill -- -$pid` stops it and everything it started.";
     return ShellResult(
         returnCode: 0,
+        jobId: job.id,
         output: "Started in the background as job ${job.id}.$stop Its output "
             "goes to $log in the chat workspace$where: read it with `tail` or "
             "the read tool at chat:$log. Your next call after it exits says "

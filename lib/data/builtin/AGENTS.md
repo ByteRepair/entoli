@@ -305,21 +305,31 @@ pipe, so the call never came back. A job is a one-shot run, gated and
 sandboxed like any call, whose script first points its output at
 `.entoli-jobs/<id>.log` in the chat workspace and its input at `/dev/null`
 (`backgroundScript`), so nothing it leaves behind holds a pipe of the app's.
+The log is named by the call that started the job (`backgroundLog`), not by
+the job's number: the number starts again with the app, and a reused one
+would write over a log the chat still points at.
 The answer gives the job's number, its pid (the group leader, so
 `kill -- -<pid>` takes everything it started) and the log, which the model
-reads with `tail` or `read`.
+reads with `tail` or `read`; the number also rides the result as
+`ToolResult.jobId`, which is how the chat tells a job's call from a call.
 
 `BackgroundJobs` holds them per chat on the backend, so a job outlives its
 turn. How one ended rides the agent's next tool result in that chat, this
 turn or a later one, as `ToolResult.notes`: beside the output rather than in
 it, since an answered question's output is data, and the projection words
-the notes ahead of the result for every tool.
+the notes ahead of the result for every tool. The same end goes to the chat
+as `ChatShellJobs.ended`, with the last lines of the log (`jobTail`: ten
+lines, cut from the top to a kilobyte), for the room to keep on the log as a
+`jobEnded` call event — not for the model, which already has the note. It
+goes out synchronously and before the job leaves `jobs`, so the chat never
+sees a job neither running nor ended. A job the app killed on its
+way out has no end; that absence is what "ended with the app" reads.
 Each is killed after `timeout`; deleting the chat
 or quitting the app kills them, and ids are never reused while the app runs,
-since an id names its log. Offered where `Shell.canRunInBackground` (the
+since the model stops a job by its id. Offered where `Shell.canRunInBackground` (the
 machine's shell, a guest under proot included), never to a sub-agent: nobody
-would hear how its job ended. The chat page draws them as pills; see "Background
-jobs, on screen" in `lib/ui/chat/AGENTS.md`.
+would hear how its job ended. The chat page draws them as pills and in the reply; see "What is running,
+on screen" in `lib/ui/chat/AGENTS.md`.
 
 ### Running a command yourself
 
@@ -547,7 +557,7 @@ wording rides with it. Digging
 it back out of the JSON in the widget was the first version, and it meant a list
 of argument names — `command`, `url` — kept in a widget file, describing tools
 it is nowhere near. The raw JSON stays as the fallback for a tool that words
-nothing, which is what `ToolLabel` does with the same field.
+nothing, which is what `toolRunView` does with the same field.
 
 It is its own file rather than the end of `message_bubble.dart`, where it used
 to live: it is not a message, and the turn is what is asking.
@@ -565,7 +575,7 @@ the chat draws an answered question back out of what was persisted. `AskLabel`
 is that: the question on a label, the answers behind the drawer, parsed once and
 kept — every visible message is rebuilt on every streamed delta. What it draws is
 decided by what parsed, not by the name that got it there: a call named
-`ask_user` with nothing askable in it falls back to `ToolLabel`, which shows the
+`ask_user` with nothing askable in it falls back to the generic run label, which shows the
 rejection the model was sent.
 
 Every call is reported and every call is answered, which is the invariant that
@@ -667,8 +677,8 @@ would race the two.
 
 `SubAgentStartEvent` / `SubAgentEndEvent` are turn-scoped view state (like
 approvals and questions), so `conv.jsonl` keeps the call/result pair and
-nothing more; a reloaded chat draws a `TaskLabel` from the call's arguments
-alone. `SubAgentStrip` shows the running ones as chips above the composer.
+nothing more; a reloaded chat draws the run from the call's arguments alone
+(`TaskUI.view`). `RunningStrip` shows the running ones as pills above the composer.
 
 ### Their own transcripts
 

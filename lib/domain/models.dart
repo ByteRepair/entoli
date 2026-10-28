@@ -252,9 +252,65 @@ abstract class Chat with _$Chat {
     /// messages under it.
     @Default([]) List<ConversationCompaction> compactions,
 
+    /// What happened to each call after its turn, by the call's id and then
+    /// the event's kind, the last of a kind standing. Derived by `replayTree`
+    /// from `callEvent` records, every kind kept whether this build reads it
+    /// or not; the typed reading is [CallEvents].
+    @Default({}) Map<String, Map<String, Map<String, dynamic>>> callEvents,
   }) = _Chat;
 
   factory Chat.fromJson(Map<String, dynamic> json) => _$ChatFromJson(json);
+}
+
+/// The `callEvent` kind saying a background job ended, its data a [JobEnd].
+const jobEndedEvent = "jobEnded";
+
+/// [events] with [data] as the call [callId]'s event of [kind], the last of
+/// a kind standing: the one rule replay and a room writing live both fold by.
+Map<String, Map<String, Map<String, dynamic>>> withCallEvent(
+        Map<String, Map<String, Map<String, dynamic>>> events,
+        String callId,
+        String kind,
+        Map<String, dynamic> data) =>
+    {
+      ...events,
+      callId: {...?events[callId], kind: data},
+    };
+
+// Decoded once per event: a label reads its job's end on every streamed token.
+final _jobEnds = Expando<JobEnd>();
+
+/// The call events this build reads, typed.
+extension CallEvents on Chat {
+  /// How the background job [callId] started ended, where the log says.
+  JobEnd? jobEndOf(String callId) {
+    final data = callEvents[callId]?[jobEndedEvent];
+    if (data == null) return null;
+    try {
+      return _jobEnds[data] ??= JobEnd.fromJson(data);
+    } on Object {
+      // Written by a build whose JobEnd had another shape: no end to show.
+      return null;
+    }
+  }
+}
+
+/// How a background job ended, as the chat keeps it: the job's log lives in
+/// the workspace, which is not the chat's record and is not on a mirror, so
+/// the end of it is carried here.
+@freezed
+abstract class JobEnd with _$JobEnd {
+  const factory JobEnd({
+    required int jobId,
+
+    /// Null where it was stopped rather than exiting.
+    int? exitCode,
+
+    /// The last lines of its log; see `jobTail`.
+    required String tail,
+  }) = _JobEnd;
+
+  factory JobEnd.fromJson(Map<String, dynamic> json) => _$JobEndFromJson(json);
 }
 
 /// Where a message sits among the threads written at its point in the
@@ -536,6 +592,9 @@ abstract class ToolResult with _$ToolResult {
     required String output,
     String? exceptionInfo,
     String? cwd,
+    /// The background job the call started: a fact rather than the wording
+    /// of [output], which is the model's to read.
+    int? jobId,
     @Default([]) List<String> violations,
     /// What happened since the last call that the model should hear — a
     /// background job ending — beside the result rather than inside

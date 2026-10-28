@@ -1,6 +1,7 @@
 import "../agent_backend.dart";
 import "../ask.dart";
 import "../models.dart";
+import "../shell_job.dart";
 
 /// Per-chat state container exposed to the UI.
 class ChatViewState {
@@ -15,6 +16,8 @@ class ChatViewState {
     this.unfinishedNotice,
     this.shellOutput = const {},
     this.steering = const [],
+    this.runningJobs = const {},
+    this.mirrored = false,
   });
   final Chat? chat;
   final bool isRunning;
@@ -58,6 +61,24 @@ class ChatViewState {
   /// first. Not on the log until it is read, when it lands in the reply.
   final List<Message> steering;
 
+  /// The background jobs running, by the call that started each. Not
+  /// turn-scoped: a job runs on past its turn. Empty on a mirror, whose jobs
+  /// are the other device's.
+  final Map<String, ShellJob> runningJobs;
+
+  /// A chat whose home is another device: its jobs and their logs are there.
+  final bool mirrored;
+
+  /// Where the job [callId] started is: running here, or how the log says it
+  /// ended, or neither. The one place the two meet.
+  JobState jobOf(String callId) {
+    final running = runningJobs[callId];
+    if (running != null) return JobRunning(running);
+    final end = chat?.jobEndOf(callId);
+    if (end != null) return JobEnded(end);
+    return mirrored ? const JobUnheard() : const JobLost();
+  }
+
   /// Who may speak now — see [RoomPhase], whose facts "The room's phase is
   /// one answer" in `lib/domain/room/AGENTS.md` owns.
   RoomPhase get roomPhase => questions.values.any((q) => q.isNotEmpty)
@@ -80,6 +101,7 @@ class ChatViewState {
     bool clearUnfinishedNotice = false,
     Map<String, String>? shellOutput,
     List<Message>? steering,
+    Map<String, ShellJob>? runningJobs,
   }) =>
       ChatViewState(
         chat: chat ?? this.chat,
@@ -94,6 +116,8 @@ class ChatViewState {
             : (unfinishedNotice ?? this.unfinishedNotice),
         shellOutput: shellOutput ?? this.shellOutput,
         steering: steering ?? this.steering,
+        runningJobs: runningJobs ?? this.runningJobs,
+        mirrored: mirrored,
       );
 }
 

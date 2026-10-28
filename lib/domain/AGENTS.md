@@ -10,7 +10,7 @@ written, so the only thing a kill can now cost is whatever had not been appended
 yet. That is what makes an interrupted turn something to offer to continue
 rather than something to apologise for.
 
-Seven records. `message` opens one — before it holds anything, which is what the
+Nine records. `message` opens one — before it holds anything, which is what the
 empty assistant message at the head of a turn is — and its `siblingOf` names
 what it is an alternative to, or nothing at all, which puts it on the end of the
 thread being read; `replacesSibling` takes that one away rather than joining it,
@@ -22,6 +22,8 @@ on the end of the part at an index. `turnEnd` closes the turn and says why:
 to read. `rewind` forgets a message and everything below it. `compaction` says
 the conversation up to a message is summarized for the model, and still there
 for the user to read — see "Compaction" below.
+`callEvent` says something happened to a call after its turn — today, that
+the background job it started ended (`jobEnded`).
 
 Nothing is mutable, so a part that changed is **superseded**: the same index
 written again wins, and `replay` applies records in order, so the last one
@@ -51,6 +53,28 @@ beside them where it gave one. On the close because that is when it is known,
 and on the log so a rewind or a thread change takes the chat page's Context
 bars with it. A `compaction` carries `chatTokens`, the conversation's estimate
 with the summary standing in, which the bars read until the next reply measures.
+
+`callEvent` is the one record written **between turns**: a job outlives the
+turn that started it and usually ends when nothing is running. It goes
+through the room's one append queue like a turn's records, so lines never
+interleave, and it names a call rather than a part's index, so a job ending
+while the turn that started it is still writing that reply cannot collide
+with the reply's own parts. It carries a `kind` and its `data` as plain JSON,
+and replay keeps every kind in `Chat.callEvents`, the last of a kind per call
+standing, whether this build reads it or not: a log a newer build wrote with
+a kind this one does not know reads whole here, where a new record type
+would stop `decodeLog` at its line. A new kind of late event is a kind name
+and a typed reading in `CallEvents`, not a new record. A turn's
+`copyWith(messages:)` leaves the map alone. It is never projected: the model
+hears how a job ended through the next tool result's notes.
+
+The room is where a job's two halves meet. It holds the backend's running
+jobs as `ChatViewState.runningJobs`, and `ChatViewState.jobOf` answers by the
+call: `JobRunning`, `JobEnded` from the call event, `JobLost` with the app
+that ran it, or on a mirror `JobUnheard`. The backend sends a job's end,
+synchronously, before it drops the job from its list, and the room applies
+it at once, so a job is never read as neither. Both halves of the call event
+rule — replay's fold and the room's live write — are `withCallEvent`.
 
 Rewinding is a record rather than a truncation because shortening a log means
 rewriting it, which is the one thing the format exists to avoid. It is also the

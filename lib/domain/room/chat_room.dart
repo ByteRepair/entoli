@@ -8,6 +8,7 @@ import "../agent_backend.dart";
 import "../chat_log.dart";
 import "../chat_repository.dart";
 import "../models.dart";
+import "../shell_job.dart" show ChatShellJobs;
 import "../project_settings.dart" show OmadaOrdering;
 import "../prompt_library.dart" show nameOf;
 import "../turn_recorder.dart";
@@ -61,7 +62,41 @@ abstract interface class RoomHost {
 class ChatRoom {
   ChatRoom(this.chatId, this._repo, this._host) {
     _ready = _load();
+    _jobs.jobs.addListener(_jobsChanged);
+    _jobEnds = _jobs.ended.listen(_jobEnded);
+    // Not from here: the holder is still building on this call.
+    unawaited(_ready.then((_) => _jobsChanged()));
   }
+
+  late final ChatShellJobs _jobs = _repo.jobsOf(chatId);
+  late final StreamSubscription<void> _jobEnds;
+
+  void _jobsChanged() {
+    if (_disposed) return;
+    _view = state.copyWith(
+        runningJobs: {for (final job in _jobs.jobs.value) job.callId: job});
+  }
+
+  /// A background job ended, likely between turns: kept on the log through
+  /// the one queue every turn's writes take, and on the chat on screen —
+  /// at once, ahead of the backend dropping it from its list, so it is never
+  /// read as neither running nor ended.
+  Future<void> _jobEnded(({String callId, JobEnd end}) ended) async {
+    final (:callId, :end) = ended;
+    final data = end.toJson();
+    unawaited(_append(
+        [ChatRecord.callEvent(callId: callId, kind: jobEndedEvent, data: data)]));
+    // After the load, which may have read the log before this line landed.
+    if (!_loaded) await _ready;
+    final chat = state.chat;
+    if (_disposed || chat == null) return;
+    _view = state.copyWith(
+        chat: chat.copyWith(
+            callEvents:
+                withCallEvent(chat.callEvents, callId, jobEndedEvent, data)));
+  }
+
+  bool _loaded = false;
 
   final String chatId;
   final ChatRepository _repo;
@@ -87,6 +122,8 @@ class ChatRoom {
   /// the room still has in flight reaches it.
   void dispose() {
     _disposed = true;
+    _jobs.jobs.removeListener(_jobsChanged);
+    unawaited(_jobEnds.cancel());
     for (final turn in _turns.values) {
       turn.sub?.cancel();
       turn.recorder.dispose();
@@ -202,6 +239,7 @@ class ChatRoom {
       // Left unsaid the page keeps a spinner up with nothing behind it.
       logFailure("chat", "could not open $chatId", e);
     }
+    _loaded = true;
   }
 
   /// The composer's own path: what it is holding becomes files under the chat
