@@ -65,7 +65,8 @@ class AppConfig {
 
   static Future<AppConfig> load(FileSystem fs, String dataDir) async {
     final config = AppConfig._(dataDir, fs);
-    await runMigrations(config, fresh: await config.ensureDirs());
+    await runMigrations(config.fs, config.dataDir,
+        fresh: await config.ensureDirs());
     await config.documents.hydrate([
       config.settingsFile,
       for (final project in everyProject(await config.projectNames()))
@@ -260,10 +261,8 @@ class AppConfig {
   /// leaves them out and a restore leaves them in place.
   List<String> get machineLocalFiles => [linkedInstructionsFile];
 
-  /// Not the app's version: it names the release whose migration last ran here,
-  /// and a release that leaves the layout alone leaves this where it was. See
-  /// `migrations.dart`.
-  String get versionFile => fs.path.join(dataDir, "version");
+  /// See [migrationStamp].
+  String get versionFile => migrationStamp(fs, dataDir);
 
   String get settingsFile => fs.path.join(dataDir, "settings.json");
 

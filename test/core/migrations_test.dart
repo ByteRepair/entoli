@@ -33,7 +33,7 @@ void main() {
 
   test("a directory this launch created is stamped at the end and left alone",
       () async {
-    await runMigrations(config, fresh: true, chain: [step("0.1.3"), step("1.0.0")]);
+    await runMigrations(config.fs, config.dataDir, fresh: true, chain: [step("0.1.3"), step("1.0.0")]);
 
     expect(ran, isEmpty);
     expect(await stamped(), "1.0.0");
@@ -41,7 +41,7 @@ void main() {
 
   test("the stamp is where the chain resumes", () async {
     // No stamp: older than every entry, so the whole chain runs.
-    await runMigrations(config,
+    await runMigrations(config.fs, config.dataDir,
         fresh: false, chain: [step("0.1.3"), step("0.2.0"), step("1.0.0")]);
 
     expect(ran, ["0.1.3", "0.2.0", "1.0.0"]);
@@ -50,7 +50,7 @@ void main() {
 
     // A stamp mid-chain: only the entries after it run.
     await stamp("0.2.0");
-    await runMigrations(config,
+    await runMigrations(config.fs, config.dataDir,
         fresh: false, chain: [step("0.1.3"), step("0.2.0"), step("1.0.0")]);
 
     expect(ran, ["1.0.0"]);
@@ -58,9 +58,9 @@ void main() {
 
     // A stamp from a build newer than this one is left where it is, and
     // nothing runs here.
-    await runMigrations(config, fresh: false, chain: [step("9.9.9")]);
+    await runMigrations(config.fs, config.dataDir, fresh: false, chain: [step("9.9.9")]);
     await stamp("2.0.0");
-    await runMigrations(config, fresh: false, chain: [step("0.1.3"), step("1.0.0")]);
+    await runMigrations(config.fs, config.dataDir, fresh: false, chain: [step("0.1.3"), step("1.0.0")]);
 
     expect(ran, isEmpty);
     expect(await stamped(), "2.0.0");
@@ -68,21 +68,21 @@ void main() {
 
   test("one that dies halfway is picked up at the entry it died in", () async {
     await expectLater(
-      runMigrations(config,
+      runMigrations(config.fs, config.dataDir,
           fresh: false, chain: [step("0.1.3"), step("0.2.0", fails: true)]),
       throwsStateError,
     );
     expect(await stamped(), "0.1.3");
     ran.clear();
 
-    await runMigrations(config,
+    await runMigrations(config.fs, config.dataDir,
         fresh: false, chain: [step("0.1.3"), step("0.2.0"), step("1.0.0")]);
 
     expect(ran, ["0.2.0", "1.0.0"]);
   });
 
   test("a chain with nothing in it stamps nothing", () async {
-    await runMigrations(config, fresh: true, chain: const []);
+    await runMigrations(config.fs, config.dataDir, fresh: true, chain: const []);
 
     expect(await stamped(), isNull);
   });

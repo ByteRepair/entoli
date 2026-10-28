@@ -191,7 +191,8 @@ Future<void> restoreBackup(
   // A backup holding none of them is still a working app afterwards, and one
   // made by an older build unpacks that build's layout — including the version
   // stamp that says which one it is.
-  await runMigrations(config, fresh: await config.ensureDirs());
+  await runMigrations(config.fs, config.dataDir,
+      fresh: await config.ensureDirs());
 }
 
 /// A member on its way out of the archive, which is what `IncomingFile` already
