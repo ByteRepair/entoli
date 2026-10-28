@@ -16,7 +16,7 @@ class LlmProviderConfig {
     required this.baseUrl,
     this.label,
     this.apiKeyEnv,
-    this.models = const [],
+    this.modelsEndpoint,
     this.defaultModelId,
     this.defaultLightModelId,
     this.customModels = const [],
@@ -33,9 +33,10 @@ class LlmProviderConfig {
 
   final String? apiKeyEnv;
 
-  /// What to offer in the model picker. Empty asks the endpoint, which most
-  /// of them answer and a few do not.
-  final List<String> models;
+  /// Where to list models beyond models.dev's, e.g.
+  /// `http://localhost:11434/v1/models`. Null asks nothing: a provider
+  /// models.dev does not know then offers only its [customModels].
+  final String? modelsEndpoint;
 
   /// The model a new chat is answered by when the user picks this provider's
   /// "Default" entry, and the one the title, memory and classifier pickers
@@ -80,7 +81,7 @@ class LlmProviderConfig {
     String? baseUrl,
     String? label,
     String? apiKeyEnv,
-    List<String>? models,
+    String? modelsEndpoint,
     String? defaultModelId,
     String? defaultLightModelId,
     List<ModelInfo>? customModels,
@@ -91,7 +92,7 @@ class LlmProviderConfig {
         baseUrl: baseUrl ?? this.baseUrl,
         label: label ?? this.label,
         apiKeyEnv: apiKeyEnv ?? this.apiKeyEnv,
-        models: models ?? this.models,
+        modelsEndpoint: modelsEndpoint ?? this.modelsEndpoint,
         defaultModelId: defaultModelId ?? this.defaultModelId,
         defaultLightModelId: defaultLightModelId ?? this.defaultLightModelId,
         customModels: customModels ?? this.customModels,
@@ -103,7 +104,7 @@ class LlmProviderConfig {
         "baseUrl": baseUrl,
         if (label != null) "label": label,
         if (apiKeyEnv != null) "apiKeyEnv": apiKeyEnv,
-        if (models.isNotEmpty) "models": models,
+        if (modelsEndpoint != null) "modelsEndpoint": modelsEndpoint,
         if (defaultModelId != null) "defaultModelId": defaultModelId,
         if (defaultLightModelId != null) "defaultLightModelId": defaultLightModelId,
         if (customModels.isNotEmpty)
@@ -117,7 +118,6 @@ class LlmProviderConfig {
     final id = value["id"];
     final baseUrl = value["baseUrl"];
     if (id is! String || id.isEmpty || baseUrl is! String || baseUrl.isEmpty) return null;
-    final models = value["models"];
     final custom = value["customModels"];
     return LlmProviderConfig(
       id: id,
@@ -127,7 +127,7 @@ class LlmProviderConfig {
       // An older file's `apiKey` is ignored: the store is where a key lives,
       // and a key left in the file was stripped by the save that followed it.
       apiKeyEnv: value["apiKeyEnv"] as String?,
-      models: models is List ? models.whereType<String>().toList() : const [],
+      modelsEndpoint: value["modelsEndpoint"] as String?,
       defaultModelId: value["defaultModelId"] as String?,
       defaultLightModelId: value["defaultLightModelId"] as String?,
       customModels: [

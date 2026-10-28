@@ -397,9 +397,10 @@ void main() {
   });
 
   group("listing models", () {
-    test("reads the ids the endpoint offers", () async {
+    test("reads the ids the models endpoint offers", () async {
       final client = OpenAiClient(
         baseUrl: Uri.parse("https://example.test/v1"),
+        modelsUrl: Uri.parse("https://example.test/v1/models"),
         httpClient: MockClient((request) async {
           expect(request.url.path, "/v1/models");
           return http.Response(
@@ -420,7 +421,17 @@ void main() {
     test("an endpoint that will not say contributes nothing", () async {
       final client = OpenAiClient(
         baseUrl: Uri.parse("https://example.test/v1"),
+        modelsUrl: Uri.parse("https://example.test/v1/models"),
         httpClient: MockClient((_) async => http.Response("nope", 404)),
+      );
+
+      expect(await client.listModels(), isEmpty);
+    });
+
+    test("with no models endpoint nothing is asked", () async {
+      final client = OpenAiClient(
+        baseUrl: Uri.parse("https://example.test/v1"),
+        httpClient: MockClient((_) async => fail("nothing should be asked")),
       );
 
       expect(await client.listModels(), isEmpty);

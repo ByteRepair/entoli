@@ -74,7 +74,8 @@ class _ProviderDialogState extends State<_ProviderDialog> {
   late final _id = TextEditingController(text: widget.initial?.id ?? "");
   late final _baseUrl = TextEditingController(text: widget.initial?.baseUrl ?? "");
   late final _apiKey = TextEditingController();
-  late final _models = TextEditingController(text: widget.initial?.models.join(", ") ?? "");
+  late final _modelsEndpoint =
+      TextEditingController(text: widget.initial?.modelsEndpoint ?? "");
   late var _api = widget.initial?.api ?? LlmApi.openai;
 
   /// Non-null for a provider with a class of its own, which opens on the key
@@ -100,7 +101,7 @@ class _ProviderDialogState extends State<_ProviderDialog> {
     _id.dispose();
     _baseUrl.dispose();
     _apiKey.dispose();
-    _models.dispose();
+    _modelsEndpoint.dispose();
     super.dispose();
   }
 
@@ -118,6 +119,7 @@ class _ProviderDialogState extends State<_ProviderDialog> {
   ProviderEdit? _submit() {
     final id = _id.text.trim();
     final baseUrl = _baseUrl.text.trim();
+    final modelsEndpoint = _modelsEndpoint.text.trim();
     if (id.isEmpty || baseUrl.isEmpty) return null;
     return ProviderEdit(
       LlmProviderConfig(
@@ -129,10 +131,7 @@ class _ProviderDialogState extends State<_ProviderDialog> {
         defaultModelId: widget.initial?.defaultModelId,
         defaultLightModelId: widget.initial?.defaultLightModelId,
         customModels: widget.initial?.customModels ?? const [],
-        models: [
-          for (final model in _models.text.split(RegExp(r"[,\n]")))
-            if (model.trim().isNotEmpty) model.trim(),
-        ],
+        modelsEndpoint: modelsEndpoint.isEmpty ? null : modelsEndpoint,
       ),
       _setKey,
     );
@@ -338,12 +337,11 @@ class _ProviderDialogState extends State<_ProviderDialog> {
       ],
       const SizedBox(height: 16),
       TextField(
-        controller: _models,
-        minLines: 1,
-        maxLines: 4,
+        controller: _modelsEndpoint,
         decoration: const InputDecoration(
-          labelText: "Models",
-          helperText: "Comma-separated. Leave empty to ask the endpoint.",
+          labelText: "Models endpoint",
+          helperText: "Lists models models.dev does not know, e.g. "
+              "http://localhost:11434/v1/models. Leave empty for models.dev's.",
         ),
       ),
     ];

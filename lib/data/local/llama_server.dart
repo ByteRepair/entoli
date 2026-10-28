@@ -250,12 +250,14 @@ class LlamaServerPool extends LocalLlm {
   }
 
   @override
+  List<String> get installed => [
+        for (final model in localModelCatalog)
+          if (_store.fileOfSync(model) != null) model.id,
+      ];
+
+  @override
   LlmProviderConfig? get provider {
-    final models = [
-      for (final model in localModelCatalog)
-        if (_store.fileOfSync(model) != null) model.id,
-    ];
-    if (models.isEmpty) return null;
+    if (installed.isEmpty) return null;
     return LlmProviderConfig(
       id: localProviderId,
       label: "On-device",
@@ -266,7 +268,6 @@ class LlamaServerPool extends LocalLlm {
       // and an empty string keeps the registry's cache signature still while
       // servers come and go under it.
       baseUrl: "",
-      models: models,
     );
   }
 

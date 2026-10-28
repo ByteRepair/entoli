@@ -102,10 +102,6 @@ class AppleFm {
         // registry's cache signature still. The shape rides out of habit
         // rather than need.
         baseUrl: "",
-        models: [
-          appleModelId,
-          if (probe.mlx) ...mlxModels,
-        ],
         defaultModelId: appleModelId,
       );
 

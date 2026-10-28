@@ -132,7 +132,7 @@ class LocalPoolClient implements LlmClient {
   /// Answered from what is on disk rather than by asking a server, since asking
   /// would mean loading one — and this is what the model picker calls.
   @override
-  Future<List<String>> listModels() async => _llm.provider?.models ?? const [];
+  Future<List<String>> listModels() async => _llm.installed;
 
   @override
   void close() => _clients.close();

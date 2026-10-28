@@ -1168,6 +1168,7 @@ class FakeLocalLlm extends LocalLlm {
   final List<LocalDevice> devicesFound;
   final bool ready;
   final String failure;
+  @override
   final List<String> installed;
 
   /// What the cores slider tops out at, and whether it is drawn at all. Null by
@@ -1253,7 +1254,6 @@ class FakeLocalLlm extends LocalLlm {
           label: "On-device",
           api: LlmApi.openai,
           baseUrl: "",
-          models: installed,
         );
 }
 

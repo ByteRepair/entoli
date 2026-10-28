@@ -15,6 +15,7 @@ class OllamaProvider extends LocalServerProvider {
     label: "Ollama (local)",
     api: LlmApi.openai,
     baseUrl: "http://localhost:11434/v1",
+    modelsEndpoint: "http://localhost:11434/v1/models",
     defaultModelId: "glm-5.3-flash",
     defaultLightModelId: "nemotron-3-nano:30b",
   );
@@ -33,6 +34,7 @@ class LmStudioProvider extends LocalServerProvider {
     label: "LM Studio (local)",
     api: LlmApi.openai,
     baseUrl: "http://localhost:1234/v1",
+    modelsEndpoint: "http://localhost:1234/v1/models",
     defaultModelId: "glm-5.3-flash",
     defaultLightModelId: "nemotron-3-nano:30b",
   );

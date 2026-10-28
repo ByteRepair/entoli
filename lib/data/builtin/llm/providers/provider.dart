@@ -29,6 +29,8 @@ abstract class LlmProvider {
   String get id => config.id;
   String get displayName => config.displayName;
   Uri get baseUrl => Uri.parse(config.baseUrl);
+  Uri? get modelsUrl =>
+      config.modelsEndpoint == null ? null : Uri.parse(config.modelsEndpoint!);
 
   /// False for a server nothing guards, whose key the dialog does not ask for.
   bool get needsKey => true;
@@ -135,7 +137,8 @@ class OpenAiCompatibleProvider extends LlmProvider {
   const OpenAiCompatibleProvider(super.config, [super.terms]);
 
   @override
-  OpenAiClient client(String? apiKey) => OpenAiClient(baseUrl: baseUrl, apiKey: apiKey);
+  OpenAiClient client(String? apiKey) =>
+      OpenAiClient(baseUrl: baseUrl, apiKey: apiKey, modelsUrl: modelsUrl);
 
   @override
   bool get answersAudio => true;

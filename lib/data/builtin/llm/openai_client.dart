@@ -20,12 +20,16 @@ class OpenAiClient implements LlmClient {
   OpenAiClient({
     required this.baseUrl,
     this.apiKey,
+    this.modelsUrl,
     this.returnProgress = false,
     http.Client? httpClient,
   }) : _http = httpClient ?? tlsClient();
 
   final Uri baseUrl;
   final String? apiKey;
+
+  /// The provider's `modelsEndpoint`. Null lists nothing.
+  final Uri? modelsUrl;
 
   /// Ask for `prompt_progress` frames. llama.cpp's own extension, so it is off
   /// unless the endpoint is known to be one — a hosted provider is entitled to
@@ -52,8 +56,9 @@ class OpenAiClient implements LlmClient {
   void close() => _http.close();
 
   @override
-  Future<List<String>> listModels() =>
-      listModelIds(_http, under(baseUrl, "models"), headers: _auth);
+  Future<List<String>> listModels() async => modelsUrl == null
+      ? const []
+      : await listModelIds(_http, modelsUrl!, headers: _auth);
 
   /// What a refused request reports. A host whose status means something more
   /// specific than its message says rewrites it here.

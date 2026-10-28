@@ -73,12 +73,13 @@ abstract class LocalLlm {
   /// phone short of memory wants.
   Future<void> stopAll();
 
-  /// Every model on disk, as one provider.
-  ///
-  /// Null where nothing is downloaded, which is what keeps the entry out of
-  /// every picker until there is something to pick. It lists what is *on disk*
-  /// rather than what is loaded: asking for one is what causes it to load, so a
-  /// list of the already-running would never grow.
+  /// The ids of every model on disk. What is *on disk* rather than what is
+  /// loaded: asking for one is what causes it to load, so a list of the
+  /// already-running would never grow.
+  List<String> get installed;
+
+  /// [installed], as one provider. Null where nothing is downloaded, which is
+  /// what keeps the entry out of every picker until there is something to pick.
   LlmProviderConfig? get provider;
 }
 
@@ -191,6 +192,9 @@ class UnavailableLocalLlm extends LocalLlm {
 
   @override
   Future<void> stopAll() async {}
+
+  @override
+  List<String> get installed => const [];
 
   @override
   LlmProviderConfig? get provider => null;
