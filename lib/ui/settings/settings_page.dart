@@ -17,7 +17,7 @@ import "../../domain/temp_chat_ttl.dart";
 import "../../domain/app_settings.dart";
 import "../../providers.dart";
 import "../chat/activity/format.dart";
-import "../sidebar/sidebar.dart";
+import "../selection.dart";
 import "../theme.dart";
 import "../widgets/add_button_row.dart";
 import "../widgets/busy.dart";
@@ -47,48 +47,10 @@ import "skills_settings.dart";
 import "sync_settings.dart";
 import "terminal_settings.dart";
 import "voice_settings.dart";
+import "settings_category.dart";
 import "welcome_page.dart";
 
-/// The page's categories, in the order they are offered and the groups they
-/// are offered in. General, Providers, On-device, LLMs and Image Generation
-/// are the app and the plumbing that answers a chat — everything an endpoint
-/// is, where a model can run without a network, and everything a model is
-/// asked to do; Memory, Voice
-/// and Triggers are what a conversation does beyond the text; Agents and
-/// Skills are what a message addresses by name; Terminal, Agent Browser and
-/// Byte Repair are where commands run and pages open; Sync and Data are the device and all of it at once —
-/// the chats, the settings and the workspaces as one file to keep; and
-/// Welcome, Shortcuts and About are the app rather than anything it does,
-/// which is why they are last.
-enum SettingsCategory {
-  general("General", Icons.tune),
-  providers("Providers", Icons.cloud_outlined),
-  onDevice("On-device", Icons.memory),
-  llms("LLMs", Icons.auto_awesome_outlined),
-  images("Image Generation", Icons.image_outlined),
-  memory("Memory", Icons.psychology, dividerAbove: true),
-  voice("Voice", Icons.graphic_eq),
-  triggers("Triggers", Icons.alarm),
-  agents("Agents", Icons.person_outline, dividerAbove: true),
-  skills("Skills", Icons.extension),
-  terminal("Terminal", Icons.terminal, dividerAbove: true),
-  agentBrowser("Agent Browser", Icons.travel_explore),
-  byteRepair("Byte Repair", Icons.verified_user),
-  sync("Sync", Icons.sync, dividerAbove: true),
-  data("Data", Icons.inventory_2_outlined),
-  welcome("Welcome", Icons.waving_hand, dividerAbove: true),
-  shortcuts("Shortcuts", Icons.keyboard_outlined),
-  about("About", Icons.info_outline);
-
-  const SettingsCategory(this.label, this.icon, {this.dividerAbove = false});
-
-  final String label;
-  final IconData icon;
-
-  /// A divider drawn above the category's tile, where one group of categories
-  /// ends and another begins.
-  final bool dividerAbove;
-}
+export "settings_category.dart" show SettingsCategory;
 
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key, this.initialCategory, this.focus = false});

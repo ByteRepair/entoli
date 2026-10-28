@@ -40,6 +40,7 @@ import "package:agent_chat/domain/model_registry.dart";
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/domain/room/room_state.dart";
 import "package:agent_chat/ui/widgets/resettable_field.dart" show LabelledField;
+import "package:agent_chat/ui/routes.dart";
 import "package:agent_chat/ui/widgets/model_picker.dart";
 import "package:agent_chat/domain/prompt_library.dart";
 import "package:agent_chat/domain/trigger.dart";
@@ -55,7 +56,7 @@ import "package:agent_chat/ui/chat/widgets/composer.dart";
 import "package:agent_chat/ui/chat/widgets/message_bubble.dart";
 import "package:agent_chat/ui/focus_follows_keyboard.dart";
 import "package:agent_chat/ui/settings/settings_page.dart";
-import "package:agent_chat/ui/sidebar/sidebar.dart";
+import "package:agent_chat/ui/selection.dart";
 import "package:agent_chat/ui/theme.dart";
 
 import "fakes.dart";
@@ -439,6 +440,7 @@ class TestApp {
         container: container,
         child: MaterialApp(
           theme: entoliTheme(brightness),
+          onGenerateRoute: appRoute,
           home: FocusFollowsKeyboard(child: child),
         ),
       ),

@@ -6,7 +6,7 @@ import "package:flutter_test/flutter_test.dart";
 import "package:agent_chat/domain/app_settings.dart";
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/providers.dart";
-import "package:agent_chat/ui/sidebar/sidebar.dart";
+import "package:agent_chat/ui/selection.dart";
 import "package:agent_chat/ui/settings/llm_settings.dart" show ImageSection;
 import "package:agent_chat/ui/settings/settings_page.dart";
 import "package:agent_chat/ui/settings/welcome_page.dart";

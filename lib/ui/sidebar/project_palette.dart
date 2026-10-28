@@ -11,7 +11,8 @@ import "../../domain/project_settings.dart";
 import "../../providers.dart";
 import "../widgets/nav_drawer.dart";
 import "chat_groups.dart";
-import "sidebar.dart";
+import "remote_projects.dart";
+import "../selection.dart";
 
 /// What picking a row does. Run by whoever opened the palette, with its own
 /// context and ref: the palette's are disposed by the time the pick lands, and

@@ -13,7 +13,7 @@ import "../../domain/speech_text.dart";
 import "../../domain/voice.dart";
 import "../../providers.dart";
 import "../chat/chat_controller.dart";
-import "../sidebar/sidebar.dart";
+import "../selection.dart";
 import "../theme.dart";
 import "read_aloud.dart";
 

@@ -13,7 +13,7 @@ import "package:agent_chat/domain/project.dart" show localProject;
 import "package:agent_chat/providers.dart";
 import "package:agent_chat/ui/chat/chat_controller.dart";
 import "package:agent_chat/ui/chat/widgets/composer.dart";
-import "package:agent_chat/ui/sidebar/sidebar.dart";
+import "package:agent_chat/ui/selection.dart";
 import "package:agent_chat/ui/voice/read_aloud.dart";
 import "package:agent_chat/ui/voice/transcript.dart";
 import "package:agent_chat/ui/voice/voice_controller.dart";

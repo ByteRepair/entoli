@@ -20,6 +20,7 @@ import "../../providers.dart";
 import "../fonts.dart";
 import "../theme.dart";
 import "../sidebar/sidebar.dart";
+import "../selection.dart";
 import "../voice/read_aloud.dart";
 import "../voice/voice_page.dart";
 import "../widgets/app_mark.dart";

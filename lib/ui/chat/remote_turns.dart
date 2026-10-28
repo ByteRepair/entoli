@@ -12,7 +12,7 @@ import "../../domain/project_settings.dart";
 import "../../domain/prompt_library.dart";
 import "../../domain/sync/protocol.dart";
 import "../../providers.dart";
-import "../sidebar/sidebar.dart" show selectedChatIdProvider, selectedProjectProvider;
+import "../selection.dart";
 import "chat_controller.dart";
 
 /// This device's end of a chat somebody else is watching or driving.

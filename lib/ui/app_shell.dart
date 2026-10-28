@@ -7,6 +7,7 @@ import "chat/chat_page.dart";
 import "shortcuts.dart";
 import "sidebar/project_palette.dart";
 import "sidebar/sidebar.dart";
+import "selection.dart";
 import "widgets/nav_drawer.dart";
 
 /// Responsive shell: sidebar + chat pane. On narrow screens the sidebar

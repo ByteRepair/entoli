@@ -6,7 +6,7 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 import "../../domain/assistant_view.dart";
 import "../../domain/project.dart";
 import "../../providers.dart";
-import "../sidebar/sidebar.dart";
+import "../selection.dart";
 import "../voice/voice_page.dart";
 
 /// Wraps the app so the system's assistant gesture opens a new chat over

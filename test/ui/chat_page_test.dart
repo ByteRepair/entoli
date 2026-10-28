@@ -29,7 +29,7 @@ import "package:agent_chat/ui/chat/widgets/view_only_bar.dart";
 import "package:agent_chat/ui/chat/widgets/message_bubble.dart";
 import "package:agent_chat/ui/chat/widgets/needs_setup_bar.dart";
 import "package:agent_chat/ui/chat/widgets/paired_project_badges.dart";
-import "package:agent_chat/ui/sidebar/sidebar.dart";
+import "package:agent_chat/ui/selection.dart";
 import "package:agent_chat/ui/theme.dart";
 
 import "../fakes.dart" show onePixelPng;
