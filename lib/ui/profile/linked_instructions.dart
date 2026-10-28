@@ -1,17 +1,4 @@
-import "package:flutter/foundation.dart";
 import "package:flutter/material.dart";
-
-/// A path is only something to link where the picker hands back the file
-/// itself: a phone's picker gives a copy, and a browser no path at all.
-bool get linksInstructionFiles =>
-    !kIsWeb &&
-    switch (defaultTargetPlatform) {
-      TargetPlatform.linux ||
-      TargetPlatform.macOS ||
-      TargetPlatform.windows =>
-        true,
-      _ => false,
-    };
 
 /// The profile page's linked files, in the order a turn reads them. Held
 /// down to drag, since a handle on every row would be a second control beside
@@ -31,7 +18,7 @@ class LinkedFileList extends StatelessWidget {
   final List<String> files;
   final Set<String> missing;
   final String Function(String path) nameOf;
-  final void Function(String path) onOpen;
+  final void Function(String path, String name) onOpen;
   final void Function(String path) onRemove;
   final void Function(int from, int to) onReorder;
   final VoidCallback onAdd;
@@ -48,14 +35,15 @@ class LinkedFileList extends StatelessWidget {
             onReorderItem: onReorder,
             itemBuilder: (context, i) {
               final path = files[i];
+              final name = nameOf(path);
               return ReorderableDelayedDragStartListener(
                 key: ValueKey(path),
                 index: i,
                 child: _FileTile(
                   path: path,
-                  name: nameOf(path),
+                  name: name,
                   missing: missing.contains(path),
-                  onTap: () => onOpen(path),
+                  onTap: () => onOpen(path, name),
                   trailing: IconButton(
                     icon: const Icon(Icons.close),
                     tooltip: "Remove",
@@ -93,7 +81,7 @@ class InstructionFileSwitches extends StatelessWidget {
   final List<(String, String)> rows;
   final Set<String> off;
   final Set<String> missing;
-  final void Function(String path) onOpen;
+  final void Function(String path, String name) onOpen;
   final void Function(String path, bool on) onChanged;
 
   @override
@@ -104,7 +92,7 @@ class InstructionFileSwitches extends StatelessWidget {
               path: path,
               name: name,
               missing: missing.contains(path),
-              onTap: () => onOpen(path),
+              onTap: () => onOpen(path, name),
               trailing: Switch(
                 value: !off.contains(path),
                 onChanged: (on) => onChanged(path, on),

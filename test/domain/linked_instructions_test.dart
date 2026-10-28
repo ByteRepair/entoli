@@ -14,6 +14,15 @@ void main() {
     expect(linked.isOn(null, "/a.md"), isTrue);
   });
 
+  test("a project reads the global file then the linked ones, less its own off",
+      () {
+    final linked = const LinkedInstructions(files: ["/a.md", "/b.md"])
+        .withOff("work", [global, "/b.md"]);
+
+    expect(linked.filesFor(null, global), [global, "/a.md", "/b.md"]);
+    expect(linked.filesFor("work", global), ["/a.md"]);
+  });
+
   test("unlinking a file drops its switches, the global file's stay", () {
     final linked = const LinkedInstructions(files: ["/a.md", "/b.md"])
         .withOff("work", ["/a.md", global])

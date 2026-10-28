@@ -48,26 +48,24 @@ class InstructionFile {
   final int depth;
 }
 
-/// The two files a turn loads up front — the global one where [global] names
-/// it, and the project's at its workspace root — outermost first, with `@path`
+/// The files a turn loads up front — the user's [global] ones in reading
+/// order (the data dir's AGENTS.md and any linked from elsewhere on the
+/// machine), then the project's at its workspace root — with `@path`
 /// references in the project's file expanded depth-first after it when
-/// [imports] is on. The global file's own references are left as text: it is
-/// the user's background for every project, and an import reaching only into
-/// one project's workspace would be a word in the model's mouth about the
-/// other projects. [linked] are the files the user linked from elsewhere on
-/// the machine, read after [global] as more of it. A file whose path
-/// [excludes] names is skipped.
+/// [imports] is on. The global files' own references are left as text: they
+/// are the user's background for every project, and an import reaching only
+/// into one project's workspace would be a word in the model's mouth about the
+/// other projects. A file whose path [excludes] names is skipped.
 Future<List<InstructionFile>> loadInstructions(
   FileSystem fs, {
   required String projectWorkspace,
-  String? global,
-  List<String> linked = const [],
+  List<String> global = const [],
   bool imports = false,
   List<String> excludes = const [],
 }) async {
   final files = <InstructionFile>[];
   final loaded = <String>{};
-  for (final path in [?global, ...linked]) {
+  for (final path in global) {
     await _readInto(fs, _norm(fs, path), InstructionKind.global, 0, files,
         loaded, excludes);
   }

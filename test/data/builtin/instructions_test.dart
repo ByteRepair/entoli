@@ -43,7 +43,7 @@ void main() {
           {bool imports = false, List<String> excludes = const []}) =>
       loadInstructions(fileSystemIo,
           projectWorkspace: projectWorkspace,
-          global: global,
+          global: [global],
           imports: imports,
           excludes: excludes);
 
@@ -78,8 +78,7 @@ void main() {
 
     final files = await loadInstructions(fileSystemIo,
         projectWorkspace: projectWorkspace,
-        global: global,
-        linked: [other.path, claude.path, global, p.join(tmp.path, "gone.md")]);
+        global: [global, other.path, claude.path, global, p.join(tmp.path, "gone.md")]);
 
     expect([for (final f in files) f.content], [
       "global rules",

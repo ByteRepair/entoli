@@ -72,6 +72,9 @@ class BuiltinBackend implements AgentBackend {
   final LlmRegistry registry;
   final Shell shell;
 
+  /// Read only here; the pages write through their own.
+  late final _linkedInstructions = LinkedInstructionsStore(config);
+
   /// The chat store, which the agent writes artifacts to. Held here rather
   /// than passed per-turn: the store resolves which project a chat is in.
   final ChatStore store;
@@ -356,24 +359,14 @@ class BuiltinBackend implements AgentBackend {
       // loads are not a queue.
       final bundled = settings.bundledInstructions;
       final readFiles = bundled == null || settings.includesUserInstructions;
-      Future<List<InstructionFile>> readInstructions() async {
-        final linked = await LinkedInstructionsStore(config).load();
-        final global = config.globalInstructionsFile;
-        return loadInstructions(
-          config.fs,
-          projectWorkspace: projectWorkspace,
-          global: linked.isOn(project, global) ? global : null,
-          linked: [
-            for (final path in linked.files)
-              if (linked.isOn(project, path)) path,
-          ],
-          imports: settings.memory.imports,
-          excludes: settings.memory.excludes,
-        );
-      }
-
       final instructionsF = readFiles
-          ? readInstructions()
+          ? _linkedInstructions.load().then((linked) => loadInstructions(
+                config.fs,
+                projectWorkspace: projectWorkspace,
+                global: linked.filesFor(project, config.globalInstructionsFile),
+                imports: settings.memory.imports,
+                excludes: settings.memory.excludes,
+              ))
           : Future.value(const <InstructionFile>[]);
       // The project's memory store, when the subsystem runs at all. Which
       // project's is on the settings; the dir is never built twice for a

@@ -8,6 +8,13 @@ bool get isPhone =>
     (defaultTargetPlatform == TargetPlatform.android ||
         defaultTargetPlatform == TargetPlatform.iOS);
 
+/// Linux, macOS or Windows, outside a browser.
+bool get isDesktop =>
+    !kIsWeb &&
+    (defaultTargetPlatform == TargetPlatform.linux ||
+        defaultTargetPlatform == TargetPlatform.macOS ||
+        defaultTargetPlatform == TargetPlatform.windows);
+
 /// Android, outside a browser.
 bool get isAndroid =>
     !kIsWeb && defaultTargetPlatform == TargetPlatform.android;

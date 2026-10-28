@@ -15,24 +15,32 @@ class LinkedInstructions {
   bool isOn(String? project, String path) =>
       project == null || !(off[project]?.contains(path) ?? false);
 
+  /// The user's files [project]'s turns read, in reading order: [global]
+  /// first, then the linked ones.
+  List<String> filesFor(String? project, String global) => [
+        for (final path in [global, ...files])
+          if (isOn(project, path)) path,
+      ];
+
   /// [files] replaced. A path no longer linked loses its switches, other than
   /// [keep]'s, so linking it again starts it on everywhere.
   LinkedInstructions withFiles(List<String> files, {required String keep}) {
     final linked = {...files, keep};
-    return LinkedInstructions(files: files, off: {
-      for (final MapEntry(:key, :value) in off.entries)
-        if (value.where(linked.contains).toList() case final kept
-            when kept.isNotEmpty)
-          key: kept,
-    });
+    return LinkedInstructions(
+      files: files,
+      off: {
+        for (final e in off.entries)
+          e.key: e.value.where(linked.contains).toList(),
+      }..removeWhere((_, paths) => paths.isEmpty),
+    );
   }
 
   /// [project]'s switched-off [paths] replaced.
   LinkedInstructions withOff(String project, Iterable<String> paths) =>
       LinkedInstructions(files: files, off: {
-        ...withoutProject(project).off,
-        if (paths.isNotEmpty) project: paths.toList(),
-      });
+        ...off,
+        project: paths.toList(),
+      }..removeWhere((_, paths) => paths.isEmpty));
 
   LinkedInstructions withoutProject(String project) => off.containsKey(project)
       ? LinkedInstructions(files: files, off: {...off}..remove(project))

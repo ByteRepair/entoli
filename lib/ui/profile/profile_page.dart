@@ -3,11 +3,13 @@ import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../core/config.dart";
+import "../../core/platform/form_factor.dart";
 import "../../domain/documents.dart" show RenameWriter;
 import "../../domain/profile.dart";
 import "../../domain/tone.dart";
 import "../../providers.dart";
 import "../widgets/resettable_field.dart";
+import "../widgets/section_header.dart" show mutedParagraph;
 import "../widgets/text_file_page.dart";
 import "linked_instructions.dart";
 
@@ -59,7 +61,6 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
   /// Which of them are not on disk, said on the row rather than dropped from
   /// it: a file on a drive not mounted yet is still meant to be there.
   Set<String> _missing = {};
-  bool _hasGlobal = false;
 
   /// The app's resolved answers, read once for the project page's `Default`
   /// entries to name.
@@ -81,14 +82,14 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
     } catch (_) {
       // A file that will not read is shown as empty; saving overwrites it.
     }
-    if (linksInstructionFiles) {
+    // Linking is by path, which only a desktop's picker hands back: a phone's
+    // gives a copy, and a browser no path at all.
+    if (isDesktop) {
       final linked = await ref.read(linkedInstructionsStoreProvider).load();
       _linked = [...linked.files];
-      if (widget.project != null) {
-        _off = {...?linked.off[widget.project]};
-        _hasGlobal = await config.fs.file(config.globalInstructionsFile).exists();
-      }
-      _missing = await _missingOf(_linked);
+      _off = {...?linked.off[widget.project]};
+      _missing =
+          await _missingOf([config.globalInstructionsFile, ..._linked]);
     }
     if (widget.project == null) {
       final settings = ref.read(appSettingsProvider);
@@ -117,20 +118,19 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
           ? config.globalInstructionsFile
           : config.projectInstructionsFile(project: widget.project);
 
+  /// Together rather than in turn: a path on a stalled mount should cost the
+  /// page its own wait, not everyone's after it.
   Future<Set<String>> _missingOf(List<String> paths) async {
     final fs = ref.read(appConfigProvider).fs;
-    return {
-      for (final path in paths)
-        if (!await fs.file(path).exists()) path,
-    };
+    final exists = await Future.wait(paths.map((p) => fs.file(p).exists()));
+    return {for (final (i, path) in paths.indexed) if (!exists[i]) path};
   }
 
   String _nameOf(String path) => ref.read(appConfigProvider).fs.path.basename(path);
 
-  Future<void> _openFile(String path, {String? name}) async {
+  Future<void> _openFile(String path, String name) async {
     await Navigator.of(context).push(MaterialPageRoute<void>(
-      builder: (_) => TextFilePage(
-          path: path, name: name ?? _nameOf(path), popsBinary: false),
+      builder: (_) => TextFilePage(path: path, name: name, popsBinary: false),
     ));
   }
 
@@ -178,7 +178,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
     setState(() => _saving = true);
     final config = ref.read(appConfigProvider);
     await _writeInstructions(config, _instructionsPath(config), _instructions.text);
-    if (linksInstructionFiles) await _saveLinked(config);
+    if (isDesktop) await _saveLinked(config);
     if (widget.project == null) {
       final profile = _profile();
       // One write of settings.json: three separate setters would be three
@@ -250,24 +250,23 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
   /// The app page lists the linked files, read after the general
   /// instructions; a project's page switches each of the user's files.
   List<Widget> _linkedSection(bool global) {
-    final config = ref.read(appConfigProvider);
+    final generalPath = ref.read(appConfigProvider).globalInstructionsFile;
     final rows = [
-      if (_hasGlobal) (config.globalInstructionsFile, "General instructions"),
+      // The general instructions are a field when they are empty, not a file.
+      if (!_missing.contains(generalPath)) (generalPath, "General instructions"),
       for (final path in _linked) (path, _nameOf(path)),
     ];
     if (!global && rows.isEmpty) return const [];
     return [
       Padding(
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
-        child: Text(
+        child: mutedParagraph(
+          context,
           global
               ? "Instruction files elsewhere on this computer, such as a "
                   "CLAUDE.md, read after your general instructions in this "
                   "order. Hold a row to move it."
               : "Your instructions, as this project's chats read them.",
-          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
-              ),
         ),
       ),
       if (global)
@@ -286,10 +285,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
           rows: rows,
           off: _off,
           missing: _missing,
-          onOpen: (path) => _openFile(path,
-              name: path == config.globalInstructionsFile
-                  ? "General instructions"
-                  : null),
+          onOpen: _openFile,
           onChanged: (path, on) => setState(
               () => _off = on ? ({..._off}..remove(path)) : {..._off, path}),
         ),
@@ -452,7 +448,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                     ),
                   ),
                 ),
-                if (linksInstructionFiles) ..._linkedSection(global),
+                if (isDesktop) ..._linkedSection(global),
                 const SizedBox(height: 24),
               ],
             ),

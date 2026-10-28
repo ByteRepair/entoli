@@ -252,10 +252,13 @@ class AppConfig {
       fs.path.join(projectWorkspaceDir(project: project), instructionFileName);
 
   /// The instruction files the user linked from elsewhere on this machine,
-  /// and which projects switched each off. Paths into this machine alone, so
-  /// a backup leaves it out and a restore leaves it in place.
+  /// and which projects switched each off. One of [machineLocalFiles].
   String get linkedInstructionsFile =>
       fs.path.join(dataDir, "instruction_files.json");
+
+  /// Top-level files that mean something on this machine alone: a backup
+  /// leaves them out and a restore leaves them in place.
+  List<String> get machineLocalFiles => [linkedInstructionsFile];
 
   /// Not the app's version: it names the release whose migration last ran here,
   /// and a release that leaves the layout alone leaves this where it was. See
