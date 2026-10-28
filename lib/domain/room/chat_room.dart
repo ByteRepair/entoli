@@ -61,6 +61,22 @@ abstract interface class RoomHost {
 class ChatRoom {
   ChatRoom(this.chatId, this._repo, this._host) {
     _ready = _load();
+    _jobEnds = _repo.jobEnds(chatId).listen(_jobEnded);
+  }
+
+  late final StreamSubscription<void> _jobEnds;
+
+  /// A background job ended, likely between turns: kept on the log through
+  /// the one queue every turn's writes take, and on the chat on screen.
+  Future<void> _jobEnded(({String callId, JobEnd end}) ended) async {
+    final (:callId, :end) = ended;
+    unawaited(_append([ChatRecord.jobEnd(callId: callId, end: end)]));
+    // After the load, which may have read the log before this line landed.
+    await _ready;
+    final chat = state.chat;
+    if (chat == null || _disposed) return;
+    _view = state.copyWith(
+        chat: chat.copyWith(jobEnds: {...chat.jobEnds, callId: end}));
   }
 
   final String chatId;
@@ -87,6 +103,7 @@ class ChatRoom {
   /// the room still has in flight reaches it.
   void dispose() {
     _disposed = true;
+    unawaited(_jobEnds.cancel());
     for (final turn in _turns.values) {
       turn.sub?.cancel();
       turn.recorder.dispose();

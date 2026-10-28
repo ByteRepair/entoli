@@ -19,6 +19,7 @@ import "../domain/wired_skill.dart";
 import "../domain/project_settings.dart";
 import "../domain/prompt_library.dart";
 import "../domain/shell.dart";
+import "../domain/shell_job.dart" show ChatShellJobs;
 import "../domain/temp_chat_ttl.dart";
 import "../domain/tristate.dart";
 
@@ -310,6 +311,10 @@ class ChatRepository {
   /// sync layer streams these to a mirror asking to follow from where it
   /// already is.
   Future<List<ChatRecord>> readRecords(String chatId) => _store.readRecords(chatId);
+
+  /// [chatId]'s background jobs as they end. See [ChatShellJobs.ended].
+  Stream<({String callId, JobEnd end})> jobEnds(String chatId) =>
+      _backend.jobsOf(chatId).ended;
 
   /// Every running sub-agent's appends to its transcript, as they land.
   Stream<SubAgentAppend> get subAgentAppends => _backend.subAgents.appends;

@@ -247,9 +247,36 @@ abstract class Chat with _$Chat {
     /// messages under it.
     @Default([]) List<ConversationCompaction> compactions,
 
+
+    /// How each background job the chat started ended, by the call that
+    /// started it. Derived by `replayTree` from the records; a job with no
+    /// entry is running, or ended with the app.
+    @Default({}) Map<String, JobEnd> jobEnds,
   }) = _Chat;
 
   factory Chat.fromJson(Map<String, dynamic> json) => _$ChatFromJson(json);
+}
+
+/// How a background job ended, as the chat keeps it: the job's log lives in
+/// the workspace, which is not the chat's record and is not on a mirror, so
+/// the end of it is carried here.
+@freezed
+abstract class JobEnd with _$JobEnd {
+  const factory JobEnd({
+    required int jobId,
+
+    /// Null where it was stopped rather than exiting.
+    int? exitCode,
+    required DateTime endedAt,
+
+    /// The last lines of its log; see `jobTail`.
+    required String tail,
+
+    /// The log, relative to the chat workspace.
+    required String log,
+  }) = _JobEnd;
+
+  factory JobEnd.fromJson(Map<String, dynamic> json) => _$JobEndFromJson(json);
 }
 
 /// Where a message sits among the threads written at its point in the

@@ -412,6 +412,10 @@ void main() {
       const ChatRecord.append(messageId: "m1", index: 0, text: " more"),
       ChatRecord.turnEnd(messageId: "m1", reason: TurnEnd.aborted),
       ChatRecord.rewind(messageId: "m1"),
+      ChatRecord.jobEnd(
+          callId: "c1",
+          end: JobEnd(
+              jobId: 1, exitCode: 2, endedAt: at, tail: "boom", log: ".entoli-jobs/c1.log")),
     ];
 
     final back = records
@@ -420,6 +424,21 @@ void main() {
         .toList();
 
     expect(back, records);
+  });
+
+  test("a job's end lands on the chat by the call that started it, "
+      "the last written winning", () {
+    JobEnd end(int? code) =>
+        JobEnd(jobId: 1, exitCode: code, endedAt: at, tail: "", log: "l");
+    final chat = chatFrom(state(), [
+      message("m1"),
+      ChatRecord.jobEnd(callId: "c1", end: end(null)),
+      ChatRecord.jobEnd(callId: "c1", end: end(0)),
+      // A job can end after a rewind took its call away: kept, and harmless.
+      ChatRecord.rewind(messageId: "m1"),
+    ]);
+    expect(chat.messages, isEmpty);
+    expect(chat.jobEnds, {"c1": end(0)});
   });
 
   test("recordsOf writes a chat out as the log it would have", () {

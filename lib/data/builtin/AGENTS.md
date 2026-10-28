@@ -305,6 +305,9 @@ pipe, so the call never came back. A job is a one-shot run, gated and
 sandboxed like any call, whose script first points its output at
 `.entoli-jobs/<id>.log` in the chat workspace and its input at `/dev/null`
 (`backgroundScript`), so nothing it leaves behind holds a pipe of the app's.
+The log is named by the call that started the job (`backgroundLog`), not by
+the job's number: the number starts again with the app, and a reused one
+would write over a log the chat still points at.
 The answer gives the job's number, its pid (the group leader, so
 `kill -- -<pid>` takes everything it started) and the log, which the model
 reads with `tail` or `read`.
@@ -313,7 +316,11 @@ reads with `tail` or `read`.
 turn. How one ended rides the agent's next tool result in that chat, this
 turn or a later one, as `ToolResult.notes`: beside the output rather than in
 it, since an answered question's output is data, and the projection words
-the notes ahead of the result for every tool.
+the notes ahead of the result for every tool. The same end goes to the chat
+as `ChatShellJobs.ended`, with the last lines of the log (`jobTail`: ten
+lines, cut from the top to a kilobyte), for the room to keep on the log —
+not for the model, which already has the note. A job the app killed on its
+way out has no end; that absence is what "ended with the app" reads.
 Each is killed after `timeout`; deleting the chat
 or quitting the app kills them, and ids are never reused while the app runs,
 since an id names its log. Offered where `Shell.canRunInBackground` (the
@@ -668,7 +675,7 @@ would race the two.
 `SubAgentStartEvent` / `SubAgentEndEvent` are turn-scoped view state (like
 approvals and questions), so `conv.jsonl` keeps the call/result pair and
 nothing more; a reloaded chat draws a `TaskLabel` from the call's arguments
-alone. `SubAgentStrip` shows the running ones as chips above the composer.
+alone. `RunningStrip` shows the running ones as pills above the composer.
 
 ### Their own transcripts
 

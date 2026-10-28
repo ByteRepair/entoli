@@ -17,7 +17,7 @@ void main() {
   late FakeBackend backend;
 
   ShellJob job(int id, String command) => ShellJob(
-      id: id, command: command, logPath: "/w/.entoli-jobs/$id.log", pid: 4000 + id);
+      id: id, callId: "c$id", command: command, logPath: "/w/.entoli-jobs/$id.log", pid: 4000 + id);
 
   final chat = Chat(
     state: ChatState(

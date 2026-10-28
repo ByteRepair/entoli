@@ -4,6 +4,7 @@ import "package:flutter_test/flutter_test.dart";
 
 import "package:agent_chat/domain/agent_backend.dart";
 import "package:agent_chat/domain/chat_log.dart";
+import "package:agent_chat/domain/models.dart" show JobEnd;
 import "package:agent_chat/domain/project_settings.dart" show OmadaOrdering;
 import "package:agent_chat/domain/room/chat_room.dart";
 import "package:agent_chat/domain/room/room_state.dart";
@@ -96,5 +97,21 @@ void main() {
 
     expect(room.state.chat, isNull);
     expect(host.states.last.chat, isNull);
+  });
+
+  test("a job that ends between turns is written to the log and the chat",
+      () async {
+    final (room, host) = await openRoom();
+    await room.send("hello");
+    await room.turnDone;
+    final end = JobEnd(
+        jobId: 1, exitCode: 0, endedAt: DateTime.utc(2026), tail: "done", log: "l");
+    app.backend.jobsOf(room.chatId).endings.add((callId: "c1", end: end));
+    await waitFor(() => room.state.chat?.jobEnds["c1"] != null,
+        what: "the end on the chat");
+
+    expect(host.states.last.chat!.jobEnds, {"c1": end});
+    final records = await app.repo.readRecords(room.chatId);
+    expect(records.last, ChatRecord.jobEnd(callId: "c1", end: end));
   });
 }

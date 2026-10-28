@@ -130,7 +130,14 @@ The drawer opens at six tenths of the screen and grows with what is in it to
 the whole of it; sized to its content alone, a one-line output was a strip at
 the bottom of the window. On a wide window it is 960 wide rather than
 Material's 640. It is a route, so the back key closes it and nothing had to be
-written for that.
+written for that. It is drawn after the app's dialogs — their surface, a
+headline title, a status line under it, actions beside the close button, and
+output in code blocks (`codeBlockDecoration`) — while keeping a drawer's
+layout of labelled sections, since it is swiped or tapped away where a
+dialog is not. `ActivityCard` is that drawing, whoever feeds it: a label's
+drawer and `JobSheet` both. A `bash` drawer sets the command apart as a `!`
+message is, keeps what else the call was given as its Arguments, and says
+the exit code in the status line.
 
 **And it streams.** A label is the wrong thing to hold an open drawer's
 content: it is rebuilt per delta, folded into a collapsed run when its block
@@ -525,16 +532,45 @@ them under the project it left. Messages already composed keep what their
 `/skill` and `@agent` references meant when they were sent — the records are
 on the message, not looked up per turn.
 
-## Background jobs, on screen
+## What is running, on screen
 
-`JobStrip` sits in `TurnSurface` under the browser chip and, like it, is not
-turn-scoped: a pill per background job the chat is running (see "Background
-jobs" in `lib/data/builtin/AGENTS.md`), gone when the job ends, since the
-agent hears how it ended. It reads the backend's list directly, not the
-controller's view state, and draws nothing on a mirrored chat. A pill opens
-`JobSheet`: the command, the pid, and the end of the log as it grows (re-read
-every half second while the file changes), with Stop. A sheet left open when
-its job ends keeps the last of the log and loses the button.
+`RunningStrip` is one row in `TurnSurface` above the composer: the browser's
+tab first, then the background jobs, then the running sub-agents. It has no
+surface of its own; the pills are the row. It scrolls sideways, and a mouse
+wheel over it scrolls it without Shift, claimed through the pointer-signal
+resolver the way the browser card claims one. Jobs and sub-agents are each a
+group ("2 background tasks running"), closed by default, which a tap opens
+to a pill apiece inside it and closes again; the group's own surface stays
+around the pills, and the opening is `AnimatedSize` with the pills fading
+in. Open or closed is the strip's own state, not the chat's.
+
+A sub-agent's pill opens the drawer its label in the reply opens
+(`showTaskSheet`), following the turn through an `ActivitySource` the strip
+builds from the page's source, which `TurnSurface` is handed for this. A
+job's pill opens `JobSheet`: the drawer a tool run opens, with the command
+set the way a `!` message is, "Running · pid" under the title, Stop beside
+the close button, and the end of the log as it grows (re-read every half
+second while the file changes). A sheet left open when its job ends keeps
+the last of the log, loses Stop, and says how it ended.
+
+Jobs are not turn-scoped: a pill per job the chat is running (see
+"Background jobs" in `lib/data/builtin/AGENTS.md`), gone when it ends. The
+strip reads the backend's list directly, not the controller's view state,
+and draws no jobs on a mirrored chat.
+
+### Background jobs, in the reply
+
+The `bash` call that started a job is drawn as the job (`JobLabel`, from
+`BashUI.label`): "Running in the background" while the backend still has it,
+then how it ended. How it ended is `Chat.jobEnds`, by the call's id, which
+the room writes to the log as the job ends (see "The conversation log" in
+`lib/domain/AGENTS.md`); a call with neither ended with the app, and on a
+mirror, where only ends arrive, it is "not heard from". The drawer of an
+ended job shows the last lines the chat kept and an Open log button to the
+whole log in `TextViewerPage`, disabled once the workspace no longer has the
+file and absent on a mirror, whose workspace is elsewhere. A call asking for
+the background on a shell with none ran in the foreground and is drawn as
+one: what tells them apart is the answer, `backgroundStarted`.
 
 ## The agent's browser, on screen
 
@@ -542,14 +578,13 @@ The sidebar's spinner (and the project palette's) reads `busyChatsProvider`,
 a turn running *or* a browser tab open: a chat whose browser is up is active
 between turns, and with the browser hidden nothing else on screen says so.
 
-`BrowserStrip` is a chip in `TurnSurface`, below the running sub-agents and
-drawn the way their strip is, for as long as the chat has a browser tab open
-— which is not turn-scoped like the strips above it: the tab outlives the
-turn that opened it, until the user or the idle timer quits the browser. It
-reads the tab straight off `agentBrowserProvider` rather than through the
+`BrowserPill` is the first pill of `RunningStrip`, for as long as the chat
+has a browser tab open — which is not turn-scoped: the tab outlives the turn
+that opened it, until the user or the idle timer quits the browser. It reads
+the tab straight off `agentBrowserProvider` rather than through the
 controller's view state, since the tab is the browser's, not the turn's, and
 draws nothing on a mirrored chat, whose browser is on the device it came
-from. The chip names the page's host; tapping it opens `BrowserCard`, a dialog
+from. The pill names the page's host; tapping it opens `BrowserCard`, a dialog
 of the tab's screencast frames over its title and address. A hidden browser
 is watchable through it, which is the point. It listens again when the tab is
 reopened under it (`BrowserPage.opened`) and says so when the tab closes.
@@ -581,14 +616,14 @@ the agent: the user is the one doing it, and the agent's next call reads the
 page as the user left it. It acts only on an open tab — input never starts a
 browser.
 
-The strip also draws the two private paths of "Signing in" in
-`lib/data/builtin/AGENTS.md`. A sign-in the agent asked for is
-`CredentialPanel`, above the chip: the fields, obscured where the agent said
+`BrowserPrompts`, the bar across the whole width above the row, draws the
+two private paths of "Signing in" in `lib/data/builtin/AGENTS.md`. A sign-in
+the agent asked for is `CredentialPanel`: the fields, obscured where the agent said
 `secret`, with autocorrect and suggestions off, and Sign in and Decline. What
 is typed lives in the panel's controllers and goes from them to
 `submitCredentials`, cleared when the panel goes. A browser the agent hid is
-its `reason` as a button that opens the card, and the chip reads "hidden from
-the agent" either way; the card has the "Hide from agent" toggle and, while
+its `reason` as a full-width button that opens the card, and the pill reads
+"hidden from the agent" either way; the card has the "Hide from agent" toggle and, while
 hidden, a band saying so with "Give back to agent".
 
 An upload the user is to choose for is `UploadPanel`, over the sign-in panel's

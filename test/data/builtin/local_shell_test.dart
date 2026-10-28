@@ -265,7 +265,7 @@ void main() {
     test("a background script writes its log, names its pid, and a child "
         "it leaves behind holds nothing of the run's", () async {
       final run = shell.start(
-          backgroundScript(1, "sleep 30 &\necho started"),
+          backgroundScript("c1", "sleep 30 &\necho started"),
           cwd: workspace.path,
           home: home.path,
           timeout: const Duration(seconds: 10),
@@ -276,7 +276,7 @@ void main() {
       expect(pid, isNotNull);
       expect(result.returnCode, 0);
       expect(result.output, isEmpty);
-      expect(File(p.join(workspace.path, ".entoli-jobs", "1.log"))
+      expect(File(p.join(workspace.path, ".entoli-jobs", "c1.log"))
           .readAsStringSync(), "started\n");
     });
 

@@ -1,9 +1,12 @@
+import "dart:async";
+
 import "package:flutter/gestures.dart";
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:flutter_riverpod/misc.dart" show ProviderListenable;
 
 import "../../../domain/agent_backend.dart" show SubAgentStartEvent;
+import "../../../domain/models.dart" show JobEnd;
 import "../../../domain/room/room_state.dart" show ChatViewState;
 import "../../../domain/shell_job.dart";
 import "../../../domain/tool_arg.dart";
@@ -15,6 +18,7 @@ import "activity_label.dart"
     show
         ActivityCard,
         ActivitySource,
+        jobStatus,
         liveMessageOf,
         plural,
         showActivityCard,
@@ -321,6 +325,22 @@ class JobSheet extends StatefulWidget {
 class _JobSheetState extends State<JobSheet> {
   // Once, not per build: a new stream per rebuild would restart the tail.
   late final Stream<String> _log = widget.jobs.log(widget.job);
+  JobEnd? _end;
+  late final StreamSubscription<void> _ended;
+
+  @override
+  void initState() {
+    super.initState();
+    _ended = widget.jobs.ended
+        .where((e) => e.callId == widget.job.callId)
+        .listen((e) => setState(() => _end = e.end));
+  }
+
+  @override
+  void dispose() {
+    unawaited(_ended.cancel());
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -338,12 +358,14 @@ class _JobSheetState extends State<JobSheet> {
               title: "Background job ${job.id}",
               icon: Icons.terminal,
               command: job.command,
-              status: (
-                text: running
-                    ? "Running${job.pid == null ? "" : " · pid ${job.pid}"}"
-                    : "Ended",
-                isError: false,
-              ),
+              status: running
+                  ? (
+                      text: "Running${job.pid == null ? "" : " · pid ${job.pid}"}",
+                      isError: false,
+                    )
+                  : _end == null
+                      ? (text: "Ended", isError: false)
+                      : jobStatus(_end),
               actions: [
                 if (running)
                   TextButton(

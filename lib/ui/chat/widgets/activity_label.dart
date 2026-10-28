@@ -17,7 +17,12 @@ import "../../../domain/room/room_state.dart" show ChatViewState;
 import "../../../domain/shell.dart" show bashToolName;
 import "../../../domain/tool_arg.dart";
 import "../../../providers.dart";
+import "../../../domain/shell_job.dart";
+import "../../workspace/text_viewer_page.dart";
+import "../chat_controller.dart" show chatControllerProvider;
+import "../mirror_controller.dart" show mirrorChatControllerProvider;
 import "../sub_agent_transcript.dart" show subAgentLiveProvider;
+import "running_strip.dart" show JobSheet;
 import "code_block.dart" show codeBlockDecoration, codeBlockStyle;
 import "message_bubble.dart" show MessageBubble, StreamingCaret;
 import "shell_run.dart" show ShellCommandText;
@@ -749,6 +754,124 @@ List<ActivitySection> _taskSections(String prompt, ToolResult? result,
       if (!transcript) (label: "Output", body: result?.output, isError: false),
       (label: "Error", body: result?.exceptionInfo, isError: true),
     ];
+
+/// A `bash` call that started a background job: the job's state rather than
+/// the call's, since the call was over the moment the job started. Its drawer
+/// is the job's — the log as it grows while it runs, then what the chat kept
+/// of it and a way to the whole log while that is still in the workspace.
+class JobLabel extends ConsumerWidget {
+  const JobLabel({super.key, required this.chatId, required this.call});
+
+  final String chatId;
+  final ToolCall call;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final mirrored = ref.watch(isMirroredChatProvider(chatId));
+    final ProviderListenable<ChatViewState> chat = mirrored
+        ? mirrorChatControllerProvider(chatId)
+        : chatControllerProvider(chatId);
+    final end = ref.watch(chat.select((v) => v.chat?.jobEnds[call.id]));
+    final command = stringArg(call.argumentsJson, "command") ?? "";
+    final line = firstLine(command);
+    // A mirror's jobs are the other device's, and only their ends reach it.
+    final jobs = mirrored ? null : ref.watch(agentBackendProvider).jobsOf(chatId);
+
+    Widget ended() {
+      final status = jobStatus(end, mirrored: mirrored);
+      return _Label(
+        icon: status.isError ? Icons.error_outline : Icons.terminal,
+        text: "Background job ${status.text.toLowerCase()}: $line",
+        isError: status.isError,
+        onTap: () => showActivityCard<void>(
+          context,
+          (_) => ActivityCard(
+            title: end == null ? "Background job" : "Background job ${end.jobId}",
+            icon: Icons.terminal,
+            command: command,
+            status: status,
+            mono: true,
+            actions: [
+              if (!mirrored)
+                _OpenLog(
+                  path: ref.read(appConfigProvider).fs.path.join(
+                      ref.read(appConfigProvider).workspaceDir(chatId,
+                          project: ref.read(chat).chat?.state.project),
+                      end?.log ?? backgroundLog(call.id)),
+                ),
+            ],
+            sections: [
+              (label: "Output", body: end?.tail, isError: false),
+            ],
+          ),
+        ),
+      );
+    }
+
+    if (end != null || jobs == null) return ended();
+    return ValueListenableBuilder<List<ShellJob>>(
+      valueListenable: jobs.jobs,
+      builder: (context, list, _) {
+        final job = list.where((j) => j.callId == call.id).firstOrNull;
+        if (job == null) return ended();
+        return _Label(
+          icon: Icons.terminal,
+          text: "Running in the background: $line",
+          iconWidget: Padding(
+            padding: const EdgeInsets.all(1),
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+          ),
+          onTap: () =>
+              showActivityCard<void>(context, (_) => JobSheet(jobs: jobs, job: job)),
+        );
+      },
+    );
+  }
+}
+
+/// How a job ended, for a card's status line. No [end] is a job that ended
+/// with the app, or on a [mirrored] chat, one whose end has not reached it.
+ActivityStatus jobStatus(JobEnd? end, {bool mirrored = false}) {
+  if (end == null) {
+    return (text: mirrored ? "Not heard from" : "Ended with the app", isError: false);
+  }
+  final code = end.exitCode;
+  if (code == null) return (text: "Stopped", isError: false);
+  return (text: "Exited with code $code", isError: code != 0);
+}
+
+/// Opens a job's whole log in the file viewer, while the workspace still has
+/// it.
+class _OpenLog extends StatelessWidget {
+  const _OpenLog({required this.path});
+
+  final String path;
+
+  @override
+  Widget build(BuildContext context) {
+    final fs = ProviderScope.containerOf(context).read(appConfigProvider).fs;
+    return FutureBuilder<bool>(
+      future: fs.file(path).exists(),
+      builder: (context, there) {
+        final has = there.data ?? false;
+        final button = TextButton(
+          onPressed: !has
+              ? null
+              : () => Navigator.of(context).push(MaterialPageRoute<void>(
+                  builder: (_) =>
+                      TextViewerPage(path: path, name: fs.path.basename(path)))),
+          child: const Text("Open log"),
+        );
+        if (has || there.connectionState != ConnectionState.done) return button;
+        return Tooltip(
+            message: "The log is no longer in the workspace", child: button);
+      },
+    );
+  }
+}
 
 /// A `websearch` or `webfetch` call, once it is history: the query or URL
 /// read out of the call's arguments, and what came back behind the drawer.

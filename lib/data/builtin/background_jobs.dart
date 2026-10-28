@@ -6,6 +6,8 @@ import "dart:typed_data";
 import "package:flutter/foundation.dart";
 import "package:fs_shim/fs.dart";
 
+import "../../core/log.dart";
+import "../../domain/models.dart" show JobEnd;
 import "../../domain/shell.dart";
 import "../../domain/shell_job.dart";
 
@@ -36,15 +38,12 @@ class BackgroundJobs {
   Future<void> close() => Future.wait([..._chats.keys].map(closeChat));
 }
 
-/// Job [id]'s log, relative to the chat workspace it starts in.
-String backgroundLog(int id) => ".entoli-jobs/$id.log";
-
 /// What a job's shell runs: its streams pointed at its log and at nothing
 /// before [command] starts, so a child it leaves behind holds no pipe of the
 /// app's, then [command] as written. A log that cannot be opened ends the
 /// job there rather than letting it print into the app.
-String backgroundScript(int id, String command) =>
-    "mkdir -p .entoli-jobs; exec >${backgroundLog(id)} 2>&1 </dev/null || exit 1\n"
+String backgroundScript(String callId, String command) =>
+    "mkdir -p .entoli-jobs; exec >${backgroundLog(callId)} 2>&1 </dev/null || exit 1\n"
     "$command";
 
 /// One chat's jobs.
@@ -57,23 +56,29 @@ class ChatJobs implements ChatShellJobs {
   final ValueNotifier<List<ShellJob>> jobs = ValueNotifier(const []);
   final _runs = <int, ShellRun>{};
   final _notes = <String>[];
+  final _ended = StreamController<({String callId, JobEnd end})>.broadcast();
 
-  /// Never reused while the app runs: the number names the log, and a reused
-  /// one would write over a log a sheet may still be showing.
+  @override
+  Stream<({String callId, JobEnd end})> get ended => _ended.stream;
+
+  /// What the agent and the pill call a job. Not what names its log, so
+  /// starting again with the app overwrites nothing.
   int _count = 0;
 
-  /// Start [command] as the next job, [spawn] running the script it is
-  /// wrapped in from [workspace], where its log lands.
+  /// Start [command] as the next job for the call [callId], [spawn] running
+  /// the script it is wrapped in from [workspace], where its log lands.
   Future<ShellJob> start(String command,
-      {required String workspace,
+      {required String callId,
+      required String workspace,
       required ShellRun Function(String script) spawn}) async {
     final id = ++_count;
-    final run = spawn(backgroundScript(id, command));
+    final run = spawn(backgroundScript(callId, command));
     _runs[id] = run;
     final job = ShellJob(
       id: id,
+      callId: callId,
       command: command,
-      logPath: _fs.path.join(workspace, backgroundLog(id)),
+      logPath: _fs.path.join(workspace, backgroundLog(callId)),
       pid: await run.pid,
     );
     jobs.value = [...jobs.value, job];
@@ -81,11 +86,29 @@ class ChatJobs implements ChatShellJobs {
     return job;
   }
 
-  void _end(ShellJob job, int code) {
+  Future<void> _end(ShellJob job, int code) async {
     if (_runs.remove(job.id) == null) return;
     jobs.value = [for (final j in jobs.value) if (j.id != job.id) j];
     final how = code == -1 ? "was stopped" : "exited with code $code";
     _notes.add("Background job ${job.id} (`${firstLine(job.command)}`) $how.");
+    var log = "";
+    try {
+      final file = _fs.file(job.logPath);
+      log = await _tail(file, (await file.stat()).size);
+    } catch (e) {
+      logFailure("jobs", "could not read the log of job ${job.id}", e);
+    }
+    if (_ended.isClosed) return;
+    _ended.add((
+      callId: job.callId,
+      end: JobEnd(
+        jobId: job.id,
+        exitCode: code == -1 ? null : code,
+        endedAt: DateTime.now(),
+        tail: jobTail(log),
+        log: backgroundLog(job.callId),
+      ),
+    ));
   }
 
   /// How the jobs that ended since the last call ended, once each.
@@ -149,6 +172,7 @@ class ChatJobs implements ChatShellJobs {
     final runs = [..._runs.values];
     _runs.clear();
     jobs.dispose();
+    await _ended.close();
     await Future.wait(runs.map((r) => r.kill()));
   }
 }
