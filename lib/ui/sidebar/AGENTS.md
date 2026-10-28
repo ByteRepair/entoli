@@ -88,8 +88,10 @@ Ctrl+K (Cmd+K on Apple's platforms). It is the whole screen below
 `compactWidth` and a box in the middle above it. The default project and the
 built-ins sit above a rule, the user's projects below it, other devices'
 projects under their own heading; each row is a spinner slot, the icon, the
-name and its chat count. Typing searches project names first, then chat titles
-in every project, each chat tagged with its own. Picking a chat switches to its
+name and its chat count. Below another rule are the chats of every project,
+each tagged with its own: running ones first, then by when each was last
+touched. Typing narrows both, projects by name and chats by title, the chats
+kept in the same order. Picking a chat switches to its
 project first, since the sidebar lists one project and would otherwise deny the
 chat on screen.
 
