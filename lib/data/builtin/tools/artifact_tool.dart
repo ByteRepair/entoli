@@ -19,6 +19,9 @@ class ArtifactTool extends AgentTool {
   ArtifactTool(super.offer);
 
   @override
+  ToolGroup get group => ToolGroup.artifacts;
+
+  @override
   String get name => artifactToolName;
 
   @override

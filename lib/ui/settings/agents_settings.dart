@@ -3,14 +3,18 @@ import "dart:convert";
 import "dart:typed_data";
 
 import "package:file_selector/file_selector.dart";
+import "package:flutter/foundation.dart" show setEquals;
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:fs_shim/fs.dart";
 
 import "../../core/platform/platform.dart" as platform;
+import "../../data/builtin/tools/agent_tool.dart";
+import "../../data/builtin/tools/registry.dart";
 import "../../data/prompts/agent_pictures.dart";
 import "../../data/prompts/prompt_export.dart";
 import "../../data/prompts/skill_import.dart";
+import "../../domain/agent_definition.dart";
 import "../../domain/models.dart";
 import "../../domain/project.dart" show promptsDirUserWritable;
 import "../../domain/prompt_library.dart";
@@ -102,7 +106,9 @@ class _AgentsSectionState extends ConsumerState<AgentsSection> {
 
   Future<void> _add() async {
     final result = await Navigator.of(context).push<AgentEdit>(
-      MaterialPageRoute(builder: (_) => AgentEditorPage(isNew: true, project: widget.project)),
+      MaterialPageRoute(
+          builder: (_) => AgentEditorPage(
+              initial: AgentDefinition.named(""), isNew: true, project: widget.project)),
     );
     if (result == null || !mounted) return;
     await _save(result, previous: null);
@@ -122,11 +128,9 @@ class _AgentsSectionState extends ConsumerState<AgentsSection> {
     final result = await Navigator.of(context).push<AgentEdit>(
       MaterialPageRoute(
         builder: (_) => AgentEditorPage(
+          initial: AgentDefinition.of(agent),
           isNew: false,
           project: widget.project,
-          initialName: agent.name,
-          initialDescription: agent.description ?? "",
-          initialBody: agent.body,
           initialPicture: bytes,
         ),
       ),
@@ -144,15 +148,16 @@ class _AgentsSectionState extends ConsumerState<AgentsSection> {
   /// loses. The collision that stops a rename is the editor's to show — it is
   /// the layer the field is on — so only an add confirms here.
   Future<void> _save(AgentEdit edit, {required String? previous}) async {
-    if (!isFolderName(edit.name)) {
+    final name = edit.agent.name;
+    if (!isFolderName(name)) {
       _say("That name cannot be a file name.");
       return;
     }
-    if (previous == null && !await _mayReplace(edit.name, "Saving")) return;
+    if (previous == null && !await _mayReplace(name, "Saving")) return;
     await _write(
-      edit.name,
-      PromptDocument.toSource(description: edit.description, body: edit.body),
-      "Saved ${edit.name}.",
+      name,
+      edit.agent.toSource(),
+      "Saved $name.",
       removes: previous,
       picture: edit.picture,
       removePicture: edit.removePicture,
@@ -438,16 +443,15 @@ class _AgentsSectionState extends ConsumerState<AgentsSection> {
           : "Inherited";
 }
 
-/// What the editor page hands back on save. [picture] is a freshly picked
+/// What the editor page hands back on save: the [agent] as edited, whose
+/// source is what the file becomes. [picture] is a freshly picked
 /// image, written as the agent's picture; [removePicture] takes it away on
 /// save. Exactly one of the two is set — an edit removed it (null bytes, true)
 /// or replaced it (bytes, false) — and neither is when the picture was left
 /// alone, so a save without an edit to it keeps whatever the agent already
 /// had — and a rename moves what it had under the old name.
 typedef AgentEdit = ({
-  String name,
-  String description,
-  String body,
+  AgentDefinition agent,
   Uint8List? picture,
   bool removePicture,
 });
@@ -463,17 +467,20 @@ typedef AgentEdit = ({
 /// as `<name>.png` beside the `.md`, a remove takes it away, and a save
 /// touching neither leaves what is there — a rename moves it, and a rename
 /// with a fresh pick or a remove replaces or takes the old one rather than
-/// leaving it behind.
+/// leaving it behind. The tools are switches over the registry's grantable
+/// ones, grouped as the tools group themselves.
 class AgentEditorPage extends ConsumerStatefulWidget {
   const AgentEditorPage({
     super.key,
+    required this.initial,
     required this.isNew,
     this.project,
-    this.initialName = "",
-    this.initialDescription = "",
-    this.initialBody = "",
     this.initialPicture,
   });
+
+  /// The agent as the page opens on it; its keys the page does not edit are
+  /// written back as they were.
+  final AgentDefinition initial;
 
   final bool isNew;
 
@@ -481,9 +488,6 @@ class AgentEditorPage extends ConsumerStatefulWidget {
   /// whose library the body's completions offer. Null is the default project,
   /// the way it is everywhere a project is named.
   final String? project;
-  final String initialName;
-  final String initialDescription;
-  final String initialBody;
 
   /// The picture the agent already has, read by the section before the page
   /// opens — shown until a pick or a remove changes what save will do.
@@ -494,11 +498,29 @@ class AgentEditorPage extends ConsumerStatefulWidget {
 }
 
 class _AgentEditorPageState extends ConsumerState<AgentEditorPage> {
-  late final TextEditingController _name = TextEditingController(text: widget.initialName);
+  late final TextEditingController _name = TextEditingController(text: widget.initial.name);
   late final TextEditingController _description =
-      TextEditingController(text: widget.initialDescription);
-  late final TextEditingController _body = TextEditingController(text: widget.initialBody);
+      TextEditingController(text: widget.initial.description);
+  late final TextEditingController _body =
+      TextEditingController(text: widget.initial.instructions);
   String? _nameError;
+
+  /// What an agent may be granted, listed whatever this device can run: the
+  /// file means the same on every device it reaches.
+  static final _grantable = [
+    for (final tool in agentTools(const ToolOffer()))
+      if (tool.group != null) tool,
+  ];
+
+  static final _defaults = {
+    for (final tool in _grantable)
+      if (tool.onByDefault) tool.id,
+  };
+
+  /// The ids switched on. Ids this build does not know stay in it, so a
+  /// save keeps what a newer build's list named.
+  late final Set<String> _initialTools = widget.initial.tools ?? _defaults;
+  late final Set<String> _tools = {..._initialTools};
 
   /// What the picture row shows: what the agent had, what a pick brought in,
   /// or nothing after a remove. Touched with [_picture] null is "removed on
@@ -522,9 +544,10 @@ class _AgentEditorPageState extends ConsumerState<AgentEditorPage> {
   }
 
   bool get _edited =>
-      _name.text != widget.initialName ||
-      _description.text != widget.initialDescription ||
-      _body.text != widget.initialBody ||
+      _name.text != widget.initial.name ||
+      _description.text != widget.initial.description ||
+      _body.text != widget.initial.instructions ||
+      !setEquals(_tools, _initialTools) ||
       _pictureTouched;
 
   Future<void> _discard() async {
@@ -573,7 +596,7 @@ class _AgentEditorPageState extends ConsumerState<AgentEditorPage> {
       setState(() => _nameError = "That name cannot be a file name.");
       return;
     }
-    final renaming = !widget.isNew && name != widget.initialName;
+    final renaming = !widget.isNew && name != widget.initial.name;
     if (renaming) {
       final config = ref.read(appConfigProvider);
       final taken = await config.fs
@@ -586,11 +609,25 @@ class _AgentEditorPageState extends ConsumerState<AgentEditorPage> {
       }
     }
     if (!mounted) return;
+    // An agent left at the defaults writes no list, so a default added later
+    // reaches it.
+    final unchanged =
+        widget.initial.tools == null && setEquals(_tools, _defaults);
+    final known = {for (final tool in _grantable) tool.id};
     Navigator.of(context).pop(
       (
-        name: name,
-        description: _description.text,
-        body: _body.text,
+        agent: widget.initial.edited(
+          name: name,
+          description: _description.text,
+          instructions: _body.text,
+          tools: unchanged
+              ? null
+              : {
+                  for (final tool in _grantable)
+                    if (_tools.contains(tool.id)) tool.id,
+                  ..._tools.difference(known),
+                },
+        ),
         // Only what was touched: untouched bytes going back would have the
         // section rewrite the same picture over the new name on a rename —
         // over what moving the old one there already put. Touched and null
@@ -602,6 +639,54 @@ class _AgentEditorPageState extends ConsumerState<AgentEditorPage> {
     );
   }
 
+  /// Two tools of one name are one tool worded two ways (`bash` and its
+  /// read-only form): switching one on switches the other off.
+  void _setTool(AgentTool tool, bool on) => setState(() {
+        if (on) {
+          _tools.removeAll([
+            for (final other in _grantable)
+              if (other.name == tool.name) other.id,
+          ]);
+        }
+        on ? _tools.add(tool.id) : _tools.remove(tool.id);
+      });
+
+  /// On is every name in [tools] on in one of its forms, and switching the
+  /// group on picks each name's first.
+  bool _groupOn(List<AgentTool> tools) => tools.every((tool) =>
+      _tools.contains(tool.id) ||
+      tools.any((other) => other.name == tool.name && _tools.contains(other.id)));
+
+  void _setGroup(List<AgentTool> tools, bool on) => setState(() {
+        _tools.removeAll(tools.map((tool) => tool.id));
+        if (!on) return;
+        final names = <String>{};
+        for (final tool in tools) {
+          if (names.add(tool.name)) _tools.add(tool.id);
+        }
+      });
+
+  List<Widget> _group(List<AgentTool> tools) => [
+        if (tools.isNotEmpty) ...[
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            title: Text(tools.first.group!.label),
+            value: _groupOn(tools),
+            onChanged: (on) => _setGroup(tools, on),
+          ),
+          for (final tool in tools)
+            SwitchListTile(
+              dense: true,
+              contentPadding: const EdgeInsets.only(left: 16),
+              title: Text(tool.id),
+              subtitle: Text(tool.description,
+                  maxLines: 2, overflow: TextOverflow.ellipsis),
+              value: _tools.contains(tool.id),
+              onChanged: (on) => _setTool(tool, on),
+            ),
+        ],
+      ];
+
   @override
   Widget build(BuildContext context) {
     return PopScope(
@@ -611,7 +696,7 @@ class _AgentEditorPageState extends ConsumerState<AgentEditorPage> {
       },
       child: Scaffold(
         appBar: AppBar(
-          title: Text(widget.isNew ? "Add agent" : "Edit ${widget.initialName}"),
+          title: Text(widget.isNew ? "Add agent" : "Edit ${widget.initial.name}"),
           leading: IconButton(
             icon: const Icon(Icons.close),
             tooltip: "Discard",
@@ -701,6 +786,19 @@ class _AgentEditorPageState extends ConsumerState<AgentEditorPage> {
                   ),
                 ),
               ),
+              const SizedBox(height: 16),
+              Text("Tools", style: Theme.of(context).textTheme.titleMedium),
+              const SizedBox(height: 4),
+              mutedParagraph(
+                  context,
+                  "What this agent can use when it runs as a sub-agent or a "
+                  "team member. A tool this device cannot run stays off "
+                  "whatever is set here."),
+              for (final group in ToolGroup.values)
+                ..._group([
+                  for (final tool in _grantable)
+                    if (tool.group == group) tool,
+                ]),
             ],
           ),
         ),

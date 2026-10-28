@@ -32,6 +32,9 @@ class SetProfileTool extends AgentTool {
   SetProfileTool(super.offer);
 
   @override
+  ToolGroup get group => ToolGroup.settings;
+
+  @override
   String get name => setProfileName;
 
   @override
@@ -66,6 +69,9 @@ class SetProfileTool extends AgentTool {
 /// Set the tone replies are written in.
 class SetToneTool extends AgentTool {
   SetToneTool(super.offer);
+
+  @override
+  ToolGroup get group => ToolGroup.settings;
 
   @override
   String get name => setToneName;

@@ -7,7 +7,6 @@ import "../../domain/models.dart" show CompletionKind;
 import "../../domain/profile.dart";
 import "../../domain/shell.dart" show CommandSandbox;
 import "../../domain/tone.dart";
-import "../../domain/prompt_library.dart";
 import "tools/agent_tool.dart";
 import "tools/registry.dart";
 
@@ -264,19 +263,12 @@ String summarizedTurnText(String summary) =>
     "context small. It follows; everything after it is the conversation "
     "itself, unchanged.\n\n<summary>\n$summary\n</summary>";
 
-/// The member's prompt, from the library as it stands now: the file is the
-/// member. Null where the name is no longer in the library — the controller
-/// has already routed such a turn to the main agent, so this is unreachable
-/// from a member turn.
-///
-/// The first line is the member's handle: the room contract tells a member
-/// not to write its own, and nothing else in the prompt says what it is.
-String? memberPrompt(PromptLibrary? library, String member) {
-  final body = library?.find(CompletionKind.agent, member)?.body;
-  if (body == null) return null;
-  return "You are ${CompletionKind.agent.trigger}$member, a member of this "
-      "team.\n\n$body";
-}
+/// A member's [instructions] as its turn reads them. The first line is the
+/// member's handle: the room contract tells a member not to write its own,
+/// and nothing else in the prompt says what it is.
+String memberInstructions(String member, String instructions) =>
+    "You are ${CompletionKind.agent.trigger}$member, a member of this "
+    "team.\n\n$instructions";
 
 /// What the conversation calls the main agent wherever a viewer is named and
 /// the reply carries no author — the label, not a member handle.

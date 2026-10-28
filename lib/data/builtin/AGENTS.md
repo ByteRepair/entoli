@@ -72,6 +72,26 @@ through — `bash` and the prompt around it change with the shell. Sub-agents
 read the parent's capabilities through `unattended`, which zeroes `ask` and
 `task`: a worker has nothing to ask and nothing to fan out to.
 
+**Then the agent picks.** A tool with a `group` is one an agent may be
+granted, and the offer's `AgentDefinition` decides it by `id` (see "Tools per
+agent" in `lib/domain/AGENTS.md`); a tool with none — `ask`, `task`,
+`end_turn`, `list_participants` — is the turn's machinery, which no list adds
+or takes. A tool that changes something the user owns is never machinery:
+`set_profile` and `set_tone` are grantable, and their own gate (the
+customization skill loaded) still applies on top. `group` is also where the agent editor lists it.
+Two tools may share a name and differ by `id`, and `offeredTools` keeps the
+first an agent picked: `bash` and `bash(readonly)` are one tool to the model.
+
+**`ReadOnlyBashTool` is `bash` for an agent that only looks**, off by default
+and `explore`'s. It refuses, as the call's result and ahead of the gate, any
+command with a segment `profileSegment` cannot prove non-modifying — a
+redirect to a file, an install, a fetch, anything the parse cannot model — and
+hands the rest to `bash`, whose gate and rules still apply. It offers no
+`unsandboxed`: the sandbox confines writes, so leaving it buys a read nothing
+and would only raise a banner. The refusal is the
+tool's rather than the mode's because a sub-agent runs under `never`: without
+it, nothing but the agent's own prompt stood between `explore` and a write.
+
 **What a running tool may reach is `Turn`** (`tools/turn.dart`): the
 workspaces and the shell, the gate, the user (`approve`, `answer`), the
 collaborators a turn may or may not have been handed — a tool whose

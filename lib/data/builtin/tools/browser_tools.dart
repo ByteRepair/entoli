@@ -48,6 +48,9 @@ abstract class BrowserTool extends AgentTool {
   BrowserTool(super.offer);
 
   @override
+  ToolGroup get group => ToolGroup.browser;
+
+  @override
   bool get offered => offer.caps.browser;
 
   /// The refusal every browser tool answers with while the user holds the

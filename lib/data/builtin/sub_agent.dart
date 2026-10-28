@@ -3,6 +3,7 @@ import "dart:async";
 import "package:fs_shim/fs.dart";
 
 import "../../domain/agent_backend.dart";
+import "../../domain/agent_definition.dart";
 import "../../domain/chat_log.dart";
 import "../../domain/models.dart";
 import "../../domain/permission.dart";
@@ -108,42 +109,44 @@ class SubAgentRunner {
 
   /// Run one sub-agent. The [agentName] is looked up in the [library]; a name
   /// that is not found falls back to `general`, and a missing `general` runs
-  /// with no overlay. The [prompt] is the sub-agent's whole task — it sees
-  /// nothing else of the parent's conversation.
+  /// as the main agent would. The [prompt] is the sub-agent's whole task — it
+  /// sees nothing else of the parent's conversation.
   Future<ShellResult> run(String agentName, String prompt, {String? callId}) async {
-    final agentPrompt = _agentPrompt(agentName);
     final session = BuiltinSession();
     // The task as a message, because that is what opens a turn now. A
     // sub-agent's transcript opens on the assistant's message, so this one is
     // never logged and has no `/command` of the user's to record.
     final said = unloggedMessage(
         MessageRole.user, DateTime.now(), [MessagePart.text(text: prompt)]);
-    return _drive(session, agentPrompt, callId,
+    return _drive(session, _definitionOf(agentName), callId,
         // The task is dressed: a fresh session's first own mail, what the
         // instance template frames it as.
-        (agent) => agent.run(said, agentPrompt: agentPrompt, mayDress: true));
+        (agent) => agent.run(said, mayDress: true));
   }
 
   /// Carry on the sub-agent [callId] left off in, over a session rebuilt from
   /// its own transcript. The same thing the user's Continue does one level up,
   /// and the same three steps: project the log back, nudge, run the loop.
   Future<ShellResult> resume(String agentName, String callId) async {
-    final agentPrompt = _agentPrompt(agentName);
     final session = BuiltinSession()
       ..replaceWith(await projectionOf(await log.read(callId), load: noResources));
-    return _drive(session, agentPrompt, callId, (agent) => agent.resume(agentPrompt: agentPrompt));
+    return _drive(session, _definitionOf(agentName), callId,
+        (agent) => agent.resume());
   }
 
-  String? _agentPrompt(String name) =>
-      (library?.find(CompletionKind.agent, name) ??
-              library?.find(CompletionKind.agent, "general"))
-          ?.body;
+  AgentDefinition _definitionOf(String name) {
+    final document = library?.find(CompletionKind.agent, name) ??
+        library?.find(CompletionKind.agent, "general");
+    return document == null
+        ? AgentDefinition.main
+        : AgentDefinition.of(document);
+  }
 
   /// What running and carrying on have in common: the agent, its transcript,
   /// and reading a final answer out of what it said.
   Future<ShellResult> _drive(
     BuiltinSession session,
-    String? agentPrompt,
+    AgentDefinition definition,
     String? callId,
     Stream<AgentEvent> Function(BuiltinAgent) start,
   ) async {
@@ -151,6 +154,7 @@ class SubAgentRunner {
 
     final agent = BuiltinAgent(
       session: session,
+      agent: definition,
       client: client,
       shell: shell,
       // One-shot over the same shell: a fresh subshell per command, so the

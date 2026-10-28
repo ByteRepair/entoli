@@ -33,6 +33,9 @@ class AddDirectoryTool extends AgentTool {
   AddDirectoryTool(super.offer);
 
   @override
+  ToolGroup get group => ToolGroup.directories;
+
+  @override
   String get name => addDirectoryName;
 
   @override
@@ -166,6 +169,9 @@ class AddDirectoryTool extends AgentTool {
 /// and commands take that shorthand and the grants are recorded absolute.
 class WritableDirectoriesTool extends AgentTool {
   WritableDirectoriesTool(super.offer);
+
+  @override
+  ToolGroup get group => ToolGroup.directories;
 
   @override
   String get name => writableDirectoriesName;

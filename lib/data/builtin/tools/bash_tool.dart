@@ -1,4 +1,5 @@
 import "../../../domain/agent_backend.dart";
+import "../../../domain/safe_command.dart" show SegmentReach, profileSegment;
 import "../../../domain/shell.dart";
 import "../../../domain/shell_command_analysis.dart";
 import "../../../domain/tool_arg.dart";
@@ -28,6 +29,9 @@ class BashTool extends AgentTool {
   String get name => bashToolName;
 
   @override
+  ToolGroup get group => ToolGroup.shell;
+
+  @override
   bool get offered => offer.caps.commands;
 
   @override
@@ -46,13 +50,17 @@ class BashTool extends AgentTool {
           "in the workspace directory and keeps its state between commands: a "
           "`cd` or an export made by one command is still there for the next.";
 
+  /// Whether a call may ask to leave the sandbox: only where there is one to
+  /// leave, and a person to approve leaving it.
+  bool get leavesSandbox => !offer.oneShot && offer.sandboxed;
+
   @override
   Map<String, dynamic> get schema => {
         "type": "object",
         "properties": {
           ..._common,
           if (!offer.oneShot) ..._restart,
-          if (!offer.oneShot && offer.sandboxed) ..._unsandboxed,
+          if (leavesSandbox) ..._unsandboxed,
           if (!offer.oneShot && offer.background) ..._background,
         },
         "required": ["command"],
@@ -128,7 +136,7 @@ class BashTool extends AgentTool {
     yield toolCalled(call, command);
     // Leaving the sandbox is part of what is asked: where one would confine
     // the run and no no-sandbox rule covers it, the call goes to the mode.
-    final leave = boolArg(call.argumentsJson, "unsandboxed");
+    final leave = leavesSandbox && boolArg(call.argumentsJson, "unsandboxed");
     final escaping = leave && await turn.gate.confinementOf(analysis) != null;
     final outcome = GateOutcome();
     yield* turn.gate.decide(
@@ -226,5 +234,65 @@ class BashTool extends AgentTool {
             "goes to $log in the chat workspace$where: read it with `tail` or "
             "the read tool at chat:$log. Your next call after it exits says "
             "how it ended.");
+  }
+}
+
+/// `bash` for an agent that only looks: a command runs only where the parse
+/// proves every segment changes nothing (`safe_command.dart`), and anything
+/// else is refused as the call's result. The refusal is the tool's, ahead of
+/// the gate, so no mode and no rule can let a write through — a sub-agent
+/// runs under `never`, and its prompt asking it not to write is all that
+/// would stand in the way otherwise.
+class ReadOnlyBashTool extends BashTool {
+  ReadOnlyBashTool(super.offer);
+
+  @override
+  String get id => "$bashToolName(readonly)";
+
+  @override
+  bool get onByDefault => false;
+
+  @override
+  String get fragment => "`bash` to run a command that only reads";
+
+  /// The sandbox confines writes, and nothing this runs writes: leaving it
+  /// would only put a banner in front of the user.
+  @override
+  bool get leavesSandbox => false;
+
+  @override
+  String get description => "${super.description} Read-only: only commands "
+      "that change nothing run — reading, listing and searching (ls, find, "
+      "grep, rg, cat, head, git log, git diff and the like). A command that "
+      "writes a file, installs, fetches or cannot be checked is refused.";
+
+  @override
+  Stream<AgentEvent> run(LlmToolCall call, Turn turn) async* {
+    final command = stringArg(call.argumentsJson, "command");
+    final refused = command == null ? null : _refusal(command, turn);
+    if (refused == null) {
+      yield* super.run(call, turn);
+      return;
+    }
+    yield toolCalled(call, command);
+    yield toolFailed(call, refused);
+  }
+
+  String? _refusal(String command, Turn turn) {
+    final segments = ShellCommandAnalysis.parse(command,
+            isWindows: turn.shell.platformIsWindows)
+        .modelableSegments;
+    if (segments == null) {
+      return "Not run: this shell is read-only and this command cannot be "
+          "checked. Write it as plain commands, without substitutions or "
+          "expansions.";
+    }
+    for (final segment in segments) {
+      if (profileSegment(segment).reach != SegmentReach.nonModifying) {
+        return "Not run: this shell is read-only, and `$segment` is not a "
+            "command that only reads.";
+      }
+    }
+    return null;
   }
 }

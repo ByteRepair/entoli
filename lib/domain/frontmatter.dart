@@ -11,10 +11,10 @@
 // would refuse; new content should be spec YAML, where the strict path wins.
 import "package:yaml/yaml.dart";
 
-/// One file's frontmatter and body: the top-level scalars, the nested
-/// `metadata:` map, and the text after the closing fence. Only what the menu
-/// and the tool gates need is read; everything else — nested lists, deeper
-/// maps — is dropped.
+/// One file's frontmatter and body: the top-level scalars (a list of them
+/// comma-joined), the nested `metadata:` map, and the text after the closing
+/// fence. Only what the menu and the tool gates need is read; everything else
+/// — lists of maps, deeper maps — is dropped.
 class Frontmatter {
   const Frontmatter(
       {this.scalars = const {}, this.metadata = const {}, this.body = ""});
@@ -125,7 +125,15 @@ class Frontmatter {
         });
         return;
       }
-      if (value == null || value is YamlMap || value is YamlList) return;
+      // A list of scalars is comma-joined, the form an agent's `tools:` is
+      // written in, so either spelling reads the same.
+      if (valueNode is YamlList) {
+        if (valueNode.nodes.every((n) => n is YamlScalar)) {
+          scalars[key] = valueNode.nodes.map(_scalarString).join(", ");
+        }
+        return;
+      }
+      if (value == null || value is YamlMap) return;
       scalars[key] = _scalarString(valueNode);
     });
     return Frontmatter(scalars: scalars, metadata: metadata, body: body);

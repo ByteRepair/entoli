@@ -20,6 +20,9 @@ class CreateSkillTool extends AgentTool {
   CreateSkillTool(super.offer);
 
   @override
+  ToolGroup get group => ToolGroup.skills;
+
+  @override
   String get name => createSkillToolName;
 
   @override

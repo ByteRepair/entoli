@@ -18,6 +18,9 @@ class SkillTool extends AgentTool {
   SkillTool(super.offer);
 
   @override
+  ToolGroup get group => ToolGroup.skills;
+
+  @override
   String get name => skillToolName;
 
   Iterable<PromptDocument> get _usable =>

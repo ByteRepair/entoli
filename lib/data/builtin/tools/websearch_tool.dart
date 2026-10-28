@@ -17,6 +17,9 @@ class WebSearchTool extends AgentTool {
   WebSearchTool(super.offer);
 
   @override
+  ToolGroup get group => ToolGroup.web;
+
+  @override
   String get name => websearchToolName;
 
   @override
@@ -63,6 +66,9 @@ class WebSearchTool extends AgentTool {
 /// command consults — and the banner is where one standing answer comes from.
 class WebFetchTool extends AgentTool {
   WebFetchTool(super.offer);
+
+  @override
+  ToolGroup get group => ToolGroup.web;
 
   @override
   String get name => webfetchToolName;

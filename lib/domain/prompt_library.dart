@@ -54,9 +54,9 @@ class PromptDocument {
       );
 
   /// Only the top-level scalars and one nested `metadata:` map are read,
-  /// because `description` and the metadata keys are all the menu and the
-  /// tool gates need. Everything else — nested lists, deeper maps — is
-  /// dropped. The parsing lives in [Frontmatter], its own file so the
+  /// because `description`, an agent's `tools` and the metadata keys are all
+  /// the menu and the tool gates need. Everything else — lists of maps,
+  /// deeper maps — is dropped. The parsing lives in [Frontmatter], its own file so the
   /// build-time generators can share it without the freezed models.
   factory PromptDocument.parse(CompletionKind kind, String name, String source) {
     final parsed = Frontmatter.parse(source);
@@ -85,17 +85,6 @@ class PromptDocument {
         metadata: (json["metadata"] as Map).cast<String, String>(),
         body: json["body"] as String,
       );
-
-  /// The `.md` source for a document: a `description` frontmatter where there
-  /// is one, then the body. The inverse of [parse] for the scalars an agent
-  /// editor writes — `description` is the only one, and an empty description
-  /// is omitted rather than written as an empty value, which [parse] reads as
-  /// the opening of a nested block.
-  static String toSource({String? description, required String body}) {
-    final desc = description?.trim() ?? "";
-    final head = desc.isEmpty ? "" : "---\ndescription: $desc\n---\n\n";
-    return "$head${body.trim()}";
-  }
 }
 
 /// Somewhere prompt files come from — the app's own assets, or a directory the

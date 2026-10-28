@@ -14,6 +14,9 @@ class ImageGenerationTool extends AgentTool {
   ImageGenerationTool(super.offer);
 
   @override
+  ToolGroup get group => ToolGroup.images;
+
+  @override
   String get name => imageGenerationToolName;
 
   @override

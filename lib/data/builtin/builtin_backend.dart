@@ -8,6 +8,7 @@ import "package:uuid/uuid.dart";
 import "../../core/config.dart";
 import "../../core/log.dart";
 import "../../domain/agent_backend.dart";
+import "../../domain/agent_definition.dart";
 import "../../domain/agent_browser.dart";
 import "../../domain/trigger_manager.dart" show TriggerRegistryFactory;
 import "../../domain/app_settings.dart";
@@ -45,7 +46,6 @@ import "llm/rate_limit_gate.dart";
 import "permission_classifier.dart";
 import "projection.dart";
 import "sub_agent.dart";
-import "templates.dart";
 import "tools/agent_tool.dart" show AgentCapabilities;
 import "tools/bash_tool.dart" show runningCommand;
 
@@ -443,9 +443,18 @@ class BuiltinBackend implements AgentBackend {
           rebuild: prompt == null,
           viewer: settings.omadaMember,
           compactions: compactions);
+      // A member turn runs as the member's file, as the library stands now.
+      // A member no longer in it has been routed to the main agent already.
+      final memberDoc = settings.omadaMember == null
+          ? null
+          : libraryFor(settings.project)
+              ?.find(CompletionKind.agent, settings.omadaMember!);
       final agent = BuiltinAgent(
         session: session,
         viewer: settings.omadaMember,
+        agent: memberDoc == null
+            ? AgentDefinition.main
+            : AgentDefinition.of(memberDoc),
         loadResource: _resourcesOf(chatId),
         steers: steers,
         client: gatedClient,
@@ -555,20 +564,17 @@ class BuiltinBackend implements AgentBackend {
 
       // A resumed turn has no prompt of its own to read `@agent` mentions out
       // of, so they come off the message that started it. A member turn is
-      // the other shape: the overlay is the member's prompt from the library
-      // as it stands now, and it replaces the mentions rather than joining
-      // them.
+      // the other shape: its instructions are the member's own, which the
+      // mentions do not join.
       final said =
           prompt ?? history.lastWhereOrNull((m) => m.role == MessageRole.user);
-      final memberBody = settings.omadaMember == null
+      final mentions = memberDoc != null
           ? null
-          : memberPrompt(libraryFor(settings.project), settings.omadaMember!);
-      final mentions = agentPromptFrom(said?.documents ?? const {});
-      final agentPrompt = memberBody ?? mentions;
+          : agentPromptFrom(said?.documents ?? const {});
       final events = prompt == null
-          ? agent.resume(agentPrompt: agentPrompt)
+          ? agent.resume(mentions: mentions)
           : agent.run(prompt,
-              agentPrompt: agentPrompt,
+              mentions: mentions,
               mayDress: mayDress(session, history, settings.omadaMember));
 
       var reply = "";

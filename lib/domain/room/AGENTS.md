@@ -44,6 +44,9 @@ The room has two participants who speak, and a third shape that never does:
   channel is the tool result to their delegator, and the main agent sends
   the message back. They never address the room, and nothing here draws
   them as speakers.
+- **What a participant may use is its own.** A member's turn and a
+  sub-agent's both run as the agent's `AgentDefinition`, so its `tools:` list
+  holds in either role; see "Tools per agent" in `lib/domain/AGENTS.md`.
 - **An `@mention` is not a participant.** It stacks the named agent's body
   as the main agent's instructions. Omada is what changes that sentence, in
   Omada-on projects only.
@@ -103,7 +106,7 @@ turn runs under `MyTeamProject`'s bundled note (`assets/prompts/projects/
 my-team/system/instructions.md`): the room, the handles, `end_turn`, and that
 every other member's handle in a reply is handed a turn — worded once for
 any participant, main agent or member, since both run under it. A member
-tells which one it is by the `You are @name` line `memberPrompt` opens its
+tells which one it is by the `You are @name` line `memberInstructions` opens its
 prompt with. The project's own note comes first where it ships
 one, and the user's instruction files are read on top, the way they always
 are for a user project. A project's Omada answer decides whether the note is

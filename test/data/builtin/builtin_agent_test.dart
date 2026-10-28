@@ -171,7 +171,7 @@ void main() {
         [finish],
       ]);
       await agentOver(client)
-          .run(userMessage("look at it"), agentPrompt: "You only read; you never edit.")
+          .run(userMessage("look at it"), mentions: "You only read; you never edit.")
           .toList();
 
       expect(client.sent.first.first.text,
@@ -803,7 +803,7 @@ void main() {
       final client = FakeLlmClient([
         [finish],
       ]);
-      await agentOver(client).resume(agentPrompt: "Be brief.").toList();
+      await agentOver(client).resume(mentions: "Be brief.").toList();
 
       expect(client.sent.single.first.role, LlmRole.system);
       expect(client.sent.single[1].text, contains("Be brief."));

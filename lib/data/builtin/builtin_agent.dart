@@ -7,6 +7,7 @@ import "package:flutter/foundation.dart" show visibleForTesting;
 import "package:uuid/uuid.dart";
 
 import "../../domain/agent_backend.dart";
+import "../../domain/agent_definition.dart";
 import "../../domain/agent_browser.dart";
 import "../../domain/ask.dart";
 import "../../domain/file_tools.dart";
@@ -231,6 +232,7 @@ class BuiltinAgent implements Turn {
   BuiltinAgent({
     required this.session,
     this.viewer,
+    this.agent = AgentDefinition.main,
     required this.client,
     required this.shell,
     this.oneShot = false,
@@ -293,6 +295,11 @@ class BuiltinAgent implements Turn {
   /// prompt's wording must match what a reload rebuilds, so the viewer rides
   /// the agent the way the session does.
   final String? viewer;
+
+  /// Who this turn runs as: whose instructions the prompt carries and which
+  /// of the tools [caps] leaves it is offered. The main agent's is
+  /// [AgentDefinition.main]; a sub-agent's or a member's is its file.
+  final AgentDefinition agent;
 
   /// Marks an instruction file as first-reached in the conversation, as a
   /// nested `AGENTS.md` read above a file mid-turn is pulled in; returning
@@ -653,6 +660,7 @@ class BuiltinAgent implements Turn {
         member: viewer != null,
         customizing: _customizing,
         attachments: attachmentsDir != null,
+        agent: agent,
       );
 
   /// What the model may call this step: worked out once at its head and read
@@ -735,9 +743,12 @@ class BuiltinAgent implements Turn {
   /// worded here — see [projectionOf]. [mayDress] is whether it may dress as
   /// the task — the viewer's first own mail, decided by the caller against
   /// the history it holds, the decision a whole-span walk would make.
+  ///
+  /// [mentions] is what the message's `@agent` mentions stack on top of the
+  /// agent's own instructions.
   Stream<AgentEvent> run(Message prompt,
-      {String? agentPrompt, bool mayDress = false}) async* {
-    await _openTurn(prompt, mayDress, agentPrompt);
+      {String? mentions, bool mayDress = false}) async* {
+    await _openTurn(prompt, mayDress, mentions);
     yield* _recorded(_loop)();
   }
 
@@ -755,8 +766,8 @@ class BuiltinAgent implements Turn {
   /// rather than added to. Nothing logs it, so a session that kept it would
   /// hold a message no reload could rebuild; see "The projection" in
   /// `lib/domain/AGENTS.md` for what that cost.
-  Stream<AgentEvent> resume({String? agentPrompt}) async* {
-    _setSystemPrompt(agentPrompt);
+  Stream<AgentEvent> resume({String? mentions}) async* {
+    _setSystemPrompt(mentions);
     final turn = _recorded(_loop);
     // Wrapped either way: the branch decides whether the reason goes in, not
     // whether the turn is recorded.
@@ -871,8 +882,8 @@ class BuiltinAgent implements Turn {
   }
 
   Future<void> _openTurn(
-      Message prompt, bool mayDress, String? agentPrompt) async {
-    _setSystemPrompt(agentPrompt);
+      Message prompt, bool mayDress, String? mentions) async {
+    _setSystemPrompt(mentions);
     // The wording the live turn sends is the wording a reload rebuilds: both
     // call the projection, and the dress decision — may this message dress —
     // is the caller's, computed against the history it holds: the viewer's
@@ -896,12 +907,18 @@ class BuiltinAgent implements Turn {
   /// what a restore can find. See [turnPrompt]. Two only as far as the KV keys:
   /// a chat template renders one system block, so `mergeLeadingSystem` joins
   /// them on the way out.
-  void _setSystemPrompt(String? agentPrompt) {
+  void _setSystemPrompt(String? mentions) {
     final offer = this.offer;
+    final own = agent.instructions.isEmpty
+        ? null
+        : viewer == null
+            ? agent.instructions
+            : memberInstructions(viewer!, agent.instructions);
+    final stacked = [?own, ?mentions];
     final turn = turnPrompt(
       workspace: workspace,
       projectWorkspace: projectWorkspace,
-      agentPrompt: agentPrompt,
+      agentPrompt: stacked.isEmpty ? null : stacked.join("\n\n"),
       instructions: renderInstructions(instructions),
       pinned: pinned,
       index: index,

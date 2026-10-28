@@ -20,6 +20,9 @@ abstract class _MemoryTool extends AgentTool {
   _MemoryTool(super.offer);
 
   @override
+  ToolGroup get group => ToolGroup.memory;
+
+  @override
   bool get offered => offer.memory;
 }
 
