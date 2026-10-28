@@ -1324,6 +1324,28 @@ final projectListProvider =
 final availableModelsProvider = FutureProvider<List<ModelOption>>(
     (ref) => ref.watch(agentBackendProvider).models());
 
+/// The window [chatId]'s model runs in: the chat's own choice, else the app
+/// default, as the catalog knows it, else the settings' global guess. Read
+/// from the chat's meta, so it is there before any turn, and computed again
+/// when the meta, the settings or the catalog change.
+final contextWindowProvider =
+    FutureProvider.autoDispose.family<int, String>((ref, chatId) async {
+  final repo = ref.watch(chatRepositoryProvider);
+  final settings = ref.watch(appSettingsProvider);
+  final backend = ref.watch(agentBackendProvider);
+  final sub = repo.changes.listen((event) {
+    if (event is MetaChanged && event.chatId == chatId) ref.invalidateSelf();
+  });
+  void catalogChanged() => ref.invalidateSelf();
+  ModelCatalog.notifier.addListener(catalogChanged);
+  ref.onDispose(() {
+    sub.cancel();
+    ModelCatalog.notifier.removeListener(catalogChanged);
+  });
+  final meta = await repo.loadMeta(chatId);
+  return backend.contextWindowOf(chatModelOf(meta, settings)) ?? settings.totalContext;
+});
+
 /// The same models in the one order every picker lists them in. Sorted here
 /// rather than in `build`, since an endpoint that offers hundreds is sorted
 /// again on every keystroke that rebuilds a settings page.

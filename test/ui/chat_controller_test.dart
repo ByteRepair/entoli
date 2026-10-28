@@ -2232,6 +2232,19 @@ group("a banner answer through the controller", () {
       expect(app.backend.compactionCalls, hasLength(1));
     });
 
+    test("the share is of the chat's model's window, not the global guess",
+        () async {
+      final (id, controller) = await chatWithCompactSkill();
+      await app.repo.saveMeta(id, ChatMeta(model: "big", provider: "fake"));
+      app.backend.windowHolder["big"] = 1000000;
+      // Past 80% of the 128k guess, a ninth of the model's own.
+      app.backend.usageHolder[id] = 120000;
+      app.backend.scriptedSummary = "Everything so far.";
+      await controller.send("grow");
+      await waitIdle(id);
+      expect(app.backend.compactionCalls, isEmpty);
+    });
+
   });
 
 }
