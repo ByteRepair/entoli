@@ -308,7 +308,7 @@ something else entirely
       // live on the settings page.
       expect(pool.running.value, isEmpty);
       expect(pool.provider!.id, localProviderId);
-      expect(pool.provider!.models, localModelCatalog.map((m) => m.id));
+      expect(pool.installed, localModelCatalog.map((m) => m.id));
       // No address of its own: each model is its own process on its own port,
       // and the endpoint's client is what routes between them.
       expect(pool.provider!.baseUrl, isEmpty);

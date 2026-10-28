@@ -70,12 +70,11 @@ void main() {
       await controller.close();
     });
 
-    test("listModels and close pass through", () async {
+    test("close passes through", () {
       final inner = FakeLlmClient(const []);
       final gate = RateLimitGate(maxConcurrent: 2);
       final client = GatedLlmClient(inner, gate);
 
-      expect(await client.listModels(), ["fake-model"]);
       client.close();
       expect(inner.closed, isTrue);
     });
@@ -97,9 +96,6 @@ class _SingleCallClient implements LlmClient {
     String? reasoningEffort,
   }) =>
       _stream;
-
-  @override
-  Future<List<String>> listModels() async => const [];
 
   @override
   void close() {}

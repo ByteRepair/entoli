@@ -29,6 +29,10 @@ abstract class LlmProvider {
   String get id => config.id;
   String get displayName => config.displayName;
   Uri get baseUrl => Uri.parse(config.baseUrl);
+  Uri? get modelsUrl {
+    final url = config.modelsEndpoint;
+    return url == null ? null : Uri.parse(url);
+  }
 
   /// False for a server nothing guards, whose key the dialog does not ask for.
   bool get needsKey => true;
@@ -46,6 +50,21 @@ abstract class LlmProvider {
   Set<String> get retiredModels => const {};
 
   LlmClient client(String? apiKey);
+
+  /// The headers a request to it carries [apiKey] in.
+  Map<String, String> authOf(String? apiKey) => OpenAiClient.authOf(apiKey);
+
+  /// The models listed beyond models.dev's: [modelsUrl]'s, or none.
+  Future<List<String>> listModels(String? apiKey, {http.Client? httpClient}) async {
+    final url = modelsUrl;
+    if (url == null) return const [];
+    final client = httpClient ?? tlsClient();
+    try {
+      return await listModelIds(client, url, headers: authOf(apiKey));
+    } finally {
+      if (httpClient == null) client.close();
+    }
+  }
 
   /// Whether the provider accepts [apiKey]. Throws an [LlmException] where it
   /// could not be asked, which is not a no.
@@ -163,7 +182,7 @@ class OpenAiCompatibleProvider extends LlmProvider {
   @override
   Future<bool> checkKey(String apiKey, {http.Client? httpClient}) => LlmProvider.askWith(
         http.Request("GET", under(baseUrl, keyCheckPath))
-          ..headers.addAll(OpenAiClient.authOf(apiKey)),
+          ..headers.addAll(authOf(apiKey)),
         httpClient: httpClient,
         rejecting: refusingStatuses,
       );

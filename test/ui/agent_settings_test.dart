@@ -88,12 +88,13 @@ void main() {
 
       await tester.enterText(dialogField("Name"), "vllm");
       await tester.enterText(dialogField("Base URL"), "http://gpu.local:8000/v1");
-      await tester.enterText(dialogField("Models"), "qwen3, llama4");
+      await tester.enterText(
+          dialogField("Models endpoint"), "http://gpu.local:8000/v1/models");
       await saveDialog(tester);
 
       expect(saved().single.id, "vllm");
       expect(saved().single.baseUrl, "http://gpu.local:8000/v1");
-      expect(saved().single.models, ["qwen3", "llama4"]);
+      expect(saved().single.modelsEndpoint, "http://gpu.local:8000/v1/models");
       expect(saved().single.api, LlmApi.openai);
     });
 

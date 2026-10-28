@@ -51,10 +51,6 @@ class OpenAiClient implements LlmClient {
   @override
   void close() => _http.close();
 
-  @override
-  Future<List<String>> listModels() =>
-      listModelIds(_http, under(baseUrl, "models"), headers: _auth);
-
   /// What a refused request reports. A host whose status means something more
   /// specific than its message says rewrites it here.
   @protected

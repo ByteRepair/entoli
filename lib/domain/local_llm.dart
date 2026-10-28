@@ -73,13 +73,26 @@ abstract class LocalLlm {
   /// phone short of memory wants.
   Future<void> stopAll();
 
-  /// Every model on disk, as one provider.
-  ///
-  /// Null where nothing is downloaded, which is what keeps the entry out of
-  /// every picker until there is something to pick. It lists what is *on disk*
-  /// rather than what is loaded: asking for one is what causes it to load, so a
-  /// list of the already-running would never grow.
-  LlmProviderConfig? get provider;
+  /// The ids of every model on disk. What is *on disk* rather than what is
+  /// loaded: asking for one is what causes it to load, so a list of the
+  /// already-running would never grow.
+  List<String> get installed;
+
+  /// [installed], as one provider. Null where nothing is downloaded, which is
+  /// what keeps the entry out of every picker until there is something to pick.
+  LlmProviderConfig? get provider => installed.isEmpty
+      ? null
+      : const LlmProviderConfig(
+          id: localProviderId,
+          label: "On-device",
+          api: LlmApi.openai,
+          // Empty, and it has to be: there is no one server behind this entry,
+          // and each model is its own process on a port of its own. The
+          // endpoint carries the client that routes between them, so nothing
+          // reads this — and an empty string keeps the registry's cache
+          // signature still while servers come and go under it.
+          baseUrl: "",
+        );
 }
 
 /// One running server: where it is, and what it will answer to.
@@ -193,5 +206,5 @@ class UnavailableLocalLlm extends LocalLlm {
   Future<void> stopAll() async {}
 
   @override
-  LlmProviderConfig? get provider => null;
+  List<String> get installed => const [];
 }
