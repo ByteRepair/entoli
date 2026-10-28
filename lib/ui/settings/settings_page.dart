@@ -50,8 +50,6 @@ import "voice_settings.dart";
 import "settings_category.dart";
 import "welcome_page.dart";
 
-export "settings_category.dart" show SettingsCategory;
-
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key, this.initialCategory, this.focus = false});
 

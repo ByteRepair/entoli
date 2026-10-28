@@ -149,7 +149,7 @@ void main() {
         approveMode: ApproveMode.never,
         approve: (_) async => ApprovalResponse.allow,
         answer: (request) async => request.unanswered,
-        subAgentRunner: runner,
+        subAgents: runner,
       );
     }
 
@@ -315,7 +315,7 @@ void main() {
         approveMode: ApproveMode.never,
         approve: (_) async => ApprovalResponse.allow,
         answer: (request) async => request.unanswered,
-        subAgentRunner: runner,
+        subAgents: runner,
       );
 
       final events = await agent.run(userMessage("fan out")).toList();
@@ -382,7 +382,7 @@ void main() {
         approveMode: ApproveMode.never,
         approve: (_) async => ApprovalResponse.allow,
         answer: (request) async => request.unanswered,
-        subAgentRunner: runner,
+        subAgents: runner,
       );
 
       final events = <AgentEvent>[];
@@ -448,7 +448,7 @@ void main() {
         approveMode: ApproveMode.never,
         approve: (_) async => ApprovalResponse.allow,
         answer: (request) async => request.unanswered,
-        subAgentRunner: runner,
+        subAgents: runner,
         rateLimitGate: gate,
       );
       return (agent: agent, parentTrack: parentTrack, subTrack: subTrack, gate: gate);
@@ -613,7 +613,7 @@ void main() {
         approveMode: ApproveMode.never,
         approve: (_) async => ApprovalResponse.allow,
         answer: (request) async => request.unanswered,
-        subAgentRunner: runner,
+        subAgents: runner,
       );
 
       final events = await agent.run(userMessage("fan out")).toList();

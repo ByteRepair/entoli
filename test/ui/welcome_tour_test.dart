@@ -13,6 +13,7 @@ import "package:agent_chat/ui/settings/welcome_page.dart";
 import "package:agent_chat/ui/welcome_gate.dart";
 
 import "../harness.dart";
+import "package:agent_chat/ui/settings/settings_category.dart";
 
 void main() {
   late TestApp app;

@@ -11,13 +11,13 @@ import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/domain/prompt_library.dart";
 import "package:agent_chat/domain/project.dart" show localProject;
 import "package:agent_chat/providers.dart";
-import "package:agent_chat/ui/settings/settings_page.dart";
 import "package:agent_chat/ui/sidebar/project_settings_page.dart"
     show ProjectSettingsPage;
 import "package:agent_chat/ui/widgets/agent_picture.dart";
 
 import "../fakes.dart" show onePixelPng, testAttachment;
 import "../harness.dart";
+import "package:agent_chat/ui/settings/settings_category.dart";
 
 void main() {
   late TestApp app;

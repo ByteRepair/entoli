@@ -190,10 +190,16 @@ String _dedent(List<String> lines) => [
 }
 
 /// How many tasks are done and how many there are.
-(int done, int total) planProgress(String? text) {
-  final tasks = planTasksFrom(text);
-  return (tasks.where((t) => t.status == PlanTaskStatus.done).length, tasks.length);
-}
+(int done, int total) planProgress(String? text) =>
+    progressOf(planTasksFrom(text));
+
+/// How many of [tasks] are done, and of how many.
+(int done, int total) progressOf(List<PlanTask> tasks) =>
+    (tasks.where((t) => t.status == PlanTaskStatus.done).length, tasks.length);
+
+/// [progressOf] every task under [sections].
+(int done, int total) sectionsProgress(List<PlanSection> sections) =>
+    progressOf([for (final s in sections) ...s.tasks]);
 
 /// The first task neither done nor in progress, or null.
 PlanTask? planNext(String? text) => planTasksFrom(text)

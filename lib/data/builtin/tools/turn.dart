@@ -13,7 +13,7 @@ import "../background_jobs.dart";
 import "../builtin_options.dart";
 import "../llm/llm_client.dart";
 import "../memory/store.dart";
-import "../../../domain/app_settings.dart";
+import "../../../domain/app_settings.dart" show SettingsEditor;
 
 /// What a running tool may reach of the turn it runs in: the workspaces, the
 /// shell, the gate, the user, and whichever of the optional collaborators
@@ -105,7 +105,7 @@ abstract interface class Turn {
   TriggerRegistry? get registerTrigger;
   ChatJobs? get backgroundJobs;
   SettingsEditor? get editSettings;
-  SubAgents? get subAgentRunner;
+  SubAgents? get subAgents;
 
   /// Whether the turn was stopped.
   bool get cancelled;
@@ -129,10 +129,6 @@ abstract interface class Turn {
   /// killed by a stop.
   Future<ShellResult> track(LlmToolCall call, ShellRun run);
 }
-
-/// How the tools write: the settings notifier's own update, so a change lands
-/// in the state the app holds rather than under it.
-typedef SettingsEditor = Future<void> Function(void Function(AppSettings) change);
 
 /// What a turn asks of its sub-agents: run one to the end for a `task` call,
 /// and stop every one still running. The loop that spawns them implements

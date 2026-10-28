@@ -6,11 +6,11 @@ import "package:flutter_test/flutter_test.dart";
 
 import "package:agent_chat/data/prompts/skill_import.dart";
 import "package:agent_chat/domain/models.dart";
-import "package:agent_chat/ui/settings/settings_page.dart" show SettingsCategory;
 import "package:agent_chat/ui/sidebar/project_settings_page.dart";
 import "package:agent_chat/ui/widgets/install_destination.dart";
 
 import "../harness.dart";
+import "package:agent_chat/ui/settings/settings_category.dart";
 
 final _exportButtons = find.byIcon(Icons.download);
 

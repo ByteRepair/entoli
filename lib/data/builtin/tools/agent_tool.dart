@@ -273,5 +273,3 @@ Stream<AgentEvent> toolRejected(LlmToolCall call, String problem) async* {
   yield toolCalled(call);
   yield toolFailed(call, problem);
 }
-
-

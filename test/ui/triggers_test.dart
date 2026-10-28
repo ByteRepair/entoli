@@ -8,11 +8,11 @@ import "package:agent_chat/domain/temp_chat_ttl.dart";
 import "package:agent_chat/providers.dart";
 import "package:agent_chat/ui/triggers/incoming_open.dart";
 import "package:agent_chat/ui/settings/triggers.dart";
-import "package:agent_chat/ui/settings/settings_page.dart";
 import "package:agent_chat/ui/widgets/resettable_field.dart";
 
 import "../fakes.dart";
 import "../harness.dart";
+import "package:agent_chat/ui/settings/settings_category.dart";
 
 /// The field on the prompt page, and not the editor's Name behind it: a route
 /// under another is still in the tree, so every finder here is anchored to the

@@ -37,6 +37,7 @@ import "tools/skill_tool.dart" show skillToolName;
 import "tools/turn.dart";
 import "builtin_options.dart";
 import "system_prompt.dart";
+import "../../domain/app_settings.dart";
 
 /// What the spinner says while the model reads the prompt.
 ///
@@ -191,7 +192,7 @@ class BuiltinAgent implements Turn {
     this.classifier,
     this.temperature,
     this.reasoningEffort,
-    this.subAgentRunner,
+    this.subAgents,
     this.rateLimitGate,
     this.caps = AgentCapabilities.full,
     this.sharedWorkspace = true,
@@ -398,7 +399,7 @@ class BuiltinAgent implements Turn {
   /// Spawns sub-agents for `task` calls. Null where the agent is itself a
   /// sub-agent: sub-agents do not spawn their own sub-agents.
   @override
-  final SubAgents? subAgentRunner;
+  final SubAgents? subAgents;
 
   /// Bounds in-flight `LlmClient.stream` calls across the parent and its
   /// sub-agents and coordinates 429 backoff. Null where the agent is built
@@ -410,7 +411,7 @@ class BuiltinAgent implements Turn {
   /// facts minus a headless turn's takes and a built-in project's. Sub-agents
   /// pass the parent's `caps.unattended` — they run unattended, so they ask
   /// nothing, fan out nothing, and publish nothing. Where the platform itself
-  /// cannot run something ([shell], [webSearch], a missing [subAgentRunner] or
+  /// cannot run something ([shell], [webSearch], a missing [subAgents] or
   /// [saveArtifact]), it is dropped below even if [caps] holds it.
   final AgentCapabilities caps;
 
@@ -544,7 +545,7 @@ class BuiltinAgent implements Turn {
 
   /// What the trigger tools run against — a registry over the app's own
   /// trigger list — or null, which withholds the trio the way a missing
-  /// [subAgentRunner] withholds `task`. Null on a sub-agent: a trigger's
+  /// [subAgents] withholds `task`. Null on a sub-agent: a trigger's
   /// fire sends into *this* chat, which is one a worker is not.
   @override
   final TriggerRegistry? registerTrigger;
@@ -569,14 +570,14 @@ class BuiltinAgent implements Turn {
 
   /// [caps] with the platform's facts applied where [caps] cannot know them:
   /// a tool the device cannot run is not offered even if the turn was, and a
-  /// sub-agent's missing [subAgentRunner] or [saveArtifact] withholds `task`
+  /// sub-agent's missing [subAgents] or [saveArtifact] withholds `task`
   /// and `artifact` the way [AgentCapabilities.unattended] does from the front.
   AgentCapabilities get _offered => AgentCapabilities(
         commands: caps.commands && shell.canRunCommands,
         webSearch: caps.webSearch && (webSearch?.available ?? false),
         ask: caps.ask,
         // A sub-agent's work is commands; with no shell it has none to do.
-        task: caps.task && subAgentRunner != null && shell.canRunCommands,
+        task: caps.task && subAgents != null && shell.canRunCommands,
         artifact: caps.artifact && saveArtifact != null,
         createSkill: caps.createSkill && packageSkill != null,
         trigger: caps.trigger && registerTrigger != null,
@@ -679,7 +680,7 @@ class BuiltinAgent implements Turn {
     _cancelled = true;
     if (!_stopped.isCompleted) _stopped.complete();
     await _running?.kill();
-    await subAgentRunner?.cancel();
+    await subAgents?.cancel();
   }
 
   /// [prompt] is the message being logged for this turn, projected rather than

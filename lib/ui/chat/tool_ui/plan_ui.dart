@@ -94,7 +94,6 @@ class _PlanLabel extends ConsumerWidget {
 }
 
 String _progress(List<PlanSection> sections) {
-  final tasks = [for (final s in sections) ...s.tasks];
-  final done = tasks.where((t) => t.status == PlanTaskStatus.done).length;
-  return "$done of ${tasks.length} tasks done";
+  final (done, total) = sectionsProgress(sections);
+  return "$done of $total tasks done";
 }

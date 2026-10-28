@@ -1,10 +1,10 @@
 import "package:flutter_test/flutter_test.dart";
 
 import "package:agent_chat/domain/app_settings.dart";
-import "package:agent_chat/ui/settings/settings_page.dart";
 
 import "../fakes.dart";
 import "../harness.dart";
+import "package:agent_chat/ui/settings/settings_category.dart";
 
 /// General's Update section: the row exists exactly where a platform half
 /// does, and the switch is the setting, written the way an off-by-default

@@ -676,3 +676,7 @@ class AppSettings {
         "agentBrowserUploads": agentBrowserUploads.name,
     };
 }
+
+/// How the tools write: the settings notifier's own update, so a change lands
+/// in the state the app holds rather than under it.
+typedef SettingsEditor = Future<void> Function(void Function(AppSettings) change);

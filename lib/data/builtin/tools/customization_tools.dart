@@ -14,7 +14,6 @@ const customizationSkill = "entoli-customization";
 const setProfileName = "set_profile";
 const setToneName = "set_tone";
 
-
 const _profileFields = {
   "name": "The user's name.",
   "date_of_birth": "Date of birth, YYYY-MM-DD.",

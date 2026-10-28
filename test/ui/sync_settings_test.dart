@@ -8,10 +8,10 @@ import "package:qr_flutter/qr_flutter.dart";
 import "package:agent_chat/data/sync/sync_hub.dart";
 import "package:agent_chat/domain/app_settings.dart";
 import "package:agent_chat/domain/sync/devices.dart";
-import "package:agent_chat/ui/settings/settings_page.dart";
 
 import "../fakes.dart";
 import "../harness.dart";
+import "package:agent_chat/ui/settings/settings_category.dart";
 
 /// The Sync category, over a real [SyncHub] with no transport under it. What
 /// it draws is the hub's own — the fingerprint, the peers, the pairing window

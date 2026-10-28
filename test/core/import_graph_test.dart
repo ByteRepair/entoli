@@ -89,6 +89,28 @@ void main() {
     );
   });
 
+  // Between the layers, `domain/` is the app's own terms and knows nothing of
+  // how it is stored or drawn, and `data/` stores and runs without knowing
+  // how it is drawn. `core/` and `main.dart` assemble the app and may reach
+  // anything.
+  test("domain imports nothing of data or ui, and data nothing of ui", () {
+    final lib = p.absolute("lib");
+    const above = {
+      "domain": {"data", "ui"},
+      "data": {"ui"},
+    };
+    String layer(String file) => p.split(p.relative(file, from: lib)).first;
+    expect(
+      [
+        for (final MapEntry(key: file, value: imports) in _graph().entries)
+          for (final target in imports)
+            if (above[layer(file)]?.contains(layer(target)) ?? false)
+              "${p.relative(file, from: lib)} -> ${p.relative(target, from: lib)}",
+      ],
+      isEmpty,
+    );
+  });
+
   test("the check finds a cycle where there is one", () {
     expect(
       _cycles({

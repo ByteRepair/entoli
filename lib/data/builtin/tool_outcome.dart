@@ -1,6 +1,6 @@
-import "../../../domain/models.dart";
-import "../../../domain/shell.dart";
-import "../llm/llm_client.dart";
+import "../../domain/models.dart";
+import "../../domain/shell.dart";
+import "llm/llm_client.dart";
 
 /// What decided a call, the tiers that spoke, and the verdict.
 typedef Decision = ({

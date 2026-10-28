@@ -32,7 +32,6 @@ import "../../domain/shell.dart";
 import "../config.dart";
 import "io/platform.dart" if (dart.library.js_interop) "web/platform.dart";
 import "../../data/builtin/builtin_options.dart";
-import "../../data/builtin/tools/turn.dart";
 
 export "io/platform.dart" if (dart.library.js_interop) "web/platform.dart"
     show

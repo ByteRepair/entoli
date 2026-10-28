@@ -1,3 +1,7 @@
+/// What the app has open — which project, which chat in it — and the
+/// actions that change either: app state, read and changed from several pages.
+library;
+
 import "dart:async";
 
 import "package:flutter/material.dart";
@@ -11,9 +15,6 @@ import "../providers.dart";
 import "chat/chat_controller.dart";
 import "widgets/nav_drawer.dart";
 
-/// What the app has open: which project, which chat in it, and the actions
-/// that change either. App state rather than the sidebar's, which is one of
-/// several places that read and change it.
 /// Which chat the pane is showing, or null for the new-chat screen. **Null is
 /// a screen rather than a chat to be made**: nothing is written until there is
 /// something to say — see "Nothing selected is a new chat".

@@ -7,12 +7,12 @@ import "package:agent_chat/domain/model_registry.dart";
 import "package:agent_chat/domain/voice.dart";
 import "package:agent_chat/domain/voice_model.dart";
 import "package:agent_chat/providers.dart";
-import "package:agent_chat/ui/settings/settings_page.dart";
 import "package:agent_chat/ui/settings/voice_settings.dart";
 import "package:agent_chat/ui/widgets/resettable_field.dart";
 
 import "../fakes.dart";
 import "../harness.dart";
+import "package:agent_chat/ui/settings/settings_category.dart";
 
 void main() {
   late TestApp app;

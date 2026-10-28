@@ -261,8 +261,6 @@ class AppConfig {
   /// leaves them out and a restore leaves them in place.
   List<String> get machineLocalFiles => [linkedInstructionsFile];
 
-  /// See [migrationStamp].
-  String get versionFile => migrationStamp(fs, dataDir);
 
   String get settingsFile => fs.path.join(dataDir, "settings.json");
 

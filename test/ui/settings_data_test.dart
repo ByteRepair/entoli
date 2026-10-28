@@ -7,10 +7,10 @@ import "package:flutter_test/flutter_test.dart";
 import "package:agent_chat/data/local/file_chat_store.dart";
 import "package:agent_chat/data/backup.dart";
 import "package:agent_chat/domain/models.dart";
-import "package:agent_chat/ui/settings/settings_page.dart";
 
 import "../fakes.dart";
 import "../harness.dart";
+import "package:agent_chat/ui/settings/settings_category.dart";
 
 void main() {
   late TestApp app;

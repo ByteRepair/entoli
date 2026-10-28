@@ -98,27 +98,25 @@ with nothing either, which is why nothing user-facing names it at all.
 
 ### Imports point one way
 
-No file in `lib/` reaches itself through its imports, and
-`test/core/import_graph_test.dart` fails on the first that does. A cycle has
-always been one mistake: a file that is both something others build on and a
-user of those builders. The fixes are the same each time.
+No file in `lib/` reaches itself through its imports, `domain/` imports
+nothing of `data/` or `ui/`, and `data/` nothing of `ui/`;
+`test/core/import_graph_test.dart` fails on the first file that does. A cycle
+is a file that is both something others build on and a user of those
+builders, and each place it could happen is held apart the same few ways:
 
-- **A base apart from its catalogue.** `ToolUI` and the list of every tool
-  were one file, so the base imported its own subclasses; the list is
-  `tools.dart`, above them.
-- **State apart from a widget.** The open chat and project lived in the
-  sidebar, so every page reading them imported the sidebar that opens those
-  pages; they are `ui/selection.dart`.
-- **An interface where the concrete is above.** A tool's `Turn` named the
-  sub-agent runner, which is the agent loop the tools sit under; it holds
-  `SubAgents` instead, and the backend binds the runner.
+- **A base apart from its catalogue.** `ToolUI` is the base; the list of
+  every tool is `tools.dart`, above the tools.
+- **State apart from a widget.** The open chat and project are
+  `ui/selection.dart`, which every page reads and none of them owns.
+- **An interface where the concrete is above.** A tool's `Turn` holds
+  `SubAgents`; the runner, which is the agent loop the tools sit under,
+  implements it and the backend binds it.
 - **A composite over an abstraction, bound at the root.** A reply is made of
   activities and a sub-agent's activity draws a reply; the reply depends on
-  `ActivityCatalog`, and `main` binds the catalogue, the way it binds every
-  port in `providers.dart`.
+  `ActivityCatalog`, which `main` binds the way it binds every port in
+  `providers.dart`.
 - **A route where two pages open each other.** Settings shows the welcome
-  tour, which opens Settings; the tour names `settingsRoute`, and `appRoute`
-  builds the page.
+  tour, which opens Settings by `settingsRoute`; `appRoute` builds the page.
 
 ### On-disk layout
 

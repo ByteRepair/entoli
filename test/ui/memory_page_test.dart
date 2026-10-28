@@ -9,12 +9,12 @@ import "package:agent_chat/domain/project.dart" show localProject;
 import "package:agent_chat/domain/tristate.dart";
 import "package:agent_chat/providers.dart";
 import "package:agent_chat/ui/memory/memory_page.dart";
-import "package:agent_chat/ui/settings/settings_page.dart";
 import "package:agent_chat/ui/sidebar/project_settings_page.dart";
 import "package:agent_chat/ui/sidebar/sidebar.dart";
 import "package:agent_chat/ui/widgets/settings_card.dart";
 
 import "../harness.dart";
+import "package:agent_chat/ui/settings/settings_category.dart";
 
 void main() {
   late TestApp app;

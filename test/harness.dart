@@ -62,6 +62,7 @@ import "package:agent_chat/ui/selection.dart";
 import "package:agent_chat/ui/theme.dart";
 
 import "fakes.dart";
+import "package:agent_chat/ui/settings/settings_category.dart";
 
 /// The shell a test gets by default: a real host shell where the test pretends
 /// to be Android — [proot] or [abi] set — and `UnavailableShell` otherwise,

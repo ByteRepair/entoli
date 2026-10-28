@@ -24,12 +24,12 @@ void main() {
       });
 
   Future<String?> stamped() async {
-    final file = config.fs.file(config.versionFile);
+    final file = config.fs.file(migrationStamp(config.fs, config.dataDir));
     return await file.exists() ? file.readAsString() : null;
   }
 
   Future<void> stamp(String version) =>
-      config.fs.file(config.versionFile).writeAsString(version);
+      config.fs.file(migrationStamp(config.fs, config.dataDir)).writeAsString(version);
 
   test("a directory this launch created is stamped at the end and left alone",
       () async {

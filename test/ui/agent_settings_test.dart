@@ -7,9 +7,9 @@ import "package:agent_chat/domain/llm_provider.dart";
 import "package:agent_chat/domain/permission.dart";
 import "package:agent_chat/domain/project_settings.dart";
 import "package:agent_chat/providers.dart";
-import "package:agent_chat/ui/settings/settings_page.dart";
 
 import "../harness.dart";
+import "package:agent_chat/ui/settings/settings_category.dart";
 
 void main() {
   late TestApp app;
