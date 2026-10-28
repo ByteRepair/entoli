@@ -1,5 +1,6 @@
 import "package:flutter_test/flutter_test.dart";
 
+import "package:agent_chat/domain/chat_meta.dart";
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/ui/chat/context_page.dart";
 
@@ -72,6 +73,23 @@ void main() {
 
     expect(old.instructions, 0);
     expect(old.estimated, 10);
+  });
+
+  testWidgets("the window is the chat's model's before any turn, and follows a "
+      "change of model", (tester) async {
+    app.backend.windowHolder["big"] = 1000000;
+    app.backend.windowHolder["small"] = 32000;
+    final id = await seed(tester, [
+      reply("a1", const ContextUsage(system: 4000, tools: 6000, profile: 0, chat: 10000)),
+    ]);
+    await io(tester, () => app.repo.saveMeta(id, ChatMeta(model: "big", provider: "p")));
+    await app.pump(tester, ContextPage(chatId: id));
+    await settleUntil(tester, () => find.text("20k / 1000k").evaluate().isNotEmpty,
+        what: "the model's window");
+
+    await io(tester, () => app.repo.saveMeta(id, ChatMeta(model: "small", provider: "p")));
+    await settleUntil(tester, () => find.text("20k / 32k").evaluate().isNotEmpty,
+        what: "the new model's window");
   });
 
   testWidgets("a context past the window fills the bar without overflowing",

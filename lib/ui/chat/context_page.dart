@@ -23,8 +23,7 @@ class ContextPage extends ConsumerWidget {
         ref.watch(chatViewProvider(chatId).select((s) => s.chat))?.contexts ??
             const {};
     final settings = ref.watch(appSettingsProvider);
-    final window = ref.watch(agentBackendProvider).contextWindowFor(chatId) ??
-        settings.totalContext;
+    final window = ref.watch(contextWindowProvider(chatId)).value ?? settings.totalContext;
     final threshold = settings.autoCompact ? settings.autoCompactPercent : null;
     // The house first, the members by name.
     final authors = contexts.keys.toList()

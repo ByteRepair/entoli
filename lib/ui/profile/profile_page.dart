@@ -442,9 +442,14 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                   child: TextField(
                     controller: _instructions,
                     maxLines: 8,
-                    decoration: const InputDecoration(
-                      hintText:
-                          "Standing rules for the agent, applied to every turn",
+                    // Only the project's file follows `@path`: the global
+                    // one's are left as text, so no example there.
+                    decoration: InputDecoration(
+                      hintText: global
+                          ? "Standing rules for the agent, applied to every turn"
+                          : "Standing rules for this project's chats\n\n"
+                              "Pull in a file from the project workspace with "
+                              "a line like:\n@docs/style.md",
                     ),
                   ),
                 ),

@@ -230,13 +230,12 @@ class ChatController extends Notifier<ChatViewState>
     final settings = ref.read(appSettingsProvider);
     if (!settings.autoCompact) return;
     // The usage is the backend's one per-chat fact — the newest request's
-    // reading of the session — and the window is answered from the same
-    // maps: the chat's model's own where the registry knows it, the
-    // app-wide guess where it does not. One read, no meta on the settle path.
-    final backend = ref.read(agentBackendProvider);
-    final used = backend.usageFor(chatId);
+    // reading of the session — and the window the chat's model's, as the
+    // context page reads it.
+    final used = ref.read(agentBackendProvider).usageFor(chatId);
     if (used == null) return;
-    final window = backend.contextWindowFor(chatId) ?? settings.totalContext;
+    final window = await ref.read(contextWindowProvider(chatId).future);
+    if (!ref.mounted) return;
     if (used < settings.autoCompactPercent * window ~/ 100) {
       return;
     }

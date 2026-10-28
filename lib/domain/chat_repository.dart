@@ -436,9 +436,10 @@ class ChatRepository {
     final instructions = builtIn != null
         ? builtIn.turnInstructions(omada: omada)
         : BuiltinProject.turnInstructionsForUserProject(omada: omada);
+    final model = chatModelOf(meta, settings);
     return TurnSettings(
-      model: meta.model ?? settings.defaultModelId,
-      provider: meta.model != null ? meta.provider : settings.defaultProviderId,
+      model: model.modelId,
+      provider: model.providerId,
       project: project,
       classifierProvider: settings.classifierProviderId,
       classifierModel: settings.classifierModelId,
@@ -756,3 +757,11 @@ class ChatRepository {
   Future<void> respondQuestions(String chatId, String requestId, List<String?> answers) =>
       _backend.respondQuestions(chatId, requestId, answers);
 }
+
+/// The model a chat's turns run on: its own choice, else the app default.
+/// Never mixed halves: a chat's model under the app default's provider is not
+/// a combination anyone asked for. A null model is the provider's default.
+ModelChoice chatModelOf(ChatMeta meta, AppSettings settings) => (
+      modelId: meta.model ?? settings.defaultModelId,
+      providerId: meta.model != null ? meta.provider : settings.defaultProviderId,
+    );
