@@ -134,6 +134,7 @@ flutter:
     # Bundled skills and agents are embedded in code by
     # tool/gen_bundled_skills.dart, not shipped as Flutter assets.
     - assets/icons/
+    - assets/images/
     # The version About shows, generated from pubspec by tool/prepare.sh.
     # Flutter writes its own version.json for Linux and Web, which overrides
     # this where one exists; on every other platform this is the only copy.

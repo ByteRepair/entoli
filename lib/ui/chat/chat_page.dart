@@ -303,7 +303,7 @@ class _ProjectBadges extends ConsumerWidget {
 }
 
 /// A chat with nothing said in it yet, which is also the page the app opens
-/// on. The mark, the question, the project it would happen in, and what the
+/// on. Athena, the question, the project it would happen in, and what the
 /// composer's `/` and `@` menus hold — which is the only place those are named
 /// before the user has typed the character that opens them.
 ///
@@ -358,8 +358,8 @@ class _EmptyChat extends ConsumerWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const AppMark(size: 56),
-            const SizedBox(height: 20),
+            const _Athena(),
+            const SizedBox(height: 16),
             // A project whose description is the empty string asks nothing:
             // the sweep is handed the empty string and eats its own tail
             // away, rather than the widget leaving the tree and the next
@@ -409,6 +409,35 @@ class _EmptyChat extends ConsumerWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// The empty chat's figure. Full length rather than cropped to a square, so
+/// it is sized by the screen's height and capped where a phone held sideways
+/// would otherwise lose the question below the fold. The feet fade into the
+/// page, so the figure stands on the question rather than ending above it.
+class _Athena extends StatelessWidget {
+  const _Athena();
+
+  @override
+  Widget build(BuildContext context) {
+    final height =
+        (MediaQuery.sizeOf(context).height * 0.3).clamp(120.0, 280.0);
+    return ShaderMask(
+      blendMode: BlendMode.dstIn,
+      shaderCallback: (bounds) => const LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: [Colors.white, Colors.white, Colors.transparent],
+        stops: [0, 0.82, 1],
+      ).createShader(bounds),
+      child: Image.asset(
+        "assets/images/athena.png",
+        height: height,
+        filterQuality: FilterQuality.medium,
+        semanticLabel: "Athena",
       ),
     );
   }
