@@ -236,6 +236,9 @@ class RemoteTurnDriver implements RemoteTurns {
     if (_ref.read(appSettingsProvider).assistantProject == name) {
       await _ref.read(appSettingsProvider.notifier).setAssistantProject(null);
     }
+    await _ref
+        .read(linkedInstructionsStoreProvider)
+        .update((l) => l.withoutProject(name));
     _ref.invalidate(projectListProvider);
     _ref.invalidate(chatListProvider);
   }

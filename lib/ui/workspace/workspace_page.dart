@@ -9,7 +9,7 @@ import "../widgets/dialogs.dart";
 import "../widgets/empty_pane.dart";
 import "../../core/formatting.dart";
 import "../widgets/settings_card.dart";
-import "text_viewer_page.dart";
+import "../widgets/text_file_page.dart";
 
 /// The row that opens the explorer, on the chat and project settings pages
 /// alike. Both hold a workspace and neither has anything else to say about it.
@@ -125,7 +125,7 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage> {
     if (entry.isDirectory) return _goTo(entry.path);
     if (looksTextual(ref.read(appConfigProvider).fs, entry.name)) {
       final handOff = await Navigator.of(context).push<bool>(MaterialPageRoute(
-        builder: (_) => TextViewerPage(path: entry.path, name: entry.name),
+        builder: (_) => TextFilePage(path: entry.path, name: entry.name),
       ));
       if (handOff != true || !mounted) return;
     }

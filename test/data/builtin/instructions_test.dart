@@ -43,7 +43,7 @@ void main() {
           {bool imports = false, List<String> excludes = const []}) =>
       loadInstructions(fileSystemIo,
           projectWorkspace: projectWorkspace,
-          global: global,
+          global: [global],
           imports: imports,
           excludes: excludes);
 
@@ -63,6 +63,42 @@ void main() {
     expect(pathsOf(files), ["AGENTS.md", "projects/default/workspace/AGENTS.md"]);
     expect(files.first.kind, InstructionKind.global);
     expect(files.last.kind, InstructionKind.project);
+  });
+
+  test("linked files load after the global one, in order, before the project's",
+      () async {
+    writeGlobal("global rules");
+    write("AGENTS.md", "project rules");
+    final claude = File(p.join(tmp.path, "home", ".claude", "CLAUDE.md"))
+      ..createSync(recursive: true)
+      ..writeAsStringSync("claude rules");
+    final other = File(p.join(tmp.path, "repo", "AGENTS.md"))
+      ..createSync(recursive: true)
+      ..writeAsStringSync("repo rules");
+
+    final files = await loadInstructions(fileSystemIo,
+        projectWorkspace: projectWorkspace,
+        global: [global, other.path, claude.path, global, p.join(tmp.path, "gone.md")]);
+
+    expect([for (final f in files) f.content], [
+      "global rules",
+      "repo rules",
+      "claude rules",
+      "project rules",
+    ]);
+    expect(files.take(3).map((f) => f.kind), everyElement(InstructionKind.global));
+  });
+
+  test("the user's files are counted apart from the app's note", () {
+    const note = InstructionFile(
+        path: "", kind: InstructionKind.bundled, content: "app note");
+    const mine = InstructionFile(
+        path: "/a/AGENTS.md", kind: InstructionKind.global, content: "mine");
+
+    expect(userInstructionChars([note]), 0);
+    expect(userInstructionChars([note, mine]),
+        renderInstructions([note, mine]).length -
+            renderInstructions([note]).length);
   });
 
   // Only the workspace root's AGENTS.md loads: the chat's own and any

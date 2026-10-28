@@ -1050,20 +1050,26 @@ class BuiltinAgent implements Turn {
 
   static const watchInterval = Duration(milliseconds: 100);
 
+  /// Fixed for the turn, unlike the rest of [_contextOf], which every model
+  /// call measures again.
+  late final _profileTokens =
+      (profileSection(profile) + styleSection(tone, citations)).length ~/ 4;
+  late final _instructionTokens = userInstructionChars(instructions) ~/ 4;
+
   /// What the request [completion] answered held, its reply counted in the
   /// chat so the estimate covers what the provider's count does.
   ContextUsage _contextOf(LlmCompletion completion) {
     final system =
         session.messages.takeWhile((m) => m.role == LlmRole.system).toList();
-    final profileTokens = profileSection(profile).length ~/ 4;
     final tools = [
       for (final t in _tools)
         {"name": t.name, "description": t.description, "schema": t.schema},
     ];
     return ContextUsage(
-      system: estimateTokens(system) - profileTokens,
+      system: estimateTokens(system) - _profileTokens - _instructionTokens,
       tools: jsonEncode(tools).length ~/ 4,
-      profile: profileTokens,
+      profile: _profileTokens,
+      instructions: _instructionTokens,
       chat: estimateTokens([...session.conversation, completion.message]),
       reported: completion.usage?.contextTokens,
     );

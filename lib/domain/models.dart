@@ -180,9 +180,14 @@ abstract class ContextUsage with _$ContextUsage {
     required int system,
     required int tools,
 
-    /// The "About the user" block, counted apart from the [system] prompt it
-    /// sits in.
+    /// The "About the user" block and the reply style, counted apart from the
+    /// [system] prompt they sit in.
     required int profile,
+
+    /// The user's and the project's AGENTS.md files, apart from the [system]
+    /// message they are rendered into. Zero on a reply from before it was
+    /// counted, whose instructions are still in [system].
+    @Default(0) int instructions,
     required int chat,
     int? reported,
   }) = _ContextUsage;
@@ -190,7 +195,7 @@ abstract class ContextUsage with _$ContextUsage {
   factory ContextUsage.fromJson(Map<String, dynamic> json) =>
       _$ContextUsageFromJson(json);
 
-  int get estimated => system + tools + profile + chat;
+  int get estimated => system + tools + profile + instructions + chat;
 
   int get total => reported ?? estimated;
 

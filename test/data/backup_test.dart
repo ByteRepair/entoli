@@ -107,6 +107,19 @@ void main() {
     expect(Directory(config.chatDir("later")).existsSync(), isFalse);
   });
 
+  test("the linked instruction files are this machine's: left out, and kept",
+      () async {
+    write("instruction_files.json", '{"files":["/home/me/CLAUDE.md"]}');
+
+    final backup = await roundTrip();
+    expect(backup.entries.map((e) => e.name), isNot(contains("instruction_files.json")));
+
+    await restoreBackup(config, backup);
+
+    expect(File(config.linkedInstructionsFile).readAsStringSync(),
+        contains("CLAUDE.md"));
+  });
+
   test("the directories the app needs are there whatever the backup held",
       () async {
     final backup = await roundTrip();

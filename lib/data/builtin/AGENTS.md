@@ -1467,6 +1467,25 @@ whose path matches one of the user's exclude patterns is skipped wherever it
 would be read — the patterns are globs, anchored, `**` spanning directories,
 and a pattern with no slash matching the file's name alone.
 
+On a desktop the user can also link files from anywhere on the machine — a
+`~/.claude/CLAUDE.md`, another repository's AGENTS.md — from the profile page,
+in an order they choose. They are read right after the global file, as more of
+it (`InstructionKind.global`, references left as text), and before the
+project's. The list is `<dataDir>/instruction_files.json`
+(`LinkedInstructions`), linked by path rather than copied, so an edit made in
+the user's own editor is in the next turn and an edit made here reaches the
+original. Being paths on one machine, the file is out of backups and sync. A
+project's page switches each of the user's files off for that project, the
+global one included: every file is on until switched off, so only the
+exceptions are stored, and a file linked later reaches every project. Phones
+and the browser get no list: their pickers hand back a copy or no path at all.
+
+The context page counts all of these, the project's file and its imports
+included, as one "Instructions" segment, apart from the system prompt they are
+rendered into and from the profile, which is the "About the user" block and the
+reply style. A built-in project's note stays under the system prompt: the app
+wrote it.
+
 A built-in project that ships a note of its own reads no file at all: the
 note, embedded at build time from `assets/prompts/projects/<project>/system/`,
 is the turn's instructions in full, and the nested walk on a
