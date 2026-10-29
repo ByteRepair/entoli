@@ -5,7 +5,6 @@ class OpenRouterProvider extends OpenAiCompatibleProvider {
   const OpenRouterProvider([LlmProviderConfig config = preset]) : super(config, _terms);
 
   static const preset = LlmProviderConfig(
-    id: "openrouter",
     catalogId: "openrouter",
     name: "OpenRouter",
     api: LlmApi.openai,

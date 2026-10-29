@@ -8,7 +8,7 @@ import "../../domain/llm_provider.dart";
 /// Add or edit one endpoint the agent can call. A preset opens on the key
 /// alone, in plain words, with its technical fields folded under Advanced;
 /// a custom endpoint opens on all of them. The name is asked of both, and
-/// Save waits until it is one none of [takenNames] has. Returns null if
+/// Save waits until it is one [nameTaken] says no other provider has. Returns null if
 /// dismissed, or if the base URL was left blank — a half-written provider
 /// fails at the first prompt rather than here. The key decision rides beside
 /// it as the notifier's own [setKey] encoding — null leaves the stored key, `""` clears it, a string stores it —
@@ -23,7 +23,7 @@ Future<ProviderEdit?> promptForProvider(
   BuildContext context, {
   LlmProviderConfig? initial,
   String? storedKey,
-  Set<String> takenNames = const {},
+  bool Function(String name)? nameTaken,
   bool encrypted = false,
   String title = "Add provider",
   void Function(BuildContext, Uri)? openLink,
@@ -34,7 +34,7 @@ Future<ProviderEdit?> promptForProvider(
       builder: (context) => _ProviderDialog(
         initial: initial,
         storedKey: storedKey,
-        takenNames: takenNames,
+        nameTaken: nameTaken,
         encrypted: encrypted,
         title: title,
         openLink: openLink,
@@ -55,7 +55,7 @@ class _ProviderDialog extends StatefulWidget {
   const _ProviderDialog({
     required this.initial,
     required this.storedKey,
-    required this.takenNames,
+    required this.nameTaken,
     required this.encrypted,
     required this.title,
     required this.openLink,
@@ -64,7 +64,7 @@ class _ProviderDialog extends StatefulWidget {
 
   final LlmProviderConfig? initial;
   final String? storedKey;
-  final Set<String> takenNames;
+  final bool Function(String name)? nameTaken;
   final bool encrypted;
   final String title;
   final void Function(BuildContext, Uri)? openLink;
@@ -123,10 +123,7 @@ class _ProviderDialogState extends State<_ProviderDialog> {
   }
 
   /// Another provider already has the name typed.
-  bool get _nameTaken {
-    final lower = _name.text.trim().toLowerCase();
-    return widget.takenNames.any((n) => n.toLowerCase() == lower);
-  }
+  bool get _nameTaken => widget.nameTaken?.call(_name.text) ?? false;
 
   bool get _nameOk => _name.text.trim().isNotEmpty && !_nameTaken;
 
@@ -221,15 +218,12 @@ class _ProviderDialogState extends State<_ProviderDialog> {
 
   /// The preset's own name, which the plain words are about whatever the
   /// entry is called.
-  late final String _service = llmProviderPresets
-          .where((p) => p.runtimeType == _provider?.runtimeType)
-          .firstOrNull
-          ?.displayName ??
-      widget.initial?.displayName ??
+  late final String _service = (widget.initial == null
+          ? null
+          : presetOf(widget.initial!)?.displayName) ??
       "The provider";
 
   Future<void> _save() async {
-    if (!_nameOk) return;
     final edit = _submit();
     final key = edit?.setKey;
     final check = widget.checkKey;

@@ -33,7 +33,6 @@ class AnthropicProvider extends AnthropicCompatibleProvider {
   const AnthropicProvider([LlmProviderConfig config = preset]) : super(config, _terms);
 
   static const preset = LlmProviderConfig(
-    id: "anthropic",
     catalogId: "anthropic",
     name: "Anthropic",
     api: LlmApi.anthropic,

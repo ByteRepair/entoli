@@ -16,7 +16,6 @@ class OllamaProvider extends LocalServerProvider {
   const OllamaProvider([LlmProviderConfig config = preset]) : super(config, _terms);
 
   static const preset = LlmProviderConfig(
-    id: "ollama",
     catalogId: "ollama",
     name: "Ollama (local)",
     api: LlmApi.openai,
@@ -35,7 +34,6 @@ class LmStudioProvider extends LocalServerProvider {
   const LmStudioProvider([LlmProviderConfig config = preset]) : super(config, _terms);
 
   static const preset = LlmProviderConfig(
-    id: "lmstudio",
     catalogId: "lmstudio",
     name: "LM Studio (local)",
     api: LlmApi.openai,

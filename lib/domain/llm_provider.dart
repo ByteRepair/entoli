@@ -1,5 +1,3 @@
-import "package:uuid/uuid.dart";
-
 import "model_info.dart";
 
 /// Which wire format a provider speaks. Everything that copied OpenAI's
@@ -13,7 +11,7 @@ enum LlmApi { openai, anthropic }
 /// (`AppSecrets`), or named by [apiKeyEnv] and read from the environment.
 class LlmProviderConfig {
   const LlmProviderConfig({
-    required this.id,
+    this.id = "",
     required this.api,
     required this.baseUrl,
     this.name,
@@ -27,6 +25,7 @@ class LlmProviderConfig {
 
   /// What the settings, the secret store and every chat name it by: a UUID,
   /// fixed when it is added, so [name] can change without moving anything.
+  /// Empty on a preset and on one not added yet; adding it gives it one.
   final String id;
   final LlmApi api;
 
@@ -63,10 +62,6 @@ class LlmProviderConfig {
   final List<ModelInfo> customModels;
 
   String get displayName => name ?? id;
-
-  /// This as a provider being added: a preset, or one typed in, under an id
-  /// of its own.
-  LlmProviderConfig added() => copyWith(id: const Uuid().v4());
 
   /// [lookup] reads the app's own environment and whatever settings adds, so a
   /// key can be named there instead of pasted here.

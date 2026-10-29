@@ -958,7 +958,7 @@ class _RecommendedProviderState extends ConsumerState<_RecommendedProvider> {
     // frame, and the save must outlive it rather than resume on a defunct
     // ref. The key goes to the store (setKey), never onto the config.
     final notifier = ref.read(appSettingsProvider.notifier);
-    await notifier.upsertProvider(_ollamaCloud.config.added(), setKey: key);
+    await notifier.upsertProvider(_ollamaCloud.config, setKey: key);
   }
 
   @override
@@ -1013,12 +1013,11 @@ class _ProvidersEditor extends ConsumerWidget {
   const _ProvidersEditor();
 
   /// One upsert for both routes in: an entry being edited keeps its id, and
-  /// one being added, preset or not, is given its own.
+  /// one being added, preset or not, has none until the notifier gives it one.
   Future<void> _upsert(
     BuildContext context,
     WidgetRef ref, {
     LlmProviderConfig? initial,
-    bool adding = false,
     String title = "Add provider",
   }) async {
     // Notifier first: this page can go away while the dialog is open, and the
@@ -1028,19 +1027,17 @@ class _ProvidersEditor extends ConsumerWidget {
     final saved = await promptForProvider(
       context,
       initial: initial,
-      storedKey: adding || initial == null ? null : secrets.providerKey(initial.id),
-      takenNames: {
-        for (final p in ref.read(appSettingsProvider).llmProviders)
-          if (adding || p.id != initial?.id) p.displayName,
-      },
+      storedKey: initial == null ? null : secrets.providerKey(initial.id),
+      nameTaken: (name) => ref
+          .read(appSettingsProvider)
+          .providerNameTaken(name, exceptId: initial?.id),
       encrypted: secrets.encrypted,
       title: title,
       openLink: ref.read(linkOpenerProvider).open,
       checkKey: ref.read(keyCheckProvider),
     );
     if (saved == null) return;
-    await notifier.upsertProvider(adding ? saved.config.added() : saved.config,
-        setKey: saved.setKey);
+    await notifier.upsertProvider(saved.config, setKey: saved.setKey);
   }
 
   Future<void> _remove(WidgetRef ref, LlmProviderConfig provider) async {
@@ -1090,7 +1087,6 @@ class _ProvidersEditor extends ConsumerWidget {
       final preset = chosen.preset;
       await _upsert(context, ref,
           initial: preset,
-          adding: true,
           title: preset == null ? "Add provider" : "Connect ${preset.displayName}");
     }
   }

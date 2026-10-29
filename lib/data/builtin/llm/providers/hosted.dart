@@ -8,7 +8,6 @@ class GroqProvider extends OpenAiCompatibleProvider {
   const GroqProvider([LlmProviderConfig config = preset]) : super(config, _terms);
 
   static const preset = LlmProviderConfig(
-    id: "groq",
     catalogId: "groq",
     name: "Groq",
     api: LlmApi.openai,
@@ -32,7 +31,6 @@ class ZaiProvider extends OpenAiCompatibleProvider with ChecksKeyByCompletion {
   const ZaiProvider([LlmProviderConfig config = preset]) : super(config, _terms);
 
   static const preset = LlmProviderConfig(
-    id: "zai",
     catalogId: "zai",
     name: "Z.ai",
     api: LlmApi.openai,
@@ -59,7 +57,6 @@ class OllamaCloudProvider extends OpenAiCompatibleProvider with ChecksKeyByCompl
   const OllamaCloudProvider([LlmProviderConfig config = preset]) : super(config, _terms);
 
   static const preset = LlmProviderConfig(
-    id: "ollama-cloud",
     catalogId: "ollama-cloud",
     name: "Ollama Cloud",
     api: LlmApi.openai,

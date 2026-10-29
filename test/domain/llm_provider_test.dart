@@ -112,13 +112,14 @@ void main() {
 
   group("the presets", () {
     test("cover the endpoints worth naming, each with a versioned root", () {
-      expect(llmProviderPresets.map((p) => p.id),
+      expect(llmProviderPresets.map((p) => p.config.catalogId),
           containsAll(["anthropic", "openai", "openrouter", "ollama-cloud", "ollama"]));
       for (final preset in llmProviderPresets.map((p) => p.config)) {
-        expect(preset.baseUrl, contains(RegExp(r"/v\d")), reason: preset.id);
+        expect(preset.baseUrl, contains(RegExp(r"/v\d")), reason: preset.catalogId);
         // A preset names a variable, never key material: nothing shipped
         // carries a credential.
-        expect(preset.toJson().containsKey("apiKey"), isFalse, reason: preset.id);
+        expect(preset.toJson().containsKey("apiKey"), isFalse, reason: preset.catalogId);
+        expect(preset.id, isEmpty, reason: preset.catalogId);
       }
     });
 

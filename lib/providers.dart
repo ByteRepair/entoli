@@ -824,9 +824,10 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
     ref.invalidate(chatListProvider);
   }
 
-  /// The endpoints the agent can call, replacing any entry that shares an id.
-  /// The model list is rebuilt from them, so it is invalidated here rather
-  /// than left showing the old one.
+  /// The endpoints the agent can call, replacing any entry that shares an id;
+  /// one with no id yet is added under a UUID of its own. The model list is
+  /// rebuilt from them, so it is invalidated here rather than left showing the
+  /// old one.
   ///
   /// [setKey] is the key decision in the dialog's own encoding — null leaves
   /// the stored key, `""` clears it, a string stores it — written before the
@@ -838,6 +839,7 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
   /// already picked is left where it is; importing a backup and other bulk
   /// writes stay on [setProviders], which adopts nothing.
   Future<void> upsertProvider(LlmProviderConfig provider, {String? setKey}) async {
+    if (provider.id.isEmpty) provider = provider.copyWith(id: const Uuid().v4());
     // The key first: the settings state change below is what rebuilds the
     // section drawing the row, and the row reads the store — so the key has
     // to be in it before that rebuild runs.
