@@ -518,7 +518,7 @@ actually have** — a Pixel's Mali, a Galaxy's, a MediaTek device's — since
 Hexagon is Snapdragon alone. So the build carries the **Vulkan** backend too,
 and unlike the NPU's it is not opt-in: everything it needs is in the NDK, so it
 costs a `libggml-vulkan.so` in the APK and nothing at setup. That library is not
-small — 36 MB of embedded SPIR-V, more than the rest of llama.cpp put together —
+small — 21 MB of embedded SPIR-V, close to the rest of llama.cpp put together —
 which is the price of the one accelerator a non-Snapdragon phone can reach.
 `build.sh` builds it against Vulkan 1.1, which is Android 9's (API 28): the
 backend calls 1.1 entry points directly, so on an API 26 or 27 phone the library
@@ -558,9 +558,10 @@ keeps `noDevice` out of the UI.
 answers `none` for it — llama.cpp's own word — and `-dev none` is passed like any
 other device. Omitting `-dev` is *auto* down in llama.cpp, which is not the same
 auto as ours: it builds a device list out of every GPU it can see, and `-ngl`
-defaults to -1, which is every layer. So a picker set to CPU on a phone with a
-Vulkan driver used to run entirely on the GPU — the model was as slow as ever,
-the UI stuttered because the compositor was sharing the GPU with it, and the CPU
+defaults to auto, which on a phone fits every layer. So a picker set to CPU on
+a phone with a Vulkan driver used to run entirely on the GPU — the model was as
+slow as ever, the UI stuttered because the compositor was sharing the GPU with
+it, and the CPU
 cores slider moved nothing, since there was nothing on the CPU to move.
 
 What the Hexagon backend does *not* need is a signature. It enables an unsigned
@@ -591,47 +592,67 @@ that grows one should not also have to grow a line here. `LD_LIBRARY_PATH` is
 not optional: the server is exec'd by path with no rpath in it, so libllama and
 the backends beside it are found through that and nothing else.
 
-**The CPU backend is built for armv8.2 with dotprod**, and it is the difference
-between a model that answers and one that looks hung. Cross-compiling, ggml
-appends no `-march` unless it is given `GGML_CPU_ARM_ARCH`, and the NDK's arm64
+**The CPU backend is built once per ARM feature set**
+(`GGML_CPU_ALL_VARIANTS`), and ggml loads the best one the phone reports. It is
+the difference between a model that answers and one that looks hung.
+Cross-compiling, ggml appends no `-march` of its own, and the NDK's arm64
 default is baseline armv8-a — which defines neither `__ARM_FEATURE_DOTPROD` nor
 `__ARM_FEATURE_FP16_VECTOR_ARITHMETIC`. Both are what every Q4_0 fast path in
 ggml is `#if`'d on: the whole of its ARM repack file, and the gemv and gemm in
 its quants. The catalog is Q4_0 throughout for the NPU's sake, so a baseline
 build runs the one format it accelerates down the one path it does not, and
-prompt processing is minutes rather than seconds. `GGML_CPU_ALL_VARIANTS` is
-what would pick per device instead and is not offered here — ggml builds the ARM
-variant list on Linux only — so it is one floor for every phone, and dotprod is
-2018 where i8mm would be 2022.
+prompt processing is minutes rather than seconds. One fixed floor cannot be
+right for every phone: dotprod is 2018, i8mm (the int8 matrix multiply the Q4_0
+repack's gemm runs on) is 2022, and a phone below the floor does not run slowly
+but dies on an illegal instruction. ggml's Android list runs from armv8.0 to
+SME, each a `libggml-cpu-android_<variant>.so` beside the other backends, found
+the way they are.
 
 **The little cores are left out of the thread count.** llama.cpp's own default
 is every physical core, which on a phone is wrong in a way it is not on a
 desktop: the cores are not alike and ggml's threadpool moves at its slowest
 thread's pace, so a little core holds up every big one beside it. `bigCoreCount`
 ranks them by what the kernel says each one's ceiling is and takes everything
-above the floor. A machine of one tier gets all of them, and one the kernel will
-not answer for passes no `-t` at all and leaves the choice where it was. It is
-read only where the pool is built, so a desktop whose cpufreq answers nothing
-falls back to llama.cpp's own default — which, on a desktop of alike cores, is
-the right one.
+more than a tenth above the floor — the tenth because AMD's preferred-core
+ranking gives one tier ceilings a few percent apart, where a phone's little
+cluster and a laptop's E-cores are much further down. `cpuCeilings` counts a
+physical core once, skipping hyperthread siblings: two threads on one core's
+math units are slower than one, and without it a laptop's P-cores were counted
+twice. On an i7-1360P (4 P-cores with SMT, 8 E-cores) that is 4, which is also
+what llama.cpp's own x86 default picks; on a phone, which has no SMT, it is the
+big and mid cores. A machine of one tier gets all of them, and one the kernel
+will not answer for passes no `-t` at all and leaves the choice where it was.
+
+**How many layers go to the GPU differs by platform.** A phone takes `-ngl 999`:
+its GPU and NPU address the RAM the weights are already in, so there is nothing
+to run out of. A laptop's discrete GPU has memory of its own, and every layer
+of a model larger than it is a load that fails. There `-ngl` is left out and
+llama.cpp's `--fit` splits the layers against what the card has free, which an
+explicit `-ngl` would turn off. It sizes nothing else, since `-c` is always
+given. `LlamaServerPool(fitLayers:)` is the switch, on everywhere but Android.
 
 **arm64 only, and that is a size decision — on Android.** The server and its
-libraries are about 55 MB stripped — the Vulkan backend's `libggml-vulkan.so`
-is 36 MB of that on its own — and three ABIs of it would be most of what a
-phone downloads. It is most of why the release APK is split per ABI: see
+libraries are about 50 MB stripped — the Vulkan backend's `libggml-vulkan.so`
+is 21 MB of that and the seven CPU variants 7 — and three ABIs of it would be
+most of what a phone downloads. It is most of why the release APK is split per ABI: see
 "Releasing". Nothing is lost: a 32-bit phone cannot map a two-gigabyte model
 at all, and x86_64 Android is an emulator. A build without it leaves
-`LocalLlm.available` false, and the settings page says so — naming on the web
-what a browser cannot do, and on a desktop that the build ran without
-`tool/linux/build-llama.sh`, which is a build fault in the sense a missing
-proot is.
+`LocalLlm.available` false. On Android and Linux, which build one, the settings
+page says the build ran without `tool/linux/build-llama.sh`, a build fault in
+the sense a missing proot is. Everywhere else there is never a server to miss,
+so the section is not drawn, and the On-device category itself is hidden where
+there is no voice catalog to download either (`SettingsCategory.offered`): iOS and the
+web.
 
 **Linux carries the same server, built natively.** `tool/linux/build-llama.sh`
 builds the pinned release for the host — the same cmake choices the Android
-build makes, minus the NDK's: no toolchain file, and `GGML_NATIVE=OFF` where a
-distributed binary needs ggml's runtime dispatch rather than this machine's
-`-march`. The backends are CPU and Vulkan, the Android build minus the NPU,
-and `GGML_BACKEND_DL` keeps them loadable-at-runtime so a machine with no
+build makes, minus the NDK's: no toolchain file, and `GGML_NATIVE=OFF` so this
+machine's `-march` stays out of a distributed binary. That flag alone is a
+fixed AVX2 floor, not dispatch; `GGML_CPU_ALL_VARIANTS` is what builds one CPU
+backend per x86 level, x64 to AMX, so a pre-Haswell machine starts and an
+AVX-512 or VNNI one uses them. The backends are CPU and Vulkan, the Android
+build minus the NPU, and `GGML_BACKEND_DL` keeps them loadable-at-runtime so a
+machine with no
 usable Vulkan driver runs the CPU rather than failing. `linux/CMakeLists.txt`
 installs the staged output into the bundle's `lib/`, which is where
 `platformLocalLlm` looks for it beside the executable — so a build without the
@@ -775,7 +796,16 @@ prefix of a request before the turn and saves the whole prompt after it; both
 are best-effort, so a miss or a build without slot save/restore just pays the
 prompt the way it did before. The code is `local_kv_cache.dart` (the port and the
 pure key/eviction math, web-safe) and `file_kv_cache.dart` (the disk and the
-`/slots/0` requests, Android only).
+`/slots/0` requests, wherever the pool runs).
+
+**That `/slots/0` is why the server has one slot (`-np 1`).** Its default is
+four sharing the pool, each request routed to whichever slot's prompt matches
+best, so a turn could run in slot 2 while slot 0 was saved under its key. What
+one slot costs is concurrency: two sub-agents on one model take turns, which on
+a phone's cores is close to what they were getting anyway. `--cache-ram 0` sits
+beside it: the server's own RAM prompt cache defaults to 8 GiB of slot states
+in host memory, which `kvBudgetBytes` does not count and a phone cannot give,
+and the disk cache is this app's answer to the same question.
 
 **Invalidation is the keying, not a bookkeeping step.** A rewound or edited chat
 hashes to a different key, misses, and its stale dump ages out of the LRU on its

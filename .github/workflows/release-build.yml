@@ -284,7 +284,13 @@ jobs:
           done
 
           for abi in $LLAMA_ABIS; do
-            for tool in libllama-server.so libggml-cpu.so libggml-hexagon.so; do
+            # The baseline CPU variant by name, and more than one beside it, so
+            # the check survives ggml renaming the others.
+            if [ "$(grep -c "^lib/$abi/libggml-cpu-" <<<"$libs")" -lt 2 ]; then
+              echo "::error::dist/$AAB has no CPU backend variants for $abi"
+              exit 1
+            fi
+            for tool in libllama-server.so libggml-cpu-android_armv8.0_1.so libggml-hexagon.so; do
               if ! grep -qx "lib/$abi/$tool" <<<"$libs"; then
                 echo "::error::dist/$AAB has no $tool for $abi"
                 exit 1
