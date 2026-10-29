@@ -59,11 +59,12 @@ class ModelCatalog {
   final Map<String, Map<String, ModelInfo>> _providers;
   final Map<String, String> _apis;
 
-  /// models.dev's entry for [provider]: the same id, or failing that the same
-  /// base URL. Which of them a provider offers is its class's to decide — see
+  /// models.dev's entry for [provider]: its models.dev id, or failing that the
+  /// same base URL. Which of them a provider offers is its class's to decide — see
   /// `LlmProvider.models`.
   Map<String, ModelInfo>? entryOf(LlmProviderConfig provider) =>
-      _providers[provider.id] ?? _providers[_apis[_normalUrl(provider.baseUrl)]];
+      _providers[provider.catalogId] ??
+      _providers[_apis[_normalUrl(provider.baseUrl)]];
 
   ModelInfo? lookup(LlmProviderConfig provider, String model) =>
       provider.customModels.where((m) => m.id == model).firstOrNull ??

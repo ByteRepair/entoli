@@ -27,6 +27,8 @@ void main() {
       expect(provider!.id, "openrouter");
       expect(provider.api, LlmApi.openai);
       expect(provider.displayName, "OpenRouter");
+      // Saved before names and models.dev ids were apart: the id was both.
+      expect(provider.catalogId, "openrouter");
       expect(provider.modelsEndpoint, "https://openrouter.ai/api/v1/models");
       // The key is not the config's any more; nothing here carries one.
       expect(
@@ -43,7 +45,18 @@ void main() {
       expect(provider.displayName, "x");
     });
 
-    test("an entry missing its name or its URL is dropped", () {
+    test("a named entry's models.dev id is its own, and may be none", () {
+      final provider = LlmProviderConfig.fromJson(const {
+        "id": "4f1c",
+        "name": "Work",
+        "baseUrl": "https://x.test/v1",
+      });
+
+      expect(provider!.displayName, "Work");
+      expect(provider.catalogId, isNull);
+    });
+
+    test("an entry missing its id or its URL is dropped", () {
       expect(LlmProviderConfig.fromJson(const {"baseUrl": "https://x.test"}), isNull);
       expect(LlmProviderConfig.fromJson(const {"id": "x"}), isNull);
       expect(LlmProviderConfig.fromJson("not a map"), isNull);
@@ -52,6 +65,8 @@ void main() {
     test("a round trip through JSON changes nothing", () {
       const original = LlmProviderConfig(
         id: "anthropic",
+        name: "Work",
+        catalogId: "anthropic",
         api: LlmApi.anthropic,
         baseUrl: "https://api.anthropic.com/v1",
         apiKeyEnv: "ANTHROPIC_API_KEY",
@@ -61,6 +76,8 @@ void main() {
       final back = LlmProviderConfig.fromJson(jsonDecode(jsonEncode(original.toJson())))!;
 
       expect(back.id, original.id);
+      expect(back.name, original.name);
+      expect(back.catalogId, original.catalogId);
       expect(back.api, original.api);
       expect(back.baseUrl, original.baseUrl);
       expect(back.apiKeyEnv, original.apiKeyEnv);

@@ -34,7 +34,8 @@ class AnthropicProvider extends AnthropicCompatibleProvider {
 
   static const preset = LlmProviderConfig(
     id: "anthropic",
-    label: "Anthropic",
+    catalogId: "anthropic",
+    name: "Anthropic",
     api: LlmApi.anthropic,
     baseUrl: "https://api.anthropic.com/v1",
     apiKeyEnv: "ANTHROPIC_API_KEY",

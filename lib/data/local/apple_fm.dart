@@ -96,7 +96,7 @@ class AppleFm {
 
   LlmProviderConfig get provider => LlmProviderConfig(
         id: appleProviderId,
-        label: "Apple on-device",
+        name: "Apple on-device",
         api: LlmApi.openai,
         // Empty, and it has to be: there is nothing here a URL could reach,
         // the endpoint carries its own client, and an empty string keeps the

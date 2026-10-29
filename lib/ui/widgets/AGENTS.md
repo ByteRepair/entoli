@@ -276,8 +276,14 @@ reason: nothing sends a schema, the background roles parse their JSON from text.
 
 The models come from `ModelCatalog` (`domain/model_registry.dart`), which is
 models.dev's own shape: a provider
-is matched to its models.dev entry by id, then by base URL, and the model by
-its exact id inside it. `data/model_catalog.dart` loads it at startup — the
+is matched to its models.dev entry by its Provider ID
+(`LlmProviderConfig.catalogId`), then by base URL, and the model by its exact
+id inside it. Never by its name. The id (`LlmProviderConfig.id`) is a UUID
+given when it is added, what the settings, the secret store and every chat
+point at, so a rename moves nothing; the name is what the user calls it,
+unique among the providers, so a second account at one service is a second
+entry under a name of its own; the Provider ID is its models.dev key. An entry
+in `settings.json` with no `name` reads its id as all three. `data/model_catalog.dart` loads it at startup — the
 presets' default models built in (`lib/data/builtin_models.dart`, written by
 `tool/gen_builtin_models.dart` and committed, since it fetches), then the
 cached copy in `<dataDir>/models.json`, then a fetch when that is a day old,
@@ -291,8 +297,9 @@ shape), where it comes before the catalog's own entry of the same id.
 A provider's own list is asked only where the user names one: the dialog's
 Models endpoint (`LlmProviderConfig.modelsEndpoint`), empty by default. The
 hosted providers' `/models` add nothing to models.dev's entry — ids alone, plus
-retired and non-chat ones — so an empty field means the catalog alone, and a
-provider models.dev does not know offers nothing until one is named. Listing is
+retired and non-chat ones — so an empty field lists the catalog's entry, a
+filled one lists the endpoint's instead, and a provider models.dev does not
+know offers nothing until one is named. Listing is
 the provider's (`LlmProvider.listModels`), not the chat client's: a local
 server asks its own `/models` unless another is named, and the on-device
 providers list what is installed. What such a list has and the catalog does not know is

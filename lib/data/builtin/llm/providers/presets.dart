@@ -36,10 +36,11 @@ final llmProviderPresets = [for (final kind in _kinds) kind()];
 
 /// The class [config] is read as. By host first, since a provider's quirks are
 /// its server's and an entry renamed by hand still reaches them; then by
-/// preset id, which is what a local server has; then by the wire format alone.
+/// models.dev id, which is what a local server has; then by the wire format
+/// alone.
 LlmProvider providerOf(LlmProviderConfig config) {
   final host = Uri.tryParse(config.baseUrl)?.host;
-  final kind = _byHost[host] ?? _byId[config.id];
+  final kind = _byHost[host] ?? _byCatalogId[config.catalogId];
   if (kind != null) return kind(config);
   return switch (config.api) {
     LlmApi.anthropic => AnthropicCompatibleProvider(config),
@@ -47,10 +48,12 @@ LlmProvider providerOf(LlmProviderConfig config) {
   };
 }
 
-/// A local server's host is anybody's, so it is read by id alone.
+/// A local server's host is anybody's, so it is read by models.dev id alone.
 final _byHost = {
   for (final (i, p) in llmProviderPresets.indexed)
     if (p.needsKey) p.baseUrl.host: _kinds[i],
 };
 
-final _byId = {for (final (i, p) in llmProviderPresets.indexed) p.id: _kinds[i]};
+final _byCatalogId = {
+  for (final (i, p) in llmProviderPresets.indexed) p.config.catalogId: _kinds[i],
+};

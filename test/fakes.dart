@@ -100,7 +100,8 @@ void seedCatalog(List<ModelOption> models) =>
 const testProviderId = "test";
 const testProvider = LlmProviderConfig(
   id: testProviderId,
-  label: "Test",
+  name: "Test",
+  catalogId: testProviderId,
   api: LlmApi.openai,
   baseUrl: "https://test.example/v1",
   defaultModelId: "glm-5.3-flash",

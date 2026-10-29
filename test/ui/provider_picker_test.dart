@@ -14,7 +14,7 @@ void main() {
       child: MaterialApp(
         home: Builder(
           builder: (context) => TextButton(
-            onPressed: () => pickProviderPreset(context, configured: const {}),
+            onPressed: () => pickProviderPreset(context),
             child: const Text("open"),
           ),
         ),

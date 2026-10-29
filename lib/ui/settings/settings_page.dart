@@ -958,7 +958,7 @@ class _RecommendedProviderState extends ConsumerState<_RecommendedProvider> {
     // frame, and the save must outlive it rather than resume on a defunct
     // ref. The key goes to the store (setKey), never onto the config.
     final notifier = ref.read(appSettingsProvider.notifier);
-    await notifier.upsertProvider(_ollamaCloud.config, setKey: key);
+    await notifier.upsertProvider(_ollamaCloud.config.added(), setKey: key);
   }
 
   @override
@@ -1012,13 +1012,13 @@ class _RecommendedProviderState extends ConsumerState<_RecommendedProvider> {
 class _ProvidersEditor extends ConsumerWidget {
   const _ProvidersEditor();
 
-  /// One upsert for both routes in: editing an entry and adding one that turns
-  /// out to share an id mean the same thing, and two entries under one name
-  /// would show the same models twice.
+  /// One upsert for both routes in: an entry being edited keeps its id, and
+  /// one being added, preset or not, is given its own.
   Future<void> _upsert(
     BuildContext context,
     WidgetRef ref, {
     LlmProviderConfig? initial,
+    bool adding = false,
     String title = "Add provider",
   }) async {
     // Notifier first: this page can go away while the dialog is open, and the
@@ -1028,17 +1028,19 @@ class _ProvidersEditor extends ConsumerWidget {
     final saved = await promptForProvider(
       context,
       initial: initial,
-      storedKey: initial == null ? null : secrets.providerKey(initial.id),
+      storedKey: adding || initial == null ? null : secrets.providerKey(initial.id),
+      takenNames: {
+        for (final p in ref.read(appSettingsProvider).llmProviders)
+          if (adding || p.id != initial?.id) p.displayName,
+      },
       encrypted: secrets.encrypted,
       title: title,
       openLink: ref.read(linkOpenerProvider).open,
       checkKey: ref.read(keyCheckProvider),
     );
     if (saved == null) return;
-    // A renamed provider is a move: the stored key follows the new id and the
-    // old entry goes, in the same upsert — the notifier owns both stores.
-    await notifier.upsertProvider(saved.config,
-        fromId: initial?.id, setKey: saved.setKey);
+    await notifier.upsertProvider(adding ? saved.config.added() : saved.config,
+        setKey: saved.setKey);
   }
 
   Future<void> _remove(WidgetRef ref, LlmProviderConfig provider) async {
@@ -1050,7 +1052,6 @@ class _ProvidersEditor extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final providers = ref.watch(appSettingsProvider).llmProviders;
-    final configured = providers.map((p) => p.id).toSet();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1067,7 +1068,7 @@ class _ProvidersEditor extends ConsumerWidget {
           EditableRow(
             title: provider.displayName,
             subtitle: _describe(ref, provider),
-            removeLabel: "Remove ${provider.id}",
+            removeLabel: "Remove ${provider.displayName}",
             onTap: () => _upsert(context, ref,
                 initial: provider, title: "Edit ${provider.displayName}"),
             onRemove: () => _remove(ref, provider),
@@ -1076,20 +1077,20 @@ class _ProvidersEditor extends ConsumerWidget {
           child: OutlinedButton.icon(
             icon: const Icon(Icons.add),
             label: const Text("Add provider"),
-            onPressed: () => _add(context, ref, configured),
+            onPressed: () => _add(context, ref),
           ),
         ),
       ],
     );
   }
 
-  Future<void> _add(BuildContext context, WidgetRef ref, Set<String> configured) async {
-    // One already configured is edited from its row rather than added again.
-    final chosen = await pickProviderPreset(context, configured: configured);
+  Future<void> _add(BuildContext context, WidgetRef ref) async {
+    final chosen = await pickProviderPreset(context);
     if (chosen != null && context.mounted) {
       final preset = chosen.preset;
       await _upsert(context, ref,
           initial: preset,
+          adding: true,
           title: preset == null ? "Add provider" : "Connect ${preset.displayName}");
     }
   }

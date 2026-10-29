@@ -9,10 +9,13 @@ import "package:agent_chat/domain/local_model.dart";
 import "package:agent_chat/domain/model_registry.dart";
 
 const _openai = LlmProviderConfig(
-    id: "openai", api: LlmApi.openai, baseUrl: "https://api.openai.com/v1");
+    id: "openai",
+    catalogId: "openai",
+    api: LlmApi.openai,
+    baseUrl: "https://api.openai.com/v1");
 
 /// A slice of models.dev as it is served: one provider keyed by our preset's
-/// id, one only reachable by its base URL.
+/// models.dev id, one only reachable by its base URL.
 final _source = jsonEncode({
   "openai": {
     "models": {
@@ -62,7 +65,7 @@ void main() {
   group("the catalog", () {
     setUp(() => ModelCatalog.notifier.value = ModelCatalog.parse(_source));
 
-    test("a model is read from the provider of the same id", () {
+    test("a model is read from the provider of its models.dev id", () {
       final info = modelInfoOf(_openai, "gpt-x")!;
       expect(info.displayName, "GPT X");
       expect(info.readsImages, isTrue);
@@ -125,6 +128,12 @@ void main() {
       expect(modelInfoOf(mine, "gpt-x"), isNull);
     });
 
+    test("a provider is not matched by its name", () {
+      const named = LlmProviderConfig(
+          id: "openai", name: "openai", api: LlmApi.openai, baseUrl: "https://gateway.test/v1");
+      expect(modelInfoOf(named, "gpt-x"), isNull);
+    });
+
     test("an unknown model is no answer rather than a guess", () {
       expect(modelInfoOf(_openai, "gpt-y"), isNull);
     });
@@ -147,6 +156,7 @@ void main() {
       }));
       const google = LlmProviderConfig(
           id: "google",
+          catalogId: "google",
           api: LlmApi.openai,
           baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai");
       expect(providerOf(google).models(ModelCatalog.current).map((m) => m.id),

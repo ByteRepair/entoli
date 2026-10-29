@@ -17,7 +17,8 @@ class OllamaProvider extends LocalServerProvider {
 
   static const preset = LlmProviderConfig(
     id: "ollama",
-    label: "Ollama (local)",
+    catalogId: "ollama",
+    name: "Ollama (local)",
     api: LlmApi.openai,
     baseUrl: "http://localhost:11434/v1",
     defaultModelId: "glm-5.3-flash",
@@ -35,7 +36,8 @@ class LmStudioProvider extends LocalServerProvider {
 
   static const preset = LlmProviderConfig(
     id: "lmstudio",
-    label: "LM Studio (local)",
+    catalogId: "lmstudio",
+    name: "LM Studio (local)",
     api: LlmApi.openai,
     baseUrl: "http://localhost:1234/v1",
     defaultModelId: "glm-5.3-flash",

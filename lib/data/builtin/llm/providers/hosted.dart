@@ -9,7 +9,8 @@ class GroqProvider extends OpenAiCompatibleProvider {
 
   static const preset = LlmProviderConfig(
     id: "groq",
-    label: "Groq",
+    catalogId: "groq",
+    name: "Groq",
     api: LlmApi.openai,
     baseUrl: "https://api.groq.com/openai/v1",
     apiKeyEnv: "GROQ_API_KEY",
@@ -32,7 +33,8 @@ class ZaiProvider extends OpenAiCompatibleProvider with ChecksKeyByCompletion {
 
   static const preset = LlmProviderConfig(
     id: "zai",
-    label: "Z.ai",
+    catalogId: "zai",
+    name: "Z.ai",
     api: LlmApi.openai,
     baseUrl: "https://api.z.ai/api/paas/v4",
     apiKeyEnv: "ZAI_API_KEY",
@@ -58,7 +60,8 @@ class OllamaCloudProvider extends OpenAiCompatibleProvider with ChecksKeyByCompl
 
   static const preset = LlmProviderConfig(
     id: "ollama-cloud",
-    label: "Ollama Cloud",
+    catalogId: "ollama-cloud",
+    name: "Ollama Cloud",
     api: LlmApi.openai,
     // The same OpenAI-compatible surface the local server exposes, hosted.
     baseUrl: "https://ollama.com/v1",

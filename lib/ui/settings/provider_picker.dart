@@ -8,19 +8,16 @@ import "../../providers.dart";
 /// Ask which provider to add, saying beside each preset what it does with the
 /// prompts it is sent. A free tier paid for in privacy is accepted here, in a
 /// second dialog, before the key is asked for. Null if dismissed; a null
-/// [preset] is Custom.
-Future<({LlmProviderConfig? preset})?> pickProviderPreset(
-  BuildContext context, {
-  required Set<String> configured,
-}) => showDialog<({LlmProviderConfig? preset})>(
-  context: context,
-  builder: (context) => _PresetPicker(configured: configured),
-);
+/// [preset] is Custom. One already configured is offered again, for a second
+/// account.
+Future<({LlmProviderConfig? preset})?> pickProviderPreset(BuildContext context) =>
+    showDialog<({LlmProviderConfig? preset})>(
+      context: context,
+      builder: (context) => const _PresetPicker(),
+    );
 
 class _PresetPicker extends ConsumerWidget {
-  const _PresetPicker({required this.configured});
-
-  final Set<String> configured;
+  const _PresetPicker();
 
   Future<void> _choose(
     BuildContext context,
@@ -38,16 +35,12 @@ class _PresetPicker extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final offered = [
-      for (final p in llmProviderPresets)
-        if (!configured.contains(p.id)) p,
-    ];
     bool free(LlmProvider p) => p.terms?.freeTier != null;
     bool local(LlmProvider p) => p.terms?.prompts == PromptUse.local;
     final groups = [
-      ("Paid", offered.where((p) => !free(p) && !local(p))),
-      ("Free, at a cost to privacy", offered.where(free)),
-      ("On this machine", offered.where(local)),
+      ("Paid", llmProviderPresets.where((p) => !free(p) && !local(p))),
+      ("Free, at a cost to privacy", llmProviderPresets.where(free)),
+      ("On this machine", llmProviderPresets.where(local)),
     ];
 
     return AlertDialog(

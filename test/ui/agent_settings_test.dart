@@ -28,6 +28,13 @@ void main() {
     await settleIo(tester);
   }
 
+  Future<void> openAdvanced(WidgetTester tester) async {
+    await tester.ensureVisible(find.text("Advanced"));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text("Advanced"));
+    await tester.pumpAndSettle();
+  }
+
   Future<void> saveDialog(WidgetTester tester) async {
     await tester.tap(find.text("Save"));
     await settleIo(tester);
@@ -39,6 +46,10 @@ void main() {
   Finder dialogField(String label) => find.widgetWithText(TextField, label);
 
   List<LlmProviderConfig> saved() => app.container.read(appSettingsProvider).llmProviders;
+
+  /// The key stored for the provider called [name].
+  String? keyOf(String name) => app.secrets
+      .providerKey(saved().firstWhere((p) => p.displayName == name).id);
 
   group("providers", () {
     testWidgets("says plainly that nothing is configured yet", (tester) async {
@@ -57,18 +68,18 @@ void main() {
       expect(dialogField("Base URL"), findsNothing);
       expect(dialogField("API key"), findsNothing);
 
-      await tester.tap(find.text("Advanced"));
-      await tester.pumpAndSettle();
+      await openAdvanced(tester);
       expect(find.text("ollama-cloud"), findsOneWidget);
       expect(find.text("https://ollama.com/v1"), findsOneWidget);
 
       await tester.enterText(dialogField("Access key"), "sk-ollama");
       await saveDialog(tester);
 
-      expect(saved().single.id, "ollama-cloud");
+      expect(saved().single.displayName, "Ollama Cloud");
+      expect(saved().single.catalogId, "ollama-cloud");
       expect(saved().single.baseUrl, "https://ollama.com/v1");
       // The key went to the store; no config carries one.
-      expect(app.secrets.providerKey("ollama-cloud"), "sk-ollama");
+      expect(keyOf("Ollama Cloud"), "sk-ollama");
     });
 
     testWidgets("a local preset asks for nothing", (tester) async {
@@ -79,7 +90,7 @@ void main() {
       expect(dialogField("Access key"), findsNothing);
       await saveDialog(tester);
 
-      expect(saved().single.id, "ollama");
+      expect(saved().single.catalogId, "ollama");
     });
 
     testWidgets("a custom endpoint starts empty and is typed in", (tester) async {
@@ -92,7 +103,8 @@ void main() {
           dialogField("Models endpoint"), "http://gpu.local:8000/v1/models");
       await saveDialog(tester);
 
-      expect(saved().single.id, "vllm");
+      expect(saved().single.displayName, "vllm");
+      expect(saved().single.catalogId, isNull);
       expect(saved().single.baseUrl, "http://gpu.local:8000/v1");
       expect(saved().single.modelsEndpoint, "http://gpu.local:8000/v1/models");
       expect(saved().single.api, LlmApi.openai);
@@ -163,7 +175,7 @@ void main() {
 
       await tester.tap(find.text("Save anyway"));
       await settleIo(tester);
-      expect(app.secrets.providerKey("openai"), "sk-typo");
+      expect(keyOf("OpenAI"), "sk-typo");
     });
 
     testWidgets("typing again after a refusal checks the new key", (tester) async {
@@ -178,7 +190,7 @@ void main() {
       expect(find.text("Save anyway"), findsNothing);
       await saveDialog(tester);
 
-      expect(app.secrets.providerKey("openai"), "sk-good");
+      expect(keyOf("OpenAI"), "sk-good");
     });
 
     testWidgets("a provider that could not be asked does not stop the save", (tester) async {
@@ -190,20 +202,26 @@ void main() {
       await tester.enterText(dialogField("Access key"), "sk-o");
       await saveDialog(tester);
 
-      expect(app.secrets.providerKey("openai"), "sk-o");
+      expect(keyOf("OpenAI"), "sk-o");
     });
 
-    testWidgets("a preset already configured is not offered twice", (tester) async {
+    testWidgets("a preset already configured is added again under a name of its own",
+        (tester) async {
       await pumpSettings(tester, app, SettingsCategory.providers);
       await addProvider(tester, "Groq");
       await saveDialog(tester);
+      await addProvider(tester, "Groq");
 
-      await scrollTo(tester, find.text("Add provider"));
-      await tester.tap(find.text("Add provider"));
-      await settleIo(tester);
+      expect(find.text("Another provider is called Groq"), findsOneWidget);
+      expect(tester.widget<FilledButton>(find.widgetWithText(FilledButton, "Save")).onPressed,
+          isNull);
+      await tester.enterText(dialogField("Name"), "Groq work");
+      await tester.pump();
+      await saveDialog(tester);
 
-      expect(find.text("Groq"), findsOneWidget); // the row, not a picker entry
-      expect(find.text("OpenAI"), findsOneWidget);
+      expect(saved().map((p) => p.displayName), ["Groq", "Groq work"]);
+      expect(saved().map((p) => p.catalogId), ["groq", "groq"]);
+      expect(saved().first.id, isNot(saved().last.id));
     });
 
     testWidgets("a free tier paid for in privacy is accepted before its key is asked", (tester) async {
@@ -222,7 +240,7 @@ void main() {
       await tester.enterText(dialogField("Access key"), "gm-secret");
       await saveDialog(tester);
 
-      expect(saved().single.id, "google");
+      expect(saved().single.catalogId, "google");
     });
 
     testWidgets("a provider with no free tier is not warned about", (tester) async {
@@ -240,8 +258,7 @@ void main() {
 
       await tester.tap(find.text("OpenAI"));
       await settleIo(tester);
-      await tester.tap(find.text("Advanced"));
-      await tester.pumpAndSettle();
+      await openAdvanced(tester);
       await tester.enterText(dialogField("Base URL"), "https://proxy.local/v1");
       await saveDialog(tester);
 
@@ -256,11 +273,11 @@ void main() {
       await addProvider(tester, "Groq");
       await saveDialog(tester);
 
-      await scrollTo(tester, find.byTooltip("Remove groq"));
-      await tester.tap(find.byTooltip("Remove groq"));
+      await scrollTo(tester, find.byTooltip("Remove Groq"));
+      await tester.tap(find.byTooltip("Remove Groq"));
       await settleIo(tester);
 
-      expect(saved().map((p) => p.id), ["openai"]);
+      expect(saved().map((p) => p.displayName), ["OpenAI"]);
     });
 
     testWidgets("adding one refreshes what the model picker can offer", (tester) async {
@@ -279,13 +296,14 @@ void main() {
       await addProvider(tester, "OpenAI");
       await tester.enterText(dialogField("Access key"), "sk-o");
       await saveDialog(tester);
-      expect(app.secrets.providerKey("openai"), "sk-o");
+      final id = saved().single.id;
+      expect(app.secrets.providerKey(id), "sk-o");
 
-      await scrollTo(tester, find.byTooltip("Remove openai"));
-      await tester.tap(find.byTooltip("Remove openai"));
+      await scrollTo(tester, find.byTooltip("Remove OpenAI"));
+      await tester.tap(find.byTooltip("Remove OpenAI"));
       await settleIo(tester);
 
-      expect(app.secrets.providerKey("openai"), isNull);
+      expect(app.secrets.providerKey(id), isNull);
     });
 
     testWidgets("editing one with a stored key, saving empty, keeps the key",
@@ -299,27 +317,27 @@ void main() {
       await settleIo(tester);
       await saveDialog(tester);
 
-      expect(app.secrets.providerKey("openai"), "sk-o");
+      expect(keyOf("OpenAI"), "sk-o");
     });
 
-    testWidgets("renaming one moves the stored key with it", (tester) async {
+    testWidgets("renaming one keeps its id, and so its key", (tester) async {
       await pumpSettings(tester, app, SettingsCategory.providers);
       await addProvider(tester, "Custom…");
       await tester.enterText(dialogField("Name"), "vllm");
       await tester.enterText(dialogField("Base URL"), "http://gpu.local:8000/v1");
       await tester.enterText(dialogField("API key"), "sk-v");
       await saveDialog(tester);
-      expect(app.secrets.providerKey("vllm"), "sk-v");
+      final id = saved().single.id;
 
       await tester.tap(find.text("vllm"));
       await settleIo(tester);
       await tester.enterText(dialogField("Name"), "gpu");
+      await tester.pump();
       await saveDialog(tester);
-      await settleIo(tester);
 
-      expect(saved().map((p) => p.id), ["gpu"]);
-      expect(app.secrets.providerKey("gpu"), "sk-v");
-      expect(app.secrets.providerKey("vllm"), isNull);
+      expect(saved().single.displayName, "gpu");
+      expect(saved().single.id, id);
+      expect(app.secrets.providerKey(id), "sk-v");
     });
   });
 
@@ -377,7 +395,7 @@ void main() {
       await tester.tap(find.textContaining("Run everything without asking").last);
       await settleIo(tester);
 
-      expect(saved().map((p) => p.id), ["openai"]);
+      expect(saved().map((p) => p.displayName), ["OpenAI"]);
     });
   });
   group("the default project's permissions", () {
