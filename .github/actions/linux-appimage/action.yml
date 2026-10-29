@@ -43,10 +43,13 @@ runs:
         [ -x build/llama/llama-server ] ||
           { echo "::error::the llama artifact has no executable llama-server" >&2; exit 1; }
         for lib in libllama-common.so.0 libggml-base.so.0 \
-          libggml-vulkan.so libggml-cpu.so; do
+          libggml-vulkan.so libggml-cpu-x64.so; do
           [ -e "build/llama/$lib" ] ||
             { echo "::error::the llama artifact has no $lib" >&2; exit 1; }
         done
+        variants=(build/llama/libggml-cpu-*.so)
+        [ "${#variants[@]}" -ge 2 ] ||
+          { echo "::error::the llama artifact has one CPU backend, not its variants" >&2; exit 1; }
 
     # The Ubuntu list in README.md; keep the README part in step. cmake and
     # ninja stay here — `flutter build linux` drives the engine's own cmake

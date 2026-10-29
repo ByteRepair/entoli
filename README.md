@@ -108,8 +108,8 @@ tool/android/stage.sh
   `$HOME` rather than `~`: as an argument to `env` or inside quotes a tilde is
   not expanded, and the build fails on a path with a literal `~` in it.
 - llama.cpp needs `cmake` and `ninja`, and is built for `arm64-v8a` only —
-  `LLAMA_ABIS` overrides that. About 55 MB an ABI is why — the Vulkan backend's
-  `libggml-vulkan.so` is 36 MB of it — and a 32-bit phone cannot map a model
+  `LLAMA_ABIS` overrides that. About 50 MB an ABI is why — the Vulkan backend's
+  `libggml-vulkan.so` is 21 MB of it — and a 32-bit phone cannot map a model
   anyway, x86_64 Android being an emulator.
 - The NPU wants Qualcomm's Hexagon SDK, and a build without it is a build
   without the NPU. `tool/android/setup.sh` fetches it into

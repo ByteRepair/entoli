@@ -58,6 +58,7 @@ class LlamaBinaries {
   required String device,
   int? threads,
   String? slotSavePath,
+  bool fitLayers = false,
 }) =>
     (
       command: [
@@ -80,6 +81,11 @@ class LlamaBinaries {
         // backend reports every physical page as free. See "How much context"
         // in AGENTS.md.
         "-c", "$contextLength",
+        // One slot, since the disk cache is `/slots/0`'s, and no 8 GiB RAM
+        // prompt cache beside it. See "That `/slots/0` is why the server has
+        // one slot" in AGENTS.md.
+        "-np", "1",
+        "--cache-ram", "0",
         // The chat template as the publisher wrote it, which is what turns a
         // small model's tool call into an OpenAI one. Without it the agent's
         // tools reach a model that has never been told they exist.
@@ -103,12 +109,10 @@ class LlamaBinaries {
         // Always named, [noDevice] included. See "The CPU is a device to name"
         // in AGENTS.md.
         "-dev", device,
-        if (device != noDevice) ...[
-          // Everything the device will take. A phone has no separate pool of
-          // memory to run out of — the NPU and the GPU are addressing the same
-          // RAM the model was already in — so holding layers back buys nothing.
-          "-ngl", "999",
-        ],
+        // Every layer on a phone, whose accelerators share the RAM the weights
+        // are in; `--fit`'s split on a laptop. See "How many layers go to the
+        // GPU" in AGENTS.md.
+        if (device != noDevice && !fitLayers) ...["-ngl", "999"],
       ],
       environment: binaries.environment,
     );
@@ -159,20 +163,28 @@ final int? _bigCores = bigCoreCount(cpuCeilings());
 /// in a way it is not on a desktop: the cores are not alike, and ggml's
 /// threadpool moves at its slowest thread's pace, so a little core holds up
 /// every big one it was scheduled beside. The little cluster is the one at the
-/// lowest ceiling; everything above it is what to run on.
+/// lowest ceiling; everything clearly above it is what to run on.
+///
+/// "Clearly" is a tenth: AMD's preferred-core ranking gives each core of one
+/// tier a slightly different ceiling, and splitting on that would drop cores
+/// that are as fast as the rest. Real tiers are further apart — a phone's
+/// little cluster, a laptop's E-cores.
 ///
 /// A machine whose cores are all one tier has no little cluster and gets all of
 /// them, and so does one the kernel would not answer for — `threads` is null
 /// there and llama.cpp decides, which is what happened before this existed.
 int? bigCoreCount(List<int> ceilings) {
   if (ceilings.isEmpty) return null;
-  final slowest = ceilings.reduce(min);
-  final big = ceilings.where((each) => each > slowest).length;
+  final floor = ceilings.reduce(min) * 1.1;
+  final big = ceilings.where((each) => each > floor).length;
   return big == 0 ? ceilings.length : big;
 }
 
 /// What the kernel says each core's ceiling is, out of Linux's `cpufreq` — in
-/// whatever unit it uses, since only the ordering is read.
+/// whatever unit it uses, since only the ordering is read. One entry per
+/// physical core: a hyperthread sibling is skipped, since two threads on one
+/// core's math units are slower than one, and counting them put a laptop's
+/// P-cores in twice.
 ///
 /// Linux rather than Android, and it needs no guard for it: this is only ever
 /// reached from [LlamaServerPool], which `platformLocalLlm` builds on Android
@@ -183,21 +195,37 @@ int? bigCoreCount(List<int> ceilings) {
 /// about is one the others cannot be ranked against, and half a list read as a
 /// whole one is a big cluster of the wrong size — which is worse than the
 /// default this then falls back to.
-List<int> cpuCeilings() {
+List<int> cpuCeilings({String root = "/sys/devices/system/cpu", int? cpus}) {
   final ceilings = <int>[];
-  for (var cpu = 0; cpu < Platform.numberOfProcessors; cpu++) {
-    final file = File("/sys/devices/system/cpu/cpu$cpu/cpufreq/cpuinfo_max_freq");
+  for (var cpu = 0; cpu < (cpus ?? Platform.numberOfProcessors); cpu++) {
+    final file = File("$root/cpu$cpu/cpufreq/cpuinfo_max_freq");
     final value = file.existsSync() ? int.tryParse(file.readAsStringSync().trim()) : null;
     if (value == null) return const [];
-    ceilings.add(value);
+    if (_firstSibling(root, cpu) == cpu) ceilings.add(value);
   }
   return ceilings;
 }
 
+/// The lowest-numbered CPU sharing [cpu]'s core, out of a list like `0-1` or
+/// `0,8`. A kernel that does not say is a core of its own.
+int _firstSibling(String root, int cpu) {
+  final file = File("$root/cpu$cpu/topology/thread_siblings_list");
+  if (!file.existsSync()) return cpu;
+  final first = file.readAsStringSync().trim().split(_listSeparator).first;
+  return int.tryParse(first) ?? cpu;
+}
+
+final _listSeparator = RegExp("[,-]");
+
 /// llama.cpp's servers, running beside the app on the loopback address — one
 /// process per model, up to what the settings allow.
 class LlamaServerPool extends LocalLlm {
-  LlamaServerPool(this._binaries, this._store, {this._slotSaveDir});
+  LlamaServerPool(this._binaries, this._store, {this._slotSaveDir, this._fitLayers = false});
+
+  /// Whether llama.cpp sizes the GPU layers itself — a laptop, whose GPU may
+  /// have less memory than the model — rather than taking all of them, as a
+  /// phone's shared memory can. See [llamaLaunch].
+  final bool _fitLayers;
 
   /// Never null: `platformLocalLlm` answers with [UnavailableLocalLlm] where
   /// this build shipped no server, so a pool that exists has one.
@@ -324,7 +352,7 @@ class LlamaServerPool extends LocalLlm {
     for (final old in stopping) {
       await old.stop();
     }
-    await server.spawn(_binaries, file, onChange: _publish);
+    await server.spawn(_binaries, file, fitLayers: _fitLayers, onChange: _publish);
     await server.ready;
     return server.endpoint;
   }
@@ -438,7 +466,7 @@ class _Server {
   }();
 
   Future<void> spawn(LlamaBinaries binaries, String modelFile,
-      {required void Function() onChange}) async {
+      {required bool fitLayers, required void Function() onChange}) async {
     // Asked of the OS rather than picked: a fixed port is one another app can
     // already be on, and the failure that gives is the server exiting a second
     // after it started for a reason nothing here would think to report.
@@ -457,6 +485,7 @@ class _Server {
       device: device,
       threads: threads,
       slotSavePath: slotSavePath,
+      fitLayers: fitLayers,
     );
 
     try {
