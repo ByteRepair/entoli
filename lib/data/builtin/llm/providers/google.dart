@@ -7,8 +7,8 @@ class GoogleProvider extends OpenAiCompatibleProvider {
   const GoogleProvider([LlmProviderConfig config = preset]) : super(config, _terms);
 
   static const preset = LlmProviderConfig(
-    id: "google",
-    label: "Google Gemini",
+    catalogId: "google",
+    name: "Google Gemini",
     api: LlmApi.openai,
     // Gemini's OpenAI-compatible surface, not its native one.
     baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai",

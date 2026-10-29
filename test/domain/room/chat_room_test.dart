@@ -111,6 +111,10 @@ void main() {
         what: "the end on the chat");
 
     expect(host.states.last.jobOf("c1"), const JobEnded(end));
+    // The state changes before the append lands, which is real I/O.
+    await waitFor(
+        () async => (await app.repo.readRecords(room.chatId)).last is CallEventRecord,
+        what: "the end in the log");
     final records = await app.repo.readRecords(room.chatId);
     expect(records.last,
         ChatRecord.callEvent(callId: "c1", kind: jobEndedEvent, data: end.toJson()));

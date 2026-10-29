@@ -7,11 +7,11 @@ import "../../domain/llm_provider.dart";
 
 /// Add or edit one endpoint the agent can call. A preset opens on the key
 /// alone, in plain words, with its technical fields folded under Advanced;
-/// a custom endpoint opens on all of them. Returns null if dismissed, or
-/// if the name or base URL was left blank — either one missing makes the entry
-/// unusable, and a half-written provider fails at the first prompt rather than
-/// here. The key decision rides beside it as the notifier's own [setKey]
-/// encoding — null leaves the stored key, `""` clears it, a string stores it —
+/// a custom endpoint opens on all of them. The name is asked of both, and
+/// Save waits until it is one [nameTaken] says no other provider has. Returns null if
+/// dismissed, or if the base URL was left blank — a half-written provider
+/// fails at the first prompt rather than here. The key decision rides beside
+/// it as the notifier's own [setKey] encoding — null leaves the stored key, `""` clears it, a string stores it —
 /// because the dialog cannot decide keep against clear from an empty field
 /// alone, and the store is written by the caller's notifier, not by this
 /// dialog.
@@ -23,6 +23,7 @@ Future<ProviderEdit?> promptForProvider(
   BuildContext context, {
   LlmProviderConfig? initial,
   String? storedKey,
+  bool Function(String name)? nameTaken,
   bool encrypted = false,
   String title = "Add provider",
   void Function(BuildContext, Uri)? openLink,
@@ -33,6 +34,7 @@ Future<ProviderEdit?> promptForProvider(
       builder: (context) => _ProviderDialog(
         initial: initial,
         storedKey: storedKey,
+        nameTaken: nameTaken,
         encrypted: encrypted,
         title: title,
         openLink: openLink,
@@ -53,6 +55,7 @@ class _ProviderDialog extends StatefulWidget {
   const _ProviderDialog({
     required this.initial,
     required this.storedKey,
+    required this.nameTaken,
     required this.encrypted,
     required this.title,
     required this.openLink,
@@ -61,6 +64,7 @@ class _ProviderDialog extends StatefulWidget {
 
   final LlmProviderConfig? initial;
   final String? storedKey;
+  final bool Function(String name)? nameTaken;
   final bool encrypted;
   final String title;
   final void Function(BuildContext, Uri)? openLink;
@@ -71,7 +75,8 @@ class _ProviderDialog extends StatefulWidget {
 }
 
 class _ProviderDialogState extends State<_ProviderDialog> {
-  late final _id = TextEditingController(text: widget.initial?.id ?? "");
+  late final _name = TextEditingController(text: widget.initial?.displayName ?? "");
+  late final _catalogId = TextEditingController(text: widget.initial?.catalogId ?? "");
   late final _baseUrl = TextEditingController(text: widget.initial?.baseUrl ?? "");
   late final _apiKey = TextEditingController();
   late final _modelsEndpoint =
@@ -98,7 +103,8 @@ class _ProviderDialogState extends State<_ProviderDialog> {
 
   @override
   void dispose() {
-    _id.dispose();
+    _name.dispose();
+    _catalogId.dispose();
     _baseUrl.dispose();
     _apiKey.dispose();
     _modelsEndpoint.dispose();
@@ -116,17 +122,23 @@ class _ProviderDialogState extends State<_ProviderDialog> {
     return widget.storedKey == null ? "" : null;
   }
 
+  /// Another provider already has the name typed.
+  bool get _nameTaken => widget.nameTaken?.call(_name.text) ?? false;
+
+  bool get _nameOk => _name.text.trim().isNotEmpty && !_nameTaken;
+
   ProviderEdit? _submit() {
-    final id = _id.text.trim();
     final baseUrl = _baseUrl.text.trim();
     final modelsEndpoint = _modelsEndpoint.text.trim();
-    if (id.isEmpty || baseUrl.isEmpty) return null;
+    final catalogId = _catalogId.text.trim();
+    if (baseUrl.isEmpty) return null;
     return ProviderEdit(
       LlmProviderConfig(
-        id: id,
+        id: widget.initial?.id ?? "",
         api: _api,
         baseUrl: baseUrl,
-        label: widget.initial?.label,
+        name: _name.text.trim(),
+        catalogId: catalogId.isEmpty ? null : catalogId,
         apiKeyEnv: widget.initial?.apiKeyEnv,
         defaultModelId: widget.initial?.defaultModelId,
         defaultLightModelId: widget.initial?.defaultLightModelId,
@@ -147,10 +159,10 @@ class _ProviderDialogState extends State<_ProviderDialog> {
     return [
       Text(
         _keyless
-            ? "$_name runs on this computer, so there is nothing to type. "
-                "Start $_name before you chat."
-            : "Entoli needs an access key from your $_name account to talk "
-                "to it. Create one on $_name's website, copy it, and paste it "
+            ? "$_service runs on this computer, so there is nothing to type. "
+                "Start $_service before you chat."
+            : "Entoli needs an access key from your $_service account to talk "
+                "to it. Create one on $_service's website, copy it, and paste it "
                 "below.",
         style: textTheme.bodyMedium,
       ),
@@ -158,7 +170,7 @@ class _ProviderDialogState extends State<_ProviderDialog> {
         const SizedBox(height: 12),
         FilledButton.tonalIcon(
           icon: const Icon(Icons.open_in_new, size: 18),
-          label: Text("Get a key from $_name"),
+          label: Text("Get a key from $_service"),
           onPressed: () => _open(terms.keyUrl!),
         ),
       ],
@@ -176,7 +188,7 @@ class _ProviderDialogState extends State<_ProviderDialog> {
         TextButton(
           style: TextButton.styleFrom(padding: EdgeInsets.zero),
           onPressed: () => _open(terms.policy!),
-          child: Text("$_name's privacy policy"),
+          child: Text("$_service's privacy policy"),
         ),
       ],
     ];
@@ -197,14 +209,19 @@ class _ProviderDialogState extends State<_ProviderDialog> {
           labelText: label,
           helperText: helper,
           errorText: _rejected
-              ? "$_name did not accept this key. Check "
+              ? "$_service did not accept this key. Check "
                   "it was copied whole."
               : null,
           errorMaxLines: 2,
         ),
       );
 
-  String get _name => widget.initial?.displayName ?? "The provider";
+  /// The preset's own name, which the plain words are about whatever the
+  /// entry is called.
+  late final String _service = (widget.initial == null
+          ? null
+          : presetOf(widget.initial!)?.displayName) ??
+      "The provider";
 
   Future<void> _save() async {
     final edit = _submit();
@@ -245,6 +262,19 @@ class _ProviderDialogState extends State<_ProviderDialog> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              TextField(
+                controller: _name,
+                autofocus: widget.initial == null,
+                onChanged: (_) => setState(() {}),
+                decoration: InputDecoration(
+                  labelText: "Name",
+                  helperText: "What the model list calls it",
+                  errorText: _nameTaken
+                      ? "Another provider is called ${_name.text.trim()}"
+                      : null,
+                ),
+              ),
+              const SizedBox(height: 16),
               if (terms != null) ...[
                 ..._basic(context, terms),
                 Align(
@@ -275,7 +305,7 @@ class _ProviderDialogState extends State<_ProviderDialog> {
       actions: [
         TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancel")),
         FilledButton(
-          onPressed: _checking ? null : _save,
+          onPressed: _checking || !_nameOk ? null : _save,
           child: _checking
               ? const SizedBox.square(
                   dimension: 18, child: CircularProgressIndicator(strokeWidth: 2))
@@ -290,15 +320,6 @@ class _ProviderDialogState extends State<_ProviderDialog> {
   /// local server can sit behind a key, so it is offered here.
   List<Widget> _technical(bool hasStoredKey) {
     return [
-      TextField(
-        controller: _id,
-        autofocus: widget.initial == null,
-        decoration: const InputDecoration(
-          labelText: "Name",
-          helperText: "How the model list refers to it, e.g. openrouter",
-        ),
-      ),
-      const SizedBox(height: 16),
       DropdownButtonFormField<LlmApi>(
         initialValue: _api,
         isExpanded: true,
@@ -340,8 +361,21 @@ class _ProviderDialogState extends State<_ProviderDialog> {
         controller: _modelsEndpoint,
         decoration: const InputDecoration(
           labelText: "Models endpoint",
-          helperText: "Lists models models.dev does not know, e.g. "
-              "http://localhost:11434/v1/models. Leave empty for models.dev's.",
+          helperText: "Empty lists the models models.dev has for it. Filled, "
+              "lists this endpoint's instead, e.g. "
+              "http://localhost:11434/v1/models.",
+          helperMaxLines: 3,
+        ),
+      ),
+      const SizedBox(height: 16),
+      TextField(
+        controller: _catalogId,
+        decoration: const InputDecoration(
+          labelText: "Provider ID",
+          helperText: "Its id on models.dev, which lists its models when the "
+              "models endpoint is empty, e.g. google. Empty matches it by "
+              "base URL.",
+          helperMaxLines: 3,
         ),
       ),
     ];

@@ -47,7 +47,7 @@ which client it speaks through, how a key is checked (`checkKey`) and which of
 models.dev's models it offers (`models`). A wire format is a client — a
 provider has one rather than being one, since half of them speak the same
 protocol. `providerOf` reads a config as its class: by host, so an entry
-renamed by hand keeps its server's quirks; then by preset id; then by wire
+renamed by hand keeps its server's quirks; then by models.dev id; then by wire
 format alone (`OpenAiCompatibleProvider`, `AnthropicCompatibleProvider`), which
 is what an endpoint typed in by hand is.
 

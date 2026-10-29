@@ -168,6 +168,14 @@ class AppSettings {
   /// why the first thing settings offers is a list of presets.
   List<LlmProviderConfig> llmProviders;
 
+  /// Whether a provider other than [exceptId] is called [name], whatever its
+  /// case: a name is what tells two of them apart.
+  bool providerNameTaken(String name, {String? exceptId}) {
+    final lower = name.trim().toLowerCase();
+    return llmProviders
+        .any((p) => p.id != exceptId && p.displayName.toLowerCase() == lower);
+  }
+
   /// The user's profile, injected at the end of the system prompt. App-level
   /// default; a project can override it. Null means nothing is injected.
   Profile? profile;

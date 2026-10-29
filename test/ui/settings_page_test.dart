@@ -237,9 +237,9 @@ void main() {
       await tester.tap(add);
       await settleIo(tester, least: 8);
 
-      final providers = app.container.read(appSettingsProvider).llmProviders;
-      expect(providers.map((p) => p.id), contains("ollama-cloud"));
-      expect(app.secrets.providerKey("ollama-cloud"), "ollama-key-123");
+      final added = app.container.read(appSettingsProvider).llmProviders.single;
+      expect(added.catalogId, "ollama-cloud");
+      expect(app.secrets.providerKey(added.id), "ollama-key-123");
       expect(find.textContaining("We recommend Ollama Cloud"), findsNothing);
 
       // The first provider becomes what every role resolves to, until the
@@ -247,12 +247,12 @@ void main() {
       // next frame — the adoption has to survive that, or the pickers stay
       // on None/Off.
       final settings = app.container.read(appSettingsProvider);
-      expect(settings.defaultProviderId, "ollama-cloud");
+      expect(settings.defaultProviderId, added.id);
       expect(settings.defaultModelId, isNull);
-      expect(settings.titleProviderId, "ollama-cloud");
+      expect(settings.titleProviderId, added.id);
       expect(settings.titleModelId, isNull);
-      expect(settings.memoryProviderId, "ollama-cloud");
-      expect(settings.classifierProviderId, "ollama-cloud");
+      expect(settings.memoryProviderId, added.id);
+      expect(settings.classifierProviderId, added.id);
     });
 
     // The recommended provider group drives one dialog flow three times:
@@ -276,7 +276,7 @@ void main() {
       final provider = app.container
           .read(appSettingsProvider)
           .llmProviders
-          .firstWhere((p) => p.id == "anthropic");
+          .firstWhere((p) => p.catalogId == "anthropic");
       expect(provider.defaultModelId, "claude-sonnet-5");
       expect(provider.defaultLightModelId, "claude-haiku-4-5");
     });

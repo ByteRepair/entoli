@@ -285,7 +285,7 @@ void main() {
       (tester) async {
     const bareProvider = LlmProviderConfig(
       id: "bare",
-      label: "Bare",
+      name: "Bare",
       api: LlmApi.openai,
       baseUrl: "https://bare.example/v1",
     );
@@ -341,7 +341,7 @@ void main() {
   testWidgets("a light picker resets to the first provider naming a light default",
       (tester) async {
     const chatOnly = LlmProviderConfig(
-        id: "chat", label: "Chat", api: LlmApi.openai, baseUrl: "https://c.example/v1",
+        id: "chat", name: "Chat", api: LlmApi.openai, baseUrl: "https://c.example/v1",
         defaultModelId: "big");
     await pump(tester,
         providers: [chatOnly, testProvider],

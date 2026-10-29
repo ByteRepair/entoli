@@ -12,7 +12,7 @@ import "gen_common.dart";
 Future<void> main() async {
   final wanted = {
     for (final p in llmProviderPresets)
-      p.id: {
+      p.config.catalogId!: {
         ?p.config.defaultModelId,
         ?p.config.defaultLightModelId,
         ?p.imageModel,

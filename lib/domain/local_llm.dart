@@ -84,7 +84,7 @@ abstract class LocalLlm {
       ? null
       : const LlmProviderConfig(
           id: localProviderId,
-          label: "On-device",
+          name: "On-device",
           api: LlmApi.openai,
           // Empty, and it has to be: there is no one server behind this entry,
           // and each model is its own process on a port of its own. The

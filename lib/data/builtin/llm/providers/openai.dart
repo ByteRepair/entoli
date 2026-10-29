@@ -5,8 +5,8 @@ class OpenAiProvider extends OpenAiCompatibleProvider {
   const OpenAiProvider([LlmProviderConfig config = preset]) : super(config, _terms);
 
   static const preset = LlmProviderConfig(
-    id: "openai",
-    label: "OpenAI",
+    catalogId: "openai",
+    name: "OpenAI",
     api: LlmApi.openai,
     baseUrl: "https://api.openai.com/v1",
     apiKeyEnv: "OPENAI_API_KEY",

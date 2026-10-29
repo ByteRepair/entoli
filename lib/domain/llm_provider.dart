@@ -11,10 +11,11 @@ enum LlmApi { openai, anthropic }
 /// (`AppSecrets`), or named by [apiKeyEnv] and read from the environment.
 class LlmProviderConfig {
   const LlmProviderConfig({
-    required this.id,
+    this.id = "",
     required this.api,
     required this.baseUrl,
-    this.label,
+    this.name,
+    this.catalogId,
     this.apiKeyEnv,
     this.modelsEndpoint,
     this.defaultModelId,
@@ -22,6 +23,9 @@ class LlmProviderConfig {
     this.customModels = const [],
   });
 
+  /// What the settings, the secret store and every chat name it by: a UUID,
+  /// fixed when it is added, so [name] can change without moving anything.
+  /// Empty on a preset and on one not added yet; adding it gives it one.
   final String id;
   final LlmApi api;
 
@@ -29,13 +33,18 @@ class LlmProviderConfig {
   /// to it, so a gateway that lives under a prefix works unchanged.
   final String baseUrl;
 
-  final String? label;
+  /// What the user calls it, unique among the providers: two entries for one
+  /// service are told apart by it.
+  final String? name;
+
+  /// Its provider id on models.dev, whose models it offers. Null matches it by
+  /// [baseUrl] alone.
+  final String? catalogId;
 
   final String? apiKeyEnv;
 
-  /// Where to list models beyond models.dev's, e.g.
-  /// `http://localhost:11434/v1/models`. Null asks nothing: a provider
-  /// models.dev does not know then offers only its [customModels].
+  /// Where to list its models in place of models.dev's, e.g.
+  /// `http://localhost:11434/v1/models`. Null lists models.dev's.
   final String? modelsEndpoint;
 
   /// The model a new chat is answered by when the user picks this provider's
@@ -52,7 +61,7 @@ class LlmProviderConfig {
   /// a fine-tune, a private deployment. Ahead of the catalog's on a clash.
   final List<ModelInfo> customModels;
 
-  String get displayName => label ?? id;
+  String get displayName => name ?? id;
 
   /// [lookup] reads the app's own environment and whatever settings adds, so a
   /// key can be named there instead of pasted here.
@@ -79,7 +88,8 @@ class LlmProviderConfig {
     String? id,
     LlmApi? api,
     String? baseUrl,
-    String? label,
+    String? name,
+    String? catalogId,
     String? apiKeyEnv,
     String? modelsEndpoint,
     String? defaultModelId,
@@ -90,7 +100,8 @@ class LlmProviderConfig {
         id: id ?? this.id,
         api: api ?? this.api,
         baseUrl: baseUrl ?? this.baseUrl,
-        label: label ?? this.label,
+        name: name ?? this.name,
+        catalogId: catalogId ?? this.catalogId,
         apiKeyEnv: apiKeyEnv ?? this.apiKeyEnv,
         modelsEndpoint: modelsEndpoint ?? this.modelsEndpoint,
         defaultModelId: defaultModelId ?? this.defaultModelId,
@@ -102,7 +113,8 @@ class LlmProviderConfig {
         "id": id,
         "api": api.name,
         "baseUrl": baseUrl,
-        if (label != null) "label": label,
+        "name": displayName,
+        if (catalogId != null) "catalogId": catalogId,
         if (apiKeyEnv != null) "apiKeyEnv": apiKeyEnv,
         if (modelsEndpoint != null) "modelsEndpoint": modelsEndpoint,
         if (defaultModelId != null) "defaultModelId": defaultModelId,
@@ -119,11 +131,15 @@ class LlmProviderConfig {
     final baseUrl = value["baseUrl"];
     if (id is! String || id.isEmpty || baseUrl is! String || baseUrl.isEmpty) return null;
     final custom = value["customModels"];
+    // An entry with no name was written by 7.0.0 or older, whose id was its
+    // name and its models.dev id both.
+    final named = value.containsKey("name");
     return LlmProviderConfig(
       id: id,
       api: value["api"] == "anthropic" ? LlmApi.anthropic : LlmApi.openai,
       baseUrl: baseUrl,
-      label: value["label"] as String?,
+      name: (named ? value["name"] : value["label"]) as String?,
+      catalogId: named ? value["catalogId"] as String? : id,
       // An older file's `apiKey` is ignored: the store is where a key lives,
       // and a key left in the file was stripped by the save that followed it.
       apiKeyEnv: value["apiKeyEnv"] as String?,
