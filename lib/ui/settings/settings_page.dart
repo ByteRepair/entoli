@@ -50,7 +50,7 @@ import "voice_settings.dart";
 import "settings_category.dart";
 import "welcome_page.dart";
 
-class SettingsPage extends StatefulWidget {
+class SettingsPage extends ConsumerStatefulWidget {
   const SettingsPage({super.key, this.initialCategory, this.focus = false});
 
   final SettingsCategory? initialCategory;
@@ -63,10 +63,10 @@ class SettingsPage extends StatefulWidget {
   final bool focus;
 
   @override
-  State<SettingsPage> createState() => _SettingsPageState();
+  ConsumerState<SettingsPage> createState() => _SettingsPageState();
 }
 
-class _SettingsPageState extends State<SettingsPage> {
+class _SettingsPageState extends ConsumerState<SettingsPage> {
   late SettingsCategory _category = widget.initialCategory ?? SettingsCategory.general;
 
   /// The state is kept where the category is a page of its own too, so that a
@@ -84,19 +84,23 @@ class _SettingsPageState extends State<SettingsPage> {
     // The page is the whole window, so its width is the window's — no
     // `LayoutBuilder`, which would run the Scaffold's build during layout.
     final wide = MediaQuery.sizeOf(context).width >= navBreakpoint;
+    // A category this platform does not offer is not opened, whoever names it.
+    final initial = widget.initialCategory?.offered(ref) == false
+        ? null
+        : widget.initialCategory;
+    final category = _category.offered(ref) ? _category : SettingsCategory.general;
     // One rule, not two: a named category is the whole page unless the window
     // is wide enough for the panel and nobody asked to focus. Narrow has no
     // panel for a preselected category to sit beside, so there it is the page
     // whatever the caller asked for.
-    final fullPage =
-        widget.initialCategory != null && (widget.focus || !wide);
+    final fullPage = initial != null && (widget.focus || !wide);
     if (fullPage) {
-      return _categoryScaffold(widget.initialCategory!);
+      return _categoryScaffold(initial);
     }
     final categories = _Categories(
       // Nothing is selected where the list is the whole page: a category there
       // is somewhere to go rather than what is showing beside it.
-      selected: wide ? _category : null,
+      selected: wide ? category : null,
       onSelect: (category) => _open(category, push: !wide),
     );
     final bar = AppBar(title: const Text("Settings"));
@@ -110,7 +114,7 @@ class _SettingsPageState extends State<SettingsPage> {
         children: [
           SizedBox(width: navPanelWidth, child: categories),
           const VerticalDivider(width: 1),
-          Expanded(child: _categoryBody(_category, key: ValueKey(_category))),
+          Expanded(child: _categoryBody(category, key: ValueKey(category))),
         ],
       ),
     );
@@ -211,8 +215,6 @@ List<Widget> _sectionsOf(SettingsCategory category) => switch (category) {
           VoiceSection(),
           AssistantSection(),
         ],
-      // Says so and offers nothing where there is no clock to schedule with —
-      // see the section itself.
       SettingsCategory.triggers => const [TriggersSection()],
       // Rendered by [_categoryBody] whole rather than filed here, for the
       // footers pinned to their bottoms.
@@ -258,9 +260,7 @@ class _Categories extends ConsumerWidget {
           child: ListView(
             children: [
               for (final category in SettingsCategory.values)
-                // Where there is no browser to drive there is nothing to pick.
-                if (category != SettingsCategory.agentBrowser ||
-                    ref.watch(agentBrowserProvider).available) ...[
+                if (category.offered(ref)) ...[
                 if (category.dividerAbove) const Divider(),
                 ListTile(
                   selected: category == selected,

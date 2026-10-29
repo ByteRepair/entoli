@@ -772,34 +772,34 @@ class _ScrollHint extends StatelessWidget {
 
 /// A way into something set up elsewhere: a settings category pushed on its
 /// own, or a page of its own.
-class _SetupRow extends StatelessWidget {
+class _SetupRow extends ConsumerWidget {
   const _SetupRow({
     required this.icon,
     required this.title,
     required this.detail,
     required this.open,
-  });
+  }) : category = null;
 
   /// The icon is the category's own — one place an icon is named per category.
   _SetupRow.category({
-    required String title,
-    required String detail,
-    required SettingsCategory category,
-  }) : this(
-          icon: category.icon,
-          title: title,
-          detail: detail,
-          open: (context) =>
-              openSettings(context, category: category, focus: true),
-        );
+    required this.title,
+    required this.detail,
+    required SettingsCategory this.category,
+  })  : icon = category.icon,
+        open = ((context) =>
+            openSettings(context, category: category, focus: true));
 
   final IconData icon;
   final String title;
   final String detail;
   final void Function(BuildContext context) open;
 
+  /// Where the row leads, if a category: not drawn where it is not offered.
+  final SettingsCategory? category;
+
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    if (category?.offered(ref) == false) return const SizedBox.shrink();
     final scheme = Theme.of(context).colorScheme;
     return Card(
       margin: const EdgeInsets.symmetric(vertical: 4),

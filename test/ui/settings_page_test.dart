@@ -12,6 +12,7 @@ import "package:agent_chat/ui/chat/widgets/code_block.dart" show CodeBlock;
 import "package:agent_chat/ui/settings/settings_page.dart";
 import "package:agent_chat/ui/widgets/resettable_field.dart";
 
+import "../fakes.dart";
 import "../harness.dart";
 import "package:agent_chat/ui/settings/settings_category.dart";
 
@@ -136,6 +137,9 @@ void main() {
 
     testWidgets("a divider stands where one group ends and another begins",
         (tester) async {
+      // A platform with every category, Triggers' clock included.
+      app.dispose();
+      app = TestApp.create(reminderAlarms: FakeReminderAlarms());
       useWindow(tester, const Size(1200, 1400));
       await app.pump(tester, const SettingsPage());
       final panel = find.ancestor(of: tile("General"), matching: find.byType(ListView));

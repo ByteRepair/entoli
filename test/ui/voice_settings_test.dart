@@ -7,6 +7,7 @@ import "package:agent_chat/domain/model_registry.dart";
 import "package:agent_chat/domain/voice.dart";
 import "package:agent_chat/domain/voice_model.dart";
 import "package:agent_chat/providers.dart";
+import "package:agent_chat/ui/settings/settings_page.dart";
 import "package:agent_chat/ui/settings/voice_settings.dart";
 import "package:agent_chat/ui/widgets/resettable_field.dart";
 
@@ -223,12 +224,24 @@ void main() {
     expect(app.container.read(appSettingsProvider).voicePushToTalk, isTrue);
   });
 
-  testWidgets("a browser is not offered it: there is no microphone to hold",
+  testWidgets("a platform with no voice does not list the category",
       (tester) async {
     app = TestApp.create(voice: FakeVoice(available: false));
-    await pumpVoice(tester);
+    useWindow(tester, const Size(1200, 1600));
+    await app.pump(tester, const SettingsPage());
 
-    expect(find.text("Touch to speak"), findsNothing);
+    expect(tile("Voice"), findsNothing);
+    expect(tile("Memory"), findsOneWidget);
+  });
+
+  testWidgets("nor opens it when asked for it by name", (tester) async {
+    app = TestApp.create(voice: FakeVoice(available: false));
+    useWindow(tester, const Size(1200, 1600));
+    await app.pump(tester,
+        const SettingsPage(initialCategory: SettingsCategory.voice, focus: true));
+
+    expect(find.widgetWithText(AppBar, "Settings"), findsOneWidget);
+    expect(find.text("Voice mode"), findsNothing);
   });
 
   testWidgets("the preview reads one line in the voice picked", (tester) async {

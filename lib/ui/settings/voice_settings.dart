@@ -24,10 +24,7 @@ class VoiceSection extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // The one fact both halves of this page turn on, asked of the port rather
-    // than of the store: two flags for "this is a browser" could disagree.
     final voice = ref.watch(voiceProvider);
-    final canListen = voice.available;
     final settings = ref.watch(appSettingsProvider);
     final installed = ref.watch(installedVoiceModelsProvider);
     final notifier = ref.read(appSettingsProvider.notifier);
@@ -35,38 +32,34 @@ class VoiceSection extends ConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        SectionHeader(
+        const SectionHeader(
           "Voice mode",
-          description: canListen
-              ? "What listens and what speaks. A model on this device keeps "
-                  "what is said here; a provider's is sent the recording, or "
-                  "the reply, to turn into the other."
-              : "Voice mode needs a microphone, and a browser has none.",
+          description: "What listens and what speaks. A model on this device "
+              "keeps what is said here; a provider's is sent the recording, "
+              "or the reply, to turn into the other.",
         ),
-        if (canListen) ...[
-          // Where neither a download nor a provider can listen, the system's
-          // engine is the only answer, and a picker of one says nothing.
-          if (voice.hasModelCatalog)
-            _VoicePicker(
-              label: "Recognition model",
-              role: ModelRole.transcription,
-              off: "Nothing to listen with: voice mode stays off. Read-aloud "
-                  "needs only a speech model.",
-              choice: voiceRecognitionChoice(settings),
-              onChanged: notifier.setVoiceRecognition,
-            ),
+        // Where neither a download nor a provider can listen, the system's
+        // engine is the only answer, and a picker of one says nothing.
+        if (voice.hasModelCatalog)
           _VoicePicker(
-            label: "Speech model",
-            role: ModelRole.speech,
-            off: "Nothing to speak with: replies are not read out.",
-            choice: voiceSpeechChoice(settings),
-            onChanged: notifier.setVoiceSpeech,
+            label: "Recognition model",
+            role: ModelRole.transcription,
+            off: "Nothing to listen with: voice mode stays off. Read-aloud "
+                "needs only a speech model.",
+            choice: voiceRecognitionChoice(settings),
+            onChanged: notifier.setVoiceRecognition,
           ),
-        ],
+        _VoicePicker(
+          label: "Speech model",
+          role: ModelRole.speech,
+          off: "Nothing to speak with: replies are not read out.",
+          choice: voiceSpeechChoice(settings),
+          onChanged: notifier.setVoiceSpeech,
+        ),
         _SpeakerField(settings: settings),
         _VoiceNameField(settings: settings),
         _LanguageField(settings: settings),
-        if (canListen) const _TouchToSpeak(),
+        const _TouchToSpeak(),
         if (voice.hasEngineInstalls) _MissingEngines(installed: installed),
       ],
     );
@@ -256,16 +249,16 @@ class VoiceModelTile extends ConsumerWidget {
           ],
         ],
       ),
-      tags: [
-        if (model.parameters != null)
-          InfoTag(Icons.memory, "${model.parameters} params"),
-        InfoTag(Icons.translate, model.languages),
-        InfoTag(Icons.download_outlined, formatSize(model.bytes)),
-        if (model case SpeechModel(:final speakers))
-          InfoTag(Icons.record_voice_over_outlined,
-              speakers == 1 ? "1 voice" : "$speakers voices"),
-        if (model.licence != null) InfoTag(Icons.gavel_outlined, model.licence!),
-      ],
+      tags: modelTags(
+        parameters: model.parameters,
+        languages: model.languages,
+        bytes: model.bytes,
+        voices: switch (model) {
+          SpeechModel(:final speakers) => speakers,
+          _ => null,
+        },
+        licence: model.licence,
+      ),
       note: model.note,
       failure: failure,
       progress: progress,
@@ -292,11 +285,7 @@ class _Action extends ConsumerWidget {
         deleteTitle: "Delete ${model.name}?",
         deleteMessage:
             "${formatSize(model.bytes)} to download again if you want it back.",
-        // A browser has nowhere to put one, so the row is drawn dead rather
-        // than left out.
-        onDownload: ref.watch(voiceProvider).available
-            ? () => ref.read(voiceModelsProvider.notifier).install(model)
-            : null,
+        onDownload: () => ref.read(voiceModelsProvider.notifier).install(model),
       );
 }
 

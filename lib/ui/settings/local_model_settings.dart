@@ -384,10 +384,10 @@ class _RunningRow extends ConsumerWidget {
   }
 }
 
-/// What the section says where no server was bundled. Said rather than hidden,
-/// for the reason the Voice category is drawn where `Voice.available` is
-/// false: the settings are the app's whatever it is running on, and the answer
-/// here is a good one rather than an apology.
+/// What the section says where no server was bundled. Said rather than hidden
+/// like an unsupported category (`SettingsCategory.offered`): the page also
+/// holds the voice catalogs, and the answer here is a good one rather than an
+/// apology.
 ///
 /// The two cases differ in what went missing. On the web there is nothing that
 /// could run a model, and the better answer is a hosted provider or a machine
@@ -458,23 +458,7 @@ class LocalModelCatalogSection extends ConsumerWidget {
   }
 }
 
-/// A model's facts as tags, as many as are known of it.
-List<Widget> _tagsOf({
-  String? parameters,
-  int? bytes,
-  String? quantisation,
-  int? context,
-  String? licence,
-}) =>
-    [
-      if (parameters != null) InfoTag(Icons.memory, "$parameters params"),
-      if (bytes != null) InfoTag(Icons.download_outlined, formatSize(bytes)),
-      if (quantisation != null) InfoTag(Icons.compress, quantisation),
-      if (context != null) InfoTag(Icons.data_usage, "${tokenCount(context)} context"),
-      if (licence != null) InfoTag(Icons.gavel_outlined, licence),
-    ];
-
-List<Widget> _downloadedTags(DownloadedModel model) => _tagsOf(
+List<Widget> _downloadedTags(DownloadedModel model) => modelTags(
       parameters: model.parameters,
       bytes: model.bytes,
       quantisation: model.quantisation,
@@ -506,7 +490,7 @@ class LocalModelTile extends ConsumerWidget {
       title: Text(model.name.isEmpty ? model.id : model.name),
       tags: downloaded != null
           ? _downloadedTags(downloaded)
-          : _tagsOf(parameters: model.parameters, bytes: model.bytes, licence: model.licence),
+          : modelTags(parameters: model.parameters, bytes: model.bytes, licence: model.licence),
       failure: failure,
       progress: progress,
       trailing: CatalogAction(

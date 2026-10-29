@@ -1,4 +1,7 @@
 import "package:flutter/material.dart";
+import "package:flutter_riverpod/flutter_riverpod.dart";
+
+import "../../providers.dart";
 
 /// The page's categories, in the order they are offered and the groups they
 /// are offered in. General, Providers, On-device, LLMs and Image Generation
@@ -39,6 +42,17 @@ enum SettingsCategory {
   /// A divider drawn above the category's tile, where one group of categories
   /// ends and another begins.
   final bool dividerAbove;
+
+  /// Whether this platform can do anything the category sets. One it cannot
+  /// is neither listed nor opened, so its page never has to say so. A
+  /// category only part of which depends on the platform says so inside
+  /// instead, as On-device does.
+  bool offered(WidgetRef ref) => switch (this) {
+        agentBrowser => ref.watch(agentBrowserProvider).available,
+        voice => ref.watch(voiceProvider).available,
+        triggers => ref.watch(reminderAlarmsProvider).available,
+        _ => true,
+      };
 }
 
 /// The route Settings is reached by, registered once with the app's
