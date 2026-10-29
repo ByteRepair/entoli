@@ -236,6 +236,26 @@ void main() {
     expect(app.container.read(installedLocalModelsProvider), isEmpty);
   });
 
+  testWidgets("a download landing, and a delete, both refresh what the pickers offer",
+      (tester) async {
+    // The on-device provider lists what is on disk, so a list built before
+    // the download would leave the model out of every picker.
+    app = TestApp.create(localLlm: FakeLocalLlm());
+    await pumpOnDevice(tester);
+    final before = app.container.read(availableModelsProvider);
+
+    await tester.tap(find.byTooltip("Download").first);
+    await settleIo(tester);
+    final downloaded = app.container.read(availableModelsProvider);
+    expect(identical(before, downloaded), isFalse);
+
+    await tester.tap(find.byTooltip("Delete"));
+    await settleIo(tester);
+    await tester.tap(find.text("Delete").last);
+    await settleIo(tester);
+    expect(identical(downloaded, app.container.read(availableModelsProvider)), isFalse);
+  });
+
   testWidgets("a downloaded model the catalog does not offer is a row, and deletable",
       (tester) async {
     // One added by link, or one an older catalog offered: either way it is the
