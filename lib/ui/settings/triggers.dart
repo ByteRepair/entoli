@@ -26,8 +26,8 @@ import "../widgets/temp_chat_ttl_field.dart";
 /// (AlarmManager; launchd), on iOS it delivers the moment a notification the
 /// turn is run by catching up at the next open, on Linux the session bus's
 /// notifications announce what one did — scheduling there still rides the
-/// app's own timer, so where the port is unavailable the page says so and
-/// offers nothing, the way a row for a missing device would.
+/// app's own timer. Where the port is unavailable the category is not listed
+/// (`SettingsCategory.offered`).
 class TriggersSection extends ConsumerStatefulWidget {
   const TriggersSection({super.key});
 
@@ -57,7 +57,6 @@ class _TriggersSectionState extends ConsumerState<TriggersSection> {
 
   Future<void> _loadPermissions() async {
     final alarms = ref.read(reminderAlarmsProvider);
-    if (!alarms.available) return;
     final notifications = await alarms.notificationsAllowed();
     final exact = await alarms.exactAllowed();
     if (!mounted) return;
@@ -74,7 +73,6 @@ class _TriggersSectionState extends ConsumerState<TriggersSection> {
   @override
   Widget build(BuildContext context) {
     final alarms = ref.watch(reminderAlarmsProvider);
-    if (!alarms.available) return const _Unavailable();
     final triggers = ref.watch(triggersProvider);
 
     return Column(
@@ -126,28 +124,6 @@ class _TriggersSectionState extends ConsumerState<TriggersSection> {
       ],
     );
   }
-}
-
-/// Where there is no clock to schedule against and no notifications to post
-/// through — nothing of what a trigger does can be heard.
-class _Unavailable extends StatelessWidget {
-  const _Unavailable();
-
-  @override
-  Widget build(BuildContext context) => const Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SectionHeader("Triggers"),
-          Padding(
-            padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            child: Text(
-              "This operating system does not support triggers: nothing here "
-              "can notify what one did, and nothing can wake the app to run "
-              "one while it is closed.",
-            ),
-          ),
-        ],
-      );
 }
 
 /// One trigger as a row: what and when, with the switch that arms it.

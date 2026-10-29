@@ -641,7 +641,7 @@ at all, and x86_64 Android is an emulator. A build without it leaves
 page says the build ran without `tool/linux/build-llama.sh`, a build fault in
 the sense a missing proot is. Everywhere else there is never a server to miss,
 so the section is not drawn, and the On-device category itself is hidden where
-there is no voice catalog to download either (`categoryOffered`): iOS and the
+there is no voice catalog to download either (`SettingsCategory.offered`): iOS and the
 web.
 
 **Linux carries the same server, built natively.** `tool/linux/build-llama.sh`

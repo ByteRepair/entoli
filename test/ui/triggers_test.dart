@@ -7,6 +7,7 @@ import "package:agent_chat/domain/trigger.dart";
 import "package:agent_chat/domain/temp_chat_ttl.dart";
 import "package:agent_chat/providers.dart";
 import "package:agent_chat/ui/triggers/incoming_open.dart";
+import "package:agent_chat/ui/settings/settings_page.dart";
 import "package:agent_chat/ui/settings/triggers.dart";
 import "package:agent_chat/ui/widgets/resettable_field.dart";
 
@@ -36,15 +37,15 @@ Future<void> writePrompt(WidgetTester tester, String text) async {
 }
 
 void main() {
-  testWidgets("a platform with no clock says so and offers nothing",
+  testWidgets("a platform with no clock does not list the category",
       (tester) async {
     final app = TestApp.create();
     addTearDown(app.dispose);
     useWindow(tester, const Size(400, 900));
-    await pumpSettings(tester, app, SettingsCategory.triggers);
+    await app.pump(tester, const SettingsPage());
 
-    expect(find.textContaining("does not support triggers"), findsOneWidget);
-    expect(find.text("Add trigger"), findsNothing);
+    expect(tile("Triggers"), findsNothing);
+    expect(tile("General"), findsOneWidget);
   });
 
   testWidgets("the description is the honest one per what the platform can do",

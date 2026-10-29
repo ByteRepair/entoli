@@ -42,17 +42,20 @@ enum SettingsCategory {
   /// A divider drawn above the category's tile, where one group of categories
   /// ends and another begins.
   final bool dividerAbove;
-}
 
-/// Whether this build has anything to put under [category]. On-device holds
-/// the model server's downloads and the voice models', so a build with neither
-/// — iOS, macOS, Windows, the web — has no page to offer.
-bool categoryOffered(SettingsCategory category, WidgetRef ref) => switch (category) {
-      SettingsCategory.agentBrowser => ref.watch(agentBrowserProvider).available,
-      SettingsCategory.onDevice =>
-        ref.watch(localLlmProvider).available || ref.watch(voiceProvider).hasModelCatalog,
-      _ => true,
-    };
+  /// Whether this platform can do anything the category sets. One it cannot
+  /// is neither listed nor opened, so its page never has to say so. On-device
+  /// holds the model server's downloads and the voice models', so a build with
+  /// neither (iOS, the web) has no page to offer.
+  bool offered(WidgetRef ref) => switch (this) {
+        agentBrowser => ref.watch(agentBrowserProvider).available,
+        voice => ref.watch(voiceProvider).available,
+        triggers => ref.watch(reminderAlarmsProvider).available,
+        onDevice =>
+          ref.watch(localLlmProvider).available || ref.watch(voiceProvider).hasModelCatalog,
+        _ => true,
+      };
+}
 
 /// The route Settings is reached by, registered once with the app's
 /// `MaterialApp` (`appRoute`): a page that opens Settings — the welcome tour,

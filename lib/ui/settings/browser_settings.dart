@@ -255,6 +255,7 @@ class _AgentBrowserSectionState extends ConsumerState<AgentBrowserSection> {
             },
           ),
         ),
+        if (browser.trustedInput)
         LabelledField(
           label: "File uploads",
           child: DropdownButtonFormField<BrowserUploadPolicy>(

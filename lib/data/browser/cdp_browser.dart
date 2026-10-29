@@ -73,6 +73,9 @@ class CdpBrowser extends AgentBrowser {
   @override
   bool get inApp => webViews != null;
 
+  @override
+  bool get trustedInput => !_webKit;
+
   final _isRunning = ValueNotifier(false);
 
   @override
@@ -671,7 +674,7 @@ class _CdpTab implements BrowserTab {
   ValueListenable<BrowserPage?> get page => _shown;
 
   @override
-  bool get trustedInput => !_browser._webKit;
+  bool get trustedInput => _browser.trustedInput;
 
   void _forget() {
     _page = null;

@@ -70,6 +70,8 @@ sealed class VoiceModel {
     required this.multilingual,
     required this.downloads,
     this.note,
+    this.parameters,
+    this.licence,
   });
 
   /// Stable, and the name of the directory it installs into — so renaming one
@@ -90,6 +92,11 @@ sealed class VoiceModel {
   /// desktop model, that it is the fastest. Null where the name and the
   /// languages say enough.
   final String? note;
+
+  /// As the model card writes them, for the row's tags. Null where the card
+  /// does not say.
+  final String? parameters;
+  final String? licence;
 
   final List<VoiceDownload> downloads;
 
@@ -125,6 +132,8 @@ class RecognitionModel extends VoiceModel {
     required super.downloads,
     required this.tokens,
     super.note,
+    super.parameters,
+    super.licence,
     this.model,
     this.encoder,
     this.decoder,
@@ -165,6 +174,8 @@ class SpeechModel extends VoiceModel {
     required this.model,
     required this.tokens,
     super.note,
+    super.parameters,
+    super.licence,
     this.voices,
     this.lexicons = const [],
     this.dataDir,
@@ -214,6 +225,9 @@ const recognitionModels = <RecognitionModel>[
     engine: VoiceEngine.whisper,
     languages: "99 languages",
     multilingual: true,
+    note: "The smallest and fastest multilingual model.",
+    parameters: "39M",
+    licence: "MIT",
     encoder: "tiny-encoder.int8.onnx",
     decoder: "tiny-decoder.int8.onnx",
     tokens: "tiny-tokens.txt",
@@ -229,8 +243,10 @@ const recognitionModels = <RecognitionModel>[
     engine: VoiceEngine.moonshine,
     languages: "English",
     multilingual: false,
-    note: "The lowest latency: it transcribes what was said rather than "
-        "padding it to Whisper's thirty seconds first.",
+    note: "Lowest latency. Transcribes only the audio spoken, without "
+        "Whisper's 30-second padding.",
+    parameters: "27M",
+    licence: "MIT",
     preprocessor: "preprocess.onnx",
     encoder: "encode.int8.onnx",
     uncachedDecoder: "uncached_decode.int8.onnx",
@@ -250,7 +266,9 @@ const recognitionModels = <RecognitionModel>[
     engine: VoiceEngine.whisper,
     languages: "99 languages",
     multilingual: true,
-    note: "Noticeably better than tiny, and still comfortable on a phone.",
+    note: "More accurate than Whisper tiny, and still fast on a phone.",
+    parameters: "74M",
+    licence: "MIT",
     encoder: "base-encoder.int8.onnx",
     decoder: "base-decoder.int8.onnx",
     tokens: "base-tokens.txt",
@@ -266,8 +284,8 @@ const recognitionModels = <RecognitionModel>[
     engine: VoiceEngine.senseVoice,
     languages: "Chinese, English, Japanese, Korean, Cantonese",
     multilingual: true,
-    note: "One forward pass rather than a token loop, so it is several times "
-        "faster than a Whisper of its accuracy — on its five languages.",
+    note: "Several times faster than Whisper at similar accuracy, in its "
+        "five languages.",
     model: "model.int8.onnx",
     tokens: "tokens.txt",
     downloads: [
@@ -281,7 +299,9 @@ const recognitionModels = <RecognitionModel>[
     engine: VoiceEngine.whisper,
     languages: "99 languages",
     multilingual: true,
-    note: "The accurate one, and a desktop's: a phone will run it, slowly.",
+    note: "The most accurate. Best suited to desktops; slow on a phone.",
+    parameters: "244M",
+    licence: "MIT",
     encoder: "small-encoder.int8.onnx",
     decoder: "small-decoder.int8.onnx",
     tokens: "small-tokens.txt",
@@ -303,6 +323,7 @@ const speechModels = <SpeechModel>[
     engine: VoiceEngine.vits,
     languages: "English",
     multilingual: false,
+    note: "A single lightweight voice.",
     model: "en_US-amy-low.onnx",
     tokens: "tokens.txt",
     dataDir: "espeak-ng-data",
@@ -316,7 +337,9 @@ const speechModels = <SpeechModel>[
     engine: VoiceEngine.kitten,
     languages: "English",
     multilingual: false,
-    note: "Eight voices in thirty megabytes.",
+    note: "Eight voices in a small download.",
+    parameters: "15M",
+    licence: "Apache-2.0",
     model: "model.int8.onnx",
     voices: "voices.bin",
     tokens: "tokens.txt",
@@ -332,8 +355,10 @@ const speechModels = <SpeechModel>[
     engine: VoiceEngine.kokoro,
     languages: "English, Chinese",
     multilingual: true,
-    note: "The best of these by some way, and the only one that speaks more "
-        "than one language. Of its 103 voices, three are English.",
+    note: "The highest quality, and the only multilingual voice. 103 voices, "
+        "three of them English.",
+    parameters: "82M",
+    licence: "Apache-2.0",
     model: "model.int8.onnx",
     voices: "voices.bin",
     tokens: "tokens.txt",
