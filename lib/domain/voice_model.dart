@@ -70,6 +70,8 @@ sealed class VoiceModel {
     required this.multilingual,
     required this.downloads,
     this.note,
+    this.parameters,
+    this.licence,
   });
 
   /// Stable, and the name of the directory it installs into — so renaming one
@@ -90,6 +92,11 @@ sealed class VoiceModel {
   /// desktop model, that it is the fastest. Null where the name and the
   /// languages say enough.
   final String? note;
+
+  /// As the model card writes them, for the row's tags. Null where the card
+  /// does not say.
+  final String? parameters;
+  final String? licence;
 
   final List<VoiceDownload> downloads;
 
@@ -125,6 +132,8 @@ class RecognitionModel extends VoiceModel {
     required super.downloads,
     required this.tokens,
     super.note,
+    super.parameters,
+    super.licence,
     this.model,
     this.encoder,
     this.decoder,
@@ -165,6 +174,8 @@ class SpeechModel extends VoiceModel {
     required this.model,
     required this.tokens,
     super.note,
+    super.parameters,
+    super.licence,
     this.voices,
     this.lexicons = const [],
     this.dataDir,
@@ -215,6 +226,8 @@ const recognitionModels = <RecognitionModel>[
     languages: "99 languages",
     multilingual: true,
     note: "The smallest and fastest multilingual model.",
+    parameters: "39M",
+    licence: "MIT",
     encoder: "tiny-encoder.int8.onnx",
     decoder: "tiny-decoder.int8.onnx",
     tokens: "tiny-tokens.txt",
@@ -232,6 +245,8 @@ const recognitionModels = <RecognitionModel>[
     multilingual: false,
     note: "Lowest latency. Transcribes only the audio spoken, without "
         "Whisper's 30-second padding.",
+    parameters: "27M",
+    licence: "MIT",
     preprocessor: "preprocess.onnx",
     encoder: "encode.int8.onnx",
     uncachedDecoder: "uncached_decode.int8.onnx",
@@ -252,6 +267,8 @@ const recognitionModels = <RecognitionModel>[
     languages: "99 languages",
     multilingual: true,
     note: "More accurate than Whisper tiny, and still fast on a phone.",
+    parameters: "74M",
+    licence: "MIT",
     encoder: "base-encoder.int8.onnx",
     decoder: "base-decoder.int8.onnx",
     tokens: "base-tokens.txt",
@@ -283,6 +300,8 @@ const recognitionModels = <RecognitionModel>[
     languages: "99 languages",
     multilingual: true,
     note: "The most accurate. Best suited to desktops; slow on a phone.",
+    parameters: "244M",
+    licence: "MIT",
     encoder: "small-encoder.int8.onnx",
     decoder: "small-decoder.int8.onnx",
     tokens: "small-tokens.txt",
@@ -319,6 +338,8 @@ const speechModels = <SpeechModel>[
     languages: "English",
     multilingual: false,
     note: "Eight voices in a small download.",
+    parameters: "15M",
+    licence: "Apache-2.0",
     model: "model.int8.onnx",
     voices: "voices.bin",
     tokens: "tokens.txt",
@@ -336,6 +357,8 @@ const speechModels = <SpeechModel>[
     multilingual: true,
     note: "The highest quality, and the only multilingual voice. 103 voices, "
         "three of them English.",
+    parameters: "82M",
+    licence: "Apache-2.0",
     model: "model.int8.onnx",
     voices: "voices.bin",
     tokens: "tokens.txt",

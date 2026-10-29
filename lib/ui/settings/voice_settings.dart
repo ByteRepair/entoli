@@ -256,7 +256,16 @@ class VoiceModelTile extends ConsumerWidget {
           ],
         ],
       ),
-      summary: "${model.languages} · ${formatSize(model.bytes)}",
+      tags: [
+        if (model.parameters != null)
+          InfoTag(Icons.memory, "${model.parameters} params"),
+        InfoTag(Icons.translate, model.languages),
+        InfoTag(Icons.download_outlined, formatSize(model.bytes)),
+        if (model case SpeechModel(:final speakers))
+          InfoTag(Icons.record_voice_over_outlined,
+              speakers == 1 ? "1 voice" : "$speakers voices"),
+        if (model.licence != null) InfoTag(Icons.gavel_outlined, model.licence!),
+      ],
       note: model.note,
       failure: failure,
       progress: progress,

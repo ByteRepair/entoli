@@ -83,6 +83,24 @@ void main() {
         findsNothing);
   });
 
+  testWidgets("a row's specs are tags, and a speech model counts its voices",
+      (tester) async {
+    app = TestApp.create();
+    await pumpOnDevice(tester);
+    await scrollTo(tester, find.text("Kokoro"));
+
+    Finder tag(String model, String label) => find.descendant(
+        of: find.ancestor(
+            of: find.text(model), matching: find.byType(VoiceModelTile)),
+        matching: find.text(label));
+    expect(tag("Kokoro", "82M params"), findsOneWidget);
+    expect(tag("Kokoro", "103 voices"), findsOneWidget);
+    expect(tag("Kokoro", "Apache-2.0"), findsOneWidget);
+    expect(tag("Piper (Amy)", "1 voice"), findsOneWidget);
+    // Its card gives neither, so neither is shown.
+    expect(tag("Piper (Amy)", "MIT"), findsNothing);
+  });
+
   testWidgets("downloading one puts it on the list of what can be picked",
       (tester) async {
     app = TestApp.create();
