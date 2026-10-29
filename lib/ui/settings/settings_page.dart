@@ -39,6 +39,7 @@ import "byte_repair_settings.dart";
 import "llm_settings.dart";
 import "local_model_settings.dart";
 import "memory_settings.dart";
+import "on_device_catalog.dart";
 import "privacy_policy_page.dart";
 import "provider_picker.dart";
 import "shortcuts_settings.dart";
@@ -203,11 +204,9 @@ List<Widget> _sectionsOf(SettingsCategory category) => switch (category) {
       // what is here beside the providers' models.
       SettingsCategory.onDevice => const [
           LocalModelSection(),
-          // Draws its own divider, since a build with no server in it has no
+          // Draws its own dividers, since a kind nothing here can run has no
           // catalog to put under one.
-          LocalModelCatalogSection(),
-          // The same, for a platform with no voice catalog.
-          VoiceCatalogSections(),
+          OnDeviceCatalog(),
         ],
       // The assistant section draws nothing where the platform has no
       // gesture, and opens its own divider.

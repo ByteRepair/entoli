@@ -397,7 +397,7 @@ per model family is most of what llama.cpp's server *is*. Writing a second copy
 of it in Dart, to save a subprocess on a device that is about to spend a
 gigabyte of memory on weights, is the wrong trade.
 
-The endpoint is composed by `llmEndpoints` rather than written into
+The endpoint is composed by `modelProvidersProvider` rather than written into
 `settings.json`, and it has no address to write: each model is its own process
 on a port asked of the OS when it loads. It goes **first** in the list, which is
 what decides a collision — `localProviderId` is the app's name, and a
@@ -439,7 +439,7 @@ the honest cost of one, and the reason to raise it.
 model out of the request, serves it, and hands the call to a `OpenAiClient` on
 that server's port — one per model, dropped when the port changes, the same
 signature check `LlmRegistry` makes. **It rides on the provider rather than on
-the registry**: `LocalPoolProvider` is an `LlmProvider` whose `client` is the
+the registry**: `OnDeviceProvider` is an `LlmProvider` whose `client` is the
 pool, as `AppleFmProvider`'s is the framework's channel, so the registry never
 compares a provider id against a reserved name — it knows nothing about who
 its providers are. A
@@ -674,9 +674,11 @@ export and a deletion on every restore.
 
 `FileLocalModelStore` is `FileRootfsStore` without the unpacking: a `DownloadRun`
 and, after it, the checksum where there is one, the header read, and the record.
-`LocalModelDownloads` is a third `Downloads<T>` beside the voice models and the
-Linux, and the rows are `CatalogTile` and `CatalogAction` like theirs — see "A
-catalog of things to download" — with the facts as tags rather than a sentence.
+A text model and a voice model are both an `Installable`
+(`lib/domain/installable.dart`), bound to its store by `InstallableLocalModel`
+or `InstallableVoiceModel`, so one `ModelDownloads` queue fetches either and
+one `ModelDownloadTile` draws either — see "A catalog of things to download".
+A text model's facts are the file's own once it is on disk.
 
 Where it parts company with the other two is that the list is the disk's, not
 the catalog's: `downloadedSync()` reads the records once and is kept in step by

@@ -1,4 +1,5 @@
 import "download.dart";
+import "installable.dart";
 import "local_model.dart";
 
 /// Where a downloaded model is kept, and what fetching one costs.
@@ -42,6 +43,58 @@ abstract class LocalModelStore {
   /// catalog entry, and one the catalog has dropped is still the gigabytes it
   /// always was.
   Future<void> delete(String id);
+}
+
+/// A text model as a catalogue row, kept in [store]. Once it is on disk its
+/// facts are the file's own rather than what the catalogue promised.
+class InstallableLocalModel implements Installable {
+  const InstallableLocalModel(this.model, this.store);
+
+  final LocalModel model;
+  final LocalModelStore store;
+
+  @override
+  String get id => model.id;
+
+  @override
+  String get name => model.name.isEmpty ? model.id : model.name;
+
+  @override
+  int get bytes => model.bytes ?? 0;
+
+  @override
+  ModelFacts get facts => switch (store.downloadedOfSync(id)) {
+        final DownloadedModel d => (
+            parameters: d.parameters,
+            languages: null,
+            bytes: d.bytes,
+            quantisation: d.quantisation,
+            context: d.contextLength,
+            voices: null,
+            licence: d.licence,
+          ),
+        null => (
+            parameters: model.parameters,
+            languages: null,
+            bytes: model.bytes,
+            quantisation: null,
+            context: null,
+            voices: null,
+            licence: model.licence,
+          ),
+      };
+
+  @override
+  String? get note => null;
+
+  @override
+  bool get multilingual => false;
+
+  @override
+  Stream<DownloadProgress> install() => store.install(model);
+
+  @override
+  Future<void> delete() => store.delete(id);
 }
 
 /// A browser's model store: nowhere to put a gigabyte, and nothing that could

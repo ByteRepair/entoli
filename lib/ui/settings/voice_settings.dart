@@ -2,21 +2,18 @@ import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../domain/app_settings.dart";
-import "../../domain/local_model.dart" show localProviderId;
 import "../../domain/models.dart" show ModelChoice;
 import "../../domain/voice_model.dart";
 import "../../providers.dart";
 import "../voice/read_aloud.dart";
-import "voice_models.dart";
 import "../widgets/catalog.dart";
 import "../widgets/dialogs.dart";
 import "../widgets/model_picker.dart";
-import "../../core/formatting.dart";
 import "../widgets/resettable_field.dart";
 import "../widgets/section_header.dart";
 
 /// Which two models voice mode uses, picked on the same catalog page as every
-/// other model: what is on the device under "On device", and each provider's
+/// other model: what is on the device under "On-device", and each provider's
 /// transcription and speech models beside it. Downloading is Settings >
 /// On-device's.
 class VoiceSection extends ConsumerWidget {
@@ -106,7 +103,7 @@ class _VoiceNameField extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    if (settings.voiceSpeechProviderId == localProviderId) return const SizedBox.shrink();
+    if (ref.watch(pickedSpeechProvider)?.namesVoices != true) return const SizedBox.shrink();
     final name = settings.voiceSpeechVoice;
     final playing = ref.watch(readAloudProvider) == previewId;
     return LabelledField(
@@ -167,126 +164,6 @@ class _TouchToSpeak extends ConsumerWidget {
       onChanged: ref.read(appSettingsProvider.notifier).setVoicePushToTalk,
     );
   }
-}
-
-/// Both voice catalogs, on the On-device page beside the text models. iOS has
-/// no sherpa and no downloads, so the port's own answer takes the whole thing
-/// off the page rather than leaving lists with nothing to fetch in them.
-class VoiceCatalogSections extends ConsumerWidget {
-  const VoiceCatalogSections({super.key});
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    if (!ref.watch(voiceProvider).hasModelCatalog) {
-      return const SizedBox.shrink();
-    }
-    return const Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Divider(),
-        _VoiceCatalogSection.recognition(),
-        Divider(),
-        _VoiceCatalogSection.speech(),
-      ],
-    );
-  }
-}
-
-/// One kind's catalog, every entry listed whether it is installed or not, with
-/// its size, what it can understand, and the button that fetches or removes it.
-/// The two are separate sections because they answer separate questions: a
-/// single list of eight would leave the reader working out which ones speak.
-class _VoiceCatalogSection extends StatelessWidget {
-  const _VoiceCatalogSection.recognition()
-      : title = "Speech recognition",
-        description = "Transcribe speech in voice mode, on this device. "
-            "Larger models are more accurate but slower.",
-        models = recognitionModels;
-
-  const _VoiceCatalogSection.speech()
-      : title = "Speech synthesis",
-        description = "Read replies aloud, in voice mode or on request, on "
-            "this device.",
-        models = speechModels;
-
-  final String title;
-  final String description;
-  final List<VoiceModel> models;
-
-  @override
-  Widget build(BuildContext context) => Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SectionHeader(title, description: description),
-          for (final model in models) VoiceModelTile(model: model),
-        ],
-      );
-}
-
-/// A model as a row: what it is, what it costs, and the one button that applies
-/// to it — download, cancel, or delete, never more than one at a time.
-class VoiceModelTile extends ConsumerWidget {
-  const VoiceModelTile({super.key, required this.model});
-
-  final VoiceModel model;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    // Its own row only: a progress event names one model, and taking the whole
-    // state rebuilds all eight tiles for it.
-    final progress =
-        ref.watch(voiceModelsProvider.select((s) => s.active[model.id]));
-    final failure =
-        ref.watch(voiceModelsProvider.select((s) => s.failures[model.id]));
-
-    return CatalogTile(
-      title: Row(
-        children: [
-          Flexible(child: Text(model.name)),
-          if (model.multilingual) ...[
-            const SizedBox(width: 8),
-            _Badge(label: "Multilingual", tone: Theme.of(context).colorScheme.primary),
-          ],
-        ],
-      ),
-      tags: modelTags(
-        parameters: model.parameters,
-        languages: model.languages,
-        bytes: model.bytes,
-        voices: switch (model) {
-          SpeechModel(:final speakers) => speakers,
-          _ => null,
-        },
-        licence: model.licence,
-      ),
-      note: model.note,
-      failure: failure,
-      progress: progress,
-      trailing: _Action(model: model, downloading: progress != null),
-    );
-  }
-}
-
-/// Reads what it needs itself rather than being handed it: neither the
-/// installed set nor whether this platform can listen appears in the row above,
-/// and passing them down rebuilt the whole `ListTile` for a button.
-class _Action extends ConsumerWidget {
-  const _Action({required this.model, required this.downloading});
-
-  final VoiceModel model;
-  final bool downloading;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) => CatalogAction(
-        downloading: downloading,
-        installed: ref.watch(installedVoiceModelsProvider).contains(model.id),
-        onCancel: () => ref.read(voiceModelsProvider.notifier).cancel(model.id),
-        onDelete: () => ref.read(voiceModelsProvider.notifier).delete(model),
-        deleteTitle: "Delete ${model.name}?",
-        deleteMessage:
-            "${formatSize(model.bytes)} to download again if you want it back.",
-        onDownload: () => ref.read(voiceModelsProvider.notifier).install(model),
-      );
 }
 
 /// What to do when the device has no engine for one half of voice mode. Drawn
@@ -382,16 +259,14 @@ class _SpeakerField extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final speech = settings.voiceSpeechProviderId == localProviderId
-        ? voiceModelOf<SpeechModel>(settings.voiceSpeechModelId)
-        : null;
-    // Nothing picked, a provider's, or the system synthesiser — whose voice is the user's,
-    // set in the OS, so there is no list of them here to offer.
-    if (speech == null || speech.isNative) return const SizedBox.shrink();
+    // Nothing picked, a provider's, or the system synthesiser — whose voice is
+    // the user's, set in the OS, so there is no list of them here to offer.
+    final speakers = ref.watch(pickedSpeechProvider)?.speakers ?? 0;
+    if (speakers == 0) return const SizedBox.shrink();
     // Otherwise drawn even where the model has one voice, which is most of
     // them: a field that came and went with the model above it would make
     // picking a model a change of what the page is.
-    final value = settings.voiceSpeaker.clamp(0, speech.speakers - 1);
+    final value = settings.voiceSpeaker.clamp(0, speakers - 1);
     final playing = ref.watch(readAloudProvider) == previewId;
     return LabelledField(
       label: "Voice",
@@ -402,7 +277,7 @@ class _SpeakerField extends ConsumerWidget {
               isExpanded: true,
               initialValue: value,
               items: [
-                for (var i = 0; i < speech.speakers; i++)
+                for (var i = 0; i < speakers; i++)
                   DropdownMenuItem(value: i, child: Text("Voice ${i + 1}")),
               ],
               onChanged: (picked) =>
@@ -410,12 +285,7 @@ class _SpeakerField extends ConsumerWidget {
             ),
           ),
           IconButton(
-            // Dead until the model is on disk: the picker offers what the
-            // catalog has, and a preview of something not downloaded could
-            // only apologise.
-            onPressed: ref.watch(speechReadyProvider)
-                ? () => readAloud(context, ref, previewId, previewSpeech)
-                : null,
+            onPressed: () => readAloud(context, ref, previewId, previewSpeech),
             icon: Icon(
                 playing ? Icons.stop_circle_outlined : Icons.play_circle_outline),
             tooltip: playing ? "Stop" : "Hear this voice",
@@ -440,11 +310,8 @@ class _LanguageField extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final native = settings.voiceRecognitionProviderId == localProviderId &&
-            voiceModelOf<RecognitionModel>(settings.voiceRecognitionModelId)?.isNative ==
-                true ||
-        settings.voiceSpeechProviderId == localProviderId &&
-            voiceModelOf<SpeechModel>(settings.voiceSpeechModelId)?.isNative == true;
+    final native = ref.watch(pickedRecognitionProvider)?.systemEngine == true ||
+        ref.watch(pickedSpeechProvider)?.systemEngine == true;
     if (!native) return const SizedBox.shrink();
     final offered = ref.watch(systemVoiceLanguagesProvider).value ?? const [];
     if (offered.isEmpty) return const SizedBox.shrink();
@@ -465,22 +332,3 @@ class _LanguageField extends ConsumerWidget {
   }
 }
 
-class _Badge extends StatelessWidget {
-  const _Badge({required this.label, required this.tone});
-
-  final String label;
-  final Color tone;
-
-  @override
-  Widget build(BuildContext context) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(999),
-          border: Border.all(color: tone),
-        ),
-        child: Text(
-          label,
-          style: Theme.of(context).textTheme.labelSmall?.copyWith(color: tone),
-        ),
-      );
-}

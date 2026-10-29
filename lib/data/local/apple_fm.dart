@@ -19,7 +19,7 @@ export "../../domain/local_model.dart" show appleProviderId, appleModelId;
 /// through the Foundation Models framework (iOS 26 and later) behind a
 /// method channel — `AppleFmChannel.swift`, beside `VoiceChannel.swift`. The
 /// port surface is an [AppleFmProvider] carrying its own client, composed into
-/// `llmEndpoints` beside the llama pool, so the registry, the pickers, a
+/// `modelProvidersProvider` beside the llama pool, so the registry, the pickers, a
 /// chat's pinned model and every tool the agent has see a provider like any
 /// other. None of the machine questions the pool answers (devices, threads,
 /// context, KV caches) exists here, and the window the compaction reads is
@@ -109,7 +109,7 @@ class AppleFm {
   LlmProvider get endpoint => AppleFmProvider(provider, probe);
 }
 
-class AppleFmProvider extends LlmProvider with KeyFree, ChatOnly {
+class AppleFmProvider extends LlmProvider with KeyFree {
   const AppleFmProvider(super.config, this.probe);
 
   final AppleFmProbe probe;

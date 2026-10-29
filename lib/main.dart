@@ -11,6 +11,7 @@ import "core/platform/background_work.dart";
 import "core/platform/platform.dart" as platform;
 import "core/platform/system_palette.dart";
 import "core/tls.dart";
+import "data/builtin/llm/providers/provider.dart" show LlmProvider;
 import "data/local/file_trigger_store.dart";
 import "data/model_catalog.dart";
 import "data/local/file_selector_picker.dart";
@@ -160,20 +161,27 @@ class AppSession {
     // exists.
     late final TriggerRegistryFactory triggerRegistry;
     late final Future<void> Function(void Function(AppSettings)) editSettings;
+    // The registry's providers are the container's one list of them.
+    late final List<LlmProvider> Function() endpoints;
+    // Before the backend, whose registry serves a provider's transcription
+    // model only where this platform can cut the microphone into utterances.
+    final voiceModels = platform.createVoiceModelStore(cache);
+    final voice = platform.createVoice(voiceModels, cache);
+    final apple = await appleFm;
     final backend = platform.createBackend(config, libraries, store,
-        tools: toolset, rootfs: rootfs, abi: await abi, localLlm: server, kvCache: kvCache,
-        appleFm: await appleFm, byteRepairBinDir: byteRepairBin, secrets: secrets,
+        tools: toolset, rootfs: rootfs, abi: await abi,
+        byteRepairBinDir: byteRepairBin, secrets: secrets,
         loginPath: await loginPath,
         triggerRegistry: (chatId, project) => triggerRegistry(chatId, project),
         editSettings: (change) => editSettings(change),
+        endpoints: () => endpoints(),
+        cutsUtterances: voice.hasModelCatalog,
         browser: browser);
     // One instance, shared: the prefill's notification and every other
     // foreground hold go through the same service.
     final foreground = ForegroundService();
     final prefill = platform.createLocalPrefill(backend, server, foreground, config,
         kvCache: kvCache);
-    final voiceModels = platform.createVoiceModelStore(cache);
-    final voice = platform.createVoice(voiceModels, cache);
     // Both started before either is awaited: one is a disk scan and the other
     // a channel round trip, and neither needs the other's answer.
     final scan = voiceModels.installed();
@@ -264,6 +272,8 @@ class AppSession {
         agentBrowserProvider.overrideWithValue(browser),
         localModelStoreProvider.overrideWithValue(localModels),
         localLlmProvider.overrideWithValue(server),
+        localKvCacheProvider.overrideWithValue(kvCache),
+        appleFmProvider.overrideWithValue(apple),
         localPrefillProvider.overrideWithValue(prefill),
         installedLocalModelsProvider
             .overrideWith(() => InstalledLocalModels(scans.last)),
@@ -274,6 +284,7 @@ class AppSession {
     triggerRegistry = (chatId, project) =>
         ProviderTriggerOwner(container).registryFor(chatId, project);
     editSettings = container.read(appSettingsProvider.notifier).edit;
+    endpoints = () => container.read(modelProvidersProvider);
     // Before `ensureReady`, which starts listening: a peer that lands during
     // it would otherwise run the whole handshake against a hub with no
     // repository and be sent no welcome.

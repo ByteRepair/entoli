@@ -213,7 +213,7 @@ the grants, a spoken turn, push-to-talk and read-aloud are its recipe.
 `AppleFmChannel.swift` answers the `agent_chat/apple_fm` channel — `AppleFm`
 and its client are the Dart half, in `lib/data/local/apple_fm.dart`. The model
 is the OS's own `SystemLanguageModel`, composed as an ordinary provider
-beside the llama pool in `llmEndpoints` (`appleProviderId`, an endpoint
+beside the llama pool in `modelProvidersProvider` (`appleProviderId`, an endpoint
 carrying its own client), so the registry, the pickers and a chat's pinned
 model see a provider like any other. No server: iOS has no exec, and the
 framework *is* the model — the llama pool this build never carried is not a

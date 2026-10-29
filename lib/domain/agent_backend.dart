@@ -7,12 +7,12 @@ import "../domain/ask.dart";
 import "../domain/shell_job.dart";
 import "../domain/builtin_project.dart";
 import "../domain/chat_log.dart";
+import "../domain/model_capability.dart";
 import "../domain/models.dart";
 import "../domain/permission.dart";
 import "../domain/profile.dart";
 import "../domain/sub_agent_log.dart";
 import "../domain/tone.dart";
-import "../domain/voice.dart" show Synthesize, Transcribe;
 
 export "../domain/sub_agent_log.dart" show SubAgentFeed, SubAgentAppend;
 
@@ -655,12 +655,7 @@ abstract class AgentBackend {
 
   Future<List<ModelOption>> models();
 
-  /// A provider's transcription model as a call, for voice mode. Null where
-  /// [providerId] is not configured or does not speak OpenAI's audio
-  /// endpoints: Anthropic has none.
-  Transcribe? transcriber(String providerId, String modelId);
-
-  /// A provider's speech model as a call, the same way. [voice] is the
-  /// provider's name for one, null for none sent.
-  Synthesize? synthesizer(String providerId, String modelId, {String? voice});
+  /// [ref] as a [T], ready to run, where a provider serves one: voice mode's
+  /// models, on the device or a provider's.
+  T? resolveModel<T extends Model>(ModelRef ref);
 }

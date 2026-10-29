@@ -259,8 +259,7 @@ class VoiceController extends Notifier<VoiceViewState> {
     // Re-opens what a previous [stop] closed; a no-op on the way in.
     _listenToChat();
     final settings = ref.read(appSettingsProvider);
-    final picks = voicePicks(
-        settings, ref.read(agentBackendProvider), ref.read(voiceProvider));
+    final picks = voicePicks(settings, ref.read(agentBackendProvider));
     final (:hearing, :speaking) = picks;
     if (hearing == null || speaking == null) {
       voiceFailed("no models picked");

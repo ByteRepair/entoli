@@ -11,7 +11,12 @@ import "../core/config.dart";
 import "domain/file_tools.dart" show resolveWorkspacePath;
 import "../core/platform/platform.dart"
     show createFileWatches, createPromptSources, processEnv, setupComplete;
+import "data/builtin/llm/hosted_models.dart" show ModelHost;
+import "data/builtin/llm/local_pool_client.dart" show OnDeviceProvider, poolOptions;
 import "data/builtin/llm/providers/presets.dart" show providerOf;
+import "data/builtin/llm/local_kv_cache.dart" show LocalKvCache;
+import "data/builtin/llm/providers/provider.dart" show LlmProvider, resolveIn;
+import "data/local/apple_fm.dart" show AppleFm;
 import "data/builtin/builtin_backend.dart";
 import "data/local/file_trigger_store.dart";
 import "data/local/linked_instructions_store.dart";
@@ -37,6 +42,7 @@ import "domain/chat_store.dart";
 import "domain/file_handoff.dart";
 import "domain/link_opener.dart";
 import "domain/llm_provider.dart";
+import "domain/model_capability.dart";
 import "domain/model_registry.dart";
 import "data/builtin/llm/local_prefill.dart";
 import "data/local/byte_repair_store.dart";
@@ -66,8 +72,6 @@ import "domain/tone.dart";
 import "domain/tristate.dart";
 import "domain/turn_keep_alive.dart";
 import "domain/voice.dart";
-import "domain/voice_model.dart"
-    show RecognitionModel, SpeechModel, voiceModelOf;
 import "domain/voice_model_store.dart";
 
 final chatStoreProvider = Provider<ChatStore>((ref) => throw UnimplementedError());
@@ -225,6 +229,21 @@ final setupCompleteProvider =
 /// once in `main` beside the cache directory; null where there is none.
 final byteRepairBinDirProvider = Provider<String?>((ref) => null);
 
+/// Where the pool saves and restores a turn's KV, and Apple's on-device model:
+/// null where this build has neither. Overridden in `main`.
+final localKvCacheProvider = Provider<LocalKvCache?>((ref) => null);
+final appleFmProvider = Provider<AppleFm?>((ref) => null);
+
+/// This device's models as one provider, built once: it reads the settings
+/// and what is installed when asked, so the client the registry caches from
+/// it never holds a stale one.
+final onDeviceModelsProvider = Provider<OnDeviceProvider>((ref) => OnDeviceProvider(
+      ref.watch(localLlmProvider),
+      () => poolOptions(ref.read(appSettingsProvider)),
+      kvCache: ref.watch(localKvCacheProvider),
+      voices: () => ref.read(installedVoiceModelsProvider),
+    ));
+
 final localModelStoreProvider =
     Provider<LocalModelStore>((ref) => const UnavailableLocalModelStore());
 
@@ -375,79 +394,85 @@ ModelChoice voiceSpeechChoice(AppSettings s) => (
       modelId: s.voiceSpeechModelId,
     );
 
-/// Whether [provider] is configured and has audio endpoints. Read off the
-/// settings alone: asking the backend builds a client, and the registry it
-/// builds from reads `settings.json` again, which the readiness gates would do
-/// on every settings write.
-bool _answersAudio(AppSettings settings, String provider) =>
-    settings.llmProviders.any((p) => p.id == provider && providerOf(p).answersAudio);
+/// [choice] as a ref, where it names a model.
+ModelRef? refOf(ModelChoice choice) => switch (choice) {
+      (providerId: final String providerId, modelId: final String modelId) =>
+        (providerId: providerId, modelId: modelId),
+      _ => null,
+    };
 
 /// What a voice session is started with. Null halves are nothing usable: no
-/// pick, a provider no longer configured or with no audio endpoints, or a
-/// provider's listening where this platform cannot.
+/// pick, or one no provider serves as that kind on this platform.
 ({Hearing? hearing, Speaking? speaking}) voicePicks(
-        AppSettings settings, AgentBackend backend, Voice voice) =>
-    (hearing: _hearing(settings, backend, voice), speaking: _speaking(settings, backend));
-
-Hearing? _hearing(AppSettings settings, AgentBackend backend, Voice voice) {
-  final model = settings.voiceRecognitionModelId;
-  final provider = settings.voiceRecognitionProviderId;
-  if (model == null) return null;
-  if (provider == localProviderId) {
-    final recognition = voiceModelOf<RecognitionModel>(model);
-    return recognition == null ? null : HearOnDevice(recognition);
-  }
-  if (!voice.hasModelCatalog) return null;
-  final transcribe = backend.transcriber(provider, model);
-  return transcribe == null ? null : HearThrough(transcribe);
+    AppSettings settings, AgentBackend backend) {
+  final hears = refOf(voiceRecognitionChoice(settings));
+  final speaks = refOf(voiceSpeechChoice(settings));
+  return (
+    hearing: hears == null ? null : backend.resolveModel<TranscriptionModel>(hears)?.hearing,
+    speaking: speaks == null
+        ? null
+        : backend
+            .resolveModel<SynthesisModel>(speaks)
+            ?.speaking(voice: settings.voiceSpeechVoice),
+  );
 }
 
-Speaking? _speaking(AppSettings settings, AgentBackend backend) {
-  final model = settings.voiceSpeechModelId;
-  final provider = settings.voiceSpeechProviderId;
-  if (model == null) return null;
-  if (provider == localProviderId) {
-    final speech = voiceModelOf<SpeechModel>(model);
-    return speech == null ? null : SpeakOnDevice(speech);
-  }
-  final synthesize = backend.synthesizer(provider, model, voice: settings.voiceSpeechVoice);
-  return synthesize == null ? null : SpeakThrough(synthesize);
+/// Every provider the app can reach, and the one list of them: the backend's
+/// registry runs models from it, and the pickers and gates resolve picks
+/// against it. What the user configured, after the models on this device —
+/// composed here rather than written into `settings.json` because they have no
+/// address to write.
+///
+/// **First in the list, and that decides a collision**: `localProviderId` is
+/// the app's name, and so is `appleProviderId` — a `settings.json` that
+/// happens to use either is shadowed rather than allowed to take the models'
+/// own endpoint away from them.
+///
+/// A new list whenever an install changes, though the on-device provider is
+/// the same one, so what watches this sees a download land.
+final modelProvidersProvider = Provider<List<LlmProvider>>((ref) {
+  ref.watch(installedVoiceModelsProvider);
+  ref.watch(installedLocalModelsProvider);
+  return [
+    ref.watch(onDeviceModelsProvider),
+    ?ref.watch(appleFmProvider)?.endpoint,
+    for (final config in ref.watch(appSettingsProvider.select((s) => s.llmProviders)))
+      providerOf(config),
+  ];
+});
+
+/// [choice] as the [T] some provider serves on this platform, or null. A
+/// system-engine pick is served only where the device has the engine, so a
+/// settings file carried off a phone does not light up voice on a machine
+/// that cannot use it.
+T? _resolved<T extends Model>(Ref ref, ModelChoice choice) {
+  final pick = refOf(choice);
+  if (pick == null) return null;
+  final host = ModelHost.resolving(cutsUtterances: ref.watch(voiceProvider).hasModelCatalog);
+  return resolveIn<T>(ref.watch(modelProvidersProvider), pick, (_) => host);
 }
+
+/// The voice picks as what they resolve to, for the settings that depend on
+/// which kind of model each is. Resolved to look at, not to run: a session
+/// gets its own from the backend.
+final pickedRecognitionProvider = Provider<TranscriptionModel?>((ref) =>
+    _resolved<TranscriptionModel>(
+        ref, ref.watch(appSettingsProvider.select(voiceRecognitionChoice))));
+
+final pickedSpeechProvider = Provider<SynthesisModel?>((ref) =>
+    _resolved<SynthesisModel>(ref, ref.watch(appSettingsProvider.select(voiceSpeechChoice))));
 
 /// Whether a message can be read out: a platform that can speak, and a speech
-/// model picked and either installed or a configured provider's. Half of
-/// [voiceReadyProvider], because reading a message out needs nothing to hear
-/// with.
-final speechReadyProvider = Provider<bool>((ref) {
-  if (!ref.watch(voiceProvider).available) return false;
-  final settings = ref.watch(appSettingsProvider);
-  final model = settings.voiceSpeechModelId;
-  if (settings.voiceSpeechProviderId != localProviderId) {
-    return model != null && _answersAudio(settings, settings.voiceSpeechProviderId);
-  }
-  // `contains` takes an `Object?`, so a setting naming nothing is simply not
-  // in the set. A sentinel is in it only where the device has the engine, so
-  // a settings file carried off a phone does not light up read-aloud on a
-  // machine that cannot speak.
-  return ref.watch(installedVoiceModelsProvider)
-      .contains(voiceModelOf<SpeechModel>(model)?.id);
-});
+/// model picked that a provider serves. Half of [voiceReadyProvider], because
+/// reading a message out needs nothing to hear with.
+final speechReadyProvider = Provider<bool>((ref) =>
+    ref.watch(voiceProvider).available && ref.watch(pickedSpeechProvider) != null);
 
 /// Whether the composer draws its voice button: a platform that can listen, and
 /// two models picked and usable. Anything less and pressing it could only
 /// lead to an apology.
-final voiceReadyProvider = Provider<bool>((ref) {
-  if (!ref.watch(speechReadyProvider)) return false;
-  final settings = ref.watch(appSettingsProvider);
-  final model = settings.voiceRecognitionModelId;
-  if (settings.voiceRecognitionProviderId != localProviderId) {
-    return model != null &&
-        ref.watch(voiceProvider).hasModelCatalog &&
-        _answersAudio(settings, settings.voiceRecognitionProviderId);
-  }
-  return ref.watch(installedVoiceModelsProvider)
-      .contains(voiceModelOf<RecognitionModel>(model)?.id);
-});
+final voiceReadyProvider = Provider<bool>((ref) =>
+    ref.watch(speechReadyProvider) && ref.watch(pickedRecognitionProvider) != null);
 
 /// The languages the device's own engines offer. A future rather than
 /// something seeded at startup like [installedVoiceModelsProvider]: only the

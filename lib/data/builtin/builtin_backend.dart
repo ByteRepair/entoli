@@ -19,6 +19,7 @@ import "../../domain/chat_store.dart";
 import "../../domain/file_tools.dart";
 import "../../domain/llm_provider.dart";
 import "../../domain/local_model.dart" show isTitleOnlyModel;
+import "../../domain/model_capability.dart";
 import "../../domain/models.dart";
 import "../../domain/model_registry.dart";
 import "../../domain/permission.dart";
@@ -27,7 +28,6 @@ import "../../domain/shell.dart";
 import "../../domain/sub_agent_log.dart";
 import "../../domain/tool_arg.dart";
 import "../../domain/web_search.dart";
-import "../../domain/voice.dart" show Synthesize, Transcribe;
 import "../local/file_sub_agent_log.dart";
 import "../local/linked_instructions_store.dart";
 import "../prompts/prompt_sources.dart" show promptDirsOf;
@@ -39,7 +39,7 @@ import "memory/instructions.dart";
 import "memory/store.dart";
 import "llm/gated_client.dart";
 import "llm/llm_client.dart";
-import "llm/providers/provider.dart" show ImageGenerator;
+import "llm/hosted_models.dart";
 import "llm/readable_client.dart";
 import "llm/llm_registry.dart";
 import "llm/rate_limit_gate.dart";
@@ -1380,8 +1380,9 @@ class BuiltinBackend implements AgentBackend {
     final endpoint = provider == null ? null : registry.providerFor(provider);
     final modelId = model ?? endpoint?.imageModel;
     if (endpoint == null || modelId == null) return null;
-    return endpoint.imageGenerator(registry.clientOf(endpoint), modelId,
-        quality: quality == ImageQuality.auto ? null : quality.name);
+    return registry
+        .resolve<ImageModel>((providerId: endpoint.id, modelId: modelId))
+        ?.generator(quality: quality == ImageQuality.auto ? null : quality.name);
   }
 
   Future<ApprovalResponse> _awaitApproval(ToolApproval approval) =>
@@ -1547,16 +1548,7 @@ class BuiltinBackend implements AgentBackend {
   Future<List<ModelOption>> models() => registry.models();
 
   @override
-  Transcribe? transcriber(String providerId, String modelId) {
-    final provider = registry.providerFor(providerId);
-    return provider?.transcriber(registry.clientOf(provider), modelId);
-  }
-
-  @override
-  Synthesize? synthesizer(String providerId, String modelId, {String? voice}) {
-    final provider = registry.providerFor(providerId);
-    return provider?.synthesizer(registry.clientOf(provider), modelId, voice: voice);
-  }
+  T? resolveModel<T extends Model>(ModelRef ref) => registry.resolve<T>(ref);
 }
 
 /// The turns in flight, and which chats they belong to as that changes. One

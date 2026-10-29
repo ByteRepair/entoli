@@ -5,9 +5,9 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 import "../../domain/app_settings.dart";
 import "../../domain/local_llm.dart";
 import "../../domain/local_model.dart";
+import "../../domain/local_model_store.dart";
 import "../../providers.dart";
-import "local_model_downloads.dart";
-import "../widgets/add_button_row.dart";
+import "model_downloads.dart";
 import "../widgets/catalog.dart";
 import "../../core/formatting.dart";
 import "../widgets/resettable_field.dart";
@@ -412,131 +412,6 @@ class _Elsewhere extends StatelessWidget {
       );
 }
 
-/// The catalog, the models added by link, and everything else downloaded — or
-/// nothing at all where there is no server to run one. Draws its own divider
-/// for the reason the rootfs catalog does: a line with nothing under it is a
-/// rule across the bottom of the page.
-class LocalModelCatalogSection extends ConsumerWidget {
-  const LocalModelCatalogSection({super.key});
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    if (!ref.watch(localLlmProvider).available) return const SizedBox.shrink();
-    ref.watch(installedLocalModelsProvider);
-    final added = ref.watch(addedLocalModelsProvider);
-    final listed = {for (final model in [...localModelCatalog, ...added]) model.id};
-    final others = [
-      for (final model in ref.read(localModelStoreProvider).downloadedSync())
-        if (!listed.contains(model.id)) model,
-    ];
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Divider(),
-        const SectionHeader(
-          "Text models",
-          description: "Run language models offline, on this device. "
-              "Downloaded models appear under On-device in every model picker. "
-              "They are stored outside the app's data and are not included in "
-              "backups.",
-        ),
-        for (final model in [...localModelCatalog, ...added]) LocalModelTile(model: model),
-        for (final model in others) _DownloadedTile(model: model),
-        AddButtonRow(
-          child: OutlinedButton.icon(
-            icon: const Icon(Icons.add_link),
-            label: const Text("Add model"),
-            onPressed: () => Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const AddLocalModelPage())),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-List<Widget> _downloadedTags(DownloadedModel model) => modelTags(
-      parameters: model.parameters,
-      bytes: model.bytes,
-      quantisation: model.quantisation,
-      context: model.contextLength,
-      licence: model.licence,
-    );
-
-/// One downloadable model as a row: its facts as tags — read off the file once
-/// it is downloaded — and the single button that applies to it: download,
-/// cancel, or delete, never more than one.
-class LocalModelTile extends ConsumerWidget {
-  const LocalModelTile({super.key, required this.model});
-
-  final LocalModel model;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    // Its own row only: a progress event names one model, and watching the
-    // whole state would rebuild every tile for it.
-    final progress =
-        ref.watch(localModelDownloadsProvider.select((s) => s.active[model.id]));
-    final failure =
-        ref.watch(localModelDownloadsProvider.select((s) => s.failures[model.id]));
-    final installed = ref.watch(installedLocalModelsProvider).contains(model.id);
-    final downloaded =
-        installed ? ref.read(localModelStoreProvider).downloadedOfSync(model.id) : null;
-
-    return CatalogTile(
-      title: Text(model.name.isEmpty ? model.id : model.name),
-      tags: downloaded != null
-          ? _downloadedTags(downloaded)
-          : modelTags(parameters: model.parameters, bytes: model.bytes, licence: model.licence),
-      failure: failure,
-      progress: progress,
-      trailing: CatalogAction(
-        downloading: progress != null,
-        installed: installed,
-        onCancel: () => ref.read(localModelDownloadsProvider.notifier).cancel(model.id),
-        onDelete: () => ref.read(localModelDownloadsProvider.notifier).delete(model),
-        onDownload: () => ref.read(localModelDownloadsProvider.notifier).install(model),
-        deleteTitle: "Delete ${model.name.isEmpty ? model.id : model.name}?",
-        deleteMessage: _deleteMessage(ref, model.id, again: true),
-      ),
-    );
-  }
-}
-
-/// A downloaded model the catalog does not offer: one added by link in an
-/// earlier session, or one an older catalog offered. Kept, and run, until it
-/// is deleted.
-class _DownloadedTile extends ConsumerWidget {
-  const _DownloadedTile({required this.model});
-
-  final DownloadedModel model;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) => CatalogTile(
-        title: Text(model.name),
-        tags: _downloadedTags(model),
-        trailing: CatalogAction(
-          downloading: false,
-          installed: true,
-          onCancel: () {},
-          onDelete: () => ref
-              .read(localModelDownloadsProvider.notifier)
-              .delete(LocalModel(id: model.id, name: model.name, url: model.url ?? "")),
-          deleteTitle: "Delete ${model.name}?",
-          deleteMessage: _deleteMessage(ref, model.id, again: false),
-        ),
-      );
-}
-
-String _deleteMessage(WidgetRef ref, String id, {required bool again}) => [
-      if (ref.watch(localLlmStateProvider).any((each) => each.modelId == id))
-        "It is loaded right now. It stops answering, and chats pinned to it have "
-            "nothing to run until another model is picked."
-      else
-        "Chats pinned to it have nothing to run until another model is picked.",
-      if (again) "It can be downloaded again.",
-    ].join(" ");
-
 /// A model from any link to a GGUF. Only the link is needed: what the server
 /// needs is read off the file once it has arrived, and the rest is what the
 /// row will say about it.
@@ -598,7 +473,9 @@ class _AddLocalModelPageState extends ConsumerState<AddLocalModelPage> {
       sha256: optional(_sha256),
     );
     ref.read(addedLocalModelsProvider.notifier).add(model);
-    ref.read(localModelDownloadsProvider.notifier).install(model);
+    ref
+        .read(modelDownloadsProvider.notifier)
+        .install(InstallableLocalModel(model, ref.read(localModelStoreProvider)));
     Navigator.of(context).pop();
   }
 

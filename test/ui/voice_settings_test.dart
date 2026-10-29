@@ -7,6 +7,7 @@ import "package:agent_chat/domain/model_registry.dart";
 import "package:agent_chat/domain/voice.dart";
 import "package:agent_chat/domain/voice_model.dart";
 import "package:agent_chat/providers.dart";
+import "package:agent_chat/ui/settings/on_device_catalog.dart";
 import "package:agent_chat/ui/settings/settings_page.dart";
 import "package:agent_chat/ui/settings/voice_settings.dart";
 import "package:agent_chat/ui/widgets/resettable_field.dart";
@@ -51,7 +52,7 @@ void main() {
     app = TestApp.create();
     await pumpVoice(tester);
 
-    expect(find.byType(VoiceModelTile), findsNothing);
+    expect(find.byType(ModelDownloadTile), findsNothing);
   });
 
   testWidgets("every model is listed whether it is downloaded or not",
@@ -73,9 +74,9 @@ void main() {
     await scrollTo(tester, find.text("Moonshine tiny"));
 
     final whisper = find.ancestor(
-        of: find.text("Whisper tiny"), matching: find.byType(VoiceModelTile));
+        of: find.text("Whisper tiny"), matching: find.byType(ModelDownloadTile));
     final moonshine = find.ancestor(
-        of: find.text("Moonshine tiny"), matching: find.byType(VoiceModelTile));
+        of: find.text("Moonshine tiny"), matching: find.byType(ModelDownloadTile));
     expect(
         find.descendant(of: whisper, matching: find.text("Multilingual")),
         findsOneWidget);
@@ -92,7 +93,7 @@ void main() {
 
     Finder tag(String model, String label) => find.descendant(
         of: find.ancestor(
-            of: find.text(model), matching: find.byType(VoiceModelTile)),
+            of: find.text(model), matching: find.byType(ModelDownloadTile)),
         matching: find.text(label));
     expect(tag("Kokoro", "82M params"), findsOneWidget);
     expect(tag("Kokoro", "103 voices"), findsOneWidget);
@@ -109,7 +110,7 @@ void main() {
     await scrollTo(tester, find.text("Whisper tiny"));
 
     final row = find.ancestor(
-        of: find.text("Whisper tiny"), matching: find.byType(VoiceModelTile));
+        of: find.text("Whisper tiny"), matching: find.byType(ModelDownloadTile));
     await tester.tap(find.descendant(of: row, matching: find.byTooltip("Download")));
     await settleIo(tester);
 
@@ -132,15 +133,14 @@ void main() {
     app.dispose();
     app = TestApp.create(voiceModels: const {"whisper-tiny"});
     await pumpVoice(tester);
-    expect(await offered(tester, "Recognition model"), contains("On device · whisper-tiny"));
+    expect(await offered(tester, "Recognition model"), contains("On-device · whisper-tiny"));
     expect(await offered(tester, "Speech model"),
-        isNot(contains("On device · whisper-tiny")));
+        isNot(contains("On-device · whisper-tiny")));
   });
 
   testWidgets("a provider's speech model is picked beside the device's, with a voice name",
       (tester) async {
     app = TestApp.create(voiceModels: const {"piper-en_US-amy"});
-    app.backend.speakers.add(testProviderId);
     ModelCatalog.notifier.value = ModelCatalog.parse(jsonEncode({
       testProviderId: {
         "models": {
@@ -155,7 +155,7 @@ void main() {
     await pumpVoice(tester);
 
     expect(await offered(tester, "Speech model"),
-        containsAll(["On device · piper-en_US-amy", "Test · tts-x"]));
+        containsAll(["On-device · piper-en_US-amy", "Test · tts-x"]));
     await pickModel(tester, "Test · tts-x",
         field: find.widgetWithText(LabelledField, "Speech model"));
 
@@ -179,7 +179,7 @@ void main() {
     await scrollTo(tester, find.text("Whisper tiny"));
 
     final row = find.ancestor(
-        of: find.text("Whisper tiny"), matching: find.byType(VoiceModelTile));
+        of: find.text("Whisper tiny"), matching: find.byType(ModelDownloadTile));
     await tester.tap(find.descendant(of: row, matching: find.byTooltip("Delete")));
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(TextButton, "Delete"));
@@ -258,13 +258,13 @@ void main() {
     expect(find.byIcon(Icons.stop_circle_outlined), findsOneWidget);
   });
 
-  testWidgets("the preview is dead until the model is downloaded",
+  testWidgets("a pick that is not downloaded has no voice to preview",
       (tester) async {
     app = TestApp.create();
     await pick(tester, speech: "piper-en_US-amy");
     await pumpVoice(tester);
 
-    expect(enabled(tester, buttonTipped("Hear this voice")), isFalse);
+    expect(buttonTipped("Hear this voice"), findsNothing);
   });
 
   group("on Android", () {
@@ -291,7 +291,7 @@ void main() {
       // Defaulted into both picks.
       expect(find.text("Android system"), findsNWidgets(2));
       expect(await offered(tester, "Recognition model"),
-          contains("On device · android-recognition"));
+          contains("On-device · android-recognition"));
       // With both engines there is nothing to explain above them.
       expect(find.textContaining("This device has nothing to"), findsNothing);
     });
@@ -437,16 +437,13 @@ void main() {
       (tester) async {
     Future<bool> ready({required bool sherpa}) async {
       app = TestApp.create(voice: FakeVoice(hasModelCatalog: sherpa));
-      app.backend
-        ..listeners.add(testProviderId)
-        ..speakers.add(testProviderId);
       await io(tester, () async {
         await app.seedProviders(const [testProvider]);
         final settings = app.container.read(appSettingsProvider.notifier);
         await settings.setVoiceRecognition((providerId: testProviderId, modelId: "stt"));
         await settings.setVoiceSpeech((providerId: testProviderId, modelId: "tts"));
       });
-      final picks = voicePicks(app.container.read(appSettingsProvider), app.backend, app.voice);
+      final picks = voicePicks(app.container.read(appSettingsProvider), app.backend);
       expect(picks.speaking, isA<SpeakThrough>());
       expect(picks.hearing is HearThrough, sherpa);
       final ready = app.container.read(voiceReadyProvider);

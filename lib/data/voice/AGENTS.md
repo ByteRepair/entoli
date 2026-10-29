@@ -127,19 +127,24 @@ exactly that, so a chat model that also hears is not offered. models.dev's own
 each.
 
 A pick is a provider id beside the model id it always was, `localProviderId`
-being the on-device catalog, as every picker already names it —
+being the on-device provider, as every picker already names it —
 `voiceRecognitionProviderId`, `voiceSpeechProviderId`, absent from a file that
-predates them and so read as on-device. The picker is the same
-`ModelCatalogPage` every model is picked on, with the installed set offered
-under that id; the downloads themselves are Settings > On-device's, beside the
-text models. The readiness gates answer from the settings alone — a provider
-configured, in OpenAI's shape — since asking the backend builds a client from a
-registry that reads `settings.json` again, on every settings write.
+predates them and so read as on-device. A pick resolves to a
+`TranscriptionModel` or a `SynthesisModel` (see "What a model can do is its
+type" in `lib/data/builtin/llm/AGENTS.md`): `OnDeviceProvider` serves the
+installed voice models as those, beside the downloaded text models, and an
+OpenAI-shaped provider serves its audio models. The picker is the same
+`ModelCatalogPage` every model is picked on, offering what each provider
+serves; the downloads themselves are Settings > On-device's, beside the text
+models. Every provider is in one list, `modelProvidersProvider`: the
+readiness gates and pickers resolve picks against it as it changes, and the
+backend's registry runs models from the same list.
 
 **The port knows no HTTP.** `Voice.start` takes one `Hearing` and one
 `Speaking`, each a model on the device or a provider's call (`Transcribe`,
-`Synthesize`) that the backend builds from its registry the way it builds the
-image generator; `voicePicks` is where settings become them. A provider's
+`Synthesize`), which the resolved model hands over; `voicePicks` resolves the
+settings through the backend's registry, so a provider's call runs over its
+cached client. A provider's
 speaker is `RemoteSpeaker`: a request per sentence, one at a time — so they
 play in order, and a long reply is not a burst into a rate limit — through
 the play queue `SherpaSpeaker` shares (`PlayingSpeaker`). A provider's listener
@@ -223,8 +228,8 @@ told when one arrives: the next launch asks the device again.
 in `voiceCatalog` but not in `recognitionModels`/`speechModels`. That is what
 makes them cost nothing: every gate the app already has — `voiceReadyProvider`,
 `speechReadyProvider`, the settings dropdowns, `ReadAloud`, `VoiceController` —
-resolves a pick through `voiceModelOf` and asks whether it is installed, and a
-sentinel answers both questions without any of them learning a new shape. A
+resolves a pick through the on-device provider, which serves only what is
+installed, and a sentinel resolves without any of them learning a new shape. A
 `nativeVoice` flag beside the model id would have been a second thing every one
 of those had to consult, and the one that forgot would be wrong silently.
 

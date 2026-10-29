@@ -436,14 +436,8 @@ const voiceCatalog = <VoiceModel>[
   iosSpeech,
 ];
 
-/// The catalog model [id] names, if it is the kind asked for. Null where it
-/// names nothing, names something no longer in the catalog, or names the wrong
-/// kind — a settings file can say anything.
-T? voiceModelOf<T extends VoiceModel>(String? id) {
-  final model = voiceModelById(id);
-  return model is T ? model : null;
-}
-
+/// The catalog model [id] names. Null where it names nothing, or something no
+/// longer in the catalog — a settings file can say anything.
 VoiceModel? voiceModelById(String? id) {
   if (id == null) return null;
   for (final model in voiceCatalog) {

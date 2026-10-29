@@ -65,12 +65,19 @@ entry there. A provider nothing guards â€” a local server, the on-device ones â€
 takes `KeyFree`, whose `needsKey` is what the dialog and the provider list
 read.
 
-**What a provider can do beyond chat is its own to say.** `LlmProvider`
-declares `imageGenerator`, `transcriber`, `synthesizer` and `answersAudio`
-unimplemented; `OpenAiCompatibleProvider` answers them over its client's
-image and audio endpoints, and `ChatOnly` answers none, for Anthropic and the
-on-device providers. The backend and the voice gates ask the provider, never
-the client's type. A key can be left out and named as
+**What a model can do is its type.** A provider `serve`s a model id as one
+`Model` per thing it does (`lib/domain/model_capability.dart`): a
+`ChatModel`, an `ImageModel`, a `TranscriptionModel`, a `SynthesisModel`.
+`LlmProvider` serves chat alone; `OpenAiCompatibleProvider` adds the other
+three over its client's image and audio endpoints, as the model's catalog
+entry describes it, or all of them for an id the catalog does not describe.
+`OnDeviceProvider` serves the downloaded text models and the installed voice
+models, which the platform's `Voice` runs. A model holds what runs it, so the
+provider says what exists and never runs anything. The backend, the voice
+gates and the pickers resolve a pick to the kind they need (`resolve<T>`),
+never asking the provider's or the client's type; no transcription model is
+served where `ModelHost.cutsUtterances` is false. A key can be left out and
+named as
 `apiKeyEnv` instead, which is how one already exported stays out of the file.
 `LlmRegistry` builds a client per provider and rebuilds it when the URL or key
 changes; a provider that lists no models is asked, and one that cannot answer

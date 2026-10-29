@@ -194,12 +194,17 @@ the one holding the drawer.
 
 ## A catalog of things to download
 
-There are two of them: the voice models, and the Linux the agent runs commands
-in. They are different enough to be two catalogs — one is picked in two halves
-and has system sentinels in it, the other is per-architecture and decides where
-a command runs — and identical in everything about *downloading*. So that half
+There are two of them: the on-device models, text and voice, and the Linux the
+agent runs commands in. They are different enough to be two catalogs — one is
+models that are picked, the other is per-architecture and decides where a
+command runs — and identical in everything about *downloading*. So that half
 is one implementation, at both ends: `DownloadRun` fetches and `Downloads<T>`
 reports, and what differs between them is hooks.
+
+The models are one catalog because every one is an `Installable`: a text model
+and a voice model each say what their row shows and how they are fetched and
+deleted, so `ModelDownloads` queues either and `ModelDownloadTile` draws
+either, on the On-device page (`OnDeviceCatalog`), a section per kind.
 
 `Downloads<T>` in `ui/settings/downloads.dart` is the notifier both catalogs
 are: the running subscriptions, the bar's state, the Cancel in the
@@ -209,11 +214,11 @@ several are called, how to look again, what to unpick, and how to erase. Held
 above the settings page rather than in it, because a download outlives the page
 and, on Android, outlives the app being on screen.
 
-**Unpick, erase, then look again — in that order, and in the base class.** Both
-catalogs resolve a pick against the catalog rather than the disk, so a setting
-left naming something deleted fails later and somewhere else: at the microphone
-for a voice model, and in the middle of a turn for a rootfs. It was written
-twice, and the second copy is the one that would have drifted.
+**Unpick, erase, then look again — in that order, and in the base class.** A
+setting left naming something deleted fails later and somewhere else: voice
+mode staying off with no word of why for a voice model, and the middle of a
+turn for a rootfs. It was written twice, and the second copy is the one that
+would have drifted.
 
 `begin` returning null is the other rule worth naming: a distribution with no
 image for this device has nothing to fetch, so the press does nothing rather

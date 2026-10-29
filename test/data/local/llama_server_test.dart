@@ -2,8 +2,12 @@ import "dart:io";
 
 import "package:flutter_test/flutter_test.dart";
 
+import "package:agent_chat/data/builtin/llm/hosted_models.dart";
+import "package:agent_chat/data/builtin/llm/local_pool_client.dart";
 import "package:agent_chat/data/local/llama_server.dart";
+import "package:agent_chat/domain/app_settings.dart";
 import "package:agent_chat/domain/local_llm.dart";
+import "package:agent_chat/domain/model_registry.dart";
 import "package:agent_chat/domain/local_model.dart";
 import "package:agent_chat/domain/download.dart";
 import "package:agent_chat/domain/local_model_store.dart";
@@ -19,6 +23,8 @@ void main() {
     libDir: "/data/app/pkg/lib/arm64",
   );
   final model = downloadedAs(localModelCatalog.first);
+  OnDeviceProvider onDevice(LocalLlm pool) =>
+      OnDeviceProvider(pool, () => poolOptions(AppSettings()), voices: () => const {});
 
   ({List<String> command, Map<String, String> environment}) launch({
     String device = noDevice,
@@ -357,11 +363,14 @@ something else entirely
       // full all the same. That is the whole change from the pick that used to
       // live on the settings page.
       expect(pool.running.value, isEmpty);
-      expect(pool.provider!.id, localProviderId);
       expect(pool.installed, localModelCatalog.map((m) => m.id));
+      expect(
+          [for (final m in onDevice(pool).offered(ModelCatalog.empty, ModelHost.resolving()))
+            m.ref],
+          [for (final m in localModelCatalog) (providerId: localProviderId, modelId: m.id)]);
       // No address of its own: each model is its own process on its own port,
       // and the endpoint's client is what routes between them.
-      expect(pool.provider!.baseUrl, isEmpty);
+      expect(onDevice(pool).config.baseUrl, isEmpty);
     });
 
     test("a model that is not downloaded is refused before anything is spawned",
@@ -376,7 +385,7 @@ something else entirely
       expect(pool.running.value, isEmpty);
       // Nothing on disk is nothing to offer, which is what keeps the entry out
       // of every picker until there is something to pick.
-      expect(pool.provider, isNull);
+      expect(onDevice(pool).offered(ModelCatalog.empty, ModelHost.resolving()), isEmpty);
     });
 
     test("a model this build has never heard of is refused too", () async {

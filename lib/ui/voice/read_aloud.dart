@@ -45,9 +45,7 @@ class ReadAloud extends Notifier<String?> {
     if (reading == id) return null;
 
     final settings = ref.read(appSettingsProvider);
-    final speaking = voicePicks(
-            settings, ref.read(agentBackendProvider), ref.read(voiceProvider))
-        .speaking;
+    final speaking = voicePicks(settings, ref.read(agentBackendProvider)).speaking;
     if (speaking == null) return "No speech model is picked.";
     final text = speakable(said);
     if (text.trim().isEmpty) return null;
