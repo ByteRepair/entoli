@@ -92,6 +92,7 @@ BuiltinBackend createBackend(
   SettingsEditor? editSettings,
   AgentBrowser browser = const UnavailableAgentBrowser(),
   required Set<String> Function() installedVoices,
+  required bool cutsUtterances,
 }) {
   AppSettings settings() => AppSettings.load(config);
   final backend = BuiltinBackend(
@@ -134,6 +135,7 @@ BuiltinBackend createBackend(
     registry: LlmRegistry(
       endpoints: () => llmEndpoints(settings, localLlm, kvCache, appleFm,
           installedVoices: installedVoices),
+      cutsUtterances: cutsUtterances,
       // Settings wins, but a key already exported is found without having to
       // be pasted in.
       lookupEnv: (name) => settings().environment[name] ?? processEnv(name),

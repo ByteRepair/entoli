@@ -161,6 +161,10 @@ class AppSession {
     late final TriggerRegistryFactory triggerRegistry;
     late final Future<void> Function(void Function(AppSettings)) editSettings;
     late final Set<String> Function() installedVoices;
+    // Before the backend, whose registry serves a provider's transcription
+    // model only where this platform can cut the microphone into utterances.
+    final voiceModels = platform.createVoiceModelStore(cache);
+    final voice = platform.createVoice(voiceModels, cache);
     final backend = platform.createBackend(config, libraries, store,
         tools: toolset, rootfs: rootfs, abi: await abi, localLlm: server, kvCache: kvCache,
         appleFm: await appleFm, byteRepairBinDir: byteRepairBin, secrets: secrets,
@@ -168,14 +172,13 @@ class AppSession {
         triggerRegistry: (chatId, project) => triggerRegistry(chatId, project),
         editSettings: (change) => editSettings(change),
         installedVoices: () => installedVoices(),
+        cutsUtterances: voice.hasModelCatalog,
         browser: browser);
     // One instance, shared: the prefill's notification and every other
     // foreground hold go through the same service.
     final foreground = ForegroundService();
     final prefill = platform.createLocalPrefill(backend, server, foreground, config,
         kvCache: kvCache);
-    final voiceModels = platform.createVoiceModelStore(cache);
-    final voice = platform.createVoice(voiceModels, cache);
     // Both started before either is awaited: one is a disk scan and the other
     // a channel round trip, and neither needs the other's answer.
     final scan = voiceModels.installed();

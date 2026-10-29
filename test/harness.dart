@@ -224,7 +224,7 @@ class TestApp {
     // after it writes is [AppSecrets]'s own, so faking it would only prove
     // the fake.
     final appSecrets = AppSecrets(FakeSecretStore());
-    return TestApp._(
+    final app = TestApp._(
       config: config,
       secrets: appSecrets,
       backend: backend,
@@ -336,6 +336,12 @@ class TestApp {
         ],
       ),
     );
+    // A pick resolves against the providers the gates read, as the app's
+    // registry resolves against the same settings and installs.
+    backend
+      ..providers = (() => app.container.read(modelProvidersProvider))
+      ..cutsUtterances = speech.hasModelCatalog;
+    return app;
   }
 
   final AppConfig config;

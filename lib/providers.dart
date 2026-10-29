@@ -11,8 +11,10 @@ import "../core/config.dart";
 import "domain/file_tools.dart" show resolveWorkspacePath;
 import "../core/platform/platform.dart"
     show createFileWatches, createPromptSources, processEnv, setupComplete;
+import "data/builtin/llm/hosted_models.dart" show ModelHost;
 import "data/builtin/llm/local_pool_client.dart" show OnDeviceProvider, poolOptions;
 import "data/builtin/llm/providers/presets.dart" show providerOf;
+import "data/builtin/llm/providers/provider.dart" show LlmProvider;
 import "data/builtin/builtin_backend.dart";
 import "data/local/file_trigger_store.dart";
 import "data/local/linked_instructions_store.dart";
@@ -38,6 +40,7 @@ import "domain/chat_store.dart";
 import "domain/file_handoff.dart";
 import "domain/link_opener.dart";
 import "domain/llm_provider.dart";
+import "domain/model_capability.dart";
 import "domain/model_registry.dart";
 import "data/builtin/llm/local_prefill.dart";
 import "data/local/byte_repair_store.dart";
@@ -67,8 +70,6 @@ import "domain/tone.dart";
 import "domain/tristate.dart";
 import "domain/turn_keep_alive.dart";
 import "domain/voice.dart";
-import "domain/voice_model.dart"
-    show RecognitionModel, SpeechModel, voiceModelOf;
 import "domain/voice_model_store.dart";
 
 final chatStoreProvider = Provider<ChatStore>((ref) => throw UnimplementedError());
@@ -390,79 +391,69 @@ ModelChoice voiceSpeechChoice(AppSettings s) => (
       modelId: s.voiceSpeechModelId,
     );
 
-/// Whether [provider] is configured and has audio endpoints. Read off the
-/// settings alone: asking the backend builds a client, and the registry it
-/// builds from reads `settings.json` again, which the readiness gates would do
-/// on every settings write.
-bool _answersAudio(AppSettings settings, String provider) =>
-    settings.llmProviders.any((p) => p.id == provider && providerOf(p).answersAudio);
+/// [choice] as a ref, where it names a model.
+ModelRef? refOf(ModelChoice choice) => switch (choice) {
+      (providerId: final String providerId, modelId: final String modelId) =>
+        (providerId: providerId, modelId: modelId),
+      _ => null,
+    };
 
 /// What a voice session is started with. Null halves are nothing usable: no
-/// pick, a provider no longer configured or with no audio endpoints, or a
-/// provider's listening where this platform cannot.
+/// pick, or one no provider serves as that kind on this platform.
 ({Hearing? hearing, Speaking? speaking}) voicePicks(
-        AppSettings settings, AgentBackend backend, Voice voice) =>
-    (hearing: _hearing(settings, backend, voice), speaking: _speaking(settings, backend));
-
-Hearing? _hearing(AppSettings settings, AgentBackend backend, Voice voice) {
-  final model = settings.voiceRecognitionModelId;
-  final provider = settings.voiceRecognitionProviderId;
-  if (model == null) return null;
-  if (provider == localProviderId) {
-    final recognition = voiceModelOf<RecognitionModel>(model);
-    return recognition == null ? null : HearOnDevice(recognition);
-  }
-  if (!voice.hasModelCatalog) return null;
-  final transcribe = backend.transcriber(provider, model);
-  return transcribe == null ? null : HearThrough(transcribe);
+    AppSettings settings, AgentBackend backend) {
+  final hears = refOf(voiceRecognitionChoice(settings));
+  final speaks = refOf(voiceSpeechChoice(settings));
+  return (
+    hearing: hears == null ? null : backend.resolveModel<TranscriptionModel>(hears)?.hearing,
+    speaking: speaks == null
+        ? null
+        : backend
+            .resolveModel<SynthesisModel>(speaks)
+            ?.speaking(voice: settings.voiceSpeechVoice),
+  );
 }
 
-Speaking? _speaking(AppSettings settings, AgentBackend backend) {
-  final model = settings.voiceSpeechModelId;
-  final provider = settings.voiceSpeechProviderId;
-  if (model == null) return null;
-  if (provider == localProviderId) {
-    final speech = voiceModelOf<SpeechModel>(model);
-    return speech == null ? null : SpeakOnDevice(speech);
-  }
-  final synthesize = backend.synthesizer(provider, model, voice: settings.voiceSpeechVoice);
-  return synthesize == null ? null : SpeakThrough(synthesize);
+/// The providers a pick resolves against where nothing is run: this device's,
+/// then the configured ones, the order the registry shadows an id in. Built
+/// from the settings and installs the gates already watch, rather than asked
+/// of the backend, whose registry reads `settings.json` again.
+final modelProvidersProvider = Provider<List<LlmProvider>>((ref) => [
+      ref.watch(onDeviceModelsProvider),
+      for (final config in ref.watch(appSettingsProvider.select((s) => s.llmProviders)))
+        providerOf(config),
+    ]);
+
+/// Whether [choice] names a [T] some provider serves on this platform. A
+/// system-engine pick is served only where the device has the engine, so a
+/// settings file carried off a phone does not light up voice on a machine
+/// that cannot use it.
+bool _resolves<T extends Model>(Ref ref, ModelChoice choice) {
+  final pick = refOf(choice);
+  if (pick == null) return false;
+  final host = ModelHost.resolving(cutsUtterances: ref.watch(voiceProvider).hasModelCatalog);
+  return ref
+          .watch(modelProvidersProvider)
+          .where((p) => p.id == pick.providerId)
+          .firstOrNull
+          ?.resolve<T>(pick.modelId, host) !=
+      null;
 }
 
 /// Whether a message can be read out: a platform that can speak, and a speech
-/// model picked and either installed or a configured provider's. Half of
-/// [voiceReadyProvider], because reading a message out needs nothing to hear
-/// with.
-final speechReadyProvider = Provider<bool>((ref) {
-  if (!ref.watch(voiceProvider).available) return false;
-  final settings = ref.watch(appSettingsProvider);
-  final model = settings.voiceSpeechModelId;
-  if (settings.voiceSpeechProviderId != localProviderId) {
-    return model != null && _answersAudio(settings, settings.voiceSpeechProviderId);
-  }
-  // `contains` takes an `Object?`, so a setting naming nothing is simply not
-  // in the set. A sentinel is in it only where the device has the engine, so
-  // a settings file carried off a phone does not light up read-aloud on a
-  // machine that cannot speak.
-  return ref.watch(installedVoiceModelsProvider)
-      .contains(voiceModelOf<SpeechModel>(model)?.id);
-});
+/// model picked that a provider serves. Half of [voiceReadyProvider], because
+/// reading a message out needs nothing to hear with.
+final speechReadyProvider = Provider<bool>((ref) =>
+    ref.watch(voiceProvider).available &&
+    _resolves<SynthesisModel>(ref, voiceSpeechChoice(ref.watch(appSettingsProvider))));
 
 /// Whether the composer draws its voice button: a platform that can listen, and
 /// two models picked and usable. Anything less and pressing it could only
 /// lead to an apology.
-final voiceReadyProvider = Provider<bool>((ref) {
-  if (!ref.watch(speechReadyProvider)) return false;
-  final settings = ref.watch(appSettingsProvider);
-  final model = settings.voiceRecognitionModelId;
-  if (settings.voiceRecognitionProviderId != localProviderId) {
-    return model != null &&
-        ref.watch(voiceProvider).hasModelCatalog &&
-        _answersAudio(settings, settings.voiceRecognitionProviderId);
-  }
-  return ref.watch(installedVoiceModelsProvider)
-      .contains(voiceModelOf<RecognitionModel>(model)?.id);
-});
+final voiceReadyProvider = Provider<bool>((ref) =>
+    ref.watch(speechReadyProvider) &&
+    _resolves<TranscriptionModel>(
+        ref, voiceRecognitionChoice(ref.watch(appSettingsProvider))));
 
 /// The languages the device's own engines offer. A future rather than
 /// something seeded at startup like [installedVoiceModelsProvider]: only the

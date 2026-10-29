@@ -140,7 +140,6 @@ void main() {
   testWidgets("a provider's speech model is picked beside the device's, with a voice name",
       (tester) async {
     app = TestApp.create(voiceModels: const {"piper-en_US-amy"});
-    app.backend.speakers.add(testProviderId);
     ModelCatalog.notifier.value = ModelCatalog.parse(jsonEncode({
       testProviderId: {
         "models": {
@@ -437,16 +436,13 @@ void main() {
       (tester) async {
     Future<bool> ready({required bool sherpa}) async {
       app = TestApp.create(voice: FakeVoice(hasModelCatalog: sherpa));
-      app.backend
-        ..listeners.add(testProviderId)
-        ..speakers.add(testProviderId);
       await io(tester, () async {
         await app.seedProviders(const [testProvider]);
         final settings = app.container.read(appSettingsProvider.notifier);
         await settings.setVoiceRecognition((providerId: testProviderId, modelId: "stt"));
         await settings.setVoiceSpeech((providerId: testProviderId, modelId: "tts"));
       });
-      final picks = voicePicks(app.container.read(appSettingsProvider), app.backend, app.voice);
+      final picks = voicePicks(app.container.read(appSettingsProvider), app.backend);
       expect(picks.speaking, isA<SpeakThrough>());
       expect(picks.hearing is HearThrough, sherpa);
       final ready = app.container.read(voiceReadyProvider);

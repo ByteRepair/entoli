@@ -756,17 +756,11 @@ class FakeBackend implements AgentBackend {
   @override
   Future<List<ModelOption>> models() async => modelList;
 
-  /// The providers whose audio endpoints answer.
-  final Set<String> listeners = {};
-  final Set<String> speakers = {};
+  @override
+  Transcribe? transcriber(String providerId, String modelId) => null;
 
   @override
-  Transcribe? transcriber(String providerId, String modelId) =>
-      listeners.contains(providerId) ? (_) async => "" : null;
-
-  @override
-  Synthesize? synthesizer(String providerId, String modelId, {String? voice}) =>
-      speakers.contains(providerId) ? (_) async => Uint8List(0) : null;
+  Synthesize? synthesizer(String providerId, String modelId, {String? voice}) => null;
 
   /// What [resolveModel] resolves against, and what this platform can run.
   List<LlmProvider> Function() providers = () => const [];
