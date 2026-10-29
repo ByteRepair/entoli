@@ -1,5 +1,5 @@
 import "package:flutter/material.dart";
-import "package:flutter/foundation.dart" show kIsWeb;
+import "package:flutter/foundation.dart" show defaultTargetPlatform, kIsWeb;
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../domain/app_settings.dart";
@@ -26,7 +26,9 @@ class LocalModelSection extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    if (!ref.watch(localLlmProvider).available) return const _Elsewhere();
+    if (!ref.watch(localLlmProvider).available) {
+      return _serverBuilt ? const _Elsewhere() : const SizedBox.shrink();
+    }
     return ListTile(
       title: const Text("LLM settings"),
       subtitle: const Text("Hardware, context, caching and loaded models"),
@@ -384,34 +386,29 @@ class _RunningRow extends ConsumerWidget {
   }
 }
 
-/// What the section says where no server was bundled. Said rather than hidden
-/// like an unsupported category (`SettingsCategory.offered`): the page also
-/// holds the voice catalogs, and the answer here is a good one rather than an
-/// apology.
-///
-/// The two cases differ in what went missing. On the web there is nothing that
-/// could run a model, and the better answer is a hosted provider or a machine
-/// running one. On a desktop the build could have carried one and did not —
-/// a build fault in the same sense a missing proot is, though said as a line
-/// in the section rather than a banner, since the section itself is the
-/// apology enough: what to run to fill it, and the presets meanwhile.
+/// Whether this platform's build carries a model server when it is built
+/// whole: Android and Linux. Anywhere else a missing one is not a fault, and
+/// the section is not drawn at all.
+bool get _serverBuilt =>
+    !kIsWeb &&
+    (defaultTargetPlatform == TargetPlatform.android ||
+        defaultTargetPlatform == TargetPlatform.linux);
+
+/// What the section says where a build that should have carried a server did
+/// not — a build fault in the same sense a missing proot is, said as a line in
+/// the section rather than a banner: what to run to fill it, and the presets
+/// meanwhile.
 class _Elsewhere extends StatelessWidget {
   const _Elsewhere();
 
   @override
-  Widget build(BuildContext context) => SectionHeader(
+  Widget build(BuildContext context) => const SectionHeader(
         "Text models",
-        description: kIsWeb
-            ? "A browser can hold no model and run none. The better answer is "
-                "already there: add Ollama or LM Studio under Providers, and "
-                "everything they serve appears in the pickers. Carrying a "
-                "model is the desktops' and the phone's, where there is a "
-                "machine of one's own to ask."
-            : "This build carries no model server. Run "
-                "tool/linux/build-llama.sh and build again, and the catalog "
-                "below is bundled into the app. Until then the better answer "
-                "is already there: add Ollama or LM Studio under Providers, "
-                "and everything they serve appears in the pickers.",
+        description: "This build carries no model server. Run "
+            "tool/linux/build-llama.sh and build again, and the catalog "
+            "below is bundled into the app. Until then the better answer "
+            "is already there: add Ollama or LM Studio under Providers, "
+            "and everything they serve appears in the pickers.",
       );
 }
 

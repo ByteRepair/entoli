@@ -182,8 +182,8 @@ nothing needs a hand.
 
 No on-device models: the bundled llama.cpp server is built for Android and
 Linux and never for this platform, so `platformLocalLlm` answers
-`UnavailableLocalLlm` here and the On-device page says so — the same wording a
-Linux build that skipped `build-llama.sh` gets. The plan for this platform is
+`UnavailableLocalLlm` here and the On-device page holds only the voice
+downloads, with no model section to apologise from. The plan for this platform is
 not llama at all: Apple Intelligence's FoundationModels, reached through a
 Swift plugin of the app's own, on macOS 26 and later — a future version, at
 which point the settings page is where the story changes and nowhere else.

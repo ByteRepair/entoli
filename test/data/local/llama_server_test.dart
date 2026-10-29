@@ -1,3 +1,5 @@
+import "dart:io";
+
 import "package:flutter_test/flutter_test.dart";
 
 import "package:agent_chat/data/local/llama_server.dart";
@@ -23,6 +25,7 @@ void main() {
     int? contextLength,
     int? threads,
     String? slotSavePath,
+    bool fitLayers = false,
   }) =>
       llamaLaunch(
         binaries: binaries,
@@ -34,6 +37,7 @@ void main() {
         contextLength: contextLength ?? model.defaultContext,
         threads: threads,
         slotSavePath: slotSavePath,
+        fitLayers: fitLayers,
       );
 
   /// The value of the argument after [flag], or null where it was not passed.
@@ -62,6 +66,15 @@ void main() {
     expect(valueOf(launch().command, "-m"), "/cache/llm/${model.id}/model.gguf");
   });
 
+  test("one slot and no RAM prompt cache", () {
+    final it = launch();
+
+    // The disk cache saves and restores slot 0, so a turn must run there.
+    expect(valueOf(it.command, "-np"), "1");
+    // Its default is 8 GiB of host memory no budget here counts.
+    expect(valueOf(it.command, "--cache-ram"), "0");
+  });
+
   test("the chat template is applied, since that is what tool calls are", () {
     expect(launch().command, contains("--jinja"));
   });
@@ -86,6 +99,15 @@ void main() {
     expect(int.parse(valueOf(npu.command, "-ngl")!), greaterThan(100));
   });
 
+  test("a laptop leaves the layers to --fit", () {
+    // A discrete GPU smaller than the model fails to load with every layer on
+    // it, and an explicit -ngl is what turns fitting off.
+    final gpu = launch(device: "Vulkan0", fitLayers: true);
+
+    expect(valueOf(gpu.command, "-dev"), "Vulkan0");
+    expect(gpu.command, isNot(contains("-ngl")));
+  });
+
   group("how many cores it runs on", () {
     test("the little cluster is left out of the count", () {
       // Four big and four little, which is the common phone. ggml's threadpool
@@ -104,6 +126,29 @@ void main() {
 
     test("cores that are all one tier are all worth running on", () {
       expect(bigCoreCount([2000000, 2000000, 2000000, 2000000]), 4);
+      // AMD's preferred-core ranking: one tier, ceilings a few percent apart.
+      expect(bigCoreCount([5100000, 5050000, 4950000, 4900000]), 4);
+    });
+
+    test("a hyperthread sibling is not a core", () {
+      // An i7-1360P: four P-cores with two threads each, then eight E-cores.
+      final root = Directory.systemTemp.createTempSync("cpu").path;
+      addTearDown(() => Directory(root).deleteSync(recursive: true));
+      for (var cpu = 0; cpu < 16; cpu++) {
+        final p = cpu < 8;
+        File("$root/cpu$cpu/cpufreq/cpuinfo_max_freq")
+          ..createSync(recursive: true)
+          ..writeAsStringSync(p ? "5000000\n" : "3700000\n");
+        File("$root/cpu$cpu/topology/thread_siblings_list")
+          ..createSync(recursive: true)
+          ..writeAsStringSync(p ? "${cpu & ~1}-${cpu | 1}\n" : "$cpu\n");
+      }
+
+      final ceilings = cpuCeilings(root: root, cpus: 16);
+
+      expect(ceilings, hasLength(12));
+      // The four P-cores, which is llama.cpp's own answer on x86 Linux.
+      expect(bigCoreCount(ceilings), 4);
     });
 
     test("a kernel that will not say leaves the choice to llama.cpp", () {

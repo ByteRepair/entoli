@@ -1,5 +1,6 @@
 import "dart:async";
 
+import "package:flutter/foundation.dart";
 import "package:flutter/material.dart";
 import "package:flutter_test/flutter_test.dart";
 
@@ -10,6 +11,7 @@ import "package:agent_chat/providers.dart";
 import "../fakes.dart";
 import "../harness.dart";
 import "package:agent_chat/ui/settings/settings_category.dart";
+import "package:agent_chat/ui/settings/settings_page.dart";
 
 void main() {
   late TestApp app;
@@ -34,11 +36,31 @@ void main() {
     app = TestApp.create();
     await pumpOnDevice(tester);
 
-    // Web and a server-less desktop build get different wordings — the
-    // desktop could have run the script — but both name the presets either.
+    // Android and Linux build a server, so missing one is a fault to name.
     expect(find.textContaining("Ollama or LM Studio"), findsOneWidget);
     expect(find.text(model.name), findsNothing);
     expect(find.text("LLM settings"), findsNothing);
+  });
+
+  testWidgets("a platform that never builds a server keeps only the voice "
+      "downloads", (tester) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.macOS;
+    app = TestApp.create();
+    await pumpOnDevice(tester);
+
+    expect(find.textContaining("Ollama or LM Studio"), findsNothing);
+    expect(find.text("Answering on this device"), findsNothing);
+    debugDefaultTargetPlatformOverride = null;
+  });
+
+  testWidgets("with neither a server nor a voice catalog there is no On-device "
+      "page", (tester) async {
+    app = TestApp.create(voice: FakeVoice(hasModelCatalog: false));
+    useWindow(tester, const Size(1200, 1600));
+    await app.pump(tester, const SettingsPage());
+
+    expect(tile(SettingsCategory.onDevice.label), findsNothing);
+    expect(tile(SettingsCategory.providers.label), findsOneWidget);
   });
 
   testWidgets("where it can run one, the catalog is offered with its size",
