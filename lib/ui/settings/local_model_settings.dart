@@ -19,8 +19,26 @@ import "../widgets/section_header.dart";
 final localDevicesProvider = FutureProvider<List<LocalDevice>>(
     (ref) => ref.watch(localLlmProvider).devices());
 
-/// What answers from the device itself: how many models may be loaded at once,
-/// what they run on, and how much context they are given.
+/// The row that opens [LocalLlmSettingsPage], kept off the On-device page
+/// itself so the catalogs are what it shows.
+class LocalModelSection extends ConsumerWidget {
+  const LocalModelSection({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    if (!ref.watch(localLlmProvider).available) return const _Elsewhere();
+    return ListTile(
+      title: const Text("LLM settings"),
+      subtitle: const Text("Hardware, context, caching and loaded models"),
+      trailing: const Icon(Icons.chevron_right),
+      onTap: () => Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => const LocalLlmSettingsPage())),
+    );
+  }
+}
+
+/// How on-device text models run: how many may be loaded at once, what they
+/// run on, and how much context they are given.
 ///
 /// **There is no model picker here, and that is the point.** Every model on
 /// disk is offered by the on-device provider, so which one a turn uses is
@@ -28,44 +46,26 @@ final localDevicesProvider = FutureProvider<List<LocalDevice>>(
 /// the title and classifier pickers — and asking for one is what loads it. A
 /// picker here would have been a second place to say the same thing, and the
 /// one place that could disagree with the rest.
-class LocalModelSection extends ConsumerWidget {
-  const LocalModelSection({super.key});
+class LocalLlmSettingsPage extends StatelessWidget {
+  const LocalLlmSettingsPage({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    if (!ref.watch(localLlmProvider).available) return const _Elsewhere();
-    final installed = ref.watch(installedLocalModelsProvider);
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const SectionHeader(
-          "Answering on this device",
-          description: "A model downloaded here answers with no network and no "
-              "account, and every one of them is offered to every chat under "
-              "On-device. One is loaded when a chat first asks for it. They are "
-              "slower and less able than anything hosted, and the only ones "
-              "that work on a plane.",
+  Widget build(BuildContext context) => Scaffold(
+        appBar: AppBar(title: const Text("LLM settings")),
+        body: ListView(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          children: const [
+            _MaxRunningPicker(),
+            _DevicePicker(),
+            _ContextPicker(),
+            _ThreadsSlider(),
+            _PrefillToggle(),
+            _KvCachePicker(),
+            _Prefilling(),
+            _Running(),
+          ],
         ),
-        if (installed.isEmpty)
-          const ListTile(
-            title: Text("Nothing downloaded yet"),
-            subtitle: Text("Fetch one below and it appears in every model "
-                "picker, under On-device."),
-          )
-        else ...[
-          const _MaxRunningPicker(),
-          const _DevicePicker(),
-          const _ContextPicker(),
-          const _ThreadsSlider(),
-          const _PrefillToggle(),
-          const _KvCachePicker(),
-          const _Prefilling(),
-          const _Running(),
-        ],
-      ],
-    );
-  }
+      );
 }
 
 /// How many may be resident at once. The one setting here that is about the
@@ -400,7 +400,7 @@ class _Elsewhere extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => SectionHeader(
-        "Answering on this device",
+        "Text models",
         description: kIsWeb
             ? "A browser can hold no model and run none. The better answer is "
                 "already there: add Ollama or LM Studio under Providers, and "
@@ -438,10 +438,10 @@ class LocalModelCatalogSection extends ConsumerWidget {
         const Divider(),
         const SectionHeader(
           "Text models",
-          description: "Downloaded once and kept outside the app's data, so a "
-              "backup does not carry it and a restore does not delete it. The "
-              "ones offered here are Q4_0 — the one quantisation an NPU can be "
-              "handed as it is.",
+          description: "Run language models offline, on this device. "
+              "Downloaded models appear under On-device in every model picker. "
+              "They are stored outside the app's data and are not included in "
+              "backups.",
         ),
         for (final model in [...localModelCatalog, ...added]) LocalModelTile(model: model),
         for (final model in others) _DownloadedTile(model: model),

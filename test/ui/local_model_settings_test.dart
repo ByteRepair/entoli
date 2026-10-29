@@ -23,6 +23,12 @@ void main() {
     await pumpSettings(tester, app, SettingsCategory.onDevice);
   }
 
+  Future<void> pumpLlmSettings(WidgetTester tester) async {
+    await pumpOnDevice(tester);
+    await tester.tap(find.text("LLM settings"));
+    await settleIo(tester);
+  }
+
   testWidgets("a build with no server in it says where the answer is instead, "
       "and offers nothing to download", (tester) async {
     app = TestApp.create();
@@ -32,7 +38,7 @@ void main() {
     // desktop could have run the script — but both name the presets either.
     expect(find.textContaining("Ollama or LM Studio"), findsOneWidget);
     expect(find.text(model.name), findsNothing);
-    expect(find.text("Max LLMs running"), findsNothing);
+    expect(find.text("LLM settings"), findsNothing);
   });
 
   testWidgets("where it can run one, the catalog is offered with its size",
@@ -41,12 +47,10 @@ void main() {
     await pumpOnDevice(tester);
 
     expect(find.text(model.name), findsOneWidget);
-    expect(find.textContaining("Q4_0"), findsWidgets);
     expect(find.byTooltip("Download"), findsWidgets);
     expect(find.byTooltip("Delete"), findsNothing);
-    // Nothing on disk means nothing to configure: the settings above the
-    // catalog are all about models, and there are none.
-    expect(find.text("Nothing downloaded yet"), findsOneWidget);
+    // The settings are a page of their own, so the catalog leads this one.
+    expect(find.text("LLM settings"), findsOneWidget);
     expect(find.text("Max LLMs running"), findsNothing);
   });
 
@@ -56,7 +60,7 @@ void main() {
       localLlm: FakeLocalLlm(installed: [model.id]),
       localModels: {model.id},
     );
-    await pumpOnDevice(tester);
+    await pumpLlmSettings(tester);
 
     // The pick used to live here, and having moved it there must be nothing
     // left that looks like one: two places to say which model answers is one
@@ -74,7 +78,7 @@ void main() {
       localLlm: FakeLocalLlm(installed: [model.id]),
       localModels: {model.id},
     );
-    await pumpOnDevice(tester);
+    await pumpLlmSettings(tester);
 
     await tester.tap(find.text("One at a time"));
     await settleIo(tester);
@@ -100,7 +104,7 @@ void main() {
       ]),
       localModels: {model.id},
     );
-    await pumpOnDevice(tester);
+    await pumpLlmSettings(tester);
 
     // "Auto" is the resting label now, not "CPU": null means the best
     // accelerator found, and the CPU is a choice below it.
@@ -120,7 +124,7 @@ void main() {
       localLlm: FakeLocalLlm(installed: [model.id]),
       localModels: {model.id},
     );
-    await pumpOnDevice(tester);
+    await pumpLlmSettings(tester);
 
     expect(find.textContaining("no accelerator on this device"), findsOneWidget);
   });
@@ -130,7 +134,7 @@ void main() {
     final llm = FakeLocalLlm(installed: [model.id]);
     app = TestApp.create(localLlm: llm, localModels: {model.id});
     await io(tester, () => llm.serve(model.id, device: "Vulkan0"));
-    await pumpOnDevice(tester);
+    await pumpLlmSettings(tester);
 
     // The resolved device, not the setting: Auto is decided when the model
     // loads, so this row is the only place the answer appears.
@@ -142,7 +146,7 @@ void main() {
     final llm = FakeLocalLlm(installed: [model.id]);
     app = TestApp.create(localLlm: llm, localModels: {model.id});
     await io(tester, () => llm.serve(model.id, device: LocalDevice.cpu));
-    await pumpOnDevice(tester);
+    await pumpLlmSettings(tester);
 
     expect(find.textContaining("Answering on the CPU"), findsOneWidget);
   });
@@ -165,7 +169,7 @@ void main() {
         // Expected.
       }
     });
-    await pumpOnDevice(tester);
+    await pumpLlmSettings(tester);
 
     // The server's own last words. For a model too large to fit this is the
     // only place it is said at all.
@@ -177,7 +181,7 @@ void main() {
     final llm = FakeLocalLlm(installed: [model.id]);
     app = TestApp.create(localLlm: llm, localModels: {model.id}, prefill: true);
     await io(tester, () => llm.serve(model.id));
-    await pumpOnDevice(tester);
+    await pumpLlmSettings(tester);
 
     // Held at its serve, which is where a warm-up spends most of its life. From
     // here the page has a spinner on it, so it is pumped rather than settled.
@@ -305,7 +309,7 @@ void main() {
       localLlm: FakeLocalLlm(installed: [model.id]),
       localModels: {model.id},
     );
-    await pumpOnDevice(tester);
+    await pumpLlmSettings(tester);
 
     // On by default: the field leads with the ten it resolves to.
     expect(find.text("Default (10)"), findsOneWidget);
@@ -322,7 +326,7 @@ void main() {
       localLlm: FakeLocalLlm(installed: [model.id]),
       localModels: {model.id},
     );
-    await pumpOnDevice(tester);
+    await pumpLlmSettings(tester);
 
     // A dump is one request to the model and a turn writes one per step, so
     // every wording here is per prompt — "10 chats" promised conversations kept
@@ -343,7 +347,7 @@ void main() {
       localLlm: FakeLocalLlm(installed: [model.id], maxThreads: 8),
       localModels: {model.id},
     );
-    await pumpOnDevice(tester);
+    await pumpLlmSettings(tester);
 
     expect(find.text("CPU cores"), findsOneWidget);
     // The default is every core, and that is what the row says until it is moved.
@@ -356,7 +360,7 @@ void main() {
       localLlm: FakeLocalLlm(installed: [model.id], maxThreads: 1),
       localModels: {model.id},
     );
-    await pumpOnDevice(tester);
+    await pumpLlmSettings(tester);
 
     expect(find.text("CPU cores"), findsNothing);
   });
@@ -366,7 +370,7 @@ void main() {
       localLlm: FakeLocalLlm(installed: [model.id], maxThreads: 8),
       localModels: {model.id},
     );
-    await pumpOnDevice(tester);
+    await pumpLlmSettings(tester);
 
     await tester.drag(find.byType(Slider), const Offset(-300, 0));
     await settleIo(tester);

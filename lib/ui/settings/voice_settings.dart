@@ -206,14 +206,14 @@ class VoiceCatalogSections extends ConsumerWidget {
 class _VoiceCatalogSection extends StatelessWidget {
   const _VoiceCatalogSection.recognition()
       : title = "Speech recognition",
-        description = "What listens, for voice mode. Bigger is more accurate "
-            "and slower. Everything here runs on this device.",
+        description = "Transcribe speech in voice mode, on this device. "
+            "Larger models are more accurate but slower.",
         models = recognitionModels;
 
   const _VoiceCatalogSection.speech()
       : title = "Speech synthesis",
-        description = "What speaks, for voice mode and reading a reply out. "
-            "One voice each, except where the model says otherwise.",
+        description = "Read replies aloud, in voice mode or on request, on "
+            "this device.",
         models = speechModels;
 
   final String title;
