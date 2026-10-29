@@ -155,7 +155,7 @@ final _mention = RegExp(r"(?<![\w.-])@([\w.-]+)");
 
 /// What the library says [text]'s references mean, ready to be written into the
 /// message as [Message.documents] and read back by [expandedPrompt] and
-/// [agentPromptFrom] — see "Skills and agents" in `lib/domain/AGENTS.md`.
+/// [mentionedAgents] — see "Skills and agents" in `lib/domain/AGENTS.md`.
 ///
 /// Keyed by the reference as written, sigil included, so a skill and an agent
 /// of the same name do not collide. A name the library does not know is left
@@ -206,16 +206,15 @@ Map<String, String> agentEntriesFrom(Map<String, String> documents) => {
           entry.key: entry.value,
     };
 
-/// The `@agent` instructions the message asked for, joined in the order they
-/// were written — what `turnPrompt` puts under the system prompt for the turn.
-/// Null where it named none.
+/// The agents the message asked to hand the work to, sigils off, in the order
+/// they were written — who a direct chat's main agent is told to delegate to.
 ///
 /// Off the record rather than the text: the mentions were resolved when the
 /// message was composed, and a name mentioned twice was recorded once.
-String? agentPromptFrom(Map<String, String> documents) {
-  final bodies = agentEntriesFrom(documents).values.toList();
-  return bodies.isEmpty ? null : bodies.join("\n\n");
-}
+List<String> mentionedAgents(Map<String, String> documents) => [
+      for (final key in agentEntriesFrom(documents).keys)
+        key.substring(CompletionKind.agent.trigger.length),
+    ];
 
 /// The member [documents] shows addressed, as typed — the first agent key in
 /// write order. Null where the message names no member at all. A message that

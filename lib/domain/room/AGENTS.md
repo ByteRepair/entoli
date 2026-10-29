@@ -47,17 +47,17 @@ The room has two participants who speak, and a third shape that never does:
 - **What a participant may use is its own.** A member's turn and a
   sub-agent's both run as the agent's `AgentDefinition`, so its `tools:` list
   holds in either role; see "Tools per agent" in `lib/domain/AGENTS.md`.
-- **An `@mention` is not a participant.** It stacks the named agent's body
-  as the main agent's instructions. Omada is what changes that sentence, in
-  Omada-on projects only.
+- **An `@mention` is not a participant.** It asks the main agent to hand
+  the work to the named agent through `task`. Omada is what changes that
+  sentence, in Omada-on projects only.
 
 ### The contract between direct and Omada chats
 
 **A direct chat** — Omada off, the default, every chat that existed before
 there was a toggle — is **strictly 1:1 between the user and the main agent**.
 Every turn is the main agent's turn, whether the message addresses it or not;
-an `@mention` on the prompt is instruction material, stacked from
-`Message.documents`, and the reply is the main agent's, unnamed. When the
+an `@mention` on the prompt, read from `Message.documents`, asks it to
+delegate to the named agent, and the reply is the main agent's, unnamed. When the
 main agent delegates, it does so through `task`: sub-agents are machinery
 inside its turn, headless and off the record, their output readable by the
 main agent alone, and the user sees only what the main agent says about it.
