@@ -1,9 +1,6 @@
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
-import "../../data/builtin/llm/hosted_models.dart" show HostedSynthesisModel;
-import "../../data/builtin/llm/local_pool_client.dart"
-    show OnDeviceSynthesisModel, OnDeviceTranscriptionModel;
 import "../../domain/app_settings.dart";
 import "../../domain/models.dart" show ModelChoice;
 import "../../domain/voice_model.dart";
@@ -106,9 +103,7 @@ class _VoiceNameField extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    if (ref.watch(pickedSpeechProvider) is! HostedSynthesisModel) {
-      return const SizedBox.shrink();
-    }
+    if (ref.watch(pickedSpeechProvider)?.namesVoices != true) return const SizedBox.shrink();
     final name = settings.voiceSpeechVoice;
     final playing = ref.watch(readAloudProvider) == previewId;
     return LabelledField(
@@ -264,17 +259,14 @@ class _SpeakerField extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final speech = switch (ref.watch(pickedSpeechProvider)) {
-      OnDeviceSynthesisModel(:final model) => model,
-      _ => null,
-    };
-    // Nothing picked, a provider's, or the system synthesiser — whose voice is the user's,
-    // set in the OS, so there is no list of them here to offer.
-    if (speech == null || speech.isNative) return const SizedBox.shrink();
+    // Nothing picked, a provider's, or the system synthesiser — whose voice is
+    // the user's, set in the OS, so there is no list of them here to offer.
+    final speakers = ref.watch(pickedSpeechProvider)?.speakers ?? 0;
+    if (speakers == 0) return const SizedBox.shrink();
     // Otherwise drawn even where the model has one voice, which is most of
     // them: a field that came and went with the model above it would make
     // picking a model a change of what the page is.
-    final value = settings.voiceSpeaker.clamp(0, speech.speakers - 1);
+    final value = settings.voiceSpeaker.clamp(0, speakers - 1);
     final playing = ref.watch(readAloudProvider) == previewId;
     return LabelledField(
       label: "Voice",
@@ -285,7 +277,7 @@ class _SpeakerField extends ConsumerWidget {
               isExpanded: true,
               initialValue: value,
               items: [
-                for (var i = 0; i < speech.speakers; i++)
+                for (var i = 0; i < speakers; i++)
                   DropdownMenuItem(value: i, child: Text("Voice ${i + 1}")),
               ],
               onChanged: (picked) =>
@@ -318,10 +310,8 @@ class _LanguageField extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final hears = ref.watch(pickedRecognitionProvider);
-    final speaks = ref.watch(pickedSpeechProvider);
-    final native = hears is OnDeviceTranscriptionModel && hears.model.isNative ||
-        speaks is OnDeviceSynthesisModel && speaks.model.isNative;
+    final native = ref.watch(pickedRecognitionProvider)?.systemEngine == true ||
+        ref.watch(pickedSpeechProvider)?.systemEngine == true;
     if (!native) return const SizedBox.shrink();
     final offered = ref.watch(systemVoiceLanguagesProvider).value ?? const [];
     if (offered.isEmpty) return const SizedBox.shrink();

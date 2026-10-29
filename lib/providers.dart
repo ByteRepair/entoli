@@ -14,7 +14,9 @@ import "../core/platform/platform.dart"
 import "data/builtin/llm/hosted_models.dart" show ModelHost;
 import "data/builtin/llm/local_pool_client.dart" show OnDeviceProvider, poolOptions;
 import "data/builtin/llm/providers/presets.dart" show providerOf;
-import "data/builtin/llm/providers/provider.dart" show LlmProvider;
+import "data/builtin/llm/local_kv_cache.dart" show LocalKvCache;
+import "data/builtin/llm/providers/provider.dart" show LlmProvider, resolveIn;
+import "data/local/apple_fm.dart" show AppleFm;
 import "data/builtin/builtin_backend.dart";
 import "data/local/file_trigger_store.dart";
 import "data/local/linked_instructions_store.dart";
@@ -227,19 +229,20 @@ final setupCompleteProvider =
 /// once in `main` beside the cache directory; null where there is none.
 final byteRepairBinDirProvider = Provider<String?>((ref) => null);
 
-/// This device's models as the provider every picker and gate reads them
-/// through: the class the registry runs them with, over what is installed.
-final onDeviceModelsProvider = Provider<OnDeviceProvider>((ref) {
-  final voices = ref.watch(installedVoiceModelsProvider);
-  // Read through by the provider rather than held, so a download has to
-  // rebuild it to be seen.
-  ref.watch(installedLocalModelsProvider);
-  return OnDeviceProvider(
-    ref.watch(localLlmProvider),
-    () => poolOptions(ref.read(appSettingsProvider)),
-    voices: () => voices,
-  );
-});
+/// Where the pool saves and restores a turn's KV, and Apple's on-device model:
+/// null where this build has neither. Overridden in `main`.
+final localKvCacheProvider = Provider<LocalKvCache?>((ref) => null);
+final appleFmProvider = Provider<AppleFm?>((ref) => null);
+
+/// This device's models as one provider, built once: it reads the settings
+/// and what is installed when asked, so the client the registry caches from
+/// it never holds a stale one.
+final onDeviceModelsProvider = Provider<OnDeviceProvider>((ref) => OnDeviceProvider(
+      ref.watch(localLlmProvider),
+      () => poolOptions(ref.read(appSettingsProvider)),
+      kvCache: ref.watch(localKvCacheProvider),
+      voices: () => ref.read(installedVoiceModelsProvider),
+    ));
 
 final localModelStoreProvider =
     Provider<LocalModelStore>((ref) => const UnavailableLocalModelStore());
@@ -414,15 +417,29 @@ ModelRef? refOf(ModelChoice choice) => switch (choice) {
   );
 }
 
-/// The providers a pick resolves against where nothing is run: this device's,
-/// then the configured ones, the order the registry shadows an id in. Built
-/// from the settings and installs the gates already watch, rather than asked
-/// of the backend, whose registry reads `settings.json` again.
-final modelProvidersProvider = Provider<List<LlmProvider>>((ref) => [
-      ref.watch(onDeviceModelsProvider),
-      for (final config in ref.watch(appSettingsProvider.select((s) => s.llmProviders)))
-        providerOf(config),
-    ]);
+/// Every provider the app can reach, and the one list of them: the backend's
+/// registry runs models from it, and the pickers and gates resolve picks
+/// against it. What the user configured, after the models on this device —
+/// composed here rather than written into `settings.json` because they have no
+/// address to write.
+///
+/// **First in the list, and that decides a collision**: `localProviderId` is
+/// the app's name, and so is `appleProviderId` — a `settings.json` that
+/// happens to use either is shadowed rather than allowed to take the models'
+/// own endpoint away from them.
+///
+/// A new list whenever an install changes, though the on-device provider is
+/// the same one, so what watches this sees a download land.
+final modelProvidersProvider = Provider<List<LlmProvider>>((ref) {
+  ref.watch(installedVoiceModelsProvider);
+  ref.watch(installedLocalModelsProvider);
+  return [
+    ref.watch(onDeviceModelsProvider),
+    ?ref.watch(appleFmProvider)?.endpoint,
+    for (final config in ref.watch(appSettingsProvider.select((s) => s.llmProviders)))
+      providerOf(config),
+  ];
+});
 
 /// [choice] as the [T] some provider serves on this platform, or null. A
 /// system-engine pick is served only where the device has the engine, so a
@@ -432,21 +449,18 @@ T? _resolved<T extends Model>(Ref ref, ModelChoice choice) {
   final pick = refOf(choice);
   if (pick == null) return null;
   final host = ModelHost.resolving(cutsUtterances: ref.watch(voiceProvider).hasModelCatalog);
-  return ref
-      .watch(modelProvidersProvider)
-      .where((p) => p.id == pick.providerId)
-      .firstOrNull
-      ?.resolve<T>(pick.modelId, host);
+  return resolveIn<T>(ref.watch(modelProvidersProvider), pick, (_) => host);
 }
 
 /// The voice picks as what they resolve to, for the settings that depend on
 /// which kind of model each is. Resolved to look at, not to run: a session
 /// gets its own from the backend.
 final pickedRecognitionProvider = Provider<TranscriptionModel?>((ref) =>
-    _resolved<TranscriptionModel>(ref, voiceRecognitionChoice(ref.watch(appSettingsProvider))));
+    _resolved<TranscriptionModel>(
+        ref, ref.watch(appSettingsProvider.select(voiceRecognitionChoice))));
 
 final pickedSpeechProvider = Provider<SynthesisModel?>((ref) =>
-    _resolved<SynthesisModel>(ref, voiceSpeechChoice(ref.watch(appSettingsProvider))));
+    _resolved<SynthesisModel>(ref, ref.watch(appSettingsProvider.select(voiceSpeechChoice))));
 
 /// Whether a message can be read out: a platform that can speak, and a speech
 /// model picked that a provider serves. Half of [voiceReadyProvider], because

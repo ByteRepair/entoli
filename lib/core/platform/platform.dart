@@ -14,7 +14,6 @@ import "../../data/builtin/llm/providers/presets.dart";
 import "../../data/local/file_chat_store.dart";
 import "../../data/local/byte_repair_store.dart" show ByteRepairStore;
 import "../../data/prompts/prompt_sources.dart";
-import "../../data/local/apple_fm.dart";
 import "../../domain/agent_browser.dart";
 import "../../domain/app_settings.dart";
 import "../../domain/app_secrets.dart";
@@ -82,16 +81,13 @@ BuiltinBackend createBackend(
   Toolset? tools,
   RootfsStore? rootfs,
   String? abi,
-  required LocalLlm localLlm,
-  LocalKvCache? kvCache,
-  AppleFm? appleFm,
   String? byteRepairBinDir,
   required AppSecrets secrets,
   String? loginPath,
   TriggerRegistryFactory? triggerRegistry,
   SettingsEditor? editSettings,
   AgentBrowser browser = const UnavailableAgentBrowser(),
-  required Set<String> Function() installedVoices,
+  required List<LlmProvider> Function() endpoints,
   required bool cutsUtterances,
 }) {
   AppSettings settings() => AppSettings.load(config);
@@ -133,8 +129,7 @@ BuiltinBackend createBackend(
     triggerRegistry: triggerRegistry,
     editSettings: editSettings,
     registry: LlmRegistry(
-      endpoints: () => llmEndpoints(settings, localLlm, kvCache, appleFm,
-          installedVoices: installedVoices),
+      endpoints: endpoints,
       cutsUtterances: cutsUtterances,
       // Settings wins, but a key already exported is found without having to
       // be pasted in.
@@ -222,41 +217,6 @@ LocalPrefill? createLocalPrefill(
       );
     },
   );
-}
-
-/// Every endpoint the app can reach: what the user configured, and the models
-/// on this device.
-///
-/// The local ones are composed here rather than written into `settings.json`
-/// because they have no address to write. The on-device provider carries the
-/// client that routes a request to the right one of the pool's processes and
-/// loads it on the way; Apple's carries the client that speaks the
-/// framework's channel, and is there only where the framework is.
-///
-/// **First in the list, and that decides a collision**: `localProviderId` is
-/// the app's name, and so is `appleProviderId` — a `settings.json` that
-/// happens to use either is shadowed rather than allowed to take the
-/// models' own endpoint away from them.
-List<LlmProvider> llmEndpoints(
-  AppSettings Function() settings,
-  LocalLlm localLlm,
-  LocalKvCache? kvCache,
-  AppleFm? appleFm, {
-  required Set<String> Function() installedVoices,
-}) {
-  // The Apple model composes the same way the pool does: an entry the user
-  // never configures, carrying its own client — first in the list, beside the
-  // pool, so a `settings.json` that claims one of these ids is shadowed
-  // rather than allowed to take the models' own endpoint away.
-  return [
-    OnDeviceProvider(localLlm, () {
-      // Read here rather than above: this client outlives any one turn, and
-      // the settings page edits these between them.
-      return poolOptions(settings());
-    }, kvCache: kvCache, voices: installedVoices),
-    if (appleFm != null) appleFm.endpoint,
-    for (final config in settings().llmProviders) providerOf(config),
-  ];
 }
 
 /// The Byte Repair tooling store. Which project it is for is decided here so

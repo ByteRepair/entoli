@@ -1,6 +1,7 @@
 import "package:flutter/material.dart";
 
 import "../../domain/download.dart";
+import "../../domain/installable.dart" show ModelFacts;
 import "../chat/activity/format.dart" show plural;
 import "dialogs.dart";
 import "../../core/formatting.dart";
@@ -221,16 +222,17 @@ class InstalledPicker extends StatelessWidget {
 
 /// A model's facts as tags, as many as are known of it, in one order for every
 /// catalog.
-List<Widget> modelTags({
-  String? parameters,
-  String? languages,
-  int? bytes,
-  String? quantisation,
-  int? context,
-  int? voices,
-  String? licence,
-}) =>
-    [
+List<Widget> modelTags(ModelFacts facts) => switch (facts) {
+      (
+        :final parameters,
+        :final languages,
+        :final bytes,
+        :final quantisation,
+        :final context,
+        :final voices,
+        :final licence,
+      ) =>
+        [
       if (parameters != null) InfoTag(Icons.memory, "$parameters params"),
       if (languages != null) InfoTag(Icons.translate, languages),
       if (bytes != null) InfoTag(Icons.download_outlined, formatSize(bytes)),
@@ -238,7 +240,8 @@ List<Widget> modelTags({
       if (context != null) InfoTag(Icons.data_usage, "${tokenCount(context)} context"),
       if (voices != null) InfoTag(Icons.record_voice_over_outlined, plural(voices, "voice")),
       if (licence != null) InfoTag(Icons.gavel_outlined, licence),
-    ];
+    ],
+    };
 
 /// One fact about a thing, as a small labelled chip.
 class InfoTag extends StatelessWidget {

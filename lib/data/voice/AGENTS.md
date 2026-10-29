@@ -136,9 +136,9 @@ installed voice models as those, beside the downloaded text models, and an
 OpenAI-shaped provider serves its audio models. The picker is the same
 `ModelCatalogPage` every model is picked on, offering what each provider
 serves; the downloads themselves are Settings > On-device's, beside the text
-models. The readiness gates resolve the picks against providers built from
-the settings and installs they watch (`modelProvidersProvider`), never the
-backend's registry, which reads `settings.json` again.
+models. Every provider is in one list, `modelProvidersProvider`: the
+readiness gates and pickers resolve picks against it as it changes, and the
+backend's registry runs models from the same list.
 
 **The port knows no HTTP.** `Voice.start` takes one `Hearing` and one
 `Speaking`, each a model on the device or a provider's call (`Transcribe`,

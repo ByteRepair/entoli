@@ -98,9 +98,10 @@ abstract class LlmProvider {
       [for (final m in models(catalog)) ...serve(m.id, m, host)];
 
   /// [modelId] as a [T], where this provider serves one.
-  T? resolve<T extends Model>(String modelId, ModelHost host) => modelOf<T>(
-      serve(modelId, ModelCatalog.current.lookup(config, modelId), host),
-      (providerId: id, modelId: modelId));
+  T? resolve<T extends Model>(String modelId, ModelHost host) =>
+      serve(modelId, ModelCatalog.current.lookup(config, modelId), host)
+          .whereType<T>()
+          .firstOrNull;
 
   /// [request] sent with the key on it, answered by its status: success is
   /// yes, one of [rejecting] is no. A spent balance or a rate limit is a key
@@ -122,6 +123,14 @@ abstract class LlmProvider {
       if (httpClient == null) client.close();
     }
   }
+}
+
+/// [ref] as a [T] from the first of [providers] with its id, the one that
+/// shadows any later, made with what [host] gives that provider.
+T? resolveIn<T extends Model>(Iterable<LlmProvider> providers, ModelRef ref,
+    ModelHost Function(LlmProvider provider) host) {
+  final provider = providers.where((p) => p.id == ref.providerId).firstOrNull;
+  return provider?.resolve<T>(ref.modelId, host(provider));
 }
 
 /// A server nothing guards: no key is asked for, and any key is a yes.

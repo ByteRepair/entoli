@@ -397,7 +397,7 @@ per model family is most of what llama.cpp's server *is*. Writing a second copy
 of it in Dart, to save a subprocess on a device that is about to spend a
 gigabyte of memory on weights, is the wrong trade.
 
-The endpoint is composed by `llmEndpoints` rather than written into
+The endpoint is composed by `modelProvidersProvider` rather than written into
 `settings.json`, and it has no address to write: each model is its own process
 on a port asked of the OS when it loads. It goes **first** in the list, which is
 what decides a collision — `localProviderId` is the app's name, and a

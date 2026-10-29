@@ -3,7 +3,7 @@ import "package:flutter/services.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../data/builtin/llm/hosted_models.dart";
-import "../../data/builtin/llm/local_pool_client.dart" show OnDeviceProvider;
+import "../../data/builtin/llm/providers/provider.dart" show LlmProvider;
 import "../../data/builtin/llm/providers/presets.dart";
 import "../../domain/llm_provider.dart";
 import "../../domain/local_model.dart" show isTitleOnlyModel;
@@ -164,17 +164,16 @@ class _ModelCatalogPageState extends ConsumerState<ModelCatalogPage> {
   }
 
   // Rebuilt only when what it is built from changes, not on every keystroke.
-  // Records compare their fields with ==, which is identity for all three.
+  // Records compare their fields with ==, which is identity for the lists.
   Object? _entriesKey;
   var _entries = const <CatalogEntry>[];
 
-  List<CatalogEntry> _entriesOf(ModelCatalog catalog, List<LlmProviderConfig> providers,
-      List<ModelOption> listed, OnDeviceProvider onDevice, bool cutsUtterances) {
-    final key = (catalog, providers, listed, onDevice, cutsUtterances);
+  List<CatalogEntry> _entriesOf(ModelCatalog catalog, List<LlmProvider> providers,
+      List<ModelOption> listed, bool cutsUtterances) {
+    final key = (catalog, providers, listed, cutsUtterances);
     if (key != _entriesKey) {
       _entriesKey = key;
-      _entries = catalogEntries(
-          catalog, [onDevice, for (final p in providers) providerOf(p)], listed,
+      _entries = catalogEntries(catalog, providers, listed,
           role: widget.role, host: ModelHost.resolving(cutsUtterances: cutsUtterances));
     }
     return _entries;
@@ -222,18 +221,19 @@ class _ModelCatalogPageState extends ConsumerState<ModelCatalogPage> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final configured = ref.watch(appSettingsProvider.select((s) => s.llmProviders));
-    // A provider's transcription model needs the device to cut the microphone
-    // into utterances, which not every platform can.
     final cutsUtterances = ref.watch(voiceProvider).hasModelCatalog;
+    // No provider serves a transcription model where the device cannot cut
+    // the microphone into utterances, so none is offered a Default entry or a
+    // model to add for one there either.
     final providers = widget.role == ModelRole.transcription && !cutsUtterances
         ? const <LlmProviderConfig>[]
         : configured;
     final listed = ref.watch(sortedModelsProvider).value ?? const <ModelOption>[];
-    final onDevice = ref.watch(onDeviceModelsProvider);
+    final serving = ref.watch(modelProvidersProvider);
     return ValueListenableBuilder(
       valueListenable: ModelCatalog.notifier,
       builder: (context, catalog, _) {
-        final all = _entriesOf(catalog, providers, listed, onDevice, cutsUtterances);
+        final all = _entriesOf(catalog, serving, listed, cutsUtterances);
         final words = _search.text.toLowerCase().split(RegExp(r"\s+"))
           ..removeWhere((w) => w.isEmpty);
         final shown = all.where((e) => _matches(e, words)).toList();

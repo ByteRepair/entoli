@@ -92,14 +92,8 @@ class OnDeviceProvider extends LlmProvider with KeyFree {
   }
 
   @override
-  Iterable<Model> offered(ModelCatalog catalog, ModelHost host) {
-    final installed = voices();
-    return [
-      for (final id in _llm.installed) ...serve(id, null, host),
-      for (final m in voiceCatalog)
-        if (installed.contains(m.id)) ...serve(m.id, null, host),
-    ];
-  }
+  Iterable<Model> offered(ModelCatalog catalog, ModelHost host) =>
+      [for (final id in {..._llm.installed, ...voices()}) ...serve(id, null, host)];
 }
 
 /// A voice model on the device, as the platform's [Voice] runs it.
@@ -116,6 +110,9 @@ class OnDeviceTranscriptionModel implements TranscriptionModel {
 
   @override
   Hearing get hearing => HearOnDevice(model);
+
+  @override
+  bool get systemEngine => model.isNative;
 }
 
 class OnDeviceSynthesisModel implements SynthesisModel {
@@ -132,6 +129,15 @@ class OnDeviceSynthesisModel implements SynthesisModel {
   /// speakers reads is its own setting.
   @override
   Speaking speaking({String? voice}) => SpeakOnDevice(model);
+
+  @override
+  bool get systemEngine => model.isNative;
+
+  @override
+  bool get namesVoices => false;
+
+  @override
+  int get speakers => model.isNative ? 0 : model.speakers;
 }
 
 /// The on-device provider, as one client over however many servers are running.

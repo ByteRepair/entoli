@@ -28,14 +28,25 @@ abstract interface class ChatModel implements Model {}
 /// Hears speech, for voice mode.
 abstract interface class TranscriptionModel implements Model {
   Hearing get hearing;
+
+  /// The device's own engine, which is asked for a language rather than
+  /// being one.
+  bool get systemEngine;
 }
 
 /// Speaks text, for voice mode and reading a reply out. [voice] is a hosted
 /// provider's name for one; an on-device model's speaker is picked apart.
 abstract interface class SynthesisModel implements Model {
   Speaking speaking({String? voice});
-}
 
-/// [ref] as a [T] from [models], or null where none of them is one.
-T? modelOf<T extends Model>(Iterable<Model> models, ModelRef ref) =>
-    models.whereType<T>().where((m) => m.ref == ref).firstOrNull;
+  /// See [TranscriptionModel.systemEngine]. Its voice is the user's, set in
+  /// the OS.
+  bool get systemEngine;
+
+  /// Whether a voice is picked by the provider's name for one.
+  bool get namesVoices;
+
+  /// How many voices it has to pick between by number, none where a voice is
+  /// named or the OS picks it.
+  int get speakers;
+}

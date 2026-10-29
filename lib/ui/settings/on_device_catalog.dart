@@ -165,7 +165,6 @@ class ModelDownloadTile extends ConsumerWidget {
         ref.watch(modelDownloadsProvider.select((s) => s.active[model.id]));
     final failure =
         ref.watch(modelDownloadsProvider.select((s) => s.failures[model.id]));
-    final facts = model.facts;
     final downloads = ref.read(modelDownloadsProvider.notifier);
     return CatalogTile(
       title: Row(
@@ -177,15 +176,7 @@ class ModelDownloadTile extends ConsumerWidget {
           ],
         ],
       ),
-      tags: modelTags(
-        parameters: facts.parameters,
-        languages: facts.languages,
-        bytes: facts.bytes,
-        quantisation: facts.quantisation,
-        context: facts.context,
-        voices: facts.voices,
-        licence: facts.licence,
-      ),
+      tags: modelTags(model.facts),
       note: model.note,
       failure: failure,
       progress: progress,

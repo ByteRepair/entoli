@@ -761,10 +761,8 @@ class FakeBackend implements AgentBackend {
   bool cutsUtterances = true;
 
   @override
-  T? resolveModel<T extends Model>(ModelRef ref) => providers()
-      .where((p) => p.id == ref.providerId)
-      .firstOrNull
-      ?.resolve<T>(ref.modelId, ModelHost.resolving(cutsUtterances: cutsUtterances));
+  T? resolveModel<T extends Model>(ModelRef ref) => resolveIn<T>(
+      providers(), ref, (_) => ModelHost.resolving(cutsUtterances: cutsUtterances));
 }
 
 /// A `ChatStore` that keeps everything in memory, for the tests whose subject

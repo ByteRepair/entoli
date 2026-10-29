@@ -63,6 +63,9 @@ class HostedTranscriptionModel implements TranscriptionModel {
 
   @override
   Hearing get hearing => HearThrough(_transcribe);
+
+  @override
+  bool get systemEngine => false;
 }
 
 class HostedSynthesisModel implements SynthesisModel {
@@ -76,4 +79,13 @@ class HostedSynthesisModel implements SynthesisModel {
 
   @override
   Speaking speaking({String? voice}) => SpeakThrough(_synthesizer(voice: voice));
+
+  @override
+  bool get systemEngine => false;
+
+  @override
+  bool get namesVoices => true;
+
+  @override
+  int get speakers => 0;
 }
