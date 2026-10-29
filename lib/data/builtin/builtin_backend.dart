@@ -28,7 +28,6 @@ import "../../domain/shell.dart";
 import "../../domain/sub_agent_log.dart";
 import "../../domain/tool_arg.dart";
 import "../../domain/web_search.dart";
-import "../../domain/voice.dart" show Synthesize, Transcribe;
 import "../local/file_sub_agent_log.dart";
 import "../local/linked_instructions_store.dart";
 import "../prompts/prompt_sources.dart" show promptDirsOf;
@@ -1381,8 +1380,9 @@ class BuiltinBackend implements AgentBackend {
     final endpoint = provider == null ? null : registry.providerFor(provider);
     final modelId = model ?? endpoint?.imageModel;
     if (endpoint == null || modelId == null) return null;
-    return endpoint.imageGenerator(registry.clientOf(endpoint), modelId,
-        quality: quality == ImageQuality.auto ? null : quality.name);
+    return registry
+        .resolve<ImageModel>((providerId: endpoint.id, modelId: modelId))
+        ?.generator(quality: quality == ImageQuality.auto ? null : quality.name);
   }
 
   Future<ApprovalResponse> _awaitApproval(ToolApproval approval) =>
@@ -1546,18 +1546,6 @@ class BuiltinBackend implements AgentBackend {
 
   @override
   Future<List<ModelOption>> models() => registry.models();
-
-  @override
-  Transcribe? transcriber(String providerId, String modelId) {
-    final provider = registry.providerFor(providerId);
-    return provider?.transcriber(registry.clientOf(provider), modelId);
-  }
-
-  @override
-  Synthesize? synthesizer(String providerId, String modelId, {String? voice}) {
-    final provider = registry.providerFor(providerId);
-    return provider?.synthesizer(registry.clientOf(provider), modelId, voice: voice);
-  }
 
   @override
   T? resolveModel<T extends Model>(ModelRef ref) => registry.resolve<T>(ref);

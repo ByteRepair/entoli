@@ -14,7 +14,7 @@ import "package:flutter/foundation.dart"
 import "package:http/http.dart" as http;
 
 /// A provider whose client is whatever the test builds.
-class FakeProvider extends LlmProvider with ChatOnly {
+class FakeProvider extends LlmProvider {
   FakeProvider(super.config, this.build);
 
   final LlmClient Function(LlmProviderConfig config, String? apiKey) build;

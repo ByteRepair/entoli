@@ -1,8 +1,10 @@
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
+import "../../data/builtin/llm/hosted_models.dart" show HostedSynthesisModel;
+import "../../data/builtin/llm/local_pool_client.dart"
+    show OnDeviceSynthesisModel, OnDeviceTranscriptionModel;
 import "../../domain/app_settings.dart";
-import "../../domain/local_model.dart" show localProviderId;
 import "../../domain/models.dart" show ModelChoice;
 import "../../domain/voice_model.dart";
 import "../../providers.dart";
@@ -106,7 +108,9 @@ class _VoiceNameField extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    if (settings.voiceSpeechProviderId == localProviderId) return const SizedBox.shrink();
+    if (ref.watch(pickedSpeechProvider) is! HostedSynthesisModel) {
+      return const SizedBox.shrink();
+    }
     final name = settings.voiceSpeechVoice;
     final playing = ref.watch(readAloudProvider) == previewId;
     return LabelledField(
@@ -382,9 +386,10 @@ class _SpeakerField extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final speech = settings.voiceSpeechProviderId == localProviderId
-        ? voiceModelOf<SpeechModel>(settings.voiceSpeechModelId)
-        : null;
+    final speech = switch (ref.watch(pickedSpeechProvider)) {
+      OnDeviceSynthesisModel(:final model) => model,
+      _ => null,
+    };
     // Nothing picked, a provider's, or the system synthesiser — whose voice is the user's,
     // set in the OS, so there is no list of them here to offer.
     if (speech == null || speech.isNative) return const SizedBox.shrink();
@@ -410,12 +415,7 @@ class _SpeakerField extends ConsumerWidget {
             ),
           ),
           IconButton(
-            // Dead until the model is on disk: the picker offers what the
-            // catalog has, and a preview of something not downloaded could
-            // only apologise.
-            onPressed: ref.watch(speechReadyProvider)
-                ? () => readAloud(context, ref, previewId, previewSpeech)
-                : null,
+            onPressed: () => readAloud(context, ref, previewId, previewSpeech),
             icon: Icon(
                 playing ? Icons.stop_circle_outlined : Icons.play_circle_outline),
             tooltip: playing ? "Stop" : "Hear this voice",
@@ -440,11 +440,10 @@ class _LanguageField extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final native = settings.voiceRecognitionProviderId == localProviderId &&
-            voiceModelOf<RecognitionModel>(settings.voiceRecognitionModelId)?.isNative ==
-                true ||
-        settings.voiceSpeechProviderId == localProviderId &&
-            voiceModelOf<SpeechModel>(settings.voiceSpeechModelId)?.isNative == true;
+    final hears = ref.watch(pickedRecognitionProvider);
+    final speaks = ref.watch(pickedSpeechProvider);
+    final native = hears is OnDeviceTranscriptionModel && hears.model.isNative ||
+        speaks is OnDeviceSynthesisModel && speaks.model.isNative;
     if (!native) return const SizedBox.shrink();
     final offered = ref.watch(systemVoiceLanguagesProvider).value ?? const [];
     if (offered.isEmpty) return const SizedBox.shrink();

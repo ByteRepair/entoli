@@ -27,10 +27,9 @@ class VoiceModels extends Downloads<VoiceModel> {
   Future<void> rescan() =>
       ref.read(installedVoiceModelsProvider.notifier).refresh();
 
-  /// Both halves, since one model can be picked as either — and `voiceModelOf`
-  /// reads the catalog rather than the disk, so a setting left naming a deleted
-  /// model gets all the way into `SherpaVoice.start` before failing, which
-  /// moves the complaint from choosing a model to pressing the microphone.
+  /// Both halves, since one model can be picked as either. A setting left
+  /// naming a deleted model resolves to nothing, so the pick would read as
+  /// set while voice mode stays off with no word of why.
   @override
   Future<void> unpick(VoiceModel model) async {
     final settings = ref.read(appSettingsProvider.notifier);

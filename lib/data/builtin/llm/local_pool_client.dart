@@ -53,7 +53,7 @@ extension LocalPoolCaching on LocalPoolOptions {
 ///
 /// Always there, with nothing in it until something is downloaded — an empty
 /// provider is in no picker, so nothing has to keep it out of one.
-class OnDeviceProvider extends LlmProvider with KeyFree, ChatOnly {
+class OnDeviceProvider extends LlmProvider with KeyFree {
   const OnDeviceProvider(this._llm, this._options,
       {LocalKvCache? kvCache, required this.voices})
       : _kv = kvCache,

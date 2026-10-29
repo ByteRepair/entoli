@@ -424,36 +424,41 @@ final modelProvidersProvider = Provider<List<LlmProvider>>((ref) => [
         providerOf(config),
     ]);
 
-/// Whether [choice] names a [T] some provider serves on this platform. A
+/// [choice] as the [T] some provider serves on this platform, or null. A
 /// system-engine pick is served only where the device has the engine, so a
 /// settings file carried off a phone does not light up voice on a machine
 /// that cannot use it.
-bool _resolves<T extends Model>(Ref ref, ModelChoice choice) {
+T? _resolved<T extends Model>(Ref ref, ModelChoice choice) {
   final pick = refOf(choice);
-  if (pick == null) return false;
+  if (pick == null) return null;
   final host = ModelHost.resolving(cutsUtterances: ref.watch(voiceProvider).hasModelCatalog);
   return ref
-          .watch(modelProvidersProvider)
-          .where((p) => p.id == pick.providerId)
-          .firstOrNull
-          ?.resolve<T>(pick.modelId, host) !=
-      null;
+      .watch(modelProvidersProvider)
+      .where((p) => p.id == pick.providerId)
+      .firstOrNull
+      ?.resolve<T>(pick.modelId, host);
 }
+
+/// The voice picks as what they resolve to, for the settings that depend on
+/// which kind of model each is. Resolved to look at, not to run: a session
+/// gets its own from the backend.
+final pickedRecognitionProvider = Provider<TranscriptionModel?>((ref) =>
+    _resolved<TranscriptionModel>(ref, voiceRecognitionChoice(ref.watch(appSettingsProvider))));
+
+final pickedSpeechProvider = Provider<SynthesisModel?>((ref) =>
+    _resolved<SynthesisModel>(ref, voiceSpeechChoice(ref.watch(appSettingsProvider))));
 
 /// Whether a message can be read out: a platform that can speak, and a speech
 /// model picked that a provider serves. Half of [voiceReadyProvider], because
 /// reading a message out needs nothing to hear with.
 final speechReadyProvider = Provider<bool>((ref) =>
-    ref.watch(voiceProvider).available &&
-    _resolves<SynthesisModel>(ref, voiceSpeechChoice(ref.watch(appSettingsProvider))));
+    ref.watch(voiceProvider).available && ref.watch(pickedSpeechProvider) != null);
 
 /// Whether the composer draws its voice button: a platform that can listen, and
 /// two models picked and usable. Anything less and pressing it could only
 /// lead to an apology.
 final voiceReadyProvider = Provider<bool>((ref) =>
-    ref.watch(speechReadyProvider) &&
-    _resolves<TranscriptionModel>(
-        ref, voiceRecognitionChoice(ref.watch(appSettingsProvider))));
+    ref.watch(speechReadyProvider) && ref.watch(pickedRecognitionProvider) != null);
 
 /// The languages the device's own engines offer. A future rather than
 /// something seeded at startup like [installedVoiceModelsProvider]: only the

@@ -109,7 +109,7 @@ class AppleFm {
   LlmProvider get endpoint => AppleFmProvider(provider, probe);
 }
 
-class AppleFmProvider extends LlmProvider with KeyFree, ChatOnly {
+class AppleFmProvider extends LlmProvider with KeyFree {
   const AppleFmProvider(super.config, this.probe);
 
   final AppleFmProbe probe;

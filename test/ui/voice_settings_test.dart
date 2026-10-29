@@ -257,13 +257,13 @@ void main() {
     expect(find.byIcon(Icons.stop_circle_outlined), findsOneWidget);
   });
 
-  testWidgets("the preview is dead until the model is downloaded",
+  testWidgets("a pick that is not downloaded has no voice to preview",
       (tester) async {
     app = TestApp.create();
     await pick(tester, speech: "piper-en_US-amy");
     await pumpVoice(tester);
 
-    expect(enabled(tester, buttonTipped("Hear this voice")), isFalse);
+    expect(buttonTipped("Hear this voice"), findsNothing);
   });
 
   group("on Android", () {

@@ -9,7 +9,7 @@ import "provider.dart";
 /// Anything that speaks Anthropic's `/messages`: Anthropic itself, and a
 /// gateway in front of it. Anthropic makes no images and has no audio
 /// endpoints.
-class AnthropicCompatibleProvider extends LlmProvider with ChatOnly {
+class AnthropicCompatibleProvider extends LlmProvider {
   const AnthropicCompatibleProvider(super.config, [super.terms]);
 
   @override
