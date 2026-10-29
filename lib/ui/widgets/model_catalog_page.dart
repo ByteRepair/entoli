@@ -2,12 +2,14 @@ import "package:flutter/material.dart";
 import "package:flutter/services.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
+import "../../data/builtin/llm/hosted_models.dart";
+import "../../data/builtin/llm/local_pool_client.dart" show OnDeviceProvider;
 import "../../data/builtin/llm/providers/presets.dart";
 import "../../domain/llm_provider.dart";
-import "../../domain/local_model.dart" show isTitleOnlyModel, localProviderId;
+import "../../domain/local_model.dart" show isTitleOnlyModel;
+import "../../domain/model_capability.dart";
 import "../../domain/model_registry.dart";
 import "../../domain/models.dart";
-import "../../domain/voice_model.dart";
 import "../../providers.dart";
 import "../../core/formatting.dart";
 import "../fonts.dart";
@@ -49,12 +51,12 @@ enum ModelRole {
   /// Voice mode's voice through a provider: only models that speak.
   speech;
 
-  bool offers(ModelInfo m) => switch (this) {
-        agent => m.answersTurns,
-        text || title => m.talks,
-        image => m.makesImages,
-        transcription => m.transcribes,
-        speech => m.speaks,
+  bool offers(Model m) => switch (this) {
+        agent => m is ChatModel && m.info.answersTurns,
+        text || title => m is ChatModel,
+        image => m is ImageModel,
+        transcription => m is TranscriptionModel,
+        speech => m is SynthesisModel,
       };
 
   /// Whether its models are chat models: the ones only an endpoint's own list
@@ -73,48 +75,34 @@ enum ModelRole {
       };
 }
 
-/// The on-device voice models a voice role offers, under [localProviderId]:
-/// what is downloaded, and the system engines where the device has them —
-/// [installed] is the set every voice gate asks.
-List<CatalogEntry> onDeviceVoiceEntries(ModelRole role, Set<String> installed) => [
-      for (final m in voiceCatalog)
-        if (installed.contains(m.id) &&
-            (role == ModelRole.transcription && m is RecognitionModel ||
-                role == ModelRole.speech && m is SpeechModel))
-          CatalogEntry(
-            localProviderId,
-            "On device",
-            ModelInfo(
-              id: m.id,
-              name: m.name,
-              talks: false,
-              transcribes: m is RecognitionModel,
-              speaks: m is SpeechModel,
-            ),
-          ),
-    ];
-
-/// What a picker offers: each configured provider's models from the catalog
-/// that [role] can use, then whatever the endpoints list that the catalog does
-/// not know — a self-hosted server's models, the on-device ones — and the
-/// voice models of [installed], which the catalog cannot know either.
+/// What a picker offers: each provider's models that [role] can use — the
+/// on-device one's, then the configured ones' from the catalog — then whatever
+/// the endpoints list that the catalog does not know, a self-hosted server's
+/// models.
 List<CatalogEntry> catalogEntries(
   ModelCatalog catalog,
-  List<LlmProviderConfig> providers,
+  List<LlmProvider> providers,
   List<ModelOption> listed, {
   required ModelRole role,
-  Set<String> installed = const {},
+  ModelHost? host,
 }) {
+  host ??= ModelHost.resolving();
   // Same-named models — one model through two providers — keep the order the
   // providers are configured in.
   final order = {for (final (i, p) in providers.indexed) p.id: i};
-  final known = <(String, String)>{};
-  return [
+  final described = [
     for (final p in providers)
-      for (final m in providerOf(p).models(catalog))
-        if (known.add((p.id, m.id)) && role.offers(m))
-          CatalogEntry(p.id, p.displayName, m,
-              custom: p.customModels.any((c) => c.id == m.id)),
+      for (final m in p.offered(catalog, host)) (provider: p, model: m),
+  ];
+  // Every model a provider describes, whatever this role makes of it: what
+  // the catalog says of one wins over the endpoint naming it.
+  final known = {for (final d in described) (d.provider.id, d.model.info.id)};
+  final shown = <(String, String)>{};
+  return [
+    for (final (:provider, :model) in described)
+      if (role.offers(model) && shown.add((provider.id, model.info.id)))
+        CatalogEntry(provider.id, provider.displayName, model.info,
+            custom: provider.config.customModels.any((c) => c.id == model.info.id)),
     // Named by their own listing — `<endpoint> · <model>` — and taken to be
     // chat models, since nothing says otherwise: no image model is guessed.
     if (role.chat)
@@ -122,7 +110,6 @@ List<CatalogEntry> catalogEntries(
         if (!known.contains((o.providerId, o.modelId)) &&
             (role == ModelRole.title || !isTitleOnlyModel(o.providerId, o.modelId)))
           _listedEntry(o),
-    ...onDeviceVoiceEntries(role, installed),
   ]..sort((a, b) {
       final byName =
           a.info.displayName.toLowerCase().compareTo(b.info.displayName.toLowerCase());
@@ -182,12 +169,13 @@ class _ModelCatalogPageState extends ConsumerState<ModelCatalogPage> {
   var _entries = const <CatalogEntry>[];
 
   List<CatalogEntry> _entriesOf(ModelCatalog catalog, List<LlmProviderConfig> providers,
-      List<ModelOption> listed, Set<String> installed) {
-    final key = (catalog, providers, listed, installed);
+      List<ModelOption> listed, OnDeviceProvider onDevice, bool cutsUtterances) {
+    final key = (catalog, providers, listed, onDevice, cutsUtterances);
     if (key != _entriesKey) {
       _entriesKey = key;
-      _entries =
-          catalogEntries(catalog, providers, listed, role: widget.role, installed: installed);
+      _entries = catalogEntries(
+          catalog, [onDevice, for (final p in providers) providerOf(p)], listed,
+          role: widget.role, host: ModelHost.resolving(cutsUtterances: cutsUtterances));
     }
     return _entries;
   }
@@ -236,18 +224,16 @@ class _ModelCatalogPageState extends ConsumerState<ModelCatalogPage> {
     final configured = ref.watch(appSettingsProvider.select((s) => s.llmProviders));
     // A provider's transcription model needs the device to cut the microphone
     // into utterances, which not every platform can.
-    final providers = widget.role == ModelRole.transcription &&
-            !ref.watch(voiceProvider).hasModelCatalog
+    final cutsUtterances = ref.watch(voiceProvider).hasModelCatalog;
+    final providers = widget.role == ModelRole.transcription && !cutsUtterances
         ? const <LlmProviderConfig>[]
         : configured;
     final listed = ref.watch(sortedModelsProvider).value ?? const <ModelOption>[];
-    final installed = widget.role.voice
-        ? ref.watch(installedVoiceModelsProvider)
-        : const <String>{};
+    final onDevice = ref.watch(onDeviceModelsProvider);
     return ValueListenableBuilder(
       valueListenable: ModelCatalog.notifier,
       builder: (context, catalog, _) {
-        final all = _entriesOf(catalog, providers, listed, installed);
+        final all = _entriesOf(catalog, providers, listed, onDevice, cutsUtterances);
         final words = _search.text.toLowerCase().split(RegExp(r"\s+"))
           ..removeWhere((w) => w.isEmpty);
         final shown = all.where((e) => _matches(e, words)).toList();

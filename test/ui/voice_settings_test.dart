@@ -132,9 +132,9 @@ void main() {
     app.dispose();
     app = TestApp.create(voiceModels: const {"whisper-tiny"});
     await pumpVoice(tester);
-    expect(await offered(tester, "Recognition model"), contains("On device · whisper-tiny"));
+    expect(await offered(tester, "Recognition model"), contains("On-device · whisper-tiny"));
     expect(await offered(tester, "Speech model"),
-        isNot(contains("On device · whisper-tiny")));
+        isNot(contains("On-device · whisper-tiny")));
   });
 
   testWidgets("a provider's speech model is picked beside the device's, with a voice name",
@@ -155,7 +155,7 @@ void main() {
     await pumpVoice(tester);
 
     expect(await offered(tester, "Speech model"),
-        containsAll(["On device · piper-en_US-amy", "Test · tts-x"]));
+        containsAll(["On-device · piper-en_US-amy", "Test · tts-x"]));
     await pickModel(tester, "Test · tts-x",
         field: find.widgetWithText(LabelledField, "Speech model"));
 
@@ -291,7 +291,7 @@ void main() {
       // Defaulted into both picks.
       expect(find.text("Android system"), findsNWidgets(2));
       expect(await offered(tester, "Recognition model"),
-          contains("On device · android-recognition"));
+          contains("On-device · android-recognition"));
       // With both engines there is nothing to explain above them.
       expect(find.textContaining("This device has nothing to"), findsNothing);
     });

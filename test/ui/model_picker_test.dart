@@ -3,8 +3,11 @@ import "dart:convert";
 import "package:flutter/material.dart";
 import "package:flutter_test/flutter_test.dart";
 
+import "package:agent_chat/data/builtin/llm/local_pool_client.dart";
 import "package:agent_chat/data/builtin/llm/providers/presets.dart";
+import "package:agent_chat/domain/app_settings.dart";
 import "package:agent_chat/domain/llm_provider.dart";
+import "package:agent_chat/domain/local_llm.dart";
 import "package:agent_chat/domain/local_model.dart" show appleModelId, appleProviderId;
 import "package:agent_chat/domain/model_registry.dart";
 import "package:agent_chat/domain/models.dart";
@@ -50,10 +53,13 @@ void main() {
       },
     }));
     const listed = [ModelOption(providerId: testProviderId, modelId: "my-finetune")];
-    const installed = {"whisper-tiny", "piper-en_US-amy"};
+    final onDevice = OnDeviceProvider(const UnavailableLocalLlm(),
+        () => poolOptions(AppSettings()),
+        voices: () => const {"whisper-tiny", "piper-en_US-amy"});
     List<String> offered(ModelRole role) => [
-          for (final e in catalogEntries(catalog, const [testProvider], listed,
-              role: role, installed: installed))
+          for (final e in catalogEntries(
+              catalog, [onDevice, providerOf(testProvider)], listed,
+              role: role))
             "${e.providerId}/${e.info.id}",
         ];
 

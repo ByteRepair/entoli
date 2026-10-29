@@ -2,8 +2,10 @@ import "package:collection/collection.dart";
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
+import "../../data/builtin/llm/hosted_models.dart";
+import "../../data/builtin/llm/local_pool_client.dart" show OnDeviceProvider;
 import "../../domain/llm_provider.dart";
-import "../../domain/local_model.dart" show localProviderId;
+import "../../domain/model_capability.dart";
 import "../../domain/model_registry.dart";
 import "../../domain/models.dart";
 import "../../providers.dart";
@@ -67,9 +69,7 @@ class ModelPicker extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final providers = ref.watch(appSettingsProvider.select((s) => s.llmProviders));
     final listed = ref.watch(sortedModelsProvider).value ?? const <ModelOption>[];
-    final onDevice = role.voice
-        ? onDeviceVoiceEntries(role, ref.watch(installedVoiceModelsProvider))
-        : const <CatalogEntry>[];
+    final onDevice = ref.watch(onDeviceModelsProvider);
     final none = choice.providerId == null && choice.modelId == null;
     final nullEntry =
         inherited == null ? nullLabel : "$nullLabel (${_name(providers, listed, inherited!)})";
@@ -117,11 +117,12 @@ class ModelPicker extends ConsumerWidget {
   /// helper names what it inherits; a model
   /// is named by what the catalog calls it, its id where nothing does.
   String _label(List<LlmProviderConfig> providers, List<ModelOption> listed,
-      List<CatalogEntry> onDevice) {
-    // Named from what the catalog page offers, since no endpoint lists them.
-    if (role.voice && choice.providerId == localProviderId) {
-      return onDevice
-              .firstWhereOrNull((e) => e.info.id == choice.modelId)
+      OnDeviceProvider onDevice) {
+    // A voice model is named by what the device says of it, since no endpoint
+    // lists it.
+    if (role.voice && choice.providerId == onDevice.id) {
+      final model = choice.modelId;
+      return (model == null ? null : onDevice.resolve<Model>(model, ModelHost.resolving()))
               ?.info
               .displayName ??
           nullLabel;

@@ -11,6 +11,7 @@ import "../core/config.dart";
 import "domain/file_tools.dart" show resolveWorkspacePath;
 import "../core/platform/platform.dart"
     show createFileWatches, createPromptSources, processEnv, setupComplete;
+import "data/builtin/llm/local_pool_client.dart" show OnDeviceProvider, poolOptions;
 import "data/builtin/llm/providers/presets.dart" show providerOf;
 import "data/builtin/builtin_backend.dart";
 import "data/local/file_trigger_store.dart";
@@ -224,6 +225,20 @@ final setupCompleteProvider =
 /// the turns' driver injects on PATH and `setupComplete` asks after. Resolved
 /// once in `main` beside the cache directory; null where there is none.
 final byteRepairBinDirProvider = Provider<String?>((ref) => null);
+
+/// This device's models as the provider every picker and gate reads them
+/// through: the class the registry runs them with, over what is installed.
+final onDeviceModelsProvider = Provider<OnDeviceProvider>((ref) {
+  final voices = ref.watch(installedVoiceModelsProvider);
+  // Read through by the provider rather than held, so a download has to
+  // rebuild it to be seen.
+  ref.watch(installedLocalModelsProvider);
+  return OnDeviceProvider(
+    ref.watch(localLlmProvider),
+    () => poolOptions(ref.read(appSettingsProvider)),
+    voices: () => voices,
+  );
+});
 
 final localModelStoreProvider =
     Provider<LocalModelStore>((ref) => const UnavailableLocalModelStore());

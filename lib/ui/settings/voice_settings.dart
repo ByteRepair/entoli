@@ -16,7 +16,7 @@ import "../widgets/resettable_field.dart";
 import "../widgets/section_header.dart";
 
 /// Which two models voice mode uses, picked on the same catalog page as every
-/// other model: what is on the device under "On device", and each provider's
+/// other model: what is on the device under "On-device", and each provider's
 /// transcription and speech models beside it. Downloading is Settings >
 /// On-device's.
 class VoiceSection extends ConsumerWidget {

@@ -160,12 +160,14 @@ class AppSession {
     // exists.
     late final TriggerRegistryFactory triggerRegistry;
     late final Future<void> Function(void Function(AppSettings)) editSettings;
+    late final Set<String> Function() installedVoices;
     final backend = platform.createBackend(config, libraries, store,
         tools: toolset, rootfs: rootfs, abi: await abi, localLlm: server, kvCache: kvCache,
         appleFm: await appleFm, byteRepairBinDir: byteRepairBin, secrets: secrets,
         loginPath: await loginPath,
         triggerRegistry: (chatId, project) => triggerRegistry(chatId, project),
         editSettings: (change) => editSettings(change),
+        installedVoices: () => installedVoices(),
         browser: browser);
     // One instance, shared: the prefill's notification and every other
     // foreground hold go through the same service.
@@ -274,6 +276,7 @@ class AppSession {
     triggerRegistry = (chatId, project) =>
         ProviderTriggerOwner(container).registryFor(chatId, project);
     editSettings = container.read(appSettingsProvider.notifier).edit;
+    installedVoices = () => container.read(installedVoiceModelsProvider);
     // Before `ensureReady`, which starts listening: a peer that lands during
     // it would otherwise run the whole handshake against a hub with no
     // repository and be sent no welcome.

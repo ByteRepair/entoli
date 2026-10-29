@@ -439,7 +439,7 @@ the honest cost of one, and the reason to raise it.
 model out of the request, serves it, and hands the call to a `OpenAiClient` on
 that server's port — one per model, dropped when the port changes, the same
 signature check `LlmRegistry` makes. **It rides on the provider rather than on
-the registry**: `LocalPoolProvider` is an `LlmProvider` whose `client` is the
+the registry**: `OnDeviceProvider` is an `LlmProvider` whose `client` is the
 pool, as `AppleFmProvider`'s is the framework's channel, so the registry never
 compares a provider id against a reserved name — it knows nothing about who
 its providers are. A

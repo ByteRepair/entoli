@@ -91,6 +91,7 @@ BuiltinBackend createBackend(
   TriggerRegistryFactory? triggerRegistry,
   SettingsEditor? editSettings,
   AgentBrowser browser = const UnavailableAgentBrowser(),
+  required Set<String> Function() installedVoices,
 }) {
   AppSettings settings() => AppSettings.load(config);
   final backend = BuiltinBackend(
@@ -131,7 +132,8 @@ BuiltinBackend createBackend(
     triggerRegistry: triggerRegistry,
     editSettings: editSettings,
     registry: LlmRegistry(
-      endpoints: () => llmEndpoints(settings, localLlm, kvCache, appleFm),
+      endpoints: () => llmEndpoints(settings, localLlm, kvCache, appleFm,
+          installedVoices: installedVoices),
       // Settings wins, but a key already exported is found without having to
       // be pasted in.
       lookupEnv: (name) => settings().environment[name] ?? processEnv(name),
@@ -221,14 +223,13 @@ LocalPrefill? createLocalPrefill(
 }
 
 /// Every endpoint the app can reach: what the user configured, and the models
-/// on this device where there are any.
+/// on this device.
 ///
 /// The local ones are composed here rather than written into `settings.json`
-/// because they have no address to write. The llama pool's endpoint carries
-/// the client that routes a request to the right one of its processes and
+/// because they have no address to write. The on-device provider carries the
+/// client that routes a request to the right one of the pool's processes and
 /// loads it on the way; Apple's carries the client that speaks the
-/// framework's channel. Null while nothing is there for them, which is what
-/// keeps them out of every picker on the platforms that have neither.
+/// framework's channel, and is there only where the framework is.
 ///
 /// **First in the list, and that decides a collision**: `localProviderId` is
 /// the app's name, and so is `appleProviderId` — a `settings.json` that
@@ -238,20 +239,19 @@ List<LlmProvider> llmEndpoints(
   AppSettings Function() settings,
   LocalLlm localLlm,
   LocalKvCache? kvCache,
-  AppleFm? appleFm,
-) {
-  final local = localLlm.provider;
+  AppleFm? appleFm, {
+  required Set<String> Function() installedVoices,
+}) {
   // The Apple model composes the same way the pool does: an entry the user
   // never configures, carrying its own client — first in the list, beside the
   // pool, so a `settings.json` that claims one of these ids is shadowed
   // rather than allowed to take the models' own endpoint away.
   return [
-    if (local != null)
-      LocalPoolProvider(local, localLlm, () {
-        // Read here rather than above: this client outlives any one turn,
-        // and the settings page edits these between them.
-        return poolOptions(settings());
-      }, kvCache: kvCache),
+    OnDeviceProvider(localLlm, () {
+      // Read here rather than above: this client outlives any one turn, and
+      // the settings page edits these between them.
+      return poolOptions(settings());
+    }, kvCache: kvCache, voices: installedVoices),
     if (appleFm != null) appleFm.endpoint,
     for (final config in settings().llmProviders) providerOf(config),
   ];
