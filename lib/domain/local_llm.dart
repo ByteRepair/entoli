@@ -78,6 +78,9 @@ abstract class LocalLlm {
   /// already-running would never grow.
   List<String> get installed;
 
+  /// What [modelId] is called, for a line that names it.
+  String nameOf(String modelId) => modelId;
+
   /// [installed], as one provider. Null where nothing is downloaded, which is
   /// what keeps the entry out of every picker until there is something to pick.
   LlmProviderConfig? get provider => installed.isEmpty

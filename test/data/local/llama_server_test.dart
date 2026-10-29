@@ -6,6 +6,8 @@ import "package:agent_chat/domain/local_model.dart";
 import "package:agent_chat/domain/download.dart";
 import "package:agent_chat/domain/local_model_store.dart";
 
+import "../../fakes.dart" show downloadedAs;
+
 /// What the server is asked to do is the whole of what running a model on the
 /// device does, and it is the part of it that can be pinned on a machine with
 /// no Android on it — the bargain `proot_test.dart` already makes.
@@ -14,7 +16,7 @@ void main() {
     server: "/data/app/pkg/lib/arm64/libllama-server.so",
     libDir: "/data/app/pkg/lib/arm64",
   );
-  final model = localModelCatalog.first;
+  final model = downloadedAs(localModelCatalog.first);
 
   ({List<String> command, Map<String, String> environment}) launch({
     String device = noDevice,
@@ -240,16 +242,19 @@ something else entirely
           _AlwaysInstalled(),
         );
 
-    Future<void> ask(LlamaServerPool pool, LocalModel model, {int maxRunning = 1}) =>
+    Future<void> askFor(LlamaServerPool pool, String id, {int maxRunning = 1}) =>
         expectLater(
-          pool.serve(model.id, maxRunning: maxRunning),
+          pool.serve(id, maxRunning: maxRunning),
           throwsA(isA<LocalLlmFailure>()),
         );
+
+    Future<void> ask(LlamaServerPool pool, LocalModel model, {int maxRunning = 1}) =>
+        askFor(pool, model.id, maxRunning: maxRunning);
 
     test("what is waiting on it is told the server's own last words", () async {
       final pool = failing();
 
-      await ask(pool, model);
+      await askFor(pool, model.id);
 
       // Not a connection to localhost that was refused, which is both true and
       // useless: for a model too big to fit, the server's own output is the
@@ -263,7 +268,7 @@ something else entirely
     test("asking for a second model past the cap drops the first", () async {
       final pool = failing();
 
-      await ask(pool, model);
+      await askFor(pool, model.id);
       await ask(pool, localModelCatalog[1]);
 
       expect(pool.running.value.map((each) => each.modelId),
@@ -273,7 +278,7 @@ something else entirely
     test("raising the cap is what lets both stay", () async {
       final pool = failing();
 
-      await ask(pool, model, maxRunning: 2);
+      await askFor(pool, model.id, maxRunning: 2);
       await ask(pool, localModelCatalog[1], maxRunning: 2);
 
       expect(pool.running.value.map((each) => each.modelId),
@@ -293,7 +298,7 @@ something else entirely
 
     test("unloading everything empties the list", () async {
       final pool = failing();
-      await ask(pool, model, maxRunning: 2);
+      await askFor(pool, model.id, maxRunning: 2);
 
       await pool.stopAll();
 
@@ -340,7 +345,7 @@ something else entirely
   });
 }
 
-/// Says every model is on disk, at a path nothing will open.
+/// Says every catalog model is on disk, at a path nothing will open.
 class _AlwaysInstalled extends LocalModelStore {
   const _AlwaysInstalled();
 
@@ -348,7 +353,10 @@ class _AlwaysInstalled extends LocalModelStore {
   Future<Set<String>> installed() async => const {};
 
   @override
-  String? fileOfSync(LocalModel model) => "/nonexistent/${model.id}.gguf";
+  List<DownloadedModel> downloadedSync() => [
+        for (final model in localModelCatalog)
+          downloadedAs(model, file: "/nonexistent/${model.id}.gguf"),
+      ];
 
   @override
   Stream<DownloadProgress> install(LocalModel model) => const Stream.empty();

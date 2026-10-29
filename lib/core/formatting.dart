@@ -12,3 +12,12 @@ String formatSize(int bytes) {
   final rounded = unit == 0 || size >= 10 ? size.round().toString() : size.toStringAsFixed(1);
   return "$rounded ${units[unit]}";
 }
+
+/// "200K", "1M": a window as providers write it.
+String tokenCount(int n) {
+  if (n >= 1000000) {
+    final m = n / 1000000;
+    return "${m == m.roundToDouble() ? m.round() : m.toStringAsFixed(1)}M";
+  }
+  return n >= 1000 ? "${(n / 1000).round()}K" : "$n";
+}

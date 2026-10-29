@@ -236,32 +236,48 @@ void main() {
     expect(app.container.read(installedLocalModelsProvider), isEmpty);
   });
 
-  testWidgets("a model the catalog has dropped is still a row, and deletable",
+  testWidgets("a downloaded model the catalog does not offer is a row, and deletable",
       (tester) async {
-    // Why the store reads the disk rather than the catalog. Swapping a
-    // generation of models out is what the catalog is for, and every id it
-    // drops is a gigabyte nothing else in the app could reach.
+    // One added by link, or one an older catalog offered: either way it is the
+    // gigabytes it always was, and only this row can reach them.
     app = TestApp.create(
-        localLlm: FakeLocalLlm(), localModels: {"qwen2.5-coder-3b-q4_0"});
+        localLlm: FakeLocalLlm(), localModels: {"qwen3.5-2b-q4_0"});
     await pumpOnDevice(tester);
 
-    expect(find.text("qwen2.5-coder-3b-q4_0"), findsOneWidget);
-    expect(find.textContaining("not offered any more"), findsOneWidget);
+    expect(find.text("qwen3.5-2b-q4_0"), findsOneWidget);
+    expect(find.text("Q4_0"), findsWidgets);
 
     await tester.tap(find.byTooltip("Delete"));
     await settleIo(tester);
+    expect(find.textContaining("can be downloaded again"), findsNothing);
     await tester.tap(find.text("Delete").last);
     await settleIo(tester);
 
-    expect(app.localModels.deleted, ["qwen2.5-coder-3b-q4_0"]);
+    expect(app.localModels.deleted, ["qwen3.5-2b-q4_0"]);
     expect(app.container.read(installedLocalModelsProvider), isEmpty);
+    expect(find.text("qwen3.5-2b-q4_0"), findsNothing);
   });
 
-  testWidgets("nothing stale means no such row", (tester) async {
-    app = TestApp.create(localLlm: FakeLocalLlm(), localModels: {model.id});
+  testWidgets("a model is added by its link alone, and lands in the list",
+      (tester) async {
+    app = TestApp.create(localLlm: FakeLocalLlm());
     await pumpOnDevice(tester);
 
-    expect(find.textContaining("not offered any more"), findsNothing);
+    await scrollTo(tester, find.text("Add model"));
+    await tester.tap(find.text("Add model"));
+    await tester.pumpAndSettle();
+    final download = find.widgetWithText(FilledButton, "Download");
+    expect(tester.widget<FilledButton>(download).onPressed, isNull);
+
+    await tester.enterText(find.widgetWithText(TextField, "Link"),
+        "https://example.com/models/My-Model-Q8_0.gguf");
+    await tester.enterText(find.widgetWithText(TextField, "Name"), "My model");
+    await tester.pump();
+    await tester.tap(download);
+    await settleIo(tester);
+
+    expect(app.container.read(installedLocalModelsProvider), contains("my-model-q8_0"));
+    expect(find.text("My model"), findsOneWidget);
   });
 
   testWidgets("turning the KV cache off is stored", (tester) async {

@@ -9,11 +9,13 @@ import "package:path/path.dart" as p;
 
 import "../fake_network.dart";
 import "../../harness.dart";
+import "gguf_bytes.dart";
 
 /// For the reason `file_rootfs_store_test.dart` is: what is worth pinning is
 /// the shape of what lands on disk — the marker that says a model is whole,
-/// and the nothing a cancelled or corrupted download leaves. The network
-/// itself is [FakeNetwork], so a suite run binds no port.
+/// the record that says what it is, and the nothing a cancelled or corrupted
+/// download leaves. The network itself is [FakeNetwork], so a suite run binds
+/// no port.
 void main() {
   late Directory root;
   late FakeNetwork net;
@@ -21,7 +23,8 @@ void main() {
 
   setUp(() async {
     root = await Directory.systemTemp.createTemp("local-model-store");
-    weights = List.generate(4096, (i) => i % 256);
+    final header = tinyModel();
+    weights = [...header, ...List.generate(4096 - header.length, (i) => i % 256)];
     net = FakeNetwork.inHalves({
       "/model.gguf": weights,
       "/rubbish": List.filled(64, 7),
@@ -35,31 +38,60 @@ void main() {
 
   String url(String path) => net.url(path);
 
-  LocalModel gguf({String path = "/model.gguf", String? sha}) => LocalModel(
+  LocalModel gguf({String path = "/model.gguf", String? sha, bool checked = true}) =>
+      LocalModel(
         id: "test-model",
         name: "Test 1B",
         parameters: "1B",
         url: url(path),
-        bytes: weights.length,
-        sha256: sha ?? "${sha256.convert(weights)}",
-        contextLength: 4096,
-        kvBytesPerToken: 49152,
+        bytes: checked ? weights.length : null,
+        sha256: checked ? sha ?? "${sha256.convert(weights)}" : null,
         licence: "Apache-2.0",
       );
 
   FileLocalModelStore store() => FileLocalModelStore(root.path, client: net);
 
-  test("a finished download is the weights and a marker", () async {
-    final model = gguf();
-
-    await store().install(model).drain<void>();
+  test("a finished download is the weights, its record and a marker", () async {
+    await store().install(gguf()).drain<void>();
 
     expect(await store().installed(), {"test-model"});
-    final file = store().fileOfSync(model);
-    expect(file, isNotNull);
-    expect(File(file!).readAsBytesSync(), weights);
+    final model = store().downloadedOfSync("test-model")!;
+    expect(File(model.file).readAsBytesSync(), weights);
+    // What it was fetched as, and what its own header says.
+    expect(model.name, "Test 1B");
+    expect(model.licence, "Apache-2.0");
+    expect(model.quantisation, "Q4_0");
+    expect(model.contextLength, 32768);
+    expect(model.kvBytesPerToken, 4 * 2 * 128 * 2);
     // Written last, and the whole of what "installed" means.
     expect(File(p.join(root.path, "test-model", ".complete")).existsSync(), isTrue);
+  });
+
+  test("a link with nothing checked is kept, named by its own file", () async {
+    await store().install(gguf(checked: false)).drain<void>();
+
+    expect(store().downloadedOfSync("test-model")?.bytes, weights.length);
+  });
+
+  test("a file that is no model is not kept, checked or not", () async {
+    await expectLater(
+      store().install(gguf(path: "/rubbish", checked: false)).drain<void>(),
+      throwsA(isA<StateError>()),
+    );
+
+    expect(await store().installed(), isEmpty);
+  });
+
+  test("a model an older build downloaded is described from its header", () async {
+    // Weights and a marker, and no record: what every build before records
+    // left behind.
+    final dir = Directory(p.join(root.path, "qwen3.5-2b-q4_0"))..createSync(recursive: true);
+    File(p.join(dir.path, "model.gguf")).writeAsBytesSync(weights);
+    File(p.join(dir.path, ".complete")).writeAsStringSync("");
+
+    expect(await store().installed(), {"qwen3.5-2b-q4_0"});
+    expect(store().downloadedOfSync("qwen3.5-2b-q4_0")?.name, "Tiny 1B");
+    expect(File(p.join(dir.path, "model.json")).existsSync(), isTrue);
   });
 
   test("a file that is not what was checked is not kept", () async {
@@ -100,7 +132,7 @@ void main() {
     File(p.join(dir.path, "model.gguf")).writeAsBytesSync(weights.sublist(0, 10));
 
     expect(await store().installed(), isEmpty);
-    expect(store().fileOfSync(gguf()), isNull);
+    expect(store().downloadedOfSync("test-model"), isNull);
   });
 
   test("installing again replaces what an earlier attempt left", () async {
@@ -121,22 +153,22 @@ void main() {
     expect(Directory(p.join(root.path, "test-model")).existsSync(), isFalse);
   });
 
-  /// `fileOfSync` is asked once per catalog entry every time the provider list
-  /// is built, which is several times a turn — so it remembers what it found.
-  /// One store across all three calls, deliberately: a fresh one per call would
-  /// have an empty cache and prove nothing about the remembering.
-  group("what it remembers about the marker", () {
+  /// The list is asked every time the provider list is built, which is
+  /// several times a turn — so it remembers what it found. One store across
+  /// all three calls, deliberately: a fresh one per call would have an empty
+  /// cache and prove nothing about the remembering.
+  group("what it remembers about the disk", () {
     test("an install and a delete both reach it", () async {
       final one = store();
 
-      expect(one.fileOfSync(gguf()), isNull);
+      expect(one.downloadedSync(), isEmpty);
       await one.install(gguf()).drain<void>();
-      expect(one.fileOfSync(gguf()), isNotNull);
+      expect(one.downloadedOfSync("test-model"), isNotNull);
       await one.delete(gguf().id);
 
       // The hazard the cache introduces: a model deleted while the app runs,
       // still answered for out of what was remembered before it went.
-      expect(one.fileOfSync(gguf()), isNull);
+      expect(one.downloadedSync(), isEmpty);
     });
 
     test("a download that was not kept is not remembered as installed",
@@ -146,7 +178,7 @@ void main() {
       await one.install(gguf(sha: "not-the-checksum")).drain<void>().onError(
           (_, _) {});
 
-      expect(one.fileOfSync(gguf()), isNull);
+      expect(one.downloadedSync(), isEmpty);
     });
   });
 

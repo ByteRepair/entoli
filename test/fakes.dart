@@ -1109,12 +1109,33 @@ class FakeRootfsStore extends RootfsStore {
   }
 }
 
+/// [model] as the store would describe it once downloaded: a 4B's cache cost
+/// and a 256K window, at [file].
+DownloadedModel downloadedAs(LocalModel model, {String? file}) => DownloadedModel(
+      id: model.id,
+      name: model.name.isEmpty ? model.id : model.name,
+      file: file ?? "/models/${model.id}/model.gguf",
+      bytes: model.bytes ?? 0,
+      quantisation: "Q4_0",
+      contextLength: 262144,
+      kvBytesPerToken: 131072,
+      parameters: model.parameters,
+      licence: model.licence,
+      url: model.url,
+    );
+
 /// Models that are simply there, or simply are not, like the two catalogs
 /// beside it — downloading is tested against the real store and a real socket.
+/// An id the catalog does not have is described by the id alone.
 class FakeLocalModelStore extends LocalModelStore {
-  FakeLocalModelStore({Set<String> installed = const {}}) : _installed = {...installed};
+  FakeLocalModelStore({Set<String> installed = const {}})
+      : _installed = {
+          for (final id in installed)
+            id: downloadedAs(localModelCatalog.firstWhere((m) => m.id == id,
+                orElse: () => LocalModel(id: id, name: id, url: ""))),
+        };
 
-  final Set<String> _installed;
+  final Map<String, DownloadedModel> _installed;
 
   final List<String> deleted = [];
 
@@ -1126,18 +1147,17 @@ class FakeLocalModelStore extends LocalModelStore {
   Object? failNext;
 
   @override
-  Future<Set<String>> installed() async => {..._installed};
+  Future<Set<String>> installed() async => {..._installed.keys};
 
   @override
-  String? fileOfSync(LocalModel model) =>
-      _installed.contains(model.id) ? "/models/${model.id}/model.gguf" : null;
+  List<DownloadedModel> downloadedSync() => [..._installed.values];
 
   @override
   Stream<DownloadProgress> install(LocalModel model) async* {
-    yield DownloadProgress(received: 0, total: model.bytes);
+    yield DownloadProgress(received: 0, total: model.bytes ?? 0);
     if (installing != null) await installing!.future;
-    yield DownloadProgress(received: model.bytes, total: model.bytes);
-    _installed.add(model.id);
+    yield DownloadProgress(received: model.bytes ?? 0, total: model.bytes ?? 0);
+    _installed[model.id] = downloadedAs(model);
   }
 
   @override
@@ -1181,6 +1201,10 @@ class FakeLocalLlm extends LocalLlm {
   final String failure;
   @override
   final List<String> installed;
+
+  @override
+  String nameOf(String modelId) =>
+      localModelCatalog.where((m) => m.id == modelId).firstOrNull?.name ?? modelId;
 
   /// What the cores slider tops out at, and whether it is drawn at all. Null by
   /// default, which takes the slider off the page — a test that wants it sets a
