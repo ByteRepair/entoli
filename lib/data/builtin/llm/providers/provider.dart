@@ -4,8 +4,10 @@ import "package:http/http.dart" as http;
 
 import "../../../../core/tls.dart";
 import "../../../../domain/llm_provider.dart";
+import "../../../../domain/model_capability.dart";
 import "../../../../domain/model_registry.dart";
 import "../../../../domain/voice.dart" show Synthesize, Transcribe;
+import "../hosted_models.dart";
 import "../http_stream.dart";
 import "../llm_client.dart";
 import "../openai_client.dart";
@@ -98,6 +100,24 @@ abstract class LlmProvider {
     ];
   }
 
+  /// [id] as each thing it can do here. One this provider does not describe
+  /// — a pick made before the catalog arrived, a model only its own list
+  /// names — is taken to be anything its API answers, since it was picked for
+  /// that.
+  List<Model> serve(String id, ModelInfo? info, ModelHost host) => [
+        if (info?.talks ?? true)
+          HostedChatModel((providerId: this.id, modelId: id), info ?? ModelInfo(id: id)),
+      ];
+
+  /// Every model it describes, as what each can do.
+  Iterable<Model> offered(ModelCatalog catalog, ModelHost host) =>
+      [for (final m in models(catalog)) ...serve(m.id, m, host)];
+
+  /// [modelId] as a [T], where this provider serves one.
+  T? resolve<T extends Model>(String modelId, ModelHost host) => modelOf<T>(
+      serve(modelId, ModelCatalog.current.lookup(config, modelId), host),
+      (providerId: id, modelId: modelId));
+
   /// [request] sent with the key on it, answered by its status: success is
   /// yes, one of [rejecting] is no. A spent balance or a rate limit is a key
   /// that was accepted. Anything else could not tell.
@@ -119,8 +139,6 @@ abstract class LlmProvider {
     }
   }
 }
-
-typedef ImageGenerator = Future<List<LlmAttachment>> Function(String prompt);
 
 /// A provider that makes no images and has no audio endpoints.
 mixin ChatOnly on LlmProvider {
@@ -171,6 +189,23 @@ class OpenAiCompatibleProvider extends LlmProvider {
   @override
   Synthesize? synthesizer(LlmClient client, String model, {String? voice}) =>
       (text) => (client as OpenAiClient).speak(text, model: model, voice: voice);
+
+  @override
+  List<Model> serve(String id, ModelInfo? info, ModelHost host) {
+    final ref = (providerId: this.id, modelId: id);
+    final known = info ?? ModelInfo(id: id);
+    return [
+      ...super.serve(id, info, host),
+      if (info?.makesImages ?? true)
+        HostedImageModel(ref, known, ({quality}) => (prompt) =>
+            imageGenerator(host.client(), id, quality: quality)!(prompt)),
+      if ((info?.transcribes ?? true) && host.cutsUtterances)
+        HostedTranscriptionModel(ref, known, (wav) => transcriber(host.client(), id)!(wav)),
+      if (info?.speaks ?? true)
+        HostedSynthesisModel(ref, known, ({voice}) => (text) =>
+            synthesizer(host.client(), id, voice: voice)!(text)),
+    ];
+  }
 
   /// What the key is asked about: the model list, which most of these keep
   /// behind it.

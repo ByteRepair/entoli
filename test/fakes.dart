@@ -5,8 +5,10 @@ import "package:archive/archive.dart";
 import "package:flutter/foundation.dart";
 import "package:flutter/widgets.dart";
 
+import "package:agent_chat/data/builtin/llm/hosted_models.dart";
 import "package:agent_chat/data/builtin/llm/llm_client.dart";
 import "package:agent_chat/data/builtin/llm/local_pool_client.dart";
+import "package:agent_chat/data/builtin/llm/providers/provider.dart";
 import "package:agent_chat/data/builtin/llm/local_prefill.dart";
 import "package:agent_chat/data/sync/channel.dart";
 import "package:agent_chat/data/sync/peers.dart" show PeerState;
@@ -30,6 +32,7 @@ import "package:agent_chat/domain/llm_provider.dart";
 import "package:agent_chat/domain/local_llm.dart";
 import "package:agent_chat/domain/local_model.dart";
 import "package:agent_chat/domain/local_model_store.dart";
+import "package:agent_chat/domain/model_capability.dart";
 import "package:agent_chat/domain/model_registry.dart";
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/domain/room/room_state.dart";
@@ -764,6 +767,16 @@ class FakeBackend implements AgentBackend {
   @override
   Synthesize? synthesizer(String providerId, String modelId, {String? voice}) =>
       speakers.contains(providerId) ? (_) async => Uint8List(0) : null;
+
+  /// What [resolveModel] resolves against, and what this platform can run.
+  List<LlmProvider> Function() providers = () => const [];
+  bool cutsUtterances = true;
+
+  @override
+  T? resolveModel<T extends Model>(ModelRef ref) => providers()
+      .where((p) => p.id == ref.providerId)
+      .firstOrNull
+      ?.resolve<T>(ref.modelId, ModelHost.resolving(cutsUtterances: cutsUtterances));
 }
 
 /// A `ChatStore` that keeps everything in memory, for the tests whose subject

@@ -5,10 +5,13 @@ import "package:http/http.dart" as http;
 import "package:http/testing.dart";
 
 import "package:agent_chat/data/builtin/llm/gemini_client.dart";
+import "package:agent_chat/data/builtin/llm/hosted_models.dart";
 import "package:agent_chat/data/builtin/llm/llm_client.dart";
 import "package:agent_chat/data/builtin/llm/providers/presets.dart";
 import "package:agent_chat/domain/llm_provider.dart";
+import "package:agent_chat/domain/model_capability.dart";
 import "package:agent_chat/domain/model_registry.dart";
+import "package:agent_chat/domain/voice.dart";
 
 void main() {
   group("providerOf", () {
@@ -60,6 +63,50 @@ void main() {
     test("a local server asks for no key", () {
       expect(const OllamaProvider().needsKey, isFalse);
       expect(const OpenAiProvider().needsKey, isTrue);
+    });
+  });
+
+  group("serve", () {
+    final host = ModelHost.resolving();
+    List<Type> kinds(List<Model> models) => [
+          for (final m in models)
+            switch (m) {
+              ChatModel() => ChatModel,
+              ImageModel() => ImageModel,
+              TranscriptionModel() => TranscriptionModel,
+              SynthesisModel() => SynthesisModel,
+              _ => Model,
+            },
+        ];
+
+    test("a described model is what its description says", () {
+      final tts = ModelInfo.fromJson("tts-1", {
+        "modalities": {"input": ["text"], "output": ["audio"]},
+      });
+      expect(kinds(const OpenAiProvider().serve("tts-1", tts, host)), [SynthesisModel]);
+      final chat = ModelInfo.fromJson("gpt-5", {
+        "modalities": {"input": ["text", "image"], "output": ["text"]},
+      });
+      expect(kinds(const OpenAiProvider().serve("gpt-5", chat, host)), [ChatModel]);
+    });
+
+    test("one it does not describe is anything its API answers", () {
+      expect(kinds(const OpenAiProvider().serve("whisper-1", null, host)),
+          [ChatModel, ImageModel, TranscriptionModel, SynthesisModel]);
+      expect(kinds(const AnthropicProvider().serve("any", null, host)), [ChatModel]);
+    });
+
+    test("nothing hears through a provider where nothing cuts utterances", () {
+      final models = const OpenAiProvider()
+          .serve("whisper-1", null, ModelHost.resolving(cutsUtterances: false));
+      expect(models.whereType<TranscriptionModel>(), isEmpty);
+    });
+
+    test("resolves a pick to the kind asked for, with the pick's ref", () {
+      final model = OpenAiProvider(OpenAiProvider.preset.copyWith(id: "mine"))
+          .resolve<SynthesisModel>("tts-1", host);
+      expect(model?.ref, (providerId: "mine", modelId: "tts-1"));
+      expect(model?.speaking(voice: "alloy"), isA<SpeakThrough>());
     });
   });
 

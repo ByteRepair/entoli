@@ -1,6 +1,8 @@
 import "../../../core/log.dart";
 import "../../../domain/llm_provider.dart";
+import "../../../domain/model_capability.dart";
 import "../../../domain/models.dart";
+import "hosted_models.dart";
 import "llm_client.dart";
 import "providers/provider.dart";
 
@@ -16,6 +18,7 @@ class LlmRegistry {
     required this.endpoints,
     required this.lookupEnv,
     required this.lookupKey,
+    this.cutsUtterances = true,
   });
 
   final List<LlmProvider> Function() endpoints;
@@ -30,7 +33,19 @@ class LlmRegistry {
   /// before [lookupEnv]: a key pasted here wins over a named one.
   final String? Function(String providerId) lookupKey;
 
+  /// Whether this platform can cut the microphone into utterances, which a
+  /// hosted transcription model needs. See [ModelHost.cutsUtterances].
+  final bool cutsUtterances;
+
   final _clients = LlmClientCache();
+
+  /// [ref] as a [T], where a configured provider serves one, run over that
+  /// provider's cached client.
+  T? resolve<T extends Model>(ModelRef ref) {
+    final provider = providerFor(ref.providerId);
+    return provider?.resolve<T>(ref.modelId,
+        ModelHost(client: () => clientOf(provider), cutsUtterances: cutsUtterances));
+  }
 
   LlmProvider? providerFor(String providerId) {
     for (final provider in endpoints()) {

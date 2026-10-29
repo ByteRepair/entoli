@@ -19,6 +19,7 @@ import "../../domain/chat_store.dart";
 import "../../domain/file_tools.dart";
 import "../../domain/llm_provider.dart";
 import "../../domain/local_model.dart" show isTitleOnlyModel;
+import "../../domain/model_capability.dart";
 import "../../domain/models.dart";
 import "../../domain/model_registry.dart";
 import "../../domain/permission.dart";
@@ -39,7 +40,7 @@ import "memory/instructions.dart";
 import "memory/store.dart";
 import "llm/gated_client.dart";
 import "llm/llm_client.dart";
-import "llm/providers/provider.dart" show ImageGenerator;
+import "llm/hosted_models.dart";
 import "llm/readable_client.dart";
 import "llm/llm_registry.dart";
 import "llm/rate_limit_gate.dart";
@@ -1557,6 +1558,9 @@ class BuiltinBackend implements AgentBackend {
     final provider = registry.providerFor(providerId);
     return provider?.synthesizer(registry.clientOf(provider), modelId, voice: voice);
   }
+
+  @override
+  T? resolveModel<T extends Model>(ModelRef ref) => registry.resolve<T>(ref);
 }
 
 /// The turns in flight, and which chats they belong to as that changes. One

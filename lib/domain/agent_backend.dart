@@ -7,6 +7,7 @@ import "../domain/ask.dart";
 import "../domain/shell_job.dart";
 import "../domain/builtin_project.dart";
 import "../domain/chat_log.dart";
+import "../domain/model_capability.dart";
 import "../domain/models.dart";
 import "../domain/permission.dart";
 import "../domain/profile.dart";
@@ -663,4 +664,7 @@ abstract class AgentBackend {
   /// A provider's speech model as a call, the same way. [voice] is the
   /// provider's name for one, null for none sent.
   Synthesize? synthesizer(String providerId, String modelId, {String? voice});
+
+  /// [ref] as a [T], ready to run, where a provider serves one.
+  T? resolveModel<T extends Model>(ModelRef ref);
 }
