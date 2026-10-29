@@ -12,6 +12,7 @@ import "../../providers.dart";
 import "../../core/formatting.dart";
 import "../fonts.dart";
 import "catalog.dart" show InfoTag;
+import "dialogs.dart" show confirm;
 
 /// One model a picker can offer, with the provider it is reached through.
 class CatalogEntry {
@@ -205,12 +206,28 @@ class _ModelCatalogPageState extends ConsumerState<ModelCatalogPage> {
   void _pick(String? providerId, String? modelId) =>
       Navigator.of(context).pop<ModelChoice>((providerId: providerId, modelId: modelId));
 
-  Future<void> _addModel() async {
-    final added = await Navigator.of(context).push<String>(MaterialPageRoute(
-      builder: (_) => AddModelPage(role: widget.role, provider: _provider),
+  /// Adds a model, or edits [initial] on [provider].
+  Future<void> _openModelPage({String? provider, ModelInfo? initial}) async {
+    final saved = await Navigator.of(context).push<String>(MaterialPageRoute(
+      builder: (_) => AddModelPage(role: widget.role, provider: provider, initial: initial),
     ));
     // Found straight away, since it is what was just described.
-    if (added != null) setState(() => _search.text = added);
+    if (saved != null) setState(() => _search.text = saved);
+  }
+
+  Future<void> _addModel() => _openModelPage(provider: _provider);
+
+  Future<void> _deleteModel(CatalogEntry entry) async {
+    final settings = ref.read(appSettingsProvider.notifier);
+    final ok = await confirm(
+      context,
+      title: "Delete ${entry.info.displayName}?",
+      message: "It is no longer offered for ${entry.providerName}. A model "
+          "already picked keeps its id until another is picked.",
+      confirmLabel: "Delete",
+      destructive: true,
+    );
+    if (ok) await settings.removeCustomModel(entry.providerId, entry.info.id);
   }
 
   @override
@@ -351,6 +368,13 @@ class _ModelCatalogPageState extends ConsumerState<ModelCatalogPage> {
                         entry: e,
                         selected: _picked(e.providerId, e.info.id),
                         onTap: () => _pick(e.providerId, e.info.id),
+                        manage: e.custom
+                            ? (
+                                edit: () =>
+                                    _openModelPage(provider: e.providerId, initial: e.info),
+                                delete: () => _deleteModel(e),
+                              )
+                            : null,
                       );
                     },
                   ),
@@ -436,11 +460,19 @@ class _QuickPick extends StatelessWidget {
 }
 
 class _ModelCard extends StatelessWidget {
-  const _ModelCard({required this.entry, required this.selected, required this.onTap});
+  const _ModelCard({
+    required this.entry,
+    required this.selected,
+    required this.onTap,
+    this.manage,
+  });
 
   final CatalogEntry entry;
   final bool selected;
   final VoidCallback onTap;
+
+  /// Where it was added by hand: the user's to change, and nobody else's.
+  final ({VoidCallback edit, VoidCallback delete})? manage;
 
   @override
   Widget build(BuildContext context) {
@@ -491,6 +523,15 @@ class _ModelCard extends StatelessWidget {
                     ),
                   ),
                   if (selected) Icon(Icons.check_circle, color: scheme.primary),
+                  if (manage case final manage?)
+                    PopupMenuButton<VoidCallback>(
+                      tooltip: "Model options",
+                      onSelected: (action) => action(),
+                      itemBuilder: (_) => [
+                        PopupMenuItem(value: manage.edit, child: const Text("Edit")),
+                        PopupMenuItem(value: manage.delete, child: const Text("Delete")),
+                      ],
+                    ),
                 ],
               ),
               const SizedBox(height: 10),
@@ -616,14 +657,18 @@ class _Empty extends StatelessWidget {
 /// A model models.dev does not list, described by hand: the same fields the
 /// catalog reads, for the user to fill in. Pops with the new model's id.
 class AddModelPage extends ConsumerStatefulWidget {
-  const AddModelPage({super.key, required this.role, this.provider});
+  const AddModelPage({super.key, required this.role, this.provider, this.initial});
 
   /// The picker this was opened from: the toggles start where its models'
   /// would be.
   final ModelRole role;
 
-  /// The provider the catalog was narrowed to, where it was.
+  /// The provider the catalog was narrowed to, where it was; for an edit, the
+  /// one [initial] is on.
   final String? provider;
+
+  /// The model being edited, added by hand earlier; null adds one.
+  final ModelInfo? initial;
 
   @override
   ConsumerState<AddModelPage> createState() => _AddModelPageState();
@@ -631,24 +676,29 @@ class AddModelPage extends ConsumerStatefulWidget {
 
 class _AddModelPageState extends ConsumerState<AddModelPage> {
   final _form = GlobalKey<FormState>();
-  final _id = TextEditingController();
-  final _name = TextEditingController();
-  final _context = TextEditingController();
-  final _output = TextEditingController();
-  final _inputCost = TextEditingController();
-  final _outputCost = TextEditingController();
+  late final _id = TextEditingController(text: widget.initial?.id);
+  late final _name = TextEditingController(text: widget.initial?.name);
+  late final _context = TextEditingController(text: widget.initial?.context?.toString());
+  late final _output = TextEditingController(text: widget.initial?.output?.toString());
+  late final _inputCost = TextEditingController(text: widget.initial?.inputCost?.toString());
+  late final _outputCost = TextEditingController(text: widget.initial?.outputCost?.toString());
   late String? _provider = widget.provider;
-  late var _toolCall = widget.role == ModelRole.agent;
-  var _reasoning = false;
-  var _readsImages = false;
-  var _readsPdfs = false;
-  late var _makesImages = widget.role == ModelRole.image;
+  late var _toolCall = widget.initial?.toolCall ?? widget.role == ModelRole.agent;
+  late var _reasoning = widget.initial?.reasoning ?? false;
+  late var _readsImages = widget.initial?.readsImages ?? false;
+  late var _readsPdfs = widget.initial?.readsPdfs ?? false;
+  late var _makesImages = widget.initial?.makesImages ?? widget.role == ModelRole.image;
 
   /// What the model is: a chat model, or one of the two speech kinds, which
   /// answer endpoints of their own and take none of the chat toggles.
-  late var _kind = switch (widget.role) {
-    ModelRole.transcription || ModelRole.speech => widget.role,
-    _ => ModelRole.text,
+  late var _kind = switch (widget.initial) {
+    ModelInfo(transcribes: true) => ModelRole.transcription,
+    ModelInfo(speaks: true) => ModelRole.speech,
+    ModelInfo() => ModelRole.text,
+    null => switch (widget.role) {
+        ModelRole.transcription || ModelRole.speech => widget.role,
+        _ => ModelRole.text,
+      },
   };
 
   @override
@@ -664,7 +714,8 @@ class _AddModelPageState extends ConsumerState<AddModelPage> {
     final id = _id.text.trim();
     String? text(TextEditingController c) => c.text.trim().isEmpty ? null : c.text.trim();
     final chat = _kind == ModelRole.text;
-    await ref.read(appSettingsProvider.notifier).addCustomModel(
+    final before = widget.initial;
+    await ref.read(appSettingsProvider.notifier).putCustomModel(
           _provider!,
           ModelInfo(
             id: id,
@@ -682,6 +733,7 @@ class _AddModelPageState extends ConsumerState<AddModelPage> {
             readsPdfs: chat && _readsPdfs,
             makesImages: chat && _makesImages,
           ),
+          replacing: before == null ? null : (widget.provider!, before.id),
         );
     if (mounted) Navigator.of(context).pop(id);
   }
@@ -693,7 +745,7 @@ class _AddModelPageState extends ConsumerState<AddModelPage> {
     _provider ??= providers.firstOrNull?.id;
     return Scaffold(
       appBar: AppBar(
-        title: const Text("Add model"),
+        title: Text(widget.initial == null ? "Add model" : "Edit model"),
         actions: [
           Padding(
             padding: const EdgeInsets.only(right: 12),

@@ -329,6 +329,61 @@ void main() {
     expect(find.text("Added by you"), findsOneWidget);
   });
 
+  group("a model added by hand", () {
+    const mine = ModelInfo(id: "ft:glm:acme", context: 65536, toolCall: true);
+
+    Future<void> openWithMine(WidgetTester tester) async {
+      useWindow(tester, const Size(800, 1400));
+      await pump(tester,
+          providers: [testProvider.copyWith(customModels: const [mine])]);
+      await openModelCatalog(tester);
+      await tester.enterText(find.byType(SearchBar), "acme");
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets("is edited in the form it was added in", (tester) async {
+      await openWithMine(tester);
+
+      await tester.tap(find.byTooltip("Model options"));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text("Edit"));
+      await tester.pumpAndSettle();
+      expect(find.text("Edit model"), findsOneWidget);
+      expect(find.text("65536"), findsOneWidget);
+      await tester.enterText(
+          find.widgetWithText(TextFormField, "Model id"), "ft:glm:acme-2");
+      await tester.tap(find.text("Save"));
+      await settleIo(tester);
+
+      // Renamed rather than added beside.
+      final provider = app.container.read(appSettingsProvider).llmProviders.single;
+      expect(provider.customModels.map((m) => m.id), ["ft:glm:acme-2"]);
+      expect(provider.customModels.single.context, 65536);
+    });
+
+    testWidgets("is deleted, after asking", (tester) async {
+      await openWithMine(tester);
+
+      await tester.tap(find.byTooltip("Model options"));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text("Delete"));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text("Delete").last);
+      await settleIo(tester);
+
+      expect(app.container.read(appSettingsProvider).llmProviders.single.customModels,
+          isEmpty);
+    });
+
+    testWidgets("is the only kind with options", (tester) async {
+      useWindow(tester, const Size(800, 1400));
+      await pump(tester);
+      await openModelCatalog(tester);
+
+      expect(find.byTooltip("Model options"), findsNothing);
+    });
+  });
+
   testWidgets("reset puts a pick back on the provider default", (tester) async {
     await pump(tester, choice: (providerId: testProviderId, modelId: "claude-sonnet-4"));
 

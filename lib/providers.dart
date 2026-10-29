@@ -151,9 +151,14 @@ abstract class InstalledIds extends Notifier<Set<String>> {
 
   Future<Set<String>> scan();
 
+  /// A scan that found what was already there tells nobody: the model list
+  /// watches this, and rebuilding it asks every provider again.
   Future<void> refresh() async {
     final installed = await scan();
-    if (ref.mounted) state = installed;
+    if (!ref.mounted) return;
+    if (installed.length != state.length || !state.containsAll(installed)) {
+      state = installed;
+    }
   }
 }
 
@@ -559,17 +564,30 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
       _update((s) => s.imageQuality = value);
 
   /// A model described by hand, on the provider it is reached through. One of
-  /// the same id is replaced.
-  Future<void> addCustomModel(String providerId, ModelInfo model) => _update((s) =>
-      s.llmProviders = [
-        for (final p in s.llmProviders)
-          p.id == providerId
-              ? p.copyWith(customModels: [
-                  ...p.customModels.where((m) => m.id != model.id),
-                  model,
-                ])
-              : p,
-      ]);
+  /// the same id there is replaced, and so is [replacing] — the provider and id
+  /// an edit moved it from — in the same write.
+  Future<void> putCustomModel(String providerId, ModelInfo model,
+          {(String, String)? replacing}) =>
+      _editCustomModels((provider, models) => [
+            for (final m in models)
+              if ((provider, m.id) != (providerId, model.id) && (provider, m.id) != replacing) m,
+            if (provider == providerId) model,
+          ]);
+
+  Future<void> removeCustomModel(String providerId, String modelId) =>
+      _editCustomModels((provider, models) => [
+            for (final m in models)
+              if ((provider, m.id) != (providerId, modelId)) m,
+          ]);
+
+  /// The model list is built from these, so it is rebuilt with them.
+  Future<void> _editCustomModels(
+      List<ModelInfo> Function(String providerId, List<ModelInfo> models) edit) async {
+    await _update((s) => s.llmProviders = [
+          for (final p in s.llmProviders) p.copyWith(customModels: edit(p.id, p.customModels)),
+        ]);
+    ref.invalidate(availableModelsProvider);
+  }
 
   Future<void> setImageModel(ModelChoice choice) => _update((s) => s
     ..imageProviderId = choice.providerId
@@ -1319,11 +1337,13 @@ final projectListProvider =
     FutureProvider((ref) => ref.watch(chatRepositoryProvider).listProjects());
 
 /// Asked again when models.dev's catalog arrives, since a provider with no
-/// models endpoint lists from it.
+/// models endpoint lists from it, and when an on-device model is downloaded or
+/// deleted, since the on-device provider lists what is on disk.
 final availableModelsProvider = FutureProvider<List<ModelOption>>((ref) {
   void catalogChanged() => ref.invalidateSelf();
   ModelCatalog.notifier.addListener(catalogChanged);
   ref.onDispose(() => ModelCatalog.notifier.removeListener(catalogChanged));
+  ref.watch(installedLocalModelsProvider);
   return ref.watch(agentBackendProvider).models();
 });
 
