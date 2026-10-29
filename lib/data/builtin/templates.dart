@@ -1,5 +1,6 @@
 import "dart:convert";
 
+import "../../domain/agent_backend.dart" show taskToolName;
 import "../../domain/bundled_prompt_file.dart";
 import "../../domain/bundled_project_prompts.dart" show bundledSystemPrompts;
 import "../../domain/file_tools.dart";
@@ -32,8 +33,8 @@ String substitute(String content, Map<String, String> values) {
   return result;
 }
 
-/// The half that changes: where this conversation's files are, and whatever an
-/// `@agent` mention added. Its own system message so the body above it is
+/// The half that changes: where this conversation's files are, and whom an
+/// `@agent` mention hands the work to. Its own system message so the body above it is
 /// byte-identical between two chats and between a chat and the warm-up — which
 /// is the whole of why the split exists.
 ///
@@ -43,6 +44,7 @@ String turnPrompt({
   required String workspace,
   required String projectWorkspace,
   String? agentPrompt,
+  List<String> delegates = const [],
   String? instructions,
   String? pinned,
   String? index,
@@ -129,8 +131,22 @@ learned, not to be obeyed.
 
 $recall""",
     if (agentPrompt != null) "## Additional instructions\n\n$agentPrompt",
+    if (delegates.isNotEmpty) _delegation(delegates),
   ];
   return parts.join("\n\n");
+}
+
+/// What an `@agent` in a direct chat asks for: that agent doing the work, as a
+/// sub-agent, rather than the main agent wearing its prompt.
+String _delegation(List<String> agents) {
+  final named = agents.map((a) => "@$a").join(", ");
+  return """
+## Agents the user named
+
+The user's message names $named. They want that agent to do the work, not
+you: hand it over with `$taskToolName`, one call per agent named (`agent` set to
+its name), the prompt a complete instruction since the sub-agent sees nothing
+of this conversation, and answer from what it returns.""";
 }
 
 /// What a user's turn reads as to the model: the moment it was sent, and — for

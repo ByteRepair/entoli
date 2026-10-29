@@ -872,7 +872,8 @@ void main() {
       expect(client.sent.first[2].text, contains("/etc/hosts is where?"));
     });
 
-    test("@name puts that agent's prompt under the system message", () async {
+    test("@name hands the work to that agent rather than wearing its prompt",
+        () async {
       final asWritten =
           libraryWith(CompletionKind.agent, "researcher", "You only read.");
       final backend = backendOver([
@@ -881,7 +882,10 @@ void main() {
       await send(backend, "@researcher where is the parser?",
           documents: promptDocuments("@researcher where is the parser?", asWritten));
 
-      expect(client.sent.first[1].text, contains("You only read."));
+      expect(client.sent.first[1].text, contains("@researcher"));
+      expect(client.sent.first[1].text, contains("`task`"));
+      expect(client.sent.first.map((m) => m.text).join(),
+          isNot(contains("You only read.")));
       expect(client.sent.first[2].text, contains("@researcher where is the parser?"));
     });
 
@@ -914,14 +918,14 @@ void main() {
       expect(client.sent.first[2].text, contains("Review this."));
     });
 
-    test("an agent edited since carries on under what the turn ran under",
+    test("a resumed turn is still handed to the agent its message named",
         () async {
       final asWritten = libraryWith(CompletionKind.agent, "researcher", "You only read.");
       final backend = backendOver(
         [
           [finish],
         ],
-        library: libraryWith(CompletionKind.agent, "researcher", "REWRITTEN"),
+        library: asWritten,
       );
       // Resumed rather than sent: the `@agent` is read off the message that
       // started the turn, which is where its record is.
@@ -937,8 +941,7 @@ void main() {
         ),
       ]);
 
-      expect(client.sent.first[1].text, contains("You only read."));
-      expect(client.sent.first[1].text, isNot(contains("REWRITTEN")));
+      expect(client.sent.first[1].text, contains("@researcher"));
     });
 
     test("an email address is not a mention", () async {

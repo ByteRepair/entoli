@@ -555,13 +555,12 @@ class BuiltinBackend implements AgentBackend {
 
       // A resumed turn has no prompt of its own to read `@agent` mentions out
       // of, so they come off the message that started it. A member turn is
-      // the other shape: its instructions are the member's own, which the
-      // mentions do not join.
+      // the other shape: the mention is what routed the turn to it.
       final said =
           prompt ?? history.lastWhereOrNull((m) => m.role == MessageRole.user);
       final mentions = memberDoc != null
-          ? null
-          : agentPromptFrom(said?.documents ?? const {});
+          ? const <String>[]
+          : mentionedAgents(said?.documents ?? const {});
       final events = prompt == null
           ? agent.resume(mentions: mentions)
           : agent.run(prompt,

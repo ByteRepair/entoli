@@ -688,10 +688,10 @@ class BuiltinAgent implements Turn {
   /// the task — the viewer's first own mail, decided by the caller against
   /// the history it holds, the decision a whole-span walk would make.
   ///
-  /// [mentions] is what the message's `@agent` mentions add, for the main
-  /// agent's turn.
+  /// [mentions] are the agents the message's `@agent` mentions hand the work
+  /// to, for the main agent's turn.
   Stream<AgentEvent> run(Message prompt,
-      {String? mentions, bool mayDress = false}) async* {
+      {List<String> mentions = const [], bool mayDress = false}) async* {
     await _openTurn(prompt, mayDress, mentions);
     yield* _recorded(_loop)();
   }
@@ -710,7 +710,7 @@ class BuiltinAgent implements Turn {
   /// rather than added to. Nothing logs it, so a session that kept it would
   /// hold a message no reload could rebuild; see "The projection" in
   /// `lib/domain/AGENTS.md` for what that cost.
-  Stream<AgentEvent> resume({String? mentions}) async* {
+  Stream<AgentEvent> resume({List<String> mentions = const []}) async* {
     _setSystemPrompt(mentions);
     final turn = _recorded(_loop);
     // Wrapped either way: the branch decides whether the reason goes in, not
@@ -826,7 +826,7 @@ class BuiltinAgent implements Turn {
   }
 
   Future<void> _openTurn(
-      Message prompt, bool mayDress, String? mentions) async {
+      Message prompt, bool mayDress, List<String> mentions) async {
     _setSystemPrompt(mentions);
     // The wording the live turn sends is the wording a reload rebuilds: both
     // call the projection, and the dress decision — may this message dress —
@@ -851,10 +851,11 @@ class BuiltinAgent implements Turn {
   /// what a restore can find. See [turnPrompt]. Two only as far as the KV keys:
   /// a chat template renders one system block, so `mergeLeadingSystem` joins
   /// them on the way out.
-  void _setSystemPrompt(String? mentions) {
+  void _setSystemPrompt(List<String> mentions) {
     final offer = this.offer;
     // A member is told its handle whatever its file says; the main agent has
-    // no instructions of its own, and is the only one mentions reach.
+    // no instructions of its own, and is the only one mentions reach — as
+    // agents to delegate to, so only where it has `task` to delegate with.
     final own = viewer != null && agent.document != null
         ? memberInstructions(viewer!, agent.instructions)
         : agent.instructions.isEmpty
@@ -863,7 +864,8 @@ class BuiltinAgent implements Turn {
     final turn = turnPrompt(
       workspace: workspace,
       projectWorkspace: projectWorkspace,
-      agentPrompt: own ?? mentions,
+      agentPrompt: own,
+      delegates: own == null && offer.caps.task ? mentions : const [],
       instructions: renderInstructions(instructions),
       pinned: pinned,
       index: index,

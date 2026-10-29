@@ -9,6 +9,7 @@ import "package:path/path.dart" as p;
 
 import "package:agent_chat/data/builtin/builtin_agent.dart";
 import "package:agent_chat/data/builtin/tools/image_tool.dart";
+import "package:agent_chat/data/builtin/tools/turn.dart" show SubAgents;
 import "package:agent_chat/data/builtin/memory/instructions.dart";
 import "package:agent_chat/data/builtin/memory/store.dart";
 import "package:agent_chat/data/builtin/tools/memory_tools.dart";
@@ -56,6 +57,7 @@ void main() {
     bool seesImages = true,
     bool seesPdfs = false,
     bool attachments = false,
+    SubAgents? subAgents,
   }) {
     final tempDir = Directory.systemTemp.createTempSync("agent-test");
     // Beside the workspaces, the way the layout keeps `chats/<id>/resources`.
@@ -96,6 +98,7 @@ void main() {
       seesPdfs: seesPdfs,
       attachmentsDir: attachments ? attachmentsDir : null,
       readOnlyDirs: attachments ? [attachmentsDir] : const [],
+      subAgents: subAgents,
     );
   }
 
@@ -166,18 +169,18 @@ void main() {
     });
 
     test("what rides the second system message, and what does not", () async {
-      // An @agent's prompt is this turn's: in the per-turn message, not the
-      // body, which has to stay the same string for every chat.
+      // An @agent is this turn's: in the per-turn message, not the body,
+      // which has to stay the same string for every chat.
       final client = FakeLlmClient([
         [finish],
       ]);
-      await agentOver(client)
-          .run(userMessage("look at it"), mentions: "You only read; you never edit.")
+      await agentOver(client, subAgents: _NoSubAgents())
+          .run(userMessage("look at it"), mentions: ["explore"])
           .toList();
 
-      expect(client.sent.first.first.text,
-          isNot(contains("You only read; you never edit.")));
-      expect(client.sent.first[1].text, contains("You only read; you never edit."));
+      expect(client.sent.first.first.text, isNot(contains("@explore")));
+      expect(client.sent.first[1].text, contains("@explore"));
+      expect(client.sent.first[1].text, contains("`task`"));
 
       // Workspace instructions ride the same message, in a section of theirs.
       final instructed = FakeLlmClient([
@@ -795,6 +798,15 @@ void main() {
       expect(events.last, isA<DoneEvent>());
     });
 
+    test("an @agent with no task to hand it to is not promised one", () async {
+      final client = FakeLlmClient([
+        [finish],
+      ]);
+      await agentOver(client).run(userMessage("look at it"), mentions: ["explore"]).toList();
+
+      expect(client.sent.first.map((m) => m.text).join(), isNot(contains("@explore")));
+    });
+
     test("the system prompt is rewritten, so an @agent carries on too", () async {
       session.replaceWith(const [
         LlmMessage(role: LlmRole.system, text: "stale"),
@@ -804,10 +816,12 @@ void main() {
       final client = FakeLlmClient([
         [finish],
       ]);
-      await agentOver(client).resume(mentions: "Be brief.").toList();
+      await agentOver(client, subAgents: _NoSubAgents())
+          .resume(mentions: ["explore"])
+          .toList();
 
       expect(client.sent.single.first.role, LlmRole.system);
-      expect(client.sent.single[1].text, contains("Be brief."));
+      expect(client.sent.single[1].text, contains("@explore"));
       expect(client.sent.single.map((m) => m.text).join(), isNot(contains("stale")));
     });
 
@@ -2045,4 +2059,14 @@ class _StubSandboxHelper implements SandboxHelper {
   @override
   Future<List<String>?> prefixFor(CommandSandbox sandbox) async =>
       ["/bin/entoli-landlock", "exec", "--workspace", sandbox.workspace, "--"];
+}
+
+/// Makes `task` offered; never run by the tests that pass it.
+class _NoSubAgents implements SubAgents {
+  @override
+  Future<ShellResult> run(String agentName, String prompt, {String? callId}) =>
+      throw UnimplementedError();
+
+  @override
+  Future<void> cancel() async {}
 }

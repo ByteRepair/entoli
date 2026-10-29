@@ -757,7 +757,8 @@ offers has to dispatch.
 appended); a name the library does not know is left alone, because it is more
 likely a path. The `skill` tool hands the model the same body through the same
 `withArguments`, so the two routes put the same words in front of it. `@name`
-stacks that agent's prompt under the system message.
+hands the work to that agent: `/` puts words in front of the main agent, `@`
+names who should do it.
 
 **The library is read once, where the message is composed, and never again.**
 `ChatRepository.composeUserPrompt` is the only place a user's message is made,
@@ -788,14 +789,21 @@ Old logs have no `documents` and default to an empty map, which renders as the
 text alone — exactly what those turns already did. There is nothing to migrate
 and no version to bump, the same bargain `siblingOf` made.
 
-`agentPromptFrom` reads the same map for the `@agent` half, which is why a
-resumed turn carries on under the agent the turn actually ran under rather than
-whatever that name means today. The mentions stay in the text and are not
-stripped, so what the user reads and what the model reads name the same agent.
+`mentionedAgents` reads the same map for the `@agent` half, which is why a
+resumed turn is still handed to the agents its message named. Only the names:
+the sub-agent runs under its file as the library has it when `task` runs. The
+mentions stay in the text and are not stripped, so what the user reads and
+what the model reads name the same agent.
 
-**An `@mention` is not a participant.** It stacks instructions for the turn —
-the reply is the main agent's — and who speaks is the room's `Roster.answering`
-decision (see "The room and its participants" in `lib/domain/room/AGENTS.md`).
+**In a direct chat an `@mention` is a delegation.** The main agent is told, in
+the per-turn system message, that the user wants the named agent to do the
+work, and it hands it over with `task`; the reply is still the main agent's.
+The agent's prompt is not put under the main agent's: that runs its words
+with none of its `tools:` limits and does the work in the main conversation,
+when `@` is what a user types to ask for a sub-agent. A turn with no `task` (a
+built-in project that takes it away, a device with no shell) is told nothing,
+and the mention is prose. Who speaks is the room's `Roster.answering`
+decision (see "The room and its participants" in `lib/domain/room/AGENTS.md`):
 Omada is what makes a mention promote the named member, in Omada-on projects.
 
 `completions` is therefore **not** on `AgentBackend`: `completionsProvider`
@@ -818,7 +826,7 @@ whichever way the agent runs: the `task` runner and a member's turn each
 resolve it from the library and hand it over, and the offer narrows by it —
 the request's tools, the dispatch and the system prompt's tool sentences all
 read the one list, so an agent's prompt names only what it has. A mention in a
-direct chat is not the agent running, so it adds instructions and no tools.
+direct chat runs the agent as a `task` sub-agent, so its list holds there too.
 
 The list is one scalar, `tools: read, bash(readonly)`, because `PromptDocument`
 keeps scalars; a YAML list is read the same, comma-joined, and `tools: []` is
