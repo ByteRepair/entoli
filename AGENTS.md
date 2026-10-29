@@ -558,6 +558,9 @@ is `logDetail`, which is debug-only.
 - Analyze: `flutter analyze`. Tests: `flutter test` — see `test/AGENTS.md`.
 - The repo is not `dart format` clean and is not meant to be; match the file you
   are in rather than reformatting it.
+- Every commit subject and PR title starts with one of `fix:`, `add:`,
+  `remove:`, `refactor:` or `docs:` — e.g. `fix: keep a chat's draft on
+  rename`. Pick the one that says what the change mostly is.
 
 ## Dependency note
 
