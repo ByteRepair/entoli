@@ -10,6 +10,7 @@ import "package:agent_chat/ui/chat/chat_settings_page.dart";
 import "package:agent_chat/ui/chat/widgets/composer.dart";
 import "package:agent_chat/ui/chat/widgets/view_only_bar.dart";
 import "package:agent_chat/ui/sidebar/sidebar.dart";
+import "package:agent_chat/ui/selection.dart";
 
 import "../harness.dart";
 

@@ -26,10 +26,13 @@ import "domain/project.dart" show everyProject;
 import "domain/prompt_library.dart";
 import "domain/sync/identity.dart";
 import "providers.dart";
+import "ui/chat/activity/activities.dart" show ChatActivities;
+import "ui/chat/activity/activity.dart" show activityCatalogProvider;
 import "ui/chat/remote_turns.dart";
 import "ui/app_licence.dart";
 import "ui/app_shell.dart";
 import "ui/initial_setup_gate.dart";
+import "ui/routes.dart";
 import "ui/welcome_gate.dart";
 import "ui/chat/chat_controller.dart";
 import "ui/chat/trigger_turn_driver.dart";
@@ -39,7 +42,7 @@ import "ui/fonts.dart";
 import "ui/link_opener.dart";
 import "ui/share/incoming_shares.dart";
 import "ui/triggers/incoming_open.dart";
-import "ui/sidebar/sidebar.dart";
+import "ui/selection.dart";
 import "ui/theme.dart";
 
 void main() async {
@@ -219,6 +222,7 @@ class AppSession {
       overrides: [
         chatStoreProvider.overrideWithValue(store),
         agentBackendProvider.overrideWithValue(backend),
+        activityCatalogProvider.overrideWithValue(const ChatActivities()),
         shellProvider.overrideWithValue(backend.shell),
         appConfigProvider.overrideWithValue(config),
         appSecretsProvider.overrideWithValue(secrets),
@@ -489,6 +493,7 @@ class _AgentChatAppState extends ConsumerState<AgentChatApp> {
       theme: entoliTheme(Brightness.light, look),
       darkTheme: entoliTheme(Brightness.dark, look),
       themeMode: mode,
+      onGenerateRoute: appRoute,
       // All four wrapped rather than folded into the shell: what another app
       // shared has to be offered a workspace over whatever is on screen and the
       // assistant gesture has to open a chat over it, both of which want a

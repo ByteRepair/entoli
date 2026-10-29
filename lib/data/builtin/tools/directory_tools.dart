@@ -17,6 +17,7 @@ import "../../../domain/tool_arg.dart";
 import "../llm/llm_client.dart";
 import "agent_tool.dart";
 import "turn.dart";
+import "../tool_outcome.dart";
 
 /// The directory grant request. The banner is the whole grant: the model
 /// names a directory, the user answers on the ordinary approval banner less

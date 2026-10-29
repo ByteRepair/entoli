@@ -5,6 +5,7 @@ import "package:agent_chat/data/builtin/templates.dart";
 import "package:agent_chat/domain/profile.dart";
 import "package:agent_chat/domain/tone.dart";
 import "package:agent_chat/data/builtin/tools/agent_tool.dart";
+import "package:agent_chat/data/builtin/system_prompt.dart";
 
 void main() {
   // The style prose is in the cacheable body under the capability sections, so

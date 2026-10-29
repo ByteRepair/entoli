@@ -96,6 +96,28 @@ with nothing either, which is why nothing user-facing names it at all.
   resolved where the message is composed and recorded on it, so the model reads
   the same words on every reading of the conversation.
 
+### Imports point one way
+
+No file in `lib/` reaches itself through its imports, `domain/` imports
+nothing of `data/` or `ui/`, and `data/` nothing of `ui/`;
+`test/core/import_graph_test.dart` fails on the first file that does. A cycle
+is a file that is both something others build on and a user of those
+builders, and each place it could happen is held apart the same few ways:
+
+- **A base apart from its catalogue.** `ToolUI` is the base; the list of
+  every tool is `tools.dart`, above the tools.
+- **State apart from a widget.** The open chat and project are
+  `ui/selection.dart`, which every page reads and none of them owns.
+- **An interface where the concrete is above.** A tool's `Turn` holds
+  `SubAgents`; the runner, which is the agent loop the tools sit under,
+  implements it and the backend binds it.
+- **A composite over an abstraction, bound at the root.** A reply is made of
+  activities and a sub-agent's activity draws a reply; the reply depends on
+  `ActivityCatalog`, which `main` binds the way it binds every port in
+  `providers.dart`.
+- **A route where two pages open each other.** Settings shows the welcome
+  tour, which opens Settings by `settingsRoute`; `appRoute` builds the page.
+
 ### On-disk layout
 
 `<dataDir>/projects/<project>/` holds `chats/`, `workspace/` and `memory/`,

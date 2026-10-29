@@ -10,11 +10,10 @@ import "../../../domain/trigger_manager.dart" show TriggerRegistry;
 import "../../../domain/web_search.dart";
 import "../approval_gate.dart";
 import "../background_jobs.dart";
-import "../builtin_agent.dart" show BuiltinOptions;
+import "../builtin_options.dart";
 import "../llm/llm_client.dart";
 import "../memory/store.dart";
-import "../sub_agent.dart";
-import "customization_tools.dart" show SettingsEditor;
+import "../../../domain/app_settings.dart" show SettingsEditor;
 
 /// What a running tool may reach of the turn it runs in: the workspaces, the
 /// shell, the gate, the user, and whichever of the optional collaborators
@@ -106,7 +105,7 @@ abstract interface class Turn {
   TriggerRegistry? get registerTrigger;
   ChatJobs? get backgroundJobs;
   SettingsEditor? get editSettings;
-  SubAgentRunner? get subAgentRunner;
+  SubAgents? get subAgents;
 
   /// Whether the turn was stopped.
   bool get cancelled;
@@ -129,4 +128,15 @@ abstract interface class Turn {
   /// [run]'s result, with its output reported as it prints and the run
   /// killed by a stop.
   Future<ShellResult> track(LlmToolCall call, ShellRun run);
+}
+
+/// What a turn asks of its sub-agents: run one to the end for a `task` call,
+/// and stop every one still running. The loop that spawns them implements
+/// it, above the tools; a tool only holds this.
+abstract interface class SubAgents {
+  /// Run [agentName] on [prompt] headless; its final text is the result.
+  Future<ShellResult> run(String agentName, String prompt, {String? callId});
+
+  /// Stop every sub-agent still running.
+  Future<void> cancel();
 }

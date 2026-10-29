@@ -5,7 +5,7 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../domain/reminder_alarms.dart";
 import "../../providers.dart";
-import "../sidebar/sidebar.dart";
+import "../selection.dart";
 
 /// Wraps the app so tapping a finished trigger's notification opens the chat
 /// it ran in. Both routes in, the shape [IncomingAssistant] has: the read at

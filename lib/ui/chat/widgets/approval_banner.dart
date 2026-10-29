@@ -2,7 +2,7 @@ import "package:flutter/material.dart";
 
 import "../../../domain/models.dart";
 import "../../fonts.dart";
-import "../tool_ui/tool_ui.dart";
+import "../tool_ui/tools.dart";
 
 /// What the turn stops on: the agent wants to run something, and nothing moves
 /// until this is answered. It sits above the composer rather than in the

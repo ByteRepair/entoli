@@ -17,6 +17,7 @@ import "package:agent_chat/ui/sidebar/chat_groups.dart";
 import "package:agent_chat/ui/sidebar/project_palette.dart";
 import "package:agent_chat/ui/sidebar/project_settings_page.dart";
 import "package:agent_chat/ui/sidebar/sidebar.dart";
+import "package:agent_chat/ui/selection.dart";
 import "package:agent_chat/ui/workspace/workspace_page.dart";
 
 import "../harness.dart";

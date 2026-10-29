@@ -460,11 +460,20 @@ the divider its only evidence, the way the memory extraction's note is.
 
 **Everything above a reply is an `Activity`** (`activity/`): a tool run, a
 thinking block, an instruction read, a permission answered, an artifact or
-skill card. One stateless class per kind; the bubble asks `activityFor(part)`
-which kind a part is, builds the `Run` it is drawn from — the call and its
-result, or the part and where it sits — and draws what `build` returns. It
-asks `important` whether the activity stands on its own row. Nothing in the
-bubble names a kind.
+skill card. One stateless class per kind; the bubble asks the
+`ActivityCatalog` which kind a part is, builds the `Run` it is drawn from —
+the call and its result, or the part and where it sits — and draws what
+`build` returns. It asks `important` whether the activity stands on its own
+row. Nothing in the bubble names a kind.
+
+**The catalogue is bound, not imported.** A reply is made of activities and
+a sub-agent's drawer draws a reply: a composite. With the bubble importing
+the kinds, the bubble, the catalogue and the sub-agent's view were one
+import cycle. So the bubble depends on the abstract `ActivityCatalog` beside
+`Activity`, `ChatActivities` (`activity/activities.dart`) implements it over
+every kind and the tools' catalogue (`tool_ui/tools.dart`, apart from the
+`ToolUI` base for the same reason), and `main` and the test harness bind it
+through `activityCatalogProvider`, the way the app's ports are bound.
 
 **A labelled activity is one view.** A `LabelledActivity` returns a `RunView`
 from `view(ref, run)`: the label's icon and line, and a `drawer` builder for
@@ -500,13 +509,13 @@ A call is matched by the name the log recorded, never by what this device
 offers, so a mirrored chat or an old one draws the same. A view whose
 content changes while the turn runs watches what it reads through its ref,
 as the job's watches the room; a label of its own watches its own provider,
-as `PlanLabel` watches `planProvider`; the `ToolUI` itself holds no state. A test checks
+as the plan's label watches `planProvider`; the `ToolUI` itself holds no state. A test checks
 every `ToolUI` names a tool the registry has, since the two are paired by
 that string alone.
 
 ## The plan, on screen
 
-A `present_plan` call is drawn as the plan it put to the user (`PlanLabel`):
+A `present_plan` call is drawn as the plan it put to the user (`PresentPlanUI`):
 every task with whether it is done, each opening to its details as markdown.
 It is not a slim activity label, since the plan is what the turn stopped to
 show. The bar carries a checklist button beside the running-turn spinner for

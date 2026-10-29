@@ -4,9 +4,9 @@ import "package:flutter_test/flutter_test.dart";
 import "package:agent_chat/domain/app_settings.dart";
 import "package:agent_chat/domain/assistant_view.dart";
 import "package:agent_chat/ui/settings/assistant_settings.dart";
-import "package:agent_chat/ui/settings/settings_page.dart";
 
 import "../harness.dart";
+import "package:agent_chat/ui/settings/settings_category.dart";
 
 void main() {
   late TestApp app;

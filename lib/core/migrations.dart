@@ -1,7 +1,6 @@
 import "package:fs_shim/fs.dart";
 
 import "../domain/documents.dart";
-import "config.dart";
 
 /// A change to the data directory that a release makes once, to files an
 /// earlier release wrote. See "Migrations" in AGENTS.md for writing one.
@@ -18,11 +17,17 @@ class Migration {
   final Future<void> Function(FileSystem fs, String dataDir) apply;
 }
 
+/// The stamp in [dataDir] naming the release whose entry last ran there.
+/// Not the app's version: a release that leaves the layout alone leaves it
+/// where it was.
+String migrationStamp(FileSystem fs, String dataDir) =>
+    fs.path.join(dataDir, "version");
+
 /// The chain, oldest first: each entry moves what the one above it left, and
 /// nothing older. Empty until a release changes the layout.
 const List<Migration> migrations = [];
 
-/// Bring [config]'s data directory to the end of [chain]. Called at launch and
+/// Bring [dataDir] to the end of [chain]. Called at launch and
 /// again after a restore, since a backup unpacks the layout of the build that
 /// made it, stamp and all.
 ///
@@ -32,15 +37,15 @@ const List<Migration> migrations = [];
 ///
 /// [chain] is a parameter so a test can drive the engine with entries of its
 /// own.
-Future<void> runMigrations(AppConfig config,
+Future<void> runMigrations(FileSystem fs, String dataDir,
     {required bool fresh, List<Migration> chain = migrations}) async {
   if (chain.isEmpty) return;
-  if (fresh) return _stamp(config, chain.last);
-  for (final migration in await _pending(config, chain)) {
-    await migration.apply(config.fs, config.dataDir);
+  if (fresh) return _stamp(fs, dataDir, chain.last);
+  for (final migration in await _pending(fs, dataDir, chain)) {
+    await migration.apply(fs, dataDir);
     // As each one goes rather than at the end: a run cut short by a kill picks
     // up at the entry it died in.
-    await _stamp(config, migration);
+    await _stamp(fs, dataDir, migration);
   }
 }
 
@@ -48,8 +53,9 @@ Future<void> runMigrations(AppConfig config,
 /// written by a newer build, and moving its files to an older idea of the
 /// layout is worse than leaving them where they are. No stamp at all is a
 /// directory older than every entry there is.
-Future<List<Migration>> _pending(AppConfig config, List<Migration> chain) async {
-  final file = config.fs.file(config.versionFile);
+Future<List<Migration>> _pending(
+    FileSystem fs, String dataDir, List<Migration> chain) async {
+  final file = fs.file(migrationStamp(fs, dataDir));
   if (!await file.exists()) return chain;
   final stamped = (await file.readAsString()).trim();
   final at = chain.indexWhere((migration) => migration.version == stamped);
@@ -60,5 +66,5 @@ Future<List<Migration>> _pending(AppConfig config, List<Migration> chain) async 
 /// `writeAsString` killed between its truncate and its write leaves a stamp
 /// naming no entry, and that directory is frozen out of every migration to
 /// come.
-Future<void> _stamp(AppConfig config, Migration migration) =>
-    writeThroughRename(config.fs, config.versionFile, migration.version);
+Future<void> _stamp(FileSystem fs, String dataDir, Migration migration) =>
+    writeThroughRename(fs, migrationStamp(fs, dataDir), migration.version);

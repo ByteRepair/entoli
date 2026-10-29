@@ -4,7 +4,7 @@ import "package:flutter_test/flutter_test.dart";
 import "package:agent_chat/domain/app_settings.dart";
 import "package:agent_chat/domain/assistant_view.dart";
 import "package:agent_chat/ui/assistant/incoming_assistant.dart";
-import "package:agent_chat/ui/sidebar/sidebar.dart";
+import "package:agent_chat/ui/selection.dart";
 import "package:agent_chat/ui/voice/voice_page.dart";
 
 import "../harness.dart";

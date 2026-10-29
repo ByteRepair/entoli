@@ -25,7 +25,7 @@ import "../widgets/settings_card.dart";
 import "../widgets/tristate_toggle.dart";
 import "../chat/widgets/view_only_bar.dart" show MirrorStrip;
 import "../workspace/workspace_page.dart";
-import "sidebar.dart";
+import "../selection.dart";
 
 /// Delete a project, its chats, and its shared workspace. Confirms first
 /// (unless [ask] is false — the settings page's `DestructiveButton` has

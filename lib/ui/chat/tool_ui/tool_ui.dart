@@ -1,17 +1,8 @@
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
-import "../../../domain/plan.dart";
 import "../activity/activity.dart";
 import "../activity/tool_run.dart" show toolRunView;
-import "artifact_ui.dart";
-import "ask_ui.dart";
-import "command_ui.dart";
-import "directory_ui.dart";
-import "file_ui.dart";
-import "plan_ui.dart";
-import "task_ui.dart";
-import "web_ui.dart";
 
 /// How the chat shows one tool's calls: an [Activity] like any other above a
 /// reply — the label and the drawer behind it, from [view] — plus what voice
@@ -38,36 +29,3 @@ abstract class ToolUI extends LabelledActivity {
   @override
   RunView view(WidgetRef ref, Run run) => toolRunView(run);
 }
-
-class _DefaultToolUI extends ToolUI {
-  const _DefaultToolUI(this.tool);
-
-  @override
-  final String tool;
-}
-
-/// Every tool UI there is.
-const toolUIs = <ToolUI>[
-  BashUI(),
-  ReadUI(),
-  WriteUI(),
-  EditUI(),
-  WebSearchUI(),
-  WebFetchUI(),
-  TaskUI(),
-  AskUI(),
-  ArtifactUI(),
-  QuietPlanUI(planAddToolName),
-  QuietPlanUI(planNextToolName),
-  QuietPlanUI(planDoneToolName),
-  PresentPlanUI(),
-  AddDirectoryUI(),
-];
-
-final _byName = {for (final ui in toolUIs) ui.tool: ui};
-
-/// A tool run no tool claims: a result whose call is gone.
-const genericToolUI = _DefaultToolUI("");
-
-/// How the chat shows a call of [tool].
-ToolUI toolUIFor(String tool) => _byName[tool] ?? _DefaultToolUI(tool);

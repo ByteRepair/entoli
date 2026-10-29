@@ -3,7 +3,7 @@ import "package:flutter_test/flutter_test.dart";
 import "package:agent_chat/data/builtin/tools/agent_tool.dart";
 import "package:agent_chat/data/builtin/tools/registry.dart";
 import "package:agent_chat/ui/chat/activity/activity.dart" show Run;
-import "package:agent_chat/ui/chat/tool_ui/tool_ui.dart";
+import "package:agent_chat/ui/chat/tool_ui/tools.dart";
 
 void main() {
   // A UI is paired with its tool by the name alone, so a rename on either

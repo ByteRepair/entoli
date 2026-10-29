@@ -6,6 +6,7 @@ import "../llm/llm_client.dart";
 import "../templates.dart" show notStarted, substitute, systemProse, turnStopped;
 import "agent_tool.dart";
 import "turn.dart";
+import "../tool_outcome.dart";
 
 /// Spawns a sub-agent that runs a task to completion and returns its final
 /// text. The sub-agent runs in its own session under the named `@agent`'s
@@ -113,7 +114,7 @@ class TaskTool extends AgentTool {
       controller.add(SubAgentStartEvent(
           id: call.id, agent: agent, prompt: _truncate(prompt, 80)));
       final result =
-          await turn.subAgentRunner!.run(agent, prompt, callId: call.id);
+          await turn.subAgents!.run(agent, prompt, callId: call.id);
       controller.add(SubAgentEndEvent(id: call.id, failed: result.returnCode != 0));
       controller.add(ToolResultEvent(toolRan(call, result)));
     }

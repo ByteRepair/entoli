@@ -29,13 +29,15 @@ import "llm/rate_limit_gate.dart";
 import "memory/instructions.dart";
 import "memory/store.dart";
 import "projection.dart";
-import "sub_agent.dart";
 import "templates.dart";
 import "tools/agent_tool.dart";
 import "tools/customization_tools.dart";
 import "tools/registry.dart";
 import "tools/skill_tool.dart" show skillToolName;
 import "tools/turn.dart";
+import "builtin_options.dart";
+import "system_prompt.dart";
+import "../../domain/app_settings.dart";
 
 /// What the spinner says while the model reads the prompt.
 ///
@@ -48,64 +50,6 @@ String readingPrompt(LlmPromptProgress progress) {
   return fraction == null
       ? "Reading the prompt"
       : "Reading the prompt · ${(fraction * 100).round()}%";
-}
-
-class BuiltinOptions {
-  const BuiltinOptions({
-    this.stepLimit = 40,
-    this.commandTimeout = const Duration(minutes: 3),
-    this.maxAttempts = 4,
-    this.retryBackoff = const Duration(seconds: 1),
-    this.maxConcurrentSubAgents = 8,
-    this.maxConcurrentLlmRequests = 4,
-    this.rateLimitRetryBudget = const Duration(minutes: 5),
-  });
-
-  /// How many model calls one turn may make. Upstream defaults to no limit and
-  /// leans on a cost limit instead; a chat has someone waiting, so it counts
-  /// steps.
-  final int stepLimit;
-  final Duration commandTimeout;
-
-  /// How many times a failed request is tried again before the turn gives up,
-  /// and the first wait between two — it doubles after that, so the defaults
-  /// spend 7s waiting in total. Deliberately short for the parent: the
-  /// controller carries a failed turn on itself, and one attempt here plus its
-  /// retry rounds there is the same patience without a second mechanism.
-  /// Sub-agents keep the default, a failed worker being a tool result the
-  /// parent can redo rather than a turn to give up on. Applies to retryables
-  /// other than 429; a 429 is governed by the shared [RateLimitGate] and
-  /// [rateLimitRetryBudget].
-  final int maxAttempts;
-  final Duration retryBackoff;
-
-  /// How many `task` calls in one message run at once. A deep-research turn
-  /// can fan out to 75 sub-agents; 8 concurrent keeps provider rate limits
-  /// in reach without serializing the whole batch. Bounds long-lived agent
-  /// parallelism, distinct from [maxConcurrentLlmRequests] which bounds the
-  /// in-flight request count — one sub-agent makes up to [stepLimit] calls.
-  final int maxConcurrentSubAgents;
-
-  /// How many [LlmClient.stream] calls may be in flight at once across the
-  /// parent agent and every sub-agent it spawns. A [RateLimitGate] enforces
-  /// it per turn; the gate also coordinates 429 backoff so a fan-out doesn't
-  /// each-retry-into the same rate limit.
-  final int maxConcurrentLlmRequests;
-
-  /// How long 429 retries continue through the shared cooldown before the
-  /// agent gives up. Other retryables (503, connection drops) keep
-  /// [maxAttempts].
-  final Duration rateLimitRetryBudget;
-
-  BuiltinOptions copyWith({int? stepLimit, int? maxAttempts}) => BuiltinOptions(
-        stepLimit: stepLimit ?? this.stepLimit,
-        commandTimeout: commandTimeout,
-        maxAttempts: maxAttempts ?? this.maxAttempts,
-        retryBackoff: retryBackoff,
-        maxConcurrentSubAgents: maxConcurrentSubAgents,
-        maxConcurrentLlmRequests: maxConcurrentLlmRequests,
-        rateLimitRetryBudget: rateLimitRetryBudget,
-      );
 }
 
 /// A chat's conversation as the model sees it. Held per chat and outliving a
@@ -248,7 +192,7 @@ class BuiltinAgent implements Turn {
     this.classifier,
     this.temperature,
     this.reasoningEffort,
-    this.subAgentRunner,
+    this.subAgents,
     this.rateLimitGate,
     this.caps = AgentCapabilities.full,
     this.sharedWorkspace = true,
@@ -455,7 +399,7 @@ class BuiltinAgent implements Turn {
   /// Spawns sub-agents for `task` calls. Null where the agent is itself a
   /// sub-agent: sub-agents do not spawn their own sub-agents.
   @override
-  final SubAgentRunner? subAgentRunner;
+  final SubAgents? subAgents;
 
   /// Bounds in-flight `LlmClient.stream` calls across the parent and its
   /// sub-agents and coordinates 429 backoff. Null where the agent is built
@@ -467,7 +411,7 @@ class BuiltinAgent implements Turn {
   /// facts minus a headless turn's takes and a built-in project's. Sub-agents
   /// pass the parent's `caps.unattended` — they run unattended, so they ask
   /// nothing, fan out nothing, and publish nothing. Where the platform itself
-  /// cannot run something ([shell], [webSearch], a missing [subAgentRunner] or
+  /// cannot run something ([shell], [webSearch], a missing [subAgents] or
   /// [saveArtifact]), it is dropped below even if [caps] holds it.
   final AgentCapabilities caps;
 
@@ -601,7 +545,7 @@ class BuiltinAgent implements Turn {
 
   /// What the trigger tools run against — a registry over the app's own
   /// trigger list — or null, which withholds the trio the way a missing
-  /// [subAgentRunner] withholds `task`. Null on a sub-agent: a trigger's
+  /// [subAgents] withholds `task`. Null on a sub-agent: a trigger's
   /// fire sends into *this* chat, which is one a worker is not.
   @override
   final TriggerRegistry? registerTrigger;
@@ -626,14 +570,14 @@ class BuiltinAgent implements Turn {
 
   /// [caps] with the platform's facts applied where [caps] cannot know them:
   /// a tool the device cannot run is not offered even if the turn was, and a
-  /// sub-agent's missing [subAgentRunner] or [saveArtifact] withholds `task`
+  /// sub-agent's missing [subAgents] or [saveArtifact] withholds `task`
   /// and `artifact` the way [AgentCapabilities.unattended] does from the front.
   AgentCapabilities get _offered => AgentCapabilities(
         commands: caps.commands && shell.canRunCommands,
         webSearch: caps.webSearch && (webSearch?.available ?? false),
         ask: caps.ask,
         // A sub-agent's work is commands; with no shell it has none to do.
-        task: caps.task && subAgentRunner != null && shell.canRunCommands,
+        task: caps.task && subAgents != null && shell.canRunCommands,
         artifact: caps.artifact && saveArtifact != null,
         createSkill: caps.createSkill && packageSkill != null,
         trigger: caps.trigger && registerTrigger != null,
@@ -736,7 +680,7 @@ class BuiltinAgent implements Turn {
     _cancelled = true;
     if (!_stopped.isCompleted) _stopped.complete();
     await _running?.kill();
-    await subAgentRunner?.cancel();
+    await subAgents?.cancel();
   }
 
   /// [prompt] is the message being logged for this turn, projected rather than

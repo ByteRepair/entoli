@@ -16,8 +16,7 @@ class PlanPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final plan = ref.watch(planProvider(chatId));
     final sections = plan.value;
-    final tasks = [for (final s in sections ?? const <PlanSection>[]) ...s.tasks];
-    final done = tasks.where((t) => t.status == PlanTaskStatus.done).length;
+    final (done, total) = sectionsProgress(sections ?? const []);
     return Scaffold(
       appBar: AppBar(title: const Text("Plan")),
       body: switch (plan) {
@@ -33,11 +32,11 @@ class PlanPage extends ConsumerWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text("$done of ${tasks.length} tasks done",
+                    Text("$done of $total tasks done",
                         style: Theme.of(context).textTheme.titleSmall),
                     const SizedBox(height: 8),
                     LinearProgressIndicator(
-                        value: tasks.isEmpty ? 0 : done / tasks.length),
+                        value: total == 0 ? 0 : done / total),
                   ],
                 ),
               ),
@@ -45,6 +44,27 @@ class PlanPage extends ConsumerWidget {
             ],
           ),
       },
+    );
+  }
+}
+
+/// The app bar's way to the plan, there only while the chat has one.
+class PlanButton extends ConsumerWidget {
+  const PlanButton({super.key, required this.chatId});
+
+  final String chatId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final sections = ref.watch(planProvider(chatId)).value;
+    if (sections == null) return const SizedBox.shrink();
+    final (done, total) = sectionsProgress(sections);
+    return IconButton(
+      tooltip: "Plan, $done of $total done",
+      icon: const Icon(Icons.checklist),
+      onPressed: () => Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => PlanPage(chatId: chatId)),
+      ),
     );
   }
 }

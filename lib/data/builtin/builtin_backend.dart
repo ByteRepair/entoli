@@ -34,7 +34,6 @@ import "../prompts/prompt_sources.dart" show promptDirsOf;
 import "../prompts/skill_package.dart";
 import "background_jobs.dart";
 import "builtin_agent.dart";
-import "tools/customization_tools.dart" show SettingsEditor;
 import "compact_prompt.dart";
 import "memory/instructions.dart";
 import "memory/store.dart";
@@ -49,6 +48,7 @@ import "projection.dart";
 import "sub_agent.dart";
 import "tools/agent_tool.dart" show AgentCapabilities;
 import "tools/bash_tool.dart" show runningCommand;
+import "builtin_options.dart";
 
 /// The built-in agent, running in this process. The loop is [BuiltinAgent];
 /// this is what Entoli talks to: it holds a session per chat, resolves which
@@ -316,7 +316,7 @@ class BuiltinBackend implements AgentBackend {
       final gatedClient = GatedLlmClient(target.client, rateLimitGate);
       final subAgentLog =
           FileSubAgentLog(config, chatId, project: project, feed: subAgents);
-      final subAgentRunner = SubAgentRunner(
+      final runner = SubAgentRunner(
         client: gatedClient,
         shell: shell,
         fs: config.fs,
@@ -433,7 +433,7 @@ class BuiltinBackend implements AgentBackend {
       // Before the session is built, so the revived results are in the history
       // it is projected from rather than patched in afterwards.
       if (prompt == null) {
-        history = await _reviveSubAgents(history, subAgentRunner, subAgentLog, controller);
+        history = await _reviveSubAgents(history, runner, subAgentLog, controller);
       }
       final session = await _sessionOf(chatId, history,
           rebuild: prompt == null,
@@ -477,7 +477,7 @@ class BuiltinBackend implements AgentBackend {
         classifier: classifier,
         approve: _awaitApproval,
         answer: _awaitAnswers,
-        subAgentRunner: subAgentRunner,
+        subAgents: runner,
         webSearch: webSearch,
         browser: caps.browser
             ? (browser.tab(chatId)

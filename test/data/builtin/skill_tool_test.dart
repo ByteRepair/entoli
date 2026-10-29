@@ -15,6 +15,7 @@ import "package:agent_chat/data/builtin/tools/agent_tool.dart";
 
 import "../../fakes.dart";
 import "builtin_fakes.dart";
+import "package:agent_chat/data/builtin/builtin_options.dart";
 
 /// A skill as the library holds one: a body the model is handed whole.
 PromptDocument skillDoc(

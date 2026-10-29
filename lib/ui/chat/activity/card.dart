@@ -5,7 +5,7 @@ import "../../../domain/models.dart";
 import "../../../domain/room/room_state.dart" show ChatViewState;
 import "../../widgets/scrolling.dart" show ScrollFollow;
 import "../widgets/code_block.dart" show codeBlockDecoration, codeBlockStyle;
-import "../widgets/message_bubble.dart" show StreamingCaret;
+import "../widgets/message_text.dart" show StreamingCaret;
 import "../widgets/shell_run.dart" show ShellCommandText;
 
 typedef ActivitySection = ({String? label, String? body, bool isError});

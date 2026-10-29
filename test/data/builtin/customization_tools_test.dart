@@ -17,6 +17,7 @@ import "package:agent_chat/domain/tone.dart";
 
 import "../../fakes.dart";
 import "builtin_fakes.dart";
+import "package:agent_chat/data/builtin/builtin_options.dart";
 
 void main() {
   group("editedProfile", () {

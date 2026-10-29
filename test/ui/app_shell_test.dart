@@ -8,6 +8,7 @@ import "package:agent_chat/domain/project.dart";
 import "package:agent_chat/ui/app_shell.dart";
 import "package:agent_chat/ui/sidebar/chat_groups.dart";
 import "package:agent_chat/ui/sidebar/sidebar.dart";
+import "package:agent_chat/ui/selection.dart";
 import "package:agent_chat/ui/theme.dart";
 
 import "../harness.dart";

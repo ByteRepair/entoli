@@ -1,6 +1,6 @@
 import "package:flutter/material.dart";
 
-import "../../settings/settings_page.dart";
+import "../../settings/settings_category.dart";
 
 /// What sits where the composer does on a project that requires setup and
 /// has not been set up yet: why there is nothing to type into, and the way
@@ -47,11 +47,4 @@ class NeedsSetupBar extends StatelessWidget {
 
 /// The settings page at the Byte Repair category, where setup is run.
 Future<void> _openSetupSettings(BuildContext context) =>
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => const SettingsPage(
-          initialCategory: SettingsCategory.byteRepair,
-          focus: true,
-        ),
-      ),
-    );
+    openSettings(context, category: SettingsCategory.byteRepair, focus: true);

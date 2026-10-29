@@ -16,6 +16,7 @@ import "package:agent_chat/domain/permission.dart";
 
 import "../../fakes.dart";
 import "builtin_fakes.dart";
+import "package:agent_chat/data/builtin/builtin_options.dart";
 
 const _skillMd = "---\nname: demo\ndescription: does the demo thing\n---\n\nDo it.\n";
 

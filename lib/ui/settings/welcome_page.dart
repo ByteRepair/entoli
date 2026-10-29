@@ -12,13 +12,13 @@ import "../../domain/models.dart";
 import "../../domain/project.dart";
 import "../../providers.dart";
 import "../marketplace/marketplace_page.dart";
-import "../sidebar/sidebar.dart";
+import "../selection.dart";
 import "../app_licence.dart";
 import "../widgets/app_mark.dart";
 import "../widgets/dialogs.dart";
 import "../widgets/scrolling.dart";
 import "llm_settings.dart";
-import "settings_page.dart";
+import "settings_category.dart";
 
 /// The welcome tour as the home content on first launch. It is the root route,
 /// not a pushed one, so there is no back arrow; Done writes the flag and the
@@ -537,7 +537,8 @@ class _ExtrasPage extends StatelessWidget {
             icon: Icons.storefront_outlined,
             title: "Marketplace",
             detail: "Install skills and agents others have shared.",
-            open: (_) => const MarketplacePage(),
+            open: (context) => Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const MarketplacePage())),
           ),
           _SetupRow.category(
             title: "Byte Repair",
@@ -788,13 +789,14 @@ class _SetupRow extends StatelessWidget {
           icon: category.icon,
           title: title,
           detail: detail,
-          open: (_) => SettingsPage(initialCategory: category, focus: true),
+          open: (context) =>
+              openSettings(context, category: category, focus: true),
         );
 
   final IconData icon;
   final String title;
   final String detail;
-  final WidgetBuilder open;
+  final void Function(BuildContext context) open;
 
   @override
   Widget build(BuildContext context) {
@@ -807,8 +809,7 @@ class _SetupRow extends StatelessWidget {
         title: Text(title),
         subtitle: Text(detail),
         trailing: const Icon(Icons.chevron_right),
-        onTap: () =>
-            Navigator.of(context).push(MaterialPageRoute(builder: open)),
+        onTap: () => open(context),
       ),
     );
   }

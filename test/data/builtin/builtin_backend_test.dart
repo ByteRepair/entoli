@@ -8,7 +8,6 @@ import "dart:convert";
 import "package:path/path.dart" as p;
 
 import "package:agent_chat/core/config.dart";
-import "package:agent_chat/data/builtin/builtin_agent.dart";
 import "package:agent_chat/data/builtin/builtin_backend.dart";
 import "package:agent_chat/data/builtin/llm/llm_client.dart";
 import "package:agent_chat/data/builtin/llm/llm_registry.dart";
@@ -31,6 +30,7 @@ import "package:agent_chat/domain/shell.dart";
 import "../../fakes.dart";
 import "../../harness.dart";
 import "builtin_fakes.dart";
+import "package:agent_chat/data/builtin/builtin_options.dart";
 
 void main() {
   const chatId = "chat-1";

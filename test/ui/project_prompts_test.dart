@@ -8,8 +8,6 @@ import "package:flutter_test/flutter_test.dart";
 import "package:agent_chat/data/prompts/skill_import.dart";
 import "package:agent_chat/data/prompts/skill_package.dart";
 import "package:agent_chat/domain/models.dart";
-import "package:agent_chat/ui/settings/settings_page.dart"
-    show SettingsCategory;
 import "package:agent_chat/ui/skills/skill_install_preview.dart";
 import "package:agent_chat/ui/sidebar/project_settings_page.dart";
 import "package:agent_chat/ui/settings/agents_settings.dart";
@@ -17,6 +15,7 @@ import "package:agent_chat/ui/widgets/install_destination.dart";
 
 import "../fakes.dart" show FakeChatStore;
 import "../harness.dart";
+import "package:agent_chat/ui/settings/settings_category.dart";
 
 const _skillMd =
     "---\nname: letterbox\ndescription: frames the reply\n---\n\nFrame.\n";

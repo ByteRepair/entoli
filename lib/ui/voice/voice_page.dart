@@ -7,7 +7,7 @@ import "../../domain/room/room_state.dart";
 import "../../providers.dart";
 import "../chat/chat_controller.dart";
 import "../chat/widgets/turn_surface.dart";
-import "../settings/settings_page.dart";
+import "../settings/settings_category.dart";
 import "../widgets/dialogs.dart";
 import "../widgets/nav_drawer.dart";
 import "transcript.dart";
@@ -48,8 +48,7 @@ Future<bool> _haveModels(BuildContext context, WidgetRef ref) async {
     confirmLabel: "Open settings",
   );
   if (go && context.mounted) {
-    await Navigator.of(context)
-        .push(MaterialPageRoute(builder: (_) => const SettingsPage()));
+    await openSettings(context);
   }
   return false;
 }
