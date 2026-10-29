@@ -74,8 +74,8 @@ class LlmRegistry {
     return config.resolveKeyWith(lookupEnv);
   }
 
-  /// Every model the configured endpoints list beyond models.dev's. All asked
-  /// at once, since one slow host should not hold up the rest, and one that
+  /// Every model the configured endpoints offer: a models endpoint's where one
+  /// is set, models.dev's otherwise. All asked at once, since one slow host should not hold up the rest, and one that
   /// cannot answer contributes nothing rather than failing the whole list.
   Future<List<ModelOption>> models() async {
     final configured = endpoints();

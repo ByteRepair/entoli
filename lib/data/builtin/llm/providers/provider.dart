@@ -54,10 +54,10 @@ abstract class LlmProvider {
   /// The headers a request to it carries [apiKey] in.
   Map<String, String> authOf(String? apiKey) => OpenAiClient.authOf(apiKey);
 
-  /// The models listed beyond models.dev's: [modelsUrl]'s, or none.
+  /// [modelsUrl]'s models where one is set, else [models] from models.dev.
   Future<List<String>> listModels(String? apiKey, {http.Client? httpClient}) async {
     final url = modelsUrl;
-    if (url == null) return const [];
+    if (url == null) return [for (final m in models(ModelCatalog.current)) m.id];
     final client = httpClient ?? tlsClient();
     try {
       return await listModelIds(client, url, headers: authOf(apiKey));

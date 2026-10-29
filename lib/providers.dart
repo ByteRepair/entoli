@@ -1321,8 +1321,14 @@ final chatDeletionRefreshProvider = Provider<void>((ref) {
 final projectListProvider =
     FutureProvider((ref) => ref.watch(chatRepositoryProvider).listProjects());
 
-final availableModelsProvider = FutureProvider<List<ModelOption>>(
-    (ref) => ref.watch(agentBackendProvider).models());
+/// Asked again when models.dev's catalog arrives, since a provider with no
+/// models endpoint lists from it.
+final availableModelsProvider = FutureProvider<List<ModelOption>>((ref) {
+  void catalogChanged() => ref.invalidateSelf();
+  ModelCatalog.notifier.addListener(catalogChanged);
+  ref.onDispose(() => ModelCatalog.notifier.removeListener(catalogChanged));
+  return ref.watch(agentBackendProvider).models();
+});
 
 /// The window [chatId]'s model runs in: the chat's own choice, else the app
 /// default, as the catalog knows it, else the settings' global guess. Read
