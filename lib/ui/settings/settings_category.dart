@@ -1,4 +1,7 @@
 import "package:flutter/material.dart";
+import "package:flutter_riverpod/flutter_riverpod.dart";
+
+import "../../providers.dart";
 
 /// The page's categories, in the order they are offered and the groups they
 /// are offered in. General, Providers, On-device, LLMs and Image Generation
@@ -40,6 +43,16 @@ enum SettingsCategory {
   /// ends and another begins.
   final bool dividerAbove;
 }
+
+/// Whether this build has anything to put under [category]. On-device holds
+/// the model server's downloads and the voice models', so a build with neither
+/// — iOS, macOS, Windows, the web — has no page to offer.
+bool categoryOffered(SettingsCategory category, WidgetRef ref) => switch (category) {
+      SettingsCategory.agentBrowser => ref.watch(agentBrowserProvider).available,
+      SettingsCategory.onDevice =>
+        ref.watch(localLlmProvider).available || ref.watch(voiceProvider).hasModelCatalog,
+      _ => true,
+    };
 
 /// The route Settings is reached by, registered once with the app's
 /// `MaterialApp` (`appRoute`): a page that opens Settings — the welcome tour,

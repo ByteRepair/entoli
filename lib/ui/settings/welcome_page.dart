@@ -449,11 +449,12 @@ class _ProviderPage extends ConsumerWidget {
       title: "Connect a model",
       body: "Run one on this device, or reach one over the network.",
       children: [
-        _SetupRow.category(
-          title: "On this device",
-          detail: "Download a model. No key, no network.",
-          category: SettingsCategory.onDevice,
-        ),
+        if (categoryOffered(SettingsCategory.onDevice, ref))
+          _SetupRow.category(
+            title: "On this device",
+            detail: "Download a model. No key, no network.",
+            category: SettingsCategory.onDevice,
+          ),
         _SetupRow.category(
           title: "A provider",
           detail: "Anthropic, OpenAI, OpenRouter and more, with your key.",
