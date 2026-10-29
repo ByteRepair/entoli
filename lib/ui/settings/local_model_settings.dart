@@ -7,6 +7,7 @@ import "../../domain/local_llm.dart";
 import "../../domain/local_model.dart";
 import "../../providers.dart";
 import "local_model_downloads.dart";
+import "../widgets/add_button_row.dart";
 import "../widgets/catalog.dart";
 import "../../core/formatting.dart";
 import "../widgets/resettable_field.dart";
@@ -335,7 +336,7 @@ class _Running extends ConsumerWidget {
   }
 }
 
-class _RunningRow extends StatelessWidget {
+class _RunningRow extends ConsumerWidget {
   const _RunningRow(this.state);
 
   final LocalLlmState state;
@@ -350,9 +351,9 @@ class _RunningRow extends StatelessWidget {
       };
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
-    final name = localModelById(state.modelId)?.name ?? state.modelId;
+    final name = ref.watch(localLlmProvider).nameOf(state.modelId);
     final where = _where(state.device);
     return switch (state.phase) {
       LocalLlmPhase.starting => ListTile(
@@ -414,15 +415,23 @@ class _Elsewhere extends StatelessWidget {
       );
 }
 
-/// The catalog, or nothing at all where there is no server to run one. Draws
-/// its own divider for the reason the rootfs catalog does: a line with nothing
-/// under it is a rule across the bottom of the page.
+/// The catalog, the models added by link, and everything else downloaded — or
+/// nothing at all where there is no server to run one. Draws its own divider
+/// for the reason the rootfs catalog does: a line with nothing under it is a
+/// rule across the bottom of the page.
 class LocalModelCatalogSection extends ConsumerWidget {
   const LocalModelCatalogSection({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     if (!ref.watch(localLlmProvider).available) return const SizedBox.shrink();
+    ref.watch(installedLocalModelsProvider);
+    final added = ref.watch(addedLocalModelsProvider);
+    final listed = {for (final model in [...localModelCatalog, ...added]) model.id};
+    final others = [
+      for (final model in ref.read(localModelStoreProvider).downloadedSync())
+        if (!listed.contains(model.id)) model,
+    ];
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -430,74 +439,52 @@ class LocalModelCatalogSection extends ConsumerWidget {
         const SectionHeader(
           "Text models",
           description: "Downloaded once and kept outside the app's data, so a "
-              "backup does not carry it and a restore does not delete it. All "
-              "of them are Q4_0 — the one quantisation an NPU can be handed "
-              "as it is, and small enough that the phones this list is sized "
-              "for run the larger sizes well.",
+              "backup does not carry it and a restore does not delete it. The "
+              "ones offered here are Q4_0 — the one quantisation an NPU can be "
+              "handed as it is.",
         ),
-        for (final model in localModelCatalog) LocalModelTile(model: model),
-        const _StaleModelTiles(),
-      ],
-    );
-  }
-}
-
-/// Rows for weights that are installed and no longer in the catalog.
-///
-/// [LocalModelStore.installed] reads the disk rather than the catalog so these
-/// stay findable; this is what makes that reachable rather than only true. A
-/// catalog that swaps a generation of models out — which is what it is for —
-/// otherwise strands gigabytes behind a file manager, on the platform least
-/// likely to have one.
-class _StaleModelTiles extends ConsumerWidget {
-  const _StaleModelTiles();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final known = {for (final model in localModelCatalog) model.id};
-    final stale = ref.watch(installedLocalModelsProvider)
-        .where((id) => !known.contains(id))
-        .toList()
-      ..sort();
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        for (final id in stale)
-          CatalogTile(
-            title: Text(id),
-            summary: "Downloaded by an earlier version · not offered any more",
-            trailing: _StaleAction(id: id),
+        for (final model in [...localModelCatalog, ...added]) LocalModelTile(model: model),
+        for (final model in others) _DownloadedTile(model: model),
+        AddButtonRow(
+          child: OutlinedButton.icon(
+            icon: const Icon(Icons.add_link),
+            label: const Text("Add model"),
+            onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const AddLocalModelPage())),
           ),
+        ),
       ],
     );
   }
 }
 
-/// Delete and nothing else. There is no [Downloads] entry behind one of these
-/// to cancel or fetch again, and nothing to unpick either: a pick naming an id
-/// the catalog has lost already stops the server rather than serving it.
-class _StaleAction extends ConsumerWidget {
-  const _StaleAction({required this.id});
+/// A model's facts as tags, as many as are known of it.
+List<Widget> _tagsOf({
+  String? parameters,
+  int? bytes,
+  String? quantisation,
+  int? context,
+  String? licence,
+}) =>
+    [
+      if (parameters != null) InfoTag(Icons.memory, "$parameters params"),
+      if (bytes != null) InfoTag(Icons.download_outlined, formatSize(bytes)),
+      if (quantisation != null) InfoTag(Icons.compress, quantisation),
+      if (context != null) InfoTag(Icons.data_usage, "${tokenCount(context)} context"),
+      if (licence != null) InfoTag(Icons.gavel_outlined, licence),
+    ];
 
-  final String id;
+List<Widget> _downloadedTags(DownloadedModel model) => _tagsOf(
+      parameters: model.parameters,
+      bytes: model.bytes,
+      quantisation: model.quantisation,
+      context: model.contextLength,
+      licence: model.licence,
+    );
 
-  @override
-  Widget build(BuildContext context, WidgetRef ref) => CatalogAction(
-        downloading: false,
-        installed: true,
-        onCancel: () {},
-        onDelete: () async {
-          await ref.read(localModelStoreProvider).delete(id);
-          await ref.read(installedLocalModelsProvider.notifier).refresh();
-        },
-        deleteTitle: "Delete $id?",
-        deleteMessage: "It is not in the catalog any more, so this app cannot "
-            "download it again.",
-      );
-}
-
-/// One model as a row: what it is, what it costs, and the single button that
-/// applies to it — download, cancel, or delete, never more than one.
+/// One downloadable model as a row: its facts as tags — read off the file once
+/// it is downloaded — and the single button that applies to it: download,
+/// cancel, or delete, never more than one.
 class LocalModelTile extends ConsumerWidget {
   const LocalModelTile({super.key, required this.model});
 
@@ -511,46 +498,173 @@ class LocalModelTile extends ConsumerWidget {
         ref.watch(localModelDownloadsProvider.select((s) => s.active[model.id]));
     final failure =
         ref.watch(localModelDownloadsProvider.select((s) => s.failures[model.id]));
+    final installed = ref.watch(installedLocalModelsProvider).contains(model.id);
+    final downloaded =
+        installed ? ref.read(localModelStoreProvider).downloadedOfSync(model.id) : null;
 
     return CatalogTile(
-      title: Text(model.name),
-      summary: "${model.parameters} · Q4_0 · ${formatSize(model.bytes)} to "
-          "download · ${model.licence}",
-      note: model.note,
+      title: Text(model.name.isEmpty ? model.id : model.name),
+      tags: downloaded != null
+          ? _downloadedTags(downloaded)
+          : _tagsOf(parameters: model.parameters, bytes: model.bytes, licence: model.licence),
       failure: failure,
       progress: progress,
-      trailing: _Action(model: model, downloading: progress != null),
+      trailing: CatalogAction(
+        downloading: progress != null,
+        installed: installed,
+        onCancel: () => ref.read(localModelDownloadsProvider.notifier).cancel(model.id),
+        onDelete: () => ref.read(localModelDownloadsProvider.notifier).delete(model),
+        onDownload: () => ref.read(localModelDownloadsProvider.notifier).install(model),
+        deleteTitle: "Delete ${model.name.isEmpty ? model.id : model.name}?",
+        deleteMessage: _deleteMessage(ref, model.id, again: true),
+      ),
     );
   }
 }
 
-/// Reads what it needs itself rather than being handed it: the installed set
-/// does not appear in the row above, and passing it down would rebuild the
-/// whole `ListTile` for a button.
-class _Action extends ConsumerWidget {
-  const _Action({required this.model, required this.downloading});
+/// A downloaded model the catalog does not offer: one added by link in an
+/// earlier session, or one an older catalog offered. Kept, and run, until it
+/// is deleted.
+class _DownloadedTile extends ConsumerWidget {
+  const _DownloadedTile({required this.model});
 
-  final LocalModel model;
-  final bool downloading;
+  final DownloadedModel model;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) => CatalogAction(
-        downloading: downloading,
-        installed: ref.watch(installedLocalModelsProvider).contains(model.id),
-        onCancel: () =>
-            ref.read(localModelDownloadsProvider.notifier).cancel(model.id),
-        onDelete: () =>
-            ref.read(localModelDownloadsProvider.notifier).delete(model),
-        onDownload: () =>
-            ref.read(localModelDownloadsProvider.notifier).install(model),
-        deleteTitle: "Delete ${model.name}?",
-        deleteMessage: ref
-                .watch(localLlmStateProvider)
-                .any((each) => each.modelId == model.id)
-            ? "It is loaded right now. It stops answering, and chats pinned to "
-                "it have nothing to run until another model is picked. It can "
-                "be downloaded again."
-            : "Chats pinned to it have nothing to run until another model is "
-                "picked. It can be downloaded again.",
+  Widget build(BuildContext context, WidgetRef ref) => CatalogTile(
+        title: Text(model.name),
+        tags: _downloadedTags(model),
+        trailing: CatalogAction(
+          downloading: false,
+          installed: true,
+          onCancel: () {},
+          onDelete: () => ref
+              .read(localModelDownloadsProvider.notifier)
+              .delete(LocalModel(id: model.id, name: model.name, url: model.url ?? "")),
+          deleteTitle: "Delete ${model.name}?",
+          deleteMessage: _deleteMessage(ref, model.id, again: false),
+        ),
       );
+}
+
+String _deleteMessage(WidgetRef ref, String id, {required bool again}) => [
+      if (ref.watch(localLlmStateProvider).any((each) => each.modelId == id))
+        "It is loaded right now. It stops answering, and chats pinned to it have "
+            "nothing to run until another model is picked."
+      else
+        "Chats pinned to it have nothing to run until another model is picked.",
+      if (again) "It can be downloaded again.",
+    ].join(" ");
+
+/// A model from any link to a GGUF. Only the link is needed: what the server
+/// needs is read off the file once it has arrived, and the rest is what the
+/// row will say about it.
+class AddLocalModelPage extends ConsumerStatefulWidget {
+  const AddLocalModelPage({super.key});
+
+  @override
+  ConsumerState<AddLocalModelPage> createState() => _AddLocalModelPageState();
+}
+
+class _AddLocalModelPageState extends ConsumerState<AddLocalModelPage> {
+  final _url = TextEditingController();
+  final _name = TextEditingController();
+  final _parameters = TextEditingController();
+  final _licence = TextEditingController();
+  final _sha256 = TextEditingController();
+
+  @override
+  void dispose() {
+    for (final field in [_url, _name, _parameters, _licence, _sha256]) {
+      field.dispose();
+    }
+    super.dispose();
+  }
+
+  String? get _urlError {
+    final text = _url.text.trim();
+    if (text.isEmpty) return null;
+    final uri = Uri.tryParse(text);
+    return uri == null || !uri.isScheme("https") && !uri.isScheme("http") || uri.host.isEmpty
+        ? "A link starting with https://"
+        : null;
+  }
+
+  String? get _shaError {
+    final text = _sha256.text.trim();
+    return text.isEmpty || RegExp(r"^[0-9a-fA-F]{64}$").hasMatch(text)
+        ? null
+        : "64 hexadecimal characters";
+  }
+
+  bool get _ready => _url.text.trim().isNotEmpty && _urlError == null && _shaError == null;
+
+  void _add() {
+    String? optional(TextEditingController field) =>
+        field.text.trim().isEmpty ? null : field.text.trim();
+    final url = _url.text.trim();
+    final taken = {
+      for (final model in localModelCatalog) model.id,
+      for (final model in ref.read(addedLocalModelsProvider)) model.id,
+      ...ref.read(installedLocalModelsProvider),
+    };
+    final model = LocalModel(
+      id: localModelIdFor(url, taken),
+      name: _name.text.trim(),
+      url: url,
+      parameters: optional(_parameters),
+      licence: optional(_licence),
+      sha256: optional(_sha256),
+    );
+    ref.read(addedLocalModelsProvider.notifier).add(model);
+    ref.read(localModelDownloadsProvider.notifier).install(model);
+    Navigator.of(context).pop();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    TextField field(TextEditingController controller, String label,
+            {String? helper, String? error, bool autofocus = false}) =>
+        TextField(
+          controller: controller,
+          autofocus: autofocus,
+          onChanged: (_) => setState(() {}),
+          decoration: InputDecoration(
+            labelText: label,
+            helperText: helper,
+            helperMaxLines: 2,
+            errorText: error,
+          ),
+        );
+    return Scaffold(
+      appBar: AppBar(title: const Text("Add model")),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          field(_url, "Link",
+              helper: "To a .gguf file, e.g. a Hugging Face \"resolve\" link",
+              error: _urlError,
+              autofocus: true),
+          const SizedBox(height: 16),
+          field(_name, "Name", helper: "Empty takes the one inside the file"),
+          const SizedBox(height: 16),
+          field(_parameters, "Parameters", helper: "As the publisher writes it, e.g. 4B"),
+          const SizedBox(height: 16),
+          field(_licence, "Licence"),
+          const SizedBox(height: 16),
+          field(_sha256, "SHA-256",
+              helper: "Checked before the file is kept, where given",
+              error: _shaError),
+          const SizedBox(height: 24),
+          Align(
+            alignment: Alignment.centerRight,
+            child: FilledButton(
+              onPressed: _ready ? _add : null,
+              child: const Text("Download"),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }

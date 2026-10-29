@@ -7,43 +7,41 @@ import "package:agent_chat/domain/local_model.dart";
 /// the largest while costing a third of the memory — so what is worth pinning
 /// is that the answer follows from the model rather than from a constant.
 void main() {
-  LocalModel modelWith(int kvBytesPerToken) => LocalModel(
+  DownloadedModel modelWith(int kvBytesPerToken, {int contextLength = 262144}) =>
+      DownloadedModel(
         id: "test",
         name: "Test",
-        parameters: "1B",
-        url: "https://example.invalid/model.gguf",
+        file: "/models/test/model.gguf",
         bytes: 1,
-        sha256: "",
-        contextLength: 262144,
+        quantisation: "Q4_0",
+        contextLength: contextLength,
         kvBytesPerToken: kvBytesPerToken,
-        licence: "Apache-2.0",
       );
 
   test("the budget is what decides it, divided by what a token costs", () {
-    // 48 KiB a token is the two smaller Qwen3.5s: 24 layers, 2 KV heads, 256
-    // wide, K and V, at f16.
-    expect(modelWith(48 * 1024).defaultContext, 16384);
-    // 128 KiB is the two larger ones — 32 layers and 4 KV heads — so the same
+    // 22 KiB a token is LFM3 1.7B: eleven attention layers of four KV heads,
+    // 128 wide, K and V, at f16.
+    expect(modelWith(22528).defaultContext, 32768);
+    // 128 KiB is a Qwen3.5 4B — 32 layers and 4 KV heads — so the same
     // gigabyte buys a quarter of the context.
     expect(modelWith(128 * 1024).defaultContext, 8192);
   });
 
-  test("no entry in the catalog is given more than the budget", () {
-    for (final model in localModelCatalog) {
-      expect(model.defaultContext * model.kvBytesPerToken,
-          lessThanOrEqualTo(kvBudgetBytes),
-          reason: model.id);
-      // Nor so little that the agent's own prompt would not fit: the system
-      // prompt and the tool schemas are about 2,700 tokens before the user has
-      // typed anything, which is what made 4,096 unusable.
-      expect(model.defaultContext, greaterThan(4096), reason: model.id);
-    }
+  test("a model is never run past what it was trained for", () {
+    expect(modelWith(1024, contextLength: 4096).defaultContext, 4096);
   });
 
-  test("a model is never run past what it was trained for", () {
-    for (final model in localModelCatalog) {
-      expect(model.defaultContext, lessThanOrEqualTo(model.contextLength),
-          reason: model.id);
-    }
+  test("a record reads back what it was written as", () {
+    final model = modelWith(22528);
+    final back = DownloadedModel.fromJson(model.toJson(), file: model.file)!;
+
+    expect(back.toJson(), model.toJson());
+    expect(DownloadedModel.fromJson({"id": "x"}, file: ""), isNull);
+  });
+
+  test("a link names its model by its file, past one already taken", () {
+    const url = "https://huggingface.co/a/b/resolve/main/Some-Model-Q4_0.gguf";
+    expect(localModelIdFor(url, const {}), "some-model-q4_0");
+    expect(localModelIdFor(url, const {"some-model-q4_0"}), "some-model-q4_0-2");
   });
 }

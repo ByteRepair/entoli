@@ -5,7 +5,6 @@ import "package:http/http.dart" as http;
 
 import "../../../domain/background_work.dart";
 import "../../../domain/local_llm.dart";
-import "../../../domain/local_model.dart";
 import "llm_client.dart";
 import "local_kv_cache.dart";
 import "local_pool_client.dart";
@@ -105,7 +104,7 @@ class LocalPrefill {
   }
 
   Future<void> _run(String modelId, int gen) async {
-    final name = localModelById(modelId)?.name ?? modelId;
+    final name = llm.nameOf(modelId);
     state.value = LocalPrefillState(name: name);
     await background.prefilling(name);
 

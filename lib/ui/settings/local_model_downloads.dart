@@ -17,7 +17,7 @@ class LocalModelDownloads extends Downloads<LocalModel> {
   /// rows are drawn only where `LocalLlm.available`.
   @override
   Download? begin(LocalModel model) => Download(
-        bytes: model.bytes,
+        bytes: model.bytes ?? 0,
         progress: ref.read(localModelStoreProvider).install(model),
       );
 
@@ -27,9 +27,20 @@ class LocalModelDownloads extends Downloads<LocalModel> {
   @override
   String get plural => "models";
 
+  /// One added by link leaves [addedLocalModelsProvider] once it is on disk,
+  /// where it is listed as downloaded like any other.
   @override
-  Future<void> rescan() =>
-      ref.read(installedLocalModelsProvider.notifier).refresh();
+  Future<void> rescan() async {
+    await ref.read(installedLocalModelsProvider.notifier).refresh();
+    ref.read(addedLocalModelsProvider.notifier).drop(ref.read(installedLocalModelsProvider));
+  }
+
+  /// One added by link and stopped before it arrived goes with its row.
+  @override
+  void cancel(String id) {
+    super.cancel(id);
+    ref.read(addedLocalModelsProvider.notifier).drop({id});
+  }
 
   /// Stop serving it before it goes. The load-bearing half of a delete: the
   /// server has the file open, so deleting under it leaves a model answering
@@ -53,3 +64,22 @@ class LocalModelDownloads extends Downloads<LocalModel> {
 
 final localModelDownloadsProvider =
     NotifierProvider<LocalModelDownloads, DownloadState>(LocalModelDownloads.new);
+
+/// Models added by link this session that are not on disk yet: a row each,
+/// with its bar, until the download lands or is cancelled. A failed one stays
+/// with the button to try again.
+class AddedLocalModels extends Notifier<List<LocalModel>> {
+  @override
+  List<LocalModel> build() => const [];
+
+  void add(LocalModel model) => state = [...state, model];
+
+  void drop(Set<String> ids) {
+    if (state.any((model) => ids.contains(model.id))) {
+      state = [for (final model in state) if (!ids.contains(model.id)) model];
+    }
+  }
+}
+
+final addedLocalModelsProvider =
+    NotifierProvider<AddedLocalModels, List<LocalModel>>(AddedLocalModels.new);

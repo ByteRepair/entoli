@@ -1,11 +1,13 @@
 /// The models Entoli can run on the device itself, as data. `local_model_store.dart`
 /// is what fetches one and `llama_server.dart` is what answers with it.
 ///
-/// A const list for the reason `rootfs.dart` and `voice_model.dart` are ones: a
-/// model Entoli can run is one someone checked the file of, so a new entry is a
-/// line here rather than anything to discover. Sizes and checksums are exact,
-/// so a row can say what it costs before it is fetched and the download can
-/// refuse a file that is not the one that was checked.
+/// Two lists that are not the same thing. [localModelCatalog] is what is
+/// offered, each entry a download filled in ahead of time, sizes and checksums
+/// exact so a row says what it costs and the download refuses a file that is
+/// not the one that was checked. What is downloaded is a [DownloadedModel],
+/// one per directory on disk, whatever it was fetched from: an entry here, a
+/// link the user typed, or an entry an older build offered and this one does
+/// not.
 library;
 
 /// What an accelerator is, for the label beside its name. There is no CPU here
@@ -63,158 +65,209 @@ class LocalDevice {
       name.startsWith("HTP") ? LocalCompute.npu : LocalCompute.gpu;
 }
 
-/// One model, as one file.
+/// One model to download, as one file: a catalog entry, or a link the user
+/// typed. What it needs to run is read off the file once it has arrived, so
+/// none of that is asked of either.
 ///
-/// **Q4_0 rather than the Q4_K_M everyone publishes**, and that is the entry
-/// requirement rather than a preference. The Hexagon backend repacks Q4_0, Q8_0
-/// and MXFP4 and nothing else, so a K-quant is a model that quietly runs on the
-/// CPU on the one device that has an NPU to run it on. Q4_0 is a little worse
-/// per byte and is the only one of the two that can be offloaded.
+/// **The catalog is Q4_0 rather than the Q4_K_M everyone publishes**, and that
+/// is the entry requirement rather than a preference. The Hexagon backend
+/// repacks Q4_0, Q8_0 and MXFP4 and nothing else, so a K-quant is a model that
+/// quietly runs on the CPU on the one device that has an NPU to run it on. A
+/// link the user typed may be anything the server reads.
 class LocalModel {
   const LocalModel({
     required this.id,
     required this.name,
-    required this.parameters,
     required this.url,
-    required this.bytes,
-    required this.sha256,
-    required this.contextLength,
-    required this.kvBytesPerToken,
-    required this.licence,
-    this.note,
+    this.parameters,
+    this.bytes,
+    this.sha256,
+    this.licence,
   });
 
-  /// Stable, and the name of the directory it installs into — renaming one
-  /// orphans what a user already downloaded. It is also what the running server
-  /// is told to call itself, so it is the model id that appears in the pickers
-  /// and is written into a chat's `meta.json`.
+  /// Stable, and the name of the directory it installs into. It is also what
+  /// the running server is told to call itself, so it is the model id that
+  /// appears in the pickers and is written into a chat's `meta.json`.
   final String id;
 
   final String name;
 
-  /// As the publisher writes it — `0.8B`. Shown rather than computed, since
-  /// what a row is answering is "will this run on my phone".
-  final String parameters;
-
   final String url;
 
-  /// What the server will send, exactly. The bar reads it before the first byte
-  /// arrives, and a `Content-Length` that disagrees is not treated as news.
+  /// As the publisher writes it — `1.7B`. Shown rather than computed, since
+  /// what a row is answering is "will this run on my phone".
+  final String? parameters;
+
+  /// What the server will send, exactly. The bar reads it before the first
+  /// byte arrives; null takes the response's own length.
+  final int? bytes;
+
+  /// Checked before the file is kept, where one is given. Weights are not code,
+  /// but they are a gigabyte fetched over somebody's mobile data and the
+  /// publisher already says what they should be.
+  final String? sha256;
+
+  final String? licence;
+}
+
+/// A model on disk, described by its own file and by what it was fetched as.
+class DownloadedModel {
+  const DownloadedModel({
+    required this.id,
+    required this.name,
+    required this.file,
+    required this.bytes,
+    required this.quantisation,
+    required this.contextLength,
+    required this.kvBytesPerToken,
+    this.parameters,
+    this.licence,
+    this.url,
+  });
+
+  final String id;
+  final String name;
+
+  /// The weights, where the server is pointed.
+  final String file;
+
   final int bytes;
 
-  /// Checked before the file is kept. Weights are not code, but they are a
-  /// gigabyte fetched over somebody's mobile data and the publisher already
-  /// says what they should be.
-  final String sha256;
+  /// The GGUF's file type as llama.cpp names it — `Q4_0`.
+  final String quantisation;
 
   /// What the model was trained to handle. Not what it is *run* with — a
   /// phone's memory is the KV cache's limit long before the model's is, which
   /// is what [defaultContext] and `AppSettings.localModelContext` are for.
   final int contextLength;
 
-  /// What one token of context costs, resident, for the whole conversation.
-  ///
-  /// `2 × block_count × head_count_kv × key_length × 2` — K and V, every layer,
-  /// f16 — read off each GGUF's own metadata rather than worked out from the
-  /// parameter count, which does not decide it. It is what makes [defaultContext]
-  /// per model instead of one number for a catalog whose entries differ by 2.7×.
+  /// What one token of context costs, resident, for the whole conversation:
+  /// K and V for every layer with attention heads, f16, read off the GGUF's own
+  /// metadata rather than worked out from the parameter count, which does not
+  /// decide it. It is what makes [defaultContext] per model.
   final int kvBytesPerToken;
+
+  final String? parameters;
+  final String? licence;
+
+  /// Where it came from; null for one an older build downloaded.
+  final String? url;
 
   /// How much context this model is given when nothing overrides it.
   ///
   /// [kvBudgetBytes] divided by what a token costs, rounded down to a power of
-  /// two — so the answer follows from the model's own architecture and a new
-  /// catalog entry needs no number invented for it.
+  /// two and never past what the model was trained on — so the answer follows
+  /// from the model's own architecture and needs no number invented for it.
   int get defaultContext {
     final affordable = kvBudgetBytes ~/ kvBytesPerToken;
     var context = 1024;
-    while (context * 2 <= affordable) {
+    while (context * 2 <= affordable && context * 2 <= contextLength) {
       context *= 2;
     }
     return context;
   }
 
-  final String licence;
+  /// Whether an NPU can be handed it as it is; see [LocalModel].
+  bool get offloadsToNpu => const {"Q4_0", "Q8_0", "MXFP4"}.contains(quantisation);
 
-  /// Anything a row should say beyond its size. Null for the ones that need no
-  /// warning.
-  final String? note;
+  Map<String, Object?> toJson() => {
+        "id": id,
+        "name": name,
+        "bytes": bytes,
+        "quantisation": quantisation,
+        "contextLength": contextLength,
+        "kvBytesPerToken": kvBytesPerToken,
+        "parameters": ?parameters,
+        "licence": ?licence,
+        "url": ?url,
+      };
+
+  /// Null for anything that does not say what the server needs.
+  static DownloadedModel? fromJson(Object? json, {required String file}) {
+    if (json is! Map) return null;
+    final id = json["id"], name = json["name"], bytes = json["bytes"];
+    final quantisation = json["quantisation"];
+    final context = json["contextLength"], kv = json["kvBytesPerToken"];
+    if (id is! String || name is! String || bytes is! int || quantisation is! String ||
+        context is! int || kv is! int || kv <= 0) {
+      return null;
+    }
+    return DownloadedModel(
+      id: id,
+      name: name,
+      file: file,
+      bytes: bytes,
+      quantisation: quantisation,
+      contextLength: context,
+      kvBytesPerToken: kv,
+      parameters: json["parameters"] as String?,
+      licence: json["licence"] as String?,
+      url: json["url"] as String?,
+    );
+  }
 }
 
 /// What one running model's KV cache may take.
 ///
 /// The weights are mapped and paged, so the file's size is not what decides
 /// whether Android kills the app; the KV cache is resident, and it is. A
-/// gigabyte is what leaves the two smaller models a context worth having and
+/// gigabyte is what leaves the smallest model a context worth having and
 /// still fits beside the weights on a phone that can run them at all —
 /// remembering that `maxLocalModels` lets two of these be resident at once, and
 /// that this is the budget for each.
 const kvBudgetBytes = 1024 * 1024 * 1024;
 
-const _unsloth = "https://huggingface.co/unsloth";
+const _hf = "https://huggingface.co";
 
-/// Four sizes of one model, smallest useful first. The ceiling moved with this
-/// list — a 9B is reachable on a phone with 12 GB, where the last one stopped
-/// at about 4B — so the top of it is a real pick on some devices and a refusal
-/// to load on others, which is what the notes are for.
+/// What is offered for download, smallest first, each the strongest at its
+/// size that the bundled server runs: a phone of any size, one with 8 GB, and
+/// one with 12. The Q4_0 of the third is bartowski's, since Ornith publishes
+/// none.
 const localModelCatalog = <LocalModel>[
   LocalModel(
-    id: "qwen3.5-2b-q4_0",
-    name: "Qwen3.5 2B",
-    parameters: "2B",
-    url: "$_unsloth/Qwen3.5-2B-GGUF/resolve/main/Qwen3.5-2B-Q4_0.gguf",
-    bytes: 1214873856,
-    sha256: "cd70221bebaee0503e0f6717e174250cd7825aa88438b3aabec9ad55731d9bb1",
-    contextLength: 262144,
-    kvBytesPerToken: 49152,
-    licence: "Apache-2.0",
-    note: "The one to try first: it fits on any phone that can run one at all.",
+    id: "lfm3-1.7b-q4_0",
+    name: "LFM3 1.7B",
+    parameters: "1.7B",
+    url: "$_hf/LiquidAI/LFM3-1.7B-GGUF/resolve/main/LFM3-1.7B-QAD-Q4_0.gguf",
+    bytes: 1049615680,
+    sha256: "43a7d09a0e9cba91b63eb7052488b9564569bddfd65754d2e426465e572a7452",
+    licence: "LFM Open License 1.0",
   ),
   LocalModel(
     id: "qwen3.5-4b-q4_0",
     name: "Qwen3.5 4B",
     parameters: "4B",
-    url: "$_unsloth/Qwen3.5-4B-GGUF/resolve/main/Qwen3.5-4B-Q4_0.gguf",
+    url: "$_hf/unsloth/Qwen3.5-4B-GGUF/resolve/main/Qwen3.5-4B-Q4_0.gguf",
     bytes: 2583221408,
     sha256: "298fcb5fe7a77ccc79745ae24751560c5ac56874caff4bb39b1f2055bd72b8bb",
-    contextLength: 262144,
-    kvBytesPerToken: 131072,
     licence: "Apache-2.0",
-    note: "The pick on a phone with 8 GB or more.",
   ),
   LocalModel(
-    id: "qwen3.5-9b-q4_0",
-    name: "Qwen3.5 9B",
+    id: "ornith-1.5-9b-q4_0",
+    name: "Ornith-1.5 9B",
     parameters: "9B",
-    url: "$_unsloth/Qwen3.5-9B-GGUF/resolve/main/Qwen3.5-9B-Q4_0.gguf",
-    bytes: 5379417312,
-    sha256: "17670346b4260ddcb0173965145155885024f3c9a4a24389a3370751edbcde24",
-    contextLength: 262144,
-    kvBytesPerToken: 131072,
-    licence: "Apache-2.0",
-    note: "The best of these at code and at using tools, and five gigabytes of "
-        "a phone that had better have 12.",
-  ),
-  LocalModel(
-    id: "qwen3.5-0.8b-q4_0",
-    name: "Qwen3.5 0.8B",
-    parameters: "0.8B",
-    url: "$_unsloth/Qwen3.5-0.8B-GGUF/resolve/main/Qwen3.5-0.8B-Q4_0.gguf",
-    bytes: 507154688,
-    sha256: "444406ddd926550c724ec18d5120a9d40ded44908a063b0e66e9a7e5464c652c",
-    contextLength: 262144,
-    kvBytesPerToken: 49152,
-    licence: "Apache-2.0",
-    note: "Small enough to be a check that an accelerator works at all, and "
-        "too small to be much good at the agent's own job.",
+    url: "$_hf/bartowski/Ornith-1.5-9B-GGUF/resolve/main/Ornith-1.5-9B-Q4_0.gguf",
+    bytes: 5482832768,
+    sha256: "a5d329392574fd050af89231ca64eb004121ed51e373c441c4c748599f3cf489",
+    licence: "MIT",
   ),
 ];
 
-LocalModel? localModelById(String? id) {
-  for (final model in localModelCatalog) {
-    if (model.id == id) return model;
+/// An id for a model downloaded from [url], unused by [taken]: the file's own
+/// name without its extension, lower-cased, numbered past one in use.
+String localModelIdFor(String url, Iterable<String> taken) {
+  final file = Uri.tryParse(url)?.pathSegments.lastOrNull ?? "";
+  final stem = file
+      .replaceAll(RegExp(r"\.gguf$", caseSensitive: false), "")
+      .toLowerCase()
+      .replaceAll(RegExp(r"[^a-z0-9._-]+"), "-")
+      .replaceAll(RegExp(r"^[-.]+|[-.]+$"), "");
+  final base = stem.isEmpty ? "model" : stem;
+  final used = taken.toSet();
+  if (!used.contains(base)) return base;
+  for (var n = 2;; n++) {
+    if (!used.contains("$base-$n")) return "$base-$n";
   }
-  return null;
 }
 
 /// The provider id the running server is offered under. Fixed rather than

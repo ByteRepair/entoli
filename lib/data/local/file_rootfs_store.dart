@@ -135,8 +135,8 @@ extension DownloadRunSha256 on DownloadRun {
   /// [fetch] one file and answer its SHA-256 in hex, hashed on the way past
   /// rather than by reading back what may be gigabytes.
   Future<String> fetchSha256(
-      {required String url, required String to, required int total}) async {
-    report(DownloadProgress(received: 0, total: total));
+      {required String url, required String to, int? total}) async {
+    report(DownloadProgress(received: 0, total: total ?? 0));
     final hash = _Sha256Sink();
     final hashing = sha256.startChunkedConversion(hash);
     await fetch(url: url, to: to, total: total, watch: hashing);

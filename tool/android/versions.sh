@@ -29,9 +29,9 @@ TALLOC_SHA256=912afa237510ae542a7733998eb18a12bcda35ab6729c8e2ddb43e8d0ebab007
 #
 # A release tag rather than a branch, and the tarball GitHub generates for one —
 # the same bargain proot makes above.
-LLAMA_CPP_VERSION=b10509
+LLAMA_CPP_VERSION=b11972
 LLAMA_CPP_URL="https://github.com/ggml-org/llama.cpp/archive/refs/tags/$LLAMA_CPP_VERSION.tar.gz"
-LLAMA_CPP_SHA256=63eb7bb55a46051ca523a670621cfaa6f4a1b3ea78e1cfc34a45c0af5139df0e
+LLAMA_CPP_SHA256=3b0b6c05a420d649038b6bfd96ba3efcdcfcb8c5af0cccf7f2b661e05f7cb05e
 
 # The one thing the Vulkan GPU backend's cmake wants that neither the NDK nor
 # llama.cpp carries: `find_package(SPIRV-Headers CONFIG REQUIRED)` before it

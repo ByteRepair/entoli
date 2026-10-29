@@ -64,7 +64,7 @@ class OllamaCloudProvider extends OpenAiCompatibleProvider with ChecksKeyByCompl
     baseUrl: "https://ollama.com/v1",
     apiKeyEnv: "OLLAMA_API_KEY",
     defaultModelId: "glm-5.3-flash",
-    defaultLightModelId: "nemotron-3-nano:30b",
+    defaultLightModelId: "gemma4:31b",
   );
 
   static const _terms = PresetTerms(

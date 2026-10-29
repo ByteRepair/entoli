@@ -50,7 +50,7 @@ class LlamaBinaries {
 /// it.
 ({List<String> command, Map<String, String> environment}) llamaLaunch({
   required LlamaBinaries binaries,
-  required LocalModel model,
+  required DownloadedModel model,
   required String modelFile,
   required int port,
   required String apiKey,
@@ -249,10 +249,10 @@ class LlamaServerPool extends LocalLlm {
   }
 
   @override
-  List<String> get installed => [
-        for (final model in localModelCatalog)
-          if (_store.fileOfSync(model) != null) model.id,
-      ];
+  List<String> get installed => [for (final model in _store.downloadedSync()) model.id];
+
+  @override
+  String nameOf(String modelId) => _store.downloadedOfSync(modelId)?.name ?? modelId;
 
   @override
   Future<LocalEndpoint> serve(
@@ -263,8 +263,8 @@ class LlamaServerPool extends LocalLlm {
     int? threads,
     bool kvCache = false,
   }) async {
-    final model = localModelById(modelId);
-    if (model == null) throw LocalLlmFailure("$modelId is not a model this build knows.");
+    final model = _store.downloadedOfSync(modelId);
+    if (model == null) throw LocalLlmFailure("$modelId is not downloaded.");
     final wanted = contextLength ?? model.defaultContext;
     // Only where there is somewhere to write them: a build with no cache dir
     // serves f16 whatever the setting says.
@@ -294,8 +294,7 @@ class LlamaServerPool extends LocalLlm {
       return already.endpoint;
     }
 
-    final file = _store.fileOfSync(model);
-    if (file == null) throw LocalLlmFailure("${model.name} is not downloaded.");
+    final file = model.file;
 
     // Every list edit below happens before the first await, so two turns asking
     // at once cannot both decide to start the same model — the second finds the
@@ -366,7 +365,7 @@ class _Server {
     required this.slotSavePath,
   });
 
-  final LocalModel model;
+  final DownloadedModel model;
   final String device;
   final int contextLength;
   final int? threads;

@@ -12,15 +12,22 @@ import "local_model.dart";
 abstract class LocalModelStore {
   const LocalModelStore();
 
-  /// The ids that are installed and whole. A directory a download was killed
-  /// halfway through is not one of them: [install] writes its marker last.
+  /// The ids that are installed and whole, read again from the disk. A
+  /// directory a download was killed halfway through is not one of them:
+  /// [install] writes its marker last.
   Future<Set<String>> installed();
 
-  /// The file to load, or null if it is not installed. Synchronous because that
-  /// is what starting the server needs: it is decided from a settings change,
-  /// and one `stat` is cheaper than a state that has to be awaited before the
-  /// server can be told anything.
-  String? fileOfSync(LocalModel model);
+  /// Every model on disk, whatever it was fetched from. Synchronous because
+  /// that is what starting the server and listing the pickers need, and kept
+  /// in step by [install] and [delete] rather than read for every ask.
+  List<DownloadedModel> downloadedSync();
+
+  DownloadedModel? downloadedOfSync(String id) {
+    for (final model in downloadedSync()) {
+      if (model.id == id) return model;
+    }
+    return null;
+  }
 
   /// Fetch [model], reporting as it goes. The stream closes when it is
   /// installed and errors if it cannot be; **cancelling the subscription
@@ -28,12 +35,12 @@ abstract class LocalModelStore {
   /// button does.
   ///
   /// There is no unpacking phase, unlike the other two catalogs: a GGUF is one
-  /// file and is used where it lands.
+  /// file and is used where it lands, once its header has said what it is.
   Stream<DownloadProgress> install(LocalModel model);
 
-  /// By id rather than by [LocalModel], because the ids that most need
-  /// deleting are the ones the catalog no longer has: a model dropped or
-  /// renamed between releases is still the gigabytes it always was.
+  /// By id rather than by [LocalModel]: most of what is downloaded is no
+  /// catalog entry, and one the catalog has dropped is still the gigabytes it
+  /// always was.
   Future<void> delete(String id);
 }
 
@@ -46,7 +53,7 @@ class UnavailableLocalModelStore extends LocalModelStore {
   Future<Set<String>> installed() async => const {};
 
   @override
-  String? fileOfSync(LocalModel model) => null;
+  List<DownloadedModel> downloadedSync() => const [];
 
   @override
   Stream<DownloadProgress> install(LocalModel model) =>

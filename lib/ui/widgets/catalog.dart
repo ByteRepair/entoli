@@ -11,16 +11,17 @@ import "resettable_field.dart";
 // are different enough to be two catalogs and identical in all of this.
 
 /// One entry as a row: what it is, what it costs, and the button. Everything
-/// optional here is a line that only some rows have — a note, a failure, a bar
-/// — and the three-line height follows from whether any of them is there rather
-/// than being decided at each call site.
+/// optional here is a line that only some rows have — a note, its facts as
+/// tags, a failure, a bar — and the three-line height follows from whether any
+/// of them is there rather than being decided at each call site.
 class CatalogTile extends StatelessWidget {
   const CatalogTile({
     super.key,
     required this.title,
-    required this.summary,
     required this.trailing,
+    this.summary,
     this.note,
+    this.tags = const [],
     this.failure,
     this.progress,
   });
@@ -29,12 +30,16 @@ class CatalogTile extends StatelessWidget {
   /// name.
   final Widget title;
 
-  /// The one line under the name: what it holds, and what it costs.
-  final String summary;
+  /// The one line under the name: what it holds, and what it costs. Null
+  /// where [tags] say it.
+  final String? summary;
 
   /// Anything else worth knowing before downloading it. Null where the name and
   /// the summary say enough.
   final String? note;
+
+  /// Its facts, each an [InfoTag].
+  final List<Widget> tags;
 
   /// Why the last attempt stopped, in the error colour.
   final String? failure;
@@ -49,12 +54,17 @@ class CatalogTile extends StatelessWidget {
     final theme = Theme.of(context);
     final small = theme.textTheme.bodySmall;
     return ListTile(
-      isThreeLine: note != null || failure != null || progress != null,
+      isThreeLine:
+          note != null || tags.isNotEmpty || failure != null || progress != null,
       title: title,
       subtitle: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(summary),
+          if (summary != null) Text(summary!),
+          if (tags.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Wrap(spacing: 6, runSpacing: 4, children: tags),
+          ],
           if (note != null)
             Text(note!, style: small?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
           if (failure != null)
@@ -203,6 +213,34 @@ class InstalledPicker extends StatelessWidget {
             DropdownMenuItem<String?>(value: entry.key, child: Text(entry.value)),
         ],
         onChanged: onPick,
+      ),
+    );
+  }
+}
+
+/// One fact about a thing, as a small labelled chip.
+class InfoTag extends StatelessWidget {
+  const InfoTag(this.icon, this.label, {super.key});
+
+  final IconData icon;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerHigh,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: theme.colorScheme.onSurfaceVariant),
+          const SizedBox(width: 4),
+          Text(label, style: theme.textTheme.labelSmall),
+        ],
       ),
     );
   }

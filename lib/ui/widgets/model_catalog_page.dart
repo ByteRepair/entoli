@@ -9,7 +9,9 @@ import "../../domain/model_registry.dart";
 import "../../domain/models.dart";
 import "../../domain/voice_model.dart";
 import "../../providers.dart";
+import "../../core/formatting.dart";
 import "../fonts.dart";
+import "catalog.dart" show InfoTag;
 
 /// One model a picker can offer, with the provider it is reached through.
 class CatalogEntry {
@@ -497,15 +499,15 @@ class _ModelCard extends StatelessWidget {
                 runSpacing: 6,
                 children: [
                   if (info.context != null)
-                    _Tag(Icons.data_usage, "${tokenCount(info.context!)} context"),
-                  if (price != null) _Tag(Icons.payments_outlined, price),
-                  if (info.toolCall) _Tag(Icons.build_outlined, "Tools"),
-                  if (info.reasoning) _Tag(Icons.psychology_alt_outlined, "Reasoning"),
-                  if (info.readsImages) _Tag(Icons.image_search, "Sees images"),
-                  if (info.makesImages) _Tag(Icons.brush_outlined, "Makes images"),
-                  if (info.transcribes) _Tag(Icons.hearing, "Transcribes"),
-                  if (info.speaks) _Tag(Icons.record_voice_over_outlined, "Speaks"),
-                  if (entry.custom) _Tag(Icons.edit_outlined, "Added by you"),
+                    InfoTag(Icons.data_usage, "${tokenCount(info.context!)} context"),
+                  if (price != null) InfoTag(Icons.payments_outlined, price),
+                  if (info.toolCall) InfoTag(Icons.build_outlined, "Tools"),
+                  if (info.reasoning) InfoTag(Icons.psychology_alt_outlined, "Reasoning"),
+                  if (info.readsImages) InfoTag(Icons.image_search, "Sees images"),
+                  if (info.makesImages) InfoTag(Icons.brush_outlined, "Makes images"),
+                  if (info.transcribes) InfoTag(Icons.hearing, "Transcribes"),
+                  if (info.speaks) InfoTag(Icons.record_voice_over_outlined, "Speaks"),
+                  if (entry.custom) InfoTag(Icons.edit_outlined, "Added by you"),
                 ],
               ),
             ],
@@ -526,42 +528,6 @@ class _ModelCard extends StatelessWidget {
   static String _dollars(double v) {
     final text = v.toStringAsFixed(v < 0.1 ? 3 : 2);
     return text.contains(".") ? text.replaceFirst(RegExp(r"\.?0+$"), "") : text;
-  }
-}
-
-/// "200K", "1M": a window as providers write it.
-String tokenCount(int n) {
-  if (n >= 1000000) {
-    final m = n / 1000000;
-    return "${m == m.roundToDouble() ? m.round() : m.toStringAsFixed(1)}M";
-  }
-  return n >= 1000 ? "${(n / 1000).round()}K" : "$n";
-}
-
-class _Tag extends StatelessWidget {
-  const _Tag(this.icon, this.label);
-
-  final IconData icon;
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerHigh,
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 14, color: theme.colorScheme.onSurfaceVariant),
-          const SizedBox(width: 4),
-          Text(label, style: theme.textTheme.labelSmall),
-        ],
-      ),
-    );
   }
 }
 

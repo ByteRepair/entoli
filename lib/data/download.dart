@@ -75,12 +75,14 @@ class DownloadRun {
   /// One file, streamed to disk, and how many bytes it turned out to be.
   /// [done] is what earlier files already added up to and [total] what they
   /// will in the end, so a model of four files reports one bar rather than
-  /// four. [watch] sees every chunk on the way past — a checksum, where the
-  /// caller wants one, without a second read of the file.
+  /// four; null takes the response's own length. [watch] sees every chunk on
+  /// the way past — a checksum, where the caller wants one, without a second
+  /// read of the file. A body shorter than the length the response declared
+  /// is an error, since a dropped connection otherwise ends like a finished one.
   Future<int> fetch({
     required String url,
     required String to,
-    required int total,
+    int? total,
     int done = 0,
     Sink<List<int>>? watch,
   }) async {
@@ -88,6 +90,8 @@ class DownloadRun {
     if (response.statusCode != 200) {
       throw HttpException("${response.statusCode} for $url");
     }
+    final declared = response.contentLength;
+    final size = total ?? (declared == null ? 0 : done + declared);
     final sink = File(to).openWrite();
     var at = 0;
     var told = 0;
@@ -103,13 +107,16 @@ class DownloadRun {
         // pixels to move.
         if (at - told >= _reportEvery) {
           told = at;
-          report(DownloadProgress(received: done + at, total: total));
+          report(DownloadProgress(received: done + at, total: size));
         }
         return chunk;
       }));
-      report(DownloadProgress(received: done + at, total: total));
+      report(DownloadProgress(received: done + at, total: size));
     } finally {
       await sink.close();
+    }
+    if (!_cancelled && declared != null && at != declared) {
+      throw HttpException("$url ended at $at of $declared bytes");
     }
     return at;
   }

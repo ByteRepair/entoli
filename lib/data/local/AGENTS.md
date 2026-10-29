@@ -461,15 +461,16 @@ the context would be fitted against the phone's whole RAM rather than against
 what Android will let this app keep resident. A KV cache sized that way is an
 app the low-memory killer takes.
 
-**The default is the model's own**, `LocalModel.defaultContext`: `kvBudgetBytes`
-divided by what one token of *that* model's KV cache costs, rounded down to a
-power of two. The cost is `2 × block_count × head_count_kv × key_length × 2` —
-K and V, every layer, f16 — read off each GGUF's metadata rather than guessed
-from the parameter count, which does not decide it. The catalog splits two and
-two: 48 KiB a token for the 0.8B and 2B, 128 KiB for the 4B and 9B, so the same
-gigabyte buys 16,384 tokens on the small pair and 8,192 on the large. One
-constant for all four is what made the small models as cramped as the large ones
-for a third of the memory.
+**The default is the model's own**, `DownloadedModel.defaultContext`:
+`kvBudgetBytes` divided by what one token of *that* model's KV cache costs,
+rounded down to a power of two and never past what it was trained on. The cost
+is K and V for every layer with attention heads, f16, read off the downloaded
+file's own header (`data/local/gguf.dart`) rather than guessed from the
+parameter count, which does not decide it — and rather than written into the
+catalog, so a model added by link is sized the same way. `head_count_kv` is one
+number for every layer or, in a hybrid such as LFM3, a list where a convolution
+layer has none. LFM3 1.7B costs 22 KiB a token and Qwen3.5 4B 128 KiB, so the
+same gigabyte buys 32,768 tokens on one and 8,192 on the other.
 
 It matters more than it looks, because the agent's own prompt is not small: the
 system prompt and the tool schemas are about 2,700 tokens before the user has
@@ -479,31 +480,31 @@ The Context setting overrides it for every model at once. That is the honest
 shape now that any downloaded model can be the one a turn asks for — there is no
 longer a single picked model for a per-model override to attach to.
 
-### What is in the catalog, and why it is one family
+### What is in the catalog, and what is downloaded
 
-Three things have to be true before a row can exist, and together they cut the
-field down to almost nothing: the publisher has to ship **Q4_0** — see "What the
-NPU actually is" — the GGUF's `general.architecture` has to be one the bundled
-server knows, and the exact size and SHA-256 have to come from the publisher
-rather than from a download someone did once.
+Two lists. The catalog (`localModelCatalog`) is what is offered: each entry a
+download filled in ahead of time, one tap and no form. What is downloaded is
+whatever is on disk, each directory with a record of what it is
+(`DownloadedModel`, `model.json`) beside the weights, whatever it was fetched
+from — a catalog entry, a link the user typed on the Add model page, or an entry
+an older catalog offered. A model the catalog drops is therefore nothing to
+migrate: it stays in the pickers and on the settings page, and runs, until it is
+deleted. A directory from a build before records has its record written from
+its own header the first time it is listed.
 
-What survives is Qwen3.5, four sizes of it. Not a preference for the vendor:
-Gemma 4's E4B is the near miss and shows the shape of the comparison. It is the
-one model published *as* Q4_0 — quantization-aware trained, so the quant this
-list is forced into costs it nothing — and it is still twice the file of
-Qwen3.5 4B for a lower LiveCodeBench. A row nobody should pick is a row that
-only makes the list longer.
+Three things have to be true before a catalog row can exist: the publisher of
+the file has to ship **Q4_0** — see "What the NPU actually is" — the GGUF's
+`general.architecture` has to be one the bundled server knows, and the exact
+size and SHA-256 have to come from where the file is published rather than from
+a download someone did once. A link the user adds is held to none of them: the
+SHA-256 is checked where one is given, and a file whose header does not say
+what its context costs is refused.
 
-**None of them is a coder model**, which is the change from the list before it.
-Small coder-tuned weights stopped being published: the current official one is
-Qwen3-Coder-Next, which is 48 GB at Q4 and arrives in four pieces. What replaced
-them is a general model of this size beating the old specialists at code
-outright, and being far better at the conversation around it — which is most of
-what this agent does between edits.
-
-The sizes are not interchangeable and the notes say so. 0.8B and 2B answer
-directly; 4B and 9B think first, which on a phone is a wait long enough to
-notice and is also why they are better over a long turn.
+Each entry is the strongest at its size: LFM3 1.7B for any phone, Qwen3.5 4B
+for one with 8 GB, Ornith-1.5 9B (a Qwen3.5 9B fine-tune, so the same
+architecture) for one with 12. Ornith publishes no Q4_0, so its file is
+bartowski's. LFM3 is why `LLAMA_CPP_VERSION` is at least `b11951`, the first
+release that reads its architecture.
 
 ### What the NPU actually is
 
@@ -651,21 +652,17 @@ and a restore *replaces* it, so a model in there would be a gigabyte in every
 export and a deletion on every restore.
 
 `FileLocalModelStore` is `FileRootfsStore` without the unpacking: a `DownloadRun`
-and, after it, the one thing this download has that the others do not, which is
-the checksum. `LocalModelDownloads` is a third `Downloads<T>` beside the voice
-models and the Linux, and the rows are `CatalogTile` and `CatalogAction` like
-theirs — see "A catalog of things to download". Nothing here needed a new
-mechanism, which is the point: the catalog is a const list, the store is a
-marker and a hash, and everything between them was already written.
+and, after it, the checksum where there is one, the header read, and the record.
+`LocalModelDownloads` is a third `Downloads<T>` beside the voice models and the
+Linux, and the rows are `CatalogTile` and `CatalogAction` like theirs — see "A
+catalog of things to download" — with the facts as tags rather than a sentence.
 
-The one place it parts company with the other two is `installed()`, which reads
-the directory names off the disk rather than the catalog, and `delete`, which
-takes an id rather than a `LocalModel` so that what `installed()` finds can
-actually be acted on. Both exist for the same event: the catalog replaces a
-generation of models, and every id it drops is a couple of gigabytes that no
-row would otherwise mention and nothing in the app could remove. The settings
-page draws those as rows of their own, delete and nothing else — there is no
-`Downloads` entry behind one to cancel or fetch again.
+Where it parts company with the other two is that the list is the disk's, not
+the catalog's: `downloadedSync()` reads the records once and is kept in step by
+`install` and `delete`, and `delete` takes an id so that anything on disk can
+be removed. The settings page draws the catalog, then a row for each model
+added by link this session until it lands, then every other downloaded model,
+delete and nothing else.
 
 It is the third catalog and by far the largest — a couple of gigabytes where a
 rootfs is four megabytes — which is what makes the notification's own throttle in
