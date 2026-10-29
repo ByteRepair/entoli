@@ -22,6 +22,10 @@ abstract class AgentBrowser {
   /// pick or download.
   bool get inApp;
 
+  /// [BrowserTab.trustedInput] for every tab: false on iOS, where there is
+  /// no drag or upload, so the settings page has no upload policy to offer.
+  bool get trustedInput;
+
   /// Whether a browser is picked and there to launch: what offers the tools.
   /// Asked per turn, so a pick reaches the next turn without a restart.
   bool get configured;
@@ -481,6 +485,9 @@ class UnavailableAgentBrowser extends AgentBrowser {
 
   @override
   bool get inApp => false;
+
+  @override
+  bool get trustedInput => false;
 
   static final _notRunning = ValueNotifier(false);
 

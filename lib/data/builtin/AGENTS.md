@@ -950,7 +950,8 @@ checks than Helium does.
 ### On iOS
 
 The browser is a WKWebView per chat, made by `BrowserChannel.swift`, and the
-settings are Android's switch. WebKit serves no protocol an app can reach, so
+settings are Android's switch, less the upload policy, which
+`AgentBrowser.trustedInput` hides since there are no uploads to govern. WebKit serves no protocol an app can reach, so
 `WebKitConnection` answers the slice of it the tab sends — the tab is the
 same code — in terms of the channel: a script is `evaluateJavaScript` (the
 isolated world a named `WKContentWorld`; nothing the tab runs returns a

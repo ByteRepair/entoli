@@ -129,6 +129,9 @@ class _Browser implements AgentBrowser {
   bool inApp = false;
 
   @override
+  bool get trustedInput => true;
+
+  @override
   BrowserTab tab(String chatId) => tabs.putIfAbsent(chatId, _Tab.new);
 
   @override
