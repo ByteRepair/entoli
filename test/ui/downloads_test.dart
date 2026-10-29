@@ -4,11 +4,13 @@ import "package:flutter/material.dart";
 import "package:flutter_test/flutter_test.dart";
 
 import "package:agent_chat/domain/background_work.dart";
+import "package:agent_chat/domain/installable.dart";
 import "package:agent_chat/domain/rootfs.dart";
 import "package:agent_chat/domain/voice_model.dart";
+import "package:agent_chat/domain/voice_model_store.dart";
 import "package:agent_chat/providers.dart";
+import "package:agent_chat/ui/settings/model_downloads.dart";
 import "package:agent_chat/ui/settings/rootfs_downloads.dart";
-import "package:agent_chat/ui/settings/voice_models.dart";
 
 import "../harness.dart";
 
@@ -27,6 +29,7 @@ void main() {
   tearDown(() => app.dispose());
 
   DownloadNotice? lastNotice() => app.work.downloads.last;
+  Installable voice(VoiceModel model) => InstallableVoiceModel(model, app.voiceModels);
 
   group("the notification", () {
     testWidgets("names the one thing being fetched", (tester) async {
@@ -34,7 +37,7 @@ void main() {
       app.voiceModels.installing = Completer<void>();
       await app.pump(tester, const SizedBox());
 
-      app.container.read(voiceModelsProvider.notifier).install(tiny);
+      app.container.read(modelDownloadsProvider.notifier).install(voice(tiny));
       await settleIo(tester);
 
       expect(lastNotice()?.label, tiny.name);
@@ -42,11 +45,11 @@ void main() {
 
       // Where there are several, the count is in the catalog's own words,
       // and the total is the pair of them.
-      final downloads = app.container.read(voiceModelsProvider.notifier);
-      downloads.install(aVoice);
+      final downloads = app.container.read(modelDownloadsProvider.notifier);
+      downloads.install(voice(aVoice));
       await settleIo(tester);
 
-      expect(lastNotice()?.label, "2 voice models");
+      expect(lastNotice()?.label, "2 models");
       expect(lastNotice()?.total, tiny.bytes + aVoice.bytes);
     });
 
@@ -68,7 +71,7 @@ void main() {
       app = TestApp.create();
       await app.pump(tester, const SizedBox());
 
-      app.container.read(voiceModelsProvider.notifier).install(tiny);
+      app.container.read(modelDownloadsProvider.notifier).install(voice(tiny));
       await settleIo(tester);
 
       expect(lastNotice(), isNull);
@@ -79,14 +82,14 @@ void main() {
       app = TestApp.create();
       app.voiceModels.installing = Completer<void>();
       await app.pump(tester, const SizedBox());
-      app.container.read(voiceModelsProvider.notifier).install(tiny);
+      app.container.read(modelDownloadsProvider.notifier).install(voice(tiny));
       await settleIo(tester);
 
       app.work.stop(BackgroundJob.download);
       await settleIo(tester);
 
       expect(lastNotice(), isNull);
-      expect(app.container.read(voiceModelsProvider).active, isEmpty);
+      expect(app.container.read(modelDownloadsProvider).active, isEmpty);
     });
   });
 
@@ -98,13 +101,13 @@ void main() {
       ..installing = Completer<void>();
     await app.pump(tester, const SizedBox());
 
-    app.container.read(voiceModelsProvider.notifier).install(tiny);
+    app.container.read(modelDownloadsProvider.notifier).install(voice(tiny));
     await settleIo(tester);
 
     // Forty events, one notification: a channel call and five binder calls per
     // megabyte is what this rule exists to avoid. The bar still saw all forty.
     expect(app.work.downloads, hasLength(1));
-    expect(app.container.read(voiceModelsProvider).active, hasLength(1));
+    expect(app.container.read(modelDownloadsProvider).active, hasLength(1));
   });
 
   testWidgets("a download this device has nothing to fetch for starts nothing",
@@ -126,16 +129,16 @@ void main() {
     app.voiceModels.failWith = "the server said no";
     await app.pump(tester, const SizedBox());
 
-    app.container.read(voiceModelsProvider.notifier).install(tiny);
+    app.container.read(modelDownloadsProvider.notifier).install(voice(tiny));
     await settleIo(tester);
-    expect(app.container.read(voiceModelsProvider).failures[tiny.id],
+    expect(app.container.read(modelDownloadsProvider).failures[tiny.id],
         contains("the server said no"));
 
     app.voiceModels.failWith = null;
-    app.container.read(voiceModelsProvider.notifier).install(tiny);
+    app.container.read(modelDownloadsProvider.notifier).install(voice(tiny));
     await settleIo(tester);
 
-    expect(app.container.read(voiceModelsProvider).failures, isEmpty);
+    expect(app.container.read(modelDownloadsProvider).failures, isEmpty);
     expect(app.container.read(installedVoiceModelsProvider), contains(tiny.id));
   });
 }

@@ -653,9 +653,11 @@ export and a deletion on every restore.
 
 `FileLocalModelStore` is `FileRootfsStore` without the unpacking: a `DownloadRun`
 and, after it, the checksum where there is one, the header read, and the record.
-`LocalModelDownloads` is a third `Downloads<T>` beside the voice models and the
-Linux, and the rows are `CatalogTile` and `CatalogAction` like theirs — see "A
-catalog of things to download" — with the facts as tags rather than a sentence.
+A text model and a voice model are both an `Installable`
+(`lib/domain/installable.dart`), bound to its store by `InstallableLocalModel`
+or `InstallableVoiceModel`, so one `ModelDownloads` queue fetches either and
+one `ModelDownloadTile` draws either — see "A catalog of things to download".
+A text model's facts are the file's own once it is on disk.
 
 Where it parts company with the other two is that the list is the disk's, not
 the catalog's: `downloadedSync()` reads the records once and is kept in step by

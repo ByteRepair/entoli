@@ -7,6 +7,7 @@ import "package:agent_chat/domain/model_registry.dart";
 import "package:agent_chat/domain/voice.dart";
 import "package:agent_chat/domain/voice_model.dart";
 import "package:agent_chat/providers.dart";
+import "package:agent_chat/ui/settings/on_device_catalog.dart";
 import "package:agent_chat/ui/settings/settings_page.dart";
 import "package:agent_chat/ui/settings/voice_settings.dart";
 import "package:agent_chat/ui/widgets/resettable_field.dart";
@@ -51,7 +52,7 @@ void main() {
     app = TestApp.create();
     await pumpVoice(tester);
 
-    expect(find.byType(VoiceModelTile), findsNothing);
+    expect(find.byType(ModelDownloadTile), findsNothing);
   });
 
   testWidgets("every model is listed whether it is downloaded or not",
@@ -73,9 +74,9 @@ void main() {
     await scrollTo(tester, find.text("Moonshine tiny"));
 
     final whisper = find.ancestor(
-        of: find.text("Whisper tiny"), matching: find.byType(VoiceModelTile));
+        of: find.text("Whisper tiny"), matching: find.byType(ModelDownloadTile));
     final moonshine = find.ancestor(
-        of: find.text("Moonshine tiny"), matching: find.byType(VoiceModelTile));
+        of: find.text("Moonshine tiny"), matching: find.byType(ModelDownloadTile));
     expect(
         find.descendant(of: whisper, matching: find.text("Multilingual")),
         findsOneWidget);
@@ -92,7 +93,7 @@ void main() {
 
     Finder tag(String model, String label) => find.descendant(
         of: find.ancestor(
-            of: find.text(model), matching: find.byType(VoiceModelTile)),
+            of: find.text(model), matching: find.byType(ModelDownloadTile)),
         matching: find.text(label));
     expect(tag("Kokoro", "82M params"), findsOneWidget);
     expect(tag("Kokoro", "103 voices"), findsOneWidget);
@@ -109,7 +110,7 @@ void main() {
     await scrollTo(tester, find.text("Whisper tiny"));
 
     final row = find.ancestor(
-        of: find.text("Whisper tiny"), matching: find.byType(VoiceModelTile));
+        of: find.text("Whisper tiny"), matching: find.byType(ModelDownloadTile));
     await tester.tap(find.descendant(of: row, matching: find.byTooltip("Download")));
     await settleIo(tester);
 
@@ -178,7 +179,7 @@ void main() {
     await scrollTo(tester, find.text("Whisper tiny"));
 
     final row = find.ancestor(
-        of: find.text("Whisper tiny"), matching: find.byType(VoiceModelTile));
+        of: find.text("Whisper tiny"), matching: find.byType(ModelDownloadTile));
     await tester.tap(find.descendant(of: row, matching: find.byTooltip("Delete")));
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(TextButton, "Delete"));

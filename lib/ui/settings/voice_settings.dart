@@ -9,11 +9,9 @@ import "../../domain/models.dart" show ModelChoice;
 import "../../domain/voice_model.dart";
 import "../../providers.dart";
 import "../voice/read_aloud.dart";
-import "voice_models.dart";
 import "../widgets/catalog.dart";
 import "../widgets/dialogs.dart";
 import "../widgets/model_picker.dart";
-import "../../core/formatting.dart";
 import "../widgets/resettable_field.dart";
 import "../widgets/section_header.dart";
 
@@ -171,126 +169,6 @@ class _TouchToSpeak extends ConsumerWidget {
       onChanged: ref.read(appSettingsProvider.notifier).setVoicePushToTalk,
     );
   }
-}
-
-/// Both voice catalogs, on the On-device page beside the text models. iOS has
-/// no sherpa and no downloads, so the port's own answer takes the whole thing
-/// off the page rather than leaving lists with nothing to fetch in them.
-class VoiceCatalogSections extends ConsumerWidget {
-  const VoiceCatalogSections({super.key});
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    if (!ref.watch(voiceProvider).hasModelCatalog) {
-      return const SizedBox.shrink();
-    }
-    return const Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Divider(),
-        _VoiceCatalogSection.recognition(),
-        Divider(),
-        _VoiceCatalogSection.speech(),
-      ],
-    );
-  }
-}
-
-/// One kind's catalog, every entry listed whether it is installed or not, with
-/// its size, what it can understand, and the button that fetches or removes it.
-/// The two are separate sections because they answer separate questions: a
-/// single list of eight would leave the reader working out which ones speak.
-class _VoiceCatalogSection extends StatelessWidget {
-  const _VoiceCatalogSection.recognition()
-      : title = "Speech recognition",
-        description = "Transcribe speech in voice mode, on this device. "
-            "Larger models are more accurate but slower.",
-        models = recognitionModels;
-
-  const _VoiceCatalogSection.speech()
-      : title = "Speech synthesis",
-        description = "Read replies aloud, in voice mode or on request, on "
-            "this device.",
-        models = speechModels;
-
-  final String title;
-  final String description;
-  final List<VoiceModel> models;
-
-  @override
-  Widget build(BuildContext context) => Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SectionHeader(title, description: description),
-          for (final model in models) VoiceModelTile(model: model),
-        ],
-      );
-}
-
-/// A model as a row: what it is, what it costs, and the one button that applies
-/// to it — download, cancel, or delete, never more than one at a time.
-class VoiceModelTile extends ConsumerWidget {
-  const VoiceModelTile({super.key, required this.model});
-
-  final VoiceModel model;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    // Its own row only: a progress event names one model, and taking the whole
-    // state rebuilds all eight tiles for it.
-    final progress =
-        ref.watch(voiceModelsProvider.select((s) => s.active[model.id]));
-    final failure =
-        ref.watch(voiceModelsProvider.select((s) => s.failures[model.id]));
-
-    return CatalogTile(
-      title: Row(
-        children: [
-          Flexible(child: Text(model.name)),
-          if (model.multilingual) ...[
-            const SizedBox(width: 8),
-            _Badge(label: "Multilingual", tone: Theme.of(context).colorScheme.primary),
-          ],
-        ],
-      ),
-      tags: modelTags(
-        parameters: model.parameters,
-        languages: model.languages,
-        bytes: model.bytes,
-        voices: switch (model) {
-          SpeechModel(:final speakers) => speakers,
-          _ => null,
-        },
-        licence: model.licence,
-      ),
-      note: model.note,
-      failure: failure,
-      progress: progress,
-      trailing: _Action(model: model, downloading: progress != null),
-    );
-  }
-}
-
-/// Reads what it needs itself rather than being handed it: neither the
-/// installed set nor whether this platform can listen appears in the row above,
-/// and passing them down rebuilt the whole `ListTile` for a button.
-class _Action extends ConsumerWidget {
-  const _Action({required this.model, required this.downloading});
-
-  final VoiceModel model;
-  final bool downloading;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) => CatalogAction(
-        downloading: downloading,
-        installed: ref.watch(installedVoiceModelsProvider).contains(model.id),
-        onCancel: () => ref.read(voiceModelsProvider.notifier).cancel(model.id),
-        onDelete: () => ref.read(voiceModelsProvider.notifier).delete(model),
-        deleteTitle: "Delete ${model.name}?",
-        deleteMessage:
-            "${formatSize(model.bytes)} to download again if you want it back.",
-        onDownload: () => ref.read(voiceModelsProvider.notifier).install(model),
-      );
 }
 
 /// What to do when the device has no engine for one half of voice mode. Drawn
@@ -464,22 +342,3 @@ class _LanguageField extends ConsumerWidget {
   }
 }
 
-class _Badge extends StatelessWidget {
-  const _Badge({required this.label, required this.tone});
-
-  final String label;
-  final Color tone;
-
-  @override
-  Widget build(BuildContext context) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(999),
-          border: Border.all(color: tone),
-        ),
-        child: Text(
-          label,
-          style: Theme.of(context).textTheme.labelSmall?.copyWith(color: tone),
-        ),
-      );
-}
