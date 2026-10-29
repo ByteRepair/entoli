@@ -8,6 +8,7 @@ import "package:agent_chat/data/builtin/llm/gemini_client.dart";
 import "package:agent_chat/data/builtin/llm/llm_client.dart";
 import "package:agent_chat/data/builtin/llm/providers/presets.dart";
 import "package:agent_chat/domain/llm_provider.dart";
+import "package:agent_chat/domain/model_registry.dart";
 
 void main() {
   group("providerOf", () {
@@ -137,9 +138,17 @@ void main() {
 
     setUp(() => requests = []);
 
-    test("a provider with no models endpoint asks nothing", () async {
+    test("a provider with no models endpoint lists models.dev's, asking nothing",
+        () async {
+      ModelCatalog.notifier.value = ModelCatalog.parse(jsonEncode({
+        "openai": {
+          "models": {"gpt-a": {"tool_call": true}},
+        },
+      }));
+      addTearDown(() => ModelCatalog.notifier.value = ModelCatalog.empty);
+
       expect(await const OpenAiProvider().listModels("k", httpClient: listing(["x"])),
-          isEmpty);
+          ["gpt-a"]);
       expect(requests, isEmpty);
     });
 
