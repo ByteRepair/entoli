@@ -82,7 +82,7 @@ class LocalPoolClient implements LlmClient {
   final LocalPoolOptions Function() _options;
 
   /// Where a turn's KV is saved and restored, or null where this build keeps
-  /// none — every platform but Android. See [LocalKvCache].
+  /// none — every platform with no bundled server. See [LocalKvCache].
   final LocalKvCache? _kv;
 
   /// One client per model, dropped when that model's server comes up again on

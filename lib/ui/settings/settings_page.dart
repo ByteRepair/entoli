@@ -258,9 +258,7 @@ class _Categories extends ConsumerWidget {
           child: ListView(
             children: [
               for (final category in SettingsCategory.values)
-                // Where there is no browser to drive there is nothing to pick.
-                if (category != SettingsCategory.agentBrowser ||
-                    ref.watch(agentBrowserProvider).available) ...[
+                if (categoryOffered(category, ref)) ...[
                 if (category.dividerAbove) const Divider(),
                 ListTile(
                   selected: category == selected,

@@ -108,11 +108,14 @@ echo "==> llama.cpp $LLAMA_CPP_VERSION"
     # A native build wants no toolchain file, and one flag carries the weight
     # the ANDROID_ABI one does on the other side.
     #
-    # `GGML_NATIVE=OFF` is load-bearing for a distributed binary: it leaves
-    # ggml's runtime dispatch on, so one binary runs a 2015 x-86-64 and a
-    # Zen 5 both. `native` would bake this machine's -march into it.
-    # `GGML_BACKEND_DL`, `GGML_OPENMP`, `LLAMA_CURL` and `LLAMA_OPENSSL` are
-    # shared with the Android build and said there. The OpenSSL pin is this
+    # `GGML_NATIVE=OFF` keeps this machine's -march out of a distributed
+    # binary, and on its own that is all it does: it turns on a fixed AVX2
+    # floor, which a pre-Haswell CPU dies on and an AVX-512 or VNNI one runs
+    # under. `GGML_CPU_ALL_VARIANTS` is the runtime dispatch: one
+    # `libggml-cpu-<variant>.so` per instruction set, and ggml loads the best
+    # one the CPU reports, which needs `GGML_BACKEND_DL`. That, `GGML_OPENMP`,
+    # `LLAMA_CURL` and `LLAMA_OPENSSL` are shared with the Android build and
+    # said there. The OpenSSL pin is this
     # script's half of why: the option defaults ON, and where the host has
     # libssl3's dev files — the CI runner, most desktops — cpp-httplib would
     # link libssl.so.3 into what is staged, which the check below refuses.
@@ -123,6 +126,7 @@ echo "==> llama.cpp $LLAMA_CPP_VERSION"
       -DCMAKE_SKIP_BUILD_RPATH=ON \
       -DGGML_BACKEND_DL=ON \
       -DGGML_NATIVE=OFF \
+      -DGGML_CPU_ALL_VARIANTS=ON \
       -DGGML_OPENMP=OFF \
       -DGGML_VULKAN=ON \
       -DVulkan_INCLUDE_DIR="$vulkan_headers/include" \

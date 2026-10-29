@@ -327,6 +327,7 @@ Future<LocalLlm> createLocalLlm(LocalModelStore store, String cacheDir) async {
     LlamaBinaries(server: server, libDir: libDir),
     store,
     slotSaveDir: _kvCacheDir(cacheDir),
+    fitLayers: !Platform.isAndroid,
   );
 }
 

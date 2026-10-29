@@ -18,9 +18,8 @@ import "../../core/log.dart";
 class FileKvCache implements LocalKvCache {
   FileKvCache(this._dir, {http.Client? client}) : _http = client ?? tlsClient() {
     // The server is launched with this as its `--slot-save-path` and will not
-    // create it, so it has to exist before the first turn. Android only and a
-    // single `mkdir`, so synchronously at startup is cheaper than a guard on
-    // every save.
+    // create it, so it has to exist before the first turn. A single `mkdir`,
+    // so synchronously at startup is cheaper than a guard on every save.
     Directory(_dir).createSync(recursive: true);
   }
 

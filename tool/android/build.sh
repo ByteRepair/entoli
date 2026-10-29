@@ -57,8 +57,8 @@ export PATH=$bin:$PATH
 export CFLAGS="-O2 -fPIC -Wl,-z,max-page-size=16384"
 
 # **llama.cpp is arm64 only, and that is a size decision.** The server and its
-# libraries are about 18 MB stripped — nearer 55 with the Vulkan backend, whose
-# `libggml-vulkan.so` is a good 36 MB of embedded SPIR-V on its own — and three
+# libraries are about 30 MB stripped — nearer 50 with the Vulkan backend, whose
+# `libggml-vulkan.so` is 21 MB of embedded SPIR-V on its own — and three
 # ABIs of that would be a lot of a universal APK. Nothing is lost: a 32-bit
 # phone cannot map a two-gigabyte model at all, and x86_64 Android is an
 # emulator. A build without it leaves `LocalLlm.available` false, which the
@@ -207,10 +207,11 @@ else
       -DBUILD_SHARED_LIBS=ON
       -DGGML_BACKEND_DL=ON
       -DGGML_NATIVE=OFF
-      # Without this, ggml appends no `-march` when cross-compiling and every
-      # Q4_0 fast path `#if`s itself out — see "Where it lives, and what it
-      # costs". Dropping it builds a server that works and is unusably slow.
-      -DGGML_CPU_ARM_ARCH=armv8.2-a+dotprod+fp16
+      # One `libggml-cpu-android_<variant>.so` per ARM feature set, from
+      # baseline armv8.0 to SME, and ggml loads the best the phone has. Without
+      # it, ggml appends no `-march` when cross-compiling and every Q4_0 fast
+      # path `#if`s itself out — see "Where it lives, and what it costs".
+      -DGGML_CPU_ALL_VARIANTS=ON
       -DCMAKE_SKIP_INSTALL_RPATH=ON
       # ggml defaults to OpenMP, and the NDK's `libomp.so` is a host toolchain
       # file rather than something a phone has — a build with it links, ships,
