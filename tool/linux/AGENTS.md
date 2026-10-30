@@ -26,7 +26,7 @@ plugins and links the system's GTK 3, exactly as the bundle already did. The
 one native addition is **llama.cpp's server**, built by
 `tool/linux/build-llama.sh` into `build/llama/` and installed by
 `linux/CMakeLists.txt` into the bundle's `lib/` beside the engine — the
-directory the rpath already resolves, and the one place `platformLocalLlm`
+directory the rpath already resolves, and the one place `createLocalEngine`
 looks beside the executable. The app is built after the script runs, so the
 bundle carries the server whole or not at all; a build that skipped it ships
 without it, and the On-device page says so.

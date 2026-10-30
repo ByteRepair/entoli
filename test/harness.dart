@@ -2,6 +2,7 @@ import "dart:async";
 import "dart:io";
 
 import "package:clock/clock.dart";
+import "package:flutter/foundation.dart" show defaultTargetPlatform;
 import "package:flutter/gestures.dart" show PointerDeviceKind;
 import "package:flutter/material.dart";
 import "package:flutter/services.dart";
@@ -15,6 +16,8 @@ import "package:agent_chat/core/config.dart";
 import "package:agent_chat/data/builtin/llm/local_prefill.dart";
 import "package:agent_chat/data/builtin/local_shell.dart";
 import "package:agent_chat/data/local/file_chat_store.dart";
+import "package:agent_chat/data/local/llama_engine.dart";
+import "package:agent_chat/data/local/local_engine.dart";
 import "package:agent_chat/data/local/byte_repair_store.dart"
     show guestEsbmcInstallDir;
 import "package:agent_chat/data/local/file_byte_repair_store.dart";
@@ -294,8 +297,13 @@ class TestApp {
               rootfsStore: linux,
               brewPaths: byteRepairBrewPaths)),
           installedRootfsProvider.overrideWith(() => InstalledRootfs(linuxes)),
-          localModelStoreProvider.overrideWithValue(onDevice),
-          localLlmProvider.overrideWithValue(server),
+          localEngineProvider.overrideWithValue(server.available
+              ? LlamaEngine(server, onDevice)
+              // What `createLocalEngine` answers where the build carried no
+              // server: a fault on the platforms that build one.
+              : NoLocalEngine(
+                  missingFromBuild: defaultTargetPlatform == TargetPlatform.android ||
+                      defaultTargetPlatform == TargetPlatform.linux)),
           localPrefillProvider.overrideWithValue(warmUp),
           installedLocalModelsProvider
               .overrideWith(() => InstalledLocalModels(localModels)),

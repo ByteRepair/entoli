@@ -1120,7 +1120,7 @@ DownloadedModel downloadedAs(LocalModel model, {String? file}) => DownloadedMode
       kvBytesPerToken: 131072,
       parameters: model.parameters,
       licence: model.licence,
-      url: model.url,
+      url: model.source,
     );
 
 /// Models that are simply there, or simply are not, like the two catalogs
@@ -1130,8 +1130,8 @@ class FakeLocalModelStore extends LocalModelStore {
   FakeLocalModelStore({Set<String> installed = const {}})
       : _installed = {
           for (final id in installed)
-            id: downloadedAs(localModelCatalog.firstWhere((m) => m.id == id,
-                orElse: () => LocalModel(id: id, name: id, url: ""))),
+            id: downloadedAs(ggufCatalog.firstWhere((m) => m.id == id,
+                orElse: () => GgufModel(id: id, name: id, url: ""))),
         };
 
   final Map<String, DownloadedModel> _installed;
@@ -1169,19 +1169,13 @@ class FakeLocalModelStore extends LocalModelStore {
 /// The on-device pool with nothing behind it. [served] is what a test asserts
 /// on — that asking for a model is what loads it, and with what — and [ready] is
 /// whether it gets there, so the failed row can be drawn without a model that
-/// will not load.
-///
-/// [installed] is what the pool would find on disk, and so what the provider
-/// offers. It is a separate list from what is running for the reason the real
-/// one keeps them apart: every downloaded model is in every picker, and only
-/// the ones that have been asked for are loaded.
+/// will not load. What is on disk is the store's, beside it in the engine.
 class FakeLocalLlm extends LocalLlm {
   FakeLocalLlm({
     this.available = true,
     this.devicesFound = const [],
     this.ready = true,
     this.failure = "It would not fit.",
-    this.installed = const [],
     this.maxThreads,
     this.baseUrl = "http://127.0.0.1:1/v1",
   });
@@ -1198,12 +1192,10 @@ class FakeLocalLlm extends LocalLlm {
   final List<LocalDevice> devicesFound;
   final bool ready;
   final String failure;
-  @override
-  final List<String> installed;
 
   @override
   String nameOf(String modelId) =>
-      localModelCatalog.where((m) => m.id == modelId).firstOrNull?.name ?? modelId;
+      ggufCatalog.where((m) => m.id == modelId).firstOrNull?.name ?? modelId;
 
   /// What the cores slider tops out at, and whether it is drawn at all. Null by
   /// default, which takes the slider off the page — a test that wants it sets a

@@ -35,8 +35,8 @@ abstract class LocalModelStore {
   /// cancels the download** and leaves nothing behind, which is what the Cancel
   /// button does.
   ///
-  /// There is no unpacking phase, unlike the other two catalogs: a GGUF is one
-  /// file and is used where it lands, once its header has said what it is.
+  /// There is no unpacking phase, unlike the other two catalogs: a model's
+  /// files are used where they land, once they have said what they are.
   Stream<DownloadProgress> install(LocalModel model);
 
   /// By id rather than by [LocalModel]: most of what is downloaded is no

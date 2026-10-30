@@ -7,11 +7,11 @@ import "package:http/http.dart" as http;
 import "package:web/web.dart" as web;
 
 import "../../../data/backup_handoff.dart";
-import "../../../data/builtin/llm/local_kv_cache.dart";
 import "../../../data/local/apple_fm.dart";
 import "../../../data/local/byte_repair_store.dart"
     show ByteRepairStore, UnavailableByteRepairStore;
 import "../../../data/local/file_secret_store.dart";
+import "../../../data/local/local_engine.dart";
 import "../../../data/web/web_file_handoff.dart";
 import "../../../domain/agent_browser.dart";
 import "../../../domain/app_update.dart";
@@ -19,8 +19,6 @@ import "../../../domain/assistant_launch.dart";
 import "../../../domain/confinement.dart";
 import "../../../domain/backup_handoff.dart";
 import "../../../domain/file_handoff.dart";
-import "../../../domain/local_llm.dart";
-import "../../../domain/local_model_store.dart";
 import "../../../domain/file_watches.dart";
 import "../../../domain/reminder_alarms.dart";
 import "../../../domain/rootfs_store.dart";
@@ -104,15 +102,9 @@ bool setupComplete(AppConfig config, String? project, String? binDir) => true;
 
 WebSearch platformWebSearch() => const UnavailableWebSearch();
 
-LocalModelStore createLocalModelStore(String cacheDir) =>
-    const UnavailableLocalModelStore();
-
-Future<LocalLlm> createLocalLlm(LocalModelStore store, String cacheDir) async =>
-    const UnavailableLocalLlm();
+Future<LocalEngine> createLocalEngine(String cacheDir) async => const NoLocalEngine();
 
 Future<AppleFm?> createAppleFm() async => null;
-
-LocalKvCache? createLocalKvCache(String cacheDir, LocalLlm localLlm) => null;
 
 /// Nominal: nothing here fetches a model.
 Future<String> cacheDir() async => "/entoli-cache";

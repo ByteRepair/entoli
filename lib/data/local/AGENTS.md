@@ -397,6 +397,29 @@ per model family is most of what llama.cpp's server *is*. Writing a second copy
 of it in Dart, to save a subprocess on a device that is about to spend a
 gigabyte of memory on weights, is the wrong trade.
 
+### The engine
+
+**What runs models is a `LocalEngine`, one per platform**, chosen by
+`createLocalEngine` in `core/platform/` and nowhere else. It owns the four
+things that differ between runtimes: the catalog it offers, the store its
+models live in, which settings it reads (`controls`), and the `client` a
+request reaches a model through. `OnDeviceProvider` holds one and asks it for
+the client, so the provider knows nothing of servers or ports; the On-device
+page draws `catalog` and only the `controls` the engine names. `LlamaEngine`
+is llama.cpp's server pool (`LocalLlm`) over GGUF files, on Android and Linux,
+and reads every control; `NoLocalEngine` is everywhere else, `missingFromBuild`
+where a platform that builds a server got a build without one.
+
+A model is its files (`LocalModel.files`), each with its own size and
+SHA-256, so `FileLocalModelStore` fetches and checks any model the same way.
+What the files mean once they land — what the runtime is pointed at, and the
+facts read off them — is the engine's `ModelFormat`; `GgufFormat` reads the
+header. A GGUF model (`GgufModel`) is the one-file case.
+
+The settings only llama.cpp reads (devices, threads, the KV cache, the prefill)
+still reach the pool directly through `localLlmProvider`, which answers the
+pool where the engine is `LlamaEngine` and an unavailable one elsewhere.
+
 The endpoint is composed by `modelProvidersProvider` rather than written into
 `settings.json`, and it has no address to write: each model is its own process
 on a port asked of the OS when it loads. It goes **first** in the list, which is
@@ -435,12 +458,13 @@ and a phone that could hold three is not the phone this is written for. With the
 cap at one and a title model set, the two evict each other every turn; that is
 the honest cost of one, and the reason to raise it.
 
-**The client is what routes**, not the registry. `LocalPoolClient` reads the
+**The client is what routes**, not the registry. `LlamaEngine`'s client,
+`LocalPoolClient`, reads the
 model out of the request, serves it, and hands the call to a `OpenAiClient` on
 that server's port — one per model, dropped when the port changes, the same
 signature check `LlmRegistry` makes. **It rides on the provider rather than on
 the registry**: `OnDeviceProvider` is an `LlmProvider` whose `client` is the
-pool, as `AppleFmProvider`'s is the framework's channel, so the registry never
+engine's, as `AppleFmProvider`'s is the framework's channel, so the registry never
 compares a provider id against a reserved name — it knows nothing about who
 its providers are. A
 turn sent at a loading model waits; a turn sent at a model that will never load
@@ -482,7 +506,7 @@ longer a single picked model for a per-model override to attach to.
 
 ### What is in the catalog, and what is downloaded
 
-Two lists. The catalog (`localModelCatalog`) is what is offered: each entry a
+Two lists. The engine's catalog (`ggufCatalog` here) is what is offered: each entry a
 download filled in ahead of time, one tap and no form. What is downloaded is
 whatever is on disk, each directory with a record of what it is
 (`DownloadedModel`, `model.json`) beside the weights, whatever it was fetched
@@ -636,8 +660,8 @@ libraries are about 50 MB stripped — the Vulkan backend's `libggml-vulkan.so`
 is 21 MB of that and the seven CPU variants 7 — and three ABIs of it would be
 most of what a phone downloads. It is most of why the release APK is split per ABI: see
 "Releasing". Nothing is lost: a 32-bit phone cannot map a two-gigabyte model
-at all, and x86_64 Android is an emulator. A build without it leaves
-`LocalLlm.available` false. On Android and Linux, which build one, the settings
+at all, and x86_64 Android is an emulator. A build without it gets a
+`NoLocalEngine`. On Android and Linux, which build one, the settings
 page says the build ran without `tool/linux/build-llama.sh`, a build fault in
 the sense a missing proot is. Everywhere else there is never a server to miss,
 so the section is not drawn, and the On-device category itself is hidden where
@@ -655,7 +679,7 @@ build minus the NPU, and `GGML_BACKEND_DL` keeps them loadable-at-runtime so a
 machine with no
 usable Vulkan driver runs the CPU rather than failing. `linux/CMakeLists.txt`
 installs the staged output into the bundle's `lib/`, which is where
-`platformLocalLlm` looks for it beside the executable — so a build without the
+`createLocalEngine` looks for it beside the executable — so a build without the
 script still builds, and says what it is missing rather than pretending. The
 server is started under `setpriv --pdeathsig TERM` where `setpriv` is on
 `PATH`, so a crashed or killed app does not leave it holding the model's

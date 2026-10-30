@@ -1,7 +1,7 @@
 import "package:flutter/material.dart";
-import "package:flutter/foundation.dart" show defaultTargetPlatform, kIsWeb;
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
+import "../../data/local/local_engine.dart" show LocalControl;
 import "../../domain/app_settings.dart";
 import "../../domain/local_llm.dart";
 import "../../domain/local_model.dart";
@@ -26,8 +26,9 @@ class LocalModelSection extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    if (!ref.watch(localLlmProvider).available) {
-      return _serverBuilt ? const _Elsewhere() : const SizedBox.shrink();
+    final engine = ref.watch(localEngineProvider);
+    if (!engine.available) {
+      return engine.missingFromBuild ? const _Elsewhere() : const SizedBox.shrink();
     }
     return ListTile(
       title: const Text("LLM settings"),
@@ -48,26 +49,36 @@ class LocalModelSection extends ConsumerWidget {
 /// the title and classifier pickers — and asking for one is what loads it. A
 /// picker here would have been a second place to say the same thing, and the
 /// one place that could disagree with the rest.
-class LocalLlmSettingsPage extends StatelessWidget {
+///
+/// Each setting is drawn only where the engine reads it, in this order.
+class LocalLlmSettingsPage extends ConsumerWidget {
   const LocalLlmSettingsPage({super.key});
 
+  static const _rows = <LocalControl, Widget>{
+    LocalControl.maxRunning: _MaxRunningPicker(),
+    LocalControl.device: _DevicePicker(),
+    LocalControl.context: _ContextPicker(),
+    LocalControl.threads: _ThreadsSlider(),
+    LocalControl.prefill: _PrefillToggle(),
+    LocalControl.kvCache: _KvCachePicker(),
+  };
+
   @override
-  Widget build(BuildContext context) => Scaffold(
-        appBar: AppBar(title: const Text("LLM settings")),
-        body: ListView(
-          padding: const EdgeInsets.symmetric(vertical: 8),
-          children: const [
-            _MaxRunningPicker(),
-            _DevicePicker(),
-            _ContextPicker(),
-            _ThreadsSlider(),
-            _PrefillToggle(),
-            _KvCachePicker(),
-            _Prefilling(),
-            _Running(),
-          ],
-        ),
-      );
+  Widget build(BuildContext context, WidgetRef ref) {
+    final controls = ref.watch(localEngineProvider).controls;
+    return Scaffold(
+      appBar: AppBar(title: const Text("LLM settings")),
+      body: ListView(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        children: [
+          for (final MapEntry(:key, :value) in _rows.entries)
+            if (controls.contains(key)) value,
+          if (controls.contains(LocalControl.prefill)) const _Prefilling(),
+          const _Running(),
+        ],
+      ),
+    );
+  }
 }
 
 /// How many may be resident at once. The one setting here that is about the
@@ -329,7 +340,7 @@ class _Running extends ConsumerWidget {
         Padding(
           padding: const EdgeInsets.only(left: 16, bottom: 8),
           child: TextButton(
-            onPressed: () => ref.read(localLlmProvider).stopAll(),
+            onPressed: () => ref.read(localEngineProvider).stopAll(),
             child: const Text("Unload all"),
           ),
         ),
@@ -355,7 +366,7 @@ class _RunningRow extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
-    final name = ref.watch(localLlmProvider).nameOf(state.modelId);
+    final name = ref.watch(localEngineProvider).nameOf(state.modelId);
     final where = _where(state.device);
     return switch (state.phase) {
       LocalLlmPhase.starting => ListTile(
@@ -385,14 +396,6 @@ class _RunningRow extends ConsumerWidget {
     };
   }
 }
-
-/// Whether this platform's build carries a model server when it is built
-/// whole: Android and Linux. Anywhere else a missing one is not a fault, and
-/// the section is not drawn at all.
-bool get _serverBuilt =>
-    !kIsWeb &&
-    (defaultTargetPlatform == TargetPlatform.android ||
-        defaultTargetPlatform == TargetPlatform.linux);
 
 /// What the section says where a build that should have carried a server did
 /// not — a build fault in the same sense a missing proot is, said as a line in
@@ -460,11 +463,11 @@ class _AddLocalModelPageState extends ConsumerState<AddLocalModelPage> {
         field.text.trim().isEmpty ? null : field.text.trim();
     final url = _url.text.trim();
     final taken = {
-      for (final model in localModelCatalog) model.id,
+      for (final model in ref.read(localEngineProvider).catalog) model.id,
       for (final model in ref.read(addedLocalModelsProvider)) model.id,
       ...ref.read(installedLocalModelsProvider),
     };
-    final model = LocalModel(
+    final model = GgufModel(
       id: localModelIdFor(url, taken),
       name: _name.text.trim(),
       url: url,

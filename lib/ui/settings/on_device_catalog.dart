@@ -2,6 +2,7 @@ import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../core/formatting.dart";
+import "../../data/local/local_engine.dart" show LocalControl;
 import "../../domain/installable.dart";
 import "../../domain/local_model.dart";
 import "../../domain/local_model_store.dart";
@@ -28,7 +29,7 @@ class OnDeviceCatalog extends ConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        if (ref.watch(localLlmProvider).available) const _TextModels(),
+        if (ref.watch(localEngineProvider).available) const _TextModels(),
         if (voices) ...[
           const Divider(),
           const _VoiceModels.recognition(),
@@ -48,15 +49,16 @@ class _TextModels extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final installed = ref.watch(installedLocalModelsProvider);
     final added = ref.watch(addedLocalModelsProvider);
-    final store = ref.read(localModelStoreProvider);
-    final offered = [...localModelCatalog, ...added];
+    final engine = ref.watch(localEngineProvider);
+    final store = engine.store;
+    final offered = [...engine.catalog, ...added];
     final listed = {for (final model in offered) model.id};
     // A model added by link in an earlier session, or one an older catalog
     // offered: kept, and run, until it is deleted.
     final others = [
       for (final model in store.downloadedSync())
         if (!listed.contains(model.id))
-          LocalModel(id: model.id, name: model.name, url: model.url ?? ""),
+          OnDiskModel(id: model.id, name: model.name, source: model.url),
     ];
     final loaded = ref.watch(localLlmStateProvider);
     String deleteMessage(Installable model, {required bool again}) => [
@@ -90,14 +92,15 @@ class _TextModels extends ConsumerWidget {
             installed: true,
             deleteMessage: (m) => deleteMessage(m, again: false),
           ),
-        AddButtonRow(
-          child: OutlinedButton.icon(
-            icon: const Icon(Icons.add_link),
-            label: const Text("Add model"),
-            onPressed: () => Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const AddLocalModelPage())),
+        if (engine.controls.contains(LocalControl.addByLink))
+          AddButtonRow(
+            child: OutlinedButton.icon(
+              icon: const Icon(Icons.add_link),
+              label: const Text("Add model"),
+              onPressed: () => Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const AddLocalModelPage())),
+            ),
           ),
-        ),
       ],
     );
   }

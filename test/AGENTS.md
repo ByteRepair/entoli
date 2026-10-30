@@ -101,13 +101,15 @@ wait is event-driven instead — poll a thing the code already publishes
 says the moment being aimed at has arrived.
 
 `TestApp.create(localLlm: …, localModels: …)` is the same pair for the On-device
-page — whether this build has a server at all, and which models are downloaded.
+page — whether this build has a server at all, and which models are downloaded;
+the harness puts the two together as a `LlamaEngine`, or a `NoLocalEngine`
+where the server is unavailable.
 `FakeLocalLlm.served` is what its tests assert on — one entry per `serve`,
 including the ones answered from what was already up, since "it did not start a
-second copy" is worth asserting. `installed:` is what the pool would find on
-disk, and it is a separate list from what is running for the reason the real one
-keeps them apart: every downloaded model is in every picker, and only the ones
-asked for are loaded. `ready: false` is a model that will not load, which is the
+second copy" is worth asserting. What is on disk is `localModels`, a separate
+list from what is running for the reason the real one keeps them apart: every
+downloaded model is in every picker, and only the ones asked for are loaded.
+`ready: false` is a model that will not load, which is the
 one failure the page has to draw — and reaching that row now means calling
 `serve` in the test, because the settings page no longer starts anything.
 `loading` is a completer `serve` waits on after publishing its row, which is a

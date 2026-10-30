@@ -61,8 +61,8 @@ class ModelDownloads extends Downloads<Installable> {
     if (voiceSpeechChoice(ref.read(appSettingsProvider)) == picked) {
       await settings.setVoiceSpeechModel(null);
     }
-    final llm = ref.read(localLlmProvider);
-    if (llm.running.value.any((each) => each.modelId == model.id)) await llm.stopAll();
+    final engine = ref.read(localEngineProvider);
+    if (engine.running.value.any((each) => each.modelId == model.id)) await engine.stopAll();
   }
 
   @override

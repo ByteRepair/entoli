@@ -10,18 +10,19 @@ import "../../domain/local_model_store.dart";
 import "../../domain/download.dart";
 import "../download.dart";
 import "file_rootfs_store.dart" show DownloadRunSha256;
-import "gguf.dart";
+import "model_format.dart";
 
 /// A downloaded model in a directory of its own, outside the data directory —
 /// see [LocalModelStore] for why that matters. `dart:io` rather than the
-/// config's `FileSystem` for the reason `FileRootfsStore` is: what reads this
-/// file is a subprocess with a path, not the app.
+/// config's `FileSystem` for the reason `FileRootfsStore` is: what reads these
+/// files is a runtime with a path, not the app.
 ///
-/// Each directory holds the weights, a record of what they are and where they
-/// came from, and the marker, written last. The record is what lists it: the
-/// catalog is only where some of them were fetched from.
+/// Each directory holds the model's files, a record of what they are and where
+/// they came from, and the marker, written last. The record is what lists it:
+/// the catalog is only where some of them were fetched from. What the files
+/// mean is [format]'s; this class fetches and checks them.
 class FileLocalModelStore extends LocalModelStore {
-  FileLocalModelStore(this.root, {this.client});
+  FileLocalModelStore(this.root, {required this.format, this.client});
 
   /// The client downloads go through. Injected only by the tests, which have
   /// no socket to reach.
@@ -29,6 +30,8 @@ class FileLocalModelStore extends LocalModelStore {
 
   /// `<cacheDir>/llm`, holding one directory per installed model.
   final String root;
+
+  final ModelFormat format;
 
   /// What is on disk, read once and then kept in step by [install] and
   /// [delete], the one class that owns both.
@@ -43,15 +46,9 @@ class FileLocalModelStore extends LocalModelStore {
   /// marker.
   static const _marker = ".complete";
 
-  /// The weights, under the model's own directory rather than the name they
-  /// were published under.
-  static const _weights = "model.gguf";
-
   static const _record = "model.json";
 
   String directoryFor(String id) => p.join(root, id);
-
-  String _fileFor(String id) => p.join(directoryFor(id), _weights);
 
   @override
   List<DownloadedModel> downloadedSync() => _downloaded ??= _scan();
@@ -72,38 +69,23 @@ class FileLocalModelStore extends LocalModelStore {
     ];
   }
 
-  /// The record, or one written from the file's header for a directory that
+  /// The record, or one written from the files themselves for a directory that
   /// has none — what a build before records downloaded.
   DownloadedModel? _read(String id) {
-    final file = _fileFor(id);
-    final record = File(p.join(directoryFor(id), _record));
+    final directory = directoryFor(id);
+    final record = File(p.join(directory, _record));
     try {
       if (record.existsSync()) {
-        return DownloadedModel.fromJson(jsonDecode(record.readAsStringSync()), file: file);
+        return DownloadedModel.fromJson(jsonDecode(record.readAsStringSync()),
+            file: format.entry(directory));
       }
-      final model = _describe(id, file);
+      final model = format.describe(id, directory);
       record.writeAsStringSync(jsonEncode(model.toJson()));
       return model;
     } catch (e) {
       logFailure("llm", "could not read the downloaded model $id", e);
       return null;
     }
-  }
-
-  DownloadedModel _describe(String id, String file, [LocalModel? from]) {
-    final facts = readGgufFacts(file);
-    return DownloadedModel(
-      id: id,
-      name: (from?.name.isNotEmpty ?? false ? from!.name : null) ?? facts.name ?? id,
-      file: file,
-      bytes: File(file).lengthSync(),
-      quantisation: facts.quantisation,
-      contextLength: facts.contextLength,
-      kvBytesPerToken: facts.kvBytesPerToken,
-      parameters: from?.parameters,
-      licence: from?.licence,
-      url: from?.url,
-    );
   }
 
   @override
@@ -113,8 +95,8 @@ class FileLocalModelStore extends LocalModelStore {
     if (await dir.exists()) await dir.delete(recursive: true);
   }
 
-  /// One file, checked and described and kept where it landed. The fetching
-  /// and the giving up are [DownloadRun]'s.
+  /// Every file, checked, then described and kept where it landed. The
+  /// fetching and the giving up are [DownloadRun]'s.
   @override
   Stream<DownloadProgress> install(LocalModel model) => DownloadRun(
         client: client,
@@ -123,32 +105,39 @@ class FileLocalModelStore extends LocalModelStore {
           // Whatever an earlier attempt left: a partial file under a name we
           // are about to write, which is worse than starting again.
           await delete(model.id);
-          final dir = Directory(directoryFor(model.id))
-            ..createSync(recursive: true);
-          final file = _fileFor(model.id);
+          final directory = directoryFor(model.id);
+          Directory(directory).createSync(recursive: true);
 
-          final digest =
-              await run.fetchSha256(url: model.url, to: file, total: model.bytes);
-          if (run.cancelled) return;
-          // A gigabyte over somebody's mobile data, and the publisher already
-          // says what it should come to. Weights are not a program, so this is
-          // not the check a rootfs gets — it is the check that the download
-          // finished, and arrived from the model it claims to be.
-          final expected = model.sha256;
-          if (expected != null && digest != expected.toLowerCase()) {
-            throw StateError(
-              "The download did not match what ${model.name} was checked to "
-              "be, so nothing was kept.",
-            );
+          var done = 0;
+          for (final file in model.files) {
+            final to = p.join(directory, file.path);
+            Directory(p.dirname(to)).createSync(recursive: true);
+            final digest = await run.fetchSha256(
+                url: file.url, to: to, total: model.bytes, done: done);
+            if (run.cancelled) return;
+            // A gigabyte over somebody's mobile data, and the publisher already
+            // says what it should come to. Weights are not a program, so this
+            // is not the check a rootfs gets — it is the check that the download
+            // finished, and arrived from the model it claims to be.
+            final expected = file.sha256;
+            if (expected != null && digest != expected.toLowerCase()) {
+              throw StateError(
+                "The download did not match what ${model.name} was checked to "
+                "be, so nothing was kept.",
+              );
+            }
+            done += await File(to).length();
           }
+
           final DownloadedModel downloaded;
           try {
-            downloaded = _describe(model.id, file, model);
+            downloaded = format.describe(model.id, directory, model);
           } on FormatException catch (e) {
             throw StateError("${model.name} is not a model this app can run: ${e.message}.");
           }
-          await File(p.join(dir.path, _record)).writeAsString(jsonEncode(downloaded.toJson()));
-          await File(p.join(dir.path, _marker)).writeAsString("");
+          await File(p.join(directory, _record))
+              .writeAsString(jsonEncode(downloaded.toJson()));
+          await File(p.join(directory, _marker)).writeAsString("");
           _downloaded = [...downloadedSync().where((m) => m.id != model.id), downloaded];
         },
       ).stream;

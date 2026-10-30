@@ -135,22 +135,19 @@ class AppSession {
     final handoff = platform.createFileHandoff(config);
     final cache = await cacheDir;
     final rootfs = platform.createRootfsStore(cache);
-    final localModels = platform.createLocalModelStore(cache);
     // Started here and awaited below, the way the three above are: it is a
     // channel round trip and a `stat`, and laying the tools out is another —
     // neither needs the other's answer. The backend does need this one, since a
     // provider list composed without it would leave the on-device model out of
     // the first turn after a launch.
-    final localLlm = platform.createLocalLlm(localModels, cache);
+    final localEngine = platform.createLocalEngine(cache);
     // Started here and awaited below with the pool: one channel round trip
     // at launch, so the pickers are honest for the whole session rather than
     // after the first turn. Null wherever the model is not this device's to
     // answer with.
     final appleFm = platform.createAppleFm();
     final toolset = await tools;
-    final server = await localLlm;
-    // Beside the pool, so the two agree on where the server's slot dumps go.
-    final kvCache = platform.createLocalKvCache(cache, server);
+    final engine = await localEngine;
     // Where Byte Repair's fetched tools land on the host, and the one
     // directory both the store that fills it and the turns' driver that
     // injects it on PATH are built from.
@@ -180,8 +177,7 @@ class AppSession {
     // One instance, shared: the prefill's notification and every other
     // foreground hold go through the same service.
     final foreground = ForegroundService();
-    final prefill = platform.createLocalPrefill(backend, server, foreground, config,
-        kvCache: kvCache);
+    final prefill = platform.createLocalPrefill(backend, engine, foreground, config);
     // Both started before either is awaited: one is a disk scan and the other
     // a channel round trip, and neither needs the other's answer.
     final scan = voiceModels.installed();
@@ -201,7 +197,7 @@ class AppSession {
     // started when the page opens would draw every row as "not installed"
     // first. Both at once — they are two directories and neither needs the
     // other.
-    final scans = await Future.wait([rootfs.installed(), localModels.installed()]);
+    final scans = await Future.wait([rootfs.installed(), engine.store.installed()]);
     final triggers = await FileTriggerStore(config).load();
     // Started before the identity load and awaited below, so the session-bus
     // connect on Linux overlaps it rather than serialising behind it; nothing
@@ -270,9 +266,7 @@ class AppSession {
         appUpdateHostProvider
             .overrideWithValue(platform.createAppUpdateHost(cache)),
         agentBrowserProvider.overrideWithValue(browser),
-        localModelStoreProvider.overrideWithValue(localModels),
-        localLlmProvider.overrideWithValue(server),
-        localKvCacheProvider.overrideWithValue(kvCache),
+        localEngineProvider.overrideWithValue(engine),
         appleFmProvider.overrideWithValue(apple),
         localPrefillProvider.overrideWithValue(prefill),
         installedLocalModelsProvider
@@ -353,7 +347,7 @@ class AppSession {
     await container.read(agentBackendProvider).shutdown();
     // Before the container goes: each is a subprocess holding a gigabyte of the
     // phone's memory, and nothing else would ever kill them.
-    await container.read(localLlmProvider).stopAll();
+    await container.read(localEngineProvider).stopAll();
     // Left running, it holds the profile the next launch's browser needs.
     await container.read(agentBrowserProvider).close(why: "The app quit.");
     container.dispose();

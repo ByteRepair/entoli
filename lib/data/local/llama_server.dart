@@ -277,9 +277,6 @@ class LlamaServerPool extends LocalLlm {
   }
 
   @override
-  List<String> get installed => [for (final model in _store.downloadedSync()) model.id];
-
-  @override
   String nameOf(String modelId) => _store.downloadedOfSync(modelId)?.name ?? modelId;
 
   @override

@@ -1,8 +1,8 @@
 /// The models Entoli can run on the device itself, as data. `local_model_store.dart`
 /// is what fetches one and `llama_server.dart` is what answers with it.
 ///
-/// Two lists that are not the same thing. [localModelCatalog] is what is
-/// offered, each entry a download filled in ahead of time, sizes and checksums
+/// Two lists that are not the same thing. An engine's catalog ([ggufCatalog])
+/// is what is offered, each entry a download filled in ahead of time, sizes and checksums
 /// exact so a row says what it costs and the download refuses a file that is
 /// not the one that was checked. What is downloaded is a [DownloadedModel],
 /// one per directory on disk, whatever it was fetched from: an entry here, a
@@ -65,23 +65,40 @@ class LocalDevice {
       name.startsWith("HTP") ? LocalCompute.npu : LocalCompute.gpu;
 }
 
-/// One model to download, as one file: a catalog entry, or a link the user
-/// typed. What it needs to run is read off the file once it has arrived, so
-/// none of that is asked of either.
-///
-/// **The catalog is Q4_0 rather than the Q4_K_M everyone publishes**, and that
-/// is the entry requirement rather than a preference. The Hexagon backend
-/// repacks Q4_0, Q8_0 and MXFP4 and nothing else, so a K-quant is a model that
-/// quietly runs on the CPU on the one device that has an NPU to run it on. A
-/// link the user typed may be anything the server reads.
-class LocalModel {
+/// One file of a model to download, and where it lands in the model's
+/// directory.
+class ModelFile {
+  const ModelFile({
+    required this.path,
+    required this.url,
+    this.bytes,
+    this.sha256,
+  });
+
+  /// Relative to the model's directory.
+  final String path;
+
+  final String url;
+
+  /// What the server will send, exactly. The bar reads it before the first
+  /// byte arrives; null takes the response's own length.
+  final int? bytes;
+
+  /// Checked before the file is kept, where one is given. Weights are not code,
+  /// but they are a gigabyte fetched over somebody's mobile data and the
+  /// publisher already says what they should be.
+  final String? sha256;
+}
+
+/// One model to download: a catalog entry, or a link the user typed. What it
+/// needs to run is read off its files once they have arrived, so none of that
+/// is asked of either. Which files make a model is the format's: see
+/// [GgufModel].
+abstract class LocalModel {
   const LocalModel({
     required this.id,
     required this.name,
-    required this.url,
     this.parameters,
-    this.bytes,
-    this.sha256,
     this.licence,
   });
 
@@ -92,22 +109,74 @@ class LocalModel {
 
   final String name;
 
-  final String url;
-
   /// As the publisher writes it — `1.7B`. Shown rather than computed, since
   /// what a row is answering is "will this run on my phone".
   final String? parameters;
 
-  /// What the server will send, exactly. The bar reads it before the first
-  /// byte arrives; null takes the response's own length.
-  final int? bytes;
+  final String? licence;
 
-  /// Checked before the file is kept, where one is given. Weights are not code,
-  /// but they are a gigabyte fetched over somebody's mobile data and the
-  /// publisher already says what they should be.
+  List<ModelFile> get files;
+
+  /// Where it came from, recorded beside the download.
+  String? get source;
+
+  /// The whole download, or null where a file does not say.
+  int? get bytes {
+    var total = 0;
+    for (final file in files) {
+      final size = file.bytes;
+      if (size == null) return null;
+      total += size;
+    }
+    return total;
+  }
+}
+
+/// Where a GGUF's weights land in its directory, whatever they were published
+/// as.
+const ggufWeights = "model.gguf";
+
+/// A model that is one GGUF file, which is what llama.cpp runs.
+///
+/// **The catalog is Q4_0 rather than the Q4_K_M everyone publishes**, and that
+/// is the entry requirement rather than a preference. The Hexagon backend
+/// repacks Q4_0, Q8_0 and MXFP4 and nothing else, so a K-quant is a model that
+/// quietly runs on the CPU on the one device that has an NPU to run it on. A
+/// link the user typed may be anything the server reads.
+class GgufModel extends LocalModel {
+  const GgufModel({
+    required super.id,
+    required super.name,
+    required this.url,
+    super.parameters,
+    this.size,
+    this.sha256,
+    super.licence,
+  });
+
+  final String url;
+  final int? size;
   final String? sha256;
 
-  final String? licence;
+  @override
+  List<ModelFile> get files =>
+      [ModelFile(path: ggufWeights, url: url, bytes: size, sha256: sha256)];
+
+  @override
+  String get source => url;
+}
+
+/// A model already on disk that no catalog offers: an older catalog's entry,
+/// or one added by link in an earlier session. There is nothing to fetch, only
+/// a row to delete.
+class OnDiskModel extends LocalModel {
+  const OnDiskModel({required super.id, required super.name, this.source});
+
+  @override
+  List<ModelFile> get files => const [];
+
+  @override
+  final String? source;
 }
 
 /// A model on disk, described by its own file and by what it was fetched as.
@@ -219,35 +288,35 @@ const kvBudgetBytes = 1024 * 1024 * 1024;
 
 const _hf = "https://huggingface.co";
 
-/// What is offered for download, smallest first, each the strongest at its
+/// What llama.cpp is offered, smallest first, each the strongest at its
 /// size that the bundled server runs: a phone of any size, one with 8 GB, and
 /// one with 12. The Q4_0 of the third is bartowski's, since Ornith publishes
 /// none.
-const localModelCatalog = <LocalModel>[
-  LocalModel(
+const ggufCatalog = <GgufModel>[
+  GgufModel(
     id: "lfm3-1.7b-q4_0",
     name: "LFM3 1.7B",
     parameters: "1.7B",
     url: "$_hf/LiquidAI/LFM3-1.7B-GGUF/resolve/main/LFM3-1.7B-QAD-Q4_0.gguf",
-    bytes: 1049615680,
+    size: 1049615680,
     sha256: "43a7d09a0e9cba91b63eb7052488b9564569bddfd65754d2e426465e572a7452",
     licence: "LFM Open License 1.0",
   ),
-  LocalModel(
+  GgufModel(
     id: "qwen3.5-4b-q4_0",
     name: "Qwen3.5 4B",
     parameters: "4B",
     url: "$_hf/unsloth/Qwen3.5-4B-GGUF/resolve/main/Qwen3.5-4B-Q4_0.gguf",
-    bytes: 2583221408,
+    size: 2583221408,
     sha256: "298fcb5fe7a77ccc79745ae24751560c5ac56874caff4bb39b1f2055bd72b8bb",
     licence: "Apache-2.0",
   ),
-  LocalModel(
+  GgufModel(
     id: "ornith-1.5-9b-q4_0",
     name: "Ornith-1.5 9B",
     parameters: "9B",
     url: "$_hf/bartowski/Ornith-1.5-9B-GGUF/resolve/main/Ornith-1.5-9B-Q4_0.gguf",
-    bytes: 5482832768,
+    size: 5482832768,
     sha256: "a5d329392574fd050af89231ca64eb004121ed51e373c441c4c748599f3cf489",
     licence: "MIT",
   ),
