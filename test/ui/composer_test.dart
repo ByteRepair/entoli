@@ -7,6 +7,7 @@ import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/domain/prompt_library.dart";
 import "package:agent_chat/domain/room/roster.dart" show isCommand;
 import "package:agent_chat/ui/chat/widgets/composer.dart";
+import "package:agent_chat/ui/widgets/attachment_chip.dart";
 
 import "../data/builtin/builtin_fakes.dart";
 import "../fakes.dart";
@@ -403,6 +404,52 @@ void main() {
 
     expect(find.text("notes.txt"), findsNothing);
     expect(find.text("other.txt"), findsOneWidget);
+  });
+
+  Future<void> pasteKeys(WidgetTester tester) async {
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyV);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    await settleIo(tester);
+  }
+
+  testWidgets("pasting files attaches them and types nothing", (tester) async {
+    app.clipboard.files = [testAttachment("notes.txt")];
+    await pump(tester);
+    await type(tester, "look");
+
+    await pasteKeys(tester);
+
+    expect(find.text("notes.txt"), findsOneWidget);
+    expect(controller.text, "look");
+  });
+
+  testWidgets("pasting text with no files on the clipboard types it", (tester) async {
+    final messenger = tester.binding.defaultBinaryMessenger;
+    messenger.setMockMethodCallHandler(SystemChannels.platform, (call) async =>
+        call.method == "Clipboard.getData" ? {"text": "pasted"} : null);
+    addTearDown(() => messenger.setMockMethodCallHandler(SystemChannels.platform, null));
+    await pump(tester);
+    await type(tester, "");
+
+    await pasteKeys(tester);
+
+    expect(controller.text, "pasted");
+    expect(find.byType(AttachmentChip), findsNothing);
+  });
+
+  testWidgets("a browser's pasted files land only in a focused composer",
+      (tester) async {
+    await pump(tester);
+
+    app.clipboard.pastedEvents.add([testAttachment("away.txt")]);
+    await settleIo(tester);
+    expect(find.text("away.txt"), findsNothing);
+
+    await type(tester, "");
+    app.clipboard.pastedEvents.add([testAttachment("here.txt")]);
+    await settleIo(tester);
+    expect(find.text("here.txt"), findsOneWidget);
   });
 
   testWidgets("an attachment on its own is worth sending, nothing at all is not", (tester) async {

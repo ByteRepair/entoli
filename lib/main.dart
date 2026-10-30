@@ -8,6 +8,7 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 import "core/config.dart";
 import "core/platform/app_icon.dart";
 import "core/platform/background_work.dart";
+import "core/platform/clipboard_files.dart";
 import "core/platform/platform.dart" as platform;
 import "core/platform/system_palette.dart";
 import "core/tls.dart";
@@ -235,6 +236,7 @@ class AppSession {
         appConfigProvider.overrideWithValue(config),
         appSecretsProvider.overrideWithValue(secrets),
         attachmentPickerProvider.overrideWithValue(const FileSelectorPicker()),
+        clipboardFilesProvider.overrideWithValue(createClipboardFiles()),
         // Seed every project's library at startup: each family member gets its
         // own seeded library, so nothing downstream waits on disk.
         promptLibraryProvider.overrideWith2(

@@ -153,9 +153,10 @@ object FilesChannel {
     private fun uriFor(context: Context, path: String): Uri =
         FileProvider.getUriForFile(context, "${context.packageName}.files", File(path))
 
-    // The sharing app wrote this, so it is trimmed to a single segment here and
-    // sanitised again in Dart before it is joined onto a workspace.
-    private fun displayName(context: Context, uri: Uri): String {
+    // Another app wrote this, a share or a clip, so it is trimmed to a single
+    // segment here and sanitised again in Dart before it is joined onto a
+    // workspace.
+    fun displayName(context: Context, uri: Uri): String {
         val name = context.contentResolver
             .query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)
             ?.use { if (it.moveToFirst()) it.getString(0) else null }

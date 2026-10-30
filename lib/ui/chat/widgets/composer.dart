@@ -1,7 +1,10 @@
+import "dart:async";
+
 import "package:flutter/material.dart";
 import "package:flutter/services.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
+import "../../../data/mime.dart" show pastedAttachment;
 import "../../../domain/models.dart";
 import "../../../domain/shell.dart";
 import "../../../domain/file_tools.dart" show guestWorkspacePath;
@@ -19,6 +22,21 @@ class _SendIntent extends Intent {
 
 class _QueueIntent extends Intent {
   const _QueueIntent();
+}
+
+/// Ctrl/Cmd+V over the field's own paste: files on the clipboard are
+/// attached, and anything else goes to the field. The field's action is
+/// captured before the await, since it is only set for the call.
+class _PasteAction extends Action<PasteTextIntent> {
+  _PasteAction(this.attach);
+
+  final Future<bool> Function() attach;
+
+  @override
+  Future<void> invoke(PasteTextIntent intent) async {
+    final paste = callingAction;
+    if (!await attach()) paste?.invoke(intent);
+  }
 }
 
 typedef SendCallback = void Function(String text, List<Attachment> attachments);
@@ -117,10 +135,18 @@ class ComposerState extends ConsumerState<Composer> {
   final ValueNotifier<bool> _queues = ValueNotifier(false);
   late final Listenable _sendState = Listenable.merge([_canSend, _queues]);
 
+  /// Whether the field has focus, so a browser's paste lands in the composer
+  /// it was made in and not in every one listening.
+  bool _focused = false;
+  late final StreamSubscription<List<Attachment>> _pasted;
+
   @override
   void initState() {
     super.initState();
     widget.controller.addListener(_sync);
+    _pasted = ref.read(clipboardFilesProvider).pasted.listen((files) {
+      if (_focused) _add(files);
+    });
   }
 
   @override
@@ -138,6 +164,7 @@ class ComposerState extends ConsumerState<Composer> {
   @override
   void dispose() {
     widget.controller.removeListener(_sync);
+    _pasted.cancel();
     _canSend.dispose();
     _queues.dispose();
     super.dispose();
@@ -169,9 +196,33 @@ class ComposerState extends ConsumerState<Composer> {
   }
 
   Future<void> _attach(AttachmentKind kind) async {
-    final picked = await ref.read(attachmentPickerProvider).pick(kind);
-    if (picked.isEmpty || !mounted) return;
-    setState(() => _attachments.addAll(picked));
+    _add(await ref.read(attachmentPickerProvider).pick(kind));
+  }
+
+  /// Attach what the clipboard holds other than text. False where it held
+  /// none, and the paste is the field's.
+  Future<bool> _pasteFiles() async {
+    final files = await ref.read(clipboardFilesProvider).read();
+    _add(files);
+    return files.isNotEmpty;
+  }
+
+  /// A keyboard's image, which Android's keyboards hand over as content
+  /// rather than through the clipboard.
+  void _inserted(KeyboardInsertedContent content) {
+    final bytes = content.data;
+    if (bytes == null) return;
+    final name = Uri.tryParse(content.uri)?.pathSegments.lastOrNull;
+    _add([
+      pastedAttachment(bytes,
+          name: name == null || name.isEmpty ? null : name,
+          declared: content.mimeType),
+    ]);
+  }
+
+  void _add(List<Attachment> files) {
+    if (files.isEmpty || !mounted) return;
+    setState(() => _attachments.addAll(files));
     _refresh();
   }
 
@@ -234,10 +285,13 @@ class ComposerState extends ConsumerState<Composer> {
             SingleActivator(LogicalKeyboardKey.enter, alt: true): _QueueIntent(),
           },
           actions: {
+            PasteTextIntent: _PasteAction(_pasteFiles),
             _SendIntent: CallbackAction<_SendIntent>(onInvoke: (_) => _submit()),
             _QueueIntent: CallbackAction<_QueueIntent>(
                 onInvoke: (_) => _submit(queue: true)),
           },
+          contentInsertionConfiguration:
+              ContentInsertionConfiguration(onContentInserted: _inserted),
           // The menu spans the composer rather than the field, so what it
           // offers is not squeezed by the buttons either side.
           layout: (menu, field) => Column(
@@ -270,7 +324,14 @@ class ComposerState extends ConsumerState<Composer> {
                       ...completionInsertItems(context, _field),
                     ],
                   ),
-                  Expanded(child: field),
+                  Expanded(
+                    child: Focus(
+                      canRequestFocus: false,
+                      skipTraversal: true,
+                      onFocusChange: (focused) => _focused = focused,
+                      child: field,
+                    ),
+                  ),
                   // The voice button and the field share the row, so the field
                   // gets the width back the moment there is a message in it:
                   // something typed is something to send rather than to say.

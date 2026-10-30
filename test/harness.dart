@@ -89,6 +89,7 @@ class TestApp {
     required this.secrets,
     required this.backend,
     required this.picker,
+    required this.clipboard,
     required this.launcher,
     required this.handoff,
     required this.assistant,
@@ -197,6 +198,7 @@ class TestApp {
     seedCatalog(testProviderModels);
     final backend = FakeBackend();
     final picker = FakeAttachmentPicker();
+    final clipboard = FakeClipboardFiles();
     final launcher = FakeLauncherIcons(available: launcherIcons);
     final files = handoff ?? FakeFileHandoff();
     final assist = FakeAssistantLaunch(hasGesture: assistantGesture);
@@ -229,6 +231,7 @@ class TestApp {
       secrets: appSecrets,
       backend: backend,
       picker: picker,
+      clipboard: clipboard,
       launcher: launcher,
       handoff: files,
       assistant: assist,
@@ -255,6 +258,7 @@ class TestApp {
           if (browser != null) agentBrowserProvider.overrideWithValue(browser(config)),
           appSecretsProvider.overrideWithValue(appSecrets),
           attachmentPickerProvider.overrideWithValue(picker),
+          clipboardFilesProvider.overrideWithValue(clipboard),
           promptLibraryProvider.overrideWith2(
               (project) => PromptLibraryNotifier(project, library ?? testLibrary())),
           launcherIconsProvider.overrideWithValue(launcher),
@@ -347,6 +351,7 @@ class TestApp {
   final AppConfig config;
   final FakeBackend backend;
   final FakeAttachmentPicker picker;
+  final FakeClipboardFiles clipboard;
   final FakeLauncherIcons launcher;
   final FakeFileHandoff handoff;
   final FakeAssistantLaunch assistant;
