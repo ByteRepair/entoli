@@ -85,23 +85,42 @@ void got_uris(GtkClipboard*, gchar** uris, gpointer user) {
   respond_files(call, files);
 }
 
-void got_image(GtkClipboard*, GdkPixbuf* pixbuf, gpointer user) {
-  auto* call = static_cast<FlMethodCall*>(user);
+void respond_image(FlMethodCall* call, const guchar* bytes, gsize size) {
   g_autoptr(FlValue) files = fl_value_new_list();
-  gchar* png = nullptr;
-  gsize size = 0;
-  if (pixbuf != nullptr &&
-      gdk_pixbuf_save_to_buffer(pixbuf, &png, &size, "png", nullptr, nullptr)) {
+  if (bytes != nullptr && size > 0) {
     FlValue* entry = fl_value_new_map();
-    fl_value_set_string_take(entry, "name", fl_value_new_string("pasted.png"));
-    fl_value_set_string_take(entry, "mime", fl_value_new_string("image/png"));
-    fl_value_set_string_take(
-        entry, "bytes",
-        fl_value_new_uint8_list(reinterpret_cast<const uint8_t*>(png), size));
+    fl_value_set_string_take(entry, "bytes",
+                             fl_value_new_uint8_list(bytes, size));
     fl_value_append_take(files, entry);
-    g_free(png);
   }
   respond_files(call, files);
+}
+
+void got_png(GtkClipboard*, GtkSelectionData* data, gpointer user) {
+  gint size = data == nullptr ? 0 : gtk_selection_data_get_length(data);
+  respond_image(static_cast<FlMethodCall*>(user),
+                size > 0 ? gtk_selection_data_get_data(data) : nullptr,
+                size > 0 ? size : 0);
+}
+
+// An image offered in some other format, converted to PNG here.
+void got_image(GtkClipboard*, GdkPixbuf* pixbuf, gpointer user) {
+  gchar* png = nullptr;
+  gsize size = 0;
+  if (pixbuf == nullptr ||
+      !gdk_pixbuf_save_to_buffer(pixbuf, &png, &size, "png", nullptr, nullptr)) {
+    size = 0;
+  }
+  respond_image(static_cast<FlMethodCall*>(user),
+                reinterpret_cast<const guchar*>(png), size);
+  g_free(png);
+}
+
+bool offers(GdkAtom* atoms, gint count, GdkAtom target) {
+  for (gint i = 0; i < count; i++) {
+    if (atoms[i] == target) return true;
+  }
+  return false;
 }
 
 // A file manager's copy carries the names as text too, so a file list wins
@@ -114,7 +133,12 @@ void got_targets(GtkClipboard* clipboard, GdkAtom* atoms, gint count,
     gtk_clipboard_request_uris(clipboard, got_uris, call);
   } else if (atoms != nullptr && !gtk_targets_include_text(atoms, count) &&
              gtk_targets_include_image(atoms, count, FALSE)) {
-    gtk_clipboard_request_image(clipboard, got_image, call);
+    GdkAtom png = gdk_atom_intern_static_string("image/png");
+    if (offers(atoms, count, png)) {
+      gtk_clipboard_request_contents(clipboard, png, got_png, call);
+    } else {
+      gtk_clipboard_request_image(clipboard, got_image, call);
+    }
   } else {
     g_autoptr(FlValue) none = fl_value_new_list();
     respond_files(call, none);

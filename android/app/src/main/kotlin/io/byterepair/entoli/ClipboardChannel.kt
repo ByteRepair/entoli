@@ -5,7 +5,7 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.net.Uri
 import android.os.Handler
-import android.provider.OpenableColumns
+import android.os.Looper
 import android.util.Log
 import io.flutter.plugin.common.BinaryMessenger
 import io.flutter.plugin.common.MethodChannel
@@ -16,6 +16,7 @@ import java.util.concurrent.Executors
 // read. See rich_clipboard.dart and clipboard_files.dart.
 object ClipboardChannel {
     private val reads = Executors.newSingleThreadExecutor()
+    private val main = Handler(Looper.getMainLooper())
 
     fun register(context: Context, messenger: BinaryMessenger) {
         val appContext = context.applicationContext
@@ -40,7 +41,7 @@ object ClipboardChannel {
                     if (uris.isEmpty()) return@setMethodCallHandler result.success(emptyList<Any>())
                     reads.execute {
                         val files = uris.mapNotNull { read(appContext, it) }
-                        Handler(appContext.mainLooper).post { result.success(files) }
+                        main.post { result.success(files) }
                     }
                 }
                 else -> result.notImplemented()
@@ -50,13 +51,9 @@ object ClipboardChannel {
 
     private fun read(context: Context, uri: Uri): Map<String, Any>? = try {
         val resolver = context.contentResolver
-        val name = resolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)
-            ?.use { if (it.moveToFirst()) it.getString(0) else null }
-            ?: uri.lastPathSegment
-            ?: "pasted"
         resolver.openInputStream(uri)?.use { it.readBytes() }?.let { bytes ->
             buildMap {
-                put("name", name)
+                put("name", FilesChannel.displayName(context, uri))
                 put("bytes", bytes)
                 resolver.getType(uri)?.let { put("mime", it) }
             }

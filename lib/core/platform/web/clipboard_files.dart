@@ -40,9 +40,7 @@ class DomClipboardFiles implements ClipboardFiles {
 
 Future<Attachment> _read(web.File file) async {
   final bytes = (await file.arrayBuffer().toDart).toDart.asUint8List();
-  final name = file.name.isEmpty ? "pasted" : file.name;
-  return Attachment(
-      filename: name,
-      mimeType: attachmentMime(name, bytes, declared: file.type.isEmpty ? null : file.type),
-      bytes: bytes);
+  return pastedAttachment(bytes,
+      name: file.name.isEmpty ? null : file.name,
+      declared: file.type.isEmpty ? null : file.type);
 }

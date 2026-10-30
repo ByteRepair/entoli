@@ -30,14 +30,15 @@ class ChannelClipboardFiles implements ClipboardFiles {
       logFailure("clipboard", "reading pasted files failed", e);
       return const [];
     }
-    final out = <Attachment>[];
-    for (final entry in entries.whereType<Map<Object?, Object?>>()) {
-      final attachment = entry["path"] is String
-          ? await _readPath(entry["path"] as String)
-          : _fromBytes(entry);
-      if (attachment != null) out.add(attachment);
-    }
-    return out;
+    final read = await Future.wait([
+      for (final entry in entries.whereType<Map<Object?, Object?>>())
+        if (entry["path"] case final String path)
+          _readPath(path)
+        else if (entry["bytes"] case final Uint8List bytes)
+          Future.value(pastedAttachment(bytes,
+              name: entry["name"] as String?, declared: entry["mime"] as String?)),
+    ]);
+    return read.nonNulls.toList();
   }
 
   @override
@@ -48,21 +49,9 @@ Future<Attachment?> _readPath(String path) async {
   // A copied folder is in the list too, and has no bytes to attach.
   if (!await FileSystemEntity.isFile(path)) return null;
   try {
-    final bytes = await File(path).readAsBytes();
-    final name = p.basename(path);
-    return Attachment(filename: name, mimeType: attachmentMime(name, bytes), bytes: bytes);
+    return pastedAttachment(await File(path).readAsBytes(), name: p.basename(path));
   } on FileSystemException catch (e) {
     logFailure("clipboard", "pasted file unreadable", e.osError ?? e.message);
     return null;
   }
-}
-
-Attachment? _fromBytes(Map<Object?, Object?> entry) {
-  final bytes = entry["bytes"];
-  if (bytes is! Uint8List) return null;
-  final name = entry["name"] as String? ?? "pasted";
-  return Attachment(
-      filename: name,
-      mimeType: attachmentMime(name, bytes, declared: entry["mime"] as String?),
-      bytes: bytes);
 }

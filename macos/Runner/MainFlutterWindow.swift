@@ -106,6 +106,6 @@ enum ClipboardChannel {
         NSBitmapImageRep(data: $0)?.representation(using: .png, properties: [:])
       }
     guard let png else { return [] }
-    return [["name": "pasted.png", "mime": "image/png", "bytes": FlutterStandardTypedData(bytes: png)]]
+    return [["bytes": FlutterStandardTypedData(bytes: png)]]
   }
 }

@@ -4,6 +4,7 @@ import "package:flutter/material.dart";
 import "package:flutter/services.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
+import "../../../data/mime.dart" show pastedAttachment;
 import "../../../domain/models.dart";
 import "../../../domain/shell.dart";
 import "../../../domain/file_tools.dart" show guestWorkspacePath;
@@ -213,10 +214,9 @@ class ComposerState extends ConsumerState<Composer> {
     if (bytes == null) return;
     final name = Uri.tryParse(content.uri)?.pathSegments.lastOrNull;
     _add([
-      Attachment(
-          filename: name == null || name.isEmpty ? "pasted" : name,
-          mimeType: content.mimeType,
-          bytes: bytes),
+      pastedAttachment(bytes,
+          name: name == null || name.isEmpty ? null : name,
+          declared: content.mimeType),
     ]);
   }
 

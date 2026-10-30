@@ -1,5 +1,7 @@
 #include "clipboard_channel.h"
 
+#include "utils.h"
+
 #include <flutter/method_channel.h>
 #include <flutter/standard_method_codec.h>
 
@@ -10,6 +12,7 @@
 #include <cstring>
 #include <memory>
 #include <string>
+#include <utility>
 #include <variant>
 #include <vector>
 
@@ -66,16 +69,6 @@ bool SetHtml(HWND window, const std::string& plain, const std::string& html) {
   return ok;
 }
 
-std::string Utf8(const std::wstring& wide) {
-  const int size = WideCharToMultiByte(CP_UTF8, 0, wide.c_str(), -1, nullptr,
-                                       0, nullptr, nullptr);
-  std::string out(size > 0 ? size : 1, '\0');
-  WideCharToMultiByte(CP_UTF8, 0, wide.c_str(), -1, out.data(), size, nullptr,
-                      nullptr);
-  out.resize(std::strlen(out.c_str()));
-  return out;
-}
-
 // Explorer's copy carries the names as text too, so a file list wins over
 // text, and text over an image: a spreadsheet's cells come with a picture of
 // themselves.
@@ -91,7 +84,7 @@ flutter::EncodableList ReadFiles(HWND window) {
       path.resize(DragQueryFileW(drop, i, path.data(),
                                  static_cast<UINT>(path.size())));
       files.push_back(EncodableValue(EncodableMap{
-          {EncodableValue("path"), EncodableValue(Utf8(path))}}));
+          {EncodableValue("path"), EncodableValue(Utf8FromUtf16(path.c_str()))}}));
     }
   } else if (!IsClipboardFormatAvailable(CF_UNICODETEXT)) {
     // What a screenshot tool puts beside its bitmap. A bare CF_DIB is left
@@ -103,9 +96,7 @@ flutter::EncodableList ReadFiles(HWND window) {
       std::vector<uint8_t> data(bytes, bytes + GlobalSize(png));
       GlobalUnlock(png);
       files.push_back(EncodableValue(EncodableMap{
-          {EncodableValue("name"), EncodableValue("pasted.png")},
-          {EncodableValue("mime"), EncodableValue("image/png")},
-          {EncodableValue("bytes"), EncodableValue(data)}}));
+          {EncodableValue("bytes"), EncodableValue(std::move(data))}}));
     }
   }
   CloseClipboard();

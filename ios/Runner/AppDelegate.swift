@@ -53,9 +53,10 @@ enum ClipboardChannel {
         // The has- checks raise no paste prompt; reading the image does, so
         // a text paste never asks.
         guard pasteboard.hasImages, !pasteboard.hasStrings,
-              let png = pasteboard.image?.pngData()
+              let png = pasteboard.data(forPasteboardType: "public.png")
+                ?? pasteboard.image?.pngData()
         else { return result([]) }
-        result([["name": "pasted.png", "mime": "image/png", "bytes": FlutterStandardTypedData(bytes: png)]])
+        result([["bytes": FlutterStandardTypedData(bytes: png)]])
       default:
         result(FlutterMethodNotImplemented)
       }
