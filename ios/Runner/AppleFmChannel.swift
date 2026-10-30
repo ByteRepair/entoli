@@ -1,19 +1,23 @@
+#if os(iOS)
 import Flutter
-import UIKit
+#else
+import FlutterMacOS
+#endif
 #if canImport(FoundationModels)
 import FoundationModels
 #endif
-// The MLX models ride the same `LanguageModelSession` the system model does;
-// what builds with them is the package's presence, not this file's
-// structure — see `mlxAvailable` and the catalog in `apple_fm.dart`.
-#if canImport(MLXFoundationModels)
-import MLXFoundationModels
-#endif
+// The MLX models ride the same `LanguageModelSession` the system model does,
+// through `EntoliMLX` — tool/apple/mlx, prebuilt into the XCFramework both
+// Runners link — which answers on any OS and gates on its own.
+import EntoliMLX
 
-/// The iOS half of the `agent_chat/apple_fm` channel — `AppleFm` and its
-/// client are the Dart half. The model is the OS's own: the availability the
-/// handshake reports, and one generation per ask, is the whole of what this
-/// class owns.
+/// The Apple half of the `agent_chat/apple_fm` channel — `AppleFm` and its
+/// client are the Dart half — compiled into both Runners. The system model
+/// is the OS's own: the availability the handshake reports, and one
+/// generation per ask, is the whole of what this class owns for it. An MLX
+/// model is loaded from the directory Dart downloaded it to and kept
+/// resident (`EntoliMLX`'s `Mlx`) until Dart evicts it; Dart decides
+/// residency.
 ///
 /// **A tool call is reported and ended, not run.** The agent in Dart owns
 /// the loop the way it owns every other model's — approvals, the recorder
@@ -31,11 +35,8 @@ import MLXFoundationModels
 class AppleFmChannel: NSObject {
   private static var instance: AppleFmChannel?
 
-  static func register(with bridge: FlutterImplicitEngineBridge) {
-    guard let registrar = bridge.pluginRegistry.registrar(forPlugin: "AppleFmChannel") else {
-      return
-    }
-    instance = AppleFmChannel(messenger: registrar.messenger())
+  static func register(with messenger: FlutterBinaryMessenger) {
+    instance = AppleFmChannel(messenger: messenger)
   }
 
   private let channel: FlutterMethodChannel
@@ -61,7 +62,7 @@ class AppleFmChannel: NSObject {
   }
 
   private func availabilityReason() -> String {
-    guard #available(iOS 26.0, *) else { return "os" }
+    guard #available(iOS 26.0, macOS 26.0, *) else { return "os" }
     switch SystemLanguageModel.default.availability {
     case .available: return "available"
     case .unavailable(.deviceNotEligible): return "device-not-eligible"
@@ -71,20 +72,34 @@ class AppleFmChannel: NSObject {
     }
   }
 
-  /// The picker's MLX rows ride the handshake, so a build whose Runner
-  /// links `MLXFoundationModels` offers them and one that does not does not
-  /// — the same build-carries-it answer the llama backends give.
-  private func mlxAvailable() -> Bool {
-    #if canImport(MLXFoundationModels)
-    if #available(iOS 27.0, *) { return true }
-    #endif
-    return false
+  /// `load`, `evict` and `evictAll`: the residency Dart decides. A load
+  /// that fails answers a `FlutterError` whose message is the reason, which
+  /// is what the settings row shows.
+  private func residency(_ call: FlutterMethodCall, _ result: @escaping FlutterResult) {
+    let args = call.arguments as? [String: Any] ?? [:]
+    let model = args["model"] as? String ?? ""
+    let reply = { (value: Any?) in DispatchQueue.main.async { result(value) } }
+    Task.detached(priority: .userInitiated) {
+      do {
+        switch call.method {
+        case "load":
+          try await Mlx.load(model, args["directory"] as? String ?? "")
+        case "evict":
+          await Mlx.evict(model)
+        default:
+          await Mlx.evictAll()
+        }
+        reply(nil)
+      } catch {
+        reply(FlutterError(code: "load", message: "\(error)", details: nil))
+      }
+    }
   }
 
   private func handle(call: FlutterMethodCall, result: @escaping FlutterResult) {
     switch call.method {
     case "handshake":
-      result(["reason": availabilityReason(), "mlx": mlxAvailable()])
+      result(["reason": availabilityReason(), "mlx": Mlx.isAvailable])
     case "generate":
       let args = call.arguments as? [String: Any] ?? [:]
       let id = args["id"] as? String ?? ""
@@ -100,6 +115,8 @@ class AppleFmChannel: NSObject {
       let id = (call.arguments as? [String: Any])?["id"] as? String ?? ""
       finishGeneration(id)
       result(nil)
+    case "load", "evict", "evictAll":
+      residency(call, result)
     default:
       result(FlutterMethodNotImplemented)
     }
@@ -117,7 +134,7 @@ class AppleFmChannel: NSObject {
   private func generate(_ id: String, _ args: [String: Any]) async {
     // Every exit, the early ones included, or the task stays in `generations`.
     defer { finishGeneration(id) }
-    guard #available(iOS 26.0, *) else {
+    guard #available(iOS 26.0, macOS 26.0, *) else {
       send("error", [
         "id": id, "code": "os",
         "message": "This OS carries no Foundation Models framework.",
@@ -133,7 +150,7 @@ class AppleFmChannel: NSObject {
       // A stop, or the tool that reported and stopped the generation:
       // cancelled, not failed, so nothing is said.
     } catch {
-      if #available(iOS 27.0, *) {
+      if #available(iOS 27.0, macOS 27.0, *) {
         // The typed failures the framework throws now; a `false` is the
         // untyped ones, said as they are.
         if mapError(id, error) { return }
@@ -142,7 +159,7 @@ class AppleFmChannel: NSObject {
     }
   }
 
-  @available(iOS 26.0, *)
+  @available(iOS 26.0, macOS 26.0, *)
   private func runGeneration(_ id: String, _ args: [String: Any]) async throws {
     let model = args["model"] as? String ?? ""
     let instructions = args["instructions"] as? String ?? ""
@@ -186,7 +203,8 @@ class AppleFmChannel: NSObject {
           : .prompt(Transcript.Prompt(segments: [segment])))
     }
 
-    let session = try sessionFor(model, tools, Transcript(entries: entries))
+    let session = try await sessionFor(
+      model, args["directory"] as? String, tools, Transcript(entries: entries))
     let stream = session.streamResponse(
       to: prompt,
       options: GenerationOptions(temperature: temperature))
@@ -207,7 +225,7 @@ class AppleFmChannel: NSObject {
     // and later); a turn's compact threshold reads them off the done frame.
     // Everything before a 27 runtime says nothing, and the estimate stands.
     var usage = [String: Any]()
-    if #available(iOS 27.0, *) {
+    if #available(iOS 27.0, macOS 27.0, *) {
       let counts = session.usage
       let input = counts.input.totalTokenCount
       let output = counts.output.totalTokenCount
@@ -225,31 +243,18 @@ class AppleFmChannel: NSObject {
     send("done", done)
   }
 
-  /// The Dart side names the system model `apple-foundation-model` and the
-  /// two halves spell it twice: the contract is one channel, not one shared
-  /// symbol. An MLX id is the package's business — it constructs from the id
-  /// and caches the fetch and the weights itself.
-  /// shortcut: no resident-instance cache of the channel's own, when the
-  /// hand-run shows the package re-mapping weights per session.
-  @available(iOS 26.0, *)
+  /// A generation with a `directory` is an MLX model's, built on the kept
+  /// instance — loaded first where Dart's load has not run or was evicted
+  /// under it. Without one it is the system model's.
+  @available(iOS 26.0, macOS 26.0, *)
   private func sessionFor(
-    _ model: String, _ tools: [any Tool], _ transcript: Transcript
-  ) throws -> LanguageModelSession {
-    if model == "apple-foundation-model" {
+    _ model: String, _ directory: String?, _ tools: [any Tool], _ transcript: Transcript
+  ) async throws -> LanguageModelSession {
+    guard let directory else {
       return LanguageModelSession(
         model: .default, tools: tools, transcript: transcript)
     }
-    guard #available(iOS 27.0, *) else {
-      throw GenerationFailure("This OS does not carry MLX models.")
-    }
-    #if canImport(MLXFoundationModels)
-    return LanguageModelSession(
-      model: MLXLanguageModel(modelID: model),
-      tools: tools,
-      transcript: transcript)
-    #else
-    throw GenerationFailure("This build does not link MLX.")
-    #endif
+    return try await Mlx.session(model, directory, tools: tools, transcript: transcript)
   }
 
   private func toolCall(_ id: String, _ name: String, _ arguments: String) {
@@ -260,7 +265,7 @@ class AppleFmChannel: NSObject {
     finishGeneration(id)
   }
 
-  @available(iOS 27.0, *)
+  @available(iOS 27.0, macOS 27.0, *)
   /// `true` when the error was one of the framework's typed failures and has
   /// been said.
   private func mapError(_ id: String, _ error: Error) -> Bool {
@@ -280,22 +285,11 @@ class AppleFmChannel: NSObject {
 /// What `BridgeTool` throws the moment it has forwarded its call.
 struct BridgeHandoff: Error {}
 
-/// A generation that cannot start because this OS or this build carries no
-/// model for the id it was asked for. The wording rides out as it is; the
-/// Dart side's error map says the rest.
-struct GenerationFailure: Error, CustomStringConvertible {
-  let message: String
-  init(_ message: String) {
-    self.message = message
-  }
-  var description: String { message }
-}
-
 /// One of the agent's tools, as the framework sees it. The arguments are the
 /// `schema` the Dart side sent, converted below into the framework's dynamic
 /// schema — so decoding is the framework's, guided generation included, and
 /// what reaches Dart is the JSON the call carried.
-@available(iOS 26.0, *)
+@available(iOS 26.0, macOS 26.0, *)
 struct BridgeTool: Tool {
   let name: String
   let description: String
@@ -311,11 +305,11 @@ struct BridgeTool: Tool {
   }
 }
 
-@available(iOS 26.0, *)
+@available(iOS 26.0, macOS 26.0, *)
 extension AppleFmChannel {
   /// The framework's failures, in the words the Dart side's error map acts
   /// on — short tokens, no prose, the model's own `\(error)` riding beside.
-  @available(iOS 27.0, *)
+  @available(iOS 27.0, macOS 27.0, *)
   private func code(of error: LanguageModelError) -> String {
     switch error {
     case .contextSizeExceeded: return "context"

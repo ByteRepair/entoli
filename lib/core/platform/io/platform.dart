@@ -33,6 +33,7 @@ import "../../../data/local/ish_shell.dart";
 import "../../../data/local/llama_engine.dart";
 import "../../../data/local/llama_server.dart";
 import "../../../data/local/local_engine.dart";
+import "../../../data/local/mlx_engine.dart";
 import "../../../data/local/model_format.dart";
 import "../../../data/local/proot.dart";
 import "../../../data/local/apple_fm.dart";
@@ -312,8 +313,15 @@ WebSearch platformWebSearch() => DuckDuckGoSearch();
 /// What runs downloaded models here. Android and Linux run llama.cpp's server
 /// where this build carried one: Android's native library directory (the one
 /// place an app may exec from), or the Linux bundle's `lib/`. A machine's own
-/// llama.cpp is reached as a provider instead.
+/// llama.cpp is reached as a provider instead. iOS and macOS run MLX where the
+/// handshake says the build links it and the OS can run it.
 Future<LocalEngine> createLocalEngine(String cacheDir) async {
+  if (Platform.isIOS || Platform.isMacOS) {
+    final probe = await _appleProbe();
+    return probe != null && probe.mlx
+        ? MlxEngine(FileLocalModelStore(p.join(cacheDir, "llm"), format: const MlxFormat()))
+        : const NoLocalEngine();
+  }
   if (!Platform.isAndroid && !Platform.isLinux) return const NoLocalEngine();
   final (String? libDir, String serverName) = Platform.isAndroid
       ? (await BundledTools.nativeLibraryDir(), "libllama-server.so")
@@ -333,28 +341,36 @@ Future<LocalEngine> createLocalEngine(String cacheDir) async {
   return LlamaEngine(pool, store, kvCache: FileKvCache(_kvCacheDir(cacheDir)));
 }
 
-/// [AppleFm] where the device could carry Apple's on-device model (iOS only).
-/// Hardware that never could is null, out of every picker; a model that is
-/// merely not enabled yet keeps its endpoint, and a turn's failure says why,
-/// since that can flip mid-session.
+/// [AppleFm] where the device could carry Apple's on-device model. Hardware
+/// that never could is null, out of every picker; a model that is merely not
+/// enabled yet keeps its endpoint, and a turn's failure says why, since that
+/// can flip mid-session.
 Future<AppleFm?> createAppleFm() async {
-  if (!Platform.isIOS) return null;
-  try {
-    final answer = await appleChannel
-        .invokeMethod<Object?>("handshake")
-        .timeout(const Duration(seconds: 3));
-    final handshake = answer as Map<Object?, Object?>? ?? const {};
-    final reason = handshake["reason"] as String? ?? "other";
-    return switch (reason) {
-      "device-not-eligible" || "os" => null,
-      _ => AppleFm(AppleFmProbe(reason,
-          mlx: handshake["mlx"] as bool? ?? false)),
-    };
-  } catch (e) {
-    logFailure("apple-fm", "handshake failed", e);
-    return null;
-  }
+  final probe = await _appleProbe();
+  return switch (probe?.reason) {
+    null || "device-not-eligible" || "os" => null,
+    _ => AppleFm(probe!),
+  };
 }
+
+/// The channel's handshake, asked once for both the Apple model and the MLX
+/// engine: null where there is no channel to ask.
+Future<AppleFmProbe?> _appleProbe() => _appleHandshake ??= () async {
+      if (!Platform.isIOS && !Platform.isMacOS) return null;
+      try {
+        final answer = await appleChannel
+            .invokeMethod<Object?>("handshake")
+            .timeout(const Duration(seconds: 3));
+        final handshake = answer as Map<Object?, Object?>? ?? const {};
+        return AppleFmProbe(handshake["reason"] as String? ?? "other",
+            mlx: handshake["mlx"] as bool? ?? false);
+      } catch (e) {
+        logFailure("apple-fm", "handshake failed", e);
+        return null;
+      }
+    }();
+
+Future<AppleFmProbe?>? _appleHandshake;
 
 /// The bundle's `lib/` beside the running executable, the one its `$ORIGIN`
 /// rpath resolves. Takes [executablePath] so a test can pin each shape.

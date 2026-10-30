@@ -1,2 +1,3 @@
 #include "Ish.xcconfig"
 #include "Generated.xcconfig"
+#include "Mlx.xcconfig"

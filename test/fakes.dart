@@ -1145,8 +1145,9 @@ class FakeLocalModelStore extends LocalModelStore {
   FakeLocalModelStore({Set<String> installed = const {}})
       : _installed = {
           for (final id in installed)
-            id: downloadedAs(ggufCatalog.firstWhere((m) => m.id == id,
-                orElse: () => GgufModel(id: id, name: id, url: ""))),
+            id: downloadedAs(<LocalModel>[...ggufCatalog, ...mlxCatalog]
+                .firstWhere((m) => m.id == id,
+                    orElse: () => GgufModel(id: id, name: id, url: ""))),
         };
 
   final Map<String, DownloadedModel> _installed;

@@ -36,9 +36,10 @@ behind an Xcode configuration of its own, not as a fork of this one. That
 build re-enters the Powerbox territory deliberately, since a MAS archive
 cannot ship without it.
 
-The deployment target is 12.0, not the 10.15 the 3.44 template generated:
-current Xcode refuses anything below 12.0 outright, so the number says what
-the toolchain will build rather than what the app needs.
+The deployment target is 14.0, mlx-swift-lm's floor: the package will not
+link below it, so the number is the MLX models' cost to every Mac rather than
+what the rest of the app needs. FoundationModels is weak-linked in the
+Debug and Release xcconfigs, since 14 and 15 do not carry it.
 
 ## What a command runs on
 
@@ -180,13 +181,14 @@ nothing needs a hand.
 
 ## What is absent, and honestly so
 
-No on-device models: the bundled llama.cpp server is built for Android and
-Linux and never for this platform, so `createLocalEngine` answers
-`NoLocalEngine` here and the On-device page holds only the voice
-downloads, with no model section to apologise from. The plan for this platform is
-not llama at all: Apple Intelligence's FoundationModels, reached through a
-Swift plugin of the app's own, on macOS 26 and later — a future version, at
-which point the settings page is where the story changes and nowhere else.
+No llama.cpp: the bundled server is built for Android and Linux. The
+on-device text models here are MLX's, as on iOS — `MlxEngine`, on macOS 27
+where the build links `EntoliMLX` (`tool/apple/mlx/build.sh`, which this
+Runner now needs before it links at all). The channel is iOS's own
+`AppleFmChannel.swift`, compiled into this Runner by reference; below 27 the
+handshake answers `mlx: false`, `createLocalEngine` answers `NoLocalEngine`
+and the On-device page holds only the voice downloads. See "The MLX models"
+in `ios/AGENTS.md`.
 
 The keyring is the file fallback (`KeyringSecretStore` probes a Secret Service
 through the session bus, which macOS does not run) and says nothing different

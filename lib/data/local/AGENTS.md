@@ -407,14 +407,19 @@ request reaches a model through. `OnDeviceProvider` holds one and asks it for
 the client, so the provider knows nothing of servers or ports; the On-device
 page draws `catalog` and only the `controls` the engine names. `LlamaEngine`
 is llama.cpp's server pool (`LocalLlm`) over GGUF files, on Android and Linux,
-and reads every control; `NoLocalEngine` is everywhere else, `missingFromBuild`
-where a platform that builds a server got a build without one.
+and reads every control. `MlxEngine` is MLX through Apple's Foundation Models
+framework, on iOS 27 and macOS 27 where the build links mlx-swift-lm, and
+reads only how many may be resident — see "The MLX models" in
+`ios/AGENTS.md`. `NoLocalEngine` is everywhere else, `missingFromBuild` where
+a platform that builds a server got a build without one.
 
 A model is its files (`LocalModel.files`), each with its own size and
 SHA-256, so `FileLocalModelStore` fetches and checks any model the same way.
 What the files mean once they land — what the runtime is pointed at, and the
 facts read off them — is the engine's `ModelFormat`; `GgufFormat` reads the
-header. A GGUF model (`GgufModel`) is the one-file case.
+header, `MlxFormat` the `config.json`. A GGUF model (`GgufModel`) is the
+one-file case; an MLX model (`MlxModel`) is a repository's files at a pinned
+commit.
 
 Some rows are drawn from what the engine answers rather than from
 `controls`: the device picker from `devices()`, the cores slider from

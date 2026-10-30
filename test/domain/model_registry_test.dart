@@ -3,7 +3,6 @@ import "dart:convert";
 import "package:flutter_test/flutter_test.dart";
 
 import "package:agent_chat/data/builtin/llm/providers/presets.dart";
-import "package:agent_chat/data/local/apple_fm.dart" show mlxModels;
 import "package:agent_chat/domain/llm_provider.dart";
 import "package:agent_chat/domain/local_model.dart";
 import "package:agent_chat/domain/model_registry.dart";
@@ -53,7 +52,7 @@ void main() {
       final apple = LlmProviderConfig(id: appleProviderId, api: LlmApi.openai, baseUrl: "");
       expect(modelInfoOf(apple, appleModelId)?.context, 8192);
       expect(modelInfoOf(apple, null)?.context, 8192);
-      expect(modelInfoOf(apple, mlxModels.first), isNull);
+      expect(modelInfoOf(apple, "another-model"), isNull);
     });
 
     test("nothing is known where there is no provider or no model", () {
