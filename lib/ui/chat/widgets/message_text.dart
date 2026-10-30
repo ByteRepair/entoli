@@ -1,7 +1,8 @@
 import "package:flutter/material.dart";
 import "package:flutter_markdown_plus/flutter_markdown_plus.dart";
 
-import "code_block.dart";
+import "../../../domain/formatted_text.dart";
+import "math_block.dart";
 import "reply_style.dart";
 
 /// One line of a message bubble: raw text while the reply streams or when it is
@@ -88,7 +89,8 @@ class _MessageTextState extends State<MessageText> {
     return MarkdownBody(
       data: widget.text,
       styleSheet: _styleSheet,
-      builders: codeBlockBuilders,
+      builders: replyBuilders,
+      extensionSet: replyExtensionSet,
       bulletBuilder: (parameters) => SelectionContainer.disabled(
         child: Padding(
           padding: const EdgeInsets.only(right: 4),
