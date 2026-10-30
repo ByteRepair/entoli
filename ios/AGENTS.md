@@ -299,17 +299,15 @@ generation carries `model` (the catalog id) and `directory`.
 `AppleFmChannel.swift` answers, beside `handshake`, `generate` and `cancel`,
 the residency Dart decides:
 
-- `handshake` → `mlx: true` only where `MLXLanguageModel` exists in this
-  build and `#available(iOS 27, macOS 27)`. The import is gated on
-  `canImport(FoundationModels, _version: 2) && canImport(EntoliMLX)`: with
-  an older SDK there is no `LanguageModel` to hand a session, and
-  mlx-swift-lm compiles to an empty module that `canImport` would still
-  answer yes for.
+- `handshake` → `mlx: true` on iOS 27 and macOS 27 (`Mlx.isAvailable`).
+  Every MLX call goes through `EntoliMLX`'s `Mlx`, which answers on any OS
+  and holds the one `#available` gate; below 27 a load throws and an evict
+  is nothing.
 - `load {model, directory}` → an `MLXLanguageModel` over
   `ModelConfiguration(directory:)`, capabilities `[.guidedGeneration,
   .toolCalling, .reasoning]`, its `load` closure
   `loadModelContainer(from:using: #huggingFaceTokenizerLoader())`, preloaded
-  and kept by `model` in `MlxModels` (`EntoliMLX`, below) — only once its
+  and kept by `model` in `EntoliMLX`'s `MlxModels` (below) — only once its
   weights are in, so a failed load leaves nothing behind. A failure answers a `FlutterError` whose
   message is what the settings row shows.
 - `evict {model}` → that instance's `evict()`, and it is dropped;
@@ -323,10 +321,10 @@ of `part.content` with `.reasoning` declared.
 ### The build
 
 MLX reaches the Runners prebuilt: `tool/apple/mlx/` is a package,
-`EntoliMLX`, whose one public type is `MlxModels`, and `build.sh` builds it
-into `tool/apple/mlx/dist/EntoliMLX.xcframework`, a dynamic framework per
-platform (iOS, the simulator, macOS; arm64 alone) that both Runners link and
-embed. Not run by the app build, as iSH's is not: without it neither Runner
+`EntoliMLX`, whose public face is `Mlx`, and `build.sh` builds it into
+`tool/apple/mlx/dist/EntoliMLX.xcframework`, a dynamic framework per
+platform (iOS, the simulator, macOS; arm64 alone, all three unless named)
+that both Runners link and embed. Not run by the app build, as iSH's is not: without it neither Runner
 links. Three reasons it is prebuilt rather than a package dependency of the
 Runners:
 
@@ -342,12 +340,12 @@ Runners:
   enforced: what runs is the code a person chose by bumping a number.
 - **The MLX compile is minutes of C++ and Metal**, which CI caches
   (`.github/actions/apple-mlx`) on the package, its pins, the script and the
-  Xcode build.
+  Xcode build — one slice per job, the one it ships.
 
 The module is built with library evolution and its imports `internal`, so its
-interface names nothing of MLX's — `MlxModels` hands the channel an
-`any LanguageModel` — and the Runners import one module and nothing behind
-it. MLX finds its Metal kernels beside its own binary before anywhere else,
+interface names nothing of MLX's — `Mlx.session` hands the channel a
+`LanguageModelSession` — and the Runners import one module and nothing
+behind it. MLX finds its Metal kernels beside its own binary before anywhere else,
 so they travel inside the framework (`mlx.metallib` in the flat iOS one,
 `Resources/default.metallib` in the versioned macOS one) and the app copies
 nothing; the packages' resource bundles sit in the framework's resource
@@ -360,10 +358,13 @@ registers the architectures; without it a load fails with
 swift-transformers 1.3.0 (`Tokenizers`, which the tokenizer macro expands
 to), and needs Xcode 27 with the Metal Toolchain component
 (`xcodebuild -downloadComponent MetalToolchain`): with an older SDK the
-adapter compiles out and the MLX section silently never appears, which is
-why both release jobs run on the `xcode-27` image. The deployment targets are
+adapter compiles out, so `EntoliMLX` is an `#error` there rather than an
+empty framework that silently hides the MLX section — and both release jobs
+run on the `xcode-27` image. The deployment targets are
 the package's floor, iOS 17 and macOS 14 — the app's, not just the
-feature's. The macOS Runner compiles `AppleFmChannel.swift` by reference, the
+feature's. The simulator is built arm64 alone (`ios/Flutter/Mlx.xcconfig`):
+Flutter's simulator build adds x86_64, where the import has no module, and
+Xcode 27 runs on no Intel Mac to want one. The macOS Runner compiles `AppleFmChannel.swift` by reference, the
 way iOS compiles `RemindersShared.swift`.
 
 Still owed: the licences MLX and swift-transformers ship, on the About page.

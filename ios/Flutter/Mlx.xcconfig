@@ -1,0 +1,6 @@
+// The simulator is built arm64 alone: EntoliMLX ships no x86_64 slice, and
+// a Swift import of it has no module to read there (iSH's link only skips its
+// library, which is why nothing failed before an import). Xcode 27 runs only
+// on Apple silicon, so an Intel simulator is nothing this loses. Included
+// after Generated.xcconfig, whose i386 exclusion this replaces.
+EXCLUDED_ARCHS[sdk=iphonesimulator*] = i386 x86_64

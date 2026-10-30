@@ -2,13 +2,15 @@
 # Builds EntoliMLX — mlx-swift-lm behind the three calls AppleFmChannel.swift
 # makes — into the XCFramework both Runners link and embed.
 #
-#   tool/apple/mlx/build.sh
+#   tool/apple/mlx/build.sh [ios] [simulator] [macos]
 #
-# Needs macOS and Xcode 27 (an older SDK compiles mlx-swift-lm's adapter out,
-# and this module with it) with the Metal Toolchain component installed
+# Names the slices to build, all three by default: a release job wants the
+# one it ships, a local run the simulator's too.
+#
+# Needs macOS and Xcode 27 (an older SDK fails the build: mlx-swift-lm's
+# adapter compiles out with it) with the Metal Toolchain component installed
 # (xcodebuild -downloadComponent MetalToolchain). Produces, in dist/:
-#   EntoliMLX.xcframework — a dynamic framework each for iOS, the iOS
-#   simulator and macOS, arm64 alone.
+#   EntoliMLX.xcframework — a dynamic framework per slice, arm64 alone.
 #
 # Not run by the app build, the way tool/ios/ish/build.sh is not: without it
 # neither Runner links. Why it is prebuilt at all is `flutter build ios`, which
@@ -22,11 +24,18 @@ work=${WORK_DIR:-$here/build}
 out=${OUT_DIR:-$here/dist}
 
 # destination, products directory, module triple
-slices=(
-  "generic/platform=iOS|Release-iphoneos|arm64-apple-ios"
-  "generic/platform=iOS Simulator|Release-iphonesimulator|arm64-apple-ios-simulator"
-  "generic/platform=macOS|Release|arm64-apple-macos"
-)
+slice_of() {
+  case "$1" in
+    ios) echo "generic/platform=iOS|Release-iphoneos|arm64-apple-ios" ;;
+    simulator) echo "generic/platform=iOS Simulator|Release-iphonesimulator|arm64-apple-ios-simulator" ;;
+    macos) echo "generic/platform=macOS|Release|arm64-apple-macos" ;;
+    *) echo "No slice named $1: ios, simulator or macos" >&2; exit 1 ;;
+  esac
+}
+names=("$@")
+[ ${#names[@]} -gt 0 ] || names=(ios simulator macos)
+slices=()
+for name in "${names[@]}"; do slices+=("$(slice_of "$name")"); done
 
 rm -rf "$work/frameworks" "$out/EntoliMLX.xcframework"
 mkdir -p "$work/frameworks" "$out"
@@ -50,14 +59,21 @@ for slice in "${slices[@]}"; do
   mkdir -p "$(dirname "$framework")"
   cp -R "$built/PackageFrameworks/EntoliMLX.framework" "$framework"
 
-  # A macOS framework is versioned, an iOS one flat: where the binary and
-  # the resources sit is all that differs.
+  # A macOS framework is versioned, an iOS one flat: where the binary, the
+  # resources and the kernels sit is all that differs. MLX looks for its
+  # kernels beside its own binary before anywhere else — mlx.metallib there,
+  # then Resources/ — so they travel inside the framework and the app copies
+  # nothing. A flat bundle keeps no Resources directory, which codesign takes
+  # for a versioned one.
   if [ -d "$framework/Versions/A" ]; then
     root="$framework/Versions/A"
     resources="$root/Resources"
+    kernels="$resources/default.metallib"
+    ln -sfn Versions/Current/Modules "$framework/Modules"
   else
     root="$framework"
     resources="$framework"
+    kernels="$root/mlx.metallib"
   fi
 
   # Xcode leaves a package framework's module beside it; the interface is
@@ -67,22 +83,10 @@ for slice in "${slices[@]}"; do
   cp "$built/EntoliMLX.swiftmodule/$triple".* "$modules/"
   cp "$work/dd/Build/Intermediates.noindex/EntoliMLX.build/$products/EntoliMLX-t.build/Objects-normal/arm64/EntoliMLX.swiftinterface" \
     "$modules/$triple.swiftinterface"
-  if [ "$root" != "$framework" ]; then
-    ln -sfn Versions/Current/Modules "$framework/Modules"
-  fi
 
-  # MLX looks for its kernels beside its own binary before anywhere else —
-  # mlx.metallib there, then Resources/ — so they travel inside the
-  # framework and the app copies nothing. A flat bundle keeps no Resources
-  # directory, which codesign takes for a versioned one. The other
-  # packages' bundles are found by their accessors in the framework's
-  # resource directory.
-  metallib="$(find "$built/mlx-swift_Cmlx.bundle" -name default.metallib)"
-  if [ "$root" != "$framework" ]; then
-    cp "$metallib" "$resources/default.metallib"
-  else
-    cp "$metallib" "$root/mlx.metallib"
-  fi
+  cp "$(find "$built/mlx-swift_Cmlx.bundle" -name default.metallib)" "$kernels"
+  # The other packages' bundles are found by their accessors in the
+  # framework's resource directory.
   for bundle in "$built"/*.bundle; do
     [ "$(basename "$bundle")" = mlx-swift_Cmlx.bundle ] && continue
     cp -R "$bundle" "$resources/"

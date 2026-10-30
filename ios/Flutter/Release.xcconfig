@@ -6,3 +6,4 @@ STRIP_STYLE = non-global
 #include "Ish.xcconfig"
 #include "Signing.xcconfig"
 #include "Generated.xcconfig"
+#include "Mlx.xcconfig"

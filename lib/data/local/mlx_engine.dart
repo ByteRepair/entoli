@@ -60,7 +60,7 @@ class MlxEngine extends LocalEngine {
     final others = [for (final state in running.value) if (state.modelId != model.id) state];
     // Evicted before the next loads, never after: overlapping them is the
     // memory the cap exists to keep free.
-    while (others.length >= maxRunning && others.isNotEmpty) {
+    while (others.length >= maxRunning) {
       final oldest = others.removeAt(0);
       _resident.remove(oldest.modelId);
       await appleChannel.invokeMethod("evict", {"model": oldest.modelId});
@@ -105,9 +105,8 @@ class MlxEngine extends LocalEngine {
   /// Most recently served last, which is what eviction reads.
   void _touch(String id) {
     final states = running.value;
-    if (states.isEmpty || states.last.modelId == id) return;
     final state = states.where((each) => each.modelId == id).firstOrNull;
-    if (state == null) return;
+    if (state == null || states.last == state) return;
     _publish([...states.where((each) => each.modelId != id), state]);
   }
 

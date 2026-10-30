@@ -8,18 +8,15 @@ import FoundationModels
 #endif
 // The MLX models ride the same `LanguageModelSession` the system model does,
 // through `EntoliMLX` — tool/apple/mlx, prebuilt into the XCFramework both
-// Runners link. The version check is what matters: with an SDK older than 27
-// there is no `LanguageModel` to hand the session.
-#if canImport(FoundationModels, _version: 2) && canImport(EntoliMLX)
+// Runners link — which answers on any OS and gates on its own.
 import EntoliMLX
-#endif
 
 /// The Apple half of the `agent_chat/apple_fm` channel — `AppleFm` and its
 /// client are the Dart half — compiled into both Runners. The system model
 /// is the OS's own: the availability the handshake reports, and one
 /// generation per ask, is the whole of what this class owns for it. An MLX
 /// model is loaded from the directory Dart downloaded it to and kept
-/// resident (`EntoliMLX`'s `MlxModels`) until Dart evicts it; Dart decides
+/// resident (`EntoliMLX`'s `Mlx`) until Dart evicts it; Dart decides
 /// residency.
 ///
 /// **A tool call is reported and ended, not run.** The agent in Dart owns
@@ -75,16 +72,6 @@ class AppleFmChannel: NSObject {
     }
   }
 
-  /// The On-device page's MLX section rides the handshake, so a build whose
-  /// Runner links `EntoliMLX` offers it and one that does not does
-  /// not — the same build-carries-it answer the llama backends give.
-  private func mlxAvailable() -> Bool {
-    #if canImport(FoundationModels, _version: 2) && canImport(EntoliMLX)
-    if #available(iOS 27.0, macOS 27.0, *) { return true }
-    #endif
-    return false
-  }
-
   /// `load`, `evict` and `evictAll`: the residency Dart decides. A load
   /// that fails answers a `FlutterError` whose message is the reason, which
   /// is what the settings row shows.
@@ -92,34 +79,27 @@ class AppleFmChannel: NSObject {
     let args = call.arguments as? [String: Any] ?? [:]
     let model = args["model"] as? String ?? ""
     let reply = { (value: Any?) in DispatchQueue.main.async { result(value) } }
-    #if canImport(FoundationModels, _version: 2) && canImport(EntoliMLX)
-    guard #available(iOS 27.0, macOS 27.0, *) else {
-      return reply(FlutterError(code: "os", message: "This OS does not carry MLX models.", details: nil))
-    }
     Task.detached(priority: .userInitiated) {
       do {
         switch call.method {
         case "load":
-          _ = try await MlxModels.shared.load(model, args["directory"] as? String ?? "")
+          try await Mlx.load(model, args["directory"] as? String ?? "")
         case "evict":
-          await MlxModels.shared.evict(model)
+          await Mlx.evict(model)
         default:
-          await MlxModels.shared.evictAll()
+          await Mlx.evictAll()
         }
         reply(nil)
       } catch {
         reply(FlutterError(code: "load", message: "\(error)", details: nil))
       }
     }
-    #else
-    reply(FlutterError(code: "build", message: "This build does not link MLX.", details: nil))
-    #endif
   }
 
   private func handle(call: FlutterMethodCall, result: @escaping FlutterResult) {
     switch call.method {
     case "handshake":
-      result(["reason": availabilityReason(), "mlx": mlxAvailable()])
+      result(["reason": availabilityReason(), "mlx": Mlx.isAvailable])
     case "generate":
       let args = call.arguments as? [String: Any] ?? [:]
       let id = args["id"] as? String ?? ""
@@ -274,17 +254,7 @@ class AppleFmChannel: NSObject {
       return LanguageModelSession(
         model: .default, tools: tools, transcript: transcript)
     }
-    guard #available(iOS 27.0, macOS 27.0, *) else {
-      throw GenerationFailure("This OS does not carry MLX models.")
-    }
-    #if canImport(FoundationModels, _version: 2) && canImport(EntoliMLX)
-    return LanguageModelSession(
-      model: try await MlxModels.shared.load(model, directory),
-      tools: tools,
-      transcript: transcript)
-    #else
-    throw GenerationFailure("This build does not link MLX.")
-    #endif
+    return try await Mlx.session(model, directory, tools: tools, transcript: transcript)
   }
 
   private func toolCall(_ id: String, _ name: String, _ arguments: String) {
@@ -314,17 +284,6 @@ class AppleFmChannel: NSObject {
 
 /// What `BridgeTool` throws the moment it has forwarded its call.
 struct BridgeHandoff: Error {}
-
-/// A generation that cannot start because this OS or this build carries no
-/// model for the id it was asked for. The wording rides out as it is; the
-/// Dart side's error map says the rest.
-struct GenerationFailure: Error, CustomStringConvertible {
-  let message: String
-  init(_ message: String) {
-    self.message = message
-  }
-  var description: String { message }
-}
 
 /// One of the agent's tools, as the framework sees it. The arguments are the
 /// `schema` the Dart side sent, converted below into the framework's dynamic

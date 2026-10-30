@@ -426,6 +426,8 @@ jobs:
           key: ${{ steps.ishkey.outputs.key }}
 
       - uses: ./.github/actions/apple-mlx
+        with:
+          slice: ios
 
       # Archived unsigned, then exported with automatic signing. The key is
       # decoded into runner temp and dies with the runner; it needs the
@@ -526,10 +528,8 @@ jobs:
   # ticket stapled into the image, so Gatekeeper opens it without a prompt;
   # see "The DMG" in macos/AGENTS.md.
   #
-  # On the xcode-27 image with 27.1 selected, as the ios job is: with an
-  # older SDK mlx-swift-lm's adapter compiles to an empty module, the
-  # handshake answers `mlx: false`, and the On-device page's MLX section
-  # silently never appears.
+  # On the xcode-27 image with 27.1 selected, as the ios job is: EntoliMLX
+  # needs the 27 SDK, and refuses to build without it.
   macos:
     needs: version
     runs-on: xcode-27
@@ -615,6 +615,8 @@ jobs:
       - uses: ./.github/actions/flutter-setup
 
       - uses: ./.github/actions/apple-mlx
+        with:
+          slice: macos
 
       - name: Build the app bundle
         run: flutter build macos --release --build-number="${{ needs.version.outputs.code }}"

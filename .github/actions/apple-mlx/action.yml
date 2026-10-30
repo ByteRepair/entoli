@@ -4,7 +4,16 @@ description: >
   Apple Runners link from `tool/apple/mlx/dist/`. Cached on what decides the
   output: the package, its pins, the recipe, this file and the Xcode the
   caller selected, since the module is read back by that compiler. Expects
-  Xcode 27 already selected.
+  Xcode 27 already selected; an older one fails the build rather than
+  caching a framework with no MLX in it.
+
+inputs:
+  slice:
+    description: >
+      The one slice the job ships — `ios` or `macos` — so neither job compiles
+      the other's, nor the simulator's no release uses. Its own cache key, so
+      the two jobs never race to save one.
+    required: true
 
 runs:
   using: composite
@@ -20,7 +29,7 @@ runs:
       uses: actions/cache/restore@v6.1.0
       with:
         path: tool/apple/mlx/dist/
-        key: apple-mlx-${{ steps.key.outputs.xcode }}-${{ hashFiles('tool/apple/mlx/Package.swift', 'tool/apple/mlx/Package.resolved', 'tool/apple/mlx/Sources/**', 'tool/apple/mlx/build.sh', '.github/actions/apple-mlx/action.yml') }}
+        key: apple-mlx-${{ inputs.slice }}-${{ steps.key.outputs.xcode }}-${{ hashFiles('tool/apple/mlx/Package.swift', 'tool/apple/mlx/Package.resolved', 'tool/apple/mlx/Sources/**', 'tool/apple/mlx/build.sh', '.github/actions/apple-mlx/action.yml') }}
 
     # MLX compiles Metal kernels, and the image's Xcode ships without the
     # compiler for them; nothing on a hit path needs it.
@@ -32,7 +41,7 @@ runs:
     - name: Build the MLX framework
       if: steps.mlx-cache.outputs.cache-hit != 'true'
       shell: bash
-      run: tool/apple/mlx/build.sh
+      run: tool/apple/mlx/build.sh "${{ inputs.slice }}"
 
     # From a branch only, as bundled-tools saves.
     - name: Save the MLX framework
