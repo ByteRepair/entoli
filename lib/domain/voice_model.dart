@@ -58,6 +58,8 @@ enum VoiceEngine {
   androidSpeech,
   iosRecognition,
   iosSpeech,
+  macosRecognition,
+  macosSpeech,
 }
 
 /// A model in the catalog, installed or not.
@@ -102,14 +104,10 @@ sealed class VoiceModel {
 
   int get bytes => downloads.fold(0, (sum, d) => sum + d.bytes);
 
-  /// Whether this is one of the Android-system sentinels — a pick that means
+  /// Whether this is one of the system sentinels — a pick that means
   /// "use the OS engine" rather than a downloaded model. Read off [engine],
   /// which is already the one thing about a model that decides what runs it.
-  bool get isNative =>
-      engine == VoiceEngine.androidRecognition ||
-      engine == VoiceEngine.androidSpeech ||
-      engine == VoiceEngine.iosRecognition ||
-      engine == VoiceEngine.iosSpeech;
+  bool get isNative => _systemEngines.contains(engine);
 
   /// Which half of the model directory it installs into: one of [voiceFolders].
   String get folder;
@@ -424,6 +422,40 @@ const iosSpeech = SpeechModel(
   downloads: [],
 );
 
+/// macOS's: the same two Apple engines, over the same channel contract. Unlike
+/// iOS they sit beside the downloaded catalog rather than replacing it, the way
+/// Android's do.
+const macosRecognition = RecognitionModel(
+  id: "macos-recognition",
+  name: "macOS system",
+  engine: VoiceEngine.macosRecognition,
+  languages: "System languages",
+  multilingual: false,
+  tokens: "",
+  downloads: [],
+);
+
+const macosSpeech = SpeechModel(
+  id: "macos-speech",
+  name: "macOS system",
+  engine: VoiceEngine.macosSpeech,
+  languages: "System languages",
+  multilingual: false,
+  model: "",
+  tokens: "",
+  downloads: [],
+);
+
+/// The engines that are a platform's own rather than sherpa's.
+const _systemEngines = {
+  VoiceEngine.androidRecognition,
+  VoiceEngine.androidSpeech,
+  VoiceEngine.iosRecognition,
+  VoiceEngine.iosSpeech,
+  VoiceEngine.macosRecognition,
+  VoiceEngine.macosSpeech,
+};
+
 /// Every model, either kind. The settings page draws each kind's own list; this
 /// is for looking one up by the id a setting holds, which is why the sentinels
 /// are in here.
@@ -434,6 +466,8 @@ const voiceCatalog = <VoiceModel>[
   nativeSpeech,
   iosRecognition,
   iosSpeech,
+  macosRecognition,
+  macosSpeech,
 ];
 
 /// The catalog model [id] names. Null where it names nothing, or something no

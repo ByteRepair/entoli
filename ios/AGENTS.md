@@ -190,8 +190,10 @@ interpreter being its own task.
 ## Voice mode
 
 Voice mode is Apple's engines, behind the same `agent_chat/voice` contract
-`VoiceChannel.kt` answers on Android — `VoiceChannel.swift` beside the
-delegate, and the Dart `Native*` strategies shared with `android_voice.dart`.
+`VoiceChannel.kt` answers on Android — `VoiceChannel.swift`, which lives in
+`macos/Runner/` and is compiled into both Runners the way
+`RemindersShared.swift` is, its `AVAudioSession` half under `#if os(iOS)` —
+and the Dart `Native*` strategies shared with `android_voice.dart`.
 Recognition is on-device `SFSpeechRecognizer` only and synthesis is
 `AVSpeechSynthesizer`, so no audio leaves the device — the transcript does, to
 the chat's model like any typed message, which is what both usage strings say —

@@ -5,8 +5,27 @@ import "dart:typed_data";
 /// helper so that the main isolate, where playback happens, needs nothing of
 /// sherpa at all.
 Uint8List wavOf(Float32List samples, int sampleRate) {
-  const headerBytes = 44;
-  final data = ByteData(headerBytes + samples.length * 2);
+  final data = _withHeader(samples.length * 2, sampleRate);
+  for (var i = 0; i < samples.length; i++) {
+    // Clamped rather than wrapped: a sample past full scale that wraps is a
+    // click, and models do overshoot.
+    final value = (samples[i] * 32767).round().clamp(-32768, 32767);
+    data.setInt16(_headerBytes + i * 2, value, Endian.little);
+  }
+  return data.buffer.asUint8List();
+}
+
+/// A mono WAV of [pcm], 16-bit little-endian samples already: what a provider
+/// that answers in raw PCM sends.
+Uint8List wavOfPcm16(Uint8List pcm, int sampleRate) =>
+    _withHeader(pcm.length, sampleRate).buffer.asUint8List()
+      ..setRange(_headerBytes, _headerBytes + pcm.length, pcm);
+
+const _headerBytes = 44;
+
+/// A WAV's whole buffer, its header written and [dataBytes] of room after it.
+ByteData _withHeader(int dataBytes, int sampleRate) {
+  final data = ByteData(_headerBytes + dataBytes);
   var at = 0;
   void ascii(String s) {
     for (final c in s.codeUnits) {
@@ -25,7 +44,7 @@ Uint8List wavOf(Float32List samples, int sampleRate) {
   }
 
   ascii("RIFF");
-  u32(36 + samples.length * 2);
+  u32(36 + dataBytes);
   ascii("WAVE");
   ascii("fmt ");
   u32(16); // PCM header length
@@ -36,13 +55,6 @@ Uint8List wavOf(Float32List samples, int sampleRate) {
   u16(2); // bytes per frame
   u16(16); // bits per sample
   ascii("data");
-  u32(samples.length * 2);
-  for (final sample in samples) {
-    // Clamped rather than wrapped: a sample past full scale that wraps is a
-    // click, and models do overshoot.
-    final value = (sample * 32767).round().clamp(-32768, 32767);
-    data.setInt16(at, value, Endian.little);
-    at += 2;
-  }
-  return data.buffer.asUint8List();
+  u32(dataBytes);
+  return data;
 }

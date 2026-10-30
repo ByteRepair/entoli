@@ -144,14 +144,16 @@ class SherpaListener extends MicrophoneListener {
       return;
     }
     try {
-      final stream = await _recorder.startStream(const RecordConfig(
+      final stream = await _recorder.startStream(RecordConfig(
         encoder: AudioEncoder.pcm16bits,
         sampleRate: sampleRate,
         numChannels: 1,
         // The reply comes out of the same device the microphone is on. The
         // microphone is shut while one is being read out, so this is belt and
         // braces rather than the thing keeping the model from hearing itself.
-        echoCancel: true,
+        // Not on macOS: there it is Apple's voice processing, whose input is
+        // several channels that `record` converts to mono as pure silence.
+        echoCancel: !Platform.isMacOS,
         noiseSuppress: true,
       ));
       // Shut while this was opening, which is a Talk button let go inside the

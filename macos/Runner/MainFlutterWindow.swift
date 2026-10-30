@@ -30,6 +30,7 @@ class MainFlutterWindow: NSWindow {
 
     RemindersPlugin.register(with: flutterViewController.engine.binaryMessenger)
     ClipboardChannel.register(with: flutterViewController.engine.binaryMessenger)
+    VoiceChannel.register(with: flutterViewController.engine.binaryMessenger)
 
     // A wake session is not an opening anyone is watching: the trigger's
     // launchd job started the process, and hiding is the application's own —
