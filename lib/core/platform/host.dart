@@ -38,6 +38,8 @@ import "../../data/local/landlock.dart";
 import "../../data/local/shared_backup.dart";
 import "../../data/local/tree_ops.dart";
 import "../../data/local/desktop_file_handoff.dart";
+import "../../data/model_host/helper_process.dart";
+import "../../data/model_host/model_host.dart";
 import "../../data/local/io_file_watches.dart";
 import "../../data/local/linux_reminder_alarms.dart";
 import "../../data/local/macos_reminder_alarms.dart";
@@ -307,6 +309,7 @@ Future<LocalEngine> createLocalEngine(String cacheDir) async {
               p.join(cacheDir, "llm"),
               format: const MlxFormat(),
             ),
+            _modelHost,
           )
         : const NoLocalEngine();
   }
@@ -468,14 +471,22 @@ void registerRecorder() {
   if (Platform.isLinux) RecordPlatform.instance = LinuxRecorder();
 }
 
+/// Where this process's on-device models run, one for the process so MLX and
+/// voice share it: a model host on macOS, where MLX's GPU work beside the
+/// window starves the window's frames, and this process everywhere else. See
+/// "The model host" in macos/AGENTS.md.
+final ModelHost _modelHost = Platform.isMacOS
+    ? HelperModelHost(HelperProcess.launch)
+    : const InProcessModelHost();
+
 /// sherpa-onnx on the desktops; Android and macOS also have their system
 /// engines (see [AndroidVoice], [MacosVoice]); iOS has Apple's alone (see
 /// [IosVoice]).
 Voice createVoice(VoiceModelStore store, String cacheDir) {
   if (Platform.isAndroid) return AndroidVoice(store, cacheDir);
   if (Platform.isIOS) return const IosVoice();
-  if (Platform.isMacOS) return MacosVoice(store, cacheDir);
-  return SherpaVoice(store, cacheDir);
+  if (Platform.isMacOS) return MacosVoice(store, cacheDir, _modelHost);
+  return SherpaVoice(store, cacheDir, _modelHost);
 }
 
 /// The process's environment. The Dart VM's iOS build leaves

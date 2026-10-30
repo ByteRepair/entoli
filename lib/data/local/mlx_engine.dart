@@ -6,6 +6,7 @@ import "../../domain/local_llm.dart";
 import "../../domain/local_model.dart";
 import "../../domain/local_model_store.dart";
 import "../builtin/llm/llm_client.dart";
+import "../model_host/model_host.dart";
 import "apple_fm.dart";
 import "local_engine.dart";
 
@@ -13,16 +14,27 @@ import "local_engine.dart";
 /// and macOS 27, where the build links the package. The Swift half of
 /// [appleChannel] loads a model from its directory, keeps it resident until
 /// it is evicted, and runs each generation the way it runs the Apple system
-/// model's — so tool calls arrive decoded, as they do there.
+/// model's — so tool calls arrive decoded, as they do there. Which process
+/// that Swift half is in is the [ModelHost]'s answer: the model host on
+/// macOS, this one on iOS.
 ///
 /// Residency is decided here, the way the llama pool decides it: past
 /// `maxLocalModels` the least recently served is evicted before the next one
 /// loads, so two sets of weights are never mapped where one was asked for.
 class MlxEngine extends LocalEngine {
-  MlxEngine(this.store);
+  MlxEngine(this.store, ModelHost host)
+    : _channel = host.channel(appleChannel.name) {
+    // The models were the process's; a new one starts with none resident.
+    host.lost.listen((_) {
+      _resident.clear();
+      _publish(const []);
+    });
+  }
 
   @override
   final LocalModelStore store;
+
+  final ModelChannel _channel;
 
   /// Each resident model's load, by id: two turns asking at once wait on the
   /// same one, and a model that is in here is never loaded again.
@@ -68,11 +80,11 @@ class MlxEngine extends LocalEngine {
     while (others.length >= maxRunning) {
       final oldest = others.removeAt(0);
       _resident.remove(oldest.modelId);
-      await appleChannel.invokeMethod("evict", {"model": oldest.modelId});
+      await _channel.invokeMethod("evict", {"model": oldest.modelId});
     }
     _publish([...others, _state(model, LocalLlmPhase.starting)]);
     try {
-      await appleChannel.invokeMethod("load", {
+      await _channel.invokeMethod("load", {
         "model": model.id,
         "directory": model.file,
       });
@@ -86,8 +98,11 @@ class MlxEngine extends LocalEngine {
 
   @override
   Future<void> stopAll() async {
+    // Nothing loaded is nothing to evict, and asking would start a model host
+    // only to tell it so.
+    if (_resident.isEmpty && running.value.isEmpty) return;
     _resident.clear();
-    await appleChannel.invokeMethod("evictAll");
+    await _channel.invokeMethod("evictAll");
     _publish(const []);
   }
 
@@ -128,7 +143,7 @@ class MlxEngine extends LocalEngine {
 
 /// An MLX model, asked through the channel once [MlxEngine] has it resident.
 class MlxClient extends FoundationModelsClient {
-  MlxClient(this._engine, this._settings);
+  MlxClient(this._engine, this._settings) : super(_engine._channel);
 
   final MlxEngine _engine;
   final AppSettings Function() _settings;

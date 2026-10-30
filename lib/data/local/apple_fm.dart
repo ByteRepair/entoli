@@ -7,6 +7,8 @@ import "../../domain/local_model.dart";
 import "../../domain/llm_provider.dart";
 import "../builtin/llm/llm_client.dart";
 import "../builtin/llm/providers/provider.dart";
+import "../model_host/host_connection.dart";
+import "../model_host/model_host.dart";
 
 // The ids live in the domain beside `localProviderId`, exported here for the
 // tests and the pages that name the model.
@@ -115,34 +117,21 @@ class AppleFmProvider extends LlmProvider with KeyFree {
   }) async => [appleModelId];
 }
 
-/// Everything the channel says, broadcast — the `NativeVoiceBridge` shape:
-/// `setMethodCallHandler` takes one handler, so a second client's
-/// registration would land on the first's, and the bridge owns it while the
-/// clients filter by generation id.
-class AppleFmBridge {
-  AppleFmBridge._install() {
-    appleChannel.setMethodCallHandler((call) async {
-      incoming.add(call);
-    });
-  }
-
-  static final shared = AppleFmBridge._install();
-
-  final incoming = StreamController<MethodCall>.broadcast();
-
-  Stream<MethodCall> get calls => incoming.stream;
-}
-
 /// A model the Foundation Models framework runs, as a client: the Apple
-/// system model ([AppleFmClient]) or an MLX model (`MlxEngine`'s). Both cross
-/// the same channel and differ only in [route], what the channel is told runs
-/// the model. Nothing is held between calls, so [close] is nothing and a
-/// rebuilt client costs nothing — the registry can cache or drop this as it
-/// likes.
+/// system model ([AppleFmClient]) or an MLX model (`MlxEngine`'s). Both speak
+/// the same channel and differ in [route], what the channel is told runs the
+/// model, and in [channel], where its native half is — this process for the
+/// system model, the model host for MLX. Nothing is held between calls, so
+/// [close] is nothing and a rebuilt client costs nothing — the registry can
+/// cache or drop this as it likes.
 abstract class FoundationModelsClient implements LlmClient {
+  FoundationModelsClient(this.channel);
+
   /// One counter for the whole process, across every client the registry
-  /// ever built: a generation id must not mean two things to one bridge.
+  /// ever built: a generation id must not mean two things to one channel.
   static var _generations = 0;
+
+  final ModelChannel channel;
 
   /// What the model is called in an error, after "the": "Apple on-device
   /// model".
@@ -170,17 +159,18 @@ abstract class FoundationModelsClient implements LlmClient {
     // fields: one client is the registry's one cache entry, and concurrent
     // streams of its own would have been one buffer each.
     final textSoFar = StringBuffer();
+    final thought = StringBuffer();
     final calls = <LlmToolCall>[];
 
     // Registered before the request goes out, so a frame the platform sent
     // early cannot fall between the request and its listener.
     final events = StreamController<MethodCall>();
-    final subscription = AppleFmBridge.shared.calls
+    final subscription = channel.calls
         .where((call) => (call.arguments as Map?)?["id"] == generation)
-        .listen(events.add);
+        .listen(events.add, onError: events.addError);
     var finished = false;
     try {
-      await appleChannel.invokeMethod("generate", {
+      await channel.invokeMethod("generate", {
         "id": generation,
         ...target,
         "instructions": joinedSystemText(messages),
@@ -209,6 +199,15 @@ abstract class FoundationModelsClient implements LlmClient {
               textSoFar.write(text);
               yield LlmTextChunk(text);
             }
+          case "reasoning":
+            // A thinking model's trace, apart from its reply: on an MLX turn
+            // with tools offered it is all that streams, the reply arriving
+            // whole at the end.
+            final text = (call.arguments as Map?)?["text"] as String?;
+            if (text != null && text.isNotEmpty) {
+              thought.write(text);
+              yield LlmReasoningChunk(text);
+            }
           case "toolCall":
             final args = call.arguments as Map?;
             calls.add(
@@ -228,6 +227,7 @@ abstract class FoundationModelsClient implements LlmClient {
                 role: LlmRole.assistant,
                 text: textSoFar.toString(),
                 toolCalls: List.of(calls),
+                reasoning: thought.isEmpty ? null : thought.toString(),
               ),
               finishReason: "tool_calls",
             );
@@ -241,6 +241,7 @@ abstract class FoundationModelsClient implements LlmClient {
               message: LlmMessage(
                 role: LlmRole.assistant,
                 text: textSoFar.toString(),
+                reasoning: thought.isEmpty ? null : thought.toString(),
               ),
               finishReason: args?["finish"] as String? ?? "stop",
               // Real counts where the session keeps them (iOS 27 and
@@ -267,6 +268,11 @@ abstract class FoundationModelsClient implements LlmClient {
         }
       }
       throw LlmException("The $label never answered.", statusCode: 502);
+    } on ModelHostGone {
+      // Its process went mid-turn, and the next turn starts another: worth
+      // the retry a dropped connection to a provider gets.
+      finished = true;
+      throw LlmException("The $label stopped.", retryable: true);
     } finally {
       // Unsubscribe first: a cancel arriving at the Swift half cannot race a
       // generation this client is still reading.
@@ -274,7 +280,7 @@ abstract class FoundationModelsClient implements LlmClient {
       await events.close();
       if (!finished) {
         try {
-          await appleChannel.invokeMethod("cancel", {"id": generation});
+          await channel.invokeMethod("cancel", {"id": generation});
         } catch (_) {
           // Best-effort by construction: an engine mid-teardown, or a test
           // host with nothing behind the channel. The Swift side's own
@@ -288,7 +294,9 @@ abstract class FoundationModelsClient implements LlmClient {
 
 /// The Apple system model, gated on its own availability.
 class AppleFmClient extends FoundationModelsClient {
-  AppleFmClient(this.probe);
+  /// The system model is the OS's own process already, so its channel is
+  /// always this one's.
+  AppleFmClient(this.probe) : super(PlatformModelChannel(appleChannel));
 
   final AppleFmProbe probe;
 

@@ -21,6 +21,17 @@ class MainFlutterWindow: NSWindow {
       }
     }
 
+    // A model host runs a headless engine of its own instead of this window's:
+    // the storyboard's window still loads, so it is closed once AppKit has
+    // finished putting it up, and the policy keeps a Dock icon from showing.
+    if AppDelegate.modelHost {
+      NSApp.setActivationPolicy(.prohibited)
+      ModelHost.start()
+      super.awakeFromNib()
+      DispatchQueue.main.async { self.close() }
+      return
+    }
+
     let flutterViewController = FlutterViewController()
     let windowFrame = self.frame
     self.contentViewController = flutterViewController
@@ -59,6 +70,62 @@ class MainFlutterWindow: NSWindow {
     }
 
     super.awakeFromNib()
+  }
+}
+
+/// The model host's engine: `modelHostMain` with no view, `AppleFmChannel`
+/// the one native piece registered on it, and a watch on the app that
+/// started it. In this file rather than its own so the Xcode project needs no
+/// new entry. See "The model host" in macos/AGENTS.md.
+enum ModelHost {
+  private static var engine: FlutterEngine?
+  private static var parent: DispatchSourceProcess?
+
+  static func start() {
+    let project = FlutterDartProject()
+    // What follows the flag is the socket to connect to, then the app's pid.
+    let arguments = Array(
+      ProcessInfo.processInfo.arguments.drop { $0 != "entoli-models" }.dropFirst())
+    project.dartEntrypointArguments = arguments
+    let engine = FlutterEngine(name: "models", project: project, allowHeadlessExecution: true)
+    AppleFmChannel.register(with: engine.binaryMessenger)
+    let channel = FlutterMethodChannel(
+      name: "agent_chat/model_host", binaryMessenger: engine.binaryMessenger)
+    channel.setMethodCallHandler { call, result in
+      guard call.method == "quit" else { return result(FlutterMethodNotImplemented) }
+      result(nil)
+      quit()
+    }
+    engine.run(withEntrypoint: "modelHostMain")
+    self.engine = engine
+    // Opened through LaunchServices, this host's parent is launchd: the app
+    // is the pid it was handed.
+    watch(arguments.count > 1 ? pid_t(arguments[1]) ?? 0 : 0)
+  }
+
+  /// Stops the generations, then leaves through `_exit`. `exit` runs the C++
+  /// static destructors, MLX's Metal device among them, while a generation
+  /// may still be encoding on another thread — the crash every quit during an
+  /// MLX turn used to end in. Bounded, so a generation that will not stop
+  /// cannot keep a host alive past its app.
+  static func quit() {
+    Task { @MainActor in
+      await AppleFmChannel.stopAll()
+      _exit(0)
+    }
+    DispatchQueue.main.asyncAfter(deadline: .now() + 3) { _exit(0) }
+  }
+
+  /// The app going, however it goes — a crash closes no socket in time to be
+  /// read — is this host going. No pid to watch is no app to serve.
+  private static func watch(_ pid: pid_t) {
+    guard pid > 1 else { return quit() }
+    let source = DispatchSource.makeProcessSource(identifier: pid, eventMask: .exit, queue: .main)
+    source.setEventHandler { quit() }
+    source.resume()
+    parent = source
+    // Gone before the source was armed, which it would never report.
+    if kill(pid, 0) != 0 { quit() }
   }
 }
 

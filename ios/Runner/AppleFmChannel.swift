@@ -122,6 +122,16 @@ class AppleFmChannel: NSObject {
     }
   }
 
+  /// Every generation cancelled, returning once each has ended: what a model
+  /// host does before it leaves, so no generation is still encoding GPU work
+  /// as the process goes.
+  @MainActor static func stopAll() async {
+    guard let instance else { return }
+    let tasks = Array(instance.generations.values)
+    tasks.forEach { $0.cancel() }
+    for task in tasks { await task.value }
+  }
+
   private func finishGeneration(_ id: String) {
     DispatchQueue.main.async { [weak self] in
       self?.generations.removeValue(forKey: id)?.cancel()
@@ -213,12 +223,18 @@ class AppleFmChannel: NSObject {
     // the suffix past what was last said crosses the channel. A snapshot
     // that rewrote rather than extended cannot be said as a delta and is
     // skipped; the framework's content only grows.
+    let thinking = watchThinking(id, session)
     var sent = ""
     for try await part in stream {
       let text: String = part.content
       guard text.hasPrefix(sent), text != sent else { continue }
       send("text", ["id": id, "text": String(text.dropFirst(sent.count))])
       sent = text
+    }
+    // Whatever the last look missed, said before the end is.
+    thinking?.cancel()
+    if #available(iOS 27.0, macOS 27.0, *), let thinking {
+      sendThinking(id, session, after: await thinking.value)
     }
 
     // The session keeps the request's counts after it has streamed (iOS 27
@@ -255,6 +271,45 @@ class AppleFmChannel: NSObject {
         model: .default, tools: tools, transcript: transcript)
     }
     return try await Mlx.session(model, directory, tools: tools, transcript: transcript)
+  }
+
+  /// A thinking model's trace, sent as `reasoning` frames while it is
+  /// produced. It is never in a snapshot's `content`, and the stream itself
+  /// says nothing until the turn is over: measured, an MLX turn with a tool
+  /// offered — every agent turn — gave no snapshot in 31 seconds, its reply
+  /// held back until mlx-swift-lm could tell a tool call from an answer. The
+  /// session's own transcript fills with the thinking as it is generated, so
+  /// that is watched instead. Polled rather than observed: a poll ends the
+  /// moment it is cancelled, which is what lets the end of the turn wait for
+  /// it. Answers what it has sent.
+  @available(iOS 26.0, macOS 26.0, *)
+  private func watchThinking(_ id: String, _ session: LanguageModelSession) -> Task<String, Never>? {
+    guard #available(iOS 27.0, macOS 27.0, *) else { return nil }
+    return Task { [weak self] in
+      var thought = ""
+      while !Task.isCancelled {
+        thought = self?.sendThinking(id, session, after: thought) ?? thought
+        try? await Task.sleep(nanoseconds: 100_000_000)
+      }
+      return thought
+    }
+  }
+
+  /// The trace past [after], sent as one frame, and the trace as now said.
+  /// A trace that rewrote rather than extended cannot be said as a delta and
+  /// waits for one that does, the way the reply's text does.
+  @available(iOS 27.0, macOS 27.0, *)
+  @discardableResult
+  private func sendThinking(_ id: String, _ session: LanguageModelSession, after: String) -> String {
+    var thought = ""
+    for case .reasoning(let reasoning) in session.transcript {
+      for case .text(let segment) in reasoning.segments {
+        thought += segment.content
+      }
+    }
+    guard thought.hasPrefix(after), thought != after else { return after }
+    send("reasoning", ["id": id, "text": String(thought.dropFirst(after.count))])
+    return thought
   }
 
   private func toolCall(_ id: String, _ name: String, _ arguments: String) {

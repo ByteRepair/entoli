@@ -14,7 +14,10 @@ import "core/platform/system_palette.dart";
 import "core/tls.dart";
 import "data/backup.dart" show recoverRestore;
 import "data/builtin/llm/providers/provider.dart" show LlmProvider;
+import "data/local/apple_fm.dart" show appleChannel;
 import "data/local/file_trigger_store.dart";
+import "data/model_host/model_host_server.dart";
+import "data/voice/sherpa_voice.dart" show sherpaWorkers;
 import "data/model_catalog.dart";
 import "data/local/file_selector_picker.dart";
 import "data/prompts/bundled_skills.dart";
@@ -47,6 +50,18 @@ import "ui/share/incoming_shares.dart";
 import "ui/triggers/incoming_open.dart";
 import "ui/selection.dart";
 import "ui/theme.dart";
+
+/// The model host's entry point: Entoli's own executable launched again as
+/// `entoli-models`, running the on-device models for the app that started it
+/// and nothing else. Here rather than beside the server because the macOS
+/// engine finds an entry point by name in this library. See "The model host"
+/// in macos/AGENTS.md.
+@pragma("vm:entry-point")
+void modelHostMain(List<String> arguments) => ModelHostServer.run(
+  arguments,
+  channels: [appleChannel],
+  workers: sherpaWorkers,
+);
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();

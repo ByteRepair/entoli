@@ -315,8 +315,13 @@ the residency Dart decides:
 - `generate` with a `directory` → the session is built on the kept instance,
   loaded first if it is not kept; without one, the system model.
 
-Still the hand-run's to confirm: whether a thinking model's trace stays out
-of `part.content` with `.reasoning` declared.
+A thinking model's trace stays out of `part.content` with `.reasoning`
+declared. From 27 it is in each snapshot's `transcriptEntries` instead, and
+`generate` sends it as `reasoning` frames beside the `text` ones, which the
+client yields as `LlmReasoningChunk`s. On an MLX turn with tools offered —
+every agent turn — it is all that streams: mlx-swift-lm buffers the reply
+until generation ends, since it cannot tell a tool call from an answer
+before then, so the reply arrives whole after the thinking.
 
 ### The build
 

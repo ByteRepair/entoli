@@ -59,6 +59,28 @@ void main() {
     expect(asked.where((call) => call.method == "cancel"), isEmpty);
   });
 
+  test("reasoning streams apart from the reply", () async {
+    final reply = AppleFmClient(const AppleFmProbe("available")).stream(const [
+      LlmMessage(role: LlmRole.user, text: "hello"),
+    ], model: appleModelId).toList();
+    await breathe();
+
+    final id = outgoing("generate")["id"];
+    await incoming("reasoning", {"id": id, "text": "The user "});
+    await incoming("reasoning", {"id": id, "text": "said hello."});
+    await incoming("text", {"id": id, "text": "Hello there."});
+    await incoming("done", {"id": id});
+
+    final chunks = await reply;
+    expect(
+      chunks.whereType<LlmReasoningChunk>().map((c) => c.text).join(),
+      "The user said hello.",
+    );
+    final completion = chunks.whereType<LlmCompletion>().single;
+    expect(completion.message.text, "Hello there.");
+    expect(completion.message.reasoning, "The user said hello.");
+  });
+
   test("a tool call is the handoff: report, end, cancel", () async {
     final reply = AppleFmClient(const AppleFmProbe("available"))
         .stream(

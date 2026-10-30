@@ -14,8 +14,16 @@ class AppDelegate: FlutterAppDelegate {
   /// Set by `MainFlutterWindow`'s activation watcher.
   static var userShowedUp = false
 
+  /// A model host launch: the app started this copy of its own executable to
+  /// run the on-device models, so their GPU work is not in the process that
+  /// draws the window. No window and no Dock icon; `ModelHost` is all it
+  /// runs. See "The model host" in macos/AGENTS.md.
+  static let modelHost = ProcessInfo.processInfo.arguments.contains("entoli-models")
+
   override func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
-    return true
+    // A model host has closed its window by design and lives until the app
+    // that started it goes.
+    return !AppDelegate.modelHost
   }
 
   override func applicationSupportsSecureRestorableState(_ app: NSApplication) -> Bool {

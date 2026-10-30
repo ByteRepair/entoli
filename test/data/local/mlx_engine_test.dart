@@ -4,6 +4,7 @@ import "package:flutter_test/flutter_test.dart";
 import "package:agent_chat/data/builtin/llm/llm_client.dart";
 import "package:agent_chat/data/local/local_engine.dart";
 import "package:agent_chat/data/local/mlx_engine.dart";
+import "package:agent_chat/data/model_host/model_host.dart";
 import "package:agent_chat/domain/app_settings.dart";
 import "package:agent_chat/domain/local_llm.dart";
 import "package:agent_chat/domain/local_model.dart";
@@ -39,8 +40,10 @@ void main() {
     refuse.clear();
   });
 
-  MlxEngine engine() =>
-      MlxEngine(FakeLocalModelStore(installed: {small.id, large.id}));
+  MlxEngine engine() => MlxEngine(
+    FakeLocalModelStore(installed: {small.id, large.id}),
+    const InProcessModelHost(),
+  );
 
   List<String> calls() => [
     for (final call in asked)
