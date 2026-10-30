@@ -824,12 +824,14 @@ void main() {
       await settleIo(tester, least: 20);
 
       expect(await io(tester, () => app.repo.projectOf(chat.state.id)), "work");
-      // The list was invalidated by the move; it has to be read again to show
-      // it. The selection is set at the end of the same chain, so it is read
-      // once the rebuild has landed rather than on a round count.
+      // The selection is set at the end of the move's chain and the list is
+      // read again after it, so both are waited for rather than counted: the
+      // title alone was on screen before the move landed.
+      await settleUntil(
+          tester, () => app.container.read(selectedProjectProvider).project == "work",
+          what: "the sidebar following the chat into work");
       await pumpUntil(tester, find.text("at home"));
       expect(find.text("at home"), findsOneWidget);
-      expect(app.container.read(selectedProjectProvider).project, "work");
     });
 
     // The open controller held the chat as it was when it read it — project
