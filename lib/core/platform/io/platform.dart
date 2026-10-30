@@ -49,6 +49,7 @@ import "../../../data/builtin/local_shell.dart";
 import "../../../data/voice/android_voice.dart";
 import "../../../data/voice/file_voice_model_store.dart";
 import "../../../data/voice/ios_voice.dart";
+import "../../../data/voice/macos_voice.dart";
 import "../../../data/voice/sherpa_voice.dart";
 import "../../../domain/app_settings.dart";
 import "../../../domain/agent_browser.dart";
@@ -465,11 +466,13 @@ void registerRecorder() {
   if (Platform.isLinux) RecordPlatform.instance = LinuxRecorder();
 }
 
-/// sherpa-onnx on the desktops; Android also has its system engines (see
-/// [AndroidVoice]); iOS has Apple's alone (see [IosVoice]).
+/// sherpa-onnx on the desktops; Android and macOS also have their system
+/// engines (see [AndroidVoice], [MacosVoice]); iOS has Apple's alone (see
+/// [IosVoice]).
 Voice createVoice(VoiceModelStore store, String cacheDir) {
   if (Platform.isAndroid) return AndroidVoice(store, cacheDir);
   if (Platform.isIOS) return const IosVoice();
+  if (Platform.isMacOS) return MacosVoice(store, cacheDir);
   return SherpaVoice(store, cacheDir);
 }
 

@@ -1,10 +1,18 @@
 import AVFoundation
+#if os(iOS)
 import Flutter
+#else
+import FlutterMacOS
+#endif
 import Speech
 
-/// The iOS half of the `agent_chat/voice` channel — the same contract
+/// Both Apples' half of the `agent_chat/voice` channel — the same contract
 /// `VoiceChannel.kt` answers on Android, because the Dart `Native*` strategies
-/// are what drive it from either platform. Recognition is Apple's and
+/// are what drive it from every platform. Compiled into both Runners (the iOS
+/// project references this file here, as it does `RemindersShared.swift`);
+/// what differs is under `#if os(iOS)`: iOS has an `AVAudioSession` to
+/// configure and be interrupted through, macOS has none, and the microphone
+/// grant is asked a different way on each. Recognition is Apple's and
 /// on-device only, so nothing said leaves the device; the languages answer is
 /// what enforces that, since a locale the device cannot hear on-device is
 /// never offered.
@@ -13,15 +21,25 @@ import Speech
 /// permission sheet nobody was pressing a button for is worse than one at the
 /// Talk button. A refusal arrives as a recognition error, which the voice
 /// screen shows; it is not remembered here, and the next launch re-probes.
+///
+/// The input is tapped as it comes, never through voice processing: on a Mac
+/// that turns the microphone into several channels, which is what silenced
+/// the sherpa path when `record` was asked for echo cancellation.
 class VoiceChannel: NSObject {
   private static var instance: VoiceChannel?
 
+#if os(iOS)
   static func register(with bridge: FlutterImplicitEngineBridge) {
     guard let registrar = bridge.pluginRegistry.registrar(forPlugin: "VoiceChannel") else {
       return
     }
     instance = VoiceChannel(messenger: registrar.messenger())
   }
+#else
+  static func register(with messenger: FlutterBinaryMessenger) {
+    instance = VoiceChannel(messenger: messenger)
+  }
+#endif
 
   private let channel: FlutterMethodChannel
   private let synthesizer = AVSpeechSynthesizer()
@@ -54,6 +72,7 @@ class VoiceChannel: NSObject {
     channel.setMethodCallHandler { [weak self] call, result in
       self?.handle(call: call, result: result)
     }
+#if os(iOS)
     interruptionObserver = NotificationCenter.default.addObserver(
       forName: AVAudioSession.interruptionNotification, object: nil, queue: .main
     ) { [weak self] notification in
@@ -69,6 +88,7 @@ class VoiceChannel: NSObject {
       guard self.wantListening else { return }
       self.send("recognitionError", "The microphone was interrupted.")
     }
+#endif
   }
 
   private func handle(call: FlutterMethodCall, result: @escaping FlutterResult) {
@@ -178,12 +198,19 @@ class VoiceChannel: NSObject {
     ensureGrants { [weak self] granted in
       guard let self else { return }
       guard granted else {
+#if os(iOS)
+        let settings = "Settings"
+#else
+        let settings = "System Settings"
+#endif
         self.send("recognitionError",
                   "Voice needs the microphone and speech-recognition "
-                    + "permissions, in Settings → Privacy & Security.")
+                    + "permissions, in \(settings) → Privacy & Security.")
         self.stopRecognizing()
         return
       }
+      // Shut while the grants were being asked.
+      guard self.wantListening else { return }
       self.recognize(language: language)
     }
   }
@@ -199,6 +226,7 @@ class VoiceChannel: NSObject {
     }
     log("recognizing in \(locale?.identifier ?? recognizer.locale.identifier), "
         + "on-device supported: \(recognizer.supportsOnDeviceRecognition)")
+#if os(iOS)
 #if !targetEnvironment(simulator)
     guard recognizer.supportsOnDeviceRecognition else {
       send("recognitionError", "This device cannot hear that language on-device.")
@@ -218,6 +246,16 @@ class VoiceChannel: NSObject {
       send("recognitionError", "The microphone could not be opened.")
       return
     }
+#else
+    // A Mac's on-device recognition is Dictation's download, which is the
+    // one thing worth saying where it is missing.
+    guard recognizer.supportsOnDeviceRecognition else {
+      send("recognitionError",
+           "This Mac cannot hear that language on-device. Turning on Dictation "
+             + "in System Settings → Keyboard downloads what it needs.")
+      return
+    }
+#endif
 
     let newRequest = SFSpeechAudioBufferRecognitionRequest()
     newRequest.shouldReportPartialResults = true
@@ -236,8 +274,8 @@ class VoiceChannel: NSObject {
 
     // One utterance per request: the level says when it ended, the final
     // result delivers what it heard, and a still-listening session starts the
-    // next request right there. Silence produces no callbacks at all on iOS,
-    // so there is nothing to restart on but the endpoint timer.
+    // next request right there. Silence produces no callbacks at all, so
+    // there is nothing to restart on but the endpoint timer.
     let input = engine.inputNode
     input.removeTap(onBus: 0)
     input.installTap(onBus: 0, bufferSize: 1024, format: input.outputFormat(forBus: 0)) {
@@ -321,7 +359,7 @@ class VoiceChannel: NSObject {
     endpointTimer = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { [weak self] _ in
       guard let self, self.wantListening, self.hasPartial, let quiet = self.quietSince else { return }
       if CACurrentMediaTime() - quiet > 0.9 {
-        log("ending the utterance: \(CACurrentMediaTime() - quiet)s of level quiet")
+        self.log("ending the utterance: \(CACurrentMediaTime() - quiet)s of level quiet")
         self.quietSince = nil
         self.request?.endAudio()
       }
@@ -347,6 +385,7 @@ class VoiceChannel: NSObject {
     func afterSpeech(_ granted: Bool) {
       guard granted else { done(false); return }
       // Both callbacks land on an arbitrary queue; `done` touches the engine.
+#if os(iOS)
       if #available(iOS 17.0, *) {
         AVAudioApplication.requestRecordPermission { mic in
           DispatchQueue.main.async { done(mic) }
@@ -356,13 +395,19 @@ class VoiceChannel: NSObject {
           DispatchQueue.main.async { done(mic) }
         }
       }
+#else
+      AVCaptureDevice.requestAccess(for: .audio) { mic in
+        DispatchQueue.main.async { done(mic) }
+      }
+#endif
     }
-    if SFSpeechRecognizer.authorizationStatus() == .notDetermined {
+    switch SFSpeechRecognizer.authorizationStatus() {
+    case .notDetermined:
       SFSpeechRecognizer.requestAuthorization { status in
         DispatchQueue.main.async { afterSpeech(status == .authorized) }
       }
-    } else {
-      afterSpeech(SFSpeechRecognizer.authorizationStatus() == .authorized)
+    case let status:
+      afterSpeech(status == .authorized)
     }
   }
 
@@ -380,20 +425,24 @@ class VoiceChannel: NSObject {
   private func stopRecognizing() {
     wantListening = false
     teardownRecognition()
+#if os(iOS)
     if !synthesizer.isSpeaking {
       try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
     }
+#endif
   }
 
   private func speak(_ text: String, generation: Int) {
     let utterance = AVSpeechUtterance(string: text)
     utterance.voice = voice
     pendingUtterances[ObjectIdentifier(utterance)] = generation
+#if os(iOS)
     // The reply can begin seconds after the microphone was shut, which
     // deactivated the session; whether the synthesiser re-activates one that
     // was explicitly released is version-dependent, and this is a no-op when
     // it was never down.
     try? AVAudioSession.sharedInstance().setActive(true)
+#endif
     synthesizer.speak(utterance)
   }
 }

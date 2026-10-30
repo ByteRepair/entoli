@@ -195,12 +195,35 @@ here now — see "Waking for a trigger" below.
 
 ## Voice mode
 
-The stock implementations — sherpa-onnx and audioplayers both carry macOS
-plugins, and `record` ships a macOS recorder — so there is no recorder
-registration and nothing to swap: `registerRecorder` is a no-op here the way
-it would be on any platform without a fallback to install. What the mic costs
-is one prompt: `NSMicrophoneUsageDescription` in `Info.plist` is the text TCC
-reads, and with Apple Events the only permissions a macOS build asks for.
+Two engines, chosen per half the way Android's are: Apple's own on-device
+pair — `SFSpeechRecognizer` asked `requiresOnDeviceRecognition`, and
+`AVSpeechSynthesizer` — behind `Runner/VoiceChannel.swift`, and the sherpa
+catalog the other desktops run. `MacosVoice` routes a `macos-recognition` or
+`macos-speech` pick to the channel and anything downloaded to sherpa, so
+nothing has to be fetched before voice mode works, and a null pick defaults
+to whichever of Apple's engines the probe found. The channel is iOS's own file,
+compiled into both Runners like `RemindersShared.swift`: what macOS lacks —
+`AVAudioSession`, and its way of asking for the microphone — is under
+`#if os(iOS)`; a language the Mac cannot hear on-device says so and points at
+Dictation, whose download is what supplies one.
+
+**sherpa's microphone is `record`, asked for no echo cancellation here.**
+`record_macos` answers `echoCancel` with Apple's voice processing, which turns
+the input into a several-channel stream (seven on a MacBook) that its
+convert-to-16 kHz-mono step renders as pure zeros: measured, a source peak of
+0.099 became an output peak of 0. Silero heard nothing, so every sherpa
+listener — a downloaded model or a provider's — was deaf, while speaking
+worked. The microphone is shut while a reply is read out, so nothing needed
+the cancellation; the channel's own tap never asks for voice processing
+either.
+
+What the mic costs is the prompts: `NSMicrophoneUsageDescription` and
+`NSSpeechRecognitionUsageDescription` in `Info.plist` are the text TCC
+reads — a process asking for speech recognition without the second is
+killed — and with Apple Events the only permissions a macOS build asks for.
+The release entitlements carry `device.audio-input`, which hardened runtime
+otherwise denies; speech recognition needs no entitlement outside the
+sandbox.
 
 ## The icon
 

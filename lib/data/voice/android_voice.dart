@@ -17,7 +17,8 @@ import "voice_strategies.dart";
 /// APK. Each half routes on its own pick. See "The system engines" in
 /// AGENTS.md for why sherpa is the fallback here.
 ///
-/// The `Native*` classes below are the native contract `ios_voice.dart` shares.
+/// `MacosVoice` is this over Apple's engines. The `Native*` classes below are
+/// the native contract `ios_voice.dart` shares too.
 class AndroidVoice extends Voice {
   AndroidVoice(VoiceModelStore store, String cacheDir)
       : _sherpa = SherpaVoice(store, cacheDir);

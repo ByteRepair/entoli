@@ -72,7 +72,7 @@
 		E1D2B33A4C5D6E7F8A90B1C2 /* RemindersPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemindersPlugin.swift; sourceTree = "<group>"; };
 		E1D2B33C4C5D6E7F8A90B1C2 /* RemindersShared.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = RemindersShared.swift; path = ../macos/Runner/RemindersShared.swift; sourceTree = SOURCE_ROOT; };
 		E2AD518B0A99A053D1A7C29F /* IshCore.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = IshCore.xcframework; path = ../tool/ios/ish/dist/IshCore.xcframework; sourceTree = SOURCE_ROOT; };
-		F01CE00000000000000000C0 /* VoiceChannel.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = VoiceChannel.swift; sourceTree = "<group>"; };
+		F01CE00000000000000000C0 /* VoiceChannel.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; name = VoiceChannel.swift; path = ../macos/Runner/VoiceChannel.swift; sourceTree = SOURCE_ROOT; };
 		F01CE00000000000000000D0 /* AppleFmChannel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleFmChannel.swift; sourceTree = "<group>"; };
 		F01CE00000000000000000E0 /* BrowserChannel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrowserChannel.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */

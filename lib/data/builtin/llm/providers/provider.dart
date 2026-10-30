@@ -162,13 +162,17 @@ class OpenAiCompatibleProvider extends LlmProvider {
       if (info?.makesImages ?? true)
         HostedImageModel(ref, known, ({quality}) => (prompt) =>
             client().generateImage(prompt, model: id, quality: quality)),
-      if ((info?.transcribes ?? true) && host.cutsUtterances)
+      if (transcribes(id, info) && host.cutsUtterances)
         HostedTranscriptionModel(ref, known, (wav) => client().transcribe(wav, model: id)),
       if (info?.speaks ?? true)
         HostedSynthesisModel(ref, known,
             ({voice}) => (text) => client().speak(text, model: id, voice: voice)),
     ];
   }
+
+  /// Whether [id] answers transcription here: what models.dev says, and for
+  /// one it does not describe, yes — it was picked for that.
+  bool transcribes(String id, ModelInfo? info) => info?.transcribes ?? true;
 
   /// What the key is asked about: the model list, which most of these keep
   /// behind it.

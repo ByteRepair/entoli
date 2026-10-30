@@ -84,6 +84,27 @@ void main() {
       expect(models.whereType<TranscriptionModel>(), isEmpty);
     });
 
+    test("Google hears through its text models, and through nothing Live", () {
+      ModelInfo info(String id, List<String> input, List<String> output) =>
+          ModelInfo.fromJson(id, {
+            "modalities": {"input": input, "output": output},
+          });
+      const google = GoogleProvider();
+      expect(kinds(google.serve("gemini-3.8-flash",
+          info("gemini-3.8-flash", ["text", "image"], ["text"]), host)), [ChatModel, TranscriptionModel]);
+      expect(kinds(google.serve("gemini-3.5-live-translate-preview",
+          info("gemini-3.5-live-translate-preview", ["audio"], ["text"]), host)), isEmpty);
+      expect(kinds(google.serve("gemini-2.5-flash-preview-tts",
+          info("gemini-2.5-flash-preview-tts", ["text"], ["audio"]), host)), [SynthesisModel]);
+      expect(kinds(google.serve("gemini-embedding-001",
+          info("gemini-embedding-001", ["text"], ["text"]), host)), [ChatModel]);
+      expect(
+          google
+              .serve("gemini-3.8-flash", null, ModelHost.resolving(cutsUtterances: false))
+              .whereType<TranscriptionModel>(),
+          isEmpty);
+    });
+
     test("resolves a pick to the kind asked for, with the pick's ref", () {
       final model = OpenAiProvider(OpenAiProvider.preset.copyWith(id: "mine"))
           .resolve<SynthesisModel>("tts-1", host);

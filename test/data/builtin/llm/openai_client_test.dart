@@ -658,5 +658,75 @@ void main() {
         throwsA(isA<LlmException>().having((e) => e.statusCode, "statusCode", 429)),
       );
     });
+
+    GeminiClient geminiAnswering(List<Map<String, dynamic>> parts) {
+      requests = [];
+      return GeminiClient(
+        baseUrl: Uri.parse("https://generativelanguage.googleapis.com/v1beta/openai"),
+        apiKey: "g-key",
+        httpClient: MockClient.streaming((request, _) async {
+          requests.add(request);
+          return http.StreamedResponse(
+              Stream.value(utf8.encode(jsonEncode({
+                "candidates": [
+                  {
+                    "content": {"parts": parts},
+                  },
+                ],
+              }))),
+              200);
+        }),
+      );
+    }
+
+    test("speech is transcribed natively, the thinking left out", () async {
+      final text = await geminiAnswering([
+        {"text": "working it out", "thought": true},
+        {"text": " hello there \n"},
+      ]).transcribe(Uint8List.fromList([1, 2]), model: "gemini-3.8-flash");
+
+      expect(requests.single.url.path, "/v1beta/models/gemini-3.8-flash:generateContent");
+      final parts = sentBody()["contents"][0]["parts"] as List;
+      expect(parts.first["text"], GeminiClient.transcribeInstruction);
+      expect(parts.last["inlineData"], {"mimeType": "audio/wav", "data": base64Encode([1, 2])});
+      expect(text, "hello there");
+    });
+
+    test("speech is synthesised natively, and its PCM wrapped as a WAV", () async {
+      final wav = await geminiAnswering([
+        {
+          "inlineData": {
+            "mimeType": "audio/L16;codec=pcm;rate=22050",
+            "data": base64Encode([1, 2, 3, 4]),
+          },
+        },
+      ]).speak("hi", model: "gemini-tts", voice: "Kore");
+
+      expect(requests.single.url.path, "/v1beta/models/gemini-tts:generateContent");
+      final config = sentBody()["generationConfig"] as Map;
+      expect(config["responseModalities"], ["AUDIO"]);
+      expect(config["speechConfig"]["voiceConfig"]["prebuiltVoiceConfig"]["voiceName"], "Kore");
+      expect(ascii.decode(wav.sublist(0, 4)), "RIFF");
+      expect(ByteData.sublistView(wav).getUint32(24, Endian.little), 22050);
+      expect(wav.sublist(44), [1, 2, 3, 4]);
+    });
+
+    test("no voice asked for sends no speech config", () async {
+      await geminiAnswering([
+        {
+          "inlineData": {"mimeType": "audio/L16;codec=pcm;rate=24000", "data": "AAA="},
+        },
+      ]).speak("hi", model: "gemini-tts");
+      expect((sentBody()["generationConfig"] as Map).containsKey("speechConfig"), isFalse);
+    });
+
+    test("a reply with no audio in it is a failure, not a silent sentence", () async {
+      await expectLater(
+        geminiAnswering([
+          {"text": "no"},
+        ]).speak("hi", model: "gemini-tts"),
+        throwsA(isA<LlmException>()),
+      );
+    });
   });
 }

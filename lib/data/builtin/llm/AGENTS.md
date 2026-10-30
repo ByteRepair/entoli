@@ -34,6 +34,10 @@ with no signature at all — logged before they were kept, or made by another
 model — goes to Gemini's host with LiteLLM's placeholder
 `skip_thought_signature_validator` on its first call.
 
+Its compat surface has no audio endpoints, so speech and transcription are
+native `generateContent` calls in `GeminiClient` too — see "A provider's
+models" in `lib/data/voice/AGENTS.md`.
+
 Google retires a model for new accounts while its own list and models.dev
 still name it, so nothing says in advance which are gone: a Gemini 404 reads
 as "retired", and `GoogleProvider.retiredModels` is kept by hand.

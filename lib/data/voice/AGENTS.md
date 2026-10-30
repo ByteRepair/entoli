@@ -6,10 +6,11 @@ user picks a provider's model for a half (see "A provider's models"), and
 which device decides how: **the desktops run `sherpa_onnx`** — speech
 recognition, speech synthesis and voice activity detection from one dependency,
 with the models downloaded from the settings page rather than shipped — while
-**Android and iOS run the system's own engines** and have no models at all,
-Android's `TextToSpeech` and `SpeechRecognizer`, iOS's `AVSpeechSynthesizer`
-and on-device `SFSpeechRecognizer`, both behind the one native channel contract
-and the same shared Dart strategies. See "The system engines", which is also
+**Android, iOS and macOS also run the system's own engines** — Android's
+`TextToSpeech` and `SpeechRecognizer`, Apple's `AVSpeechSynthesizer` and
+on-device `SFSpeechRecognizer` — behind the one native channel contract and
+the same shared Dart strategies; iOS has nothing else, while Android and macOS
+keep the sherpa catalog beside them (see `macos/AGENTS.md` for the Mac's). See "The system engines", which is also
 where the reasoning for that split is.
 
 **A voice turn is an ordinary turn, and that is the constraint the rest is
@@ -155,6 +156,16 @@ judged by the gate *when it ends*
 while the request is out is not the room it was said in. That needs sherpa, so
 iOS (`hasModelCatalog` false) can speak through a provider but not
 listen through one.
+
+**Google answers neither endpoint.** Its OpenAI-compatible surface has no
+`/audio/speech` or `/audio/transcriptions` (both 404), so `GeminiClient`
+calls native `generateContent` for both: speech asks for the `AUDIO` modality
+and wraps the raw 16-bit PCM it returns as a WAV, its rate read off the MIME
+type; transcription sends the WAV inline with an instruction to write it
+down. What listens is not what models.dev says transcribes either — its one
+audio-to-text Gemini is a Live API translator, which a request cannot reach —
+so `GoogleProvider` offers its Gemini text models for listening, which hear
+audio in an ordinary request, and nothing Live.
 
 ## The system engines
 
@@ -597,8 +608,8 @@ are `Listener` and `Speaker` in `voice_strategies.dart`, and
 `ComposedVoiceSession` holds one of each and wires them together. Neither half
 knows which the other is.
 
-The split was built to let the two kinds mix per side, which no platform now
-does — Android and iOS are native on both and the desktops are sherpa on both.
+The split was built to let the two kinds mix per side, which Android and macOS
+do — a system recognizer with a downloaded voice, or the reverse.
 It earns its keep anyway, twice: `AndroidVoice` is a dozen lines because the session, the
 shut-microphone rule and the silence reporting were already somewhere neither
 engine owned, and `read_aloud` gets a speak-only session by passing a null
