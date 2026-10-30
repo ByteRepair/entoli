@@ -136,8 +136,6 @@ class AppleFmBridge {
 /// rebuilt client costs nothing — the registry can cache or drop this as it
 /// likes.
 abstract class FoundationModelsClient implements LlmClient {
-  FoundationModelsClient();
-
   /// One counter for the whole process, across every client the registry
   /// ever built: a generation id must not mean two things to one bridge.
   static var _generations = 0;

@@ -20,6 +20,10 @@ abstract class ModelFormat {
   /// is what it was downloaded as, where that is known. Throws
   /// [FormatException] for files this format cannot run.
   DownloadedModel describe(String id, String directory, [LocalModel? from]);
+
+  /// What it was downloaded as, unless that was left blank.
+  static String? nameFrom(LocalModel? from) =>
+      (from?.name.isEmpty ?? true) ? null : from!.name;
 }
 
 /// One GGUF file, its facts read out of its header.
@@ -35,7 +39,7 @@ class GgufFormat extends ModelFormat {
     final facts = readGgufFacts(file);
     return DownloadedModel(
       id: id,
-      name: (from?.name.isNotEmpty ?? false ? from!.name : null) ?? facts.name ?? id,
+      name: ModelFormat.nameFrom(from) ?? facts.name ?? id,
       file: file,
       bytes: File(file).lengthSync(),
       quantisation: facts.quantisation,
@@ -92,9 +96,9 @@ class MlxFormat extends ModelFormat {
     final bits = (json["quantization"] as Map?)?["bits"];
     return DownloadedModel(
       id: id,
-      name: (from?.name.isNotEmpty ?? false) ? from!.name : id,
+      name: ModelFormat.nameFrom(from) ?? id,
       file: entry(directory),
-      bytes: _sizeOf(directory),
+      bytes: from?.bytes ?? _sizeOf(directory),
       quantisation: bits is int ? "$bits-bit" : "unquantised",
       contextLength: context,
       // K and V, f16, for every layer that has attention.

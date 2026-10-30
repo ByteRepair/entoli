@@ -2,7 +2,6 @@ import "package:flutter/services.dart";
 import "package:flutter_test/flutter_test.dart";
 
 import "package:agent_chat/data/builtin/llm/llm_client.dart";
-import "package:agent_chat/data/local/apple_fm.dart";
 import "package:agent_chat/data/local/local_engine.dart";
 import "package:agent_chat/data/local/mlx_engine.dart";
 import "package:agent_chat/domain/app_settings.dart";
@@ -10,35 +9,33 @@ import "package:agent_chat/domain/local_llm.dart";
 import "package:agent_chat/domain/local_model.dart";
 
 import "../../fakes.dart";
+import "apple_channel_mock.dart";
 
-// The Swift half behind a mock `agent_chat/apple_fm`, as in
-// `apple_fm_client_test.dart`: what the engine asks to load and evict, and
-// what a generation carries to name the model it runs.
+// What the engine asks the Swift half to load and evict, over
+// [AppleChannelMock], and what a generation carries to name the model it runs.
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   final small = mlxCatalog[0], large = mlxCatalog[1];
-  final asked = <MethodCall>[];
+  final channel = AppleChannelMock();
+  final asked = channel.asked;
 
   /// Load failures by model id, answered as the Swift half throws them.
   final refuse = <String, String>{};
 
   setUp(() {
-    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-        .setMockMethodCallHandler(appleChannel, (call) async {
-      asked.add(call);
+    channel.answer = (call) {
       final model = (call.arguments as Map?)?["model"];
       if (call.method == "load" && refuse[model] != null) {
         throw PlatformException(code: "load", message: refuse[model]);
       }
       return null;
-    });
+    };
+    channel.install();
   });
 
   tearDown(() {
-    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-        .setMockMethodCallHandler(appleChannel, null);
-    asked.clear();
+    channel.uninstall();
     refuse.clear();
   });
 
@@ -113,20 +110,13 @@ void main() {
         .stream(const [LlmMessage(role: LlmRole.user, text: "hi")], model: small.id)
         .toList();
     // The load, then the generation behind it.
-    for (var i = 0; i < 20 && !asked.any((call) => call.method == "generate"); i++) {
-      await Future<void>.delayed(Duration.zero);
-    }
+    await channel.until("generate");
 
-    final generate = asked.singleWhere((call) => call.method == "generate").arguments as Map;
+    final generate = channel.outgoing("generate");
     expect(generate["model"], small.id);
     expect(generate["directory"], mlx.store.downloadedOfSync(small.id)!.file);
 
-    await TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-        .handlePlatformMessage(
-      appleChannel.name,
-      appleChannel.codec.encodeMethodCall(MethodCall("done", {"id": generate["id"]})),
-      (_) {},
-    );
+    await channel.incoming("done", {"id": generate["id"]});
     expect((await reply).whereType<LlmCompletion>().single.finishReason, "stop");
   });
 

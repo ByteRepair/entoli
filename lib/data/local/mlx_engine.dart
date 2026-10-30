@@ -24,10 +24,9 @@ class MlxEngine extends LocalEngine {
   @override
   final LocalModelStore store;
 
-  static const _channel = appleChannel;
-
-  /// One load per model, so two turns asking at once wait on the same one.
-  final _loads = <String, Future<void>>{};
+  /// Each resident model's load, by id: two turns asking at once wait on the
+  /// same one, and a model that is in here is never loaded again.
+  final _resident = <String, Future<void>>{};
 
   @override
   List<LocalModel> get catalog => mlxCatalog;
@@ -46,17 +45,12 @@ class MlxEngine extends LocalEngine {
     if (model == null) {
       throw LlmException("$modelId is not downloaded on this device.");
     }
-    final pending = _loads[modelId];
-    if (pending != null) {
-      await pending;
-    } else if (_stateOf(modelId)?.phase != LocalLlmPhase.ready) {
-      final load = _load(model, maxRunning);
-      _loads[modelId] = load;
-      try {
-        await load;
-      } finally {
-        _loads.remove(modelId);
-      }
+    try {
+      await (_resident[modelId] ??=
+          _load(model, maxRunning.clamp(1, maxLocalModelsAllowed)));
+    } catch (_) {
+      _resident.remove(modelId);
+      rethrow;
     }
     _touch(modelId);
     return model.file;
@@ -68,44 +62,53 @@ class MlxEngine extends LocalEngine {
     // memory the cap exists to keep free.
     while (others.length >= maxRunning && others.isNotEmpty) {
       final oldest = others.removeAt(0);
-      await _channel.invokeMethod("evict", {"model": oldest.modelId});
+      _resident.remove(oldest.modelId);
+      await appleChannel.invokeMethod("evict", {"model": oldest.modelId});
     }
-    _publish([...others, _state(model.id, LocalLlmPhase.starting)]);
+    _publish([...others, _state(model, LocalLlmPhase.starting)]);
     try {
-      await _channel.invokeMethod("load", {"model": model.id, "directory": model.file});
+      await appleChannel.invokeMethod("load", {"model": model.id, "directory": model.file});
     } on PlatformException catch (e) {
       final why = e.message ?? e.code;
-      _replace(model.id, _state(model.id, LocalLlmPhase.failed, failure: why));
+      _replace(model.id, _state(model, LocalLlmPhase.failed, failure: why));
       throw LlmException("${model.name} would not load: $why");
     }
-    _replace(model.id, _state(model.id, LocalLlmPhase.ready));
+    _replace(model.id, _state(model, LocalLlmPhase.ready));
   }
 
   @override
   Future<void> stopAll() async {
-    await _channel.invokeMethod("evictAll");
+    _resident.clear();
+    await appleChannel.invokeMethod("evictAll");
     _publish(const []);
   }
 
   @override
   LlmClient client(AppSettings Function() settings) => MlxClient(this, settings);
 
-  LocalLlmState? _stateOf(String id) =>
-      running.value.where((state) => state.modelId == id).firstOrNull;
-
-  /// Named the way the settings page names a device, so its running row says
-  /// where a model answers.
-  static LocalLlmState _state(String id, LocalLlmPhase phase, {String? failure}) =>
-      LocalLlmState(modelId: id, phase: phase, device: "Metal", failure: failure);
+  /// The device named the way the settings page names one, so its running row
+  /// says where a model answers. The context is the model's own: MLX's cache
+  /// grows as it is used rather than being sized at load.
+  static LocalLlmState _state(DownloadedModel model, LocalLlmPhase phase,
+          {String? failure}) =>
+      LocalLlmState(
+        modelId: model.id,
+        phase: phase,
+        device: "Metal",
+        contextLength: model.contextLength,
+        failure: failure,
+      );
 
   void _replace(String id, LocalLlmState state) => _publish(
       [for (final each in running.value) each.modelId == id ? state : each]);
 
   /// Most recently served last, which is what eviction reads.
   void _touch(String id) {
-    final state = _stateOf(id);
+    final states = running.value;
+    if (states.isEmpty || states.last.modelId == id) return;
+    final state = states.where((each) => each.modelId == id).firstOrNull;
     if (state == null) return;
-    _publish([...running.value.where((each) => each.modelId != id), state]);
+    _publish([...states.where((each) => each.modelId != id), state]);
   }
 
   void _publish(List<LocalLlmState> states) => running.value = List.unmodifiable(states);

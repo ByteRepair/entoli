@@ -1,21 +1,17 @@
-import "package:flutter/services.dart";
 import "package:flutter_test/flutter_test.dart";
 
 import "package:agent_chat/data/builtin/llm/llm_client.dart";
 import "package:agent_chat/data/local/apple_fm.dart";
 
-// The Swift half behind a mock `agent_chat/apple_fm`: what Dart asks for and
-// what it does with what the framework reports. The real channel has no
-// implementation on a test host, so every test installs one and feeds the
-// bridge through `handlePlatformMessage` — the same door Swift's `send`
-// knocks on. `AppleFmBridge.shared` installs the one handler the mock's
-// deliveries reach.
+import "apple_channel_mock.dart";
+
+// What Dart asks of the Swift half, and what it does with what the
+// framework reports, over [AppleChannelMock]. `AppleFmBridge.shared`
+// installs the one handler the mock's deliveries reach.
 //
 // Plain `test`s, not `testWidgets`: the client is protocol machinery driven
 // by real futures, and a suspended generator under the fake clock is the
 // hang that made the first of these need rewriting.
-// The channel under the mock is the export `appleChannel` itself, so a name
-// drift on the port is a compile error here rather than a hung test.
 
 const sampleSchema = {
   "type": "object",
@@ -29,42 +25,14 @@ const sampleSchema = {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  final asked = <MethodCall>[];
+  final channel = AppleChannelMock();
+  final asked = channel.asked;
+  final incoming = channel.incoming;
+  final breathe = channel.breathe;
+  final outgoing = channel.outgoing;
 
-  setUp(() {
-    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-        .setMockMethodCallHandler(appleChannel, (call) async {
-      asked.add(call);
-      return null;
-    });
-  });
-
-  tearDown(() {
-    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-        .setMockMethodCallHandler(appleChannel, null);
-    asked.clear();
-  });
-
-  Future<void> incoming(String method, [Object? arguments]) async {
-    await TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-        .handlePlatformMessage(
-      appleChannel.name,
-      appleChannel.codec.encodeMethodCall(MethodCall(method, arguments)),
-      (_) {},
-    );
-    // The delivery's chain is microtasks through the broadcast; one zero
-    // timer is the flush.
-    await Future<void>.delayed(Duration.zero);
-  }
-
-  /// One breathing round before the client's request has reached the mock
-  /// at all: an async* generator starts on the next microtask, not eagerly.
-  Future<void> breathe() => Future<void>.delayed(Duration.zero);
-
-  Map<Object?, Object?> outgoing(String method) => (asked
-      .where((call) => call.method == method)
-      .map((call) => call.arguments as Map<Object?, Object?>)
-      .single);
+  setUp(channel.install);
+  tearDown(channel.uninstall);
 
   test("text streams, and the completion closes the stream", () async {
     final reply = AppleFmClient(const AppleFmProbe("available"))

@@ -213,6 +213,9 @@ class MlxModel extends LocalModel {
 
   @override
   String get source => "$_hf/$repo";
+
+  @override
+  int get bytes => weights.fold(0, (total, file) => total + file.$2);
 }
 
 /// A model on disk, described by its own file and by what it was fetched as.
