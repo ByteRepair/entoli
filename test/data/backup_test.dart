@@ -27,10 +27,13 @@ void main() {
     return path;
   }
 
-  Future<Backup> opened(String path) async {
-    final backup = await openBackup(path);
-    addTearDown(backup.close);
-    return backup;
+  Future<Backup> opened(String path) => openBackup(path);
+
+  /// The launch's sweep is unawaited; wait out the tree it is deleting.
+  Future<void> settleDeletes(String path) async {
+    for (var i = 0; i < 100 && Directory(path).existsSync(); i++) {
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+    }
   }
 
   void write(String relative, String text) {
@@ -145,10 +148,41 @@ void main() {
     final dataDir = config.dataDir;
     Directory(dataDir).renameSync(replacedDirOf(dataDir));
 
+    await recoverRestore(dataDir);
     final loaded = await AppConfig.load(dataDir);
 
     expect(Directory(loaded.chatDir("kept")).existsSync(), isTrue);
     expect(Directory(replacedDirOf(dataDir)).existsSync(), isFalse);
+  });
+
+  test("the directory a restore replaced goes at the next launch", () async {
+    final backup = await roundTrip();
+
+    await restoreBackup(config, backup);
+    expect(Directory(replacedDirOf(config.dataDir)).existsSync(), isTrue);
+
+    await recoverRestore(config.dataDir);
+    await settleDeletes(replacedDirOf(config.dataDir));
+
+    expect(Directory(replacedDirOf(config.dataDir)).existsSync(), isFalse);
+  });
+
+  test("a restore that fails unpacking takes its staging with it", () async {
+    write("projects/default/chats/kept/state.json", "{}");
+    // "a" a file and "a/b" beneath it: the second cannot be written.
+    final archive = Archive()
+      ..add(ArchiveFile.string(manifestName,
+          jsonEncode({"format": backupFormat, "version": backupVersion})))
+      ..add(ArchiveFile.string("a", "file"))
+      ..add(ArchiveFile.string("a/b", "under a file"));
+    final path = "${out.path}/clash.zip";
+    File(path).writeAsBytesSync(ZipEncoder().encodeBytes(archive));
+
+    await expectLater(
+        restoreBackup(config, await opened(path)), throwsA(anything));
+
+    expect(Directory(config.chatDir("kept")).existsSync(), isTrue);
+    expect(Directory(restoringDirOf(config.dataDir)).existsSync(), isFalse);
   });
 
   test("the linked instruction files are this machine's: left out, and kept",
@@ -156,7 +190,7 @@ void main() {
     write("instruction_files.json", '{"files":["/home/me/CLAUDE.md"]}');
 
     final backup = await roundTrip();
-    expect(backup.entries.map((e) => e.name), isNot(contains("instruction_files.json")));
+    expect(backup.members, isNot(contains("instruction_files.json")));
 
     await restoreBackup(config, backup);
 

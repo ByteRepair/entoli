@@ -66,9 +66,8 @@ void main() {
     expect(app.backups.saved.single.name, endsWith(".zip"));
     final backup =
         await io(tester, () => openBackup(app.backups.saved.single.path));
-    addTearDown(backup.close);
     expect(backup.chats, 1);
-    expect(backup.entries.map((e) => e.name), contains(endsWith("state.json")));
+    expect(backup.members, contains(endsWith("state.json")));
   });
 
   testWidgets("Import asks before it replaces anything", (tester) async {

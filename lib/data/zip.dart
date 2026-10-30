@@ -49,8 +49,9 @@ Future<Archive> archiveOf(
   return archive;
 }
 
-/// [path] into [encoder] as [name], read as it is compressed. One stat for the
-/// time and the mode, where `ZipFileEncoder.addFile` takes two.
+/// [path] into [encoder] as [name], read as it is compressed. One stat of the
+/// path for the time and the mode, where `ZipFileEncoder.addFile` takes two —
+/// beside the length the open reads off the handle either way.
 Future<void> _addStreamed(ZipFileEncoder encoder, String path, String name) async {
   final stat = File(path).statSync();
   final input = InputFileStream(path);

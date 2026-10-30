@@ -58,12 +58,6 @@ class AppConfig {
   final Documents documents;
 
   static Future<AppConfig> load(String dataDir) async {
-    // A restore killed between its two renames leaves the data directory
-    // missing and the one it was replacing beside it; that one is still whole.
-    final replaced = Directory(replacedDirOf(dataDir));
-    if (!Directory(dataDir).existsSync() && replaced.existsSync()) {
-      await replaced.rename(dataDir);
-    }
     final config = AppConfig.forDirectory(dataDir);
     await runMigrations(config.dataDir,
         fresh: await config.ensureDirs());
@@ -278,11 +272,3 @@ class AppConfig {
   String projectSettingsFile({String? project}) =>
       p.join(projectDir(project: project), "project.json");
 }
-
-/// Where a restore unpacks a backup before swapping it in, beside [dataDir] so
-/// the swap is a rename on one filesystem.
-String restoringDirOf(String dataDir) => "$dataDir.restoring";
-
-/// Where a restore moves the data directory it replaces, until the backup is
-/// in its place.
-String replacedDirOf(String dataDir) => "$dataDir.replaced";

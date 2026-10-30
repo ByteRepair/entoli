@@ -89,8 +89,11 @@ class Documents {
   /// Null where nothing has been written, which is the caller's cue to use its
   /// defaults rather than an error.
   String? read(String path) => _texts.putIfAbsent(path, () {
-        final file = File(path);
-        return file.existsSync() ? file.readAsStringSync() : null;
+        try {
+          return File(path).readAsStringSync();
+        } on PathNotFoundException {
+          return null;
+        }
       });
 
   /// Written through a rename for the same reason the chat store is:
