@@ -210,31 +210,12 @@ void main() {
     await expectation;
   });
 
-  test("the picker's rows are what the handshake announced", () async {
-    final base = await AppleFm(const AppleFmProbe("available")).endpoint.listModels(null);
-    expect(base, contains(appleModelId));
-    expect(base, isNot(contains(mlxModels.first)),
-        reason: "a build that links no MLX offers no MLX rows");
-
-    final both =
+  test("the Apple provider offers the system model alone", () async {
+    // MLX models are downloads, and the on-device provider's; a build that
+    // links MLX adds nothing here.
+    final models =
         await AppleFm(const AppleFmProbe("available", mlx: true)).endpoint.listModels(null);
-    expect(both, containsAll([appleModelId, mlxModels.single]));
-  });
-
-  test("an MLX row runs whether Apple Intelligence is on or not", () async {
-    final reply = AppleFmClient(
-            const AppleFmProbe("not-enabled", mlx: true))
-        .stream(const [LlmMessage(role: LlmRole.user, text: "hi")],
-            model: mlxModels.single)
-        .toList();
-    await breathe();
-
-    // The request went out: the availability wording that stands in front
-    // of the system model's first turn does not stand in front of this one.
-    expect(outgoing("generate")["model"], mlxModels.single);
-    await incoming("done", {"id": outgoing("generate")["id"]});
-    final completion = (await reply).whereType<LlmCompletion>().single;
-    expect(completion.finishReason, "stop");
+    expect(models, [appleModelId]);
   });
 
   test("a model the device has not turned on says where the setting is",

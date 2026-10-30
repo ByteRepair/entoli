@@ -380,8 +380,10 @@ class _RunningRow extends ConsumerWidget {
       LocalLlmPhase.ready => ListTile(
           leading: Icon(Icons.check_circle_outline, color: theme.colorScheme.primary),
           title: Text(name),
-          subtitle: Text("${where == null ? "Answering" : "Answering on $where"}"
-              " · ${state.contextLength} tokens of context"),
+          subtitle: Text([
+            where == null ? "Answering" : "Answering on $where",
+            if (state.contextLength case final context?) "$context tokens of context",
+          ].join(" · ")),
         ),
       LocalLlmPhase.failed => ListTile(
           isThreeLine: true,

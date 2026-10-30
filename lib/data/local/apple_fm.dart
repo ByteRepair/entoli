@@ -59,8 +59,9 @@ class AppleFmProbe {
   final String reason;
 
   /// Whether the build carries the MLX models' package and the OS can run
-  /// one. The handshake says so, because what a build links is the build's
-  /// answer, the same way the llama backends are the server's.
+  /// one, which is what decides the platform's engine is `MlxEngine`. The
+  /// handshake says so, because what a build links is the build's answer, the
+  /// same way the llama backends are the server's.
   final bool mlx;
 
   LlmException get unavailable => switch (reason) {
@@ -75,18 +76,6 @@ class AppleFmProbe {
         _ => const LlmException("The Apple on-device model is unavailable."),
       };
 }
-
-/// The MLX models the channel offers beside the system model, when this
-/// build links mlx-swift-lm's `MLXFoundationModels` (the one-tap Xcode
-/// addition `ios/AGENTS.md` carries) and the OS is 27. The rows stop well
-/// inside the 6B an 8GB iPhone can hold beside the rest of the app; the
-/// framework fetches what a row names from Hugging Face at first turn and
-/// caches it, which is why nothing here pins a checksum.
-/// shortcut: weights arrive unpinned from mlx-community, and the list is
-/// the Apple-verified example alone — rows are one edited line each;
-/// owning the fetch the way the GGUF catalog does is the upgrade the
-/// supply chain may demand.
-const mlxModels = <String>["mlx-community/Qwen3.5-4B-4bit"];
 
 /// The port: what the handshake said, and the provider composed from it.
 class AppleFm {
@@ -119,7 +108,7 @@ class AppleFmProvider extends LlmProvider with KeyFree {
 
   @override
   Future<List<String>> listModels(String? apiKey, {http.Client? httpClient}) async =>
-      [appleModelId, if (probe.mlx) ...mlxModels];
+      [appleModelId];
 }
 
 /// Everything the channel says, broadcast — the `NativeVoiceBridge` shape:
@@ -140,17 +129,26 @@ class AppleFmBridge {
   Stream<MethodCall> get calls => incoming.stream;
 }
 
-/// The Apple on-device model, as a client. Nothing is held between calls, so
-/// [close] is nothing and a rebuilt client costs nothing — the registry can
-/// cache or drop this as it likes.
-class AppleFmClient implements LlmClient {
-  AppleFmClient(this.probe);
-
-  final AppleFmProbe probe;
+/// A model the Foundation Models framework runs, as a client: the Apple
+/// system model ([AppleFmClient]) or an MLX model (`MlxEngine`'s). Both cross
+/// the same channel and differ only in [route], what the channel is told runs
+/// the model. Nothing is held between calls, so [close] is nothing and a
+/// rebuilt client costs nothing — the registry can cache or drop this as it
+/// likes.
+abstract class FoundationModelsClient implements LlmClient {
+  FoundationModelsClient();
 
   /// One counter for the whole process, across every client the registry
   /// ever built: a generation id must not mean two things to one bridge.
   static var _generations = 0;
+
+  /// What the model is called in an error, after "the": "Apple on-device
+  /// model".
+  String get label;
+
+  /// The channel arguments naming what runs [model], once it can run: throws
+  /// an [LlmException] where it never will.
+  Future<Map<String, Object?>> route(String model);
 
   @override
   void close() {}
@@ -163,12 +161,7 @@ class AppleFmClient implements LlmClient {
     double? temperature,
     String? reasoningEffort,
   }) async* {
-    // The system model's gate is its own availability. An MLX row's is not:
-    // it runs on the GPU whether Apple Intelligence is on at all or not —
-    // the handshake's `mlx` is the whole of that gate.
-    if (model == appleModelId && probe.reason != "available") {
-      throw probe.unavailable;
-    }
+    final target = await route(model);
     final generation = "fm${++_generations}";
 
     // The state the completion's message is assembled from — locals, not
@@ -187,9 +180,7 @@ class AppleFmClient implements LlmClient {
     try {
       await appleChannel.invokeMethod("generate", {
         "id": generation,
-        // The model id is the route: the system model by name, and every
-        // MLX row by its package's own id.
-        "model": model,
+        ...target,
         "instructions": joinedSystemText(messages),
         "history": _transcript(messages),
         // A trailing tool result is worded the way the history words one, or
@@ -265,13 +256,13 @@ class AppleFmClient implements LlmClient {
           case "error":
             final args = call.arguments as Map?;
             throw _errorOf(
+              label,
               args?["code"] as String? ?? "other",
               args?["message"] as String? ?? "",
             );
         }
       }
-      throw const LlmException("The Apple on-device model never answered.",
-          statusCode: 502);
+      throw LlmException("The $label never answered.", statusCode: 502);
     } finally {
       // Unsubscribe first: a cancel arriving at the Swift half cannot race a
       // generation this client is still reading.
@@ -288,6 +279,22 @@ class AppleFmClient implements LlmClient {
         }
       }
     }
+  }
+}
+
+/// The Apple system model, gated on its own availability.
+class AppleFmClient extends FoundationModelsClient {
+  AppleFmClient(this.probe);
+
+  final AppleFmProbe probe;
+
+  @override
+  String get label => "Apple on-device model";
+
+  @override
+  Future<Map<String, Object?>> route(String model) async {
+    if (probe.reason != "available") throw probe.unavailable;
+    return {"model": appleModelId};
   }
 }
 
@@ -352,27 +359,18 @@ String _toolResultText(LlmMessage message, Map<String, String> names) =>
 /// re-sent is the same refusal, and the turn's honest answer is the wording
 /// — the compaction ladder, which bounds its own asks and halves on any
 /// error, is what recovers the session.
-LlmException _errorOf(String code, String message) => switch (code) {
-      "context" => const LlmException(
-          "The conversation has outgrown the Apple on-device model's context "
-          "window. Compact the chat, or lower Total Context under "
-          "Settings > LLMs."),
-      "guardrail" => const LlmException(
-          "The Apple on-device model's guardrails refused this request."),
-      "rate-limit" => const LlmException(
-          "The Apple on-device model is rate limited.",
+LlmException _errorOf(String label, String code, String message) => switch (code) {
+      "context" => LlmException(
+          "The conversation has outgrown the $label's context window. Compact "
+          "the chat, or lower Total Context under Settings > LLMs."),
+      "guardrail" => LlmException("The $label's guardrails refused this request."),
+      "rate-limit" => LlmException("The $label is rate limited.", retryable: true),
+      "assets" => LlmException(
+          "The $label's assets are not ready; the system is still fetching them.",
           retryable: true),
-      "assets" => const LlmException(
-          "The Apple on-device model's assets are not ready; the system is "
-          "still fetching them.",
-          retryable: true),
-      "language" => const LlmException(
-          "The on-device model does not support this conversation's "
-          "language."),
-      "resources" => const LlmException(
-          "The Apple on-device model ran short of device resources."),
+      "language" => LlmException(
+          "The $label does not support this conversation's language."),
+      "resources" => LlmException("The $label ran short of device resources."),
       _ => LlmException(
-          message.isEmpty
-              ? "The Apple on-device model failed."
-              : "The Apple on-device model failed: $message"),
+          message.isEmpty ? "The $label failed." : "The $label failed: $message"),
     };

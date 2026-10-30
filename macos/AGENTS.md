@@ -180,13 +180,12 @@ nothing needs a hand.
 
 ## What is absent, and honestly so
 
-No on-device models: the bundled llama.cpp server is built for Android and
-Linux and never for this platform, so `createLocalEngine` answers
-`NoLocalEngine` here and the On-device page holds only the voice
-downloads, with no model section to apologise from. The plan for this platform is
-not llama at all: Apple Intelligence's FoundationModels, reached through a
-Swift plugin of the app's own, on macOS 26 and later — a future version, at
-which point the settings page is where the story changes and nowhere else.
+No llama.cpp: the bundled server is built for Android and Linux. The
+on-device text models here are MLX's, as on iOS — `MlxEngine`, on macOS 27
+where the build links mlx-swift-lm — and the Swift half of that is not
+written yet; until it answers the handshake, `createLocalEngine` answers
+`NoLocalEngine` and the On-device page holds only the voice downloads. See
+"The MLX models" in `ios/AGENTS.md` for the contract and the Mac work left.
 
 The keyring is the file fallback (`KeyringSecretStore` probes a Secret Service
 through the session bus, which macOS does not run) and says nothing different

@@ -97,9 +97,8 @@ class ModelCatalog {
 /// The Apple on-device model: `SystemLanguageModel.contextSize` reads 8,192
 /// on the OS today, and the framework only exposes it from 26.4 on — one
 /// constant here is what that is while the reader is the compaction
-/// machinery, which cannot wait on a channel round trip. The provider's MLX
-/// rows are other models whose windows are their own; a null model id is the
-/// provider's default — the system model.
+/// machinery, which cannot wait on a channel round trip. A null model id is
+/// the provider's default — the system model.
 ModelInfo? modelInfoOf(LlmProviderConfig? provider, String? modelId) {
   if (provider == null) return null;
   if (provider.id == appleProviderId) {

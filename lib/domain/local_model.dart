@@ -179,6 +179,42 @@ class OnDiskModel extends LocalModel {
   final String? source;
 }
 
+/// A model in MLX's layout: a Hugging Face repository's files at one pinned
+/// revision, of which [weights] names the ones loading needs. The rest — the
+/// README, the images, a vision model's preprocessors — are never fetched.
+class MlxModel extends LocalModel {
+  const MlxModel({
+    required super.id,
+    required super.name,
+    required this.repo,
+    required this.revision,
+    required this.weights,
+    super.parameters,
+    super.licence,
+  });
+
+  final String repo;
+
+  /// A commit, never a branch: the checksums below are this commit's.
+  final String revision;
+
+  final List<(String path, int bytes, String sha256)> weights;
+
+  @override
+  List<ModelFile> get files => [
+        for (final (path, bytes, sha256) in weights)
+          ModelFile(
+            path: path,
+            url: "$_hf/$repo/resolve/$revision/$path",
+            bytes: bytes,
+            sha256: sha256,
+          ),
+      ];
+
+  @override
+  String get source => "$_hf/$repo";
+}
+
 /// A model on disk, described by its own file and by what it was fetched as.
 class DownloadedModel {
   const DownloadedModel({
@@ -322,6 +358,61 @@ const ggufCatalog = <GgufModel>[
   ),
 ];
 
+/// What MLX is offered: the same three sizes as [ggufCatalog], in MLX's 4-bit
+/// format, each a model mlx-swift-lm has an architecture for. LFM3 has none
+/// there, so the smallest is Qwen3.5 2B, the nearest of its size that calls
+/// tools. The 9B is Ornith's own conversion.
+const mlxCatalog = <MlxModel>[
+  MlxModel(
+    id: "qwen3.5-2b-mlx-4bit",
+    name: "Qwen3.5 2B",
+    parameters: "2B",
+    repo: "mlx-community/Qwen3.5-2B-4bit",
+    revision: "674aaa7240b91e8012fcad5d791b7dfe5ba90207",
+    licence: "Apache-2.0",
+    weights: [
+      ("chat_template.jinja", 7755, "273d8e0e683b885071fb17e08d71e5f2a5ddfb5309756181681de4f5a1822d80"),
+      ("config.json", 3113, "beb7fc5a6e0405fe332821cf1a8ef7b69bb390a8c8933171647de5579debf949"),
+      ("model.safetensors", 1722271785, "713fe7e5d3c3965f7106b0d0ee17615f7869c23c8d327996df8c1196fbcf07d5"),
+      ("model.safetensors.index.json", 81722, "8294c05cca7d53a6c33e3db2b379539bd296d054e0b689711b16b6ac93c7e49d"),
+      ("tokenizer.json", 19989343, "87a7830d63fcf43bf241c3c5242e96e62dd3fdc29224ca26fed8ea333db72de4"),
+      ("tokenizer_config.json", 1139, "e98f1901ac6f0adff67b1d540bfa0c36ac1a0cf59eb72ed78146ef89aafa1182"),
+    ],
+  ),
+  MlxModel(
+    id: "qwen3.5-4b-mlx-4bit",
+    name: "Qwen3.5 4B",
+    parameters: "4B",
+    repo: "mlx-community/Qwen3.5-4B-4bit",
+    revision: "0e7ffd5c629ef7719d4cbc04069232580bfa9d9c",
+    licence: "Apache-2.0",
+    weights: [
+      ("chat_template.jinja", 7756, "a4aee8afcf2e0711942cf848899be66016f8d14a889ff9ede07bca099c28f715"),
+      ("config.json", 3366, "f3efc81b2ea8d96a45301037d3ccccbcccdef44a961845c87f286aaddbc6eaaa"),
+      ("model.safetensors", 3034300695, "5fb9acd0246866381cf8c5c354c6db1019f6498eec4ccb4f5edcc71ffeacb2db"),
+      ("model.safetensors.index.json", 101944, "52e534c41f7b97708329c85f762e5882bf48bd5955a422c6ae74eba321e6048a"),
+      ("tokenizer.json", 19989343, "87a7830d63fcf43bf241c3c5242e96e62dd3fdc29224ca26fed8ea333db72de4"),
+      ("tokenizer_config.json", 1139, "e98f1901ac6f0adff67b1d540bfa0c36ac1a0cf59eb72ed78146ef89aafa1182"),
+    ],
+  ),
+  MlxModel(
+    id: "ornith-1.5-9b-mlx-4bit",
+    name: "Ornith-1.5 9B",
+    parameters: "9B",
+    repo: "ornith-ai/Ornith-1.5-9B-MLX-4bit",
+    revision: "a48173b246ac705be75c05bedf1a0666db522d53",
+    licence: "MIT",
+    weights: [
+      ("chat_template.jinja", 7593, "9dd2fbd270feaa1fbef2d4f634d7887c9c506e3bde140f8e7351c8944e8fd235"),
+      ("config.json", 3084, "7ddc5bb8c3057edaa0a3337c1721312a8f3d28ad587b77dd6ac075876929d95d"),
+      ("model.safetensors", 5038161163, "c022a4c4b8de62c75306e2442fd78161ff49bce85fe7abb308c5ad5d04454a26"),
+      ("model.safetensors.index.json", 81194, "215f9abadc1cea4d465b01c036dffcac5a84c2fb2386777863eff6928b91ed0b"),
+      ("tokenizer.json", 19989325, "06b9509352d2af50381ab2247e083b80d32d5c0aba91c272ca9ff729b6a0e523"),
+      ("tokenizer_config.json", 1160, "386ba246ba3dfa4d3a21d8bc8712eba38de558e5ac94c2c90436d8f94d519d5e"),
+    ],
+  ),
+];
+
 /// An id for a model downloaded from [url], unused by [taken]: the file's own
 /// name without its extension, lower-cased, numbered past one in use.
 String localModelIdFor(String url, Iterable<String> taken) {
@@ -355,6 +446,6 @@ const appleModelId = "apple-foundation-model";
 /// about 6k before the first message — so every turn would open with a
 /// compaction, and a sub-agent or a memory pass would fare no better; a title
 /// is one short ask. A null model id is the provider's default, the system
-/// model; the provider's MLX rows have windows of their own and are not this.
+/// model.
 bool isTitleOnlyModel(String? providerId, String? modelId) =>
     providerId == appleProviderId && (modelId == null || modelId == appleModelId);

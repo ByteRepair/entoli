@@ -228,9 +228,9 @@ name only. `isTitleOnlyModel` (`lib/domain/local_model.dart`) is the one
 gate: the backend resolves it for the title's ask alone and refuses a turn
 on it with a line saying so, only the Title LLM picker (`ModelRole.title`)
 lists it, and the welcome tour does not count it as a model connected — so
-an iOS device sets up a provider before its first chat. The MLX rows are
-other models and are not gated. Lifting it is the predicate and nothing
-else, once a slimmer prompt fits the window.
+an iOS device sets up a provider before its first chat, or downloads an MLX
+model (below). Lifting it is the predicate and nothing else, once a slimmer
+prompt fits the window.
 
 Three decisions worth knowing before touching it:
 
@@ -271,36 +271,74 @@ that once named a node like its root and failed every turn. What the VM does pin
 protocol over a mock channel — `test/data/local/apple_fm_client_test.dart`:
 the streaming, the handoff ending, the history wording, the error map.
 
-## The MLX models beside it
+## The MLX models
 
-The MLX rows ride the same channel and the same client. The handshake
-carries a second answer, `mlx` — whether this build links Apple's
-`MLXLanguageModel` at all — and the picker draws the catalog (`mlxModels`
-in `apple_fm.dart`: one const row for now, `mlx-community/Qwen3.5-4B-4bit`,
-the id Apple's own sample names) only where it does. The registry answers
-their context windows with nothing — the global `totalContext` guess, not
-the system model's 8k — the same fall-through every unknown model takes.
-What turns it on is the package, not more code:
+The On-device page's text models here are MLX's: `MlxEngine`
+(`lib/data/local/mlx_engine.dart`) is this platform's `LocalEngine`, and
+macOS's, wherever the handshake answers `mlx: true` — this build links
+mlx-swift-lm's `MLXFoundationModels` and the OS is 27. Below that, or with
+the package missing, the engine is `NoLocalEngine` and the page has no text
+section. Requiring 27 is for the feature, not the app.
 
-- Xcode, `Runner` target, File > Add Package Dependencies:
-  `https://github.com/ml-explore/mlx-swift-lm`, product
-  `MLXFoundationModels`, iOS 27. The Swift half compiles either way — the
-  branch is `#if canImport`, so a build without the package answers
-  nothing in the handshake and offers no rows, rather than failing; and
-  this checkout's Swift was typechecked without it for exactly that
-  reason.
-- The weights are the package's fetch: from Hugging Face at first turn,
-  cached by the package, unpinned — a supply-chain hole next to the
-  checksum culture every other catalog here keeps, accepted because the
-  alternative is owning a downloader for a day-two feature. A row is one
-  edited line; nothing else grows with it.
-- The session is built per ask from the id (`sessionFor` in the Swift
-  half); whether `MLXLanguageModel` re-maps weight memory per session is
-  the hand-run's to see, tokens-per-second collapsing between steps of one
-  turn being the symptom, and a resident-instance cache being the
-  one-paragraph fix with the eviction question the llama pool already
-  answered. The licences the toggle owes the About page come with the
-  package (MLX's own).
+The catalog is `mlxCatalog` (`lib/domain/local_model.dart`): the GGUF
+catalog's three sizes in MLX's 4-bit format, each pinned to a commit with
+every file's size and SHA-256, downloaded and checked by the same
+`FileLocalModelStore` as a GGUF into `<cacheDir>/llm/<id>/`. Only the files
+loading needs are fetched. LFM3 has no architecture in mlx-swift-lm, so the
+smallest row is Qwen3.5 2B. `MlxFormat` describes a download from its
+`config.json`.
+
+The engine decides residency, the way the llama pool does: past
+`maxLocalModels` the least recently served is evicted before the next loads.
+A generation crosses the same channel and the same client code as the system
+model's (`FoundationModelsClient`); what differs is the route — an MLX
+generation carries `model` (the catalog id) and `directory`.
+
+### The channel contract the Swift half owes
+
+Not written yet; it is Mac work. `AppleFmChannel.swift` answers, beside
+`handshake`, `generate` and `cancel`:
+
+- `handshake` → `mlx: true` only where `MLXLanguageModel` exists in this
+  build and `#available(iOS 27, macOS 27)`. Gate the import on
+  `canImport(FoundationModels, _version: 2) && canImport(MLXFoundationModels)`:
+  with an older SDK the package compiles to an empty module, and
+  `canImport(MLXFoundationModels)` alone would still be true.
+- `load {model, directory}` → build an `MLXLanguageModel` with
+  `ModelConfiguration(directory: URL(fileURLWithPath: directory))`,
+  capabilities `[.guidedGeneration, .toolCalling, .reasoning]`, and a `load`
+  closure calling `loadModelContainer(from: directory, using:
+  #huggingFaceTokenizerLoader())`; keep it by `model` and `preload()` it.
+  Throw a `FlutterError` with the reason where it will not load — the
+  message is what the settings row shows.
+- `evict {model}` → that instance's `evict()`, and drop it; `evictAll` →
+  `MLXLanguageModel.evictAll()`, and drop them all.
+- `generate` with a `directory` → the session is built on the kept
+  instance (load it first if it is not kept); without one, the system model
+  as today. The current `MLXLanguageModel(modelID:)` call does not exist in
+  the package and is replaced by this.
+- Whether a thinking model's trace stays out of `part.content` with
+  `.reasoning` declared is the hand-run's to confirm.
+
+### The rest of the Mac work
+
+- Link the packages to both Runners (File > Add Package Dependencies):
+  `https://github.com/ml-explore/mlx-swift-lm` from 3.32.3, products
+  `MLXFoundationModels`, `MLXLLM` (registers the architectures; without it a
+  load fails with `noModelFactoryAvailable`), `MLXLMCommon` and
+  `MLXHuggingFace`; and `https://github.com/huggingface/swift-transformers`
+  from 1.3.0, product `Tokenizers`, which the tokenizer macro expands to.
+- Raise the deployment targets to the package's floor: iOS 15 to 17, macOS
+  12 to 14. That drops the older OSes from the app, not just the feature.
+- Compile `AppleFmChannel.swift` into the macOS Runner too, the way
+  `RemindersShared.swift` is shared: `#if os(iOS) import Flutter` /
+  `FlutterMacOS`, `UIKit` iOS-only, every `@available`/`#available` naming
+  macOS beside iOS, and `register` taking a messenger so
+  `MainFlutterWindow` can call it.
+- Move `release-build.yml`'s macos job to the `xcode-27` image with Xcode
+  27.1 selected, as the ios job is: with an older SDK the adapter compiles
+  out and the MLX section silently never appears.
+- The licences MLX and swift-transformers ship are owed to the About page.
 
 ## The rootfs
 
