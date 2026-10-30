@@ -11,11 +11,16 @@ runs:
     # SDK's path and cache keys: the caches are restored and saved below, so
     # a tag run can read them without writing any (see "Caches" in
     # .github/workflows/AGENTS.md).
+    #
+    # A beta, for flutter/flutter#188965: before it, Impeller on macOS reused
+    # a frame's vertex memory while the GPU was still reading it, and an
+    # on-device model's GPU work garbled the window. No stable carries the
+    # fix yet; the next one that does is where this goes back to stable.
     - id: flutter
       uses: subosito/flutter-action@v2.23.0
       with:
-        flutter-version: 3.47.7
-        channel: stable
+        flutter-version: 3.50.0-0.3.pre
+        channel: beta
         dry-run: true
 
     - name: Restore the Flutter SDK
@@ -39,8 +44,8 @@ runs:
     # way.
     - uses: subosito/flutter-action@v2.23.0
       with:
-        flutter-version: 3.47.7
-        channel: stable
+        flutter-version: 3.50.0-0.3.pre
+        channel: beta
 
     # Most of build_runner's minute is compiling its own entrypoint, which the
     # packages alone decide — so the key is the lock rather than the sources.
