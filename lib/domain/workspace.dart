@@ -31,22 +31,18 @@ class WorkspaceEntry {
 /// not there yet is empty rather than an error — a workspace is created with
 /// the chat and may never be written to.
 ///
-/// The listing is drained before anything is stat-ed, and the stats then go out
-/// together: awaiting one inside the loop pauses the stream on each, one stat
-/// per file, serialised, in front of the spinner.
 Future<List<WorkspaceEntry>> listWorkspace(String dir) async {
   final directory = Directory(dir);
   if (!directory.existsSync()) return const [];
-  final entities = await directory.list().toList();
-  final entries = await Future.wait(entities.map((entity) async {
-    final isDirectory = entity is Directory;
-    return WorkspaceEntry(
-      path: entity.path,
-      name: p.basename(entity.path),
-      isDirectory: isDirectory,
-      size: isDirectory ? 0 : (entity.statSync()).size,
-    );
-  }));
+  final entries = [
+    for (final entity in await directory.list().toList())
+      WorkspaceEntry(
+        path: entity.path,
+        name: p.basename(entity.path),
+        isDirectory: entity is Directory,
+        size: entity is Directory ? 0 : entity.statSync().size,
+      ),
+  ];
   return entries
     ..sort((a, b) => a.isDirectory == b.isDirectory
         ? a.name.toLowerCase().compareTo(b.name.toLowerCase())

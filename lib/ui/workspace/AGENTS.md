@@ -72,7 +72,7 @@ a rune cut in half is otherwise a file that reads as binary.
 Everything else the page can do is `FileHandoff`'s, and every route is gated the
 way `Shell.canRunCommands` gates the agent's commands. Desktop and Android do
 not differ in degree here, they differ in kind — and so there are two
-implementations, chosen at runtime in `platformFileHandoff`, because they share
+implementations, chosen at runtime in `createFileHandoff`, because they share
 `dart:io` and agree on nothing else here. Choosing rather than branching is the point: a class that
 answered both would carry an `if (Platform.isAndroid)` in every member, and
 every future member too.

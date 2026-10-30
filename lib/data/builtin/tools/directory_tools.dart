@@ -79,7 +79,7 @@ class AddDirectoryTool extends AgentTool {
     }
     yield toolCalled(call, path);
     final resolved = turn.resolvePath(path);
-    final type = await FileSystemEntity.type(resolved);
+    final type = FileSystemEntity.typeSync(resolved);
     if (type == FileSystemEntityType.notFound) {
       yield toolFailed(call, "Directory not found: $resolved. "
           "Create it first, then ask again.");
@@ -102,7 +102,7 @@ class AddDirectoryTool extends AgentTool {
     // is chased to where it points, so one aliasing the data dir is the data
     // dir.
     final dataDir = turn.dataDir;
-    if (dataDir != null && await _overlapsData(resolved, dataDir)) {
+    if (dataDir != null && pathsOverlap(resolved, dataDir)) {
       yield toolFailed(call, "$resolved holds this app's own data, or lies "
           "inside it, which is not grantable. Choose a directory outside it.");
       return;
@@ -206,18 +206,5 @@ class WritableDirectoriesTool extends AgentTool {
       if (home != null) "~ is $home.",
     ];
     yield toolOk(call, lines.join("\n"));
-  }
-}
-
-/// Whether [path] is [dataDir], inside it or holds it — by the names given,
-/// then by where their links lead.
-Future<bool> _overlapsData(String path, String dataDir) async {
-  bool overlaps(String a, String b) => pathInside(a, b) || pathInside(b, a);
-  if (overlaps(path, dataDir)) return true;
-  try {
-    return overlaps(await Directory(path).resolveSymbolicLinks(),
-        await Directory(dataDir).resolveSymbolicLinks());
-  } on FileSystemException {
-    return false;
   }
 }

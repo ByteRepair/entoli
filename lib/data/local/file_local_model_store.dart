@@ -90,7 +90,7 @@ class FileLocalModelStore extends LocalModelStore {
   Future<void> delete(String id) async {
     _downloaded = downloadedSync().where((m) => m.id != id).toList();
     final dir = Directory(directoryFor(id));
-    if (await dir.exists()) await dir.delete(recursive: true);
+    if (dir.existsSync()) await dir.delete(recursive: true);
   }
 
   /// Every file, checked, then described and kept where it landed. The

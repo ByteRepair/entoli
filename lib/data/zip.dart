@@ -21,9 +21,11 @@ Future<void> zipTo(
 }) async {
   final encoder = ZipFileEncoder()..create(to);
   try {
-    await _walk(paths, base, skip, skipDir,
-        directory: (name) => encoder.addArchiveFile(ArchiveFile.directory(name)),
-        file: (path, name) => encoder.addFile(File(path), name));
+    await for (final entry in _entries(paths, base, skip, skipDir)) {
+      entry.isDirectory
+          ? encoder.addArchiveFile(ArchiveFile.directory(entry.name))
+          : await encoder.addFile(File(entry.path), entry.name);
+    }
     extra.forEach(encoder.addArchiveFile);
   } finally {
     await encoder.close();
@@ -39,10 +41,11 @@ Future<Archive> archiveOf(
   bool Function(String path)? skipDir,
 }) async {
   final archive = Archive();
-  await _walk(paths, base, skip, skipDir,
-      directory: (name) => archive.add(ArchiveFile.directory(name)),
-      file: (path, name) async =>
-          archive.add(ArchiveFile.bytes(name, await File(path).readAsBytes())));
+  await for (final entry in _entries(paths, base, skip, skipDir)) {
+    archive.add(entry.isDirectory
+        ? ArchiveFile.directory(entry.name)
+        : ArchiveFile.bytes(entry.name, await File(entry.path).readAsBytes()));
+  }
   return archive;
 }
 
@@ -53,51 +56,37 @@ String zipNameFor(List<String> paths) {
   return "${p.basename(named)}.zip";
 }
 
-typedef _Directory = void Function(String name);
-typedef _File = Future<void> Function(String path, String name);
-
-Future<void> _walk(
+/// Every member [paths] make, in walk order: each folder before what is in
+/// it, named relative to [base] or the path's own parent.
+Stream<({String path, String name, bool isDirectory})> _entries(
   List<String> paths,
   String? base,
   bool Function(String path)? skip,
-  bool Function(String path)? skipDir, {
-  required _Directory directory,
-  required _File file,
-}) async {
-  for (final path in paths) {
-    final from = base ?? p.dirname(path);
-    if (await FileSystemEntity.isDirectory(path)) {
-      if (skipDir == null || !skipDir(path)) {
-        await _walkDirectory(from, path, skip, skipDir, directory, file);
+  bool Function(String path)? skipDir,
+) async* {
+  Stream<({String path, String name, bool isDirectory})> walk(
+      String from, String path, bool isDirectory) async* {
+    if (!isDirectory) {
+      if (skip == null || !skip(path)) {
+        yield (path: path, name: p.relative(path, from: from), isDirectory: false);
       }
-    } else if (skip == null || !skip(path)) {
-      await file(path, p.relative(path, from: from));
+      return;
+    }
+    if (skipDir != null && skipDir(path)) return;
+    // Its own entry as well as its contents': an empty folder is otherwise
+    // nothing at all, and a zip of one alone would come out empty. The base
+    // itself is not one of its own entries — `.` names nothing to unzip.
+    final name = p.relative(path, from: from);
+    if (name != ".") yield (path: path, name: name, isDirectory: true);
+    // On the entity rather than its path: `list` has already answered which
+    // each one is, and asking again is a stat per file.
+    await for (final entity in Directory(path).list()) {
+      yield* walk(from, entity.path, entity is Directory);
     }
   }
-}
 
-/// Recurses on the entity rather than its path: `list` has already answered
-/// which each one is, and asking again is a stat per file.
-Future<void> _walkDirectory(
-  String base,
-  String path,
-  bool Function(String path)? skip,
-  bool Function(String path)? skipDir,
-  _Directory directory,
-  _File file,
-) async {
-  // Its own entry as well as its contents': an empty folder is otherwise
-  // nothing at all, and a zip of one alone would come out empty. The base
-  // itself is not one of its own entries — `.` names nothing to unzip.
-  final name = p.relative(path, from: base);
-  if (name != ".") directory(name);
-  await for (final entity in Directory(path).list()) {
-    if (entity is Directory) {
-      if (skipDir == null || !skipDir(entity.path)) {
-        await _walkDirectory(base, entity.path, skip, skipDir, directory, file);
-      }
-    } else if (skip == null || !skip(entity.path)) {
-      await file(entity.path, p.relative(entity.path, from: base));
-    }
+  for (final path in paths) {
+    yield* walk(base ?? p.dirname(path), path,
+        FileSystemEntity.isDirectorySync(path));
   }
 }

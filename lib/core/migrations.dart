@@ -13,7 +13,7 @@ class Migration {
   /// runs is decided by where the entry sits in [migrations].
   final String version;
 
-  /// A filesystem and a data directory rather than the `AppConfig` over them:
+  /// A data directory rather than the `AppConfig` over it:
   /// an entry describes a layout that no longer exists, and a path helper
   /// answers for the one this build has.
   final Future<void> Function(String dataDir) apply;

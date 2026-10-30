@@ -706,7 +706,7 @@ class ChatRepository {
       // outlive the turn.
       final dirs = [
         for (final d in deniedDirs)
-          if (!pathInside(_config.dataDir, d) && !pathInside(d, _config.dataDir)) d,
+          if (!pathsOverlap(d, _config.dataDir)) d,
       ];
       if (dirs.length < deniedDirs.length) {
         logFailure("perms", "refused a persisted grant over the app's data");

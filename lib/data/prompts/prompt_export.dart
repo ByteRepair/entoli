@@ -14,7 +14,6 @@ import "../../domain/bundled_prompt_file.dart"
     show bundledPromptFileOf, bundledPromptFilesOf;
 import "../../domain/models.dart";
 import "../../domain/project.dart" show defaultProjectDir;
-import "../backup_handoff.dart";
 import "skill_import.dart"
     show SkillImportException, SkillPackage, skillDirectory, agentFilePath;
 import "skill_package.dart" show packageSkillBytes;
@@ -80,10 +79,8 @@ Future<void> exportAndSave(
   if (bytes == null) {
     throw const SkillImportException("its file could not be read");
   }
-  await withStagedFile(promptExportName(kind, name), (path) async {
-    await File(path).writeAsBytes(bytes);
-    await handoff.save(path);
-  });
+  await handoff.save(
+      promptExportName(kind, name), (path) => File(path).writeAsBytes(bytes));
 }
 
 /// The skill's files as they sit inside its own directory, resolved the way

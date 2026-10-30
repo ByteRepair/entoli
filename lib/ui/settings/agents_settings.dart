@@ -272,8 +272,7 @@ class _AgentsSectionState extends ConsumerState<AgentsSection> {
   /// would rather keep it, or the page went away while asking.
   Future<bool> _mayReplace(String name, String doing) async {
     final config = ref.read(appConfigProvider);
-    final exists = await File(agentFilePath(config, name, project: widget.project))
-        .exists();
+    final exists = File(agentFilePath(config, name, project: widget.project)).existsSync();
     if (!mounted) return false;
     return !exists ||
         await confirm(
@@ -595,8 +594,7 @@ class _AgentEditorPageState extends ConsumerState<AgentEditorPage> {
     final renaming = !widget.isNew && name != widget.initial.name;
     if (renaming) {
       final config = ref.read(appConfigProvider);
-      final taken = await File(agentFilePath(config, name, project: widget.project))
-          .exists();
+      final taken = File(agentFilePath(config, name, project: widget.project)).existsSync();
       if (!mounted) return;
       if (taken) {
         setState(() => _nameError = "An agent with that name already exists.");

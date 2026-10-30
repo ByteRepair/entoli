@@ -8,15 +8,15 @@ import "package:agent_chat/domain/app_settings.dart";
 import "package:agent_chat/domain/secret_store.dart";
 import "package:flutter_test/flutter_test.dart";
 
+import "../harness.dart";
+
 /// The secrets the settings pages write, over the store Android gets, on a data directory `AppConfig.load` created — the same state the app
 /// is in when the first key is stored.
 void main() {
   late AppConfig config;
 
   setUp(() async {
-    final dir = await Directory.systemTemp.createTemp("entoli_test_");
-    addTearDown(() => dir.delete(recursive: true));
-    config = await AppConfig.load(dir.path);
+    config = await loadedTempConfig();
   });
 
   AppSecrets secretsOver() => AppSecrets(FileSecretStore(config));
@@ -45,7 +45,7 @@ void main() {
     final stored =
         utf8.decode((await FileSecretStore(config).read(providerKeysKey))!);
     expect(stored, contains("sk-1"));
-    final settings = await File(config.settingsFile).exists()
+    final settings = File(config.settingsFile).existsSync()
         ? await File(config.settingsFile).readAsString()
         : "";
     expect(settings, isNot(contains("sk-1")));

@@ -884,11 +884,9 @@ class BuiltinBackend implements AgentBackend {
       config.resourcesDir(chatId, project: project),
       for (final dir in promptDirsOf(config, project: project)) dir.path,
     ];
-    final there =
-        await Future.wait(dirs.map((dir) => Directory(dir).exists()));
     return [
-      for (final (i, dir) in dirs.indexed)
-        if (there[i]) dir,
+      for (final dir in dirs)
+        if (Directory(dir).existsSync()) dir,
     ];
   }
 

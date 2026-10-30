@@ -27,7 +27,7 @@ void main() {
 
   Future<String?> stamped() async {
     final file = File(migrationStamp(config.dataDir));
-    return await file.exists() ? file.readAsString() : null;
+    return file.existsSync() ? file.readAsString() : null;
   }
 
   Future<void> stamp(String version) =>

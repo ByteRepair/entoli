@@ -43,13 +43,12 @@ Future<void> installBundledSkills(AppConfig config, ReadOnlyDirs dirs) async {
 }
 
 Future<void> _installFor(AppConfig config, String project) async {
-  final path = p.context;
   final root = Directory(config.bundledSkillsDir(project: project));
 
   final known = <String>{};
   for (final file in bundledSkillFiles) {
     if (file.project != project) continue;
-    final dest = path.join(
+    final dest = p.join(
         config.bundledSkillsDir(project: project), file.name, file.relativePath);
     known.add(dest);
     try {

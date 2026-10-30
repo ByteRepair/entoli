@@ -363,15 +363,18 @@ binary costs a third more as base64, and nothing compresses, where deflate takes
 what the document is before anything is deleted for it, a member gives back.
 
 Both directions stream, so a backup costs disk rather than memory.
-`writeBackup` walks the data directory into a `ZipFileEncoder` writing to a
-staged file (`zipTo`, the walker the workspace share uses too), a member read
-and compressed at a time, and `BackupHandoff.save` takes that file's path.
+`writeBackup` walks the data directory into a `ZipFileEncoder` (`zipTo`, the
+walker the workspace share uses too), a member read and compressed at a time.
+`BackupHandoff.save` takes a name and a writer rather than a file: the desktop
+asks where first and the writer zips straight there, so nothing is written
+twice and nothing at all on a cancel, which `save` answers false and the page
+then says nothing; Android writes to a temporary directory and shares from it.
 `openBackup` decodes the picked file's directory alone and leaves the members in
 it; the restore decompresses each straight into its target file. The file
 stays open until `Backup.close`, which the settings page owes whether or not
 the user agreed. A backup picked from under the data directory — one saved into
-a workspace — is copied out first, since the restore clears the directory
-before it reads a member.
+a workspace, or reached through a link into it (`pathsOverlap`) — is copied out
+first, since the restore clears the directory before it reads a member.
 
 That member is `backup-meta.json`, holding the format name, the version and when
 the backup was made — meta about the backup rather than a file of the data

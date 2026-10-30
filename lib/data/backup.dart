@@ -8,6 +8,7 @@ import "../core/config.dart";
 import "../core/migrations.dart";
 import "../domain/documents.dart";
 import "../domain/file_handoff.dart";
+import "../domain/shell.dart" show pathsOverlap;
 import "../domain/workspace.dart";
 import "zip.dart";
 
@@ -78,10 +79,12 @@ class Backup {
   /// disk is smaller and says nothing about what fits back.
   int get size => entries.fold(0, (total, file) => total + file.size);
 
-  Future<void> close() async {
-    await _input.close();
-    await staging?.delete(recursive: true);
-  }
+  Future<void> close() => _release(_input, staging);
+}
+
+Future<void> _release(InputFileStream input, Directory? staging) async {
+  await input.close();
+  await staging?.delete(recursive: true);
 }
 
 /// `projects/<name>/chats/<id>/state.json`, which is where `AppConfig` puts one
@@ -129,7 +132,7 @@ Future<void> writeBackup(AppConfig config, String to) =>
 /// a member.
 Future<Backup> openBackup(AppConfig config, String path) async {
   Directory? staging;
-  if (p.isWithin(config.dataDir, path)) {
+  if (pathsOverlap(path, config.dataDir)) {
     staging = await Directory.systemTemp.createTemp("entoli-restore");
     path = (await File(path).copy(p.join(staging.path, "backup.zip"))).path;
   }
@@ -137,8 +140,7 @@ Future<Backup> openBackup(AppConfig config, String path) async {
   try {
     return _checked(input, staging);
   } catch (_) {
-    await input.close();
-    await staging?.delete(recursive: true);
+    await _release(input, staging);
     rethrow;
   }
 }

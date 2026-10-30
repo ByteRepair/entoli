@@ -152,8 +152,7 @@ class _SkillsSectionState extends ConsumerState<SkillsSection> {
     // snack bar, not in the list.
     final target = widget.project ?? _destination;
     final config = ref.read(appConfigProvider);
-    final replacing = await Directory(skillDirectory(config, package.name, project: target))
-        .exists();
+    final replacing = Directory(skillDirectory(config, package.name, project: target)).existsSync();
     if (!mounted) return;
     if (replacing) {
       final confirmed = await confirm(

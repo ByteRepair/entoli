@@ -240,7 +240,7 @@ class CdpBrowser extends AgentBrowser {
         "signed out.");
     await webViews?.invokeMethod<void>("clearData");
     final profile = Directory(_profile);
-    if (await profile.exists()) await profile.delete(recursive: true);
+    if (profile.existsSync()) await profile.delete(recursive: true);
   }
 
   /// The browser is gone rather than restarting: the window it was shown
@@ -306,7 +306,7 @@ class CdpBrowser extends AgentBrowser {
       final staging = Directory(_staging);
       // What is left here is a download no tab could be found for, kept
       // until the next start.
-      if (await staging.exists()) await staging.delete(recursive: true);
+      if (staging.existsSync()) await staging.delete(recursive: true);
       await staging.create(recursive: true);
       await cdp.send("Browser.setDownloadBehavior", params: {
         "behavior": "allowAndName",
@@ -365,7 +365,7 @@ class CdpBrowser extends AgentBrowser {
           ? "download"
           : p.basename(suggested.trim());
       var to = p.join(dir, name);
-      for (var n = 1; await File(to).exists() || await Directory(to).exists(); n++) {
+      for (var n = 1; File(to).existsSync() || Directory(to).existsSync(); n++) {
         to = p.join(dir, "${p.basenameWithoutExtension(name)} ($n)${p.extension(name)}");
       }
       try {
@@ -389,7 +389,7 @@ class CdpBrowser extends AgentBrowser {
   Future<List<FoundBrowser>> detect() async {
     final found = <String, FoundBrowser>{};
     for (final (name, path) in _candidates()) {
-      if (!found.containsKey(name) && await File(path).exists()) {
+      if (!found.containsKey(name) && File(path).existsSync()) {
         found[name] = FoundBrowser(name, path);
       }
     }
@@ -399,7 +399,7 @@ class CdpBrowser extends AgentBrowser {
   @override
   Future<String> verify(String picked) async {
     final exe = picked.endsWith(".app") ? macAppExecutable(picked) : picked;
-    if (exe == null || !await File(exe).exists()) {
+    if (exe == null || !File(exe).existsSync()) {
       throw CdpException("$picked is not a program this app can run.");
     }
     final probe = p.join(browserDir, "probe-$pid");
@@ -493,7 +493,7 @@ Future<_Running> _launch(String exe, String profile,
   await Directory(profile).create(recursive: true);
   await reapLostBrowser(profile);
   final portFile = File(p.join(profile, "DevToolsActivePort"));
-  if (await portFile.exists()) await portFile.delete();
+  if (portFile.existsSync()) await portFile.delete();
   final process = await Process.start(
     exe,
     [
@@ -528,7 +528,7 @@ Future<_Running> _launch(String exe, String profile,
 
   final deadline = DateTime.now().add(const Duration(seconds: 30));
   while (true) {
-    if (await portFile.exists()) {
+    if (portFile.existsSync()) {
       final lines = (await portFile.readAsString()).trim().split("\n");
       if (lines.length >= 2) {
         final url = Uri.parse("ws://127.0.0.1:${lines[0].trim()}${lines[1].trim()}");

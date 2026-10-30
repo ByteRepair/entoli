@@ -13,10 +13,9 @@ void main() {
   setUp(() => dir = tempConfig().projectWorkspaceDir());
 
   Future<Archive> unzip(List<String> paths) async {
-    final out = await Directory.systemTemp.createTemp("zip_out_");
-    addTearDown(() => out.delete(recursive: true));
-    await zipTo("${out.path}/out.zip", paths);
-    return ZipDecoder().decodeBytes(File("${out.path}/out.zip").readAsBytesSync());
+    final out = "${tempDir().path}/out.zip";
+    await zipTo(out, paths);
+    return ZipDecoder().decodeBytes(File(out).readAsBytesSync());
   }
 
   test("a file is named without the folder it came out of", () async {

@@ -13,7 +13,6 @@ import "../../data/builtin/llm/local_pool_client.dart";
 import "../../data/builtin/llm/local_prefill.dart";
 import "../../data/builtin/llm/providers/presets.dart";
 import "../../data/local/file_chat_store.dart";
-import "../../data/local/byte_repair_store.dart" show ByteRepairStore;
 import "../../data/local/llama_engine.dart";
 import "../../data/local/local_engine.dart";
 import "../../data/prompts/prompt_sources.dart";
@@ -21,10 +20,7 @@ import "../../domain/agent_browser.dart";
 import "../../domain/app_settings.dart";
 import "../../domain/app_secrets.dart";
 import "../../domain/background_work.dart";
-import "../../domain/backup_handoff.dart";
-import "../../domain/builtin_project.dart";
 import "../../domain/chat_store.dart";
-import "../../domain/file_handoff.dart";
 import "../../domain/models.dart";
 import "../../domain/prompt_library.dart";
 import "../../domain/trigger_manager.dart" show TriggerRegistryFactory;
@@ -43,7 +39,10 @@ export "host.dart"
         createAgentBrowser,
         createAppleFm,
         createAppUpdateHost,
+        createBackupHandoff,
+        createByteRepairStore,
         createAssistantLaunch,
+        createFileHandoff,
         createFileWatches,
         createLanSignaling,
         createLocalEngine,
@@ -216,17 +215,6 @@ LocalPrefill? createLocalPrefill(
   );
 }
 
-/// The Byte Repair tooling store, for the Byte Repair project.
-ByteRepairStore createByteRepairStore(
-        AppConfig config, String cacheDir, RootfsStore? rootfs) =>
-    platformByteRepairStore(
-      config,
-      ByteRepairProject().dir,
-      config.projectWorkspaceDir(project: ByteRepairProject().dir),
-      cacheDir,
-      rootfs,
-    );
-
 /// The version this build was made from, out of the `version.json` asset that
 /// `tool/prepare.sh` writes from pubspec. Null if it could not be read, which
 /// About leaves the line out for.
@@ -242,11 +230,6 @@ Future<String?> appVersion() async {
 
 ChatStore createChatStore(AppConfig config) =>
     FileChatStore(config, deleteTree: deleteTree, readOnlyDirs: readOnlyDirs);
-
-FileHandoff createFileHandoff(AppConfig config) => platformFileHandoff();
-
-BackupHandoff createBackupHandoff(AppConfig config, FileHandoff handoff) =>
-    platformBackupHandoff(handoff);
 
 /// The presets and the user's own beside them. [project]'s overrides are
 /// layered on the default set; `null` is the default project.

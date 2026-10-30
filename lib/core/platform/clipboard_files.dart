@@ -47,7 +47,7 @@ class ChannelClipboardFiles implements ClipboardFiles {
 
 Future<Attachment?> _readPath(String path) async {
   // A copied folder is in the list too, and has no bytes to attach.
-  if (!await FileSystemEntity.isFile(path)) return null;
+  if (!FileSystemEntity.isFileSync(path)) return null;
   try {
     return pastedAttachment(await File(path).readAsBytes(), name: p.basename(path));
   } on FileSystemException catch (e) {

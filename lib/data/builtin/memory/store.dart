@@ -385,7 +385,7 @@ class MemoryStore implements Memories {
   Future<Map<String, List<String>>> _index(List<MemoryEntry> entries) async {
     final indexFile = File(_indexPath);
     final logFile = File(_logPath);
-    final logSize = logFile.existsSync() ? (logFile.statSync()).size : 0;
+    final logSize = logFile.existsSync() ? logFile.lengthSync() : 0;
     if (indexFile.existsSync()) {
       try {
         final json = jsonDecode(await indexFile.readAsString());
@@ -412,7 +412,7 @@ class MemoryStore implements Memories {
   Future<void> _rebuildIndex() async {
     final all = await entries();
     final logFile = File(_logPath);
-    final size = logFile.existsSync() ? (logFile.statSync()).size : 0;
+    final size = logFile.existsSync() ? logFile.lengthSync() : 0;
     await _writeIndex(size, _indexFor(all));
   }
 

@@ -230,8 +230,7 @@ class _MarketplaceEntryPreviewPageState
       }
       return null;
     }
-    if (await Directory(skillDirectory(config, pkg.name, project: target))
-        .exists()) {
+    if (Directory(skillDirectory(config, pkg.name, project: target)).existsSync()) {
       if (!mounted) return null;
       final confirmed = await confirm(
         context,
@@ -274,8 +273,7 @@ class _MarketplaceEntryPreviewPageState
       }
       return null;
     }
-    final agentExists = await File(agentFilePath(config, name, project: target))
-        .exists();
+    final agentExists = File(agentFilePath(config, name, project: target)).existsSync();
     if (agentExists) {
       if (!mounted) return null;
       final confirmed = await confirm(

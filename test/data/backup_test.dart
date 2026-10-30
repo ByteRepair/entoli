@@ -17,8 +17,7 @@ void main() {
 
   setUp(() {
     config = tempConfig();
-    out = Directory.systemTemp.createTempSync("backup_out_");
-    addTearDown(() => out.deleteSync(recursive: true));
+    out = tempDir("backup_out_");
   });
 
   /// A backup written the way Export writes one, outside the data directory.

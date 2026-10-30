@@ -93,7 +93,7 @@ class ChatJobs implements ChatShellJobs {
     var log = "";
     try {
       final file = File(job.logPath);
-      log = await _tail(file, (file.statSync()).size);
+      log = await _tail(file, file.statSync().size);
     } catch (e) {
       logFailure("jobs", "could not read the log of job ${job.id}", e);
     }

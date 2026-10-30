@@ -6,6 +6,8 @@ import "package:agent_chat/data/local/file_secret_store.dart";
 import "package:agent_chat/domain/sync/identity.dart";
 import "package:flutter_test/flutter_test.dart";
 
+import "../../harness.dart";
+
 /// The secret store Android gets, over a data directory this launch
 /// created — which is the state that matters, since the identity is written on
 /// the first launch and a failure there took the app down before a frame.
@@ -14,9 +16,7 @@ void main() {
   late FileSecretStore store;
 
   setUp(() async {
-    final dir = await Directory.systemTemp.createTemp("entoli_test_");
-    addTearDown(() => dir.delete(recursive: true));
-    config = await AppConfig.load(dir.path);
+    config = await loadedTempConfig();
     store = FileSecretStore(config);
   });
 
@@ -26,7 +26,7 @@ void main() {
     await store.write("k", bytes());
 
     expect(await store.read("k"), bytes());
-    expect(await File("${config.dataDir}/sync/secrets.json").exists(), isTrue);
+    expect(File("${config.dataDir}/sync/secrets.json").existsSync(), isTrue);
   });
 
   test("a second store reads what the first wrote", () async {

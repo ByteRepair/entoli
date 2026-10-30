@@ -91,7 +91,7 @@ EditArgs? editArgsFrom(String? json) {
 typedef FileStamp = ({DateTime modified, int size});
 
 /// [path]'s stamp now, or null where nothing is there.
-Future<FileStamp?> fileStampOf(String path) async {
+FileStamp? fileStampOf(String path) {
   final stat = File(path).statSync();
   if (stat.type == FileSystemEntityType.notFound) return null;
   return (modified: stat.modified, size: stat.size);
@@ -105,7 +105,7 @@ Future<String?> unreadFileProblem(String path,
     {required String shownPath,
     required String toolName,
     required Map<String, FileStamp> readFiles}) async {
-  final now = await fileStampOf(path);
+  final now = fileStampOf(path);
   if (now == null) return null;
   final read = readFiles[path];
   if (read == null) {

@@ -8,7 +8,6 @@ import "../../domain/app_theme.dart";
 import "../../domain/corner_radius.dart";
 import "../../domain/theme_colour.dart";
 import "../../data/backup.dart";
-import "../../data/backup_handoff.dart";
 import "../../data/builtin/llm/providers/presets.dart";
 import "../../core/platform/platform.dart" as platform;
 import "../../domain/llm_provider.dart";
@@ -1231,13 +1230,15 @@ class _BackupSectionState extends ConsumerState<_BackupSection> {
     super.dispose();
   }
 
-  Future<void> _export() => _guard(() =>
-      withStagedFile(backupFilename(DateTime.now()), (path) async {
-        await writeBackup(ref.read(appConfigProvider), path);
-        final size = await File(path).length();
-        await ref.read(backupHandoffProvider).save(path);
-        _say("Backup written — ${formatSize(size)}.");
-      }));
+  Future<void> _export() => _guard(() async {
+        var size = 0;
+        final saved = await ref.read(backupHandoffProvider).save(
+            backupFilename(DateTime.now()), (path) async {
+          await writeBackup(ref.read(appConfigProvider), path);
+          size = await File(path).length();
+        });
+        if (saved) _say("Backup written — ${formatSize(size)}.");
+      });
 
   Future<void> _import() async {
     // A courtesy rather than a safeguard: the restart stops the turn either

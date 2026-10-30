@@ -132,7 +132,7 @@ class AppSession {
     final libraries = Map.fromEntries(await Future.wait(projects.map((project) async =>
         MapEntry(project,
             await PromptLibrary.from(platform.createPromptSources(config, project: project))))));
-    final handoff = platform.createFileHandoff(config);
+    final handoff = platform.createFileHandoff();
     final cache = await cacheDir;
     final rootfs = platform.createRootfsStore(cache);
     // Started here and awaited below, the way the three above are: it is a
@@ -249,7 +249,7 @@ class AppSession {
         triggerTurnDriverProvider
             .overrideWith((ref) => ChatControllerTriggerTurnDriver(ref)),
         backupHandoffProvider
-            .overrideWithValue(platform.createBackupHandoff(config, handoff)),
+            .overrideWithValue(platform.createBackupHandoff(handoff)),
         appRestartProvider.overrideWithValue(relaunch),
         voiceModelStoreProvider.overrideWithValue(voiceModels),
         voiceProvider.overrideWithValue(voice),

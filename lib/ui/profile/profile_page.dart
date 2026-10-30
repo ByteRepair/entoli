@@ -124,6 +124,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
   /// Together rather than in turn: a path on a stalled mount should cost the
   /// page its own wait, not everyone's after it.
   Future<Set<String>> _missingOf(List<String> paths) async {
+    // ignore: avoid_slow_async_io
     final exists = await Future.wait(paths.map((p) => File(p).exists()));
     return {for (final (i, path) in paths.indexed) if (!exists[i]) path};
   }

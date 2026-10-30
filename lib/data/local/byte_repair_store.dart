@@ -89,13 +89,13 @@ class ByteRepairStore {
       return "No rootfs is installed. Download one from Terminal settings.";
     }
     final target = config.projectRootfsDir(project: project, rootfsId: id);
-    if (File(p.join(target, ".complete")).existsSync()) return null;
+    if (_rootfsComplete(target).existsSync()) return null;
     final err = await copyTree(baseDir, target);
     if (err != null) {
       logFailure("byte-repair", "rootfs copy failed", err);
       return "Failed to copy rootfs: $err";
     }
-    File(p.join(target, ".complete")).writeAsStringSync(id);
+    _rootfsComplete(target).writeAsStringSync(id);
     return null;
   }
 
@@ -180,7 +180,7 @@ class ByteRepairStore {
     }
     try {
       final marker = File(config.setupCompleteFile(project: project));
-      if (await marker.exists()) await marker.delete();
+      if (marker.existsSync()) await marker.delete();
       return null;
     } catch (e) {
       logFailure("byte-repair", "delete environment failed", e);
@@ -305,7 +305,7 @@ class ByteRepairStore {
     final id = AppSettings.load(config).rootfsId;
     if (id == null) return null;
     final dir = config.projectRootfsDir(project: project, rootfsId: id);
-    return File(p.join(dir, ".complete")).existsSync()
+    return _rootfsComplete(dir).existsSync()
         ? p.join(dir, "usr", "local", "bin")
         : null;
   }
@@ -338,3 +338,6 @@ const homebrewInstallCommand = '/bin/bash -c "\$(curl -fsSL '
 /// Intel's. The only two it supports, so asking them is asking whether it is
 /// installed.
 const homebrewPaths = ["/opt/homebrew/bin/brew", "/usr/local/bin/brew"];
+
+/// The marker a finished rootfs copy at [dir] carries, naming its rootfs.
+File _rootfsComplete(String dir) => File(p.join(dir, ".complete"));

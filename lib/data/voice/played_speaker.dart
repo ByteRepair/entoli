@@ -66,7 +66,7 @@ abstract class PlayingSpeaker implements Speaker {
     // in: a session killed mid-reply leaves its files behind, and nothing else
     // ever comes back for them.
     final speech = Directory(_speechDir);
-    if (await speech.exists()) await speech.delete(recursive: true);
+    if (speech.existsSync()) await speech.delete(recursive: true);
     await speech.create(recursive: true);
   }
 

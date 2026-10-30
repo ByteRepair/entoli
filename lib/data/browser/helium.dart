@@ -226,7 +226,7 @@ class HeliumDownload implements EmbeddedBrowser {
 
   static Future<void> _deleteIfThere(String path) async {
     final dir = Directory(path);
-    if (await dir.exists()) await dir.delete(recursive: true);
+    if (dir.existsSync()) await dir.delete(recursive: true);
   }
 }
 

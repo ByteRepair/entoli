@@ -8,9 +8,11 @@
 /// Files rather than bytes both ways, so a backup the size of the data
 /// directory never has to fit in memory to leave or to come back.
 abstract interface class BackupHandoff {
-  /// Hand the file at [path] to the user under its own name. The caller made
-  /// it and removes it after; this copies or shares it before returning.
-  Future<void> save(String path);
+  /// Hand the user a file called [name], which [write] makes at the path it is
+  /// given — where the user chose, on a platform with a save dialog, so
+  /// nothing is written twice and nothing at all on a cancel. False is a
+  /// cancel.
+  Future<bool> save(String name, Future<void> Function(String path) write);
 
   /// Where the file the user picked is, or null if they cancelled.
   Future<String?> pick();

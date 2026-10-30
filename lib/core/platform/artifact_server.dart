@@ -38,7 +38,7 @@ class ArtifactServer {
         p.normalize(p.join(rootDir, path.isEmpty ? "index.html" : path));
     final file = File(resolved);
 
-    if (!p.isWithin(rootDir, resolved) || !await file.exists()) {
+    if (!p.isWithin(rootDir, resolved) || !file.existsSync()) {
       request.response
         ..statusCode = HttpStatus.notFound
         ..write("Not found: $path");

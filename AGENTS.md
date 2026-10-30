@@ -195,7 +195,10 @@ The filesystem is `dart:io`'s, with no port over it: every platform the app
 runs on has a disk, and a test runs on a real temp directory (see
 `test/AGENTS.md`). `AppConfig` composes path names: `dataDir` and every helper
 are plain `String`s rather than `File` and `Directory`, joined with
-`package:path`. Where this platform keeps things is the one question it does
+`package:path`. `exists`, `stat` and their kin are called sync — one metadata
+call each — which `avoid_slow_async_io` holds the code to; the one async
+exception is the profile page's check of linked files, which may sit on a
+stalled mount. Where this platform keeps things is the one question it does
 not answer, and that stays in `core/platform/`.
 
 `AppSettings.load` and `ProjectSettings.load` are synchronous and hot — the

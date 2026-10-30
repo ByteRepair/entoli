@@ -205,6 +205,7 @@ class TestApp {
     final assist = FakeAssistantLaunch(hasGesture: assistantGesture);
     final alarms = reminderAlarms ?? FakeReminderAlarms(available: false);
     final backups = FakeBackupHandoff();
+    addTearDown(backups.dispose);
     final restart = FakeAppRestart();
     final chats = store ?? FileChatStore(config);
     final linkOpener = FakeLinkOpener();
@@ -946,6 +947,18 @@ AppConfig tempConfig([String prefix = "agent_chat_test_"]) {
   });
   return config;
 }
+
+/// An empty temp directory, torn down when the test ends — for a file a test
+/// stages outside any data directory.
+Directory tempDir([String prefix = "agent_chat_test_"]) {
+  final dir = Directory.systemTemp.createTempSync(prefix);
+  addTearDown(() => dir.deleteSync(recursive: true));
+  return dir;
+}
+
+/// A data directory [AppConfig.load] made from nothing, the state a first
+/// launch is in — unlike [tempConfig], which builds the folders itself.
+Future<AppConfig> loadedTempConfig() => AppConfig.load(tempDir().path);
 
 /// Reload a project's prompt library and settle, so what a page draws reflects
 /// what is on disk rather than the test's seeded library. The reload is real

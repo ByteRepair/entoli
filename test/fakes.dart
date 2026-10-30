@@ -275,18 +275,28 @@ class FakeAppRestart implements AppRestart {
 /// of which a test can answer. What was saved is kept so a test can read the
 /// document back, which is the only witness there is that Export did anything.
 class FakeBackupHandoff implements BackupHandoff {
-  /// Read back at once, since the caller removes the file when this returns.
-  final List<({String name, Uint8List bytes})> saved = [];
+  /// Each one written into [dir], where the save dialog would have put it.
+  final List<({String name, String path})> saved = [];
 
   /// Where the next pick answers. Null is a cancelled chooser.
   String? scripted;
 
+  /// Where saves land, made on the first; removed by [dispose].
+  Directory? dir;
+
   @override
-  Future<void> save(String path) async =>
-      saved.add((name: p.basename(path), bytes: await File(path).readAsBytes()));
+  Future<bool> save(String name, Future<void> Function(String path) write) async {
+    final into = dir ??= await Directory.systemTemp.createTemp("backups_");
+    final path = p.join(into.path, "${saved.length}-$name");
+    await write(path);
+    saved.add((name: name, path: path));
+    return true;
+  }
 
   @override
   Future<String?> pick() async => scripted;
+
+  Future<void> dispose() async => dir?.delete(recursive: true);
 }
 
 /// The system's assistant gesture, as the app sees it. [pending] is a launch

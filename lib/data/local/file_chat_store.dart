@@ -321,7 +321,7 @@ class FileChatStore implements ChatStore {
     if (id != artifactId || id.isEmpty) return null;
     project = project ?? await projectOf(chatId);
     final dir = config.artifactDir(chatId, id, project: project);
-    if (!await FileSystemEntity.isDirectory(dir)) return null;
+    if (!FileSystemEntity.isDirectorySync(dir)) return null;
     // `base` is the artifact root itself: the entries come out named relative
     // to it, the shape the unzip on the far side writes back.
     return ZipEncoder().encodeBytes(await archiveOf([dir], base: dir));

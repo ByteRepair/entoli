@@ -34,7 +34,7 @@ class FileVoiceModelStore extends VoiceModelStore {
   @override
   Future<String?> directoryOf(VoiceModel model) async {
     final dir = directoryFor(model);
-    return File(p.join(dir, _marker)).exists().then((ok) => ok ? dir : null);
+    return File(p.join(dir, _marker)).existsSync() ? dir : null;
   }
 
   /// Read off the disk rather than off the catalog: what is installed is a

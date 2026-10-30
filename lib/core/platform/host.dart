@@ -240,18 +240,14 @@ RootfsStore createRootfsStore(String cacheDir) =>
 /// Installs into the guest's `/usr/local/bin` on the phones (proot, iSH) and
 /// the app's own bin directory on the desktops. A guest's `apk` installs in
 /// minutes; a host install fetches a 240 MB ESBMC zip and wants the half hour.
-ByteRepairStore platformByteRepairStore(
-  AppConfig config,
-  String project,
-  String workspace,
-  String cacheDir,
-  RootfsStore? rootfs,
-) {
+ByteRepairStore createByteRepairStore(
+    AppConfig config, String cacheDir, RootfsStore? rootfs) {
   final guest = Platform.isAndroid || Platform.isIOS;
+  final project = ByteRepairProject().dir;
   return ByteRepairStore(
     config: config,
     project: project,
-    workspace: workspace,
+    workspace: config.projectWorkspaceDir(project: project),
     installDir: guest ? guestEsbmcInstallDir : byteRepairBinDir(cacheDir),
     installTimeout: guest ? guestInstallTimeout : hostInstallTimeout,
     rootfsStore: rootfs,
@@ -312,7 +308,7 @@ Future<LocalEngine> createLocalEngine(String cacheDir) async {
       : (bundledLinuxLibDir(), "llama-server");
   if (libDir == null) return const NoLocalEngine(missingFromBuild: true);
   final server = p.join(libDir, serverName);
-  if (!await File(server).exists()) {
+  if (!File(server).existsSync()) {
     return const NoLocalEngine(missingFromBuild: true);
   }
   final store = FileLocalModelStore(p.join(cacheDir, "llm"), format: const GgufFormat());
@@ -368,11 +364,11 @@ String bundledLinuxLibDir({String? executablePath}) {
 /// the two cannot disagree.
 String _kvCacheDir(String cacheDir) => p.join(cacheDir, "kv-cache");
 
-FileHandoff platformFileHandoff() =>
+FileHandoff createFileHandoff() =>
     Platform.isAndroid ? AndroidFileHandoff() : const DesktopFileHandoff();
 
 /// Android has no save dialog; a backup leaves through the share sheet.
-BackupHandoff platformBackupHandoff(FileHandoff handoff) =>
+BackupHandoff createBackupHandoff(FileHandoff handoff) =>
     Platform.isAndroid
         ? SharedBackup(handoff)
         : const FileSelectorBackup();

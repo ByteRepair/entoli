@@ -146,7 +146,7 @@ class PlatformLinkOpener implements LinkOpener {
   /// port has already checked, so it launches straight away instead.
   Future<void> _openDesktopArtifact(
       String chatId, String artifactId, String dir, String entryFile) async {
-    if (!await File("$dir/$entryFile").exists()) {
+    if (!File("$dir/$entryFile").existsSync()) {
       logFailure("open", "Artifact entry file missing: $dir/$entryFile");
       return;
     }

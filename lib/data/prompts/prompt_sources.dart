@@ -191,15 +191,14 @@ class DirectoryPrompts implements PromptSource {
   }
 
   Future<List<PromptDocument>> _loadFlat(CompletionKind kind, String project) async {
-    final path = p.context;
     final directory = Directory(config.promptsDir(kind, project: project));
     if (!directory.existsSync()) return const [];
     final documents = <PromptDocument>[];
     await for (final entity in directory.list()) {
-      if (entity is! File || path.extension(entity.path) != ".md") continue;
+      if (entity is! File || p.extension(entity.path) != ".md") continue;
       documents.add(PromptDocument.parse(
         kind,
-        path.basenameWithoutExtension(entity.path),
+        p.basenameWithoutExtension(entity.path),
         await entity.readAsString(),
       ));
     }
@@ -217,14 +216,13 @@ class DirectoryPrompts implements PromptSource {
 /// conform, is skipped with a line in the log — one broken skill does not take
 /// the menu with it, and the skills settings page shows the reason.
 Future<List<PromptDocument>> loadSkillDirectories(String directory) async {
-  final path = p.context;
   final root = Directory(directory);
   if (!root.existsSync()) return const [];
   final documents = <PromptDocument>[];
   await for (final entity in root.list()) {
     if (entity is! Directory) continue;
-    final folderName = path.basename(entity.path);
-    final file = File(path.join(entity.path, "SKILL.md"));
+    final folderName = p.basename(entity.path);
+    final file = File(p.join(entity.path, "SKILL.md"));
     try {
       if (!file.existsSync()) continue;
       final document =

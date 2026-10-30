@@ -5,15 +5,15 @@ import "package:agent_chat/data/local/file_trigger_store.dart";
 import "package:flutter/foundation.dart";
 import "package:flutter_test/flutter_test.dart";
 
+import "../../harness.dart";
+
 void main() {
   late AppConfig config;
   late List<String> logged;
   late DebugPrintCallback saved;
 
   setUp(() async {
-    final dir = await Directory.systemTemp.createTemp("entoli_test_");
-    addTearDown(() => dir.delete(recursive: true));
-    config = await AppConfig.load(dir.path);
+    config = await loadedTempConfig();
     logged = [];
     saved = debugPrint;
     debugPrint = (message, {wrapWidth}) => logged.add(message ?? "");

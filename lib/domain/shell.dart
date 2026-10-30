@@ -4,6 +4,8 @@
 /// of the model is here too, since it is the same shell it reaches.
 library;
 
+import "dart:io";
+
 import "package:flutter/foundation.dart" show ValueListenable;
 
 /// The command tool's name: the log records it, the chat draws it, and the
@@ -128,6 +130,20 @@ bool pathInside(String path, String root) {
   final p = _trimSlash(path);
   final r = _trimSlash(root);
   return p == r || p.startsWith("$r/");
+}
+
+/// Whether [a] and [b] overlap — one is the other or holds it — by the names
+/// given, then by where their links lead, so a symlink aliasing a directory is
+/// that directory. What keeps a grant or a restore off the app's own data.
+bool pathsOverlap(String a, String b) {
+  bool named(String x, String y) => pathInside(x, y) || pathInside(y, x);
+  if (named(a, b)) return true;
+  try {
+    return named(File(a).resolveSymbolicLinksSync(),
+        File(b).resolveSymbolicLinksSync());
+  } on FileSystemException {
+    return false;
+  }
 }
 
 String _trimSlash(String path) =>

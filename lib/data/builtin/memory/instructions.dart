@@ -188,7 +188,7 @@ Future<void> _readInto(String path, InstructionKind kind,
   try {
     final file = File(path);
     if (!file.existsSync()) return;
-    if ((file.statSync()).size > maxInstructionBytes) {
+    if (file.statSync().size > maxInstructionBytes) {
       logFailure("memory", "skipping $path: over $maxInstructionBytes bytes");
       return;
     }

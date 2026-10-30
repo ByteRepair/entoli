@@ -65,7 +65,7 @@ Future<String?> _unread(Turn turn, String path, String shownPath, String tool) =
 /// What the model wrote or read is what it has seen, so the next edit needs
 /// no read.
 Future<void> _stamp(Turn turn, String path) async {
-  final stamp = await fileStampOf(path);
+  final stamp = fileStampOf(path);
   if (stamp != null) turn.readFiles[path] = stamp;
 }
 

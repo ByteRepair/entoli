@@ -1,6 +1,5 @@
 import "dart:io";
 
-import "package:flutter/foundation.dart";
 import "package:path/path.dart" as p;
 
 import "../domain/documents.dart";
@@ -49,11 +48,8 @@ const instructionBlockHeader = "Workspace instructions are shown below";
 /// `WorkspaceProvider` — it answers Android's Files app with no engine running,
 /// so moving `workspace/` or `chats/` has to move there too.
 class AppConfig {
-  AppConfig._(this.dataDir) : documents = Documents();
-
-  /// Test-only constructor using an explicit data directory. Creates nothing,
-  /// and hydrates nothing.
-  @visibleForTesting
+  /// Over [dataDir] as it is: creates nothing and hydrates nothing, which is
+  /// [load]'s to do — a test that wants neither builds one directly.
   AppConfig.forDirectory(this.dataDir) : documents = Documents();
 
   final String dataDir;
@@ -62,7 +58,7 @@ class AppConfig {
   final Documents documents;
 
   static Future<AppConfig> load(String dataDir) async {
-    final config = AppConfig._(dataDir);
+    final config = AppConfig.forDirectory(dataDir);
     await runMigrations(config.dataDir,
         fresh: await config.ensureDirs());
     await config.documents.hydrate([
