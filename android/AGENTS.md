@@ -74,8 +74,8 @@ That is also why `onDestroy` throws the engine away again when the activity is
 finishing and `ForegroundWork.busy` is false — which counts voice mode too,
 since the session it holds is in that same isolate. Cached unconditionally it would be a
 permanent change to what "a restart" means: `main` builds the `PromptLibrary`
-once and hydrates the `Documents` cache once, and both are documented as picking
-up an edit made behind the app's back on the next restart. With no eviction that
+once and the `Documents` cache reads each file once, and both are documented as
+picking up an edit made behind the app's back on the next restart. With no eviction that
 restart would only ever come when Android reclaimed the process, which is
 nothing the user can do on purpose. So the sticky isolate lasts exactly as long
 as the thing that needs it, and closing the app with nothing running gives a

@@ -344,11 +344,22 @@ filesystem there beside the chats. `writeBackup`'s `skipDir` leaves it out for
 the same reason the voice models are outside it, and for a second one: proot's
 mode-0000 bind stubs (see `tree_ops.dart`) sit inside it, and `dart:io` cannot
 list a mode-0000 directory, so a walker that reached one would throw. The
-restore clear routes every top-level directory through `removeTree` rather than
-a plain recursive delete, so the stubs a skipped `rootfs/` leaves behind are
-cleared on the way in too — the same `removeTree` the rootfs stores use, so the
-one function that knows how to delete a stub-bearing tree is the one the
-restore reuses.
+directory a restore replaces goes through `removeTree` rather than a plain
+recursive delete, so the stubs a skipped `rootfs/` leaves behind go with it —
+the same `removeTree` the rootfs stores use, so the one function that knows how
+to delete a stub-bearing tree is the one the restore reuses.
+
+**A restore is unpacked beside the data directory and swapped in.** The members
+go into `<dataDir>.restoring`, the `machineLocalFiles` are copied across from
+the live directory, and the migrations run there; then two renames put the live
+directory at `<dataDir>.replaced` and the restored one in its place, and the
+replaced tree is deleted. Until the first rename nothing of the data directory
+has been touched, so a restore that fails on the way — a member that will not
+write, a full disk, a backup file that went away — leaves the app exactly as it
+was rather than half cleared. A process killed between the two renames leaves
+no data directory beside a whole `.replaced` one, which `AppConfig.load` renames
+back; leftovers of either name are cleared by the next restore before it
+starts. The sibling is what makes the swap a rename: one filesystem, no copy.
 
 `AppConfig.machineLocalFiles` are the top-level files a backup skips and a
 restore leaves where they are, one list both read so the two cannot drift.
@@ -370,11 +381,12 @@ asks where first and the writer zips straight there, so nothing is written
 twice and nothing at all on a cancel, which `save` answers false and the page
 then says nothing; Android writes to a temporary directory and shares from it.
 `openBackup` decodes the picked file's directory alone and leaves the members in
-it; the restore decompresses each straight into its target file. The file
-stays open until `Backup.close`, which the settings page owes whether or not
-the user agreed. A backup picked from under the data directory — one saved into
-a workspace, or reached through a link into it (`pathsOverlap`) — is copied out
-first, since the restore clears the directory before it reads a member.
+it; the restore opens it again by path on an isolate of its own — an open file
+does not cross — and decompresses each member straight into its target file,
+so a large one holds up no frames; `writeBackup` compresses on one the same way.
+The file stays open until `Backup.close`, which the settings page owes whether
+or not the user agreed. A backup saved inside the data directory needs nothing
+special: the restore reads every member before the swap touches the directory.
 
 That member is `backup-meta.json`, holding the format name, the version and when
 the backup was made — meta about the backup rather than a file of the data

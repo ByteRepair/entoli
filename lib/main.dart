@@ -12,6 +12,7 @@ import "core/platform/clipboard_files.dart";
 import "core/platform/platform.dart" as platform;
 import "core/platform/system_palette.dart";
 import "core/tls.dart";
+import "data/backup.dart" show recoverRestore;
 import "data/builtin/llm/providers/provider.dart" show LlmProvider;
 import "data/local/file_trigger_store.dart";
 import "data/model_catalog.dart";
@@ -97,7 +98,11 @@ class AppSession {
     // leaves the inherited PATH standing.
     final loginPath = platform.captureLoginPath();
     final accent = systemAccent();
-    final config = await AppConfig.load(await platform.dataDir());
+    final dataDir = await platform.dataDir();
+    // Before anything reads the data directory: a restore leaves its swap's
+    // last step to the launch after it.
+    await recoverRestore(dataDir, deleteTree: platform.deleteTree);
+    final config = await AppConfig.load(dataDir);
     // Started here and awaited before the identity load below: the keyring
     // probe is decided once, so the identity's own first read must not race
     // this one, and the mirror the registry reads keys through is filled by

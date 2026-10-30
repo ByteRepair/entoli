@@ -204,11 +204,11 @@ not answer, and that stays in `core/platform/`.
 `AppSettings.load` and `ProjectSettings.load` are synchronous and hot — the
 shell asks for the environment on every command and the registry for the
 providers on every model call — so `Documents` holds those two kinds of small
-JSON file in memory, hydrated in `main` before `runApp` and written through on
-save, the copy first, so a read on the line after a save sees it while the
-rename is still landing. Nothing else gets a copy; everything else reads
-through, async. The cost is that a file edited behind the app's back is not
-picked up until a restart.
+JSON file in memory, each read the first time it is asked for and written
+through on save, the copy first, so a read on the line after a save sees it
+while the rename is still landing. Nothing else gets a copy; everything else
+reads through, async. The cost is that a file edited behind the app's back
+after its first read is not picked up until a restart.
 
 Writes go through a rename. `writeAsString` truncates and only then writes, so a
 read landing between the two finds an empty file — and the title call renames a

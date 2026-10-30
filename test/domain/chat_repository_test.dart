@@ -816,8 +816,7 @@ void main() {
             decision: PermissionDecision.allow),
       ]));
       // The default project's rules, saved through the documents copy the
-      // repository reads — a repo test's config hydrates nothing, so writing
-      // the file alone would not be seen.
+      // repository reads, the way the settings page saves them.
       await config.documents.write(
           config.projectSettingsFile(project: null), jsonEncode({
         "permissions": [

@@ -1251,18 +1251,10 @@ class _BackupSectionState extends ConsumerState<_BackupSection> {
 
     final Backup backup;
     try {
-      backup = await openBackup(ref.read(appConfigProvider), path);
+      backup = await openBackup(path);
     } on BackupFormatException catch (e) {
       return _say("That file cannot be restored: $e.");
     }
-    try {
-      await _confirmAndRestore(backup);
-    } finally {
-      await backup.close();
-    }
-  }
-
-  Future<void> _confirmAndRestore(Backup backup) async {
     if (!mounted) return;
 
     final confirmed = await confirm(
@@ -1282,10 +1274,9 @@ class _BackupSectionState extends ConsumerState<_BackupSection> {
     // against one writer could only approximate.
     final config = ref.read(appConfigProvider);
     await _guard(() => ref.read(appRestartProvider).restart(
-          // `deleteTree` is the io side's `removeTree`-backed clear, which
-          // `chmod`s past proot's mode-0000 bind stubs deep inside a
-          // `projects/<project>/rootfs/` tree the restore is about to replace.
-          // See `restoreBackup` for why every top-level dir goes through it.
+          // `deleteTree` is the platform's, which gets past proot's mode-0000
+          // stubs in a `projects/<project>/rootfs/` an earlier restore left
+          // behind, and past the read-only skill directories.
           whileStopped: () => restoreBackup(
             config,
             backup,

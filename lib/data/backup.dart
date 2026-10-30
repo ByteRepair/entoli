@@ -1,15 +1,18 @@
+import "dart:async";
 import "dart:convert";
 import "dart:io";
+import "dart:isolate";
 
 import "package:archive/archive_io.dart";
 import "package:path/path.dart" as p;
 
 import "../core/config.dart";
+import "../core/log.dart";
 import "../core/migrations.dart";
 import "../domain/documents.dart";
 import "../domain/file_handoff.dart";
-import "../domain/shell.dart" show pathsOverlap;
 import "../domain/workspace.dart";
+import "local/tree_ops.dart" show removeTree;
 import "zip.dart";
 
 /// The whole data directory as a zip, and back again. The members are the
@@ -42,29 +45,23 @@ class BackupFormatException implements Exception {
 }
 
 /// A backup that has been opened and agreed with, before anything has been done
-/// with it. Its members are still compressed, and still in the file: what it
-/// answers here it answers out of the archive's directory, so a size or a count
-/// reads no bytes, and a restore reads each member only as it writes it.
-///
-/// The file stays open until [close], which every opener owes whether or not
-/// the backup was restored.
+/// with it: what the confirm says about it, read out of the archive's
+/// directory, so a size or a count reads no member. The file is closed by the
+/// time this exists; the restore opens it again by [path].
 class Backup {
-  Backup._(this.archive, this._input, {this.createdAt, this.staging});
+  const Backup._(
+    this.path,
+    this.members,
+    this.chats,
+    this.size, {
+    this.createdAt,
+  });
 
-  final Archive archive;
-  final InputFileStream _input;
+  final String path;
 
-  /// The copy [openBackup] read from in place of a file under the data
-  /// directory, which the restore's first act would delete. Null otherwise.
-  final Directory? staging;
-
-  /// Null where the manifest did not say, which a hand-made one may not.
-  final DateTime? createdAt;
-
-  /// Everything to restore: the archive without the manifest, which describes
-  /// the backup rather than belonging to the data directory.
-  Iterable<ArchiveFile> get entries =>
-      archive.files.where((file) => file.name != manifestName);
+  /// Every member's name but the manifest's, which describes the backup
+  /// rather than belonging to the data directory.
+  final List<String> members;
 
   /// How many chats it holds, counted from the `state.json` each one has rather
   /// than written into the manifest: a count stored beside the files is a count
@@ -73,18 +70,14 @@ class Backup {
   /// Matched against the layout rather than the basename, since the agent can
   /// have written a `state.json` of its own into a workspace and this is the
   /// number the user reads before agreeing to a restore.
-  int get chats => entries.where((file) => _chatState.hasMatch(file.name)).length;
+  final int chats;
 
   /// What it comes to unpacked, which is the number worth saying — the file on
   /// disk is smaller and says nothing about what fits back.
-  int get size => entries.fold(0, (total, file) => total + file.size);
+  final int size;
 
-  Future<void> close() => _release(_input, staging);
-}
-
-Future<void> _release(InputFileStream input, Directory? staging) async {
-  await input.close();
-  await staging?.delete(recursive: true);
+  /// Null where the manifest did not say, which a hand-made one may not.
+  final DateTime? createdAt;
 }
 
 /// `projects/<name>/chats/<id>/state.json`, which is where `AppConfig` puts one
@@ -92,60 +85,75 @@ Future<void> _release(InputFileStream input, Directory? staging) async {
 final _chatState = RegExp(r"^projects/[^/]+/chats/[^/]+/state\.json$");
 
 /// Every file under the data directory, as the zip a backup is, written to
-/// [to] a member at a time — a backup costs disk, not memory.
-Future<void> writeBackup(AppConfig config, String to) =>
-    zipTo(to, [config.dataDir],
-    base: config.dataDir,
-    // The half of a rename that a kill landed in. Nothing reads one, and a
-    // restore that put it back would put back a torn write.
-    skip: (path) =>
-        path.endsWith(writingSuffix) || _isMachineLocal(config, path),
-    // The top-level `sync/` holds private keys, and restoring it would unpair
-    // this device. A project's `rootfs/` is re-fetchable and holds proot's
-    // mode-0000 stubs the walker cannot list (see `tree_ops.dart`). Matched by
-    // position: a workspace folder with either name is the user's data.
-    skipDir: (path) {
-      final parts =
-          p.split(p.relative(path, from: config.dataDir));
-      return (parts.length == 1 && parts[0] == "sync") ||
-          (parts.length == 3 && parts[0] == "projects" && parts[2] == "rootfs");
-    },
-    extra: [
-      ArchiveFile.string(
-        manifestName,
-        jsonEncode({
-          "format": backupFormat,
-          "version": backupVersion,
-          "createdAt": DateTime.now().toUtc().toIso8601String(),
-        }),
-      ),
-    ],
+/// [to] a member at a time — a backup costs disk, not memory — on an isolate of
+/// its own, so a large file compressing does not hold up a frame.
+Future<void> writeBackup(AppConfig config, String to) {
+  // Strings alone cross: whatever the closure captures is copied to the
+  // isolate.
+  final dataDir = config.dataDir;
+  final machineLocal = config.machineLocalFiles;
+  return Isolate.run(
+    () => zipTo(
+      to,
+      [dataDir],
+      base: dataDir,
+      // The half of a rename that a kill landed in. Nothing reads one, and a
+      // restore that put it back would put back a torn write.
+      skip: (path) =>
+          path.endsWith(writingSuffix) ||
+          machineLocal.any((f) => p.equals(path, f)),
+      // The top-level `sync/` holds private keys, and restoring it would
+      // unpair this device. A project's `rootfs/` is re-fetchable and holds
+      // proot's mode-0000 stubs the walker cannot list (see `tree_ops.dart`).
+      // Matched by position: a workspace folder with either name is the
+      // user's data.
+      skipDir: (path) {
+        final parts = p.split(p.relative(path, from: dataDir));
+        return (parts.length == 1 && parts[0] == "sync") ||
+            (parts.length == 3 &&
+                parts[0] == "projects" &&
+                parts[2] == "rootfs");
+      },
+      extra: [
+        ArchiveFile.string(
+          manifestName,
+          jsonEncode({
+            "format": backupFormat,
+            "version": backupVersion,
+            "createdAt": DateTime.now().toUtc().toIso8601String(),
+          }),
+        ),
+      ],
+    ),
   );
-
-/// Open the backup at [path] and check the manifest. Everything that can be
-/// refused is refused here, so [restoreBackup] is only ever reached by a file
-/// that will restore — nothing is deleted for a zip that turns out to be
-/// something else.
-///
-/// A file under [config]'s data directory — a backup saved into a workspace —
-/// is read from a copy, since the restore clears the directory before it reads
-/// a member.
-Future<Backup> openBackup(AppConfig config, String path) async {
-  Directory? staging;
-  if (pathsOverlap(path, config.dataDir)) {
-    staging = await Directory.systemTemp.createTemp("entoli-restore");
-    path = (await File(path).copy(p.join(staging.path, "backup.zip"))).path;
-  }
-  final input = InputFileStream(path);
-  try {
-    return _checked(input, staging);
-  } catch (_) {
-    await _release(input, staging);
-    rethrow;
-  }
 }
 
-Backup _checked(InputFileStream input, Directory? staging) {
+/// Open the backup at [path] and check the manifest, on an isolate of its own:
+/// the directory of a large zip is a read per member. Everything that can be
+/// refused is refused here, before the user is asked, so the confirm is only
+/// ever shown for a file that will restore.
+Future<Backup> openBackup(String path) => Isolate.run(() async {
+  final input = InputFileStream(path);
+  try {
+    final archive = _decoded(input);
+    final members = [
+      for (final file in archive.files)
+        if (file.name != manifestName) file,
+    ];
+    return Backup._(
+      path,
+      [for (final file in members) file.name],
+      members.where((file) => _chatState.hasMatch(file.name)).length,
+      members.fold(0, (total, file) => total + file.size),
+      createdAt: _createdAt(archive),
+    );
+  } finally {
+    await input.close();
+  }
+});
+
+/// [input] as a backup's archive, refused where it is not one.
+Archive _decoded(InputFileStream input) {
   final Archive archive;
   try {
     archive = ZipDecoder().decodeStream(input);
@@ -167,64 +175,161 @@ Backup _checked(InputFileStream input, Directory? staging) {
   }
   final version = document["version"];
   if (version is! int || version > backupVersion) {
-    throw const BackupFormatException("it was made by a newer version of Entoli");
+    throw const BackupFormatException(
+      "it was made by a newer version of Entoli",
+    );
   }
-  return Backup._(
-    archive,
-    input,
-    createdAt: DateTime.tryParse(document["createdAt"] as String? ?? ""),
-    staging: staging,
-  );
+  return archive;
 }
 
-bool _isMachineLocal(AppConfig config, String path) =>
-    config.machineLocalFiles.any((f) => p.equals(path, f));
+DateTime? _createdAt(Archive archive) {
+  final manifest = archive.findFile(manifestName)!.readBytes() ?? <int>[];
+  final document = jsonDecode(utf8.decode(manifest)) as Map;
+  return DateTime.tryParse(document["createdAt"] as String? ?? "");
+}
 
 /// Put a backup back. What is in the data directory now goes: a restore is what
 /// was backed up, not that plus whatever has happened since, and a merge would
 /// leave a chat deleted before the backup was made alive again beside one
 /// written after it.
 ///
+/// Unpacked beside the data directory rather than over it, then swapped in by
+/// two renames, so a restore that fails on the way — a member that will not
+/// write, a disk that fills — leaves the data directory as it was and takes
+/// its own half-unpacked copy with it. The [AppConfig.machineLocalFiles] come
+/// across from the directory being replaced. On an isolate of its own, so a
+/// large member decompressing does not hold up a frame. The directory replaced
+/// is left beside the restored one for [recoverRestore] to delete once the
+/// app is back, rather than holding up the restart while a rootfs goes.
+///
 /// Nothing of the app may be running over these files while they are replaced,
 /// which is `AppRestart`'s to arrange rather than this function's to check.
 ///
-/// [deleteTree] clears each top-level directory. The platform's gets past
-/// proot's mode-0000 stubs under `projects/<project>/rootfs/`, which the plain
-/// recursive delete used by default (enough for a test) dies on.
+/// [deleteTree] clears what an earlier restore left. The platform's gets past
+/// proot's mode-0000 stubs under `projects/<project>/rootfs/` and the
+/// read-only skill directories.
 Future<void> restoreBackup(
   AppConfig config,
   Backup backup, {
-  Future<void> Function(String path)? deleteTree,
-}) async {
-  Future<void> clear(String path) async =>
-      deleteTree != null ? deleteTree(path) : Directory(path).delete(recursive: true);
+  Future<void> Function(String path) deleteTree = _removeTree,
+}) {
+  final dataDir = config.dataDir;
+  final machineLocal = config.machineLocalFiles;
+  final from = backup.path;
+  return Isolate.run(() => _restore(from, dataDir, machineLocal, deleteTree));
+}
 
-  // Listed whole first: deleting out of a stream deletes what it walks.
-  final top = await Directory(config.dataDir).list().toList();
-  await Future.wait([
-    for (final entity in top)
-      if (entity is Directory)
-        clear(entity.path)
-      else if (entity is File && !_isMachineLocal(config, entity.path))
-        entity.delete(),
-  ]);
+Future<void> _restore(
+  String from,
+  String dataDir,
+  List<String> machineLocal,
+  Future<void> Function(String path) deleteTree,
+) async {
+  final staged = restoringDirOf(dataDir);
+  final replaced = replacedDirOf(dataDir);
+  await _clear(staged, deleteTree);
+  await _clear(replaced, deleteTree);
 
-  // A member's name was written by whoever made the zip, and `writeIncoming`
-  // is where a path from outside is made safe to join onto a directory.
-  await writeIncoming(config.dataDir, [
-    for (final member in backup.entries)
-      if (!member.isDirectory) _RestoredFile(member),
-  ]);
-  for (final member in backup.entries) {
-    if (member.isDirectory) await createFolder(config.dataDir, member.name);
+  try {
+    await Directory(staged).create(recursive: true);
+    final input = InputFileStream(from);
+    try {
+      final members = [
+        for (final file in _decoded(input).files)
+          if (file.name != manifestName) file,
+      ];
+      // A member's name was written by whoever made the zip, and
+      // `writeIncoming` is where a path from outside is made safe to join
+      // onto a directory.
+      await writeIncoming(staged, [
+        for (final member in members)
+          if (!member.isDirectory) _RestoredFile(member),
+      ]);
+      for (final member in members) {
+        if (member.isDirectory) await createFolder(staged, member.name);
+      }
+    } finally {
+      await input.close();
+    }
+    for (final file in machineLocal) {
+      if (File(file).existsSync()) {
+        await File(file).copy(p.join(staged, p.relative(file, from: dataDir)));
+      }
+    }
+    // A backup holding none of them is still a working app afterwards, and
+    // one made by an older build unpacks that build's layout — including the
+    // version stamp that says which one it is.
+    await runMigrations(
+      staged,
+      fresh: await AppConfig.forDirectory(staged).ensureDirs(),
+    );
+  } catch (_) {
+    await _clear(staged, deleteTree);
+    rethrow;
   }
 
-  // A backup holding none of them is still a working app afterwards, and one
-  // made by an older build unpacks that build's layout — including the version
-  // stamp that says which one it is.
-  await runMigrations(config.dataDir,
-      fresh: await config.ensureDirs());
+  await Directory(dataDir).rename(replaced);
+  try {
+    await Directory(staged).rename(dataDir);
+  } catch (_) {
+    await _putBack(dataDir);
+    rethrow;
+  }
 }
+
+/// What a restore leaves to the next launch, called before the data directory
+/// is read: a data directory missing beside the one a restore was replacing —
+/// a kill between its two renames — is put back, since that one is still
+/// whole, and the directory a finished restore replaced is deleted, unawaited,
+/// so the app is not held up while a rootfs goes.
+Future<void> recoverRestore(
+  String dataDir, {
+  Future<void> Function(String path) deleteTree = _removeTree,
+}) async {
+  if (!Directory(dataDir).existsSync()) {
+    await _putBack(dataDir);
+    return;
+  }
+  unawaited(
+    _clear(replacedDirOf(dataDir), deleteTree).catchError(
+      (Object e) => logFailure("backup", "replaced data not deleted: $e"),
+    ),
+  );
+}
+
+Future<void> _putBack(String dataDir) async {
+  final replaced = Directory(replacedDirOf(dataDir));
+  if (replaced.existsSync()) await replaced.rename(dataDir);
+}
+
+/// Deletes [path] where it is there. A delete that raced another to the same
+/// tree — the launch's sweep and a restore started straight after — is done
+/// when the tree is gone, whichever of them finished it.
+Future<void> _clear(
+  String path,
+  Future<void> Function(String path) deleteTree,
+) async {
+  if (!Directory(path).existsSync()) return;
+  try {
+    await deleteTree(path);
+  } catch (_) {
+    if (Directory(path).existsSync()) rethrow;
+  }
+}
+
+/// The default delete: `removeTree`, which gets past what a plain recursive
+/// delete dies on where `chmod` can run.
+Future<void> _removeTree(String path) async {
+  final err = await removeTree(path);
+  if (err != null) throw FileSystemException(err, path);
+}
+
+/// Where a restore unpacks a backup before swapping it in, beside [dataDir] so
+/// the swap is a rename on one filesystem.
+String restoringDirOf(String dataDir) => "$dataDir.restoring";
+
+/// Where a restore moves the data directory it replaces.
+String replacedDirOf(String dataDir) => "$dataDir.replaced";
 
 /// A member on its way out of the archive, which is what `IncomingFile` already
 /// describes: bytes that have not been read yet, read once, as they are

@@ -48,7 +48,7 @@ const instructionBlockHeader = "Workspace instructions are shown below";
 /// `WorkspaceProvider` — it answers Android's Files app with no engine running,
 /// so moving `workspace/` or `chats/` has to move there too.
 class AppConfig {
-  /// Over [dataDir] as it is: creates nothing and hydrates nothing, which is
+  /// Over [dataDir] as it is: creates nothing and migrates nothing, which is
   /// [load]'s to do — a test that wants neither builds one directly.
   AppConfig.forDirectory(this.dataDir) : documents = Documents();
 
@@ -61,11 +61,6 @@ class AppConfig {
     final config = AppConfig.forDirectory(dataDir);
     await runMigrations(config.dataDir,
         fresh: await config.ensureDirs());
-    await config.documents.hydrate([
-      config.settingsFile,
-      for (final project in everyProject(await config.projectNames()))
-        config.projectSettingsFile(project: project),
-    ]);
     return config;
   }
 

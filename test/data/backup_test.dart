@@ -27,10 +27,13 @@ void main() {
     return path;
   }
 
-  Future<Backup> opened(String path) async {
-    final backup = await openBackup(config, path);
-    addTearDown(backup.close);
-    return backup;
+  Future<Backup> opened(String path) => openBackup(path);
+
+  /// The launch's sweep is unawaited; wait out the tree it is deleting.
+  Future<void> settleDeletes(String path) async {
+    for (var i = 0; i < 100 && Directory(path).existsSync(); i++) {
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+    }
   }
 
   void write(String relative, String text) {
@@ -124,12 +127,70 @@ void main() {
     expect(Directory(config.chatDir("later")).existsSync(), isFalse);
   });
 
+  test("a restore that fails on the way leaves the data directory as it was",
+      () async {
+    write("projects/default/chats/kept/state.json", "{}");
+    final backup = await roundTrip();
+    write("projects/default/chats/later/state.json", "{}");
+
+    // The file goes between the confirm and the restore reading it.
+    File(backup.path).deleteSync();
+
+    await expectLater(restoreBackup(config, backup), throwsA(anything));
+
+    expect(Directory(config.chatDir("later")).existsSync(), isTrue);
+    expect(Directory(restoringDirOf(config.dataDir)).existsSync(), isFalse);
+  });
+
+  test("a launch after a restore killed mid-swap finds the old directory",
+      () async {
+    write("projects/default/chats/kept/state.json", "{}");
+    final dataDir = config.dataDir;
+    Directory(dataDir).renameSync(replacedDirOf(dataDir));
+
+    await recoverRestore(dataDir);
+    final loaded = await AppConfig.load(dataDir);
+
+    expect(Directory(loaded.chatDir("kept")).existsSync(), isTrue);
+    expect(Directory(replacedDirOf(dataDir)).existsSync(), isFalse);
+  });
+
+  test("the directory a restore replaced goes at the next launch", () async {
+    final backup = await roundTrip();
+
+    await restoreBackup(config, backup);
+    expect(Directory(replacedDirOf(config.dataDir)).existsSync(), isTrue);
+
+    await recoverRestore(config.dataDir);
+    await settleDeletes(replacedDirOf(config.dataDir));
+
+    expect(Directory(replacedDirOf(config.dataDir)).existsSync(), isFalse);
+  });
+
+  test("a restore that fails unpacking takes its staging with it", () async {
+    write("projects/default/chats/kept/state.json", "{}");
+    // "a" a file and "a/b" beneath it: the second cannot be written.
+    final archive = Archive()
+      ..add(ArchiveFile.string(manifestName,
+          jsonEncode({"format": backupFormat, "version": backupVersion})))
+      ..add(ArchiveFile.string("a", "file"))
+      ..add(ArchiveFile.string("a/b", "under a file"));
+    final path = "${out.path}/clash.zip";
+    File(path).writeAsBytesSync(ZipEncoder().encodeBytes(archive));
+
+    await expectLater(
+        restoreBackup(config, await opened(path)), throwsA(anything));
+
+    expect(Directory(config.chatDir("kept")).existsSync(), isTrue);
+    expect(Directory(restoringDirOf(config.dataDir)).existsSync(), isFalse);
+  });
+
   test("the linked instruction files are this machine's: left out, and kept",
       () async {
     write("instruction_files.json", '{"files":["/home/me/CLAUDE.md"]}');
 
     final backup = await roundTrip();
-    expect(backup.entries.map((e) => e.name), isNot(contains("instruction_files.json")));
+    expect(backup.members, isNot(contains("instruction_files.json")));
 
     await restoreBackup(config, backup);
 
@@ -217,8 +278,8 @@ void main() {
         lessThan(File(config.convFile("a")).lengthSync()));
   });
 
-  // The restore clears the data directory before it reads a member, so one
-  // saved into a workspace would be gone by then without the copy.
+  // The restore reads every member before the data directory is touched, so
+  // a backup saved into a workspace is still there to read.
   test("a backup kept inside the data directory still restores", () async {
     write("projects/default/chats/a/state.json", "{}");
     final inside = "${config.projectWorkspaceDir()}/backup.zip";
@@ -248,16 +309,16 @@ void main() {
     test("something that is not a backup", () async {
       final refused = throwsA(isA<BackupFormatException>());
       await expectLater(
-          openBackup(config, fileOf("not a zip".codeUnits)), refused);
+          openBackup(fileOf("not a zip".codeUnits)), refused);
       // A zip, but none of ours: no manifest.
-      await expectLater(openBackup(config, zipOf(null)), refused);
+      await expectLater(openBackup(zipOf(null)), refused);
       // Ours, but another format's manifest.
       await expectLater(
-          openBackup(config, zipOf({"format": "something-else", "version": 1})),
+          openBackup(zipOf({"format": "something-else", "version": 1})),
           refused);
       // A format and version this build speaks of but cannot read.
       await expectLater(
-          openBackup(config,
+          openBackup(
               zipOf({"format": backupFormat, "version": backupVersion + 1})),
           refused);
     });

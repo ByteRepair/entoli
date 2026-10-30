@@ -70,29 +70,31 @@ class RenameWriter {
 ///
 /// These are not, because they are read on every command (`LocalShell` asks for
 /// the environment per run) and on every model call (`LlmRegistry` asks for the
-/// providers per client), so they are read once at startup and served from
-/// memory after that.
+/// providers per client), so each is read off the disk the first time it is
+/// asked for and served from memory after that — a project nobody opens is
+/// never read at all.
 ///
-/// The cost is that a file edited behind the app's back is not picked up until
-/// a restart. Everything the app itself writes goes through [write], which
-/// updates the copy before it touches the filesystem, so a read on the next
-/// line sees it.
+/// The cost is that a file edited behind the app's back after its first read
+/// is not picked up until a restart. Everything the app itself writes goes
+/// through [write], which updates the copy before it touches the filesystem,
+/// so a read on the next line sees it.
 class Documents {
   Documents() : _writes = RenameWriter();
 
   final RenameWriter _writes;
-  final Map<String, String> _texts = {};
 
-  Future<void> hydrate(Iterable<String> paths) async {
-    for (final path in paths) {
-      final file = File(path);
-      if (file.existsSync()) _texts[path] = await file.readAsString();
-    }
-  }
+  /// Null for a file that was not there when it was first asked for.
+  final Map<String, String?> _texts = {};
 
   /// Null where nothing has been written, which is the caller's cue to use its
   /// defaults rather than an error.
-  String? read(String path) => _texts[path];
+  String? read(String path) => _texts.putIfAbsent(path, () {
+        try {
+          return File(path).readAsStringSync();
+        } on PathNotFoundException {
+          return null;
+        }
+      });
 
   /// Written through a rename for the same reason the chat store is:
   /// `writeAsString` truncates before it writes, so a read landing between the
