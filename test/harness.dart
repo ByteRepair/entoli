@@ -541,9 +541,19 @@ ChatState makeState(String id, {String? project, int day = 2}) => ChatState(
 /// animation itself advances.
 /// [least] rounds happen whatever the tree looks like: a store write started by
 /// a tap shows no spinner while it runs, so an empty frame is not evidence that
-/// it landed.
-Future<void> settleIo(WidgetTester tester, {int least = 6, int tries = 40}) async {
-  for (var i = 0; i < tries && (i < least || tester.binding.transientCallbackCount > 0); i++) {
+/// it landed. Past [tries], a round still follows while anything animates, up
+/// to [limit] of real time: a loaded machine's I/O outlasts any count, and a
+/// spinner handed to `pumpAndSettle` is a timeout, since it advances no I/O.
+Future<void> settleIo(WidgetTester tester,
+    {int least = 6,
+    int tries = 40,
+    Duration limit = const Duration(seconds: 20)}) async {
+  final end = DateTime.now().add(limit);
+  for (var i = 0;
+      i < least ||
+          (tester.binding.transientCallbackCount > 0 &&
+              (i < tries || DateTime.now().isBefore(end)));
+      i++) {
     await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 5)));
     await tester.pump(const Duration(milliseconds: 16));
   }

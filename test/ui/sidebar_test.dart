@@ -896,10 +896,11 @@ void main() {
       expect(find.text("Unpin"), findsNothing);
       await tester.tap(find.text("Pin"));
       await pumpUntil(tester, find.text(pinnedHeading));
-      await settleIo(tester);
+      // The date group it was in goes when the list is read again, after the
+      // heading — waited for rather than counted.
+      await settleUntil(tester, () => find.text("Today").evaluate().isEmpty,
+          what: "the chat leaving its date group");
       expect(find.text("to pin"), findsOneWidget);
-      // The date group it was in is gone — the chat left it.
-      expect(find.text("Today"), findsNothing);
       expect((await io(tester, () => app.savedMeta(chat.state.id))).tempChatTtl,
           TempChatTtl.off);
 
@@ -907,8 +908,9 @@ void main() {
       expect(find.text("Pin"), findsNothing);
       await tester.tap(find.text("Unpin"));
       await pumpUntil(tester, find.text("Today"));
-      await settleIo(tester);
-      expect(find.text(pinnedHeading), findsNothing);
+      await settleUntil(
+          tester, () => find.text(pinnedHeading).evaluate().isEmpty,
+          what: "the pinned group going");
       expect(find.text("to pin"), findsOneWidget);
       expect((await io(tester, () => app.savedMeta(chat.state.id))).tempChatTtl,
           TempChatTtl.off);
