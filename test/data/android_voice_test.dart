@@ -2,9 +2,11 @@ import "package:flutter/services.dart";
 import "package:flutter_test/flutter_test.dart";
 
 import "package:agent_chat/data/voice/android_voice.dart";
-import "package:agent_chat/data/voice/voice_strategies.dart" show SpeechFailed, SpeechSignal, SpeechSilent;
+import "package:agent_chat/data/voice/voice_strategies.dart"
+    show SpeechFailed, SpeechSignal, SpeechSilent;
 import "package:agent_chat/domain/voice.dart";
-import "package:agent_chat/domain/voice_model.dart" show nativeSpeech, recognitionModels, speechModels;
+import "package:agent_chat/domain/voice_model.dart"
+    show nativeSpeech, recognitionModels, speechModels;
 import "../fakes.dart";
 
 // The system engines behind a mock `agent_chat/voice`: what Dart asks for and
@@ -20,9 +22,9 @@ void main() {
   setUp(() {
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(channel, (call) async {
-      invoked.add(call);
-      return null;
-    });
+          invoked.add(call);
+          return null;
+        });
   });
 
   tearDown(() {
@@ -34,14 +36,15 @@ void main() {
   Future<void> incoming(String method, [Object? arguments]) =>
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
           .handlePlatformMessage(
-    channel.name,
-    channel.codec.encodeMethodCall(MethodCall(method, arguments)),
-    (_) {},
-  );
+            channel.name,
+            channel.codec.encodeMethodCall(MethodCall(method, arguments)),
+            (_) {},
+          );
 
   /// A listener that has started, and everything it has said since.
   Future<(NativeSpeechRecognizer, List<VoiceEvent>)> listening(
-      WidgetTester tester) async {
+    WidgetTester tester,
+  ) async {
     final recognizer = NativeSpeechRecognizer();
     addTearDown(recognizer.dispose);
     final events = <VoiceEvent>[];
@@ -51,16 +54,19 @@ void main() {
     return (recognizer, events);
   }
 
-  testWidgets("what is heard arrives; an empty result is nothing",
-      (tester) async {
+  testWidgets("what is heard arrives; an empty result is nothing", (
+    tester,
+  ) async {
     final (recognizer, events) = await listening(tester);
 
     await incoming("heard", "hello there");
     await incoming("heard", "   ");
     await tester.pump();
 
-    expect(events.single,
-        isA<VoiceHeard>().having((e) => e.text, "text", "hello there"));
+    expect(
+      events.single,
+      isA<VoiceHeard>().having((e) => e.text, "text", "hello there"),
+    );
   });
 
   /// A room with nothing happening in it, reported long enough for the gate to
@@ -71,8 +77,9 @@ void main() {
     }
   }
 
-  testWidgets("what the service reports is judged against the person",
-      (tester) async {
+  testWidgets("what the service reports is judged against the person", (
+    tester,
+  ) async {
     final (recognizer, events) = await listening(tester);
 
     // The whole of the rule is unit-tested over `LoudnessGate`; what this is
@@ -101,12 +108,16 @@ void main() {
     expect(invoked, isEmpty);
 
     await recognizer.setListening(true);
-    expect(invoked.single.arguments,
-        {"on": true, "finish": false, "language": null});
+    expect(invoked.single.arguments, {
+      "on": true,
+      "finish": false,
+      "language": null,
+    });
   });
 
-  testWidgets("the language rides on every open: each one is a new request",
-      (tester) async {
+  testWidgets("the language rides on every open: each one is a new request", (
+    tester,
+  ) async {
     final recognizer = NativeSpeechRecognizer(language: "el-GR");
     addTearDown(recognizer.dispose);
 
@@ -115,12 +126,16 @@ void main() {
     await recognizer.setListening(true);
 
     expect(
-        invoked.where((c) => c.arguments["on"] == true).map((c) => c.arguments["language"]),
-        ["el-GR", "el-GR"]);
+      invoked
+          .where((c) => c.arguments["on"] == true)
+          .map((c) => c.arguments["language"]),
+      ["el-GR", "el-GR"],
+    );
   });
 
-  testWidgets("releasing the talk button asks for the sentence it was held for",
-      (tester) async {
+  testWidgets("releasing the talk button asks for the sentence it was held for", (
+    tester,
+  ) async {
     final (recognizer, events) = await listening(tester);
 
     await recognizer.setListening(false, finish: true);
@@ -133,8 +148,10 @@ void main() {
     await incoming("rms", 0.5);
     await incoming("heard", "what was said while it was held");
     await tester.pump();
-    expect(events.whereType<VoiceHeard>().single.text,
-        "what was said while it was held");
+    expect(
+      events.whereType<VoiceHeard>().single.text,
+      "what was said while it was held",
+    );
   });
 
   testWidgets("a recognition error fails the listener", (tester) async {
@@ -144,20 +161,28 @@ void main() {
     await tester.pump();
 
     expect(
-        events.single,
-        isA<VoiceFailed>()
-            .having((e) => e.message, "message", "Recognition failed (error 7)."));
+      events.single,
+      isA<VoiceFailed>().having(
+        (e) => e.message,
+        "message",
+        "Recognition failed (error 7).",
+      ),
+    );
   });
 
-  testWidgets("speech waits until the engine says it can speak",
-      (tester) async {
+  testWidgets("speech waits until the engine says it can speak", (
+    tester,
+  ) async {
     final tts = NativeTextToSpeech();
     addTearDown(tts.dispose);
     await tester.pump();
 
     await tts.speak("held");
-    expect(invoked.where((call) => call.method == "speak"), isEmpty,
-        reason: "an engine that has not answered holds everything");
+    expect(
+      invoked.where((call) => call.method == "speak"),
+      isEmpty,
+      reason: "an engine that has not answered holds everything",
+    );
 
     await incoming("speechReady");
     await tester.pump();
@@ -166,8 +191,9 @@ void main() {
     expect(speak.arguments, {"text": "held", "generation": 0});
   });
 
-  testWidgets("every done counts its utterance down to silence",
-      (tester) async {
+  testWidgets("every done counts its utterance down to silence", (
+    tester,
+  ) async {
     final tts = NativeTextToSpeech();
     addTearDown(tts.dispose);
     final signals = <SpeechSignal>[];
@@ -220,8 +246,9 @@ void main() {
     await tts.speak("flaky");
     await incoming("speechUtteranceError", 0);
     await tester.pump();
-    expect(signals, [const SpeechSilent()],
-        reason: "the queue drained around the failure");
+    expect(signals, [
+      const SpeechSilent(),
+    ], reason: "the queue drained around the failure");
 
     // A success clears the count, so failures straddling one are tolerated.
     await tts.speak("fine");
@@ -240,12 +267,15 @@ void main() {
     }
     await tester.pump();
 
-    expect(signals.whereType<SpeechFailed>().single.message,
-        "Speech playback keeps failing.");
+    expect(
+      signals.whereType<SpeechFailed>().single.message,
+      "Speech playback keeps failing.",
+    );
   });
 
-  testWidgets("an engine that never starts is said, not waited for",
-      (tester) async {
+  testWidgets("an engine that never starts is said, not waited for", (
+    tester,
+  ) async {
     final tts = NativeTextToSpeech();
     addTearDown(tts.dispose);
     final signals = <SpeechSignal>[];
@@ -270,15 +300,28 @@ void main() {
   testWidgets("a pick is the store's to answer, either half", (tester) async {
     final voice = AndroidVoice(FakeVoiceModelStore(), "/cache");
     await expectLater(
-        voice.start(
-            hearing: HearOnDevice(sherpaRecognition),
-            speaking: const SpeakOnDevice(nativeSpeech)),
-        throwsA(isA<StateError>()
-            .having((e) => e.message, "message", contains("not downloaded"))));
+      voice.start(
+        hearing: HearOnDevice(sherpaRecognition),
+        speaking: const SpeakOnDevice(nativeSpeech),
+      ),
+      throwsA(
+        isA<StateError>().having(
+          (e) => e.message,
+          "message",
+          contains("not downloaded"),
+        ),
+      ),
+    );
     // The speech half consults the same store.
     await expectLater(
-        voice.start(speaking: SpeakOnDevice(sherpaSpeech)),
-        throwsA(isA<StateError>()
-            .having((e) => e.message, "message", contains("not downloaded"))));
+      voice.start(speaking: SpeakOnDevice(sherpaSpeech)),
+      throwsA(
+        isA<StateError>().having(
+          (e) => e.message,
+          "message",
+          contains("not downloaded"),
+        ),
+      ),
+    );
   });
 }

@@ -27,35 +27,41 @@ void main() {
   /// What a kill leaves behind: a reply with something in it and no `turnEnd`
   /// record closing the turn.
   Message killedHalfway(String callId, String text) => Message(
-        id: callId,
-        role: MessageRole.assistant,
-        createdAt: DateTime.utc(2026),
-        parts: [MessagePart.text(text: text)],
-      );
+    id: callId,
+    role: MessageRole.assistant,
+    createdAt: DateTime.utc(2026),
+    parts: [MessagePart.text(text: text)],
+  );
 
   PromptLibrary libraryWithGeneral() => PromptLibrary([
-        PromptDocument.parse(
-            CompletionKind.agent, "general", "---\n---\nYou are a general agent."),
-      ]);
+    PromptDocument.parse(
+      CompletionKind.agent,
+      "general",
+      "---\n---\nYou are a general agent.",
+    ),
+  ]);
 
-  SubAgentRunner runnerOver(FakeLlmClient client,
-          {ShellResult Function(String)? respond}) =>
-      SubAgentRunner(
-        client: client,
-        shell: FakeShell(respond ?? (_) => ok(""), canRunCommands: true),
-        workspace: config.workspaceDir(chatId),
-        projectWorkspace: config.projectWorkspaceDir(),
-        model: "fake-model",
-        library: libraryWithGeneral(),
-        log: log,
-      );
+  SubAgentRunner runnerOver(
+    FakeLlmClient client, {
+    ShellResult Function(String)? respond,
+  }) => SubAgentRunner(
+    client: client,
+    shell: FakeShell(respond ?? (_) => ok(""), canRunCommands: true),
+    workspace: config.workspaceDir(chatId),
+    projectWorkspace: config.projectWorkspaceDir(),
+    model: "fake-model",
+    library: libraryWithGeneral(),
+    log: log,
+  );
 
   group("a sub-agent's own transcript", () {
     test("is written under the call that spawned it", () async {
-      final runner = runnerOver(FakeLlmClient([
-        [bashCall("ls")],
-        [saidOnly("all done")],
-      ]));
+      final runner = runnerOver(
+        FakeLlmClient([
+          [bashCall("ls")],
+          [saidOnly("all done")],
+        ]),
+      );
 
       await runner.run("general", "look around", callId: "call-7");
 
@@ -66,9 +72,11 @@ void main() {
     });
 
     test("nothing is written for a call with no id", () async {
-      final runner = runnerOver(FakeLlmClient([
-        [saidOnly("done")],
-      ]));
+      final runner = runnerOver(
+        FakeLlmClient([
+          [saidOnly("done")],
+        ]),
+      );
 
       await runner.run("general", "look around");
 
@@ -76,9 +84,11 @@ void main() {
     });
 
     test("one that finished is not offered to be carried on", () async {
-      final runner = runnerOver(FakeLlmClient([
-        [saidOnly("done")],
-      ]));
+      final runner = runnerOver(
+        FakeLlmClient([
+          [saidOnly("done")],
+        ]),
+      );
 
       await runner.run("general", "look around", callId: "call-7");
 
@@ -87,18 +97,26 @@ void main() {
 
     test("one killed mid-turn is, and a missing one is not", () async {
       // What a kill leaves: records with no `turnEnd` closing them.
-      await log.append("call-9", recordsOf([killedHalfway("call-9", "halfway")]));
+      await log.append(
+        "call-9",
+        recordsOf([killedHalfway("call-9", "halfway")]),
+      );
 
       expect(await log.isResumable("call-9"), isTrue);
       expect(await log.isResumable("never-ran"), isFalse);
     });
 
     test("carrying one on adds to the transcript it already had", () async {
-      await log.append("call-9", recordsOf([killedHalfway("call-9", "halfway")]));
+      await log.append(
+        "call-9",
+        recordsOf([killedHalfway("call-9", "halfway")]),
+      );
 
-      final runner = runnerOver(FakeLlmClient([
-        [saidOnly("and finished")],
-      ]));
+      final runner = runnerOver(
+        FakeLlmClient([
+          [saidOnly("and finished")],
+        ]),
+      );
       final result = await runner.resume("general", "call-9");
 
       expect(result.returnCode, 0);
@@ -114,29 +132,50 @@ void main() {
       expect(await log.isResumable("call-9"), isFalse);
     });
 
-    test("a running one is followed record by record, numbered from disk",
-        () async {
-      await log.append("call-9", recordsOf([killedHalfway("call-9", "halfway")]));
-      final onDisk = decodeLog(File(config.subAgentFile(chatId, "call-9")).readAsStringSync());
-      // A fresh process, holding nothing of the run until it is carried on.
-      final appends = <SubAgentAppend>[];
-      log = FileSubAgentLog(config, chatId, feed: SubAgentFeed()..appends.listen(appends.add));
+    test(
+      "a running one is followed record by record, numbered from disk",
+      () async {
+        await log.append(
+          "call-9",
+          recordsOf([killedHalfway("call-9", "halfway")]),
+        );
+        final onDisk = decodeLog(
+          File(config.subAgentFile(chatId, "call-9")).readAsStringSync(),
+        );
+        // A fresh process, holding nothing of the run until it is carried on.
+        final appends = <SubAgentAppend>[];
+        log = FileSubAgentLog(
+          config,
+          chatId,
+          feed: SubAgentFeed()..appends.listen(appends.add),
+        );
 
-      await runnerOver(FakeLlmClient([
-        [saidOnly("and finished")],
-      ])).resume("general", "call-9");
-      await Future<void>.delayed(Duration.zero);
+        await runnerOver(
+          FakeLlmClient([
+            [saidOnly("and finished")],
+          ]),
+        ).resume("general", "call-9");
+        await Future<void>.delayed(Duration.zero);
 
-      expect(appends.first.from, onDisk.length);
-      final followed = appends.fold<List<ChatRecord>>(onDisk,
-          (held, a) => growTranscript(held, a.from, a.records)!);
-      expect(replay(followed).single.plainText, "halfway\nand finished");
-      expect(log.feed!.holds(chatId, "call-9"), isFalse,
-          reason: "a closed run is the file's to answer for");
-    });
+        expect(appends.first.from, onDisk.length);
+        final followed = appends.fold<List<ChatRecord>>(
+          onDisk,
+          (held, a) => growTranscript(held, a.from, a.records)!,
+        );
+        expect(replay(followed).single.plainText, "halfway\nand finished");
+        expect(
+          log.feed!.holds(chatId, "call-9"),
+          isFalse,
+          reason: "a closed run is the file's to answer for",
+        );
+      },
+    );
 
     test("what it already did is put back in front of the model", () async {
-      await log.append("call-9", recordsOf([killedHalfway("call-9", "I counted three files")]));
+      await log.append(
+        "call-9",
+        recordsOf([killedHalfway("call-9", "I counted three files")]),
+      );
 
       final client = FakeLlmClient([
         [saidOnly("done")],

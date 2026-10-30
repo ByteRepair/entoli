@@ -82,9 +82,9 @@ Future<SecurityContext> _mozillaRootContext() =>
 Future<SecurityContext> _loadMozillaRootContext() async {
   final data = await rootBundle.load(_mozillaAsset);
   // The bundle's ByteData may be a view into a larger buffer, at an offset.
-  return SecurityContext()
-    ..setTrustedCertificatesBytes(
-        data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes));
+  return SecurityContext()..setTrustedCertificatesBytes(
+    data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes),
+  );
 }
 
 /// [See "Reaching a provider" in lib/data/builtin/llm/AGENTS.md for the
@@ -102,8 +102,8 @@ Future<SecurityContext> _loadMozillaRootContext() async {
 /// "Can't finalize a finalized Request." before any connection starts.
 class TlsFallbackClient extends http.BaseClient {
   TlsFallbackClient(this._client, {bool? windows, http.Client? fallback})
-      : _windows = windows ?? Platform.isWindows,
-        _bundledFallback = fallback;
+    : _windows = windows ?? Platform.isWindows,
+      _bundledFallback = fallback;
 
   final http.Client _client;
   final bool _windows;
@@ -151,10 +151,9 @@ class TlsFallbackClient extends http.BaseClient {
   /// The bundled set's client, built once, on the first
   /// certificate-verify refusal at the earliest: nothing here loads the
   /// asset for a machine whose store answered.
-  Future<http.Client> _mozillaClient() =>
-      _building ??= _bundledFallback != null
-          ? Future.value(_bundledFallback)
-          : _buildMozillaClient();
+  Future<http.Client> _mozillaClient() => _building ??= _bundledFallback != null
+      ? Future.value(_bundledFallback)
+      : _buildMozillaClient();
 
   static Future<http.Client> _buildMozillaClient() async {
     final context = await _mozillaRootContext();

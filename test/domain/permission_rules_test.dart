@@ -21,36 +21,55 @@ void main() {
     });
 
     test("* spans a newline in a quoted script", () {
-      expect(globMatch("toolbox *", "toolbox run bash -lc echo a\necho b"),
-          isTrue);
+      expect(
+        globMatch("toolbox *", "toolbox run bash -lc echo a\necho b"),
+        isTrue,
+      );
     });
 
     test("a command is matched by its words: operators split it first, and "
         "redirects are not words", () {
       const make = PermissionRule(
-          tool: "bash", pattern: "make *", decision: PermissionDecision.allow);
-      RuleVerdict? decide(String command) => rulesDecideTraced([make], "bash",
-          segments: ShellCommandAnalysis.parse(command).modelableSegments);
+        tool: "bash",
+        pattern: "make *",
+        decision: PermissionDecision.allow,
+      );
+      RuleVerdict? decide(String command) => rulesDecideTraced(
+        [make],
+        "bash",
+        segments: ShellCommandAnalysis.parse(command).modelableSegments,
+      );
       expect(decide("make all 2>&1")?.decision, PermissionDecision.allow);
-      expect(decide("make all &>build.log")?.decision, PermissionDecision.allow);
-      expect(decide("make all && evil"), isNull,
-          reason: "evil is a segment of its own, and no rule covers it");
+      expect(
+        decide("make all &>build.log")?.decision,
+        PermissionDecision.allow,
+      );
+      expect(
+        decide("make all && evil"),
+        isNull,
+        reason: "evil is a segment of its own, and no rule covers it",
+      );
       expect(decide("make all & evil"), isNull);
-      expect(decide(r"make $(evil)"), isNull,
-          reason: "words the parse cannot read are matched by no rule");
+      expect(
+        decide(r"make $(evil)"),
+        isNull,
+        reason: "words the parse cannot read are matched by no rule",
+      );
     });
 
     test("a rule's writes reach a command that redirects stderr", () {
       const rule = PermissionRule(
-          tool: "bash",
-          pattern: "{podman,toolbox} *",
-          decision: PermissionDecision.allow,
-          writes: ["/home/u/.local/share/containers/storage"]);
+        tool: "bash",
+        pattern: "{podman,toolbox} *",
+        decision: PermissionDecision.allow,
+        writes: ["/home/u/.local/share/containers/storage"],
+      );
       final segments = ShellCommandAnalysis.parse(
-              "toolbox run esbmc-dev esbmc --version 2>&1 | head -3")
-          .modelableSegments!;
-      expect(rulesSandbox([rule], segments).writes,
-          ["/home/u/.local/share/containers/storage"]);
+        "toolbox run esbmc-dev esbmc --version 2>&1 | head -3",
+      ).modelableSegments!;
+      expect(rulesSandbox([rule], segments).writes, [
+        "/home/u/.local/share/containers/storage",
+      ]);
     });
 
     test("** is * twice", () {
@@ -66,8 +85,11 @@ void main() {
     test("name the alternatives a pattern covers", () {
       expect(expandBraces("{podman,toolbox} *"), ["podman *", "toolbox *"]);
       expect(expandBraces("{a,b}{1,2}"), ["a1", "a2", "b1", "b2"]);
-      expect(expandBraces("git {push,pull{,--rebase}} *"),
-          ["git push *", "git pull *", "git pull--rebase *"]);
+      expect(expandBraces("git {push,pull{,--rebase}} *"), [
+        "git push *",
+        "git pull *",
+        "git pull--rebase *",
+      ]);
     });
 
     test("with no comma, or left open, are literal", () {
@@ -77,28 +99,43 @@ void main() {
 
     test("a rule matches any of them, per segment", () {
       const rule = PermissionRule(
-          tool: "bash",
-          pattern: "{podman,toolbox} *",
-          decision: PermissionDecision.allow);
+        tool: "bash",
+        pattern: "{podman,toolbox} *",
+        decision: PermissionDecision.allow,
+      );
       RuleVerdict? decide(List<String> segments) =>
           rulesDecideTraced([rule], "bash", segments: segments);
       expect(decide(["podman ps"])?.decision, PermissionDecision.allow);
-      expect(decide(["toolbox run -c x make"])?.decision,
-          PermissionDecision.allow);
+      expect(
+        decide(["toolbox run -c x make"])?.decision,
+        PermissionDecision.allow,
+      );
       expect(decide(["docker ps"]), isNull);
-      expect(decide(["podman ps", "rm -rf x"]), isNull,
-          reason: "the braces do not widen a segment past its operator");
+      expect(
+        decide(["podman ps", "rm -rf x"]),
+        isNull,
+        reason: "the braces do not widen a segment past its operator",
+      );
     });
 
     test("cover hosts and paths too", () {
       const host = PermissionRule(
-          tool: "webfetch",
-          pattern: "{github.com,gitlab.com}",
-          decision: PermissionDecision.allow);
-      expect(rulesDecideTraced([host], "webfetch", url: "https://api.github.com/x")
-          ?.decision, PermissionDecision.allow);
-      expect(rulesDecideTraced([host], "webfetch", url: "https://example.com"),
-          isNull);
+        tool: "webfetch",
+        pattern: "{github.com,gitlab.com}",
+        decision: PermissionDecision.allow,
+      );
+      expect(
+        rulesDecideTraced(
+          [host],
+          "webfetch",
+          url: "https://api.github.com/x",
+        )?.decision,
+        PermissionDecision.allow,
+      );
+      expect(
+        rulesDecideTraced([host], "webfetch", url: "https://example.com"),
+        isNull,
+      );
     });
   });
 
@@ -107,41 +144,66 @@ void main() {
 
     test("are its writes and a file tool's pattern", () {
       const rule = PermissionRule(
-          tool: "write",
-          pattern: "~/Projects/x",
-          decision: PermissionDecision.allow);
+        tool: "write",
+        pattern: "~/Projects/x",
+        decision: PermissionDecision.allow,
+      );
       expect(rule.withPaths(home).pattern, "/home/u/Projects/x");
       const bash = PermissionRule(
-          tool: "bash", pattern: "podman *", writes: ["~/.local/share"]);
+        tool: "bash",
+        pattern: "podman *",
+        writes: ["~/.local/share"],
+      );
       expect(bash.withPaths(home).writes, ["/home/u/.local/share"]);
     });
 
     test("leave a command's pattern, which matches what was typed", () {
       const rule = PermissionRule(
-          tool: "bash", pattern: "~/bin/build *", decision: PermissionDecision.allow);
+        tool: "bash",
+        pattern: "~/bin/build *",
+        decision: PermissionDecision.allow,
+      );
       expect(rule.withPaths(home).pattern, "~/bin/build *");
     });
   });
 
   group("rulesSandbox", () {
     const podman = PermissionRule(
-        tool: "bash", pattern: "podman *", unconfined: true);
+      tool: "bash",
+      pattern: "podman *",
+      unconfined: true,
+    );
 
     test("a read-only segment does not hold an unconfined run back", () {
-      expect(rulesSandbox([podman], ["podman ps", "head -5"]).unconfined, isTrue);
       expect(
-          rulesSandbox([podman], ["podman version", "grep -i version"]).unconfined,
-          isTrue);
+        rulesSandbox([podman], ["podman ps", "head -5"]).unconfined,
+        isTrue,
+      );
+      expect(
+        rulesSandbox(
+          [podman],
+          ["podman version", "grep -i version"],
+        ).unconfined,
+        isTrue,
+      );
     });
 
     test("a segment that writes still does", () {
-      expect(rulesSandbox([podman], ["podman ps", "touch x"]).unconfined, isFalse);
-      expect(rulesSandbox([podman], ["podman ps", "echo hi > f"]).unconfined,
-          isFalse);
+      expect(
+        rulesSandbox([podman], ["podman ps", "touch x"]).unconfined,
+        isFalse,
+      );
+      expect(
+        rulesSandbox([podman], ["podman ps", "echo hi > f"]).unconfined,
+        isFalse,
+      );
     });
 
     test("read-only segments alone unconfine nothing", () {
-      expect(rulesSandbox([podman], ["head -5 f", "grep x f"]).unconfined, isFalse);
+      expect(
+        rulesSandbox([podman], ["head -5 f", "grep x f"]).unconfined,
+        isFalse,
+      );
       expect(rulesSandbox([podman], const []).unconfined, isFalse);
     });
   });
@@ -223,7 +285,10 @@ void main() {
     });
 
     test("an uncovered command asks", () {
-      expect(rulesDecideTraced([allowGit], "bash", segments: ["git push"]), null);
+      expect(
+        rulesDecideTraced([allowGit], "bash", segments: ["git push"]),
+        null,
+      );
       expect(rulesDecideTraced([], "bash", segments: ["anything"]), null);
     });
 
@@ -353,7 +418,8 @@ void main() {
 
     test("a command that parses to no segments does not throw", () {
       final rule = ruleFromApproval(
-          const ToolApproval(id: "a", toolName: "bash", argumentsText: ";"));
+        const ToolApproval(id: "a", toolName: "bash", argumentsText: ";"),
+      );
       expect(rule!.tool, "bash");
     });
 
@@ -644,23 +710,31 @@ void main() {
 
     test("a rule with no decision says nothing about asking", () {
       expect(
-          rulesDecideTraced([unconfinedPodman], "bash", segments: ["podman ps"]),
-          isNull);
+        rulesDecideTraced([unconfinedPodman], "bash", segments: ["podman ps"]),
+        isNull,
+      );
     });
 
     test("every segment unconfined runs unconfined", () {
       expect(
-          rulesSandbox([unconfinedPodman], ["podman ps", "podman images"])
-              .unconfined,
-          isTrue);
+        rulesSandbox(
+          [unconfinedPodman],
+          ["podman ps", "podman images"],
+        ).unconfined,
+        isTrue,
+      );
     });
 
-    test("one writing segment without an unconfined rule keeps the sandbox",
-        () {
-      expect(rulesSandbox([unconfinedPodman], ["podman ps", "touch x"]).unconfined,
-          isFalse);
-      expect(rulesSandbox([unconfinedPodman], const []).unconfined, isFalse);
-    });
+    test(
+      "one writing segment without an unconfined rule keeps the sandbox",
+      () {
+        expect(
+          rulesSandbox([unconfinedPodman], ["podman ps", "touch x"]).unconfined,
+          isFalse,
+        );
+        expect(rulesSandbox([unconfinedPodman], const []).unconfined, isFalse);
+      },
+    );
 
     test("writes reach only the commands their rule matches", () {
       expect(rulesSandbox([makeWrites], ["make all"]).writes, ["/opt/out"]);
@@ -668,13 +742,19 @@ void main() {
     });
 
     test("a rule that changes nothing says so", () {
-      expect(const PermissionRule(tool: "bash", pattern: "x").saysNothing,
-          isTrue);
+      expect(
+        const PermissionRule(tool: "bash", pattern: "x").saysNothing,
+        isTrue,
+      );
       // A sandbox on a tool that never runs in one is nothing either.
       expect(
-          const PermissionRule(tool: "read", pattern: "/x", unconfined: true)
-              .saysNothing,
-          isTrue);
+        const PermissionRule(
+          tool: "read",
+          pattern: "/x",
+          unconfined: true,
+        ).saysNothing,
+        isTrue,
+      );
       expect(unconfinedPodman.saysNothing, isFalse);
     });
 

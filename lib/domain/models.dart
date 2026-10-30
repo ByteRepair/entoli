@@ -92,12 +92,12 @@ enum InstructionKind {
 /// What [InstructionKind] reads as, on a label's drawer and in the model's
 /// prompt. One table so the two cannot disagree — the `outcomeText` pattern.
 String instructionKindPhrase(InstructionKind kind) => switch (kind) {
-      InstructionKind.global => "the user's global instructions, for every project",
-      InstructionKind.project => "project workspace instructions",
-      InstructionKind.imported => "instructions imported by another file",
-      InstructionKind.directory => "instructions for this directory",
-      InstructionKind.bundled => "the app's own note on this kind of chat",
-    };
+  InstructionKind.global => "the user's global instructions, for every project",
+  InstructionKind.project => "project workspace instructions",
+  InstructionKind.imported => "instructions imported by another file",
+  InstructionKind.directory => "instructions for this directory",
+  InstructionKind.bundled => "the app's own note on this kind of chat",
+};
 
 @freezed
 abstract class ChatState with _$ChatState {
@@ -133,7 +133,8 @@ abstract class ChatState with _$ChatState {
     DateTime? tempTtlExpiresAt,
   }) = _ChatState;
 
-  factory ChatState.fromJson(Map<String, dynamic> json) => _$ChatStateFromJson(json);
+  factory ChatState.fromJson(Map<String, dynamic> json) =>
+      _$ChatStateFromJson(json);
 }
 
 /// Whether this chat's TTL window has passed. The one place the sidebar
@@ -268,14 +269,14 @@ const jobEndedEvent = "jobEnded";
 /// [events] with [data] as the call [callId]'s event of [kind], the last of
 /// a kind standing: the one rule replay and a room writing live both fold by.
 Map<String, Map<String, Map<String, dynamic>>> withCallEvent(
-        Map<String, Map<String, Map<String, dynamic>>> events,
-        String callId,
-        String kind,
-        Map<String, dynamic> data) =>
-    {
-      ...events,
-      callId: {...?events[callId], kind: data},
-    };
+  Map<String, Map<String, Map<String, dynamic>>> events,
+  String callId,
+  String kind,
+  Map<String, dynamic> data,
+) => {
+  ...events,
+  callId: {...?events[callId], kind: data},
+};
 
 // Decoded once per event: a label reads its job's end on every streamed token.
 final _jobEnds = Expando<JobEnd>();
@@ -318,7 +319,8 @@ abstract class JobEnd with _$JobEnd {
 extension Threads on Chat {
   /// Every thread written where [messageId] is, oldest first. One entry — the
   /// message itself — where nothing was ever branched there.
-  List<String> threadsAt(String messageId) => branches[messageId] ?? [messageId];
+  List<String> threadsAt(String messageId) =>
+      branches[messageId] ?? [messageId];
 
   /// Which of [threadsAt] is being read, counting from zero.
   int threadIndex(String messageId) => threadsAt(messageId).indexOf(messageId);
@@ -397,6 +399,7 @@ abstract class Message with _$Message {
     required MessageRole role,
     required DateTime createdAt,
     @Default([]) List<MessagePart> parts,
+
     /// What this message's `/command` and `@agent` references meant when it was
     /// sent, keyed by the reference as written — `/review`, `@researcher`. See
     /// "Commands and agents" in `lib/domain/AGENTS.md`.
@@ -427,7 +430,8 @@ abstract class Message with _$Message {
     ContextUsage? context,
   }) = _Message;
 
-  factory Message.fromJson(Map<String, dynamic> json) => _$MessageFromJson(json);
+  factory Message.fromJson(Map<String, dynamic> json) =>
+      _$MessageFromJson(json);
 }
 
 /// Polymorphic part of a message: what the model said, thought, ran, or was
@@ -440,10 +444,8 @@ abstract class Message with _$Message {
 /// produces carries one; a result belongs to the call it answers.
 @freezed
 sealed class MessagePart with _$MessagePart {
-  const factory MessagePart.text({
-    required String text,
-    String? responseId,
-  }) = TextPart;
+  const factory MessagePart.text({required String text, String? responseId}) =
+      TextPart;
 
   /// The model thinking out loud. Kept out of [TextPart] because it is not the
   /// reply: the UI files it under a label and a transcript leaves it out.
@@ -464,7 +466,8 @@ sealed class MessagePart with _$MessagePart {
     required ToolCall toolCall,
     String? responseId,
   }) = ToolCallPart;
-  const factory MessagePart.toolResult({required ToolResult result}) = ToolResultPart;
+  const factory MessagePart.toolResult({required ToolResult result}) =
+      ToolResultPart;
 
   /// A command the user ran themselves, by starting a message with `!`. Not a
   /// [ToolCallPart]: no model asked for it, and one reading the conversation
@@ -488,6 +491,7 @@ sealed class MessagePart with _$MessagePart {
     required String filename,
     required String mimeType,
   }) = FilePart;
+
   /// [trace] is the stack of an exception nothing expected, kept for whoever
   /// reads `conv.jsonl` after the fact; nothing on screen shows it.
   const factory MessagePart.error({required String message, String? trace}) =
@@ -550,7 +554,8 @@ sealed class MessagePart with _$MessagePart {
   /// `lib/domain/room/AGENTS.md`.
   const factory MessagePart.steer({required Message message}) = SteerPart;
 
-  factory MessagePart.fromJson(Map<String, dynamic> json) => _$MessagePartFromJson(json);
+  factory MessagePart.fromJson(Map<String, dynamic> json) =>
+      _$MessagePartFromJson(json);
 }
 
 @freezed
@@ -577,7 +582,8 @@ abstract class ToolCall with _$ToolCall {
     String? signature,
   }) = _ToolCall;
 
-  factory ToolCall.fromJson(Map<String, dynamic> json) => _$ToolCallFromJson(json);
+  factory ToolCall.fromJson(Map<String, dynamic> json) =>
+      _$ToolCallFromJson(json);
 }
 
 @freezed
@@ -592,14 +598,17 @@ abstract class ToolResult with _$ToolResult {
     required String output,
     String? exceptionInfo,
     String? cwd,
+
     /// The background job the call started: a fact rather than the wording
     /// of [output], which is the model's to read.
     int? jobId,
     @Default([]) List<String> violations,
+
     /// What happened since the last call that the model should hear — a
     /// background job ending — beside the result rather than inside
     /// [output], which for some tools is data a reader parses back.
     @Default([]) List<String> notes,
+
     /// What decided this call's fate before it ran, and the tiers that
     /// spoke — a compound covered from two tiers carries both. Null on a
     /// result from before the field existed, and null where nothing stood
@@ -607,13 +616,15 @@ abstract class ToolResult with _$ToolResult {
     /// decision to record, the banner it raises being its own record.
     PermissionSource? decidedBy,
     @Default([]) List<PermissionTier> decidedTier,
+
     /// What the decider said — the verdict, recorded rather than inferred
     /// from the exit code, which says whether the command ran but not why
     /// it was held.
     PermissionDecision? decided,
   }) = _ToolResult;
 
-  factory ToolResult.fromJson(Map<String, dynamic> json) => _$ToolResultFromJson(json);
+  factory ToolResult.fromJson(Map<String, dynamic> json) =>
+      _$ToolResultFromJson(json);
 }
 
 /// A file the composer is holding, on its way to the chat's `resources/`. Once
@@ -658,7 +669,8 @@ abstract class ToolApproval with _$ToolApproval {
     @Default(false) bool unsandboxed,
   }) = _ToolApproval;
 
-  factory ToolApproval.fromJson(Map<String, dynamic> json) => _$ToolApprovalFromJson(json);
+  factory ToolApproval.fromJson(Map<String, dynamic> json) =>
+      _$ToolApprovalFromJson(json);
 }
 
 enum ApprovalResponse {
@@ -689,7 +701,8 @@ abstract class ModelOption with _$ModelOption {
     String? label,
   }) = _ModelOption;
 
-  factory ModelOption.fromJson(Map<String, dynamic> json) => _$ModelOptionFromJson(json);
+  factory ModelOption.fromJson(Map<String, dynamic> json) =>
+      _$ModelOptionFromJson(json);
 }
 
 /// A [ModelOption] as it is stored and passed around. The registry keys clients
@@ -732,17 +745,20 @@ abstract class CompletionOption with _$CompletionOption {
 /// Text and files are scattered across parts; almost every caller wants one
 /// kind at a time.
 extension MessageParts on Message {
-  String get plainText => parts.whereType<TextPart>().map((p) => p.text).join("\n");
+  String get plainText =>
+      parts.whereType<TextPart>().map((p) => p.text).join("\n");
 
-  bool get hasText => parts.whereType<TextPart>().any((p) => p.text.trim().isNotEmpty);
+  bool get hasText =>
+      parts.whereType<TextPart>().any((p) => p.text.trim().isNotEmpty);
 
   Iterable<FilePart> get files => parts.whereType<FilePart>();
 
   /// Results by the call they answer. They arrive as parts of their own, but
   /// a call and its result are one thing that happened.
   Map<String, ToolResult> get toolResults => {
-        for (final part in parts.whereType<ToolResultPart>()) part.result.callId: part.result,
-      };
+    for (final part in parts.whereType<ToolResultPart>())
+      part.result.callId: part.result,
+  };
 }
 
 extension ChatTitle on String {

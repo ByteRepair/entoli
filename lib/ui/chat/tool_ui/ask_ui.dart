@@ -87,7 +87,9 @@ class _AskLabelState extends State<_AskLabel> {
 
   @override
   Widget build(BuildContext context) {
-    if (_questions.isEmpty) return RunLabel(activity: widget.activity, run: widget.run);
+    if (_questions.isEmpty) {
+      return RunLabel(activity: widget.activity, run: widget.run);
+    }
     return ActivityLabel(
       icon: Icons.help_outline,
       text: _questions.length == 1

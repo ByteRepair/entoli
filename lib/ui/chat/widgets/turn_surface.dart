@@ -25,8 +25,12 @@ import "steer_strip.dart";
 /// nothing useful to type until it is answered, while the voice screen keeps
 /// the circle above it — but how it is wired does not.
 class TurnSurface extends StatelessWidget {
-  const TurnSurface(
-      {super.key, required this.view, required this.notifier, this.onWithdrawn});
+  const TurnSurface({
+    super.key,
+    required this.view,
+    required this.notifier,
+    this.onWithdrawn,
+  });
 
   final ChatViewState view;
   final TurnDriver notifier;
@@ -68,20 +72,30 @@ class TurnSurface extends StatelessWidget {
               approval: approval,
               // A mirrored chat keeps it: with no always answers there,
               // Deny would be all that was left.
-              onAllow: notifier.rulesWritable &&
+              onAllow:
+                  notifier.rulesWritable &&
                       approval.toolName == addDirectoryName
                   ? null
                   : () => notifier.respondApproval(
-                      approval.id, ApprovalResponse.allow),
-              onDeny: () => notifier.respondApproval(approval.id, ApprovalResponse.deny),
+                      approval.id,
+                      ApprovalResponse.allow,
+                    ),
+              onDeny: () =>
+                  notifier.respondApproval(approval.id, ApprovalResponse.deny),
               onAlwaysAllowChat: !notifier.rulesWritable
                   ? null
-                  : () => notifier.respondApproval(approval.id,
-                      ApprovalResponse.alwaysAllowChat, approval: approval),
+                  : () => notifier.respondApproval(
+                      approval.id,
+                      ApprovalResponse.alwaysAllowChat,
+                      approval: approval,
+                    ),
               onAlwaysAllowProject: !notifier.rulesWritable
                   ? null
-                  : () => notifier.respondApproval(approval.id,
-                      ApprovalResponse.alwaysAllowProject, approval: approval),
+                  : () => notifier.respondApproval(
+                      approval.id,
+                      ApprovalResponse.alwaysAllowProject,
+                      approval: approval,
+                    ),
             ),
       ],
     );

@@ -24,8 +24,10 @@ class AppSecrets {
   String? _turnPassword;
 
   Future<void> load() async {
-    final (keys, turn) =
-        await (_store.read(providerKeysKey), _store.read(turnPasswordKey)).wait;
+    final (keys, turn) = await (
+      _store.read(providerKeysKey),
+      _store.read(turnPasswordKey),
+    ).wait;
     _providers = keys == null || keys.isEmpty ? const {} : secretMapOf(keys);
     _turnPassword = turn == null || turn.isEmpty ? null : utf8.decode(turn);
   }
@@ -76,6 +78,8 @@ class AppSecrets {
     if (_turnPassword == password) return;
     _turnPassword = password;
     await _store.write(
-        turnPasswordKey, Uint8List.fromList(utf8.encode(password)));
+      turnPasswordKey,
+      Uint8List.fromList(utf8.encode(password)),
+    );
   }
 }

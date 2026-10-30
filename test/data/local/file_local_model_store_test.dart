@@ -25,7 +25,10 @@ void main() {
   setUp(() async {
     root = await Directory.systemTemp.createTemp("local-model-store");
     final header = tinyModel();
-    weights = [...header, ...List.generate(4096 - header.length, (i) => i % 256)];
+    weights = [
+      ...header,
+      ...List.generate(4096 - header.length, (i) => i % 256),
+    ];
     net = FakeNetwork.inHalves({
       "/model.gguf": weights,
       "/rubbish": List.filled(64, 7),
@@ -39,16 +42,19 @@ void main() {
 
   String url(String path) => net.url(path);
 
-  LocalModel gguf({String path = "/model.gguf", String? sha, bool checked = true}) =>
-      GgufModel(
-        id: "test-model",
-        name: "Test 1B",
-        parameters: "1B",
-        url: url(path),
-        size: checked ? weights.length : null,
-        sha256: checked ? sha ?? "${sha256.convert(weights)}" : null,
-        licence: "Apache-2.0",
-      );
+  LocalModel gguf({
+    String path = "/model.gguf",
+    String? sha,
+    bool checked = true,
+  }) => GgufModel(
+    id: "test-model",
+    name: "Test 1B",
+    parameters: "1B",
+    url: url(path),
+    size: checked ? weights.length : null,
+    sha256: checked ? sha ?? "${sha256.convert(weights)}" : null,
+    licence: "Apache-2.0",
+  );
 
   FileLocalModelStore store() =>
       FileLocalModelStore(root.path, format: const GgufFormat(), client: net);
@@ -66,22 +72,27 @@ void main() {
     expect(model.contextLength, 32768);
     expect(model.kvBytesPerToken, 4 * 2 * 128 * 2);
     // Written last, and the whole of what "installed" means.
-    expect(File(p.join(root.path, "test-model", ".complete")).existsSync(), isTrue);
+    expect(
+      File(p.join(root.path, "test-model", ".complete")).existsSync(),
+      isTrue,
+    );
   });
 
   test("a model of several files lands every one, on one bar", () async {
     final side = List.filled(64, 7);
     final model = _Files("test-model", [
       ModelFile(
-          path: ggufWeights,
-          url: url("/model.gguf"),
-          bytes: weights.length,
-          sha256: "${sha256.convert(weights)}"),
+        path: ggufWeights,
+        url: url("/model.gguf"),
+        bytes: weights.length,
+        sha256: "${sha256.convert(weights)}",
+      ),
       ModelFile(
-          path: "tokenizer/vocab.bin",
-          url: url("/rubbish"),
-          bytes: side.length,
-          sha256: "${sha256.convert(side)}"),
+        path: "tokenizer/vocab.bin",
+        url: url("/rubbish"),
+        bytes: side.length,
+        sha256: "${sha256.convert(side)}",
+      ),
     ]);
 
     final progress = await store().install(model).toList();
@@ -90,7 +101,10 @@ void main() {
     expect(File(p.join(dir, ggufWeights)).readAsBytesSync(), weights);
     expect(File(p.join(dir, "tokenizer", "vocab.bin")).readAsBytesSync(), side);
     // The second file's bar starts where the first's ended.
-    expect(progress.every((each) => each.total == weights.length + side.length), isTrue);
+    expect(
+      progress.every((each) => each.total == weights.length + side.length),
+      isTrue,
+    );
     expect(progress.last.received, weights.length + side.length);
     expect(await store().installed(), {"test-model"});
   });
@@ -110,17 +124,21 @@ void main() {
     expect(await store().installed(), isEmpty);
   });
 
-  test("a model an older build downloaded is described from its header", () async {
-    // Weights and a marker, and no record: what every build before records
-    // left behind.
-    final dir = Directory(p.join(root.path, "qwen3.5-2b-q4_0"))..createSync(recursive: true);
-    File(p.join(dir.path, "model.gguf")).writeAsBytesSync(weights);
-    File(p.join(dir.path, ".complete")).writeAsStringSync("");
+  test(
+    "a model an older build downloaded is described from its header",
+    () async {
+      // Weights and a marker, and no record: what every build before records
+      // left behind.
+      final dir = Directory(p.join(root.path, "qwen3.5-2b-q4_0"))
+        ..createSync(recursive: true);
+      File(p.join(dir.path, "model.gguf")).writeAsBytesSync(weights);
+      File(p.join(dir.path, ".complete")).writeAsStringSync("");
 
-    expect(await store().installed(), {"qwen3.5-2b-q4_0"});
-    expect(store().downloadedOfSync("qwen3.5-2b-q4_0")?.name, "Tiny 1B");
-    expect(File(p.join(dir.path, "model.json")).existsSync(), isTrue);
-  });
+      expect(await store().installed(), {"qwen3.5-2b-q4_0"});
+      expect(store().downloadedOfSync("qwen3.5-2b-q4_0")?.name, "Tiny 1B");
+      expect(File(p.join(dir.path, "model.json")).existsSync(), isTrue);
+    },
+  );
 
   test("a file that is not what was checked is not kept", () async {
     // A gigabyte over somebody's mobile data, and the publisher already says
@@ -142,8 +160,10 @@ void main() {
     final subscription = store().install(gguf()).listen(null);
     // Under way mid-response: the target exists, which the progress stream
     // never says at this size (it reports per megabyte).
-    await waitFor(() => File(p.join(root.path, "test-model", "model.gguf")).existsSync(),
-        what: "the download to be under way");
+    await waitFor(
+      () => File(p.join(root.path, "test-model", "model.gguf")).existsSync(),
+      what: "the download to be under way",
+    );
 
     await subscription.cancel();
     // Cancel's future is the teardown's: the half-written download went
@@ -156,15 +176,19 @@ void main() {
   test("an unfinished directory is not installed", () async {
     // What a killed process leaves: the file, and no marker. Nothing may load
     // it, because half a GGUF is a server that exits on its first read.
-    final dir = Directory(p.join(root.path, "test-model"))..createSync(recursive: true);
-    File(p.join(dir.path, "model.gguf")).writeAsBytesSync(weights.sublist(0, 10));
+    final dir = Directory(p.join(root.path, "test-model"))
+      ..createSync(recursive: true);
+    File(
+      p.join(dir.path, "model.gguf"),
+    ).writeAsBytesSync(weights.sublist(0, 10));
 
     expect(await store().installed(), isEmpty);
     expect(store().downloadedOfSync("test-model"), isNull);
   });
 
   test("installing again replaces what an earlier attempt left", () async {
-    final dir = Directory(p.join(root.path, "test-model"))..createSync(recursive: true);
+    final dir = Directory(p.join(root.path, "test-model"))
+      ..createSync(recursive: true);
     File(p.join(dir.path, "model.gguf")).writeAsBytesSync(const [1, 2, 3]);
 
     await store().install(gguf()).drain<void>();
@@ -199,15 +223,19 @@ void main() {
       expect(one.downloadedSync(), isEmpty);
     });
 
-    test("a download that was not kept is not remembered as installed",
-        () async {
-      final one = store();
+    test(
+      "a download that was not kept is not remembered as installed",
+      () async {
+        final one = store();
 
-      await one.install(gguf(sha: "not-the-checksum")).drain<void>().onError(
-          (_, _) {});
+        await one
+            .install(gguf(sha: "not-the-checksum"))
+            .drain<void>()
+            .onError((_, _) {});
 
-      expect(one.downloadedSync(), isEmpty);
-    });
+        expect(one.downloadedSync(), isEmpty);
+      },
+    );
   });
 
   test("progress is reported against the size the catalog says", () async {

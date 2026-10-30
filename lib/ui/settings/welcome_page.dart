@@ -48,15 +48,17 @@ class _WelcomeTourState extends ConsumerState<WelcomeTour> {
 
   /// The last page's checkbox, which holds Done. Seeded from the stored tick,
   /// which Done writes.
-  late final _accepted =
-      ValueNotifier(ref.read(appSettingsProvider).licenceAccepted);
+  late final _accepted = ValueNotifier(
+    ref.read(appSettingsProvider).licenceAccepted,
+  );
 
   late final _pageWidgets = <Widget>[
     _IntroPage(),
     _Slide(
       icon: Icons.key,
       title: "Bring your own model",
-      body: "Connect a provider you choose, or run a model right on this "
+      body:
+          "Connect a provider you choose, or run a model right on this "
           "device. Your chats stay private.",
     ),
     _Slide(
@@ -87,7 +89,8 @@ class _WelcomeTourState extends ConsumerState<WelcomeTour> {
     _Slide(
       icon: Icons.lock_outline,
       title: "Yours alone",
-      body: "Nothing leaves your model without your say-so, and no service "
+      body:
+          "Nothing leaves your model without your say-so, and no service "
           "stamps its watermark on what Entoli writes for you.",
     ),
     _ResponsibilityPage(accepted: _accepted),
@@ -101,10 +104,10 @@ class _WelcomeTourState extends ConsumerState<WelcomeTour> {
   }
 
   void _go(int page) => _controller.animateToPage(
-        page,
-        duration: const Duration(milliseconds: 350),
-        curve: Curves.easeInOutCubic,
-      );
+    page,
+    duration: const Duration(milliseconds: 350),
+    curve: Curves.easeInOutCubic,
+  );
 
   /// Opens the welcome chat: the `/entoli-welcome-party` skill as its first
   /// message, so the skill's instructions reach every turn the way any skill
@@ -122,7 +125,10 @@ class _WelcomeTourState extends ConsumerState<WelcomeTour> {
         parts: const [MessagePart.text(text: _greeting)],
       );
       await repo.append(chat.state.id, [
-        ...recordsOf([repo.composeUserPrompt("/entoli-welcome-party"), greeting]),
+        ...recordsOf([
+          repo.composeUserPrompt("/entoli-welcome-party"),
+          greeting,
+        ]),
         ChatRecord.turnEnd(messageId: greeting.id, reason: TurnEnd.done),
       ]);
       ref.read(selectedProjectProvider.notifier).select(localProject(null));
@@ -136,7 +142,8 @@ class _WelcomeTourState extends ConsumerState<WelcomeTour> {
     navigator.popUntil((route) => route.isFirst);
   }
 
-  static const _greeting = "Hello! Welcome to Entoli. I'm here to welcome you "
+  static const _greeting =
+      "Hello! Welcome to Entoli. I'm here to welcome you "
       "and help you customize the experience.\n\n"
       "By the way, if you ever want to talk to me again, just type "
       "/entoli-welcome-party and I'll respond.\n\n"
@@ -149,12 +156,14 @@ class _WelcomeTourState extends ConsumerState<WelcomeTour> {
     // around the button. Named off the page list, so reordering or inserting a
     // page cannot move a gate to the wrong one.
     final reachable = ref.watch(
-        availableModelsProvider.select((m) => _agentModels(m.value) > 0));
+      availableModelsProvider.select((m) => _agentModels(m.value) > 0),
+    );
     final chosen = ref.watch(
       appSettingsProvider.select((s) => s.defaultProviderId != null),
     );
     final current = _pageWidgets[_page];
-    final gate = (current is _ProviderPage && !reachable) ||
+    final gate =
+        (current is _ProviderPage && !reachable) ||
         (current is _ModelPage && !chosen);
     return Column(
       children: [
@@ -207,19 +216,19 @@ class _Fade extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => AnimatedBuilder(
-        animation: controller,
-        child: child,
-        builder: (context, child) {
-          // No position before the first layout, nor while settings covers
-          // the tour; a rebuild then (a provider added) must not dim the page.
-          final position = controller.hasClients &&
-                  controller.position.haveDimensions
-              ? controller.page ?? current.toDouble()
-              : current.toDouble();
-          final distance = (position - index).abs().clamp(0.0, 1.0);
-          return Opacity(opacity: 1 - distance * 0.8, child: child);
-        },
-      );
+    animation: controller,
+    child: child,
+    builder: (context, child) {
+      // No position before the first layout, nor while settings covers
+      // the tour; a rebuild then (a provider added) must not dim the page.
+      final position =
+          controller.hasClients && controller.position.haveDimensions
+          ? controller.page ?? current.toDouble()
+          : current.toDouble();
+      final distance = (position - index).abs().clamp(0.0, 1.0);
+      return Opacity(opacity: 1 - distance * 0.8, child: child);
+    },
+  );
 }
 
 /// Back on the left, Next or Done on the right, the progress above them.
@@ -304,23 +313,23 @@ class _Frame extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => LayoutBuilder(
-        builder: (context, constraints) => SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+    builder: (context, constraints) => SingleChildScrollView(
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+      child: ConstrainedBox(
+        constraints: BoxConstraints(minHeight: constraints.maxHeight - 32),
+        child: Center(
           child: ConstrainedBox(
-            constraints: BoxConstraints(minHeight: constraints.maxHeight - 32),
-            child: Center(
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 480),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: children,
-                ),
-              ),
+            constraints: const BoxConstraints(maxWidth: 480),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: children,
             ),
           ),
         ),
-      );
+      ),
+    ),
+  );
 }
 
 /// The icon in its tinted disc that heads every slide.
@@ -377,8 +386,9 @@ class _Slide extends StatelessWidget {
           Text(
             body!,
             textAlign: TextAlign.center,
-            style: theme.textTheme.bodyLarge
-                ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+            style: theme.textTheme.bodyLarge?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
           ),
         ],
         if (children.isNotEmpty) const SizedBox(height: 28),
@@ -405,10 +415,12 @@ class _IntroPage extends StatelessWidget {
             alignment: Alignment.center,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              gradient: RadialGradient(colors: [
-                scheme.primaryContainer,
-                scheme.primaryContainer.withValues(alpha: 0),
-              ]),
+              gradient: RadialGradient(
+                colors: [
+                  scheme.primaryContainer,
+                  scheme.primaryContainer.withValues(alpha: 0),
+                ],
+              ),
             ),
             child: const AppMark(size: 104),
           ),
@@ -423,8 +435,9 @@ class _IntroPage extends StatelessWidget {
         Text(
           "An assistant that runs on your machine and answers to you.",
           textAlign: TextAlign.center,
-          style: theme.textTheme.bodyLarge
-              ?.copyWith(color: scheme.onSurfaceVariant),
+          style: theme.textTheme.bodyLarge?.copyWith(
+            color: scheme.onSurfaceVariant,
+          ),
         ),
       ],
     );
@@ -433,8 +446,9 @@ class _IntroPage extends StatelessWidget {
 
 /// The models a chat can be answered by: a title-only one, which an iOS
 /// device lists before anything is set up, does not open the tour's gate.
-int _agentModels(List<ModelOption>? models) =>
-    (models ?? const []).where((m) => !isTitleOnlyModel(m.providerId, m.modelId)).length;
+int _agentModels(List<ModelOption>? models) => (models ?? const [])
+    .where((m) => !isTitleOnlyModel(m.providerId, m.modelId))
+    .length;
 
 /// Where the model runs. Next waits here until some model is reachable.
 class _ProviderPage extends ConsumerWidget {
@@ -490,11 +504,11 @@ class _ModelPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => const _Slide(
-        icon: Icons.auto_awesome_outlined,
-        title: "Pick a model",
-        body: "The one that answers a new chat, and the one that names it.",
-        children: [DefaultsSection()],
-      );
+    icon: Icons.auto_awesome_outlined,
+    title: "Pick a model",
+    body: "The one that answers a new chat, and the one that names it.",
+    children: [DefaultsSection()],
+  );
 }
 
 /// One switch: the Memory category's "Keep memories", every other memory
@@ -529,44 +543,45 @@ class _ExtrasPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => _Slide(
-        icon: Icons.tune,
-        title: "More to set up",
-        body: "Optional, and all here later.",
-        children: [
-          _SetupRow(
-            icon: Icons.storefront_outlined,
-            title: "Marketplace",
-            detail: "Install skills and agents others have shared.",
-            open: (context) => Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const MarketplacePage())),
-          ),
-          _SetupRow.category(
-            title: "Byte Repair",
-            detail: "Code proved correct, not merely plausible.",
-            category: SettingsCategory.byteRepair,
-          ),
-          _SetupRow.category(
-            title: "Triggers",
-            detail: "A prompt sent on a schedule or when a file changes.",
-            category: SettingsCategory.triggers,
-          ),
-          _SetupRow.category(
-            title: "Voice",
-            detail: "Talk to the agent and hear it answer.",
-            category: SettingsCategory.voice,
-          ),
-          _SetupRow.category(
-            title: "Image generation",
-            detail: "Let the agent make images, shown in the chat.",
-            category: SettingsCategory.images,
-          ),
-          _SetupRow.category(
-            title: "Terminal",
-            detail: "Run commands here, or in an isolated Linux.",
-            category: SettingsCategory.terminal,
-          ),
-        ],
-      );
+    icon: Icons.tune,
+    title: "More to set up",
+    body: "Optional, and all here later.",
+    children: [
+      _SetupRow(
+        icon: Icons.storefront_outlined,
+        title: "Marketplace",
+        detail: "Install skills and agents others have shared.",
+        open: (context) => Navigator.of(
+          context,
+        ).push(MaterialPageRoute(builder: (_) => const MarketplacePage())),
+      ),
+      _SetupRow.category(
+        title: "Byte Repair",
+        detail: "Code proved correct, not merely plausible.",
+        category: SettingsCategory.byteRepair,
+      ),
+      _SetupRow.category(
+        title: "Triggers",
+        detail: "A prompt sent on a schedule or when a file changes.",
+        category: SettingsCategory.triggers,
+      ),
+      _SetupRow.category(
+        title: "Voice",
+        detail: "Talk to the agent and hear it answer.",
+        category: SettingsCategory.voice,
+      ),
+      _SetupRow.category(
+        title: "Image generation",
+        detail: "Let the agent make images, shown in the chat.",
+        category: SettingsCategory.images,
+      ),
+      _SetupRow.category(
+        title: "Terminal",
+        detail: "Run commands here, or in an isolated Linux.",
+        category: SettingsCategory.terminal,
+      ),
+    ],
+  );
 }
 
 /// A few things to ask for, as chips rather than a paragraph.
@@ -582,20 +597,20 @@ class _IdeasPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => _Slide(
-        icon: Icons.lightbulb_outline,
-        title: "Ask it anything",
+    icon: Icons.lightbulb_outline,
+    title: "Ask it anything",
+    children: [
+      Wrap(
+        alignment: WrapAlignment.center,
+        spacing: 8,
+        runSpacing: 8,
         children: [
-          Wrap(
-            alignment: WrapAlignment.center,
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              for (final (icon, label) in _ideas)
-                Chip(avatar: Icon(icon, size: 18), label: Text(label)),
-            ],
-          ),
+          for (final (icon, label) in _ideas)
+            Chip(avatar: Icon(icon, size: 18), label: Text(label)),
         ],
-      );
+      ),
+    ],
+  );
 }
 
 /// The last page: the agent can be wrong, what it is let do is the user's
@@ -653,8 +668,9 @@ class _ResponsibilityPageState extends ConsumerState<_ResponsibilityPage> {
       builder: (context, accepted, _) {
         final checkbox = CheckboxListTile(
           title: const Text(
-              "I have read the licence, and I take full responsibility for "
-              "how I use Entoli and what I let it do."),
+            "I have read the licence, and I take full responsibility for "
+            "how I use Entoli and what I let it do.",
+          ),
           value: accepted,
           onChanged: (v) => _set(v ?? false),
         );
@@ -694,8 +710,9 @@ class _ResponsibilityPageState extends ConsumerState<_ResponsibilityPage> {
                                 "and the commands you approve, before you "
                                 "rely on them. Entoli comes under the "
                                 "licence below, with no warranty.",
-                                style: theme.textTheme.bodyLarge
-                                    ?.copyWith(color: muted),
+                                style: theme.textTheme.bodyLarge?.copyWith(
+                                  color: muted,
+                                ),
                               ),
                               const SizedBox(height: 16),
                               for (final p in _licence)
@@ -706,7 +723,8 @@ class _ResponsibilityPageState extends ConsumerState<_ResponsibilityPage> {
                                   ),
                                   child: Text(
                                     p.text,
-                                    textAlign: p.indent ==
+                                    textAlign:
+                                        p.indent ==
                                             LicenseParagraph.centeredIndent
                                         ? TextAlign.center
                                         : TextAlign.start,
@@ -746,7 +764,8 @@ class _ScrollHint extends StatelessWidget {
     return ListenableBuilder(
       listenable: scroll,
       builder: (context, _) {
-        final atEnd = scroll.hasClients &&
+        final atEnd =
+            scroll.hasClients &&
             scroll.position.hasContentDimensions &&
             scroll.position.nearBottom(24);
         return AnimatedOpacity(
@@ -759,8 +778,10 @@ class _ScrollHint extends StatelessWidget {
               children: [
                 Icon(Icons.keyboard_double_arrow_down, size: 18, color: muted),
                 const SizedBox(width: 6),
-                Text("Scroll to the end to agree",
-                    style: TextStyle(color: muted)),
+                Text(
+                  "Scroll to the end to agree",
+                  style: TextStyle(color: muted),
+                ),
               ],
             ),
           ),
@@ -785,9 +806,9 @@ class _SetupRow extends ConsumerWidget {
     required this.title,
     required this.detail,
     required SettingsCategory this.category,
-  })  : icon = category.icon,
-        open = ((context) =>
-            openSettings(context, category: category, focus: true));
+  }) : icon = category.icon,
+       open = ((context) =>
+           openSettings(context, category: category, focus: true));
 
   final IconData icon;
   final String title;

@@ -38,12 +38,23 @@ Color spokenColour(Brightness brightness) => brightness == Brightness.dark
 /// both colours is written once.
 final appLookProvider = Provider<AppLook>((ref) {
   final accent = ref.watch(paletteAccentProvider);
-  final settings = ref.watch(appSettingsProvider.select(
-      (s) => (primary: s.primaryColour, secondary: s.secondaryColour, radius: s.cornerRadius)));
+  final settings = ref.watch(
+    appSettingsProvider.select(
+      (s) => (
+        primary: s.primaryColour,
+        secondary: s.secondaryColour,
+        radius: s.cornerRadius,
+      ),
+    ),
+  );
   return (
     primary: accent == null
         ? settings.primary.seed
-        : (colour: Color(accent), variant: DynamicSchemeVariant.tonalSpot, grey: false),
+        : (
+            colour: Color(accent),
+            variant: DynamicSchemeVariant.tonalSpot,
+            grey: false,
+          ),
     secondary: accent == null ? settings.secondary.seed : null,
     radius: settings.radius.radius,
   );
@@ -83,12 +94,15 @@ ThemeData entoliTheme(Brightness brightness, [AppLook look = entoliLook]) {
     colorScheme: _scheme(brightness, look.primary, look.secondary),
     fontFamily: bodyFamily,
     textTheme: _displayTiers,
-    inputDecorationTheme:
-        InputDecorationTheme(border: OutlineInputBorder(borderRadius: corners)),
+    inputDecorationTheme: InputDecorationTheme(
+      border: OutlineInputBorder(borderRadius: corners),
+    ),
     cardTheme: CardThemeData(shape: shape),
     dialogTheme: DialogThemeData(shape: shape),
     popupMenuTheme: PopupMenuThemeData(shape: shape),
-    menuTheme: MenuThemeData(style: MenuStyle(shape: WidgetStatePropertyAll(shape))),
+    menuTheme: MenuThemeData(
+      style: MenuStyle(shape: WidgetStatePropertyAll(shape)),
+    ),
     // Square against the edge it is anchored to.
     bottomSheetTheme: BottomSheetThemeData(
       shape: RoundedRectangleBorder(
@@ -125,15 +139,17 @@ const _displayTiers = TextTheme(
 /// graft what is already there, so it skips a scheme instead.
 ColorScheme _scheme(Brightness brightness, Seed primary, Seed? secondary) {
   var scheme = ColorScheme.fromSeed(
-      seedColor: primary.colour,
-      brightness: brightness,
-      dynamicSchemeVariant: primary.variant);
+    seedColor: primary.colour,
+    brightness: brightness,
+    dynamicSchemeVariant: primary.variant,
+  );
   if (primary.grey) scheme = _greySurfaces(scheme, brightness);
   if (secondary == null || secondary == primary) return scheme;
   final accent = ColorScheme.fromSeed(
-      seedColor: secondary.colour,
-      brightness: brightness,
-      dynamicSchemeVariant: secondary.variant);
+    seedColor: secondary.colour,
+    brightness: brightness,
+    dynamicSchemeVariant: secondary.variant,
+  );
   return scheme.copyWith(
     secondary: accent.secondary,
     onSecondary: accent.onSecondary,
@@ -147,9 +163,10 @@ ColorScheme _scheme(Brightness brightness, Seed primary, Seed? secondary) {
 /// they were.
 ColorScheme _greySurfaces(ColorScheme scheme, Brightness brightness) {
   final grey = ColorScheme.fromSeed(
-      seedColor: scheme.primary,
-      brightness: brightness,
-      dynamicSchemeVariant: DynamicSchemeVariant.monochrome);
+    seedColor: scheme.primary,
+    brightness: brightness,
+    dynamicSchemeVariant: DynamicSchemeVariant.monochrome,
+  );
   return scheme.copyWith(
     surface: grey.surface,
     onSurface: grey.onSurface,
@@ -214,18 +231,18 @@ extension ThemeColourValue on ThemeColour {
   /// Fidelity keeps the seed's chroma, so a bold colour stays bold; the
   /// default softens it, which is what a pastel is.
   Seed get seed => (
-        colour: colour,
-        variant: group.vivid
-            ? DynamicSchemeVariant.fidelity
-            : DynamicSchemeVariant.tonalSpot,
-        grey: greySurfaces,
-      );
+    colour: colour,
+    variant: group.vivid
+        ? DynamicSchemeVariant.fidelity
+        : DynamicSchemeVariant.tonalSpot,
+    grey: greySurfaces,
+  );
 }
 
 extension AppThemeMode on AppTheme {
   ThemeMode get mode => switch (this) {
-        AppTheme.system => ThemeMode.system,
-        AppTheme.light => ThemeMode.light,
-        AppTheme.dark => ThemeMode.dark,
-      };
+    AppTheme.system => ThemeMode.system,
+    AppTheme.light => ThemeMode.light,
+    AppTheme.dark => ThemeMode.dark,
+  };
 }

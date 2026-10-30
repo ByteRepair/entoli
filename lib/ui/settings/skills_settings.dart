@@ -95,7 +95,9 @@ class _SkillsSectionState extends ConsumerState<SkillsSection> {
   Future<void> _scan() async {
     final config = ref.read(appConfigProvider);
     final problems = <String, List<String>>{};
-    final dir = Directory(config.promptsDir(CompletionKind.skill, project: widget.project));
+    final dir = Directory(
+      config.promptsDir(CompletionKind.skill, project: widget.project),
+    );
     if (dir.existsSync()) {
       final folders = <(String, String)>[];
       await for (final entity in dir.list()) {
@@ -120,12 +122,17 @@ class _SkillsSectionState extends ConsumerState<SkillsSection> {
   /// say them without a reload. A folder with no SKILL.md in it is a problem
   /// of its own; the loader skips it silently, this makes it a row.
   Future<List<String>> _folderProblems(
-      AppConfig config, String path, String folderName) async {
+    AppConfig config,
+    String path,
+    String folderName,
+  ) async {
     final file = File(p.join(path, "SKILL.md"));
     if (!file.existsSync()) return ["no SKILL.md in it"];
     try {
       return skillFrontmatterProblems(
-          Frontmatter.parse(await file.readAsString()), folderName);
+        Frontmatter.parse(await file.readAsString()),
+        folderName,
+      );
     } catch (e) {
       return ["SKILL.md could not be read: $e"];
     }
@@ -152,13 +159,16 @@ class _SkillsSectionState extends ConsumerState<SkillsSection> {
     // snack bar, not in the list.
     final target = widget.project ?? _destination;
     final config = ref.read(appConfigProvider);
-    final replacing = Directory(skillDirectory(config, package.name, project: target)).existsSync();
+    final replacing = Directory(
+      skillDirectory(config, package.name, project: target),
+    ).existsSync();
     if (!mounted) return;
     if (replacing) {
       final confirmed = await confirm(
         context,
         title: "Replace ${package.name}?",
-        message: "A skill with that name is already installed there. Importing "
+        message:
+            "A skill with that name is already installed there. Importing "
             "this one replaces it, files included.",
         confirmLabel: "Replace",
       );
@@ -170,8 +180,8 @@ class _SkillsSectionState extends ConsumerState<SkillsSection> {
       await platform.readOnlyDirs
           .skills(config.promptsDir(CompletionKind.skill, project: target))
           .write(() async {
-        await installSkillPackage(config, package, project: target);
-      });
+            await installSkillPackage(config, package, project: target);
+          });
       await _reload(target);
       await _scan();
       _say(installedSnack("Imported", package.name, target));
@@ -182,7 +192,8 @@ class _SkillsSectionState extends ConsumerState<SkillsSection> {
     final confirmed = await confirm(
       context,
       title: "Remove $name?",
-      message: "The skill and its files are deleted. A bundled skill of the "
+      message:
+          "The skill and its files are deleted. A bundled skill of the "
           "same name, if there is one, is back the next time the library "
           "loads.",
       confirmLabel: "Remove",
@@ -193,11 +204,14 @@ class _SkillsSectionState extends ConsumerState<SkillsSection> {
     await _guard(() async {
       final config = ref.read(appConfigProvider);
       await platform.readOnlyDirs
-          .skills(config.promptsDir(CompletionKind.skill, project: widget.project))
+          .skills(
+            config.promptsDir(CompletionKind.skill, project: widget.project),
+          )
           .write(() async {
-        await Directory(skillDirectory(config, name, project: widget.project))
-            .delete(recursive: true);
-      });
+            await Directory(
+              skillDirectory(config, name, project: widget.project),
+            ).delete(recursive: true);
+          });
       await _reload(widget.project);
       await _scan();
       _say("Removed $name.");
@@ -211,22 +225,25 @@ class _SkillsSectionState extends ConsumerState<SkillsSection> {
       ? reloadAllPromptLibraries(ref)
       : ref.read(promptLibraryProvider(target).notifier).reload();
 
-  Future<void> _export(String name) => _guard(() => exportAndSave(
-        ref.read(appConfigProvider),
-        ref.read(backupHandoffProvider),
-        CompletionKind.skill,
-        name,
-        project: widget.project,
-      ));
+  Future<void> _export(String name) => _guard(
+    () => exportAndSave(
+      ref.read(appConfigProvider),
+      ref.read(backupHandoffProvider),
+      CompletionKind.skill,
+      name,
+      project: widget.project,
+    ),
+  );
 
-  void _open(String name, {String? origin}) =>
-      Navigator.of(context).push(MaterialPageRoute(
-        builder: (_) => SkillViewPage(
-          name: name,
-          project: widget.project,
-          origin: origin ?? _originLabel(name),
-        ),
-      ));
+  void _open(String name, {String? origin}) => Navigator.of(context).push(
+    MaterialPageRoute(
+      builder: (_) => SkillViewPage(
+        name: name,
+        project: widget.project,
+        origin: origin ?? _originLabel(name),
+      ),
+    ),
+  );
 
   Future<void> _guard(Future<void> Function() work) =>
       whileBusy(context, _busy, work);
@@ -237,25 +254,28 @@ class _SkillsSectionState extends ConsumerState<SkillsSection> {
 
   @override
   Widget build(BuildContext context) {
-    final skills =
-        ref.watch(promptLibraryOf((device: widget.device, project: widget.project)))
-            .entries(CompletionKind.skill);
+    final skills = ref
+        .watch(
+          promptLibraryOf((device: widget.device, project: widget.project)),
+        )
+        .entries(CompletionKind.skill);
     final userSkills = _userSkills;
     final loaded = {for (final skill in skills) skill.name};
     final notLoaded = [
-      for (final entry in userSkills?.entries ?? const <MapEntry<String, List<String>>>[])
+      for (final entry
+          in userSkills?.entries ?? const <MapEntry<String, List<String>>>[])
         if (entry.value.isNotEmpty && !loaded.contains(entry.key)) entry.key,
     ];
     final description = !_writable
         ? "Named procedures the agent can load in this project, offered as "
-            "/name in the composer. Shown read-only: the entries are this "
-            "project's, the default project's, or the app's own."
+              "/name in the composer. Shown read-only: the entries are this "
+              "project's, the default project's, or the app's own."
         : skills.isEmpty
-            ? "Named procedures the agent can load, offered as /name in the "
-                "composer. None are installed yet."
-            : "Named procedures the agent can load, offered as /name in the "
-                "composer. The bundled ones ship with the app; the rest are "
-                "yours.";
+        ? "Named procedures the agent can load, offered as /name in the "
+              "composer. None are installed yet."
+        : "Named procedures the agent can load, offered as /name in the "
+              "composer. The bundled ones ship with the app; the rest are "
+              "yours.";
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -322,21 +342,24 @@ class _SkillsSectionState extends ConsumerState<SkillsSection> {
             // to write into; a built-in's rows say what they are and stop
             // there.
             true when _writable => IconButton(
-                icon: const Icon(Icons.close),
-                tooltip: "Remove ${skill.name}",
-                onPressed: () => _delete(skill.name),
-              ),
+              icon: const Icon(Icons.close),
+              tooltip: "Remove ${skill.name}",
+              onPressed: () => _delete(skill.name),
+            ),
             false => Padding(
-                padding: const EdgeInsets.only(right: 12),
-                child: Text(_originLabel(skill.name)),
-              ),
+              padding: const EdgeInsets.only(right: 12),
+              child: Text(_originLabel(skill.name)),
+            ),
             true => const SizedBox.shrink(),
           },
           if (problems != null && problems.isNotEmpty)
             Padding(
               padding: const EdgeInsets.only(right: 4),
-              child: Icon(Icons.warning_amber_rounded,
-                  size: 20, color: Theme.of(context).colorScheme.error),
+              child: Icon(
+                Icons.warning_amber_rounded,
+                size: 20,
+                color: Theme.of(context).colorScheme.error,
+              ),
             ),
           if (_local)
             IconButton(
@@ -353,38 +376,40 @@ class _SkillsSectionState extends ConsumerState<SkillsSection> {
   /// rows above, and a row here is the only place it is anything but an
   /// absence. The view page says the problems; remove takes the folder away
   /// where the directory is the user's.
-  Widget _notLoadedRow(String name) =>
-      ListTile(
-        dense: true,
-        title: Text(name),
-        subtitle: const Text("Not loaded"),
-        onTap: () => _open(name, origin: "Not loaded"),
-        trailing: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.warning_amber_rounded,
-                size: 20, color: Theme.of(context).colorScheme.error),
-            if (_writable)
-              IconButton(
-                icon: const Icon(Icons.close),
-                tooltip: "Remove $name",
-                onPressed: () => _delete(name),
-              )
-            else
-              const SizedBox(width: 48),
-            IconButton(
-              icon: const Icon(Icons.download),
-              tooltip: "Export $name",
-              onPressed: () => _export(name),
-            ),
-          ],
+  Widget _notLoadedRow(String name) => ListTile(
+    dense: true,
+    title: Text(name),
+    subtitle: const Text("Not loaded"),
+    onTap: () => _open(name, origin: "Not loaded"),
+    trailing: Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(
+          Icons.warning_amber_rounded,
+          size: 20,
+          color: Theme.of(context).colorScheme.error,
         ),
-      );
+        if (_writable)
+          IconButton(
+            icon: const Icon(Icons.close),
+            tooltip: "Remove $name",
+            onPressed: () => _delete(name),
+          )
+        else
+          const SizedBox(width: 48),
+        IconButton(
+          icon: const Icon(Icons.download),
+          tooltip: "Export $name",
+          onPressed: () => _export(name),
+        ),
+      ],
+    ),
+  );
 
   /// Where an entry the project's directory does not hold came from: a preset
   /// the binary embeds, or a default-project entry this project inherits.
   String _originLabel(String name) =>
       isBundledPromptName(CompletionKind.skill, name, project: widget.project)
-          ? "Bundled"
-          : "Inherited";
+      ? "Bundled"
+      : "Inherited";
 }

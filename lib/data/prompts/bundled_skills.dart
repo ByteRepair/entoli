@@ -49,7 +49,10 @@ Future<void> _installFor(AppConfig config, String project) async {
   for (final file in bundledSkillFiles) {
     if (file.project != project) continue;
     final dest = p.join(
-        config.bundledSkillsDir(project: project), file.name, file.relativePath);
+      config.bundledSkillsDir(project: project),
+      file.name,
+      file.relativePath,
+    );
     known.add(dest);
     try {
       final target = File(dest);
@@ -61,7 +64,11 @@ Future<void> _installFor(AppConfig config, String project) async {
       await target.create(recursive: true);
       await target.writeAsBytes(Uint8List.fromList(file.bytes));
     } catch (e) {
-      logFailure("skills", "could not write ${file.name}/${file.relativePath}", e);
+      logFailure(
+        "skills",
+        "could not write ${file.name}/${file.relativePath}",
+        e,
+      );
     }
   }
 
@@ -70,8 +77,7 @@ Future<void> _installFor(AppConfig config, String project) async {
   }
 }
 
-Future<void> _deleteStrays(
-    Directory dir, Set<String> known) async {
+Future<void> _deleteStrays(Directory dir, Set<String> known) async {
   final entities = await dir.list().toList();
   for (final entity in entities) {
     if (entity is File) {

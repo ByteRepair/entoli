@@ -128,7 +128,10 @@ abstract class PlayingSpeaker implements Speaker {
   Future<void> _enqueue(Uint8List audio) async {
     // shortcut: named .wav because WAV is what is asked of a provider; sniff
     // the bytes if one turns out to send something else.
-    final path = p.join(_speechDir, "${DateTime.now().microsecondsSinceEpoch}.wav");
+    final path = p.join(
+      _speechDir,
+      "${DateTime.now().microsecondsSinceEpoch}.wav",
+    );
     await File(path).writeAsBytes(audio);
     _queue.add(path);
     if (!_playing) await _playNext();

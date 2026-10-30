@@ -17,7 +17,8 @@ import "../widgets/section_header.dart";
 /// offers no choice. Asked once and kept: it spawns the server with
 /// `--list-devices`, and the answer cannot change while the app runs.
 final localDevicesProvider = FutureProvider<List<LocalDevice>?>(
-    (ref) => ref.watch(localEngineProvider).devices() ?? Future.value(null));
+  (ref) => ref.watch(localEngineProvider).devices() ?? Future.value(null),
+);
 
 /// The row that opens [LocalLlmSettingsPage], kept off the On-device page
 /// itself so the catalogs are what it shows.
@@ -28,14 +29,17 @@ class LocalModelSection extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final engine = ref.watch(localEngineProvider);
     if (!engine.available) {
-      return engine.missingFromBuild ? const _Elsewhere() : const SizedBox.shrink();
+      return engine.missingFromBuild
+          ? const _Elsewhere()
+          : const SizedBox.shrink();
     }
     return ListTile(
       title: const Text("LLM settings"),
       subtitle: const Text("Hardware, context, caching and loaded models"),
       trailing: const Icon(Icons.chevron_right),
-      onTap: () => Navigator.of(context).push(
-          MaterialPageRoute(builder: (_) => const LocalLlmSettingsPage())),
+      onTap: () => Navigator.of(
+        context,
+      ).push(MaterialPageRoute(builder: (_) => const LocalLlmSettingsPage())),
     );
   }
 }
@@ -64,7 +68,8 @@ class LocalLlmSettingsPage extends ConsumerWidget {
       body: ListView(
         padding: const EdgeInsets.symmetric(vertical: 8),
         children: [
-          if (controls.contains(LocalControl.maxRunning)) const _MaxRunningPicker(),
+          if (controls.contains(LocalControl.maxRunning))
+            const _MaxRunningPicker(),
           const _DevicePicker(),
           if (controls.contains(LocalControl.context)) const _ContextPicker(),
           const _ThreadsSlider(),
@@ -86,12 +91,15 @@ class _MaxRunningPicker extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final value = ref.watch(appSettingsProvider.select((s) => s.maxLocalModels));
+    final value = ref.watch(
+      appSettingsProvider.select((s) => s.maxLocalModels),
+    );
     return InstalledPicker(
       label: "Max LLMs running",
       options: const {
         "1": "One at a time",
-        "2": "Two — a small model naming chats beside a large one answering them",
+        "2":
+            "Two — a small model naming chats beside a large one answering them",
       },
       value: "$value",
       onPick: (count) => ref
@@ -110,7 +118,9 @@ class _DevicePicker extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final found = ref.watch(localDevicesProvider);
-    final picked = ref.watch(appSettingsProvider.select((s) => s.localModelDevice));
+    final picked = ref.watch(
+      appSettingsProvider.select((s) => s.localModelDevice),
+    );
     // Enumerating spawns the server, so for a second there is no answer yet —
     // and "no accelerator" is a thing to say once rather than to say and then
     // take back.
@@ -197,12 +207,15 @@ class _ThreadsSliderState extends ConsumerState<_ThreadsSlider> {
   Widget build(BuildContext context) {
     final max = ref.watch(localEngineProvider).maxThreads;
     if (max == null || max <= 1) return const SizedBox.shrink();
-    final chosen = ref.watch(appSettingsProvider.select((s) => s.localModelThreads));
+    final chosen = ref.watch(
+      appSettingsProvider.select((s) => s.localModelThreads),
+    );
     final value = _dragging ?? (chosen ?? max).toDouble();
     return LabelledField(
       label: "CPU cores",
       child: ResettableField(
-        onReset: () => ref.read(appSettingsProvider.notifier).setLocalThreads(null),
+        onReset: () =>
+            ref.read(appSettingsProvider.notifier).setLocalThreads(null),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -218,8 +231,9 @@ class _ThreadsSliderState extends ConsumerState<_ThreadsSlider> {
                 // The top of the range is the default — store null there so it
                 // tracks a machine whose big-core count the OS later reports
                 // differently, rather than pinning today's number.
-                ref.read(appSettingsProvider.notifier).setLocalThreads(
-                    v.round() >= max ? null : v.round());
+                ref
+                    .read(appSettingsProvider.notifier)
+                    .setLocalThreads(v.round() >= max ? null : v.round());
               },
             ),
             Text(
@@ -249,10 +263,13 @@ class _KvCachePicker extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final value = ref.watch(appSettingsProvider.select((s) => s.localModelKvCachePrompts));
+    final value = ref.watch(
+      appSettingsProvider.select((s) => s.localModelKvCachePrompts),
+    );
     return InstalledPicker(
       label: "Cached prompts",
-      description: "Kept across every chat, and a turn writes one for each step "
+      description:
+          "Kept across every chat, and a turn writes one for each step "
           "it takes. The disk budget behind this may allow fewer.",
       none: "Default (${AppSettings.defaultKvCachePrompts})",
       options: const {
@@ -278,13 +295,16 @@ class _PrefillToggle extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final on = ref.watch(appSettingsProvider.select((s) => s.localModelPrefill));
+    final on = ref.watch(
+      appSettingsProvider.select((s) => s.localModelPrefill),
+    );
     return SwitchListTile(
       title: const Text("Prefill the prompt"),
       subtitle: const Text(
-          "Warm the default model's system prompt in the background so the "
-          "first chat starts sooner. Costs a few minutes of the processor when "
-          "the model is set, and shows a notification while it runs."),
+        "Warm the default model's system prompt in the background so the "
+        "first chat starts sooner. Costs a few minutes of the processor when "
+        "the model is set, and shows a notification while it runs.",
+      ),
       value: on,
       onChanged: ref.read(appSettingsProvider.notifier).setLocalPrefill,
     );
@@ -301,8 +321,9 @@ class _Prefilling extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(localPrefillStateProvider);
     if (state == null) return const SizedBox.shrink();
-    final pct =
-        state.fraction == null ? "" : " · ${(state.fraction! * 100).round()}%";
+    final pct = state.fraction == null
+        ? ""
+        : " · ${(state.fraction! * 100).round()}%";
     return ListTile(
       leading: const SizedBox(
         width: 20,
@@ -310,8 +331,10 @@ class _Prefilling extends ConsumerWidget {
         child: CircularProgressIndicator(strokeWidth: 2),
       ),
       title: Text("Prefilling ${state.name}…"),
-      subtitle: Text("Warming its system prompt so the first chat starts "
-          "sooner$pct"),
+      subtitle: Text(
+        "Warming its system prompt so the first chat starts "
+        "sooner$pct",
+      ),
     );
   }
 }
@@ -357,10 +380,10 @@ class _RunningRow extends ConsumerWidget {
   /// Auto is resolved when the model loads, and a phone whose accelerator this
   /// build cannot reach answers on the CPU whatever was picked.
   static String? _where(String? device) => switch (device) {
-        null => null,
-        LocalDevice.cpu => "the CPU",
-        final name => "the ${LocalDevice.computeOf(name).label} ($name)",
-      };
+    null => null,
+    LocalDevice.cpu => "the CPU",
+    final name => "the ${LocalDevice.computeOf(name).label} ($name)",
+  };
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -369,29 +392,36 @@ class _RunningRow extends ConsumerWidget {
     final where = _where(state.device);
     return switch (state.phase) {
       LocalLlmPhase.starting => ListTile(
-          leading: const SizedBox(
-            width: 20,
-            height: 20,
-            child: CircularProgressIndicator(strokeWidth: 2),
-          ),
-          title: Text("Loading $name…"),
-          subtitle: const Text("A chat sent before this finishes waits for it."),
+        leading: const SizedBox(
+          width: 20,
+          height: 20,
+          child: CircularProgressIndicator(strokeWidth: 2),
         ),
+        title: Text("Loading $name…"),
+        subtitle: const Text("A chat sent before this finishes waits for it."),
+      ),
       LocalLlmPhase.ready => ListTile(
-          leading: Icon(Icons.check_circle_outline, color: theme.colorScheme.primary),
-          title: Text(name),
-          subtitle: Text("${where == null ? "Answering" : "Answering on $where"}"
-              " · ${state.contextLength} tokens of context"),
+        leading: Icon(
+          Icons.check_circle_outline,
+          color: theme.colorScheme.primary,
         ),
+        title: Text(name),
+        subtitle: Text(
+          "${where == null ? "Answering" : "Answering on $where"}"
+          " · ${state.contextLength} tokens of context",
+        ),
+      ),
       LocalLlmPhase.failed => ListTile(
-          isThreeLine: true,
-          leading: Icon(Icons.error_outline, color: theme.colorScheme.error),
-          title: Text("$name would not load"),
-          subtitle: Text(
-            state.failure ?? "",
-            style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.error),
+        isThreeLine: true,
+        leading: Icon(Icons.error_outline, color: theme.colorScheme.error),
+        title: Text("$name would not load"),
+        subtitle: Text(
+          state.failure ?? "",
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: theme.colorScheme.error,
           ),
         ),
+      ),
     };
   }
 }
@@ -405,13 +435,14 @@ class _Elsewhere extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => const SectionHeader(
-        "Text models",
-        description: "This build carries no model server. Run "
-            "tool/linux/build-llama.sh and build again, and the catalog "
-            "below is bundled into the app. Until then the better answer "
-            "is already there: add Ollama or LM Studio under Providers, "
-            "and everything they serve appears in the pickers.",
-      );
+    "Text models",
+    description:
+        "This build carries no model server. Run "
+        "tool/linux/build-llama.sh and build again, and the catalog "
+        "below is bundled into the app. Until then the better answer "
+        "is already there: add Ollama or LM Studio under Providers, "
+        "and everything they serve appears in the pickers.",
+  );
 }
 
 /// A model from any link to a GGUF. Only the link is needed: what the server
@@ -443,7 +474,9 @@ class _AddLocalModelPageState extends ConsumerState<AddLocalModelPage> {
     final text = _url.text.trim();
     if (text.isEmpty) return null;
     final uri = Uri.tryParse(text);
-    return uri == null || !uri.isScheme("https") && !uri.isScheme("http") || uri.host.isEmpty
+    return uri == null ||
+            !uri.isScheme("https") && !uri.isScheme("http") ||
+            uri.host.isEmpty
         ? "A link starting with https://"
         : null;
   }
@@ -455,7 +488,8 @@ class _AddLocalModelPageState extends ConsumerState<AddLocalModelPage> {
         : "64 hexadecimal characters";
   }
 
-  bool get _ready => _url.text.trim().isNotEmpty && _urlError == null && _shaError == null;
+  bool get _ready =>
+      _url.text.trim().isNotEmpty && _urlError == null && _shaError == null;
 
   void _add() {
     String? optional(TextEditingController field) =>
@@ -484,38 +518,52 @@ class _AddLocalModelPageState extends ConsumerState<AddLocalModelPage> {
 
   @override
   Widget build(BuildContext context) {
-    TextField field(TextEditingController controller, String label,
-            {String? helper, String? error, bool autofocus = false}) =>
-        TextField(
-          controller: controller,
-          autofocus: autofocus,
-          onChanged: (_) => setState(() {}),
-          decoration: InputDecoration(
-            labelText: label,
-            helperText: helper,
-            helperMaxLines: 2,
-            errorText: error,
-          ),
-        );
+    TextField field(
+      TextEditingController controller,
+      String label, {
+      String? helper,
+      String? error,
+      bool autofocus = false,
+    }) => TextField(
+      controller: controller,
+      autofocus: autofocus,
+      onChanged: (_) => setState(() {}),
+      decoration: InputDecoration(
+        labelText: label,
+        helperText: helper,
+        helperMaxLines: 2,
+        errorText: error,
+      ),
+    );
     return Scaffold(
       appBar: AppBar(title: const Text("Add model")),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          field(_url, "Link",
-              helper: "To a .gguf file, e.g. a Hugging Face \"resolve\" link",
-              error: _urlError,
-              autofocus: true),
+          field(
+            _url,
+            "Link",
+            helper: "To a .gguf file, e.g. a Hugging Face \"resolve\" link",
+            error: _urlError,
+            autofocus: true,
+          ),
           const SizedBox(height: 16),
           field(_name, "Name", helper: "Empty takes the one inside the file"),
           const SizedBox(height: 16),
-          field(_parameters, "Parameters", helper: "As the publisher writes it, e.g. 4B"),
+          field(
+            _parameters,
+            "Parameters",
+            helper: "As the publisher writes it, e.g. 4B",
+          ),
           const SizedBox(height: 16),
           field(_licence, "Licence"),
           const SizedBox(height: 16),
-          field(_sha256, "SHA-256",
-              helper: "Checked before the file is kept, where given",
-              error: _shaError),
+          field(
+            _sha256,
+            "SHA-256",
+            helper: "Checked before the file is kept, where given",
+            error: _shaError,
+          ),
           const SizedBox(height: 24),
           Align(
             alignment: Alignment.centerRight,

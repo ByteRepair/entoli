@@ -49,8 +49,11 @@ void main() {
     app = TestApp.create(hub: hub);
     // The app-level settings the page's rows read, the same relay URL and
     // name the hub dials and announces.
-    unawaited(app.seedSettings(
-        AppSettings(syncRelayUrl: relayUrl, deviceName: deviceName)));
+    unawaited(
+      app.seedSettings(
+        AppSettings(syncRelayUrl: relayUrl, deviceName: deviceName),
+      ),
+    );
     await pumpSettings(tester, app, SettingsCategory.sync);
     await settleIo(tester);
   }
@@ -72,7 +75,9 @@ void main() {
       // The field is empty and the hint is what the default would be, rather
       // than a stand-in for it.
       expect(
-          find.widgetWithText(TextFormField, "yiannis-laptop"), findsOneWidget);
+        find.widgetWithText(TextFormField, "yiannis-laptop"),
+        findsOneWidget,
+      );
     });
 
     testWidgets("a typed name wins over the hostname", (tester) async {
@@ -87,8 +92,7 @@ void main() {
       expect(hub.deviceName, startsWith("Entoli "));
       // Four hex, and none of the grouping's spaces: the name carries the
       // fingerprint's first group, and nothing else of it.
-      expect(hub.deviceName,
-          matches(RegExp(r'^Entoli [0-9A-F]{4}$')));
+      expect(hub.deviceName, matches(RegExp(r'^Entoli [0-9A-F]{4}$')));
     });
   });
 
@@ -101,8 +105,9 @@ void main() {
       expect(find.text("Disconnect"), findsNothing);
     });
 
-    testWidgets("one that pairs while the page is open appears at once",
-        (tester) async {
+    testWidgets("one that pairs while the page is open appears at once", (
+      tester,
+    ) async {
       await open(tester);
       expect(find.textContaining("No devices paired yet"), findsOneWidget);
 
@@ -112,7 +117,10 @@ void main() {
       await registry.add(testPairedDevice("d1", name: "Laptop"));
       hub.peers.value = {
         "d1": PeerState(
-            deviceId: "d1", name: "Laptop", status: PeerStatus.online),
+          deviceId: "d1",
+          name: "Laptop",
+          status: PeerStatus.online,
+        ),
       };
       await settleIo(tester);
 
@@ -120,8 +128,9 @@ void main() {
       expect(find.text("Disconnect"), findsOneWidget);
     });
 
-    testWidgets("a dial that finds nothing says so rather than throwing",
-        (tester) async {
+    testWidgets("a dial that finds nothing says so rather than throwing", (
+      tester,
+    ) async {
       await open(tester, paired: [testPairedDevice("d1", name: "Laptop")]);
       await registry.setPairingSecret("d1", "test-psk");
 
@@ -135,15 +144,20 @@ void main() {
       expect(find.textContaining("could not reach Laptop"), findsOneWidget);
     });
 
-    testWidgets("revoking asks first, and confirming takes it out", (tester) async {
+    testWidgets("revoking asks first, and confirming takes it out", (
+      tester,
+    ) async {
       await open(tester, paired: [testPairedDevice("d1", name: "Laptop")]);
 
       await scrollTo(tester, find.text("Revoke"));
       await tester.tap(find.text("Revoke"));
       await settleIo(tester);
-      await tester.tap(find.descendant(
+      await tester.tap(
+        find.descendant(
           of: find.byType(AlertDialog),
-          matching: find.widgetWithText(TextButton, "Cancel")));
+          matching: find.widgetWithText(TextButton, "Cancel"),
+        ),
+      );
       await settleIo(tester);
 
       // Cancelled: the device stays in the registry and on the page.
@@ -153,9 +167,12 @@ void main() {
 
       await tester.tap(find.text("Revoke"));
       await settleIo(tester);
-      await tester.tap(find.descendant(
+      await tester.tap(
+        find.descendant(
           of: find.byType(AlertDialog),
-          matching: find.widgetWithText(TextButton, "Revoke")));
+          matching: find.widgetWithText(TextButton, "Revoke"),
+        ),
+      );
       await settleIo(tester);
 
       expect(await registry.list(), isEmpty);
@@ -166,8 +183,9 @@ void main() {
   });
 
   group("opening a pairing window", () {
-    testWidgets("with no route at all, it says why rather than doing nothing",
-        (tester) async {
+    testWidgets("with no route at all, it says why rather than doing nothing", (
+      tester,
+    ) async {
       await open(tester);
 
       await scrollTo(tester, find.text("Open pairing window"));
@@ -177,8 +195,9 @@ void main() {
       expect(find.textContaining("no relay URL is set"), findsOneWidget);
     });
 
-    testWidgets("opening a pairing window dials the relay and shows the QR",
-        (tester) async {
+    testWidgets("opening a pairing window dials the relay and shows the QR", (
+      tester,
+    ) async {
       await open(tester, relayUrl: "wss://relay.example.com");
 
       await scrollTo(tester, find.text("Open pairing window"));
@@ -260,8 +279,10 @@ void main() {
       // What completing a pairing leaves behind here now: nothing — the
       // paired screen was wherever the pairing ran, and this page's controls
       // were never swapped out for a status.
-      hub.pairing.value =
-          PairingActivity(stage: PairingStage.done, peerName: "Laptop");
+      hub.pairing.value = PairingActivity(
+        stage: PairingStage.done,
+        peerName: "Laptop",
+      );
       await settleIo(tester);
 
       expect(find.text("Open pairing window"), findsOneWidget);
@@ -271,16 +292,19 @@ void main() {
   });
 
   group("the pairing window's own page", () {
-    testWidgets("it ends on the paired screen, and Done leaves the controls",
-        (tester) async {
+    testWidgets("it ends on the paired screen, and Done leaves the controls", (
+      tester,
+    ) async {
       await open(tester, relayUrl: "wss://relay.example.com");
 
       await scrollTo(tester, find.text("Open pairing window"));
       await tester.tap(find.text("Open pairing window"));
       await settleIo(tester);
 
-      hub.pairing.value =
-          PairingActivity(stage: PairingStage.done, peerName: "Phone");
+      hub.pairing.value = PairingActivity(
+        stage: PairingStage.done,
+        peerName: "Phone",
+      );
       await settleIo(tester);
 
       expect(find.text("Device Phone has been paired."), findsOneWidget);
@@ -292,15 +316,18 @@ void main() {
       expect(find.text("Open pairing window"), findsOneWidget);
     });
 
-    testWidgets("pairing another from it opens a fresh window on it",
-        (tester) async {
+    testWidgets("pairing another from it opens a fresh window on it", (
+      tester,
+    ) async {
       await open(tester, relayUrl: "wss://relay.example.com");
 
       await scrollTo(tester, find.text("Open pairing window"));
       await tester.tap(find.text("Open pairing window"));
       await settleIo(tester);
-      hub.pairing.value =
-          PairingActivity(stage: PairingStage.done, peerName: "Phone");
+      hub.pairing.value = PairingActivity(
+        stage: PairingStage.done,
+        peerName: "Phone",
+      );
       await settleIo(tester);
 
       await tester.tap(find.text("Pair another device"));
@@ -319,7 +346,9 @@ void main() {
       expect(find.text("Open pairing window"), findsOneWidget);
     });
 
-    testWidgets("its codes-matched view names the other device", (tester) async {
+    testWidgets("its codes-matched view names the other device", (
+      tester,
+    ) async {
       await open(tester, relayUrl: "wss://relay.example.com");
 
       await scrollTo(tester, find.text("Open pairing window"));
@@ -327,15 +356,19 @@ void main() {
       await settleIo(tester);
 
       hub.pairing.value = PairingActivity(
-          stage: PairingStage.confirming, sas: "AAAA", peerName: "Phone");
+        stage: PairingStage.confirming,
+        sas: "AAAA",
+        peerName: "Phone",
+      );
       await settleIo(tester);
 
       expect(find.textContaining("Phone"), findsOneWidget);
       expect(find.textContaining("AAAA"), findsOneWidget);
     });
 
-    testWidgets("a pairing that cannot finish fails on that screen",
-        (tester) async {
+    testWidgets("a pairing that cannot finish fails on that screen", (
+      tester,
+    ) async {
       await open(tester, relayUrl: "wss://relay.example.com");
 
       await scrollTo(tester, find.text("Open pairing window"));
@@ -343,7 +376,9 @@ void main() {
       await settleIo(tester);
 
       hub.pairing.value = PairingActivity(
-          stage: PairingStage.failed, error: "the relay refused us");
+        stage: PairingStage.failed,
+        error: "the relay refused us",
+      );
       await settleIo(tester);
 
       expect(find.text("Failed: the relay refused us"), findsOneWidget);
@@ -351,8 +386,9 @@ void main() {
   });
 
   group("pairing from a pasted code", () {
-    testWidgets("a code that is not one says so, on its own screen",
-        (tester) async {
+    testWidgets("a code that is not one says so, on its own screen", (
+      tester,
+    ) async {
       await open(tester);
 
       await scrollTo(tester, find.text("Pair"));
@@ -395,8 +431,9 @@ void main() {
       expect(find.text("Open pairing window"), findsNothing);
     });
 
-    testWidgets("renaming lands in the registry and on the row",
-        (tester) async {
+    testWidgets("renaming lands in the registry and on the row", (
+      tester,
+    ) async {
       await open(tester, paired: [testPairedDevice("d1", name: "Laptop")]);
 
       await scrollTo(tester, find.text("Laptop"));
@@ -407,9 +444,12 @@ void main() {
       await settleIo(tester);
 
       await tester.enterText(find.byType(TextField), "Desk");
-      await tester.tap(find.descendant(
+      await tester.tap(
+        find.descendant(
           of: find.byType(AlertDialog),
-          matching: find.widgetWithText(FilledButton, "Rename")));
+          matching: find.widgetWithText(FilledButton, "Rename"),
+        ),
+      );
       await settleIo(tester);
 
       expect(await registry.byId("d1"), isNotNull);
@@ -432,9 +472,12 @@ void main() {
       await settleIo(tester);
 
       await tester.enterText(find.byType(TextField), "Desk");
-      await tester.tap(find.descendant(
+      await tester.tap(
+        find.descendant(
           of: find.byType(AlertDialog),
-          matching: find.widgetWithText(TextButton, "Cancel")));
+          matching: find.widgetWithText(TextButton, "Cancel"),
+        ),
+      );
       await settleIo(tester);
 
       expect((await registry.byId("d1"))!.name, "Laptop");
@@ -443,8 +486,9 @@ void main() {
   });
 
   group("the paired device page's own actions", () {
-    testWidgets("connect is there, and a failed dial says so on the page",
-        (tester) async {
+    testWidgets("connect is there, and a failed dial says so on the page", (
+      tester,
+    ) async {
       await open(tester, paired: [testPairedDevice("d1", name: "Laptop")]);
       await registry.setPairingSecret("d1", "test-psk");
 
@@ -461,8 +505,9 @@ void main() {
       expect(find.textContaining("no route configured"), findsWidgets);
     });
 
-    testWidgets("revoke is there, asks first, and confirming pops",
-        (tester) async {
+    testWidgets("revoke is there, asks first, and confirming pops", (
+      tester,
+    ) async {
       await open(tester, paired: [testPairedDevice("d1", name: "Laptop")]);
 
       await scrollTo(tester, find.text("Laptop"));
@@ -473,9 +518,12 @@ void main() {
       await tester.tap(find.text("Revoke"));
       await settleIo(tester);
 
-      await tester.tap(find.descendant(
+      await tester.tap(
+        find.descendant(
           of: find.byType(AlertDialog),
-          matching: find.widgetWithText(TextButton, "Revoke")));
+          matching: find.widgetWithText(TextButton, "Revoke"),
+        ),
+      );
       await settleIo(tester);
 
       // Off the page: the record is gone and so is the row behind, without
@@ -490,7 +538,9 @@ void main() {
     // Android's row only — the one platform whose process freezes with the
     // screen. The override is undone in the body: flutter_test refuses
     // letting it leak past the test.
-    testWidgets("the switch is Android's, and writes the setting", (tester) async {
+    testWidgets("the switch is Android's, and writes the setting", (
+      tester,
+    ) async {
       debugDefaultTargetPlatformOverride = TargetPlatform.android;
       try {
         await open(tester);

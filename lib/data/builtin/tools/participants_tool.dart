@@ -33,7 +33,8 @@ class EndTurnTool extends AgentTool {
   bool get offered => offer.participants != null && offer.member;
 
   @override
-  String get description => "End your turn without replying. Nothing is "
+  String get description =>
+      "End your turn without replying. Nothing is "
       "shown to the user or the other members, and no one is handed a turn. "
       "Call it when the message was not addressed to you, or when your reply "
       "would only thank, agree, or say you are ready. Never call it when the "
@@ -41,15 +42,16 @@ class EndTurnTool extends AgentTool {
 
   @override
   Map<String, dynamic> get schema => const {
-        "type": "object",
-        "properties": {
-          "reason": {
-            "type": "string",
-            "description": "Why you are not replying, in one short sentence. "
-                "Kept in the log, not shown.",
-          },
-        },
-      };
+    "type": "object",
+    "properties": {
+      "reason": {
+        "type": "string",
+        "description":
+            "Why you are not replying, in one short sentence. "
+            "Kept in the log, not shown.",
+      },
+    },
+  };
 
   @override
   Stream<AgentEvent> run(LlmToolCall call, Turn turn) async* {
@@ -77,13 +79,13 @@ class ListParticipantsTool extends AgentTool {
   bool get offered => offer.participants != null;
 
   @override
-  String get description => "List this room's participants: each member's "
+  String get description =>
+      "List this room's participants: each member's "
       "handle (with the @, ready to mention in a reply to hand work to them) "
       "and their short description.";
 
   @override
-  Map<String, dynamic> get schema =>
-      const {"type": "object", "properties": {}};
+  Map<String, dynamic> get schema => const {"type": "object", "properties": {}};
 
   @override
   Stream<AgentEvent> run(LlmToolCall call, Turn turn) async* {
@@ -111,6 +113,6 @@ String participantsListing(Iterable<PromptDocument> members) {
   ];
   return lines.isEmpty
       ? "The room has no members: there is no one to hand work to by handle, "
-          "so every say is answered by the main agent."
+            "so every say is answered by the main agent."
       : lines.join("\n");
 }

@@ -23,8 +23,14 @@ class MarketplaceGroups {
 /// is the order they came in.
 MarketplaceGroups groupByOrigin(List<MarketplaceEntry> entries) =>
     MarketplaceGroups(
-      [for (final entry in entries) if (entry.location == null) entry],
-      [for (final entry in entries) if (entry.location != null) entry],
+      [
+        for (final entry in entries)
+          if (entry.location == null) entry,
+      ],
+      [
+        for (final entry in entries)
+          if (entry.location != null) entry,
+      ],
     );
 
 /// The entries a tab's search and tag ticks pick out, in the order they came
@@ -48,8 +54,7 @@ List<MarketplaceEntry> entriesMatching(
 }
 
 bool _matches(MarketplaceEntry entry, String needle) =>
-    entry.lowerName.contains(needle) ||
-    entry.lowerDescription.contains(needle);
+    entry.lowerName.contains(needle) || entry.lowerDescription.contains(needle);
 
 /// Every tag [entries] carry, with how many entries carry it — the tag
 /// picker's rows. Alphabetical, lower-case-compared the way the list is.

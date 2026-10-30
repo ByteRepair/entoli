@@ -5,7 +5,8 @@ import "provider.dart";
 /// A model server the user runs on this machine. Nothing there checks a key,
 /// so any key is a yes, and models.dev does not know what it serves, so its
 /// own list is asked unless another is named.
-abstract class LocalServerProvider extends OpenAiCompatibleProvider with KeyFree {
+abstract class LocalServerProvider extends OpenAiCompatibleProvider
+    with KeyFree {
   const LocalServerProvider(super.config, [super.terms]);
 
   @override
@@ -13,7 +14,8 @@ abstract class LocalServerProvider extends OpenAiCompatibleProvider with KeyFree
 }
 
 class OllamaProvider extends LocalServerProvider {
-  const OllamaProvider([LlmProviderConfig config = preset]) : super(config, _terms);
+  const OllamaProvider([LlmProviderConfig config = preset])
+    : super(config, _terms);
 
   static const preset = LlmProviderConfig(
     catalogId: "ollama",
@@ -31,7 +33,8 @@ class OllamaProvider extends LocalServerProvider {
 }
 
 class LmStudioProvider extends LocalServerProvider {
-  const LmStudioProvider([LlmProviderConfig config = preset]) : super(config, _terms);
+  const LmStudioProvider([LlmProviderConfig config = preset])
+    : super(config, _terms);
 
   static const preset = LlmProviderConfig(
     catalogId: "lmstudio",

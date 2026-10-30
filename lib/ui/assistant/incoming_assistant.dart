@@ -45,7 +45,10 @@ class _IncomingAssistantState extends ConsumerState<IncomingAssistant> {
   @override
   void initState() {
     super.initState();
-    _launches = ref.read(assistantLaunchProvider).launched.listen((_) => _open());
+    _launches = ref
+        .read(assistantLaunchProvider)
+        .launched
+        .listen((_) => _open());
     WidgetsBinding.instance.addPostFrameCallback((_) => _open());
   }
 
@@ -67,7 +70,10 @@ class _IncomingAssistantState extends ConsumerState<IncomingAssistant> {
     // deleted, and selecting that would make the chat recreate the directory.
     final projects = await ref.read(projectListProvider.future);
     if (!mounted) return;
-    selectProject(ref, localProject(projectOrDefault(settings.assistantProject, projects)));
+    selectProject(
+      ref,
+      localProject(projectOrDefault(settings.assistantProject, projects)),
+    );
     switch (settings.assistantView) {
       // Voice mode asks about its models first and lands on the settings rather
       // than a dead page where they are missing, which is the answer every

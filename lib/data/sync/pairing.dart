@@ -56,15 +56,14 @@ class PairingActivity {
     String? sas,
     String? peerName,
     String? error,
-  }) =>
-      PairingActivity(
-        qr: qr ?? this.qr,
-        code: code ?? this.code,
-        stage: stage ?? this.stage,
-        sas: sas ?? this.sas,
-        peerName: peerName ?? this.peerName,
-        error: error ?? this.error,
-      );
+  }) => PairingActivity(
+    qr: qr ?? this.qr,
+    code: code ?? this.code,
+    stage: stage ?? this.stage,
+    sas: sas ?? this.sas,
+    peerName: peerName ?? this.peerName,
+    error: error ?? this.error,
+  );
 }
 
 enum PairingStage { connecting, confirming, done, failed }
@@ -104,10 +103,10 @@ class SyncPairing {
     this._hostname,
     http.Client? client,
     RelayDial? relayDial,
-  })  : _turnPassword = turnPassword ?? (() => null),
-        _lanFactory = lanSignaling,
-        _relayDial = relayDial ?? RelaySignaler.connect,
-        _client = client ?? tlsClient();
+  }) : _turnPassword = turnPassword ?? (() => null),
+       _lanFactory = lanSignaling,
+       _relayDial = relayDial ?? RelaySignaler.connect,
+       _client = client ?? tlsClient();
 
   final SyncIdentity identity;
   final DeviceRegistry registry;
@@ -168,8 +167,10 @@ class SyncPairing {
     for (final device in devices) {
       final secret = await registry.pairingSecret(device.id);
       if (secret != null) {
-        _reconnects[RelaySignaler.roomFor(secret)] =
-            (deviceId: device.id, psk: secret);
+        _reconnects[RelaySignaler.roomFor(secret)] = (
+          deviceId: device.id,
+          psk: secret,
+        );
       }
     }
     // Before the early return below: a device with no pairings starts no
@@ -232,14 +233,18 @@ class SyncPairing {
       ).encode();
       unawaited(_waitInRelayRoom(relayUrl, psk));
     }
-    final opened =
-        PairingActivity(qr: qr, code: code, stage: PairingStage.connecting);
+    final opened = PairingActivity(
+      qr: qr,
+      code: code,
+      stage: PairingStage.connecting,
+    );
     activity.value = opened;
     return opened;
   }
 
   /// Why there is no window to open.
-  static const noRoute = "No way to be found: this build has no local "
+  static const noRoute =
+      "No way to be found: this build has no local "
       "network signaling and no relay URL is set.";
 
   void cancelPairingWindow() {
@@ -306,7 +311,8 @@ class SyncPairing {
         return null;
       default:
         throw SignalingException(
-            "that code asks for ${offer.kind}, not pairing");
+          "that code asks for ${offer.kind}, not pairing",
+        );
     }
   }
 
@@ -336,12 +342,14 @@ class SyncPairing {
     // window, so the codes-matched gate has this card to ask on and the
     // paired or failed screen somewhere to end up.
     activity.value = const PairingActivity();
-    unawaited(_establish(
-      link: await link.open(),
-      weOffered: false,
-      psk: invite.psk,
-      knownDeviceId: null,
-    ).catchError((Object _) => link.close()));
+    unawaited(
+      _establish(
+        link: await link.open(),
+        weOffered: false,
+        psk: invite.psk,
+        knownDeviceId: null,
+      ).catchError((Object _) => link.close()),
+    );
     return PairingOffer(
       kind: PairingOffer.answerKind,
       psk: "",
@@ -395,7 +403,11 @@ class SyncPairing {
     if (device == null || secret == null) {
       throw SignalingException("$deviceId was never paired here");
     }
-    _peers.setStatus(deviceId, name: device.name, status: PeerStatus.connecting);
+    _peers.setStatus(
+      deviceId,
+      name: device.name,
+      status: PeerStatus.connecting,
+    );
     final token = RelaySignaler.roomFor(secret);
 
     Object? failure;
@@ -406,12 +418,12 @@ class SyncPairing {
     // this pair — asked only then, since asking takes its two seconds.
     for (final candidates in [
       () async => [
-            for (final address in device.addresses) ...[
-              address,
-              "${address.substring(0, address.lastIndexOf(":"))}"
-                  ":$preferredSignalingPort",
-            ],
-          ],
+        for (final address in device.addresses) ...[
+          address,
+          "${address.substring(0, address.lastIndexOf(":"))}"
+              ":$preferredSignalingPort",
+        ],
+      ],
       if (server != null) () => server.discover(token),
     ]) {
       final addresses = await candidates();
@@ -441,8 +453,12 @@ class SyncPairing {
     // throws it with the device's name on the front. A null error on the row
     // was the honest half of this going missing.
     final reason = failure?.toString() ?? "no route configured";
-    _peers.setStatus(deviceId,
-        name: device.name, status: PeerStatus.error, error: reason);
+    _peers.setStatus(
+      deviceId,
+      name: device.name,
+      status: PeerStatus.error,
+      error: reason,
+    );
     throw SignalingException("could not reach ${device.name}: $reason");
   }
 
@@ -508,7 +524,9 @@ class SyncPairing {
         // Which pair it is decides the secret, and whether this is a first
         // pairing at all: a token names a device already known, so its
         // handshake is pinned to that key and skips the codes-matched gate.
-        final known = incoming.token == null ? null : _reconnects[incoming.token];
+        final known = incoming.token == null
+            ? null
+            : _reconnects[incoming.token];
         final psk = known?.psk ?? _windowPsk;
         if (psk == null) return;
         RtcLink? link;
@@ -555,9 +573,11 @@ class SyncPairing {
   /// The shared tail's gate, driven directly: a test pins the refusal rather
   /// than racing a handshake to reach it. Public like [establishForTest] is;
   /// the hub's own `visibleForTesting` wrapper is what bounds it.
-  Future<bool> confirmGateForTest(String sas, String peerName,
-          {required bool isNew}) =>
-      _sasGate(sas, peerName, isNew: isNew);
+  Future<bool> confirmGateForTest(
+    String sas,
+    String peerName, {
+    required bool isNew,
+  }) => _sasGate(sas, peerName, isNew: isNew);
 
   /// Unpairs [deviceId]. The secret is read before the registry loses it:
   /// the token derived from it is what admits the device, and clearing
@@ -580,7 +600,10 @@ class SyncPairing {
   Future<void> _waitInRelayRoom(String relayUrl, String psk) async {
     try {
       final closer = await _relayDial(
-          relayUrl: relayUrl, room: RelaySignaler.roomFor(psk), role: "i");
+        relayUrl: relayUrl,
+        room: RelaySignaler.roomFor(psk),
+        role: "i",
+      );
       _relaySocket = closer;
       final messages = closer.messages;
       _relayWindow = messages.listen((message) {
@@ -638,7 +661,11 @@ class SyncPairing {
       final sdp = await link.offer();
       final signaler = LanSignaler(client: _client);
       final (:answer, :address) = await signaler.exchange(
-          addresses: addresses, code: code, token: token, offerSdp: sdp);
+        addresses: addresses,
+        code: code,
+        token: token,
+        offerSdp: sdp,
+      );
       await link.acceptAnswer(answer);
       await _establish(
         link: await link.open(),
@@ -665,11 +692,18 @@ class SyncPairing {
 
   /// Fresh pairings: the joiner offers ("j"), the window holds ("i").
   /// Reconnects: the larger id offers, deterministically on both ends.
-  Future<void> _dialViaRelay(String relayUrl, String psk, String? knownId) async {
+  Future<void> _dialViaRelay(
+    String relayUrl,
+    String psk,
+    String? knownId,
+  ) async {
     final room = RelaySignaler.roomFor(psk);
     final weOffer = knownId == null || identity.id.compareTo(knownId) > 0;
     final closer = await _relayDial(
-        relayUrl: relayUrl, room: room, role: weOffer ? "i" : "j");
+      relayUrl: relayUrl,
+      room: room,
+      role: weOffer ? "i" : "j",
+    );
     try {
       final link = await RtcLink.create(iceServers: iceServers());
       try {
@@ -679,7 +713,9 @@ class SyncPairing {
           await link.acceptAnswer(message["answer"] as String);
         } else {
           final message = await closer.waitFor("offer");
-          await closer.send({"answer": await link.answer(message["offer"] as String)});
+          await closer.send({
+            "answer": await link.answer(message["offer"] as String),
+          });
         }
         await _establish(
           link: await link.open(),
@@ -726,8 +762,7 @@ class SyncPairing {
     required String? knownDeviceId,
     String? address,
   }) async {
-    final handshake =
-        Handshake(identity, pairingSecret: psk, name: deviceName);
+    final handshake = Handshake(identity, pairingSecret: psk, name: deviceName);
     SecureChannel? channel;
     try {
       channel = await SecureChannel.open(
@@ -754,10 +789,12 @@ class SyncPairing {
 
       final deviceId = peer.id;
       final peerDevice = await registry.byId(deviceId);
-      final live = LivePeer(channel,
-          deviceId: deviceId,
-          deviceName: _nameOf(peerDevice, peer),
-          onClose: () => onPeerGone(deviceId));
+      final live = LivePeer(
+        channel,
+        deviceId: deviceId,
+        deviceName: _nameOf(peerDevice, peer),
+        onClose: () => onPeerGone(deviceId),
+      );
       final hello = Completer<Map<String, dynamic>>();
       live.handle = (message) => onMessage(live, message);
       live.pump = channel.jsonIncoming.listen(
@@ -821,14 +858,16 @@ class SyncPairing {
       // when a device was last reached, and where, is what a registry is for.
       // The one we dialled first, since it answered, then every one it gave:
       // on the side that was dialled, those are the only ones there are.
-      await registry.markSeen(deviceId, addresses: {
-        ?address,
-        ...?(reply["addrs"] as List<Object?>?)?.cast<String>(),
-      }.toList());
+      await registry.markSeen(
+        deviceId,
+        addresses: {
+          ?address,
+          ...?(reply["addrs"] as List<Object?>?)?.cast<String>(),
+        }.toList(),
+      );
 
       _peers.adopt(live);
-      _peers.setStatus(deviceId,
-          name: device.name, status: PeerStatus.online);
+      _peers.setStatus(deviceId, name: device.name, status: PeerStatus.online);
 
       // What this device serves. The mirror side answers this with
       // chatOpens for whatever it follows.
@@ -856,11 +895,15 @@ class SyncPairing {
   /// connecting — arrives here with no screen the codes could be shown on,
   /// and has to fail rather than wait out a confirmation nobody can give.
   Future<bool> _sasGate(
-      String sas, String peerName, {required bool isNew}) async {
+    String sas,
+    String peerName, {
+    required bool isNew,
+  }) async {
     if (!isNew) return true;
     if (activity.value == null) {
       throw const HandshakeException(
-          "the pairing ended before the codes were confirmed");
+        "the pairing ended before the codes were confirmed",
+      );
     }
     _note(PairingStage.confirming, sas: sas, peerName: peerName);
     final confirmation = _confirmation = Completer<bool>();
@@ -870,9 +913,13 @@ class SyncPairing {
   void _note(PairingStage stage, {String? sas, String? peerName}) {
     final current = activity.value;
     if (current == null) return;
-    activity.value =
-        current.copyWith(stage: stage, sas: sas, peerName: peerName);
+    activity.value = current.copyWith(
+      stage: stage,
+      sas: sas,
+      peerName: peerName,
+    );
   }
+
   void _fail(Object error) {
     logFailure("sync", "pairing failed", error);
     final current = activity.value;

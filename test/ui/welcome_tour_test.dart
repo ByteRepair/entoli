@@ -43,8 +43,9 @@ void main() {
   Future<void> walkToLast(WidgetTester tester) => next(tester, 12);
 
   Finder licence() => find.descendant(
-      of: find.byKey(const ValueKey("licence")),
-      matching: find.byType(Scrollable));
+    of: find.byKey(const ValueKey("licence")),
+    matching: find.byType(Scrollable),
+  );
 
   Finder checkbox() => find.byType(CheckboxListTile);
 
@@ -58,7 +59,10 @@ void main() {
   }
 
   bool inLicence(WidgetTester tester) => find
-      .descendant(of: find.byKey(const ValueKey("licence")), matching: checkbox())
+      .descendant(
+        of: find.byKey(const ValueKey("licence")),
+        matching: checkbox(),
+      )
       .evaluate()
       .isNotEmpty;
 
@@ -122,13 +126,16 @@ void main() {
   // The last page holds Done until the user ticks the box at the end of the
   // licence; first run has no app behind it to restart, so unticking there
   // just unticks.
-  testWidgets("Done is held on the last page until the box is ticked",
-      (tester) async {
+  testWidgets("Done is held on the last page until the box is ticked", (
+    tester,
+  ) async {
     await app.pump(tester, const WelcomePage());
     await walkToLast(tester);
 
-    expect(find.textContaining("GNU AFFERO GENERAL PUBLIC LICENSE"),
-        findsOneWidget);
+    expect(
+      find.textContaining("GNU AFFERO GENERAL PUBLIC LICENSE"),
+      findsOneWidget,
+    );
     expect(tester.widget<FilledButton>(button("Done")).onPressed, isNull);
     await accept(tester);
     expect(tester.widget<FilledButton>(button("Done")).onPressed, isNotNull);
@@ -148,8 +155,9 @@ void main() {
 
   // The provider page holds the tour until some model is reachable: the
   // button is dead and the swipe cannot go around it.
-  testWidgets("Next is held on the provider page until a model is reachable",
-      (tester) async {
+  testWidgets("Next is held on the provider page until a model is reachable", (
+    tester,
+  ) async {
     app.backend.modelList = const [];
     await app.pump(tester, const WelcomePage());
     await walkToProviders(tester);
@@ -169,34 +177,42 @@ void main() {
     expect(tester.widget<FilledButton>(button("Next")).onPressed, isNotNull);
   });
 
-  testWidgets("the provider page is not left dimmed by a model added in settings",
-      (tester) async {
-    app.backend.modelList = const [];
-    await app.pump(tester, const WelcomePage());
-    await walkToProviders(tester);
+  testWidgets(
+    "the provider page is not left dimmed by a model added in settings",
+    (tester) async {
+      app.backend.modelList = const [];
+      await app.pump(tester, const WelcomePage());
+      await walkToProviders(tester);
 
-    await tester.tap(find.text("A provider"));
-    await tester.pumpAndSettle();
-    expect(find.text("Connect a model"), findsNothing);
-    // What the tour watches changing while it is covered is what rebuilt it
-    // with no dimensions to read the page from.
-    app.backend.modelList = const [
-      ModelOption(providerId: "anthropic", modelId: "claude-sonnet-4"),
-    ];
-    app.container.invalidate(availableModelsProvider);
-    await settleIo(tester);
-    await tester.pageBack();
-    await tester.pumpAndSettle();
-    final fade = tester.widget<Opacity>(find
-        .ancestor(of: find.text("Connect a model"), matching: find.byType(Opacity))
-        .first);
-    expect(fade.opacity, 1);
-  });
+      await tester.tap(find.text("A provider"));
+      await tester.pumpAndSettle();
+      expect(find.text("Connect a model"), findsNothing);
+      // What the tour watches changing while it is covered is what rebuilt it
+      // with no dimensions to read the page from.
+      app.backend.modelList = const [
+        ModelOption(providerId: "anthropic", modelId: "claude-sonnet-4"),
+      ];
+      app.container.invalidate(availableModelsProvider);
+      await settleIo(tester);
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+      final fade = tester.widget<Opacity>(
+        find
+            .ancestor(
+              of: find.text("Connect a model"),
+              matching: find.byType(Opacity),
+            )
+            .first,
+      );
+      expect(fade.opacity, 1);
+    },
+  );
 
   // Unseeded, unlike the walks, so the model page's gate has something to
   // hold.
-  testWidgets("Next is held on the model page until a model is picked",
-      (tester) async {
+  testWidgets("Next is held on the model page until a model is picked", (
+    tester,
+  ) async {
     app.dispose();
     app = TestApp.create();
     await app.pump(tester, const WelcomePage());
@@ -225,18 +241,28 @@ void main() {
   group("in settings", () {
     Future<void> replay(WidgetTester tester) async {
       await app.pump(tester, const SizedBox());
-      unawaited(Navigator.of(tester.element(find.byType(SizedBox))).push(
+      unawaited(
+        Navigator.of(tester.element(find.byType(SizedBox))).push(
           MaterialPageRoute(
-              builder: (_) => const SettingsPage(
-                  initialCategory: SettingsCategory.welcome, focus: true))));
+            builder: (_) => const SettingsPage(
+              initialCategory: SettingsCategory.welcome,
+              focus: true,
+            ),
+          ),
+        ),
+      );
       await tester.pumpAndSettle();
       await walkToLast(tester);
     }
 
     // A replay remembers the tick, pinned outside the licence.
     testWidgets("a replay keeps the tick", (tester) async {
-      await io(tester,
-          () => app.container.read(appSettingsProvider.notifier).setLicenceAccepted(true));
+      await io(
+        tester,
+        () => app.container
+            .read(appSettingsProvider.notifier)
+            .setLicenceAccepted(true),
+      );
       await replay(tester);
 
       expect(tester.widget<CheckboxListTile>(checkbox()).value, isTrue);
@@ -245,8 +271,12 @@ void main() {
     });
 
     testWidgets("unticking there restarts into the tour", (tester) async {
-      await io(tester,
-          () => app.container.read(appSettingsProvider.notifier).setLicenceAccepted(true));
+      await io(
+        tester,
+        () => app.container
+            .read(appSettingsProvider.notifier)
+            .setLicenceAccepted(true),
+      );
       await replay(tester);
 
       await tester.tap(checkbox());
@@ -280,8 +310,11 @@ void main() {
       await accept(tester);
       await tester.tap(button("Done"));
       // Done makes the welcome chat on disk before it leaves.
-      await settleUntil(tester, () => find.byType(WelcomeTour).evaluate().isEmpty,
-          what: "the tour leaving");
+      await settleUntil(
+        tester,
+        () => find.byType(WelcomeTour).evaluate().isEmpty,
+        what: "the tour leaving",
+      );
 
       expect(find.byType(WelcomeTour), findsNothing);
       expect(settings().licenceAccepted, isTrue);
@@ -291,15 +324,18 @@ void main() {
       expect(chat.state.title, "Welcome to Entoli");
       // The skill is the first message, so its instructions ride every turn;
       // its greeting answers it.
-      expect([for (final m in chat.messages) m.role],
-          [MessageRole.user, MessageRole.assistant]);
+      expect(
+        [for (final m in chat.messages) m.role],
+        [MessageRole.user, MessageRole.assistant],
+      );
       expect(chat.messages.first.plainText, "/entoli-welcome-party");
       expect(chat.messages.last.plainText, contains("What's your name?"));
     });
   });
 
-  testWidgets("an unseen tour opens over the shell; a seen one does not",
-      (tester) async {
+  testWidgets("an unseen tour opens over the shell; a seen one does not", (
+    tester,
+  ) async {
     await app.pump(tester, const WelcomeGate(child: SizedBox.shrink()));
     await tester.pump();
     expect(find.byType(WelcomePage), findsOneWidget);
@@ -308,8 +344,11 @@ void main() {
     await walkToLast(tester);
     await accept(tester);
     await tester.tap(button("Done"));
-    await settleUntil(tester, () => find.byType(WelcomePage).evaluate().isEmpty,
-        what: "the tour leaving");
+    await settleUntil(
+      tester,
+      () => find.byType(WelcomePage).evaluate().isEmpty,
+      what: "the tour leaving",
+    );
     expect(find.byType(WelcomePage), findsNothing);
     expect(settings().licenceAccepted, isTrue);
 
@@ -322,22 +361,28 @@ void main() {
   // A settings file from before the licence was asked for says only that the
   // tour was seen, which no longer lets the app open.
   testWidgets("a seen tour with no licence tick still opens", (tester) async {
-    await io(tester,
-        () => app.seedSettings(AppSettings.fromJson({"welcomeSeen": true})));
+    await io(
+      tester,
+      () => app.seedSettings(AppSettings.fromJson({"welcomeSeen": true})),
+    );
     await app.pump(tester, const WelcomeGate(child: SizedBox.shrink()));
     await tester.pump();
     expect(find.byType(WelcomePage), findsOneWidget);
   });
 
-  testWidgets("the hint says to scroll until the box is reached",
-      (tester) async {
+  testWidgets("the hint says to scroll until the box is reached", (
+    tester,
+  ) async {
     await app.pump(tester, const WelcomePage());
     await walkToLast(tester);
 
     double hint() => tester
-        .widget<AnimatedOpacity>(find.ancestor(
+        .widget<AnimatedOpacity>(
+          find.ancestor(
             of: find.text("Scroll to the end to agree"),
-            matching: find.byType(AnimatedOpacity)))
+            matching: find.byType(AnimatedOpacity),
+          ),
+        )
         .opacity;
     expect(hint(), 1);
     await tester.drag(licence(), const Offset(0, -100000));

@@ -25,7 +25,9 @@ class ShellCommandAnalysis {
     if (isWindows) {
       return ShellCommandAnalysis._(
         modelable: false,
-        unmodelableReasons: const ["commands on this platform are not analyzed"],
+        unmodelableReasons: const [
+          "commands on this platform are not analyzed",
+        ],
         escalationReasons: const [],
         command: command,
       );
@@ -88,11 +90,10 @@ class ShellCommandAnalysis {
     final all = [...unmodelableReasons, ...escalationReasons];
     if (all.isEmpty) return null;
     final segments = modelableSegments;
-    final segmentAdvice =
-        segments == null || segments.length < 2
-            ? ""
-            : "\nSegments the command parses to, run each as its own bash "
-                "call instead:\n${[for (final s in segments) "- $s"].join("\n")}";
+    final segmentAdvice = segments == null || segments.length < 2
+        ? ""
+        : "\nSegments the command parses to, run each as its own bash "
+              "call instead:\n${[for (final s in segments) "- $s"].join("\n")}";
     return "Not run: this command cannot be checked as one piece. The parse "
         "found:\n${[for (final r in all) "- $r"].join("\n")}\n"
         "A compound command is judged segment by segment, and one the parse "
@@ -126,7 +127,11 @@ class ShellCommandAnalysis {
 /// assignment inside one counts too. [where] says where it was found. False
 /// where a substitution does not tokenize; [reasons] then says why.
 bool _escalate(
-    _Pipeline parsed, List<String> out, List<String> reasons, String where) {
+  _Pipeline parsed,
+  List<String> out,
+  List<String> reasons,
+  String where,
+) {
   // An assignment to a write-deciding name rewrites the environment the
   // parse answered for; one to a git include redirects git's configuration.
   for (final name in parsed.assignments.keys) {
@@ -141,22 +146,33 @@ bool _escalate(
     final target = redirect.target;
     if (target == null) {
       // `&>` with no file, or a target the parse could not resolve.
-      if (!redirect.fdOnly) out.add("cannot tell where the redirect$where writes");
+      if (!redirect.fdOnly) {
+        out.add("cannot tell where the redirect$where writes");
+      }
     } else if (target.any((piece) => piece is _Substitution)) {
-      out.add("redirects$where through a substitution, so the parse cannot "
-          "name the file");
+      out.add(
+        "redirects$where through a substitution, so the parse cannot "
+        "name the file",
+      );
     } else if (target.whereType<_Expansion>().firstOrNull case final e?) {
       // Where the file lands depends on the environment: the sandbox's
       // answer to make, not the parse's guess.
-      out.add("redirects$where through \$${e.name}, so the parse cannot "
-          "name the file");
+      out.add(
+        "redirects$where through \$${e.name}, so the parse cannot "
+        "name the file",
+      );
     }
   }
   for (final word in parsed.words) {
     for (final piece in word.whereType<_Substitution>()) {
       final inner = _tokenize(piece.source, reasons);
       if (reasons.isNotEmpty ||
-          !_escalate(_Pipeline._of(inner), out, reasons, " inside a substitution")) {
+          !_escalate(
+            _Pipeline._of(inner),
+            out,
+            reasons,
+            " inside a substitution",
+          )) {
         return false;
       }
     }
@@ -198,7 +214,8 @@ List<String> _segmentsOf(String command, List<_Tok> tokens) {
             depth++;
           case ")":
             depth--;
-          case "|" || "||" || "&&" || ";" || "&" || ";;" || "\n" when depth == 0:
+          case "|" || "||" || "&&" || ";" || "&" || ";;" || "\n"
+              when depth == 0:
             cut(tok.at);
             from = start = tok.end;
         }
@@ -209,7 +226,10 @@ List<String> _segmentsOf(String command, List<_Tok> tokens) {
     final owner = starts.lastIndexWhere((at) => at <= body.owner);
     texts[owner] += command.substring(body.at, body.end);
   }
-  return [for (final text in texts) if (text.isNotEmpty) text];
+  return [
+    for (final text in texts)
+      if (text.isNotEmpty) text,
+  ];
 }
 
 /// [segment] as the read-only tier reads it: its words in order, leading
@@ -222,7 +242,9 @@ List<String> _segmentsOf(String command, List<_Tok> tokens) {
   final reasons = <String>[];
   final tokens = _tokenize(segment, reasons);
   if (reasons.isNotEmpty ||
-      tokens.any((t) => t.kind == _TokKind.op && (t.text == "(" || t.text == ")"))) {
+      tokens.any(
+        (t) => t.kind == _TokKind.op && (t.text == "(" || t.text == ")"),
+      )) {
     return null;
   }
   final parsed = _Pipeline._of(tokens);
@@ -266,7 +288,8 @@ List<String?> commandWords(String segment) {
         } else if (head) {
           final text = _plainOf(tok);
           commands.add(text);
-          head = text != null &&
+          head =
+              text != null &&
               (_commandPrefixes.contains(text) || _isAssignmentWord(text));
         }
     }
@@ -278,8 +301,18 @@ const _redirectOps = {">", ">>", "&>", "&>>", ">&", "<", "<<", "<<<", "<&"};
 
 /// Words after which the next word is still the command.
 const _commandPrefixes = {
-  "{", "!", "if", "then", "elif", "else", "while", "until", "do", "time",
-  "command", "builtin",
+  "{",
+  "!",
+  "if",
+  "then",
+  "elif",
+  "else",
+  "while",
+  "until",
+  "do",
+  "time",
+  "command",
+  "builtin",
 };
 
 /// Whether [command] reads or writes a file the way the file tools would:
@@ -376,20 +409,20 @@ enum _TokKind { word, op, body }
 /// a body the offset of the `<<` it belongs to: [_segmentsOf] cuts by them.
 class _Tok {
   const _Tok.op(this.text, [this.at = 0])
-      : kind = _TokKind.op,
-        end = at + text.length,
-        owner = 0,
-        pieces = null;
+    : kind = _TokKind.op,
+      end = at + text.length,
+      owner = 0,
+      pieces = null;
   const _Tok.word(this.pieces)
-      : kind = _TokKind.word,
-        text = "",
-        at = 0,
-        end = 0,
-        owner = 0;
+    : kind = _TokKind.word,
+      text = "",
+      at = 0,
+      end = 0,
+      owner = 0;
   const _Tok.body(this.at, this.end, this.owner)
-      : kind = _TokKind.body,
-        text = "",
-        pieces = null;
+    : kind = _TokKind.body,
+      text = "",
+      pieces = null;
   final _TokKind kind;
   final String text;
   final int at;
@@ -440,8 +473,7 @@ class _Pipeline {
           // else after `>&` is a file it writes.
           final fdOnly =
               last.fdOnly && _descriptor.hasMatch(_plain(tok.pieces!) ?? "");
-          current.redirects
-              .add(_Redirect(tok.pieces!, last.fromInput, fdOnly));
+          current.redirects.add(_Redirect(tok.pieces!, last.fromInput, fdOnly));
           expectWord = false;
           continue;
         }
@@ -550,7 +582,9 @@ List<_Tok> _tokenize(String source, List<String> reasons) {
   // `2>`: the descriptor written against a redirect is the redirect's, not a
   // word of the command.
   void dropDescriptor() {
-    if (wordOpen && !quoted && RegExp(r"^\d+$").hasMatch(_plain(pieces) ?? "")) {
+    if (wordOpen &&
+        !quoted &&
+        RegExp(r"^\d+$").hasMatch(_plain(pieces) ?? "")) {
       pieces = <Object>[];
       wordOpen = false;
     }
@@ -566,8 +600,14 @@ List<_Tok> _tokenize(String source, List<String> reasons) {
         if (delimiter == null) {
           reasons.add("a here-document delimiter with an expansion in it");
         }
-        pending.add(_Heredoc(delimiter ?? "",
-            at: delimiterAt, quoted: quoted, dash: dash));
+        pending.add(
+          _Heredoc(
+            delimiter ?? "",
+            at: delimiterAt,
+            quoted: quoted,
+            dash: dash,
+          ),
+        );
       }
     }
     pieces = <Object>[];
@@ -591,7 +631,8 @@ List<_Tok> _tokenize(String source, List<String> reasons) {
         // After an operator that wants more, or before anything, a newline is
         // a line break rather than the end of a command.
         final last = tokens.lastOrNull;
-        final carriesOn = last == null ||
+        final carriesOn =
+            last == null ||
             (last.kind == _TokKind.op && _carriesOn.contains(last.text));
         var end = i;
         if (pending.isNotEmpty) {
@@ -609,9 +650,11 @@ List<_Tok> _tokenize(String source, List<String> reasons) {
           tokens.add(_Tok.op(c + c, i));
           i += 2;
         } else if (c == "&" && two == ">") {
-          tokens.add(_Tok.op(i + 2 < source.length && source[i + 2] == ">"
-              ? "&>>"
-              : "&>"));
+          tokens.add(
+            _Tok.op(
+              i + 2 < source.length && source[i + 2] == ">" ? "&>>" : "&>",
+            ),
+          );
           i += i + 2 < source.length && source[i + 2] == ">" ? 3 : 2;
         } else {
           tokens.add(_Tok.op(c, i));
@@ -737,8 +780,12 @@ List<_Tok> _tokenize(String source, List<String> reasons) {
 const _carriesOn = {"|", "||", "&&", ";", "&", ";;", "(", "\n"};
 
 class _Heredoc {
-  const _Heredoc(this.delimiter,
-      {required this.at, required this.quoted, required this.dash});
+  const _Heredoc(
+    this.delimiter, {
+    required this.at,
+    required this.quoted,
+    required this.dash,
+  });
   final String delimiter;
 
   /// Where its `<<` is, which decides the segment the body goes back on.
@@ -756,8 +803,13 @@ class _Heredoc {
 /// newline before it to the end of its closing line; an unquoted body's
 /// substitutions follow it as one word, so the parse walks them like any
 /// other.
-int? _readBodies(String source, int i, List<_Heredoc> pending,
-    List<_Tok> tokens, List<String> reasons) {
+int? _readBodies(
+  String source,
+  int i,
+  List<_Heredoc> pending,
+  List<_Tok> tokens,
+  List<String> reasons,
+) {
   for (final doc in pending) {
     final start = i;
     int? bodyEnd;

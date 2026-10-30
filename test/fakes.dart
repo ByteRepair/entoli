@@ -14,7 +14,8 @@ import "package:agent_chat/data/builtin/llm/providers/provider.dart";
 import "package:agent_chat/data/builtin/llm/local_prefill.dart";
 import "package:agent_chat/data/sync/channel.dart";
 import "package:agent_chat/data/sync/peers.dart" show PeerState;
-import "package:agent_chat/data/sync/sync_hub.dart" show RemoteChatEntry, RemoteProject;
+import "package:agent_chat/data/sync/sync_hub.dart"
+    show RemoteChatEntry, RemoteProject;
 import "package:agent_chat/domain/app_icon.dart";
 import "package:agent_chat/domain/app_update.dart";
 import "package:agent_chat/domain/app_settings.dart";
@@ -63,7 +64,10 @@ import "package:uuid/uuid.dart";
 /// assert on the call rather than on a browser opening.
 class FakeLinkOpener implements LinkOpener {
   final List<Uri> opened = [];
-  final List<({String chatId, String artifactId, String entryFile, String? title})> openedArtifacts = [];
+  final List<
+    ({String chatId, String artifactId, String entryFile, String? title})
+  >
+  openedArtifacts = [];
 
   @override
   Future<void> open(BuildContext context, Uri url) async => opened.add(url);
@@ -75,8 +79,12 @@ class FakeLinkOpener implements LinkOpener {
     String artifactId, {
     required String entryFile,
     String? title,
-  }) async =>
-      openedArtifacts.add((chatId: chatId, artifactId: artifactId, entryFile: entryFile, title: title));
+  }) async => openedArtifacts.add((
+    chatId: chatId,
+    artifactId: artifactId,
+    entryFile: entryFile,
+    title: title,
+  ));
 }
 
 /// The models [testProvider] is answered with, labelled the way the real
@@ -90,16 +98,18 @@ final testProviderModels = [
 /// [models] as the model catalog, as models.dev would list them: each one
 /// able to answer turns, and fetched, so no page reads as offline.
 void seedCatalog(List<ModelOption> models) =>
-    ModelCatalog.notifier.value = ModelCatalog.parse(jsonEncode({
-      ModelCatalog.fetchedKey: "2026-01-01T00:00:00.000",
-      for (final provider in models.map((m) => m.providerId).toSet())
-        provider: {
-          "models": {
-            for (final m in models.where((m) => m.providerId == provider))
-              m.modelId: {"tool_call": true},
+    ModelCatalog.notifier.value = ModelCatalog.parse(
+      jsonEncode({
+        ModelCatalog.fetchedKey: "2026-01-01T00:00:00.000",
+        for (final provider in models.map((m) => m.providerId).toSet())
+          provider: {
+            "models": {
+              for (final m in models.where((m) => m.providerId == provider))
+                m.modelId: {"tool_call": true},
+            },
           },
-        },
-    }));
+      }),
+    );
 
 /// The provider the model-picker tests configure: one entry with both defaults
 /// named, so the injected "Default" entry has something to point at.
@@ -117,20 +127,25 @@ const testProvider = LlmProviderConfig(
 /// A library whose skills include two names sharing a prefix, so tests can
 /// assert the menu filters, and whose entries are deliberately out of order.
 PromptLibrary testLibrary() => PromptLibrary([
-      _doc(CompletionKind.skill, "review", "review changes"),
-      _doc(CompletionKind.skill, "revert", "undo the last turn"),
-      _doc(CompletionKind.skill, "init", "guided AGENTS.md setup"),
-      _doc(CompletionKind.agent, "explore", "fast codebase search"),
-      _doc(CompletionKind.agent, "build", "the default agent"),
-    ]);
+  _doc(CompletionKind.skill, "review", "review changes"),
+  _doc(CompletionKind.skill, "revert", "undo the last turn"),
+  _doc(CompletionKind.skill, "init", "guided AGENTS.md setup"),
+  _doc(CompletionKind.agent, "explore", "fast codebase search"),
+  _doc(CompletionKind.agent, "build", "the default agent"),
+]);
 
 PromptDocument _doc(CompletionKind kind, String name, String description) =>
-    PromptDocument.parse(kind, name, "---\ndescription: $description\n---\n\nDo $name.\n");
+    PromptDocument.parse(
+      kind,
+      name,
+      "---\ndescription: $description\n---\n\nDo $name.\n",
+    );
 
 /// A real 1x1 PNG: the chip decodes what it is given, so a stand-in string of
 /// bytes would fail the codec rather than render.
 final onePixelPng = base64Decode(
-    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==");
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
+);
 
 /// An attachment with recognisable bytes, so a test can follow the same file
 /// from the composer to the backend and back off disk.
@@ -138,8 +153,11 @@ Attachment testAttachment(
   String filename, {
   String mimeType = "text/plain",
   List<int> bytes = const [104, 105],
-}) =>
-    Attachment(filename: filename, mimeType: mimeType, bytes: Uint8List.fromList(bytes));
+}) => Attachment(
+  filename: filename,
+  mimeType: mimeType,
+  bytes: Uint8List.fromList(bytes),
+);
 
 /// The launcher, which a test has none of. Records what it was told so a test
 /// can assert the home screen was asked to change, not just the settings file.
@@ -186,7 +204,8 @@ class FakeBackgroundWork implements BackgroundWork {
   Future<void> listening(bool active) async => listened.add(active);
 
   @override
-  Future<void> downloading(DownloadNotice? notice) async => downloads.add(notice);
+  Future<void> downloading(DownloadNotice? notice) async =>
+      downloads.add(notice);
 
   @override
   Future<void> prefilling(String? model) async => prefills.add(model);
@@ -212,10 +231,12 @@ Warmup Function() testWarmup({
   List<LlmTool> tools = const [],
 }) =>
     () => (
-          options: poolOptions(AppSettings(localModelKvCachePrompts: kvCachePrompts)),
-          messages: messages,
-          tools: tools,
-        );
+      options: poolOptions(
+        AppSettings(localModelKvCachePrompts: kvCachePrompts),
+      ),
+      messages: messages,
+      tools: tools,
+    );
 
 /// A user message as the app would have logged one, for the tests that hand a
 /// turn to an agent or a backend. `sendPrompt` and `BuiltinAgent.run` take the
@@ -226,14 +247,16 @@ Message userMessage(
   DateTime? at,
   Map<String, String> documents = const {},
   List<MessagePart> files = const [],
-}) =>
-    Message(
-      id: "u1",
-      role: MessageRole.user,
-      createdAt: at ?? DateTime(2026),
-      parts: [...files, MessagePart.text(text: text)],
-      documents: documents,
-    );
+}) => Message(
+  id: "u1",
+  role: MessageRole.user,
+  createdAt: at ?? DateTime(2026),
+  parts: [
+    ...files,
+    MessagePart.text(text: text),
+  ],
+  documents: documents,
+);
 
 /// Stands in for the platform's file chooser, which no test can drive.
 class FakeAttachmentPicker implements AttachmentPicker {
@@ -285,7 +308,10 @@ class FakeBackupHandoff implements BackupHandoff {
   Directory? dir;
 
   @override
-  Future<bool> save(String name, Future<void> Function(String path) write) async {
+  Future<bool> save(
+    String name,
+    Future<void> Function(String path) write,
+  ) async {
     final into = dir ??= await Directory.systemTemp.createTemp("backups_");
     final path = p.join(into.path, "${saved.length}-$name");
     await write(path);
@@ -396,8 +422,13 @@ class FakeReminderAlarms implements ReminderAlarms {
   }
 
   @override
-  Future<void> schedule(int requestCode, DateTime at,
-      {String? calendar, String? label, String? chatId}) async {
+  Future<void> schedule(
+    int requestCode,
+    DateTime at, {
+    String? calendar,
+    String? label,
+    String? chatId,
+  }) async {
     scheduled[requestCode] = at;
   }
 
@@ -413,8 +444,10 @@ class FakeReminderAlarms implements ReminderAlarms {
   List<int> staleHeld = [];
 
   @override
-  Future<List<int>> staleCodes(Set<int> wanted) async =>
-      [for (final code in staleHeld) if (!wanted.contains(code)) code];
+  Future<List<int>> staleCodes(Set<int> wanted) async => [
+    for (final code in staleHeld)
+      if (!wanted.contains(code)) code,
+  ];
 
   @override
   Future<bool> canHoldTurn() async => canHold;
@@ -520,8 +553,7 @@ class _IncomingBytes extends IncomingFile {
   final Uint8List bytes;
 
   @override
-  Future<void> writeTo(String target) =>
-      File(target).writeAsBytes(bytes);
+  Future<void> writeTo(String target) => File(target).writeAsBytes(bytes);
 }
 
 /// A chat's background jobs as a test sets them.
@@ -536,8 +568,9 @@ class FakeShellJobs implements ChatShellJobs {
   final List<int> stopped = [];
 
   /// Where a test ends a job.
-  final endings =
-      StreamController<({String callId, JobEnd end})>.broadcast(sync: true);
+  final endings = StreamController<({String callId, JobEnd end})>.broadcast(
+    sync: true,
+  );
 
   @override
   Stream<({String callId, JobEnd end})> get ended => endings.stream;
@@ -596,8 +629,11 @@ class FakeBackend implements AgentBackend {
   String? scriptedAnswer;
 
   @override
-  Future<String?> ask(String prompt,
-      {required String? model, required String? provider}) async {
+  Future<String?> ask(
+    String prompt, {
+    required String? model,
+    required String? provider,
+  }) async {
     questions.add((prompt: prompt, model: model, provider: provider));
     return scriptedAnswer;
   }
@@ -606,7 +642,7 @@ class FakeBackend implements AgentBackend {
   /// shown of a turn is the whole message, so a test that wants the text, the
   /// date or what a `/skill` meant asks the message for it.
   final List<({Message prompt, List<Message> history, TurnSettings settings})>
-      prompts = [];
+  prompts = [];
 
   /// What the next turn streams back. Defaults to an immediate, empty reply.
   List<AgentEvent> scriptedEvents = const [DoneEvent()];
@@ -617,20 +653,22 @@ class FakeBackend implements AgentBackend {
   /// first, so a test setting either gets what it set.
   List<List<AgentEvent>> scriptedRounds = const [];
 
-  List<AgentEvent> _next() => scriptedRounds.isEmpty
-      ? scriptedEvents
-      : scriptedRounds.removeAt(0);
+  List<AgentEvent> _next() =>
+      scriptedRounds.isEmpty ? scriptedEvents : scriptedRounds.removeAt(0);
 
   /// When set, the turn stays open after the scripted events, the way a real
   /// one does while the backend is still working.
   Completer<void>? hold;
 
   @override
-  Stream<AgentEvent> sendPrompt(String chatId, Message prompt,
-      {List<Message> history = const [],
-      List<ConversationCompaction> compactions = const [],
-      TurnSettings settings = const TurnSettings(),
-      SteerInbox? steers}) async* {
+  Stream<AgentEvent> sendPrompt(
+    String chatId,
+    Message prompt, {
+    List<Message> history = const [],
+    List<ConversationCompaction> compactions = const [],
+    TurnSettings settings = const TurnSettings(),
+    SteerInbox? steers,
+  }) async* {
     prompts.add((prompt: prompt, history: history, settings: settings));
     this.steers = steers;
     yield* Stream.fromIterable(_next());
@@ -641,11 +679,13 @@ class FakeBackend implements AgentBackend {
   final List<({List<Message> history, TurnSettings settings})> resumes = [];
 
   @override
-  Stream<AgentEvent> resumeTurn(String chatId,
-      {List<Message> history = const [],
-      List<ConversationCompaction> compactions = const [],
-      TurnSettings settings = const TurnSettings(),
-      SteerInbox? steers}) async* {
+  Stream<AgentEvent> resumeTurn(
+    String chatId, {
+    List<Message> history = const [],
+    List<ConversationCompaction> compactions = const [],
+    TurnSettings settings = const TurnSettings(),
+    SteerInbox? steers,
+  }) async* {
     resumes.add((history: history, settings: settings));
     this.steers = steers;
     yield* Stream.fromIterable(_next());
@@ -682,9 +722,11 @@ class FakeBackend implements AgentBackend {
   final List<List<Message>> resets = [];
 
   @override
-  Future<void> resetSession(String chatId,
-      {List<Message> history = const [],
-      List<ConversationCompaction> compactions = const []}) async {
+  Future<void> resetSession(
+    String chatId, {
+    List<Message> history = const [],
+    List<ConversationCompaction> compactions = const [],
+  }) async {
     resets.add(history);
   }
 
@@ -696,16 +738,22 @@ class FakeBackend implements AgentBackend {
   final List<({String? instructions, int historyLength})> compactionCalls = [];
 
   @override
-  Future<ConversationCompaction?> compact(String chatId,
-      {required List<Message> history,
-      required List<ConversationCompaction> compactions,
-      required TurnSettings settings,
-      required String? instructions}) async {
-    compactionCalls
-        .add((instructions: instructions, historyLength: history.length));
+  Future<ConversationCompaction?> compact(
+    String chatId, {
+    required List<Message> history,
+    required List<ConversationCompaction> compactions,
+    required TurnSettings settings,
+    required String? instructions,
+  }) async {
+    compactionCalls.add((
+      instructions: instructions,
+      historyLength: history.length,
+    ));
     if (scriptedSummary == null) return null;
     return ConversationCompaction(
-        upToMessageId: history.lastOrNull?.id ?? "", summary: scriptedSummary!);
+      upToMessageId: history.lastOrNull?.id ?? "",
+      summary: scriptedSummary!,
+    );
   }
 
   @override
@@ -735,7 +783,10 @@ class FakeBackend implements AgentBackend {
 
   @override
   Future<void> respondApproval(
-      String chatId, String approvalId, ApprovalResponse response) async {
+    String chatId,
+    String approvalId,
+    ApprovalResponse response,
+  ) async {
     approvals.add((approvalId: approvalId, response: response));
   }
 
@@ -743,7 +794,10 @@ class FakeBackend implements AgentBackend {
 
   @override
   Future<void> respondQuestions(
-      String chatId, String requestId, List<String?> answers) async {
+    String chatId,
+    String requestId,
+    List<String?> answers,
+  ) async {
     answered.add((requestId: requestId, answers: answers));
   }
 
@@ -762,10 +816,26 @@ class FakeBackend implements AgentBackend {
   /// Two providers, two models each, deliberately not in alphabetical order so
   /// tests can assert the UI sorts them.
   List<ModelOption> modelList = const [
-    ModelOption(providerId: "ollama-cloud", modelId: "llama-3", label: "Llama 3"),
-    ModelOption(providerId: "ollama-cloud", modelId: "qwen-2.5", label: "Qwen 2.5"),
-    ModelOption(providerId: "anthropic", modelId: "claude-sonnet-4", label: "Claude Sonnet 4"),
-    ModelOption(providerId: "anthropic", modelId: "claude-haiku-3", label: "Claude Haiku 3"),
+    ModelOption(
+      providerId: "ollama-cloud",
+      modelId: "llama-3",
+      label: "Llama 3",
+    ),
+    ModelOption(
+      providerId: "ollama-cloud",
+      modelId: "qwen-2.5",
+      label: "Qwen 2.5",
+    ),
+    ModelOption(
+      providerId: "anthropic",
+      modelId: "claude-sonnet-4",
+      label: "Claude Sonnet 4",
+    ),
+    ModelOption(
+      providerId: "anthropic",
+      modelId: "claude-haiku-3",
+      label: "Claude Haiku 3",
+    ),
   ];
 
   @override
@@ -777,7 +847,10 @@ class FakeBackend implements AgentBackend {
 
   @override
   T? resolveModel<T extends Model>(ModelRef ref) => resolveIn<T>(
-      providers(), ref, (_) => ModelHost.resolving(cutsUtterances: cutsUtterances));
+    providers(),
+    ref,
+    (_) => ModelHost.resolving(cutsUtterances: cutsUtterances),
+  );
 }
 
 /// A `ChatStore` that keeps everything in memory, for the tests whose subject
@@ -791,14 +864,17 @@ class FakeChatStore implements ChatStore {
   final Map<String, List<ChatRecord>> _logs = {};
   final Map<String, ChatMeta> _metas = {};
   final Map<String, Map<String, Uint8List>> _resources = {};
+
   /// artifactId → relativePath → bytes, per chat.
   final Map<String, Map<String, Map<String, Uint8List>>> _artifacts = {};
+
   /// installId → package bytes, per chat.
   final Map<String, Map<String, Uint8List>> _skillInstalls = {};
   final Set<String> _projects = {};
 
   /// The chat's log, as it has been appended to. What the log tests assert on.
-  List<ChatRecord> records(String chatId) => List.unmodifiable(_logs[chatId] ?? const []);
+  List<ChatRecord> records(String chatId) =>
+      List.unmodifiable(_logs[chatId] ?? const []);
 
   @override
   Future<void> append(String chatId, List<ChatRecord> records) async =>
@@ -833,12 +909,15 @@ class FakeChatStore implements ChatStore {
       _subAgents["$chatId/$callId"] = records;
 
   @override
-  Future<List<ChatRecord>> readSubAgentRecords(String chatId, String callId) async =>
-      _subAgents["$chatId/$callId"] ?? const [];
+  Future<List<ChatRecord>> readSubAgentRecords(
+    String chatId,
+    String callId,
+  ) async => _subAgents["$chatId/$callId"] ?? const [];
 
   @override
   Future<List<ChatState>> list() async =>
-      _states.values.toList()..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+      _states.values.toList()
+        ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
 
   @override
   Future<List<String>> listProjects() async => _projects.toList()..sort();
@@ -852,7 +931,11 @@ class FakeChatStore implements ChatStore {
   @override
   Future<void> deleteProject(String name) async {
     _projects.remove(name);
-    for (final id in _states.entries.where((e) => e.value.project == name).map((e) => e.key).toList()) {
+    for (final id
+        in _states.entries
+            .where((e) => e.value.project == name)
+            .map((e) => e.key)
+            .toList()) {
       await delete(id);
     }
   }
@@ -873,7 +956,11 @@ class FakeChatStore implements ChatStore {
   }
 
   @override
-  Future<String> saveResource(String chatId, String filename, Uint8List bytes) async {
+  Future<String> saveResource(
+    String chatId,
+    String filename,
+    Uint8List bytes,
+  ) async {
     final resource = resourceName(filename);
     _resources.putIfAbsent(chatId, () => {})[resource] = bytes;
     return resource;
@@ -892,8 +979,11 @@ class FakeChatStore implements ChatStore {
 
   @override
   Future<String> createArtifact(
-      String chatId, String sourceDir, String entryFile,
-      {String? project}) async {
+    String chatId,
+    String sourceDir,
+    String entryFile, {
+    String? project,
+  }) async {
     final artifactId = const Uuid().v4();
     _artifacts.putIfAbsent(chatId, () => {})[artifactId] = {
       entryFile: Uint8List.fromList(utf8.encode("<p>")),
@@ -902,9 +992,13 @@ class FakeChatStore implements ChatStore {
   }
 
   @override
-  Future<void> updateArtifact(String chatId, String artifactId,
-      String sourceDir, String entryFile,
-      {String? project}) async {
+  Future<void> updateArtifact(
+    String chatId,
+    String artifactId,
+    String sourceDir,
+    String entryFile, {
+    String? project,
+  }) async {
     // Record that an update happened; the fake doesn't actually copy.
     _artifacts.putIfAbsent(chatId, () => {}).putIfAbsent(artifactId, () => {});
   }
@@ -918,8 +1012,11 @@ class FakeChatStore implements ChatStore {
   Future<String?> readPlan(String chatId) async => _plans[chatId];
 
   @override
-  Future<Uint8List?> readArtifactZip(String chatId, String artifactId,
-      {String? project}) async {
+  Future<Uint8List?> readArtifactZip(
+    String chatId,
+    String artifactId, {
+    String? project,
+  }) async {
     final files = _artifacts[chatId]?[artifactId];
     if (files == null || files.isEmpty) return null;
     final archive = Archive();
@@ -934,15 +1031,20 @@ class FakeChatStore implements ChatStore {
   /// artifact holds, and `createArtifact` copies a source directory a test
   /// building a wire case has no reason to make.
   void stageArtifact(
-          String chatId, String artifactId, Map<String, List<int>> files) =>
-      _artifacts.putIfAbsent(chatId, () => {})[artifactId] = {
-        for (final MapEntry(key: name, value: bytes) in files.entries)
-          name: Uint8List.fromList(bytes),
-      };
+    String chatId,
+    String artifactId,
+    Map<String, List<int>> files,
+  ) => _artifacts.putIfAbsent(chatId, () => {})[artifactId] = {
+    for (final MapEntry(key: name, value: bytes) in files.entries)
+      name: Uint8List.fromList(bytes),
+  };
 
   @override
-  Future<String> artifactPath(String chatId, String artifactId, {String? project}) async =>
-      "/tmp/test/$chatId/artifacts/$artifactId";
+  Future<String> artifactPath(
+    String chatId,
+    String artifactId, {
+    String? project,
+  }) async => "/tmp/test/$chatId/artifacts/$artifactId";
 
   @override
   Future<Uint8List?> readSkillInstall(String chatId, String installId) async =>
@@ -953,20 +1055,19 @@ class FakeChatStore implements ChatStore {
       _skillInstalls.putIfAbsent(chatId, () => {})[installId] = bytes;
 
   @override
-  Future<ChatMeta> loadMeta(String chatId) async => _metas[chatId] ?? ChatMeta();
+  Future<ChatMeta> loadMeta(String chatId) async =>
+      _metas[chatId] ?? ChatMeta();
 
   @override
-  Future<void> saveMeta(String chatId, ChatMeta meta) async => _metas[chatId] = meta;
+  Future<void> saveMeta(String chatId, ChatMeta meta) async =>
+      _metas[chatId] = meta;
 }
 
 /// Listening and speaking, with neither. [hear] is the user saying something
 /// and [spoken] is what the reply came out as, which is the pair every voice
 /// test is written against.
 class FakeVoice extends Voice {
-  FakeVoice({
-    this.hasEngineInstalls = true,
-    this.hasModelCatalog = true,
-  });
+  FakeVoice({this.hasEngineInstalls = true, this.hasModelCatalog = true});
 
   /// False is a desktop: no engine installs to offer, so no missing-engine
   /// block. True is Android, the one platform the block is drawn for.
@@ -981,8 +1082,10 @@ class FakeVoice extends Voice {
   /// The native picks the usable set is seeded with. Android's, unless a
   /// test makes this fake an iPhone's.
   @override
-  ({String recognition, String speech}) nativePicks =
-      (recognition: nativeRecognition.id, speech: nativeSpeech.id);
+  ({String recognition, String speech}) nativePicks = (
+    recognition: nativeRecognition.id,
+    speech: nativeSpeech.id,
+  );
 
   /// Set to make [start] throw, which is a model that will not load or a
   /// microphone the user said no to.
@@ -1071,7 +1174,8 @@ class FakeVoiceSession implements VoiceSession {
 
 /// A Linux or two, without one on disk.
 class FakeRootfsStore extends RootfsStore {
-  FakeRootfsStore({Set<String> installed = const {}}) : _installed = {...installed};
+  FakeRootfsStore({Set<String> installed = const {}})
+    : _installed = {...installed};
 
   final Set<String> _installed;
 
@@ -1088,14 +1192,18 @@ class FakeRootfsStore extends RootfsStore {
   Future<Set<String>> installed() async => {..._installed};
 
   @override
-  Future<String?> directoryOf(Rootfs rootfs) async => directoryOfSync(rootfs.id);
+  Future<String?> directoryOf(Rootfs rootfs) async =>
+      directoryOfSync(rootfs.id);
 
   @override
   String? directoryOfSync(String id) =>
       _installed.contains(id) ? "/rootfs/$id" : null;
 
   @override
-  Stream<DownloadProgress> install(Rootfs rootfs, {required String abi}) async* {
+  Stream<DownloadProgress> install(
+    Rootfs rootfs, {
+    required String abi,
+  }) async* {
     final image = rootfs.imageFor(abi)!;
     yield DownloadProgress(received: 0, total: image.bytes);
     if (failNext case final error?) {
@@ -1116,7 +1224,8 @@ class FakeRootfsStore extends RootfsStore {
 
 /// [model] as the store would describe it once downloaded: a 4B's cache cost
 /// and a 256K window, at [file].
-DownloadedModel downloadedAs(LocalModel model, {String? file}) => DownloadedModel(
+DownloadedModel downloadedAs(LocalModel model, {String? file}) =>
+    DownloadedModel(
       id: model.id,
       name: model.name.isEmpty ? model.id : model.name,
       file: file ?? "/models/${model.id}/model.gguf",
@@ -1134,12 +1243,15 @@ DownloadedModel downloadedAs(LocalModel model, {String? file}) => DownloadedMode
 /// An id the catalog does not have is described by the id alone.
 class FakeLocalModelStore extends LocalModelStore {
   FakeLocalModelStore({Set<String> installed = const {}})
-      : _installed = {
-          for (final id in installed)
-            id: downloadedAs(<LocalModel>[...ggufCatalog, ...mlxCatalog]
-                .firstWhere((m) => m.id == id,
-                    orElse: () => GgufModel(id: id, name: id, url: ""))),
-        };
+    : _installed = {
+        for (final id in installed)
+          id: downloadedAs(
+            <LocalModel>[...ggufCatalog, ...mlxCatalog].firstWhere(
+              (m) => m.id == id,
+              orElse: () => GgufModel(id: id, name: id, url: ""),
+            ),
+          ),
+      };
 
   final Map<String, DownloadedModel> _installed;
 
@@ -1206,14 +1318,16 @@ class FakeLocalLlm extends LocalLlm {
   /// from what was already up, since "it did not start a second copy" is a
   /// thing worth asserting.
   final List<
-      ({
-        String modelId,
-        String? device,
-        int? contextLength,
-        int maxRunning,
-        int? threads,
-        bool kvCache,
-      })> served = [];
+    ({
+      String modelId,
+      String? device,
+      int? contextLength,
+      int maxRunning,
+      int? threads,
+      bool kvCache,
+    })
+  >
+  served = [];
 
   var stops = 0;
 
@@ -1253,7 +1367,9 @@ class FakeLocalLlm extends LocalLlm {
       failure: ready ? null : failure,
     );
     running.value = [
-      ...running.value.where((each) => each.modelId != modelId).take(maxRunning - 1),
+      ...running.value
+          .where((each) => each.modelId != modelId)
+          .take(maxRunning - 1),
       state,
     ];
     if (loading != null) await loading!.future;
@@ -1277,7 +1393,7 @@ class FakeLocalLlm extends LocalLlm {
 /// — so this only has to answer what is installed.
 class FakeVoiceModelStore extends VoiceModelStore {
   FakeVoiceModelStore({Set<String> installed = const {}})
-      : _installed = {...installed};
+    : _installed = {...installed};
 
   final Set<String> _installed;
 
@@ -1457,9 +1573,10 @@ class FakeRelaySignaling implements RelaySignaling {
   Future<void> send(Map<String, Object?> json) async => sent.add(json);
 
   @override
-  Future<Map<String, dynamic>> waitFor(String field,
-          {Duration timeout = const Duration(seconds: 45)}) =>
-      messages.firstWhere((m) => m.containsKey(field)).timeout(timeout);
+  Future<Map<String, dynamic>> waitFor(
+    String field, {
+    Duration timeout = const Duration(seconds: 45),
+  }) => messages.firstWhere((m) => m.containsKey(field)).timeout(timeout);
 
   @override
   Future<void> close() async {
@@ -1550,7 +1667,9 @@ class FakeTriggerTurnDriver implements TriggerTurnDriver {
 
   @override
   Future<({TriggerOutcome outcome, String snippet})> send(
-      String chatId, String prompt) async {
+    String chatId,
+    String prompt,
+  ) async {
     calls.add((chatId: chatId, prompt: prompt));
     return (outcome: outcome, snippet: snippet);
   }
@@ -1595,12 +1714,23 @@ class StubRuns implements TriggerRuns {
   Completer<void>? gate;
 
   @override
-  Future<TriggerRunResult> run(Trigger trigger, String reason, List<String> projects) async {
+  Future<TriggerRunResult> run(
+    Trigger trigger,
+    String reason,
+    List<String> projects,
+  ) async {
     firedIds.add(trigger.id);
     reasons.add(reason);
-    final stamped = nowOf == null ? trigger : trigger.copyWith(lastFiredAt: nowOf!());
+    final stamped = nowOf == null
+        ? trigger
+        : trigger.copyWith(lastFiredAt: nowOf!());
     await stampThrough?.call(stamped);
     if (gate != null) await gate!.future;
-    return (chatId: "chat-${trigger.id}", outcome: TriggerOutcome.done, snippet: "done", targetGone: false);
+    return (
+      chatId: "chat-${trigger.id}",
+      outcome: TriggerOutcome.done,
+      snippet: "done",
+      targetGone: false,
+    );
   }
 }

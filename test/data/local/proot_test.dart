@@ -25,42 +25,44 @@ void main() {
     String? abi = "x86_64",
     String? projectSkillsBundled,
     String? projectUserSkills,
-  }) =>
-      prootDriver(
-        proot: from,
-        rootfs: alpine,
-        rootfsDir: "/data/user/0/pkg/cache/rootfs/alpine",
-        defaultSkillsBundledDir: defaultSkillsBundled,
-        defaultUserSkillsDir: defaultUserSkills,
-        projectSkillsBundledDir: projectSkillsBundled,
-        projectUserSkillsDir: projectUserSkills,
-        abi: abi,
-      );
+  }) => prootDriver(
+    proot: from,
+    rootfs: alpine,
+    rootfsDir: "/data/user/0/pkg/cache/rootfs/alpine",
+    defaultSkillsBundledDir: defaultSkillsBundled,
+    defaultUserSkillsDir: defaultUserSkills,
+    projectSkillsBundledDir: projectSkillsBundled,
+    projectUserSkillsDir: projectUserSkills,
+    abi: abi,
+  );
 
   /// The value of the argument after [flag], as a list because a bind is given
   /// several times over.
   List<String> valuesOf(List<String> command, String flag) => [
-        for (var i = 0; i < command.length - 1; i++)
-          if (command[i] == flag) command[i + 1],
-      ];
+    for (var i = 0; i < command.length - 1; i++)
+      if (command[i] == flag) command[i + 1],
+  ];
 
-  test("the loader is named where it is, since it is the one file really exec'd",
-      () {
-    final driver = build();
+  test(
+    "the loader is named where it is, since it is the one file really exec'd",
+    () {
+      final driver = build();
 
-    expect(driver.environment["PROOT_LOADER"], proot.loader);
-    expect(driver.environment.containsKey("PROOT_LOADER_32"), isFalse);
-  });
+      expect(driver.environment["PROOT_LOADER"], proot.loader);
+      expect(driver.environment.containsKey("PROOT_LOADER_32"), isFalse);
+    },
+  );
 
   test("a 32-bit loader is named where the architecture has one", () {
     final driver = build(
-        from: const Proot(
-      binary: "/lib/libproot.so",
-      loader: "/lib/libproot-loader.so",
-      loader32: "/lib/libproot-loader32.so",
-      tmpDir: "/tmp",
-      resolvConf: "/tmp/resolv.conf",
-    ));
+      from: const Proot(
+        binary: "/lib/libproot.so",
+        loader: "/lib/libproot-loader.so",
+        loader32: "/lib/libproot-loader32.so",
+        tmpDir: "/tmp",
+        resolvConf: "/tmp/resolv.conf",
+      ),
+    );
 
     expect(driver.environment["PROOT_LOADER_32"], "/lib/libproot-loader32.so");
   });
@@ -70,48 +72,72 @@ void main() {
     final driver = build();
     final binds = valuesOf(driver.commandFor(cwd, home), "-b");
 
-    expect(binds, containsAll([
-      "$home:/root",
-      "$defaultSkillsBundled:/opt/skills-bundled",
-      "$defaultUserSkills:/opt/skills",
-      // Android keeps no resolv.conf of its own.
-      "${proot.resolvConf}:/etc/resolv.conf",
-    ]));
+    expect(
+      binds,
+      containsAll([
+        "$home:/root",
+        "$defaultSkillsBundled:/opt/skills-bundled",
+        "$defaultUserSkills:/opt/skills",
+        // Android keeps no resolv.conf of its own.
+        "${proot.resolvConf}:/etc/resolv.conf",
+      ]),
+    );
     expect(binds, isNot(contains("$dataDir:$dataDir")));
-    expect(driver.hostToGuestPaths[defaultSkillsBundled], "/opt/skills-bundled");
+    expect(
+      driver.hostToGuestPaths[defaultSkillsBundled],
+      "/opt/skills-bundled",
+    );
     expect(driver.hostToGuestPaths[defaultUserSkills], "/opt/skills");
   });
 
   test("a read-only dir is bound at its own path unless bound already, and "
       "each is kept from the fake root", () {
     const resources = "$dataDir/projects/default/chats/abc-123/resources";
-    final command = build().commandFor(cwd, home,
-        readOnly: [resources, defaultSkillsBundled, defaultUserSkills]);
+    final command = build().commandFor(
+      cwd,
+      home,
+      readOnly: [resources, defaultSkillsBundled, defaultUserSkills],
+    );
 
     expect(valuesOf(command, "-b"), contains("$resources:$resources"));
-    expect(valuesOf(command, "-b"),
-        isNot(contains("$defaultSkillsBundled:$defaultSkillsBundled")),
-        reason: "a skills directory is reached at its clean path");
-    expect(valuesOf(command, "--read-only"),
-        [resources, defaultSkillsBundled, defaultUserSkills]);
-    expect(command.indexOf("--read-only"), greaterThan(command.indexOf("-0")),
-        reason: "beside the fake root it qualifies");
+    expect(
+      valuesOf(command, "-b"),
+      isNot(contains("$defaultSkillsBundled:$defaultSkillsBundled")),
+      reason: "a skills directory is reached at its clean path",
+    );
+    expect(valuesOf(command, "--read-only"), [
+      resources,
+      defaultSkillsBundled,
+      defaultUserSkills,
+    ]);
+    expect(
+      command.indexOf("--read-only"),
+      greaterThan(command.indexOf("-0")),
+      reason: "beside the fake root it qualifies",
+    );
   });
 
   test("a project's own skills dirs are bound beside the default's", () {
     const projectSkillsBundled = "$dataDir/projects/byte-repair/skills-bundled";
     const projectUserSkills = "$dataDir/projects/byte-repair/skills";
     final driver = build(
-        projectSkillsBundled: projectSkillsBundled,
-        projectUserSkills: projectUserSkills);
+      projectSkillsBundled: projectSkillsBundled,
+      projectUserSkills: projectUserSkills,
+    );
     final command = driver.commandFor(cwd, home);
 
-    expect(valuesOf(command, "-b"),
-        contains("$projectSkillsBundled:/opt/skills-bundled-project"));
-    expect(valuesOf(command, "-b"),
-        contains("$projectUserSkills:/opt/skills-project"));
-    expect(driver.hostToGuestPaths[projectSkillsBundled],
-        "/opt/skills-bundled-project");
+    expect(
+      valuesOf(command, "-b"),
+      contains("$projectSkillsBundled:/opt/skills-bundled-project"),
+    );
+    expect(
+      valuesOf(command, "-b"),
+      contains("$projectUserSkills:/opt/skills-project"),
+    );
+    expect(
+      driver.hostToGuestPaths[projectSkillsBundled],
+      "/opt/skills-bundled-project",
+    );
     expect(driver.hostToGuestPaths[projectUserSkills], "/opt/skills-project");
   });
 
@@ -125,9 +151,14 @@ void main() {
     expect(command, containsAll(["--kill-on-exit", "--link2symlink", "-0"]));
   });
 
-  test("the working directory is the guest path of the chat workspace, not /", () {
-    expect(valuesOf(build().commandFor(cwd, home), "-w"), ["/root/chats/abc-123"]);
-  });
+  test(
+    "the working directory is the guest path of the chat workspace, not /",
+    () {
+      expect(valuesOf(build().commandFor(cwd, home), "-w"), [
+        "/root/chats/abc-123",
+      ]);
+    },
+  );
 
   test("the guest's own environment: its PATH and package manager, no HOME "
       "(the shell sets the project's), nothing of the parent's", () {

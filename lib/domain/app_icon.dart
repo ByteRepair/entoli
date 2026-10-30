@@ -4,10 +4,7 @@ enum AppIcon {
     label: "Cookie",
     description: "A shell prompt in Material 3's scalloped shape.",
   ),
-  prompt(
-    label: "Prompt",
-    description: "The same prompt in a speech bubble.",
-  );
+  prompt(label: "Prompt", description: "The same prompt in a speech bubble.");
 
   const AppIcon({required this.label, required this.description});
 

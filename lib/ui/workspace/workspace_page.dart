@@ -32,7 +32,9 @@ class WorkspaceTile extends StatelessWidget {
       title: "Workspace",
       subtitle: "Browse files",
       onTap: () => Navigator.of(context).push(
-        MaterialPageRoute(builder: (_) => WorkspacePage(root: root, title: title)),
+        MaterialPageRoute(
+          builder: (_) => WorkspacePage(root: root, title: title),
+        ),
       ),
     );
   }
@@ -81,11 +83,10 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage> {
   }
 
   void _reload() => setState(() {
-        _entries = _read();
-      });
+    _entries = _read();
+  });
 
-  Future<List<WorkspaceEntry>> _read() =>
-      listWorkspace(_dir);
+  Future<List<WorkspaceEntry>> _read() => listWorkspace(_dir);
 
   /// A selection is one folder's, which is what lets the share sheet be handed
   /// a flat staging directory — so leaving the folder ends it.
@@ -124,9 +125,11 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage> {
   Future<void> _open(WorkspaceEntry entry) async {
     if (entry.isDirectory) return _goTo(entry.path);
     if (looksTextual(entry.name)) {
-      final handOff = await Navigator.of(context).push<bool>(MaterialPageRoute(
-        builder: (_) => TextFilePage(path: entry.path, name: entry.name),
-      ));
+      final handOff = await Navigator.of(context).push<bool>(
+        MaterialPageRoute(
+          builder: (_) => TextFilePage(path: entry.path, name: entry.name),
+        ),
+      );
       if (handOff != true || !mounted) return;
     }
     await _guard(() => ref.read(fileHandoffProvider).open(entry.path));
@@ -185,66 +188,67 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage> {
         if (!didPop) _back();
       },
       child: Scaffold(
-      appBar: AppBar(
-        leading: BackButton(onPressed: _back),
-        title: _Title(
-          text: _selected.isNotEmpty
-              ? "${_selected.length} selected"
-              : (_atRoot ? widget.title : p.basename(_dir)),
-          under: _atRoot ? null : p.relative(_dir, from: widget.root),
-        ),
-        actions: _selecting ? _selectionActions() : _browseActions(handoff),
-      ),
-      floatingActionButton: !handoff.canShare || _selected.isEmpty
-          ? null
-          : FloatingActionButton.extended(
-              onPressed: _export,
-              icon: const Icon(Icons.ios_share),
-              label: const Text("Share"),
-            ),
-      body: Column(
-        children: [
-          // The row is there either way: a bar that appears would push the
-          // listing down under the finger that started the work.
-          BusyBar(_busy),
-          Expanded(
-            child: FutureBuilder<List<WorkspaceEntry>>(
-              future: _entries,
-              builder: (context, snapshot) {
-                if (!snapshot.hasData) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-                final entries = snapshot.data!;
-                if (entries.isEmpty) {
-                  final route = _inboundRoute(handoff);
-                  return EmptyPane(
-                    icon: Icons.folder_open,
-                    title: "Nothing here yet",
-                    detail: "The agent's files land here."
-                        "${route == null ? "" : " $route"}",
-                  );
-                }
-                return ListView.builder(
-                  itemCount: entries.length,
-                  itemBuilder: (context, i) => _Row(
-                    entry: entries[i],
-                    selecting: _selecting,
-                    selected: _selected.contains(entries[i].path),
-                    onTap: () {
-                      if (_selecting) {
-                        _toggle(entries[i]);
-                      } else {
-                        _open(entries[i]);
-                      }
-                    },
-                    onLongPress: () => _select(entries[i]),
-                  ),
-                );
-              },
-            ),
+        appBar: AppBar(
+          leading: BackButton(onPressed: _back),
+          title: _Title(
+            text: _selected.isNotEmpty
+                ? "${_selected.length} selected"
+                : (_atRoot ? widget.title : p.basename(_dir)),
+            under: _atRoot ? null : p.relative(_dir, from: widget.root),
           ),
-        ],
-      ),
+          actions: _selecting ? _selectionActions() : _browseActions(handoff),
+        ),
+        floatingActionButton: !handoff.canShare || _selected.isEmpty
+            ? null
+            : FloatingActionButton.extended(
+                onPressed: _export,
+                icon: const Icon(Icons.ios_share),
+                label: const Text("Share"),
+              ),
+        body: Column(
+          children: [
+            // The row is there either way: a bar that appears would push the
+            // listing down under the finger that started the work.
+            BusyBar(_busy),
+            Expanded(
+              child: FutureBuilder<List<WorkspaceEntry>>(
+                future: _entries,
+                builder: (context, snapshot) {
+                  if (!snapshot.hasData) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+                  final entries = snapshot.data!;
+                  if (entries.isEmpty) {
+                    final route = _inboundRoute(handoff);
+                    return EmptyPane(
+                      icon: Icons.folder_open,
+                      title: "Nothing here yet",
+                      detail:
+                          "The agent's files land here."
+                          "${route == null ? "" : " $route"}",
+                    );
+                  }
+                  return ListView.builder(
+                    itemCount: entries.length,
+                    itemBuilder: (context, i) => _Row(
+                      entry: entries[i],
+                      selecting: _selecting,
+                      selected: _selected.contains(entries[i].path),
+                      onTap: () {
+                        if (_selecting) {
+                          _toggle(entries[i]);
+                        } else {
+                          _open(entries[i]);
+                        }
+                      },
+                      onLongPress: () => _select(entries[i]),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -252,46 +256,46 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage> {
   /// What can be done to what is picked. It replaces the browsing actions
   /// rather than sitting beside them.
   List<Widget> _selectionActions() => [
-        if (_selected.isNotEmpty)
-          IconButton(
-            icon: const Icon(Icons.delete_outline),
-            tooltip: "Delete",
-            onPressed: _delete,
-          ),
-        IconButton(
-          icon: const Icon(Icons.close),
-          tooltip: "Cancel selection",
-          onPressed: () => setState(_clearSelection),
-        ),
-      ];
+    if (_selected.isNotEmpty)
+      IconButton(
+        icon: const Icon(Icons.delete_outline),
+        tooltip: "Delete",
+        onPressed: _delete,
+      ),
+    IconButton(
+      icon: const Icon(Icons.close),
+      tooltip: "Cancel selection",
+      onPressed: () => setState(_clearSelection),
+    ),
+  ];
 
   List<Widget> _browseActions(FileHandoff handoff) => [
-        if (handoff.canReveal)
-          IconButton(
-            icon: const Icon(Icons.open_in_new),
-            tooltip: "Show in file manager",
-            onPressed: () => _guard(() => handoff.reveal(_dir)),
-          ),
-        IconButton(
-          icon: const Icon(Icons.create_new_folder_outlined),
-          tooltip: "New folder",
-          onPressed: _newFolder,
-        ),
-        IconButton(
-          icon: const Icon(Icons.checklist),
-          tooltip: "Select",
-          onPressed: () => setState(() => _selecting = true),
-        ),
-      ];
+    if (handoff.canReveal)
+      IconButton(
+        icon: const Icon(Icons.open_in_new),
+        tooltip: "Show in file manager",
+        onPressed: () => _guard(() => handoff.reveal(_dir)),
+      ),
+    IconButton(
+      icon: const Icon(Icons.create_new_folder_outlined),
+      tooltip: "New folder",
+      onPressed: _newFolder,
+    ),
+    IconButton(
+      icon: const Icon(Icons.checklist),
+      tooltip: "Select",
+      onPressed: () => setState(() => _selecting = true),
+    ),
+  ];
 
   void _toggle(WorkspaceEntry entry) => setState(() {
-        if (!_selected.remove(entry.path)) _selected.add(entry.path);
-      });
+    if (!_selected.remove(entry.path)) _selected.add(entry.path);
+  });
 
   void _select(WorkspaceEntry entry) => setState(() {
-        _selecting = true;
-        _selected.add(entry.path);
-      });
+    _selecting = true;
+    _selected.add(entry.path);
+  });
 
   /// What the empty state offers: the share sheet, where there is one.
   String? _inboundRoute(FileHandoff handoff) =>
@@ -345,10 +349,16 @@ class _Row extends StatelessWidget {
     return ListTile(
       leading: selecting
           ? Checkbox(value: selected, onChanged: (_) => onTap())
-          : Icon(entry.isDirectory ? Icons.folder : Icons.insert_drive_file_outlined),
+          : Icon(
+              entry.isDirectory
+                  ? Icons.folder
+                  : Icons.insert_drive_file_outlined,
+            ),
       title: Text(entry.name, overflow: TextOverflow.ellipsis),
       subtitle: entry.isDirectory ? null : Text(formatSize(entry.size)),
-      trailing: entry.isDirectory && !selecting ? const Icon(Icons.chevron_right) : null,
+      trailing: entry.isDirectory && !selecting
+          ? const Icon(Icons.chevron_right)
+          : null,
       onTap: onTap,
       onLongPress: onLongPress,
     );

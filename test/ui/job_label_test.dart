@@ -11,11 +11,16 @@ import "../harness.dart";
 
 void main() {
   const call = ToolCall(
-      id: "c1",
-      name: "bash",
-      argumentsJson: '{"command":"npm run dev","background":true}');
+    id: "c1",
+    name: "bash",
+    argumentsJson: '{"command":"npm run dev","background":true}',
+  );
   const result = ToolResult(
-      callId: "c1", returnCode: 0, output: "Started", jobId: 1);
+    callId: "c1",
+    returnCode: 0,
+    output: "Started",
+    jobId: 1,
+  );
 
   Future<(TestApp, String)> seed(WidgetTester tester) async {
     final app = TestApp.create();
@@ -26,13 +31,14 @@ void main() {
       await app.repo.append(chat.state.id, [
         ...recordsOf([
           Message(
-              id: "m1",
-              role: MessageRole.assistant,
-              createdAt: at,
-              parts: const [
-                MessagePart.toolCall(toolCall: call),
-                MessagePart.toolResult(result: result),
-              ]),
+            id: "m1",
+            role: MessageRole.assistant,
+            createdAt: at,
+            parts: const [
+              MessagePart.toolCall(toolCall: call),
+              MessagePart.toolResult(result: result),
+            ],
+          ),
         ]),
         ChatRecord.turnEnd(messageId: "m1", reason: TurnEnd.done),
       ]);
@@ -45,19 +51,29 @@ void main() {
       "keeps the end of the log", (tester) async {
     final (app, chatId) = await seed(tester);
     await app.pump(
-        tester,
-        Scaffold(
-            body: RunLabel(
-                activity: const BashUI(),
-                run: Run(chatId: chatId, callId: "c1", call: call, result: result))));
+      tester,
+      Scaffold(
+        body: RunLabel(
+          activity: const BashUI(),
+          run: Run(chatId: chatId, callId: "c1", call: call, result: result),
+        ),
+      ),
+    );
     // Neither running nor ended: the app it ran under has gone.
-    expect(find.text("Background job ended with the app: npm run dev"),
-        findsOneWidget);
+    expect(
+      find.text("Background job ended with the app: npm run dev"),
+      findsOneWidget,
+    );
 
     final jobs = app.backend.jobsOf(chatId);
     jobs.jobs.value = [
       const ShellJob(
-          id: 1, callId: "c1", command: "npm run dev", logPath: "/w/l", pid: 7),
+        id: 1,
+        callId: "c1",
+        command: "npm run dev",
+        logPath: "/w/l",
+        pid: 7,
+      ),
     ];
     await tester.pump();
     expect(find.text("Running in the background: npm run dev"), findsOneWidget);
@@ -69,8 +85,10 @@ void main() {
     jobs.jobs.value = const [];
     // The room applies it once its load is in, which is real I/O.
     await settleIo(tester);
-    expect(find.text("Background job exited with code 1: npm run dev"),
-        findsOneWidget);
+    expect(
+      find.text("Background job exited with code 1: npm run dev"),
+      findsOneWidget,
+    );
 
     await tester.tap(find.textContaining("exited with code 1"));
     await tester.pump();
@@ -86,15 +104,19 @@ void main() {
     final app = TestApp.create();
     addTearDown(app.dispose);
     await app.pump(
-        tester,
-        Scaffold(
-            body: RunLabel(
-                activity: const BashUI(),
-                run: const Run(
-                    chatId: "chat-1",
-                    callId: "c1",
-                    call: call,
-                    result: ToolResult(callId: "c1", returnCode: 0, output: "ok")))));
+      tester,
+      Scaffold(
+        body: RunLabel(
+          activity: const BashUI(),
+          run: const Run(
+            chatId: "chat-1",
+            callId: "c1",
+            call: call,
+            result: ToolResult(callId: "c1", returnCode: 0, output: "ok"),
+          ),
+        ),
+      ),
+    );
     expect(find.text("Used tool: bash"), findsOneWidget);
   });
 }

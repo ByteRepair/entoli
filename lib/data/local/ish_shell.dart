@@ -44,8 +44,8 @@ class IshShell extends Shell {
     required this.environment,
     required String Function() platformDescription,
     IshTransport? transport,
-  })  : _describe = platformDescription,
-        _transportFor = transport != null ? (() => transport) : IshWorker.new;
+  }) : _describe = platformDescription,
+       _transportFor = transport != null ? (() => transport) : IshWorker.new;
 
   /// Where the guest's rootfs is mounted from, asked per command: a Linux
   /// installed where none was reaches the next command, and one deleted stops
@@ -112,16 +112,18 @@ class IshShell extends Shell {
   String? homeFor(String home) => guestRoot ?? home;
 
   @override
-  ShellRun start(String command,
-      {required String cwd,
-      required String home,
-      required Duration timeout,
-      Map<String, String>? environment,
-      bool oneShot = false,
-      bool restart = false,
-      String? project,
-      CommandSandbox? sandbox,
-      List<String> readOnly = const []}) {
+  ShellRun start(
+    String command, {
+    required String cwd,
+    required String home,
+    required Duration timeout,
+    Map<String, String>? environment,
+    bool oneShot = false,
+    bool restart = false,
+    String? project,
+    CommandSandbox? sandbox,
+    List<String> readOnly = const [],
+  }) {
     // `project` exists so a shell can resolve a per-project driver; the
     // emulator is its own environment and has no driver to pick. `readOnly`
     // reaches the bridge, which mounts each read-only at its own host path
@@ -133,21 +135,24 @@ class IshShell extends Shell {
     // Landlock does.
     if (sandbox != null) {
       return _IshUnavailableRun(
-          "No sandbox is available in the guest to run this command confined, "
-          "so it was not run.");
+        "No sandbox is available in the guest to run this command confined, "
+        "so it was not run.",
+      );
     }
     if (!rootfsInstalled) {
       return _IshUnavailableRun(
-          "No Linux is installed on this device to run commands in. Install "
-          "one from the Terminal settings.");
+        "No Linux is installed on this device to run commands in. Install "
+        "one from the Terminal settings.",
+      );
     }
     final rootfs = rootfsDir();
     _bootedRootfs ??= rootfs;
     if (rootfs != _bootedRootfs) {
       return _IshUnavailableRun(
-          "The Linux was changed after the guest started, and the guest runs "
-          "the one it started with until the app restarts. Restart Entoli to "
-          "run commands in the new one.");
+        "The Linux was changed after the guest started, and the guest runs "
+        "the one it started with until the app restarts. Restart Entoli to "
+        "run commands in the new one.",
+      );
     }
     final busy = _claimHome(home);
     if (busy != null) return _IshUnavailableRun(busy);
@@ -168,14 +173,21 @@ class IshShell extends Shell {
         readOnly: readOnly,
         transport: _transportFor(),
       );
-      run.result.then((_) => _liveOneShots--,
-          onError: (Object _) => _liveOneShots--);
+      run.result.then(
+        (_) => _liveOneShots--,
+        onError: (Object _) => _liveOneShots--,
+      );
       return run;
     }
     return _sessions
         .putIfAbsent(cwd, () => _IshSession(this, cwd, guestCwd, home))
-        .start(command, timeout,
-            environment: environment, restart: restart, readOnly: readOnly);
+        .start(
+          command,
+          timeout,
+          environment: environment,
+          restart: restart,
+          readOnly: readOnly,
+        );
   }
 
   /// Point the guest's [guestHome] at [home]'s project, or say why not yet.
@@ -207,7 +219,9 @@ class IshShell extends Shell {
       // [_cwds] keyed host-path: the turn path's [_IshSession] updates the
       // value from the guest's own marker once something has run.
       _cwds.putIfAbsent(
-          cwd, () => ValueNotifier<String?>(_guestViewOf(cwd, home)));
+        cwd,
+        () => ValueNotifier<String?>(_guestViewOf(cwd, home)),
+      );
 
   String? _guestViewOf(String cwd, String? home) {
     final root = guestRoot;
@@ -222,21 +236,18 @@ class IshShell extends Shell {
     _sessions.remove(cwd)?.close();
   }
 
-  Map<String, String> _compose({
-    Map<String, String>? extra,
-  }) =>
-      {
-        "PATH": guestPath,
-        ...defaultShellEnvironment,
-        "HOME": guestRoot ?? "/",
-        ...environment(),
-        ...?extra,
-      };
+  Map<String, String> _compose({Map<String, String>? extra}) => {
+    "PATH": guestPath,
+    ...defaultShellEnvironment,
+    "HOME": guestRoot ?? "/",
+    ...environment(),
+    ...?extra,
+  };
 }
 
 class _IshSession {
   _IshSession(this._shell, this._cwdPath, this._guestCwd, this._workspaceHome)
-      : _transport = _shell._transportFor();
+    : _transport = _shell._transportFor();
 
   /// The session's own worker: the guest's run parks this isolate's thread,
   /// which is why it is shared with no other session. [close] ends it after
@@ -272,14 +283,25 @@ class _IshSession {
   /// A run is pending or queued: the guest's `/root` must not move under it.
   bool get busy => _runs.any((r) => !r.state.done.isCompleted);
 
-  ShellRun start(String command, Duration timeout,
-      {Map<String, String>? environment,
-      bool restart = false,
-      List<String> readOnly = const []}) {
+  ShellRun start(
+    String command,
+    Duration timeout, {
+    Map<String, String>? environment,
+    bool restart = false,
+    List<String> readOnly = const [],
+  }) {
     final run = _IshRun(this);
     _runs.add(run);
-    _queue = _queue.then((_) => _execute(run, command, timeout,
-        environment: environment, restart: restart, readOnly: readOnly));
+    _queue = _queue.then(
+      (_) => _execute(
+        run,
+        command,
+        timeout,
+        environment: environment,
+        restart: restart,
+        readOnly: readOnly,
+      ),
+    );
     return run;
   }
 
@@ -316,22 +338,31 @@ class _IshSession {
         // life on runs that can only fail it and on a bar dressed as if the
         // guest had come up.
         if (sessionId == -1) {
-          run.state.complete(const ShellResult.failed(
-              "The iSH shell is not available on this platform."));
+          run.state.complete(
+            const ShellResult.failed(
+              "The iSH shell is not available on this platform.",
+            ),
+          );
           return;
         }
         _sessionId = sessionId;
         _handle = handle;
         _shell._cwds[_cwdPath]?.value = _guestCwd;
       } catch (e) {
-        run.state.complete(ShellResult.failed(
-            "An error occurred while starting the iSH shell: $e"));
+        run.state.complete(
+          ShellResult.failed(
+            "An error occurred while starting the iSH shell: $e",
+          ),
+        );
         return;
       }
     }
 
     final scriptB64 = base64.encode(utf8.encode(command));
-    run.state.timeoutTimer = Timer(timeout, () => _interrupt(run, byTimeout: true));
+    run.state.timeoutTimer = Timer(
+      timeout,
+      () => _interrupt(run, byTimeout: true),
+    );
     _current = run;
 
     try {
@@ -347,18 +378,20 @@ class _IshSession {
       _shell._cwds[_cwdPath]?.value = result.cwd ?? _guestCwd;
       // The model is told a stop or a timeout happened, as LocalShell's
       // session tells it; a hung-up run already says it did not complete.
-      run.state.complete(!run.state.interrupted || result.exceptionInfo != null
-          ? result
-          : ShellResult(
-              returnCode: result.returnCode,
-              output: result.output,
-              cwd: result.cwd,
-              exceptionInfo: run.state.byTimeout
-                  ? "The command timed out after ${timeout.inSeconds}s and "
-                      "was interrupted. Anything it printed before that is "
-                      "above."
-                  : "The command was interrupted.",
-            ));
+      run.state.complete(
+        !run.state.interrupted || result.exceptionInfo != null
+            ? result
+            : ShellResult(
+                returnCode: result.returnCode,
+                output: result.output,
+                cwd: result.cwd,
+                exceptionInfo: run.state.byTimeout
+                    ? "The command timed out after ${timeout.inSeconds}s and "
+                          "was interrupted. Anything it printed before that is "
+                          "above."
+                    : "The command was interrupted.",
+              ),
+      );
     } catch (e) {
       _current = null;
       run.state.timeoutTimer?.cancel();
@@ -369,8 +402,9 @@ class _IshSession {
       // guest does not outlive the command that lost it, and the next
       // command starts a session cold.
       if (id != null) _transport.destroy(id);
-      run.state.complete(ShellResult.failed(
-          "An error occurred while executing the command: $e"));
+      run.state.complete(
+        ShellResult.failed("An error occurred while executing the command: $e"),
+      );
     }
   }
 
@@ -428,12 +462,14 @@ class _IshSession {
       if (!run.state.done.isCompleted) {
         run.state.timeoutTimer?.cancel();
         run.state.escalateTimer?.cancel();
-        run.state.complete(ShellResult(
-          returnCode: -1,
-          output: "",
-          exceptionInfo:
-              "The iSH shell was restarted while the command was running.",
-        ));
+        run.state.complete(
+          ShellResult(
+            returnCode: -1,
+            output: "",
+            exceptionInfo:
+                "The iSH shell was restarted while the command was running.",
+          ),
+        );
       }
     }
     _runs.clear();
@@ -504,6 +540,7 @@ class _IshRun extends ShellRun {
     state.watched = true;
     return state.output;
   }
+
   @override
   Future<void> kill() async => _session._interrupt(this, byTimeout: false);
 }
@@ -593,11 +630,13 @@ class _IshOneShotRun extends ShellRun {
       handle = session.handle;
       if (sessionId == -1) {
         return const ShellResult.failed(
-            "The iSH shell is not available on this platform.");
+          "The iSH shell is not available on this platform.",
+        );
       }
     } catch (e) {
       return ShellResult.failed(
-          "An error occurred while starting the iSH shell: $e");
+        "An error occurred while starting the iSH shell: $e",
+      );
     }
     _sessionId = sessionId;
     _handle = handle;
@@ -614,7 +653,8 @@ class _IshOneShotRun extends ShellRun {
         return ShellResult(
           returnCode: -1,
           output: res.output,
-          exceptionInfo: "The command timed out after ${timeout.inSeconds}s. "
+          exceptionInfo:
+              "The command timed out after ${timeout.inSeconds}s. "
               "Anything it printed before that is above.",
         );
       }
@@ -692,7 +732,7 @@ abstract class IshTransport {
 /// every byte in its own buffer until the end.
 class IshRunBuffer {
   IshRunBuffer({required this.token, this.onDelta})
-      : _lead = "\n${dispatcherMarker(token)}".codeUnits;
+    : _lead = "\n${dispatcherMarker(token)}".codeUnits;
 
   /// This session's dispatcher token — the only marker that ends the command.
   final String token;
@@ -805,11 +845,16 @@ class IshRunBuffer {
     var cut = _held.length - hold;
     // A chunk can split a UTF-8 sequence: hold its bytes until the rest
     // arrives, or the persistent output shows a broken character forever.
-    while (cut > 0 && (_held[cut - 1] & 0xC0) == 0x80) { cut--; }
+    while (cut > 0 && (_held[cut - 1] & 0xC0) == 0x80) {
+      cut--;
+    }
     if (cut > 0 && (_held[cut - 1] & 0x80) != 0) {
       final leadByte = _held[cut - 1];
-      final need =
-          (leadByte & 0xF8) == 0xF0 ? 4 : (leadByte & 0xF0) == 0xE0 ? 3 : 2;
+      final need = (leadByte & 0xF8) == 0xF0
+          ? 4
+          : (leadByte & 0xF0) == 0xE0
+          ? 3
+          : 2;
       if (_held.length - (cut - 1) < need) cut--;
     }
     _emit(_held.sublist(0, cut));
@@ -830,6 +875,7 @@ class IshRunBuffer {
     final digit = first >= 0x30 && first <= 0x39;
     return (ours: digit, known: true);
   }
+
   /// The rc's digits and the ` cwd=<path>` up to `@@`, whole. Null where the
   /// bytes have not arrived far enough yet.
   ({int rc, String cwd})? _parseRcAndCwd(int start) {
@@ -848,7 +894,8 @@ class IshRunBuffer {
       if (_held[k] == 0x40 && _held[k + 1] == 0x40) {
         return (
           rc: int.parse(
-              utf8.decode(_held.sublist(start, i), allowMalformed: true)),
+            utf8.decode(_held.sublist(start, i), allowMalformed: true),
+          ),
           cwd: utf8.decode(_held.sublist(cwdAt, k), allowMalformed: true),
         );
       }
@@ -882,7 +929,12 @@ class IshRunBuffer {
     return -1;
   }
 
-  bool _startsWith(List<int> lead, int leadFrom, int leadTo, {required int from}) {
+  bool _startsWith(
+    List<int> lead,
+    int leadFrom,
+    int leadTo, {
+    required int from,
+  }) {
     if (from + leadTo - leadFrom > _held.length) return false;
     for (var i = leadFrom; i < leadTo; i++) {
       if (_held[from + i - leadFrom] != lead[i]) return false;
@@ -1010,14 +1062,16 @@ class IshWorker implements IshTransport {
     required Map<String, String> env,
     List<String> readOnly = const [],
   }) {
-    final task = _ops.then((_) => _init(
-          rootfsDir: rootfsDir,
-          dataDir: dataDir,
-          home: home,
-          cwd: cwd,
-          env: env,
-          readOnly: readOnly,
-        ));
+    final task = _ops.then(
+      (_) => _init(
+        rootfsDir: rootfsDir,
+        dataDir: dataDir,
+        home: home,
+        cwd: cwd,
+        env: env,
+        readOnly: readOnly,
+      ),
+    );
     _ops = task.then((_) {}, onError: (_) {});
     return task;
   }
@@ -1039,8 +1093,15 @@ class IshWorker implements IshTransport {
     _pending[replyId] = reply;
     final sessionId = _nextReplyId++;
     _post(replyId, [
-      _kInit, replyId, sessionId, rootfsDir, dataDir, home, cwd,
-      dispatcher, token,
+      _kInit,
+      replyId,
+      sessionId,
+      rootfsDir,
+      dataDir,
+      home,
+      cwd,
+      dispatcher,
+      token,
       env.entries.map((e) => "${e.key}=${e.value}").toList(),
       readOnly,
     ]);
@@ -1063,7 +1124,13 @@ class IshWorker implements IshTransport {
     final reply = Completer<dynamic>();
     _pending[replyId] = reply;
     if (onOutput != null) _outputSinks[replyId] = onOutput;
-    _post(replyId, [_kRun, replyId, sessionId, scriptB64, timeout.inMilliseconds]);
+    _post(replyId, [
+      _kRun,
+      replyId,
+      sessionId,
+      scriptB64,
+      timeout.inMilliseconds,
+    ]);
     return await reply.future as ShellResult;
   }
 
@@ -1137,8 +1204,7 @@ class IshWorker implements IshTransport {
     // The worker's own session table: the handle every FFI step goes through
     // and the session's dispatcher token, which is what its marker feed
     // matches the command's end by.
-    final sessions =
-        <int, ({IshSessionPtr handle, String token})>{};
+    final sessions = <int, ({IshSessionPtr handle, String token})>{};
 
     receive.listen((msg) {
       if (msg is! List) return;
@@ -1221,8 +1287,11 @@ class IshWorker implements IshTransport {
           final writeFn = ishWriteStdinFn;
           final pollFn = ishPollFn;
           final readFn = ishReadFn;
-          if (sess == null || drainFn == null || pollFn == null ||
-              readFn == null || writeFn == null) {
+          if (sess == null ||
+              drainFn == null ||
+              pollFn == null ||
+              readFn == null ||
+              writeFn == null) {
             main.send([_kReply, replyId, "session not found", null]);
             return;
           }
@@ -1234,8 +1303,10 @@ class IshWorker implements IshTransport {
           // to [_handle], and the marker is Dart's from [IshRunBuffer]'s take
           // on it, so the feed never shows command work as guest output.
           final buf = calloc<Uint8>(65536);
-          final feed = IshRunBuffer(token: sess.token,
-              onDelta: (delta) => main.send([_kOutput, replyId, delta]));
+          final feed = IshRunBuffer(
+            token: sess.token,
+            onDelta: (delta) => main.send([_kOutput, replyId, delta]),
+          );
           try {
             drainFn(sess.handle);
             final scriptPtr = scriptB64.toNativeUtf8();
@@ -1243,15 +1314,15 @@ class IshWorker implements IshTransport {
             calloc.free(scriptPtr);
             while (!feed.done) {
               final flags = pollFn(sess.handle);
-              if (flags < 0) break;  // a poll we cannot trust
-              if (flags & 2 != 0) break;  // the hangup's byte
-              if (flags & 1 == 0) continue;  // nothing yet (cannot stand)
+              if (flags < 0) break; // a poll we cannot trust
+              if (flags & 2 != 0) break; // the hangup's byte
+              if (flags & 1 == 0) continue; // nothing yet (cannot stand)
               final n = readFn(sess.handle, buf, 65536);
               if (n < 0) {
-                if (n == -2) continue;  // transient
+                if (n == -2) continue; // transient
                 break;
               }
-              if (n == 0) break;  // EOF: the guest shell is gone
+              if (n == 0) break; // EOF: the guest shell is gone
               feed.add(Uint8List.fromList(buf.asTypedList(n)));
             }
           } finally {

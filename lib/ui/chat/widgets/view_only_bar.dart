@@ -42,10 +42,12 @@ class ViewOnlyBar extends StatelessWidget {
 /// under it is hidden. Its states are the same shape, so they are one widget.
 class MirrorStrip extends StatelessWidget {
   /// Read, written and run there.
-  const MirrorStrip.remote({super.key, required this.deviceName}) : offline = false;
+  const MirrorStrip.remote({super.key, required this.deviceName})
+    : offline = false;
 
   /// The home device has gone. Nothing here is moving any more.
-  const MirrorStrip.offline({super.key, required this.deviceName}) : offline = true;
+  const MirrorStrip.offline({super.key, required this.deviceName})
+    : offline = true;
 
   final String deviceName;
   final bool offline;
@@ -63,9 +65,10 @@ class MirrorStrip extends StatelessWidget {
           child: Row(
             children: [
               Icon(
-                  offline ? Icons.wifi_off_outlined : Icons.devices_other,
-                  size: 16,
-                  color: on),
+                offline ? Icons.wifi_off_outlined : Icons.devices_other,
+                size: 16,
+                color: on,
+              ),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(

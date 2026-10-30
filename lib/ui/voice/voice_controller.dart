@@ -1,6 +1,5 @@
 import "dart:async";
 
-
 import "package:flutter/foundation.dart";
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
@@ -85,13 +84,13 @@ class VoiceViewState {
 
 extension VoiceStatusWord on VoiceStatus {
   String get word => switch (this) {
-        VoiceStatus.off => "Off",
-        VoiceStatus.starting => "Starting",
-        VoiceStatus.listening => "Listening",
-        VoiceStatus.thinking => "Thinking",
-        VoiceStatus.speaking => "Speaking",
-        VoiceStatus.failed => "Failed",
-      };
+    VoiceStatus.off => "Off",
+    VoiceStatus.starting => "Starting",
+    VoiceStatus.listening => "Listening",
+    VoiceStatus.thinking => "Thinking",
+    VoiceStatus.speaking => "Speaking",
+    VoiceStatus.failed => "Failed",
+  };
 }
 
 /// What voice mode is drawn in, asked once by everything that draws it: the
@@ -169,13 +168,16 @@ class VoiceController extends Notifier<VoiceViewState> {
     // Read rather than watched, and listened to for changes: watching it would
     // rebuild this notifier, and a rebuild resets the state a running session
     // is being held in.
-    ref.listen(appSettingsProvider.select((s) => s.voicePushToTalk),
-        (_, on) => unawaited(_setPushToTalk(on)));
+    ref.listen(
+      appSettingsProvider.select((s) => s.voicePushToTalk),
+      (_, on) => unawaited(_setPushToTalk(on)),
+    );
     _listenToChat();
     ref.onDispose(() => unawaited(_shutdown()));
     return VoiceViewState(
-        chatId: _chatId,
-        pushToTalk: ref.read(appSettingsProvider).voicePushToTalk);
+      chatId: _chatId,
+      pushToTalk: ref.read(appSettingsProvider).voicePushToTalk,
+    );
   }
 
   /// Read the chat's replies out, where there is a chat and nothing is doing it
@@ -195,13 +197,18 @@ class VoiceController extends Notifier<VoiceViewState> {
     _listenToChat();
   }
 
-  ChatController get _chat => ref.read(chatControllerProvider(_chatId!).notifier);
+  ChatController get _chat =>
+      ref.read(chatControllerProvider(_chatId!).notifier);
 
   /// Every state write goes through here. Written out at each call site, the
   /// two `failed` arms silently omitted the level, which is the sort of
   /// difference nobody sees until the circle stops moving.
-  void _show(VoiceStatus status,
-      {String? error, bool? paused, bool? pushToTalk}) {
+  void _show(
+    VoiceStatus status, {
+    String? error,
+    bool? paused,
+    bool? pushToTalk,
+  }) {
     final was = state.status;
     state = VoiceViewState(
       status: status,
@@ -250,8 +257,8 @@ class VoiceController extends Notifier<VoiceViewState> {
   /// finished talking — mute, or letting the Talk button go — and the sentence
   /// in flight is the point of it. A close because the turn moved on is not,
   /// and there is no third kind.
-  void _holdMicrophone() => unawaited(
-      _session?.setListening(_wantsMicrophone, finish: state.paused));
+  void _holdMicrophone() =>
+      unawaited(_session?.setListening(_wantsMicrophone, finish: state.paused));
 
   Future<void> start({ChatMeta? meta}) async {
     if (state.isOn) return;
@@ -263,8 +270,10 @@ class VoiceController extends Notifier<VoiceViewState> {
     final (:hearing, :speaking) = picks;
     if (hearing == null || speaking == null) {
       voiceFailed("no models picked");
-      return _show(VoiceStatus.failed,
-          error: "Pick a recognition model and a speech model in Settings first.");
+      return _show(
+        VoiceStatus.failed,
+        error: "Pick a recognition model and a speech model in Settings first.",
+      );
     }
 
     // One session at a time, and there are two things that could be holding
@@ -282,7 +291,9 @@ class VoiceController extends Notifier<VoiceViewState> {
     try {
       // A session opens shut, and [_holdMicrophone] lets it open on the
       // `listening` below like any other transition.
-      final session = await ref.read(voiceProvider).start(
+      final session = await ref
+          .read(voiceProvider)
+          .start(
             hearing: hearing,
             speaking: speaking,
             speaker: settings.voiceSpeaker,
@@ -429,7 +440,9 @@ class VoiceController extends Notifier<VoiceViewState> {
     // microphone is shut for as long as one runs. Aborting waits for the turn
     // to be written and closed, so what is said next lands after it rather than
     // into it.
-    if (ref.read(chatControllerProvider(_chatId!)).isRunning) await _chat.abort();
+    if (ref.read(chatControllerProvider(_chatId!)).isRunning) {
+      await _chat.abort();
+    }
     if (!ref.mounted) return;
     // Sent whether or not the session is still on — these words were heard
     // while it was. The status is not: a stopped session is not thinking.
@@ -441,8 +454,9 @@ class VoiceController extends Notifier<VoiceViewState> {
   /// at a time — a second utterance arrives while this is still writing. See
   /// "Taking turns".
   Future<bool> _startChat() async {
-    final id = await (_creating ??=
-        ref.read(selectedChatIdProvider.notifier).create(meta: _meta));
+    final id = await (_creating ??= ref
+        .read(selectedChatIdProvider.notifier)
+        .create(meta: _meta));
     _creating = null;
     if (!ref.mounted) return false;
     // Won by the utterance that asked first, which is the one whose chat this
@@ -539,8 +553,9 @@ class RunningVoice extends Notifier<VoiceController?> {
   }
 }
 
-final runningVoiceProvider =
-    NotifierProvider<RunningVoice, VoiceController?>(RunningVoice.new);
+final runningVoiceProvider = NotifierProvider<RunningVoice, VoiceController?>(
+  RunningVoice.new,
+);
 
 /// Keyed on the chat, or on null for a session with no chat yet.
 ///

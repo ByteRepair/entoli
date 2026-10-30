@@ -54,7 +54,9 @@ class ChatPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final chatId = ref.watch(selectedChatIdProvider);
-    if (chatId != null) return _ChatBody(chatId: chatId, withDrawer: withDrawer);
+    if (chatId != null) {
+      return _ChatBody(chatId: chatId, withDrawer: withDrawer);
+    }
     return _NewChat(withDrawer: withDrawer);
   }
 }
@@ -94,34 +96,43 @@ class _ReadableColumn extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Column(
-        children: [
-          ?banner,
-          Expanded(
-            child: LayoutBuilder(builder: (context, constraints) {
-              final column = Center(
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: _readableWidth),
-                  child: Column(children: [Expanded(child: child), bottom]),
+    children: [
+      ?banner,
+      Expanded(
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final column = Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: _readableWidth),
+                child: Column(
+                  children: [
+                    Expanded(child: child),
+                    bottom,
+                  ],
                 ),
-              );
-              final margin = (constraints.maxWidth - _readableWidth) / 2;
-              if (side == null || margin < sideWidth + _sideGap * 2) return column;
-              return Stack(
-                children: [
-                  Positioned.fill(child: column),
-                  Positioned(
-                    top: 0,
-                    bottom: 0,
-                    left: constraints.maxWidth - margin + _sideGap,
-                    width: sideWidth,
-                    child: side!,
-                  ),
-                ],
-              );
-            }),
-          ),
-        ],
-      );
+              ),
+            );
+            final margin = (constraints.maxWidth - _readableWidth) / 2;
+            if (side == null || margin < sideWidth + _sideGap * 2) {
+              return column;
+            }
+            return Stack(
+              children: [
+                Positioned.fill(child: column),
+                Positioned(
+                  top: 0,
+                  bottom: 0,
+                  left: constraints.maxWidth - margin + _sideGap,
+                  width: sideWidth,
+                  child: side!,
+                ),
+              ],
+            );
+          },
+        ),
+      ),
+    ],
+  );
 }
 
 /// Nothing selected: the chat that has not been made yet. Nothing here is keyed
@@ -173,15 +184,19 @@ class _NewChatState extends ConsumerState<_NewChat> {
   /// is logged, and this is the only thing left on screen to say so.
   Future<void> _send(String text, List<Attachment> attachments) async {
     setState(() => _starting = true);
-    final made =
-        await startChatWith(ref, text, attachments: attachments, meta: _meta);
+    final made = await startChatWith(
+      ref,
+      text,
+      attachments: attachments,
+      meta: _meta,
+    );
     if (!mounted) return;
     setState(() => _starting = false);
     if (!made) {
       _controller.text = text;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Could not start a chat.")),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text("Could not start a chat.")));
     }
   }
 
@@ -223,36 +238,36 @@ class _NewChatState extends ConsumerState<_NewChat> {
   Widget build(BuildContext context) {
     final at = ref.watch(selectedProjectProvider);
     return Scaffold(
-        drawer: widget.withDrawer ? const NavDrawer(child: Sidebar()) : null,
-        appBar: AppBar(
-          title: const _AppBrand(),
-          actions: [
-            // A paired device's chat takes its settings once it is there:
-            // these name this device's models.
-            if (at.device == null)
-              IconButton(
-                icon: const Icon(Icons.tune),
-                tooltip: "Chat settings",
-                onPressed: _openSettings,
+      drawer: widget.withDrawer ? const NavDrawer(child: Sidebar()) : null,
+      appBar: AppBar(
+        title: const _AppBrand(),
+        actions: [
+          // A paired device's chat takes its settings once it is there:
+          // these name this device's models.
+          if (at.device == null)
+            IconButton(
+              icon: const Icon(Icons.tune),
+              tooltip: "Chat settings",
+              onPressed: _openSettings,
+            ),
+        ],
+      ),
+      body: _ReadableColumn(
+        bottom: _bottomBar(),
+        child: _starting
+            ? const Center(child: CircularProgressIndicator())
+            : _EmptyChat(
+                project: at.project,
+                device: at.device,
+                controller: _controller,
+                // The paired devices' badges are the new-chat screen's own — a
+                // chat that exists with nothing said in it yet is mid-turn at
+                // worst, and a list of other devices under its question would
+                // say nothing true about it.
+                showSyncedCards: true,
               ),
-          ],
-        ),
-        body: _ReadableColumn(
-          bottom: _bottomBar(),
-          child: _starting
-              ? const Center(child: CircularProgressIndicator())
-              : _EmptyChat(
-            project: at.project,
-            device: at.device,
-            controller: _controller,
-            // The paired devices' badges are the new-chat screen's own — a
-            // chat that exists with nothing said in it yet is mid-turn at
-            // worst, and a list of other devices under its question would
-            // say nothing true about it.
-            showSyncedCards: true,
-          ),
-        ),
-      );
+      ),
+    );
   }
 }
 
@@ -293,7 +308,8 @@ class _ProjectBadges extends ConsumerWidget {
                 child: ChoiceChip(
                   label: ProjectChipLabel(project),
                   selected: localProject(project) == selected,
-                  onSelected: (on) => selectProject(ref, localProject(on ? project : null)),
+                  onSelected: (on) =>
+                      selectProject(ref, localProject(on ? project : null)),
                 ),
               ),
             ),
@@ -340,17 +356,25 @@ class _EmptyChat extends ConsumerWidget {
     final remote = device != null;
     final starters = [
       for (final kind in CompletionKind.values)
-        for (final option in ref.watch(completionsProvider(
-            (project: (device: device, project: project), kind: kind))))
+        for (final option in ref.watch(
+          completionsProvider((
+            project: (device: device, project: project),
+            kind: kind,
+          )),
+        ))
           (kind: kind, option: option),
     ];
     final question = remote
-        ? emptyChatQuestionFor(project,
+        ? emptyChatQuestionFor(
+                project,
                 description: ref
-                    .watch(remoteProjectProvider((device: device, project: project)))
+                    .watch(
+                      remoteProjectProvider((device: device, project: project)),
+                    )
                     ?.settings
-                    .description) ??
-            ""
+                    .description,
+              ) ??
+              ""
         : ref.watch(emptyChatQuestionProvider(project));
 
     return Center(
@@ -369,7 +393,10 @@ class _EmptyChat extends ConsumerWidget {
             // On the new-chat screen this device's badges stay whichever
             // device is picked, so there is always a way back to them.
             if (!remote || showSyncedCards)
-              _ProjectBadges(selected: (device: device, project: project), settled: true),
+              _ProjectBadges(
+                selected: (device: device, project: project),
+                settled: true,
+              ),
             if (showSyncedCards) const PairedProjectBadges(),
             const SizedBox(height: 20),
             ChipRow(
@@ -383,8 +410,9 @@ class _EmptyChat extends ConsumerWidget {
                         key: const ValueKey("empty"),
                         child: Text(
                           "Type / for commands, @ for agents.",
-                          style: theme.textTheme.bodySmall
-                              ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: theme.colorScheme.onSurfaceVariant,
+                          ),
                         ),
                       ),
                     ]
@@ -392,18 +420,24 @@ class _EmptyChat extends ConsumerWidget {
                       for (final starter in starters)
                         ChipRowEntry(
                           key: ValueKey(
-                              "${starter.kind.trigger}${starter.option.name}"),
+                            "${starter.kind.trigger}${starter.option.name}",
+                          ),
                           child: ActionChip(
                             label: Text(
-                                "${starter.kind.trigger}${starter.option.name}"),
-                            labelStyle: theme.textTheme.bodySmall
-                                ?.copyWith(fontFamily: monoFamily),
+                              "${starter.kind.trigger}${starter.option.name}",
+                            ),
+                            labelStyle: theme.textTheme.bodySmall?.copyWith(
+                              fontFamily: monoFamily,
+                            ),
                             // Null rather than the empty string: `Chip` builds
                             // a `Tooltip` for whatever it is given, and an
                             // empty one is a blank box on a long press.
                             tooltip: starter.option.description,
                             onPressed: () => insertCompletion(
-                                controller, starter.kind, starter.option.name),
+                              controller,
+                              starter.kind,
+                              starter.option.name,
+                            ),
                           ),
                         ),
                     ],
@@ -424,8 +458,10 @@ class _Athena extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final height =
-        (MediaQuery.sizeOf(context).height * 0.3).clamp(120.0, 280.0);
+    final height = (MediaQuery.sizeOf(context).height * 0.3).clamp(
+      120.0,
+      280.0,
+    );
     return ShaderMask(
       blendMode: BlendMode.dstIn,
       shaderCallback: (bounds) => const LinearGradient(
@@ -457,13 +493,8 @@ class _Athena extends StatelessWidget {
 /// restarting. Constant speed: a fade would rush the left end and hide the
 /// sweep the motion is.
 class _QuestionSweep extends ImplicitlyAnimatedWidget {
-  const _QuestionSweep({
-    required this.text,
-    required this.style,
-  }) : super(
-          duration: const Duration(milliseconds: 400),
-          curve: Curves.linear,
-        );
+  const _QuestionSweep({required this.text, required this.style})
+    : super(duration: const Duration(milliseconds: 400), curve: Curves.linear);
 
   final String text;
   final TextStyle? style;
@@ -503,8 +534,13 @@ class _QuestionSweepState extends AnimatedWidgetBaseState<_QuestionSweep> {
 
   @override
   void forEachTween(TweenVisitor<dynamic> visitor) {
-    _tween = visitor(_tween, widget.text,
-        (value) => _SweepTween(begin: value as String)) as _SweepTween;
+    _tween =
+        visitor(
+              _tween,
+              widget.text,
+              (value) => _SweepTween(begin: value as String),
+            )
+            as _SweepTween;
   }
 
   @override
@@ -524,13 +560,13 @@ class _AppBrand extends StatelessWidget {
   // Flexible because the name is not a fixed one: a debug build's is longer,
   // and the slot is a phone's toolbar.
   Widget build(BuildContext context) => const Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          AppMark(size: 24),
-          SizedBox(width: 10),
-          Flexible(child: Text(appTitle, overflow: TextOverflow.ellipsis)),
-        ],
-      );
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      AppMark(size: 24),
+      SizedBox(width: 10),
+      Flexible(child: Text(appTitle, overflow: TextOverflow.ellipsis)),
+    ],
+  );
 }
 
 /// The page with no conversation on it yet — one still being read off disk,
@@ -543,10 +579,10 @@ class _Waiting extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-        drawer: withDrawer ? const NavDrawer(child: Sidebar()) : null,
-        appBar: withDrawer ? AppBar(title: const _AppBrand()) : null,
-        body: const Center(child: CircularProgressIndicator()),
-      );
+    drawer: withDrawer ? const NavDrawer(child: Sidebar()) : null,
+    appBar: withDrawer ? AppBar(title: const _AppBrand()) : null,
+    body: const Center(child: CircularProgressIndicator()),
+  );
 }
 
 class _ChatBody extends ConsumerStatefulWidget {
@@ -567,8 +603,11 @@ sealed class ConversationEntry {
 }
 
 class MessageEntry extends ConversationEntry {
-  const MessageEntry(this.message,
-      {required this.inOmadaSection, required this.last});
+  const MessageEntry(
+    this.message, {
+    required this.inOmadaSection,
+    required this.last,
+  });
 
   final Message message;
 
@@ -615,8 +654,13 @@ List<ConversationEntry> entriesOf(Chat chat) {
       entries.add(SectionEntry(on));
     }
     if (!endedSilently(m)) {
-      entries.add(MessageEntry(m,
-          inOmadaSection: on, last: index == chat.messages.length - 1));
+      entries.add(
+        MessageEntry(
+          m,
+          inOmadaSection: on,
+          last: index == chat.messages.length - 1,
+        ),
+      );
     }
     final marker = byBoundary[m.id];
     if (marker != null) entries.add(CompactionEntry(marker.summary));
@@ -631,10 +675,11 @@ class _Outline {
   const _Outline(this.chapters, this.rows);
 
   _Outline.of(Chat chat)
-      : chapters = chaptersOf(chat),
-        rows = [
-          for (final e in entriesOf(chat)) e is MessageEntry ? e.message.id : null,
-        ];
+    : chapters = chaptersOf(chat),
+      rows = [
+        for (final e in entriesOf(chat))
+          e is MessageEntry ? e.message.id : null,
+      ];
 
   static const empty = _Outline([], []);
 
@@ -649,7 +694,8 @@ class _Outline {
       listEquals(other.rows, rows);
 
   @override
-  int get hashCode => Object.hash(Object.hashAll(chapters), Object.hashAll(rows));
+  int get hashCode =>
+      Object.hash(Object.hashAll(chapters), Object.hashAll(rows));
 }
 
 /// Measure every row of a conversation up front, a frame's budget at a time,
@@ -737,11 +783,11 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
         .memoryNotes
         .where((note) => note.chatId == widget.chatId)
         .listen((note) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(note.text)),
-      );
-    });
+          if (!mounted) return;
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text(note.text)));
+        });
   }
 
   @override
@@ -759,9 +805,11 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
     _mirroredFeed?.close();
     _mirroredFeed = ref.listenManual(
       isMirroredChatProvider(widget.chatId),
-      (_, mirrored) => _feedOutline(mirrored
-          ? mirrorChatControllerProvider(widget.chatId)
-          : chatControllerProvider(widget.chatId)),
+      (_, mirrored) => _feedOutline(
+        mirrored
+            ? mirrorChatControllerProvider(widget.chatId)
+            : chatControllerProvider(widget.chatId),
+      ),
       fireImmediately: true,
     );
   }
@@ -769,20 +817,16 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
   void _feedOutline(ProviderListenable<ChatViewState> source) {
     _outlineFeed?.close();
     _outline.value = _Outline.empty;
-    _outlineFeed = ref.listenManual(
-      source,
-      (_, view) {
-        final chat = view.chat;
-        if (chat == null) return;
-        final next = _Outline.of(chat);
-        if (next == _outline.value) return;
-        _outline.value = next;
-        // A chapter added or a thread switched moves which one the view is
-        // in, with no scroll to say so.
-        _afterLayout((_) {});
-      },
-      fireImmediately: true,
-    );
+    _outlineFeed = ref.listenManual(source, (_, view) {
+      final chat = view.chat;
+      if (chat == null) return;
+      final next = _Outline.of(chat);
+      if (next == _outline.value) return;
+      _outline.value = next;
+      // A chapter added or a thread switched moves which one the view is
+      // in, with no scroll to say so.
+      _afterLayout((_) {});
+    }, fireImmediately: true);
   }
 
   @override
@@ -855,7 +899,9 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
   /// A scrub along the rail jumps rather than glides: it is one move of many,
   /// and a glide per tick would trail behind the pointer.
   void _goToChapter(int i, {bool scrubbing = false}) {
-    if (!_scroll.hasClients || !_list.isAttached || i >= _chapters.length) return;
+    if (!_scroll.hasClients || !_list.isAttached || i >= _chapters.length) {
+      return;
+    }
     final chapter = _chapters[i];
     final row = _outline.value.rows.indexOf(chapter.row);
     if (row < 0 || row >= _list.numberOfItems) return;
@@ -867,7 +913,9 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
     bool reveal(ScrollPosition position) {
       final offset = steerAt();
       if (offset == null) return false;
-      position.jumpTo(offset.clamp(position.minScrollExtent, position.maxScrollExtent));
+      position.jumpTo(
+        offset.clamp(position.minScrollExtent, position.maxScrollExtent),
+      );
       return true;
     }
 
@@ -883,7 +931,10 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
       _stopGlide();
       land(_scroll.position);
     } else {
-      _glideTo(() => steerAt() ?? _offsetOf(row), landed: () => _afterLayout(land));
+      _glideTo(
+        () => steerAt() ?? _offsetOf(row),
+        landed: () => _afterLayout(land),
+      );
     }
   }
 
@@ -907,8 +958,11 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
     _glideFrom = _glideAt = position.pixels;
     _glideTarget = target;
     _glideLanded = landed;
-    final screens = (target() - _glideFrom).abs() / math.max(position.viewportDimension, 1);
-    _glide.duration = Duration(milliseconds: (220 + 90 * math.min(screens, 3)).round());
+    final screens =
+        (target() - _glideFrom).abs() / math.max(position.viewportDimension, 1);
+    _glide.duration = Duration(
+      milliseconds: (220 + 90 * math.min(screens, 3)).round(),
+    );
     _glide.forward(from: 0);
   }
 
@@ -919,7 +973,10 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
     // A row laid out at a height other than the one measured for it moves the
     // view by the difference; carried, or the next tick puts the view back.
     _glideFrom += position.pixels - _glideAt;
-    final to = target().clamp(position.minScrollExtent, position.maxScrollExtent);
+    final to = target().clamp(
+      position.minScrollExtent,
+      position.maxScrollExtent,
+    );
     final t = Curves.easeInOutCubic.transform(_glide.value);
     _scroll.jumpTo(_glideFrom + (to - _glideFrom) * t);
     _glideAt = position.pixels;
@@ -995,7 +1052,9 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
     final repo = ref.read(chatRepositoryProvider);
     if (keep == true) {
       final written = await repo.keepExpiredChat(widget.chatId, state);
-      ref.read(chatControllerProvider(widget.chatId).notifier).applyState(written);
+      ref
+          .read(chatControllerProvider(widget.chatId).notifier)
+          .applyState(written);
     } else {
       ref.read(selectedChatIdProvider.notifier).select(null);
       await repo.deleteChat(widget.chatId);
@@ -1016,7 +1075,10 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
   Widget _local(BuildContext context) {
     final view = ref.watch(chatControllerProvider(widget.chatId));
     final notifier = ref.read(chatControllerProvider(widget.chatId).notifier);
-    ref.listen(chatControllerProvider(widget.chatId), (_, _) => _follow.jumpIfFollowing());
+    ref.listen(
+      chatControllerProvider(widget.chatId),
+      (_, _) => _follow.jumpIfFollowing(),
+    );
     final chat = view.chat;
     if (chat == null) return _waiting();
     _opening(chat);
@@ -1034,7 +1096,10 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
       source: chatControllerProvider(widget.chatId),
       editing: notifier,
       details: const [],
-      whenEmpty: _EmptyChat(project: chat.state.project, controller: _controller),
+      whenEmpty: _EmptyChat(
+        project: chat.state.project,
+        controller: _controller,
+      ),
       bottom: ref.watch(setupCompleteProvider(chat.state.project))
           ? _turnBar(
               view: view,
@@ -1058,18 +1123,29 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
   /// snapshot: read, and nothing to type into.
   Widget _mirrored(BuildContext context) {
     final view = ref.watch(mirrorChatControllerProvider(widget.chatId));
-    final driver = ref.read(mirrorChatControllerProvider(widget.chatId).notifier);
-    ref.listen(mirrorChatControllerProvider(widget.chatId), (_, _) => _follow.jumpIfFollowing());
+    final driver = ref.read(
+      mirrorChatControllerProvider(widget.chatId).notifier,
+    );
+    ref.listen(
+      mirrorChatControllerProvider(widget.chatId),
+      (_, _) => _follow.jumpIfFollowing(),
+    );
     // One pass over the Remotes list for the two things drawn from it, so the
     // page rebuilds when they change rather than whenever anything does.
-    final (:online, :deviceName, :deviceId) = ref.watch(remoteChatsProvider.select((chats) {
-      for (final entry in chats) {
-        if (entry.chatId == widget.chatId) {
-          return (online: entry.online, deviceName: entry.deviceName, deviceId: entry.deviceId);
+    final (:online, :deviceName, :deviceId) = ref.watch(
+      remoteChatsProvider.select((chats) {
+        for (final entry in chats) {
+          if (entry.chatId == widget.chatId) {
+            return (
+              online: entry.online,
+              deviceName: entry.deviceName,
+              deviceId: entry.deviceId,
+            );
+          }
         }
-      }
-      return (online: false, deviceName: "the home device", deviceId: null);
-    }));
+        return (online: false, deviceName: "the home device", deviceId: null);
+      }),
+    );
     final chat = view.chat;
     if (chat == null) return _waiting();
     _opening(chat);
@@ -1092,7 +1168,8 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
               driver: driver,
               project: chat.state.project,
               device: deviceId,
-              workspace: null)
+              workspace: null,
+            )
           : const ViewOnlyBar(),
     );
   }
@@ -1148,7 +1225,9 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
         toolbarHeight: barHeight,
         title: InkWell(
           onTap: () => Navigator.of(context).push(
-            MaterialPageRoute(builder: (_) => ChatSettingsPage(chatId: widget.chatId)),
+            MaterialPageRoute(
+              builder: (_) => ChatSettingsPage(chatId: widget.chatId),
+            ),
           ),
           // Fills the bar between leading and actions so the whole strip
           // opens the chat's settings, not just the text.
@@ -1166,7 +1245,9 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
                 width: 14,
                 height: 14,
                 child: CircularProgressIndicator(
-                    strokeWidth: 2, color: Theme.of(context).colorScheme.onSurface),
+                  strokeWidth: 2,
+                  color: Theme.of(context).colorScheme.onSurface,
+                ),
               ),
             ),
           PlanButton(chatId: widget.chatId),
@@ -1178,7 +1259,10 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
         side: ValueListenableBuilder<_Outline>(
           valueListenable: _outline,
           builder: (context, outline, _) => ChapterRail(
-              chapters: outline.chapters, current: _chapter, onSelect: _goToChapter),
+            chapters: outline.chapters,
+            current: _chapter,
+            onSelect: _goToChapter,
+          ),
         ),
         sideWidth: ChapterRail.width,
         child: _conversation(chat, entries, view, source, editing, whenEmpty),
@@ -1203,54 +1287,61 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
     String? workspace,
     String? workspaceHome,
   }) {
-    Future<void> send(String text, List<Attachment> attachments,
-        {bool queue = false}) async {
+    Future<void> send(
+      String text,
+      List<Attachment> attachments, {
+      bool queue = false,
+    }) async {
       // Something said over an upload waiting on the user is their answer to
       // it: the page's chooser is cancelled, as dismissing its dialog would,
       // and the agent is told.
       final browser = ref.read(agentBrowserProvider);
       if (browser.available && browser.configured) {
-        browser.tab(widget.chatId).cancelUpload(
-            why: "The user sent a message instead of choosing a file.");
+        browser
+            .tab(widget.chatId)
+            .cancelUpload(
+              why: "The user sent a message instead of choosing a file.",
+            );
       }
       try {
         await driver.send(text, attachments: attachments, queue: queue);
       } on Undelivered catch (e) {
         if (mounted) {
-          ScaffoldMessenger.of(context)
-              .showSnackBar(SnackBar(content: Text(e.message)));
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text(e.message)));
         }
       }
     }
 
     return Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          TurnSurface(
-            view: view,
-            notifier: driver,
-            onWithdrawn: (said) => _composer.currentState?.restore(said),
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        TurnSurface(
+          view: view,
+          notifier: driver,
+          onWithdrawn: (said) => _composer.currentState?.restore(said),
+        ),
+        switch (view.roomPhase) {
+          RoomPhase.waitingOnYou => TurnQuestions(view: view, notifier: driver),
+          _ => Composer(
+            key: _composer,
+            controller: _controller,
+            agentSpeaking: view.roomPhase == RoomPhase.agentSpeaking,
+            onSend: send,
+            onQueue: (text, attachments) =>
+                send(text, attachments, queue: true),
+            steers: driver.steers,
+            onAbort: driver.abort,
+            project: project,
+            device: device,
+            onVoice: onVoice,
+            workspace: workspace,
+            workspaceHome: workspaceHome,
           ),
-          switch (view.roomPhase) {
-            RoomPhase.waitingOnYou => TurnQuestions(view: view, notifier: driver),
-            _ => Composer(
-                key: _composer,
-                controller: _controller,
-                agentSpeaking: view.roomPhase == RoomPhase.agentSpeaking,
-                onSend: send,
-                onQueue: (text, attachments) =>
-                    send(text, attachments, queue: true),
-                steers: driver.steers,
-                onAbort: driver.abort,
-                project: project,
-                device: device,
-                onVoice: onVoice,
-                workspace: workspace,
-                workspaceHome: workspaceHome,
-              ),
-          },
-        ],
-      );
+        },
+      ],
+    );
   }
 
   /// The one link-opening rule, both renderers of model-written markdown — a
@@ -1269,13 +1360,20 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
     final member = nameOf(message.author);
     if (member == null) return null;
     return ref
-        .watch(agentPictureProvider(
-            (project: chat.state.project, name: member)))
+        .watch(
+          agentPictureProvider((project: chat.state.project, name: member)),
+        )
         .value;
   }
 
-  Widget _conversation(Chat chat, List<ConversationEntry> entries, ChatViewState view,
-      ProviderListenable<ChatViewState> source, TurnDriver? editing, Widget whenEmpty) {
+  Widget _conversation(
+    Chat chat,
+    List<ConversationEntry> entries,
+    ChatViewState view,
+    ProviderListenable<ChatViewState> source,
+    TurnDriver? editing,
+    Widget whenEmpty,
+  ) {
     final speechReady = ref.watch(speechReadyProvider);
     final reading = ref.watch(readAloudProvider);
     if (chat.messages.isEmpty) return whenEmpty;
@@ -1289,56 +1387,76 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
           child: NotificationListener<ScrollNotification>(
             onNotification: _follow.onNotification,
             child: SuperListView.builder(
-                controller: _scroll,
-                listController: _list,
-                extentPrecalculationPolicy: _measureAll,
-                itemCount: entries.length,
-                itemBuilder: (context, i) => switch (entries[i]) {
-                  SectionEntry(:final omada) => ConversationSeparator(
-                      text: omada ? "Omada is turned on" : "Omada is turned off"),
-                  CompactionEntry(:final summary) => ConversationSeparator(
-                      text: "Compact Conversation",
-                      body: MessageText(
-                        text: summary,
-                        isError: false,
-                        isWaiting: false,
-                        caret: false,
+              controller: _scroll,
+              listController: _list,
+              extentPrecalculationPolicy: _measureAll,
+              itemCount: entries.length,
+              itemBuilder: (context, i) => switch (entries[i]) {
+                SectionEntry(:final omada) => ConversationSeparator(
+                  text: omada ? "Omada is turned on" : "Omada is turned off",
+                ),
+                CompactionEntry(:final summary) => ConversationSeparator(
+                  text: "Compact Conversation",
+                  body: MessageText(
+                    text: summary,
+                    isError: false,
+                    isWaiting: false,
+                    caret: false,
+                    onTapLink: (href) => _openLink(context, href),
+                  ),
+                ),
+                MessageEntry(
+                  :final message,
+                  :final inOmadaSection,
+                  :final last,
+                ) =>
+                  KeyedSubtree(
+                    key: message.role == MessageRole.user
+                        ? _chapterKeys.putIfAbsent(message.id, GlobalKey.new)
+                        : null,
+                    child: ActivitySource(
+                      live: source.select((v) => liveMessageOf(v, message.id)),
+                      child: MessageBubble(
+                        chatId: widget.chatId,
+                        message: message,
+                        avatar: _avatarOf(chat, message),
+                        entoli: inOmadaSection,
+                        isWaiting: view.isRunning && last,
+                        waitingNotice: view.retry,
+                        waitingStatus: view.status,
+                        shellOutput: view.shellOutput[message.id],
                         onTapLink: (href) => _openLink(context, href),
-                      )),
-                  MessageEntry(:final message, :final inOmadaSection, :final last) =>
-                    KeyedSubtree(
-                      key: message.role == MessageRole.user
-                          ? _chapterKeys.putIfAbsent(message.id, GlobalKey.new)
-                          : null,
-                      child: ActivitySource(
-                        live: source.select((v) => liveMessageOf(v, message.id)),
-                        child: MessageBubble(
-                          chatId: widget.chatId,
-                          message: message,
-                          avatar: _avatarOf(chat, message),
-                          entoli: inOmadaSection,
-                          isWaiting: view.isRunning && last,
-                          waitingNotice: view.retry,
-                          waitingStatus: view.status,
-                          shellOutput: view.shellOutput[message.id],
-                          onTapLink: (href) => _openLink(context, href),
-                          threads: editing == null ? null : chat.branches[message.id],
-                          onThreadStep:
-                              mutable ? (step) => editing.stepThread(message.id, step) : null,
-                          onDelete: mutable ? () => editing.deleteThread(message.id) : null,
-                          onEdit: mutable && message.role == MessageRole.user
-                              ? (text) => editing.editAndResend(message.id, text)
-                              : null,
-                          onRegenerate: mutable ? () => editing.regenerate(message.id) : null,
-                          onSpeak: speechReady && message.hasText
-                              ? () => readAloud(context, ref, message.id, message.plainText)
-                              : null,
-                          isSpeaking: reading == message.id,
-                          steerKey: (id) => _chapterKeys.putIfAbsent(id, GlobalKey.new),
-                        ),
+                        threads: editing == null
+                            ? null
+                            : chat.branches[message.id],
+                        onThreadStep: mutable
+                            ? (step) => editing.stepThread(message.id, step)
+                            : null,
+                        onDelete: mutable
+                            ? () => editing.deleteThread(message.id)
+                            : null,
+                        onEdit: mutable && message.role == MessageRole.user
+                            ? (text) => editing.editAndResend(message.id, text)
+                            : null,
+                        onRegenerate: mutable
+                            ? () => editing.regenerate(message.id)
+                            : null,
+                        onSpeak: speechReady && message.hasText
+                            ? () => readAloud(
+                                context,
+                                ref,
+                                message.id,
+                                message.plainText,
+                              )
+                            : null,
+                        isSpeaking: reading == message.id,
+                        steerKey: (id) =>
+                            _chapterKeys.putIfAbsent(id, GlobalKey.new),
                       ),
                     ),
-                }),
+                  ),
+              },
+            ),
           ),
         ),
         // Only once the reader has left the end: up there a turn no longer
@@ -1353,8 +1471,10 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
             child: FloatingActionButton.small(
               heroTag: null,
               tooltip: "Jump to latest",
-              onPressed: () => _glideTo(() => _scroll.position.maxScrollExtent,
-                  landed: _settleAtBottom),
+              onPressed: () => _glideTo(
+                () => _scroll.position.maxScrollExtent,
+                landed: _settleAtBottom,
+              ),
               child: const Icon(Icons.arrow_downward),
             ),
           ),
@@ -1362,23 +1482,27 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
       ],
     );
   }
+
   /// What the bar says about the chat under its title, a line each. The
   /// conditions are here and nowhere else: [_barHeight] counts what this
   /// returns, so a line added here is one the bar makes room for.
   List<Widget> _details(ChatState state) {
     // Every chat is in a project, so naming the default one says nothing.
     // A built-in's directory name is read as its label, not its path.
-    final project =
-        state.project != null ? _TitleLine(text: projectLabel(state.project)) : null;
+    final project = state.project != null
+        ? _TitleLine(text: projectLabel(state.project))
+        : null;
     final expiresAt = state.tempTtlExpiresAt;
     return [
       // The countdown shares the project's line, held to the bar's right edge.
       if (expiresAt != null)
-        Row(children: [
-          ?project,
-          const Spacer(),
-          _TtlLine(expiresAt: expiresAt),
-        ])
+        Row(
+          children: [
+            ?project,
+            const Spacer(),
+            _TtlLine(expiresAt: expiresAt),
+          ],
+        )
       else
         ?project,
       if (state.pinned) _TitleLine(icon: Icons.push_pin, text: "Pinned"),
@@ -1396,7 +1520,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
         scaler.scale(_titleHeight) + details * scaler.scale(_TitleLine.height);
     return math.max(kToolbarHeight, lines);
   }
-  }
+}
 
 /// One line under the chat's title in the bar: the project it is in, the pin
 /// on a pinned chat, or the countdown on a temporary one. A small
@@ -1428,8 +1552,9 @@ class _TitleLine extends StatelessWidget {
           ],
           Text(
             text,
-            style: theme.textTheme.bodySmall
-                ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
           ),
         ],
       ),
@@ -1469,6 +1594,9 @@ class _TtlLineState extends State<_TtlLine> {
   @override
   Widget build(BuildContext context) {
     final remaining = widget.expiresAt.difference(DateTime.now());
-    return _TitleLine(icon: Icons.hourglass_empty, text: formatRemaining(remaining));
+    return _TitleLine(
+      icon: Icons.hourglass_empty,
+      text: formatRemaining(remaining),
+    );
   }
 }

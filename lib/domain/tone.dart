@@ -16,12 +16,15 @@ enum Tone {
 
   /// The sentence the prompt carries. Only [Tone.none] has none.
   String? get instruction => switch (this) {
-        none => null,
-        direct => "Word replies directly and to the point, plainly and "
-            "without ceremony.",
-        kind => "Word replies warmly and encouragingly, while staying "
-            "concrete and brief.",
-        formal => "Word replies in a formal, professional register, with "
-            "no slang or contractions.",
-      };
+    none => null,
+    direct =>
+      "Word replies directly and to the point, plainly and "
+          "without ceremony.",
+    kind =>
+      "Word replies warmly and encouragingly, while staying "
+          "concrete and brief.",
+    formal =>
+      "Word replies in a formal, professional register, with "
+          "no slang or contractions.",
+  };
 }

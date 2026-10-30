@@ -31,8 +31,9 @@ class AndroidFileHandoff implements FileHandoff {
 
   /// Asked once. `path_provider` sends a platform message per call, and this is
   /// in front of every file the user taps.
-  late final Future<String> _cache =
-      getTemporaryDirectory().then((dir) => dir.path);
+  late final Future<String> _cache = getTemporaryDirectory().then(
+    (dir) => dir.path,
+  );
 
   @override
   bool get canReveal => false;
@@ -49,7 +50,10 @@ class AndroidFileHandoff implements FileHandoff {
   @override
   Future<void> open(String path) async {
     final staged = await _stage([path]);
-    await _invoke<void>("open", {"path": staged.single, "mime": viewerMime(staged.single)});
+    await _invoke<void>("open", {
+      "path": staged.single,
+      "mime": viewerMime(staged.single),
+    });
   }
 
   @override
@@ -88,11 +92,13 @@ class AndroidFileHandoff implements FileHandoff {
       await Isolate.run(() => zipTo(zip, paths));
       return [zip];
     }
-    return Future.wait(paths.map((path) async {
-      final copy = p.join(dir, p.basename(path));
-      await File(path).copy(copy);
-      return copy;
-    }));
+    return Future.wait(
+      paths.map((path) async {
+        final copy = p.join(dir, p.basename(path));
+        await File(path).copy(copy);
+        return copy;
+      }),
+    );
   }
 
   /// Emptied rather than added to: what was staged last time has been read by

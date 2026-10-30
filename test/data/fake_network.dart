@@ -11,7 +11,11 @@ import "package:http/http.dart" as http;
 /// which is what a real one does and what a cancelled download is relying on
 /// to stop.
 class FakeNetwork extends http.BaseClient {
-  FakeNetwork(this.bodies, {this.headers = const {}, this.missingAs404 = false});
+  FakeNetwork(
+    this.bodies, {
+    this.headers = const {},
+    this.missingAs404 = false,
+  });
 
   /// True where an unlisted path answers 404 rather than refusing — what a
   /// server with a directory tree (GitHub Pages) says about a file that is
@@ -20,14 +24,13 @@ class FakeNetwork extends http.BaseClient {
   final bool missingAs404;
 
   /// The same for whole bodies, which arrive in two halves — a download.
-  factory FakeNetwork.inHalves(Map<String, List<int>> bodies) =>
-      FakeNetwork({
-        for (final MapEntry(:key, :value) in bodies.entries)
-          key: [
-            value.sublist(0, value.length ~/ 2),
-            value.sublist(value.length ~/ 2),
-          ],
-      });
+  factory FakeNetwork.inHalves(Map<String, List<int>> bodies) => FakeNetwork({
+    for (final MapEntry(:key, :value) in bodies.entries)
+      key: [
+        value.sublist(0, value.length ~/ 2),
+        value.sublist(value.length ~/ 2),
+      ],
+  });
 
   /// Any host: which one it is has never been what these tests are about.
   static const host = "http://nowhere.test";
@@ -58,14 +61,22 @@ class FakeNetwork extends http.BaseClient {
     if (pieces == null) {
       if (missingAs404) {
         asked++;
-        return http.StreamedResponse(const Stream.empty(), 404,
-            headers: headers, request: request);
+        return http.StreamedResponse(
+          const Stream.empty(),
+          404,
+          headers: headers,
+          request: request,
+        );
       }
       throw http.ClientException("connection refused", request.url);
     }
     asked++;
-    return http.StreamedResponse(_pieces(pieces), 200,
-        headers: headers, request: request);
+    return http.StreamedResponse(
+      _pieces(pieces),
+      200,
+      headers: headers,
+      request: request,
+    );
   }
 
   Stream<List<int>> _pieces(List<List<int>> pieces) async* {

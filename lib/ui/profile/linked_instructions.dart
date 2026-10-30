@@ -25,44 +25,44 @@ class LinkedFileList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          ReorderableListView.builder(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            buildDefaultDragHandles: false,
-            itemCount: files.length,
-            onReorderItem: onReorder,
-            itemBuilder: (context, i) {
-              final path = files[i];
-              final name = nameOf(path);
-              return ReorderableDelayedDragStartListener(
-                key: ValueKey(path),
-                index: i,
-                child: _FileTile(
-                  path: path,
-                  name: name,
-                  missing: missing.contains(path),
-                  onTap: () => onOpen(path, name),
-                  trailing: IconButton(
-                    icon: const Icon(Icons.close),
-                    tooltip: "Remove",
-                    onPressed: () => onRemove(path),
-                  ),
-                ),
-              );
-            },
-          ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8),
-            child: TextButton.icon(
-              onPressed: onAdd,
-              icon: const Icon(Icons.add),
-              label: const Text("Add instructions file"),
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      ReorderableListView.builder(
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        buildDefaultDragHandles: false,
+        itemCount: files.length,
+        onReorderItem: onReorder,
+        itemBuilder: (context, i) {
+          final path = files[i];
+          final name = nameOf(path);
+          return ReorderableDelayedDragStartListener(
+            key: ValueKey(path),
+            index: i,
+            child: _FileTile(
+              path: path,
+              name: name,
+              missing: missing.contains(path),
+              onTap: () => onOpen(path, name),
+              trailing: IconButton(
+                icon: const Icon(Icons.close),
+                tooltip: "Remove",
+                onPressed: () => onRemove(path),
+              ),
             ),
-          ),
-        ],
-      );
+          );
+        },
+      ),
+      Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8),
+        child: TextButton.icon(
+          onPressed: onAdd,
+          icon: const Icon(Icons.add),
+          label: const Text("Add instructions file"),
+        ),
+      ),
+    ],
+  );
 }
 
 /// A project's switch for each of the user's instruction files, all on until
@@ -86,20 +86,20 @@ class InstructionFileSwitches extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Column(
-        children: [
-          for (final (path, name) in rows)
-            _FileTile(
-              path: path,
-              name: name,
-              missing: missing.contains(path),
-              onTap: () => onOpen(path, name),
-              trailing: Switch(
-                value: !off.contains(path),
-                onChanged: (on) => onChanged(path, on),
-              ),
-            ),
-        ],
-      );
+    children: [
+      for (final (path, name) in rows)
+        _FileTile(
+          path: path,
+          name: name,
+          missing: missing.contains(path),
+          onTap: () => onOpen(path, name),
+          trailing: Switch(
+            value: !off.contains(path),
+            onChanged: (on) => onChanged(path, on),
+          ),
+        ),
+    ],
+  );
 }
 
 class _FileTile extends StatelessWidget {

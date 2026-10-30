@@ -10,7 +10,8 @@ import "llm_client.dart";
 /// payload's `type` — so the frames are all this has to understand.
 Stream<String> decodeSse(Stream<List<int>> body) async* {
   final buffer = StringBuffer();
-  await for (final line in body.transform(utf8.decoder).transform(const LineSplitter())) {
+  await for (final line
+      in body.transform(utf8.decoder).transform(const LineSplitter())) {
     if (line.isEmpty) {
       if (buffer.isNotEmpty) yield buffer.toString();
       buffer.clear();
@@ -29,7 +30,9 @@ Stream<String> decodeSse(Stream<List<int>> body) async* {
 /// resolving `models` against `https://host/v1` would drop the version.
 Uri under(Uri base, String path) {
   final root = base.toString();
-  return Uri.parse("${root.endsWith("/") ? root.substring(0, root.length - 1) : root}/$path");
+  return Uri.parse(
+    "${root.endsWith("/") ? root.substring(0, root.length - 1) : root}/$path",
+  );
 }
 
 /// The ids at a `/models` endpoint. Both providers answer in OpenAI's shape.
@@ -47,7 +50,8 @@ Future<List<String>> listModelIds(
   if (data is! List) return const [];
   return [
     for (final entry in data)
-      if (entry is Map<String, dynamic> && entry["id"] is String) entry["id"] as String,
+      if (entry is Map<String, dynamic> && entry["id"] is String)
+        entry["id"] as String,
   ];
 }
 
@@ -68,7 +72,9 @@ Future<http.StreamedResponse> postStream(
 /// [request] sent, whatever its status. A connection that never opened is an
 /// [LlmException].
 Future<http.StreamedResponse> sendOrUnreachable(
-    http.Client client, http.BaseRequest request) async {
+  http.Client client,
+  http.BaseRequest request,
+) async {
   try {
     return await client.send(request);
   } catch (e) {
@@ -80,7 +86,9 @@ Future<http.StreamedResponse> sendOrUnreachable(
 
 /// [postStream] for a request already built — a multipart upload.
 Future<http.StreamedResponse> sendChecked(
-    http.Client client, http.BaseRequest request) async {
+  http.Client client,
+  http.BaseRequest request,
+) async {
   final response = await sendOrUnreachable(client, request);
   if (response.statusCode == 200) return response;
   final text = await response.stream.bytesToString();

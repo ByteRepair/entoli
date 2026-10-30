@@ -27,10 +27,14 @@ class _InitialSetupGateState extends ConsumerState<InitialSetupGate> {
 
   @override
   Widget build(BuildContext context) {
-    final canHostALinux = ref.watch(prootAvailableProvider) ||
+    final canHostALinux =
+        ref.watch(prootAvailableProvider) ||
         ref.watch(deviceAbiProvider) == "ios";
-    final pending = ref.watch(appSettingsProvider
-        .select((s) => !s.licenceAccepted && s.rootfsId == null));
+    final pending = ref.watch(
+      appSettingsProvider.select(
+        (s) => !s.licenceAccepted && s.rootfsId == null,
+      ),
+    );
     if (!canHostALinux || !pending || _skipped) return widget.child;
     return InitialSetupPage(onSkip: () => setState(() => _skipped = true));
   }
@@ -75,10 +79,13 @@ class _InitialSetupPageState extends ConsumerState<InitialSetupPage> {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final progress = ref.watch(
-        rootfsDownloadsProvider.select((s) => s.active[alpine.id]));
+      rootfsDownloadsProvider.select((s) => s.active[alpine.id]),
+    );
     final failure = ref.watch(
-        rootfsDownloadsProvider.select((s) => s.failures[alpine.id]));
-    final fraction = progress == null || progress.total <= 0 || progress.unpacking
+      rootfsDownloadsProvider.select((s) => s.failures[alpine.id]),
+    );
+    final fraction =
+        progress == null || progress.total <= 0 || progress.unpacking
         ? null
         : (progress.received / progress.total).clamp(0.0, 1.0);
 
@@ -104,36 +111,42 @@ class _InitialSetupPageState extends ConsumerState<InitialSetupPage> {
                   Text(
                     failure == null
                         ? "Installing ${alpine.name}, so the agent has a "
-                            "terminal to work in."
+                              "terminal to work in."
                         : "${alpine.name} could not be installed.",
                     textAlign: TextAlign.center,
-                    style: theme.textTheme.bodyLarge
-                        ?.copyWith(color: scheme.onSurfaceVariant),
+                    style: theme.textTheme.bodyLarge?.copyWith(
+                      color: scheme.onSurfaceVariant,
+                    ),
                   ),
                   const SizedBox(height: 32),
                   if (failure == null) ...[
                     ClipRRect(
                       borderRadius: BorderRadius.circular(4),
-                      child: LinearProgressIndicator(value: fraction, minHeight: 6),
+                      child: LinearProgressIndicator(
+                        value: fraction,
+                        minHeight: 6,
+                      ),
                     ),
                     const SizedBox(height: 8),
                     Text(
                       progress == null
                           ? "Starting…"
                           : progress.unpacking
-                              ? "Unpacking…"
-                              : "${formatSize(progress.received)} of "
-                                  "${formatSize(progress.total)}",
+                          ? "Unpacking…"
+                          : "${formatSize(progress.received)} of "
+                                "${formatSize(progress.total)}",
                       textAlign: TextAlign.center,
-                      style: theme.textTheme.bodySmall
-                          ?.copyWith(color: scheme.onSurfaceVariant),
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: scheme.onSurfaceVariant,
+                      ),
                     ),
                   ] else ...[
                     Text(
                       failure,
                       textAlign: TextAlign.center,
-                      style: theme.textTheme.bodySmall
-                          ?.copyWith(color: scheme.error),
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: scheme.error,
+                      ),
                     ),
                     const SizedBox(height: 16),
                     Row(
@@ -155,8 +168,9 @@ class _InitialSetupPageState extends ConsumerState<InitialSetupPage> {
                       "Skipped, it can be installed later under "
                       "Settings > Terminal.",
                       textAlign: TextAlign.center,
-                      style: theme.textTheme.bodySmall
-                          ?.copyWith(color: scheme.onSurfaceVariant),
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: scheme.onSurfaceVariant,
+                      ),
                     ),
                   ],
                 ],

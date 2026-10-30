@@ -17,7 +17,10 @@ void main() {
   // The whole app under the wrapper, since what is under test is a page pushed
   // over whatever was on screen.
   Future<void> start(WidgetTester tester) async {
-    await app.pump(tester, const IncomingShares(child: Scaffold(body: Text("chat"))));
+    await app.pump(
+      tester,
+      const IncomingShares(child: Scaffold(body: Text("chat"))),
+    );
     await settleIo(tester);
   }
 
@@ -28,7 +31,9 @@ void main() {
     expect(find.textContaining("Share"), findsNothing);
   });
 
-  testWidgets("a share waiting at startup is offered a workspace", (tester) async {
+  testWidgets("a share waiting at startup is offered a workspace", (
+    tester,
+  ) async {
     app.handoff.pendingShare = [incomingFile("notes.md")];
     await start(tester);
 
@@ -36,7 +41,9 @@ void main() {
     expect(find.text("Default"), findsWidgets);
   });
 
-  testWidgets("a share arriving while the app is up is offered one too", (tester) async {
+  testWidgets("a share arriving while the app is up is offered one too", (
+    tester,
+  ) async {
     await start(tester);
     expect(find.text("chat"), findsOneWidget);
 
@@ -46,8 +53,9 @@ void main() {
     expect(find.text("Share 2 files to"), findsOneWidget);
   });
 
-  testWidgets("picking the default project writes into its shared workspace",
-      (tester) async {
+  testWidgets("picking the default project writes into its shared workspace", (
+    tester,
+  ) async {
     app.handoff.pendingShare = [incomingFile("notes.md", "from another app")];
     await start(tester);
 
@@ -63,7 +71,9 @@ void main() {
     expect(find.text("Share 1 file to"), findsNothing);
   });
 
-  testWidgets("picking a project writes into that project's workspace", (tester) async {
+  testWidgets("picking a project writes into that project's workspace", (
+    tester,
+  ) async {
     await io(tester, () => app.repo.createProject("research"));
     app.handoff.pendingShare = [incomingFile("paper.pdf", "bytes")];
     await start(tester);
@@ -72,14 +82,20 @@ void main() {
     await settleIo(tester);
 
     expect(
-      File("${app.config.projectWorkspaceDir(project: "research")}/paper.pdf")
-          .readAsStringSync(),
+      File(
+        "${app.config.projectWorkspaceDir(project: "research")}/paper.pdf",
+      ).readAsStringSync(),
       "bytes",
     );
   });
 
-  testWidgets("picking a chat writes into that chat's own workspace", (tester) async {
-    final chat = await io(tester, () => app.seedChat(title: "Refactor the parser"));
+  testWidgets("picking a chat writes into that chat's own workspace", (
+    tester,
+  ) async {
+    final chat = await io(
+      tester,
+      () => app.seedChat(title: "Refactor the parser"),
+    );
     await io(tester, () => app.seedChat(title: ""));
     app.handoff.pendingShare = [incomingFile("trace.log", "stack")];
     await start(tester);
@@ -90,7 +106,9 @@ void main() {
     await settleIo(tester);
 
     expect(
-      File("${app.config.workspaceDir(chat.state.id)}/trace.log").readAsStringSync(),
+      File(
+        "${app.config.workspaceDir(chat.state.id)}/trace.log",
+      ).readAsStringSync(),
       "stack",
     );
   });
@@ -103,7 +121,9 @@ void main() {
     await settleIo(tester);
 
     expect(
-      File("${app.config.projectWorkspaceDir()}/notes/today/a.txt").readAsStringSync(),
+      File(
+        "${app.config.projectWorkspaceDir()}/notes/today/a.txt",
+      ).readAsStringSync(),
       "deep",
     );
   });

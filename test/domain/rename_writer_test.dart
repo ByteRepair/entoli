@@ -22,8 +22,7 @@ void main() {
     expect(written, ["first", "second", "third"]);
   });
 
-  test("a failed write drains its entry and does not wedge the path",
-      () async {
+  test("a failed write drains its entry and does not wedge the path", () async {
     var fail = true;
     final written = <String>[];
     final writer = RenameWriter((path, text) async {
@@ -39,13 +38,15 @@ void main() {
     expect(written, ["kept"]);
   });
 
-  test("a failed write is not an unhandled error beside the awaited one",
-      () async {
-    // The queue entry carries a caught error, not the raw future: what the
-    // await delivers to the caller is the only copy of the failure.
-    final writer = RenameWriter((path, text) async => throw StateError("no"));
-    await expectLater(writer.write("settings", "text"), throwsStateError);
-  });
+  test(
+    "a failed write is not an unhandled error beside the awaited one",
+    () async {
+      // The queue entry carries a caught error, not the raw future: what the
+      // await delivers to the caller is the only copy of the failure.
+      final writer = RenameWriter((path, text) async => throw StateError("no"));
+      await expectLater(writer.write("settings", "text"), throwsStateError);
+    },
+  );
 
   test("different paths do not block each other", () async {
     final started = <String>[];

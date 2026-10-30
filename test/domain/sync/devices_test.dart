@@ -10,8 +10,10 @@ void main() {
   };
 
   test("a record from before the list reads its one address as the list", () {
-    final device =
-        PairedDevice.fromJson({...base, "lastAddress": "192.168.1.5:47921"});
+    final device = PairedDevice.fromJson({
+      ...base,
+      "lastAddress": "192.168.1.5:47921",
+    });
     expect(device.addresses, ["192.168.1.5:47921"]);
   });
 

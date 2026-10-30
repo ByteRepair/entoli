@@ -57,27 +57,27 @@ class AgentCapabilities {
     required Set<AgentCapability> disabled,
     bool browser = false,
   }) : this(
-          commands: commands,
-          webSearch: !disabled.contains(AgentCapability.webSearch),
-          ask: !disabled.contains(AgentCapability.ask),
-          task: !disabled.contains(AgentCapability.task),
-          artifact: !disabled.contains(AgentCapability.artifact),
-          createSkill: !disabled.contains(AgentCapability.createSkill),
-          trigger: !disabled.contains(AgentCapability.trigger),
-          browser: browser,
-        );
+         commands: commands,
+         webSearch: !disabled.contains(AgentCapability.webSearch),
+         ask: !disabled.contains(AgentCapability.ask),
+         task: !disabled.contains(AgentCapability.task),
+         artifact: !disabled.contains(AgentCapability.artifact),
+         createSkill: !disabled.contains(AgentCapability.createSkill),
+         trigger: !disabled.contains(AgentCapability.trigger),
+         browser: browser,
+       );
 
   /// What a sub-agent runs under: unattended, so it asks nothing, fans out
   /// nothing, and publishes nothing — there is no viewer to open what it made.
   AgentCapabilities get unattended => AgentCapabilities(
-        commands: commands,
-        webSearch: webSearch,
-        ask: false,
-        task: false,
-        artifact: false,
-        createSkill: false,
-        trigger: false,
-      );
+    commands: commands,
+    webSearch: webSearch,
+    ask: false,
+    task: false,
+    artifact: false,
+    createSkill: false,
+    trigger: false,
+  );
 }
 
 /// Everything that decides which tools a turn is offered and how each is
@@ -250,21 +250,27 @@ abstract class AgentTool {
 }
 
 /// [call] as reported, with [text] as what the label shows of it.
-ToolCallEvent toolCalled(LlmToolCall call, [String? text]) =>
-    ToolCallEvent(ToolCall(
-      id: call.id,
-      name: call.name,
-      argumentsJson: call.argumentsJson,
-      argumentsText: text,
-      signature: call.signature,
-    ));
+ToolCallEvent toolCalled(LlmToolCall call, [String? text]) => ToolCallEvent(
+  ToolCall(
+    id: call.id,
+    name: call.name,
+    argumentsJson: call.argumentsJson,
+    argumentsText: text,
+    signature: call.signature,
+  ),
+);
 
 ToolResultEvent toolOk(LlmToolCall call, String output) =>
     ToolResultEvent(ToolResult(callId: call.id, returnCode: 0, output: output));
 
-ToolResultEvent toolFailed(LlmToolCall call, String problem) =>
-    ToolResultEvent(ToolResult(
-        callId: call.id, returnCode: -1, output: "", exceptionInfo: problem));
+ToolResultEvent toolFailed(LlmToolCall call, String problem) => ToolResultEvent(
+  ToolResult(
+    callId: call.id,
+    returnCode: -1,
+    output: "",
+    exceptionInfo: problem,
+  ),
+);
 
 /// A call that could not be run at all: the UI still sees the pair, and the
 /// model still gets told why.

@@ -44,8 +44,9 @@ void main() {
 
   test("a torn last line ends the replay, the whole lines stand", () async {
     await store.add("a whole memory");
-    File(p.join(dir, "memories.jsonl"))
-        .writeAsStringSync('{"t":"m","id":"torn",', mode: FileMode.append);
+    File(
+      p.join(dir, "memories.jsonl"),
+    ).writeAsStringSync('{"t":"m","id":"torn",', mode: FileMode.append);
 
     final entries = await store.entries();
     expect(entries, hasLength(1));
@@ -55,12 +56,7 @@ void main() {
   test("a log written behind the store's back is picked up", () async {
     await store.add("flutter is here");
     File(p.join(dir, "memories.jsonl")).writeAsStringSync(
-      "${jsonEncode({
-        "t": "m",
-        "id": "side",
-        "text": "kotlin was written to the log directly",
-        "at": "2026-01-01T00:00:00.000Z",
-      })}\n",
+      "${jsonEncode({"t": "m", "id": "side", "text": "kotlin was written to the log directly", "at": "2026-01-01T00:00:00.000Z"})}\n",
       mode: FileMode.append,
     );
 
@@ -83,7 +79,9 @@ void main() {
       }
       await store.add("word0 and word1 appear together");
 
-      final hits = await store.search("word0 word1 word2 word3 word4 word5 word6");
+      final hits = await store.search(
+        "word0 word1 word2 word3 word4 word5 word6",
+      );
       // word0 and word1 are each in two memories, so they score a half a
       // piece and their memories sit under the bar; the five single-word
       // memories and the double match all score 1, and the cap trims the
@@ -100,7 +98,12 @@ void main() {
 
   group("tokenize", () {
     test("lowercases and keeps runs of letters and digits", () {
-      expect(tokenize("Flutter 3.22, and Dart!"), ["flutter", "22", "and", "dart"]);
+      expect(tokenize("Flutter 3.22, and Dart!"), [
+        "flutter",
+        "22",
+        "and",
+        "dart",
+      ]);
     });
   });
 
@@ -118,8 +121,10 @@ void main() {
       final gone = await store.add("a fact");
       await store.delete(gone.id);
 
-      expect(await store.update("no-such-id", "a fact with no predecessor"),
-          isNull);
+      expect(
+        await store.update("no-such-id", "a fact with no predecessor"),
+        isNull,
+      );
       expect(await store.update(gone.id, "a fact revived"), isNull);
       expect(await store.entries(), isEmpty);
       await store.add("a later fact");
@@ -171,19 +176,23 @@ void main() {
       expect(result, (added: 1, updated: 1, deleted: 1));
       final entries = await store.entries();
       expect(entries, hasLength(2));
-      expect(entries.singleWhere((e) => e.id == keep.id).text,
-          "keep this, revised");
-      expect(entries.singleWhere((e) => e.id == keep.id).chat, "chat-9");
       expect(
-          entries.any((e) => e.text == "a brand new fact"), isTrue);
+        entries.singleWhere((e) => e.id == keep.id).text,
+        "keep this, revised",
+      );
+      expect(entries.singleWhere((e) => e.id == keep.id).chat, "chat-9");
+      expect(entries.any((e) => e.text == "a brand new fact"), isTrue);
       // And the search index follows what the batch landed: the added memory
       // is recallable, the revised one by its new text.
-      expect((await store.search("brand")).map((e) => e.text),
-          ["a brand new fact"]);
+      expect((await store.search("brand")).map((e) => e.text), [
+        "a brand new fact",
+      ]);
     });
 
     test("a replacement of a missing id lands as a new memory", () async {
-      final result = await store.maintain(replaces: {"no-such-id": "fresh fact"});
+      final result = await store.maintain(
+        replaces: {"no-such-id": "fresh fact"},
+      );
       expect(result, (added: 1, updated: 0, deleted: 0));
       final entries = await store.entries();
       expect(entries, hasLength(1));
@@ -191,17 +200,19 @@ void main() {
       expect(entries.single.id, isNot("no-such-id"));
     });
 
-    test("empty texts are skipped and an empty batch changes nothing",
-        () async {
-      await store.add("a memory");
-      final result = await store.maintain(
-        delete: [],
-        replaces: {"no-such-id": "   "},
-        add: ["", "  "],
-      );
-      expect(result, (added: 0, updated: 0, deleted: 0));
-      expect(await store.entries(), hasLength(1));
-    });
+    test(
+      "empty texts are skipped and an empty batch changes nothing",
+      () async {
+        await store.add("a memory");
+        final result = await store.maintain(
+          delete: [],
+          replaces: {"no-such-id": "   "},
+          add: ["", "  "],
+        );
+        expect(result, (added: 0, updated: 0, deleted: 0));
+        expect(await store.entries(), hasLength(1));
+      },
+    );
   });
 
   group("renderIndex", () {
@@ -256,8 +267,7 @@ void main() {
   });
 
   group("renderPinned", () {
-    test("the pinned memories in full, newest first, the rest out",
-        () async {
+    test("the pinned memories in full, newest first, the rest out", () async {
       final older = await store.add("an older pinned memory");
       await store.pin(older.id);
       await store.add("a plain memory");
@@ -272,10 +282,11 @@ void main() {
       final entries = [
         for (var i = 0; i < pinnedLimit + 2; i++)
           MemoryEntry(
-              id: "id$i",
-              text: "memory $i",
-              at: DateTime(2026, 1, 1, i),
-              pinned: true),
+            id: "id$i",
+            text: "memory $i",
+            at: DateTime(2026, 1, 1, i),
+            pinned: true,
+          ),
       ];
       final block = renderPinned(entries);
       expect(block.split("\n"), hasLength(pinnedLimit));
@@ -291,13 +302,15 @@ void main() {
   });
 
   group("consolidation", () {
-    test("the stamp is nothing until it is written, then the time it was given",
-        () async {
-      expect(await store.lastConsolidated(), isNull);
-      final then = DateTime.utc(2026, 1, 2, 3);
-      await store.stampConsolidated(then);
-      expect(await store.lastConsolidated(), then);
-    });
+    test(
+      "the stamp is nothing until it is written, then the time it was given",
+      () async {
+        expect(await store.lastConsolidated(), isNull);
+        final then = DateTime.utc(2026, 1, 2, 3);
+        await store.stampConsolidated(then);
+        expect(await store.lastConsolidated(), then);
+      },
+    );
 
     test("a stamp that will not parse reads as never", () async {
       final directory = Directory(dir);
@@ -310,7 +323,10 @@ void main() {
       final first = await store.add("an older memory");
       final newer = await store.add("a newer memory");
       final block = renderConsolidation(await store.entries());
-      expect(block, "- [${newer.id}] a newer memory\n- [${first.id}] an older memory");
+      expect(
+        block,
+        "- [${newer.id}] a newer memory\n- [${first.id}] an older memory",
+      );
     });
 
     test("a grown store is cut at the ceiling, the oldest out", () {
@@ -320,7 +336,10 @@ void main() {
           MemoryEntry(id: "id$i", text: "memory $i", at: DateTime(2026)),
       ];
       final block = renderConsolidation(entries);
-      expect(block, isNot(contains("- [id${n - consolidationMaxEntries - 1}]")));
+      expect(
+        block,
+        isNot(contains("- [id${n - consolidationMaxEntries - 1}]")),
+      );
       expect(block, contains("- [id${n - consolidationMaxEntries}]"));
       expect(block.split("\n"), hasLength(consolidationMaxEntries));
     });

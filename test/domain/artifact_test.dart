@@ -4,7 +4,9 @@ import "package:agent_chat/domain/artifact.dart";
 
 void main() {
   test("parses path, title, and derives entryFile", () {
-    final args = artifactArgsFrom('{"path": "report/index.html", "title": "Demo"}');
+    final args = artifactArgsFrom(
+      '{"path": "report/index.html", "title": "Demo"}',
+    );
     expect(args, isNotNull);
     expect(args!.path, "report/index.html");
     expect(args.entryFile, "index.html");
@@ -14,8 +16,10 @@ void main() {
 
   test("entryFile is the basename, for a bare path and a nested one", () {
     expect(artifactArgsFrom('{"path": "chart.html"}')!.entryFile, "chart.html");
-    expect(artifactArgsFrom('{"path": "report/sub/page.html"}')!.entryFile,
-        "page.html");
+    expect(
+      artifactArgsFrom('{"path": "report/sub/page.html"}')!.entryFile,
+      "page.html",
+    );
   });
 
   test("title defaults to empty string", () {
@@ -24,7 +28,9 @@ void main() {
   });
 
   test("parses artifact_id for update in place", () {
-    final args = artifactArgsFrom('{"path": "report/index.html", "artifact_id": "existing-id"}');
+    final args = artifactArgsFrom(
+      '{"path": "report/index.html", "artifact_id": "existing-id"}',
+    );
     expect(args!.artifactId, "existing-id");
   });
 

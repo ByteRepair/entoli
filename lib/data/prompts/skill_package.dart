@@ -29,7 +29,10 @@ Future<SkillPackage> packageSkillDirectory(String dir, String? name) async {
   final skillMdFile = File(p.join(dir, "SKILL.md"));
   final skillMdContent = await skillMdFile.readAsString();
   final parsed = PromptDocument.parse(
-      CompletionKind.skill, folderName, skillMdContent);
+    CompletionKind.skill,
+    folderName,
+    skillMdContent,
+  );
   final skillName = name ?? parsed.frontmatter["name"] ?? folderName;
   final problems = skillProblems(
     name: skillName,
@@ -46,8 +49,12 @@ Future<SkillPackage> packageSkillDirectory(String dir, String? name) async {
       if (file.isFile) (file.name, file.readBytes() ?? Uint8List(0)),
   ];
 
-  return SkillPackage(skillName, entries,
-      description: parsed.description, body: parsed.body);
+  return SkillPackage(
+    skillName,
+    entries,
+    description: parsed.description,
+    body: parsed.body,
+  );
 }
 
 /// Encodes a [SkillPackage] as a `.skill` zip — the same format

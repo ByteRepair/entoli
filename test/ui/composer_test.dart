@@ -30,33 +30,34 @@ void main() {
   tearDown(() => app.dispose());
   tearDownAll(controller.dispose);
 
-  Future<void> pump(WidgetTester tester,
-          {EdgeInsets bars = EdgeInsets.zero,
-          String? workspace,
-          String? workspaceHome,
-          bool agentSpeaking = false,
-          bool Function(String text)? steers}) =>
-      app.pump(
-        tester,
-        underSystemBars(
-          bars,
-          Scaffold(
-            body: Composer(
-              controller: controller,
-              agentSpeaking: agentSpeaking,
-              onSend: (text, attachments) {
-                sent.add(text);
-                sentAttachments.add(attachments);
-              },
-              onQueue: (text, _) => queued.add(text),
-              steers: steers ?? (text) => !isCommand(text),
-              onAbort: () {},
-              workspace: workspace,
-              workspaceHome: workspaceHome,
-            ),
-          ),
+  Future<void> pump(
+    WidgetTester tester, {
+    EdgeInsets bars = EdgeInsets.zero,
+    String? workspace,
+    String? workspaceHome,
+    bool agentSpeaking = false,
+    bool Function(String text)? steers,
+  }) => app.pump(
+    tester,
+    underSystemBars(
+      bars,
+      Scaffold(
+        body: Composer(
+          controller: controller,
+          agentSpeaking: agentSpeaking,
+          onSend: (text, attachments) {
+            sent.add(text);
+            sentAttachments.add(attachments);
+          },
+          onQueue: (text, _) => queued.add(text),
+          steers: steers ?? (text) => !isCommand(text),
+          onAbort: () {},
+          workspace: workspace,
+          workspaceHome: workspaceHome,
         ),
-      );
+      ),
+    ),
+  );
 
   Future<void> type(WidgetTester tester, String text) async {
     await tester.enterText(find.byType(TextField), text);
@@ -65,10 +66,9 @@ void main() {
 
   /// The names the menu is offering, in order — the descriptions beside them
   /// carry no trigger character.
-  List<String> menuItems(WidgetTester tester) => popupLabels(tester)
-      .nonNulls
-      .where((s) => s.startsWith("/") || s.startsWith("@"))
-      .toList();
+  List<String> menuItems(WidgetTester tester) => popupLabels(
+    tester,
+  ).nonNulls.where((s) => s.startsWith("/") || s.startsWith("@")).toList();
 
   // `/` offers skills and only at the start; `@` offers agents anywhere a word
   // starts. Each in name order, narrowed by what follows; nothing matching is
@@ -92,7 +92,9 @@ void main() {
     }
   });
 
-  testWidgets("tapping an entry completes it and closes the menu", (tester) async {
+  testWidgets("tapping an entry completes it and closes the menu", (
+    tester,
+  ) async {
     await pump(tester);
     await type(tester, "/rev");
 
@@ -136,7 +138,9 @@ void main() {
     expect(controller.text, "/review ");
   });
 
-  testWidgets("escape closes the menu and hands enter back to the field", (tester) async {
+  testWidgets("escape closes the menu and hands enter back to the field", (
+    tester,
+  ) async {
     await pump(tester);
     await type(tester, "/rev");
 
@@ -173,7 +177,9 @@ void main() {
     expect(sent, isEmpty);
   });
 
-  testWidgets("with the menu open, tab still takes the highlight", (tester) async {
+  testWidgets("with the menu open, tab still takes the highlight", (
+    tester,
+  ) async {
     await pump(tester);
     await type(tester, "/rev");
 
@@ -196,8 +202,9 @@ void main() {
     expect(controller.text, isEmpty);
   });
 
-  testWidgets("over a running turn, Send steers and the other button waits",
-      (tester) async {
+  testWidgets("over a running turn, Send steers and the other button waits", (
+    tester,
+  ) async {
     await pump(tester, agentSpeaking: true);
     expect(find.byTooltip("Send after this turn (Alt+Enter)"), findsNothing);
 
@@ -219,21 +226,25 @@ void main() {
     expect(queued, ["after", "also after"]);
   });
 
-  testWidgets("no queue button where the room would queue the say anyway",
-      (tester) async {
-    await pump(tester,
-        agentSpeaking: true, steers: (text) => !text.contains("@b"));
+  testWidgets("no queue button where the room would queue the say anyway", (
+    tester,
+  ) async {
+    await pump(
+      tester,
+      agentSpeaking: true,
+      steers: (text) => !text.contains("@b"),
+    );
     await type(tester, "@a and @b");
     expect(find.byTooltip("Send after this turn (Alt+Enter)"), findsNothing);
     expect(find.byTooltip("Send"), findsOneWidget);
 
     await type(tester, "just @a");
-    expect(
-        find.byTooltip("Send after this turn (Alt+Enter)"), findsOneWidget);
+    expect(find.byTooltip("Send after this turn (Alt+Enter)"), findsOneWidget);
   });
 
-  testWidgets("a message put back keeps its files, ahead of what came since",
-      (tester) async {
+  testWidgets("a message put back keeps its files, ahead of what came since", (
+    tester,
+  ) async {
     final key = GlobalKey<ComposerState>();
     await app.pump(
       tester,
@@ -256,9 +267,10 @@ void main() {
       text: "taken back",
       attachments: [
         Attachment(
-            filename: "shot.png",
-            mimeType: "image/png",
-            bytes: Uint8List.fromList([1, 2, 3])),
+          filename: "shot.png",
+          mimeType: "image/png",
+          bytes: Uint8List.fromList([1, 2, 3]),
+        ),
       ],
     ));
     await settleIo(tester);
@@ -278,7 +290,9 @@ void main() {
     await settleIo(tester);
   }
 
-  testWidgets("the + button's Skills entry opens the skill menu", (tester) async {
+  testWidgets("the + button's Skills entry opens the skill menu", (
+    tester,
+  ) async {
     await pump(tester);
     await insertVia(tester, "Skills");
 
@@ -286,7 +300,9 @@ void main() {
     expect(menuItems(tester), ["/init", "/revert", "/review"]);
   });
 
-  testWidgets("the + button's Agents entry opens the agent menu", (tester) async {
+  testWidgets("the + button's Agents entry opens the agent menu", (
+    tester,
+  ) async {
     await pump(tester);
     await insertVia(tester, "Agents");
 
@@ -294,19 +310,23 @@ void main() {
     expect(menuItems(tester), ["@build", "@explore"]);
   });
 
-  testWidgets("a skill goes to the start of the message, a mention to the caret",
-      (tester) async {
-    await pump(tester);
-    await type(tester, "look here");
+  testWidgets(
+    "a skill goes to the start of the message, a mention to the caret",
+    (tester) async {
+      await pump(tester);
+      await type(tester, "look here");
 
-    await insertVia(tester, "Agents");
-    expect(controller.text, "look here @");
+      await insertVia(tester, "Agents");
+      expect(controller.text, "look here @");
 
-    await insertVia(tester, "Skills");
-    expect(controller.text, "/look here @");
-  });
+      await insertVia(tester, "Skills");
+      expect(controller.text, "/look here @");
+    },
+  );
 
-  testWidgets("asking for skills twice does not stack up slashes", (tester) async {
+  testWidgets("asking for skills twice does not stack up slashes", (
+    tester,
+  ) async {
     await pump(tester);
     await insertVia(tester, "Skills");
     await insertVia(tester, "Skills");
@@ -331,15 +351,19 @@ void main() {
   // rather than run the row past the menu's edge.
   testWidgets("a long entry fits its row", (tester) async {
     app.dispose();
-    app = TestApp.create(library: PromptLibrary([
-      PromptDocument(
-        kind: CompletionKind.skill,
-        name: "a-very-long-skill-name-that-goes-on-and-on-past-any-menu",
-        frontmatter: {"description": "d" * 200},
-        metadata: {"argument-hint": "<an argument hint just as long as the name>"},
-        body: "",
-      ),
-    ]));
+    app = TestApp.create(
+      library: PromptLibrary([
+        PromptDocument(
+          kind: CompletionKind.skill,
+          name: "a-very-long-skill-name-that-goes-on-and-on-past-any-menu",
+          frontmatter: {"description": "d" * 200},
+          metadata: {
+            "argument-hint": "<an argument hint just as long as the name>",
+          },
+          body: "",
+        ),
+      ]),
+    );
     await pump(tester);
     await type(tester, "/");
 
@@ -356,7 +380,9 @@ void main() {
     expect(find.byType(ListView), findsNothing);
   });
 
-  testWidgets("the + button's Image and File entries open the chooser", (tester) async {
+  testWidgets("the + button's Image and File entries open the chooser", (
+    tester,
+  ) async {
     await pump(tester);
 
     await insertVia(tester, "Image");
@@ -366,22 +392,24 @@ void main() {
     expect(controller.text, isEmpty);
   });
 
-  testWidgets("what was chosen shows above the field and goes out with the message",
-      (tester) async {
-    app.picker.scripted = [testAttachment("notes.txt")];
-    await pump(tester);
-    await insertVia(tester, "File");
+  testWidgets(
+    "what was chosen shows above the field and goes out with the message",
+    (tester) async {
+      app.picker.scripted = [testAttachment("notes.txt")];
+      await pump(tester);
+      await insertVia(tester, "File");
 
-    expect(find.text("notes.txt"), findsOneWidget);
+      expect(find.text("notes.txt"), findsOneWidget);
 
-    await type(tester, "look");
-    await tester.tap(find.byIcon(Icons.send));
-    await settleIo(tester);
+      await type(tester, "look");
+      await tester.tap(find.byIcon(Icons.send));
+      await settleIo(tester);
 
-    expect(sent, ["look"]);
-    expect(sentAttachments.single.map((a) => a.filename), ["notes.txt"]);
-    expect(find.text("notes.txt"), findsNothing);
-  });
+      expect(sent, ["look"]);
+      expect(sentAttachments.single.map((a) => a.filename), ["notes.txt"]);
+      expect(find.text("notes.txt"), findsNothing);
+    },
+  );
 
   testWidgets("an image shows itself rather than its name", (tester) async {
     app.picker.scripted = [
@@ -395,7 +423,10 @@ void main() {
   });
 
   testWidgets("the X on an attachment drops it", (tester) async {
-    app.picker.scripted = [testAttachment("notes.txt"), testAttachment("other.txt")];
+    app.picker.scripted = [
+      testAttachment("notes.txt"),
+      testAttachment("other.txt"),
+    ];
     await pump(tester);
     await insertVia(tester, "File");
 
@@ -424,11 +455,18 @@ void main() {
     expect(controller.text, "look");
   });
 
-  testWidgets("pasting text with no files on the clipboard types it", (tester) async {
+  testWidgets("pasting text with no files on the clipboard types it", (
+    tester,
+  ) async {
     final messenger = tester.binding.defaultBinaryMessenger;
-    messenger.setMockMethodCallHandler(SystemChannels.platform, (call) async =>
-        call.method == "Clipboard.getData" ? {"text": "pasted"} : null);
-    addTearDown(() => messenger.setMockMethodCallHandler(SystemChannels.platform, null));
+    messenger.setMockMethodCallHandler(
+      SystemChannels.platform,
+      (call) async =>
+          call.method == "Clipboard.getData" ? {"text": "pasted"} : null,
+    );
+    addTearDown(
+      () => messenger.setMockMethodCallHandler(SystemChannels.platform, null),
+    );
     await pump(tester);
     await type(tester, "");
 
@@ -438,29 +476,33 @@ void main() {
     expect(find.byType(AttachmentChip), findsNothing);
   });
 
-  testWidgets("an attachment on its own is worth sending, nothing at all is not", (tester) async {
-    app.picker.scripted = [testAttachment("notes.txt")];
-    await pump(tester);
+  testWidgets(
+    "an attachment on its own is worth sending, nothing at all is not",
+    (tester) async {
+      app.picker.scripted = [testAttachment("notes.txt")];
+      await pump(tester);
 
-    // The button is dead here, so this taps a live pixel that does nothing.
-    // `_submit`'s own guard is what Ctrl+Enter still meets.
-    await tester.tap(find.byIcon(Icons.send));
-    await settleIo(tester);
-    expect(sent, isEmpty);
+      // The button is dead here, so this taps a live pixel that does nothing.
+      // `_submit`'s own guard is what Ctrl+Enter still meets.
+      await tester.tap(find.byIcon(Icons.send));
+      await settleIo(tester);
+      expect(sent, isEmpty);
 
-    await insertVia(tester, "File");
-    await tester.tap(find.byIcon(Icons.send));
-    await settleIo(tester);
+      await insertVia(tester, "File");
+      await tester.tap(find.byIcon(Icons.send));
+      await settleIo(tester);
 
-    expect(sent, [""]);
-    expect(sentAttachments.single.map((a) => a.filename), ["notes.txt"]);
-  });
+      expect(sent, [""]);
+      expect(sentAttachments.single.map((a) => a.filename), ["notes.txt"]);
+    },
+  );
 
   group("the send button", () {
     Finder send() => find.widgetWithIcon(IconButton, Icons.send);
 
-    testWidgets("is dead until there is something to send, and after it goes",
-        (tester) async {
+    testWidgets("is dead until there is something to send, and after it goes", (
+      tester,
+    ) async {
       await pump(tester);
       expect(enabled(tester, send()), isFalse);
 
@@ -499,8 +541,9 @@ void main() {
     InputDecoration decoration(WidgetTester tester) =>
         tester.widget<TextField>(find.byType(TextField)).decoration!;
 
-    testWidgets("says so from the bang alone, before anything follows it",
-        (tester) async {
+    testWidgets("says so from the bang alone, before anything follows it", (
+      tester,
+    ) async {
       await pump(tester);
       await type(tester, "!");
 
@@ -548,17 +591,19 @@ void main() {
       return shell;
     }
 
-    testWidgets("shows the shell's own directory while a command is being typed",
-        (tester) async {
-      withBar(tester);
-      await pump(tester, workspace: workspace);
+    testWidgets(
+      "shows the shell's own directory while a command is being typed",
+      (tester) async {
+        withBar(tester);
+        await pump(tester, workspace: workspace);
 
-      // Nothing outside a command draws it.
-      expect(find.text(workspace), findsNothing);
+        // Nothing outside a command draws it.
+        expect(find.text(workspace), findsNothing);
 
-      await type(tester, "!");
-      expect(find.text(workspace), findsOneWidget);
-    });
+        await type(tester, "!");
+        expect(find.text(workspace), findsOneWidget);
+      },
+    );
 
     testWidgets("and follows the shell as a command moves it", (tester) async {
       final shell = withBar(tester);
@@ -583,19 +628,21 @@ void main() {
       expect(copied, [workspace]);
     });
 
-    testWidgets("a chat whose session the shell has not heard from is worded in the guest's vocabulary",
-        (tester) async {
-      app.dispose();
-      app = TestApp.create(shell: _MaskedShell());
-      await pump(
-        tester,
-        workspace: "$workspace/chats/x",
-        workspaceHome: workspace,
-      );
-      await type(tester, "!");
+    testWidgets(
+      "a chat whose session the shell has not heard from is worded in the guest's vocabulary",
+      (tester) async {
+        app.dispose();
+        app = TestApp.create(shell: _MaskedShell());
+        await pump(
+          tester,
+          workspace: "$workspace/chats/x",
+          workspaceHome: workspace,
+        );
+        await type(tester, "!");
 
-      expect(find.text("/root/chats/x"), findsOneWidget);
-    });
+        expect(find.text("/root/chats/x"), findsOneWidget);
+      },
+    );
   });
 
   group("the keyboard", () {
@@ -611,20 +658,22 @@ void main() {
 
     // The picker and the menu it opens are both tapped rather than typed at,
     // so there is nothing to bring the keyboard up for.
-    testWidgets("stays down for a file that was attached, and for a menu opened from +",
-        (tester) async {
-      app.picker.scripted = [testAttachment("notes.txt")];
-      await pump(tester);
-      await insertVia(tester, "File");
+    testWidgets(
+      "stays down for a file that was attached, and for a menu opened from +",
+      (tester) async {
+        app.picker.scripted = [testAttachment("notes.txt")];
+        await pump(tester);
+        await insertVia(tester, "File");
 
-      expect(find.text("notes.txt"), findsOneWidget);
-      expect(tester.testTextInput.isVisible, isFalse);
+        expect(find.text("notes.txt"), findsOneWidget);
+        expect(tester.testTextInput.isVisible, isFalse);
 
-      await insertVia(tester, "Skills");
+        await insertVia(tester, "Skills");
 
-      expect(menuItems(tester), ["/init", "/revert", "/review"]);
-      expect(tester.testTextInput.isVisible, isFalse);
-    });
+        expect(menuItems(tester), ["/init", "/revert", "/review"]);
+        expect(tester.testTextInput.isVisible, isFalse);
+      },
+    );
   });
 }
 

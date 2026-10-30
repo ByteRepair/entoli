@@ -46,8 +46,10 @@ class FileTriggerStore {
     }
   }
 
-  Future<void> save(List<Trigger> triggers) => _write.write(_config.remindersFile,
-      jsonEncode([for (final t in triggers) t.toJson()]));
+  Future<void> save(List<Trigger> triggers) => _write.write(
+    _config.remindersFile,
+    jsonEncode([for (final t in triggers) t.toJson()]),
+  );
 }
 
 /// A small int unique among the triggers on disk, for the alarm PendingIntent.

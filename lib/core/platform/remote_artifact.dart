@@ -20,8 +20,7 @@ Future<String> unzipRemoteArtifact(Uint8List bytes) async {
   final dir = await Directory.systemTemp.createTemp("entoli-artifact");
   for (final member in ZipDecoder().decodeBytes(bytes)) {
     if (member.isDirectory) continue;
-    final target =
-        "${dir.path}/${safeRelativePath(member.name)}";
+    final target = "${dir.path}/${safeRelativePath(member.name)}";
     final file = File(target);
     await file.create(recursive: true);
     await file.writeAsBytes(member.readBytes() ?? Uint8List(0));
@@ -45,8 +44,11 @@ class RemoteArtifacts {
   /// a dispose to clean up in, so the newest replaces the older.
   final _staged = <String, String>{};
 
-  Future<String?> fetch(String chatId, String artifactId,
-      {required String entryFile}) async {
+  Future<String?> fetch(
+    String chatId,
+    String artifactId, {
+    required String entryFile,
+  }) async {
     final bytes = await _hub.artifactBytes(chatId, artifactId);
     if (bytes == null || bytes.isEmpty) return null;
     final dir = await unzipRemoteArtifact(bytes);

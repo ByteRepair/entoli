@@ -15,13 +15,11 @@ void main() {
   /// A field to type in and a reply to select text in, which is the chat page in
   /// the two parts that matter here.
   Future<void> pump(WidgetTester tester) => app.pump(
-        tester,
-        Scaffold(
-          body: Column(
-            children: const [SelectableText("a reply"), TextField()],
-          ),
-        ),
-      );
+    tester,
+    Scaffold(
+      body: Column(children: const [SelectableText("a reply"), TextField()]),
+    ),
+  );
 
   testWidgets("the caret goes when the keyboard does", (tester) async {
     await pump(tester);
@@ -35,7 +33,9 @@ void main() {
     expect(tester.testTextInput.isVisible, isFalse);
   });
 
-  testWidgets("a field the keyboard was never up for is left alone", (tester) async {
+  testWidgets("a field the keyboard was never up for is left alone", (
+    tester,
+  ) async {
     await pump(tester);
     await tester.tap(field);
     await tester.pumpAndSettle();
@@ -48,7 +48,9 @@ void main() {
     expect(holdsCaret(tester, field), isTrue);
   });
 
-  testWidgets("a selection made while the keyboard was up keeps it", (tester) async {
+  testWidgets("a selection made while the keyboard was up keeps it", (
+    tester,
+  ) async {
     await pump(tester);
     await tester.tap(field);
     await softKeyboard(tester, up: true);

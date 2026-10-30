@@ -14,8 +14,11 @@ void main(List<String> args) {
   final port = args.contains("--port")
       ? int.parse(args[args.indexOf("--port") + 1])
       : 8090;
-  RelayServer().start(port).then((_) =>
-      stdout.writeln("entoli relay listening on ws://0.0.0.0:$port"));
+  RelayServer()
+      .start(port)
+      .then(
+        (_) => stdout.writeln("entoli relay listening on ws://0.0.0.0:$port"),
+      );
 }
 
 /// One side of a room, as the forwarding sees it. A WebSocket in earnest.

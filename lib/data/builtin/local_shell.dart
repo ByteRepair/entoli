@@ -18,9 +18,9 @@ const _appImageVars = {"APPIMAGE", "APPDIR", "ARGV0", "OWD"};
 /// ours as its own. Dart cannot unset an inherited variable, so the rest is
 /// copied.
 Map<String, String> environmentWithoutAppImage() => {
-      for (final e in Platform.environment.entries)
-        if (!_appImageVars.contains(e.key)) e.key: e.value,
-    };
+  for (final e in Platform.environment.entries)
+    if (!_appImageVars.contains(e.key)) e.key: e.value,
+};
 
 /// Runs commands under the [ShellDriver] it is given, in one persistent shell
 /// per chat; a sandboxed or `oneShot` command gets a fresh subshell. See
@@ -29,8 +29,8 @@ class LocalShell extends Shell {
   LocalShell({
     Map<String, String> Function()? environment,
     ShellDriver? Function({String? project})? driver,
-  })  : _environment = environment ?? (() => const {}),
-        _driver = driver ?? _hostDriver;
+  }) : _environment = environment ?? (() => const {}),
+       _driver = driver ?? _hostDriver;
 
   /// What the commands run under, read at each command for the reason
   /// [_environment] is: installing a Linux from the settings page, or going
@@ -55,8 +55,11 @@ class LocalShell extends Shell {
   /// the same thing without costing a subprocess. Returns the process and
   /// whether it owns a process group a stop can kill.
   static Future<({Process process, bool ownsGroup})> _spawnInGroup(
-      List<String> command, String cwd, Map<String, String> env,
-      {bool includeParentEnvironment = true}) async {
+    List<String> command,
+    String cwd,
+    Map<String, String> env, {
+    bool includeParentEnvironment = true,
+  }) async {
     // The cwd is a directory the app lays out, and it may not be there yet:
     // a project workspace before its first chat (a built-in project's setup
     // runs in one) or one a user deleted from the Files app. A missing
@@ -70,20 +73,26 @@ class LocalShell extends Shell {
     }
     if (_hasSetsid != false && !Platform.isWindows) {
       try {
-        final process = await Process.start("setsid", [command.first, ...argv],
-            workingDirectory: cwd,
-            environment: env,
-            includeParentEnvironment: includeParentEnvironment);
+        final process = await Process.start(
+          "setsid",
+          [command.first, ...argv],
+          workingDirectory: cwd,
+          environment: env,
+          includeParentEnvironment: includeParentEnvironment,
+        );
         _hasSetsid = true;
         return (process: process, ownsGroup: true);
       } on ProcessException {
         _hasSetsid = false;
       }
     }
-    final process = await Process.start(command.first, argv,
-        workingDirectory: cwd,
-        environment: env,
-        includeParentEnvironment: includeParentEnvironment);
+    final process = await Process.start(
+      command.first,
+      argv,
+      workingDirectory: cwd,
+      environment: env,
+      includeParentEnvironment: includeParentEnvironment,
+    );
     return (process: process, ownsGroup: false);
   }
 
@@ -152,7 +161,8 @@ class LocalShell extends Shell {
   /// Host path prefixes mapped to their guest equivalents, for translating
   /// paths the model is told into the guest's vocabulary. Empty on the machine.
   @override
-  Map<String, String> get hostToGuestPaths => _driver()?.hostToGuestPaths ?? const {};
+  Map<String, String> get hostToGuestPaths =>
+      _driver()?.hostToGuestPaths ?? const {};
 
   /// What commands run under on the machine itself: the shell [shellPath]
   /// resolved, whatever this build bundles beside it, and the sentence the
@@ -178,15 +188,16 @@ class LocalShell extends Shell {
     final environment0 = loginPath == null
         ? environment
         : {"PATH": loginPath, ...?environment};
-    final where = "${Platform.operatingSystem} ${Platform.operatingSystemVersion}, "
+    final where =
+        "${Platform.operatingSystem} ${Platform.operatingSystemVersion}, "
         "commands run under $path";
     final bundled = tools?.names;
     final description = bundled != null
         ? "$where, with $bundled bundled with the app"
         : tools?.proot != null
-            ? "$where. There is no git and no package manager here; installing "
-                "a Linux from the Terminal settings gives you both"
-            : where;
+        ? "$where. There is no git and no package manager here; installing "
+              "a Linux from the Terminal settings gives you both"
+        : where;
     return ShellDriver(
       commandFor: (_, _, {readOnly = const []}) => [path],
       environment: {...?environment0, ...?tools?.environment},
@@ -223,16 +234,18 @@ class LocalShell extends Shell {
   }
 
   @override
-  ShellRun start(String command,
-      {required String cwd,
-      required String home,
-      required Duration timeout,
-      Map<String, String>? environment,
-      bool oneShot = false,
-      bool restart = false,
-      String? project,
-      CommandSandbox? sandbox,
-      List<String> readOnly = const []}) {
+  ShellRun start(
+    String command, {
+    required String cwd,
+    required String home,
+    required Duration timeout,
+    Map<String, String>? environment,
+    bool oneShot = false,
+    bool restart = false,
+    String? project,
+    CommandSandbox? sandbox,
+    List<String> readOnly = const [],
+  }) {
     // A sandboxed command runs in a confined subshell of its own, whatever
     // the caller asked for: the session shell is the conversation's shared
     // state, and a boundary asked for per command cannot be attached to it
@@ -250,7 +263,10 @@ class LocalShell extends Shell {
         cwd: cwd,
         timeout: timeout,
         environment: _compose(
-            home: home, driver: driver, environment: environment),
+          home: home,
+          driver: driver,
+          environment: environment,
+        ),
         includeParentEnvironment: driver?.includeParentEnvironment ?? true,
         sandbox: sandbox,
         sandboxHelper: driver?.sandboxHelper,
@@ -258,8 +274,13 @@ class LocalShell extends Shell {
     }
     return _sessions
         .putIfAbsent(cwd, () => _Session(this, cwd, home, project: project))
-        .start(command, timeout,
-            environment: environment, restart: restart, readOnly: readOnly);
+        .start(
+          command,
+          timeout,
+          environment: environment,
+          restart: restart,
+          readOnly: readOnly,
+        );
   }
 
   /// What a command runs under, with the layers in the order they win. The
@@ -275,29 +296,27 @@ class LocalShell extends Shell {
     required String home,
     required Map<String, String> app,
     Map<String, String>? project,
-  }) =>
-      {
-        ...defaults,
-        ...?driver?.environment,
-        // The home is the workspace where the driver takes one — a guest's at
-        // [guestRoot], not the host path — and the machine's own otherwise.
-        if (driver?.projectHome ?? false) "HOME": driver?.guestRoot ?? home,
-        ...app,
-        ...?project,
-      };
+  }) => {
+    ...defaults,
+    ...?driver?.environment,
+    // The home is the workspace where the driver takes one — a guest's at
+    // [guestRoot], not the host path — and the machine's own otherwise.
+    if (driver?.projectHome ?? false) "HOME": driver?.guestRoot ?? home,
+    ...app,
+    ...?project,
+  };
 
   Map<String, String> _compose({
     required String home,
     required ShellDriver? driver,
     Map<String, String>? environment,
-  }) =>
-      composeEnvironment(
-        defaults: defaultShellEnvironment,
-        driver: driver,
-        home: home,
-        app: _environment(),
-        project: environment,
-      );
+  }) => composeEnvironment(
+    defaults: defaultShellEnvironment,
+    driver: driver,
+    home: home,
+    app: _environment(),
+    project: environment,
+  );
 
   /// The shell every command is run under, resolved once. `bash` is preferred
   /// because the prompt's examples are written for it, and the fallbacks are
@@ -320,12 +339,16 @@ class LocalShell extends Shell {
     final systemRoot = (env["SystemRoot"] ?? r"C:\Windows").toLowerCase();
     final dirs = (path ?? env["PATH"] ?? "")
         .split(listSeparator(windows: win))
-        .where((dir) => dir.isNotEmpty &&
-            !(win &&
-                (paths.equals(systemRoot, dir.toLowerCase()) ||
-                    paths.isWithin(systemRoot, dir.toLowerCase()))))
+        .where(
+          (dir) =>
+              dir.isNotEmpty &&
+              !(win &&
+                  (paths.equals(systemRoot, dir.toLowerCase()) ||
+                      paths.isWithin(systemRoot, dir.toLowerCase()))),
+        )
         .toList();
-    for (final name in win ? const ["bash.exe", "sh.exe"] : const ["bash", "sh"]) {
+    for (final name
+        in win ? const ["bash.exe", "sh.exe"] : const ["bash", "sh"]) {
       for (final dir in dirs) {
         final candidate = paths.join(dir, name);
         if (executable(candidate)) return candidate;
@@ -387,14 +410,22 @@ const _drainGrace = Duration(seconds: 2);
 void _signalGroup(Process process, bool ownsGroup, ProcessSignal signal) {
   if (Platform.isWindows) {
     if (signal == ProcessSignal.sigint) return;
-    unawaited(Process.run(
-            "taskkill", ["/T", "/F", "/PID", "${process.pid}"])
-        .then<void>((r) {
-      if (r.exitCode != 0) process.kill();
-    }, onError: (Object e) {
-      logFailure("shell", "taskkill failed", e);
-      process.kill();
-    }));
+    unawaited(
+      Process.run("taskkill", [
+        "/T",
+        "/F",
+        "/PID",
+        "${process.pid}",
+      ]).then<void>(
+        (r) {
+          if (r.exitCode != 0) process.kill();
+        },
+        onError: (Object e) {
+          logFailure("shell", "taskkill failed", e);
+          process.kill();
+        },
+      ),
+    );
     return;
   }
   if (ownsGroup) {
@@ -434,7 +465,7 @@ const _markerPrefix = "\n@@E";
 /// stop and a resend land close together.
 class _Session {
   _Session(this._shell, this._cwdPath, this._home, {this._project})
-      : _displayCwd = _computeDisplayCwd(_shell, _cwdPath, _home);
+    : _displayCwd = _computeDisplayCwd(_shell, _cwdPath, _home);
 
   final LocalShell _shell;
 
@@ -457,9 +488,7 @@ class _Session {
   static String _computeDisplayCwd(LocalShell shell, String cwd, String home) {
     final driver = shell._driver();
     final root = driver?.guestRoot;
-    return root != null
-        ? guestWorkspacePath(root, home, cwd)
-        : cwd;
+    return root != null ? guestWorkspacePath(root, home, cwd) : cwd;
   }
 
   Process? _process;
@@ -487,13 +516,24 @@ class _Session {
   /// How long a stop or a timeout waits on the interrupt before killing.
   static const _grace = Duration(seconds: 1);
 
-  ShellRun start(String command, Duration timeout,
-       {Map<String, String>? environment,
-       bool restart = false,
-       List<String> readOnly = const []}) {
+  ShellRun start(
+    String command,
+    Duration timeout, {
+    Map<String, String>? environment,
+    bool restart = false,
+    List<String> readOnly = const [],
+  }) {
     final run = _SessionRun(_RunState(timeout), this);
-    _queue = _queue.then((_) => _execute(run, command, timeout,
-        environment: environment, restart: restart, readOnly: readOnly));
+    _queue = _queue.then(
+      (_) => _execute(
+        run,
+        command,
+        timeout,
+        environment: environment,
+        restart: restart,
+        readOnly: readOnly,
+      ),
+    );
     return run;
   }
 
@@ -511,20 +551,30 @@ class _Session {
     final command0 =
         driver?.commandFor(_cwdPath, _home, readOnly: readOnly) ?? const [];
     if (command0.isEmpty) {
-      run.state.complete(const ShellResult.failed(
-          "No shell was found on this device to execute commands in."));
+      run.state.complete(
+        const ShellResult.failed(
+          "No shell was found on this device to execute commands in.",
+        ),
+      );
       return;
     }
     final env = _shell._compose(
-        home: _home, driver: driver, environment: environment);
+      home: _home,
+      driver: driver,
+      environment: environment,
+    );
     final fp = _fingerprint(command0, env);
     if (restart || _fp != fp) {
       try {
-        await _spawn(command0, env,
-            includeParentEnvironment: driver?.includeParentEnvironment ?? true);
+        await _spawn(
+          command0,
+          env,
+          includeParentEnvironment: driver?.includeParentEnvironment ?? true,
+        );
       } catch (e) {
         run.state.complete(
-            ShellResult.failed("An error occurred while starting the shell: $e"));
+          ShellResult.failed("An error occurred while starting the shell: $e"),
+        );
         return;
       }
     }
@@ -535,12 +585,18 @@ class _Session {
     // reference. This happens when an abort's grace hasn't fired yet and the
     // next turn starts.
     if (_current != null && !_current!.done.isCompleted) {
-      _failCurrent(ShellResult.failed(
+      _failCurrent(
+        ShellResult.failed(
           "The shell was interrupted by the next command.",
-          output: _current!.output));
+          output: _current!.output,
+        ),
+      );
     }
     _current = state;
-    state.timeoutTimer = Timer(timeout, () => _interrupt(state, byTimeout: true));
+    state.timeoutTimer = Timer(
+      timeout,
+      () => _interrupt(state, byTimeout: true),
+    );
     try {
       // The whole of the wire protocol: one base64 line, decoded and
       // evaluated by the shell.
@@ -549,9 +605,12 @@ class _Session {
     } catch (e) {
       // A write that fails is a pipe whose other end is gone: the shell is
       // dead, and the next command starts one again.
-      _failCurrent(ShellResult.failed(
+      _failCurrent(
+        ShellResult.failed(
           "An error occurred while executing the command: $e",
-          output: state.output));
+          output: state.output,
+        ),
+      );
     }
   }
 
@@ -559,8 +618,11 @@ class _Session {
   static String _fingerprint(List<String> command, Map<String, String> env) =>
       "${command.join("\u0000")}\u0000${env.entries.map((e) => "${e.key}=${e.value}").join("\u0000")}";
 
-  Future<void> _spawn(List<String> command, Map<String, String> env,
-      {bool includeParentEnvironment = true}) async {
+  Future<void> _spawn(
+    List<String> command,
+    Map<String, String> env, {
+    bool includeParentEnvironment = true,
+  }) async {
     await _teardown();
     final token = const Uuid().v4();
     _marker = dispatcherMarker(token);
@@ -570,8 +632,11 @@ class _Session {
       // which is what a stop kills. Whether it is there is learned by trying
       // it, the way the one-shot run learns it.
       final started = await LocalShell._spawnInGroup(
-          [command.first, ...argv], _cwdPath, env,
-          includeParentEnvironment: includeParentEnvironment);
+        [command.first, ...argv],
+        _cwdPath,
+        env,
+        includeParentEnvironment: includeParentEnvironment,
+      );
       _process = started.process;
       _ownsGroup = started.ownsGroup;
     } catch (e) {
@@ -587,10 +652,13 @@ class _Session {
     // The pipe outlives the process while an escaped child holds it, so the
     // exit code is the faster report of the shell being gone — and the grace
     // is what settles a run the pipe then never closes.
-    unawaited(process.exitCode.then((_) =>
-        Timer(_drainGrace, () {
+    unawaited(
+      process.exitCode.then(
+        (_) => Timer(_drainGrace, () {
           if (_process == process) _settleExit();
-        })));
+        }),
+      ),
+    );
     // A fresh shell is standing where it was told to start.
     _shell._cwds[_cwdPath]?.value = _displayCwd;
   }
@@ -621,17 +689,19 @@ class _Session {
     _current = null;
     run.timeoutTimer?.cancel();
     _shell._cwds[_cwdPath]?.value = cwd;
-    run.complete(ShellResult(
-      returnCode: rc,
-      output: output,
-      cwd: cwd,
-      exceptionInfo: run.interrupted
-          ? run.byTimeout
-              ? "The command timed out after ${_word(run.timeout)} and was "
-                  "interrupted. Anything it printed before that is above."
-              : "The command was interrupted."
-          : null,
-    ));
+    run.complete(
+      ShellResult(
+        returnCode: rc,
+        output: output,
+        cwd: cwd,
+        exceptionInfo: run.interrupted
+            ? run.byTimeout
+                  ? "The command timed out after ${_word(run.timeout)} and was "
+                        "interrupted. Anything it printed before that is above."
+                  : "The command was interrupted."
+            : null,
+      ),
+    );
     // A timeout's escalation lands here rather than at the end of the grace:
     // the command is done, so the interrupt is spent, and whatever survived
     // it — the background a non-interactive shell starts ignores the
@@ -652,17 +722,19 @@ class _Session {
   void _settleExit() {
     final run = _current;
     if (run != null) {
-      _failCurrent(ShellResult(
-        returnCode: -1,
-        output: run.output,
-        exceptionInfo: run.interrupted
-            ? run.byTimeout
-                ? "The command timed out after ${_word(run.timeout)} and was "
-                    "killed. Anything it printed before that is above."
-                : "The command was interrupted and killed."
-            : "The shell was closed while the command was running. "
-                "It starts again, in its starting directory, on the next command.",
-      ));
+      _failCurrent(
+        ShellResult(
+          returnCode: -1,
+          output: run.output,
+          exceptionInfo: run.interrupted
+              ? run.byTimeout
+                    ? "The command timed out after ${_word(run.timeout)} and was "
+                          "killed. Anything it printed before that is above."
+                    : "The command was interrupted and killed."
+              : "The shell was closed while the command was running. "
+                    "It starts again, in its starting directory, on the next command.",
+        ),
+      );
     }
     _shell._cwds[_cwdPath]?.value = _displayCwd;
   }
@@ -689,7 +761,9 @@ class _Session {
       return;
     }
     final process = _process;
-    if (process != null) _signalGroup(process, _ownsGroup, ProcessSignal.sigint);
+    if (process != null) {
+      _signalGroup(process, _ownsGroup, ProcessSignal.sigint);
+    }
     run.escalateTimer = Timer(_grace, () {
       if (run.byTimeout || !run.done.isCompleted) _killGroup();
     });
@@ -720,9 +794,12 @@ class _Session {
   Future<void> _teardown() async {
     final run = _current;
     if (run != null) {
-      _failCurrent(ShellResult.failed(
+      _failCurrent(
+        ShellResult.failed(
           "The shell was restarted while the command was running.",
-          output: run.output));
+          output: run.output,
+        ),
+      );
     }
     final process = _process;
     final ownsGroup = _ownsGroup;
@@ -730,7 +807,9 @@ class _Session {
     _ownsGroup = false;
     await _sub?.cancel();
     _sub = null;
-    if (process != null) _signalGroup(process, ownsGroup, ProcessSignal.sigkill);
+    if (process != null) {
+      _signalGroup(process, ownsGroup, ProcessSignal.sigkill);
+    }
   }
 
   /// For when the chat the shell belongs to is deleted.
@@ -904,7 +983,8 @@ class _OneShotRun extends ShellRun {
     if (command.isEmpty) {
       _pid.complete(null);
       return const ShellResult.failed(
-          "No shell was found on this device to execute commands in.");
+        "No shell was found on this device to execute commands in.",
+      );
     }
     final output = StringBuffer();
     Timer? timer;
@@ -918,15 +998,15 @@ class _OneShotRun extends ShellRun {
       final reading = process.stdout
           .transform(const Utf8Decoder(allowMalformed: true))
           .listen((chunk) {
-        output.write(chunk);
-        _publish(chunk);
-      });
+            output.write(chunk);
+            _publish(chunk);
+          });
       // The confinement's own stderr, before any shell runs to merge its own:
       // a ruleset that failed to come up prints why, and that reason is the
       // model's only lead. Lost, it was an rc=91 with nothing beside it.
-      process.stderr
-          .transform(const Utf8Decoder(allowMalformed: true))
-          .listen((chunk) {
+      process.stderr.transform(const Utf8Decoder(allowMalformed: true)).listen((
+        chunk,
+      ) {
         output.write(chunk);
         _publish(chunk);
       });
@@ -950,7 +1030,7 @@ class _OneShotRun extends ShellRun {
         exceptionInfo: _killed
             ? "The command was interrupted and killed."
             : "The command timed out after ${_word(timeout)} and was killed. "
-                "Anything it printed before that is above.",
+                  "Anything it printed before that is above.",
       );
     } on ShellUnavailable catch (e) {
       // Fail-closed has its own words: a confinement that did not happen is
@@ -987,12 +1067,15 @@ class _OneShotRun extends ShellRun {
     // the same fail-closed answer the session path gives.
     var confined = environment;
     if (sandbox != null) {
-      final prefix =
-          sandboxHelper == null ? null : await sandboxHelper!.prefixFor(sandbox!);
+      final prefix = sandboxHelper == null
+          ? null
+          : await sandboxHelper!.prefixFor(sandbox!);
       if (prefix == null) {
-        throw const ShellUnavailable("No sandbox is available on this machine "
-            "to run this command confined, so it was not run. Landlock needs "
-            "Linux 5.13 or newer and a C compiler.");
+        throw const ShellUnavailable(
+          "No sandbox is available on this machine "
+          "to run this command confined, so it was not run. Landlock needs "
+          "Linux 5.13 or newer and a C compiler.",
+        );
       }
       // The helper refuses a grant to a directory that is not there, so the
       // tmp the ruleset names is made before the spawn. It is inside the
@@ -1010,8 +1093,11 @@ class _OneShotRun extends ShellRun {
       argv = [...prefix.skip(1), ...command, "-c", body];
     }
     final started = await LocalShell._spawnInGroup(
-        [head, ...argv], cwd, confined,
-        includeParentEnvironment: includeParentEnvironment);
+      [head, ...argv],
+      cwd,
+      confined,
+      includeParentEnvironment: includeParentEnvironment,
+    );
     _ownsGroup = started.ownsGroup;
     return started.process;
   }

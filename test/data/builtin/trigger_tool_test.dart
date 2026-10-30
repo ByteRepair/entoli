@@ -25,14 +25,17 @@ class FakeRegistry implements TriggerRegistry {
   PromptLibrary? library;
 
   @override
-  Future<Trigger> register(
-      {required TriggerSource source,
-      required String prompt,
-      String? name,
-      String? member}) async {
-    if (member
-        case final name? when (library ?? PromptLibrary.empty)
-                .find(CompletionKind.agent, name) ==
+  Future<Trigger> register({
+    required TriggerSource source,
+    required String prompt,
+    String? name,
+    String? member,
+  }) async {
+    if (member case final name?
+        when (library ?? PromptLibrary.empty).find(
+              CompletionKind.agent,
+              name,
+            ) ==
             null) {
       throw ArgumentError.value(member, "member", "no agent named $member");
     }
@@ -46,26 +49,27 @@ class FakeRegistry implements TriggerRegistry {
     // And the same refusal, at the same site — the tools' story runs it.
     final problem = triggerScheduleProblem(anchored, now);
     if (problem != null) {
-      throw ArgumentError.value(
-          (anchored as ScheduleSource).at, "at", problem);
+      throw ArgumentError.value((anchored as ScheduleSource).at, "at", problem);
     }
     final trigger = Trigger(
-        id: id,
-        name: name ?? "",
-        prompt: prompt,
-        source: anchored,
-        chatId: chatId,
-        member: member,
-        byAgent: true,
-        nextFireAt: anchored.nextAfter(now));
+      id: id,
+      name: name ?? "",
+      prompt: prompt,
+      source: anchored,
+      chatId: chatId,
+      member: member,
+      byAgent: true,
+      nextFireAt: anchored.nextAfter(now),
+    );
     stored.add(trigger);
     return trigger;
   }
 
   @override
   Future<List<Trigger>> own() async => [
-        for (final t in stored) if (t.chatId == chatId) t,
-      ];
+    for (final t in stored)
+      if (t.chatId == chatId) t,
+  ];
 
   @override
   Future<void> remove(String id) async => removed.add(id);
@@ -92,7 +96,10 @@ void main() {
   /// The agent with the register wired, and the model's two step replies
   /// scripted: the tool call, then the finish.
   BuiltinAgent agent(List<LlmCompletion> script, {TriggerRegistry? over}) {
-    final client = FakeLlmClient([script, [_finish]]);
+    final client = FakeLlmClient([
+      script,
+      [_finish],
+    ]);
     final projectWorkspace = p.join(tempDir.path, "project");
     final workspace = p.join(projectWorkspace, "chats", "chat-1");
     Directory(workspace).createSync(recursive: true);
@@ -209,27 +216,31 @@ void main() {
     expect(registry.stored, isEmpty);
   });
 
-  test("trigger_set refuses a one-shot already past, as a fixable error", () async {
-    final events = await agent([
-      fileCall(triggerSetName, {
-        "source": "schedule",
-        "prompt": "p",
-        "at": "2026-08-22T09:00:00",
-      }),
-    ]).run(userMessage("remind me")).toList();
+  test(
+    "trigger_set refuses a one-shot already past, as a fixable error",
+    () async {
+      final events = await agent([
+        fileCall(triggerSetName, {
+          "source": "schedule",
+          "prompt": "p",
+          "at": "2026-08-22T09:00:00",
+        }),
+      ]).run(userMessage("remind me")).toList();
 
-    final result = resultOf(events);
-    expect(result.returnCode, -1);
-    expect(result.exceptionInfo, contains("could not be set"));
-    expect(result.exceptionInfo, contains("never fire"));
-    expect(registry.stored, isEmpty);
-  });
+      final result = resultOf(events);
+      expect(result.returnCode, -1);
+      expect(result.exceptionInfo, contains("could not be set"));
+      expect(result.exceptionInfo, contains("never fire"));
+      expect(registry.stored, isEmpty);
+    },
+  );
 
   test("trigger_list names the member a fire is addressed to", () async {
     await registry.register(
-        source: ScheduleSource(at: DateTime(2026, 8, 24, 9)),
-        prompt: "p",
-        member: "build");
+      source: ScheduleSource(at: DateTime(2026, 8, 24, 9)),
+      prompt: "p",
+      member: "build",
+    );
     final events = await agent([
       fileCall(triggerListName, {}),
     ]).run(userMessage("what is armed?")).toList();
@@ -238,35 +249,48 @@ void main() {
     expect(output, contains("@build"));
   });
 
-  test("trigger_list answers this chat's own with ids and next fires", () async {
-    await registry.register(
+  test(
+    "trigger_list answers this chat's own with ids and next fires",
+    () async {
+      await registry.register(
         source: ScheduleSource(at: DateTime(2026, 8, 24, 9)),
         prompt: "p",
-        name: "sweep");
-    final events = await agent([
-      fileCall(triggerListName, {}),
-    ]).run(userMessage("what is armed?")).toList();
-    final output = resultOf(events).output;
-    expect(output, contains("t-1"));
-    expect(output, contains("sweep"));
-  });
+        name: "sweep",
+      );
+      final events = await agent([
+        fileCall(triggerListName, {}),
+      ]).run(userMessage("what is armed?")).toList();
+      final output = resultOf(events).output;
+      expect(output, contains("t-1"));
+      expect(output, contains("sweep"));
+    },
+  );
 
   test("trigger_remove takes this chat's own, and only those", () async {
     await registry.register(
-        source: ScheduleSource(at: DateTime(2026, 8, 24, 9)), prompt: "p");
-    final first = agent([fileCall(triggerRemoveName, {"id": "t-1"})]);
+      source: ScheduleSource(at: DateTime(2026, 8, 24, 9)),
+      prompt: "p",
+    );
+    final first = agent([
+      fileCall(triggerRemoveName, {"id": "t-1"}),
+    ]);
     await first.run(userMessage("drop it")).toList();
     expect(registry.removed, ["t-1"]);
 
-    registry.stored.add(Trigger(
+    registry.stored.add(
+      Trigger(
         id: "t-9",
         name: "n",
         prompt: "p",
         // Another chat's: not this registry's to remove.
         source: ScheduleSource(at: DateTime(2026)),
         chatId: "chat-2",
-        byAgent: true));
-    final stranger = agent([fileCall(triggerRemoveName, {"id": "t-9"})]);
+        byAgent: true,
+      ),
+    );
+    final stranger = agent([
+      fileCall(triggerRemoveName, {"id": "t-9"}),
+    ]);
     final events = await stranger.run(userMessage("drop it")).toList();
     expect(registry.removed, ["t-1"]);
     expect(resultOf(events).exceptionInfo, contains("registered by this chat"));

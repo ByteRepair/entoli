@@ -17,7 +17,9 @@ void main() {
 
   void write(Map<String, Object?> config) {
     File(p.join(dir.path, "config.json")).writeAsStringSync(jsonEncode(config));
-    File(p.join(dir.path, "model.safetensors")).writeAsBytesSync(List.filled(100, 0));
+    File(
+      p.join(dir.path, "model.safetensors"),
+    ).writeAsBytesSync(List.filled(100, 0));
   }
 
   test("a hybrid's cache counts its full-attention layers alone", () {
@@ -30,7 +32,12 @@ void main() {
         "num_key_value_heads": 2,
         "head_dim": 256,
         "num_hidden_layers": 4,
-        "layer_types": ["linear_attention", "full_attention", "linear_attention", "full_attention"],
+        "layer_types": [
+          "linear_attention",
+          "full_attention",
+          "linear_attention",
+          "full_attention",
+        ],
       },
     });
 
@@ -61,8 +68,14 @@ void main() {
   });
 
   test("a directory with no usable config is no model", () {
-    expect(() => const MlxFormat().describe("x", dir.path), throwsFormatException);
+    expect(
+      () => const MlxFormat().describe("x", dir.path),
+      throwsFormatException,
+    );
     write({"model_type": "mystery"});
-    expect(() => const MlxFormat().describe("x", dir.path), throwsFormatException);
+    expect(
+      () => const MlxFormat().describe("x", dir.path),
+      throwsFormatException,
+    );
   });
 }

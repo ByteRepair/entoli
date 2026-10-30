@@ -179,8 +179,9 @@ class UnavailableLocalLlm extends LocalLlm {
     int maxRunning = 1,
     int? threads,
     bool kvCache = false,
-  }) async =>
-      throw const LocalLlmFailure("There is no on-device model server in this build.");
+  }) async => throw const LocalLlmFailure(
+    "There is no on-device model server in this build.",
+  );
 
   @override
   int? get maxThreads => null;

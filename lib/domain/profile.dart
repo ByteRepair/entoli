@@ -5,12 +5,7 @@
 /// applied to every turn is not here: that is the global AGENTS.md at the
 /// data dir's root, read with the instructions.
 class Profile {
-  const Profile({
-    this.name,
-    this.dateOfBirth,
-    this.religion,
-    this.profession,
-  });
+  const Profile({this.name, this.dateOfBirth, this.religion, this.profession});
 
   final String? name;
 
@@ -27,13 +22,12 @@ class Profile {
       (profession == null || profession!.isEmpty);
 
   Map<String, dynamic> toJson() => {
-        if (name != null && name!.isNotEmpty) "name": name,
-        if (dateOfBirth != null && dateOfBirth!.isNotEmpty)
-          "dateOfBirth": dateOfBirth,
-        if (religion != null && religion!.isNotEmpty) "religion": religion,
-        if (profession != null && profession!.isNotEmpty)
-          "profession": profession,
-      };
+    if (name != null && name!.isNotEmpty) "name": name,
+    if (dateOfBirth != null && dateOfBirth!.isNotEmpty)
+      "dateOfBirth": dateOfBirth,
+    if (religion != null && religion!.isNotEmpty) "religion": religion,
+    if (profession != null && profession!.isNotEmpty) "profession": profession,
+  };
 
   static Profile? fromJson(Object? value) {
     if (value is! Map) return null;
@@ -61,6 +55,5 @@ class Profile {
           profession == other.profession;
 
   @override
-  int get hashCode =>
-      Object.hash(name, dateOfBirth, religion, profession);
+  int get hashCode => Object.hash(name, dateOfBirth, religion, profession);
 }

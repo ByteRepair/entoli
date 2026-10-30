@@ -5,19 +5,36 @@ import "package:agent_chat/domain/models.dart";
 
 void main() {
   final at = DateTime.utc(2026, 1, 1);
-  ChatState state() => ChatState(id: "c", title: "t", createdAt: at, updatedAt: at);
+  ChatState state() =>
+      ChatState(id: "c", title: "t", createdAt: at, updatedAt: at);
 
-  ContextUsage usage(int chat, {int? reported}) =>
-      ContextUsage(system: 100, tools: 200, profile: 10, chat: chat, reported: reported);
+  ContextUsage usage(int chat, {int? reported}) => ContextUsage(
+    system: 100,
+    tools: 200,
+    profile: 10,
+    chat: chat,
+    reported: reported,
+  );
 
-  List<ChatRecord> exchange(String prompt, String reply, ContextUsage context,
-          {String? author}) =>
-      [
-        ChatRecord.message(id: prompt, role: MessageRole.user, createdAt: at),
-        ChatRecord.message(
-            id: reply, role: MessageRole.assistant, createdAt: at, author: author),
-        ChatRecord.turnEnd(messageId: reply, reason: TurnEnd.done, context: context),
-      ];
+  List<ChatRecord> exchange(
+    String prompt,
+    String reply,
+    ContextUsage context, {
+    String? author,
+  }) => [
+    ChatRecord.message(id: prompt, role: MessageRole.user, createdAt: at),
+    ChatRecord.message(
+      id: reply,
+      role: MessageRole.assistant,
+      createdAt: at,
+      author: author,
+    ),
+    ChatRecord.turnEnd(
+      messageId: reply,
+      reason: TurnEnd.done,
+      context: context,
+    ),
+  ];
 
   Map<String?, ContextUsage> contextsOf(List<ChatRecord> records) =>
       chatFrom(state(), records).contexts;
@@ -54,21 +71,32 @@ void main() {
     expect(contexts[null]!.chat, 1000);
   });
 
-  test("a compaction after the reply stands in for its chat, as an estimate", () {
-    final contexts = contextsOf([
-      ...exchange("u1", "a1", usage(90000, reported: 100000)),
-      const ChatRecord.compaction(upToMessageId: "a1", summary: "s", chatTokens: 800),
-    ]);
+  test(
+    "a compaction after the reply stands in for its chat, as an estimate",
+    () {
+      final contexts = contextsOf([
+        ...exchange("u1", "a1", usage(90000, reported: 100000)),
+        const ChatRecord.compaction(
+          upToMessageId: "a1",
+          summary: "s",
+          chatTokens: 800,
+        ),
+      ]);
 
-    expect(contexts[null]!.chat, 800);
-    expect(contexts[null]!.reported, isNull);
-    expect(contexts[null]!.total, 1110);
-  });
+      expect(contexts[null]!.chat, 800);
+      expect(contexts[null]!.reported, isNull);
+      expect(contexts[null]!.total, 1110);
+    },
+  );
 
   test("a reply after the compaction measures past it", () {
     final contexts = contextsOf([
       ...exchange("u1", "a1", usage(90000)),
-      const ChatRecord.compaction(upToMessageId: "a1", summary: "s", chatTokens: 800),
+      const ChatRecord.compaction(
+        upToMessageId: "a1",
+        summary: "s",
+        chatTokens: 800,
+      ),
       ...exchange("u2", "a2", usage(1200)),
     ]);
 

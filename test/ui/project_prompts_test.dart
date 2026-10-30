@@ -92,10 +92,12 @@ void main() {
 
       final dir = app.config.promptsDir(CompletionKind.skill, project: "work");
       expect(Directory("$dir/local-note").existsSync(), isFalse);
-      expect(Directory(
-              "${app.config.promptsDir(CompletionKind.skill)}/review")
-          .existsSync(),
-        isTrue);
+      expect(
+        Directory(
+          "${app.config.promptsDir(CompletionKind.skill)}/review",
+        ).existsSync(),
+        isTrue,
+      );
 
       // The default project's entry is badged Inherited and read-only.
       await scrollTo(tester, find.text("review"));
@@ -115,8 +117,9 @@ void main() {
       expect(find.text("Install to"), findsNothing);
     });
 
-    testWidgets("the global page keeps its import flow and its destination",
-        (tester) async {
+    testWidgets("the global page keeps its import flow and its destination", (
+      tester,
+    ) async {
       await pumpSettings(tester, app, SettingsCategory.skills);
       expect(find.text("Import skill"), findsOneWidget);
       expect(find.byType(InstallDestination), findsOneWidget);
@@ -125,8 +128,9 @@ void main() {
 
   group("the project's agents page", () {
     testWidgets("a project agent is written and edited in the project's "
-        "directory; the default project's is badged, not editable",
-        (tester) async {
+        "directory; the default project's is badged, not editable", (
+      tester,
+    ) async {
       await io(tester, () => app.repo.createProject("work"));
 
       await app.pump(tester, const ProjectSettingsPage(project: "work"));
@@ -154,7 +158,8 @@ void main() {
       await settleIo(tester, least: 15);
 
       final file = File(
-          "${app.config.promptsDir(CompletionKind.agent, project: "work")}/tester.md");
+        "${app.config.promptsDir(CompletionKind.agent, project: "work")}/tester.md",
+      );
       expect(file.existsSync(), isTrue);
       expect(file.readAsStringSync(), contains("You test things."));
 
@@ -167,20 +172,24 @@ void main() {
       expect(file.existsSync(), isFalse);
       // The default project's agents are untouched.
       final globalDir = Directory(app.config.promptsDir(CompletionKind.agent));
-      expect(globalDir.existsSync() && globalDir.listSync().isNotEmpty,
-          isFalse);
+      expect(
+        globalDir.existsSync() && globalDir.listSync().isNotEmpty,
+        isFalse,
+      );
     });
 
-    testWidgets("the global agents page has no destination combobox",
-        (tester) async {
+    testWidgets("the global agents page has no destination combobox", (
+      tester,
+    ) async {
       await pumpSettings(tester, app, SettingsCategory.agents);
       expect(find.byType(InstallDestination), findsNothing);
     });
   });
 
   group("the built-in's pages", () {
-    testWidgets("Byte Repair's page lists its bundled agent read-only",
-        (tester) async {
+    testWidgets("Byte Repair's page lists its bundled agent read-only", (
+      tester,
+    ) async {
       await app.pump(tester, ProjectSettingsPage(project: "byte-repair"));
       await scrollTo(tester, find.text("Agents"));
       await tester.tap(find.text("Agents"));
@@ -197,23 +206,25 @@ void main() {
       expect(find.byIcon(Icons.close), findsNothing);
     });
 
-    testWidgets("Byte Repair's skills page is read-only and has no destination",
-        (tester) async {
-      await app.pump(tester, ProjectSettingsPage(project: "byte-repair"));
-      await scrollTo(tester, find.text("Skills"));
-      await tester.tap(find.text("Skills"));
-      await settleIo(tester);
-      await reloadLibrary(tester, app, project: "byte-repair");
+    testWidgets(
+      "Byte Repair's skills page is read-only and has no destination",
+      (tester) async {
+        await app.pump(tester, ProjectSettingsPage(project: "byte-repair"));
+        await scrollTo(tester, find.text("Skills"));
+        await tester.tap(find.text("Skills"));
+        await settleIo(tester);
+        await reloadLibrary(tester, app, project: "byte-repair");
 
-      // The bundled presets the library serves every project — the
-      // locally written skills, one badge each.
-      await scrollTo(tester, find.text("artifact"));
-      expect(find.text("artifact"), findsOneWidget);
-      expect(find.text("Bundled"), findsWidgets);
-      expect(find.text("Import skill"), findsNothing);
-      expect(find.byType(InstallDestination), findsNothing);
-      expect(find.byIcon(Icons.close), findsNothing);
-    });
+        // The bundled presets the library serves every project — the
+        // locally written skills, one badge each.
+        await scrollTo(tester, find.text("artifact"));
+        expect(find.text("artifact"), findsOneWidget);
+        expect(find.text("Bundled"), findsWidgets);
+        expect(find.text("Import skill"), findsNothing);
+        expect(find.byType(InstallDestination), findsNothing);
+        expect(find.byIcon(Icons.close), findsNothing);
+      },
+    );
   });
 
   group("the install destination", () {
@@ -223,9 +234,11 @@ void main() {
       app = TestApp.create(store: store);
       await io(tester, () => app.repo.createProject("work"));
 
-      final bytes = packageSkillBytes(SkillPackage("letterbox", [
-        ("SKILL.md", Uint8List.fromList(utf8.encode(_skillMd))),
-      ]));
+      final bytes = packageSkillBytes(
+        SkillPackage("letterbox", [
+          ("SKILL.md", Uint8List.fromList(utf8.encode(_skillMd))),
+        ]),
+      );
       store.stageSkillInstall("chat-1", "install-1", bytes);
 
       await app.pump(tester, const _Launcher(), settle: false);
@@ -242,26 +255,34 @@ void main() {
       await tester.tap(_installButton);
       await settleIo(tester, least: 20, tries: 80);
 
-      final dir =
-          skillDirectory(app.config, "letterbox", project: "work");
+      final dir = skillDirectory(app.config, "letterbox", project: "work");
       expect(File("$dir/SKILL.md").existsSync(), isTrue);
-      expect(Directory(skillDirectory(app.config, "letterbox")).existsSync(),
-          isFalse);
+      expect(
+        Directory(skillDirectory(app.config, "letterbox")).existsSync(),
+        isFalse,
+      );
     });
   });
 
   group("isBundledPromptName", () {
     test("names the embedded presets, per kind and per project", () {
       expect(isBundledPromptName(CompletionKind.skill, "artifact"), isTrue);
-      expect(isBundledPromptName(CompletionKind.skill, "esbmc-verifier"),
-          isFalse);
       expect(
-        isBundledPromptName(CompletionKind.agent, "esbmc-verifier",
-            project: "byte-repair"),
+        isBundledPromptName(CompletionKind.skill, "esbmc-verifier"),
+        isFalse,
+      );
+      expect(
+        isBundledPromptName(
+          CompletionKind.agent,
+          "esbmc-verifier",
+          project: "byte-repair",
+        ),
         isTrue,
       );
-      expect(isBundledPromptName(CompletionKind.agent, "esbmc-verifier"),
-          isFalse);
+      expect(
+        isBundledPromptName(CompletionKind.agent, "esbmc-verifier"),
+        isFalse,
+      );
       expect(isBundledPromptName(CompletionKind.agent, "general"), isTrue);
       expect(isBundledPromptName(CompletionKind.skill, "review"), isFalse);
     });

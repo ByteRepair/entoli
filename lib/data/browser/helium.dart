@@ -17,10 +17,10 @@ enum HeliumOs { linux, macos, windows }
 HeliumOs? get _hostOs => Platform.isLinux
     ? HeliumOs.linux
     : Platform.isMacOS
-        ? HeliumOs.macos
-        : Platform.isWindows
-            ? HeliumOs.windows
-            : null;
+    ? HeliumOs.macos
+    : Platform.isWindows
+    ? HeliumOs.windows
+    : null;
 
 bool get _arm =>
     Abi.current() == Abi.linuxArm64 ||
@@ -32,19 +32,22 @@ String heliumRepo(HeliumOs os) => "imputnet/helium-${os.name}";
 /// The asset a release of [version] ships for [os] on this architecture: the
 /// AppImage on Linux, which runs where it is put, the disk image on macOS and
 /// the portable zip on Windows. Named as the release names them.
-String heliumAsset(HeliumOs os, String version, {required bool arm}) =>
-    switch (os) {
-      HeliumOs.linux => "helium-$version-${arm ? "arm64" : "x86_64"}.AppImage",
-      HeliumOs.macos => "helium_${version}_${arm ? "arm64" : "x86_64"}-macos.dmg",
-      HeliumOs.windows => "helium_${version}_${arm ? "arm64" : "x64"}-windows.zip",
-    };
+String heliumAsset(
+  HeliumOs os,
+  String version, {
+  required bool arm,
+}) => switch (os) {
+  HeliumOs.linux => "helium-$version-${arm ? "arm64" : "x86_64"}.AppImage",
+  HeliumOs.macos => "helium_${version}_${arm ? "arm64" : "x86_64"}-macos.dmg",
+  HeliumOs.windows => "helium_${version}_${arm ? "arm64" : "x64"}-windows.zip",
+};
 
 /// Helium, downloaded into `<cache>/browser/download/`. Installed whole into a
 /// staging directory beside it and renamed over it, so a download that dies
 /// leaves the last one working.
 class HeliumDownload implements EmbeddedBrowser {
   HeliumDownload(this.browserDir, {http.Client Function()? client})
-      : _client = client ?? http.Client.new;
+    : _client = client ?? http.Client.new;
 
   /// `<cache>/browser`.
   final String browserDir;
@@ -123,8 +126,9 @@ class HeliumDownload implements EmbeddedBrowser {
       await _deleteIfThere(staging);
       await Directory(staging).create(recursive: true);
       yield* _download(
-          "https://github.com/${heliumRepo(os)}/releases/download/$version/$asset",
-          archive);
+        "https://github.com/${heliumRepo(os)}/releases/download/$version/$asset",
+        archive,
+      );
       yield const DownloadProgress(received: 0, total: 0, unpacking: true);
       switch (os) {
         case HeliumOs.linux:
@@ -133,7 +137,11 @@ class HeliumDownload implements EmbeddedBrowser {
           final mode = await Process.run("chmod", ["755", image]);
           if (mode.exitCode != 0) {
             throw ProcessException(
-                "chmod", ["755", image], "${mode.stderr}", mode.exitCode);
+              "chmod",
+              ["755", image],
+              "${mode.stderr}",
+              mode.exitCode,
+            );
           }
         case HeliumOs.macos:
           await _copyFromImage(archive, staging);
@@ -178,7 +186,9 @@ class HeliumDownload implements EmbeddedBrowser {
       // A stream that ends short of what it declared is the one truncation
       // that looks like success.
       if (total > 0 && received != total) {
-        throw HttpException("The download arrived at $received of $total bytes.");
+        throw HttpException(
+          "The download arrived at $received of $total bytes.",
+        );
       }
     } finally {
       client.close();
@@ -190,12 +200,21 @@ class HeliumDownload implements EmbeddedBrowser {
     final mount = p.join(browserDir, "mount-$pid");
     await Directory(mount).create(recursive: true);
     final attach = await Process.run("hdiutil", [
-      "attach", "-nobrowse", "-readonly", "-noautoopen",
-      "-mountpoint", mount, dmg,
+      "attach",
+      "-nobrowse",
+      "-readonly",
+      "-noautoopen",
+      "-mountpoint",
+      mount,
+      dmg,
     ]);
     if (attach.exitCode != 0) {
       throw ProcessException(
-          "hdiutil", ["attach", dmg], "${attach.stderr}", attach.exitCode);
+        "hdiutil",
+        ["attach", dmg],
+        "${attach.stderr}",
+        attach.exitCode,
+      );
     }
     try {
       final apps = [
@@ -209,7 +228,11 @@ class HeliumDownload implements EmbeddedBrowser {
       final copy = await Process.run("ditto", [apps.single, target]);
       if (copy.exitCode != 0) {
         throw ProcessException(
-            "ditto", [apps.single, target], "${copy.stderr}", copy.exitCode);
+          "ditto",
+          [apps.single, target],
+          "${copy.stderr}",
+          copy.exitCode,
+        );
       }
     } finally {
       await Process.run("hdiutil", ["detach", "-quiet", "-force", mount]);
@@ -235,12 +258,12 @@ class HeliumDownload implements EmbeddedBrowser {
 String? macAppExecutable(String app) {
   final macos = p.join(app, "Contents", "MacOS");
   try {
-    final plist =
-        File(p.join(app, "Contents", "Info.plist")).readAsStringSync();
+    final plist = File(
+      p.join(app, "Contents", "Info.plist"),
+    ).readAsStringSync();
     final name = RegExp(
-            r"<key>CFBundleExecutable</key>\s*<string>([^<]+)</string>")
-        .firstMatch(plist)
-        ?.group(1);
+      r"<key>CFBundleExecutable</key>\s*<string>([^<]+)</string>",
+    ).firstMatch(plist)?.group(1);
     if (name != null && File(p.join(macos, name)).existsSync()) {
       return p.join(macos, name);
     }

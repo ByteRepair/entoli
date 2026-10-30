@@ -43,10 +43,11 @@ Future<List<WorkspaceEntry>> listWorkspace(String dir) async {
         size: entity is Directory ? 0 : entity.statSync().size,
       ),
   ];
-  return entries
-    ..sort((a, b) => a.isDirectory == b.isDirectory
+  return entries..sort(
+    (a, b) => a.isDirectory == b.isDirectory
         ? a.name.toLowerCase().compareTo(b.name.toLowerCase())
-        : (a.isDirectory ? -1 : 1));
+        : (a.isDirectory ? -1 : 1),
+  );
 }
 
 /// The most of a file the viewer reads. A workspace holds the agent's logs, so
@@ -73,12 +74,64 @@ bool looksTextual(String name) {
 }
 
 const _textExtensions = {
-  "txt", "md", "markdown", "rst", "log", "csv", "tsv",
-  "json", "jsonl", "yaml", "yml", "toml", "ini", "cfg", "conf", "env", "lock",
-  "xml", "html", "htm", "css", "scss", "svg", "diff", "patch", "properties",
-  "dart", "py", "js", "mjs", "cjs", "ts", "tsx", "jsx", "sh", "bash", "zsh",
-  "fish", "c", "h", "cc", "cpp", "hpp", "rs", "go", "java", "kt", "kts",
-  "swift", "rb", "php", "lua", "sql", "r", "m", "pl", "vim", "gradle",
+  "txt",
+  "md",
+  "markdown",
+  "rst",
+  "log",
+  "csv",
+  "tsv",
+  "json",
+  "jsonl",
+  "yaml",
+  "yml",
+  "toml",
+  "ini",
+  "cfg",
+  "conf",
+  "env",
+  "lock",
+  "xml",
+  "html",
+  "htm",
+  "css",
+  "scss",
+  "svg",
+  "diff",
+  "patch",
+  "properties",
+  "dart",
+  "py",
+  "js",
+  "mjs",
+  "cjs",
+  "ts",
+  "tsx",
+  "jsx",
+  "sh",
+  "bash",
+  "zsh",
+  "fish",
+  "c",
+  "h",
+  "cc",
+  "cpp",
+  "hpp",
+  "rs",
+  "go",
+  "java",
+  "kt",
+  "kts",
+  "swift",
+  "rb",
+  "php",
+  "lua",
+  "sql",
+  "r",
+  "m",
+  "pl",
+  "vim",
+  "gradle",
 };
 
 /// Read at most [textViewLimit] bytes of [path] as UTF-8, or `null` if what
@@ -111,12 +164,16 @@ Future<WorkspaceText?> readTextHead(String path) async {
 /// The walk back stops at four, since no UTF-8 rune is longer than that.
 Uint8List _withoutCutRune(Uint8List bytes) {
   var start = bytes.length - 1;
-  while (start >= 0 && bytes.length - start < 4 && bytes[start] & 0xc0 == 0x80) {
+  while (start >= 0 &&
+      bytes.length - start < 4 &&
+      bytes[start] & 0xc0 == 0x80) {
     start--;
   }
   if (start < 0 || bytes[start] < 0xc0) return bytes;
   final needed = bytes[start] >= 0xf0 ? 4 : (bytes[start] >= 0xe0 ? 3 : 2);
-  return bytes.length - start >= needed ? bytes : Uint8List.sublistView(bytes, 0, start);
+  return bytes.length - start >= needed
+      ? bytes
+      : Uint8List.sublistView(bytes, 0, start);
 }
 
 /// Write [files] into [dir], creating whatever folders they name. Their paths
@@ -134,10 +191,7 @@ Uint8List _withoutCutRune(Uint8List bytes) {
 /// The folders are made first, once each: a restored backup names one
 /// directory hundreds of times, and asking per file is hundreds of redundant
 /// creates in front of the spinner.
-Future<void> writeIncoming(
-  String dir,
-  List<IncomingFile> files,
-) async {
+Future<void> writeIncoming(String dir, List<IncomingFile> files) async {
   final targets = [
     for (final file in files) p.join(dir, safeRelativePath(file.path)),
   ];
@@ -149,8 +203,8 @@ Future<void> writeIncoming(
   }
 }
 
-Future<void> createFolder(String dir, String name) => Directory(p.join(dir, safeRelativePath(name)))
-    .create(recursive: true);
+Future<void> createFolder(String dir, String name) =>
+    Directory(p.join(dir, safeRelativePath(name))).create(recursive: true);
 
 /// Remove [paths], each with whatever is under it. One already gone is a
 /// deletion that happened.

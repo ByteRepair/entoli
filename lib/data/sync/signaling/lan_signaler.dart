@@ -16,7 +16,10 @@ import "../handshake.dart" show ProtocolMismatchException;
 /// behind an optional parameter had `close()` shutting the pairing's shared
 /// client off after the first dial.
 class LanSignaler {
-  LanSignaler({required this.client, this.probeTimeout = const Duration(seconds: 3)});
+  LanSignaler({
+    required this.client,
+    this.probeTimeout = const Duration(seconds: 3),
+  });
 
   final http.Client client;
 
@@ -45,7 +48,8 @@ class LanSignaler {
     Object? last;
     var outdated = false;
     await for (final (address, status) in Stream.fromFutures(
-        addresses.toSet().map((address) => _probe(address, token)))) {
+      addresses.toSet().map((address) => _probe(address, token)),
+    )) {
       // A build before the probe route answers it 404, and would refuse the
       // handshake on its version anyway.
       if (status == 404) outdated = true;
@@ -60,10 +64,12 @@ class LanSignaler {
       }
     }
     if (last == null && outdated) throw ProtocolMismatchException("older");
-    throw SignalingException(last == null
-        ? "could not reach the other device; check that its firewall allows "
-            "TCP and UDP port $preferredSignalingPort"
-        : "could not reach the other device: $last");
+    throw SignalingException(
+      last == null
+          ? "could not reach the other device; check that its firewall allows "
+                "TCP and UDP port $preferredSignalingPort"
+          : "could not reach the other device: $last",
+    );
   }
 
   /// The address and the status it answered with, 0 where it did not; 200
@@ -80,9 +86,11 @@ class LanSignaler {
       }
       final (:probe, :isAnswer) = SignalingRoutes.probeFor(token);
       final response = await client
-          .post(Uri.parse("http://$address${SignalingRoutes.probePath}"),
-              headers: const {"content-type": "application/json"},
-              body: jsonEncode(probe))
+          .post(
+            Uri.parse("http://$address${SignalingRoutes.probePath}"),
+            headers: const {"content-type": "application/json"},
+            body: jsonEncode(probe),
+          )
           .timeout(probeTimeout);
       if (response.statusCode != 200) return (address, response.statusCode);
       return (address, isAnswer(jsonDecode(response.body)) ? 200 : 403);
@@ -91,21 +99,29 @@ class LanSignaler {
     }
   }
 
-  Future<String> _exchange(String address, String code, String token,
-      String offerSdp, Duration timeout) async {
+  Future<String> _exchange(
+    String address,
+    String code,
+    String token,
+    String offerSdp,
+    Duration timeout,
+  ) async {
     final uri = Uri.parse("http://$address${SignalingRoutes.offerPath}");
     final response = await client
-        .post(uri,
-            headers: const {"content-type": "application/json"},
-            body: jsonEncode({
-              if (code.isNotEmpty) "code": code,
-              if (token.isNotEmpty) "token": token,
-              "sdp": offerSdp,
-            }))
+        .post(
+          uri,
+          headers: const {"content-type": "application/json"},
+          body: jsonEncode({
+            if (code.isNotEmpty) "code": code,
+            if (token.isNotEmpty) "token": token,
+            "sdp": offerSdp,
+          }),
+        )
         .timeout(timeout);
     if (response.statusCode != 200) {
       throw SignalingException(
-          "the other device answered ${response.statusCode}");
+        "the other device answered ${response.statusCode}",
+      );
     }
     final answer =
         (jsonDecode(response.body) as Map<String, dynamic>)["sdp"] as String?;

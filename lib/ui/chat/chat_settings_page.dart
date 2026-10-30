@@ -46,41 +46,41 @@ class _NewChatSettingsPageState extends State<NewChatSettingsPage> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-        appBar: AppBar(
-          title: const Text("Chat settings"),
-          actions: [
-            IconButton(
-              icon: const Icon(Icons.check),
-              tooltip: "Save",
-              onPressed: () => Navigator.of(context).pop(_meta),
-            ),
-          ],
+    appBar: AppBar(
+      title: const Text("Chat settings"),
+      actions: [
+        IconButton(
+          icon: const Icon(Icons.check),
+          tooltip: "Save",
+          onPressed: () => Navigator.of(context).pop(_meta),
         ),
-        body: ListView(
-          children: [
-            // `_LlmField` writes the pair onto the meta it was given and hands
-            // back that same object, so there is nothing to take from it.
-            _LlmField(meta: _meta, onChanged: (_) => setState(() {})),
-            const Divider(),
-            _ApprovalField(
-              value: _meta.approveMode,
-              onChanged: (v) => setState(() => _meta.approveMode = v),
-            ),
-            const Divider(),
-            _MemoryField(
-              value: _meta.memoryOff,
-              project: widget.project,
-              onChanged: (v) => setState(() => _meta.memoryOff = v),
-            ),
-            const Divider(),
-            TempChatTtlField(
-              value: _meta.tempChatTtl,
-              onChanged: (v) => setState(() => _meta.tempChatTtl = v),
-              project: widget.project,
-            ),
-          ],
+      ],
+    ),
+    body: ListView(
+      children: [
+        // `_LlmField` writes the pair onto the meta it was given and hands
+        // back that same object, so there is nothing to take from it.
+        _LlmField(meta: _meta, onChanged: (_) => setState(() {})),
+        const Divider(),
+        _ApprovalField(
+          value: _meta.approveMode,
+          onChanged: (v) => setState(() => _meta.approveMode = v),
         ),
-      );
+        const Divider(),
+        _MemoryField(
+          value: _meta.memoryOff,
+          project: widget.project,
+          onChanged: (v) => setState(() => _meta.memoryOff = v),
+        ),
+        const Divider(),
+        TempChatTtlField(
+          value: _meta.tempChatTtl,
+          onChanged: (v) => setState(() => _meta.tempChatTtl = v),
+          project: widget.project,
+        ),
+      ],
+    ),
+  );
 }
 
 class ChatSettingsPage extends ConsumerStatefulWidget {
@@ -172,21 +172,29 @@ class _ChatSettingsPageState extends ConsumerState<ChatSettingsPage> {
   @override
   Widget build(BuildContext context) {
     final mirrored = ref.watch(isMirroredChatProvider(widget.chatId));
-    final deviceName = ref.watch(remoteChatsProvider.select((chats) {
-      for (final c in chats) {
-        if (c.chatId == widget.chatId) return c.deviceName;
-      }
-      return null;
-    }));
+    final deviceName = ref.watch(
+      remoteChatsProvider.select((chats) {
+        for (final c in chats) {
+          if (c.chatId == widget.chatId) return c.deviceName;
+        }
+        return null;
+      }),
+    );
     // A mirror whose home device is away is read, not written; it is read
     // again when the device comes back.
-    final frozen = ref.watch(remoteChatsProvider.select(
-        (chats) => chats.any((c) => c.chatId == widget.chatId && !c.online)));
-    ref.listen(remoteChatsProvider.select(
-        (chats) => chats.any((c) => c.chatId == widget.chatId && !c.online)),
-        (was, now) {
-      if (was == true && !now) _load();
-    });
+    final frozen = ref.watch(
+      remoteChatsProvider.select(
+        (chats) => chats.any((c) => c.chatId == widget.chatId && !c.online),
+      ),
+    );
+    ref.listen(
+      remoteChatsProvider.select(
+        (chats) => chats.any((c) => c.chatId == widget.chatId && !c.online),
+      ),
+      (was, now) {
+        if (was == true && !now) _load();
+      },
+    );
     return Scaffold(
       appBar: AppBar(
         title: const Text("Chat settings"),
@@ -198,83 +206,102 @@ class _ChatSettingsPageState extends ConsumerState<ChatSettingsPage> {
           ),
         ],
       ),
-      body: Column(children: [
-        if (deviceName != null)
-          frozen
-              ? MirrorStrip.offline(deviceName: deviceName)
-              : MirrorStrip.remote(deviceName: deviceName),
-        Expanded(child: _meta == null
-          ? const Center(child: CircularProgressIndicator())
-          : ListView(
-              children: [
-                SettingsCardRow(children: [
-                  SettingsCard.copy(
-                    icon: Icons.badge_outlined,
-                    title: "Chat ID",
-                    value: widget.chatId,
-                    said: "Copied chat ID",
-                  ),
-                  if (_workspace != null)
-                    WorkspaceTile(root: _workspace!, title: "Chat workspace"),
-                  SettingsCard(
-                    icon: Icons.data_usage,
-                    title: "Context",
-                    subtitle: "What fills the model's window",
-                    onTap: () => Navigator.of(context).push(MaterialPageRoute(
-                        builder: (_) =>
-                            ContextPage(chatId: widget.chatId, project: _project))),
-                  ),
-                ]),
-                // The picker lists this device's providers, which the home
-                // device may not have.
-                if (!mirrored) ...[
-                  const Divider(),
-                  _LlmField(
-                    meta: _meta!,
-                    onChanged: (m) => setState(() => _meta = m),
-                  ),
-                ],
-                const Divider(),
-                _ApprovalField(
-                  value: _meta!.approveMode,
-                  onChanged: (v) => setState(() => _meta!.approveMode = v),
-                ),
-                // What it inherits is the home device's project, which a
-                // mirror cannot read.
-                if (!mirrored)
-                  _SandboxField(
-                    value: _meta!.sandbox,
-                    project: _project,
-                    onChanged: (v) => setState(() => _meta!.sandbox = v),
-                  ),
-                const Divider(),
-                _MemoryField(
-                  value: _meta!.memoryOff,
-                  project: _project,
-                  onChanged: (v) => setState(() => _meta!.memoryOff = v),
-                ),
-                const Divider(),
-                if (_state?.pinned ?? false)
-                  LabelledField(
-                    label: "Temporary chat",
-                    child: Text(
-                      "This chat is pinned and cannot be temporary.",
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                            color: Theme.of(context).colorScheme.onSurfaceVariant,
+      body: Column(
+        children: [
+          if (deviceName != null)
+            frozen
+                ? MirrorStrip.offline(deviceName: deviceName)
+                : MirrorStrip.remote(deviceName: deviceName),
+          Expanded(
+            child: _meta == null
+                ? const Center(child: CircularProgressIndicator())
+                : ListView(
+                    children: [
+                      SettingsCardRow(
+                        children: [
+                          SettingsCard.copy(
+                            icon: Icons.badge_outlined,
+                            title: "Chat ID",
+                            value: widget.chatId,
+                            said: "Copied chat ID",
                           ),
-                    ),
-                  )
-                else
-                  TempChatTtlField(
-                    value: _meta!.tempChatTtl,
-                    onChanged: (v) => setState(() => _meta!.tempChatTtl = v),
-                    project: _project,
+                          if (_workspace != null)
+                            WorkspaceTile(
+                              root: _workspace!,
+                              title: "Chat workspace",
+                            ),
+                          SettingsCard(
+                            icon: Icons.data_usage,
+                            title: "Context",
+                            subtitle: "What fills the model's window",
+                            onTap: () => Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) => ContextPage(
+                                  chatId: widget.chatId,
+                                  project: _project,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      // The picker lists this device's providers, which the home
+                      // device may not have.
+                      if (!mirrored) ...[
+                        const Divider(),
+                        _LlmField(
+                          meta: _meta!,
+                          onChanged: (m) => setState(() => _meta = m),
+                        ),
+                      ],
+                      const Divider(),
+                      _ApprovalField(
+                        value: _meta!.approveMode,
+                        onChanged: (v) =>
+                            setState(() => _meta!.approveMode = v),
+                      ),
+                      // What it inherits is the home device's project, which a
+                      // mirror cannot read.
+                      if (!mirrored)
+                        _SandboxField(
+                          value: _meta!.sandbox,
+                          project: _project,
+                          onChanged: (v) => setState(() => _meta!.sandbox = v),
+                        ),
+                      const Divider(),
+                      _MemoryField(
+                        value: _meta!.memoryOff,
+                        project: _project,
+                        onChanged: (v) => setState(() => _meta!.memoryOff = v),
+                      ),
+                      const Divider(),
+                      if (_state?.pinned ?? false)
+                        LabelledField(
+                          label: "Temporary chat",
+                          child: Text(
+                            "This chat is pinned and cannot be temporary.",
+                            style: Theme.of(context).textTheme.bodyMedium
+                                ?.copyWith(
+                                  color: Theme.of(
+                                    context,
+                                  ).colorScheme.onSurfaceVariant,
+                                ),
+                          ),
+                        )
+                      else
+                        TempChatTtlField(
+                          value: _meta!.tempChatTtl,
+                          onChanged: (v) =>
+                              setState(() => _meta!.tempChatTtl = v),
+                          project: _project,
+                        ),
+                      const Divider(),
+                      if (!frozen) _DeleteButton(chatId: widget.chatId),
+                    ],
                   ),
-                const Divider(),
-                if (!frozen) _DeleteButton(chatId: widget.chatId),
-              ],
-            )),
-      ]),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -290,7 +317,8 @@ class _DeleteButton extends ConsumerWidget {
       icon: Icons.delete,
       label: "Delete chat",
       confirmTitle: "Delete chat?",
-      confirmMessage: "Delete this chat and all its files? This cannot be undone.",
+      confirmMessage:
+          "Delete this chat and all its files? This cannot be undone.",
       onConfirmed: () async {
         if (ref.read(selectedChatIdProvider) == chatId) {
           ref.read(selectedChatIdProvider.notifier).select(null);
@@ -321,9 +349,11 @@ class _LlmField extends ConsumerWidget {
           providerId: defaults.defaultProviderId,
           modelId: defaults.defaultModelId,
         ),
-        onChanged: (choice) => onChanged(meta
-          ..provider = choice.providerId
-          ..model = choice.modelId),
+        onChanged: (choice) => onChanged(
+          meta
+            ..provider = choice.providerId
+            ..model = choice.modelId,
+        ),
       ),
     );
   }
@@ -335,8 +365,11 @@ class _LlmField extends ConsumerWidget {
 /// subsystem away outright, and for that one the row says so and takes
 /// nothing.
 class _SandboxField extends ConsumerWidget {
-  const _SandboxField(
-      {required this.value, required this.project, required this.onChanged});
+  const _SandboxField({
+    required this.value,
+    required this.project,
+    required this.onChanged,
+  });
 
   final bool? value;
   final String? project;
@@ -344,7 +377,8 @@ class _SandboxField extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final inherited = ref.watch(projectSettingsProvider(project)).sandbox ??
+    final inherited =
+        ref.watch(projectSettingsProvider(project)).sandbox ??
         ref.watch(projectSettingsProvider(null)).sandbox ??
         true;
     return InheritableSwitch(
@@ -360,8 +394,11 @@ class _SandboxField extends ConsumerWidget {
 }
 
 class _MemoryField extends StatelessWidget {
-  const _MemoryField(
-      {required this.value, required this.project, required this.onChanged});
+  const _MemoryField({
+    required this.value,
+    required this.project,
+    required this.onChanged,
+  });
 
   final bool? value;
   final String? project;
@@ -373,9 +410,11 @@ class _MemoryField extends StatelessWidget {
     return SwitchListTile(
       contentPadding: const EdgeInsets.symmetric(horizontal: 16),
       title: const Text("Project memory"),
-      subtitle: Text(taken
-          ? "This project keeps no memories."
-          : "Off, the agent reads, recalls and keeps no memories in this chat."),
+      subtitle: Text(
+        taken
+            ? "This project keeps no memories."
+            : "Off, the agent reads, recalls and keeps no memories in this chat.",
+      ),
       value: taken ? false : value != true,
       onChanged: taken ? null : (v) => onChanged(v ? null : true),
     );

@@ -19,14 +19,13 @@ Trigger fileTrigger({
   },
   Duration cooldown = const Duration(seconds: 5),
   bool enabled = true,
-}) =>
-    Trigger(
-      id: id,
-      name: id,
-      prompt: "p",
-      source: FileSource(paths: paths, events: events, cooldown: cooldown),
-      enabled: enabled,
-    );
+}) => Trigger(
+  id: id,
+  name: id,
+  prompt: "p",
+  source: FileSource(paths: paths, events: events, cooldown: cooldown),
+  enabled: enabled,
+);
 
 void main() {
   late FakeFileWatches watches;
@@ -35,7 +34,8 @@ void main() {
     watches = FakeFileWatches();
   });
 
-  FileKind kind({Future<String> Function(Trigger, String)? resolve}) => FileKind(
+  FileKind kind({Future<String> Function(Trigger, String)? resolve}) =>
+      FileKind(
         fileWatches: watches,
         resolve: resolve ?? (trigger, path) async => "/ws/$path",
       );
@@ -43,63 +43,78 @@ void main() {
   test("arms only where there are paths and a resolver", () {
     expect(kind().armed(fileTrigger()), isTrue);
     expect(kind().armed(fileTrigger(paths: [])), isFalse);
-    expect(
-        FileKind(fileWatches: watches).armed(fileTrigger()), isFalse);
+    expect(FileKind(fileWatches: watches).armed(fileTrigger()), isFalse);
     expect(kind().armed(fileTrigger(enabled: false)), isFalse);
     // Never matches another kind's source.
     expect(
-        kind().armed(Trigger(
-            id: "s", name: "", prompt: "", source: ScheduleSource(at: DateTime(2026)))),
-        isFalse);
+      kind().armed(
+        Trigger(
+          id: "s",
+          name: "",
+          prompt: "",
+          source: ScheduleSource(at: DateTime(2026)),
+        ),
+      ),
+      isFalse,
+    );
   });
 
-  test("one root is one watcher over many triggers naming the same one",
-      () async {
-    final fires = kind().watch(
-        [fileTrigger(id: "a"), fileTrigger(id: "b", paths: ["notes/"])], _now);
-    // The stream subscribes lazily on await; poke it with a first-listen.
-    final sub = fires.stream.listen((_) {});
-    await pumpEventQueue();
-    expect(watches.roots.where((r) => r == "/ws/notes/"), hasLength(1));
+  test(
+    "one root is one watcher over many triggers naming the same one",
+    () async {
+      final fires = kind().watch([
+        fileTrigger(id: "a"),
+        fileTrigger(id: "b", paths: ["notes/"]),
+      ], _now);
+      // The stream subscribes lazily on await; poke it with a first-listen.
+      final sub = fires.stream.listen((_) {});
+      await pumpEventQueue();
+      expect(watches.roots.where((r) => r == "/ws/notes/"), hasLength(1));
 
-    await sub.cancel();
-  });
+      await sub.cancel();
+    },
+  );
 
-  test("an event under a watched root fires each trigger that named it",
-      () async {
-    final collected = <TriggerFire>[];
-    final fires = kind().watch(
-        [fileTrigger(id: "a"), fileTrigger(id: "b", paths: ["notes/todo.md"])],
-        _now);
-    final sub = fires.stream.listen(collected.add);
-    await pumpEventQueue();
+  test(
+    "an event under a watched root fires each trigger that named it",
+    () async {
+      final collected = <TriggerFire>[];
+      final fires = kind().watch([
+        fileTrigger(id: "a"),
+        fileTrigger(id: "b", paths: ["notes/todo.md"]),
+      ], _now);
+      final sub = fires.stream.listen(collected.add);
+      await pumpEventQueue();
 
-    watches.push("/ws/notes/todo.md", FileEvent.change);
-    await pumpEventQueue();
+      watches.push("/ws/notes/todo.md", FileEvent.change);
+      await pumpEventQueue();
 
-    expect(collected.map((f) => f.triggerId), containsAll(["a", "b"]));
-    expect(collected.first.reason, contains("todo.md"));
+      expect(collected.map((f) => f.triggerId), containsAll(["a", "b"]));
+      expect(collected.first.reason, contains("todo.md"));
 
-    // A delete event fires too, and a root naming a directory catches what
-    // happens under it.
-    final deletions = <TriggerFire>[];
-    final deleting = kind().watch(
-        [fileTrigger(id: "c", paths: ["notes"])], _now);
-    final deleteSub = deleting.stream.listen(deletions.add);
-    await pumpEventQueue();
+      // A delete event fires too, and a root naming a directory catches what
+      // happens under it.
+      final deletions = <TriggerFire>[];
+      final deleting = kind().watch([
+        fileTrigger(id: "c", paths: ["notes"]),
+      ], _now);
+      final deleteSub = deleting.stream.listen(deletions.add);
+      await pumpEventQueue();
 
-    watches.push("/ws/notes/build.log", FileEvent.delete);
-    await pumpEventQueue();
+      watches.push("/ws/notes/build.log", FileEvent.delete);
+      await pumpEventQueue();
 
-    expect(deletions.single.reason, contains("build.log"));
-    await sub.cancel();
-    await deleteSub.cancel();
-  });
+      expect(deletions.single.reason, contains("build.log"));
+      await sub.cancel();
+      await deleteSub.cancel();
+    },
+  );
 
   test("an event of a kind the trigger did not name does not fire", () async {
     final collected = <TriggerFire>[];
-    final fires = kind()
-        .watch([fileTrigger(id: "a", events: {FileEvent.change})], _now);
+    final fires = kind().watch([
+      fileTrigger(id: "a", events: {FileEvent.change}),
+    ], _now);
     final sub = fires.stream.listen(collected.add);
     await pumpEventQueue();
 
@@ -115,8 +130,9 @@ void main() {
 
   test("the cooldown holds a burst to one fire", () async {
     final collected = <TriggerFire>[];
-    final fires = kind().watch(
-        [fileTrigger(id: "a", cooldown: const Duration(minutes: 1))], _now);
+    final fires = kind().watch([
+      fileTrigger(id: "a", cooldown: const Duration(minutes: 1)),
+    ], _now);
     final sub = fires.stream.listen(collected.add);
     await pumpEventQueue();
 

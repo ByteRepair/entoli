@@ -18,8 +18,9 @@ abstract interface class RelaySignaling {
 
 /// Join [room] at [relayUrl] as [role] — "i" for the side holding the window,
 /// "j" for the side dialling into it.
-typedef RelayDial = Future<RelaySignaling> Function({
-  required String relayUrl,
-  required String room,
-  required String role,
-});
+typedef RelayDial =
+    Future<RelaySignaling> Function({
+      required String relayUrl,
+      required String room,
+      required String role,
+    });

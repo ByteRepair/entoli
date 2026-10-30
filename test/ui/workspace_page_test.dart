@@ -68,13 +68,21 @@ void main() {
 
       expect(find.text("20 B"), findsOneWidget);
       expect(
-        find.descendant(of: find.widgetWithText(ListTile, "src"), matching: find.text("0 B")),
+        find.descendant(
+          of: find.widgetWithText(ListTile, "src"),
+          matching: find.text("0 B"),
+        ),
         findsNothing,
       );
     });
 
-    testWidgets("an empty workspace says so rather than drawing nothing", (tester) async {
-      await app.pump(tester, WorkspacePage(root: root, title: "Chat workspace"));
+    testWidgets("an empty workspace says so rather than drawing nothing", (
+      tester,
+    ) async {
+      await app.pump(
+        tester,
+        WorkspacePage(root: root, title: "Chat workspace"),
+      );
       await pumpUntil(tester, find.text("Nothing here yet"));
 
       expect(find.text("Nothing here yet"), findsOneWidget);
@@ -96,7 +104,9 @@ void main() {
       expect(find.text("src"), findsNWidgets(2));
     });
 
-    testWidgets("back climbs one folder before it leaves the page", (tester) async {
+    testWidgets("back climbs one folder before it leaves the page", (
+      tester,
+    ) async {
       seed(files: ["src/deep/main.dart"]);
       await open(tester);
 
@@ -117,8 +127,9 @@ void main() {
       expect(find.text("Chat workspace"), findsOneWidget);
     });
 
-    testWidgets("tapping a file it cannot read hands it to the platform",
-        (tester) async {
+    testWidgets("tapping a file it cannot read hands it to the platform", (
+      tester,
+    ) async {
       seed(files: ["photo.png"]);
       await open(tester);
 
@@ -137,8 +148,9 @@ void main() {
       await settleIo(tester);
     }
 
-    testWidgets("tapping one reads it in the app rather than handing it over",
-        (tester) async {
+    testWidgets("tapping one reads it in the app rather than handing it over", (
+      tester,
+    ) async {
       seed(files: ["notes.md"]);
       await open(tester);
 
@@ -181,21 +193,31 @@ void main() {
       expect(copied, ["contents of notes.md"]);
     });
 
-    testWidgets("code opens read-only in the editor until Edit", (tester) async {
+    testWidgets("code opens read-only in the editor until Edit", (
+      tester,
+    ) async {
       seed(files: ["main.dart"]);
       await open(tester);
       await view(tester, "main.dart");
 
       expect(editor(tester).text, "contents of main.dart");
-      expect(tester.widget<CodeEditor>(find.byType(CodeEditor)).readOnly, isTrue);
+      expect(
+        tester.widget<CodeEditor>(find.byType(CodeEditor)).readOnly,
+        isTrue,
+      );
 
       await tester.tap(find.byTooltip("Edit"));
       await settleIo(tester);
 
-      expect(tester.widget<CodeEditor>(find.byType(CodeEditor)).readOnly, isFalse);
+      expect(
+        tester.widget<CodeEditor>(find.byType(CodeEditor)).readOnly,
+        isFalse,
+      );
     });
 
-    testWidgets("markdown previews rendered and edits as source", (tester) async {
+    testWidgets("markdown previews rendered and edits as source", (
+      tester,
+    ) async {
       seed(files: ["notes.md"]);
       await open(tester);
       await view(tester, "notes.md");
@@ -238,7 +260,10 @@ void main() {
       await settleIo(tester);
 
       expect(find.text("Chat workspace"), findsOneWidget);
-      expect(File("$root/main.dart").readAsStringSync(), "contents of main.dart");
+      expect(
+        File("$root/main.dart").readAsStringSync(),
+        "contents of main.dart",
+      );
     });
 
     testWidgets("lines wrap from the menu", (tester) async {
@@ -248,37 +273,43 @@ void main() {
 
       await fromMenu(tester, "Wrap lines");
 
-      expect(tester.widget<CodeEditor>(find.byType(CodeEditor)).wordWrap, isTrue);
+      expect(
+        tester.widget<CodeEditor>(find.byType(CodeEditor)).wordWrap,
+        isTrue,
+      );
       await fromMenu(tester, "Wrap lines");
     });
 
-    testWidgets("a file past the cap is not shown, but can be opened or copied whole",
-        (tester) async {
-      final copied = clipboard(tester);
-      final big = "x" * (textViewLimit + 10);
-      File("$root/big.log")
-        ..createSync(recursive: true)
-        ..writeAsStringSync(big);
-      await open(tester);
-      await view(tester, "big.log");
+    testWidgets(
+      "a file past the cap is not shown, but can be opened or copied whole",
+      (tester) async {
+        final copied = clipboard(tester);
+        final big = "x" * (textViewLimit + 10);
+        File("$root/big.log")
+          ..createSync(recursive: true)
+          ..writeAsStringSync(big);
+        await open(tester);
+        await view(tester, "big.log");
 
-      expect(find.text("Too large to show here"), findsOneWidget);
-      expect(find.byType(CodeEditor), findsNothing);
-      expect(find.byTooltip("Edit"), findsNothing);
+        expect(find.text("Too large to show here"), findsOneWidget);
+        expect(find.byType(CodeEditor), findsNothing);
+        expect(find.byTooltip("Edit"), findsNothing);
 
-      await tester.tap(find.text("Copy text"));
-      await settleIo(tester);
-      expect(copied, [big]);
+        await tester.tap(find.text("Copy text"));
+        await settleIo(tester);
+        expect(copied, [big]);
 
-      await tester.tap(find.text("Open in another app"));
-      await settleIo(tester);
-      expect(app.handoff.opened, ["$root/big.log"]);
-    });
+        await tester.tap(find.text("Open in another app"));
+        await settleIo(tester);
+        expect(app.handoff.opened, ["$root/big.log"]);
+      },
+    );
 
     // The extension is only the first half of the rule: a `.log` the agent
     // wrote as a gzip goes back out to the platform rather than being drawn.
-    testWidgets("one whose bytes are not text falls back to the hand-off",
-        (tester) async {
+    testWidgets("one whose bytes are not text falls back to the hand-off", (
+      tester,
+    ) async {
       File("$root/a.log")
         ..createSync(recursive: true)
         ..writeAsBytesSync([0x1f, 0x8b, 0x00, 0x42]);
@@ -290,22 +321,26 @@ void main() {
       expect(find.text("Chat workspace"), findsOneWidget);
     });
 
-    testWidgets("one deleted under the reader says so rather than drawing nothing",
-        (tester) async {
-      seed(files: ["notes.md"]);
-      await open(tester);
-      File("$root/notes.md").deleteSync();
+    testWidgets(
+      "one deleted under the reader says so rather than drawing nothing",
+      (tester) async {
+        seed(files: ["notes.md"]);
+        await open(tester);
+        File("$root/notes.md").deleteSync();
 
-      await view(tester, "notes.md");
+        await view(tester, "notes.md");
 
-      expect(find.text("That file could not be read"), findsOneWidget);
-    });
+        expect(find.text("That file could not be read"), findsOneWidget);
+      },
+    );
   });
 
   group("desktop", () {
     setUp(() => start(handoff: FakeFileHandoff.desktop()));
 
-    testWidgets("it reveals the folder being looked at, not the root", (tester) async {
+    testWidgets("it reveals the folder being looked at, not the root", (
+      tester,
+    ) async {
       seed(files: ["src/main.dart"]);
       await open(tester);
 
@@ -325,15 +360,18 @@ void main() {
 
     // Selecting survives having nowhere to share to, because deleting is not a
     // route out of the app.
-    testWidgets("there is nothing to share, but there is to select",
-        (tester) async {
+    testWidgets("there is nothing to share, but there is to select", (
+      tester,
+    ) async {
       seed(files: ["notes.md"]);
       await open(tester);
 
       expect(find.byTooltip("Select"), findsOneWidget);
     });
 
-    testWidgets("a selection can be deleted with nowhere to send it", (tester) async {
+    testWidgets("a selection can be deleted with nowhere to send it", (
+      tester,
+    ) async {
       seed(files: ["a.txt"]);
       await open(tester);
 
@@ -449,7 +487,9 @@ void main() {
       expect(find.text("notes"), findsOneWidget);
     });
 
-    testWidgets("a typed path cannot climb out of the workspace", (tester) async {
+    testWidgets("a typed path cannot climb out of the workspace", (
+      tester,
+    ) async {
       seed(files: ["a.txt"]);
       await open(tester);
 
@@ -488,7 +528,9 @@ void main() {
       expect(find.text("src"), findsNothing);
     });
 
-    testWidgets("several files go at once, and the selection ends", (tester) async {
+    testWidgets("several files go at once, and the selection ends", (
+      tester,
+    ) async {
       seed(files: ["a.txt", "b.txt", "c.txt"]);
       await open(tester);
 
@@ -519,7 +561,9 @@ void main() {
       expect(find.text("1 selected"), findsOneWidget);
     });
 
-    testWidgets("there is nothing to delete until something is picked", (tester) async {
+    testWidgets("there is nothing to delete until something is picked", (
+      tester,
+    ) async {
       seed(files: ["a.txt"]);
       await open(tester);
       expect(find.byTooltip("Delete"), findsNothing);
@@ -537,7 +581,9 @@ void main() {
   group("getting there", () {
     setUp(() => start(handoff: FakeFileHandoff.desktop()));
 
-    testWidgets("the chat settings page opens the chat's own workspace", (tester) async {
+    testWidgets("the chat settings page opens the chat's own workspace", (
+      tester,
+    ) async {
       final chat = await io(tester, () => app.seedChat());
       final workspace = app.config.workspaceDir(chat.state.id);
       Directory(workspace).createSync(recursive: true);
@@ -552,11 +598,14 @@ void main() {
       expect(find.text("scratch.txt"), findsOneWidget);
     });
 
-    testWidgets("a chat in a project opens the workspace it actually has",
-        (tester) async {
+    testWidgets("a chat in a project opens the workspace it actually has", (
+      tester,
+    ) async {
       final chat = await io(tester, () => app.seedChat(project: "research"));
-      final workspace =
-          app.config.workspaceDir(chat.state.id, project: "research");
+      final workspace = app.config.workspaceDir(
+        chat.state.id,
+        project: "research",
+      );
       Directory(workspace).createSync(recursive: true);
       File("$workspace/in-project.txt").writeAsStringSync("x");
 
@@ -568,7 +617,9 @@ void main() {
       expect(find.text("in-project.txt"), findsOneWidget);
     });
 
-    testWidgets("the sidebar opens the default project's workspace", (tester) async {
+    testWidgets("the sidebar opens the default project's workspace", (
+      tester,
+    ) async {
       seed(files: ["shared.md"]);
 
       await app.pump(tester, const SizedBox(width: 280, child: Sidebar()));
@@ -579,7 +630,9 @@ void main() {
       expect(find.text("shared.md"), findsOneWidget);
     });
 
-    testWidgets("the project settings page opens the shared workspace", (tester) async {
+    testWidgets("the project settings page opens the shared workspace", (
+      tester,
+    ) async {
       await io(tester, () => app.repo.createProject("research"));
       final shared = app.config.projectWorkspaceDir(project: "research");
       File("$shared/shared.md").writeAsStringSync("everyone's");

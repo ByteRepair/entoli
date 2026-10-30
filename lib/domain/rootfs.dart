@@ -87,31 +87,38 @@ const alpine = Rootfs(
   images: {
     "arm64-v8a": RootfsImage(
       arch: "aarch64",
-      url: "https://dl-cdn.alpinelinux.org/alpine/v3.24/releases/aarch64/"
+      url:
+          "https://dl-cdn.alpinelinux.org/alpine/v3.24/releases/aarch64/"
           "alpine-minirootfs-3.24.1-aarch64.tar.gz",
       bytes: 4023732,
-      sha256: "f55a90f69052c5bd6f92cb09a8f47065970830b194c917a006fb94028e721259",
+      sha256:
+          "f55a90f69052c5bd6f92cb09a8f47065970830b194c917a006fb94028e721259",
     ),
     "armeabi-v7a": RootfsImage(
       arch: "armv7",
-      url: "https://dl-cdn.alpinelinux.org/alpine/v3.24/releases/armv7/"
+      url:
+          "https://dl-cdn.alpinelinux.org/alpine/v3.24/releases/armv7/"
           "alpine-minirootfs-3.24.1-armv7.tar.gz",
       bytes: 3176829,
-      sha256: "50942d567e6ee422c16cb46d5c282ed9d8adc9007c2a483faf4148a18c64ce32",
+      sha256:
+          "50942d567e6ee422c16cb46d5c282ed9d8adc9007c2a483faf4148a18c64ce32",
     ),
     "x86_64": RootfsImage(
       arch: "x86_64",
-      url: "https://dl-cdn.alpinelinux.org/alpine/v3.24/releases/x86_64/"
+      url:
+          "https://dl-cdn.alpinelinux.org/alpine/v3.24/releases/x86_64/"
           "alpine-minirootfs-3.24.1-x86_64.tar.gz",
       bytes: 3698422,
-      sha256: "41f73e3cf5fa919b8aa5ca6b30dc48f0da2720776d7423e2a7748211456fe081",
+      sha256:
+          "41f73e3cf5fa919b8aa5ca6b30dc48f0da2720776d7423e2a7748211456fe081",
     ),
     // iOS, keyed "ios" rather than by an Android ABI — iSH emulates x86 and
     // not the device's own arm64, so the guest is an i386 Alpine separate from
     // the arm64 one Android fetches. See ios/AGENTS.md.
     "ios": RootfsImage(
       arch: "i386",
-      url: "https://dl-cdn.alpinelinux.org/alpine/v3.24/releases/x86/"
+      url:
+          "https://dl-cdn.alpinelinux.org/alpine/v3.24/releases/x86/"
           "alpine-minirootfs-3.24.1-x86.tar.gz",
       bytes: 3538048,
       sha256:

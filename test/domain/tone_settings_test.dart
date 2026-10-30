@@ -30,25 +30,27 @@ void main() {
   void makeProject(String name) =>
       Directory(config.projectDir(project: name)).createSync(recursive: true);
 
-  test("the app-level tone and citations round-trip; defaults leave no trace",
-      () async {
-    await AppSettings(tone: Tone.direct, citations: true).save(config);
-    final loaded = AppSettings.load(config);
-    expect(loaded.tone, Tone.direct);
-    expect(loaded.citations, isTrue);
+  test(
+    "the app-level tone and citations round-trip; defaults leave no trace",
+    () async {
+      await AppSettings(tone: Tone.direct, citations: true).save(config);
+      final loaded = AppSettings.load(config);
+      expect(loaded.tone, Tone.direct);
+      expect(loaded.citations, isTrue);
 
-    // An unknown name is a later build's, and loads as none.
-    final path = config.settingsFile;
-    final json =
-        jsonDecode(config.documents.read(path)!) as Map<String, dynamic>;
-    await config.documents.write(path, jsonEncode(json..["tone"] = "shouty"));
-    expect(AppSettings.load(config).tone, Tone.none);
+      // An unknown name is a later build's, and loads as none.
+      final path = config.settingsFile;
+      final json =
+          jsonDecode(config.documents.read(path)!) as Map<String, dynamic>;
+      await config.documents.write(path, jsonEncode(json..["tone"] = "shouty"));
+      expect(AppSettings.load(config).tone, Tone.none);
 
-    await AppSettings().save(config);
-    final written = jsonDecode(config.documents.read(path)!) as Map;
-    expect(written.containsKey("tone"), isFalse);
-    expect(written.containsKey("citations"), isFalse);
-  });
+      await AppSettings().save(config);
+      final written = jsonDecode(config.documents.read(path)!) as Map;
+      expect(written.containsKey("tone"), isFalse);
+      expect(written.containsKey("citations"), isFalse);
+    },
+  );
 
   group("turn-time resolution", () {
     test("the app's answers travel with the turn", () async {

@@ -21,7 +21,7 @@ import "voice_strategies.dart";
 /// the native contract `ios_voice.dart` shares too.
 class AndroidVoice extends Voice {
   AndroidVoice(VoiceModelStore store, String cacheDir)
-      : _sherpa = SherpaVoice(store, cacheDir);
+    : _sherpa = SherpaVoice(store, cacheDir);
 
   /// The sherpa halves, composed where a pick names a downloaded model rather
   /// than a system engine.
@@ -41,9 +41,9 @@ class AndroidVoice extends Voice {
   /// in `VoiceChannel.kt` like the device's own would.
   @override
   Future<List<VoiceLanguage>> systemLanguages() => nativeLanguages(
-        timeout: const Duration(seconds: 5),
-        failure: "the device would not say what it can speak",
-      );
+    timeout: const Duration(seconds: 5),
+    failure: "the device would not say what it can speak",
+  );
 
   @override
   Future<VoiceSession> start({
@@ -68,15 +68,15 @@ class AndroidVoice extends Voice {
     // native half and nothing is passed on. The language is the picker it
     // draws instead — and is likewise the native synthesiser's: a downloaded
     // model speaks the language it was trained on.
-    return composeSession(
-      listener,
-      switch (speaking) {
-        SpeakOnDevice(:final model) when model.isNative =>
-          Future.value(NativeTextToSpeech(language: language)),
-        SpeakOnDevice(:final model) => _sherpa.sherpaSpeaker(model, speaker),
-        SpeakThrough(:final synthesize) => Future.value(RemoteSpeaker(synthesize)),
-      },
-    );
+    return composeSession(listener, switch (speaking) {
+      SpeakOnDevice(:final model) when model.isNative => Future.value(
+        NativeTextToSpeech(language: language),
+      ),
+      SpeakOnDevice(:final model) => _sherpa.sherpaSpeaker(model, speaker),
+      SpeakThrough(:final synthesize) => Future.value(
+        RemoteSpeaker(synthesize),
+      ),
+    });
   }
 
   @override
@@ -192,8 +192,11 @@ class NativeSpeechRecognizer extends MicrophoneListener {
     if (closed || on == listening) return;
     asked(on);
     try {
-      await voiceChannel.invokeMethod<String>("setRecognitionListening",
-          {"on": on, "finish": finish, if (on) "language": language});
+      await voiceChannel.invokeMethod<String>("setRecognitionListening", {
+        "on": on,
+        "finish": finish,
+        if (on) "language": language,
+      });
     } on PlatformException catch (e) {
       // Only opening it is a failure worth the session: nothing that goes wrong
       // shutting a microphone leaves anyone unable to speak.
@@ -258,7 +261,9 @@ class NativeTextToSpeech implements Speaker {
       if (!_ready) _fatal("Speech did not start.");
     });
     try {
-      await voiceChannel.invokeMethod<String>("initSpeech", {"language": language});
+      await voiceChannel.invokeMethod<String>("initSpeech", {
+        "language": language,
+      });
     } on PlatformException catch (e) {
       _fatal(_message(e, "Speech failed."));
     } on MissingPluginException {

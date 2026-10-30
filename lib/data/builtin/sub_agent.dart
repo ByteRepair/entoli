@@ -110,17 +110,26 @@ class SubAgentRunner implements SubAgents {
   /// as the main agent would. The [prompt] is the sub-agent's whole task — it
   /// sees nothing else of the parent's conversation.
   @override
-  Future<ShellResult> run(String agentName, String prompt, {String? callId}) async {
+  Future<ShellResult> run(
+    String agentName,
+    String prompt, {
+    String? callId,
+  }) async {
     final session = BuiltinSession();
     // The task as a message, because that is what opens a turn now. A
     // sub-agent's transcript opens on the assistant's message, so this one is
     // never logged and has no `/command` of the user's to record.
-    final said = unloggedMessage(
-        MessageRole.user, DateTime.now(), [MessagePart.text(text: prompt)]);
-    return _drive(session, _definitionOf(agentName), callId,
-        // The task is dressed: a fresh session's first own mail, what the
-        // instance template frames it as.
-        (agent) => agent.run(said, mayDress: true));
+    final said = unloggedMessage(MessageRole.user, DateTime.now(), [
+      MessagePart.text(text: prompt),
+    ]);
+    return _drive(
+      session,
+      _definitionOf(agentName),
+      callId,
+      // The task is dressed: a fresh session's first own mail, what the
+      // instance template frames it as.
+      (agent) => agent.run(said, mayDress: true),
+    );
   }
 
   /// Carry on the sub-agent [callId] left off in, over a session rebuilt from
@@ -128,14 +137,21 @@ class SubAgentRunner implements SubAgents {
   /// and the same three steps: project the log back, nudge, run the loop.
   Future<ShellResult> resume(String agentName, String callId) async {
     final session = BuiltinSession()
-      ..replaceWith(await projectionOf(await log.read(callId), load: noResources));
-    return _drive(session, _definitionOf(agentName), callId,
-        (agent) => agent.resume());
+      ..replaceWith(
+        await projectionOf(await log.read(callId), load: noResources),
+      );
+    return _drive(
+      session,
+      _definitionOf(agentName),
+      callId,
+      (agent) => agent.resume(),
+    );
   }
 
   AgentDefinition _definitionOf(String name) => AgentDefinition.of(
-      library?.find(CompletionKind.agent, name) ??
-          library?.find(CompletionKind.agent, "general"));
+    library?.find(CompletionKind.agent, name) ??
+        library?.find(CompletionKind.agent, "general"),
+  );
 
   /// What running and carrying on have in common: the agent, its transcript,
   /// and reading a final answer out of what it said.
@@ -265,16 +281,20 @@ class SubAgentRunner implements SubAgents {
   /// lays the message itself down first.
   Future<TurnRecorder> _recorderFor(String callId) async {
     final existing = await log.read(callId);
-    final recorder = TurnRecorder(append: (records) => log.append(callId, records));
+    final recorder = TurnRecorder(
+      append: (records) => log.append(callId, records),
+    );
     if (existing.isEmpty) {
-      await recorder.write(recordsOf([
-        Message(
-          id: callId,
-          role: MessageRole.assistant,
-          createdAt: DateTime.now(),
-          parts: const [],
-        ),
-      ]));
+      await recorder.write(
+        recordsOf([
+          Message(
+            id: callId,
+            role: MessageRole.assistant,
+            createdAt: DateTime.now(),
+            parts: const [],
+          ),
+        ]),
+      );
     }
     recorder.open(callId, existing: existing.lastOrNull?.parts ?? const []);
     return recorder;

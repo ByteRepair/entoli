@@ -10,7 +10,9 @@ Map<String, Set<String>> _graph() {
   final directive = RegExp(r"^(?:import|export)\s[^;]*;", multiLine: true);
   final uri = RegExp(r'"([^"]+\.dart)"');
   final graph = <String, Set<String>>{};
-  for (final file in Directory(lib).listSync(recursive: true).whereType<File>()) {
+  for (final file in Directory(
+    lib,
+  ).listSync(recursive: true).whereType<File>()) {
     final path = file.path;
     if (!path.endsWith(".dart") ||
         path.endsWith(".g.dart") ||
@@ -80,13 +82,10 @@ void main() {
     final graph = _graph();
     expect(graph, isNotEmpty);
     final lib = p.absolute("lib");
-    expect(
-      [
-        for (final group in _cycles(graph))
-          [for (final file in group) p.relative(file, from: lib)],
-      ],
-      isEmpty,
-    );
+    expect([
+      for (final group in _cycles(graph))
+        [for (final file in group) p.relative(file, from: lib)],
+    ], isEmpty);
   });
 
   // Between the layers, `domain/` is the app's own terms and knows nothing of
@@ -100,15 +99,12 @@ void main() {
       "data": {"ui"},
     };
     String layer(String file) => p.split(p.relative(file, from: lib)).first;
-    expect(
-      [
-        for (final MapEntry(key: file, value: imports) in _graph().entries)
-          for (final target in imports)
-            if (above[layer(file)]?.contains(layer(target)) ?? false)
-              "${p.relative(file, from: lib)} -> ${p.relative(target, from: lib)}",
-      ],
-      isEmpty,
-    );
+    expect([
+      for (final MapEntry(key: file, value: imports) in _graph().entries)
+        for (final target in imports)
+          if (above[layer(file)]?.contains(layer(target)) ?? false)
+            "${p.relative(file, from: lib)} -> ${p.relative(target, from: lib)}",
+    ], isEmpty);
   });
 
   test("the check finds a cycle where there is one", () {

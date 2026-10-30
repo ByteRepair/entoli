@@ -24,8 +24,12 @@ void main() {
     libDir: "/data/app/pkg/lib/arm64",
   );
   final model = downloadedAs(ggufCatalog.first);
-  OnDeviceProvider onDevice(LocalLlm pool, LocalModelStore store) => OnDeviceProvider(
-      LlamaEngine(pool, store), () => AppSettings(), voices: () => const {});
+  OnDeviceProvider onDevice(LocalLlm pool, LocalModelStore store) =>
+      OnDeviceProvider(
+        LlamaEngine(pool, store),
+        () => AppSettings(),
+        voices: () => const {},
+      );
 
   ({List<String> command, Map<String, String> environment}) launch({
     String device = noDevice,
@@ -33,19 +37,18 @@ void main() {
     int? threads,
     String? slotSavePath,
     bool fitLayers = false,
-  }) =>
-      llamaLaunch(
-        binaries: binaries,
-        model: model,
-        modelFile: "/cache/llm/${model.id}/model.gguf",
-        port: 41234,
-        apiKey: "abcdef",
-        device: device,
-        contextLength: contextLength ?? model.defaultContext,
-        threads: threads,
-        slotSavePath: slotSavePath,
-        fitLayers: fitLayers,
-      );
+  }) => llamaLaunch(
+    binaries: binaries,
+    model: model,
+    modelFile: "/cache/llm/${model.id}/model.gguf",
+    port: 41234,
+    apiKey: "abcdef",
+    device: device,
+    contextLength: contextLength ?? model.defaultContext,
+    threads: threads,
+    slotSavePath: slotSavePath,
+    fitLayers: fitLayers,
+  );
 
   /// The value of the argument after [flag], or null where it was not passed.
   String? valueOf(List<String> command, String flag) {
@@ -70,7 +73,10 @@ void main() {
     // `model.gguf` for every one of them, so without this they would all be
     // called the same thing.
     expect(valueOf(launch().command, "-a"), model.id);
-    expect(valueOf(launch().command, "-m"), "/cache/llm/${model.id}/model.gguf");
+    expect(
+      valueOf(launch().command, "-m"),
+      "/cache/llm/${model.id}/model.gguf",
+    );
   });
 
   test("one slot and no RAM prompt cache", () {
@@ -121,12 +127,30 @@ void main() {
       // moves at its slowest thread's pace, so the little four would hold up
       // the big four rather than adding to them.
       expect(
-        bigCoreCount([1800000, 1800000, 1800000, 1800000, 2800000, 2800000, 2800000, 2800000]),
+        bigCoreCount([
+          1800000,
+          1800000,
+          1800000,
+          1800000,
+          2800000,
+          2800000,
+          2800000,
+          2800000,
+        ]),
         4,
       );
       // One prime, three mid, four little: everything above the floor.
       expect(
-        bigCoreCount([1900000, 1900000, 1900000, 1900000, 2600000, 2600000, 2600000, 3200000]),
+        bigCoreCount([
+          1900000,
+          1900000,
+          1900000,
+          1900000,
+          2600000,
+          2600000,
+          2600000,
+          3200000,
+        ]),
         4,
       );
     });
@@ -216,7 +240,10 @@ Available devices:
 """);
 
       expect(devices.map((d) => d.name), ["HTP0", "Vulkan0"]);
-      expect(devices.map((d) => d.compute), [LocalCompute.npu, LocalCompute.gpu]);
+      expect(devices.map((d) => d.compute), [
+        LocalCompute.npu,
+        LocalCompute.gpu,
+      ]);
       expect(devices.first.description, "Hexagon NPU");
       expect(devices.first.totalBytes, 3584 * 1024 * 1024);
     });
@@ -242,7 +269,9 @@ something else entirely
     });
 
     test("a device that says nothing about its memory still lists", () {
-      final devices = parseDevices("Available devices:\n  Vulkan0: Mali-G715\n");
+      final devices = parseDevices(
+        "Available devices:\n  Vulkan0: Mali-G715\n",
+      );
 
       expect(devices.single.name, "Vulkan0");
       expect(devices.single.description, "Mali-G715");
@@ -251,8 +280,16 @@ something else entirely
   });
 
   group("which device a turn ends up on", () {
-    const npu = LocalDevice(name: "HTP0", description: "Hexagon NPU", compute: LocalCompute.npu);
-    const gpu = LocalDevice(name: "Vulkan0", description: "Mali-G715", compute: LocalCompute.gpu);
+    const npu = LocalDevice(
+      name: "HTP0",
+      description: "Hexagon NPU",
+      compute: LocalCompute.npu,
+    );
+    const gpu = LocalDevice(
+      name: "Vulkan0",
+      description: "Mali-G715",
+      compute: LocalCompute.gpu,
+    );
 
     test("auto takes the best accelerator, and the NPU beats the GPU", () {
       // The default a turn arrives with: nobody picked, so it gets the fastest
@@ -276,7 +313,6 @@ something else entirely
     test("a device named outright is passed straight through", () {
       expect(resolveLocalDevice("Vulkan0", [gpu, npu]), "Vulkan0");
     });
-
   });
 
   /// A server that cannot possibly come up, over weights that are claimed to be
@@ -290,18 +326,24 @@ something else entirely
   /// the list, not of whether the process came up.
   group("the pool, over a server that will not start", () {
     LlamaServerPool failing() => LlamaServerPool(
-          const LlamaBinaries(server: "/bin/false", libDir: "/nonexistent"),
-          _AlwaysInstalled(),
-        );
+      const LlamaBinaries(server: "/bin/false", libDir: "/nonexistent"),
+      _AlwaysInstalled(),
+    );
 
-    Future<void> askFor(LlamaServerPool pool, String id, {int maxRunning = 1}) =>
-        expectLater(
-          pool.serve(id, maxRunning: maxRunning),
-          throwsA(isA<LocalLlmFailure>()),
-        );
+    Future<void> askFor(
+      LlamaServerPool pool,
+      String id, {
+      int maxRunning = 1,
+    }) => expectLater(
+      pool.serve(id, maxRunning: maxRunning),
+      throwsA(isA<LocalLlmFailure>()),
+    );
 
-    Future<void> ask(LlamaServerPool pool, LocalModel model, {int maxRunning = 1}) =>
-        askFor(pool, model.id, maxRunning: maxRunning);
+    Future<void> ask(
+      LlamaServerPool pool,
+      LocalModel model, {
+      int maxRunning = 1,
+    }) => askFor(pool, model.id, maxRunning: maxRunning);
 
     test("what is waiting on it is told the server's own last words", () async {
       final pool = failing();
@@ -323,8 +365,9 @@ something else entirely
       await askFor(pool, model.id);
       await ask(pool, ggufCatalog[1]);
 
-      expect(pool.running.value.map((each) => each.modelId),
-          [ggufCatalog[1].id]);
+      expect(pool.running.value.map((each) => each.modelId), [
+        ggufCatalog[1].id,
+      ]);
     });
 
     test("raising the cap is what lets both stay", () async {
@@ -333,20 +376,24 @@ something else entirely
       await askFor(pool, model.id, maxRunning: 2);
       await ask(pool, ggufCatalog[1], maxRunning: 2);
 
-      expect(pool.running.value.map((each) => each.modelId),
-          [model.id, ggufCatalog[1].id]);
+      expect(pool.running.value.map((each) => each.modelId), [
+        model.id,
+        ggufCatalog[1].id,
+      ]);
     });
 
-    test("the cap is never more than the app allows, whatever it is passed",
-        () async {
-      final pool = failing();
+    test(
+      "the cap is never more than the app allows, whatever it is passed",
+      () async {
+        final pool = failing();
 
-      for (final each in ggufCatalog) {
-        await ask(pool, each, maxRunning: 99);
-      }
+        for (final each in ggufCatalog) {
+          await ask(pool, each, maxRunning: 99);
+        }
 
-      expect(pool.running.value.length, maxLocalModelsAllowed);
-    });
+        expect(pool.running.value.length, maxLocalModelsAllowed);
+      },
+    );
 
     test("unloading everything empties the list", () async {
       final pool = failing();
@@ -364,41 +411,61 @@ something else entirely
       // full all the same. That is the whole change from the pick that used to
       // live on the settings page.
       expect(pool.running.value, isEmpty);
-      expect(LlamaEngine(pool, const _AlwaysInstalled()).installed,
-          ggufCatalog.map((m) => m.id));
       expect(
-          [for (final m in onDevice(pool, const _AlwaysInstalled())
-                  .offered(ModelCatalog.empty, ModelHost.resolving()))
-            m.ref],
-          [for (final m in ggufCatalog) (providerId: localProviderId, modelId: m.id)]);
+        LlamaEngine(pool, const _AlwaysInstalled()).installed,
+        ggufCatalog.map((m) => m.id),
+      );
+      expect(
+        [
+          for (final m in onDevice(
+            pool,
+            const _AlwaysInstalled(),
+          ).offered(ModelCatalog.empty, ModelHost.resolving()))
+            m.ref,
+        ],
+        [
+          for (final m in ggufCatalog)
+            (providerId: localProviderId, modelId: m.id),
+        ],
+      );
       // No address of its own: each model is its own process on its own port,
       // and the endpoint's client is what routes between them.
       expect(onDevice(pool, const _AlwaysInstalled()).config.baseUrl, isEmpty);
     });
 
-    test("a model that is not downloaded is refused before anything is spawned",
-        () async {
-      final pool = LlamaServerPool(
-        const LlamaBinaries(server: "/bin/false", libDir: "/nonexistent"),
-        const UnavailableLocalModelStore(),
-      );
+    test(
+      "a model that is not downloaded is refused before anything is spawned",
+      () async {
+        final pool = LlamaServerPool(
+          const LlamaBinaries(server: "/bin/false", libDir: "/nonexistent"),
+          const UnavailableLocalModelStore(),
+        );
 
-      await expectLater(pool.serve(model.id), throwsA(isA<LocalLlmFailure>()));
+        await expectLater(
+          pool.serve(model.id),
+          throwsA(isA<LocalLlmFailure>()),
+        );
 
-      expect(pool.running.value, isEmpty);
-      // Nothing on disk is nothing to offer, which is what keeps the entry out
-      // of every picker until there is something to pick.
-      expect(
-          onDevice(pool, const UnavailableLocalModelStore())
-              .offered(ModelCatalog.empty, ModelHost.resolving()),
-          isEmpty);
-    });
+        expect(pool.running.value, isEmpty);
+        // Nothing on disk is nothing to offer, which is what keeps the entry out
+        // of every picker until there is something to pick.
+        expect(
+          onDevice(
+            pool,
+            const UnavailableLocalModelStore(),
+          ).offered(ModelCatalog.empty, ModelHost.resolving()),
+          isEmpty,
+        );
+      },
+    );
 
     test("a model this build has never heard of is refused too", () async {
       final pool = failing();
 
       await expectLater(
-          pool.serve("gone-in-a-later-build"), throwsA(isA<LocalLlmFailure>()));
+        pool.serve("gone-in-a-later-build"),
+        throwsA(isA<LocalLlmFailure>()),
+      );
 
       expect(pool.running.value, isEmpty);
     });
@@ -414,9 +481,9 @@ class _AlwaysInstalled extends LocalModelStore {
 
   @override
   List<DownloadedModel> downloadedSync() => [
-        for (final model in ggufCatalog)
-          downloadedAs(model, file: "/nonexistent/${model.id}.gguf"),
-      ];
+    for (final model in ggufCatalog)
+      downloadedAs(model, file: "/nonexistent/${model.id}.gguf"),
+  ];
 
   @override
   Stream<DownloadProgress> install(LocalModel model) => const Stream.empty();

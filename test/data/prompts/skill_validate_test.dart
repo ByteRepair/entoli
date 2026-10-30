@@ -7,7 +7,9 @@ Frontmatter _parse(String source) => Frontmatter.parse(source);
 void main() {
   group("conforming skills", () {
     test("minimal spec shape", () {
-      final parsed = _parse("---\nname: pdf-processing\ndescription: Handle PDFs.\n---\n\nBody.");
+      final parsed = _parse(
+        "---\nname: pdf-processing\ndescription: Handle PDFs.\n---\n\nBody.",
+      );
       final problems = skillFrontmatterProblems(parsed, "pdf-processing");
       expect(problems, isEmpty);
     });
@@ -32,8 +34,11 @@ void main() {
         "pdf--processing", // consecutive hyphens
         "pdf-", // trailing hyphen
       ]) {
-        expect(skillFrontmatterProblems(named(name), name), isNotEmpty,
-            reason: "$name is not a skill name");
+        expect(
+          skillFrontmatterProblems(named(name), name),
+          isNotEmpty,
+          reason: "$name is not a skill name",
+        );
       }
       expect(skillNameOk("pdf_processing"), isFalse, reason: "underscore");
     });
@@ -41,8 +46,9 @@ void main() {
     test("the 64-character cap, hyphens counting", () {
       final long = "a" * 65;
       expect(
-          skillFrontmatterProblems(named(long), long),
-          contains("name is 65 characters (max 64)"));
+        skillFrontmatterProblems(named(long), long),
+        contains("name is 65 characters (max 64)"),
+      );
       expect(skillNameOk("a" * 64), isTrue);
 
       // Hyphens and digits are characters like any other: the list of 64
@@ -54,46 +60,68 @@ void main() {
     test("name and folder must match", () {
       final parsed = named("pdf-processing");
       final problems = skillFrontmatterProblems(parsed, "pdf");
-      expect(problems,
-          contains("frontmatter name \"pdf-processing\" does not match the "
-              "folder \"pdf\""));
+      expect(
+        problems,
+        contains(
+          "frontmatter name \"pdf-processing\" does not match the "
+          "folder \"pdf\"",
+        ),
+      );
     });
 
     test("no name and empty folder refused", () {
       expect(
-          skillFrontmatterProblems(_parse("---\ndescription: d\n---\n\nB."), ""),
-          contains("no name — not in the frontmatter and the folder is not "
-              "named either"));
+        skillFrontmatterProblems(_parse("---\ndescription: d\n---\n\nB."), ""),
+        contains(
+          "no name — not in the frontmatter and the folder is not "
+          "named either",
+        ),
+      );
     });
   });
 
   group("description rules", () {
     test("over 1024 characters refused", () {
-      final parsed =
-          _parse("---\nname: s\ndescription: ${"d" * 1025}\n---\n\nB.");
-      expect(skillFrontmatterProblems(parsed, "s"),
-          contains("description is 1025 characters (max 1024)"));
+      final parsed = _parse(
+        "---\nname: s\ndescription: ${"d" * 1025}\n---\n\nB.",
+      );
+      expect(
+        skillFrontmatterProblems(parsed, "s"),
+        contains("description is 1025 characters (max 1024)"),
+      );
     });
   });
 
   group("unknown keys", () {
     test("old top-level extension keys refused", () {
       final parsed = _parse(
-          "---\nname: s\ndescription: d\nargument-hint: args\nuser-invocable: \"false\"\n---\n\nB.");
+        "---\nname: s\ndescription: d\nargument-hint: args\nuser-invocable: \"false\"\n---\n\nB.",
+      );
       final problems = skillFrontmatterProblems(parsed, "s");
       expect(
-          problems.any((p) => p.startsWith('unknown frontmatter key '
-              '"argument-hint"')),
-          isTrue);
+        problems.any(
+          (p) => p.startsWith(
+            'unknown frontmatter key '
+            '"argument-hint"',
+          ),
+        ),
+        isTrue,
+      );
       expect(
-          problems.any((p) => p.startsWith('unknown frontmatter key '
-              '"user-invocable"')),
-          isTrue);
+        problems.any(
+          (p) => p.startsWith(
+            'unknown frontmatter key '
+            '"user-invocable"',
+          ),
+        ),
+        isTrue,
+      );
     });
 
     test("metadata map accepted", () {
       final parsed = _parse(
-          "---\nname: s\ndescription: d\nmetadata:\n  argument-hint: \"the question\"\n  disable-model-invocation: \"true\"\n---\n\nB.");
+        "---\nname: s\ndescription: d\nmetadata:\n  argument-hint: \"the question\"\n  disable-model-invocation: \"true\"\n---\n\nB.",
+      );
       expect(skillFrontmatterProblems(parsed, "s"), isEmpty);
       expect(parsed.metadata["argument-hint"], "the question");
       expect(parsed.metadata["disable-model-invocation"], "true");
@@ -101,7 +129,8 @@ void main() {
 
     test("nested blocks other than metadata dropped without error", () {
       final parsed = _parse(
-          "---\nname: s\ndescription: d\nallowed-tools: Read Write\n---\n\nB.");
+        "---\nname: s\ndescription: d\nallowed-tools: Read Write\n---\n\nB.",
+      );
       expect(skillFrontmatterProblems(parsed, "s"), isEmpty);
     });
   });
@@ -109,9 +138,12 @@ void main() {
   group("compatibility", () {
     test("over 500 characters refused", () {
       final parsed = _parse(
-          "---\nname: s\ndescription: d\ncompatibility: ${"c" * 501}\n---\n\nB.");
-      expect(skillFrontmatterProblems(parsed, "s"),
-          contains("compatibility is 501 characters (max 500)"));
+        "---\nname: s\ndescription: d\ncompatibility: ${"c" * 501}\n---\n\nB.",
+      );
+      expect(
+        skillFrontmatterProblems(parsed, "s"),
+        contains("compatibility is 501 characters (max 500)"),
+      );
     });
   });
 }

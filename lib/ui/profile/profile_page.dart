@@ -46,8 +46,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
   /// rather than racing two fixed rename temps.
   RenameWriter? _write;
 
-  RenameWriter _writerOf(AppConfig config) =>
-      _write ??= RenameWriter();
+  RenameWriter _writerOf(AppConfig config) => _write ??= RenameWriter();
 
   DateTime? _dobValue;
   Tone? _tone;
@@ -91,8 +90,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
       final linked = await ref.read(linkedInstructionsStoreProvider).load();
       _linked = [...linked.files];
       _off = {...?linked.off[widget.project]};
-      _missing =
-          await _missingOf([config.globalInstructionsFile, ..._linked]);
+      _missing = await _missingOf([config.globalInstructionsFile, ..._linked]);
     }
     if (widget.project == null) {
       final settings = ref.read(appSettingsProvider);
@@ -116,25 +114,29 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
     if (mounted) setState(() => _loaded = true);
   }
 
-  String _instructionsPath(AppConfig config) =>
-      widget.project == null
-          ? config.globalInstructionsFile
-          : config.projectInstructionsFile(project: widget.project);
+  String _instructionsPath(AppConfig config) => widget.project == null
+      ? config.globalInstructionsFile
+      : config.projectInstructionsFile(project: widget.project);
 
   /// Together rather than in turn: a path on a stalled mount should cost the
   /// page its own wait, not everyone's after it.
   Future<Set<String>> _missingOf(List<String> paths) async {
     // ignore: avoid_slow_async_io
     final exists = await Future.wait(paths.map((p) => File(p).exists()));
-    return {for (final (i, path) in paths.indexed) if (!exists[i]) path};
+    return {
+      for (final (i, path) in paths.indexed)
+        if (!exists[i]) path,
+    };
   }
 
   String _nameOf(String path) => p.basename(path);
 
   Future<void> _openFile(String path, String name) async {
-    await Navigator.of(context).push(MaterialPageRoute<void>(
-      builder: (_) => TextFilePage(path: path, name: name, popsBinary: false),
-    ));
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => TextFilePage(path: path, name: name, popsBinary: false),
+      ),
+    );
   }
 
   Future<void> _addFiles() async {
@@ -151,9 +153,9 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
   }
 
   void _reorder(int from, int to) => setState(() {
-        final path = _linked.removeAt(from);
-        _linked.insert(to, path);
-      });
+    final path = _linked.removeAt(from);
+    _linked.insert(to, path);
+  });
 
   Future<void> _saveLinked(AppConfig config) {
     final store = ref.read(linkedInstructionsStoreProvider);
@@ -164,29 +166,39 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
     }
     // Only what is still a row: a switch for a file unlinked since the page
     // opened would be a switch for nothing.
-    return store.update((l) => l.withOff(
-        project, _off.where((p) => p == global || l.files.contains(p))));
+    return store.update(
+      (l) => l.withOff(
+        project,
+        _off.where((p) => p == global || l.files.contains(p)),
+      ),
+    );
   }
 
   Profile _profile() => Profile(
-        name: _blank(_name.text),
-        dateOfBirth: _blank(_dob.text),
-        religion: _blank(_religion.text),
-        profession: _blank(_profession.text),
-      );
+    name: _blank(_name.text),
+    dateOfBirth: _blank(_dob.text),
+    religion: _blank(_religion.text),
+    profession: _blank(_profession.text),
+  );
 
   String? _blank(String s) => s.trim().isEmpty ? null : s.trim();
 
   Future<void> _save() async {
     setState(() => _saving = true);
     final config = ref.read(appConfigProvider);
-    await _writeInstructions(config, _instructionsPath(config), _instructions.text);
+    await _writeInstructions(
+      config,
+      _instructionsPath(config),
+      _instructions.text,
+    );
     if (isDesktop) await _saveLinked(config);
     if (widget.project == null) {
       final profile = _profile();
       // One write of settings.json: three separate setters would be three
       // re-encodes and renames of the one file, the first two superseded.
-      await ref.read(appSettingsProvider.notifier).setReplyStyle(
+      await ref
+          .read(appSettingsProvider.notifier)
+          .setReplyStyle(
             profile: profile.isEmpty ? null : profile,
             tone: _tone ?? Tone.none,
             citations: _citations ?? false,
@@ -206,7 +218,10 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
   /// half-write would be instructions the model half-follows. An empty field
   /// deletes the file rather than leaving an empty one behind.
   Future<void> _writeInstructions(
-      AppConfig config, String path, String text) async {
+    AppConfig config,
+    String path,
+    String text,
+  ) async {
     if (text.trim().isEmpty) {
       final file = File(path);
       if (file.existsSync()) await file.delete();
@@ -255,7 +270,8 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
     final generalPath = ref.read(appConfigProvider).globalInstructionsFile;
     final rows = [
       // The general instructions are a field when they are empty, not a file.
-      if (!_missing.contains(generalPath)) (generalPath, "General instructions"),
+      if (!_missing.contains(generalPath))
+        (generalPath, "General instructions"),
       for (final path in _linked) (path, _nameOf(path)),
     ];
     if (!global && rows.isEmpty) return const [];
@@ -266,8 +282,8 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
           context,
           global
               ? "Instruction files elsewhere on this computer, such as a "
-                  "CLAUDE.md, read after your general instructions in this "
-                  "order. Hold a row to move it."
+                    "CLAUDE.md, read after your general instructions in this "
+                    "order. Hold a row to move it."
               : "Your instructions, as this project's chats read them.",
         ),
       ),
@@ -289,7 +305,8 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
           missing: _missing,
           onOpen: _openFile,
           onChanged: (path, on) => setState(
-              () => _off = on ? ({..._off}..remove(path)) : {..._off, path}),
+            () => _off = on ? ({..._off}..remove(path)) : {..._off, path},
+          ),
         ),
     ];
   }
@@ -319,8 +336,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                 for (final tone in Tone.values)
                   DropdownMenuItem(value: tone, child: Text(tone.label)),
               ],
-              onChanged: (value) =>
-                  setState(() => _tone = value ?? Tone.none),
+              onChanged: (value) => setState(() => _tone = value ?? Tone.none),
             ),
           )
         : InheritableDropdown<Tone>(
@@ -334,7 +350,8 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
         ? SwitchListTile(
             title: const Text("Numbered references"),
             subtitle: const Text(
-                "Number the web pages a reply used and list them at the end"),
+              "Number the web pages a reply used and list them at the end",
+            ),
             value: _citations ?? false,
             onChanged: (value) => setState(() => _citations = value),
           )
@@ -372,15 +389,14 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                     child: Text(
                       "About you, in every turn, in every project.",
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: Theme.of(context).colorScheme.onSurfaceVariant,
-                          ),
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
                     ),
                   ),
                 if (global)
                   LabelledField(
                     label: "Name",
-                    child: TextField(
-                        controller: _name),
+                    child: TextField(controller: _name),
                   ),
                 if (global)
                   LabelledField(
@@ -414,12 +430,12 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                   child: Text(
                     global
                         ? "How replies are worded, in every turn. A project "
-                            "can give its own answers below."
+                              "can give its own answers below."
                         : "How this project's replies are worded, in place of "
-                            "the app's answer.",
+                              "the app's answer.",
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: Theme.of(context).colorScheme.onSurfaceVariant,
-                        ),
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
                   ),
                 ),
                 toneRow,
@@ -427,16 +443,16 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                 Padding(
                   padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
                   child: Text(
-                  global
-                      ? "Your global instructions, read by every user project's "
-                          "turns; the built-in projects run on the app's own "
-                          "note. Stored at the root of your data directory, "
-                          "where a conversation's commands cannot reach them."
-                      : "The AGENTS.md at this project's workspace root, read by "
-                          "every chat's turn in it.",
+                    global
+                        ? "Your global instructions, read by every user project's "
+                              "turns; the built-in projects run on the app's own "
+                              "note. Stored at the root of your data directory, "
+                              "where a conversation's commands cannot reach them."
+                        : "The AGENTS.md at this project's workspace root, read by "
+                              "every chat's turn in it.",
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: Theme.of(context).colorScheme.onSurfaceVariant,
-                        ),
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
                   ),
                 ),
                 LabelledField(
@@ -450,8 +466,8 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                       hintText: global
                           ? "Standing rules for the agent, applied to every turn"
                           : "Standing rules for this project's chats\n\n"
-                              "Pull in a file from the project workspace with "
-                              "a line like:\n@docs/style.md",
+                                "Pull in a file from the project workspace with "
+                                "a line like:\n@docs/style.md",
                     ),
                   ),
                 ),

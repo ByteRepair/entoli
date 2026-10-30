@@ -52,7 +52,8 @@ LlmProvider providerOf(LlmProviderConfig config) {
 LlmProvider? presetOf(LlmProviderConfig config) => _kindOf(config)?.call();
 
 LlmProvider Function([LlmProviderConfig])? _kindOf(LlmProviderConfig config) =>
-    _byHost[Uri.tryParse(config.baseUrl)?.host] ?? _byCatalogId[config.catalogId];
+    _byHost[Uri.tryParse(config.baseUrl)?.host] ??
+    _byCatalogId[config.catalogId];
 
 /// A local server's host is anybody's, so it is read by models.dev id alone.
 final _byHost = {
@@ -61,5 +62,6 @@ final _byHost = {
 };
 
 final _byCatalogId = {
-  for (final (i, p) in llmProviderPresets.indexed) p.config.catalogId: _kinds[i],
+  for (final (i, p) in llmProviderPresets.indexed)
+    p.config.catalogId: _kinds[i],
 };

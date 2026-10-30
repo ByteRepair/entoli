@@ -45,24 +45,35 @@ class AskTool extends AgentTool {
     "properties": {
       "questions": {
         "type": "array",
-        "description": "The questions to put to the user, in the order to ask them.",
+        "description":
+            "The questions to put to the user, in the order to ask them.",
         "items": {
           "type": "object",
           "properties": {
-            "question": {"type": "string", "description": "The question itself."},
+            "question": {
+              "type": "string",
+              "description": "The question itself.",
+            },
             "summary": {
               "type": "string",
               "description": "Optional context, shown under the question.",
             },
             "options": {
               "type": "array",
-              "description": "The answers to offer. At least one; the user picks "
+              "description":
+                  "The answers to offer. At least one; the user picks "
                   "exactly one, or types their own.",
               "items": {
                 "type": "object",
                 "properties": {
-                  "label": {"type": "string", "description": "The answer, as the user reads it."},
-                  "detail": {"type": "string", "description": "Why this one, in a line."},
+                  "label": {
+                    "type": "string",
+                    "description": "The answer, as the user reads it.",
+                  },
+                  "detail": {
+                    "type": "string",
+                    "description": "Why this one, in a line.",
+                  },
                 },
                 "required": ["label"],
               },
@@ -84,7 +95,10 @@ class AskTool extends AgentTool {
     }
     yield toolCalled(call);
     final request = AskRequest(
-        id: call.id, questions: questions, argumentsJson: call.argumentsJson);
+      id: call.id,
+      questions: questions,
+      argumentsJson: call.argumentsJson,
+    );
     // Emitted before it is awaited, for the same reason an approval is: the
     // panel is where the answers come from.
     yield QuestionRequestEvent(request);

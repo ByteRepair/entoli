@@ -51,18 +51,21 @@ void main() {
       expect(package.body, contains("Do review."));
 
       // What landed is the same shape an install offers: it re-installs.
-      await io(tester,
-          () => installSkillPackage(app.config, package, project: "work"));
+      await io(
+        tester,
+        () => installSkillPackage(app.config, package, project: "work"),
+      );
       expect(
         File(
-                "${app.config.promptsDir(CompletionKind.skill, project: "work")}/review/SKILL.md")
-            .existsSync(),
+          "${app.config.promptsDir(CompletionKind.skill, project: "work")}/review/SKILL.md",
+        ).existsSync(),
         isTrue,
       );
     });
 
-    testWidgets("a bundled skill exports from the embedded preset",
-        (tester) async {
+    testWidgets("a bundled skill exports from the embedded preset", (
+      tester,
+    ) async {
       await pumpSettings(tester, app, SettingsCategory.skills);
       await reloadLibrary(tester, app);
 
@@ -81,9 +84,12 @@ void main() {
       expect(package.body, isNot(contains("Base directory")));
     });
 
-    testWidgets("a user agent saves its .md through the same handoff",
-        (tester) async {
-      final file = File("${app.config.promptsDir(CompletionKind.agent)}/researcher.md");
+    testWidgets("a user agent saves its .md through the same handoff", (
+      tester,
+    ) async {
+      final file = File(
+        "${app.config.promptsDir(CompletionKind.agent)}/researcher.md",
+      );
       await io(tester, () async {
         await file.create(recursive: true);
         await file.writeAsString("---\ndescription: A researcher\n---\n\nDig.");
@@ -97,7 +103,10 @@ void main() {
 
       final saved = app.backups.saved.single;
       expect(saved.name, "researcher.md");
-      expect(utf8.decode(File(saved.path).readAsBytesSync()), file.readAsStringSync());
+      expect(
+        utf8.decode(File(saved.path).readAsBytesSync()),
+        file.readAsStringSync(),
+      );
     });
   });
 
@@ -107,7 +116,8 @@ void main() {
       await io(tester, () async {
         await writeSkill(app, "loaded-fine");
         final broken = File(
-            "${app.config.promptsDir(CompletionKind.skill)}/broken-one/SKILL.md");
+          "${app.config.promptsDir(CompletionKind.skill)}/broken-one/SKILL.md",
+        );
         await broken.create(recursive: true);
         await broken.writeAsString("---\nname: broken-one\n---\n\nBody.\n");
       });
@@ -127,14 +137,18 @@ void main() {
       expect(find.text("Not loaded"), findsOneWidget);
       final warnings = find.byIcon(Icons.warning_amber_rounded);
       expect(warnings, findsOneWidget);
-      expect(find.textContaining("no description"), findsNothing,
-          reason: "the problems are the view page's to say");
+      expect(
+        find.textContaining("no description"),
+        findsNothing,
+        reason: "the problems are the view page's to say",
+      );
     });
   });
 
   group("the fixed footers", () {
-    testWidgets("the import and add buttons stay put while the list scrolls",
-        (tester) async {
+    testWidgets("the import and add buttons stay put while the list scrolls", (
+      tester,
+    ) async {
       await io(tester, () async {
         for (var i = 0; i < 30; i++) {
           await writeSkill(app, "skill-$i");
@@ -145,8 +159,7 @@ void main() {
       await reloadLibrary(tester, app);
 
       final importButton = find.text("Import skill");
-      final before =
-          tester.getTopRight(importButton).dy;
+      final before = tester.getTopRight(importButton).dy;
       await tester.drag(find.byType(ListView).first, const Offset(0, -600));
       await tester.pumpAndSettle();
       expect(tester.getTopRight(importButton).dy, before);
@@ -184,10 +197,12 @@ void main() {
 
       await io(tester, () async {
         final file = File(
-            "${app.config.promptsDir(CompletionKind.agent, project: "work")}/imported.md");
+          "${app.config.promptsDir(CompletionKind.agent, project: "work")}/imported.md",
+        );
         await file.create(recursive: true);
-        await file
-            .writeAsString("---\ndescription: A test agent\n---\n\nBody.");
+        await file.writeAsString(
+          "---\ndescription: A test agent\n---\n\nBody.",
+        );
       });
       // The section's scan reads the directory once, at open; a change
       // behind the page's back is a restart's business. Re-open it.

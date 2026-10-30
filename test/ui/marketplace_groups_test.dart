@@ -44,42 +44,45 @@ void main() {
     // A category of one either side: the other list is just empty, rather
     // than the row moving where it does not belong.
     expect(groupByOrigin([remoteEntry("alpha")]).local, isEmpty);
-    expect(groupByOrigin([remoteEntry("alpha")]).remote.map((e) => e.name),
-        ["alpha"]);
+    expect(groupByOrigin([remoteEntry("alpha")]).remote.map((e) => e.name), [
+      "alpha",
+    ]);
     expect(groupByOrigin([localEntry("alpha")]).remote, isEmpty);
   });
 
   test("searching matches the name and the description alike", () {
-    final entries = [
-      localEntry("alpha"),
-      localEntry("beta"),
-    ];
+    final entries = [localEntry("alpha"), localEntry("beta")];
     // The name.
     expect(entriesMatching(entries, "alp", {}).map((e) => e.name), ["alpha"]);
     // The description.
-    expect(entriesMatching(entries, "about beta", {}).map((e) => e.name),
-        ["beta"]);
+    expect(entriesMatching(entries, "about beta", {}).map((e) => e.name), [
+      "beta",
+    ]);
     // Case and surrounding space are the needle's, not the match's.
-    expect(entriesMatching(entries, "  ALP ", {}).map((e) => e.name),
-        ["alpha"]);
+    expect(entriesMatching(entries, "  ALP ", {}).map((e) => e.name), [
+      "alpha",
+    ]);
     // Neither.
     expect(entriesMatching(entries, "gamma", {}), isEmpty);
     // An empty query is no search: everything stands.
     expect(
-        entriesMatching([localEntry("alpha"), remoteEntry("beta")], "  ", {})
-            .length,
-        2);
+      entriesMatching(
+        [localEntry("alpha"), remoteEntry("beta")],
+        "  ",
+        {},
+      ).length,
+      2,
+    );
   });
 
   test("a matching list keeps the order it came in", () {
-    final entries = [
-      localEntry("zeta"),
-      localEntry("alpha"),
-    ];
+    final entries = [localEntry("zeta"), localEntry("alpha")];
     // Both match on "a", and the came-in order — not the alphabetical one —
     // is what stands: the filter ranks nothing, it only removes.
-    expect(entriesMatching(entries, "a", {}).map((e) => e.name),
-        ["zeta", "alpha"]);
+    expect(entriesMatching(entries, "a", {}).map((e) => e.name), [
+      "zeta",
+      "alpha",
+    ]);
   });
 
   test("the tag ticks are the intersection of what the entry carries", () {
@@ -89,11 +92,14 @@ void main() {
       localEntry("gamma"),
     ];
     // One tag: both carriers pass, tags and no-tags do not.
-    expect(entriesMatching(entries, "", {"x"}).map((e) => e.name),
-        ["alpha", "beta"]);
+    expect(entriesMatching(entries, "", {"x"}).map((e) => e.name), [
+      "alpha",
+      "beta",
+    ]);
     // Two: the entry carrying both is the only one left.
-    expect(entriesMatching(entries, "", {"x", "y"}).map((e) => e.name),
-        ["beta"]);
+    expect(entriesMatching(entries, "", {"x", "y"}).map((e) => e.name), [
+      "beta",
+    ]);
     // No ticks: the whole list.
     expect(entriesMatching(entries, "", const <String>{}).length, 3);
   });
@@ -104,8 +110,9 @@ void main() {
       localEntry("beta", tags: ["x"]),
       localEntry("gamma", tags: ["x"]),
     ];
-    expect(entriesMatching(entries, "beta", {"x"}).map((e) => e.name),
-        ["beta"]);
+    expect(entriesMatching(entries, "beta", {"x"}).map((e) => e.name), [
+      "beta",
+    ]);
     expect(entriesMatching(entries, "beta", {"y"}), isEmpty);
   });
 

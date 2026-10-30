@@ -20,5 +20,6 @@ class DownloadProgress {
 
   /// 0 to 1, or null where there is nothing to divide by — the bar goes
   /// indeterminate rather than guessing.
-  double? get fraction => total <= 0 ? null : (received / total).clamp(0.0, 1.0);
+  double? get fraction =>
+      total <= 0 ? null : (received / total).clamp(0.0, 1.0);
 }

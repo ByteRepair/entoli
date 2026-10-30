@@ -36,17 +36,18 @@ class SetProfileTool extends AgentTool {
   bool get offered => offer.customizing;
 
   @override
-  String get description => "Set fields of the user's Entoli profile. Only "
+  String get description =>
+      "Set fields of the user's Entoli profile. Only "
       "the fields passed change; an empty string clears one.";
 
   @override
   Map<String, dynamic> get schema => {
-        "type": "object",
-        "properties": {
-          for (final MapEntry(:key, :value) in _profileFields.entries)
-            key: {"type": "string", "description": value},
-        },
-      };
+    "type": "object",
+    "properties": {
+      for (final MapEntry(:key, :value) in _profileFields.entries)
+        key: {"type": "string", "description": value},
+    },
+  };
 
   @override
   Stream<AgentEvent> run(LlmToolCall call, Turn turn) async* {
@@ -57,7 +58,9 @@ class SetProfileTool extends AgentTool {
       error = edited.error;
       if (error == null) s.profile = edited.profile;
     });
-    yield error == null ? toolOk(call, "Profile saved.") : toolFailed(call, error!);
+    yield error == null
+        ? toolOk(call, "Profile saved.")
+        : toolFailed(call, error!);
   }
 }
 
@@ -79,22 +82,25 @@ class SetToneTool extends AgentTool {
 
   @override
   Map<String, dynamic> get schema => {
-        "type": "object",
-        "properties": {
-          "tone": {
-            "type": "string",
-            "enum": [for (final tone in Tone.values) tone.label.toLowerCase()],
-          },
-        },
-        "required": ["tone"],
-      };
+    "type": "object",
+    "properties": {
+      "tone": {
+        "type": "string",
+        "enum": [for (final tone in Tone.values) tone.label.toLowerCase()],
+      },
+    },
+    "required": ["tone"],
+  };
 
   @override
   Stream<AgentEvent> run(LlmToolCall call, Turn turn) async* {
     final tone = toneArg(call.argumentsJson);
     if (tone == null) {
-      yield* toolRejected(call, 'The $setToneName tool takes {"tone": '
-          '"default" | "direct" | "kind" | "formal"}.');
+      yield* toolRejected(
+        call,
+        'The $setToneName tool takes {"tone": '
+        '"default" | "direct" | "kind" | "formal"}.',
+      );
       return;
     }
     yield toolCalled(call, tone.label);
@@ -105,17 +111,19 @@ class SetToneTool extends AgentTool {
 
 /// [was] with the fields [argumentsJson] sets, or an error to hand the model.
 ({Profile? profile, String? error}) editedProfile(
-    Profile? was, String argumentsJson) {
+  Profile? was,
+  String argumentsJson,
+) {
   final args = decodeArgs(argumentsJson) ?? const {};
   final unknown = args.keys.where((k) => !_profileFields.containsKey(k));
   if (unknown.isNotEmpty) {
     return (profile: was, error: "Unknown field: ${unknown.join(", ")}.");
   }
   String? field(String key, String? old) => switch (args[key]) {
-        null => old,
-        final String v => v.trim().isEmpty ? null : v.trim(),
-        _ => old,
-      };
+    null => old,
+    final String v => v.trim().isEmpty ? null : v.trim(),
+    _ => old,
+  };
   final dob = field("date_of_birth", was?.dateOfBirth);
   if (dob != null &&
       (!RegExp(r"^\d{4}-\d{2}-\d{2}$").hasMatch(dob) ||

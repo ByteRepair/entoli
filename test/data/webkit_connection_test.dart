@@ -21,9 +21,16 @@ void main() {
       asked.add(call);
       final args = call.arguments as Map;
       return switch (call.method) {
-        "eval" when args["js"] == "throw" =>
-          throw PlatformException(code: "exception", message: "Boom"),
-        "eval" when (args["js"] as String).startsWith("[visualViewport") => [0, 100, 390, 844],
+        "eval" when args["js"] == "throw" => throw PlatformException(
+          code: "exception",
+          message: "Boom",
+        ),
+        "eval" when (args["js"] as String).startsWith("[visualViewport") => [
+          0,
+          100,
+          390,
+          844,
+        ],
         "eval" => "value",
         "snapshot" => Uint8List.fromList([1, 2]),
         _ => null,
@@ -38,33 +45,68 @@ void main() {
     asked.clear();
   });
 
-  test("a script runs in the page script's world only where it names it", () async {
-    final world = (await cdp.send("Page.createIsolatedWorld",
-        sessionId: "c"))["executionContextId"];
-    final ran = await cdp.send("Runtime.evaluate",
-        params: {"expression": "1", "contextId": world}, sessionId: "c");
-    await cdp.send("Runtime.evaluate", params: {"expression": "2"}, sessionId: "c");
-    expect((ran["result"] as Map)["value"], "value");
-    expect([for (final c in asked) (c.arguments as Map)["isolated"]], [true, false]);
-    expect((asked.first.arguments as Map)["chat"], "c");
-  });
+  test(
+    "a script runs in the page script's world only where it names it",
+    () async {
+      final world = (await cdp.send(
+        "Page.createIsolatedWorld",
+        sessionId: "c",
+      ))["executionContextId"];
+      final ran = await cdp.send(
+        "Runtime.evaluate",
+        params: {"expression": "1", "contextId": world},
+        sessionId: "c",
+      );
+      await cdp.send(
+        "Runtime.evaluate",
+        params: {"expression": "2"},
+        sessionId: "c",
+      );
+      expect((ran["result"] as Map)["value"], "value");
+      expect(
+        [for (final c in asked) (c.arguments as Map)["isolated"]],
+        [true, false],
+      );
+      expect((asked.first.arguments as Map)["chat"], "c");
+    },
+  );
 
-  test("a thrown script is the protocol's exception, not a failed call", () async {
-    final ran = await cdp.send("Runtime.evaluate",
-        params: {"expression": "throw"}, sessionId: "c");
-    expect((ran["exceptionDetails"] as Map)["text"], "Boom");
-  });
+  test(
+    "a thrown script is the protocol's exception, not a failed call",
+    () async {
+      final ran = await cdp.send(
+        "Runtime.evaluate",
+        params: {"expression": "throw"},
+        sessionId: "c",
+      );
+      expect((ran["exceptionDetails"] as Map)["text"], "Boom");
+    },
+  );
 
-  test("a screenshot's clip is moved from the document into the viewport", () async {
-    final shot = await cdp.send("Page.captureScreenshot",
+  test(
+    "a screenshot's clip is moved from the document into the viewport",
+    () async {
+      final shot = await cdp.send(
+        "Page.captureScreenshot",
         params: {
-          "clip": {"x": 10, "y": 150, "width": 50, "height": 20, "scale": 1 / 3},
+          "clip": {
+            "x": 10,
+            "y": 150,
+            "width": 50,
+            "height": 20,
+            "scale": 1 / 3,
+          },
         },
-        sessionId: "c");
-    expect(base64Decode(shot["data"] as String), [1, 2]);
-    final snap = asked.last.arguments as Map;
-    expect([snap["x"], snap["y"], snap["width"], snap["height"]], [10, 50, 50, 20]);
-  });
+        sessionId: "c",
+      );
+      expect(base64Decode(shot["data"] as String), [1, 2]);
+      final snap = asked.last.arguments as Map;
+      expect(
+        [snap["x"], snap["y"], snap["width"], snap["height"]],
+        [10, 50, 50, 20],
+      );
+    },
+  );
 
   test("the page's events come back as the protocol's", () async {
     final seen = cdp.events.take(2).toList();
@@ -72,9 +114,13 @@ void main() {
       {"type": "navigated", "chat": "c", "url": "https://example.com/"},
       {"type": "closed", "chat": "c"},
     ]) {
-      await messenger.handlePlatformMessage(channel.name,
-          const StandardMethodCodec().encodeMethodCall(MethodCall("event", event)),
-          (_) {});
+      await messenger.handlePlatformMessage(
+        channel.name,
+        const StandardMethodCodec().encodeMethodCall(
+          MethodCall("event", event),
+        ),
+        (_) {},
+      );
     }
     final [navigated, closed] = await seen;
     expect(navigated.method, "Page.frameNavigated");
@@ -85,7 +131,9 @@ void main() {
   });
 
   test("what iOS has no answer to says so", () {
-    expect(cdp.send("DOM.setFileInputFiles", sessionId: "c"),
-        throwsA(isA<CdpException>()));
+    expect(
+      cdp.send("DOM.setFileInputFiles", sessionId: "c"),
+      throwsA(isA<CdpException>()),
+    );
   });
 }

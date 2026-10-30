@@ -35,9 +35,8 @@ class SyncByteCache {
   /// A chat gone from the mirrors takes its bytes with it.
   void drop(String chatId) {
     final prefix = "$chatId/";
-    for (final key in _entries.keys
-        .where((k) => k.startsWith(prefix))
-        .toList()) {
+    for (final key
+        in _entries.keys.where((k) => k.startsWith(prefix)).toList()) {
       _held -= _entries.remove(key)!.length;
     }
   }

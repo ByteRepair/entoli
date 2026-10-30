@@ -32,7 +32,8 @@ class AgentPictureImage extends StatelessWidget {
               // The decode target the picture is drawn at: a photograph in
               // the agents directory would otherwise decode tens of MB to
               // fill three dozen logical pixels — and a list row per agent.
-              cacheWidth: (size * MediaQuery.devicePixelRatioOf(context)).round(),
+              cacheWidth: (size * MediaQuery.devicePixelRatioOf(context))
+                  .round(),
               fit: BoxFit.cover,
             )
           : Icon(
@@ -50,7 +51,12 @@ class AgentPictureImage extends StatelessWidget {
 /// tier holds one. The agents list's leading element and the Omada reply's
 /// avatar are the callers.
 class AgentPicture extends ConsumerWidget {
-  const AgentPicture({super.key, required this.name, this.project, this.size = 36});
+  const AgentPicture({
+    super.key,
+    required this.name,
+    this.project,
+    this.size = 36,
+  });
 
   final String name;
   final String? project;
@@ -58,9 +64,9 @@ class AgentPicture extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final bytes = ref.watch(
-      agentPictureProvider((project: project, name: name)),
-    ).value;
+    final bytes = ref
+        .watch(agentPictureProvider((project: project, name: name)))
+        .value;
     return AgentPictureImage(bytes: bytes, size: size);
   }
 }

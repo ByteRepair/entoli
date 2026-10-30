@@ -23,37 +23,46 @@ import "skill_validate.dart";
 /// Omada answer is the one rule [omadaFor] resolves; the rung rides it, so
 /// every source walks the same shape, skills included — My Team ships none,
 /// and the absence of tagged files is the whole of that.
-List<String> promptTiers({required String? project, required AppConfig? config}) =>
-    tiersFor(
-      project,
-      omada: omadaFor(
-        project,
-        projectOmada: config == null
-            ? false
-            : ProjectSettings.load(config, project: project).omada,
-      ),
-    );
+List<String> promptTiers({
+  required String? project,
+  required AppConfig? config,
+}) => tiersFor(
+  project,
+  omada: omadaFor(
+    project,
+    projectOmada: config == null
+        ? false
+        : ProjectSettings.load(config, project: project).omada,
+  ),
+);
 
 /// Where [project]'s prompts are read from on disk, every tier's: the bundled
 /// skills, the user's skills and the user's agents. Nothing but the app writes
 /// them, so this is what launch locks read-only and what a command is kept
 /// from, one list for both. [executable] is a skills directory's, whose
 /// scripts run.
-List<({String path, bool executable})> promptDirsOf(AppConfig config,
-        {String? project}) =>
-    [
-      for (final tier in promptTiers(project: project, config: config)) ...[
-        (path: config.bundledSkillsDir(project: tier), executable: true),
-        (path: config.promptsDir(CompletionKind.skill, project: tier), executable: true),
-        (path: config.promptsDir(CompletionKind.agent, project: tier), executable: false),
-      ],
-    ];
+List<({String path, bool executable})> promptDirsOf(
+  AppConfig config, {
+  String? project,
+}) => [
+  for (final tier in promptTiers(project: project, config: config)) ...[
+    (path: config.bundledSkillsDir(project: tier), executable: true),
+    (
+      path: config.promptsDir(CompletionKind.skill, project: tier),
+      executable: true,
+    ),
+    (
+      path: config.promptsDir(CompletionKind.agent, project: tier),
+      executable: false,
+    ),
+  ],
+];
 
 List<String> tiersFor(String? project, {required bool omada}) => [
-      defaultProjectDir,
-      if (omada && omadaBaseProject != project) omadaBaseProject,
-      if (project != null && project != defaultProjectDir) project,
-    ];
+  defaultProjectDir,
+  if (omada && omadaBaseProject != project) omadaBaseProject,
+  if (project != null && project != defaultProjectDir) project,
+];
 
 /// The presets, embedded in code at build time by `tool/gen_bundled_skills.dart`.
 /// The app is the source of truth for bundled skills and agents: the library
@@ -81,7 +90,10 @@ class BundledPrompts implements PromptSource {
   final String? project;
 
   /// The tiers this source serves, resolved once per source.
-  late final List<String> _tiers = promptTiers(project: project, config: config);
+  late final List<String> _tiers = promptTiers(
+    project: project,
+    config: config,
+  );
 
   @override
   Future<List<PromptDocument>> load(CompletionKind kind) async {
@@ -101,7 +113,8 @@ class BundledPrompts implements PromptSource {
       for (final file in bundledAgentFiles) {
         if (file.project != tag) continue;
         documents.add(
-            PromptDocument.parse(CompletionKind.agent, file.name, file.content));
+          PromptDocument.parse(CompletionKind.agent, file.name, file.content),
+        );
       }
     }
     return documents;
@@ -138,8 +151,10 @@ class BundledPrompts implements PromptSource {
           );
           final problems = skillDocumentProblems(document, skillName);
           if (problems.isNotEmpty) {
-            logFailure("skills",
-                "bundled skill $skillName skipped: ${problems.join("; ")}");
+            logFailure(
+              "skills",
+              "bundled skill $skillName skipped: ${problems.join("; ")}",
+            );
             continue;
           }
           documents.add(document);
@@ -172,7 +187,10 @@ class DirectoryPrompts implements PromptSource {
 
   /// The tiers this source serves, resolved once per source — see
   /// [BundledPrompts._tiers].
-  late final List<String> _tiers = promptTiers(project: project, config: config);
+  late final List<String> _tiers = promptTiers(
+    project: project,
+    config: config,
+  );
 
   @override
   Future<List<PromptDocument>> load(CompletionKind kind) async {
@@ -183,24 +201,32 @@ class DirectoryPrompts implements PromptSource {
     return documents;
   }
 
-  Future<List<PromptDocument>> _loadKind(CompletionKind kind, String project) async {
+  Future<List<PromptDocument>> _loadKind(
+    CompletionKind kind,
+    String project,
+  ) async {
     if (kind == CompletionKind.skill) {
       return loadSkillDirectories(config.promptsDir(kind, project: project));
     }
     return _loadFlat(kind, project);
   }
 
-  Future<List<PromptDocument>> _loadFlat(CompletionKind kind, String project) async {
+  Future<List<PromptDocument>> _loadFlat(
+    CompletionKind kind,
+    String project,
+  ) async {
     final directory = Directory(config.promptsDir(kind, project: project));
     if (!directory.existsSync()) return const [];
     final documents = <PromptDocument>[];
     await for (final entity in directory.list()) {
       if (entity is! File || p.extension(entity.path) != ".md") continue;
-      documents.add(PromptDocument.parse(
-        kind,
-        p.basenameWithoutExtension(entity.path),
-        await entity.readAsString(),
-      ));
+      documents.add(
+        PromptDocument.parse(
+          kind,
+          p.basenameWithoutExtension(entity.path),
+          await entity.readAsString(),
+        ),
+      );
     }
     return documents;
   }
@@ -225,8 +251,11 @@ Future<List<PromptDocument>> loadSkillDirectories(String directory) async {
     final file = File(p.join(entity.path, "SKILL.md"));
     try {
       if (!file.existsSync()) continue;
-      final document =
-          _skillDocument(folderName, await file.readAsString(), entity.path);
+      final document = _skillDocument(
+        folderName,
+        await file.readAsString(),
+        entity.path,
+      );
       final problems = skillDocumentProblems(document, folderName);
       if (problems.isNotEmpty) {
         logFailure("skills", "$folderName skipped: ${problems.join("; ")}");
@@ -245,8 +274,16 @@ Future<List<PromptDocument>> loadSkillDirectories(String directory) async {
 /// one, the folder's otherwise, and the body carries the base directory above
 /// the template — the one thing every reader (the composer's expansion, the
 /// `skill` tool, a replayed log) needs and none can work out.
-PromptDocument _skillDocument(String folderName, String skillMd, String baseDir) {
-  final parsed = PromptDocument.parse(CompletionKind.skill, folderName, skillMd);
+PromptDocument _skillDocument(
+  String folderName,
+  String skillMd,
+  String baseDir,
+) {
+  final parsed = PromptDocument.parse(
+    CompletionKind.skill,
+    folderName,
+    skillMd,
+  );
   return PromptDocument(
     kind: CompletionKind.skill,
     name: parsed.frontmatter["name"] ?? folderName,

@@ -13,13 +13,20 @@ void main() {
 
   /// A message opening a thread beside [of] rather than continuing the one
   /// being read.
-  ChatRecord branch(String id, {required String of, MessageRole role = MessageRole.user}) =>
-      ChatRecord.message(id: id, role: role, createdAt: at, siblingOf: of);
+  ChatRecord branch(
+    String id, {
+    required String of,
+    MessageRole role = MessageRole.user,
+  }) => ChatRecord.message(id: id, role: role, createdAt: at, siblingOf: of);
 
-  ChatState state() => ChatState(id: "c", title: "t", createdAt: at, updatedAt: at);
+  ChatState state() =>
+      ChatState(id: "c", title: "t", createdAt: at, updatedAt: at);
 
-  ChatRecord part(String message, int index, String text) =>
-      ChatRecord.part(messageId: message, index: index, part: MessagePart.text(text: text));
+  ChatRecord part(String message, int index, String text) => ChatRecord.part(
+    messageId: message,
+    index: index,
+    part: MessagePart.text(text: text),
+  );
 
   String textOf(Message m) => m.plainText;
 
@@ -57,12 +64,16 @@ void main() {
     final messages = replay([
       message("m1", MessageRole.assistant),
       ChatRecord.part(
-          messageId: "m1", index: 0, part: const MessagePart.reasoning(text: "hmm")),
+        messageId: "m1",
+        index: 0,
+        part: const MessagePart.reasoning(text: "hmm"),
+      ),
       part("m1", 1, "and so"),
       ChatRecord.part(
-          messageId: "m1",
-          index: 0,
-          part: const MessagePart.reasoning(text: "hmm", durationMs: 1200)),
+        messageId: "m1",
+        index: 0,
+        part: const MessagePart.reasoning(text: "hmm", durationMs: 1200),
+      ),
     ]);
 
     final reasoning = messages.single.parts.first as ReasoningPart;
@@ -86,9 +97,12 @@ void main() {
       final messages = replay([
         message("m1", MessageRole.assistant),
         const ChatRecord.part(
-            messageId: "m1",
-            index: 0,
-            part: MessagePart.toolCall(toolCall: ToolCall(id: "c1", name: "bash"))),
+          messageId: "m1",
+          index: 0,
+          part: MessagePart.toolCall(
+            toolCall: ToolCall(id: "c1", name: "bash"),
+          ),
+        ),
         const ChatRecord.append(messageId: "m1", index: 0, text: "nope"),
       ]);
 
@@ -98,39 +112,63 @@ void main() {
     // What decides between an append and writing the part again.
     test("only growth is written as a piece; anything else goes whole", () {
       expect(
-          textGrownFrom(
-              const MessagePart.text(text: "one"), const MessagePart.text(text: "one two")),
-          " two");
+        textGrownFrom(
+          const MessagePart.text(text: "one"),
+          const MessagePart.text(text: "one two"),
+        ),
+        " two",
+      );
       expect(
-          textGrownFrom(
-              const MessagePart.text(text: "one"), const MessagePart.text(text: "different")),
-          isNull);
+        textGrownFrom(
+          const MessagePart.text(text: "one"),
+          const MessagePart.text(text: "different"),
+        ),
+        isNull,
+      );
       expect(
-          textGrownFrom(
-              const MessagePart.text(text: "one"), const MessagePart.text(text: "one")),
-          isNull);
+        textGrownFrom(
+          const MessagePart.text(text: "one"),
+          const MessagePart.text(text: "one"),
+        ),
+        isNull,
+      );
       // A thinking block being timed as it closes changed more than its text.
       expect(
-          textGrownFrom(const MessagePart.reasoning(text: "hm"),
-              const MessagePart.reasoning(text: "hm", durationMs: 12)),
-          isNull);
+        textGrownFrom(
+          const MessagePart.reasoning(text: "hm"),
+          const MessagePart.reasoning(text: "hm", durationMs: 12),
+        ),
+        isNull,
+      );
       expect(
-          textGrownFrom(const MessagePart.reasoning(text: "hm"),
-              const MessagePart.reasoning(text: "hmmm")),
-          "mm");
+        textGrownFrom(
+          const MessagePart.reasoning(text: "hm"),
+          const MessagePart.reasoning(text: "hmmm"),
+        ),
+        "mm",
+      );
       // So did one being signed, and one belonging to another response.
       expect(
-          textGrownFrom(const MessagePart.reasoning(text: "hm"),
-              const MessagePart.reasoning(text: "hmmm", signature: "sig")),
-          isNull);
+        textGrownFrom(
+          const MessagePart.reasoning(text: "hm"),
+          const MessagePart.reasoning(text: "hmmm", signature: "sig"),
+        ),
+        isNull,
+      );
       expect(
-          textGrownFrom(const MessagePart.text(text: "one", responseId: "r1"),
-              const MessagePart.text(text: "one two", responseId: "r2")),
-          isNull);
+        textGrownFrom(
+          const MessagePart.text(text: "one", responseId: "r1"),
+          const MessagePart.text(text: "one two", responseId: "r2"),
+        ),
+        isNull,
+      );
       expect(
-          textGrownFrom(const MessagePart.text(text: "one", responseId: "r1"),
-              const MessagePart.text(text: "one two", responseId: "r1")),
-          " two");
+        textGrownFrom(
+          const MessagePart.text(text: "one", responseId: "r1"),
+          const MessagePart.text(text: "one two", responseId: "r1"),
+        ),
+        " two",
+      );
     });
 
     test("an append keeps what the part it lands on already carried", () {
@@ -138,10 +176,15 @@ void main() {
       final messages = replay([
         message("m1", MessageRole.assistant),
         const ChatRecord.part(
-            messageId: "m1",
-            index: 0,
-            part: MessagePart.reasoning(
-                text: "hm", durationMs: 40, signature: "sig", responseId: "r1")),
+          messageId: "m1",
+          index: 0,
+          part: MessagePart.reasoning(
+            text: "hm",
+            durationMs: 40,
+            signature: "sig",
+            responseId: "r1",
+          ),
+        ),
         const ChatRecord.append(messageId: "m1", index: 0, text: "mm"),
       ]);
 
@@ -185,11 +228,11 @@ void main() {
   group("threads", () {
     /// One finished exchange, which is what an edit or a regenerate branches.
     List<ChatRecord> oneTurn() => [
-          message("u1"),
-          part("u1", 0, "hello"),
-          message("a1", MessageRole.assistant),
-          part("a1", 0, "hi"),
-        ];
+      message("u1"),
+      part("u1", 0, "hello"),
+      message("a1", MessageRole.assistant),
+      part("a1", 0, "hi"),
+    ];
 
     test("a branch is read in place of what it replaces, which stays", () {
       final replayed = replayTree([
@@ -200,7 +243,7 @@ void main() {
 
       expect(replayed.messages.map(textOf), ["hello", "hello again"]);
       expect(replayed.branches, {
-        "a2": ["a1", "a2"]
+        "a2": ["a1", "a2"],
       });
     });
 
@@ -217,7 +260,7 @@ void main() {
 
       expect(replayed.messages.map(textOf), ["goodbye", "bye"]);
       expect(replayed.branches, {
-        "u2": ["u1", "u2"]
+        "u2": ["u1", "u2"],
       });
     });
 
@@ -245,7 +288,7 @@ void main() {
 
       expect(replayed.messages.map(textOf), ["hello", "hi"]);
       expect(replayed.branches, {
-        "u1": ["u1", "u2"]
+        "u1": ["u1", "u2"],
       });
     });
 
@@ -302,23 +345,30 @@ void main() {
     // read, so cycling changes the answer. The reply left open is the end of
     // its own thread, so carrying it on still only ever appends — which is the
     // reason the middle of a conversation was refused, and it does not apply.
-    test("an interrupted thread is offered again once it is stepped back to", () {
-      final log = [
-        message("u1"),
-        part("u1", 0, "hello"),
-        message("a1", MessageRole.assistant),
-        part("a1", 0, "half an"),
-        // No turnEnd: this is where the process was killed.
-        branch("a2", of: "a1", role: MessageRole.assistant),
-        part("a2", 0, "a whole answer"),
-        ChatRecord.turnEnd(messageId: "a2", reason: TurnEnd.done),
-      ];
+    test(
+      "an interrupted thread is offered again once it is stepped back to",
+      () {
+        final log = [
+          message("u1"),
+          part("u1", 0, "hello"),
+          message("a1", MessageRole.assistant),
+          part("a1", 0, "half an"),
+          // No turnEnd: this is where the process was killed.
+          branch("a2", of: "a1", role: MessageRole.assistant),
+          part("a2", 0, "a whole answer"),
+          ChatRecord.turnEnd(messageId: "a2", reason: TurnEnd.done),
+        ];
 
-      expect(chatFrom(state(), log).unfinished, isFalse);
-      expect(
-          chatFrom(state(), [...log, ChatRecord.select(messageId: "a1")]).unfinished,
-          isTrue);
-    });
+        expect(chatFrom(state(), log).unfinished, isFalse);
+        expect(
+          chatFrom(state(), [
+            ...log,
+            ChatRecord.select(messageId: "a1"),
+          ]).unfinished,
+          isTrue,
+        );
+      },
+    );
 
     test("the arrows stop at either end rather than wrapping", () {
       final chat = chatFrom(state(), [
@@ -343,15 +393,17 @@ void main() {
 
     /// A turn as it is written: the prompt, the reply, and whatever closed it.
     List<ChatRecord> turn({TurnEnd? end, String said = "do it"}) => [
-          message("m1"),
-          part("m1", 0, said),
-          message("m2", MessageRole.assistant),
-          part("m2", 0, "on it"),
-          if (end != null) ChatRecord.turnEnd(messageId: "m2", reason: end),
-        ];
+      message("m1"),
+      part("m1", 0, said),
+      message("m2", MessageRole.assistant),
+      part("m2", 0, "on it"),
+      if (end != null) ChatRecord.turnEnd(messageId: "m2", reason: end),
+    ];
 
-    test("a reply with nothing closing it was being written when the process died",
-        () => expect(unfinishedIn(turn()), isTrue));
+    test(
+      "a reply with nothing closing it was being written when the process died",
+      () => expect(unfinishedIn(turn()), isTrue),
+    );
 
     // Ended turns are not offered: a finished one because it finished, a
     // stopped one because the user has already said they want it to stop.
@@ -360,8 +412,10 @@ void main() {
       expect(unfinishedIn(turn(end: TurnEnd.aborted)), isFalse);
     });
 
-    test("a turn that gave up is offered, like one that was killed",
-        () => expect(unfinishedIn(turn(end: TurnEnd.error)), isTrue));
+    test(
+      "a turn that gave up is offered, like one that was killed",
+      () => expect(unfinishedIn(turn(end: TurnEnd.error)), isTrue),
+    );
 
     // Resuming appends to the reply, and a command has nothing to append: the
     // only way to carry one on would be to run it again.
@@ -379,7 +433,10 @@ void main() {
     });
 
     test("a reply that was rewound away is gone, not unfinished", () {
-      expect(unfinishedIn([...turn(), ChatRecord.rewind(messageId: "m1")]), isFalse);
+      expect(
+        unfinishedIn([...turn(), ChatRecord.rewind(messageId: "m1")]),
+        isFalse,
+      );
     });
 
     // A resumed turn closes the same message a second time, so the last record
@@ -401,26 +458,35 @@ void main() {
       message("m1"),
       part("m1", 0, "hello"),
       const ChatRecord.part(
-          messageId: "m1",
-          index: 1,
-          part: MessagePart.reasoning(text: "thinking", durationMs: 30)),
+        messageId: "m1",
+        index: 1,
+        part: MessagePart.reasoning(text: "thinking", durationMs: 30),
+      ),
       const ChatRecord.part(
-          messageId: "m1",
-          index: 2,
-          part: MessagePart.shellRun(
-              command: "echo hello", returnCode: 0, output: "hello\n")),
+        messageId: "m1",
+        index: 2,
+        part: MessagePart.shellRun(
+          command: "echo hello",
+          returnCode: 0,
+          output: "hello\n",
+        ),
+      ),
       const ChatRecord.append(messageId: "m1", index: 0, text: " more"),
       ChatRecord.turnEnd(messageId: "m1", reason: TurnEnd.aborted),
       ChatRecord.rewind(messageId: "m1"),
       const ChatRecord.callEvent(
-          callId: "c1",
-          kind: jobEndedEvent,
-          data: {"jobId": 1, "exitCode": 2, "tail": "boom"}),
+        callId: "c1",
+        kind: jobEndedEvent,
+        data: {"jobId": 1, "exitCode": 2, "tail": "boom"},
+      ),
     ];
 
     final back = records
-        .map((r) => ChatRecord.fromJson(
-            jsonDecode(jsonEncode(r.toJson())) as Map<String, dynamic>))
+        .map(
+          (r) => ChatRecord.fromJson(
+            jsonDecode(jsonEncode(r.toJson())) as Map<String, dynamic>,
+          ),
+        )
         .toList();
 
     expect(back, records);
@@ -430,7 +496,10 @@ void main() {
       "winning", () {
     JobEnd end(int? code) => JobEnd(jobId: 1, exitCode: code, tail: "");
     ChatRecord ended(int? code) => ChatRecord.callEvent(
-        callId: "c1", kind: jobEndedEvent, data: end(code).toJson());
+      callId: "c1",
+      kind: jobEndedEvent,
+      data: end(code).toJson(),
+    );
     final chat = chatFrom(state(), [
       message("m1"),
       ended(null),
@@ -445,15 +514,27 @@ void main() {
 
   test("a kind of call event this build does not know is kept, and the log "
       "reads on past it", () {
-    final records = decodeLog([
-      jsonEncode(message("m1").toJson()),
-      jsonEncode(const ChatRecord.callEvent(
-          callId: "c1", kind: "fromTheFuture", data: {"x": 1}).toJson()),
-      jsonEncode(part("m1", 0, "after").toJson()),
-    ].join("\n"));
+    final records = decodeLog(
+      [
+        jsonEncode(message("m1").toJson()),
+        jsonEncode(
+          const ChatRecord.callEvent(
+            callId: "c1",
+            kind: "fromTheFuture",
+            data: {"x": 1},
+          ).toJson(),
+        ),
+        jsonEncode(part("m1", 0, "after").toJson()),
+      ].join("\n"),
+    );
     final chat = chatFrom(state(), records);
-    expect(chat.messages.single.parts.single, const MessagePart.text(text: "after"));
-    expect(chat.callEvents["c1"], {"fromTheFuture": {"x": 1}});
+    expect(
+      chat.messages.single.parts.single,
+      const MessagePart.text(text: "after"),
+    );
+    expect(chat.callEvents["c1"], {
+      "fromTheFuture": {"x": 1},
+    });
   });
 
   test("recordsOf writes a chat out as the log it would have", () {
@@ -482,29 +563,37 @@ void main() {
     final records = recordsOf([reply]);
 
     final back = ChatRecord.fromJson(
-        jsonDecode(jsonEncode(records.single.toJson())) as Map<String, dynamic>);
+      jsonDecode(jsonEncode(records.single.toJson())) as Map<String, dynamic>,
+    );
     expect(back, records.single);
     // A message written before this existed reads back unnamed.
     expect(
-        replay([
-          ChatRecord.message(id: "m3", role: MessageRole.assistant, createdAt: at)
-        ]).single.author,
-        isNull);
+      replay([
+        ChatRecord.message(
+          id: "m3",
+          role: MessageRole.assistant,
+          createdAt: at,
+        ),
+      ]).single.author,
+      isNull,
+    );
   });
 
   test("a turn opener's omadaOn survives the round trip and the replay", () {
     final opener = Message(
-        id: "m2",
-        role: MessageRole.user,
-        createdAt: at,
-        omadaOn: true);
+      id: "m2",
+      role: MessageRole.user,
+      createdAt: at,
+      omadaOn: true,
+    );
     final records = [
       message("m1"),
       ...recordsOf([opener]),
     ];
 
     final back = ChatRecord.fromJson(
-        jsonDecode(jsonEncode(records[1].toJson())) as Map<String, dynamic>);
+      jsonDecode(jsonEncode(records[1].toJson())) as Map<String, dynamic>,
+    );
     expect((back as MessageRecord).omadaOn, isTrue);
     expect(replay(records).map((m) => m.omadaOn), [null, true]);
   });
@@ -516,13 +605,18 @@ void main() {
       message("m2", MessageRole.assistant),
       part("m2", 0, "hi"),
       const ChatRecord.compaction(
-          upToMessageId: "m2", summary: "The user said hello."),
+        upToMessageId: "m2",
+        summary: "The user said hello.",
+      ),
       message("m3"),
       part("m3", 0, "more"),
     ];
     final round = records
-        .map((r) => ChatRecord.fromJson(
-            jsonDecode(jsonEncode(r.toJson())) as Map<String, dynamic>))
+        .map(
+          (r) => ChatRecord.fromJson(
+            jsonDecode(jsonEncode(r.toJson())) as Map<String, dynamic>,
+          ),
+        )
         .toList();
     expect(round.lastWhere((r) => r is CompactionRecord), records[4]);
 

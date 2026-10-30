@@ -15,20 +15,23 @@ void main() {
   tearDown(() => app.dispose());
 
   group("SettingsCard", () {
-    testWidgets("the copy card copies its value, the whole card the button",
-        (tester) async {
+    testWidgets("the copy card copies its value, the whole card the button", (
+      tester,
+    ) async {
       final copied = clipboard(tester);
       await app.pump(
         tester,
         Scaffold(
-          body: ListView(children: [
-            SettingsCard.copy(
-              icon: Icons.badge_outlined,
-              title: "Project name",
-              value: "research",
-              said: "Copied project name",
-            ),
-          ]),
+          body: ListView(
+            children: [
+              SettingsCard.copy(
+                icon: Icons.badge_outlined,
+                title: "Project name",
+                value: "research",
+                said: "Copied project name",
+              ),
+            ],
+          ),
         ),
       );
 
@@ -39,20 +42,23 @@ void main() {
       expect(find.text("Copied project name"), findsOneWidget);
     });
 
-    testWidgets("a tappable card ends in the arrow, and its tap runs",
-        (tester) async {
+    testWidgets("a tappable card ends in the arrow, and its tap runs", (
+      tester,
+    ) async {
       var pushed = false;
       await app.pump(
         tester,
         Scaffold(
-          body: ListView(children: [
-            SettingsCard(
-              icon: Icons.key_outlined,
-              title: "Environment",
-              subtitle: "Default (inherited)",
-              onTap: () => pushed = true,
-            ),
-          ]),
+          body: ListView(
+            children: [
+              SettingsCard(
+                icon: Icons.key_outlined,
+                title: "Environment",
+                subtitle: "Default (inherited)",
+                onTap: () => pushed = true,
+              ),
+            ],
+          ),
         ),
       );
 
@@ -62,25 +68,31 @@ void main() {
       expect(pushed, isTrue);
     });
 
-    testWidgets("a card with no tap has no arrow and answers no gesture",
-        (tester) async {
+    testWidgets("a card with no tap has no arrow and answers no gesture", (
+      tester,
+    ) async {
       await app.pump(
         tester,
         Scaffold(
-          body: ListView(children: [
-            const SettingsCard(
-              icon: Icons.forum_outlined,
-              title: "Chats",
-              subtitle: "1",
-            ),
-          ]),
+          body: ListView(
+            children: [
+              const SettingsCard(
+                icon: Icons.forum_outlined,
+                title: "Chats",
+                subtitle: "1",
+              ),
+            ],
+          ),
         ),
       );
 
       expect(find.byIcon(Icons.arrow_right), findsNothing);
       expect(
-        find.byWidgetPredicate((w) =>
-            w is InkWell && w.onTap != null || w is InkResponse && w.onTap != null),
+        find.byWidgetPredicate(
+          (w) =>
+              w is InkWell && w.onTap != null ||
+              w is InkResponse && w.onTap != null,
+        ),
         findsNothing,
       );
     });
@@ -89,18 +101,20 @@ void main() {
       await app.pump(
         tester,
         Scaffold(
-          body: ListView(children: [
-            SettingsCard(
-              icon: Icons.description_outlined,
-              title: "Description",
-              subtitle: "Empty",
-              trailing: IconButton(
-                icon: const Icon(Icons.refresh),
-                tooltip: "Reset",
-                onPressed: () {},
+          body: ListView(
+            children: [
+              SettingsCard(
+                icon: Icons.description_outlined,
+                title: "Description",
+                subtitle: "Empty",
+                trailing: IconButton(
+                  icon: const Icon(Icons.refresh),
+                  tooltip: "Reset",
+                  onPressed: () {},
+                ),
               ),
-            ),
-          ]),
+            ],
+          ),
         ),
       );
 
@@ -108,14 +122,18 @@ void main() {
       expect(find.byIcon(Icons.arrow_right), findsNothing);
     });
 
-    testWidgets("the ink is clipped to the card at a non-default radius",
-        (tester) async {
+    testWidgets("the ink is clipped to the card at a non-default radius", (
+      tester,
+    ) async {
       const radius = CornerRadius.extraLarge;
       await app.pump(
         tester,
         Theme(
-          data: entoliTheme(Brightness.light,
-              (primary: entoliLook.primary, secondary: null, radius: radius.radius)),
+          data: entoliTheme(Brightness.light, (
+            primary: entoliLook.primary,
+            secondary: null,
+            radius: radius.radius,
+          )),
           child: Scaffold(
             body: ListView(children: [_card("One", onTap: () {})]),
           ),
@@ -125,12 +143,18 @@ void main() {
       final ink = tester.widget<InkWell>(find.byType(InkWell));
       expect(ink.borderRadius, isNull);
       expect(ink.customBorder, isNull);
-      final clip = tester.widget<PhysicalShape>(find.descendant(
-          of: find.byType(Card), matching: find.byType(PhysicalShape)));
+      final clip = tester.widget<PhysicalShape>(
+        find.descendant(
+          of: find.byType(Card),
+          matching: find.byType(PhysicalShape),
+        ),
+      );
       expect(clip.clipBehavior, isNot(Clip.none));
       final shape = (clip.clipper as ShapeBorderClipper).shape;
-      expect((shape as RoundedRectangleBorder).borderRadius,
-          BorderRadius.circular(radius.radius));
+      expect(
+        (shape as RoundedRectangleBorder).borderRadius,
+        BorderRadius.circular(radius.radius),
+      );
     });
   });
 
@@ -139,19 +163,20 @@ void main() {
     // answer one line is the Wrap's decision. What is asserted is the layout's
     // own geometry: the row children's rects, side by side where the width
     // fits two and stacked where it does not.
-    testWidgets("a phone-width row lays two cards out side by side",
-        (tester) async {
+    testWidgets("a phone-width row lays two cards out side by side", (
+      tester,
+    ) async {
       useWindow(tester, const Size(400, 800));
       await app.pump(
         tester,
         Scaffold(
-          body: ListView(children: [
-            SettingsCardRow(children: [
-              _card("One"),
-              _card("Two"),
-              _card("Three"),
-            ]),
-          ]),
+          body: ListView(
+            children: [
+              SettingsCardRow(
+                children: [_card("One"), _card("Two"), _card("Three")],
+              ),
+            ],
+          ),
         ),
       );
 
@@ -176,9 +201,11 @@ void main() {
       await app.pump(
         tester,
         Scaffold(
-          body: ListView(children: [
-            SettingsCardRow(children: [_card("One"), _card("Two")]),
-          ]),
+          body: ListView(
+            children: [
+              SettingsCardRow(children: [_card("One"), _card("Two")]),
+            ],
+          ),
         ),
       );
 
@@ -190,8 +217,9 @@ void main() {
   });
 
   group("the project settings page", () {
-    testWidgets("the name card copies, without its own copy button",
-        (tester) async {
+    testWidgets("the name card copies, without its own copy button", (
+      tester,
+    ) async {
       final copied = clipboard(tester);
       await io(tester, () => app.repo.createProject("research"));
       await app.pump(tester, const ProjectSettingsPage(project: "research"));
@@ -203,8 +231,9 @@ void main() {
       expect(find.text("Copied project name"), findsOneWidget);
     });
 
-    testWidgets("the chats card states its count and takes no tap",
-        (tester) async {
+    testWidgets("the chats card states its count and takes no tap", (
+      tester,
+    ) async {
       await io(tester, () => app.repo.createProject("research"));
       await io(tester, () => app.seedChat(project: "research"));
       await app.pump(tester, const ProjectSettingsPage(project: "research"));
@@ -233,8 +262,8 @@ List<Rect> _rowChildren(WidgetTester tester) {
 }
 
 SettingsCard _card(String title, {VoidCallback? onTap}) => SettingsCard(
-      icon: Icons.folder_outlined,
-      title: title,
-      subtitle: "Browse files",
-      onTap: onTap,
-    );
+  icon: Icons.folder_outlined,
+  title: title,
+  subtitle: "Browse files",
+  onTap: onTap,
+);

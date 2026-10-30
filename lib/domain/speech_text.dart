@@ -55,7 +55,11 @@ String? _spoken(String line, bool inFence) {
   // A table row read aloud is a run of pipes; the cells are still words.
   if (text.trimLeft().startsWith("|")) {
     if (_tableRule.hasMatch(text)) return null;
-    text = text.split("|").map((c) => c.trim()).where((c) => c.isNotEmpty).join(", ");
+    text = text
+        .split("|")
+        .map((c) => c.trim())
+        .where((c) => c.isNotEmpty)
+        .join(", ");
   }
   return text.trimRight();
 }
@@ -242,7 +246,9 @@ class SentenceSplitter {
       // the first sound the user hears.
       if (c == _comma || space) lastBreak = i + 1;
     }
-    if (_text.length - _spoken >= _most && lastBreak > _spoken) return lastBreak;
+    if (_text.length - _spoken >= _most && lastBreak > _spoken) {
+      return lastBreak;
+    }
     return null;
   }
 
@@ -266,10 +272,19 @@ class SentenceSplitter {
   static const _newline = 0x0A;
 
   /// `. ! ? … 。 ！ ？`
-  static const _terminators = {_stop, 0x21, 0x3F, 0x2026, 0x3002, 0xFF01, 0xFF1F};
+  static const _terminators = {
+    _stop,
+    0x21,
+    0x3F,
+    0x2026,
+    0x3002,
+    0xFF01,
+    0xFF1F,
+  };
 
   /// Past this, break at the last comma or space rather than wait.
   static const _most = 300;
 
-  static bool _isSpace(int c) => c == _space || c == _newline || c == 0x09 || c == 0x0D;
+  static bool _isSpace(int c) =>
+      c == _space || c == _newline || c == 0x09 || c == 0x0D;
 }

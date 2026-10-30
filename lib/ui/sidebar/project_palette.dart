@@ -17,7 +17,8 @@ import "../selection.dart";
 /// What picking a row does. Run by whoever opened the palette, with its own
 /// context and ref: the palette's are disposed by the time the pick lands, and
 /// the drawer a picked chat should close is the opener's.
-typedef PaletteAction = FutureOr<void> Function(BuildContext context, WidgetRef ref);
+typedef PaletteAction =
+    FutureOr<void> Function(BuildContext context, WidgetRef ref);
 
 /// The project switcher: the whole screen on a phone, a box in the middle of
 /// anything wider.
@@ -60,12 +61,18 @@ PaletteAction _createProject(_NewProjectAnswer answer, String? device) =>
     (context, ref) async {
       if (device != null) {
         final description = answer.description.trim();
-        if (!await ref.read(syncHubProvider).createRemoteProject(device, answer.name,
-            settings: answer.omada || description.isNotEmpty
-                ? ProjectSettings(
-                    omada: answer.omada,
-                    description: description.isEmpty ? null : description)
-                : null)) {
+        if (!await ref
+            .read(syncHubProvider)
+            .createRemoteProject(
+              device,
+              answer.name,
+              settings: answer.omada || description.isNotEmpty
+                  ? ProjectSettings(
+                      omada: answer.omada,
+                      description: description.isEmpty ? null : description,
+                    )
+                  : null,
+            )) {
           throw StateError("${answer.name} was not made on $device");
         }
         selectProject(ref, (device: device, project: answer.name));
@@ -175,10 +182,8 @@ class _ProjectPaletteState extends ConsumerState<ProjectPalette> {
           duration: const Duration(milliseconds: 250),
           switchInCurve: Curves.easeOutCubic,
           switchOutCurve: Curves.easeInCubic,
-          layoutBuilder: (current, previous) => Stack(
-            fit: StackFit.expand,
-            children: [...previous, ?current],
-          ),
+          layoutBuilder: (current, previous) =>
+              Stack(fit: StackFit.expand, children: [...previous, ?current]),
           // The new-project page sits to the right of the list. The outgoing
           // child runs its animation backwards, so keying the side on the
           // child alone slides both pages the same way in either direction.
@@ -198,11 +203,16 @@ class _ProjectPaletteState extends ConsumerState<ProjectPalette> {
                   // waiting on a paired device.
                   onCreate: (answer) async {
                     await _createProject(
-                        answer, ref.read(selectedProjectProvider).device)(context, ref);
+                      answer,
+                      ref.read(selectedProjectProvider).device,
+                    )(context, ref);
                     if (context.mounted) Navigator.of(context).pop();
                   },
                 )
-              : KeyedSubtree(key: const ValueKey(_listPage), child: _list(context)),
+              : KeyedSubtree(
+                  key: const ValueKey(_listPage),
+                  child: _list(context),
+                ),
         ),
       ),
     );
@@ -215,8 +225,11 @@ class _ProjectPaletteState extends ConsumerState<ProjectPalette> {
     final chats = (ref.watch(chatListProvider).value ?? const <ChatState>[])
         .where((c) => !c.isExpired())
         .toList();
-    final remotes = remoteEntries(ref.watch(remoteChatsProvider),
-        ref.watch(deviceProjectsProvider), ref.watch(syncPeersProvider));
+    final remotes = remoteEntries(
+      ref.watch(remoteChatsProvider),
+      ref.watch(deviceProjectsProvider),
+      ref.watch(syncPeersProvider),
+    );
     final running = ref.watch(busyChatsProvider);
 
     return ValueListenableBuilder<Set<String>>(
@@ -230,29 +243,29 @@ class _ProjectPaletteState extends ConsumerState<ProjectPalette> {
         }
 
         _Choice local(String? p) => _Choice(
-              build: (active) => _Row(
-                active: active,
-                current: selected == localProject(p),
-                running: busy.contains(p),
-                icon: projectGlyph(p),
-                label: projectLabel(p),
-                omada: ref.watch(omadaOnProvider(p)),
-                trailing: _Count(counts[p] ?? 0),
-              ),
-              action: (_, ref) => selectProject(ref, localProject(p)),
-            );
+          build: (active) => _Row(
+            active: active,
+            current: selected == localProject(p),
+            running: busy.contains(p),
+            icon: projectGlyph(p),
+            label: projectLabel(p),
+            omada: ref.watch(omadaOnProvider(p)),
+            trailing: _Count(counts[p] ?? 0),
+          ),
+          action: (_, ref) => selectProject(ref, localProject(p)),
+        );
         _Choice mirrored(RemoteEntry e) => _Choice(
-              build: (active) => _Row(
-                active: active,
-                current: e.scope == selected,
-                running: false,
-                icon: remoteGlyph,
-                label: e.label,
-                omada: e.omada,
-                trailing: _Count(e.count),
-              ),
-              action: (_, ref) => selectProject(ref, e.scope),
-            );
+          build: (active) => _Row(
+            active: active,
+            current: e.scope == selected,
+            running: false,
+            icon: remoteGlyph,
+            label: e.label,
+            omada: e.omada,
+            trailing: _Count(e.count),
+          ),
+          action: (_, ref) => selectProject(ref, e.scope),
+        );
 
         final needle = searchNeedle(_query);
         final items = <_Item>[];
@@ -299,27 +312,31 @@ class _ProjectPaletteState extends ConsumerState<ProjectPalette> {
         if (found.isNotEmpty) {
           if (items.isNotEmpty) items.add(const _Rule());
           for (final chat in found) {
-            items.add(_Choice(
-              build: (active) => _Row(
-                active: active,
-                current: chat.id == selectedChat,
-                running: runningIds.contains(chat.id),
-                label: chat.title.orUntitled,
-                trailing: _ProjectTag(projectLabel(chat.project)),
+            items.add(
+              _Choice(
+                build: (active) => _Row(
+                  active: active,
+                  current: chat.id == selectedChat,
+                  running: runningIds.contains(chat.id),
+                  label: chat.title.orUntitled,
+                  trailing: _ProjectTag(projectLabel(chat.project)),
+                ),
+                // Into its project first: the sidebar lists one project, and
+                // a chat it does not list would be open with nothing saying so.
+                action: (context, ref) {
+                  selectProject(ref, localProject(chat.project));
+                  openChat(context, ref, chat.id);
+                },
               ),
-              // Into its project first: the sidebar lists one project, and
-              // a chat it does not list would be open with nothing saying so.
-              action: (context, ref) {
-                selectProject(ref, localProject(chat.project));
-                openChat(context, ref, chat.id);
-              },
-            ));
+            );
           }
         }
 
         final choices = items.whereType<_Choice>().toList();
-        final active = (_active ?? current ?? 0)
-            .clamp(0, choices.isEmpty ? 0 : choices.length - 1);
+        final active = (_active ?? current ?? 0).clamp(
+          0,
+          choices.isEmpty ? 0 : choices.length - 1,
+        );
         return Column(
           children: [
             _header(context, choices, active),
@@ -350,24 +367,24 @@ class _ProjectPaletteState extends ConsumerState<ProjectPalette> {
       for (final item in items)
         switch (item) {
           _Heading(:final text) => Padding(
-              padding: const EdgeInsets.fromLTRB(20, 12, 20, 6),
-              child: Text(
-                text,
-                style: theme.textTheme.labelSmall?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
-                  fontWeight: FontWeight.w600,
-                ),
+            padding: const EdgeInsets.fromLTRB(20, 12, 20, 6),
+            child: Text(
+              text,
+              style: theme.textTheme.labelSmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+                fontWeight: FontWeight.w600,
               ),
             ),
+          ),
           _Rule() => const Divider(indent: 16, endIndent: 16),
           _Choice() => () {
-              final i = index++;
-              return InkWell(
-                key: i == active ? _activeKey : null,
-                onTap: () => _pick(item.action),
-                child: item.build(i == active),
-              );
-            }(),
+            final i = index++;
+            return InkWell(
+              key: i == active ? _activeKey : null,
+              onTap: () => _pick(item.action),
+              child: item.build(i == active),
+            );
+          }(),
         },
     ];
   }
@@ -401,7 +418,9 @@ class _ProjectPaletteState extends ConsumerState<ProjectPalette> {
                 decoration: InputDecoration(
                   isDense: true,
                   filled: true,
-                  fillColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+                  fillColor: Theme.of(
+                    context,
+                  ).colorScheme.surfaceContainerHighest,
                   hintText: "Search projects and chats",
                   prefixIcon: const Icon(Icons.search, size: 20),
                   contentPadding: const EdgeInsets.symmetric(vertical: 12),
@@ -426,17 +445,20 @@ class _ProjectPaletteState extends ConsumerState<ProjectPalette> {
 }
 
 /// Running chats first, then the rest; most recently touched first in each.
-List<ChatState> chatsByRecency(Iterable<ChatState> chats, Set<String> running) =>
-    chats.toList()
-      ..sort((a, b) {
-        final byRunning = (running.contains(b.id) ? 1 : 0) -
-            (running.contains(a.id) ? 1 : 0);
-        return byRunning != 0 ? byRunning : b.updatedAt.compareTo(a.updatedAt);
-      });
+List<ChatState> chatsByRecency(
+  Iterable<ChatState> chats,
+  Set<String> running,
+) => chats.toList()
+  ..sort((a, b) {
+    final byRunning =
+        (running.contains(b.id) ? 1 : 0) - (running.contains(a.id) ? 1 : 0);
+    return byRunning != 0 ? byRunning : b.updatedAt.compareTo(a.updatedAt);
+  });
 
 /// The default project and the built-ins sit above the rule, the user's
 /// below it.
-bool isUserProject(String? project) => project != null && isProjectName(project);
+bool isUserProject(String? project) =>
+    project != null && isProjectName(project);
 
 class _Row extends StatelessWidget {
   const _Row({
@@ -471,8 +493,8 @@ class _Row extends StatelessWidget {
         color: current
             ? scheme.secondaryContainer
             : active
-                ? scheme.onSurface.withValues(alpha: 0.08)
-                : null,
+            ? scheme.onSurface.withValues(alpha: 0.08)
+            : null,
         borderRadius: BorderRadius.circular(20),
       ),
       child: Row(
@@ -499,10 +521,7 @@ class _Row extends StatelessWidget {
               ).merge(projectLabelStyle(omada)),
             ),
           ),
-          if (trailing != null) ...[
-            const SizedBox(width: 12),
-            trailing!,
-          ],
+          if (trailing != null) ...[const SizedBox(width: 12), trailing!],
         ],
       ),
     );
@@ -519,8 +538,9 @@ class _Count extends StatelessWidget {
     final theme = Theme.of(context);
     return Text(
       "$count",
-      style: theme.textTheme.bodySmall
-          ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+      style: theme.textTheme.bodySmall?.copyWith(
+        color: theme.colorScheme.onSurfaceVariant,
+      ),
     );
   }
 }
@@ -544,8 +564,9 @@ class _ProjectTag extends StatelessWidget {
         child: Text(
           label,
           overflow: TextOverflow.ellipsis,
-          style: theme.textTheme.labelSmall
-              ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+          style: theme.textTheme.labelSmall?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
         ),
       ),
     );
@@ -597,14 +618,18 @@ class _NewProjectState extends State<_NewProject> {
     if (dir == null || _making) return;
     setState(() => _making = true);
     try {
-      await widget.onCreate(
-          (name: dir, description: _description.text, omada: _omada));
+      await widget.onCreate((
+        name: dir,
+        description: _description.text,
+        omada: _omada,
+      ));
     } catch (e) {
       logFailure("palette", "could not create $dir", e);
       if (!mounted) return;
       setState(() => _making = false);
       ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("The project could not be created.")));
+        const SnackBar(content: Text("The project could not be created.")),
+      );
     }
   }
 
@@ -669,7 +694,8 @@ class _NewProjectState extends State<_NewProject> {
                 contentPadding: EdgeInsets.zero,
                 title: const Text("Team chats (Omada)"),
                 subtitle: const Text(
-                    "Several named agents take part in this project's chats."),
+                  "Several named agents take part in this project's chats.",
+                ),
                 value: _omada,
                 onChanged: (value) => setState(() => _omada = value),
               ),
@@ -684,7 +710,9 @@ class _NewProjectState extends State<_NewProject> {
               onPressed: dir == null || _making ? null : _submit,
               child: _making
                   ? const SizedBox.square(
-                      dimension: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                      dimension: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
                   : const Text("Create"),
             ),
           ),

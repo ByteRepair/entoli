@@ -56,8 +56,12 @@ class ByteRepairStore {
 
   static const tools = {"ESBMC": "esbmc", "make": "make", "gh": "gh"};
 
-  Future<ShellResult> _run(Shell shell, String script, Duration timeout,
-      {Map<String, String>? environment}) async {
+  Future<ShellResult> _run(
+    Shell shell,
+    String script,
+    Duration timeout, {
+    Map<String, String>? environment,
+  }) async {
     try {
       final run = shell.start(
         script,
@@ -113,9 +117,15 @@ class ByteRepairStore {
   Future<ShellResult> install(Shell shell) async {
     final err = await ensureRootfs();
     if (err != null) return ShellResult.failed(err);
-    final body = await rootBundle.loadString("assets/scripts/byte-repair-setup.sh");
-    final result = await _run(shell, body, installTimeout,
-        environment: installEnvironment());
+    final body = await rootBundle.loadString(
+      "assets/scripts/byte-repair-setup.sh",
+    );
+    final result = await _run(
+      shell,
+      body,
+      installTimeout,
+      environment: installEnvironment(),
+    );
     if (result.returnCode == 0) await markSetupComplete();
     return result;
   }
@@ -146,8 +156,8 @@ class ByteRepairStore {
     if (destDirPath == null) {
       return Platform.isIOS
           ? "Importing an ESBMC binary is not possible inside the iSH "
-              "guest: its filesystem is the emulator's own, not a path "
-              "dart:io can write."
+                "guest: its filesystem is the emulator's own, not a path "
+                "dart:io can write."
           : "The Byte Repair rootfs has not been set up yet. Run Setup first.";
     }
     try {
@@ -188,7 +198,6 @@ class ByteRepairStore {
     }
   }
 
-
   /// The delete confirm's message.
   String get deleteConfirmMessage {
     final environment = environmentDeletion;
@@ -197,21 +206,29 @@ class ByteRepairStore {
         : "";
     return environment == null
         ? "This deletes the Byte Repair workspace (cloned repos, scratch "
-            "files) and all chats in the project.$tail"
+              "files) and all chats in the project.$tail"
         : "This deletes $environment, the Byte Repair workspace (cloned "
-            "repos, scratch files), and all chats in the project.$tail";
+              "repos, scratch files), and all chats in the project.$tail";
   }
 
   /// The first line of `<command> --version`, or null where it is not
   /// installed or the call failed.
   Future<String?> runToolVersion(Shell shell, String command) async {
-    final result = await _run(shell, "$command --version", const Duration(seconds: 15));
+    final result = await _run(
+      shell,
+      "$command --version",
+      const Duration(seconds: 15),
+    );
     if (result.returnCode == 0) return result.output.trim().split("\n").first;
     // Not installed is the expected answer here — the version poll is how the
     // settings page detects it — so it is quiet; only a call that failed to
     // run at all gets a line.
     if (result.exceptionInfo != null) {
-      logFailure("byte-repair", "$command --version failed", result.exceptionInfo);
+      logFailure(
+        "byte-repair",
+        "$command --version failed",
+        result.exceptionInfo,
+      );
     }
     return null;
   }
@@ -219,7 +236,9 @@ class ByteRepairStore {
   /// Each of [tools] by name, to its version or null where not installed.
   Future<Map<String, String?>> runToolVersions(Shell shell) async {
     final entries = await Future.wait(
-      tools.entries.map((e) async => MapEntry(e.key, await runToolVersion(shell, e.value))),
+      tools.entries.map(
+        (e) async => MapEntry(e.key, await runToolVersion(shell, e.value)),
+      ),
     );
     return Map.fromEntries(entries);
   }
@@ -238,9 +257,9 @@ class ByteRepairStore {
   /// the line above Run Setup: null where it installs nowhere else.
   String? get setupNotice => _usesHomebrew
       ? "On this Mac, Run Setup uses Homebrew to install whichever of make, "
-          "GitHub CLI and ESBMC are missing. They are installed into the "
-          "system, not the app, so deleting the Byte Repair data leaves them "
-          "installed."
+            "GitHub CLI and ESBMC are missing. They are installed into the "
+            "system, not the app, so deleting the Byte Repair data leaves them "
+            "installed."
       : null;
 
   /// What the user has to install before a setup can work — a line saying
@@ -249,12 +268,13 @@ class ByteRepairStore {
   /// it itself: Homebrew's installer asks for a password through sudo.
   ({String why, String command})? get prerequisite =>
       _usesHomebrew && _brew == null
-          ? (
-              why: "Homebrew is not installed. Paste this into a terminal and "
-                  "run it, then press Run Setup:",
-              command: homebrewInstallCommand,
-            )
-          : null;
+      ? (
+          why:
+              "Homebrew is not installed. Paste this into a terminal and "
+              "run it, then press Run Setup:",
+          command: homebrewInstallCommand,
+        )
+      : null;
 
   /// Why this environment cannot run a setup, or null where it can.
   String? get capabilityBanner {
@@ -265,12 +285,12 @@ class ByteRepairStore {
       if (AppSettings.load(config).rootfsId != null) return null;
       return isAndroid
           ? 'Byte Repair does not work when using the "Host" terminal '
-              "environment on this device. Please choose another terminal "
-              "environment."
+                "environment on this device. Please choose another terminal "
+                "environment."
           : 'Byte Repair does not work when using the "Host" terminal '
-              "environment on this platform, which has no shell to run "
-              "anything in. Please install a Linux from the Terminal "
-              "settings.";
+                "environment on this platform, which has no shell to run "
+                "anything in. Please install a Linux from the Terminal "
+                "settings.";
     }
     return installDir == null ? noInstallDestination : null;
   }
@@ -285,7 +305,7 @@ class ByteRepairStore {
     if (_hostInstallDir != null && Directory(_hostInstallDir!).existsSync()) {
       return _usesHomebrew
           ? "the links the setup made to Homebrew's tools (Homebrew keeps "
-              "what it installed)"
+                "what it installed)"
           : "the tools the setup fetched into the app's cache directory";
     }
     return null;
@@ -297,7 +317,8 @@ class ByteRepairStore {
       installDir == guestEsbmcInstallDir ? null : installDir;
 
   /// Every per-project rootfs copy.
-  String get _rootfsTree => p.join(config.projectDir(project: project), "rootfs");
+  String get _rootfsTree =>
+      p.join(config.projectDir(project: project), "rootfs");
 
   /// `/usr/local/bin` inside the selected rootfs's project copy, or null
   /// where setup has not made the copy yet.
@@ -320,7 +341,8 @@ const hostInstallTimeout = Duration(minutes: 30);
 const guestEsbmcInstallDir = "/usr/local/bin";
 
 /// The banner where there is nowhere to install the tools.
-const noInstallDestination = "Byte Repair does not work on this platform: "
+const noInstallDestination =
+    "Byte Repair does not work on this platform: "
     "there is nowhere to install the tools it sets up.";
 
 /// The name ESBMC lands under in a bin directory. The setup script installs
@@ -331,7 +353,8 @@ final String esbmcFileName = Platform.isWindows ? "esbmc.exe" : "esbmc";
 /// installs with Homebrew and cannot install Homebrew itself: the installer
 /// asks for an administrator's password through sudo, and the setup runs with
 /// no terminal to type it into.
-const homebrewInstallCommand = '/bin/bash -c "\$(curl -fsSL '
+const homebrewInstallCommand =
+    '/bin/bash -c "\$(curl -fsSL '
     'https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"';
 
 /// Where Homebrew's installer puts `brew`: Apple silicon's prefix, then

@@ -13,21 +13,24 @@ import "image_viewer.dart";
 class AttachmentChip extends ConsumerWidget {
   /// Not sent yet, and removable.
   AttachmentChip.pending(Attachment attachment, {super.key, this.onRemove})
-      : filename = attachment.filename,
-        mimeType = attachment.mimeType,
-        bytes = attachment.bytes,
-        source = null,
-        size = _size;
+    : filename = attachment.filename,
+      mimeType = attachment.mimeType,
+      bytes = attachment.bytes,
+      source = null,
+      size = _size;
 
   /// Part of a message that has already gone out.
   /// [size] is larger for an image the model made: it is the reply itself.
-  AttachmentChip.sent(FilePart part,
-      {super.key, required String chatId, this.size = _size})
-      : filename = part.filename,
-        mimeType = part.mimeType,
-        bytes = null,
-        source = (chatId: chatId, resource: part.resource),
-        onRemove = null;
+  AttachmentChip.sent(
+    FilePart part, {
+    super.key,
+    required String chatId,
+    this.size = _size,
+  }) : filename = part.filename,
+       mimeType = part.mimeType,
+       bytes = null,
+       source = (chatId: chatId, resource: part.resource),
+       onRemove = null;
 
   static const _size = 64.0;
 
@@ -44,8 +47,11 @@ class AttachmentChip extends ConsumerWidget {
     final source = this.source;
     // Only an image shows its bytes, so only an image is worth reading back.
     final isImage = mimeType.startsWith("image/");
-    final data = bytes ??
-        (source == null || !isImage ? null : ref.watch(attachmentBytesProvider(source)).value);
+    final data =
+        bytes ??
+        (source == null || !isImage
+            ? null
+            : ref.watch(attachmentBytesProvider(source)).value);
 
     return Tooltip(
       message: filename,
@@ -63,13 +69,16 @@ class AttachmentChip extends ConsumerWidget {
             ),
             child: isImage && data != null
                 ? InkWell(
-                    onTap: () => showImageViewer(context, data, label: filename),
+                    onTap: () =>
+                        showImageViewer(context, data, label: filename),
                     child: Image.memory(
                       data,
                       // Without a decode target a phone photo becomes tens of
                       // MB of bitmap to fill 64 logical pixels, and two of
                       // them evict the whole image cache.
-                      cacheWidth: (size * MediaQuery.devicePixelRatioOf(context)).round(),
+                      cacheWidth:
+                          (size * MediaQuery.devicePixelRatioOf(context))
+                              .round(),
                       fit: BoxFit.cover,
                     ),
                   )
@@ -81,11 +90,16 @@ class AttachmentChip extends ConsumerWidget {
               right: -6,
               child: Material(
                 color: theme.colorScheme.surfaceContainerHighest,
-                shape: CircleBorder(side: BorderSide(color: theme.colorScheme.outlineVariant)),
+                shape: CircleBorder(
+                  side: BorderSide(color: theme.colorScheme.outlineVariant),
+                ),
                 child: InkWell(
                   customBorder: const CircleBorder(),
                   onTap: onRemove,
-                  child: const Padding(padding: EdgeInsets.all(2), child: Icon(Icons.close, size: 14)),
+                  child: const Padding(
+                    padding: EdgeInsets.all(2),
+                    child: Icon(Icons.close, size: 14),
+                  ),
                 ),
               ),
             ),
@@ -95,22 +109,26 @@ class AttachmentChip extends ConsumerWidget {
   }
 
   Widget _name(ThemeData theme) => Padding(
-        padding: const EdgeInsets.all(4),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.description_outlined, size: 20, color: theme.colorScheme.onSurfaceVariant),
-            const SizedBox(height: 2),
-            Text(
-              filename,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              textAlign: TextAlign.center,
-              style: theme.textTheme.labelSmall,
-            ),
-          ],
+    padding: const EdgeInsets.all(4),
+    child: Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Icon(
+          Icons.description_outlined,
+          size: 20,
+          color: theme.colorScheme.onSurfaceVariant,
         ),
-      );
+        const SizedBox(height: 2),
+        Text(
+          filename,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          textAlign: TextAlign.center,
+          style: theme.textTheme.labelSmall,
+        ),
+      ],
+    ),
+  );
 }
 
 /// The line attachments sit on, above the composer and inside a bubble. Wraps
@@ -123,10 +141,10 @@ class AttachmentStrip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.fromLTRB(0, 8, 8, 8),
-        child: Align(
-          alignment: Alignment.centerLeft,
-          child: Wrap(spacing: 10, runSpacing: 10, children: children),
-        ),
-      );
+    padding: const EdgeInsets.fromLTRB(0, 8, 8, 8),
+    child: Align(
+      alignment: Alignment.centerLeft,
+      child: Wrap(spacing: 10, runSpacing: 10, children: children),
+    ),
+  );
 }

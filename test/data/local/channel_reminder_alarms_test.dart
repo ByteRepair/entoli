@@ -20,7 +20,9 @@ void main() {
   Future<void> incoming(String method, [Object? arguments]) =>
       messenger.handlePlatformMessage(
         channel.name,
-        const StandardMethodCodec().encodeMethodCall(MethodCall(method, arguments)),
+        const StandardMethodCodec().encodeMethodCall(
+          MethodCall(method, arguments),
+        ),
         (_) {},
       );
 
@@ -34,11 +36,19 @@ void main() {
     await alarms.cancel(7);
     await alarms.notify(title: "t", body: "b", chatId: "c");
     await alarms.doneFiring();
-    expect(asked.map((c) => c.method),
-        ["schedule", "cancel", "notify", "doneFiring"]);
+    expect(asked.map((c) => c.method), [
+      "schedule",
+      "cancel",
+      "notify",
+      "doneFiring",
+    ]);
     expect(asked.first.arguments, {"code": 7, "at": 1000});
-    expect(asked[2].arguments,
-        {"title": "t", "body": "b", "chatId": "c", "channel": "reminders"});
+    expect(asked[2].arguments, {
+      "title": "t",
+      "body": "b",
+      "chatId": "c",
+      "channel": "reminders",
+    });
   });
 
   test("fired and open nudges reach their streams", () async {

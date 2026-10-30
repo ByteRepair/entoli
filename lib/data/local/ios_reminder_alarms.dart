@@ -21,19 +21,19 @@ class IosReminderAlarms extends ChannelReminderAlarms {
   Future<void> requestExact() async {}
 
   @override
-  Future<void> schedule(int requestCode, DateTime at,
-          {String? calendar, String? label, String? chatId}) =>
-      run(
-        "schedule",
-        {
-          "code": requestCode,
-          "at": at.millisecondsSinceEpoch,
-          "calendar": ?calendar,
-          "label": ?label,
-          "chatId": ?chatId,
-        },
-        "schedule $requestCode",
-      );
+  Future<void> schedule(
+    int requestCode,
+    DateTime at, {
+    String? calendar,
+    String? label,
+    String? chatId,
+  }) => run("schedule", {
+    "code": requestCode,
+    "at": at.millisecondsSinceEpoch,
+    "calendar": ?calendar,
+    "label": ?label,
+    "chatId": ?chatId,
+  }, "schedule $requestCode");
 
   @override
   Future<void> cancel(int requestCode) =>

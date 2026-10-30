@@ -13,8 +13,10 @@ import "../../domain/web_search.dart";
 /// of the table it renders. `webfetch` is a plain GET with markup stripped to
 /// text, the same way the model would read a page if it could.
 class DuckDuckGoSearch extends WebSearch {
-  DuckDuckGoSearch({http.Client? httpClient, this.timeout = const Duration(seconds: 30)})
-      : _http = httpClient ?? tlsClient();
+  DuckDuckGoSearch({
+    http.Client? httpClient,
+    this.timeout = const Duration(seconds: 30),
+  }) : _http = httpClient ?? tlsClient();
 
   final http.Client _http;
   final Duration timeout;
@@ -27,27 +29,29 @@ class DuckDuckGoSearch extends WebSearch {
       return const ShellResult.failed("The search query is empty.");
     }
     try {
-      final response = await _http.post(
-        Uri.parse("https://lite.duckduckgo.com/lite/"),
-        headers: const {
-          "User-Agent": _userAgent,
-          "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-          "Accept-Language": "en-US,en;q=0.5",
-          "Referer": "https://lite.duckduckgo.com/",
-        },
-        body: {"q": query, "kl": "us-en"},
-      ).timeout(timeout);
+      final response = await _http
+          .post(
+            Uri.parse("https://lite.duckduckgo.com/lite/"),
+            headers: const {
+              "User-Agent": _userAgent,
+              "Accept":
+                  "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+              "Accept-Language": "en-US,en;q=0.5",
+              "Referer": "https://lite.duckduckgo.com/",
+            },
+            body: {"q": query, "kl": "us-en"},
+          )
+          .timeout(timeout);
 
       if (response.statusCode != 200) {
-        return ShellResult.failed("DuckDuckGo returned HTTP ${response.statusCode}.");
+        return ShellResult.failed(
+          "DuckDuckGo returned HTTP ${response.statusCode}.",
+        );
       }
 
       final results = _parseResults(response.body);
       if (results.isEmpty) {
-        return const ShellResult(
-          returnCode: 0,
-          output: "No results found.",
-        );
+        return const ShellResult(returnCode: 0, output: "No results found.");
       }
       return ShellResult(returnCode: 0, output: results);
     } catch (e) {
@@ -62,17 +66,22 @@ class DuckDuckGoSearch extends WebSearch {
       return const ShellResult.failed("The URL is not valid.");
     }
     try {
-      final response = await _http.get(
-        uri,
-        headers: const {
-          "User-Agent": _userAgent,
-          "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-          "Accept-Language": "en-US,en;q=0.5",
-        },
-      ).timeout(timeout);
+      final response = await _http
+          .get(
+            uri,
+            headers: const {
+              "User-Agent": _userAgent,
+              "Accept":
+                  "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+              "Accept-Language": "en-US,en;q=0.5",
+            },
+          )
+          .timeout(timeout);
 
       if (response.statusCode != 200) {
-        return ShellResult.failed("Fetch returned HTTP ${response.statusCode}.");
+        return ShellResult.failed(
+          "Fetch returned HTTP ${response.statusCode}.",
+        );
       }
 
       final text = _extractText(response.body);
@@ -133,7 +142,14 @@ class DuckDuckGoSearch extends WebSearch {
   /// whitespace normalized.
   String _extractText(String html) {
     final doc = parse(html);
-    for (final tag in const ["script", "style", "nav", "header", "footer", "noscript"]) {
+    for (final tag in const [
+      "script",
+      "style",
+      "nav",
+      "header",
+      "footer",
+      "noscript",
+    ]) {
       doc.querySelectorAll(tag).forEach((e) => e.remove());
     }
     final raw = doc.body?.text ?? "";

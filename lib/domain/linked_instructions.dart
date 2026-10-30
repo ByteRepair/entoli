@@ -18,9 +18,9 @@ class LinkedInstructions {
   /// The user's files [project]'s turns read, in reading order: [global]
   /// first, then the linked ones.
   List<String> filesFor(String? project, String global) => [
-        for (final path in [global, ...files])
-          if (isOn(project, path)) path,
-      ];
+    for (final path in [global, ...files])
+      if (isOn(project, path)) path,
+  ];
 
   /// [files] replaced. A path no longer linked loses its switches, other than
   /// [keep]'s, so linking it again starts it on everywhere.
@@ -37,10 +37,11 @@ class LinkedInstructions {
 
   /// [project]'s switched-off [paths] replaced.
   LinkedInstructions withOff(String project, Iterable<String> paths) =>
-      LinkedInstructions(files: files, off: {
-        ...off,
-        project: paths.toList(),
-      }..removeWhere((_, paths) => paths.isEmpty));
+      LinkedInstructions(
+        files: files,
+        off: {...off, project: paths.toList()}
+          ..removeWhere((_, paths) => paths.isEmpty),
+      );
 
   LinkedInstructions withoutProject(String project) => off.containsKey(project)
       ? LinkedInstructions(files: files, off: {...off}..remove(project))
@@ -55,7 +56,11 @@ class LinkedInstructions {
         off: {
           for (final MapEntry(:key, :value)
               in (json["off"] as Map<String, dynamic>? ?? const {}).entries)
-            if (value is List) key: [for (final p in value) if (p is String) p],
+            if (value is List)
+              key: [
+                for (final p in value)
+                  if (p is String) p,
+              ],
         },
       );
 

@@ -23,7 +23,10 @@ class PairedProjectBadges extends ConsumerWidget {
     final peers = ref.watch(syncPeersProvider);
     final selected = ref.watch(selectedProjectProvider);
     final entries = remoteEntries(
-        ref.watch(remoteChatsProvider), ref.watch(deviceProjectsProvider), peers);
+      ref.watch(remoteChatsProvider),
+      ref.watch(deviceProjectsProvider),
+      peers,
+    );
     final devices = {for (final e in entries) e.scope.device!};
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -41,10 +44,15 @@ class PairedProjectBadges extends ConsumerWidget {
                   ChipRowEntry(
                     key: ValueKey(entry.scope),
                     child: ChoiceChip(
-                      label: ProjectChipLabel(entry.scope.project, omada: entry.omada),
+                      label: ProjectChipLabel(
+                        entry.scope.project,
+                        omada: entry.omada,
+                      ),
                       selected: entry.scope == selected,
-                      onSelected: (on) =>
-                          selectProject(ref, on ? entry.scope : localProject(null)),
+                      onSelected: (on) => selectProject(
+                        ref,
+                        on ? entry.scope : localProject(null),
+                      ),
                     ),
                   ),
             ],
@@ -69,17 +77,17 @@ class ProjectChipLabel extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) => Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (projectIcon(project) case final icon?)
-            Padding(
-              padding: const EdgeInsets.only(right: 6),
-              child: Icon(icon, size: 18),
-            ),
-          Text(
-            projectLabel(project),
-            style: projectLabelStyle(omada ?? ref.watch(omadaOnProvider(project))),
-          ),
-        ],
-      );
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      if (projectIcon(project) case final icon?)
+        Padding(
+          padding: const EdgeInsets.only(right: 6),
+          child: Icon(icon, size: 18),
+        ),
+      Text(
+        projectLabel(project),
+        style: projectLabelStyle(omada ?? ref.watch(omadaOnProvider(project))),
+      ),
+    ],
+  );
 }

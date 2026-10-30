@@ -179,7 +179,8 @@ class ComposerState extends ConsumerState<Composer> {
     _canSend.value = canSend;
     // Only asked with something typed: the room composes a message to answer,
     // and a streaming reply rebuilds this page every frame.
-    _queues.value = canSend &&
+    _queues.value =
+        canSend &&
         widget.agentSpeaking &&
         widget.onQueue != null &&
         (widget.steers?.call(widget.controller.text) ?? false);
@@ -204,9 +205,11 @@ class ComposerState extends ConsumerState<Composer> {
     if (bytes == null) return;
     final name = Uri.tryParse(content.uri)?.pathSegments.lastOrNull;
     _add([
-      pastedAttachment(bytes,
-          name: name == null || name.isEmpty ? null : name,
-          declared: content.mimeType),
+      pastedAttachment(
+        bytes,
+        name: name == null || name.isEmpty ? null : name,
+        declared: content.mimeType,
+      ),
     ]);
   }
 
@@ -221,8 +224,9 @@ class ComposerState extends ConsumerState<Composer> {
   void restore(Draft said) {
     final (:text, :attachments) = said;
     final typed = widget.controller.text;
-    widget.controller.text =
-        typed.isEmpty || text.isEmpty ? "$text$typed" : "$text\n$typed";
+    widget.controller.text = typed.isEmpty || text.isEmpty
+        ? "$text$typed"
+        : "$text\n$typed";
     setState(() => _attachments.insertAll(0, attachments));
     _refresh();
   }
@@ -249,7 +253,9 @@ class ComposerState extends ConsumerState<Composer> {
     return Container(
       decoration: BoxDecoration(
         color: theme.colorScheme.surface,
-        border: Border(top: BorderSide(color: theme.colorScheme.outlineVariant)),
+        border: Border(
+          top: BorderSide(color: theme.colorScheme.outlineVariant),
+        ),
       ),
       child: SafeArea(
         top: false,
@@ -267,21 +273,28 @@ class ComposerState extends ConsumerState<Composer> {
           decoration: _shell
               ? _shellField(theme)
               : _wired
-                  ? _wiredField(theme)
-                  : _messageField,
+              ? _wiredField(theme)
+              : _messageField,
           shortcuts: const {
-            SingleActivator(LogicalKeyboardKey.enter, control: true): _SendIntent(),
-            SingleActivator(LogicalKeyboardKey.enter, meta: true): _SendIntent(),
-            SingleActivator(LogicalKeyboardKey.enter, alt: true): _QueueIntent(),
+            SingleActivator(LogicalKeyboardKey.enter, control: true):
+                _SendIntent(),
+            SingleActivator(LogicalKeyboardKey.enter, meta: true):
+                _SendIntent(),
+            SingleActivator(LogicalKeyboardKey.enter, alt: true):
+                _QueueIntent(),
           },
           actions: {
             PasteTextIntent: _PasteAction(_pasteFiles),
-            _SendIntent: CallbackAction<_SendIntent>(onInvoke: (_) => _submit()),
+            _SendIntent: CallbackAction<_SendIntent>(
+              onInvoke: (_) => _submit(),
+            ),
             _QueueIntent: CallbackAction<_QueueIntent>(
-                onInvoke: (_) => _submit(queue: true)),
+              onInvoke: (_) => _submit(queue: true),
+            ),
           },
-          contentInsertionConfiguration:
-              ContentInsertionConfiguration(onContentInserted: _inserted),
+          contentInsertionConfiguration: ContentInsertionConfiguration(
+            onContentInserted: _inserted,
+          ),
           // The menu spans the composer rather than the field, so what it
           // offers is not squeezed by the buttons either side.
           layout: (menu, field) => Column(
@@ -295,7 +308,8 @@ class ComposerState extends ConsumerState<Composer> {
                     for (final (i, attachment) in _attachments.indexed)
                       AttachmentChip.pending(
                         attachment,
-                        onRemove: () => setState(() => _attachments.removeAt(i)),
+                        onRemove: () =>
+                            setState(() => _attachments.removeAt(i)),
                       ),
                   ],
                 ),
@@ -308,8 +322,16 @@ class ComposerState extends ConsumerState<Composer> {
                     tooltip: "Attach or insert",
                     onSelected: (action) => action(),
                     itemBuilder: (context) => [
-                      _attachItem(Icons.image_outlined, "Image", AttachmentKind.image),
-                      _attachItem(Icons.attach_file, "File", AttachmentKind.file),
+                      _attachItem(
+                        Icons.image_outlined,
+                        "Image",
+                        AttachmentKind.image,
+                      ),
+                      _attachItem(
+                        Icons.attach_file,
+                        "File",
+                        AttachmentKind.file,
+                      ),
                       const PopupMenuDivider(),
                       ...completionInsertItems(context, _field),
                     ],
@@ -337,7 +359,10 @@ class ComposerState extends ConsumerState<Composer> {
                     builder: (context, canSend, child) => AnimatedSize(
                       duration: const Duration(milliseconds: 180),
                       curve: Curves.easeOut,
-                      child: widget.onVoice == null || widget.agentSpeaking || canSend
+                      child:
+                          widget.onVoice == null ||
+                              widget.agentSpeaking ||
+                              canSend
                           ? const SizedBox.shrink()
                           : child,
                     ),
@@ -369,29 +394,30 @@ class ComposerState extends ConsumerState<Composer> {
                   // only names which of the two is on offer.
                   ListenableBuilder(
                     listenable: _sendState,
-                    builder: (context, _) => widget.agentSpeaking &&
-                            !_canSend.value
+                    builder: (context, _) =>
+                        widget.agentSpeaking && !_canSend.value
                         ? IconButton.filled(
                             onPressed: widget.onAbort,
                             icon: const Icon(Icons.stop),
                             tooltip: "Stop",
                           )
-                         : IconButton.filled(
-                             onPressed: _canSend.value ? _submit : null,
-                             icon: Icon(
-                                 _shell
-                                     ? Icons.play_arrow
-                                     : _wired
-                                         ? Icons.auto_awesome
-                                         : Icons.send),
-                             tooltip: _shell
-                                 ? "Run"
-                                 : _wired
-                                     ? "Compact"
-                                     : _queues.value
-                                         ? "Send now, read at its next step"
-                                         : "Send",
-                           ),
+                        : IconButton.filled(
+                            onPressed: _canSend.value ? _submit : null,
+                            icon: Icon(
+                              _shell
+                                  ? Icons.play_arrow
+                                  : _wired
+                                  ? Icons.auto_awesome
+                                  : Icons.send,
+                            ),
+                            tooltip: _shell
+                                ? "Run"
+                                : _wired
+                                ? "Compact"
+                                : _queues.value
+                                ? "Send now, read at its next step"
+                                : "Send",
+                          ),
                   ),
                 ],
               ),
@@ -412,13 +438,15 @@ class ComposerState extends ConsumerState<Composer> {
   /// which is exactly while a command is being typed.
   InputDecoration _shellField(ThemeData theme) {
     OutlineInputBorder outline(double width) => OutlineInputBorder(
-          borderSide:
-              BorderSide(color: theme.colorScheme.tertiary, width: width),
-        );
+      borderSide: BorderSide(color: theme.colorScheme.tertiary, width: width),
+    );
     return _messageField.copyWith(
       hintText: "Shell command",
-      prefixIcon:
-          Icon(Icons.terminal, size: 18, color: theme.colorScheme.tertiary),
+      prefixIcon: Icon(
+        Icons.terminal,
+        size: 18,
+        color: theme.colorScheme.tertiary,
+      ),
       filled: true,
       fillColor: theme.colorScheme.surfaceContainerHighest,
       enabledBorder: outline(1),
@@ -430,10 +458,13 @@ class ComposerState extends ConsumerState<Composer> {
   /// callback is not sent to a model and runs nothing on the machine — the
   /// command's dressing would say more than is true.
   InputDecoration _wiredField(ThemeData theme) => _messageField.copyWith(
-        hintText: "Compact the conversation",
-        prefixIcon: Icon(Icons.auto_awesome,
-            size: 18, color: theme.colorScheme.primary),
-      );
+    hintText: "Compact the conversation",
+    prefixIcon: Icon(
+      Icons.auto_awesome,
+      size: 18,
+      color: theme.colorScheme.primary,
+    ),
+  );
 
   /// Where a `!` command is about to run: the shell's own directory, live,
   /// since a `cd` in an earlier one moved it. The completion menu's dressing,
@@ -441,8 +472,12 @@ class ComposerState extends ConsumerState<Composer> {
   Widget _cwdBar(ThemeData theme) {
     final workspace = widget.workspace;
     if (workspace == null) return const SizedBox.shrink();
-    final notifier = ref.watch(chatShellCwdProvider(
-        (workspace: workspace, workspaceHome: widget.workspaceHome)));
+    final notifier = ref.watch(
+      chatShellCwdProvider((
+        workspace: workspace,
+        workspaceHome: widget.workspaceHome,
+      )),
+    );
     // What stands in for the shell having said nothing yet, in the row's own
     // words: the guest's vocabulary where this shell has one, so a chat
     // reopened before its next command says where the command will run and
@@ -455,40 +490,46 @@ class ComposerState extends ConsumerState<Composer> {
           : workspace;
     }();
     Widget row(String? live) => Container(
-          margin: const EdgeInsets.only(bottom: 8),
-          constraints: const BoxConstraints(minHeight: 32),
-          decoration: BoxDecoration(
-            color: theme.colorScheme.surfaceContainerHighest,
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: theme.colorScheme.outlineVariant),
-          ),
-          clipBehavior: Clip.antiAlias,
-          child: InkWell(
-            onTap: () => copyToClipboard(context, live ?? fallback,
-                said: "Copied working directory"),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              child: Row(
-                children: [
-                  Icon(Icons.terminal,
-                      size: 14, color: theme.colorScheme.onSurfaceVariant),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      live ?? fallback,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        fontFamily: monoFamily,
-                        color: theme.colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                  ),
-                ],
+      margin: const EdgeInsets.only(bottom: 8),
+      constraints: const BoxConstraints(minHeight: 32),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: theme.colorScheme.outlineVariant),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: () => copyToClipboard(
+          context,
+          live ?? fallback,
+          said: "Copied working directory",
+        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          child: Row(
+            children: [
+              Icon(
+                Icons.terminal,
+                size: 14,
+                color: theme.colorScheme.onSurfaceVariant,
               ),
-            ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  live ?? fallback,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    fontFamily: monoFamily,
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ),
+            ],
           ),
-        );
+        ),
+      ),
+    );
     if (notifier == null) return row(null);
     return ValueListenableBuilder<String?>(
       valueListenable: notifier,
@@ -496,11 +537,14 @@ class ComposerState extends ConsumerState<Composer> {
     );
   }
 
-  PopupMenuItem<VoidCallback> _attachItem(IconData icon, String label, AttachmentKind kind) =>
-      PopupMenuItem(
-        value: () => _attach(kind),
-        child: Row(
-          children: [Icon(icon, size: 18), const SizedBox(width: 12), Text(label)],
-        ),
-      );
+  PopupMenuItem<VoidCallback> _attachItem(
+    IconData icon,
+    String label,
+    AttachmentKind kind,
+  ) => PopupMenuItem(
+    value: () => _attach(kind),
+    child: Row(
+      children: [Icon(icon, size: 18), const SizedBox(width: 12), Text(label)],
+    ),
+  );
 }

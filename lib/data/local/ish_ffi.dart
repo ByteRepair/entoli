@@ -17,46 +17,50 @@ import "package:ffi/ffi.dart";
 typedef IshSessionPtr = Pointer<Void>;
 
 // Function pointer types for the bridge entry points.
-typedef IshInitC = Pointer<Void> Function(
-    Pointer<Utf8> rootfsDir,
-    Pointer<Utf8> dataDir,
-    Pointer<Utf8> home,
-    Pointer<Utf8> cwd,
-    Pointer<Utf8> dispatcher,
-    Pointer<Utf8> token,
-    Pointer<Pointer<Utf8>> env,
-    Int32 envCount,
-    Pointer<Pointer<Utf8>> readOnly,
-    Int32 readOnlyCount,
-    Pointer<Pointer<Utf8>> error);
-typedef IshInitDart = IshSessionPtr Function(
-    Pointer<Utf8> rootfsDir,
-    Pointer<Utf8> dataDir,
-    Pointer<Utf8> home,
-    Pointer<Utf8> cwd,
-    Pointer<Utf8> dispatcher,
-    Pointer<Utf8> token,
-    Pointer<Pointer<Utf8>> env,
-    int envCount,
-    Pointer<Pointer<Utf8>> readOnly,
-    int readOnlyCount,
-    Pointer<Pointer<Utf8>> error);
+typedef IshInitC =
+    Pointer<Void> Function(
+      Pointer<Utf8> rootfsDir,
+      Pointer<Utf8> dataDir,
+      Pointer<Utf8> home,
+      Pointer<Utf8> cwd,
+      Pointer<Utf8> dispatcher,
+      Pointer<Utf8> token,
+      Pointer<Pointer<Utf8>> env,
+      Int32 envCount,
+      Pointer<Pointer<Utf8>> readOnly,
+      Int32 readOnlyCount,
+      Pointer<Pointer<Utf8>> error,
+    );
+typedef IshInitDart =
+    IshSessionPtr Function(
+      Pointer<Utf8> rootfsDir,
+      Pointer<Utf8> dataDir,
+      Pointer<Utf8> home,
+      Pointer<Utf8> cwd,
+      Pointer<Utf8> dispatcher,
+      Pointer<Utf8> token,
+      Pointer<Pointer<Utf8>> env,
+      int envCount,
+      Pointer<Pointer<Utf8>> readOnly,
+      int readOnlyCount,
+      Pointer<Pointer<Utf8>> error,
+    );
 
 typedef IshDrainWakeC = Void Function(IshSessionPtr session);
 typedef IshDrainWakeDart = void Function(IshSessionPtr session);
 
-typedef IshWriteStdinC = Void Function(
-    IshSessionPtr session, Pointer<Utf8> scriptB64);
-typedef IshWriteStdinDart = void Function(
-    IshSessionPtr session, Pointer<Utf8> scriptB64);
+typedef IshWriteStdinC =
+    Void Function(IshSessionPtr session, Pointer<Utf8> scriptB64);
+typedef IshWriteStdinDart =
+    void Function(IshSessionPtr session, Pointer<Utf8> scriptB64);
 
 typedef IshPollC = Int32 Function(IshSessionPtr session);
 typedef IshPollDart = int Function(IshSessionPtr session);
 
-typedef IshReadC = Int32 Function(
-    IshSessionPtr session, Pointer<Uint8> buf, Int32 cap);
-typedef IshReadDart = int Function(
-    IshSessionPtr session, Pointer<Uint8> buf, int cap);
+typedef IshReadC =
+    Int32 Function(IshSessionPtr session, Pointer<Uint8> buf, Int32 cap);
+typedef IshReadDart =
+    int Function(IshSessionPtr session, Pointer<Uint8> buf, int cap);
 
 typedef IshInterruptC = Void Function(IshSessionPtr session);
 typedef IshInterruptDart = void Function(IshSessionPtr session);
@@ -67,8 +71,10 @@ typedef IshHangupDart = void Function(IshSessionPtr session);
 typedef IshDestroyC = Void Function(IshSessionPtr session);
 typedef IshDestroyDart = void Function(IshSessionPtr session);
 
-typedef IshFakefsifyC = Int32 Function(Pointer<Utf8> archive, Pointer<Utf8> into);
-typedef IshFakefsifyDart = int Function(Pointer<Utf8> archive, Pointer<Utf8> into);
+typedef IshFakefsifyC =
+    Int32 Function(Pointer<Utf8> archive, Pointer<Utf8> into);
+typedef IshFakefsifyDart =
+    int Function(Pointer<Utf8> archive, Pointer<Utf8> into);
 
 // The lazy lookups. Null until first use, and only ever resolved on iOS.
 IshInitDart? _initFn;
@@ -90,19 +96,25 @@ void _resolve() {
   final lib = DynamicLibrary.process();
   _initFn = lib.lookupFunction<IshInitC, IshInitDart>("ish_session_init");
   _drainWakeFn = lib.lookupFunction<IshDrainWakeC, IshDrainWakeDart>(
-      "ish_session_drain_wake");
+    "ish_session_drain_wake",
+  );
   _writeStdinFn = lib.lookupFunction<IshWriteStdinC, IshWriteStdinDart>(
-      "ish_session_write_stdin");
+    "ish_session_write_stdin",
+  );
   _pollFn = lib.lookupFunction<IshPollC, IshPollDart>("ish_session_poll");
   _readFn = lib.lookupFunction<IshReadC, IshReadDart>("ish_session_read");
-  _interruptFn =
-      lib.lookupFunction<IshInterruptC, IshInterruptDart>("ish_session_interrupt");
-  _hangupFn =
-      lib.lookupFunction<IshHangupC, IshHangupDart>("ish_session_hangup");
-  _destroyFn =
-      lib.lookupFunction<IshDestroyC, IshDestroyDart>("ish_session_destroy");
-  _fakefsifyFn =
-      lib.lookupFunction<IshFakefsifyC, IshFakefsifyDart>("ish_fakefsify");
+  _interruptFn = lib.lookupFunction<IshInterruptC, IshInterruptDart>(
+    "ish_session_interrupt",
+  );
+  _hangupFn = lib.lookupFunction<IshHangupC, IshHangupDart>(
+    "ish_session_hangup",
+  );
+  _destroyFn = lib.lookupFunction<IshDestroyC, IshDestroyDart>(
+    "ish_session_destroy",
+  );
+  _fakefsifyFn = lib.lookupFunction<IshFakefsifyC, IshFakefsifyDart>(
+    "ish_fakefsify",
+  );
 }
 
 /// Whether the iSH bridge is linked into this build. Only iOS, where the

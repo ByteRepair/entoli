@@ -60,12 +60,18 @@ RenderParagraph? paragraphOf(
   SelectedContentRange range,
 ) {
   final transform = selectable.getTransformTo(null);
-  final start = range.startOffset < range.endOffset ? range.startOffset : range.endOffset;
+  final start = range.startOffset < range.endOffset
+      ? range.startOffset
+      : range.endOffset;
   final end = start + selected.length;
   for (final paragraph in paragraphs) {
-    if (!paragraph.attached || paragraph.getTransformTo(null) != transform) continue;
+    if (!paragraph.attached || paragraph.getTransformTo(null) != transform) {
+      continue;
+    }
     final text = paragraph.text.toPlainText(includeSemanticsLabels: false);
-    if (end <= text.length && text.substring(start, end) == selected) return paragraph;
+    if (end <= text.length && text.substring(start, end) == selected) {
+      return paragraph;
+    }
   }
   return null;
 }
@@ -94,8 +100,13 @@ String selectionHtml(List<SelectedPiece> pieces, RenderedOutline outline) {
     final piece = pieces[i];
     final paragraph = piece.paragraph;
     final fullText = paragraph?.text.toPlainText(includeSemanticsLabels: false);
-    var block = (fullText == null ? null : outline.blockOf(fullText)) ??
-        RenderedBlock(piece.monospace || isMonospace(paragraph) ? BlockKind.code : BlockKind.paragraph);
+    var block =
+        (fullText == null ? null : outline.blockOf(fullText)) ??
+        RenderedBlock(
+          piece.monospace || isMonospace(paragraph)
+              ? BlockKind.code
+              : BlockKind.paragraph,
+        );
     // An item picked up from the middle is its words, not an item: the bullet
     // was not part of what was selected.
     if (block.kind == BlockKind.listItem && piece.start > 0) {
@@ -119,7 +130,9 @@ String selectionHtml(List<SelectedPiece> pieces, RenderedOutline outline) {
     }
     // Closed before this block is written, or it lands inside them.
     if (block.kind != BlockKind.listItem) closeList();
-    if (block.kind != BlockKind.cell && block.kind != BlockKind.headerCell) closeTable();
+    if (block.kind != BlockKind.cell && block.kind != BlockKind.headerCell) {
+      closeTable();
+    }
     switch (block.kind) {
       case BlockKind.cell || BlockKind.headerCell:
         if (!table) out.write(_open("table"));
@@ -134,9 +147,11 @@ String selectionHtml(List<SelectedPiece> pieces, RenderedOutline outline) {
         final tag = block.ordered ? "ol" : "ul";
         if (list != tag) {
           closeList();
-          out.write(block.ordered && block.number != 1
-              ? '<ol start="${block.number}">'
-              : "<$tag>");
+          out.write(
+            block.ordered && block.number != 1
+                ? '<ol start="${block.number}">'
+                : "<$tag>",
+          );
           list = tag;
         }
         out.write("<li>$inline</li>");
@@ -154,7 +169,8 @@ String selectionHtml(List<SelectedPiece> pieces, RenderedOutline outline) {
   return out.toString();
 }
 
-String _open(String tag) => '<$tag style="${escapeHtmlAttribute(htmlTagStyles[tag]!)}">';
+String _open(String tag) =>
+    '<$tag style="${escapeHtmlAttribute(htmlTagStyles[tag]!)}">';
 
 /// Every word of [paragraph] is in the code face. The root span is the
 /// ambient style, so it is the words that are asked.
@@ -181,7 +197,11 @@ bool isMonospace(RenderParagraph? paragraph) {
 /// The piece's range of its paragraph, each run of text in the tags its style
 /// draws it with. Runs that share their tags share them in the HTML too, so a
 /// highlighted code block is one block of text rather than a span per token.
-String _inline(SelectedPiece piece, RenderedBlock block, RenderedOutline outline) {
+String _inline(
+  SelectedPiece piece,
+  RenderedBlock block,
+  RenderedOutline outline,
+) {
   final paragraph = piece.paragraph;
   final code = block.kind == BlockKind.code;
   if (paragraph == null) return _text(piece.text, code: code);
@@ -206,7 +226,11 @@ String _inline(SelectedPiece piece, RenderedBlock block, RenderedOutline outline
             when last.tags == tags && last.href == href) {
           last.text.write(text.substring(from, to));
         } else {
-          runs.add((tags: tags, href: href, text: StringBuffer(text.substring(from, to))));
+          runs.add((
+            tags: tags,
+            href: href,
+            text: StringBuffer(text.substring(from, to)),
+          ));
         }
       }
     }
@@ -219,7 +243,9 @@ String _inline(SelectedPiece piece, RenderedBlock block, RenderedOutline outline
   final out = StringBuffer();
   for (final run in runs) {
     final tags = run.tags.isEmpty ? const <String>[] : run.tags.split(",");
-    if (run.href != null) out.write('<a href="${escapeHtmlAttribute(run.href!)}">');
+    if (run.href != null) {
+      out.write('<a href="${escapeHtmlAttribute(run.href!)}">');
+    }
     for (final tag in tags) {
       out.write(tag == "code" ? _open("code") : "<$tag>");
     }

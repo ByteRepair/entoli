@@ -7,16 +7,19 @@ void main() {
   final now = DateTime(2026, 8, 17, 14, 30);
 
   ChatState chat(String title, DateTime updatedAt) => ChatState(
-        id: title,
-        title: title,
-        createdAt: DateTime(2026),
-        updatedAt: updatedAt,
-      );
+    id: title,
+    title: title,
+    createdAt: DateTime(2026),
+    updatedAt: updatedAt,
+  );
 
   /// A pinned chat, which is the one shape `groupChatsByDate` reads the flag
   /// from. Defaults to "now" so it lands at the top of the Pinned group.
-  ChatState pinnedChat(String title, {DateTime? updatedAt, bool pinned = true}) =>
-      chat(title, updatedAt ?? now).copyWith(pinned: pinned);
+  ChatState pinnedChat(
+    String title, {
+    DateTime? updatedAt,
+    bool pinned = true,
+  }) => chat(title, updatedAt ?? now).copyWith(pinned: pinned);
 
   /// The headings in the order they are drawn, which is the order the chats
   /// come in rather than a rank of their own.
@@ -57,18 +60,26 @@ void main() {
 
     // The month alone would put August 2025 and August 2026 under one heading.
     test("a month of another year carries the year", () {
-      expect(headingsOf([chat("last summer", DateTime(2025, 8, 20))]), ["August 2025"]);
+      expect(headingsOf([chat("last summer", DateTime(2025, 8, 20))]), [
+        "August 2025",
+      ]);
     });
 
     // Boundaries: a day counted wrong is a chat under the wrong heading, and
     // the six-and-seven pair is where the weeks give way to the month.
     test("six days back is the week and seven is the month", () {
-      expect(headingsOf([chat("six", DateTime(2026, 8, 11))]), ["Previous 7 days"]);
-      expect(headingsOf([chat("seven", DateTime(2026, 8, 10))]), ["Previous 30 days"]);
+      expect(headingsOf([chat("six", DateTime(2026, 8, 11))]), [
+        "Previous 7 days",
+      ]);
+      expect(headingsOf([chat("seven", DateTime(2026, 8, 10))]), [
+        "Previous 30 days",
+      ]);
     });
 
     test("a chat dated in the future is today rather than nowhere", () {
-      expect(headingsOf([chat("tomorrow", now.add(const Duration(days: 1)))]), ["Today"]);
+      expect(headingsOf([chat("tomorrow", now.add(const Duration(days: 1)))]), [
+        "Today",
+      ]);
     });
 
     test("nothing groups to nothing", () {
@@ -124,10 +135,10 @@ void main() {
     ];
 
     test("matches part of a title, whatever the case", () {
-      expect(
-        chatsMatching(chats, "SHELL").map((c) => c.title),
-        ["Porting the shell", "Shelling out"],
-      );
+      expect(chatsMatching(chats, "SHELL").map((c) => c.title), [
+        "Porting the shell",
+        "Shelling out",
+      ]);
     });
 
     test("an empty query, or one of spaces, keeps everything", () {

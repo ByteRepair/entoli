@@ -21,7 +21,8 @@ abstract class Downloads<T> extends Notifier<DownloadState> {
   /// What is in flight, by id, and the item each one is — kept beside its
   /// subscription rather than looked up again, since the notification needs the
   /// name of something [install] was handed three lines earlier.
-  final _running = <String, ({T item, StreamSubscription<DownloadProgress> sub})>{};
+  final _running =
+      <String, ({T item, StreamSubscription<DownloadProgress> sub})>{};
 
   /// The id [item] is filed under, which is what a row and a notice find each
   /// other by.
@@ -98,7 +99,10 @@ abstract class Downloads<T> extends Notifier<DownloadState> {
       ),
     );
     _publish(
-      active: {...state.active, id: DownloadProgress(received: 0, total: download.bytes)},
+      active: {
+        ...state.active,
+        id: DownloadProgress(received: 0, total: download.bytes),
+      },
       failures: {...state.failures}..remove(id),
     );
   }

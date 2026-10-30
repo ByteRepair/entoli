@@ -45,8 +45,9 @@ void main() {
         find.byType(FloatingPosition).at(index),
       );
 
-  testWidgets("appears where the wrap put it, with nothing to glide from",
-      (tester) async {
+  testWidgets("appears where the wrap put it, with nothing to glide from", (
+    tester,
+  ) async {
     // 208 of chips in a 300 row: 46 of leading space either side.
     await pumpChips(tester, [100, 100]);
 
@@ -69,8 +70,9 @@ void main() {
     expect(renderOf(tester, 1).paintedOffset, const Offset(170, 0));
   });
 
-  testWidgets("a push onto the next line glides down as well as across",
-      (tester) async {
+  testWidgets("a push onto the next line glides down as well as across", (
+    tester,
+  ) async {
     // 208 in a 250 row: both on one line, the second at 129.
     await pumpChips(tester, [100, 100], width: 250);
     // The first chip grows past what the line holds, so the second one is
@@ -131,9 +133,7 @@ void main() {
     await tester.pumpAndSettle(const Duration(milliseconds: 16));
     final settled = renderOf(tester, 1).paintedOffset;
     final origin = tester.getTopLeft(find.byType(TextButton));
-    await tester.tapAt(
-      origin + (painted - settled) + const Offset(50, 20),
-    );
+    await tester.tapAt(origin + (painted - settled) + const Offset(50, 20));
     expect(pressed, isTrue);
   });
 }

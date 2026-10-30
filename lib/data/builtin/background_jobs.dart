@@ -55,8 +55,9 @@ class ChatJobs implements ChatShellJobs {
   final _notes = <String>[];
   // Synchronous, so a listener has the end before the list drops the job: the
   // chat never reads a job as neither running nor ended.
-  final _ended =
-      StreamController<({String callId, JobEnd end})>.broadcast(sync: true);
+  final _ended = StreamController<({String callId, JobEnd end})>.broadcast(
+    sync: true,
+  );
 
   @override
   Stream<({String callId, JobEnd end})> get ended => _ended.stream;
@@ -67,10 +68,12 @@ class ChatJobs implements ChatShellJobs {
 
   /// Start [command] as the next job for the call [callId], [spawn] running
   /// the script it is wrapped in from [workspace], where its log lands.
-  Future<ShellJob> start(String command,
-      {required String callId,
-      required String workspace,
-      required ShellRun Function(String script) spawn}) async {
+  Future<ShellJob> start(
+    String command, {
+    required String callId,
+    required String workspace,
+    required ShellRun Function(String script) spawn,
+  }) async {
     final id = ++_count;
     final run = spawn(backgroundScript(callId, command));
     _runs[id] = run;
@@ -107,7 +110,10 @@ class ChatJobs implements ChatShellJobs {
         ),
       ));
     }
-    jobs.value = [for (final j in jobs.value) if (j.id != job.id) j];
+    jobs.value = [
+      for (final j in jobs.value)
+        if (j.id != job.id) j,
+    ];
   }
 
   /// How the jobs that ended since the last call ended, once each.
@@ -123,8 +129,10 @@ class ChatJobs implements ChatShellJobs {
   static const _tailBytes = 32 * 1024;
 
   @override
-  Stream<String> log(ShellJob job,
-      {Duration every = const Duration(milliseconds: 500)}) {
+  Stream<String> log(
+    ShellJob job, {
+    Duration every = const Duration(milliseconds: 500),
+  }) {
     final file = File(job.logPath);
     late final StreamController<String> out;
     Timer? timer;

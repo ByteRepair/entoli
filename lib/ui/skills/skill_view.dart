@@ -58,15 +58,17 @@ class _SkillViewPageState extends ConsumerState<SkillViewPage> {
 
   Future<void> _load() async {
     final config = ref.read(appConfigProvider);
-    final entries = await skillSourceEntries(config, widget.name,
-        project: widget.project);
+    final entries = await skillSourceEntries(
+      config,
+      widget.name,
+      project: widget.project,
+    );
     if (!mounted) return;
     var problems = const <String>[];
     var otherFiles = const <(String, Uint8List)>[];
     Frontmatter? parsed;
     if (entries != null) {
-      final skillMd =
-          entries.where((e) => e.$1 == "SKILL.md").firstOrNull;
+      final skillMd = entries.where((e) => e.$1 == "SKILL.md").firstOrNull;
       if (skillMd != null) {
         parsed = Frontmatter.parse(utf8.decode(skillMd.$2));
         problems = skillProblems(
@@ -76,9 +78,7 @@ class _SkillViewPageState extends ConsumerState<SkillViewPage> {
           folderName: widget.name,
         );
       }
-      otherFiles = entries
-          .where((e) => e.$1 != "SKILL.md")
-          .toList()
+      otherFiles = entries.where((e) => e.$1 != "SKILL.md").toList()
         ..sort((a, b) => a.$1.compareTo(b.$1));
     }
     setState(() {
@@ -123,7 +123,10 @@ class _SkillViewPageState extends ConsumerState<SkillViewPage> {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          Text("${widget.origin} · ${widget.name}", style: theme.textTheme.bodySmall),
+          Text(
+            "${widget.origin} · ${widget.name}",
+            style: theme.textTheme.bodySmall,
+          ),
           if (parsed != null) ...[
             if (parsed.description case final description?) ...[
               const SizedBox(height: 4),
@@ -147,8 +150,10 @@ class _SkillViewPageState extends ConsumerState<SkillViewPage> {
             for (final entry in parsed.metadata.entries)
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 2),
-                child: Text("${entry.key}: ${entry.value}",
-                    style: theme.textTheme.bodySmall),
+                child: Text(
+                  "${entry.key}: ${entry.value}",
+                  style: theme.textTheme.bodySmall,
+                ),
               ),
           ],
           const SizedBox(height: 24),
@@ -168,10 +173,7 @@ class _SkillViewPageState extends ConsumerState<SkillViewPage> {
             ),
           if (_otherFiles.isNotEmpty) ...[
             const SizedBox(height: 24),
-            PackageFileList(
-              entries: _otherFiles,
-              sizeOf: formatSize,
-            ),
+            PackageFileList(entries: _otherFiles, sizeOf: formatSize),
           ],
         ],
       ),
@@ -219,14 +221,18 @@ class _ProblemsCard extends StatelessWidget {
         children: [
           Row(
             children: [
-              Icon(Icons.warning_amber_rounded,
-                  size: 20, color: theme.colorScheme.onErrorContainer),
+              Icon(
+                Icons.warning_amber_rounded,
+                size: 20,
+                color: theme.colorScheme.onErrorContainer,
+              ),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
                   "Not loaded — does not conform to the Agent Skills spec",
-                  style: theme.textTheme.titleSmall
-                      ?.copyWith(color: theme.colorScheme.onErrorContainer),
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    color: theme.colorScheme.onErrorContainer,
+                  ),
                 ),
               ),
             ],
@@ -235,15 +241,19 @@ class _ProblemsCard extends StatelessWidget {
           for (final problem in problems)
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 2),
-              child: Text("• $problem",
-                  style: theme.textTheme.bodySmall
-                      ?.copyWith(color: theme.colorScheme.onErrorContainer)),
+              child: Text(
+                "• $problem",
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onErrorContainer,
+                ),
+              ),
             ),
           const SizedBox(height: 8),
           Text(
             "Fix the SKILL.md and import the skill again.",
-            style: theme.textTheme.bodySmall
-                ?.copyWith(color: theme.colorScheme.onErrorContainer),
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onErrorContainer,
+            ),
           ),
         ],
       ),

@@ -28,22 +28,24 @@ void main() {
   );
   const migrate = AskQuestion(
     question: "Migrate the old rows?",
-    options: [AskOption(label: "Yes"), AskOption(label: "No")],
+    options: [
+      AskOption(label: "Yes"),
+      AskOption(label: "No"),
+    ],
   );
 
   Future<String> asking(
     WidgetTester tester,
     AskRequest asked, {
     EdgeInsets bars = EdgeInsets.zero,
-  }) =>
-      heldTurn(
-        tester,
-        app,
-        event: QuestionRequestEvent(asked),
-        until: find.byType(QuestionPanel),
-        prompt: "set up storage",
-        bars: bars,
-      );
+  }) => heldTurn(
+    tester,
+    app,
+    event: QuestionRequestEvent(asked),
+    until: find.byType(QuestionPanel),
+    prompt: "set up storage",
+    bars: bars,
+  );
 
   /// Let the held turn finish — the composer goes back to offering `send` when
   /// it has.
@@ -65,8 +67,9 @@ void main() {
 
   // `Question 1 of 1` over a single segment, with two arrows that can only be
   // dead, is the `1/1` the thread counter leaves out for the same reason.
-  testWidgets("one question is not counted, and has nowhere to move",
-      (tester) async {
+  testWidgets("one question is not counted, and has nowhere to move", (
+    tester,
+  ) async {
     await asking(tester, request([database]));
 
     expect(find.text("Question 1 of 1"), findsNothing);
@@ -75,8 +78,9 @@ void main() {
     expect(find.text("Skip"), findsOneWidget);
   });
 
-  testWidgets("the bar counts the questions, and picking one moves on",
-      (tester) async {
+  testWidgets("the bar counts the questions, and picking one moves on", (
+    tester,
+  ) async {
     await asking(tester, request([database, migrate]));
     expect(find.text("Question 1 of 2"), findsOneWidget);
 
@@ -91,8 +95,9 @@ void main() {
 
   // Picking the last option used to submit the lot, which left no moment in
   // which an answer already given could be looked at again.
-  testWidgets("answering every question sends nothing until Send is pressed",
-      (tester) async {
+  testWidgets("answering every question sends nothing until Send is pressed", (
+    tester,
+  ) async {
     final id = await asking(tester, request([database, migrate]));
 
     await tester.tap(find.text("SQLite"));
@@ -108,9 +113,14 @@ void main() {
     // The option's own value, not the label it was read under.
     expect(app.backend.answered.single.requestId, "ask-1");
     expect(app.backend.answered.single.answers, ["sqlite", "No"]);
-    expect(app.container.read(chatControllerProvider(id)).questions.values
-            .every((q) => q.isEmpty),
-        isTrue);
+    expect(
+      app.container
+          .read(chatControllerProvider(id))
+          .questions
+          .values
+          .every((q) => q.isEmpty),
+      isTrue,
+    );
     expect(find.byType(QuestionPanel), findsNothing);
     expect(find.byType(Composer), findsOneWidget);
     await endTurn(tester);
@@ -118,8 +128,9 @@ void main() {
 
   // The composer is gone while the panel is up, so an answer that is not on
   // the list is typed into the question itself.
-  testWidgets("a typed answer is picked by typing, and sent as its text",
-      (tester) async {
+  testWidgets("a typed answer is picked by typing, and sent as its text", (
+    tester,
+  ) async {
     await asking(tester, request([database]));
 
     await tester.enterText(find.byType(TextField).last, "  MySQL, actually ");
@@ -151,8 +162,9 @@ void main() {
 
   // One button and one action. Two names for it would be two promises, and
   // which one it is is the whole of what "nothing picked" changes.
-  testWidgets("the button offers to skip until something is picked",
-      (tester) async {
+  testWidgets("the button offers to skip until something is picked", (
+    tester,
+  ) async {
     await asking(tester, request([database, migrate]));
     expect(find.text("Skip"), findsOneWidget);
     expect(find.text("Send"), findsNothing);
@@ -181,8 +193,9 @@ void main() {
       expect(app.backend.answered, isEmpty);
     });
 
-    testWidgets("Next moves on without answering, and Back comes back",
-        (tester) async {
+    testWidgets("Next moves on without answering, and Back comes back", (
+      tester,
+    ) async {
       await asking(tester, request([database, migrate]));
 
       await tester.tap(find.text("Next"));
@@ -210,8 +223,9 @@ void main() {
       expect(enabled(tester, step("Next")), isFalse);
     });
 
-    testWidgets("an answer given earlier can be changed before sending",
-        (tester) async {
+    testWidgets("an answer given earlier can be changed before sending", (
+      tester,
+    ) async {
       await asking(tester, request([database, migrate]));
       await tester.tap(find.text("Postgres"));
       await tester.pump();
@@ -230,8 +244,9 @@ void main() {
     });
   });
 
-  testWidgets("going back re-asks a question that was already answered",
-      (tester) async {
+  testWidgets("going back re-asks a question that was already answered", (
+    tester,
+  ) async {
     await asking(tester, request([database, migrate]));
 
     await tester.tap(find.text("Postgres"));
@@ -244,8 +259,9 @@ void main() {
     expect(app.backend.answered, isEmpty);
   });
 
-  testWidgets("skipping answers nothing rather than leaving the turn stuck",
-      (tester) async {
+  testWidgets("skipping answers nothing rather than leaving the turn stuck", (
+    tester,
+  ) async {
     await asking(tester, request([database, migrate]));
 
     await tester.tap(find.text("Skip"));
@@ -256,7 +272,9 @@ void main() {
     await endTurn(tester);
   });
 
-  testWidgets("a turn that ends with one on screen takes it away", (tester) async {
+  testWidgets("a turn that ends with one on screen takes it away", (
+    tester,
+  ) async {
     final id = await asking(tester, request([database]));
 
     await endTurn(tester);

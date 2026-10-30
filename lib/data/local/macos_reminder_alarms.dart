@@ -17,22 +17,24 @@ class MacosReminderAlarms extends IosReminderAlarms {
   final String store;
 
   @override
-  Future<void> schedule(int requestCode, DateTime at,
-          {String? calendar, String? label, String? chatId}) =>
-      run(
-        "schedule",
-        {
-          "code": requestCode,
-          "at": at.millisecondsSinceEpoch,
-          "store": store,
-          "calendar": ?calendar,
-        },
-        "schedule $requestCode",
-      );
+  Future<void> schedule(
+    int requestCode,
+    DateTime at, {
+    String? calendar,
+    String? label,
+    String? chatId,
+  }) => run("schedule", {
+    "code": requestCode,
+    "at": at.millisecondsSinceEpoch,
+    "store": store,
+    "calendar": ?calendar,
+  }, "schedule $requestCode");
 
   @override
-  Future<void> cancel(int requestCode) =>
-      run("cancel", {"code": requestCode, "store": store}, "cancel $requestCode");
+  Future<void> cancel(int requestCode) => run("cancel", {
+    "code": requestCode,
+    "store": store,
+  }, "cancel $requestCode");
 
   @override
   Future<List<int>> staleCodes(Set<int> wanted) =>

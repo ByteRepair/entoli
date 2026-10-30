@@ -40,27 +40,32 @@ void main() {
       final broken = {...complete}..remove(absent);
       expect(
         () => location(broken),
-        throwsA(predicate(
-          (e) => e is FormatException && "$e".contains(said),
-        )),
+        throwsA(predicate((e) => e is FormatException && "$e".contains(said))),
       );
     }
 
     // And the file list is a list of strings, not of anything else.
     expect(
-      () => location({...complete, "files": [1]}),
-      throwsA(predicate(
-        (e) => e is FormatException && "$e".contains("no file list recorded"),
-      )),
+      () => location({
+        ...complete,
+        "files": [1],
+      }),
+      throwsA(
+        predicate(
+          (e) => e is FormatException && "$e".contains("no file list recorded"),
+        ),
+      ),
     );
   });
 
   test("ref is a string or nothing", () {
     expect(
       () => location({...complete, "ref": 3}),
-      throwsA(predicate(
-        (e) => e is FormatException && "$e".contains("ref is not a string"),
-      )),
+      throwsA(
+        predicate(
+          (e) => e is FormatException && "$e".contains("ref is not a string"),
+        ),
+      ),
     );
     // A string is taken as it is.
     expect(location({...complete, "ref": "v1.0.0"}).ref, "v1.0.0");

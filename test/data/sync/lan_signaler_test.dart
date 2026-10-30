@@ -37,9 +37,13 @@ void main() {
         if (routes == null) {
           throw http.ClientException("connection refused", request.url);
         }
-        final reply = await routes.handle(SignalingRequest(
-            request.method, request.url.path,
-            body: request.body));
+        final reply = await routes.handle(
+          SignalingRequest(
+            request.method,
+            request.url.path,
+            body: request.body,
+          ),
+        );
         return http.Response(reply.body, reply.status);
       }),
     );
@@ -76,9 +80,10 @@ void main() {
     });
 
     await client.exchange(
-        addresses: ["192.168.1.5:47921"],
-        code: "123456",
-        offerSdp: "v=0 offer");
+      addresses: ["192.168.1.5:47921"],
+      code: "123456",
+      offerSdp: "v=0 offer",
+    );
 
     expect(seen, ["v=0 offer"]);
   });
@@ -89,9 +94,10 @@ void main() {
 
     await expectLater(
       client.exchange(
-          addresses: ["192.168.1.5:47921"],
-          code: "000000",
-          offerSdp: "v=0 offer"),
+        addresses: ["192.168.1.5:47921"],
+        code: "000000",
+        offerSdp: "v=0 offer",
+      ),
       throwsA(isA<SignalingException>()),
     );
   });
@@ -113,23 +119,27 @@ void main() {
     expect(result.address, "192.168.1.5:47921");
   });
 
-  test("an address that never answers does not hold up one that does",
-      () async {
-    // The Tailscale case: the QR's LAN address is on a network the joiner is
-    // not on, and the one that works is listed after it.
-    silent = {"192.168.1.4:47921"};
-    lan = {"100.101.102.103:47921": host};
-    host.arm("123456");
-    answerWith("v=0 answer");
+  test(
+    "an address that never answers does not hold up one that does",
+    () async {
+      // The Tailscale case: the QR's LAN address is on a network the joiner is
+      // not on, and the one that works is listed after it.
+      silent = {"192.168.1.4:47921"};
+      lan = {"100.101.102.103:47921": host};
+      host.arm("123456");
+      answerWith("v=0 answer");
 
-    final result = await client.exchange(
-      addresses: ["192.168.1.4:47921", "100.101.102.103:47921"],
-      code: "123456",
-      offerSdp: "v=0 offer",
-    ).timeout(const Duration(seconds: 1));
+      final result = await client
+          .exchange(
+            addresses: ["192.168.1.4:47921", "100.101.102.103:47921"],
+            code: "123456",
+            offerSdp: "v=0 offer",
+          )
+          .timeout(const Duration(seconds: 1));
 
-    expect(result.address, "100.101.102.103:47921");
-  });
+      expect(result.address, "100.101.102.103:47921");
+    },
+  );
 
   test("a reconnect's token goes to the peer and to nobody else", () async {
     // What a scan finds: another Entoli, and something answering 200 to
@@ -146,9 +156,13 @@ void main() {
           return http.Response(jsonEncode({"proof": "x", "sdp": "x"}), 200);
         }
         final routes = {"192.168.1.9:47921": stranger, ...lan}[address]!;
-        final reply = await routes.handle(SignalingRequest(
-            request.method, request.url.path,
-            body: request.body));
+        final reply = await routes.handle(
+          SignalingRequest(
+            request.method,
+            request.url.path,
+            body: request.body,
+          ),
+        );
         return http.Response(reply.body, reply.status);
       }),
     );
@@ -158,7 +172,11 @@ void main() {
     answerWith("v=0 answer");
 
     final result = await client.exchange(
-      addresses: ["192.168.1.8:47921", "192.168.1.9:47921", "192.168.1.5:47921"],
+      addresses: [
+        "192.168.1.8:47921",
+        "192.168.1.9:47921",
+        "192.168.1.5:47921",
+      ],
       token: token,
       offerSdp: "v=0 offer",
     );
@@ -171,13 +189,15 @@ void main() {
 
   test("a peer too old to have the probe is a version mismatch", () async {
     client = LanSignaler(
-        client: MockClient((request) async => http.Response("", 404)));
+      client: MockClient((request) async => http.Response("", 404)),
+    );
 
     await expectLater(
       client.exchange(
-          addresses: ["192.168.1.5:47921"],
-          token: "tok",
-          offerSdp: "v=0 offer"),
+        addresses: ["192.168.1.5:47921"],
+        token: "tok",
+        offerSdp: "v=0 offer",
+      ),
       throwsA(isA<ProtocolMismatchException>()),
     );
   });
@@ -186,25 +206,31 @@ void main() {
     silent = {"192.168.1.3:47921"};
     await expectLater(
       client.exchange(
-          addresses: ["192.168.1.3:47921", "192.168.1.4:47921"],
-          code: "123456",
-          offerSdp: "v=0 offer"),
+        addresses: ["192.168.1.3:47921", "192.168.1.4:47921"],
+        code: "123456",
+        offerSdp: "v=0 offer",
+      ),
       throwsA(isA<SignalingException>()),
     );
   });
 
-  test("a 200 with no answer in it is a failure, not an empty answer",
-      () async {
-    client = LanSignaler(
-        client:
-            MockClient((request) async => http.Response(jsonEncode({}), 200)));
+  test(
+    "a 200 with no answer in it is a failure, not an empty answer",
+    () async {
+      client = LanSignaler(
+        client: MockClient(
+          (request) async => http.Response(jsonEncode({}), 200),
+        ),
+      );
 
-    await expectLater(
-      client.exchange(
+      await expectLater(
+        client.exchange(
           addresses: ["192.168.1.5:47921"],
           code: "123456",
-          offerSdp: "v=0 offer"),
-      throwsA(isA<SignalingException>()),
-    );
-  });
+          offerSdp: "v=0 offer",
+        ),
+        throwsA(isA<SignalingException>()),
+      );
+    },
+  );
 }

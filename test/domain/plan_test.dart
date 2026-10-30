@@ -8,22 +8,21 @@ void main() {
   group("planTasksFrom", () {
     test("reads the markers the tools write", () {
       final text = "# Plan\n\n## Tasks\n\n- [ ] one\n- [~] two\n- [x] three\n";
-      expect(
-          planTasksFrom(text).map((t) => (t.index, t.status, t.text)),
-          [
-            (1, PlanTaskStatus.pending, "one"),
-            (2, PlanTaskStatus.inProgress, "two"),
-            (3, PlanTaskStatus.done, "three"),
-          ]);
+      expect(planTasksFrom(text).map((t) => (t.index, t.status, t.text)), [
+        (1, PlanTaskStatus.pending, "one"),
+        (2, PlanTaskStatus.inProgress, "two"),
+        (3, PlanTaskStatus.done, "three"),
+      ]);
     });
 
     test("a bare bullet is a pending task", () {
       expect(
-          planTasksFrom("- one\n* two\n").map((t) => (t.index, t.status, t.text)),
-          [
-            (1, PlanTaskStatus.pending, "one"),
-            (2, PlanTaskStatus.pending, "two"),
-          ]);
+        planTasksFrom("- one\n* two\n").map((t) => (t.index, t.status, t.text)),
+        [
+          (1, PlanTaskStatus.pending, "one"),
+          (2, PlanTaskStatus.pending, "two"),
+        ],
+      );
     });
 
     test("prose and other lists are ignored", () {
@@ -55,26 +54,41 @@ Some prose, with a list that is not the plan:
   group("planAddTask", () {
     test("creates the file when there is none", () {
       expect(planAddTask(null, "one"), "# Plan\n\n## Tasks\n\n- [ ] one\n");
-      expect(planAddTask(null, "one", details: "how"),
-          "# Plan\n\n## Tasks\n\n- [ ] one\n  how\n");
+      expect(
+        planAddTask(null, "one", details: "how"),
+        "# Plan\n\n## Tasks\n\n- [ ] one\n  how\n",
+      );
     });
 
     test("fills a section that has nothing in it yet", () {
-      expect(planAddTask("# Plan\n\n## Tasks\n", "one"),
-          "# Plan\n\n## Tasks\n\n- [ ] one\n");
-      expect(planAddTask("## Tasks\n\n## Later\n\n- [ ] b\n", "a"),
-          "## Tasks\n\n- [ ] a\n\n## Later\n\n- [ ] b\n");
+      expect(
+        planAddTask("# Plan\n\n## Tasks\n", "one"),
+        "# Plan\n\n## Tasks\n\n- [ ] one\n",
+      );
+      expect(
+        planAddTask("## Tasks\n\n## Later\n\n- [ ] b\n", "a"),
+        "## Tasks\n\n- [ ] a\n\n## Later\n\n- [ ] b\n",
+      );
     });
 
     test("appends to the section it names", () {
-      final added = planAddTask("# Plan\n\n## Setup\n\n- [x] clone\n\n## Tasks\n\n- [ ] a\n",
-          "b", section: "Tasks");
-      expect(added, "# Plan\n\n## Setup\n\n- [x] clone\n\n## Tasks\n\n- [ ] a\n- [ ] b\n");
+      final added = planAddTask(
+        "# Plan\n\n## Setup\n\n- [x] clone\n\n## Tasks\n\n- [ ] a\n",
+        "b",
+        section: "Tasks",
+      );
+      expect(
+        added,
+        "# Plan\n\n## Setup\n\n- [x] clone\n\n## Tasks\n\n- [ ] a\n- [ ] b\n",
+      );
     });
 
     test("creates the section when it does not exist", () {
-      final added =
-          planAddTask("# Plan\n\n## Tasks\n\n- [ ] a\n", "b", section: "Later");
+      final added = planAddTask(
+        "# Plan\n\n## Tasks\n\n- [ ] a\n",
+        "b",
+        section: "Later",
+      );
       expect(added, endsWith("- [ ] b\n"));
       expect(added, contains("## Later\n\n- [ ] b"));
       // Where nothing matches, the task lands at the end.
@@ -82,7 +96,8 @@ Some prose, with a list that is not the plan:
     });
 
     test("the rest of the file stands", () {
-      const before = "# Plan\n\nSome notes the model wrote.\n\n## Tasks\n\n- [x] a\n";
+      const before =
+          "# Plan\n\nSome notes the model wrote.\n\n## Tasks\n\n- [x] a\n";
       expect(planAddTask(before, "b"), contains("Some notes the model wrote."));
     });
   });
@@ -91,10 +106,14 @@ Some prose, with a list that is not the plan:
     const plan = "- [ ] one\n- [ ] two\n- [ ] three\n";
 
     test("sets the one line the index names", () {
-      expect(planMark(plan, 2, PlanTaskStatus.done),
-          "- [ ] one\n- [x] two\n- [ ] three\n");
-      expect(planMark(plan, 1, PlanTaskStatus.inProgress),
-          "- [~] one\n- [ ] two\n- [ ] three\n");
+      expect(
+        planMark(plan, 2, PlanTaskStatus.done),
+        "- [ ] one\n- [x] two\n- [ ] three\n",
+      );
+      expect(
+        planMark(plan, 1, PlanTaskStatus.inProgress),
+        "- [~] one\n- [ ] two\n- [ ] three\n",
+      );
       expect(planMark(plan, 1, PlanTaskStatus.pending), plan);
     });
 
@@ -194,14 +213,23 @@ Some prose, with a list that is not the plan:
 - [ ] write docs
 """;
 
-    test("the indented lines under a task are its details, and lists in them are not tasks", () {
-      final tasks = planTasksFrom(plan);
-      expect(tasks.map((t) => t.text), ["clone", "fix the parser", "write docs"]);
-      expect(tasks[0].details, "Clone the repo.");
-      expect(tasks[1].details,
-          "Read `parse.dart` first.\n\n- keep the old entry point\n- add a test");
-      expect(tasks[2].details, isEmpty);
-    });
+    test(
+      "the indented lines under a task are its details, and lists in them are not tasks",
+      () {
+        final tasks = planTasksFrom(plan);
+        expect(tasks.map((t) => t.text), [
+          "clone",
+          "fix the parser",
+          "write docs",
+        ]);
+        expect(tasks[0].details, "Clone the repo.");
+        expect(
+          tasks[1].details,
+          "Read `parse.dart` first.\n\n- keep the old entry point\n- add a test",
+        );
+        expect(tasks[2].details, isEmpty);
+      },
+    );
 
     test("tasks are grouped under their headings, numbered across them", () {
       final sections = planSectionsFrom(plan);
@@ -215,54 +243,82 @@ Some prose, with a list that is not the plan:
     });
 
     test("planMark leaves the details alone", () {
-      expect(planMark(plan, 2, PlanTaskStatus.done),
-          plan.replaceFirst("- [ ] fix the parser", "- [x] fix the parser"));
+      expect(
+        planMark(plan, 2, PlanTaskStatus.done),
+        plan.replaceFirst("- [ ] fix the parser", "- [x] fix the parser"),
+      );
     });
 
-    test("planAddTask indents the details under the task, at the section's end", () {
-      final added = planAddTask(plan, "release",
-          section: "Setup", details: "Tag it.\n\nThen push.");
-      expect(added,
-          contains("  Clone the repo.\n- [ ] release\n  Tag it.\n\n  Then push.\n\n## Work"));
-      final release = planTasksFrom(added)[1];
-      expect(release.text, "release");
-      expect(release.details, "Tag it.\n\nThen push.");
-    });
+    test(
+      "planAddTask indents the details under the task, at the section's end",
+      () {
+        final added = planAddTask(
+          plan,
+          "release",
+          section: "Setup",
+          details: "Tag it.\n\nThen push.",
+        );
+        expect(
+          added,
+          contains(
+            "  Clone the repo.\n- [ ] release\n  Tag it.\n\n  Then push.\n\n## Work",
+          ),
+        );
+        final release = planTasksFrom(added)[1];
+        expect(release.text, "release");
+        expect(release.details, "Tag it.\n\nThen push.");
+      },
+    );
 
     test("planNextResult carries the details", () {
       final next = planNext(plan)!;
-      expect(planNextResult(next, planProgress(plan)),
-          startsWith("Task 2 of 3: fix the parser\n\nRead `parse.dart` first."));
+      expect(
+        planNextResult(next, planProgress(plan)),
+        startsWith("Task 2 of 3: fix the parser\n\nRead `parse.dart` first."),
+      );
     });
   });
 
   group("planApprovalQuestion", () {
-    test("asks one question with the two answers, and the document round-trips", () {
-      final q = planApprovalQuestion("The work");
-      expect(q.question, contains("The work"));
-      expect(q.options.map((o) => o.label), ["Go"]);
-      expect(q.options.map((o) => o.answer), ["go"]);
+    test(
+      "asks one question with the two answers, and the document round-trips",
+      () {
+        final q = planApprovalQuestion("The work");
+        expect(q.question, contains("The work"));
+        expect(q.options.map((o) => o.label), ["Go"]);
+        expect(q.options.map((o) => o.answer), ["go"]);
 
-      // The JSON the tool sends parses into the same pair the panel runs.
-      final questions = askQuestionsFrom(planApprovalQuestionsJson("The work"));
-      expect(questions, hasLength(1));
-      expect(questions.single.options.map((o) => o.answer), ["go"]);
-      expect(questions.single.question, contains("The work"));
-      expect(askQuestionsFrom(planApprovalQuestionsJson(null)), hasLength(1));
-    });
+        // The JSON the tool sends parses into the same pair the panel runs.
+        final questions = askQuestionsFrom(
+          planApprovalQuestionsJson("The work"),
+        );
+        expect(questions, hasLength(1));
+        expect(questions.single.options.map((o) => o.answer), ["go"]);
+        expect(questions.single.question, contains("The work"));
+        expect(askQuestionsFrom(planApprovalQuestionsJson(null)), hasLength(1));
+      },
+    );
   });
 
   group("planRevision", () {
     Message reply(List<MessagePart> parts) => Message(
-        id: "a", role: MessageRole.assistant, createdAt: DateTime(2026), parts: parts);
-    ToolCallPart call(String id, String name) =>
-        ToolCallPart(toolCall: ToolCall(id: id, name: name));
-    ToolResultPart result(String id) =>
-        ToolResultPart(result: ToolResult(callId: id, returnCode: 0, output: ""));
+      id: "a",
+      role: MessageRole.assistant,
+      createdAt: DateTime(2026),
+      parts: parts,
+    );
+    ToolCallPart call(String id, String name) => ToolCallPart(
+      toolCall: ToolCall(id: id, name: name),
+    );
+    ToolResultPart result(String id) => ToolResultPart(
+      result: ToolResult(callId: id, returnCode: 0, output: ""),
+    );
 
-    test("moves on a plan tool's or a file edit's result, not on anything else", () {
-      expect(planRevision([]), 0);
-      expect(
+    test(
+      "moves on a plan tool's or a file edit's result, not on anything else",
+      () {
+        expect(planRevision([]), 0);
+        expect(
           planRevision([
             reply([
               call("1", planAddToolName),
@@ -276,8 +332,9 @@ Some prose, with a list that is not the plan:
             ]),
             reply([result("3")]),
           ]),
-          2);
-    });
+          2,
+        );
+      },
+    );
   });
-
 }

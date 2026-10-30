@@ -36,11 +36,12 @@ class SelectedChatId extends Notifier<String?> {
       final at = ref.read(selectedProjectProvider);
       // A paired device's project is not a directory here; [startChatWith]
       // starts a chat there.
-      if (at.device != null) throw StateError("${at.project} is on ${at.device}");
-      final chat = await ref.read(chatRepositoryProvider).createChat(
-            project: at.project,
-            meta: meta,
-          );
+      if (at.device != null) {
+        throw StateError("${at.project} is on ${at.device}");
+      }
+      final chat = await ref
+          .read(chatRepositoryProvider)
+          .createChat(project: at.project, meta: meta);
       state = chat.state.id;
       ref.invalidate(chatListProvider);
       return chat.state.id;
@@ -51,7 +52,9 @@ class SelectedChatId extends Notifier<String?> {
   }
 }
 
-final selectedChatIdProvider = NotifierProvider<SelectedChatId, String?>(SelectedChatId.new);
+final selectedChatIdProvider = NotifierProvider<SelectedChatId, String?>(
+  SelectedChatId.new,
+);
 
 /// Which project the sidebar is showing, on whichever device, and where a new
 /// chat goes. This device's default project is what the app opens in.
@@ -62,8 +65,9 @@ class SelectedProject extends Notifier<ProjectRef> {
   void select(ProjectRef project) => state = project;
 }
 
-final selectedProjectProvider =
-    NotifierProvider<SelectedProject, ProjectRef>(SelectedProject.new);
+final selectedProjectProvider = NotifierProvider<SelectedProject, ProjectRef>(
+  SelectedProject.new,
+);
 
 void openChat(BuildContext context, WidgetRef ref, String chatId) {
   ref.read(selectedChatIdProvider.notifier).select(chatId);
@@ -100,11 +104,16 @@ void openNewChatIn(BuildContext context, WidgetRef ref, String? project) {
 /// counting down to an expiry that is no longer there. Only there: reading the
 /// notifier for any other chat builds a controller, and loads a conversation
 /// nobody is looking at.
-Future<void> setChatPinned(WidgetRef ref, ChatState chat, bool pinned,
-    {required bool open}) async {
+Future<void> setChatPinned(
+  WidgetRef ref,
+  ChatState chat,
+  bool pinned, {
+  required bool open,
+}) async {
   final repo = ref.read(chatRepositoryProvider);
-  final written =
-      await (pinned ? repo.pinChat(chat.id, chat) : repo.unpinChat(chat.id, chat));
+  final written = await (pinned
+      ? repo.pinChat(chat.id, chat)
+      : repo.unpinChat(chat.id, chat));
   if (open) {
     ref.read(chatControllerProvider(chat.id).notifier).applyState(written);
   }
@@ -140,7 +149,9 @@ Future<bool> startChatWith(
   final at = ref.read(selectedProjectProvider);
   if (at.device != null) {
     // Made there, which runs the turn: this device follows it, holding it.
-    final reply = await ref.read(syncHubProvider).startRemoteChat(at, text, attachments: attachments);
+    final reply = await ref
+        .read(syncHubProvider)
+        .startRemoteChat(at, text, attachments: attachments);
     final id = reply?.chatId;
     if (id == null) return false;
     ref.read(selectedChatIdProvider.notifier).select(id);
@@ -148,8 +159,10 @@ Future<bool> startChatWith(
   }
   final id = await ref.read(selectedChatIdProvider.notifier).create(meta: meta);
   if (id == null) return false;
-  unawaited(ref
-      .read(chatControllerProvider(id).notifier)
-      .send(text, attachments: attachments));
+  unawaited(
+    ref
+        .read(chatControllerProvider(id).notifier)
+        .send(text, attachments: attachments),
+  );
   return true;
 }

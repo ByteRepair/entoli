@@ -24,12 +24,12 @@ class ActionIcon extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => IconButton(
-        icon: Icon(icon, size: 16),
-        tooltip: tooltip,
-        onPressed: onPressed,
-        color: Theme.of(context).colorScheme.onSurfaceVariant,
-        padding: EdgeInsets.zero,
-        visualDensity: VisualDensity.compact,
-        constraints: const BoxConstraints.tightFor(width: 32, height: height),
-      );
+    icon: Icon(icon, size: 16),
+    tooltip: tooltip,
+    onPressed: onPressed,
+    color: Theme.of(context).colorScheme.onSurfaceVariant,
+    padding: EdgeInsets.zero,
+    visualDensity: VisualDensity.compact,
+    constraints: const BoxConstraints.tightFor(width: 32, height: height),
+  );
 }

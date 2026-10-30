@@ -42,14 +42,18 @@ void main() {
     await pumpTerminal(tester);
 
     expect(find.textContaining("no proot in it for arm64-v8a"), findsOneWidget);
-    expect(find.textContaining("tool/android/build.sh arm64-v8a"), findsOneWidget);
+    expect(
+      find.textContaining("tool/android/build.sh arm64-v8a"),
+      findsOneWidget,
+    );
     expect(find.text(host), findsOneWidget);
     expect(find.textContaining("What driver to use"), findsOneWidget);
     expect(find.text("Alpine Linux 3.24.1"), findsNothing);
   });
 
-  testWidgets("where it can run one, the catalog is offered with its size",
-      (tester) async {
+  testWidgets("where it can run one, the catalog is offered with its size", (
+    tester,
+  ) async {
     app = TestApp.create(proot: true);
     await pumpTerminal(tester);
 
@@ -72,18 +76,23 @@ void main() {
 
     expect(find.text("No build for this device"), findsOneWidget);
     final button = tester.widget<IconButton>(
-        find.widgetWithIcon(IconButton, Icons.download_outlined));
+      find.widgetWithIcon(IconButton, Icons.download_outlined),
+    );
     expect(button.onPressed, isNull);
   });
 
-  testWidgets("downloading one adds it to the picker and leaves it unpicked",
-      (tester) async {
+  testWidgets("downloading one adds it to the picker and leaves it unpicked", (
+    tester,
+  ) async {
     app = TestApp.create(proot: true);
     await pumpTerminal(tester);
 
     await tester.tap(find.byTooltip("Download"));
-    await settleUntil(tester, () => app.container.read(installedRootfsProvider).isNotEmpty,
-        what: "the download");
+    await settleUntil(
+      tester,
+      () => app.container.read(installedRootfsProvider).isNotEmpty,
+      what: "the download",
+    );
 
     expect(app.container.read(installedRootfsProvider), {"alpine"});
     expect(find.byTooltip("Delete"), findsOneWidget);
@@ -95,7 +104,9 @@ void main() {
     expect(find.text(alpine), findsWidgets);
   });
 
-  testWidgets("picking one is what makes commands run inside it", (tester) async {
+  testWidgets("picking one is what makes commands run inside it", (
+    tester,
+  ) async {
     app = TestApp.create(proot: true, linuxes: const {"alpine"});
     await pumpTerminal(tester);
 
@@ -103,25 +114,34 @@ void main() {
     await settleIo(tester);
     await tester.tap(find.text(alpine).last);
     await settleUntil(
-        tester, () => app.container.read(appSettingsProvider).rootfsId != null,
-        what: "the pick");
+      tester,
+      () => app.container.read(appSettingsProvider).rootfsId != null,
+      what: "the pick",
+    );
 
     expect(app.container.read(appSettingsProvider).rootfsId, "alpine");
   });
 
-  testWidgets("deleting the one commands run in puts them back on the host",
-      (tester) async {
+  testWidgets("deleting the one commands run in puts them back on the host", (
+    tester,
+  ) async {
     app = TestApp.create(proot: true, linuxes: const {"alpine"});
-    await io(tester,
-        () => app.container.read(appSettingsProvider.notifier).setRootfs("alpine"));
+    await io(
+      tester,
+      () =>
+          app.container.read(appSettingsProvider.notifier).setRootfs("alpine"),
+    );
     await pumpTerminal(tester);
 
     await tester.tap(find.byTooltip("Delete"));
     await settleIo(tester);
     await tester.tap(find.text("Delete").last);
     // The rescan is the delete's last step, after the unpick's settings write.
-    await settleUntil(tester, () => app.container.read(installedRootfsProvider).isEmpty,
-        what: "the delete");
+    await settleUntil(
+      tester,
+      () => app.container.read(installedRootfsProvider).isEmpty,
+      what: "the delete",
+    );
 
     expect(app.rootfs.deleted, ["alpine"]);
     // Unpicked in the same breath: a setting naming a deleted rootfs would
@@ -130,24 +150,26 @@ void main() {
     expect(app.container.read(installedRootfsProvider), isEmpty);
   });
 
-  testWidgets("a download in flight shows what it is doing, and can be stopped",
-      (tester) async {
-    app = TestApp.create(proot: true);
-    app.rootfs.installing = Completer<void>();
-    await pumpTerminal(tester);
+  testWidgets(
+    "a download in flight shows what it is doing, and can be stopped",
+    (tester) async {
+      app = TestApp.create(proot: true);
+      app.rootfs.installing = Completer<void>();
+      await pumpTerminal(tester);
 
-    await tester.tap(find.byTooltip("Download"));
-    await settleIo(tester);
+      await tester.tap(find.byTooltip("Download"));
+      await settleIo(tester);
 
-    expect(find.byType(LinearProgressIndicator), findsOneWidget);
-    expect(find.byTooltip("Cancel"), findsOneWidget);
+      expect(find.byType(LinearProgressIndicator), findsOneWidget);
+      expect(find.byTooltip("Cancel"), findsOneWidget);
 
-    await tester.tap(find.byTooltip("Cancel"));
-    await settleIo(tester);
+      await tester.tap(find.byTooltip("Cancel"));
+      await settleIo(tester);
 
-    expect(find.byType(LinearProgressIndicator), findsNothing);
-    expect(app.container.read(installedRootfsProvider), isEmpty);
-  });
+      expect(find.byType(LinearProgressIndicator), findsNothing);
+      expect(app.container.read(installedRootfsProvider), isEmpty);
+    },
+  );
 
   testWidgets("a desktop with a host shell and no proot shows the picker with "
       "only the host, and no catalog", (tester) async {
@@ -169,47 +191,67 @@ void main() {
       app = TestApp.create(shell: LocalShell(environment: () => const {}));
       await pumpTerminal(tester);
 
-      expect(find.textContaining("kept but not enforced here: nothing on this "
-          "platform implements them"), findsOneWidget);
+      expect(
+        find.textContaining(
+          "kept but not enforced here: nothing on this "
+          "platform implements them",
+        ),
+        findsOneWidget,
+      );
       expect(find.byIcon(Icons.warning_amber_rounded), findsOneWidget);
     });
 
     testWidgets("Linux's host says Landlock enforces them", (tester) async {
       app = TestApp.create(
-          shell: LocalShell(environment: () => const {}),
-          hostConfinement: Confinement.landlock);
+        shell: LocalShell(environment: () => const {}),
+        hostConfinement: Confinement.landlock,
+      );
       await pumpTerminal(tester);
 
       expect(find.text("Host · ${Confinement.landlock.label}"), findsOneWidget);
-      expect(find.textContaining("Enforces your sandbox settings with Landlock"),
-          findsOneWidget);
+      expect(
+        find.textContaining("Enforces your sandbox settings with Landlock"),
+        findsOneWidget,
+      );
       expect(find.byIcon(Icons.shield_outlined), findsOneWidget);
     });
 
-    testWidgets("Landlock switched off by the policy is a warning",
-        (tester) async {
+    testWidgets("Landlock switched off by the policy is a warning", (
+      tester,
+    ) async {
       app = TestApp.create(
-          shell: LocalShell(environment: () => const {}),
-          hostConfinement: Confinement.landlock);
-      await io(tester,
-          () => app.container
-              .read(projectSettingsProvider(null).notifier)
-              .setProjectSandbox(false));
+        shell: LocalShell(environment: () => const {}),
+        hostConfinement: Confinement.landlock,
+      );
+      await io(
+        tester,
+        () => app.container
+            .read(projectSettingsProvider(null).notifier)
+            .setProjectSandbox(false),
+      );
       await pumpTerminal(tester);
 
-      expect(find.textContaining("switched off in Settings > General"),
-          findsOneWidget);
+      expect(
+        find.textContaining("switched off in Settings > General"),
+        findsOneWidget,
+      );
       expect(find.byIcon(Icons.warning_amber_rounded), findsOneWidget);
     });
 
     testWidgets("a picked Linux says it does not enforce them", (tester) async {
       app = TestApp.create(proot: true, linuxes: const {"alpine"});
-      await io(tester,
-          () => app.container.read(appSettingsProvider.notifier).setRootfs("alpine"));
+      await io(
+        tester,
+        () => app.container
+            .read(appSettingsProvider.notifier)
+            .setRootfs("alpine"),
+      );
       await pumpTerminal(tester);
 
-      expect(find.textContaining("run inside the downloaded Linux"),
-          findsOneWidget);
+      expect(
+        find.textContaining("run inside the downloaded Linux"),
+        findsOneWidget,
+      );
     });
   });
 }

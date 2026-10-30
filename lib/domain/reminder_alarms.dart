@@ -60,8 +60,13 @@ abstract interface class ReminderAlarms {
   /// exactly when due, process dead included, so its words and tap route are
   /// fixed at arm time. The wake platforms compose nothing until the turn
   /// runs and ignore both.
-  Future<void> schedule(int requestCode, DateTime at,
-      {String? calendar, String? label, String? chatId});
+  Future<void> schedule(
+    int requestCode,
+    DateTime at, {
+    String? calendar,
+    String? label,
+    String? chatId,
+  });
 
   Future<void> cancel(int requestCode);
 
@@ -135,8 +140,13 @@ class UnavailableReminderAlarms implements ReminderAlarms {
   Future<void> requestNotifications() async {}
 
   @override
-  Future<void> schedule(int requestCode, DateTime at,
-      {String? calendar, String? label, String? chatId}) async {}
+  Future<void> schedule(
+    int requestCode,
+    DateTime at, {
+    String? calendar,
+    String? label,
+    String? chatId,
+  }) async {}
 
   @override
   Future<void> cancel(int requestCode) async {}

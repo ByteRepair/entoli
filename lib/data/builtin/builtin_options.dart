@@ -48,12 +48,12 @@ class BuiltinOptions {
   final Duration rateLimitRetryBudget;
 
   BuiltinOptions copyWith({int? stepLimit, int? maxAttempts}) => BuiltinOptions(
-        stepLimit: stepLimit ?? this.stepLimit,
-        commandTimeout: commandTimeout,
-        maxAttempts: maxAttempts ?? this.maxAttempts,
-        retryBackoff: retryBackoff,
-        maxConcurrentSubAgents: maxConcurrentSubAgents,
-        maxConcurrentLlmRequests: maxConcurrentLlmRequests,
-        rateLimitRetryBudget: rateLimitRetryBudget,
-      );
+    stepLimit: stepLimit ?? this.stepLimit,
+    commandTimeout: commandTimeout,
+    maxAttempts: maxAttempts ?? this.maxAttempts,
+    retryBackoff: retryBackoff,
+    maxConcurrentSubAgents: maxConcurrentSubAgents,
+    maxConcurrentLlmRequests: maxConcurrentLlmRequests,
+    rateLimitRetryBudget: rateLimitRetryBudget,
+  );
 }

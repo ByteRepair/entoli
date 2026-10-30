@@ -26,7 +26,8 @@ class ChannelClipboardFiles implements ClipboardFiles {
   Future<List<Attachment>> read() async {
     final List<Object?> entries;
     try {
-      entries = await _channel.invokeListMethod<Object?>("readFiles") ?? const [];
+      entries =
+          await _channel.invokeListMethod<Object?>("readFiles") ?? const [];
     } on MissingPluginException catch (_) {
       return const [];
     } on PlatformException catch (e) {
@@ -38,8 +39,13 @@ class ChannelClipboardFiles implements ClipboardFiles {
         if (entry["path"] case final String path)
           _readPath(path)
         else if (entry["bytes"] case final Uint8List bytes)
-          Future.value(pastedAttachment(bytes,
-              name: entry["name"] as String?, declared: entry["mime"] as String?)),
+          Future.value(
+            pastedAttachment(
+              bytes,
+              name: entry["name"] as String?,
+              declared: entry["mime"] as String?,
+            ),
+          ),
     ]);
     return read.nonNulls.toList();
   }
@@ -49,7 +55,10 @@ Future<Attachment?> _readPath(String path) async {
   // A copied folder is in the list too, and has no bytes to attach.
   if (!FileSystemEntity.isFileSync(path)) return null;
   try {
-    return pastedAttachment(await File(path).readAsBytes(), name: p.basename(path));
+    return pastedAttachment(
+      await File(path).readAsBytes(),
+      name: p.basename(path),
+    );
   } on FileSystemException catch (e) {
     logFailure("clipboard", "pasted file unreadable", e.osError ?? e.message);
     return null;

@@ -56,7 +56,9 @@ abstract class LocalEngine {
 
   /// The ids of every model on disk. On disk rather than loaded: asking for one
   /// is what loads it.
-  List<String> get installed => [for (final model in store.downloadedSync()) model.id];
+  List<String> get installed => [
+    for (final model in store.downloadedSync()) model.id,
+  ];
 
   /// What [modelId] is called, for a line that names it.
   String nameOf(String modelId) =>

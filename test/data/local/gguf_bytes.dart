@@ -6,8 +6,12 @@ import "dart:typed_data";
 /// int32 arrays, and lists of strings as string arrays.
 List<int> ggufBytes(Map<String, Object> metadata) {
   final out = BytesBuilder();
-  void u32(int n) => out.add((ByteData(4)..setUint32(0, n, Endian.little)).buffer.asUint8List());
-  void u64(int n) => out.add((ByteData(8)..setUint64(0, n, Endian.little)).buffer.asUint8List());
+  void u32(int n) => out.add(
+    (ByteData(4)..setUint32(0, n, Endian.little)).buffer.asUint8List(),
+  );
+  void u64(int n) => out.add(
+    (ByteData(8)..setUint64(0, n, Endian.little)).buffer.asUint8List(),
+  );
   void string(String s) {
     final bytes = utf8.encode(s);
     u64(bytes.length);
@@ -32,7 +36,9 @@ List<int> ggufBytes(Map<String, Object> metadata) {
         u32(5);
         u64(list.length);
         for (final n in list) {
-          out.add((ByteData(4)..setInt32(0, n, Endian.little)).buffer.asUint8List());
+          out.add(
+            (ByteData(4)..setInt32(0, n, Endian.little)).buffer.asUint8List(),
+          );
         }
       case final List<String> list:
         u32(9);
@@ -48,13 +54,13 @@ List<int> ggufBytes(Map<String, Object> metadata) {
 
 /// A small model's header: four layers of two KV heads, 64 wide, Q4_0.
 List<int> tinyModel({String name = "Tiny 1B"}) => ggufBytes({
-      "general.architecture": "tiny",
-      "general.name": name,
-      "general.file_type": 2,
-      "tiny.block_count": 4,
-      "tiny.context_length": 32768,
-      "tiny.attention.head_count": 8,
-      "tiny.attention.head_count_kv": 2,
-      "tiny.attention.key_length": 64,
-      "tiny.attention.value_length": 64,
-    });
+  "general.architecture": "tiny",
+  "general.name": name,
+  "general.file_type": 2,
+  "tiny.block_count": 4,
+  "tiny.context_length": 32768,
+  "tiny.attention.head_count": 8,
+  "tiny.attention.head_count_kv": 2,
+  "tiny.attention.key_length": 64,
+  "tiny.attention.value_length": 64,
+});

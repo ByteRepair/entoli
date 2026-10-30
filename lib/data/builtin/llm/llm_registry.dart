@@ -41,8 +41,14 @@ class LlmRegistry {
 
   /// [ref] as a [T], where a configured provider serves one, run over that
   /// provider's cached client.
-  T? resolve<T extends Model>(ModelRef ref) => resolveIn<T>(endpoints(), ref,
-      (provider) => ModelHost(client: () => clientOf(provider), cutsUtterances: cutsUtterances));
+  T? resolve<T extends Model>(ModelRef ref) => resolveIn<T>(
+    endpoints(),
+    ref,
+    (provider) => ModelHost(
+      client: () => clientOf(provider),
+      cutsUtterances: cutsUtterances,
+    ),
+  );
 
   LlmProvider? providerFor(String providerId) {
     for (final provider in endpoints()) {

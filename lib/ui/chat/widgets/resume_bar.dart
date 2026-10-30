@@ -6,7 +6,12 @@ import "../activity/format.dart";
 /// the list, like the approval banner: scrolling back through the turn should
 /// not lose the way to carry it on.
 class ResumeBar extends StatelessWidget {
-  const ResumeBar({super.key, required this.startedAt, required this.onContinue, this.notice});
+  const ResumeBar({
+    super.key,
+    required this.startedAt,
+    required this.onContinue,
+    this.notice,
+  });
 
   final DateTime startedAt;
   final VoidCallback onContinue;

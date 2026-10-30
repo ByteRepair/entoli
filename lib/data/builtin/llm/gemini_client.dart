@@ -30,8 +30,11 @@ class GeminiClient extends OpenAiClient {
 
   /// Native, because neither compat route takes every Gemini image model.
   @override
-  Future<List<LlmAttachment>> generateImage(String prompt,
-      {required String model, String? quality}) async {
+  Future<List<LlmAttachment>> generateImage(
+    String prompt, {
+    required String model,
+    String? quality,
+  }) async {
     final parts = await _generate(model, {
       "contents": [
         {
@@ -49,11 +52,13 @@ class GeminiClient extends OpenAiClient {
       final data = part["inlineData"];
       if (data is Map && data["data"] is String && data["mimeType"] is String) {
         final mime = data["mimeType"] as String;
-        out.add(LlmAttachment(
-          filename: "image-${out.length}.${mime.split("/").last}",
-          mimeType: mime,
-          bytes: base64Decode(data["data"] as String),
-        ));
+        out.add(
+          LlmAttachment(
+            filename: "image-${out.length}.${mime.split("/").last}",
+            mimeType: mime,
+            bytes: base64Decode(data["data"] as String),
+          ),
+        );
       }
     }
     return out;
@@ -69,7 +74,10 @@ class GeminiClient extends OpenAiClient {
           "parts": [
             {"text": transcribeInstruction},
             {
-              "inlineData": {"mimeType": "audio/wav", "data": base64Encode(wav)},
+              "inlineData": {
+                "mimeType": "audio/wav",
+                "data": base64Encode(wav),
+              },
             },
           ],
         },
@@ -77,7 +85,8 @@ class GeminiClient extends OpenAiClient {
     });
     return [
       for (final part in parts)
-        if (part["text"] is String && part["thought"] != true) part["text"] as String,
+        if (part["text"] is String && part["thought"] != true)
+          part["text"] as String,
     ].join().trim();
   }
 
@@ -88,7 +97,11 @@ class GeminiClient extends OpenAiClient {
   /// Native: the compat surface has no `/audio/speech`. What comes back is raw
   /// 16-bit PCM, its rate in the MIME type, so it is wrapped as a WAV here.
   @override
-  Future<Uint8List> speak(String text, {required String model, String? voice}) async {
+  Future<Uint8List> speak(
+    String text, {
+    required String model,
+    String? voice,
+  }) async {
     final parts = await _generate(model, {
       "contents": [
         {
@@ -125,19 +138,25 @@ class GeminiClient extends OpenAiClient {
 
   /// Where native `generateContent` lives: one level up from the compat
   /// surface.
-  late final Uri _native =
-      baseUrl.replace(path: baseUrl.path.replaceFirst(RegExp(r"/openai/?$"), ""));
+  late final Uri _native = baseUrl.replace(
+    path: baseUrl.path.replaceFirst(RegExp(r"/openai/?$"), ""),
+  );
 
   /// The parts of the first candidate of a native `generateContent`. Decoded
   /// as it streams, since a spoken sentence is megabytes of base64.
-  Future<List<Map<String, dynamic>>> _generate(String model, Map<String, dynamic> body) async {
+  Future<List<Map<String, dynamic>>> _generate(
+    String model,
+    Map<String, dynamic> body,
+  ) async {
     final response = await postStream(
       httpClient,
       under(_native, "models/$model:generateContent"),
       headers: {"content-type": "application/json", "x-goog-api-key": ?apiKey},
       body: body,
     ).onError<LlmException>((e, _) => throw refused(e));
-    final json = await response.stream.transform(utf8.decoder.fuse(const JsonDecoder())).first;
+    final json = await response.stream
+        .transform(utf8.decoder.fuse(const JsonDecoder()))
+        .first;
     final candidates = json is Map ? json["candidates"] : null;
     final content = candidates is List && candidates.isNotEmpty
         ? (candidates.first as Map)["content"]

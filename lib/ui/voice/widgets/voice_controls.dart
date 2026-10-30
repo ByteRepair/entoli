@@ -56,7 +56,9 @@ class VoiceControls extends StatelessWidget {
           _Key(
             icon: state.paused ? Icons.mic_off_outlined : Icons.mic_none,
             label: state.paused ? "Listen" : "Mute",
-            tooltip: state.paused ? "Open the microphone" : "Shut the microphone",
+            tooltip: state.paused
+                ? "Open the microphone"
+                : "Shut the microphone",
             held: state.paused,
             onPressed: state.isOn ? onMute : null,
           ),
@@ -129,8 +131,9 @@ class _Key extends StatelessWidget {
         fixedSize: const Size.square(52),
         shape: const CircleBorder(),
         foregroundColor: held ? scheme.onSecondaryContainer : colour,
-        backgroundColor:
-            held ? scheme.secondaryContainer : scheme.surfaceContainerLow,
+        backgroundColor: held
+            ? scheme.secondaryContainer
+            : scheme.surfaceContainerLow,
         disabledForegroundColor: scheme.onSurface.withValues(alpha: 0.3),
         side: BorderSide(
           color: dead

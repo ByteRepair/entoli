@@ -132,8 +132,7 @@ class ClockKind extends TriggerKind {
   bool matches(Trigger trigger) => matchOf(trigger);
 
   @override
-  bool armed(Trigger trigger) =>
-      trigger.enabled && trigger.nextFireAt != null;
+  bool armed(Trigger trigger) => trigger.enabled && trigger.nextFireAt != null;
 
   @override
   DateTime? nextFire(Trigger trigger, DateTime after) =>
@@ -168,7 +167,8 @@ class ClockKind extends TriggerKind {
       final now = clock.now();
       for (final trigger in triggers) {
         final at = trigger.nextFireAt;
-        if (at != null && at.isAfter(now) &&
+        if (at != null &&
+            at.isAfter(now) &&
             (nearest == null || at.isBefore(nearest))) {
           nearest = at;
         }
@@ -194,9 +194,13 @@ class ClockKind extends TriggerKind {
     controller = StreamController<TriggerFire>(
       onListen: () {
         // A start that throws still settles [TriggerWatch.started].
-        unawaited(start()
-            .catchError((Object e) => logFailure("trigger", "watch did not start", e))
-            .whenComplete(done.complete));
+        unawaited(
+          start()
+              .catchError(
+                (Object e) => logFailure("trigger", "watch did not start", e),
+              )
+              .whenComplete(done.complete),
+        );
       },
       onPause: () => timer?.cancel(),
       onResume: aim,
@@ -244,8 +248,13 @@ class ClockKind extends TriggerKind {
     for (final entry in wanted.entries) {
       if (_armed[entry.key] != entry.value) {
         final (at, calendar, label, chatId) = entry.value;
-        await alarms.schedule(entry.key, at,
-            calendar: calendar, label: label, chatId: chatId);
+        await alarms.schedule(
+          entry.key,
+          at,
+          calendar: calendar,
+          label: label,
+          chatId: chatId,
+        );
       }
     }
     _armed
@@ -261,8 +270,12 @@ class ClockKind extends TriggerKind {
     _deferred.add(trigger.id);
     final at = trigger.nextFireAt;
     if (at != null) {
-      await alarms.schedule(trigger.requestCode!, at,
-          label: trigger.label, chatId: trigger.chatId);
+      await alarms.schedule(
+        trigger.requestCode!,
+        at,
+        label: trigger.label,
+        chatId: trigger.chatId,
+      );
     }
     return true;
   }
@@ -335,15 +348,15 @@ class FileKind extends TriggerKind {
       for (final entry in byRoot.entries) {
         final pairs = entry.value;
         final sub = fileWatches.watch(entry.key).listen(
-              (event) {
-                for (final (trigger, source) in pairs) {
-                  final fire = _fireFor(event, trigger, source, clock);
-                  if (fire != null) controller.add(fire);
-                }
-              },
-              // The next registration rebuilds what the list still asks for.
-              onError: (Object e) => logFailure("trigger", "file watch failed", e),
-            );
+          (event) {
+            for (final (trigger, source) in pairs) {
+              final fire = _fireFor(event, trigger, source, clock);
+              if (fire != null) controller.add(fire);
+            }
+          },
+          // The next registration rebuilds what the list still asks for.
+          onError: (Object e) => logFailure("trigger", "file watch failed", e),
+        );
         subscriptions.add(sub);
       }
     }
@@ -352,9 +365,13 @@ class FileKind extends TriggerKind {
     controller = StreamController<TriggerFire>(
       onListen: () {
         // A start that throws still settles [TriggerWatch.started].
-        unawaited(start()
-            .catchError((Object e) => logFailure("trigger", "watch did not start", e))
-            .whenComplete(done.complete));
+        unawaited(
+          start()
+              .catchError(
+                (Object e) => logFailure("trigger", "watch did not start", e),
+              )
+              .whenComplete(done.complete),
+        );
       },
       onCancel: () async {
         for (final sub in subscriptions) {
@@ -370,8 +387,12 @@ class FileKind extends TriggerKind {
   /// cooldown lets the answer be yes. The event is matched by *what* fired
   /// ([FileEvent], the one vocabulary) and the trigger by *where* — its
   /// paths are roots, and anything under one is in its reach.
-  TriggerFire? _fireFor(FileWatchEvent event, Trigger trigger,
-      FileSource source, Clock clock) {
+  TriggerFire? _fireFor(
+    FileWatchEvent event,
+    Trigger trigger,
+    FileSource source,
+    Clock clock,
+  ) {
     if (!source.events.contains(event.kind)) return null;
     final last = _seen[trigger.id];
     final now = clock.now();

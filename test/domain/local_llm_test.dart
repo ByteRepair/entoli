@@ -7,16 +7,18 @@ import "package:agent_chat/domain/local_model.dart";
 /// the largest while costing a third of the memory — so what is worth pinning
 /// is that the answer follows from the model rather than from a constant.
 void main() {
-  DownloadedModel modelWith(int kvBytesPerToken, {int contextLength = 262144}) =>
-      DownloadedModel(
-        id: "test",
-        name: "Test",
-        file: "/models/test/model.gguf",
-        bytes: 1,
-        quantisation: "Q4_0",
-        contextLength: contextLength,
-        kvBytesPerToken: kvBytesPerToken,
-      );
+  DownloadedModel modelWith(
+    int kvBytesPerToken, {
+    int contextLength = 262144,
+  }) => DownloadedModel(
+    id: "test",
+    name: "Test",
+    file: "/models/test/model.gguf",
+    bytes: 1,
+    quantisation: "Q4_0",
+    contextLength: contextLength,
+    kvBytesPerToken: kvBytesPerToken,
+  );
 
   test("the budget is what decides it, divided by what a token costs", () {
     // 22 KiB a token is LFM3 1.7B: eleven attention layers of four KV heads,
@@ -42,6 +44,9 @@ void main() {
   test("a link names its model by its file, past one already taken", () {
     const url = "https://huggingface.co/a/b/resolve/main/Some-Model-Q4_0.gguf";
     expect(localModelIdFor(url, const {}), "some-model-q4_0");
-    expect(localModelIdFor(url, const {"some-model-q4_0"}), "some-model-q4_0-2");
+    expect(
+      localModelIdFor(url, const {"some-model-q4_0"}),
+      "some-model-q4_0-2",
+    );
   });
 }

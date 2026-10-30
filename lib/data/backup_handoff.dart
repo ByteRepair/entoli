@@ -14,9 +14,14 @@ class FileSelectorBackup implements BackupHandoff {
   const FileSelectorBackup();
 
   @override
-  Future<bool> save(String name, Future<void> Function(String path) write) async {
-    final location =
-        await getSaveLocation(suggestedName: name, acceptedTypeGroups: const [_backups]);
+  Future<bool> save(
+    String name,
+    Future<void> Function(String path) write,
+  ) async {
+    final location = await getSaveLocation(
+      suggestedName: name,
+      acceptedTypeGroups: const [_backups],
+    );
     if (location == null) return false;
     await write(location.path);
     return true;

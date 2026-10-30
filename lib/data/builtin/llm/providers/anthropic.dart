@@ -16,13 +16,15 @@ class AnthropicCompatibleProvider extends LlmProvider {
   bool get takesPdfs => true;
 
   @override
-  LlmClient client(String? apiKey) => AnthropicClient(baseUrl: baseUrl, apiKey: apiKey);
+  LlmClient client(String? apiKey) =>
+      AnthropicClient(baseUrl: baseUrl, apiKey: apiKey);
 
   @override
   Map<String, String> authOf(String? apiKey) => AnthropicClient.authOf(apiKey);
 
   @override
-  Future<bool> checkKey(String apiKey, {http.Client? httpClient}) => LlmProvider.askWith(
+  Future<bool> checkKey(String apiKey, {http.Client? httpClient}) =>
+      LlmProvider.askWith(
         http.Request("GET", under(baseUrl, "models"))
           ..headers.addAll(authOf(apiKey)),
         httpClient: httpClient,
@@ -30,7 +32,8 @@ class AnthropicCompatibleProvider extends LlmProvider {
 }
 
 class AnthropicProvider extends AnthropicCompatibleProvider {
-  const AnthropicProvider([LlmProviderConfig config = preset]) : super(config, _terms);
+  const AnthropicProvider([LlmProviderConfig config = preset])
+    : super(config, _terms);
 
   static const preset = LlmProviderConfig(
     catalogId: "anthropic",

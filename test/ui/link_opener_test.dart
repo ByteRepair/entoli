@@ -17,7 +17,10 @@ void main() {
 
   /// The in-app webview is Android's alone, and the override has to be undone
   /// inside the body: flutter_test checks it before a tear-down runs.
-  void androidTest(String description, Future<void> Function(WidgetTester) body) {
+  void androidTest(
+    String description,
+    Future<void> Function(WidgetTester) body,
+  ) {
     testWidgets(description, (tester) async {
       debugDefaultTargetPlatformOverride = TargetPlatform.android;
       try {
@@ -32,16 +35,20 @@ void main() {
   /// it.
   Future<List<String>> openLink(WidgetTester tester, String url) async {
     final copied = clipboard(tester);
-    await tester.pumpWidget(MaterialApp(
-      home: Scaffold(
-        body: Builder(
-          builder: (context) => TextButton(
-            onPressed: () => PlatformLinkOpener(FakeChatStore()).open(context, Uri.parse(url)),
-            child: const Text("open"),
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Builder(
+            builder: (context) => TextButton(
+              onPressed: () => PlatformLinkOpener(
+                FakeChatStore(),
+              ).open(context, Uri.parse(url)),
+              child: const Text("open"),
+            ),
           ),
         ),
       ),
-    ));
+    );
     await tester.tap(find.text("open"));
     await tester.pumpAndSettle();
     return copied;
@@ -52,7 +59,9 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  androidTest("copies the page navigated to, not the link that opened it", (tester) async {
+  androidTest("copies the page navigated to, not the link that opened it", (
+    tester,
+  ) async {
     final copied = await openLink(tester, "https://example.com/one");
     platform.title = "Two";
     platform.delegate!.onPageFinished!("https://example.com/two");
@@ -65,9 +74,13 @@ void main() {
     expect(find.text("Two"), findsOneWidget);
   });
 
-  androidTest("a page that only rewrites its URL is still copied as it is", (tester) async {
+  androidTest("a page that only rewrites its URL is still copied as it is", (
+    tester,
+  ) async {
     final copied = await openLink(tester, "https://example.com/one");
-    platform.delegate!.onUrlChange!(const UrlChange(url: "https://example.com/three"));
+    platform.delegate!.onUrlChange!(
+      const UrlChange(url: "https://example.com/three"),
+    );
     await tester.pumpAndSettle();
 
     await tapCopyLink(tester);
@@ -75,7 +88,9 @@ void main() {
     expect(copied, ["https://example.com/three"]);
   });
 
-  androidTest("nothing loaded yet copies the link it was opened with", (tester) async {
+  androidTest("nothing loaded yet copies the link it was opened with", (
+    tester,
+  ) async {
     final copied = await openLink(tester, "https://example.com/one");
 
     await tapCopyLink(tester);
@@ -102,18 +117,18 @@ class _FakeWebViewPlatform extends WebViewPlatform {
 
   @override
   PlatformWebViewController createPlatformWebViewController(
-          PlatformWebViewControllerCreationParams params) =>
-      _FakeWebViewController(params, this);
+    PlatformWebViewControllerCreationParams params,
+  ) => _FakeWebViewController(params, this);
 
   @override
   PlatformNavigationDelegate createPlatformNavigationDelegate(
-          PlatformNavigationDelegateCreationParams params) =>
-      delegate = _FakeNavigationDelegate(params);
+    PlatformNavigationDelegateCreationParams params,
+  ) => delegate = _FakeNavigationDelegate(params);
 
   @override
   PlatformWebViewWidget createPlatformWebViewWidget(
-          PlatformWebViewWidgetCreationParams params) =>
-      _FakeWebViewWidget(params);
+    PlatformWebViewWidgetCreationParams params,
+  ) => _FakeWebViewWidget(params);
 }
 
 class _FakeWebViewController extends PlatformWebViewController {
@@ -125,7 +140,9 @@ class _FakeWebViewController extends PlatformWebViewController {
   Future<void> setJavaScriptMode(JavaScriptMode javaScriptMode) async {}
 
   @override
-  Future<void> setPlatformNavigationDelegate(PlatformNavigationDelegate handler) async {}
+  Future<void> setPlatformNavigationDelegate(
+    PlatformNavigationDelegate handler,
+  ) async {}
 
   @override
   Future<void> loadRequest(LoadRequestParams params) async {}

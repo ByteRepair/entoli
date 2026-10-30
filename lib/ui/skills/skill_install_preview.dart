@@ -50,8 +50,10 @@ class _SkillInstallPreviewPageState
   Future<void> _loadPackage() async {
     final store = ref.read(chatStoreProvider);
     try {
-      final bytes =
-          await store.readSkillInstall(widget.chatId, widget.installId);
+      final bytes = await store.readSkillInstall(
+        widget.chatId,
+        widget.installId,
+      );
       if (bytes == null) {
         if (mounted) {
           setState(() => _loading = false);
@@ -77,13 +79,15 @@ class _SkillInstallPreviewPageState
     final target = _destination;
     final config = ref.read(appConfigProvider);
     final skillsDir = config.promptsDir(CompletionKind.skill, project: target);
-    final replacing =
-        Directory(skillDirectory(config, pkg.name, project: target)).existsSync();
+    final replacing = Directory(
+      skillDirectory(config, pkg.name, project: target),
+    ).existsSync();
     if (mounted && replacing) {
       final confirmed = await confirm(
         context,
         title: "Replace ${pkg.name}?",
-        message: "A skill with that name is already installed there. Installing "
+        message:
+            "A skill with that name is already installed there. Installing "
             "this one replaces it, files included.",
         confirmLabel: "Replace",
       );
@@ -92,9 +96,7 @@ class _SkillInstallPreviewPageState
         return;
       }
     }
-    await platform.readOnlyDirs
-        .skills(skillsDir)
-        .write(() async {
+    await platform.readOnlyDirs.skills(skillsDir).write(() async {
       await installSkillPackage(config, pkg, project: target);
     });
     await reloadAllPromptLibraries(ref);
@@ -115,18 +117,18 @@ class _SkillInstallPreviewPageState
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _package == null
-              ? Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(32),
-                    child: Text(
-                      "The skill package could not be read. It may have been "
-                      "deleted with the chat.",
-                      style: theme.textTheme.bodyMedium,
-                      textAlign: TextAlign.center,
-                    ),
-                  ),
-                )
-              : _previewBody(theme),
+          ? Center(
+              child: Padding(
+                padding: const EdgeInsets.all(32),
+                child: Text(
+                  "The skill package could not be read. It may have been "
+                  "deleted with the chat.",
+                  style: theme.textTheme.bodyMedium,
+                  textAlign: TextAlign.center,
+                ),
+              ),
+            )
+          : _previewBody(theme),
       bottomNavigationBar: _package == null || _loading
           ? null
           : InstallBar(

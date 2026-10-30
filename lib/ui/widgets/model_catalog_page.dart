@@ -18,7 +18,12 @@ import "dialogs.dart" show confirm;
 
 /// One model a picker can offer, with the provider it is reached through.
 class CatalogEntry {
-  const CatalogEntry(this.providerId, this.providerName, this.info, {this.custom = false});
+  const CatalogEntry(
+    this.providerId,
+    this.providerName,
+    this.info, {
+    this.custom = false,
+  });
 
   final String providerId;
   final String providerName;
@@ -52,12 +57,12 @@ enum ModelRole {
   speech;
 
   bool offers(Model m) => switch (this) {
-        agent => m is ChatModel && m.info.answersTurns,
-        text || title => m is ChatModel,
-        image => m is ImageModel,
-        transcription => m is TranscriptionModel,
-        speech => m is SynthesisModel,
-      };
+    agent => m is ChatModel && m.info.answersTurns,
+    text || title => m is ChatModel,
+    image => m is ImageModel,
+    transcription => m is TranscriptionModel,
+    speech => m is SynthesisModel,
+  };
 
   /// Whether its models are chat models: the ones only an endpoint's own list
   /// names are offered, being taken for chat models since nothing says
@@ -68,11 +73,11 @@ enum ModelRole {
 
   /// What the picker's page is called, and what its empty list says.
   String get noun => switch (this) {
-        image => "image model",
-        transcription => "transcription model",
-        speech => "speech model",
-        _ => "model",
-      };
+    image => "image model",
+    transcription => "transcription model",
+    speech => "speech model",
+    _ => "model",
+  };
 }
 
 /// What a picker offers: each provider's models that [role] can use — the
@@ -101,22 +106,32 @@ List<CatalogEntry> catalogEntries(
   return [
     for (final (:provider, :model) in described)
       if (role.offers(model) && shown.add((provider.id, model.info.id)))
-        CatalogEntry(provider.id, provider.displayName, model.info,
-            custom: provider.config.customModels.any((c) => c.id == model.info.id)),
+        CatalogEntry(
+          provider.id,
+          provider.displayName,
+          model.info,
+          custom: provider.config.customModels.any(
+            (c) => c.id == model.info.id,
+          ),
+        ),
     // Named by their own listing — `<endpoint> · <model>` — and taken to be
     // chat models, since nothing says otherwise: no image model is guessed.
     if (role.chat)
       for (final o in listed)
         if (!known.contains((o.providerId, o.modelId)) &&
-            (role == ModelRole.title || !isTitleOnlyModel(o.providerId, o.modelId)))
+            (role == ModelRole.title ||
+                !isTitleOnlyModel(o.providerId, o.modelId)))
           _listedEntry(o),
   ]..sort((a, b) {
-      final byName =
-          a.info.displayName.toLowerCase().compareTo(b.info.displayName.toLowerCase());
-      return byName != 0
-          ? byName
-          : (order[a.providerId] ?? order.length).compareTo(order[b.providerId] ?? order.length);
-    });
+    final byName = a.info.displayName.toLowerCase().compareTo(
+      b.info.displayName.toLowerCase(),
+    );
+    return byName != 0
+        ? byName
+        : (order[a.providerId] ?? order.length).compareTo(
+            order[b.providerId] ?? order.length,
+          );
+  });
 }
 
 CatalogEntry _listedEntry(ModelOption o) {
@@ -168,19 +183,29 @@ class _ModelCatalogPageState extends ConsumerState<ModelCatalogPage> {
   Object? _entriesKey;
   var _entries = const <CatalogEntry>[];
 
-  List<CatalogEntry> _entriesOf(ModelCatalog catalog, List<LlmProvider> providers,
-      List<ModelOption> listed, bool cutsUtterances) {
+  List<CatalogEntry> _entriesOf(
+    ModelCatalog catalog,
+    List<LlmProvider> providers,
+    List<ModelOption> listed,
+    bool cutsUtterances,
+  ) {
     final key = (catalog, providers, listed, cutsUtterances);
     if (key != _entriesKey) {
       _entriesKey = key;
-      _entries = catalogEntries(catalog, providers, listed,
-          role: widget.role, host: ModelHost.resolving(cutsUtterances: cutsUtterances));
+      _entries = catalogEntries(
+        catalog,
+        providers,
+        listed,
+        role: widget.role,
+        host: ModelHost.resolving(cutsUtterances: cutsUtterances),
+      );
     }
     return _entries;
   }
 
   bool _matches(CatalogEntry e, List<String> words) {
-    final hay = "${e.info.displayName} ${e.info.id} ${e.providerName}".toLowerCase();
+    final hay = "${e.info.displayName} ${e.info.id} ${e.providerName}"
+        .toLowerCase();
     return words.every(hay.contains) &&
         (!_reasoning || e.info.reasoning) &&
         (!_seesImages || e.info.readsImages) &&
@@ -188,16 +213,24 @@ class _ModelCatalogPageState extends ConsumerState<ModelCatalogPage> {
   }
 
   bool _picked(String? providerId, String? modelId) =>
-      widget.choice.providerId == providerId && widget.choice.modelId == modelId;
+      widget.choice.providerId == providerId &&
+      widget.choice.modelId == modelId;
 
-  void _pick(String? providerId, String? modelId) =>
-      Navigator.of(context).pop<ModelChoice>((providerId: providerId, modelId: modelId));
+  void _pick(String? providerId, String? modelId) => Navigator.of(
+    context,
+  ).pop<ModelChoice>((providerId: providerId, modelId: modelId));
 
   /// Adds a model, or edits [initial] on [provider].
   Future<void> _openModelPage({String? provider, ModelInfo? initial}) async {
-    final saved = await Navigator.of(context).push<String>(MaterialPageRoute(
-      builder: (_) => AddModelPage(role: widget.role, provider: provider, initial: initial),
-    ));
+    final saved = await Navigator.of(context).push<String>(
+      MaterialPageRoute(
+        builder: (_) => AddModelPage(
+          role: widget.role,
+          provider: provider,
+          initial: initial,
+        ),
+      ),
+    );
     // Found straight away, since it is what was just described.
     if (saved != null) setState(() => _search.text = saved);
   }
@@ -209,7 +242,8 @@ class _ModelCatalogPageState extends ConsumerState<ModelCatalogPage> {
     final ok = await confirm(
       context,
       title: "Delete ${entry.info.displayName}?",
-      message: "It is no longer offered for ${entry.providerName}. A model "
+      message:
+          "It is no longer offered for ${entry.providerName}. A model "
           "already picked keeps its id until another is picked.",
       confirmLabel: "Delete",
       destructive: true,
@@ -220,7 +254,9 @@ class _ModelCatalogPageState extends ConsumerState<ModelCatalogPage> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final configured = ref.watch(appSettingsProvider.select((s) => s.llmProviders));
+    final configured = ref.watch(
+      appSettingsProvider.select((s) => s.llmProviders),
+    );
     final cutsUtterances = ref.watch(voiceProvider).hasModelCatalog;
     // No provider serves a transcription model where the device cannot cut
     // the microphone into utterances, so none is offered a Default entry or a
@@ -228,7 +264,8 @@ class _ModelCatalogPageState extends ConsumerState<ModelCatalogPage> {
     final providers = widget.role == ModelRole.transcription && !cutsUtterances
         ? const <LlmProviderConfig>[]
         : configured;
-    final listed = ref.watch(sortedModelsProvider).value ?? const <ModelOption>[];
+    final listed =
+        ref.watch(sortedModelsProvider).value ?? const <ModelOption>[];
     final serving = ref.watch(modelProvidersProvider);
     return ValueListenableBuilder(
       valueListenable: ModelCatalog.notifier,
@@ -247,47 +284,63 @@ class _ModelCatalogPageState extends ConsumerState<ModelCatalogPage> {
             title: Text("Choose a ${widget.role.noun}"),
             bottom: PreferredSize(
               preferredSize: const Size.fromHeight(112),
-              child: _Readable(Padding(
-                padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-                child: Column(
-                  children: [
-                    SearchBar(
-                      controller: _search,
-                      autoFocus: true,
-                      hintText: "Search ${all.length} models",
-                      leading: const Icon(Icons.search),
-                      trailing: [
-                        if (searching)
-                          IconButton(
-                            tooltip: "Clear",
-                            icon: const Icon(Icons.close),
-                            onPressed: () => setState(_search.clear),
-                          ),
-                      ],
-                      elevation: const WidgetStatePropertyAll(0),
-                      onChanged: (_) => setState(() {}),
-                    ),
-                    const SizedBox(height: 8),
-                    SizedBox(
-                      height: 40,
-                      child: ListView(
-                        scrollDirection: Axis.horizontal,
-                        children: [
-                          _Filter("Reasoning", Icons.psychology_alt_outlined, _reasoning,
-                              (v) => setState(() => _reasoning = v)),
-                          if (widget.role.chat)
-                            _Filter("Sees images", Icons.image_search, _seesImages,
-                                (v) => setState(() => _seesImages = v)),
-                          if (names.length > 1)
-                            for (final MapEntry(key: id, value: name) in names.entries)
-                              _Filter(name, Icons.cloud_outlined, _provider == id,
-                                  (v) => setState(() => _provider = v ? id : null)),
+              child: _Readable(
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                  child: Column(
+                    children: [
+                      SearchBar(
+                        controller: _search,
+                        autoFocus: true,
+                        hintText: "Search ${all.length} models",
+                        leading: const Icon(Icons.search),
+                        trailing: [
+                          if (searching)
+                            IconButton(
+                              tooltip: "Clear",
+                              icon: const Icon(Icons.close),
+                              onPressed: () => setState(_search.clear),
+                            ),
                         ],
+                        elevation: const WidgetStatePropertyAll(0),
+                        onChanged: (_) => setState(() {}),
                       ),
-                    ),
-                  ],
+                      const SizedBox(height: 8),
+                      SizedBox(
+                        height: 40,
+                        child: ListView(
+                          scrollDirection: Axis.horizontal,
+                          children: [
+                            _Filter(
+                              "Reasoning",
+                              Icons.psychology_alt_outlined,
+                              _reasoning,
+                              (v) => setState(() => _reasoning = v),
+                            ),
+                            if (widget.role.chat)
+                              _Filter(
+                                "Sees images",
+                                Icons.image_search,
+                                _seesImages,
+                                (v) => setState(() => _seesImages = v),
+                              ),
+                            if (names.length > 1)
+                              for (final MapEntry(key: id, value: name)
+                                  in names.entries)
+                                _Filter(
+                                  name,
+                                  Icons.cloud_outlined,
+                                  _provider == id,
+                                  (v) =>
+                                      setState(() => _provider = v ? id : null),
+                                ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-              )),
+              ),
             ),
           ),
           floatingActionButton: providers.isEmpty
@@ -297,89 +350,104 @@ class _ModelCatalogPageState extends ConsumerState<ModelCatalogPage> {
                   icon: const Icon(Icons.add),
                   label: const Text("Add model"),
                 ),
-          body: _Readable(CustomScrollView(
-            slivers: [
-              if (catalog.fetched == null)
-                SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-                    child: Card.filled(
-                      color: theme.colorScheme.secondaryContainer,
-                      child: ListTile(
-                        leading: const Icon(Icons.cloud_off_outlined),
-                        title: const Text("Only the default models for now"),
-                        subtitle: const Text("The full catalog comes from models.dev "
-                            "and arrives the next time Entoli is online."),
+          body: _Readable(
+            CustomScrollView(
+              slivers: [
+                if (catalog.fetched == null)
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                      child: Card.filled(
+                        color: theme.colorScheme.secondaryContainer,
+                        child: ListTile(
+                          leading: const Icon(Icons.cloud_off_outlined),
+                          title: const Text("Only the default models for now"),
+                          subtitle: const Text(
+                            "The full catalog comes from models.dev "
+                            "and arrives the next time Entoli is online.",
+                          ),
+                        ),
                       ),
                     ),
                   ),
-                ),
-              if (!searching) ...[
-                _header(theme, "Quick picks"),
-                SliverList.list(children: [
-                  _QuickPick(
-                    icon: Icons.block,
-                    title: widget.nullEntry,
-                    selected: _picked(null, null),
-                    onTap: () => _pick(null, null),
-                  ),
-                  for (final p in providers)
-                    if (widget.defaultOf(p) case final id?)
+                if (!searching) ...[
+                  _header(theme, "Quick picks"),
+                  SliverList.list(
+                    children: [
                       _QuickPick(
-                        icon: Icons.auto_awesome,
-                        title: "${p.displayName} - Default",
-                        subtitle: modelInfoOf(p, id)?.displayName ?? id,
-                        selected: _picked(p.id, null),
-                        onTap: () => _pick(p.id, null),
+                        icon: Icons.block,
+                        title: widget.nullEntry,
+                        selected: _picked(null, null),
+                        onTap: () => _pick(null, null),
                       ),
-                ]),
-              ],
-              _header(theme, shown.length == 1 ? "1 model" : "${shown.length} models"),
-              if (shown.isEmpty)
-                SliverFillRemaining(
-                  hasScrollBody: false,
-                  child: _Empty(
-                      role: searching ? null : widget.role,
-                      onAdd: providers.isEmpty ? null : _addModel),
-                )
-              else
-                SliverPadding(
-                  // Room under the last card for the button floating over it.
-                  padding: const EdgeInsets.fromLTRB(12, 0, 12, 96),
-                  sliver: SliverList.builder(
-                    itemCount: shown.length,
-                    itemBuilder: (context, i) {
-                      final e = shown[i];
-                      return _ModelCard(
-                        entry: e,
-                        selected: _picked(e.providerId, e.info.id),
-                        onTap: () => _pick(e.providerId, e.info.id),
-                        manage: e.custom
-                            ? (
-                                edit: () =>
-                                    _openModelPage(provider: e.providerId, initial: e.info),
-                                delete: () => _deleteModel(e),
-                              )
-                            : null,
-                      );
-                    },
+                      for (final p in providers)
+                        if (widget.defaultOf(p) case final id?)
+                          _QuickPick(
+                            icon: Icons.auto_awesome,
+                            title: "${p.displayName} - Default",
+                            subtitle: modelInfoOf(p, id)?.displayName ?? id,
+                            selected: _picked(p.id, null),
+                            onTap: () => _pick(p.id, null),
+                          ),
+                    ],
                   ),
+                ],
+                _header(
+                  theme,
+                  shown.length == 1 ? "1 model" : "${shown.length} models",
                 ),
-            ],
-          )),
+                if (shown.isEmpty)
+                  SliverFillRemaining(
+                    hasScrollBody: false,
+                    child: _Empty(
+                      role: searching ? null : widget.role,
+                      onAdd: providers.isEmpty ? null : _addModel,
+                    ),
+                  )
+                else
+                  SliverPadding(
+                    // Room under the last card for the button floating over it.
+                    padding: const EdgeInsets.fromLTRB(12, 0, 12, 96),
+                    sliver: SliverList.builder(
+                      itemCount: shown.length,
+                      itemBuilder: (context, i) {
+                        final e = shown[i];
+                        return _ModelCard(
+                          entry: e,
+                          selected: _picked(e.providerId, e.info.id),
+                          onTap: () => _pick(e.providerId, e.info.id),
+                          manage: e.custom
+                              ? (
+                                  edit: () => _openModelPage(
+                                    provider: e.providerId,
+                                    initial: e.info,
+                                  ),
+                                  delete: () => _deleteModel(e),
+                                )
+                              : null,
+                        );
+                      },
+                    ),
+                  ),
+              ],
+            ),
+          ),
         );
       },
     );
   }
 
   Widget _header(ThemeData theme, String text) => SliverToBoxAdapter(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
-          child: Text(text,
-              style: theme.textTheme.labelLarge
-                  ?.copyWith(color: theme.colorScheme.primary)),
+    child: Padding(
+      padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+      child: Text(
+        text,
+        style: theme.textTheme.labelLarge?.copyWith(
+          color: theme.colorScheme.primary,
         ),
-      );
+      ),
+    ),
+  );
 }
 
 /// A list of cards is read down, not across: on a wide window it keeps a
@@ -391,9 +459,12 @@ class _Readable extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Align(
-        alignment: Alignment.topCenter,
-        child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 760), child: child),
-      );
+    alignment: Alignment.topCenter,
+    child: ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 760),
+      child: child,
+    ),
+  );
 }
 
 class _Filter extends StatelessWidget {
@@ -406,14 +477,14 @@ class _Filter extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.only(right: 8),
-        child: FilterChip(
-          avatar: selected ? null : Icon(icon, size: 18),
-          label: Text(label),
-          selected: selected,
-          onSelected: onSelected,
-        ),
-      );
+    padding: const EdgeInsets.only(right: 8),
+    child: FilterChip(
+      avatar: selected ? null : Icon(icon, size: 18),
+      label: Text(label),
+      selected: selected,
+      onSelected: onSelected,
+    ),
+  );
 }
 
 class _QuickPick extends StatelessWidget {
@@ -433,16 +504,16 @@ class _QuickPick extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => ListTile(
-        contentPadding: const EdgeInsets.symmetric(horizontal: 20),
-        leading: Icon(icon),
-        title: Text(title),
-        subtitle: subtitle == null ? null : Text(subtitle!),
-        trailing: selected
-            ? Icon(Icons.check_circle, color: Theme.of(context).colorScheme.primary)
-            : null,
-        selected: selected,
-        onTap: onTap,
-      );
+    contentPadding: const EdgeInsets.symmetric(horizontal: 20),
+    leading: Icon(icon),
+    title: Text(title),
+    subtitle: subtitle == null ? null : Text(subtitle!),
+    trailing: selected
+        ? Icon(Icons.check_circle, color: Theme.of(context).colorScheme.primary)
+        : null,
+    selected: selected,
+    onTap: onTap,
+  );
 }
 
 class _ModelCard extends StatelessWidget {
@@ -474,7 +545,9 @@ class _ModelCard extends StatelessWidget {
     return Card(
       elevation: 0,
       margin: const EdgeInsets.symmetric(vertical: 4),
-      color: selected ? scheme.primaryContainer.withValues(alpha: 0.5) : scheme.surface,
+      color: selected
+          ? scheme.primaryContainer.withValues(alpha: 0.5)
+          : scheme.surface,
       shape: base.copyWith(
         side: selected
             ? BorderSide(color: scheme.primary, width: 1.5)
@@ -496,15 +569,21 @@ class _ModelCard extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(info.displayName,
-                            style: theme.textTheme.titleMedium,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis),
-                        Text("${entry.providerName} · ${info.id}",
-                            style: theme.textTheme.bodySmall?.copyWith(
-                                color: scheme.onSurfaceVariant, fontFamily: monoFamily),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis),
+                        Text(
+                          info.displayName,
+                          style: theme.textTheme.titleMedium,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        Text(
+                          "${entry.providerName} · ${info.id}",
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: scheme.onSurfaceVariant,
+                            fontFamily: monoFamily,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ],
                     ),
                   ),
@@ -514,8 +593,14 @@ class _ModelCard extends StatelessWidget {
                       tooltip: "Model options",
                       onSelected: (action) => action(),
                       itemBuilder: (_) => [
-                        PopupMenuItem(value: manage.edit, child: const Text("Edit")),
-                        PopupMenuItem(value: manage.delete, child: const Text("Delete")),
+                        PopupMenuItem(
+                          value: manage.edit,
+                          child: const Text("Edit"),
+                        ),
+                        PopupMenuItem(
+                          value: manage.delete,
+                          child: const Text("Delete"),
+                        ),
                       ],
                     ),
                 ],
@@ -526,15 +611,23 @@ class _ModelCard extends StatelessWidget {
                 runSpacing: 6,
                 children: [
                   if (info.context != null)
-                    InfoTag(Icons.data_usage, "${tokenCount(info.context!)} context"),
+                    InfoTag(
+                      Icons.data_usage,
+                      "${tokenCount(info.context!)} context",
+                    ),
                   if (price != null) InfoTag(Icons.payments_outlined, price),
                   if (info.toolCall) InfoTag(Icons.build_outlined, "Tools"),
-                  if (info.reasoning) InfoTag(Icons.psychology_alt_outlined, "Reasoning"),
-                  if (info.readsImages) InfoTag(Icons.image_search, "Sees images"),
-                  if (info.makesImages) InfoTag(Icons.brush_outlined, "Makes images"),
+                  if (info.reasoning)
+                    InfoTag(Icons.psychology_alt_outlined, "Reasoning"),
+                  if (info.readsImages)
+                    InfoTag(Icons.image_search, "Sees images"),
+                  if (info.makesImages)
+                    InfoTag(Icons.brush_outlined, "Makes images"),
                   if (info.transcribes) InfoTag(Icons.hearing, "Transcribes"),
-                  if (info.speaks) InfoTag(Icons.record_voice_over_outlined, "Speaks"),
-                  if (entry.custom) InfoTag(Icons.edit_outlined, "Added by you"),
+                  if (info.speaks)
+                    InfoTag(Icons.record_voice_over_outlined, "Speaks"),
+                  if (entry.custom)
+                    InfoTag(Icons.edit_outlined, "Added by you"),
                 ],
               ),
             ],
@@ -576,8 +669,10 @@ class _Monogram extends StatelessWidget {
     return CircleAvatar(
       radius: 18,
       backgroundColor: bg,
-      child: Text(name.isEmpty ? "?" : name.characters.first.toUpperCase(),
-          style: TextStyle(color: fg, fontWeight: FontWeight.w600)),
+      child: Text(
+        name.isEmpty ? "?" : name.characters.first.toUpperCase(),
+        style: TextStyle(color: fg, fontWeight: FontWeight.w600),
+      ),
     );
   }
 }
@@ -592,16 +687,19 @@ class _Empty extends StatelessWidget {
   final VoidCallback? onAdd;
 
   String? get _media => switch (role) {
-        ModelRole.image => "None of your providers makes images. OpenAI and "
-            "OpenRouter do: add one in Settings > Providers.",
-        ModelRole.transcription => "Nothing here can listen yet. Download a "
-            "model in Settings > On-device, or add a provider with one: Groq "
-            "has Whisper, and OpenAI's whisper-1 can be added by hand.",
-        ModelRole.speech => "Nothing here can speak yet. Download a model in "
-            "Settings > On-device, or add a provider with one: Groq and Google "
-            "have them, and OpenAI's tts-1 can be added by hand.",
-        _ => null,
-      };
+    ModelRole.image =>
+      "None of your providers makes images. OpenAI and "
+          "OpenRouter do: add one in Settings > Providers.",
+    ModelRole.transcription =>
+      "Nothing here can listen yet. Download a "
+          "model in Settings > On-device, or add a provider with one: Groq "
+          "has Whisper, and OpenAI's whisper-1 can be added by hand.",
+    ModelRole.speech =>
+      "Nothing here can speak yet. Download a model in "
+          "Settings > On-device, or add a provider with one: Groq and Google "
+          "have them, and OpenAI's tts-1 can be added by hand.",
+    _ => null,
+  };
 
   @override
   Widget build(BuildContext context) {
@@ -611,20 +709,27 @@ class _Empty extends StatelessWidget {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.travel_explore, size: 48, color: theme.colorScheme.onSurfaceVariant),
+          Icon(
+            Icons.travel_explore,
+            size: 48,
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
           const SizedBox(height: 12),
-          Text(_media != null ? "No ${role!.noun}s" : "No model matches",
-              style: theme.textTheme.titleMedium),
+          Text(
+            _media != null ? "No ${role!.noun}s" : "No model matches",
+            style: theme.textTheme.titleMedium,
+          ),
           const SizedBox(height: 4),
           Text(
             onAdd == null && role?.voice != true
                 ? "Add a provider in Settings > Providers to see its models."
                 : _media ??
-                    "Not every model is in the catalog. A fine-tune or a "
-                        "private deployment can be added by hand.",
+                      "Not every model is in the catalog. A fine-tune or a "
+                          "private deployment can be added by hand.",
             textAlign: TextAlign.center,
-            style: theme.textTheme.bodyMedium
-                ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
           ),
           if (onAdd != null) ...[
             const SizedBox(height: 16),
@@ -643,7 +748,12 @@ class _Empty extends StatelessWidget {
 /// A model models.dev does not list, described by hand: the same fields the
 /// catalog reads, for the user to fill in. Pops with the new model's id.
 class AddModelPage extends ConsumerStatefulWidget {
-  const AddModelPage({super.key, required this.role, this.provider, this.initial});
+  const AddModelPage({
+    super.key,
+    required this.role,
+    this.provider,
+    this.initial,
+  });
 
   /// The picker this was opened from: the toggles start where its models'
   /// would be.
@@ -664,16 +774,26 @@ class _AddModelPageState extends ConsumerState<AddModelPage> {
   final _form = GlobalKey<FormState>();
   late final _id = TextEditingController(text: widget.initial?.id);
   late final _name = TextEditingController(text: widget.initial?.name);
-  late final _context = TextEditingController(text: widget.initial?.context?.toString());
-  late final _output = TextEditingController(text: widget.initial?.output?.toString());
-  late final _inputCost = TextEditingController(text: widget.initial?.inputCost?.toString());
-  late final _outputCost = TextEditingController(text: widget.initial?.outputCost?.toString());
+  late final _context = TextEditingController(
+    text: widget.initial?.context?.toString(),
+  );
+  late final _output = TextEditingController(
+    text: widget.initial?.output?.toString(),
+  );
+  late final _inputCost = TextEditingController(
+    text: widget.initial?.inputCost?.toString(),
+  );
+  late final _outputCost = TextEditingController(
+    text: widget.initial?.outputCost?.toString(),
+  );
   late String? _provider = widget.provider;
-  late var _toolCall = widget.initial?.toolCall ?? widget.role == ModelRole.agent;
+  late var _toolCall =
+      widget.initial?.toolCall ?? widget.role == ModelRole.agent;
   late var _reasoning = widget.initial?.reasoning ?? false;
   late var _readsImages = widget.initial?.readsImages ?? false;
   late var _readsPdfs = widget.initial?.readsPdfs ?? false;
-  late var _makesImages = widget.initial?.makesImages ?? widget.role == ModelRole.image;
+  late var _makesImages =
+      widget.initial?.makesImages ?? widget.role == ModelRole.image;
 
   /// What the model is: a chat model, or one of the two speech kinds, which
   /// answer endpoints of their own and take none of the chat toggles.
@@ -682,9 +802,9 @@ class _AddModelPageState extends ConsumerState<AddModelPage> {
     ModelInfo(speaks: true) => ModelRole.speech,
     ModelInfo() => ModelRole.text,
     null => switch (widget.role) {
-        ModelRole.transcription || ModelRole.speech => widget.role,
-        _ => ModelRole.text,
-      },
+      ModelRole.transcription || ModelRole.speech => widget.role,
+      _ => ModelRole.text,
+    },
   };
 
   @override
@@ -698,10 +818,13 @@ class _AddModelPageState extends ConsumerState<AddModelPage> {
   Future<void> _save() async {
     if (!_form.currentState!.validate()) return;
     final id = _id.text.trim();
-    String? text(TextEditingController c) => c.text.trim().isEmpty ? null : c.text.trim();
+    String? text(TextEditingController c) =>
+        c.text.trim().isEmpty ? null : c.text.trim();
     final chat = _kind == ModelRole.text;
     final before = widget.initial;
-    await ref.read(appSettingsProvider.notifier).putCustomModel(
+    await ref
+        .read(appSettingsProvider.notifier)
+        .putCustomModel(
           _provider!,
           ModelInfo(
             id: id,
@@ -727,7 +850,9 @@ class _AddModelPageState extends ConsumerState<AddModelPage> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final providers = ref.watch(appSettingsProvider.select((s) => s.llmProviders));
+    final providers = ref.watch(
+      appSettingsProvider.select((s) => s.llmProviders),
+    );
     _provider ??= providers.firstOrNull?.id;
     return Scaffold(
       appBar: AppBar(
@@ -748,8 +873,9 @@ class _AddModelPageState extends ConsumerState<AddModelPage> {
               "For a model models.dev does not list: a fine-tune, a private "
               "deployment. Entoli trusts what you enter here, so take it from "
               "the provider's documentation.",
-              style: theme.textTheme.bodyMedium
-                  ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
             ),
             const SizedBox(height: 20),
             DropdownButtonFormField<String>(
@@ -774,7 +900,9 @@ class _AddModelPageState extends ConsumerState<AddModelPage> {
             const SizedBox(height: 16),
             TextFormField(
               controller: _name,
-              decoration: const InputDecoration(labelText: "Display name (optional)"),
+              decoration: const InputDecoration(
+                labelText: "Display name (optional)",
+              ),
             ),
             const SizedBox(height: 16),
             Row(
@@ -787,16 +915,33 @@ class _AddModelPageState extends ConsumerState<AddModelPage> {
             const SizedBox(height: 16),
             Row(
               children: [
-                Expanded(child: _number(_inputCost, "Input price", "\$ per M tokens", decimal: true)),
+                Expanded(
+                  child: _number(
+                    _inputCost,
+                    "Input price",
+                    "\$ per M tokens",
+                    decimal: true,
+                  ),
+                ),
                 const SizedBox(width: 12),
-                Expanded(child: _number(_outputCost, "Output price", "\$ per M tokens", decimal: true)),
+                Expanded(
+                  child: _number(
+                    _outputCost,
+                    "Output price",
+                    "\$ per M tokens",
+                    decimal: true,
+                  ),
+                ),
               ],
             ),
             const SizedBox(height: 24),
             SegmentedButton<ModelRole>(
               segments: const [
                 ButtonSegment(value: ModelRole.text, label: Text("Chat")),
-                ButtonSegment(value: ModelRole.transcription, label: Text("Transcribes")),
+                ButtonSegment(
+                  value: ModelRole.transcription,
+                  label: Text("Transcribes"),
+                ),
                 ButtonSegment(value: ModelRole.speech, label: Text("Speaks")),
               ],
               selected: {_kind},
@@ -809,8 +954,9 @@ class _AddModelPageState extends ConsumerState<AddModelPage> {
                   _kind == ModelRole.transcription
                       ? "Called at /audio/transcriptions, for voice mode's listening."
                       : "Called at /audio/speech, for voice mode's speaking.",
-                  style: theme.textTheme.bodySmall
-                      ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
                 ),
               ),
             if (_kind == ModelRole.text) ...[
@@ -839,7 +985,9 @@ class _AddModelPageState extends ConsumerState<AddModelPage> {
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
                 title: const Text("Reads PDFs"),
-                subtitle: const Text("PDFs are sent to it, where the provider takes them"),
+                subtitle: const Text(
+                  "PDFs are sent to it, where the provider takes them",
+                ),
                 value: _readsPdfs,
                 onChanged: (v) => setState(() => _readsPdfs = v),
               ),
@@ -854,8 +1002,9 @@ class _AddModelPageState extends ConsumerState<AddModelPage> {
                   padding: const EdgeInsets.only(top: 8),
                   child: Text(
                     "It will not be offered as an image model unless it makes images.",
-                    style: theme.textTheme.bodySmall
-                        ?.copyWith(color: theme.colorScheme.error),
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.error,
+                    ),
                   ),
                 ),
             ],
@@ -869,22 +1018,28 @@ class _AddModelPageState extends ConsumerState<AddModelPage> {
   /// error colour while it is off, since the model is then not offered as a
   /// chat's model — a title or memory model needs no tools.
   Widget _required(ThemeData theme, bool on) => Text(
-        "Required for agentic use: without it, the model is not offered for chats",
-        style: on ? null : TextStyle(color: theme.colorScheme.error),
-      );
+    "Required for agentic use: without it, the model is not offered for chats",
+    style: on ? null : TextStyle(color: theme.colorScheme.error),
+  );
 
-  Widget _number(TextEditingController c, String label, String suffix,
-          {bool decimal = false}) =>
-      TextFormField(
-        controller: c,
-        decoration: InputDecoration(labelText: label, helperText: suffix),
-        keyboardType: TextInputType.numberWithOptions(decimal: decimal),
-        inputFormatters: [
-          FilteringTextInputFormatter.allow(decimal ? RegExp(r"[0-9.]") : RegExp(r"[0-9]")),
-        ],
-        validator: (v) => (v ?? "").isEmpty ||
-                (decimal ? double.tryParse(v!) : int.tryParse(v!)) != null
-            ? null
-            : "Not a number",
-      );
+  Widget _number(
+    TextEditingController c,
+    String label,
+    String suffix, {
+    bool decimal = false,
+  }) => TextFormField(
+    controller: c,
+    decoration: InputDecoration(labelText: label, helperText: suffix),
+    keyboardType: TextInputType.numberWithOptions(decimal: decimal),
+    inputFormatters: [
+      FilteringTextInputFormatter.allow(
+        decimal ? RegExp(r"[0-9.]") : RegExp(r"[0-9]"),
+      ),
+    ],
+    validator: (v) =>
+        (v ?? "").isEmpty ||
+            (decimal ? double.tryParse(v!) : int.tryParse(v!)) != null
+        ? null
+        : "Not a number",
+  );
 }

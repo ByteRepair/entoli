@@ -1,6 +1,5 @@
 import "dart:io";
 
-
 /// What a document being written through a rename is called until the rename.
 /// Whoever writes one spells it, and a backup skips one — it is the half of a
 /// rename a kill landed in, not a file anything reads.
@@ -89,12 +88,12 @@ class Documents {
   /// Null where nothing has been written, which is the caller's cue to use its
   /// defaults rather than an error.
   String? read(String path) => _texts.putIfAbsent(path, () {
-        try {
-          return File(path).readAsStringSync();
-        } on PathNotFoundException {
-          return null;
-        }
-      });
+    try {
+      return File(path).readAsStringSync();
+    } on PathNotFoundException {
+      return null;
+    }
+  });
 
   /// Written through a rename for the same reason the chat store is:
   /// `writeAsString` truncates before it writes, so a read landing between the

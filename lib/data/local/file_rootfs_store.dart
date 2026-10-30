@@ -67,45 +67,61 @@ class FileRootfsStore extends RootfsStore {
   /// [DownloadRun]'s; what is left here is the checksum, which is the thing
   /// this download has that no other one does.
   @override
-  Stream<DownloadProgress> install(Rootfs rootfs, {required String abi}) => DownloadRun(
-        client: client,
-        discard: () => delete(rootfs),
-        run: (run) async {
-          final image = rootfs.imageFor(abi);
-          if (image == null) {
-            throw UnsupportedError("${rootfs.name} has no build for $abi.");
-          }
-          // Whatever an earlier attempt left: files under a name we are about to
-          // write, which is worse than starting again.
-          await delete(rootfs);
-          final dir = Directory(directoryFor(rootfs.id))..createSync(recursive: true);
-          final archive = p.join(dir.path, "_rootfs.tar.gz");
+  Stream<DownloadProgress> install(
+    Rootfs rootfs, {
+    required String abi,
+  }) => DownloadRun(
+    client: client,
+    discard: () => delete(rootfs),
+    run: (run) async {
+      final image = rootfs.imageFor(abi);
+      if (image == null) {
+        throw UnsupportedError("${rootfs.name} has no build for $abi.");
+      }
+      // Whatever an earlier attempt left: files under a name we are about to
+      // write, which is worse than starting again.
+      await delete(rootfs);
+      final dir = Directory(directoryFor(rootfs.id))
+        ..createSync(recursive: true);
+      final archive = p.join(dir.path, "_rootfs.tar.gz");
 
-          final digest =
-              await run.fetchSha256(url: image.url, to: archive, total: image.bytes);
-          if (run.cancelled) return;
-          // Before a byte of it is unpacked, let alone run. Everything in here
-          // becomes a program this device will execute, so arriving is not the
-          // same as being what was asked for.
-          if (digest != image.sha256) {
-            throw StateError(
-              "The download did not match what ${rootfs.name} ${rootfs.version} was "
-              "checked to be, so nothing was installed.",
-            );
-          }
+      final digest = await run.fetchSha256(
+        url: image.url,
+        to: archive,
+        total: image.bytes,
+      );
+      if (run.cancelled) return;
+      // Before a byte of it is unpacked, let alone run. Everything in here
+      // becomes a program this device will execute, so arriving is not the
+      // same as being what was asked for.
+      if (digest != image.sha256) {
+        throw StateError(
+          "The download did not match what ${rootfs.name} ${rootfs.version} was "
+          "checked to be, so nothing was installed.",
+        );
+      }
 
-          run.report(DownloadProgress(
-              received: image.bytes, total: image.bytes, unpacking: true));
-          final result = await tar(archive, dir.path);
-          if (run.cancelled) return;
-          if (result.exitCode != 0) {
-            throw ProcessException("tar", const [], "${result.stderr}".trim(),
-                result.exitCode);
-          }
-          await File(archive).delete();
-          await File(p.join(dir.path, _marker)).writeAsString("");
-        },
-      ).stream;
+      run.report(
+        DownloadProgress(
+          received: image.bytes,
+          total: image.bytes,
+          unpacking: true,
+        ),
+      );
+      final result = await tar(archive, dir.path);
+      if (run.cancelled) return;
+      if (result.exitCode != 0) {
+        throw ProcessException(
+          "tar",
+          const [],
+          "${result.stderr}".trim(),
+          result.exitCode,
+        );
+      }
+      await File(archive).delete();
+      await File(p.join(dir.path, _marker)).writeAsString("");
+    },
+  ).stream;
 
   /// Android's `tar` is toybox's, and `-z` is the one thing this needs of it.
   /// `runTar` in `tree_ops` handles finding it on `PATH` or at
@@ -132,8 +148,12 @@ Future<Set<String>> markedDirs(String root, String marker) async {
 extension DownloadRunSha256 on DownloadRun {
   /// [fetch] one file and answer its SHA-256 in hex, hashed on the way past
   /// rather than by reading back what may be gigabytes.
-  Future<String> fetchSha256(
-      {required String url, required String to, int? total, int done = 0}) async {
+  Future<String> fetchSha256({
+    required String url,
+    required String to,
+    int? total,
+    int done = 0,
+  }) async {
     report(DownloadProgress(received: done, total: total ?? 0));
     final hash = _Sha256Sink();
     final hashing = sha256.startChunkedConversion(hash);

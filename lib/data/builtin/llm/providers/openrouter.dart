@@ -2,7 +2,8 @@ import "../../../../domain/llm_provider.dart";
 import "provider.dart";
 
 class OpenRouterProvider extends OpenAiCompatibleProvider {
-  const OpenRouterProvider([LlmProviderConfig config = preset]) : super(config, _terms);
+  const OpenRouterProvider([LlmProviderConfig config = preset])
+    : super(config, _terms);
 
   static const preset = LlmProviderConfig(
     catalogId: "openrouter",

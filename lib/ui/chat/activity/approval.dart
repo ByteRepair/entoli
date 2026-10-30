@@ -24,8 +24,7 @@ class ApprovalActivity extends LabelledActivity {
     final part = run.part! as ApprovalPart;
     final result = run.result;
     // Raw answers, not the mapped wording: "deny" is what the enum records.
-    final denied =
-        part.answer == "deny" || part.answer == "asked";
+    final denied = part.answer == "deny" || part.answer == "asked";
     final answer = switch (part.answer) {
       "asked" => "asked (never answered)",
       "allow" => "allowed",
@@ -66,7 +65,8 @@ class ApprovalActivity extends LabelledActivity {
               isError: false,
             ),
           (label: "Answer", body: answer, isError: false),
-          if (outcome != null) (label: "Outcome", body: outcome, isError: false),
+          if (outcome != null)
+            (label: "Outcome", body: outcome, isError: false),
         ],
       ),
     );

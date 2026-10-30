@@ -46,20 +46,26 @@ List<String> skillProblems({
     problems.add("no description in the SKILL.md frontmatter");
   } else if (description.length > skillDescriptionMax) {
     problems.add(
-        "description is ${description.length} characters (max $skillDescriptionMax)");
+      "description is ${description.length} characters (max $skillDescriptionMax)",
+    );
   }
   for (final key in frontmatter.keys) {
     if (skillSpecKeys.contains(key)) continue;
-    problems.add("unknown frontmatter key \"$key\" (allowed: ${_allowedKeys.join(", ")})");
+    problems.add(
+      "unknown frontmatter key \"$key\" (allowed: ${_allowedKeys.join(", ")})",
+    );
   }
   final compatibility = frontmatter["compatibility"];
   if (compatibility != null && compatibility.length > skillCompatibilityMax) {
-    problems.add("compatibility is ${compatibility.length} characters "
-        "(max $skillCompatibilityMax)");
+    problems.add(
+      "compatibility is ${compatibility.length} characters "
+      "(max $skillCompatibilityMax)",
+    );
   }
   if (folderName != null && name != folderName) {
     problems.add(
-        "frontmatter name \"$name\" does not match the folder \"$folderName\"");
+      "frontmatter name \"$name\" does not match the folder \"$folderName\"",
+    );
   }
   return problems;
 }
@@ -75,15 +81,19 @@ bool skillNameOk(String name) =>
 
 List<String> _nameProblems(String name) {
   if (name.isEmpty) {
-    return ["no name — not in the frontmatter and the folder is not named "
-        "either"];
+    return [
+      "no name — not in the frontmatter and the folder is not named "
+          "either",
+    ];
   }
   if (name.length > skillNameMax) {
     return ["name is ${name.length} characters (max $skillNameMax)"];
   }
   if (!skillNameOk(name)) {
-    return ["name \"$name\" is not lowercase letters, digits and hyphens "
-        "with no doubled or leading/trailing hyphen"];
+    return [
+      "name \"$name\" is not lowercase letters, digits and hyphens "
+          "with no doubled or leading/trailing hyphen",
+    ];
   }
   return const [];
 }
@@ -91,8 +101,7 @@ List<String> _nameProblems(String name) {
 /// The problems of the frontmatter a skill's SKILL.md parsed to, against the
 /// folder it would be served from — the whole validation, runnable wherever a
 /// [Frontmatter] is already in hand (loader, import, generators).
-List<String> skillFrontmatterProblems(
-        Frontmatter parsed, String folderName) =>
+List<String> skillFrontmatterProblems(Frontmatter parsed, String folderName) =>
     skillProblems(
       name: parsed.name ?? folderName,
       description: parsed.description,
@@ -105,10 +114,12 @@ List<String> skillFrontmatterProblems(
 /// read from. The name-fallback rule is `_skillDocument`'s already
 /// ([PromptDocument.name] carries it), so this applies the rest of the
 /// validation beside it.
-List<String> skillDocumentProblems(PromptDocument document, String folderName) =>
-    skillProblems(
-      name: document.name,
-      description: document.description,
-      frontmatter: document.frontmatter,
-      folderName: folderName,
-    );
+List<String> skillDocumentProblems(
+  PromptDocument document,
+  String folderName,
+) => skillProblems(
+  name: document.name,
+  description: document.description,
+  frontmatter: document.frontmatter,
+  folderName: folderName,
+);

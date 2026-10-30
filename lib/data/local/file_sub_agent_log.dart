@@ -20,7 +20,6 @@ class FileSubAgentLog implements SubAgentLog {
   /// where nothing follows one.
   final SubAgentFeed? feed;
 
-
   String _path(String callId) =>
       config.subAgentFile(chatId, callId, project: project);
 
@@ -33,8 +32,12 @@ class FileSubAgentLog implements SubAgentLog {
     }
     // Unlike a chat's log, nothing has created this directory: a sub-agent's
     // first record is the first thing to name it.
-    await Directory(config.subAgentsDir(chatId, project: project)).create(recursive: true);
-    await File(_path(callId)).writeAsString(encodeLog(records), mode: FileMode.append);
+    await Directory(
+      config.subAgentsDir(chatId, project: project),
+    ).create(recursive: true);
+    await File(
+      _path(callId),
+    ).writeAsString(encodeLog(records), mode: FileMode.append);
     feed?.add(chatId, callId, records);
   }
 

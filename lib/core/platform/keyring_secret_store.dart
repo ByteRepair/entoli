@@ -28,7 +28,7 @@ const _tag = "secrets";
 /// daemon appears later is next launch's business.
 class KeyringSecretStore implements SecretStore {
   KeyringSecretStore(this._fallback, {SecretServiceClient Function()? service})
-      : _connect = service ?? SecretServiceClient.new;
+    : _connect = service ?? SecretServiceClient.new;
 
   static const _schema = "io.byterepair.entoli.sync";
   static const _labels = {
@@ -61,8 +61,11 @@ class KeyringSecretStore implements SecretStore {
     return _service;
   }
 
-  Map<String, String> _attributes(String key) =>
-      {"xdg:schema": _schema, "kind": key, "build": kDebugMode ? "debug" : "release"};
+  Map<String, String> _attributes(String key) => {
+    "xdg:schema": _schema,
+    "kind": key,
+    "build": kDebugMode ? "debug" : "release",
+  };
 
   @override
   Future<Uint8List?> read(String key) async {

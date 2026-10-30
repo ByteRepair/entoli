@@ -34,8 +34,9 @@ class ArtifactServer {
     final path = Uri.decodeComponent(request.uri.path.substring(1));
     // Decoding after the URI's dot-segment pass lets `..%2F` through, so the
     // decoded path is held to [rootDir] here.
-    final resolved =
-        p.normalize(p.join(rootDir, path.isEmpty ? "index.html" : path));
+    final resolved = p.normalize(
+      p.join(rootDir, path.isEmpty ? "index.html" : path),
+    );
     final file = File(resolved);
 
     if (!p.isWithin(rootDir, resolved) || !file.existsSync()) {
@@ -54,7 +55,9 @@ class ArtifactServer {
     // The base stylesheet rides under the model's own CSS, so it is injected
     // into HTML before serving. Other content types pass through unchanged.
     if (type == "text/html") {
-      request.response.add(utf8.encode(injectBaseStyles(await file.readAsString())));
+      request.response.add(
+        utf8.encode(injectBaseStyles(await file.readAsString())),
+      );
     } else {
       request.response.add(await file.readAsBytes());
     }

@@ -71,12 +71,17 @@ void main() {
     expect(onDisk().assistantView, AssistantView.voice);
   });
 
-  testWidgets("a project that has since been deleted reads as the default one",
-      (tester) async {
-    await io(tester, () => app.seedSettings(AppSettings(assistantProject: "gone")));
-    await pumpAssistant(tester);
+  testWidgets(
+    "a project that has since been deleted reads as the default one",
+    (tester) async {
+      await io(
+        tester,
+        () => app.seedSettings(AppSettings(assistantProject: "gone")),
+      );
+      await pumpAssistant(tester);
 
-    expect(inSection(find.text("Default")), findsOneWidget);
-    expect(inSection(find.text("gone")), findsNothing);
-  });
+      expect(inSection(find.text("Default")), findsOneWidget);
+      expect(inSection(find.text("gone")), findsNothing);
+    },
+  );
 }

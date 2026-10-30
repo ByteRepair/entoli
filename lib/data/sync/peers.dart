@@ -39,10 +39,12 @@ class PeerState {
 /// One live connection, and the queue that keeps a peer's messages in the
 /// order they arrived.
 class LivePeer {
-  LivePeer(this.channel,
-      {required this.deviceId,
-      required this.deviceName,
-      required this._onClose});
+  LivePeer(
+    this.channel, {
+    required this.deviceId,
+    required this.deviceName,
+    required this._onClose,
+  });
 
   final SecureChannel channel;
   final String deviceId;
@@ -79,8 +81,12 @@ class LivePeer {
 
   void enqueue(SyncMessage message) {
     if (_closed) return;
-    _queue = _queue.then((_) => handle?.call(message)).catchError((Object error) =>
-        logFailure("sync", "handling a message from $deviceId", error));
+    _queue = _queue
+        .then((_) => handle?.call(message))
+        .catchError(
+          (Object error) =>
+              logFailure("sync", "handling a message from $deviceId", error),
+        );
   }
 
   /// Set once the peer exists; reads the hub's dispatcher.
@@ -166,12 +172,20 @@ class SyncPeers {
     }
   }
 
-  void setStatus(String deviceId,
-      {required String name, required PeerStatus status, String? error}) {
+  void setStatus(
+    String deviceId, {
+    required String name,
+    required PeerStatus status,
+    String? error,
+  }) {
     final next = {
       ...states.value,
       deviceId: PeerState(
-          deviceId: deviceId, name: name, status: status, error: error),
+        deviceId: deviceId,
+        name: name,
+        status: status,
+        error: error,
+      ),
     };
     if (!mapEquals(next, states.value)) states.value = next;
   }
@@ -190,7 +204,12 @@ class SyncPeers {
   void renamed(String deviceId, String name) {
     final existing = states.value[deviceId];
     if (existing == null) return;
-    setStatus(deviceId, name: name, status: existing.status, error: existing.error);
+    setStatus(
+      deviceId,
+      name: name,
+      status: existing.status,
+      error: existing.error,
+    );
   }
 
   void forget(String deviceId) =>
@@ -206,9 +225,10 @@ class SyncPeers {
       next.putIfAbsent(
         device.id,
         () => PeerState(
-            deviceId: device.id,
-            name: device.name,
-            status: PeerStatus.offline),
+          deviceId: device.id,
+          name: device.name,
+          status: PeerStatus.offline,
+        ),
       );
     }
     if (!mapEquals(next, states.value)) states.value = next;
@@ -217,8 +237,12 @@ class SyncPeers {
   void refreshServed() {
     final served = {for (final peer in _live.values) ...peer.subscriptions};
     if (!setEquals(served, servedChats.value)) servedChats.value = served;
-    final projects = {for (final peer in _live.values) ...peer.projectSubscriptions};
-    if (!setEquals(projects, servedProjects.value)) servedProjects.value = projects;
+    final projects = {
+      for (final peer in _live.values) ...peer.projectSubscriptions,
+    };
+    if (!setEquals(projects, servedProjects.value)) {
+      servedProjects.value = projects;
+    }
   }
 
   /// A ping every five seconds; fifteen without an answer is a connection

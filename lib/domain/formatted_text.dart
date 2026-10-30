@@ -70,6 +70,7 @@ class _FormattedTextVisitor implements md.NodeVisitor {
     }
   }
 }
+
 /// A message's markdown as HTML: the rich half of what the copy button puts on
 /// the clipboard, beside [formattedTextOf], for a word processor to paste with
 /// its formatting. Parsed as [formattedTextOf] parses it, so the two halves
@@ -95,7 +96,8 @@ String htmlClipboardDocument(String fragment) =>
     '<html><head><meta charset="utf-8"></head><body>'
     "<!--StartFragment-->$fragment<!--EndFragment--></body></html>";
 
-String escapeHtml(String text) => const HtmlEscape(HtmlEscapeMode.element).convert(text);
+String escapeHtml(String text) =>
+    const HtmlEscape(HtmlEscapeMode.element).convert(text);
 
 String escapeHtmlAttribute(String text) =>
     const HtmlEscape(HtmlEscapeMode.attribute).convert(text);
@@ -104,19 +106,22 @@ String escapeHtmlAttribute(String text) =>
 /// the reply did. Shared with the selection's copy, so a block reads the same
 /// copied whole or in part.
 const htmlTagStyles = {
-  "pre": "font-family: Consolas, Menlo, 'Courier New', monospace; "
+  "pre":
+      "font-family: Consolas, Menlo, 'Courier New', monospace; "
       "background: #f6f8fa; padding: 8px; white-space: pre-wrap",
-  "code": "font-family: Consolas, Menlo, 'Courier New', monospace; background: #f6f8fa",
+  "code":
+      "font-family: Consolas, Menlo, 'Courier New', monospace; background: #f6f8fa",
   "table": "border-collapse: collapse",
   "th": "border: 1px solid #d0d7de; padding: 4px 8px",
   "td": "border: 1px solid #d0d7de; padding: 4px 8px",
-  "blockquote": "border-left: 3px solid #d0d7de; margin-left: 0; padding-left: 12px",
+  "blockquote":
+      "border-left: 3px solid #d0d7de; margin-left: 0; padding-left: 12px",
 };
 
 List<md.Node> _parse(String markdown) => md.Document(
-      extensionSet: md.ExtensionSet.gitHubFlavored,
-      encodeHtml: false,
-    ).parseLines(markdown.split("\n"));
+  extensionSet: md.ExtensionSet.gitHubFlavored,
+  encodeHtml: false,
+).parseLines(markdown.split("\n"));
 
 class _HtmlVisitor implements md.NodeVisitor {
   _HtmlVisitor(this.buffer);
@@ -134,7 +139,9 @@ class _HtmlVisitor implements md.NodeVisitor {
       if (key == "style") continue;
       buffer.write(' $key="${escapeHtmlAttribute(value)}"');
     }
-    if (style.isNotEmpty) buffer.write(' style="${escapeHtmlAttribute(style)}"');
+    if (style.isNotEmpty) {
+      buffer.write(' style="${escapeHtmlAttribute(style)}"');
+    }
     buffer.write(">");
     // A void element — `br`, `hr`, `img` — has no children and no end tag.
     return element.children != null;
@@ -144,7 +151,8 @@ class _HtmlVisitor implements md.NodeVisitor {
   void visitText(md.Text text) => buffer.write(escapeHtml(text.text));
 
   @override
-  void visitElementAfter(md.Element element) => buffer.write("</${element.tag}>");
+  void visitElementAfter(md.Element element) =>
+      buffer.write("</${element.tag}>");
 }
 
 /// What kind of block a rendered paragraph is, read back from the markdown
@@ -197,10 +205,14 @@ class RenderedOutline {
     final key = _key(text);
     if (key.isEmpty) return null;
     return _links[key] ??
-        _links.entries.where((link) => link.key.contains(key)).firstOrNull?.value;
+        _links.entries
+            .where((link) => link.key.contains(key))
+            .firstOrNull
+            ?.value;
   }
 
-  static String _key(String text) => text.replaceAll(RegExp(r"\s+"), " ").trim();
+  static String _key(String text) =>
+      text.replaceAll(RegExp(r"\s+"), " ").trim();
 
   void _add(md.Node node, RenderedBlock block) =>
       _blocks.putIfAbsent(_key(node.textContent), () => block);
@@ -209,8 +221,14 @@ class RenderedOutline {
     if (node is! md.Element) return;
     switch (node.tag) {
       case "h1" || "h2" || "h3" || "h4" || "h5" || "h6":
-        _add(node, RenderedBlock(BlockKind.heading,
-            level: int.parse(node.tag.substring(1)), quoted: quoted));
+        _add(
+          node,
+          RenderedBlock(
+            BlockKind.heading,
+            level: int.parse(node.tag.substring(1)),
+            quoted: quoted,
+          ),
+        );
       case "p":
         _add(node, item ?? RenderedBlock(BlockKind.paragraph, quoted: quoted));
       case "pre":
@@ -234,8 +252,12 @@ class RenderedOutline {
         var number = int.tryParse(node.attributes["start"] ?? "") ?? 1;
         for (final li in node.children ?? const <md.Node>[]) {
           if (li is! md.Element) continue;
-          final block = RenderedBlock(BlockKind.listItem,
-              ordered: ordered, number: number++, quoted: quoted);
+          final block = RenderedBlock(
+            BlockKind.listItem,
+            ordered: ordered,
+            number: number++,
+            quoted: quoted,
+          );
           // A tight item's words are its own children; a loose one's are its
           // paragraphs, which the `p` case files with this item's kind.
           final inline = [
@@ -246,7 +268,9 @@ class RenderedOutline {
           ];
           if (inline.isNotEmpty) {
             _blocks.putIfAbsent(
-                _key(inline.map((child) => child.textContent).join()), () => block);
+              _key(inline.map((child) => child.textContent).join()),
+              () => block,
+            );
           }
           for (final child in li.children ?? const <md.Node>[]) {
             _walk(child, quoted: quoted, item: block);
@@ -260,7 +284,18 @@ class RenderedOutline {
   }
 
   static const _blockTags = {
-    "p", "ul", "ol", "pre", "blockquote", "table", "hr",
-    "h1", "h2", "h3", "h4", "h5", "h6",
+    "p",
+    "ul",
+    "ol",
+    "pre",
+    "blockquote",
+    "table",
+    "hr",
+    "h1",
+    "h2",
+    "h3",
+    "h4",
+    "h5",
+    "h6",
   };
 }

@@ -12,7 +12,13 @@ class FileSelectorPicker implements AttachmentPicker {
   static const _images = XTypeGroup(
     label: "Images",
     extensions: ["png", "jpg", "jpeg", "gif", "webp", "bmp", "heic", "avif"],
-    mimeTypes: ["image/png", "image/jpeg", "image/gif", "image/webp", "image/bmp"],
+    mimeTypes: [
+      "image/png",
+      "image/jpeg",
+      "image/gif",
+      "image/webp",
+      "image/bmp",
+    ],
     uniformTypeIdentifiers: ["public.image"],
   );
 
@@ -30,8 +36,9 @@ class FileSelectorPicker implements AttachmentPicker {
   Future<Attachment> _read(XFile file) async {
     final bytes = await file.readAsBytes();
     return Attachment(
-        filename: file.name,
-        mimeType: attachmentMime(file.name, bytes, declared: file.mimeType),
-        bytes: bytes);
+      filename: file.name,
+      mimeType: attachmentMime(file.name, bytes, declared: file.mimeType),
+      bytes: bytes,
+    );
   }
 }

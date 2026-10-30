@@ -23,8 +23,12 @@ const pinnedHeading = "Pinned";
 /// sorted newest first, each chat lands in the group it is already in or one
 /// further down, and never one further up — and the pinned group is always
 /// above the date groups because it is drawn before them.
-List<ChatGroup> groupChatsByDate(Iterable<ChatState> chats, {required DateTime now}) {
-  final sorted = chats.toList()..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+List<ChatGroup> groupChatsByDate(
+  Iterable<ChatState> chats, {
+  required DateTime now,
+}) {
+  final sorted = chats.toList()
+    ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
   final pinned = sorted.where((c) => c.pinned).toList();
   final rest = sorted.where((c) => !c.pinned).toList();
   final groups = <String, List<ChatState>>{};
@@ -60,8 +64,18 @@ bool titleMatches(ChatState chat, String needle) =>
     chat.title.orUntitled.toLowerCase().contains(needle);
 
 const _months = [
-  "January", "February", "March", "April", "May", "June",
-  "July", "August", "September", "October", "November", "December",
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
 ];
 
 String _heading(DateTime at, DateTime now) {
@@ -79,6 +93,8 @@ String _heading(DateTime at, DateTime now) {
 /// Whole days from one local date to another, counted on a UTC calendar: a
 /// local day either side of a clock change is 23 or 25 hours long, and
 /// yesterday would round to today.
-int _daysBetween(DateTime from, DateTime to) => DateTime.utc(to.year, to.month, to.day)
-    .difference(DateTime.utc(from.year, from.month, from.day))
-    .inDays;
+int _daysBetween(DateTime from, DateTime to) => DateTime.utc(
+  to.year,
+  to.month,
+  to.day,
+).difference(DateTime.utc(from.year, from.month, from.day)).inDays;

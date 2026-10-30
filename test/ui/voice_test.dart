@@ -33,10 +33,16 @@ bool _finished(TestApp app, String id) {
 }
 
 /// What the orb is drawn from, which is where everything it is told ends up.
-BloomPainter _bloom(WidgetTester tester) => tester
-    .widget<CustomPaint>(find.byWidgetPredicate(
-        (widget) => widget is CustomPaint && widget.painter is BloomPainter))
-    .painter! as BloomPainter;
+BloomPainter _bloom(WidgetTester tester) =>
+    tester
+            .widget<CustomPaint>(
+              find.byWidgetPredicate(
+                (widget) =>
+                    widget is CustomPaint && widget.painter is BloomPainter,
+              ),
+            )
+            .painter!
+        as BloomPainter;
 
 void main() {
   late TestApp app;
@@ -55,8 +61,10 @@ void main() {
 
   /// The session for [chat], held. Every test reaches one through here.
   ProviderSubscription<VoiceViewState> hold(String? chat) =>
-      sessions.putIfAbsent(chat,
-          () => app.container.listen(voiceControllerProvider(chat), (_, _) {}));
+      sessions.putIfAbsent(
+        chat,
+        () => app.container.listen(voiceControllerProvider(chat), (_, _) {}),
+      );
 
   VoiceController voiceOf(String? chat) {
     hold(chat);
@@ -84,8 +92,10 @@ void main() {
     await app.pickVoiceModels();
     final chat = await app.seedChat();
     final id = chat.state.id;
-    await waitFor(() => app.container.read(chatControllerProvider(id)).chat != null,
-        what: "the chat to load");
+    await waitFor(
+      () => app.container.read(chatControllerProvider(id)).chat != null,
+      what: "the chat to load",
+    );
     await voiceOf(id).start();
     return id;
   }
@@ -131,39 +141,46 @@ void main() {
       expect(await app.repo.listChats(), isEmpty);
     });
 
-    test("the first word makes the chat, selects it and says it into it",
-        () async {
-      app.backend.scriptedEvents = [
-        const TextDelta("Right away."),
-        const DoneEvent(),
-      ];
-      await startNewVoiceChat();
+    test(
+      "the first word makes the chat, selects it and says it into it",
+      () async {
+        app.backend.scriptedEvents = [
+          const TextDelta("Right away."),
+          const DoneEvent(),
+        ];
+        await startNewVoiceChat();
 
-      final id = await heard("list the files");
+        final id = await heard("list the files");
 
-      expect((await app.repo.listChats()).single.id, id);
-      expect(app.container.read(selectedChatIdProvider), id);
-      final messages = app.container.read(chatControllerProvider(id)).chat!.messages;
-      expect(messages.first.plainText, "list the files");
-      expect(messages.last.plainText, "Right away.");
-    });
+        expect((await app.repo.listChats()).single.id, id);
+        expect(app.container.read(selectedChatIdProvider), id);
+        final messages = app.container
+            .read(chatControllerProvider(id))
+            .chat!
+            .messages;
+        expect(messages.first.plainText, "list the files");
+        expect(messages.last.plainText, "Right away.");
+      },
+    );
 
     // The null key is shared by every new voice chat, so what keeps one out of
     // another's conversation is that the session does not outlive its page.
-    test("a second session does not go on speaking into the first chat",
-        () async {
-      await startNewVoiceChat();
-      final first = await heard("first");
+    test(
+      "a second session does not go on speaking into the first chat",
+      () async {
+        await startNewVoiceChat();
+        final first = await heard("first");
 
-      await leaveVoice();
-      await startNewVoiceChat();
+        await leaveVoice();
+        await startNewVoiceChat();
 
-      expect(spokenInto(), isNull);
-      final second = await heard("second");
+        expect(spokenInto(), isNull);
+        final second = await heard("second");
 
-      expect(second, isNot(first));
-      expect(await app.repo.listChats(), hasLength(2));
-    });
+        expect(second, isNot(first));
+        expect(await app.repo.listChats(), hasLength(2));
+      },
+    );
 
     test("leaving the page shuts the session", () async {
       await startNewVoiceChat();
@@ -187,7 +204,9 @@ void main() {
 
     test("what it hears is spoken into the project being shown", () async {
       await app.repo.createProject("work");
-      app.container.read(selectedProjectProvider.notifier).select(localProject("work"));
+      app.container
+          .read(selectedProjectProvider.notifier)
+          .select(localProject("work"));
       await startNewVoiceChat();
 
       await heard("hello");
@@ -227,7 +246,7 @@ void main() {
       await waitFor(() {
         final said =
             app.container.read(chatControllerProvider(id)).chat?.messages ??
-                const <Message>[];
+            const <Message>[];
         return said.isNotEmpty && said.last.plainText.isNotEmpty;
       }, what: "the reply to start");
       return id;
@@ -244,15 +263,17 @@ void main() {
     });
   });
 
-  test("the language Settings picked is what the session is started in",
-      () async {
-    await app.container
-        .read(appSettingsProvider.notifier)
-        .setVoiceLanguage("el-GR");
-    await startVoice();
+  test(
+    "the language Settings picked is what the session is started in",
+    () async {
+      await app.container
+          .read(appSettingsProvider.notifier)
+          .setVoiceLanguage("el-GR");
+      await startVoice();
 
-    expect(app.voice.startedIn, "el-GR");
-  });
+      expect(app.voice.startedIn, "el-GR");
+    },
+  );
 
   group("a spoken turn", () {
     test("is an ordinary turn: same records, same log", () async {
@@ -265,16 +286,17 @@ void main() {
       await waitFor(() => _finished(app, id), what: "the turn");
 
       final chat = await app.store.load(id);
-      expect(chat.messages.map((m) => m.role),
-          [MessageRole.user, MessageRole.assistant]);
+      expect(chat.messages.map((m) => m.role), [
+        MessageRole.user,
+        MessageRole.assistant,
+      ]);
       expect(chat.messages.first.plainText, "list the files");
       expect(chat.messages.last.plainText, "Right away.");
       // Closed like any other turn, so a reload does not offer to continue it.
       expect(chat.unfinished, isFalse);
     });
 
-    test("is spoken a sentence at a time, and only what was said",
-        () async {
+    test("is spoken a sentence at a time, and only what was said", () async {
       app.backend.scriptedEvents = [
         const ReasoningDelta("thinking about it"),
         const ReasoningEnd(text: "thinking about it"),
@@ -285,89 +307,115 @@ void main() {
       final id = await startVoice();
       app.voice.session!.hear("what is here");
       await waitFor(() => _finished(app, id), what: "the turn");
-      await waitFor(() => app.voice.session!.spoken.length >= 2,
-          what: "both sentences");
+      await waitFor(
+        () => app.voice.session!.spoken.length >= 2,
+        what: "both sentences",
+      );
 
       expect(app.voice.session!.spoken, ["Two files.", "Both are Dart."]);
     });
   });
 
-  test("the microphone is shut for as long as it is not the user's turn",
-      () async {
-    final held = Completer<void>();
-    // No DoneEvent: the turn is left open on the hold, the way a real one is
-    // while the backend is still working.
-    app.backend
-      ..scriptedEvents = [const TextDelta("A long answer. ")]
-      ..hold = held;
-    final id = await startVoice();
-    expect(app.voice.session!.listening, isTrue,
-        reason: "waiting to be spoken to");
+  test(
+    "the microphone is shut for as long as it is not the user's turn",
+    () async {
+      final held = Completer<void>();
+      // No DoneEvent: the turn is left open on the hold, the way a real one is
+      // while the backend is still working.
+      app.backend
+        ..scriptedEvents = [const TextDelta("A long answer. ")]
+        ..hold = held;
+      final id = await startVoice();
+      expect(
+        app.voice.session!.listening,
+        isTrue,
+        reason: "waiting to be spoken to",
+      );
 
-    app.voice.session!.hear("go on then");
-    // A turn running, and then a reply being read out. The phone hears its own
-    // voice as readily as it hears the person, so the answer is not to listen:
-    // everything that used to decide which sounds to ignore was a guess.
-    await waitFor(() => !app.voice.session!.listening,
-        what: "the microphone to shut");
-    await waitFor(() => app.voice.session!.spoken.isNotEmpty,
-        what: "the reply to start being read");
-    expect(app.voice.session!.listening, isFalse);
+      app.voice.session!.hear("go on then");
+      // A turn running, and then a reply being read out. The phone hears its own
+      // voice as readily as it hears the person, so the answer is not to listen:
+      // everything that used to decide which sounds to ignore was a guess.
+      await waitFor(
+        () => !app.voice.session!.listening,
+        what: "the microphone to shut",
+      );
+      await waitFor(
+        () => app.voice.session!.spoken.isNotEmpty,
+        what: "the reply to start being read",
+      );
+      expect(app.voice.session!.listening, isFalse);
 
-    held.complete();
-    await waitFor(() => !app.container.read(chatControllerProvider(id)).isRunning,
-        what: "the turn to finish");
-    app.voice.session!.fallSilent();
-    await waitFor(() => app.voice.session!.listening,
-        what: "the microphone to open again");
-  });
+      held.complete();
+      await waitFor(
+        () => !app.container.read(chatControllerProvider(id)).isRunning,
+        what: "the turn to finish",
+      );
+      app.voice.session!.fallSilent();
+      await waitFor(
+        () => app.voice.session!.listening,
+        what: "the microphone to open again",
+      );
+    },
+  );
 
-  test("a turn that says nothing out loud still hands the turn back",
-      () async {
+  test("a turn that says nothing out loud still hands the turn back", () async {
     // Nothing to read out, so silence is never reported — and without an
     // answer to that the microphone would never open again.
     app.backend.scriptedEvents = [const DoneEvent()];
     final id = await startVoice();
     app.voice.session!.hear("run something");
-    await waitFor(() => !app.container.read(chatControllerProvider(id)).isRunning,
-        what: "the turn");
-
-    await waitFor(() => app.voice.session!.listening,
-        what: "the microphone to open again");
-    expect(voiceState(id).status,
-        VoiceStatus.listening);
-  });
-
-  test("a reply that was already written is not read out on the way in", () async {
-    await app.pickVoiceModels();
-    final made = await app.repo.createChat();
-    await app.writeChat(
-      made.copyWith(messages: [
-        Message(
-          id: "u",
-          role: MessageRole.user,
-          createdAt: DateTime(2026),
-          parts: const [MessagePart.text(text: "what is here")],
-        ),
-        Message(
-          id: "a",
-          role: MessageRole.assistant,
-          createdAt: DateTime(2026),
-          parts: const [MessagePart.text(text: "Two files. Both are Dart.")],
-        ),
-      ]),
-      finished: false,
+    await waitFor(
+      () => !app.container.read(chatControllerProvider(id)).isRunning,
+      what: "the turn",
     );
-    final id = made.state.id;
-    await waitFor(() => app.container.read(chatControllerProvider(id)).chat != null,
-        what: "the chat to load");
-    await voiceOf(id).start();
-    await Future<void>.delayed(Duration.zero);
 
-    // Entering voice mode over a finished reply, or carrying on an interrupted
-    // turn, must not read what is already there back from the top.
-    expect(app.voice.session!.spoken, isEmpty);
+    await waitFor(
+      () => app.voice.session!.listening,
+      what: "the microphone to open again",
+    );
+    expect(voiceState(id).status, VoiceStatus.listening);
   });
+
+  test(
+    "a reply that was already written is not read out on the way in",
+    () async {
+      await app.pickVoiceModels();
+      final made = await app.repo.createChat();
+      await app.writeChat(
+        made.copyWith(
+          messages: [
+            Message(
+              id: "u",
+              role: MessageRole.user,
+              createdAt: DateTime(2026),
+              parts: const [MessagePart.text(text: "what is here")],
+            ),
+            Message(
+              id: "a",
+              role: MessageRole.assistant,
+              createdAt: DateTime(2026),
+              parts: const [
+                MessagePart.text(text: "Two files. Both are Dart."),
+              ],
+            ),
+          ],
+        ),
+        finished: false,
+      );
+      final id = made.state.id;
+      await waitFor(
+        () => app.container.read(chatControllerProvider(id)).chat != null,
+        what: "the chat to load",
+      );
+      await voiceOf(id).start();
+      await Future<void>.delayed(Duration.zero);
+
+      // Entering voice mode over a finished reply, or carrying on an interrupted
+      // turn, must not read what is already there back from the top.
+      expect(app.voice.session!.spoken, isEmpty);
+    },
+  );
 
   test("the process is held open while listening, and let go after", () async {
     final id = await startVoice();
@@ -384,8 +432,9 @@ void main() {
 
     app.work.stop(BackgroundJob.voice);
     await waitFor(
-        () => voiceState(id).status == VoiceStatus.off,
-        what: "voice mode to stop");
+      () => voiceState(id).status == VoiceStatus.off,
+      what: "voice mode to stop",
+    );
     expect(app.voice.session!.disposed, isTrue);
   });
 
@@ -411,11 +460,11 @@ void main() {
     final id = await startVoice();
     app.voice.session!.fail("the microphone was taken");
     await waitFor(
-        () => voiceState(id).status == VoiceStatus.failed,
-        what: "the failure");
+      () => voiceState(id).status == VoiceStatus.failed,
+      what: "the failure",
+    );
 
-    expect(voiceState(id).error,
-        contains("microphone was taken"));
+    expect(voiceState(id).error, contains("microphone was taken"));
   });
 
   test("leaving voice mode closes the session", () async {
@@ -428,27 +477,29 @@ void main() {
     expect(voiceState(id).status, VoiceStatus.off);
   });
 
-  test("a model that will not load says so rather than opening silent",
-      () async {
-    app.voice.refusal = "Entoli was not allowed to use the microphone.";
-    final id = await startVoice();
+  test(
+    "a model that will not load says so rather than opening silent",
+    () async {
+      app.voice.refusal = "Entoli was not allowed to use the microphone.";
+      final id = await startVoice();
 
-    final state = voiceState(id);
-    expect(state.status, VoiceStatus.failed);
-    expect(state.error, contains("microphone"));
-  });
+      final state = voiceState(id);
+      expect(state.status, VoiceStatus.failed);
+      expect(state.error, contains("microphone"));
+    },
+  );
 
   group("the transcript", () {
     testWidgets("holds five lines whatever the text scale", (tester) async {
       final lines = [
         for (var i = 0; i < 20; i++) VoiceLine(VoiceLineKind.said, "line $i"),
       ];
-      await app.pump(
-        tester,
-        Scaffold(body: TranscriptWindow(lines: lines)),
-      );
+      await app.pump(tester, Scaffold(body: TranscriptWindow(lines: lines)));
       final box = tester.getSize(find.byType(TranscriptWindow));
-      expect(box.height, TranscriptWindow.lineHeight * TranscriptWindow.visibleLines);
+      expect(
+        box.height,
+        TranscriptWindow.lineHeight * TranscriptWindow.visibleLines,
+      );
     });
 
     testWidgets("fades into the orb above it", (tester) async {
@@ -471,7 +522,8 @@ void main() {
       // the gradient upside down.
       final painted = await tester.runAsync(() async {
         final boundary = tester.renderObject<RenderRepaintBoundary>(
-            find.byKey(const ValueKey("window")));
+          find.byKey(const ValueKey("window")),
+        );
         final image = await boundary.toImage();
         return image.toByteData();
       });
@@ -490,26 +542,41 @@ void main() {
 
       final top = densest(2, line - 2);
       final bottom = densest(line * 4 + 2, line * 5 - 2);
-      expect(bottom, greaterThan(200), reason: "the newest line is the one being read");
-      expect(top, lessThan(bottom ~/ 2), reason: "the oldest fades out of the window");
+      expect(
+        bottom,
+        greaterThan(200),
+        reason: "the newest line is the one being read",
+      );
+      expect(
+        top,
+        lessThan(bottom ~/ 2),
+        reason: "the oldest fades out of the window",
+      );
     });
 
     testWidgets("follows a reply that grows in place", (tester) async {
       Widget window(String last) => Scaffold(
-            body: SizedBox(
-              width: 200,
-              child: TranscriptWindow(lines: [
-                for (var i = 0; i < 3; i++) VoiceLine(VoiceLineKind.said, "line $i"),
-                VoiceLine(VoiceLineKind.replied, last),
-              ]),
-            ),
-          );
+        body: SizedBox(
+          width: 200,
+          child: TranscriptWindow(
+            lines: [
+              for (var i = 0; i < 3; i++)
+                VoiceLine(VoiceLineKind.said, "line $i"),
+              VoiceLine(VoiceLineKind.replied, last),
+            ],
+          ),
+        ),
+      );
       await app.pump(tester, window("short"));
       await app.pump(tester, window("a reply that keeps going " * 6));
 
       final position = tester
-          .state<ScrollableState>(find.descendant(
-              of: find.byType(TranscriptWindow), matching: find.byType(Scrollable)))
+          .state<ScrollableState>(
+            find.descendant(
+              of: find.byType(TranscriptWindow),
+              matching: find.byType(Scrollable),
+            ),
+          )
           .position;
       expect(position.maxScrollExtent, greaterThan(0));
       expect(position.pixels, position.maxScrollExtent);
@@ -545,7 +612,8 @@ void main() {
           parts: const [
             MessagePart.reasoning(text: "not this"),
             MessagePart.toolCall(
-                toolCall: ToolCall(id: "1", name: "bash", argumentsText: "ls")),
+              toolCall: ToolCall(id: "1", name: "bash", argumentsText: "ls"),
+            ),
             MessagePart.text(text: "Two files."),
           ],
         ),
@@ -558,24 +626,27 @@ void main() {
     });
   });
 
-  testWidgets("an interrupted turn is offered to be carried on here too",
-      (tester) async {
+  testWidgets("an interrupted turn is offered to be carried on here too", (
+    tester,
+  ) async {
     final chat = await io(tester, () async {
       final made = await app.repo.createChat();
-      final full = made.copyWith(messages: [
-        Message(
-          id: "u",
-          role: MessageRole.user,
-          createdAt: DateTime(2026),
-          parts: const [MessagePart.text(text: "go on")],
-        ),
-        Message(
-          id: "a",
-          role: MessageRole.assistant,
-          createdAt: DateTime(2026),
-          parts: const [MessagePart.text(text: "Half a")],
-        ),
-      ]);
+      final full = made.copyWith(
+        messages: [
+          Message(
+            id: "u",
+            role: MessageRole.user,
+            createdAt: DateTime(2026),
+            parts: const [MessagePart.text(text: "go on")],
+          ),
+          Message(
+            id: "a",
+            role: MessageRole.assistant,
+            createdAt: DateTime(2026),
+            parts: const [MessagePart.text(text: "Half a")],
+          ),
+        ],
+      );
       await app.writeChat(full, finished: false);
       return full;
     });
@@ -609,50 +680,65 @@ void main() {
   });
 
   group("the controls", () {
-    Future<void> pumpControls(WidgetTester tester, VoiceViewState state,
-            {VoidCallback? onDone, ValueChanged<bool>? onTalk}) =>
-        app.pump(
-          tester,
-          Scaffold(
-            body: VoiceControls(
-              state: state,
-              onMute: () {},
-              onTalk: onTalk ?? (_) {},
-              onStop: () {},
-              onDone: onDone ?? () {},
-            ),
-          ),
-        );
+    Future<void> pumpControls(
+      WidgetTester tester,
+      VoiceViewState state, {
+      VoidCallback? onDone,
+      ValueChanged<bool>? onTalk,
+    }) => app.pump(
+      tester,
+      Scaffold(
+        body: VoiceControls(
+          state: state,
+          onMute: () {},
+          onTalk: onTalk ?? (_) {},
+          onStop: () {},
+          onDone: onDone ?? () {},
+        ),
+      ),
+    );
 
     testWidgets("stop is dead unless there is a reply to stop", (tester) async {
       await pumpControls(
-          tester, const VoiceViewState(status: VoiceStatus.listening));
+        tester,
+        const VoiceViewState(status: VoiceStatus.listening),
+      );
       expect(enabled(tester, buttonTipped("Stop the reply")), isFalse);
 
       await pumpControls(
-          tester, const VoiceViewState(status: VoiceStatus.speaking));
+        tester,
+        const VoiceViewState(status: VoiceStatus.speaking),
+      );
       expect(enabled(tester, buttonTipped("Stop the reply")), isTrue);
     });
 
     testWidgets("the microphone button says which way it goes", (tester) async {
       await pumpControls(
-          tester, const VoiceViewState(status: VoiceStatus.listening));
+        tester,
+        const VoiceViewState(status: VoiceStatus.listening),
+      );
       expect(find.text("Mute"), findsOneWidget);
       expect(find.byIcon(Icons.mic_none), findsOneWidget);
 
-      await pumpControls(tester,
-          const VoiceViewState(status: VoiceStatus.listening, paused: true));
+      await pumpControls(
+        tester,
+        const VoiceViewState(status: VoiceStatus.listening, paused: true),
+      );
       expect(find.text("Listen"), findsOneWidget);
       expect(find.byIcon(Icons.mic_off_outlined), findsOneWidget);
     });
 
-    testWidgets("touch to speak puts Talk where the microphone button was",
-        (tester) async {
+    testWidgets("touch to speak puts Talk where the microphone button was", (
+      tester,
+    ) async {
       final held = <bool>[];
       await pumpControls(
         tester,
         const VoiceViewState(
-            status: VoiceStatus.listening, paused: true, pushToTalk: true),
+          status: VoiceStatus.listening,
+          paused: true,
+          pushToTalk: true,
+        ),
         onTalk: held.add,
       );
       expect(find.text("Mute"), findsNothing);
@@ -661,7 +747,8 @@ void main() {
       // Down and up rather than a tap: the microphone is open for as long as
       // the finger is on it.
       final gesture = await tester.startGesture(
-          tester.getCenter(find.byTooltip("Hold to talk")));
+        tester.getCenter(find.byTooltip("Hold to talk")),
+      );
       await tester.pump();
       expect(held, [true]);
 
@@ -670,7 +757,9 @@ void main() {
       expect(held, [true, false]);
     });
 
-    testWidgets("done is offered whatever the session is doing", (tester) async {
+    testWidgets("done is offered whatever the session is doing", (
+      tester,
+    ) async {
       var left = 0;
       // Off is the state a page that failed to start is left in, and leaving
       // is the only thing there is to do about it.
@@ -702,8 +791,11 @@ void main() {
       final voice = voiceOf(id);
 
       await voice.setPaused(true);
-      expect(app.voice.session!.listening, isFalse,
-          reason: "paused has to mean the device has stopped recording");
+      expect(
+        app.voice.session!.listening,
+        isFalse,
+        reason: "paused has to mean the device has stopped recording",
+      );
       expect(voiceState(id).paused, isTrue);
 
       await voice.setPaused(false);
@@ -711,16 +803,18 @@ void main() {
       expect(voiceState(id).paused, isFalse);
     });
 
-    test("a fresh session is listening, whatever the last one was doing",
-        () async {
-      final id = await startVoice();
-      final voice = voiceOf(id);
-      await voice.setPaused(true);
-      await voice.stop();
+    test(
+      "a fresh session is listening, whatever the last one was doing",
+      () async {
+        final id = await startVoice();
+        final voice = voiceOf(id);
+        await voice.setPaused(true);
+        await voice.stop();
 
-      await voice.start();
-      expect(voiceState(id).paused, isFalse);
-    });
+        await voice.start();
+        expect(voiceState(id).paused, isFalse);
+      },
+    );
 
     test("shuts the microphone and nothing else: the reply goes on", () async {
       app.backend.scriptedEvents = [
@@ -729,21 +823,26 @@ void main() {
       ];
       final id = await startVoice();
       app.voice.session!.hear("say something");
-      await waitFor(() => app.voice.session!.spoken.isNotEmpty,
-          what: "the reply to start being read");
+      await waitFor(
+        () => app.voice.session!.spoken.isNotEmpty,
+        what: "the reply to start being read",
+      );
 
       await voiceOf(id).setPaused(true);
 
-      expect(app.voice.session!.hushed, 0,
-          reason: "mute is about what the phone hears, not what it is saying");
-      expect(voiceState(id).status,
-          VoiceStatus.speaking);
+      expect(
+        app.voice.session!.hushed,
+        0,
+        reason: "mute is about what the phone hears, not what it is saying",
+      );
+      expect(voiceState(id).status, VoiceStatus.speaking);
     });
   });
 
   group("touch to speak", () {
-    Future<void> turnOn() =>
-        app.container.read(appSettingsProvider.notifier).setVoicePushToTalk(true);
+    Future<void> turnOn() => app.container
+        .read(appSettingsProvider.notifier)
+        .setVoicePushToTalk(true);
 
     test("a session opens with the microphone shut", () async {
       await turnOn();
@@ -769,12 +868,17 @@ void main() {
       // microphone shut.
       await voice.talk(true);
       app.voice.session!.hear("go on then");
-      await waitFor(() => app.voice.session!.spoken.isNotEmpty,
-          what: "the reply to start being read");
+      await waitFor(
+        () => app.voice.session!.spoken.isNotEmpty,
+        what: "the reply to start being read",
+      );
 
       await voice.talk(true);
-      expect(app.voice.session!.hushed, greaterThan(0),
-          reason: "whoever holds the button down is about to talk over it");
+      expect(
+        app.voice.session!.hushed,
+        greaterThan(0),
+        reason: "whoever holds the button down is about to talk over it",
+      );
       expect(app.voice.session!.listening, isTrue);
     });
 
@@ -791,22 +895,26 @@ void main() {
       expect(voiceState(id).paused, isTrue);
     });
 
-    test("turning it off under a running session opens the microphone",
-        () async {
-      await turnOn();
-      final id = await startVoice();
-      expect(app.voice.session!.listening, isFalse);
+    test(
+      "turning it off under a running session opens the microphone",
+      () async {
+        await turnOn();
+        final id = await startVoice();
+        expect(app.voice.session!.listening, isFalse);
 
-      await app.container
-          .read(appSettingsProvider.notifier)
-          .setVoicePushToTalk(false);
-      await waitFor(() => app.voice.session!.listening,
-          what: "the microphone to open");
+        await app.container
+            .read(appSettingsProvider.notifier)
+            .setVoicePushToTalk(false);
+        await waitFor(
+          () => app.voice.session!.listening,
+          what: "the microphone to open",
+        );
 
-      final view = voiceState(id);
-      expect(view.pushToTalk, isFalse);
-      expect(view.paused, isFalse);
-    });
+        final view = voiceState(id);
+        expect(view.pushToTalk, isFalse);
+        expect(view.paused, isFalse);
+      },
+    );
   });
 
   group("reading one message out", () {
@@ -821,8 +929,7 @@ void main() {
       expect(failed, isNull);
       // The whole of what makes this not voice mode.
       expect(app.voice.listeningWith, isNull);
-      expect(app.voice.session!.spoken.join(" "),
-          "Hello there. How are you?");
+      expect(app.voice.session!.spoken.join(" "), "Hello there. How are you?");
       expect(app.container.read(readAloudProvider), "m1");
     });
 
@@ -847,18 +954,22 @@ void main() {
       expect(app.container.read(readAloudProvider), isNull);
     });
 
-    test("with no speech model picked it says so rather than opening silent",
-        () async {
-      final failed =
-          await app.container.read(readAloudProvider.notifier).toggle("m1", "One.");
+    test(
+      "with no speech model picked it says so rather than opening silent",
+      () async {
+        final failed = await app.container
+            .read(readAloudProvider.notifier)
+            .toggle("m1", "One.");
 
-      expect(failed, isNotNull);
-      expect(app.voice.session, isNull);
-    });
+        expect(failed, isNotNull);
+        expect(app.voice.session, isNull);
+      },
+    );
   });
 
-  testWidgets("a paused orb is the microphone shut, and does not follow it",
-      (tester) async {
+  testWidgets("a paused orb is the microphone shut, and does not follow it", (
+    tester,
+  ) async {
     final level = ValueNotifier(0.0);
     addTearDown(level.dispose);
     await app.pump(
@@ -866,7 +977,10 @@ void main() {
       Scaffold(
         body: VoiceBloom(
           state: VoiceViewState(
-              status: VoiceStatus.listening, level: level, paused: true),
+            status: VoiceStatus.listening,
+            level: level,
+            paused: true,
+          ),
         ),
       ),
     );
@@ -874,27 +988,32 @@ void main() {
     expect(find.text("PAUSED"), findsOneWidget);
     level.value = 1;
     await tester.pump();
-    expect(_bloom(tester).level, 0,
-        reason: "a shut microphone is not something to draw a voice from");
+    expect(
+      _bloom(tester).level,
+      0,
+      reason: "a shut microphone is not something to draw a voice from",
+    );
     // Nothing is moving either, which is the whole of what a wake lock held
     // over a shut microphone would otherwise be spent on.
     expect(tester.binding.transientCallbackCount, 0);
   });
 
   group("the composer's voice button", () {
-    Future<void> pumpComposer(WidgetTester tester, TextEditingController text) =>
-        app.pump(
-          tester,
-          Scaffold(
-            body: Composer(
-              controller: text,
-              agentSpeaking: false,
-              onSend: (_, _) {},
-              onAbort: () {},
-              onVoice: () {},
-            ),
-          ),
-        );
+    Future<void> pumpComposer(
+      WidgetTester tester,
+      TextEditingController text,
+    ) => app.pump(
+      tester,
+      Scaffold(
+        body: Composer(
+          controller: text,
+          agentSpeaking: false,
+          onSend: (_, _) {},
+          onAbort: () {},
+          onVoice: () {},
+        ),
+      ),
+    );
 
     testWidgets("goes when there is a message to send instead", (tester) async {
       final text = TextEditingController();
@@ -925,14 +1044,16 @@ void main() {
     });
   });
 
-  testWidgets("with no models picked the page says so rather than opening silent",
-      (tester) async {
-    final chat = await io(tester, app.seedChat);
-    await app.pump(tester, VoicePage(chatId: chat.state.id), settle: false);
-    await tester.pump();
+  testWidgets(
+    "with no models picked the page says so rather than opening silent",
+    (tester) async {
+      final chat = await io(tester, app.seedChat);
+      await app.pump(tester, VoicePage(chatId: chat.state.id), settle: false);
+      await tester.pump();
 
-    expect(find.byType(VoiceBloom), findsOneWidget);
-    expect(find.byType(TranscriptWindow), findsOneWidget);
-    expect(find.textContaining("Settings"), findsOneWidget);
-  });
+      expect(find.byType(VoiceBloom), findsOneWidget);
+      expect(find.byType(TranscriptWindow), findsOneWidget);
+      expect(find.textContaining("Settings"), findsOneWidget);
+    },
+  );
 }

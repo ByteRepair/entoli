@@ -36,7 +36,8 @@ class CreateSkillTool extends AgentTool {
   // the validator is what the model's draft is held to, so the description
   // is not a second copy of its numbers to drift.
   @override
-  String get description => "Package a skill you have drafted in the "
+  String get description =>
+      "Package a skill you have drafted in the "
       "workspace and offer it to the user to install. Write the skill as a "
       "directory containing a SKILL.md plus any scripts, references, or "
       "assets it needs, then call this with the directory's path. The "
@@ -52,20 +53,21 @@ class CreateSkillTool extends AgentTool {
 
   @override
   Map<String, dynamic> get schema => const {
-        "type": "object",
-        "properties": {
-          "path": {
-            "type": "string",
-            "description": "Workspace-relative path to the skill directory "
-                "(the one containing SKILL.md).",
-          },
-          "name": {
-            "type": "string",
-            "description": "Optional skill name. Defaults to the directory name.",
-          },
-        },
-        "required": ["path"],
-      };
+    "type": "object",
+    "properties": {
+      "path": {
+        "type": "string",
+        "description":
+            "Workspace-relative path to the skill directory "
+            "(the one containing SKILL.md).",
+      },
+      "name": {
+        "type": "string",
+        "description": "Optional skill name. Defaults to the directory name.",
+      },
+    },
+    "required": ["path"],
+  };
 
   @override
   Stream<AgentEvent> run(LlmToolCall call, Turn turn) async* {
@@ -82,12 +84,14 @@ class CreateSkillTool extends AgentTool {
     yield* turn.gate.path(call, path, createSkillToolName, () async {
       if (!Directory(path).existsSync()) {
         return ShellResult.failed(
-            "The directory '$path' does not exist. Write the skill there first "
-            "with write/edit, then call $createSkillToolName.");
+          "The directory '$path' does not exist. Write the skill there first "
+          "with write/edit, then call $createSkillToolName.",
+        );
       }
       if (!File(p.join(path, "SKILL.md")).existsSync()) {
         return ShellResult.failed(
-            "The directory '$path' has no SKILL.md. A skill needs one.");
+          "The directory '$path' has no SKILL.md. A skill needs one.",
+        );
       }
       try {
         final result = await turn.packageSkill!(args.path, args.name);
@@ -95,8 +99,9 @@ class CreateSkillTool extends AgentTool {
         skillName = result.name;
       } on SkillImportException catch (e) {
         return ShellResult.failed(
-            "SKILL.md does not conform to the Agent Skills spec: $e. "
-            "Fix the frontmatter and call $createSkillToolName again.");
+          "SKILL.md does not conform to the Agent Skills spec: $e. "
+          "Fix the frontmatter and call $createSkillToolName again.",
+        );
       }
       return const ShellResult(returnCode: 0, output: "");
     }, outcome);
@@ -107,8 +112,11 @@ class CreateSkillTool extends AgentTool {
     }
     final name = skillName ?? args.name ?? args.path;
     yield SkillInstallEvent(installId: id, title: name);
-    yield toolOk(call, "Skill '$name' packaged. "
-        "The user can review and install it from the card below.");
+    yield toolOk(
+      call,
+      "Skill '$name' packaged. "
+      "The user can review and install it from the card below.",
+    );
   }
 }
 

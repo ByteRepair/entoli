@@ -21,16 +21,13 @@ PromptDocument skillDoc(
   String description = "a description",
   bool modelInvocable = true,
   String body = r"Do $ARGUMENTS.",
-}) =>
-    PromptDocument(
-      kind: CompletionKind.skill,
-      name: name,
-      frontmatter: {"description": description},
-      metadata: {
-        if (!modelInvocable) "disable-model-invocation": "true",
-      },
-      body: body,
-    );
+}) => PromptDocument(
+  kind: CompletionKind.skill,
+  name: name,
+  frontmatter: {"description": description},
+  metadata: {if (!modelInvocable) "disable-model-invocation": "true"},
+  body: body,
+);
 
 void main() {
   late BuiltinSession session;
@@ -62,8 +59,7 @@ void main() {
             LlmToolCall(
               id: id,
               name: skillToolName,
-              argumentsJson:
-                  jsonEncode({"skill": name, "args": ?args}),
+              argumentsJson: jsonEncode({"skill": name, "args": ?args}),
             ),
           ],
         ),
@@ -72,70 +68,95 @@ void main() {
   final finish = saidOnly("done");
 
   group("offering", () {
-    test("the skill tool is offered iff a model-invocable skill exists", () async {
-      // One is.
-      var client = FakeLlmClient([[finish]]);
-      await agentWith(client, [skillDoc("review")]).run(userMessage("hi")).toList();
-      expect(client.calls.first.tools.map((t) => t.name), contains("skill"));
+    test(
+      "the skill tool is offered iff a model-invocable skill exists",
+      () async {
+        // One is.
+        var client = FakeLlmClient([
+          [finish],
+        ]);
+        await agentWith(client, [
+          skillDoc("review"),
+        ]).run(userMessage("hi")).toList();
+        expect(client.calls.first.tools.map((t) => t.name), contains("skill"));
 
-      // None is.
-      client = FakeLlmClient([[finish]]);
-      await agentWith(client, const []).run(userMessage("hi")).toList();
-      expect(client.calls.first.tools.map((t) => t.name), isNot(contains("skill")));
+        // None is.
+        client = FakeLlmClient([
+          [finish],
+        ]);
+        await agentWith(client, const []).run(userMessage("hi")).toList();
+        expect(
+          client.calls.first.tools.map((t) => t.name),
+          isNot(contains("skill")),
+        );
 
-      // A skill exists, but it is the user's: the model may not call it.
-      client = FakeLlmClient([[finish]]);
-      await agentWith(client, [skillDoc("private", modelInvocable: false)])
-          .run(userMessage("hi")).toList();
-      expect(client.calls.first.tools.map((t) => t.name), isNot(contains("skill")));
-    });
-
-    test("the system prompt lists the model-invocable skills, not the rest", () {
-      final text = agentSystemMessage(
-        platform: "test",
-        offer: ToolOffer(skills: [
-          skillDoc("review", description: "look it over"),
+        // A skill exists, but it is the user's: the model may not call it.
+        client = FakeLlmClient([
+          [finish],
+        ]);
+        await agentWith(client, [
           skillDoc("private", modelInvocable: false),
-        ]),
-      ).text;
+        ]).run(userMessage("hi")).toList();
+        expect(
+          client.calls.first.tools.map((t) => t.name),
+          isNot(contains("skill")),
+        );
+      },
+    );
 
-      expect(text, contains("## Skills"));
-      expect(text, contains("review: look it over"));
-      expect(text, isNot(contains("private")));
+    test(
+      "the system prompt lists the model-invocable skills, not the rest",
+      () {
+        final text = agentSystemMessage(
+          platform: "test",
+          offer: ToolOffer(
+            skills: [
+              skillDoc("review", description: "look it over"),
+              skillDoc("private", modelInvocable: false),
+            ],
+          ),
+        ).text;
 
-      // And with no skills, the section is left out of the prompt.
-      final bare =
-          agentSystemMessage(platform: "test").text;
-      expect(bare, isNot(contains("## Skills")));
-    });
+        expect(text, contains("## Skills"));
+        expect(text, contains("review: look it over"));
+        expect(text, isNot(contains("private")));
+
+        // And with no skills, the section is left out of the prompt.
+        final bare = agentSystemMessage(platform: "test").text;
+        expect(bare, isNot(contains("## Skills")));
+      },
+    );
   });
 
   group("loading", () {
-    test("a known skill loads its instructions, arguments substituted", () async {
-      final client = FakeLlmClient([
-        [skillCall("review", args: "the code")],
-        [finish],
-      ]);
-      final events = await agentWith(client, [skillDoc("review")])
-          .run(userMessage("go")).toList();
+    test(
+      "a known skill loads its instructions, arguments substituted",
+      () async {
+        final client = FakeLlmClient([
+          [skillCall("review", args: "the code")],
+          [finish],
+        ]);
+        final events = await agentWith(client, [
+          skillDoc("review"),
+        ]).run(userMessage("go")).toList();
 
-      final result = events
-          .whereType<ToolResultEvent>()
-          .firstWhere((e) => e.result.callId == "sk-1")
-          .result;
-      expect(result.returnCode, 0);
-      expect(result.output, "Do the code.");
-    });
+        final result = events
+            .whereType<ToolResultEvent>()
+            .firstWhere((e) => e.result.callId == "sk-1")
+            .result;
+        expect(result.returnCode, 0);
+        expect(result.output, "Do the code.");
+      },
+    );
 
     test("a skill with no placeholder gets the arguments appended", () async {
       final client = FakeLlmClient([
         [skillCall("brief", args: "for the launch")],
         [finish],
       ]);
-      final events =
-          await agentWith(client, [skillDoc("brief", body: "Write a brief.")])
-              .run(userMessage("go"))
-              .toList();
+      final events = await agentWith(client, [
+        skillDoc("brief", body: "Write a brief."),
+      ]).run(userMessage("go")).toList();
 
       final result = events
           .whereType<ToolResultEvent>()
@@ -163,10 +184,10 @@ void main() {
         [skillCall("ghost")],
         [finish],
       ]);
-      final events =
-          await agentWith(client, [skillDoc("review"), skillDoc("brief")])
-              .run(userMessage("go"))
-              .toList();
+      final events = await agentWith(client, [
+        skillDoc("review"),
+        skillDoc("brief"),
+      ]).run(userMessage("go")).toList();
 
       final result = events
           .whereType<ToolResultEvent>()
@@ -183,15 +204,20 @@ void main() {
         [skillCall("ghost")],
         [finish],
       ]);
-      final none = await agentWith(empty, const [])
-          .run(userMessage("go")).toList();
+      final none = await agentWith(
+        empty,
+        const [],
+      ).run(userMessage("go")).toList();
 
       final noneResult = none
           .whereType<ToolResultEvent>()
           .firstWhere((e) => e.result.callId == "sk-1")
           .result;
       expect(noneResult.returnCode, -1);
-      expect(noneResult.exceptionInfo, contains("There is no tool called 'skill'"));
+      expect(
+        noneResult.exceptionInfo,
+        contains("There is no tool called 'skill'"),
+      );
     });
 
     test("a user-only skill is refused, not worked around", () async {
@@ -199,11 +225,10 @@ void main() {
         [skillCall("private")],
         [finish],
       ]);
-      final events =
-          await agentWith(client, [
-            skillDoc("review"),
-            skillDoc("private", modelInvocable: false),
-          ]).run(userMessage("go")).toList();
+      final events = await agentWith(client, [
+        skillDoc("review"),
+        skillDoc("private", modelInvocable: false),
+      ]).run(userMessage("go")).toList();
 
       final result = events
           .whereType<ToolResultEvent>()
@@ -221,22 +246,30 @@ void main() {
             message: LlmMessage(
               role: LlmRole.assistant,
               toolCalls: [
-                LlmToolCall(id: "sk-1", name: skillToolName, argumentsJson: '{}'),
+                LlmToolCall(
+                  id: "sk-1",
+                  name: skillToolName,
+                  argumentsJson: '{}',
+                ),
               ],
             ),
           ),
         ],
         [finish],
       ]);
-      final events =
-          await agentWith(client, [skillDoc("review")]).run(userMessage("go")).toList();
+      final events = await agentWith(client, [
+        skillDoc("review"),
+      ]).run(userMessage("go")).toList();
 
       final result = events
           .whereType<ToolResultEvent>()
           .firstWhere((e) => e.result.callId == "sk-1")
           .result;
       expect(result.returnCode, -1);
-      expect(result.exceptionInfo, contains('the "skill" argument was missing'));
+      expect(
+        result.exceptionInfo,
+        contains('the "skill" argument was missing'),
+      );
     });
   });
 }

@@ -58,10 +58,11 @@ abstract class BrowserTool extends AgentTool {
   /// browser, or null where it is the agent's.
   static Stream<AgentEvent>? refusedWhileHeld(LlmToolCall call, Turn turn) =>
       turn.browser!.hold.value == null
-          ? null
-          : toolRejected(call, noted(turn, _hidden));
+      ? null
+      : toolRejected(call, noted(turn, _hidden));
 
-  static const _hidden = "The user has hidden the browser from you to do "
+  static const _hidden =
+      "The user has hidden the browser from you to do "
       "something private in it, such as signing in. Do not retry yet: carry "
       "on with something else, or ask the user and wait for them to say they "
       "have handed it back.";
@@ -79,11 +80,17 @@ abstract class BrowserTool extends AgentTool {
   }
 
   /// [outcome] as [call]'s result, under what happened since the last.
-  static ToolResultEvent result(LlmToolCall call, Turn turn, GateOutcome outcome) {
+  static ToolResultEvent result(
+    LlmToolCall call,
+    Turn turn,
+    GateOutcome outcome,
+  ) {
     final result = outcome.result!;
     outcome.result = result.returnCode == 0
         ? ShellResult(returnCode: 0, output: noted(turn, result.output))
-        : ShellResult.failed(noted(turn, result.exceptionInfo ?? result.output));
+        : ShellResult.failed(
+            noted(turn, result.exceptionInfo ?? result.output),
+          );
     return ToolResultEvent(outcome.resultOf(call));
   }
 
@@ -92,25 +99,33 @@ abstract class BrowserTool extends AgentTool {
   /// nothing about.
   static LlmToolCall described(LlmToolCall call, String described) =>
       LlmToolCall(
-          id: call.id,
-          name: call.name,
-          argumentsJson: jsonEncode({"action": described}));
+        id: call.id,
+        name: call.name,
+        argumentsJson: jsonEncode({"action": described}),
+      );
 
   /// [run]'s text as a result, a throw as a failed one.
-  static Future<ShellResult> Function() attempt(Future<String> Function() run) =>
-      () async {
-        try {
-          return ShellResult(returnCode: 0, output: await run());
-        } catch (e) {
-          return ShellResult.failed("$e");
-        }
-      };
+  static Future<ShellResult> Function() attempt(
+    Future<String> Function() run,
+  ) => () async {
+    try {
+      return ShellResult(returnCode: 0, output: await run());
+    } catch (e) {
+      return ShellResult.failed("$e");
+    }
+  };
 }
 
 /// One step on the page, worked out of a call's arguments: what the label
 /// shows, what it does, and what gates it.
 class PageStep {
-  const PageStep(this.label, this.run, {this.navigate, this.acting, this.target});
+  const PageStep(
+    this.label,
+    this.run, {
+    this.navigate,
+    this.acting,
+    this.target,
+  });
 
   final String label;
   final Future<String> Function() run;
@@ -142,13 +157,14 @@ abstract class PageTool extends BrowserTool {
   /// A non-empty string argument, as [stringArg] reads one.
   static String? string(Map<String, dynamic> args, String key) =>
       args[key] is String && (args[key] as String).isNotEmpty
-          ? args[key] as String
-          : null;
+      ? args[key] as String
+      : null;
 
   static int? ref(Map<String, dynamic> args) =>
       args["ref"] is int ? args["ref"] as int : null;
 
-  static double? number(Object? value) => value is num ? value.toDouble() : null;
+  static double? number(Object? value) =>
+      value is num ? value.toDouble() : null;
 
   static ({double x, double y})? point(Object? value) {
     if (value is! Map) return null;
@@ -173,8 +189,15 @@ abstract class PageTool extends BrowserTool {
     final outcome = GateOutcome();
     final navigate = step.navigate, acting = step.acting;
     if (navigate != null) {
-      yield* turn.gate.decide(call, webfetchToolName, attempt, outcome,
-          argumentsText: navigate, ruleSubject: navigate, mode: turn.browserApprove);
+      yield* turn.gate.decide(
+        call,
+        webfetchToolName,
+        attempt,
+        outcome,
+        argumentsText: navigate,
+        ruleSubject: navigate,
+        mode: turn.browserApprove,
+      );
     } else if (acting != null) {
       final String target;
       try {
@@ -185,8 +208,13 @@ abstract class PageTool extends BrowserTool {
       }
       final described = "$acting $target";
       yield* turn.gate.decide(
-          BrowserTool.described(call, described), name, attempt, outcome,
-          argumentsText: described, mode: turn.browserApprove);
+        BrowserTool.described(call, described),
+        name,
+        attempt,
+        outcome,
+        argumentsText: described,
+        mode: turn.browserApprove,
+      );
     } else {
       outcome.result = await attempt();
     }
@@ -211,19 +239,20 @@ class BrowserGotoTool extends PageTool {
   String get section => systemProse("agent-browser");
 
   @override
-  String get description => "Open a URL in the browser, a real one with the "
+  String get description =>
+      "Open a URL in the browser, a real one with the "
       "user's window and logins, and return what is in view. Use it over "
       "`webfetch` for a page that needs JavaScript, a login, or one that "
       "refused `webfetch`.";
 
   @override
   Map<String, dynamic> get schema => const {
-        "type": "object",
-        "properties": {
-          "url": {"type": "string", "description": "The URL to open."},
-        },
-        "required": ["url"],
-      };
+    "type": "object",
+    "properties": {
+      "url": {"type": "string", "description": "The URL to open."},
+    },
+    "required": ["url"],
+  };
 
   @override
   String get usage => 'The $browserGotoToolName tool takes {"url": "..."}.';
@@ -251,12 +280,12 @@ class BrowserSearchTool extends PageTool {
 
   @override
   Map<String, dynamic> get schema => const {
-        "type": "object",
-        "properties": {
-          "query": {"type": "string", "description": "The search query."},
-        },
-        "required": ["query"],
-      };
+    "type": "object",
+    "properties": {
+      "query": {"type": "string", "description": "The search query."},
+    },
+    "required": ["query"],
+  };
 
   @override
   String get usage => 'The $browserSearchToolName tool takes {"query": "..."}.';
@@ -265,8 +294,10 @@ class BrowserSearchTool extends PageTool {
   PageStep? step(Map<String, dynamic> args, BrowserTab tab) {
     final query = PageTool.string(args, "query");
     if (query == null) return null;
-    return PageStep(query,
-        () => tab.goto(Uri.https("duckduckgo.com", "/", {"q": query}).toString()));
+    return PageStep(
+      query,
+      () => tab.goto(Uri.https("duckduckgo.com", "/", {"q": query}).toString()),
+    );
   }
 }
 
@@ -277,7 +308,8 @@ class BrowserClickTool extends PageTool {
   String get name => browserClickToolName;
 
   @override
-  String get description => "Click an element by its number from the last "
+  String get description =>
+      "Click an element by its number from the last "
       "page description, or a point by x and y in viewport pixels (what a "
       "screenshot shows). Use x and y for what has no number, such as the "
       "inside of a frame. A file the page downloads is saved into "
@@ -286,13 +318,13 @@ class BrowserClickTool extends PageTool {
 
   @override
   Map<String, dynamic> get schema => const {
-        "type": "object",
-        "properties": {
-          "ref": {"type": "integer", "description": "The element's number."},
-          "x": {"type": "number"},
-          "y": {"type": "number"},
-        },
-      };
+    "type": "object",
+    "properties": {
+      "ref": {"type": "integer", "description": "The element's number."},
+      "x": {"type": "number"},
+      "y": {"type": "number"},
+    },
+  };
 
   @override
   String get usage =>
@@ -303,9 +335,12 @@ class BrowserClickTool extends PageTool {
     final at = PageTool.ref(args);
     final x = PageTool.number(args["x"]), y = PageTool.number(args["y"]);
     if (at == null && (x == null || y == null)) return null;
-    return PageStep(at != null ? "[$at]" : "($x, $y)",
-        () => tab.click(ref: at, x: x, y: y),
-        acting: "click", target: () => tab.describeTarget(ref: at, x: x, y: y));
+    return PageStep(
+      at != null ? "[$at]" : "($x, $y)",
+      () => tab.click(ref: at, x: x, y: y),
+      acting: "click",
+      target: () => tab.describeTarget(ref: at, x: x, y: y),
+    );
   }
 }
 
@@ -319,7 +354,8 @@ class BrowserTypeTool extends PageTool {
   String get runningLabel => "Typing";
 
   @override
-  String get description => "Type text. With `ref`, replaces the text in that "
+  String get description =>
+      "Type text. With `ref`, replaces the text in that "
       "field (on a select, picks the option whose label matches). Without "
       "`ref`, types at whatever has focus, key by key, as a keyboard does: "
       "what an editor that draws its own text needs, such as Google Docs or "
@@ -328,20 +364,21 @@ class BrowserTypeTool extends PageTool {
 
   @override
   Map<String, dynamic> get schema => const {
-        "type": "object",
-        "properties": {
-          "ref": {
-            "type": "integer",
-            "description": "The field's number; leave out to type at the focus.",
-          },
-          "text": {"type": "string"},
-          "submit": {"type": "boolean"},
-        },
-        "required": ["text"],
-      };
+    "type": "object",
+    "properties": {
+      "ref": {
+        "type": "integer",
+        "description": "The field's number; leave out to type at the focus.",
+      },
+      "text": {"type": "string"},
+      "submit": {"type": "boolean"},
+    },
+    "required": ["text"],
+  };
 
   @override
-  String get usage => 'The $browserTypeToolName tool takes {"text": "..."}, '
+  String get usage =>
+      'The $browserTypeToolName tool takes {"text": "..."}, '
       'and a "ref" to type into that field.';
 
   @override
@@ -350,11 +387,18 @@ class BrowserTypeTool extends PageTool {
     final text = args["text"];
     if (text is! String) return null;
     final submit = args["submit"] == true;
-    return PageStep(at == null ? text : "[$at] $text",
-        () => tab.type(at, text, submit: submit),
-        acting: submit ? "type \"$text\" and press Enter in" : "type \"$text\" in",
-        target: () => tab.describeTarget(
-            ref: at, x: PageTool.number(args["x"]), y: PageTool.number(args["y"])));
+    return PageStep(
+      at == null ? text : "[$at] $text",
+      () => tab.type(at, text, submit: submit),
+      acting: submit
+          ? "type \"$text\" and press Enter in"
+          : "type \"$text\" in",
+      target: () => tab.describeTarget(
+        ref: at,
+        x: PageTool.number(args["x"]),
+        y: PageTool.number(args["y"]),
+      ),
+    );
   }
 }
 
@@ -368,33 +412,36 @@ class BrowserPressTool extends PageTool {
   String get runningLabel => "Typing";
 
   @override
-  String get description => "Press one key at the focus, optionally with "
+  String get description =>
+      "Press one key at the focus, optionally with "
       "modifiers held: Enter, Tab, Escape, Backspace, an arrow, or a shortcut "
       "such as Control+b for bold or Control+a to select all (Meta on a Mac "
       "site that wants Cmd).";
 
   @override
   Map<String, dynamic> get schema => const {
-        "type": "object",
-        "properties": {
-          "key": {
-            "type": "string",
-            "description": "The DOM key name (Enter, Tab, Escape, Backspace, "
-                "Delete, ArrowDown, Home, PageDown, F5) or one character.",
-          },
-          "modifiers": {
-            "type": "array",
-            "items": {
-              "type": "string",
-              "enum": ["Control", "Shift", "Alt", "Meta"],
-            },
-          },
+    "type": "object",
+    "properties": {
+      "key": {
+        "type": "string",
+        "description":
+            "The DOM key name (Enter, Tab, Escape, Backspace, "
+            "Delete, ArrowDown, Home, PageDown, F5) or one character.",
+      },
+      "modifiers": {
+        "type": "array",
+        "items": {
+          "type": "string",
+          "enum": ["Control", "Shift", "Alt", "Meta"],
         },
-        "required": ["key"],
-      };
+      },
+    },
+    "required": ["key"],
+  };
 
   @override
-  String get usage => 'The $browserPressToolName tool takes {"key": "Enter"}, '
+  String get usage =>
+      'The $browserPressToolName tool takes {"key": "Enter"}, '
       'and "modifiers": ["Control"] to hold any.';
 
   @override
@@ -406,12 +453,16 @@ class BrowserPressTool extends PageTool {
         if (modifier is String) modifier,
     };
     final label = [...held, key].join("+");
-    return PageStep(label, () => tab.press(key, modifiers: held),
-        acting: "press $label in",
-        target: () => tab.describeTarget(
-            ref: PageTool.ref(args),
-            x: PageTool.number(args["x"]),
-            y: PageTool.number(args["y"])));
+    return PageStep(
+      label,
+      () => tab.press(key, modifiers: held),
+      acting: "press $label in",
+      target: () => tab.describeTarget(
+        ref: PageTool.ref(args),
+        x: PageTool.number(args["x"]),
+        y: PageTool.number(args["y"]),
+      ),
+    );
   }
 }
 
@@ -425,28 +476,32 @@ class BrowserDragTool extends PageTool {
   bool get offered => super.offered && offer.trustedInput;
 
   @override
-  String get description => "Press at `from`, move, and release at `to`, in "
+  String get description =>
+      "Press at `from`, move, and release at `to`, in "
       "viewport pixels: for a slider.";
 
   @override
   Map<String, dynamic> get schema => const {
-        "type": "object",
-        "properties": {"from": _point, "to": _point},
-        "required": ["from", "to"],
-      };
+    "type": "object",
+    "properties": {"from": _point, "to": _point},
+    "required": ["from", "to"],
+  };
 
   @override
-  String get usage => 'The $browserDragToolName tool takes '
+  String get usage =>
+      'The $browserDragToolName tool takes '
       '{"from": {"x": n, "y": n}, "to": {"x": n, "y": n}}.';
 
   @override
   PageStep? step(Map<String, dynamic> args, BrowserTab tab) {
     final from = PageTool.point(args["from"]), to = PageTool.point(args["to"]);
     if (from == null || to == null) return null;
-    return PageStep("(${from.x}, ${from.y}) → (${to.x}, ${to.y})",
-        () => tab.drag(from, to),
-        acting: "drag from",
-        target: () => tab.describeTarget(x: from.x, y: from.y));
+    return PageStep(
+      "(${from.x}, ${from.y}) → (${to.x}, ${to.y})",
+      () => tab.drag(from, to),
+      acting: "drag from",
+      target: () => tab.describeTarget(x: from.x, y: from.y),
+    );
   }
 }
 
@@ -457,7 +512,8 @@ class BrowserScrollTool extends PageTool {
   String get name => browserScrollToolName;
 
   @override
-  String get description => "Scroll one screen down, or up, and return what "
+  String get description =>
+      "Scroll one screen down, or up, and return what "
       "is then in view. The wheel turns over the middle of the viewport and "
       "scrolls whatever is under it. To scroll a panel or frame of its own, "
       "such as a mail's body or a list beside the page, give its `ref`, or a "
@@ -465,20 +521,20 @@ class BrowserScrollTool extends PageTool {
 
   @override
   Map<String, dynamic> get schema => const {
-        "type": "object",
-        "properties": {
-          "direction": {
-            "type": "string",
-            "enum": ["down", "up"],
-          },
-          "ref": {
-            "type": "integer",
-            "description": "The number of the element to scroll inside.",
-          },
-          "x": {"type": "number"},
-          "y": {"type": "number"},
-        },
-      };
+    "type": "object",
+    "properties": {
+      "direction": {
+        "type": "string",
+        "enum": ["down", "up"],
+      },
+      "ref": {
+        "type": "integer",
+        "description": "The number of the element to scroll inside.",
+      },
+      "x": {"type": "number"},
+      "y": {"type": "number"},
+    },
+  };
 
   @override
   PageStep step(Map<String, dynamic> args, BrowserTab tab) {
@@ -503,8 +559,7 @@ class BrowserBackTool extends PageTool {
   String get description => "Go back to the previous page.";
 
   @override
-  Map<String, dynamic> get schema =>
-      const {"type": "object", "properties": {}};
+  Map<String, dynamic> get schema => const {"type": "object", "properties": {}};
 
   @override
   PageStep step(Map<String, dynamic> args, BrowserTab tab) =>
@@ -521,23 +576,26 @@ class BrowserPageTextTool extends PageTool {
   String get runningLabel => "Reading the page";
 
   @override
-  String get description => "The whole page's text and every interactive "
+  String get description =>
+      "The whole page's text and every interactive "
       "element, not just what is in view. Long pages come in chunks: pass "
       "`offset` to read on.";
 
   @override
   Map<String, dynamic> get schema => const {
-        "type": "object",
-        "properties": {
-          "offset": {"type": "integer"},
-        },
-      };
+    "type": "object",
+    "properties": {
+      "offset": {"type": "integer"},
+    },
+  };
 
   @override
   PageStep step(Map<String, dynamic> args, BrowserTab tab) {
     final offset = PageTool.number(args["offset"])?.toInt() ?? 0;
-    return PageStep(offset == 0 ? "page" : "from $offset",
-        () => tab.pageText(offset: offset));
+    return PageStep(
+      offset == 0 ? "page" : "from $offset",
+      () => tab.pageText(offset: offset),
+    );
   }
 }
 
@@ -558,7 +616,8 @@ class BrowserScreenshotTool extends BrowserTool {
   String get runningLabel => "Taking a screenshot";
 
   @override
-  String get description => "Take a screenshot of the viewport, or of one "
+  String get description =>
+      "Take a screenshot of the viewport, or of one "
       "element by number. One image pixel is one viewport pixel, so a point "
       "in it can be clicked by x and y; for an element's screenshot, add the "
       "offset the result gives. Set `last_click` after clicking by x and y to "
@@ -566,15 +625,15 @@ class BrowserScreenshotTool extends BrowserTool {
 
   @override
   Map<String, dynamic> get schema => const {
-        "type": "object",
-        "properties": {
-          "ref": {"type": "integer"},
-          "last_click": {
-            "type": "boolean",
-            "description": "Mark the last click on this page with a red dot.",
-          },
-        },
-      };
+    "type": "object",
+    "properties": {
+      "ref": {"type": "integer"},
+      "last_click": {
+        "type": "boolean",
+        "description": "Mark the last click on this page with a red dot.",
+      },
+    },
+  };
 
   @override
   Stream<AgentEvent> run(LlmToolCall call, Turn turn) async* {
@@ -590,8 +649,13 @@ class BrowserScreenshotTool extends BrowserTool {
     final ImageEvent saved;
     try {
       shot = await tab.screenshot(ref: ref, markClick: markClick);
-      saved = await turn.saved(LlmAttachment(
-          filename: "screenshot.png", mimeType: "image/png", bytes: shot.png));
+      saved = await turn.saved(
+        LlmAttachment(
+          filename: "screenshot.png",
+          mimeType: "image/png",
+          bytes: shot.png,
+        ),
+      );
     } catch (e) {
       yield toolFailed(call, "$e");
       return;
@@ -601,18 +665,20 @@ class BrowserScreenshotTool extends BrowserTool {
     final marked = !markClick
         ? ""
         : click == null
-            ? " No click to mark: none since the page last loaded or scrolled."
-            : " The red dot is the last click, at "
-                "(${click.x.round()}, ${click.y.round()}) in the viewport.";
+        ? " No click to mark: none since the page last loaded or scrolled."
+        : " The red dot is the last click, at "
+              "(${click.x.round()}, ${click.y.round()}) in the viewport.";
     yield toolOk(
-        call,
-        BrowserTool.noted(
-            turn,
-            ref == null
-                ? "Screenshot of the viewport attached.$marked"
-                : "Screenshot of [$ref] attached. Its top-left corner is at "
-                    "(${shot.left.round()}, ${shot.top.round()}) in the "
-                    "viewport: add that to a point in it to click there.$marked"));
+      call,
+      BrowserTool.noted(
+        turn,
+        ref == null
+            ? "Screenshot of the viewport attached.$marked"
+            : "Screenshot of [$ref] attached. Its top-left corner is at "
+                  "(${shot.left.round()}, ${shot.top.round()}) in the "
+                  "viewport: add that to a point in it to click there.$marked",
+      ),
+    );
   }
 }
 
@@ -640,7 +706,8 @@ class BrowserCredentialsPromptTool extends _AskingBrowserTool {
   String get runningLabel => "Waiting for you to sign in";
 
   @override
-  String get description => "Ask the user to fill in a sign-in on the current "
+  String get description =>
+      "Ask the user to fill in a sign-in on the current "
       "page. They type into a panel in the app, which types it into the "
       "fields and makes the submit clicks itself; you never see what they "
       "type, and must never ask for a password or code in chat. Waits for "
@@ -649,43 +716,44 @@ class BrowserCredentialsPromptTool extends _AskingBrowserTool {
 
   @override
   Map<String, dynamic> get schema => const {
-        "type": "object",
-        "properties": {
-          "reason": {
-            "type": "string",
-            "description": "Shown to the user, e.g. \"Sign in to GitHub\".",
-          },
-          "fields": {
-            "type": "array",
-            "items": {
-              "type": "object",
-              "properties": {
-                "ref": {"type": "integer", "description": "The field's number."},
-                "label": {"type": "string", "description": "e.g. \"Password\"."},
-                "secret": {
-                  "type": "boolean",
-                  "description": "Obscure what the user types.",
-                },
-              },
-              "required": ["ref", "label"],
+    "type": "object",
+    "properties": {
+      "reason": {
+        "type": "string",
+        "description": "Shown to the user, e.g. \"Sign in to GitHub\".",
+      },
+      "fields": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "ref": {"type": "integer", "description": "The field's number."},
+            "label": {"type": "string", "description": "e.g. \"Password\"."},
+            "secret": {
+              "type": "boolean",
+              "description": "Obscure what the user types.",
             },
           },
-          "submit": {
-            "type": "array",
-            "description": "The clicks that submit the fields, in order: an "
-                "element's number, or a point.",
-            "items": {
-              "type": "object",
-              "properties": {
-                "ref": {"type": "integer"},
-                "x": {"type": "number"},
-                "y": {"type": "number"},
-              },
-            },
+          "required": ["ref", "label"],
+        },
+      },
+      "submit": {
+        "type": "array",
+        "description":
+            "The clicks that submit the fields, in order: an "
+            "element's number, or a point.",
+        "items": {
+          "type": "object",
+          "properties": {
+            "ref": {"type": "integer"},
+            "x": {"type": "number"},
+            "y": {"type": "number"},
           },
         },
-        "required": ["reason", "fields"],
-      };
+      },
+    },
+    "required": ["reason", "fields"],
+  };
 
   @override
   Stream<AgentEvent> run(LlmToolCall call, Turn turn) async* {
@@ -702,9 +770,12 @@ class BrowserCredentialsPromptTool extends _AskingBrowserTool {
           ),
     ];
     if (reason == null || fields.isEmpty) {
-      yield* toolRejected(call, 'The $browserCredentialsPromptToolName tool takes '
-          '{"reason": "...", "fields": [{"ref": n, "label": "..."}], '
-          '"submit": [{"ref": n}]}.');
+      yield* toolRejected(
+        call,
+        'The $browserCredentialsPromptToolName tool takes '
+        '{"reason": "...", "fields": [{"ref": n, "label": "..."}], '
+        '"submit": [{"ref": n}]}.',
+      );
       return;
     }
     if (BrowserTool.refusedWhileHeld(call, turn) case final refused?) {
@@ -723,8 +794,11 @@ class BrowserCredentialsPromptTool extends _AskingBrowserTool {
     yield toolCalled(call, reason);
     final String? done;
     try {
-      done = await turn.untilStopped(tab.requestCredentials(
-          CredentialRequest(reason: reason, fields: fields, submit: submit)));
+      done = await turn.untilStopped(
+        tab.requestCredentials(
+          CredentialRequest(reason: reason, fields: fields, submit: submit),
+        ),
+      );
     } catch (e) {
       yield toolFailed(call, "$e");
       return;
@@ -751,7 +825,8 @@ class BrowserCredentialsHideTool extends _AskingBrowserTool {
   String get runningLabel => "Waiting for you to hand the browser back";
 
   @override
-  String get description => "Hide the browser from yourself and hand it to "
+  String get description =>
+      "Hide the browser from yourself and hand it to "
       "the user, for a sign-in the prompt cannot do: a multi-step login, a "
       "code sent to their phone, a passkey. A button labelled with `reason` "
       "appears in the chat and opens the browser for them. Waits until they "
@@ -759,24 +834,26 @@ class BrowserCredentialsHideTool extends _AskingBrowserTool {
 
   @override
   Map<String, dynamic> get schema => const {
-        "type": "object",
-        "properties": {
-          "reason": {
-            "type": "string",
-            "description":
-                "The button's label, e.g. \"Please sign in to Google to proceed\".",
-          },
-        },
-        "required": ["reason"],
-      };
+    "type": "object",
+    "properties": {
+      "reason": {
+        "type": "string",
+        "description":
+            "The button's label, e.g. \"Please sign in to Google to proceed\".",
+      },
+    },
+    "required": ["reason"],
+  };
 
   @override
   Stream<AgentEvent> run(LlmToolCall call, Turn turn) async* {
     final tab = turn.browser!;
     final reason = stringArg(call.argumentsJson, "reason");
     if (reason == null) {
-      yield* toolRejected(call,
-          'The $browserCredentialsHideToolName tool takes {"reason": "..."}.');
+      yield* toolRejected(
+        call,
+        'The $browserCredentialsHideToolName tool takes {"reason": "..."}.',
+      );
       return;
     }
     yield toolCalled(call, reason);
@@ -798,10 +875,14 @@ class BrowserCredentialsHideTool extends _AskingBrowserTool {
       tab.hold.removeListener(given);
     }
     yield toolOk(
-        call,
-        // The giving back is the note's to say.
-        BrowserTool.noted(turn, "Read the page again before acting on it: the "
-            "user may have moved on from where you left it."));
+      call,
+      // The giving back is the note's to say.
+      BrowserTool.noted(
+        turn,
+        "Read the page again before acting on it: the "
+        "user may have moved on from where you left it.",
+      ),
+    );
   }
 }
 
@@ -830,31 +911,31 @@ class BrowserUploadTool extends BrowserTool {
   @override
   String get description => _byUser
       ? "Ask the user to upload a file through the page: give the number of "
-          "the upload button or file field. The user chooses the file in the "
-          "app, which you cannot do here; the call waits for them, and says "
-          "what they chose or that they cancelled."
+            "the upload button or file field. The user chooses the file in the "
+            "app, which you cannot do here; the call waits for them, and says "
+            "what they chose or that they cancelled."
       : "Upload files from your workspace through the page: give the number "
-          "of the upload button or file field, and the files' paths. The "
-          "page's file chooser is filled in for you, with no dialog. Only "
-          "upload what the task needs.";
+            "of the upload button or file field, and the files' paths. The "
+            "page's file chooser is filled in for you, with no dialog. Only "
+            "upload what the task needs.";
 
   @override
   Map<String, dynamic> get schema => {
-        "type": "object",
-        "properties": {
-          "ref": {
-            "type": "integer",
-            "description": "The upload button's or file field's number.",
-          },
-          if (!_byUser)
-            "paths": {
-              "type": "array",
-              "items": {"type": "string"},
-              "description": "Files to upload, as the file tools take paths.",
-            },
+    "type": "object",
+    "properties": {
+      "ref": {
+        "type": "integer",
+        "description": "The upload button's or file field's number.",
+      },
+      if (!_byUser)
+        "paths": {
+          "type": "array",
+          "items": {"type": "string"},
+          "description": "Files to upload, as the file tools take paths.",
         },
-        "required": ["ref", if (!_byUser) "paths"],
-      };
+    },
+    "required": ["ref", if (!_byUser) "paths"],
+  };
 
   @override
   Stream<AgentEvent> run(LlmToolCall call, Turn turn) async* {
@@ -865,8 +946,11 @@ class BrowserUploadTool extends BrowserTool {
     }
     final ref = intArg(call.argumentsJson, "ref");
     if (ref == null) {
-      yield* toolRejected(call, 'The $browserUploadToolName tool takes {"ref": n'
-          '${_byUser ? "" : ', "paths": ["..."]'}}.');
+      yield* toolRejected(
+        call,
+        'The $browserUploadToolName tool takes {"ref": n'
+        '${_byUser ? "" : ', "paths": ["..."]'}}.',
+      );
       return;
     }
     if (_byUser) {
@@ -892,8 +976,11 @@ class BrowserUploadTool extends BrowserTool {
         if (path is String && path.isNotEmpty) path,
     ];
     if (paths.isEmpty) {
-      yield* toolRejected(call, 'The $browserUploadToolName tool takes '
-          '{"ref": n, "paths": ["..."]}: which files to upload.');
+      yield* toolRejected(
+        call,
+        'The $browserUploadToolName tool takes '
+        '{"ref": n, "paths": ["..."]}: which files to upload.',
+      );
       return;
     }
     final resolved = [for (final path in paths) turn.resolvePath(path)];
@@ -914,14 +1001,15 @@ class BrowserUploadTool extends BrowserTool {
     final described = "upload ${resolved.join(", ")} into $target";
     final outcome = GateOutcome();
     yield* turn.gate.decide(
-        BrowserTool.described(call, described),
-        browserUploadToolName,
-        BrowserTool.attempt(() => tab.upload(ref, resolved)),
-        outcome,
-        argumentsText: described,
-        mode: offer.uploads == BrowserUploadPolicy.allow
-            ? ApproveMode.never
-            : ApproveMode.auto);
+      BrowserTool.described(call, described),
+      browserUploadToolName,
+      BrowserTool.attempt(() => tab.upload(ref, resolved)),
+      outcome,
+      argumentsText: described,
+      mode: offer.uploads == BrowserUploadPolicy.allow
+          ? ApproveMode.never
+          : ApproveMode.auto,
+    );
     yield BrowserTool.result(call, turn, outcome);
   }
 }

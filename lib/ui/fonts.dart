@@ -35,10 +35,9 @@ void registerBundledFontLicences() {
       (displayFamily, "assets/fonts/PlayfairDisplay-OFL.txt"),
       (bodyFamily, "assets/fonts/SourceSerif4-OFL.txt"),
     ]) {
-      yield LicenseEntryWithLineBreaks(
-        [family],
-        await rootBundle.loadString(file),
-      );
+      yield LicenseEntryWithLineBreaks([
+        family,
+      ], await rootBundle.loadString(file));
     }
   });
 }

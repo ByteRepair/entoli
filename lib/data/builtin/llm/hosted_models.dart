@@ -19,7 +19,7 @@ class ModelHost {
   /// For a host that only asks what a pick resolves to — the readiness gates —
   /// and never runs one.
   ModelHost.resolving({this.cutsUtterances = true})
-      : client = (() => throw StateError("Resolved to check, not to run."));
+    : client = (() => throw StateError("Resolved to check, not to run."));
 
   final LlmClient Function() client;
 
@@ -78,7 +78,8 @@ class HostedSynthesisModel implements SynthesisModel {
   final Synthesize Function({String? voice}) _synthesizer;
 
   @override
-  Speaking speaking({String? voice}) => SpeakThrough(_synthesizer(voice: voice));
+  Speaking speaking({String? voice}) =>
+      SpeakThrough(_synthesizer(voice: voice));
 
   @override
   bool get systemEngine => false;

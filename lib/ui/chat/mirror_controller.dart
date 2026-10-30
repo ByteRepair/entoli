@@ -9,8 +9,7 @@ import "../../domain/models.dart";
 import "../../domain/room/roster.dart" show isCommand;
 import "../../domain/room/room_state.dart";
 import "../../providers.dart";
-import "chat_controller.dart"
-    show TurnDriver, chatControllerProvider;
+import "chat_controller.dart" show TurnDriver, chatControllerProvider;
 
 /// The controller a mirrored chat is read through — the counterpart
 /// [ChatController] would have been if it read from the wire instead of the
@@ -56,9 +55,7 @@ class MirrorChatController extends Notifier<ChatViewState>
       isRunning: online && mirror.running,
       // A mirror sees one turn, the home device's — keyed by that turn's
       // own reply, the shape the state asks for.
-      approvals: online
-          ? {"mirror": mirror.approvals}
-          : const {},
+      approvals: online ? {"mirror": mirror.approvals} : const {},
       // Rebuilt from the call's own arguments rather than from a second
       // encoding of the questions — the same string the home device read.
       questions: online
@@ -70,7 +67,7 @@ class MirrorChatController extends Notifier<ChatViewState>
                     questions: askQuestionsFrom(asked.argumentsJson),
                     argumentsJson: asked.argumentsJson,
                   ),
-              ]
+              ],
             }
           : const {},
       retry: online ? mirror.retry : null,
@@ -89,11 +86,20 @@ class MirrorChatController extends Notifier<ChatViewState>
   /// Throws [Undelivered] where it did not arrive: the composer has already
   /// cleared, so the page says so.
   @override
-  Future<void> send(String text,
-      {List<Attachment> attachments = const [], bool queue = false}) async {
-    final reply = await _hub.sendRemotePrompt(chatId, text,
-        attachments: attachments, queue: queue);
-    if (reply == null || !reply.ok) throw const Undelivered("The message did not reach the other device.");
+  Future<void> send(
+    String text, {
+    List<Attachment> attachments = const [],
+    bool queue = false,
+  }) async {
+    final reply = await _hub.sendRemotePrompt(
+      chatId,
+      text,
+      attachments: attachments,
+      queue: queue,
+    );
+    if (reply == null || !reply.ok) {
+      throw const Undelivered("The message did not reach the other device.");
+    }
   }
 
   /// A say waiting for its turn is the home device's view state, which no
@@ -102,8 +108,7 @@ class MirrorChatController extends Notifier<ChatViewState>
   Future<void> queueSteer(String id) async {}
 
   @override
-  Future<Draft?> withdrawSteer(String id) async =>
-      null;
+  Future<Draft?> withdrawSteer(String id) async => null;
 
   /// Who is speaking is the home device's to judge, so anything but a command
   /// is offered both ways and it decides.
@@ -120,14 +125,17 @@ class MirrorChatController extends Notifier<ChatViewState>
   bool get rulesWritable => false;
 
   @override
-  Future<void> respondApproval(String approvalId, ApprovalResponse r,
-          {ToolApproval? approval}) =>
-      _hub
-      .respondRemoteApproval(
-          chatId, approvalId,
-          r == ApprovalResponse.allow ||
-              r == ApprovalResponse.alwaysAllowChat ||
-              r == ApprovalResponse.alwaysAllowProject);
+  Future<void> respondApproval(
+    String approvalId,
+    ApprovalResponse r, {
+    ToolApproval? approval,
+  }) => _hub.respondRemoteApproval(
+    chatId,
+    approvalId,
+    r == ApprovalResponse.allow ||
+        r == ApprovalResponse.alwaysAllowChat ||
+        r == ApprovalResponse.alwaysAllowProject,
+  );
 
   @override
   Future<void> answerQuestions(String requestId, List<String?> answers) =>
@@ -138,25 +146,30 @@ class MirrorChatController extends Notifier<ChatViewState>
       _hub.editRemote(chatId, messageId, text);
 
   @override
-  Future<void> regenerate(String messageId) => _hub.regenerateRemote(chatId, messageId);
+  Future<void> regenerate(String messageId) =>
+      _hub.regenerateRemote(chatId, messageId);
 
   @override
   Future<void> stepThread(String messageId, int step) =>
       _hub.stepThreadRemote(chatId, messageId, step);
 
   @override
-  Future<void> deleteThread(String messageId) => _hub.deleteThreadRemote(chatId, messageId);
+  Future<void> deleteThread(String messageId) =>
+      _hub.deleteThreadRemote(chatId, messageId);
 }
 
-final mirrorChatControllerProvider = NotifierProvider.family<
-    MirrorChatController, ChatViewState, String>(MirrorChatController.new);
+final mirrorChatControllerProvider =
+    NotifierProvider.family<MirrorChatController, ChatViewState, String>(
+      MirrorChatController.new,
+    );
 
 /// A chat's view from whichever controller reads it, for a page that draws a
 /// mirrored chat and a local one alike. Only the one it is gets built.
-final chatViewProvider = Provider.family<ChatViewState, String>((ref, chatId) =>
-    ref.watch(isMirroredChatProvider(chatId))
-        ? ref.watch(mirrorChatControllerProvider(chatId))
-        : ref.watch(chatControllerProvider(chatId)));
+final chatViewProvider = Provider.family<ChatViewState, String>(
+  (ref, chatId) => ref.watch(isMirroredChatProvider(chatId))
+      ? ref.watch(mirrorChatControllerProvider(chatId))
+      : ref.watch(chatControllerProvider(chatId)),
+);
 
 /// A message a paired device did not take. [message] is said to the user.
 class Undelivered implements Exception {

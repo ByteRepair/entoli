@@ -10,11 +10,12 @@ import "../../providers.dart";
 /// second dialog, before the key is asked for. Null if dismissed; a null
 /// [preset] is Custom. One already configured is offered again, for a second
 /// account.
-Future<({LlmProviderConfig? preset})?> pickProviderPreset(BuildContext context) =>
-    showDialog<({LlmProviderConfig? preset})>(
-      context: context,
-      builder: (context) => const _PresetPicker(),
-    );
+Future<({LlmProviderConfig? preset})?> pickProviderPreset(
+  BuildContext context,
+) => showDialog<({LlmProviderConfig? preset})>(
+  context: context,
+  builder: (context) => const _PresetPicker(),
+);
 
 class _PresetPicker extends ConsumerWidget {
   const _PresetPicker();
@@ -151,10 +152,7 @@ class _GroupHeading extends StatelessWidget {
 }
 
 class _PresetTile extends StatelessWidget {
-  const _PresetTile({
-    required this.preset,
-    required this.onTap,
-  });
+  const _PresetTile({required this.preset, required this.onTap});
 
   final LlmProvider preset;
   final VoidCallback onTap;
@@ -257,7 +255,9 @@ class _Tag extends StatelessWidget {
           Flexible(
             child: Text(
               label,
-              style: Theme.of(context).textTheme.labelSmall?.copyWith(color: fg),
+              style: Theme.of(
+                context,
+              ).textTheme.labelSmall?.copyWith(color: fg),
             ),
           ),
         ],

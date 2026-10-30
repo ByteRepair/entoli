@@ -24,13 +24,13 @@ typedef LocalPoolOptions = ({
 /// UI shows into the number the provider counts, so nothing else has to know
 /// that null means ten.
 LocalPoolOptions poolOptions(AppSettings settings) => (
-      device: settings.localModelDevice,
-      contextLength: settings.localModelContext,
-      maxRunning: settings.maxLocalModels,
-      threads: settings.localModelThreads,
-      kvCachePrompts:
-          settings.localModelKvCachePrompts ?? AppSettings.defaultKvCachePrompts,
-    );
+  device: settings.localModelDevice,
+  contextLength: settings.localModelContext,
+  maxRunning: settings.maxLocalModels,
+  threads: settings.localModelThreads,
+  kvCachePrompts:
+      settings.localModelKvCachePrompts ?? AppSettings.defaultKvCachePrompts,
+);
 
 extension LocalPoolCaching on LocalPoolOptions {
   /// Whether the KV cache is on, the one place null-means-ten and zero-means-off
@@ -53,7 +53,7 @@ extension LocalPoolCaching on LocalPoolOptions {
 /// starting rather than the whole job.
 class LocalPoolClient implements LlmClient {
   LocalPoolClient(this._llm, this._options, {LocalKvCache? kvCache})
-      : _kv = kvCache;
+    : _kv = kvCache;
 
   final LocalLlm _llm;
   final LocalPoolOptions Function() _options;
@@ -135,14 +135,17 @@ class LocalPoolClient implements LlmClient {
     }
   }
 
-  LlmClient _clientFor(String model, LocalEndpoint at) =>
-      _clients.of(model, at.baseUrl, () => OpenAiClient(
-            baseUrl: Uri.parse(at.baseUrl),
-            apiKey: at.apiKey,
-            // llama.cpp's own extension, and the only place it is asked for: it
-            // is what turns a minute of prefill into something the chat can
-            // draw. A hosted provider would reject the field, which is why it
-            // rides on this client rather than on every request the app makes.
-            returnProgress: true,
-          ));
+  LlmClient _clientFor(String model, LocalEndpoint at) => _clients.of(
+    model,
+    at.baseUrl,
+    () => OpenAiClient(
+      baseUrl: Uri.parse(at.baseUrl),
+      apiKey: at.apiKey,
+      // llama.cpp's own extension, and the only place it is asked for: it
+      // is what turns a minute of prefill into something the chat can
+      // draw. A hosted provider would reject the field, which is why it
+      // rides on this client rather than on every request the app makes.
+      returnProgress: true,
+    ),
+  );
 }

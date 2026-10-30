@@ -28,17 +28,20 @@ Future<void> copyToClipboard(
 /// Report [error] in a snack bar. The one-line form several pages spell out
 /// for a caught failure, hoisted so they stop duplicating it. Selectable, so
 /// it can be copied into an issue.
-void say(BuildContext context, Object error) => ScaffoldMessenger.of(context)
-    .showSnackBar(SnackBar(content: SelectableText("$error")));
+void say(BuildContext context, Object error) => ScaffoldMessenger.of(
+  context,
+).showSnackBar(SnackBar(content: SelectableText("$error")));
 
 /// Run a [work] whose future nobody would await — a sync verb handed to an
 /// `onPressed` — and catch its failure with [say], where dropping it left a
 /// button that did nothing and an unhandled error. Reported only while the
 /// context survives; the work itself runs whatever the tree does.
 void catchAndSay(BuildContext context, Future<void> Function() work) =>
-    unawaited(work().catchError((Object error) {
-      if (context.mounted) say(context, error);
-    }));
+    unawaited(
+      work().catchError((Object error) {
+        if (context.mounted) say(context, error);
+      }),
+    );
 
 /// Ask which project something belongs under. The answer is wrapped because
 /// the default project is null as well, and a dismissed dialog must not read
@@ -47,35 +50,37 @@ Future<({String? project})?> pickProject(
   BuildContext context, {
   required List<String?> projects,
   String? current,
-}) =>
-    showDialog<({String? project})>(
-      context: context,
-      builder: (context) => SimpleDialog(
-        title: const Text("Move to project"),
-        children: [
-          for (final project in projects)
-            SimpleDialogOption(
-              onPressed: () => Navigator.pop(context, (project: project)),
-              child: Row(
-                children: [
-                  Icon(
-                    Icons.check,
-                    size: 18,
-                    color: project == current ? null : Colors.transparent,
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(child: Text(projectLabel(project))),
-                ],
+}) => showDialog<({String? project})>(
+  context: context,
+  builder: (context) => SimpleDialog(
+    title: const Text("Move to project"),
+    children: [
+      for (final project in projects)
+        SimpleDialogOption(
+          onPressed: () => Navigator.pop(context, (project: project)),
+          child: Row(
+            children: [
+              Icon(
+                Icons.check,
+                size: 18,
+                color: project == current ? null : Colors.transparent,
               ),
-            ),
-        ],
-      ),
-    );
+              const SizedBox(width: 12),
+              Expanded(child: Text(projectLabel(project))),
+            ],
+          ),
+        ),
+    ],
+  ),
+);
 
 /// Tab indents where there is more than one line to indent; where the field is
 /// one line it is still how the caret leaves for the buttons.
-Widget _indentable(int maxLines, TextEditingController controller, Widget field) =>
-    maxLines == 1 ? field : TabIndents(controller: controller, child: field);
+Widget _indentable(
+  int maxLines,
+  TextEditingController controller,
+  Widget field,
+) => maxLines == 1 ? field : TabIndents(controller: controller, child: field);
 
 /// Ask for a line (or a few) of text. Returns null if dismissed or, unless
 /// [allowBlank], left blank — a blank answer names nothing.
@@ -107,11 +112,16 @@ Future<String?> promptForText(
           minLines: 1,
           maxLines: maxLines,
           decoration: InputDecoration(hintText: hint),
-          onSubmitted: maxLines == 1 ? (_) => Navigator.pop(context, submit()) : null,
+          onSubmitted: maxLines == 1
+              ? (_) => Navigator.pop(context, submit())
+              : null,
         ),
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancel")),
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text("Cancel"),
+        ),
         FilledButton(
           onPressed: () => Navigator.pop(context, submit()),
           child: Text(confirmLabel),
@@ -160,8 +170,14 @@ Future<({String name, String value})?> promptForPair(
         ],
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancel")),
-        FilledButton(onPressed: () => Navigator.pop(context, submit()), child: const Text("Save")),
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text("Cancel"),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.pop(context, submit()),
+          child: const Text("Save"),
+        ),
       ],
     ),
   );
@@ -182,12 +198,17 @@ Future<bool> confirm(
       title: Text(title),
       content: Text(message),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(context, false), child: const Text("Cancel")),
+        TextButton(
+          onPressed: () => Navigator.pop(context, false),
+          child: const Text("Cancel"),
+        ),
         if (confirmLabel != null)
           TextButton(
             onPressed: () => Navigator.pop(context, true),
             style: destructive
-                ? TextButton.styleFrom(foregroundColor: Theme.of(context).colorScheme.error)
+                ? TextButton.styleFrom(
+                    foregroundColor: Theme.of(context).colorScheme.error,
+                  )
                 : null,
             child: Text(confirmLabel),
           ),

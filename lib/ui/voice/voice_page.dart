@@ -20,7 +20,11 @@ import "widgets/voice_controls.dart";
 /// possible. Every way in goes through here — the composer's circle and the
 /// assistant gesture's voice view — so there is one answer to what asking for
 /// it means with the models not downloaded.
-Future<void> openVoice(BuildContext context, WidgetRef ref, String chatId) async {
+Future<void> openVoice(
+  BuildContext context,
+  WidgetRef ref,
+  String chatId,
+) async {
   if (!await _haveModels(context, ref) || !context.mounted) return;
   await _push(context, chatId);
 }
@@ -31,8 +35,11 @@ Future<void> openVoice(BuildContext context, WidgetRef ref, String chatId) async
 /// first word, which is the same rule the composer keeps. [meta] is the
 /// settings that screen offered, spent on the chat whichever way it is
 /// started.
-Future<void> startVoiceChat(BuildContext context, WidgetRef ref,
-    {ChatMeta? meta}) async {
+Future<void> startVoiceChat(
+  BuildContext context,
+  WidgetRef ref, {
+  ChatMeta? meta,
+}) async {
   if (!await _haveModels(context, ref) || !context.mounted) return;
   closeNavDrawer(context);
   await _push(context, null, meta: meta);
@@ -43,7 +50,8 @@ Future<bool> _haveModels(BuildContext context, WidgetRef ref) async {
   final go = await confirm(
     context,
     title: "Voice mode needs two models",
-    message: "One to hear you and one to answer, downloaded to this device. "
+    message:
+        "One to hear you and one to answer, downloaded to this device. "
         "Settings has the list.",
     confirmLabel: "Open settings",
   );
@@ -54,8 +62,11 @@ Future<bool> _haveModels(BuildContext context, WidgetRef ref) async {
 }
 
 Future<void> _push(BuildContext context, String? chatId, {ChatMeta? meta}) =>
-    Navigator.of(context).push(MaterialPageRoute(
-        builder: (_) => VoicePage(chatId: chatId, meta: meta)));
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => VoicePage(chatId: chatId, meta: meta),
+      ),
+    );
 
 /// Voice mode: an orb for what the microphone hears and five scrolling lines
 /// of what has been said, over the chat that was already open. It is a view,
@@ -107,10 +118,15 @@ class _VoicePageState extends ConsumerState<VoicePage> {
       body: SafeArea(
         child: Column(
           children: [
-            Expanded(child: Center(child: VoiceBloom(state: voice))),
+            Expanded(
+              child: Center(child: VoiceBloom(state: voice)),
+            ),
             if (voice.error != null)
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 8,
+                ),
                 child: Text(
                   voice.error!,
                   textAlign: TextAlign.center,
@@ -150,8 +166,11 @@ class _Title extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final title = chatId == null
         ? null
-        : ref.watch(chatControllerProvider(chatId!)
-            .select((view) => view.chat?.state.title.orUntitled));
+        : ref.watch(
+            chatControllerProvider(
+              chatId!,
+            ).select((view) => view.chat?.state.title.orUntitled),
+          );
     return Text(title ?? "Voice");
   }
 }
@@ -180,9 +199,12 @@ class _ScriptState extends ConsumerState<_Script> {
     // at its own height either way, so the orb does not jump up the screen when
     // the first line lands. One shape rather than two, or the empty one is
     // shorter than the state it stands in for by exactly the gap below it.
-    final chat = chatId == null ? null : ref.watch(chatControllerProvider(chatId));
-    final driver =
-        chatId == null ? null : ref.read(chatControllerProvider(chatId).notifier);
+    final chat = chatId == null
+        ? null
+        : ref.watch(chatControllerProvider(chatId));
+    final driver = chatId == null
+        ? null
+        : ref.read(chatControllerProvider(chatId).notifier);
     final lines = _transcript.of(chat?.chat?.messages ?? const <Message>[]);
 
     return Column(

@@ -45,42 +45,49 @@ void main() {
   /// recommended-provider card's key box does.
   Finder dialogField(String label) => find.widgetWithText(TextField, label);
 
-  List<LlmProviderConfig> saved() => app.container.read(appSettingsProvider).llmProviders;
+  List<LlmProviderConfig> saved() =>
+      app.container.read(appSettingsProvider).llmProviders;
 
   /// The key stored for the provider called [name].
-  String? keyOf(String name) => app.secrets
-      .providerKey(saved().firstWhere((p) => p.displayName == name).id);
+  String? keyOf(String name) => app.secrets.providerKey(
+    saved().firstWhere((p) => p.displayName == name).id,
+  );
 
   group("providers", () {
     testWidgets("says plainly that nothing is configured yet", (tester) async {
       await pumpSettings(tester, app, SettingsCategory.providers);
 
-      expect(find.textContaining("cannot answer until one is added"), findsOneWidget);
+      expect(
+        find.textContaining("cannot answer until one is added"),
+        findsOneWidget,
+      );
     });
 
-    testWidgets("a preset asks for the key alone, its endpoint filled in under Advanced",
-        (tester) async {
-      await pumpSettings(tester, app, SettingsCategory.providers);
-      await addProvider(tester, "Ollama Cloud");
+    testWidgets(
+      "a preset asks for the key alone, its endpoint filled in under Advanced",
+      (tester) async {
+        await pumpSettings(tester, app, SettingsCategory.providers);
+        await addProvider(tester, "Ollama Cloud");
 
-      expect(find.text("Get a key from Ollama Cloud"), findsOneWidget);
-      expect(find.text("Ollama Cloud's privacy policy"), findsOneWidget);
-      expect(dialogField("Base URL"), findsNothing);
-      expect(dialogField("API key"), findsNothing);
+        expect(find.text("Get a key from Ollama Cloud"), findsOneWidget);
+        expect(find.text("Ollama Cloud's privacy policy"), findsOneWidget);
+        expect(dialogField("Base URL"), findsNothing);
+        expect(dialogField("API key"), findsNothing);
 
-      await openAdvanced(tester);
-      expect(find.text("ollama-cloud"), findsOneWidget);
-      expect(find.text("https://ollama.com/v1"), findsOneWidget);
+        await openAdvanced(tester);
+        expect(find.text("ollama-cloud"), findsOneWidget);
+        expect(find.text("https://ollama.com/v1"), findsOneWidget);
 
-      await tester.enterText(dialogField("Access key"), "sk-ollama");
-      await saveDialog(tester);
+        await tester.enterText(dialogField("Access key"), "sk-ollama");
+        await saveDialog(tester);
 
-      expect(saved().single.displayName, "Ollama Cloud");
-      expect(saved().single.catalogId, "ollama-cloud");
-      expect(saved().single.baseUrl, "https://ollama.com/v1");
-      // The key went to the store; no config carries one.
-      expect(keyOf("Ollama Cloud"), "sk-ollama");
-    });
+        expect(saved().single.displayName, "Ollama Cloud");
+        expect(saved().single.catalogId, "ollama-cloud");
+        expect(saved().single.baseUrl, "https://ollama.com/v1");
+        // The key went to the store; no config carries one.
+        expect(keyOf("Ollama Cloud"), "sk-ollama");
+      },
+    );
 
     testWidgets("a local preset asks for nothing", (tester) async {
       await pumpSettings(tester, app, SettingsCategory.providers);
@@ -93,14 +100,21 @@ void main() {
       expect(saved().single.catalogId, "ollama");
     });
 
-    testWidgets("a custom endpoint starts empty and is typed in", (tester) async {
+    testWidgets("a custom endpoint starts empty and is typed in", (
+      tester,
+    ) async {
       await pumpSettings(tester, app, SettingsCategory.providers);
       await addProvider(tester, "Custom…");
 
       await tester.enterText(dialogField("Name"), "vllm");
-      await tester.enterText(dialogField("Base URL"), "http://gpu.local:8000/v1");
       await tester.enterText(
-          dialogField("Models endpoint"), "http://gpu.local:8000/v1/models");
+        dialogField("Base URL"),
+        "http://gpu.local:8000/v1",
+      );
+      await tester.enterText(
+        dialogField("Models endpoint"),
+        "http://gpu.local:8000/v1/models",
+      );
       await saveDialog(tester);
 
       expect(saved().single.displayName, "vllm");
@@ -139,46 +153,63 @@ void main() {
       expect(find.text("Needs a key"), findsOneWidget);
     });
 
-    testWidgets("one reading its key from the settings' environment is connected",
-        (tester) async {
-      await pumpSettings(tester, app, SettingsCategory.providers);
-      await io(tester, () => app.container
-          .read(appSettingsProvider.notifier)
-          .setEnvironment(const {"ANTHROPIC_API_KEY": "sk-env"}));
-      await addProvider(tester, "Anthropic");
-      await saveDialog(tester);
+    testWidgets(
+      "one reading its key from the settings' environment is connected",
+      (tester) async {
+        await pumpSettings(tester, app, SettingsCategory.providers);
+        await io(
+          tester,
+          () => app.container.read(appSettingsProvider.notifier).setEnvironment(
+            const {"ANTHROPIC_API_KEY": "sk-env"},
+          ),
+        );
+        await addProvider(tester, "Anthropic");
+        await saveDialog(tester);
 
-      expect(find.text("Connected"), findsOneWidget);
-    });
+        expect(find.text("Connected"), findsOneWidget);
+      },
+    );
 
-    testWidgets("an endpoint typed in by hand is told apart by its address", (tester) async {
+    testWidgets("an endpoint typed in by hand is told apart by its address", (
+      tester,
+    ) async {
       await pumpSettings(tester, app, SettingsCategory.providers);
       await addProvider(tester, "Custom…");
       await tester.enterText(dialogField("Name"), "vllm");
-      await tester.enterText(dialogField("Base URL"), "http://gpu.local:8000/v1");
+      await tester.enterText(
+        dialogField("Base URL"),
+        "http://gpu.local:8000/v1",
+      );
       await saveDialog(tester);
 
-      expect(find.text("http://gpu.local:8000/v1 · Needs a key"), findsOneWidget);
+      expect(
+        find.text("http://gpu.local:8000/v1 · Needs a key"),
+        findsOneWidget,
+      );
     });
 
-    testWidgets("a key the provider refuses keeps the dialog open, and can be saved anyway",
-        (tester) async {
-      app.dispose();
-      app = TestApp.create(acceptsKey: (key) async => key == "sk-good");
-      await pumpSettings(tester, app, SettingsCategory.providers);
-      await addProvider(tester, "OpenAI");
-      await tester.enterText(dialogField("Access key"), "sk-typo");
-      await saveDialog(tester);
+    testWidgets(
+      "a key the provider refuses keeps the dialog open, and can be saved anyway",
+      (tester) async {
+        app.dispose();
+        app = TestApp.create(acceptsKey: (key) async => key == "sk-good");
+        await pumpSettings(tester, app, SettingsCategory.providers);
+        await addProvider(tester, "OpenAI");
+        await tester.enterText(dialogField("Access key"), "sk-typo");
+        await saveDialog(tester);
 
-      expect(find.textContaining("did not accept this key"), findsOneWidget);
-      expect(saved(), isEmpty);
+        expect(find.textContaining("did not accept this key"), findsOneWidget);
+        expect(saved(), isEmpty);
 
-      await tester.tap(find.text("Save anyway"));
-      await settleIo(tester);
-      expect(keyOf("OpenAI"), "sk-typo");
-    });
+        await tester.tap(find.text("Save anyway"));
+        await settleIo(tester);
+        expect(keyOf("OpenAI"), "sk-typo");
+      },
+    );
 
-    testWidgets("typing again after a refusal checks the new key", (tester) async {
+    testWidgets("typing again after a refusal checks the new key", (
+      tester,
+    ) async {
       app.dispose();
       app = TestApp.create(acceptsKey: (key) async => key == "sk-good");
       await pumpSettings(tester, app, SettingsCategory.providers);
@@ -193,10 +224,14 @@ void main() {
       expect(keyOf("OpenAI"), "sk-good");
     });
 
-    testWidgets("a provider that could not be asked does not stop the save", (tester) async {
+    testWidgets("a provider that could not be asked does not stop the save", (
+      tester,
+    ) async {
       app.dispose();
       app = TestApp.create(
-          acceptsKey: (_) async => throw const LlmException("offline", retryable: true));
+        acceptsKey: (_) async =>
+            throw const LlmException("offline", retryable: true),
+      );
       await pumpSettings(tester, app, SettingsCategory.providers);
       await addProvider(tester, "OpenAI");
       await tester.enterText(dialogField("Access key"), "sk-o");
@@ -205,45 +240,56 @@ void main() {
       expect(keyOf("OpenAI"), "sk-o");
     });
 
-    testWidgets("a preset already configured is added again under a name of its own",
-        (tester) async {
-      await pumpSettings(tester, app, SettingsCategory.providers);
-      await addProvider(tester, "Groq");
-      await saveDialog(tester);
-      await addProvider(tester, "Groq");
+    testWidgets(
+      "a preset already configured is added again under a name of its own",
+      (tester) async {
+        await pumpSettings(tester, app, SettingsCategory.providers);
+        await addProvider(tester, "Groq");
+        await saveDialog(tester);
+        await addProvider(tester, "Groq");
 
-      expect(find.text("Another provider is called Groq"), findsOneWidget);
-      expect(tester.widget<FilledButton>(find.widgetWithText(FilledButton, "Save")).onPressed,
-          isNull);
-      await tester.enterText(dialogField("Name"), "Groq work");
-      await tester.pump();
-      await saveDialog(tester);
+        expect(find.text("Another provider is called Groq"), findsOneWidget);
+        expect(
+          tester
+              .widget<FilledButton>(find.widgetWithText(FilledButton, "Save"))
+              .onPressed,
+          isNull,
+        );
+        await tester.enterText(dialogField("Name"), "Groq work");
+        await tester.pump();
+        await saveDialog(tester);
 
-      expect(saved().map((p) => p.displayName), ["Groq", "Groq work"]);
-      expect(saved().map((p) => p.catalogId), ["groq", "groq"]);
-      expect(saved().first.id, isNot(saved().last.id));
-    });
+        expect(saved().map((p) => p.displayName), ["Groq", "Groq work"]);
+        expect(saved().map((p) => p.catalogId), ["groq", "groq"]);
+        expect(saved().first.id, isNot(saved().last.id));
+      },
+    );
 
-    testWidgets("a free tier paid for in privacy is accepted before its key is asked", (tester) async {
-      await pumpSettings(tester, app, SettingsCategory.providers);
-      await addProvider(tester, "Google Gemini");
+    testWidgets(
+      "a free tier paid for in privacy is accepted before its key is asked",
+      (tester) async {
+        await pumpSettings(tester, app, SettingsCategory.providers);
+        await addProvider(tester, "Google Gemini");
 
-      expect(find.textContaining("free tier is not private"), findsOneWidget);
-      await tester.tap(find.text("Cancel").last);
-      await settleIo(tester);
-      expect(dialogField("Access key"), findsNothing);
+        expect(find.textContaining("free tier is not private"), findsOneWidget);
+        await tester.tap(find.text("Cancel").last);
+        await settleIo(tester);
+        expect(dialogField("Access key"), findsNothing);
 
-      await tester.tap(find.text("Google Gemini").last);
-      await settleIo(tester);
-      await tester.tap(find.text("I understand, add it"));
-      await settleIo(tester);
-      await tester.enterText(dialogField("Access key"), "gm-secret");
-      await saveDialog(tester);
+        await tester.tap(find.text("Google Gemini").last);
+        await settleIo(tester);
+        await tester.tap(find.text("I understand, add it"));
+        await settleIo(tester);
+        await tester.enterText(dialogField("Access key"), "gm-secret");
+        await saveDialog(tester);
 
-      expect(saved().single.catalogId, "google");
-    });
+        expect(saved().single.catalogId, "google");
+      },
+    );
 
-    testWidgets("a provider with no free tier is not warned about", (tester) async {
+    testWidgets("a provider with no free tier is not warned about", (
+      tester,
+    ) async {
       await pumpSettings(tester, app, SettingsCategory.providers);
       await addProvider(tester, "Anthropic");
 
@@ -251,7 +297,9 @@ void main() {
       expect(dialogField("Access key"), findsOneWidget);
     });
 
-    testWidgets("editing one replaces it rather than adding another", (tester) async {
+    testWidgets("editing one replaces it rather than adding another", (
+      tester,
+    ) async {
       await pumpSettings(tester, app, SettingsCategory.providers);
       await addProvider(tester, "OpenAI");
       await saveDialog(tester);
@@ -280,7 +328,9 @@ void main() {
       expect(saved().map((p) => p.displayName), ["OpenAI"]);
     });
 
-    testWidgets("adding one refreshes what the model picker can offer", (tester) async {
+    testWidgets("adding one refreshes what the model picker can offer", (
+      tester,
+    ) async {
       await pumpSettings(tester, app, SettingsCategory.providers);
       final before = app.container.read(availableModelsProvider);
       await addProvider(tester, "Anthropic");
@@ -288,7 +338,10 @@ void main() {
 
       // Invalidated rather than left showing a list built before the provider
       // existed.
-      expect(identical(before, app.container.read(availableModelsProvider)), isFalse);
+      expect(
+        identical(before, app.container.read(availableModelsProvider)),
+        isFalse,
+      );
     });
 
     testWidgets("removing one takes its stored key with it", (tester) async {
@@ -306,8 +359,9 @@ void main() {
       expect(app.secrets.providerKey(id), isNull);
     });
 
-    testWidgets("editing one with a stored key, saving empty, keeps the key",
-        (tester) async {
+    testWidgets("editing one with a stored key, saving empty, keeps the key", (
+      tester,
+    ) async {
       await pumpSettings(tester, app, SettingsCategory.providers);
       await addProvider(tester, "OpenAI");
       await tester.enterText(dialogField("Access key"), "sk-o");
@@ -324,7 +378,10 @@ void main() {
       await pumpSettings(tester, app, SettingsCategory.providers);
       await addProvider(tester, "Custom…");
       await tester.enterText(dialogField("Name"), "vllm");
-      await tester.enterText(dialogField("Base URL"), "http://gpu.local:8000/v1");
+      await tester.enterText(
+        dialogField("Base URL"),
+        "http://gpu.local:8000/v1",
+      );
       await tester.enterText(dialogField("API key"), "sk-v");
       await saveDialog(tester);
       final id = saved().single.id;
@@ -349,27 +406,37 @@ void main() {
       await settleIo(tester);
     }
 
-    testWidgets("defaults to auto, degraded to asking without a classifier",
-        (tester) async {
+    testWidgets("defaults to auto, degraded to asking without a classifier", (
+      tester,
+    ) async {
       await pumpSettings(tester, app, SettingsCategory.general);
       await scrollTo(tester, find.text("Running commands"));
 
-      expect(app.container.read(appSettingsProvider).approveMode,
-          ApproveMode.auto);
+      expect(
+        app.container.read(appSettingsProvider).approveMode,
+        ApproveMode.auto,
+      );
       expect(find.textContaining("No classifier model set"), findsOneWidget);
     });
 
     testWidgets("can be switched to run without asking", (tester) async {
       await pumpSettings(tester, app, SettingsCategory.general);
       await openModeDropdown(tester);
-      await tester.tap(find.textContaining("Run everything without asking").last);
+      await tester.tap(
+        find.textContaining("Run everything without asking").last,
+      );
       await settleIo(tester);
 
-      expect(app.container.read(appSettingsProvider).approveMode, ApproveMode.never);
+      expect(
+        app.container.read(appSettingsProvider).approveMode,
+        ApproveMode.never,
+      );
       expect(AppSettings.load(app.config).approveMode, ApproveMode.never);
     });
 
-    testWidgets("auto is disabled when no classifier model is set", (tester) async {
+    testWidgets("auto is disabled when no classifier model is set", (
+      tester,
+    ) async {
       await pumpSettings(tester, app, SettingsCategory.general);
       await openModeDropdown(tester);
       await tester.tap(find.textContaining("Ask before every command").last);
@@ -377,22 +444,31 @@ void main() {
       await openModeDropdown(tester);
 
       // The item is there but greyed out — tapping it does nothing.
-      final autoItem = find.textContaining("Auto: run what the classifier rates safe");
+      final autoItem = find.textContaining(
+        "Auto: run what the classifier rates safe",
+      );
       expect(autoItem, findsOneWidget);
       await tester.tap(autoItem);
       await settleIo(tester);
 
-      expect(app.container.read(appSettingsProvider).approveMode, ApproveMode.ask);
+      expect(
+        app.container.read(appSettingsProvider).approveMode,
+        ApproveMode.ask,
+      );
     });
 
-    testWidgets("changing the mode does not disturb the providers", (tester) async {
+    testWidgets("changing the mode does not disturb the providers", (
+      tester,
+    ) async {
       await pumpSettings(tester, app, SettingsCategory.providers);
       await addProvider(tester, "OpenAI");
       await saveDialog(tester);
 
       await openCategory(tester, SettingsCategory.general);
       await openModeDropdown(tester);
-      await tester.tap(find.textContaining("Run everything without asking").last);
+      await tester.tap(
+        find.textContaining("Run everything without asking").last,
+      );
       await settleIo(tester);
 
       expect(saved().map((p) => p.displayName), ["OpenAI"]);
@@ -403,11 +479,15 @@ void main() {
       final settings = ProjectSettings()
         ..permissions = [
           const PermissionRule(
-              tool: "bash", pattern: "git *", decision: PermissionDecision.deny),
+            tool: "bash",
+            pattern: "git *",
+            decision: PermissionDecision.deny,
+          ),
           const PermissionRule(
-              tool: "read",
-              pattern: "/home/x/doc",
-              decision: PermissionDecision.allow),
+            tool: "read",
+            pattern: "/home/x/doc",
+            decision: PermissionDecision.allow,
+          ),
         ];
       await io(tester, () => settings.save(app.config, project: null));
       app.container.invalidate(projectSettingsProvider(null));
@@ -420,15 +500,18 @@ void main() {
       expect(find.text("Run without asking"), findsOneWidget);
     });
 
-    testWidgets("a rule can set the sandbox and leave asking to the mode",
-        (tester) async {
+    testWidgets("a rule can set the sandbox and leave asking to the mode", (
+      tester,
+    ) async {
       await pumpSettings(tester, app, SettingsCategory.general);
       await scrollTo(tester, find.text("Add rule"));
       await tester.tap(find.text("Add rule"));
       await tester.pumpAndSettle();
 
       await tester.enterText(
-          find.widgetWithText(TextField, "Command"), "podman *");
+        find.widgetWithText(TextField, "Command"),
+        "podman *",
+      );
       await tester.pump();
       await tester.tap(find.text("Run without asking").last);
       await tester.pumpAndSettle();
@@ -437,9 +520,11 @@ void main() {
       // Both questions on Default: the rule would say nothing.
       expect(find.textContaining("would change nothing"), findsOneWidget);
       expect(
-          tester.widget<FilledButton>(find.widgetWithText(FilledButton, "Save"))
-              .onPressed,
-          isNull);
+        tester
+            .widget<FilledButton>(find.widgetWithText(FilledButton, "Save"))
+            .onPressed,
+        isNull,
+      );
       await tester.ensureVisible(find.text("Default (workspaces only)"));
       await tester.pumpAndSettle();
       await tester.tap(find.text("Default (workspaces only)").last);
@@ -451,9 +536,10 @@ void main() {
       await settleIo(tester);
       await scrollTo(tester, find.text("Shell commands (bash): podman *"));
 
-      final rule = ProjectSettings.load(app.config, project: null)
-          .permissions
-          .single;
+      final rule = ProjectSettings.load(
+        app.config,
+        project: null,
+      ).permissions.single;
       expect(rule.pattern, "podman *");
       expect(rule.decision, isNull);
       expect(rule.unconfined, isTrue);
@@ -461,5 +547,4 @@ void main() {
       expect(find.text("No sandbox"), findsOneWidget);
     });
   });
-
 }

@@ -54,7 +54,8 @@ import "data/prompts/prompt_sources.dart" show promptTiers;
 import "domain/permission.dart";
 import "domain/profile.dart";
 import "domain/project_settings.dart";
-import "domain/project.dart" show ProjectRef, emptyChatQuestionFor, everyProject;
+import "domain/project.dart"
+    show ProjectRef, emptyChatQuestionFor, everyProject;
 import "domain/prompt_library.dart";
 import "domain/reminder_alarms.dart";
 import "domain/trigger.dart";
@@ -74,8 +75,12 @@ import "domain/turn_keep_alive.dart";
 import "domain/voice.dart";
 import "domain/voice_model_store.dart";
 
-final chatStoreProvider = Provider<ChatStore>((ref) => throw UnimplementedError());
-final agentBackendProvider = Provider<AgentBackend>((ref) => throw UnimplementedError());
+final chatStoreProvider = Provider<ChatStore>(
+  (ref) => throw UnimplementedError(),
+);
+final agentBackendProvider = Provider<AgentBackend>(
+  (ref) => throw UnimplementedError(),
+);
 final shellProvider = Provider<Shell>((ref) => throw UnimplementedError());
 
 /// Where the shell for [workspace] is standing, live: what the composer's bar
@@ -84,35 +89,54 @@ final shellProvider = Provider<Shell>((ref) => throw UnimplementedError());
 /// word the guest's own fallback for it. Null where there is no workspace to
 /// ask about, or the shell holds no session for one — which the composer
 /// falls back to the guest's view of the workspace itself for.
-final chatShellCwdProvider = Provider.family<ValueListenable<String?>?,
-    ({String? workspace, String? workspaceHome})>((ref, key) {
-  final workspace = key.workspace;
-  if (workspace == null) return null;
-  return ref
-      .watch(shellProvider)
-      .sessionCwd(workspace, home: key.workspaceHome);
-});
-final appConfigProvider = Provider<AppConfig>((ref) => throw UnimplementedError());
+final chatShellCwdProvider =
+    Provider.family<
+      ValueListenable<String?>?,
+      ({String? workspace, String? workspaceHome})
+    >((ref, key) {
+      final workspace = key.workspace;
+      if (workspace == null) return null;
+      return ref
+          .watch(shellProvider)
+          .sessionCwd(workspace, home: key.workspaceHome);
+    });
+final appConfigProvider = Provider<AppConfig>(
+  (ref) => throw UnimplementedError(),
+);
 
 /// One per config, since the store's queue is what keeps two pages' saves
 /// from overwriting each other.
 final linkedInstructionsStoreProvider = Provider(
-    (ref) => LinkedInstructionsStore(ref.watch(appConfigProvider)));
+  (ref) => LinkedInstructionsStore(ref.watch(appConfigProvider)),
+);
 
 /// The client the marketplace's fetches ride. An override in tests, so the
 /// suite answers the URLs rather than the binding's all-400s stand-in.
-final marketplaceClientProvider =
-    Provider<http.Client>((ref) => throw UnimplementedError());
-final attachmentPickerProvider = Provider<AttachmentPicker>((ref) => throw UnimplementedError());
-final clipboardFilesProvider = Provider<ClipboardFiles>((ref) => throw UnimplementedError());
-final fileHandoffProvider = Provider<FileHandoff>((ref) => throw UnimplementedError());
-final backupHandoffProvider = Provider<BackupHandoff>((ref) => throw UnimplementedError());
-final appRestartProvider = Provider<AppRestart>((ref) => throw UnimplementedError());
+final marketplaceClientProvider = Provider<http.Client>(
+  (ref) => throw UnimplementedError(),
+);
+final attachmentPickerProvider = Provider<AttachmentPicker>(
+  (ref) => throw UnimplementedError(),
+);
+final clipboardFilesProvider = Provider<ClipboardFiles>(
+  (ref) => throw UnimplementedError(),
+);
+final fileHandoffProvider = Provider<FileHandoff>(
+  (ref) => throw UnimplementedError(),
+);
+final backupHandoffProvider = Provider<BackupHandoff>(
+  (ref) => throw UnimplementedError(),
+);
+final appRestartProvider = Provider<AppRestart>(
+  (ref) => throw UnimplementedError(),
+);
 final voiceProvider = Provider<Voice>((ref) => throw UnimplementedError());
-final assistantLaunchProvider =
-    Provider<AssistantLaunch>((ref) => throw UnimplementedError());
-final voiceModelStoreProvider =
-    Provider<VoiceModelStore>((ref) => throw UnimplementedError());
+final assistantLaunchProvider = Provider<AssistantLaunch>(
+  (ref) => throw UnimplementedError(),
+);
+final voiceModelStoreProvider = Provider<VoiceModelStore>(
+  (ref) => throw UnimplementedError(),
+);
 
 /// Which models a pick can name and get something that works: what is on disk,
 /// plus the system-engine sentinels on a device that has those engines. One set
@@ -138,8 +162,10 @@ class InstalledVoiceModels extends InstalledIds {
   final Set<String> system;
 
   @override
-  Future<Set<String>> scan() async =>
-      {...await ref.read(voiceModelStoreProvider).installed(), ...system};
+  Future<Set<String>> scan() async => {
+    ...await ref.read(voiceModelStoreProvider).installed(),
+    ...system,
+  };
 }
 
 /// Which of a catalog's ids are installed and whole: seeded before the app is
@@ -169,9 +195,12 @@ abstract class InstalledIds extends Notifier<Set<String>> {
 
 final installedVoiceModelsProvider =
     NotifierProvider<InstalledVoiceModels, Set<String>>(
-        () => InstalledVoiceModels(const {}));
+      () => InstalledVoiceModels(const {}),
+    );
 
-final rootfsStoreProvider = Provider<RootfsStore>((ref) => throw UnimplementedError());
+final rootfsStoreProvider = Provider<RootfsStore>(
+  (ref) => throw UnimplementedError(),
+);
 
 /// Which distributions are installed, for the Terminal page's rows.
 class InstalledRootfs extends InstalledIds {
@@ -181,13 +210,15 @@ class InstalledRootfs extends InstalledIds {
   Future<Set<String>> scan() => ref.read(rootfsStoreProvider).installed();
 }
 
-final installedRootfsProvider =
-    NotifierProvider<InstalledRootfs, Set<String>>(() => InstalledRootfs(const {}));
+final installedRootfsProvider = NotifierProvider<InstalledRootfs, Set<String>>(
+  () => InstalledRootfs(const {}),
+);
 
 /// The Byte Repair tooling store, overridden in `main` with one that knows the
 /// cache directory. Throws until then, the way `rootfsStoreProvider` does.
-final byteRepairStoreProvider =
-    Provider<ByteRepairStore>((ref) => throw UnimplementedError());
+final byteRepairStoreProvider = Provider<ByteRepairStore>(
+  (ref) => throw UnimplementedError(),
+);
 
 /// The version of each tool the setup installs (ESBMC, make, gh), or null
 /// where one is not installed. Refreshed by the settings page after a setup run.
@@ -197,8 +228,9 @@ final byteRepairStoreProvider =
 /// a project that isolates its own, and write proot's stubs into it where the
 /// next setup's copy died on them. "Not installed" with no shell run is the
 /// honest row.
-final byteRepairToolVersionsProvider =
-    FutureProvider<Map<String, String?>>((ref) async {
+final byteRepairToolVersionsProvider = FutureProvider<Map<String, String?>>((
+  ref,
+) async {
   if (!ref.watch(setupCompleteProvider(ByteRepairProject().dir))) {
     return {for (final tool in ByteRepairStore.tools.keys) tool: null};
   }
@@ -216,13 +248,15 @@ final byteRepairToolVersionsProvider =
 /// platform side's (`platformSetupComplete`) — this watch is only for
 /// *rebuilds* on an env change, so switching the Terminal settings' pick
 /// moves the bar without a marker write.
-final setupCompleteProvider =
-    Provider.family<bool, String?>((ref, project) {
+final setupCompleteProvider = Provider.family<bool, String?>((ref, project) {
   final spec = builtinProjectOf(project);
   if (spec?.requiresSetup != true) return true;
   ref.watch(appSettingsProvider.select((s) => s.rootfsId));
-  return setupComplete(ref.watch(appConfigProvider), project,
-      ref.watch(byteRepairBinDirProvider));
+  return setupComplete(
+    ref.watch(appConfigProvider),
+    project,
+    ref.watch(byteRepairBinDirProvider),
+  );
 });
 
 /// Where Byte Repair's fetched tools land on the host — the directory both
@@ -237,17 +271,20 @@ final appleFmProvider = Provider<AppleFm?>((ref) => null);
 /// This device's models as one provider, built once: it reads the settings
 /// and what is installed when asked, so the client the registry caches from
 /// it never holds a stale one.
-final onDeviceModelsProvider = Provider<OnDeviceProvider>((ref) => OnDeviceProvider(
-      ref.watch(localEngineProvider),
-      () => ref.read(appSettingsProvider),
-      voices: () => ref.read(installedVoiceModelsProvider),
-    ));
+final onDeviceModelsProvider = Provider<OnDeviceProvider>(
+  (ref) => OnDeviceProvider(
+    ref.watch(localEngineProvider),
+    () => ref.read(appSettingsProvider),
+    voices: () => ref.read(installedVoiceModelsProvider),
+  ),
+);
 
 /// What runs downloaded models here, and nothing where no build of one reached
 /// it. Overridden in `main`, since resolving it is a channel round trip and
 /// every reader of this is synchronous.
-final localEngineProvider = Provider<LocalEngine>((ref) => const NoLocalEngine());
-
+final localEngineProvider = Provider<LocalEngine>(
+  (ref) => const NoLocalEngine(),
+);
 
 /// Which on-device models are downloaded.
 class InstalledLocalModels extends InstalledIds {
@@ -259,7 +296,8 @@ class InstalledLocalModels extends InstalledIds {
 
 final installedLocalModelsProvider =
     NotifierProvider<InstalledLocalModels, Set<String>>(
-        () => InstalledLocalModels(const {}));
+      () => InstalledLocalModels(const {}),
+    );
 
 /// What is loaded on the device and how far each one has got. A notifier over
 /// the port's own [ValueListenable] rather than a second copy of the state:
@@ -292,7 +330,9 @@ class LocalPrefillStatus extends Notifier<LocalPrefillState?>
 }
 
 final localPrefillStateProvider =
-    NotifierProvider<LocalPrefillStatus, LocalPrefillState?>(LocalPrefillStatus.new);
+    NotifierProvider<LocalPrefillStatus, LocalPrefillState?>(
+      LocalPrefillStatus.new,
+    );
 
 /// Drives the warm-up from the settings that decide it: when the default model
 /// is a downloaded on-device one and prefill is on, warm it; anything else
@@ -347,19 +387,22 @@ final prootAvailableProvider = Provider<bool>((ref) => false);
 
 /// What keeps the host shell's commands in, from the platform. Overridden in
 /// `main` beside the rest of the platform ports.
-final hostConfinementProvider =
-    Provider<Confinement>((ref) => Confinement.none);
+final hostConfinementProvider = Provider<Confinement>(
+  (ref) => Confinement.none,
+);
 
 /// What this build can do about a newer release of itself: the three desktops
 /// answer with the real platform half, everything else is the one that cannot.
 /// Overridden in `main` beside the rest of the platform ports.
 final appUpdateHostProvider = Provider<AppUpdateHost>(
-    (ref) => const UnavailableAppUpdateHost());
+  (ref) => const UnavailableAppUpdateHost(),
+);
 
 /// The browser the agent drives, the same instance the backend holds: the
 /// settings page closes it before replacing the embedded one under it.
-final agentBrowserProvider =
-    Provider<AgentBrowser>((ref) => const UnavailableAgentBrowser());
+final agentBrowserProvider = Provider<AgentBrowser>(
+  (ref) => const UnavailableAgentBrowser(),
+);
 
 /// The chats the sidebar shows as busy: a turn running in it, or its browser
 /// tab open — a chat whose browser is up is active between turns too, and
@@ -382,35 +425,43 @@ final busyChatsProvider = Provider<ValueListenable<Set<String>>>((ref) {
 /// What voice mode listens and speaks with, as the catalog page offers it:
 /// an on-device model under [localProviderId], a provider's under its id.
 ModelChoice voiceRecognitionChoice(AppSettings s) => (
-      providerId: s.voiceRecognitionModelId == null ? null : s.voiceRecognitionProviderId,
-      modelId: s.voiceRecognitionModelId,
-    );
+  providerId: s.voiceRecognitionModelId == null
+      ? null
+      : s.voiceRecognitionProviderId,
+  modelId: s.voiceRecognitionModelId,
+);
 
 ModelChoice voiceSpeechChoice(AppSettings s) => (
-      providerId: s.voiceSpeechModelId == null ? null : s.voiceSpeechProviderId,
-      modelId: s.voiceSpeechModelId,
-    );
+  providerId: s.voiceSpeechModelId == null ? null : s.voiceSpeechProviderId,
+  modelId: s.voiceSpeechModelId,
+);
 
 /// [choice] as a ref, where it names a model.
 ModelRef? refOf(ModelChoice choice) => switch (choice) {
-      (providerId: final String providerId, modelId: final String modelId) =>
-        (providerId: providerId, modelId: modelId),
-      _ => null,
-    };
+  (providerId: final String providerId, modelId: final String modelId) => (
+    providerId: providerId,
+    modelId: modelId,
+  ),
+  _ => null,
+};
 
 /// What a voice session is started with. Null halves are nothing usable: no
 /// pick, or one no provider serves as that kind on this platform.
 ({Hearing? hearing, Speaking? speaking}) voicePicks(
-    AppSettings settings, AgentBackend backend) {
+  AppSettings settings,
+  AgentBackend backend,
+) {
   final hears = refOf(voiceRecognitionChoice(settings));
   final speaks = refOf(voiceSpeechChoice(settings));
   return (
-    hearing: hears == null ? null : backend.resolveModel<TranscriptionModel>(hears)?.hearing,
+    hearing: hears == null
+        ? null
+        : backend.resolveModel<TranscriptionModel>(hears)?.hearing,
     speaking: speaks == null
         ? null
         : backend
-            .resolveModel<SynthesisModel>(speaks)
-            ?.speaking(voice: settings.voiceSpeechVoice),
+              .resolveModel<SynthesisModel>(speaks)
+              ?.speaking(voice: settings.voiceSpeechVoice),
   );
 }
 
@@ -433,7 +484,9 @@ final modelProvidersProvider = Provider<List<LlmProvider>>((ref) {
   return [
     ref.watch(onDeviceModelsProvider),
     ?ref.watch(appleFmProvider)?.endpoint,
-    for (final config in ref.watch(appSettingsProvider.select((s) => s.llmProviders)))
+    for (final config in ref.watch(
+      appSettingsProvider.select((s) => s.llmProviders),
+    ))
       providerOf(config),
   ];
 });
@@ -445,38 +498,52 @@ final modelProvidersProvider = Provider<List<LlmProvider>>((ref) {
 T? _resolved<T extends Model>(Ref ref, ModelChoice choice) {
   final pick = refOf(choice);
   if (pick == null) return null;
-  final host = ModelHost.resolving(cutsUtterances: ref.watch(voiceProvider).hasModelCatalog);
+  final host = ModelHost.resolving(
+    cutsUtterances: ref.watch(voiceProvider).hasModelCatalog,
+  );
   return resolveIn<T>(ref.watch(modelProvidersProvider), pick, (_) => host);
 }
 
 /// The voice picks as what they resolve to, for the settings that depend on
 /// which kind of model each is. Resolved to look at, not to run: a session
 /// gets its own from the backend.
-final pickedRecognitionProvider = Provider<TranscriptionModel?>((ref) =>
-    _resolved<TranscriptionModel>(
-        ref, ref.watch(appSettingsProvider.select(voiceRecognitionChoice))));
+final pickedRecognitionProvider = Provider<TranscriptionModel?>(
+  (ref) => _resolved<TranscriptionModel>(
+    ref,
+    ref.watch(appSettingsProvider.select(voiceRecognitionChoice)),
+  ),
+);
 
-final pickedSpeechProvider = Provider<SynthesisModel?>((ref) =>
-    _resolved<SynthesisModel>(ref, ref.watch(appSettingsProvider.select(voiceSpeechChoice))));
+final pickedSpeechProvider = Provider<SynthesisModel?>(
+  (ref) => _resolved<SynthesisModel>(
+    ref,
+    ref.watch(appSettingsProvider.select(voiceSpeechChoice)),
+  ),
+);
 
 /// Whether a message can be read out: a speech model picked that a provider
 /// serves. Half of [voiceReadyProvider], because reading a message out needs
 /// nothing to hear with.
-final speechReadyProvider =
-    Provider<bool>((ref) => ref.watch(pickedSpeechProvider) != null);
+final speechReadyProvider = Provider<bool>(
+  (ref) => ref.watch(pickedSpeechProvider) != null,
+);
 
 /// Whether the composer draws its voice button: two models picked and
 /// usable. Anything less and pressing it could only
 /// lead to an apology.
-final voiceReadyProvider = Provider<bool>((ref) =>
-    ref.watch(speechReadyProvider) && ref.watch(pickedRecognitionProvider) != null);
+final voiceReadyProvider = Provider<bool>(
+  (ref) =>
+      ref.watch(speechReadyProvider) &&
+      ref.watch(pickedRecognitionProvider) != null,
+);
 
 /// The languages the device's own engines offer. A future rather than
 /// something seeded at startup like [installedVoiceModelsProvider]: only the
 /// settings page reads it, and answering it on Android means starting a
 /// synthesiser to ask.
-final systemVoiceLanguagesProvider =
-    FutureProvider<List<VoiceLanguage>>((ref) => ref.watch(voiceProvider).systemLanguages());
+final systemVoiceLanguagesProvider = FutureProvider<List<VoiceLanguage>>(
+  (ref) => ref.watch(voiceProvider).systemLanguages(),
+);
 
 /// The prompt library, per project: the default's is the base set every other
 /// project inherits, and a project's own overrides a same-named default entry
@@ -510,7 +577,8 @@ class PromptLibraryNotifier extends Notifier<PromptLibrary> {
   /// one of its own for the `task` tool and the skills it offers a turn.
   Future<void> reload() async {
     final next = await PromptLibrary.from(
-        createPromptSources(ref.read(appConfigProvider), project: project));
+      createPromptSources(ref.read(appConfigProvider), project: project),
+    );
     state = next;
     final backend = ref.read(agentBackendProvider);
     if (backend is BuiltinBackend) backend.setLibrary(project, next);
@@ -519,7 +587,8 @@ class PromptLibraryNotifier extends Notifier<PromptLibrary> {
 
 final promptLibraryProvider =
     NotifierProvider.family<PromptLibraryNotifier, PromptLibrary, String?>(
-        (project) => PromptLibraryNotifier(project));
+      (project) => PromptLibraryNotifier(project),
+    );
 
 /// Reload every project's library at once. The Skills page and a skill install
 /// touch the default's directory (and possibly a project's), so a change has to
@@ -529,8 +598,11 @@ final promptLibraryProvider =
 /// its own dir.
 Future<void> reloadAllPromptLibraries(WidgetRef ref) async {
   final named = await ref.read(projectListProvider.future);
-  await Future.wait(everyProject(named).map((project) =>
-      ref.read(promptLibraryProvider(project).notifier).reload()));
+  await Future.wait(
+    everyProject(named).map(
+      (project) => ref.read(promptLibraryProvider(project).notifier).reload(),
+    ),
+  );
 }
 
 class AppSettingsNotifier extends Notifier<AppSettings> {
@@ -568,19 +640,25 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
   }
 
   /// What a new chat is answered by, or nothing at all.
-  Future<void> setDefault(ModelChoice choice) => _update((s) => s
-    ..defaultProviderId = choice.providerId
-    ..defaultModelId = choice.modelId);
+  Future<void> setDefault(ModelChoice choice) => _update(
+    (s) => s
+      ..defaultProviderId = choice.providerId
+      ..defaultModelId = choice.modelId,
+  );
 
   /// What names a new chat, or nothing at all.
-  Future<void> setTitleModel(ModelChoice choice) => _update((s) => s
-    ..titleProviderId = choice.providerId
-    ..titleModelId = choice.modelId);
+  Future<void> setTitleModel(ModelChoice choice) => _update(
+    (s) => s
+      ..titleProviderId = choice.providerId
+      ..titleModelId = choice.modelId,
+  );
 
   /// What classifies commands when auto mode is on, or nothing at all.
-  Future<void> setClassifierModel(ModelChoice choice) => _update((s) => s
-    ..classifierProviderId = choice.providerId
-    ..classifierModelId = choice.modelId);
+  Future<void> setClassifierModel(ModelChoice choice) => _update(
+    (s) => s
+      ..classifierProviderId = choice.providerId
+      ..classifierModelId = choice.modelId,
+  );
 
   Future<void> setImageQuality(ImageQuality value) =>
       _update((s) => s.imageQuality = value);
@@ -588,32 +666,46 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
   /// A model described by hand, on the provider it is reached through. One of
   /// the same id there is replaced, and so is [replacing] — the provider and id
   /// an edit moved it from — in the same write.
-  Future<void> putCustomModel(String providerId, ModelInfo model,
-          {(String, String)? replacing}) =>
-      _editCustomModels((provider, models) => [
-            for (final m in models)
-              if ((provider, m.id) != (providerId, model.id) && (provider, m.id) != replacing) m,
-            if (provider == providerId) model,
-          ]);
+  Future<void> putCustomModel(
+    String providerId,
+    ModelInfo model, {
+    (String, String)? replacing,
+  }) => _editCustomModels(
+    (provider, models) => [
+      for (final m in models)
+        if ((provider, m.id) != (providerId, model.id) &&
+            (provider, m.id) != replacing)
+          m,
+      if (provider == providerId) model,
+    ],
+  );
 
   Future<void> removeCustomModel(String providerId, String modelId) =>
-      _editCustomModels((provider, models) => [
-            for (final m in models)
-              if ((provider, m.id) != (providerId, modelId)) m,
-          ]);
+      _editCustomModels(
+        (provider, models) => [
+          for (final m in models)
+            if ((provider, m.id) != (providerId, modelId)) m,
+        ],
+      );
 
   /// The model list is built from these, so it is rebuilt with them.
   Future<void> _editCustomModels(
-      List<ModelInfo> Function(String providerId, List<ModelInfo> models) edit) async {
-    await _update((s) => s.llmProviders = [
-          for (final p in s.llmProviders) p.copyWith(customModels: edit(p.id, p.customModels)),
-        ]);
+    List<ModelInfo> Function(String providerId, List<ModelInfo> models) edit,
+  ) async {
+    await _update(
+      (s) => s.llmProviders = [
+        for (final p in s.llmProviders)
+          p.copyWith(customModels: edit(p.id, p.customModels)),
+      ],
+    );
     ref.invalidate(availableModelsProvider);
   }
 
-  Future<void> setImageModel(ModelChoice choice) => _update((s) => s
-    ..imageProviderId = choice.providerId
-    ..imageModelId = choice.modelId);
+  Future<void> setImageModel(ModelChoice choice) => _update(
+    (s) => s
+      ..imageProviderId = choice.providerId
+      ..imageModelId = choice.modelId,
+  );
 
   /// Read when a command runs, so an edit reaches the next one.
   Future<void> setEnvironment(Map<String, String> env) =>
@@ -623,7 +715,8 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
       _update((s) => s.approveMode = value);
 
   /// How many times a retryable turn failure is carried on automatically.
-  Future<void> setTurnRetries(int value) => _update((s) => s.turnRetries = value);
+  Future<void> setTurnRetries(int value) =>
+      _update((s) => s.turnRetries = value);
 
   /// Whether a new project starts with Omada on.
   Future<void> setOmadaByDefault(bool value) =>
@@ -686,22 +779,22 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
 
   /// What writes memories in the background, or nothing at all — until one is
   /// picked, extraction and consolidation stay off.
-  Future<void> setMemoryModel(ModelChoice choice) => _update((s) => s
-    ..memoryProviderId = choice.providerId
-    ..memoryModelId = choice.modelId);
+  Future<void> setMemoryModel(ModelChoice choice) => _update(
+    (s) => s
+      ..memoryProviderId = choice.providerId
+      ..memoryModelId = choice.modelId,
+  );
 
   /// The user's profile (null clears it), how replies are worded, and whether
   /// they number the web pages they drew on: one write, since the profile
   /// page saves all three at once.
-  Future<void> setReplyStyle({
-    Profile? profile,
-    Tone? tone,
-    bool? citations,
-  }) =>
-      _update((s) => s
-        ..profile = profile
-        ..tone = tone ?? s.tone
-        ..citations = citations ?? s.citations);
+  Future<void> setReplyStyle({Profile? profile, Tone? tone, bool? citations}) =>
+      _update(
+        (s) => s
+          ..profile = profile
+          ..tone = tone ?? s.tone
+          ..citations = citations ?? s.citations,
+      );
 
   /// Setting first, launcher second: a launcher that refuses still leaves the
   /// app showing what was picked.
@@ -710,7 +803,8 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
     await ref.read(launcherIconsProvider).use(icon);
   }
 
-  Future<void> setAppTheme(AppTheme theme) => _update((s) => s.appTheme = theme);
+  Future<void> setAppTheme(AppTheme theme) =>
+      _update((s) => s.appTheme = theme);
 
   Future<void> setPrimaryColour(ThemeColour colour) =>
       _update((s) => s.primaryColour = colour);
@@ -718,9 +812,11 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
   Future<void> setSecondaryColour(ThemeColour colour) =>
       _update((s) => s.secondaryColour = colour);
 
-  Future<void> setColourTheme(ColourTheme theme) => _update((s) => s
-    ..primaryColour = theme.primary
-    ..secondaryColour = theme.secondary);
+  Future<void> setColourTheme(ColourTheme theme) => _update(
+    (s) => s
+      ..primaryColour = theme.primary
+      ..secondaryColour = theme.secondary,
+  );
 
   Future<void> setCornerRadius(CornerRadius corner) =>
       _update((s) => s.cornerRadius = corner);
@@ -757,16 +853,20 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
       _update((s) => s.assistantView = view);
 
   /// A pick from the model catalog; nothing picked is the device's.
-  Future<void> setVoiceRecognition(ModelChoice choice) => _update((s) => s
-    ..voiceRecognitionProviderId = choice.providerId ?? localProviderId
-    ..voiceRecognitionModelId = choice.modelId);
+  Future<void> setVoiceRecognition(ModelChoice choice) => _update(
+    (s) => s
+      ..voiceRecognitionProviderId = choice.providerId ?? localProviderId
+      ..voiceRecognitionModelId = choice.modelId,
+  );
 
   /// Picking a different voice resets which of its speakers is used: speaker 40
   /// of Kokoro is nobody in a model with eight.
-  Future<void> setVoiceSpeech(ModelChoice choice) => _update((s) => s
-    ..voiceSpeechProviderId = choice.providerId ?? localProviderId
-    ..voiceSpeechModelId = choice.modelId
-    ..voiceSpeaker = 0);
+  Future<void> setVoiceSpeech(ModelChoice choice) => _update(
+    (s) => s
+      ..voiceSpeechProviderId = choice.providerId ?? localProviderId
+      ..voiceSpeechModelId = choice.modelId
+      ..voiceSpeaker = 0,
+  );
 
   /// An on-device model, by catalog id.
   Future<void> setVoiceRecognitionModel(String? id) =>
@@ -801,8 +901,9 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
   /// How many may be loaded at once. Lowering it does not stop anything: the
   /// cap is read when a model is asked for, so the extra one goes at the next
   /// turn rather than being killed under a chat that is mid-reply.
-  Future<void> setMaxLocalModels(int count) =>
-      _applyLocal((s) => s.maxLocalModels = count.clamp(1, maxLocalModelsAllowed));
+  Future<void> setMaxLocalModels(int count) => _applyLocal(
+    (s) => s.maxLocalModels = count.clamp(1, maxLocalModelsAllowed),
+  );
 
   /// Which accelerator it is offloaded to, by the name `--list-devices` gave
   /// it. Null is auto.
@@ -878,8 +979,13 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
   /// done — until the user picks something themselves. A role the user has
   /// already picked is left where it is; importing a backup and other bulk
   /// writes stay on [setProviders], which adopts nothing.
-  Future<void> upsertProvider(LlmProviderConfig provider, {String? setKey}) async {
-    if (provider.id.isEmpty) provider = provider.copyWith(id: const Uuid().v4());
+  Future<void> upsertProvider(
+    LlmProviderConfig provider, {
+    String? setKey,
+  }) async {
+    if (provider.id.isEmpty) {
+      provider = provider.copyWith(id: const Uuid().v4());
+    }
     // The key first: the settings state change below is what rebuilds the
     // section drawing the row, and the row reads the store — so the key has
     // to be in it before that rebuild runs.
@@ -890,15 +996,19 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
     }
     final existing = state.llmProviders;
     final isNew = existing.every((p) => p.id != provider.id);
-    await _update((s) => s
-      ..llmProviders = List.unmodifiable([
-        ...existing.where((p) => p.id != provider.id), provider
-      ])
-      ..defaultProviderId = s.defaultProviderId ?? (isNew ? provider.id : null)
-      ..titleProviderId = s.titleProviderId ?? (isNew ? provider.id : null)
-      ..memoryProviderId = s.memoryProviderId ?? (isNew ? provider.id : null)
-      ..classifierProviderId =
-          s.classifierProviderId ?? (isNew ? provider.id : null));
+    await _update(
+      (s) => s
+        ..llmProviders = List.unmodifiable([
+          ...existing.where((p) => p.id != provider.id),
+          provider,
+        ])
+        ..defaultProviderId =
+            s.defaultProviderId ?? (isNew ? provider.id : null)
+        ..titleProviderId = s.titleProviderId ?? (isNew ? provider.id : null)
+        ..memoryProviderId = s.memoryProviderId ?? (isNew ? provider.id : null)
+        ..classifierProviderId =
+            s.classifierProviderId ?? (isNew ? provider.id : null),
+    );
     ref.invalidate(availableModelsProvider);
   }
 
@@ -908,9 +1018,8 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
   /// here takes its stored key with it — nothing else would ever delete it,
   /// and an entry nobody names is a secret kept for no one.
   Future<void> setProviders(List<LlmProviderConfig> providers) async {
-    final removed =
-        state.llmProviders.map((p) => p.id).toSet()
-          ..removeAll(providers.map((p) => p.id));
+    final removed = state.llmProviders.map((p) => p.id).toSet()
+      ..removeAll(providers.map((p) => p.id));
     // Deleted before the state change, for the same reason the upsert stores
     // first: the rebuild the state change starts reads the store.
     final secrets = ref.read(appSecretsProvider);
@@ -939,11 +1048,13 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
   }
 }
 
-final appSettingsProvider =
-    NotifierProvider<AppSettingsNotifier, AppSettings>(AppSettingsNotifier.new);
+final appSettingsProvider = NotifierProvider<AppSettingsNotifier, AppSettings>(
+  AppSettingsNotifier.new,
+);
 
-final launcherIconsProvider =
-    Provider<LauncherIcons>((ref) => throw UnimplementedError());
+final launcherIconsProvider = Provider<LauncherIcons>(
+  (ref) => throw UnimplementedError(),
+);
 
 /// The system's own accent, read once in `main` and overridden with what it
 /// found. Null is a platform with none, which is what takes the Material 3
@@ -954,33 +1065,42 @@ final systemAccentProvider = Provider<int?>((ref) => null);
 /// The accent the palette is actually built from: the system's, where it has
 /// one and the user asked for it. Null is the two colours the settings page
 /// offers instead, and is what draws them.
-final paletteAccentProvider = Provider<int?>((ref) =>
-    ref.watch(appSettingsProvider.select((s) => s.systemPalette))
-        ? ref.watch(systemAccentProvider)
-        : null);
+final paletteAccentProvider = Provider<int?>(
+  (ref) => ref.watch(appSettingsProvider.select((s) => s.systemPalette))
+      ? ref.watch(systemAccentProvider)
+      : null,
+);
 
-final linkOpenerProvider =
-    Provider<LinkOpener>((ref) => throw UnimplementedError());
+final linkOpenerProvider = Provider<LinkOpener>(
+  (ref) => throw UnimplementedError(),
+);
 
 /// The provider API keys and the TURN password. Overridden in `main` with the
 /// one built over the platform's secret store; faked in tests over a
 /// `FakeSecretStore`.
-final appSecretsProvider =
-    Provider<AppSecrets>((ref) => throw UnimplementedError());
+final appSecretsProvider = Provider<AppSecrets>(
+  (ref) => throw UnimplementedError(),
+);
 
-typedef KeyCheck = Future<bool> Function(LlmProviderConfig config, String apiKey);
+typedef KeyCheck =
+    Future<bool> Function(LlmProviderConfig config, String apiKey);
 
 /// Whether a provider accepts a key, asked of the provider itself. Throws where
 /// it could not be asked.
 final keyCheckProvider = Provider<KeyCheck>(
-    (ref) => (config, apiKey) => providerOf(config).checkKey(apiKey));
+  (ref) =>
+      (config, apiKey) => providerOf(config).checkKey(apiKey),
+);
 
 /// The process environment, where a provider's named key is looked for after
 /// the settings' own.
-final processEnvProvider = Provider<String? Function(String name)>((ref) => processEnv);
+final processEnvProvider = Provider<String? Function(String name)>(
+  (ref) => processEnv,
+);
 
-final backgroundWorkProvider =
-    Provider<BackgroundWork>((ref) => throw UnimplementedError());
+final backgroundWorkProvider = Provider<BackgroundWork>(
+  (ref) => throw UnimplementedError(),
+);
 
 final syncHubProvider = Provider<SyncHub>((ref) => throw UnimplementedError());
 
@@ -1033,11 +1153,14 @@ final syncPeersProvider =
 /// What each paired device last said its projects are, by device id.
 class DeviceProjects extends HubValue<Map<String, List<String>>> {
   @override
-  ValueListenable<Map<String, List<String>>> of(SyncHub hub) => hub.deviceProjects;
+  ValueListenable<Map<String, List<String>>> of(SyncHub hub) =>
+      hub.deviceProjects;
 }
 
 final deviceProjectsProvider =
-    NotifierProvider<DeviceProjects, Map<String, List<String>>>(DeviceProjects.new);
+    NotifierProvider<DeviceProjects, Map<String, List<String>>>(
+      DeviceProjects.new,
+    );
 
 /// A paired device's project while something is showing it, and only then:
 /// the follow goes with the last watcher, and what was read with it. Null
@@ -1063,44 +1186,62 @@ class RemoteProjectNotifier extends Notifier<RemoteProject?> {
 }
 
 final remoteProjectProvider = NotifierProvider.autoDispose
-    .family<RemoteProjectNotifier, RemoteProject?, ProjectRef>(RemoteProjectNotifier.new);
+    .family<RemoteProjectNotifier, RemoteProject?, ProjectRef>(
+      RemoteProjectNotifier.new,
+    );
 
 /// Whether [ProjectRef]'s settings are here to show: always for this
 /// device's, once its device has answered for a paired one's.
-final projectLoadedProvider = Provider.autoDispose.family<bool, ProjectRef>((ref, project) =>
-    project.device == null || ref.watch(remoteProjectProvider(project)) != null);
+final projectLoadedProvider = Provider.autoDispose.family<bool, ProjectRef>(
+  (ref, project) =>
+      project.device == null ||
+      ref.watch(remoteProjectProvider(project)) != null,
+);
 
 /// A paired device's project its device's listing no longer names: deleted
 /// there, so nothing will answer for it. Unknown until a listing has come.
-final projectGoneProvider = Provider.autoDispose.family<bool, ProjectRef>((ref, project) {
+final projectGoneProvider = Provider.autoDispose.family<bool, ProjectRef>((
+  ref,
+  project,
+) {
   if (project.device == null) return false;
-  final listed = ref.watch(deviceProjectsProvider.select((d) => d[project.device]));
+  final listed = ref.watch(
+    deviceProjectsProvider.select((d) => d[project.device]),
+  );
   return listed != null && !everyProject(listed).contains(project.project);
 });
 
 /// A paired device's project whose device is away: what it last said stays
 /// readable, and nothing is written until it is back.
-final projectFrozenProvider = Provider.family<bool, ProjectRef>((ref, project) =>
-    project.device != null &&
-    ref.watch(syncPeersProvider.select((peers) => peers[project.device]?.status)) !=
-        PeerStatus.online);
+final projectFrozenProvider = Provider.family<bool, ProjectRef>(
+  (ref, project) =>
+      project.device != null &&
+      ref.watch(
+            syncPeersProvider.select((peers) => peers[project.device]?.status),
+          ) !=
+          PeerStatus.online,
+);
 
 final isMirroredChatProvider = Provider.family<bool, String>((ref, chatId) {
-  return ref
-      .watch(remoteChatsProvider.select((chats) => chats.any((c) => c.chatId == chatId)));
+  return ref.watch(
+    remoteChatsProvider.select((chats) => chats.any((c) => c.chatId == chatId)),
+  );
 });
 
 /// The single owner of the platform's download slot — see [DownloadHold]. Every
 /// catalog's notifier reports through it rather than to [BackgroundWork].
-final downloadHoldProvider =
-    Provider<DownloadHold>((ref) => DownloadHold(ref.watch(backgroundWorkProvider)));
+final downloadHoldProvider = Provider<DownloadHold>(
+  (ref) => DownloadHold(ref.watch(backgroundWorkProvider)),
+);
 
 /// Read once in `main` for its effect: it listens to the backend from the
 /// moment it exists, and nothing ever asks it anything. A provider so that its
 /// lifetime is the container's and `dispose` has a caller.
 final turnKeepAliveProvider = Provider<TurnKeepAlive>((ref) {
   final keepAlive = TurnKeepAlive(
-      ref.watch(agentBackendProvider), ref.watch(backgroundWorkProvider));
+    ref.watch(agentBackendProvider),
+    ref.watch(backgroundWorkProvider),
+  );
   ref.onDispose(keepAlive.dispose);
   return keepAlive;
 });
@@ -1122,14 +1263,14 @@ final syncKeepAliveProvider = Provider<SyncKeepAlive>((ref) {
   return keepAlive;
 });
 
-final reminderAlarmsProvider =
-    Provider<ReminderAlarms>((ref) => const UnavailableReminderAlarms());
+final reminderAlarmsProvider = Provider<ReminderAlarms>(
+  (ref) => const UnavailableReminderAlarms(),
+);
 
 /// Whether the app is out of the user's sight, which a turn's tail reads from
 /// outside the widget tree. An `AppLifecycleListener` writes it from the app
 /// root.
-final appHiddenProvider =
-    NotifierProvider<AppHidden, bool>(AppHidden.new);
+final appHiddenProvider = NotifierProvider<AppHidden, bool>(AppHidden.new);
 
 class AppHidden extends Notifier<bool> {
   @override
@@ -1169,18 +1310,19 @@ class Triggers extends Notifier<List<Trigger>> implements TriggerList {
 
   @override
   Future<void> replace(Trigger trigger) => write([
-        for (final t in state) if (t.id == trigger.id) trigger else t,
-      ]);
+    for (final t in state)
+      if (t.id == trigger.id) trigger else t,
+  ]);
 
   /// Add with its alarm request code assigned: the one place codes are handed
   /// out, so they stay unique for the trigger's life.
-  Future<void> add(Trigger trigger) => write([
-        ...state,
-        trigger.copyWith(requestCode: nextRequestCode(state)),
-      ]);
+  Future<void> add(Trigger trigger) =>
+      write([...state, trigger.copyWith(requestCode: nextRequestCode(state))]);
 
-  Future<void> remove(String id) =>
-      write([for (final t in state) if (t.id != id) t]);
+  Future<void> remove(String id) => write([
+    for (final t in state)
+      if (t.id != id) t,
+  ]);
 
   /// A trigger the tools registered for [chatId], which is its target. The
   /// reload the list change causes puts it under watch the moment it lands.
@@ -1188,8 +1330,13 @@ class Triggers extends Notifier<List<Trigger>> implements TriggerList {
   /// A timer is anchored here, where the clock is: the parse carried a
   /// placeholder, and re-anchoring is what makes a countdown thirty seconds
   /// from *this* rather than from somebody else's midnight.
-  Future<Trigger> registerFor(String chatId,
-      {required TriggerSource source, required String prompt, String? name, String? member}) async {
+  Future<Trigger> registerFor(
+    String chatId, {
+    required TriggerSource source,
+    required String prompt,
+    String? name,
+    String? member,
+  }) async {
     final project = await ref.read(chatRepositoryProvider).projectOf(chatId);
     final now = ref.read(clockProvider).now();
     final anchored = source is TimerSource
@@ -1199,8 +1346,7 @@ class Triggers extends Notifier<List<Trigger>> implements TriggerList {
     // success answer that fires nowhere — see [triggerScheduleProblem].
     final problem = triggerScheduleProblem(anchored, now);
     if (problem != null) {
-      throw ArgumentError.value(
-          (anchored as ScheduleSource).at, "at", problem);
+      throw ArgumentError.value((anchored as ScheduleSource).at, "at", problem);
     }
     final draft = Trigger(
       id: const Uuid().v4(),
@@ -1227,13 +1373,17 @@ class Triggers extends Notifier<List<Trigger>> implements TriggerList {
     // Disabling disarms it; re-enabling recomputes — a file trigger has
     // nothing on the clock to re-arm, a repeating schedule its next
     // occurrence, a one-shot past its time nothing.
-    await replace(trigger.copyWith(enabled: enabled, clearNextFireAt: true)
-        .copyWith(nextFireAt: next));
+    await replace(
+      trigger
+          .copyWith(enabled: enabled, clearNextFireAt: true)
+          .copyWith(nextFireAt: next),
+    );
   }
 }
 
-final triggersProvider =
-    NotifierProvider<Triggers, List<Trigger>>(() => Triggers(const []));
+final triggersProvider = NotifierProvider<Triggers, List<Trigger>>(
+  () => Triggers(const []),
+);
 
 /// The file kind's path resolution — `resolveWorkspacePath` over the pair
 /// of workspaces the turn's own file tools would resolve against: the
@@ -1252,8 +1402,9 @@ String _resolveTriggerPath(
   String? chatId,
   String? project,
 ) {
-  final chatWorkspace =
-      chatId == null ? null : config.workspaceDir(chatId, project: project);
+  final chatWorkspace = chatId == null
+      ? null
+      : config.workspaceDir(chatId, project: project);
   final shared = builtinProjectOf(project)?.sharedWorkspace ?? true;
   // A chatless trigger in a project whose workspace is not shared (the
   // anonymous one — the editor offers it): there is no chat workspace to
@@ -1261,7 +1412,8 @@ String _resolveTriggerPath(
   final projectWorkspace = shared
       ? config.projectWorkspaceDir(project: project)
       : (chatWorkspace ?? config.projectWorkspaceDir(project: project));
-  return resolveWorkspacePath(path,
+  return resolveWorkspacePath(
+    path,
     chatWorkspace ?? projectWorkspace,
     projectWorkspace,
     guestRoot: shell.guestRoot,
@@ -1269,8 +1421,9 @@ String _resolveTriggerPath(
   );
 }
 
-final triggerTurnDriverProvider =
-    Provider<TriggerTurnDriver>((ref) => throw UnimplementedError());
+final triggerTurnDriverProvider = Provider<TriggerTurnDriver>(
+  (ref) => throw UnimplementedError(),
+);
 
 /// Started once beside the sweep timer. It listens to the list from here, so
 /// an edit anywhere rebuilds every kind's watch without the editor having to
@@ -1336,7 +1489,8 @@ final chatRepositoryProvider = Provider<ChatRepository>((ref) {
 /// one it is in. A new chat joins when its first message is saved, and whoever
 /// changes what the list shows invalidates it.
 final chatListProvider = FutureProvider<List<ChatState>>(
-    (ref) => ref.watch(chatRepositoryProvider).listChats());
+  (ref) => ref.watch(chatRepositoryProvider).listChats(),
+);
 
 /// Keeps the sidebar's list in step with local deletions. The widget that
 /// asked for a delete invalidates [chatListProvider] too, but its ref may be
@@ -1353,8 +1507,9 @@ final chatDeletionRefreshProvider = Provider<void>((ref) {
 
 /// The projects that exist, for the sidebar's switcher. The default project is
 /// not in it: it is null, and it is always there.
-final projectListProvider =
-    FutureProvider((ref) => ref.watch(chatRepositoryProvider).listProjects());
+final projectListProvider = FutureProvider(
+  (ref) => ref.watch(chatRepositoryProvider).listProjects(),
+);
 
 /// Asked again when models.dev's catalog arrives, since a provider with no
 /// models endpoint lists from it, and when an on-device model is downloaded or
@@ -1371,8 +1526,10 @@ final availableModelsProvider = FutureProvider<List<ModelOption>>((ref) {
 /// default, as the catalog knows it, else the settings' global guess. Read
 /// from the chat's meta, so it is there before any turn, and computed again
 /// when the meta, the settings or the catalog change.
-final contextWindowProvider =
-    FutureProvider.autoDispose.family<int, String>((ref, chatId) async {
+final contextWindowProvider = FutureProvider.autoDispose.family<int, String>((
+  ref,
+  chatId,
+) async {
   final repo = ref.watch(chatRepositoryProvider);
   final settings = ref.watch(appSettingsProvider);
   final backend = ref.watch(agentBackendProvider);
@@ -1386,7 +1543,8 @@ final contextWindowProvider =
     ModelCatalog.notifier.removeListener(catalogChanged);
   });
   final meta = await repo.loadMeta(chatId);
-  return backend.contextWindowOf(chatModelOf(meta, settings)) ?? settings.totalContext;
+  return backend.contextWindowOf(chatModelOf(meta, settings)) ??
+      settings.totalContext;
 });
 
 /// The same models in the one order every picker lists them in. Sorted here
@@ -1402,14 +1560,17 @@ final sortedModelsProvider = FutureProvider<List<ModelOption>>((ref) async {
 /// for a local one. Auto-disposed — held, a scrolled-past image would keep
 /// its megabytes for the whole session; the mirror cache outlives it either
 /// way, so re-showing one costs no second fetch.
-final attachmentBytesProvider =
-    FutureProvider.autoDispose.family<Uint8List?, ({String chatId, String resource})>(
-        (ref, key) async {
-  if (ref.watch(isMirroredChatProvider(key.chatId))) {
-    return ref.watch(syncHubProvider).resourceBytes(key.chatId, key.resource);
-  }
-  return ref.watch(chatRepositoryProvider).readResource(key.chatId, key.resource);
-});
+final attachmentBytesProvider = FutureProvider.autoDispose
+    .family<Uint8List?, ({String chatId, String resource})>((ref, key) async {
+      if (ref.watch(isMirroredChatProvider(key.chatId))) {
+        return ref
+            .watch(syncHubProvider)
+            .resourceBytes(key.chatId, key.resource);
+      }
+      return ref
+          .watch(chatRepositoryProvider)
+          .readResource(key.chatId, key.resource);
+    });
 
 /// The composer's `/` and `@` menus, read straight off the project's library:
 /// Entoli owns its commands and agents, so nothing has to be asked what it
@@ -1420,8 +1581,13 @@ final attachmentBytesProvider =
 /// A paired device's project offers that device's: auto-disposed, so the
 /// follow it holds goes with the menu.
 final completionsProvider = Provider.autoDispose
-    .family<List<CompletionOption>, ({ProjectRef project, CompletionKind kind})>(
-        (ref, spec) => ref.watch(promptLibraryOf(spec.project)).options(spec.kind));
+    .family<
+      List<CompletionOption>,
+      ({ProjectRef project, CompletionKind kind})
+    >(
+      (ref, spec) =>
+          ref.watch(promptLibraryOf(spec.project)).options(spec.kind),
+    );
 
 /// An agent's profile picture, or null where none is set. Named like the
 /// `.md` — `<agents dir>/<name>.png` — and resolved over the same tier walk
@@ -1430,16 +1596,15 @@ final completionsProvider = Provider.autoDispose
 /// avatar on every row would keep every agent's file in memory. A page that
 /// changes one — the agents settings paths do — invalidates the family, an
 /// inherited picture being every project's to re-read after a default edit.
-final agentPictureProvider =
-    FutureProvider.autoDispose.family<Uint8List?, ({String? project, String name})>(
-        (ref, key) async {
-  final config = ref.watch(appConfigProvider);
-  return readAgentPicture(
-    config,
-    key.name,
-    promptTiers(project: key.project, config: config),
-  );
-});
+final agentPictureProvider = FutureProvider.autoDispose
+    .family<Uint8List?, ({String? project, String name})>((ref, key) async {
+      final config = ref.watch(appConfigProvider);
+      return readAgentPicture(
+        config,
+        key.name,
+        promptTiers(project: key.project, config: config),
+      );
+    });
 
 /// Take the picture a write touched back down. A global write (null
 /// [project]) lands in the default project's directory that every project
@@ -1459,37 +1624,44 @@ void invalidateAgentPicture(WidgetRef ref, String name, {String? project}) {
 /// constructor argument, the way [ChatController] takes a chat id.
 final projectSettingsProvider =
     NotifierProvider.family<ProjectSettingsNotifier, ProjectSettings, String?>(
-        ProjectSettingsNotifier.new);
+      ProjectSettingsNotifier.new,
+    );
 
 /// A paired device's project's settings, written there. Until it answers,
 /// the defaults; a page waits on [projectLoadedProvider] rather than draw them.
 final remoteProjectSettingsProvider = NotifierProvider.autoDispose
     .family<ProjectSettingsNotifier, ProjectSettings, ProjectRef>(
-        RemoteProjectSettingsNotifier.new);
+      RemoteProjectSettingsNotifier.new,
+    );
 
 /// [project]'s settings, on whichever device it is: what a page that shows a
 /// project of either watches, and writes through.
 NotifierProvider<ProjectSettingsNotifier, ProjectSettings> projectSettingsOf(
-        ProjectRef project) =>
-    project.device == null
-        ? projectSettingsProvider(project.project)
-        : remoteProjectSettingsProvider(project);
+  ProjectRef project,
+) => project.device == null
+    ? projectSettingsProvider(project.project)
+    : remoteProjectSettingsProvider(project);
 
 /// The app settings [project] inherits from: its own device's.
-ProviderListenable<AppSettings> appSettingsOf(ProjectRef project) => project.device == null
+ProviderListenable<AppSettings> appSettingsOf(ProjectRef project) =>
+    project.device == null
     ? appSettingsProvider
     : remoteProjectProvider(project).select((p) => p?.app ?? AppSettings());
 
 /// [project]'s skills and agents, on whichever device it is.
 ProviderListenable<PromptLibrary> promptLibraryOf(ProjectRef project) =>
     project.device == null
-        ? promptLibraryProvider(project.project)
-        : remoteProjectProvider(project).select((p) => p?.library ?? PromptLibrary.empty);
+    ? promptLibraryProvider(project.project)
+    : remoteProjectProvider(
+        project,
+      ).select((p) => p?.library ?? PromptLibrary.empty);
 
 /// [project]'s memories, on whichever device it is. A paired device's are
 /// asked for on every read.
 final memoriesProvider = Provider.family<Memories, ProjectRef>((ref, project) {
-  if (project.device != null) return RemoteMemories(ref.watch(syncHubProvider), project);
+  if (project.device != null) {
+    return RemoteMemories(ref.watch(syncHubProvider), project);
+  }
   final config = ref.watch(appConfigProvider);
   return MemoryStore(config.memoryDir(project: project.project));
 });
@@ -1511,11 +1683,15 @@ final omadaOnProvider = Provider.family<bool, String?>((ref, project) {
 /// read the screen makes, so an edit landing re-sweeps the headline. Null
 /// and empty mean the same thing here — nothing to ask — so the answer is
 /// the one string the sweep takes.
-final emptyChatQuestionProvider =
-    Provider.family<String, String?>((ref, project) {
+final emptyChatQuestionProvider = Provider.family<String, String?>((
+  ref,
+  project,
+) {
   final description = project == null
       ? null
-      : ref.watch(projectSettingsProvider(project).select((s) => s.description));
+      : ref.watch(
+          projectSettingsProvider(project).select((s) => s.description),
+        );
   return emptyChatQuestionFor(project, description: description) ?? "";
 });
 
@@ -1555,9 +1731,11 @@ class ProjectSettingsNotifier extends Notifier<ProjectSettings> {
   /// pages they used. Null means the app default stands. One write: the
   /// profile page saves both at once, and two writes of the one
   /// `project.json` would supersede each other.
-  Future<void> setReplyStyle({Tone? tone, bool? citations}) => _update((s) => s
-    ..tone = tone
-    ..citations = citations);
+  Future<void> setReplyStyle({Tone? tone, bool? citations}) => _update(
+    (s) => s
+      ..tone = tone
+      ..citations = citations,
+  );
 
   /// The project's own command variables. Null means none, and the app-level
   /// ones stand alone.
@@ -1621,11 +1799,13 @@ class RemoteProjectSettingsNotifier extends ProjectSettingsNotifier {
 
   @override
   ProjectSettings build() =>
-      ref.watch(remoteProjectProvider(at))?.settings.copy() ?? ProjectSettings();
+      ref.watch(remoteProjectProvider(at))?.settings.copy() ??
+      ProjectSettings();
 
   // The home device re-anchors its own chats.
   @override
-  Future<void> setTempChatTtl(TempChatTtl? ttl) => _update((s) => s.tempChatTtl = ttl);
+  Future<void> setTempChatTtl(TempChatTtl? ttl) =>
+      _update((s) => s.tempChatTtl = ttl);
 
   @override
   Future<void> _update(void Function(ProjectSettings) change) async {
@@ -1633,7 +1813,8 @@ class RemoteProjectSettingsNotifier extends ProjectSettingsNotifier {
     change(next);
     state = next;
     // Refused or unanswered: back to what the device last said.
-    if (!await ref.read(syncHubProvider).writeRemoteProject(at, next) && ref.mounted) {
+    if (!await ref.read(syncHubProvider).writeRemoteProject(at, next) &&
+        ref.mounted) {
       state = ref.read(remoteProjectProvider(at))?.settings.copy() ?? state;
     }
   }
@@ -1653,9 +1834,19 @@ class ProviderTriggerOwner implements TriggerRegistryOwner {
   Future<List<Trigger>> triggers() async => _notifier.triggers;
 
   @override
-  Future<Trigger> registerFor(String chatId,
-          {required TriggerSource source, required String prompt, String? name, String? member}) async =>
-      _notifier.registerFor(chatId, source: source, prompt: prompt, name: name, member: member);
+  Future<Trigger> registerFor(
+    String chatId, {
+    required TriggerSource source,
+    required String prompt,
+    String? name,
+    String? member,
+  }) async => _notifier.registerFor(
+    chatId,
+    source: source,
+    prompt: prompt,
+    name: name,
+    member: member,
+  );
 
   @override
   PromptLibrary libraryFor(String? project) =>

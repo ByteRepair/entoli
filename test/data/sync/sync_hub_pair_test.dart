@@ -54,15 +54,19 @@ void main() {
 
   /// Establishes both ends of one pairing. First contact, so both stop at
   /// the codes-matched gate and are confirmed by hand.
-  Future<void> pairing(_Device offers, _Device joins, ByteChannel offerLink,
-      ByteChannel joinLink,
-      {String? knownToOfferer,
-      String? knownToJoiner,
-      // A real one by default. A hand-written stand-in was what hid the
-      // padding bug: 32 bytes of base64url with the `=` stripped is 43
-      // characters, and every short literal anyone reached for happened to
-      // be a length `base64Decode` would accept.
-      String? psk}) async {
+  Future<void> pairing(
+    _Device offers,
+    _Device joins,
+    ByteChannel offerLink,
+    ByteChannel joinLink, {
+    String? knownToOfferer,
+    String? knownToJoiner,
+    // A real one by default. A hand-written stand-in was what hid the
+    // padding bug: 32 bytes of base64url with the `=` stripped is 43
+    // characters, and every short literal anyone reached for happened to
+    // be a length `base64Decode` would accept.
+    String? psk,
+  }) async {
     psk ??= generatePsk();
     final a = offers.hub.establishForTest(
       link: offerLink,
@@ -78,19 +82,29 @@ void main() {
     );
     if (knownToOfferer == null || knownToJoiner == null) {
       await waitForSync(
-          () =>
-              offers.hub.pairing.value?.stage == PairingStage.confirming &&
-              joins.hub.pairing.value?.stage == PairingStage.confirming);
+        () =>
+            offers.hub.pairing.value?.stage == PairingStage.confirming &&
+            joins.hub.pairing.value?.stage == PairingStage.confirming,
+      );
       offers.hub.confirmPairing(true);
       joins.hub.confirmPairing(true);
     }
     await Future.wait([a, b]);
   }
 
-  Future<void> pair(ByteChannel homeLink, ByteChannel awayLink,
-          {String? knownToHome, String? knownToAway}) =>
-      pairing(home, away, homeLink, awayLink,
-          knownToOfferer: knownToHome, knownToJoiner: knownToAway);
+  Future<void> pair(
+    ByteChannel homeLink,
+    ByteChannel awayLink, {
+    String? knownToHome,
+    String? knownToAway,
+  }) => pairing(
+    home,
+    away,
+    homeLink,
+    awayLink,
+    knownToOfferer: knownToHome,
+    knownToJoiner: knownToAway,
+  );
 
   /// A chat on the home device, mirrored on [away] and ready to be driven.
   Future<ChatState> mirrored() async {
@@ -111,21 +125,23 @@ void main() {
     expect(psk, isNot(contains("=")));
   });
 
-  test("the codes gate refuses a handshake whose pairing page is gone",
-      () async {
-    // What a human's back does while their dial is still connecting: the
-    // PopScope nulls the activity, and the handshake is still on the wire.
-    // Arming a confirmation into that waits forever on a human who left and
-    // holds the channel open under them; failing takes the pair down.
-    await expectLater(
-      home.hub.pairingGateForTest(generatePsk(), "Laptop", isNew: true),
-      throwsA(isA<HandshakeException>()),
-    );
-    // A reconnect (known pair) walks straight through with nothing open,
-    // which is what it always did.
-    expect(home.hub.pairing.value, isNull);
-    expect(await home.hub.pairingGateForTest("", "", isNew: false), isTrue);
-  });
+  test(
+    "the codes gate refuses a handshake whose pairing page is gone",
+    () async {
+      // What a human's back does while their dial is still connecting: the
+      // PopScope nulls the activity, and the handshake is still on the wire.
+      // Arming a confirmation into that waits forever on a human who left and
+      // holds the channel open under them; failing takes the pair down.
+      await expectLater(
+        home.hub.pairingGateForTest(generatePsk(), "Laptop", isNew: true),
+        throwsA(isA<HandshakeException>()),
+      );
+      // A reconnect (known pair) walks straight through with nothing open,
+      // which is what it always did.
+      expect(home.hub.pairing.value, isNull);
+      expect(await home.hub.pairingGateForTest("", "", isNew: false), isTrue);
+    },
+  );
 
   /// A data channel refuses a message past its negotiated maximum, and a
   /// conversation of any length is far past it — the chats this was first run
@@ -135,7 +151,11 @@ void main() {
   test("a log too big for one message crosses in pieces", () async {
     final now = DateTime.now();
     final state = ChatState(
-        id: "big", title: "Long chat", createdAt: now, updatedAt: now);
+      id: "big",
+      title: "Long chat",
+      createdAt: now,
+      updatedAt: now,
+    );
     await home.store.saveState(state);
     await home.store.append(state.id, [
       for (var i = 0; i < 200; i++)
@@ -151,9 +171,11 @@ void main() {
     links.$1.watchSends(sent.add);
     await pair(links.$1, links.$2);
     away.hub.followChat(state.id);
-    await waitForSync(() =>
-        away.hub.mirror(state.id)?.records.length ==
-        (home.store as FakeChatStore).records(state.id).length);
+    await waitForSync(
+      () =>
+          away.hub.mirror(state.id)?.records.length ==
+          (home.store as FakeChatStore).records(state.id).length,
+    );
 
     // Well over 400KB of records, so it cannot have been one message.
     expect(sent.reduce((a, b) => a > b ? a : b), lessThan(64 * 1024));
@@ -164,8 +186,10 @@ void main() {
   /// its meta and its log through three separate store calls — a path no test
   /// took until this one.
   test("a chat on a real store mirrors with its records", () async {
-    final onDisk = await _Device.create("${tempDir.path}/disk",
-        store: FileChatStore(await AppConfig.load("${tempDir.path}/disk")));
+    final onDisk = await _Device.create(
+      "${tempDir.path}/disk",
+      store: FileChatStore(await AppConfig.load("${tempDir.path}/disk")),
+    );
     addTearDown(onDisk.hub.dispose);
 
     final chat = Chat(
@@ -193,7 +217,9 @@ void main() {
     await waitForSync(() => away.hub.mirror("on-disk")!.records.isNotEmpty);
 
     final mirrored = chatFrom(
-        away.hub.mirror("on-disk")!.state, away.hub.mirror("on-disk")!.records);
+      away.hub.mirror("on-disk")!.state,
+      away.hub.mirror("on-disk")!.records,
+    );
     expect(mirrored.state.title, "Written down");
     expect(mirrored.messages.single.plainText, "said out loud");
   });
@@ -219,18 +245,25 @@ void main() {
   /// synchronous block — which every test here did — leaves a gap of
   /// microtasks; a real pairing leaves one of seconds, and everything the
   /// first side sent into it was dropped by the second.
-  test("a pairing survives one side confirming long before the other",
-      () async {
+  test("a pairing survives one side confirming long before the other", () async {
     final state = _seedChat(home);
     final links = loopbackPair();
     final psk = generatePsk();
     final a = home.hub.establishForTest(
-        link: links.$1, weOffered: true, psk: psk);
+      link: links.$1,
+      weOffered: true,
+      psk: psk,
+    );
     final b = away.hub.establishForTest(
-        link: links.$2, weOffered: false, psk: psk);
-    await waitForSync(() =>
-        home.hub.pairing.value?.stage == PairingStage.confirming &&
-        away.hub.pairing.value?.stage == PairingStage.confirming);
+      link: links.$2,
+      weOffered: false,
+      psk: psk,
+    );
+    await waitForSync(
+      () =>
+          home.hub.pairing.value?.stage == PairingStage.confirming &&
+          away.hub.pairing.value?.stage == PairingStage.confirming,
+    );
     // Both screens show the same code, which is the whole point of showing it.
     expect(home.hub.pairing.value!.sas, away.hub.pairing.value!.sas);
 
@@ -243,35 +276,45 @@ void main() {
     expect(away.hub.peers.value[home.identity.id]?.status, PeerStatus.online);
   });
 
-  test("a pairing refused after the other side confirmed leaves nothing",
-      () async {
-    _seedChat(home);
-    final links = loopbackPair();
-    final psk = generatePsk();
-    final a = home.hub.establishForTest(
-        link: links.$1, weOffered: true, psk: psk);
-    final b = away.hub.establishForTest(
-        link: links.$2, weOffered: false, psk: psk);
-    // Both humans confirming — checked on both sides, the answer side's stage
-    // is seen first and the joiner's gate arms one hop later, so a confirm
-    // made on a one-sided tick would land on nothing.
-    await waitForSync(() =>
-        home.hub.pairing.value?.stage == PairingStage.confirming &&
-        away.hub.pairing.value?.stage == PairingStage.confirming);
+  test(
+    "a pairing refused after the other side confirmed leaves nothing",
+    () async {
+      _seedChat(home);
+      final links = loopbackPair();
+      final psk = generatePsk();
+      final a = home.hub.establishForTest(
+        link: links.$1,
+        weOffered: true,
+        psk: psk,
+      );
+      final b = away.hub.establishForTest(
+        link: links.$2,
+        weOffered: false,
+        psk: psk,
+      );
+      // Both humans confirming — checked on both sides, the answer side's stage
+      // is seen first and the joiner's gate arms one hop later, so a confirm
+      // made on a one-sided tick would land on nothing.
+      await waitForSync(
+        () =>
+            home.hub.pairing.value?.stage == PairingStage.confirming &&
+            away.hub.pairing.value?.stage == PairingStage.confirming,
+      );
 
-    // The window below is the ordering contract, not a wait: both gates are
-    // answered, and the close a refusal runs must not outrun home's tail into
-    // its hello — the two then fail with the raw transport error, not the
-    // polite handshake exceptions both sides throw for themselves.
-    home.hub.confirmPairing(true);
-    await Future<void>.delayed(const Duration(milliseconds: 300));
-    away.hub.confirmPairing(false);
-    await expectLater(b, throwsA(isA<HandshakeException>()));
-    await a.catchError((_) {});
+      // The window below is the ordering contract, not a wait: both gates are
+      // answered, and the close a refusal runs must not outrun home's tail into
+      // its hello — the two then fail with the raw transport error, not the
+      // polite handshake exceptions both sides throw for themselves.
+      home.hub.confirmPairing(true);
+      await Future<void>.delayed(const Duration(milliseconds: 300));
+      away.hub.confirmPairing(false);
+      await expectLater(b, throwsA(isA<HandshakeException>()));
+      await a.catchError((_) {});
 
-    expect(away.hub.remotes.value, isEmpty);
-    expect(await away.registry.list(), isEmpty);
-  });
+      expect(away.hub.remotes.value, isEmpty);
+      expect(await away.registry.list(), isEmpty);
+    },
+  );
 
   test("pairing files each device in the other's registry", () async {
     final links = loopbackPair();
@@ -292,12 +335,16 @@ void main() {
     await waitForSync(() => away.hub.mirror(state.id) != null);
 
     final mirror = away.hub.mirror(state.id)!;
-    expect(mirror.records.length, (home.store as FakeChatStore).records(state.id).length);
+    expect(
+      mirror.records.length,
+      (home.store as FakeChatStore).records(state.id).length,
+    );
     expect(mirror.deviceName, home.hub.deviceName);
     expect(away.hub.isChatOnline(state.id), isTrue);
 
-    final entry =
-        away.hub.remotes.value.singleWhere((e) => e.chatId == state.id);
+    final entry = away.hub.remotes.value.singleWhere(
+      (e) => e.chatId == state.id,
+    );
     expect(entry.deviceId, home.identity.id);
     expect(entry.online, isTrue);
   });
@@ -310,29 +357,56 @@ void main() {
     // against an ordering that arrives interleaved.
     final now = DateTime.now();
     final state = ChatState(
-        id: "relay-log", title: "Relay", createdAt: now, updatedAt: now);
+      id: "relay-log",
+      title: "Relay",
+      createdAt: now,
+      updatedAt: now,
+    );
     await home.store.saveState(state);
     await home.store.append(state.id, [
       // The user prompt, then two turn openers in the order the room opened
       // them — the second before the first's reply has finished streaming.
+      ChatRecord.message(id: "u1", role: MessageRole.user, createdAt: now),
       ChatRecord.message(
-          id: "u1", role: MessageRole.user, createdAt: now),
+        id: "r1",
+        role: MessageRole.assistant,
+        createdAt: now,
+        author: "@explore",
+      ),
       ChatRecord.message(
-          id: "r1", role: MessageRole.assistant, createdAt: now, author: "@explore"),
-      ChatRecord.message(
-          id: "r2", role: MessageRole.assistant, createdAt: now, author: "@build"),
+        id: "r2",
+        role: MessageRole.assistant,
+        createdAt: now,
+        author: "@build",
+      ),
       // Explore finished first and wrote parts; build's are still coming.
       ChatRecord.part(
-          messageId: "r1", index: 0, part: const TextPart(text: "over to @build")),
-      ChatRecord.part(messageId: "r2", index: 0, part: const TextPart(text: "on it")),
+        messageId: "r1",
+        index: 0,
+        part: const TextPart(text: "over to @build"),
+      ),
       ChatRecord.part(
-          messageId: "r1",
-          index: 1,
-          part: const MessagePart.toolCall(
-              toolCall: ToolCall(
-                  id: "c1", name: "bash", argumentsJson: '{"command": "ls"}'),
-              responseId: "resp-1")),
-      ChatRecord.part(messageId: "r2", index: 1, part: const TextPart(text: " — done")),
+        messageId: "r2",
+        index: 0,
+        part: const TextPart(text: "on it"),
+      ),
+      ChatRecord.part(
+        messageId: "r1",
+        index: 1,
+        part: const MessagePart.toolCall(
+          toolCall: ToolCall(
+            id: "c1",
+            name: "bash",
+            argumentsJson: '{"command": "ls"}',
+          ),
+          responseId: "resp-1",
+        ),
+      ),
+      ChatRecord.part(
+        messageId: "r2",
+        index: 1,
+        part: const TextPart(text: " — done"),
+      ),
       const ChatRecord.turnEnd(messageId: "r1", reason: TurnEnd.done),
       const ChatRecord.turnEnd(messageId: "r2", reason: TurnEnd.done),
     ]);
@@ -347,12 +421,14 @@ void main() {
     expect(mirror.records.length, homeRecords.length);
     // Records arrive in the order the log holds them, interleaved and all.
     String recordId(ChatRecord r) => switch (r) {
-          MessageRecord(:final id) => id,
-          TurnEndRecord(:final messageId) => "end:$messageId",
-          _ => "",
-        };
-    expect([for (final r in mirror.records) recordId(r)],
-        [for (final r in homeRecords) recordId(r)]);
+      MessageRecord(:final id) => id,
+      TurnEndRecord(:final messageId) => "end:$messageId",
+      _ => "",
+    };
+    expect(
+      [for (final r in mirror.records) recordId(r)],
+      [for (final r in homeRecords) recordId(r)],
+    );
   });
 
   test("appends on the home device reach the mirror", () async {
@@ -363,52 +439,73 @@ void main() {
     await waitForSync(() => away.hub.mirror(state.id) != null);
 
     final before = away.hub.mirror(state.id)!.records.length;
-    await home.repo.append(state.id,
-        [ChatRecord.turnEnd(messageId: "m1", reason: TurnEnd.done)]);
-    await waitForSync(() =>
-        away.hub.mirror(state.id)!.records.length > before);
+    await home.repo.append(state.id, [
+      ChatRecord.turnEnd(messageId: "m1", reason: TurnEnd.done),
+    ]);
+    await waitForSync(() => away.hub.mirror(state.id)!.records.length > before);
   });
 
-  test("a running sub-agent's transcript reaches a mirror that follows it",
-      () async {
-    final state = await mirrored();
-    final feed = home.backend.subAgents
-      ..open(state.id, "call-1", const [])
-      ..add(state.id, "call-1", [
+  test(
+    "a running sub-agent's transcript reaches a mirror that follows it",
+    () async {
+      final state = await mirrored();
+      final feed = home.backend.subAgents
+        ..open(state.id, "call-1", const [])
+        ..add(state.id, "call-1", [
+          ChatRecord.message(
+            id: "call-1",
+            role: MessageRole.assistant,
+            createdAt: DateTime.now(),
+          ),
+        ]);
+
+      away.hub.followSubAgent(state.id, "call-1");
+      await waitForSync(
+        () => away.hub.subAgentRecords(state.id, "call-1")?.length == 1,
+      );
+
+      feed.add(state.id, "call-1", [
+        const ChatRecord.part(
+          messageId: "call-1",
+          index: 0,
+          part: MessagePart.text(text: "searching"),
+        ),
+      ]);
+      await waitForSync(
+        () => away.hub.subAgentRecords(state.id, "call-1")?.length == 2,
+      );
+      expect(
+        replay(away.hub.subAgentRecords(state.id, "call-1")!).single.plainText,
+        "searching",
+      );
+    },
+  );
+
+  test(
+    "a finished sub-agent's transcript is read off the home device",
+    () async {
+      final state = await mirrored();
+      (home.store as FakeChatStore).stageSubAgent(state.id, "call-1", [
         ChatRecord.message(
-            id: "call-1", role: MessageRole.assistant, createdAt: DateTime.now()),
+          id: "call-1",
+          role: MessageRole.assistant,
+          createdAt: DateTime.now(),
+        ),
+        const ChatRecord.part(
+          messageId: "call-1",
+          index: 0,
+          part: MessagePart.text(text: "found it"),
+        ),
+        const ChatRecord.turnEnd(messageId: "call-1", reason: TurnEnd.done),
       ]);
 
-    away.hub.followSubAgent(state.id, "call-1");
-    await waitForSync(
-        () => away.hub.subAgentRecords(state.id, "call-1")?.length == 1);
+      away.hub.followSubAgent(state.id, "call-1");
 
-    feed.add(state.id, "call-1", [
-      const ChatRecord.part(
-          messageId: "call-1", index: 0, part: MessagePart.text(text: "searching")),
-    ]);
-    await waitForSync(
-        () => away.hub.subAgentRecords(state.id, "call-1")?.length == 2);
-    expect(replay(away.hub.subAgentRecords(state.id, "call-1")!).single.plainText,
-        "searching");
-  });
-
-  test("a finished sub-agent's transcript is read off the home device",
-      () async {
-    final state = await mirrored();
-    (home.store as FakeChatStore).stageSubAgent(state.id, "call-1", [
-      ChatRecord.message(
-          id: "call-1", role: MessageRole.assistant, createdAt: DateTime.now()),
-      const ChatRecord.part(
-          messageId: "call-1", index: 0, part: MessagePart.text(text: "found it")),
-      const ChatRecord.turnEnd(messageId: "call-1", reason: TurnEnd.done),
-    ]);
-
-    away.hub.followSubAgent(state.id, "call-1");
-
-    await waitForSync(
-        () => away.hub.subAgentRecords(state.id, "call-1")?.length == 3);
-  });
+      await waitForSync(
+        () => away.hub.subAgentRecords(state.id, "call-1")?.length == 3,
+      );
+    },
+  );
 
   test("a retitle arrives as a state diff", () async {
     final state = _seedChat(home);
@@ -419,20 +516,23 @@ void main() {
 
     await home.repo.retitle(state.id, "Renamed");
     await waitForSync(
-        () => away.hub.mirror(state.id)?.state.title == "Renamed");
+      () => away.hub.mirror(state.id)?.state.title == "Renamed",
+    );
   });
 
-  test("deleting the home chat drops the mirror but not the row's owner",
-      () async {
-    final state = _seedChat(home);
-    final links = loopbackPair();
-    await pair(links.$1, links.$2);
-    away.hub.followChat(state.id);
-    await waitForSync(() => away.hub.mirror(state.id) != null);
+  test(
+    "deleting the home chat drops the mirror but not the row's owner",
+    () async {
+      final state = _seedChat(home);
+      final links = loopbackPair();
+      await pair(links.$1, links.$2);
+      away.hub.followChat(state.id);
+      await waitForSync(() => away.hub.mirror(state.id) != null);
 
-    await home.repo.deleteChat(state.id);
-    await waitForSync(() => away.hub.mirror(state.id) == null);
-  });
+      await home.repo.deleteChat(state.id);
+      await waitForSync(() => away.hub.mirror(state.id) == null);
+    },
+  );
 
   test("an attachment crosses as base64 chunks and reassembles", () async {
     final state = _seedChat(home);
@@ -442,10 +542,12 @@ void main() {
     await waitForSync(() => away.hub.mirror(state.id) != null);
 
     // Large enough to need more than one chunk at the wire's 48KB frame.
-    final bytes = Uint8List.fromList(
-        List.generate(120 * 1024, (i) => i % 251));
-    final resource =
-        await home.store.saveResource(state.id, "photo.bin", bytes);
+    final bytes = Uint8List.fromList(List.generate(120 * 1024, (i) => i % 251));
+    final resource = await home.store.saveResource(
+      state.id,
+      "photo.bin",
+      bytes,
+    );
 
     final fetched = await away.hub.fetchResource(state.id, resource);
     expect(fetched, equals(bytes));
@@ -454,16 +556,20 @@ void main() {
   test("whether a project runs Omada is the home device's answer", () async {
     final now = DateTime.now();
     for (final project in ["work", "play"]) {
-      await home.store.saveState(ChatState(
+      await home.store.saveState(
+        ChatState(
           id: project,
           title: project,
           project: project,
           createdAt: now,
-          updatedAt: now));
+          updatedAt: now,
+        ),
+      );
     }
     Future<void> omadaOn(AppConfig config, String project) async {
-      await Directory(config.projectDir(project: project))
-          .create(recursive: true);
+      await Directory(
+        config.projectDir(project: project),
+      ).create(recursive: true);
       await (ProjectSettings()..omada = true).save(config, project: project);
     }
 
@@ -484,18 +590,21 @@ void main() {
 
   test("a chunk from a peer the fetch did not ask is ignored", () async {
     final state = await mirrored();
-    final bytes = Uint8List.fromList(
-        List.generate(120 * 1024, (i) => i % 251));
-    final resource =
-        await home.store.saveResource(state.id, "photo.bin", bytes);
+    final bytes = Uint8List.fromList(List.generate(120 * 1024, (i) => i % 251));
+    final resource = await home.store.saveResource(
+      state.id,
+      "photo.bin",
+      bytes,
+    );
 
     // A third device mirroring one of away's chats, so it has a channel to
     // away to speak on.
     final rogue = await _Device.create("${tempDir.path}/rogue");
     addTearDown(rogue.hub.dispose);
     final now = DateTime.now();
-    await away.store.saveState(ChatState(
-        id: "away-chat", title: "Away", createdAt: now, updatedAt: now));
+    await away.store.saveState(
+      ChatState(id: "away-chat", title: "Away", createdAt: now, updatedAt: now),
+    );
     final links = loopbackPair();
     await pairing(away, rogue, links.$1, links.$2);
     rogue.hub.followChat("away-chat");
@@ -503,9 +612,13 @@ void main() {
 
     final fetch = away.hub.fetchResource(state.id, resource);
     await rogue.hub.sendForTest(
-        "away-chat",
-        SyncMessage.resourceChunk(
-            id: "r0", bytesB64: base64Encode([9, 9, 9]), done: false));
+      "away-chat",
+      SyncMessage.resourceChunk(
+        id: "r0",
+        bytesB64: base64Encode([9, 9, 9]),
+        done: false,
+      ),
+    );
 
     expect(await fetch, equals(bytes));
   });
@@ -522,8 +635,11 @@ void main() {
     away.hub.followChat(state.id);
     await waitForSync(() => away.hub.mirror(state.id) != null);
 
-    final artifactId =
-        await home.store.createArtifact(state.id, "/nowhere", "index.html");
+    final artifactId = await home.store.createArtifact(
+      state.id,
+      "/nowhere",
+      "index.html",
+    );
     (home.store as FakeChatStore).stageArtifact(state.id, artifactId, {
       "index.html": utf8.encode("<p>hello</p>"),
       "assets/logo.png": Uint8List.fromList([1, 2, 3, 4]),
@@ -535,9 +651,14 @@ void main() {
       for (final member in ZipDecoder().decodeBytes(fetched!))
         if (!member.isDirectory) (member.name, member.readBytes()!),
     ];
-    expect(files.map((f) => f.$1), containsAll(["index.html", "assets/logo.png"]));
-    expect(utf8.decode(files.firstWhere((f) => f.$1 == "index.html").$2),
-        "<p>hello</p>");
+    expect(
+      files.map((f) => f.$1),
+      containsAll(["index.html", "assets/logo.png"]),
+    );
+    expect(
+      utf8.decode(files.firstWhere((f) => f.$1 == "index.html").$2),
+      "<p>hello</p>",
+    );
   });
 
   // The plan lives in the home device's workspace, and a mirror reads it
@@ -575,62 +696,92 @@ void main() {
     away.hub.followChat(state.id);
     await waitForSync(() => away.hub.mirror(state.id) != null);
 
-    final artifactId =
-        await home.store.createArtifact(state.id, "/nowhere", "index.html");
-    (home.store as FakeChatStore).stageArtifact(
-        state.id, artifactId, {"index.html": utf8.encode("<p>hello</p>")});
+    final artifactId = await home.store.createArtifact(
+      state.id,
+      "/nowhere",
+      "index.html",
+    );
+    (home.store as FakeChatStore).stageArtifact(state.id, artifactId, {
+      "index.html": utf8.encode("<p>hello</p>"),
+    });
 
     final first = await away.hub.artifactBytes(state.id, artifactId);
     // Cut the wire: a second ask can only be answered from the cache.
     await links.$1.close();
     await links.$2.close();
-    await waitForSync(() =>
-        away.hub.peers.value[home.identity.id]?.status == PeerStatus.offline);
+    await waitForSync(
+      () =>
+          away.hub.peers.value[home.identity.id]?.status == PeerStatus.offline,
+    );
 
     expect(await away.hub.artifactBytes(state.id, artifactId), first);
   });
 
-  test("a re-published artifact is fetched fresh, not stale from the cache",
-      () async {
-    final state = _seedChat(home);
-    final links = loopbackPair();
-    await pair(links.$1, links.$2);
-    away.hub.followChat(state.id);
-    await waitForSync(() => away.hub.mirror(state.id) != null);
+  test(
+    "a re-published artifact is fetched fresh, not stale from the cache",
+    () async {
+      final state = _seedChat(home);
+      final links = loopbackPair();
+      await pair(links.$1, links.$2);
+      away.hub.followChat(state.id);
+      await waitForSync(() => away.hub.mirror(state.id) != null);
 
-    final artifactId =
-        await home.store.createArtifact(state.id, "/nowhere", "index.html");
-    (home.store as FakeChatStore).stageArtifact(
-        state.id, artifactId, {"index.html": utf8.encode("<p>v1</p>")});
-    final first = await away.hub.artifactBytes(state.id, artifactId);
+      final artifactId = await home.store.createArtifact(
+        state.id,
+        "/nowhere",
+        "index.html",
+      );
+      (home.store as FakeChatStore).stageArtifact(state.id, artifactId, {
+        "index.html": utf8.encode("<p>v1</p>"),
+      });
+      final first = await away.hub.artifactBytes(state.id, artifactId);
 
-    // The re-publish reaches the mirror as the record naming the artifact
-    // again — a publish mid-turn rides `recordAppend` like any other part.
-    (home.store as FakeChatStore).stageArtifact(
-        state.id, artifactId, {"index.html": utf8.encode("<p>v2</p>")});
-    final now = DateTime.now();
-    await home.repo.append(state.id, [
-      ChatRecord.message(id: "m2", role: MessageRole.assistant, createdAt: now),
-      ChatRecord.part(
+      // The re-publish reaches the mirror as the record naming the artifact
+      // again — a publish mid-turn rides `recordAppend` like any other part.
+      (home.store as FakeChatStore).stageArtifact(state.id, artifactId, {
+        "index.html": utf8.encode("<p>v2</p>"),
+      });
+      final now = DateTime.now();
+      await home.repo.append(state.id, [
+        ChatRecord.message(
+          id: "m2",
+          role: MessageRole.assistant,
+          createdAt: now,
+        ),
+        ChatRecord.part(
           messageId: "m2",
           index: 0,
           part: MessagePart.artifact(
-              artifactId: artifactId, entryFile: "index.html", title: "t")),
-    ]);
-    await waitForSync(() => away.hub.mirror(state.id)!.records.any((r) =>
-        r is PartRecord &&
-        r.messageId == "m2" &&
-        r.part is ArtifactPart));
+            artifactId: artifactId,
+            entryFile: "index.html",
+            title: "t",
+          ),
+        ),
+      ]);
+      await waitForSync(
+        () => away.hub
+            .mirror(state.id)!
+            .records
+            .any(
+              (r) =>
+                  r is PartRecord &&
+                  r.messageId == "m2" &&
+                  r.part is ArtifactPart,
+            ),
+      );
 
-    final second = await away.hub.artifactBytes(state.id, artifactId);
-    expect(second, isNot(first));
-    final files = [
-      for (final member in ZipDecoder().decodeBytes(second!))
-        if (!member.isDirectory) (member.name, member.readBytes()!),
-    ];
-    expect(utf8.decode(files.firstWhere((f) => f.$1 == "index.html").$2),
-        "<p>v2</p>");
-  });
+      final second = await away.hub.artifactBytes(state.id, artifactId);
+      expect(second, isNot(first));
+      final files = [
+        for (final member in ZipDecoder().decodeBytes(second!))
+          if (!member.isDirectory) (member.name, member.readBytes()!),
+      ];
+      expect(
+        utf8.decode(files.firstWhere((f) => f.$1 == "index.html").$2),
+        "<p>v2</p>",
+      );
+    },
+  );
 
   test("a fetch for an unknown resource answers null, not a hang", () async {
     final state = _seedChat(home);
@@ -651,53 +802,73 @@ void main() {
 
     await links.$1.close();
     await links.$2.close();
-    await waitForSync(() =>
-        away.hub.peers.value[home.identity.id]?.status == PeerStatus.offline);
+    await waitForSync(
+      () =>
+          away.hub.peers.value[home.identity.id]?.status == PeerStatus.offline,
+    );
 
     // The point of keeping it: what was read stays readable.
     expect(away.hub.mirror(state.id), isNotNull);
     expect(away.hub.remotes.value.single.online, isFalse);
   });
 
-  test("reconnecting resumes from the line count, not a second full log",
-      () async {
-    final state = _seedChat(home);
-    var links = loopbackPair();
-    await pair(links.$1, links.$2);
-    away.hub.followChat(state.id);
-    await waitForSync(() => away.hub.mirror(state.id) != null);
-    final heldBefore = away.hub.mirror(state.id)!.records.length;
+  test(
+    "reconnecting resumes from the line count, not a second full log",
+    () async {
+      final state = _seedChat(home);
+      var links = loopbackPair();
+      await pair(links.$1, links.$2);
+      away.hub.followChat(state.id);
+      await waitForSync(() => away.hub.mirror(state.id) != null);
+      final heldBefore = away.hub.mirror(state.id)!.records.length;
 
-    await links.$1.close();
-    await links.$2.close();
-    await waitForSync(() =>
-        away.hub.peers.value[home.identity.id]?.status == PeerStatus.offline);
+      await links.$1.close();
+      await links.$2.close();
+      await waitForSync(
+        () =>
+            away.hub.peers.value[home.identity.id]?.status ==
+            PeerStatus.offline,
+      );
 
-    // Said while the peer was gone.
-    await home.repo.append(state.id,
-        [ChatRecord.turnEnd(messageId: "m1", reason: TurnEnd.done)]);
+      // Said while the peer was gone.
+      await home.repo.append(state.id, [
+        ChatRecord.turnEnd(messageId: "m1", reason: TurnEnd.done),
+      ]);
 
-    links = loopbackPair();
-    await pair(links.$1, links.$2,
-        knownToHome: away.identity.id, knownToAway: home.identity.id);
-    // followChat is still desired, so the reconnecting welcome re-opens it.
-    await waitForSync(() =>
-        away.hub.mirror(state.id)!.records.length ==
-        (home.store as FakeChatStore).records(state.id).length);
+      links = loopbackPair();
+      await pair(
+        links.$1,
+        links.$2,
+        knownToHome: away.identity.id,
+        knownToAway: home.identity.id,
+      );
+      // followChat is still desired, so the reconnecting welcome re-opens it.
+      await waitForSync(
+        () =>
+            away.hub.mirror(state.id)!.records.length ==
+            (home.store as FakeChatStore).records(state.id).length,
+      );
 
-    final mirror = away.hub.mirror(state.id)!;
-    expect(mirror.records.length, heldBefore + 1);
-    // No duplicate of what the first session already carried.
-    expect(mirror.records.whereType<MessageRecord>().map((m) => m.id),
-        ["m1", "r1"]);
-  });
+      final mirror = away.hub.mirror(state.id)!;
+      expect(mirror.records.length, heldBefore + 1);
+      // No duplicate of what the first session already carried.
+      expect(mirror.records.whereType<MessageRecord>().map((m) => m.id), [
+        "m1",
+        "r1",
+      ]);
+    },
+  );
 
   test("a redial over a connection not yet seen dead stays online", () async {
     final first = loopbackPair();
     await pair(first.$1, first.$2);
     final second = loopbackPair();
-    await pair(second.$1, second.$2,
-        knownToHome: away.identity.id, knownToAway: home.identity.id);
+    await pair(
+      second.$1,
+      second.$2,
+      knownToHome: away.identity.id,
+      knownToAway: home.identity.id,
+    );
     // The superseded connection closes after the new one is filed.
     await pumpEventQueue();
 
@@ -712,8 +883,9 @@ void main() {
 
     final state = _seedChat(home);
     await home.repo.saveState(state);
-    await waitForSync(() =>
-        away.hub.remotes.value.any((e) => e.chatId == state.id));
+    await waitForSync(
+      () => away.hub.remotes.value.any((e) => e.chatId == state.id),
+    );
 
     expect(away.hub.remotes.value.single.state.title, "Home chat");
   });
@@ -767,26 +939,33 @@ void main() {
   group("driving", () {
     late _Turns turns;
 
-    setUp(() => home.hub.remoteTurns = turns = _Turns(home.repo, home.config)..hub = home.hub);
+    setUp(
+      () =>
+          home.hub.remoteTurns = turns = _Turns(home.repo, home.config)
+            ..hub = home.hub,
+    );
 
-    test("a rename of a connected device lands on every name it is said",
-        () async {
-      final state = await mirrored();
+    test(
+      "a rename of a connected device lands on every name it is said",
+      () async {
+        final state = await mirrored();
 
-      await home.hub.rename(away.identity.id, "Renamed Away");
-      expect(home.hub.peers.value[away.identity.id]!.name, "Renamed Away");
+        await home.hub.rename(away.identity.id, "Renamed Away");
+        expect(home.hub.peers.value[away.identity.id]!.name, "Renamed Away");
 
-      // The mirror side: its Remotes rows derive their name from the book,
-      // which is what shows on screen — the mirror's own field stays the
-      // creation-time fallback.
-      expect(away.hub.mirror(state.id)!.deviceName, home.hub.deviceName);
-      await away.hub.rename(home.identity.id, "Renamed Home");
-      expect(
+        // The mirror side: its Remotes rows derive their name from the book,
+        // which is what shows on screen — the mirror's own field stays the
+        // creation-time fallback.
+        expect(away.hub.mirror(state.id)!.deviceName, home.hub.deviceName);
+        await away.hub.rename(home.identity.id, "Renamed Home");
+        expect(
           away.hub.remotes.value
               .firstWhere((entry) => entry.chatId == state.id)
               .deviceName,
-          "Renamed Home");
-    });
+          "Renamed Home",
+        );
+      },
+    );
 
     test("a following device's prompt runs on the home device", () async {
       final state = await mirrored();
@@ -797,19 +976,29 @@ void main() {
       expect(turns.prompts.single, (state.id, "do the thing"));
     });
 
-    test("its attachments travel with its prompt and arrive whole",
-        () async {
+    test("its attachments travel with its prompt and arrive whole", () async {
       final state = await mirrored();
       // Past one frame, so the pieces have to be put back together.
       final bytes = Uint8List.fromList(List.generate(70000, (i) => i % 251));
 
-      await away.hub.sendRemotePrompt(state.id, "look", attachments: [
-        Attachment(filename: "a.bin", mimeType: "application/octet-stream", bytes: bytes),
-      ]);
+      await away.hub.sendRemotePrompt(
+        state.id,
+        "look",
+        attachments: [
+          Attachment(
+            filename: "a.bin",
+            mimeType: "application/octet-stream",
+            bytes: bytes,
+          ),
+        ],
+      );
       await waitForSync(() => turns.prompts.isNotEmpty);
 
       final sent = turns.attached.single.single;
-      expect((sent.filename, sent.mimeType), ("a.bin", "application/octet-stream"));
+      expect(
+        (sent.filename, sent.mimeType),
+        ("a.bin", "application/octet-stream"),
+      );
       expect(sent.bytes, bytes);
     });
 
@@ -858,8 +1047,10 @@ void main() {
       // Listed there, never opened.
       await waitForSync(() => other.hub.mirror(state.id) != null);
 
-      await other.hub.sendForTest(state.id,
-          SyncMessage.regenerate(chatId: state.id, messageId: "r1"));
+      await other.hub.sendForTest(
+        state.id,
+        SyncMessage.regenerate(chatId: state.id, messageId: "r1"),
+      );
       await Future<void>.delayed(Duration.zero);
 
       expect(turns.edits, isEmpty);
@@ -877,7 +1068,10 @@ void main() {
       expect((await home.store.loadState(state.id))!.title, "Renamed");
       expect(away.hub.mirror(state.id)!.state.title, "Renamed");
 
-      final pinned = await away.repo.pinChat(state.id, away.hub.mirror(state.id)!.state);
+      final pinned = await away.repo.pinChat(
+        state.id,
+        away.hub.mirror(state.id)!.state,
+      );
       expect(pinned.pinned, isTrue);
       expect((await home.store.loadState(state.id))!.pinned, isTrue);
 
@@ -886,44 +1080,50 @@ void main() {
       expect(await home.store.loadState(state.id), isNull);
     });
 
-    test("a write to a chat this device never opened is answered too",
-        () async {
-      final state = _seedChat(home);
-      final links = loopbackPair();
-      await pair(links.$1, links.$2);
-      await waitForSync(() => away.hub.mirror(state.id) != null);
+    test(
+      "a write to a chat this device never opened is answered too",
+      () async {
+        final state = _seedChat(home);
+        final links = loopbackPair();
+        await pair(links.$1, links.$2);
+        await waitForSync(() => away.hub.mirror(state.id) != null);
 
-      await away.repo.retitle(state.id, "From the sidebar");
+        await away.repo.retitle(state.id, "From the sidebar");
 
-      expect(away.hub.mirror(state.id)!.state.title, "From the sidebar");
-    });
+        expect(away.hub.mirror(state.id)!.state.title, "From the sidebar");
+      },
+    );
 
     test("a state write cannot move a chat or name another", () async {
       final state = await mirrored();
 
-      await away.hub.sendForTest(state.id,
-          SyncMessage.stateWrite(chatId: "elsewhere", state: state));
+      await away.hub.sendForTest(
+        state.id,
+        SyncMessage.stateWrite(chatId: "elsewhere", state: state),
+      );
       await away.repo.saveState(state.copyWith(project: "work"));
 
       expect(await home.store.loadState("elsewhere"), isNull);
       expect((await home.store.loadState(state.id))!.project, isNull);
     });
 
-    test("a write with the home device away gives up rather than hangs",
-        () async {
-      final state = _seedChat(home);
-      final links = loopbackPair();
-      await pair(links.$1, links.$2);
-      away.hub.followChat(state.id);
-      await waitForSync(() => away.hub.mirror(state.id) != null);
-      await links.$1.close();
-      await links.$2.close();
-      await waitForSync(() => !away.hub.isChatOnline(state.id));
+    test(
+      "a write with the home device away gives up rather than hangs",
+      () async {
+        final state = _seedChat(home);
+        final links = loopbackPair();
+        await pair(links.$1, links.$2);
+        away.hub.followChat(state.id);
+        await waitForSync(() => away.hub.mirror(state.id) != null);
+        await links.$1.close();
+        await links.$2.close();
+        await waitForSync(() => !away.hub.isChatOnline(state.id));
 
-      await away.repo.saveMeta(state.id, ChatMeta(model: "m"));
+        await away.repo.saveMeta(state.id, ChatMeta(model: "m"));
 
-      expect((await home.store.loadMeta(state.id)).model, isNull);
-    });
+        expect((await home.store.loadMeta(state.id)).model, isNull);
+      },
+    );
 
     test("a paired device's projects are named in its listing", () async {
       await home.repo.createProject("work");
@@ -932,89 +1132,124 @@ void main() {
       expect(away.hub.deviceProjects.value[home.identity.id], ["work"]);
     });
 
-    test("a project made or deleted there is listed here, and waited on",
-        () async {
-      await mirrored();
+    test(
+      "a project made or deleted there is listed here, and waited on",
+      () async {
+        await mirrored();
 
-      expect(
-          await away.hub.createRemoteProject(home.identity.id, "notes",
-              settings: ProjectSettings(description: "jottings")),
-          isTrue);
-      expect(await home.repo.listProjects(), contains("notes"));
-      expect(turns.projects["notes"]!.description, "jottings");
-      expect(away.hub.deviceProjects.value[home.identity.id], contains("notes"));
-      // Refused rather than left to time out.
-      expect(await away.hub.createRemoteProject(home.identity.id, "notes"), isFalse);
+        expect(
+          await away.hub.createRemoteProject(
+            home.identity.id,
+            "notes",
+            settings: ProjectSettings(description: "jottings"),
+          ),
+          isTrue,
+        );
+        expect(await home.repo.listProjects(), contains("notes"));
+        expect(turns.projects["notes"]!.description, "jottings");
+        expect(
+          away.hub.deviceProjects.value[home.identity.id],
+          contains("notes"),
+        );
+        // Refused rather than left to time out.
+        expect(
+          await away.hub.createRemoteProject(home.identity.id, "notes"),
+          isFalse,
+        );
 
-      expect(await away.hub.deleteRemoteProject(home.identity.id, "notes"), isTrue);
-      expect(await home.repo.listProjects(), isNot(contains("notes")));
-      expect(await away.hub.deleteRemoteProject(home.identity.id, "notes"), isFalse);
-      expect(away.hub.deviceProjects.value[home.identity.id],
-          isNot(contains("notes")));
-    });
+        expect(
+          await away.hub.deleteRemoteProject(home.identity.id, "notes"),
+          isTrue,
+        );
+        expect(await home.repo.listProjects(), isNot(contains("notes")));
+        expect(
+          await away.hub.deleteRemoteProject(home.identity.id, "notes"),
+          isFalse,
+        );
+        expect(
+          away.hub.deviceProjects.value[home.identity.id],
+          isNot(contains("notes")),
+        );
+      },
+    );
 
-    test("a project is read while open, written there, and forgotten after",
-        () async {
-      await home.repo.createProject("work");
-      await mirrored();
-      final ProjectRef work = (device: home.identity.id, project: "work");
+    test(
+      "a project is read while open, written there, and forgotten after",
+      () async {
+        await home.repo.createProject("work");
+        await mirrored();
+        final ProjectRef work = (device: home.identity.id, project: "work");
 
-      away.hub.followProject(work);
-      await waitForSync(() => away.hub.remoteProject(work) != null);
-      expect(home.hub.servedProjects.value, {"work"});
-      expect(away.hub.remoteProject(work)!.settings.omada, isFalse);
+        away.hub.followProject(work);
+        await waitForSync(() => away.hub.remoteProject(work) != null);
+        expect(home.hub.servedProjects.value, {"work"});
+        expect(away.hub.remoteProject(work)!.settings.omada, isFalse);
 
-      await away.hub.writeRemoteProject(work, ProjectSettings(omada: true));
-      expect(turns.projects["work"]!.omada, isTrue);
-      expect(away.hub.remoteProject(work)!.settings.omada, isTrue);
+        await away.hub.writeRemoteProject(work, ProjectSettings(omada: true));
+        expect(turns.projects["work"]!.omada, isTrue);
+        expect(away.hub.remoteProject(work)!.settings.omada, isTrue);
 
-      // A change at home reaches whoever has it open.
-      turns.projects["work"] = ProjectSettings(description: "at home");
-      home.hub.publishProject("work");
-      await waitForSync(
-          () => away.hub.remoteProject(work)!.settings.description == "at home");
+        // A change at home reaches whoever has it open.
+        turns.projects["work"] = ProjectSettings(description: "at home");
+        home.hub.publishProject("work");
+        await waitForSync(
+          () => away.hub.remoteProject(work)!.settings.description == "at home",
+        );
 
-      away.hub.unfollowProject(work);
-      expect(away.hub.remoteProject(work), isNull);
-      await waitForSync(() => home.hub.servedProjects.value.isEmpty);
-    });
+        away.hub.unfollowProject(work);
+        expect(away.hub.remoteProject(work), isNull);
+        await waitForSync(() => home.hub.servedProjects.value.isEmpty);
+      },
+    );
 
-    test("a project's skills and agents come with it, past one message",
-        () async {
-      await home.repo.createProject("work");
-      await mirrored();
-      final ProjectRef work = (device: home.identity.id, project: "work");
-      turns.libraries["work"] = PromptLibrary([
-        for (var i = 0; i < 80; i++)
-          PromptDocument(
+    test(
+      "a project's skills and agents come with it, past one message",
+      () async {
+        await home.repo.createProject("work");
+        await mirrored();
+        final ProjectRef work = (device: home.identity.id, project: "work");
+        turns.libraries["work"] = PromptLibrary([
+          for (var i = 0; i < 80; i++)
+            PromptDocument(
               kind: i.isEven ? CompletionKind.skill : CompletionKind.agent,
               name: "entry-$i",
               frontmatter: {"description": "d" * 1000},
-              body: "b" * 1000),
-      ]);
+              body: "b" * 1000,
+            ),
+        ]);
 
-      away.hub.followProject(work);
-      await waitForSync(
-          () => away.hub.remoteProject(work)?.library.all.length == 80);
-      final skill = away.hub.remoteProject(work)!.library.find(CompletionKind.skill, "entry-0")!;
-      expect(skill.description, "d" * 1000);
-      expect(skill.body, "b" * 1000);
+        away.hub.followProject(work);
+        await waitForSync(
+          () => away.hub.remoteProject(work)?.library.all.length == 80,
+        );
+        final skill = away.hub
+            .remoteProject(work)!
+            .library
+            .find(CompletionKind.skill, "entry-0")!;
+        expect(skill.description, "d" * 1000);
+        expect(skill.body, "b" * 1000);
 
-      // A settings write leaves the library as it was.
-      await away.hub.writeRemoteProject(work, ProjectSettings(omada: true));
-      await Future<void>.delayed(const Duration(milliseconds: 50));
-      expect(away.hub.remoteProject(work)!.library.all.length, 80);
+        // A settings write leaves the library as it was.
+        await away.hub.writeRemoteProject(work, ProjectSettings(omada: true));
+        await Future<void>.delayed(const Duration(milliseconds: 50));
+        expect(away.hub.remoteProject(work)!.library.all.length, 80);
 
-      // A change at home reaches whoever has it open.
-      turns.libraries["work"] = PromptLibrary.empty;
-      home.hub.publishPrompts("work");
-      await waitForSync(() => away.hub.remoteProject(work)!.library.all.isEmpty);
-    });
+        // A change at home reaches whoever has it open.
+        turns.libraries["work"] = PromptLibrary.empty;
+        home.hub.publishPrompts("work");
+        await waitForSync(
+          () => away.hub.remoteProject(work)!.library.all.isEmpty,
+        );
+      },
+    );
 
     test("a project's memories are read and changed there", () async {
       await home.repo.createProject("work");
       await mirrored();
-      final memories = RemoteMemories(away.hub, (device: home.identity.id, project: "work"));
+      final memories = RemoteMemories(away.hub, (
+        device: home.identity.id,
+        project: "work",
+      ));
       final store = turns.memories("work");
 
       await memories.add("the build uses pnpm");
@@ -1027,17 +1262,25 @@ void main() {
       expect(await store.entries(), isEmpty);
     });
 
-    test("a project not on the home device is neither read nor written",
-        () async {
-      await mirrored();
-      final ProjectRef nowhere = (device: home.identity.id, project: "nowhere");
+    test(
+      "a project not on the home device is neither read nor written",
+      () async {
+        await mirrored();
+        final ProjectRef nowhere = (
+          device: home.identity.id,
+          project: "nowhere",
+        );
 
-      away.hub.followProject(nowhere);
-      expect(await away.hub.writeRemoteProject(nowhere, ProjectSettings()), isFalse);
+        away.hub.followProject(nowhere);
+        expect(
+          await away.hub.writeRemoteProject(nowhere, ProjectSettings()),
+          isFalse,
+        );
 
-      expect(away.hub.remoteProject(nowhere), isNull);
-      expect(turns.projects, isEmpty);
-    });
+        expect(away.hub.remoteProject(nowhere), isNull);
+        expect(turns.projects, isEmpty);
+      },
+    );
 
     test("an open project stays readable while its device is away, and is "
         "read again when it is back", () async {
@@ -1055,10 +1298,16 @@ void main() {
 
       turns.projects[null] = ProjectSettings(description: "while away");
       links = loopbackPair();
-      await pair(links.$1, links.$2,
-          knownToHome: away.identity.id, knownToAway: home.identity.id);
-      await waitForSync(() =>
-          away.hub.remoteProject(base)!.settings.description == "while away");
+      await pair(
+        links.$1,
+        links.$2,
+        knownToHome: away.identity.id,
+        knownToAway: home.identity.id,
+      );
+      await waitForSync(
+        () =>
+            away.hub.remoteProject(base)!.settings.description == "while away",
+      );
     });
 
     test("a chat started from here is made there and listed before it is "
@@ -1066,9 +1315,10 @@ void main() {
       await home.repo.createProject("work");
       await mirrored();
 
-      final id = (await away.hub
-              .startRemoteChat((device: home.identity.id, project: "work"), "hello"))
-          ?.chatId;
+      final id = (await away.hub.startRemoteChat((
+        device: home.identity.id,
+        project: "work",
+      ), "hello"))?.chatId;
 
       expect(id, isNotNull);
       expect((await home.store.loadState(id!))!.project, "work");
@@ -1076,17 +1326,21 @@ void main() {
       expect(turns.prompts.last, (id, "hello"));
     });
 
-    test("a chat asked for in a project that is not there is not made",
-        () async {
-      await mirrored();
+    test(
+      "a chat asked for in a project that is not there is not made",
+      () async {
+        await mirrored();
 
-      final reply = await away.hub
-          .startRemoteChat((device: home.identity.id, project: "nowhere"), "hi");
+        final reply = await away.hub.startRemoteChat((
+          device: home.identity.id,
+          project: "nowhere",
+        ), "hi");
 
-      expect(reply!.ok, isFalse);
-      expect(reply.chatId, isNull);
-      expect(turns.prompts, isEmpty);
-    });
+        expect(reply!.ok, isFalse);
+        expect(reply.chatId, isNull);
+        expect(turns.prompts, isEmpty);
+      },
+    );
 
     test("a prompt from a device not following the chat is dropped", () async {
       final state = await mirrored();
@@ -1126,31 +1380,34 @@ void main() {
   /// The controller the read-only page is built on, over a real mirror. The
   /// page's own tests fake this out; what the wire actually resolves to is
   /// here, where there is a peer to lose.
-  test("the mirror controller replays the log, and says when it went stale",
-      () async {
-    final state = _seedChat(home);
-    final links = loopbackPair();
-    await pair(links.$1, links.$2);
+  test(
+    "the mirror controller replays the log, and says when it went stale",
+    () async {
+      final state = _seedChat(home);
+      final links = loopbackPair();
+      await pair(links.$1, links.$2);
 
-    final container = ProviderContainer(
-        overrides: [syncHubProvider.overrideWithValue(away.hub)]);
-    addTearDown(container.dispose);
-    final provider = mirrorChatControllerProvider(state.id);
+      final container = ProviderContainer(
+        overrides: [syncHubProvider.overrideWithValue(away.hub)],
+      );
+      addTearDown(container.dispose);
+      final provider = mirrorChatControllerProvider(state.id);
 
-    // Listened, not read: a provider nobody holds is disposed again, and
-    // disposing this one unfollows the chat.
-    container.listen(provider, (_, _) {});
-    await waitForSync(() => container.read(provider).chat != null);
-    expect(container.read(provider).chat!.messages, hasLength(2));
-    expect(container.read(provider).status, isNull);
+      // Listened, not read: a provider nobody holds is disposed again, and
+      // disposing this one unfollows the chat.
+      container.listen(provider, (_, _) {});
+      await waitForSync(() => container.read(provider).chat != null);
+      expect(container.read(provider).chat!.messages, hasLength(2));
+      expect(container.read(provider).status, isNull);
 
-    await links.$1.close();
-    await links.$2.close();
-    await waitForSync(() => container.read(provider).status != null);
-    expect(container.read(provider).status, contains("offline"));
-    // The snapshot is what stays readable.
-    expect(container.read(provider).chat!.messages, hasLength(2));
-  });
+      await links.$1.close();
+      await links.$2.close();
+      await waitForSync(() => container.read(provider).status != null);
+      expect(container.read(provider).status, contains("offline"));
+      // The snapshot is what stays readable.
+      expect(container.read(provider).chat!.messages, hasLength(2));
+    },
+  );
 }
 
 // ------------------------------------------------------------------ harness
@@ -1174,8 +1431,12 @@ class _Turns implements RemoteTurns {
   final answered = <(String, String, List<String?>)>[];
 
   @override
-  void prompt(String chatId, String text,
-      {List<Attachment> attachments = const [], bool queue = false}) {
+  void prompt(
+    String chatId,
+    String text, {
+    List<Attachment> attachments = const [],
+    bool queue = false,
+  }) {
     prompts.add((chatId, text));
     attached.add(attachments);
   }
@@ -1211,14 +1472,19 @@ class _Turns implements RemoteTurns {
       edits.add(("delete", chatId, messageId, null));
 
   @override
-  Future<void> saveState(String chatId, ChatState state, {required bool reanchor}) =>
-      repo.saveState(state, reanchor: reanchor);
+  Future<void> saveState(
+    String chatId,
+    ChatState state, {
+    required bool reanchor,
+  }) => repo.saveState(state, reanchor: reanchor);
 
   @override
-  Future<void> saveMeta(String chatId, ChatMeta meta) => repo.saveMeta(chatId, meta);
+  Future<void> saveMeta(String chatId, ChatMeta meta) =>
+      repo.saveMeta(chatId, meta);
 
   @override
-  Future<void> retitle(String chatId, String title) => repo.retitle(chatId, title);
+  Future<void> retitle(String chatId, String title) =>
+      repo.retitle(chatId, title);
 
   @override
   Future<void> delete(String chatId) => repo.deleteChat(chatId);
@@ -1252,7 +1518,8 @@ class _Turns implements RemoteTurns {
   Future<void> deleteProject(String name) => repo.deleteProject(name);
 
   @override
-  PromptLibrary library(String? project) => libraries[project] ?? PromptLibrary.empty;
+  PromptLibrary library(String? project) =>
+      libraries[project] ?? PromptLibrary.empty;
 
   @override
   Memories memories(String? project) =>
@@ -1260,8 +1527,15 @@ class _Turns implements RemoteTurns {
 }
 
 class _Device {
-  _Device(this.identity, this.hub, this.registry, this.store, this.repo,
-      this.config, this.backend);
+  _Device(
+    this.identity,
+    this.hub,
+    this.registry,
+    this.store,
+    this.repo,
+    this.config,
+    this.backend,
+  );
 
   static Future<_Device> create(String dir, {ChatStore? store}) async {
     final config = await AppConfig.load(dir);
@@ -1286,12 +1560,15 @@ class _Device {
 ChatState _seedChat(_Device device) {
   final now = DateTime.now();
   final state = ChatState(
-      id: "chat-1", title: "Home chat", createdAt: now, updatedAt: now);
+    id: "chat-1",
+    title: "Home chat",
+    createdAt: now,
+    updatedAt: now,
+  );
   device.store.saveState(state);
   device.store.append(state.id, [
     ChatRecord.message(id: "m1", role: MessageRole.user, createdAt: now),
-    ChatRecord.message(
-        id: "r1", role: MessageRole.assistant, createdAt: now),
+    ChatRecord.message(id: "r1", role: MessageRole.assistant, createdAt: now),
   ]);
   return state;
 }

@@ -16,8 +16,9 @@ class WelcomeGate extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final seen =
-        ref.watch(appSettingsProvider.select((s) => s.licenceAccepted));
+    final seen = ref.watch(
+      appSettingsProvider.select((s) => s.licenceAccepted),
+    );
     return seen ? child : const WelcomePage();
   }
 }

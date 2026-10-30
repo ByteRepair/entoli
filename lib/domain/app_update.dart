@@ -26,10 +26,10 @@ enum UpdateFlavour { linux, macos, windows }
 
 /// The asset the release ships for [flavour].
 String assetFor(UpdateFlavour flavour) => switch (flavour) {
-      UpdateFlavour.linux => appImageAsset,
-      UpdateFlavour.macos => dmgAsset,
-      UpdateFlavour.windows => msiAsset,
-    };
+  UpdateFlavour.linux => appImageAsset,
+  UpdateFlavour.macos => dmgAsset,
+  UpdateFlavour.windows => msiAsset,
+};
 
 /// Where a release tags [asset] can be fetched from.
 String assetDownloadUrl(String tag, String asset) =>
@@ -68,10 +68,7 @@ String? latestTagOf(Uri location) {
   const marker = "/tag/";
   final at = location.path.indexOf(marker);
   if (at < 0) return null;
-  final segment = location.path
-      .substring(at + marker.length)
-      .split("/")
-      .first;
+  final segment = location.path.substring(at + marker.length).split("/").first;
   return Uri.decodeComponent(segment);
 }
 

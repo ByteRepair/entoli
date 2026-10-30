@@ -61,20 +61,21 @@ class _TextModels extends ConsumerWidget {
     ];
     final loaded = ref.watch(localLlmStateProvider);
     String deleteMessage(Installable model, {required bool again}) => [
-          if (loaded.any((each) => each.modelId == model.id))
-            "It is loaded right now. It stops answering, and chats pinned to it "
-                "have nothing to run until another model is picked."
-          else
-            "Chats pinned to it have nothing to run until another model is picked.",
-          if (again) "It can be downloaded again.",
-        ].join(" ");
+      if (loaded.any((each) => each.modelId == model.id))
+        "It is loaded right now. It stops answering, and chats pinned to it "
+            "have nothing to run until another model is picked."
+      else
+        "Chats pinned to it have nothing to run until another model is picked.",
+      if (again) "It can be downloaded again.",
+    ].join(" ");
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const Divider(),
         const SectionHeader(
           "Text models",
-          description: "Run language models offline, on this device. "
+          description:
+              "Run language models offline, on this device. "
               "Downloaded models appear under On-device in every model picker. "
               "They are stored outside the app's data and are not included in "
               "backups.",
@@ -97,7 +98,8 @@ class _TextModels extends ConsumerWidget {
               icon: const Icon(Icons.add_link),
               label: const Text("Add model"),
               onPressed: () => Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => const AddLocalModelPage())),
+                MaterialPageRoute(builder: (_) => const AddLocalModelPage()),
+              ),
             ),
           ),
       ],
@@ -110,16 +112,18 @@ class _TextModels extends ConsumerWidget {
 /// reader working out which ones speak.
 class _VoiceModels extends ConsumerWidget {
   const _VoiceModels.recognition()
-      : title = "Speech recognition",
-        description = "Transcribe speech in voice mode, on this device. "
-            "Larger models are more accurate but slower.",
-        models = recognitionModels;
+    : title = "Speech recognition",
+      description =
+          "Transcribe speech in voice mode, on this device. "
+          "Larger models are more accurate but slower.",
+      models = recognitionModels;
 
   const _VoiceModels.speech()
-      : title = "Speech synthesis",
-        description = "Read replies aloud, in voice mode or on request, on "
-            "this device.",
-        models = speechModels;
+    : title = "Speech synthesis",
+      description =
+          "Read replies aloud, in voice mode or on request, on "
+          "this device.",
+      models = speechModels;
 
   final String title;
   final String description;
@@ -163,10 +167,12 @@ class ModelDownloadTile extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     // Its own row only: a progress event names one model, and watching the
     // whole state would rebuild every row for it.
-    final progress =
-        ref.watch(modelDownloadsProvider.select((s) => s.active[model.id]));
-    final failure =
-        ref.watch(modelDownloadsProvider.select((s) => s.failures[model.id]));
+    final progress = ref.watch(
+      modelDownloadsProvider.select((s) => s.active[model.id]),
+    );
+    final failure = ref.watch(
+      modelDownloadsProvider.select((s) => s.failures[model.id]),
+    );
     final downloads = ref.read(modelDownloadsProvider.notifier);
     return CatalogTile(
       title: Row(
@@ -174,7 +180,10 @@ class ModelDownloadTile extends ConsumerWidget {
           Flexible(child: Text(model.name)),
           if (model.multilingual) ...[
             const SizedBox(width: 8),
-            _Badge(label: "Multilingual", tone: Theme.of(context).colorScheme.primary),
+            _Badge(
+              label: "Multilingual",
+              tone: Theme.of(context).colorScheme.primary,
+            ),
           ],
         ],
       ),
@@ -203,14 +212,14 @@ class _Badge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(999),
-          border: Border.all(color: tone),
-        ),
-        child: Text(
-          label,
-          style: Theme.of(context).textTheme.labelSmall?.copyWith(color: tone),
-        ),
-      );
+    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+    decoration: BoxDecoration(
+      borderRadius: BorderRadius.circular(999),
+      border: Border.all(color: tone),
+    ),
+    child: Text(
+      label,
+      style: Theme.of(context).textTheme.labelSmall?.copyWith(color: tone),
+    ),
+  );
 }

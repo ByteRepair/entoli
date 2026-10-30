@@ -40,14 +40,15 @@ class SherpaVoice extends Voice {
     required Speaking speaking,
     int speaker = 0,
     String? language,
-  }) async =>
-      composeSession(
-        hearing == null ? null : await sherpaListener(hearing),
-        switch (speaking) {
-          SpeakOnDevice(:final model) => sherpaSpeaker(model, speaker),
-          SpeakThrough(:final synthesize) => Future.value(RemoteSpeaker(synthesize)),
-        },
-      );
+  }) async => composeSession(
+    hearing == null ? null : await sherpaListener(hearing),
+    switch (speaking) {
+      SpeakOnDevice(:final model) => sherpaSpeaker(model, speaker),
+      SpeakThrough(:final synthesize) => Future.value(
+        RemoteSpeaker(synthesize),
+      ),
+    },
+  );
 
   /// The sherpa listening half; `AndroidVoice` uses it too. A provider's
   /// model listens through the same microphone and Silero, with each
@@ -58,14 +59,19 @@ class SherpaVoice extends Voice {
     (RecognitionModel, String)? model;
     if (hearing case HearOnDevice(model: final recognition)) {
       final dir = await _store.directoryOf(recognition);
-      if (dir == null) throw StateError("${recognition.name} is not downloaded.");
+      if (dir == null) {
+        throw StateError("${recognition.name} is not downloaded.");
+      }
       model = (recognition, dir);
     }
     final recorder = await openMicrophone();
     final vad = await _vadPath();
     final worker = await Worker.spawn(_listenWorker, (vad, model));
-    return SherpaListener(recorder, worker,
-        transcribe: hearing is HearThrough ? hearing.transcribe : null);
+    return SherpaListener(
+      recorder,
+      worker,
+      transcribe: hearing is HearThrough ? hearing.transcribe : null,
+    );
   }
 
   /// The sherpa speaking half for one speech model, for the same reason as
@@ -73,7 +79,11 @@ class SherpaVoice extends Voice {
   Future<SherpaSpeaker> sherpaSpeaker(SpeechModel speech, int speaker) async {
     final speakDir = await _store.directoryOf(speech);
     if (speakDir == null) throw StateError("${speech.name} is not downloaded.");
-    final worker = await Worker.spawn(_speakWorker, (speech, speakDir, speaker));
+    final worker = await Worker.spawn(_speakWorker, (
+      speech,
+      speakDir,
+      speaker,
+    ));
     return SherpaSpeaker(worker);
   }
 
@@ -99,7 +109,7 @@ class SherpaVoice extends Voice {
 /// [decibels] reading per 32 ms detector window.
 class SherpaListener extends MicrophoneListener {
   SherpaListener(this._recorder, this._worker, {this._transcribe})
-      : super(LoudnessGate()) {
+    : super(LoudnessGate()) {
     _worker.messages.listen(_fromWorker);
   }
 
@@ -144,18 +154,20 @@ class SherpaListener extends MicrophoneListener {
       return;
     }
     try {
-      final stream = await _recorder.startStream(RecordConfig(
-        encoder: AudioEncoder.pcm16bits,
-        sampleRate: sampleRate,
-        numChannels: 1,
-        // The reply comes out of the same device the microphone is on. The
-        // microphone is shut while one is being read out, so this is belt and
-        // braces rather than the thing keeping the model from hearing itself.
-        // Not on macOS: there it is Apple's voice processing, whose input is
-        // several channels that `record` converts to mono as pure silence.
-        echoCancel: !Platform.isMacOS,
-        noiseSuppress: true,
-      ));
+      final stream = await _recorder.startStream(
+        RecordConfig(
+          encoder: AudioEncoder.pcm16bits,
+          sampleRate: sampleRate,
+          numChannels: 1,
+          // The reply comes out of the same device the microphone is on. The
+          // microphone is shut while one is being read out, so this is belt and
+          // braces rather than the thing keeping the model from hearing itself.
+          // Not on macOS: there it is Apple's voice processing, whose input is
+          // several channels that `record` converts to mono as pure silence.
+          echoCancel: !Platform.isMacOS,
+          noiseSuppress: true,
+        ),
+      );
       // Shut while this was opening, which is a Talk button let go inside the
       // platform's own latency. What was asked for last wins.
       if (closed || !listening) {
@@ -202,7 +214,9 @@ class SherpaListener extends MicrophoneListener {
     // Judged now, against the room it was said in: by the time the provider
     // answers, more of the room has been measured. Refused here, a sentence
     // the gate would drop is not paid for.
-    if (!gate.spoken()) return voiceFailed("utterance refused: too quiet for this room");
+    if (!gate.spoken()) {
+      return voiceFailed("utterance refused: too quiet for this room");
+    }
     _sent = _sent.then((_) async {
       if (closed) return;
       try {
@@ -277,7 +291,9 @@ class Worker {
   Stream<Object?> get messages => _out.stream;
 
   static Future<Worker> spawn<T>(
-      void Function((SendPort, T)) entry, T argument) async {
+    void Function((SendPort, T)) entry,
+    T argument,
+  ) async {
     final port = ReceivePort();
     final out = StreamController<Object?>();
     final ready = Completer<SendPort>();
@@ -316,7 +332,9 @@ const sampleRate = 16000;
 /// The listening half: voice activity, then the words. Runs until it is told to
 /// close. With no model, each utterance is sent back as samples for a provider
 /// to transcribe.
-void _listenWorker((SendPort, (String, (RecognitionModel, String)?)) init) async {
+void _listenWorker(
+  (SendPort, (String, (RecognitionModel, String)?)) init,
+) async {
   final (reply, (vadPath, model)) = init;
   final port = ReceivePort();
   reply.send(port.sendPort);
@@ -332,7 +350,10 @@ void _listenWorker((SendPort, (String, (RecognitionModel, String)?)) init) async
     }
     vad = sherpa.VoiceActivityDetector(
       config: sherpa.VadModelConfig(
-        sileroVad: sherpa.SileroVadModelConfig(model: vadPath, minSilenceDuration: 0.4),
+        sileroVad: sherpa.SileroVadModelConfig(
+          model: vadPath,
+          minSilenceDuration: 0.4,
+        ),
         sampleRate: sampleRate,
         debug: false,
       ),
@@ -342,7 +363,10 @@ void _listenWorker((SendPort, (String, (RecognitionModel, String)?)) init) async
     reply.send(("failed", "$e"));
   }
 
-  void drain(sherpa.VoiceActivityDetector vad, sherpa.OfflineRecognizer? engine) {
+  void drain(
+    sherpa.VoiceActivityDetector vad,
+    sherpa.OfflineRecognizer? engine,
+  ) {
     while (!vad.isEmpty()) {
       final segment = vad.front();
       vad.pop();
@@ -409,7 +433,11 @@ void _speakWorker((SendPort, (SpeechModel, String, int)) init) async {
           reply.send(("dropped", generation));
         } else {
           // Encoded here rather than on the UI isolate.
-          reply.send(("audio", generation, wavOf(audio.samples, audio.sampleRate)));
+          reply.send((
+            "audio",
+            generation,
+            wavOf(audio.samples, audio.sampleRate),
+          ));
         }
       } catch (_) {
         // One sentence this voice will not say, rather than a voice that has
@@ -425,7 +453,10 @@ void _speakWorker((SendPort, (SpeechModel, String, int)) init) async {
 
 String _at(String dir, String? name) => name == null ? "" : p.join(dir, name);
 
-sherpa.OfflineRecognizerConfig _recognizerConfig(RecognitionModel model, String dir) {
+sherpa.OfflineRecognizerConfig _recognizerConfig(
+  RecognitionModel model,
+  String dir,
+) {
   final whisper = model.engine == VoiceEngine.whisper
       ? sherpa.OfflineWhisperModelConfig(
           encoder: _at(dir, model.encoder),

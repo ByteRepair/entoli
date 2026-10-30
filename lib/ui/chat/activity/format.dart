@@ -24,7 +24,9 @@ String formatAge(Duration age) {
 /// is enough. "expiring" is the brief edge state before the sweep hides it.
 String formatRemaining(Duration remaining) {
   if (remaining.inMinutes <= 0) return "expiring";
-  if (remaining.inHours < 1) return "${plural(remaining.inMinutes, "minute")} left";
+  if (remaining.inHours < 1) {
+    return "${plural(remaining.inMinutes, "minute")} left";
+  }
   if (remaining.inDays < 1) return "${plural(remaining.inHours, "hour")} left";
   return "${plural(remaining.inDays, "day")} left";
 }

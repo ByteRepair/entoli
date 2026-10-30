@@ -27,7 +27,8 @@ void main() {
     source = await Directory.systemTemp.createTemp("rootfs-source");
 
     // A rootfs in miniature: something to run, and a name that is a link to it.
-    final bin = Directory(p.join(source.path, "bin"))..createSync(recursive: true);
+    final bin = Directory(p.join(source.path, "bin"))
+      ..createSync(recursive: true);
     File(p.join(bin.path, "busybox")).writeAsStringSync("#!/bin/sh\necho hi\n");
     await Process.run("chmod", ["+x", p.join(bin.path, "busybox")]);
     Link(p.join(bin.path, "sh")).createSync("busybox");
@@ -51,74 +52,88 @@ void main() {
   String url(String path) => net.url(path);
 
   Rootfs distro({String? path, String? sha}) => Rootfs(
-        id: "testix",
-        name: "Testix",
-        version: "1.0",
-        packageManager: "tpk",
-        images: {
-          "x86_64": RootfsImage(
-            arch: "x86_64",
-            url: url(path ?? "/rootfs.tar.gz"),
-            bytes: tarball.length,
-            sha256: sha ?? sha256.convert(tarball).toString(),
-          ),
-        },
+    id: "testix",
+    name: "Testix",
+    version: "1.0",
+    packageManager: "tpk",
+    images: {
+      "x86_64": RootfsImage(
+        arch: "x86_64",
+        url: url(path ?? "/rootfs.tar.gz"),
+        bytes: tarball.length,
+        sha256: sha ?? sha256.convert(tarball).toString(),
+      ),
+    },
+  );
+
+  FileRootfsStore storeIn({
+    Future<ProcessResult> Function(String, String)? tar,
+  }) => tar == null
+      ? FileRootfsStore(p.join(root.path, "rootfs"), client: net)
+      : FileRootfsStore(p.join(root.path, "rootfs"), client: net, tar: tar);
+
+  test(
+    "a finished install is unpacked, marked whole, and the tarball is gone",
+    () async {
+      final store = storeIn();
+      final rootfs = distro();
+
+      await store.install(rootfs, abi: "x86_64").drain<void>();
+
+      expect(await store.installed(), {"testix"});
+      final dir = (await store.directoryOf(rootfs))!;
+      expect(store.directoryOfSync("testix"), dir);
+      expect(File(p.join(dir, "_rootfs.tar.gz")).existsSync(), isFalse);
+    },
+  );
+
+  test(
+    "what tar writes and Dart cannot: the execute bit, and a symlink that is "
+    "still a link",
+    () async {
+      final store = storeIn();
+
+      await store.install(distro(), abi: "x86_64").drain<void>();
+
+      final dir = store.directoryOfSync("testix")!;
+      final busybox = File(p.join(dir, "bin", "busybox"));
+      expect(
+        busybox.statSync().mode & 0x49,
+        isNot(0),
+        reason: "a busybox nothing may execute is a Linux that cannot start",
+      );
+      expect(Link(p.join(dir, "bin", "sh")).targetSync(), "busybox");
+    },
+  );
+
+  test(
+    "it says how far along it is, and that unpacking is a phase of its own",
+    () async {
+      final seen = await storeIn().install(distro(), abi: "x86_64").toList();
+
+      expect(seen.first.received, 0);
+      expect(seen.last.unpacking, isTrue);
+      expect(seen.map((p) => p.total).toSet(), {tarball.length});
+    },
+  );
+
+  test(
+    "a tarball that is not the one that was checked installs nothing",
+    () async {
+      final store = storeIn();
+
+      await expectLater(
+        store.install(distro(path: "/rubbish"), abi: "x86_64").drain<void>(),
+        throwsA(isA<StateError>()),
       );
 
-  FileRootfsStore storeIn(
-          {Future<ProcessResult> Function(String, String)? tar}) =>
-      tar == null
-          ? FileRootfsStore(p.join(root.path, "rootfs"), client: net)
-          : FileRootfsStore(p.join(root.path, "rootfs"),
-              client: net, tar: tar);
-
-  test("a finished install is unpacked, marked whole, and the tarball is gone",
-      () async {
-    final store = storeIn();
-    final rootfs = distro();
-
-    await store.install(rootfs, abi: "x86_64").drain<void>();
-
-    expect(await store.installed(), {"testix"});
-    final dir = (await store.directoryOf(rootfs))!;
-    expect(store.directoryOfSync("testix"), dir);
-    expect(File(p.join(dir, "_rootfs.tar.gz")).existsSync(), isFalse);
-  });
-
-  test("what tar writes and Dart cannot: the execute bit, and a symlink that is "
-      "still a link", () async {
-    final store = storeIn();
-
-    await store.install(distro(), abi: "x86_64").drain<void>();
-
-    final dir = store.directoryOfSync("testix")!;
-    final busybox = File(p.join(dir, "bin", "busybox"));
-    expect(busybox.statSync().mode & 0x49, isNot(0),
-        reason: "a busybox nothing may execute is a Linux that cannot start");
-    expect(Link(p.join(dir, "bin", "sh")).targetSync(), "busybox");
-  });
-
-  test("it says how far along it is, and that unpacking is a phase of its own",
-      () async {
-    final seen = await storeIn().install(distro(), abi: "x86_64").toList();
-
-    expect(seen.first.received, 0);
-    expect(seen.last.unpacking, isTrue);
-    expect(seen.map((p) => p.total).toSet(), {tarball.length});
-  });
-
-  test("a tarball that is not the one that was checked installs nothing",
-      () async {
-    final store = storeIn();
-
-    await expectLater(
-      store.install(distro(path: "/rubbish"), abi: "x86_64").drain<void>(),
-      throwsA(isA<StateError>()),
-    );
-
-    expect(await store.installed(), isEmpty);
-    expect(Directory(p.join(root.path, "rootfs", "testix")).existsSync(), isFalse);
-  });
+      expect(await store.installed(), isEmpty);
+      expect(
+        Directory(p.join(root.path, "rootfs", "testix")).existsSync(),
+        isFalse,
+      );
+    },
+  );
 
   test("a cancelled download leaves nothing behind", () async {
     final store = storeIn();
@@ -128,13 +143,18 @@ void main() {
     // Under way mid-response: the tarball exists, which the progress stream
     // never says at this size (it reports per megabyte).
     await waitFor(
-        () => File(p.join(root.path, "rootfs", "testix", "_rootfs.tar.gz")).existsSync(),
-        what: "the download to be under way");
+      () => File(
+        p.join(root.path, "rootfs", "testix", "_rootfs.tar.gz"),
+      ).existsSync(),
+      what: "the download to be under way",
+    );
     await sub.cancel();
     // Cancel's future is the teardown's: the half-written download went
     // with the cancellation once its discard had run. Nothing to poll.
-    expect(Directory(p.join(root.path, "rootfs", "testix")).existsSync(),
-        isFalse);
+    expect(
+      Directory(p.join(root.path, "rootfs", "testix")).existsSync(),
+      isFalse,
+    );
 
     expect(await store.installed(), isEmpty);
   });
@@ -149,7 +169,8 @@ void main() {
 
   test("a failed unpack is not an install", () async {
     final store = storeIn(
-        tar: (archive, into) async => ProcessResult(0, 2, "", "tar: broken"));
+      tar: (archive, into) async => ProcessResult(0, 2, "", "tar: broken"),
+    );
 
     await expectLater(
       store.install(distro(), abi: "x86_64").drain<void>(),
@@ -162,8 +183,12 @@ void main() {
   test("what is installed is read off the disk, so nothing has to be recorded "
       "beside it", () async {
     final store = storeIn();
-    Directory(p.join(root.path, "rootfs", "handmade")).createSync(recursive: true);
-    File(p.join(root.path, "rootfs", "handmade", ".complete")).writeAsStringSync("");
+    Directory(
+      p.join(root.path, "rootfs", "handmade"),
+    ).createSync(recursive: true);
+    File(
+      p.join(root.path, "rootfs", "handmade", ".complete"),
+    ).writeAsStringSync("");
     Directory(p.join(root.path, "rootfs", "half")).createSync(recursive: true);
 
     expect(await store.installed(), {"handmade"});

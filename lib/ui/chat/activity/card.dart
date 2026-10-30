@@ -17,10 +17,10 @@ typedef LiveMessage = ({Message? message, String? shellOutput, bool running});
 
 /// Message [id] of [view] as a drawer follows it.
 LiveMessage liveMessageOf(ChatViewState view, String id) => (
-      message: view.chat?.messages.where((m) => m.id == id).firstOrNull,
-      shellOutput: view.shellOutput[id],
-      running: view.isRunning,
-    );
+  message: view.chat?.messages.where((m) => m.id == id).firstOrNull,
+  shellOutput: view.shellOutput[id],
+  running: view.isRunning,
+);
 
 /// Where a label's drawer reads its message from once it is open. The label
 /// cannot be: it is rebuilt per delta, folded into a collapsed run when its
@@ -158,8 +158,9 @@ class _ActivityCardState extends State<ActivityCard> {
 
     Widget body(ActivitySection section, {required bool last}) {
       final style = widget.mono
-          ? codeBlockStyle(theme).copyWith(
-              color: section.isError ? theme.colorScheme.error : null)
+          ? codeBlockStyle(
+              theme,
+            ).copyWith(color: section.isError ? theme.colorScheme.error : null)
           : theme.textTheme.bodyMedium?.copyWith(
               color: section.isError ? theme.colorScheme.error : null,
               height: 1.5,
@@ -167,20 +168,25 @@ class _ActivityCardState extends State<ActivityCard> {
       final caret = live && last && !section.isError;
       final text = caret
           ? Text.rich(
-              TextSpan(text: section.body, children: [
-                WidgetSpan(
-                  alignment: PlaceholderAlignment.middle,
-                  child: StreamingCaret(
-                    color: theme.colorScheme.primary,
-                    height: style?.fontSize ?? 14,
+              TextSpan(
+                text: section.body,
+                children: [
+                  WidgetSpan(
+                    alignment: PlaceholderAlignment.middle,
+                    child: StreamingCaret(
+                      color: theme.colorScheme.primary,
+                      height: style?.fontSize ?? 14,
+                    ),
                   ),
-                ),
-              ]),
+                ],
+              ),
               style: style,
             )
           // The newline output ends on would draw as a blank line under it.
-          : Text(widget.mono ? section.body!.trimRight() : section.body!,
-              style: style);
+          : Text(
+              widget.mono ? section.body!.trimRight() : section.body!,
+              style: style,
+            );
       if (!widget.mono) return text;
       return Container(
         width: double.infinity,
@@ -204,7 +210,8 @@ class _ActivityCardState extends State<ActivityCard> {
                 Text(
                   status.text,
                   style: theme.textTheme.labelMedium?.copyWith(
-                      color: status.isError ? theme.colorScheme.error : muted),
+                    color: status.isError ? theme.colorScheme.error : muted,
+                  ),
                 ),
               const SizedBox(height: 8),
               Flexible(
@@ -222,25 +229,34 @@ class _ActivityCardState extends State<ActivityCard> {
                             children: [
                               if (widget.command case final command?)
                                 Padding(
-                                  padding: const EdgeInsets.only(top: 4, bottom: 4),
+                                  padding: const EdgeInsets.only(
+                                    top: 4,
+                                    bottom: 4,
+                                  ),
                                   child: ShellCommandText(command: command),
                                 ),
                               for (final (i, section) in filled.indexed) ...[
                                 if (section.label != null)
                                   Padding(
-                                    padding: const EdgeInsets.only(top: 16, bottom: 8),
+                                    padding: const EdgeInsets.only(
+                                      top: 16,
+                                      bottom: 8,
+                                    ),
                                     child: SelectionContainer.disabled(
                                       child: Text(
                                         section.label!,
-                                        style: theme.textTheme.labelMedium?.copyWith(
-                                          color: muted,
-                                          fontWeight: FontWeight.w600,
-                                        ),
+                                        style: theme.textTheme.labelMedium
+                                            ?.copyWith(
+                                              color: muted,
+                                              fontWeight: FontWeight.w600,
+                                            ),
                                       ),
                                     ),
                                   ),
-                                body(section,
-                                    last: extra == null && i == filled.length - 1),
+                                body(
+                                  section,
+                                  last: extra == null && i == filled.length - 1,
+                                ),
                               ],
                             ],
                           ),
@@ -258,4 +274,3 @@ class _ActivityCardState extends State<ActivityCard> {
     );
   }
 }
-

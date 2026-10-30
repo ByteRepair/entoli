@@ -41,7 +41,8 @@ void main() {
   }
 
   String? openedChat() => app.container.read(selectedChatIdProvider);
-  String? openedProject() => app.container.read(selectedProjectProvider).project;
+  String? openedProject() =>
+      app.container.read(selectedProjectProvider).project;
 
   testWidgets("nothing opens when the gesture never happened", (tester) async {
     app = TestApp.create();
@@ -52,8 +53,9 @@ void main() {
     expect(openedChat(), was);
   });
 
-  testWidgets("a launch waiting at startup opens the new-chat screen",
-      (tester) async {
+  testWidgets("a launch waiting at startup opens the new-chat screen", (
+    tester,
+  ) async {
     app = TestApp.create();
     await io(tester, app.openSomeChat);
     app.assistant.pending = true;
@@ -63,8 +65,9 @@ void main() {
     expect(openedProject(), isNull);
   });
 
-  testWidgets("a launch arriving while the app is up opens one too",
-      (tester) async {
+  testWidgets("a launch arriving while the app is up opens one too", (
+    tester,
+  ) async {
     app = TestApp.create();
     await start(tester);
     await io(tester, app.openSomeChat);
@@ -77,8 +80,9 @@ void main() {
 
   // Nothing is written by the gesture itself: it says where the chat will go,
   // and the screen it lands on makes one when the first thing is said.
-  testWidgets("the next chat goes to the project the setting names",
-      (tester) async {
+  testWidgets("the next chat goes to the project the setting names", (
+    tester,
+  ) async {
     app = TestApp.create();
     await io(tester, () => app.repo.createProject("research"));
     await launchWith(tester, AppSettings(assistantProject: "research"));
@@ -87,18 +91,21 @@ void main() {
     expect(await io(tester, () => app.store.list()), isEmpty);
   });
 
-  testWidgets("a project that has since been deleted lands in the default one",
-      (tester) async {
-    app = TestApp.create();
-    await launchWith(tester, AppSettings(assistantProject: "gone"));
+  testWidgets(
+    "a project that has since been deleted lands in the default one",
+    (tester) async {
+      app = TestApp.create();
+      await launchWith(tester, AppSettings(assistantProject: "gone"));
 
-    expect(openedProject(), isNull);
-  });
+      expect(openedProject(), isNull);
+    },
+  );
 
   // Nothing is made here either: the page opens on no chat, and the first word
   // is what creates one.
-  testWidgets("the voice view opens voice mode with nothing to speak into yet",
-      (tester) async {
+  testWidgets("the voice view opens voice mode with nothing to speak into yet", (
+    tester,
+  ) async {
     app = TestApp.create(voiceModels: voiceModelIds);
     // Both models picked in the same write as the view: two writes would race,
     // since one goes through the notifier and the other straight to the file.
@@ -120,8 +127,9 @@ void main() {
     expect(await tester.runAsync(() => app.repo.listChats()), isEmpty);
   });
 
-  testWidgets("the voice view with no models offers the settings instead",
-      (tester) async {
+  testWidgets("the voice view with no models offers the settings instead", (
+    tester,
+  ) async {
     app = TestApp.create();
     await launchWith(tester, AppSettings(assistantView: AssistantView.voice));
 
@@ -129,8 +137,9 @@ void main() {
     expect(find.text("Voice mode needs two models"), findsOneWidget);
   });
 
-  testWidgets("the gesture makes a new chat rather than reopening one",
-      (tester) async {
+  testWidgets("the gesture makes a new chat rather than reopening one", (
+    tester,
+  ) async {
     app = TestApp.create();
     final old = await io(tester, () => app.seedChat());
     await start(tester);

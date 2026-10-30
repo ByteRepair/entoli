@@ -38,9 +38,9 @@ class IosVoice extends Voice {
   /// reach the picker.
   @override
   Future<List<VoiceLanguage>> systemLanguages() => nativeLanguages(
-        timeout: const Duration(seconds: 10),
-        failure: "the device would not say what it can hear and speak",
-      );
+    timeout: const Duration(seconds: 10),
+    failure: "the device would not say what it can hear and speak",
+  );
 
   @override
   Future<VoiceSession> start({

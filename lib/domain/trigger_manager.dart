@@ -239,7 +239,8 @@ class TriggerManager {
     for (final id in ids) {
       final trigger = list.triggers.where((t) => t.id == id).firstOrNull;
       if (trigger == null || !_due(trigger, clock.now())) continue;
-      final reason = _kindOf(trigger)?.reasonOf(trigger) ?? "the clock reached its time";
+      final reason =
+          _kindOf(trigger)?.reasonOf(trigger) ?? "the clock reached its time";
       await _fire(TriggerFire(trigger.id, reason));
     }
     // The receiver held the process for these; they are dealt with now, one
@@ -266,8 +267,9 @@ class TriggerManager {
   /// here, where the copy being replaced is the one the fire was decided
   /// on.
   Future<void> _fire(TriggerFire fire) async {
-    final trigger =
-        list.triggers.where((t) => t.id == fire.triggerId).firstOrNull;
+    final trigger = list.triggers
+        .where((t) => t.id == fire.triggerId)
+        .firstOrNull;
     if (trigger == null) return;
     // Claimed before the first await, not after: asking the platform whether
     // it can hold us is a round trip, and two watchers either side of it
@@ -279,8 +281,7 @@ class TriggerManager {
       // than run — the kind knows whether there is one to hand back to.
       if (kind != null && await kind.defer(trigger)) return;
       kind?.ran(trigger);
-      final result =
-          await runner.run(trigger, fire.reason, await projects());
+      final result = await runner.run(trigger, fire.reason, await projects());
       if (result.targetGone) {
         // The chat a trigger pointed at has been deleted (a swept temp chat
         // among them): the trigger is disarmed here rather than left armed
@@ -288,16 +289,16 @@ class TriggerManager {
         // at some other conversation. The runner words the notification; the
         // stamp here is the disarm landing, from the copy this fire
         // decided on, so nothing re-arms what it just switched off.
-        await list.replace(trigger.copyWith(
-            enabled: false, clearNextFireAt: true));
+        await list.replace(
+          trigger.copyWith(enabled: false, clearNextFireAt: true),
+        );
         return;
       }
       final now = clock.now();
       // How late the fire was is said once, from the one nextFireAt the
       // fire was due at — the nudge's and the catch-up's the same, no
       // watcher's race deciding the wording.
-      final late =
-          now.difference(trigger.nextFireAt ?? now) > ClockKind.late;
+      final late = now.difference(trigger.nextFireAt ?? now) > ClockKind.late;
       await alarmPort.notify(
         title: nameOf(trigger),
         body: switch (result.outcome) {
@@ -319,7 +320,9 @@ class TriggerManager {
       final current =
           list.triggers.where((t) => t.id == trigger.id).firstOrNull ?? trigger;
       final fired = current.copyWith(clearNextFireAt: true);
-      await list.replace(next == null ? fired : fired.copyWith(nextFireAt: next));
+      await list.replace(
+        next == null ? fired : fired.copyWith(nextFireAt: next),
+      );
     } finally {
       _runningIds.remove(trigger.id);
     }
@@ -346,25 +349,34 @@ class ChatTriggerRegistry implements TriggerRegistry {
   final String? project;
 
   @override
-  Future<Trigger> register(
-      {required TriggerSource source,
-      required String prompt,
-      String? name,
-      String? member}) async {
+  Future<Trigger> register({
+    required TriggerSource source,
+    required String prompt,
+    String? name,
+    String? member,
+  }) async {
     final library = _owner.libraryFor(project);
     if (member != null && library?.find(CompletionKind.agent, member) == null) {
       throw ArgumentError.value(
-          member, "member", "no agent named $member in this project");
+        member,
+        "member",
+        "no agent named $member in this project",
+      );
     }
-    return _owner.registerFor(chatId,
-        source: source, prompt: prompt, name: name, member: member);
+    return _owner.registerFor(
+      chatId,
+      source: source,
+      prompt: prompt,
+      name: name,
+      member: member,
+    );
   }
 
   @override
   Future<List<Trigger>> own() async => [
-        for (final t in await _owner.triggers())
-          if (t.byAgent && t.chatId == chatId) t,
-      ];
+    for (final t in await _owner.triggers())
+      if (t.byAgent && t.chatId == chatId) t,
+  ];
 
   @override
   Future<void> remove(String id) => _owner.remove(id);
@@ -376,8 +388,13 @@ class ChatTriggerRegistry implements TriggerRegistry {
 /// synchronisation the provider has to invent.
 abstract interface class TriggerRegistryOwner {
   Future<List<Trigger>> triggers();
-  Future<Trigger> registerFor(String chatId,
-      {required TriggerSource source, required String prompt, String? name, String? member});
+  Future<Trigger> registerFor(
+    String chatId, {
+    required TriggerSource source,
+    required String prompt,
+    String? name,
+    String? member,
+  });
 
   /// The named project's libraries — what a registration's member is
   /// checked against, and the list the fire's own library rides. Null is
@@ -388,5 +405,5 @@ abstract interface class TriggerRegistryOwner {
 
 /// What the backend holds: a registry per chat, built where the turn asks
 /// for one — one function rather than an adapter class per layer.
-typedef TriggerRegistryFactory = TriggerRegistry Function(
-    String chatId, String? project);
+typedef TriggerRegistryFactory =
+    TriggerRegistry Function(String chatId, String? project);

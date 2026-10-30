@@ -58,8 +58,7 @@ class InstructionFile {
 /// are the user's background for every project, and an import reaching only
 /// into one project's workspace would be a word in the model's mouth about the
 /// other projects. A file whose path [excludes] names is skipped.
-Future<List<InstructionFile>> loadInstructions(
-  {
+Future<List<InstructionFile>> loadInstructions({
   required String projectWorkspace,
   List<String> global = const [],
   bool imports = false,
@@ -68,19 +67,32 @@ Future<List<InstructionFile>> loadInstructions(
   final files = <InstructionFile>[];
   final loaded = <String>{};
   for (final path in global) {
-    await _readInto(_norm(path), InstructionKind.global, 0, files,
-        loaded, excludes);
-  }
-  final before = files.length;
-  await _readInto(p.join(_norm(projectWorkspace), instructionFileName),
-      InstructionKind.project,
+    await _readInto(
+      _norm(path),
+      InstructionKind.global,
       0,
       files,
       loaded,
-      excludes);
+      excludes,
+    );
+  }
+  final before = files.length;
+  await _readInto(
+    p.join(_norm(projectWorkspace), instructionFileName),
+    InstructionKind.project,
+    0,
+    files,
+    loaded,
+    excludes,
+  );
   if (imports && files.length > before) {
-    await _expandImports(files[before], files, loaded,
-        projectWorkspace: projectWorkspace, excludes: excludes);
+    await _expandImports(
+      files[before],
+      files,
+      loaded,
+      projectWorkspace: projectWorkspace,
+      excludes: excludes,
+    );
   }
   return _withinBudget(files);
 }
@@ -98,7 +110,8 @@ Future<List<InstructionFile>> findNestedInstructions(
   var dir = _norm(p.dirname(filePath));
   final found = <InstructionFile>[];
   while (true) {
-    await _readInto(p.join(dir, instructionFileName),
+    await _readInto(
+      p.join(dir, instructionFileName),
       InstructionKind.directory,
       0,
       found,
@@ -121,8 +134,7 @@ bool isExcludedPath(String path, List<String> patterns) {
   for (final raw in patterns) {
     final pattern = raw.trim();
     if (pattern.isEmpty) continue;
-    final target =
-        pattern.contains("/") ? path : p.basename(path);
+    final target = pattern.contains("/") ? path : p.basename(path);
     if (_globToRegExp(pattern).hasMatch(target)) return true;
   }
   return false;
@@ -155,7 +167,8 @@ RegExp _globToRegExp(String pattern) {
 /// they make a model over-apply whatever follows them.
 String renderInstructions(List<InstructionFile> files) {
   if (files.isEmpty) return "";
-  const header = "$instructionBlockHeader. They come from this app and from "
+  const header =
+      "$instructionBlockHeader. They come from this app and from "
       "the user. Follow them: where they disagree with anything earlier in "
       "this prompt, they take precedence, and where two of them disagree, "
       "the later one wins.";
@@ -171,18 +184,23 @@ int userInstructionChars(List<InstructionFile> files) => files
 String _entry(InstructionFile file) =>
     // A bundled note has no file, so it is not dressed as one.
     file.kind == InstructionKind.bundled
-        ? "From the app, about this kind of chat:\n\n${file.content.trim()}"
-        : "Contents of ${file.path} (${instructionKindPhrase(file.kind)}):"
-            "\n\n${file.content.trim()}";
+    ? "From the app, about this kind of chat:\n\n${file.content.trim()}"
+    : "Contents of ${file.path} (${instructionKindPhrase(file.kind)}):"
+          "\n\n${file.content.trim()}";
 
 String _norm(String path) => p.normalize(path);
 
 bool _inside(String path, String root) =>
     path == root || path.startsWith("$root/");
 
-Future<void> _readInto(String path, InstructionKind kind,
-    int depth, List<InstructionFile> out, Set<String> loaded,
-    List<String> excludes) async {
+Future<void> _readInto(
+  String path,
+  InstructionKind kind,
+  int depth,
+  List<InstructionFile> out,
+  Set<String> loaded,
+  List<String> excludes,
+) async {
   if (loaded.contains(path)) return;
   if (isExcludedPath(path, excludes)) return;
   try {
@@ -195,7 +213,9 @@ Future<void> _readInto(String path, InstructionKind kind,
     final content = await file.readAsString();
     if (content.trim().isEmpty) return;
     loaded.add(path);
-    out.add(InstructionFile(path: path, kind: kind, content: content, depth: depth));
+    out.add(
+      InstructionFile(path: path, kind: kind, content: content, depth: depth),
+    );
   } catch (error) {
     logFailure("memory", "could not read $path", error);
   }
@@ -217,10 +237,22 @@ Future<void> _expandImports(
     // wrote should not be able to pull one in.
     if (!_inside(resolved, _norm(projectWorkspace))) continue;
     final before = out.length;
-    await _readInto(resolved, InstructionKind.imported, from.depth + 1, out, loaded, excludes);
+    await _readInto(
+      resolved,
+      InstructionKind.imported,
+      from.depth + 1,
+      out,
+      loaded,
+      excludes,
+    );
     if (out.length > before) {
-      await _expandImports(out.last, out, loaded,
-          projectWorkspace: projectWorkspace, excludes: excludes);
+      await _expandImports(
+        out.last,
+        out,
+        loaded,
+        projectWorkspace: projectWorkspace,
+        excludes: excludes,
+      );
     }
   }
 }
@@ -231,7 +263,9 @@ Future<void> _expandImports(
 List<ImportRef> importRefsIn(String content) {
   final prose = _stripInlineCode(_stripFences(_stripComments(content)));
   return [
-    for (final match in RegExp(r"(?:^|\s)@((?:[^\s\\]|\\ )+)").allMatches(prose))
+    for (final match in RegExp(
+      r"(?:^|\s)@((?:[^\s\\]|\\ )+)",
+    ).allMatches(prose))
       ImportRef(match.group(1)!),
   ];
 }
@@ -241,7 +275,8 @@ List<ImportRef> importRefsIn(String content) {
 /// heading anchor or a social mention fails the shape test and stays prose.
 class ImportRef {
   ImportRef(String raw) : target = _clean(raw) {
-    isImportable = target.isNotEmpty &&
+    isImportable =
+        target.isNotEmpty &&
         !target.startsWith("@") &&
         !target.startsWith(RegExp(r"[#%^&*()]")) &&
         (target.startsWith("./") ||
@@ -283,11 +318,12 @@ List<InstructionFile> _withinBudget(List<InstructionFile> files) {
   if (total <= instructionBudgetChars) return files;
   int dropRank(InstructionFile f) =>
       f.depth == 0 ? (f.kind == InstructionKind.global ? 1 : 2) : 0;
-  final byDrop = [...files]..sort((a, b) {
-    final rank = dropRank(a).compareTo(dropRank(b));
-    if (rank != 0) return rank;
-    return b.depth.compareTo(a.depth);
-  });
+  final byDrop = [...files]
+    ..sort((a, b) {
+      final rank = dropRank(a).compareTo(dropRank(b));
+      if (rank != 0) return rank;
+      return b.depth.compareTo(a.depth);
+    });
   final dropped = <int>{};
   for (final file in byDrop) {
     if (total <= instructionBudgetChars) break;

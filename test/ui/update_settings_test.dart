@@ -35,13 +35,17 @@ void main() {
     expect(find.text("Update"), findsNothing);
   });
 
-  testWidgets("the switch is the setting, written only when off",
-      (tester) async {
+  testWidgets("the switch is the setting, written only when off", (
+    tester,
+  ) async {
     app = TestApp.create(updateHost: FakeAppUpdateHost(available: true));
     await pumpSettings(tester, app, SettingsCategory.general);
     await scrollTo(tester, find.text("Automatically update"));
-    expect(AppSettings.load(app.config).autoUpdate, isTrue,
-        reason: "on is the default, and what nothing written means");
+    expect(
+      AppSettings.load(app.config).autoUpdate,
+      isTrue,
+      reason: "on is the default, and what nothing written means",
+    );
 
     await tester.tap(find.text("Automatically update"));
     await settleIo(tester);
@@ -54,7 +58,9 @@ void main() {
     expect(AppSettings.load(app.config).autoUpdate, isTrue);
     // Back on is not written: a file the switch leaves says nothing about it
     // and gets the on default, the way every off-defaulting bool here reads.
-    expect(app.config.documents.read(app.config.settingsFile),
-        isNot(contains("autoUpdate")));
+    expect(
+      app.config.documents.read(app.config.settingsFile),
+      isNot(contains("autoUpdate")),
+    );
   });
 }

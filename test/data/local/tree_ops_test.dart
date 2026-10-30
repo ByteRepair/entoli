@@ -57,38 +57,50 @@ void main() {
     return base;
   }
 
-  test("copyTree leaves the bind stubs behind and keeps what a rootfs is",
-      () async {
-    final base = await seededRootfs();
-    final target = p.join(scratch.path, "target");
+  test(
+    "copyTree leaves the bind stubs behind and keeps what a rootfs is",
+    () async {
+      final base = await seededRootfs();
+      final target = p.join(scratch.path, "target");
 
-    final err = await copyTree(base, target);
+      final err = await copyTree(base, target);
 
-    expect(err, isNull);
-    // The stubs are excluded: nothing at those paths is reachable in the
-    // guest, because the binds shadow them — a project's own two included,
-    // since the stub lands wherever its project's command ran, the shared
-    // base rootfs included, which is what a setup copies from.
-    expect(FileSystemEntity.typeSync(p.join(target, "opt", "skills")),
-        FileSystemEntityType.notFound);
-    expect(FileSystemEntity.typeSync(p.join(target, "opt", "skills-bundled")),
-        FileSystemEntityType.notFound);
-    expect(FileSystemEntity.typeSync(p.join(target, "opt", "skills-project")),
-        FileSystemEntityType.notFound);
-    expect(
+      expect(err, isNull);
+      // The stubs are excluded: nothing at those paths is reachable in the
+      // guest, because the binds shadow them — a project's own two included,
+      // since the stub lands wherever its project's command ran, the shared
+      // base rootfs included, which is what a setup copies from.
+      expect(
+        FileSystemEntity.typeSync(p.join(target, "opt", "skills")),
+        FileSystemEntityType.notFound,
+      );
+      expect(
+        FileSystemEntity.typeSync(p.join(target, "opt", "skills-bundled")),
+        FileSystemEntityType.notFound,
+      );
+      expect(
+        FileSystemEntity.typeSync(p.join(target, "opt", "skills-project")),
+        FileSystemEntityType.notFound,
+      );
+      expect(
         FileSystemEntity.typeSync(
-            p.join(target, "opt", "skills-bundled-project")),
-        FileSystemEntityType.notFound);
-    expect(FileSystemEntity.typeSync(p.join(target, "etc", "resolv.conf")),
-        FileSystemEntityType.notFound);
-    // The symlink stays a link, the execute bit survives the trip, and a
-    // read-only directory arrives read-only.
-    expect(Link(p.join(target, "bin", "sh")).existsSync(), isTrue);
-    final busybox = File(p.join(target, "bin", "busybox")).statSync();
-    expect(busybox.mode & 0x49, 0x49);
-    final dir = Directory(p.join(target, "etc", "dir")).statSync();
-    expect(dir.mode & 0x92, 0);
-  });
+          p.join(target, "opt", "skills-bundled-project"),
+        ),
+        FileSystemEntityType.notFound,
+      );
+      expect(
+        FileSystemEntity.typeSync(p.join(target, "etc", "resolv.conf")),
+        FileSystemEntityType.notFound,
+      );
+      // The symlink stays a link, the execute bit survives the trip, and a
+      // read-only directory arrives read-only.
+      expect(Link(p.join(target, "bin", "sh")).existsSync(), isTrue);
+      final busybox = File(p.join(target, "bin", "busybox")).statSync();
+      expect(busybox.mode & 0x49, 0x49);
+      final dir = Directory(p.join(target, "etc", "dir")).statSync();
+      expect(dir.mode & 0x92, 0);
+    },
+  );
 
   test("copyTree starts over whatever an earlier attempt left", () async {
     final base = await seededRootfs();

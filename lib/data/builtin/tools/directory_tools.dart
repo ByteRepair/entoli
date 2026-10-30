@@ -44,7 +44,8 @@ class AddDirectoryTool extends AgentTool {
   bool get offered => offer.caps.ask && !offer.oneShot;
 
   @override
-  String get description => "Request persistent write access to a directory "
+  String get description =>
+      "Request persistent write access to a directory "
       "outside the workspace, when the task needs write access there "
       "repeatedly. One approval covers the directory, so writes in it "
       "afterwards run without asking. Call this when the user has indicated "
@@ -55,45 +56,56 @@ class AddDirectoryTool extends AgentTool {
 
   @override
   Map<String, dynamic> get schema => const {
-        "type": "object",
-        "properties": {
-          "path": {
-            "type": "string",
-            "description": "The directory to request write access to: an "
-                "absolute path, or one starting with ~ for the machine's "
-                "home. A directory, not a file.",
-          },
-        },
-        "required": ["path"],
-      };
+    "type": "object",
+    "properties": {
+      "path": {
+        "type": "string",
+        "description":
+            "The directory to request write access to: an "
+            "absolute path, or one starting with ~ for the machine's "
+            "home. A directory, not a file.",
+      },
+    },
+    "required": ["path"],
+  };
 
   @override
   Stream<AgentEvent> run(LlmToolCall call, Turn turn) async* {
     final path = stringArg(call.argumentsJson, "path");
     if (path == null) {
       yield* toolRejected(
-          call,
-          'The $addDirectoryName tool takes {"path": "..."}; that argument '
-          "was missing.");
+        call,
+        'The $addDirectoryName tool takes {"path": "..."}; that argument '
+        "was missing.",
+      );
       return;
     }
     yield toolCalled(call, path);
     final resolved = turn.resolvePath(path);
     final type = FileSystemEntity.typeSync(resolved);
     if (type == FileSystemEntityType.notFound) {
-      yield toolFailed(call, "Directory not found: $resolved. "
-          "Create it first, then ask again.");
+      yield toolFailed(
+        call,
+        "Directory not found: $resolved. "
+        "Create it first, then ask again.",
+      );
       return;
     }
     if (type != FileSystemEntityType.directory) {
-      yield toolFailed(call, "$resolved is not a directory. The grant covers a "
-          "directory and everything under it; ask again with the directory "
-          "the work belongs in.");
+      yield toolFailed(
+        call,
+        "$resolved is not a directory. The grant covers a "
+        "directory and everything under it; ask again with the directory "
+        "the work belongs in.",
+      );
       return;
     }
     if (!outsideWorkspaces(resolved, turn.workspace, turn.projectWorkspace)) {
-      yield toolOk(call, "$resolved is inside the workspaces, and writes there "
-          "are already allowed. Nothing was granted.");
+      yield toolOk(
+        call,
+        "$resolved is inside the workspaces, and writes there "
+        "are already allowed. Nothing was granted.",
+      );
       return;
     }
     // The tree either way — beneath it is the app's own data, containing it
@@ -103,8 +115,11 @@ class AddDirectoryTool extends AgentTool {
     // dir.
     final dataDir = turn.dataDir;
     if (dataDir != null && pathsOverlap(resolved, dataDir)) {
-      yield toolFailed(call, "$resolved holds this app's own data, or lies "
-          "inside it, which is not grantable. Choose a directory outside it.");
+      yield toolFailed(
+        call,
+        "$resolved holds this app's own data, or lies "
+        "inside it, which is not grantable. Choose a directory outside it.",
+      );
       return;
     }
     // The banner names the resolved path — the real directory is what a yes
@@ -120,45 +135,53 @@ class AddDirectoryTool extends AgentTool {
     yield ApprovalRequestEvent(approval);
     final answer = await turn.gate.approve(approval);
     if (!answer.isAllow) {
-      yield ToolResultEvent(toolRan(
+      yield ToolResultEvent(
+        toolRan(
           call,
           ShellResult.failed(
-              "Denied. Write access to $resolved was not granted; carry on "
-              "with the task — writes in that folder keep raising the "
-              "ordinary per-write approval. Do not call $addDirectoryName "
-              "again this turn."),
+            "Denied. Write access to $resolved was not granted; carry on "
+            "with the task — writes in that folder keep raising the "
+            "ordinary per-write approval. Do not call $addDirectoryName "
+            "again this turn.",
+          ),
           decision: (
             source: PermissionSource.human,
             tiers: const [PermissionTier.once],
             decided: PermissionDecision.deny,
-          )));
+          ),
+        ),
+      );
       return;
     }
     turn.gate.grant([resolved]);
     final (tiers, wording) = switch (answer) {
       ApprovalResponse.alwaysAllowChat => (
-          const [PermissionTier.chat],
-          "Allowed in this chat: the grant is saved with the conversation, so "
-              "writes in $resolved run without asking here.",
-        ),
+        const [PermissionTier.chat],
+        "Allowed in this chat: the grant is saved with the conversation, so "
+            "writes in $resolved run without asking here.",
+      ),
       ApprovalResponse.alwaysAllowProject => (
-          const [PermissionTier.project],
-          "Allowed for this project: the grant is saved with the project, so "
-              "writes in $resolved run without asking in the project's chats.",
-        ),
+        const [PermissionTier.project],
+        "Allowed for this project: the grant is saved with the project, so "
+            "writes in $resolved run without asking in the project's chats.",
+      ),
       _ => (
-          const <PermissionTier>[],
-          "Allowed for the rest of this turn: writes in $resolved run without "
-              "asking until the turn ends.",
-        ),
+        const <PermissionTier>[],
+        "Allowed for the rest of this turn: writes in $resolved run without "
+            "asking until the turn ends.",
+      ),
     };
-    yield ToolResultEvent(toolRan(
-        call, ShellResult(returnCode: 0, output: wording),
+    yield ToolResultEvent(
+      toolRan(
+        call,
+        ShellResult(returnCode: 0, output: wording),
         decision: (
           source: PermissionSource.human,
           tiers: tiers,
           decided: PermissionDecision.allow,
-        )));
+        ),
+      ),
+    );
   }
 }
 
@@ -177,21 +200,20 @@ class WritableDirectoriesTool extends AgentTool {
   String get name => writableDirectoriesName;
 
   @override
-  String get description => "List the directories outside the workspaces "
+  String get description =>
+      "List the directories outside the workspaces "
       "that this chat or project has been granted write access to, plus the "
       "workspaces themselves.";
 
   @override
-  Map<String, dynamic> get schema =>
-      const {"type": "object", "properties": {}};
+  Map<String, dynamic> get schema => const {"type": "object", "properties": {}};
 
   @override
   Stream<AgentEvent> run(LlmToolCall call, Turn turn) async* {
     yield toolCalled(call);
     final dirs = [
       for (final dir in (await turn.gate.permissions()).writableDirs.toSet())
-        if (outsideWorkspaces(dir, turn.workspace, turn.projectWorkspace))
-          dir,
+        if (outsideWorkspaces(dir, turn.workspace, turn.projectWorkspace)) dir,
     ]..sort();
     final home = turn.shell.homeFor(turn.projectWorkspace);
     final lines = [

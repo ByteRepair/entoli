@@ -22,10 +22,12 @@ import "../harness.dart";
 const _letterboxMd =
     "---\nname: letterbox\ndescription: frames the reply\n---\n\nFrame it.\n";
 
-Uint8List letterboxPackage() => packageSkillBytes(SkillPackage("letterbox", [
-      ("SKILL.md", Uint8List.fromList(utf8.encode(_letterboxMd))),
-      ("references/tone.md", Uint8List.fromList(utf8.encode("calm\n"))),
-    ]));
+Uint8List letterboxPackage() => packageSkillBytes(
+  SkillPackage("letterbox", [
+    ("SKILL.md", Uint8List.fromList(utf8.encode(_letterboxMd))),
+    ("references/tone.md", Uint8List.fromList(utf8.encode("calm\n"))),
+  ]),
+);
 
 /// An agent's PROMPT.md, frontmatter and body, as the site serves it.
 const _diaryPrompt = """---
@@ -80,9 +82,9 @@ void main() {
 
   /// The path of one raw file of the remote fixtures' source repository, at
   /// the ref their location records name.
-  String rawPath(String dir, String file) =>
-      Uri.parse("https://raw.githubusercontent.com/$upstreamRepo/main/$dir/$file")
-          .path;
+  String rawPath(String dir, String file) => Uri.parse(
+    "https://raw.githubusercontent.com/$upstreamRepo/main/$dir/$file",
+  ).path;
 
   /// An index naming one skill and one agent, and the files both answer.
   /// [skillPackageBody] stands in for the `.skill` bytes where a test wants
@@ -94,7 +96,8 @@ void main() {
     String? skillPackageBody,
     bool agentPicture = true,
   }) => {
-        indexPath(CompletionKind.skill): [utf8.encode("""{
+    indexPath(CompletionKind.skill): [
+      utf8.encode("""{
   "letterbox": {
     "name": "letterbox",
     "description": "Frames the reply.",
@@ -109,8 +112,10 @@ void main() {
     "version": "2.0.0",
     "tags": ["external"]
   }
-}""")],
-        indexPath(CompletionKind.agent): [utf8.encode("""{
+}"""),
+    ],
+    indexPath(CompletionKind.agent): [
+      utf8.encode("""{
   "diary": {
     "name": "diary",
     "description": "Keeps a diary of what was done.",
@@ -122,27 +127,33 @@ void main() {
     "author": "The Upstream Authors",
     "tags": ["external"]
   }
-}""")],
-        extIndexPath(CompletionKind.skill): [utf8.encode("""{
+}"""),
+    ],
+    extIndexPath(CompletionKind.skill): [
+      utf8.encode("""{
   "upstream/red-letter": {
     "repo": "$upstreamRepo",
     "dir": "$upstreamSkillDir",
     "files": ["README.md", "SKILL.md", "references/tone.md"],
     "ref": "main"
   }
-}""")],
-        extIndexPath(CompletionKind.agent): [utf8.encode("""{
+}"""),
+    ],
+    extIndexPath(CompletionKind.agent): [
+      utf8.encode("""{
   "upstream/letter-writer": {
     "repo": "$upstreamRepo",
     "dir": "$upstreamAgentDir",
     "files": ["PROMPT.md", "README.md", "profile.png"],
     "ref": "main"
   }
-}""")],
-        rawPath(upstreamSkillDir, "README.md"): [
-          utf8.encode("# Red letter\n\nFrom upstream.\n")
-        ],
-        rawPath(upstreamSkillDir, "SKILL.md"): [utf8.encode("""---
+}"""),
+    ],
+    rawPath(upstreamSkillDir, "README.md"): [
+      utf8.encode("# Red letter\n\nFrom upstream.\n"),
+    ],
+    rawPath(upstreamSkillDir, "SKILL.md"): [
+      utf8.encode("""---
 name: red-letter
 description: Frames the reply from upstream.
 metadata:
@@ -150,35 +161,34 @@ metadata:
 ---
 
 Frame it, from upstream.
-""")],
-        rawPath(upstreamSkillDir, "references/tone.md"): [
-          utf8.encode("calm\n")
-        ],
-        rawPath(upstreamAgentDir, "PROMPT.md"): [utf8.encode(_upstreamPrompt)],
-        rawPath(upstreamAgentDir, "README.md"): [
-          utf8.encode("# Letter writer\n\nWrites letters.\n")
-        ],
-        rawPath(upstreamAgentDir, "profile.png"): [onePixelPng],
-        entryPath(CompletionKind.skill, "letterbox", "README.md"): [
-          utf8.encode("# Letterbox\n\nFrames the reply.\n")
-        ],
-        // The `.skill` the build serves — beside the entry's directories, at
-        // the section root. The fixture's real package, or a body a test
-        // asks to stand in for a malformed one.
-        packagePath(CompletionKind.skill, "letterbox"): [
-          skillPackageBody != null
-              ? utf8.encode(skillPackageBody)
-              : letterboxPackage(),
-        ],
-        entryPath(CompletionKind.agent, "diary", "README.md"): [
-          utf8.encode("# Diary\n\nKeeps a diary.\n")
-        ],
-        entryPath(CompletionKind.agent, "diary", "PROMPT.md"): [
-          utf8.encode(_diaryPrompt)
-        ],
-        if (agentPicture)
-          entryPath(CompletionKind.agent, "diary", "profile.png"): [onePixelPng],
-      };
+"""),
+    ],
+    rawPath(upstreamSkillDir, "references/tone.md"): [utf8.encode("calm\n")],
+    rawPath(upstreamAgentDir, "PROMPT.md"): [utf8.encode(_upstreamPrompt)],
+    rawPath(upstreamAgentDir, "README.md"): [
+      utf8.encode("# Letter writer\n\nWrites letters.\n"),
+    ],
+    rawPath(upstreamAgentDir, "profile.png"): [onePixelPng],
+    entryPath(CompletionKind.skill, "letterbox", "README.md"): [
+      utf8.encode("# Letterbox\n\nFrames the reply.\n"),
+    ],
+    // The `.skill` the build serves — beside the entry's directories, at
+    // the section root. The fixture's real package, or a body a test
+    // asks to stand in for a malformed one.
+    packagePath(CompletionKind.skill, "letterbox"): [
+      skillPackageBody != null
+          ? utf8.encode(skillPackageBody)
+          : letterboxPackage(),
+    ],
+    entryPath(CompletionKind.agent, "diary", "README.md"): [
+      utf8.encode("# Diary\n\nKeeps a diary.\n"),
+    ],
+    entryPath(CompletionKind.agent, "diary", "PROMPT.md"): [
+      utf8.encode(_diaryPrompt),
+    ],
+    if (agentPicture)
+      entryPath(CompletionKind.agent, "diary", "profile.png"): [onePixelPng],
+  };
 
   /// Pumps the marketplace over the faked site, giving the fetches the real
   /// time they wait on. The pump itself is run inside `runAsync` because the
@@ -200,12 +210,14 @@ Frame it, from upstream.
     WidgetTester tester, {
     String? skillPackageBody,
     bool agentPicture = true,
-  }) =>
-      pumpMarket(tester, const MarketplacePage(),
-          bodies: site(
-            skillPackageBody: skillPackageBody,
-            agentPicture: agentPicture,
-          ));
+  }) => pumpMarket(
+    tester,
+    const MarketplacePage(),
+    bodies: site(
+      skillPackageBody: skillPackageBody,
+      agentPicture: agentPicture,
+    ),
+  );
 
   /// Opens an entry's preview and settles it — the list's settle, the tab
   /// flip where there is one, the tap, then a wait for [until], defaulting
@@ -225,11 +237,12 @@ Frame it, from upstream.
     }
     await tester.tap(find.text(slug));
     await pumpUntil(
-        tester,
-        until ??
-            find.text(kind == CompletionKind.skill
-                ? "Install skill"
-                : "Install agent"));
+      tester,
+      until ??
+          find.text(
+            kind == CompletionKind.skill ? "Install skill" : "Install agent",
+          ),
+    );
     await settleIo(tester);
   }
 
@@ -361,8 +374,9 @@ Frame it, from upstream.
     expect(find.text("The marketplace has nothing here yet."), findsOneWidget);
   });
 
-  testWidgets("the sidebar opens it from the tile below Profile",
-      (tester) async {
+  testWidgets("the sidebar opens it from the tile below Profile", (
+    tester,
+  ) async {
     await pumpMarket(
       tester,
       Scaffold(
@@ -388,11 +402,14 @@ Frame it, from upstream.
     // The marketplace tile sits between Profile and Settings in the bottom
     // block, which is what "below Profile" is.
     final tiles = tester
-        .widgetList<Text>(find.descendant(
-          of: find.byType(Sidebar),
-          matching:
-              find.textContaining(RegExp("^(Profile|Marketplace|Settings)\$")),
-        ))
+        .widgetList<Text>(
+          find.descendant(
+            of: find.byType(Sidebar),
+            matching: find.textContaining(
+              RegExp("^(Profile|Marketplace|Settings)\$"),
+            ),
+          ),
+        )
         .map((t) => t.data)
         .toList();
     expect(tiles.indexOf("Profile") < tiles.indexOf("Marketplace"), isTrue);
@@ -403,99 +420,119 @@ Frame it, from upstream.
     expect(find.text("Skills"), findsWidgets);
   });
 
-  testWidgets("a skill's preview renders the README and installs the whole directory",
-      (tester) async {
-    await pumpList(tester);
-    await settleIo(tester);
-    // The list row's own meta line, before the push — both renderings assert.
-    expect(find.text("Entoli Team · v1.0.0 · layout"), findsOneWidget);
-    await openEntry(tester, kind: CompletionKind.skill, slug: "letterbox");
+  testWidgets(
+    "a skill's preview renders the README and installs the whole directory",
+    (tester) async {
+      await pumpList(tester);
+      await settleIo(tester);
+      // The list row's own meta line, before the push — both renderings assert.
+      expect(find.text("Entoli Team · v1.0.0 · layout"), findsOneWidget);
+      await openEntry(tester, kind: CompletionKind.skill, slug: "letterbox");
 
-    // The README, drawn as the entry's long description — the meta line the
-    // list row drew before the push is the one the preview renders now; the
-    // list itself sits behind the opaque route, skipped by the finders.
-    expect(find.text("Letterbox"), findsOneWidget);
-    expect(find.text("Entoli Team · v1.0.0 · layout"), findsOneWidget);
-    // The files the package carries beside SKILL.md.
-    expect(find.text("references/tone.md"), findsOneWidget);
+      // The README, drawn as the entry's long description — the meta line the
+      // list row drew before the push is the one the preview renders now; the
+      // list itself sits behind the opaque route, skipped by the finders.
+      expect(find.text("Letterbox"), findsOneWidget);
+      expect(find.text("Entoli Team · v1.0.0 · layout"), findsOneWidget);
+      // The files the package carries beside SKILL.md.
+      expect(find.text("references/tone.md"), findsOneWidget);
 
-    await tester.tap(find.text("Install skill"));
-    await settleIo(tester, least: 20, tries: 80);
+      await tester.tap(find.text("Install skill"));
+      await settleIo(tester, least: 20, tries: 80);
 
-    final dir = p.join(app!.config.promptsDir(CompletionKind.skill), "letterbox");
-    expect(File(p.join(dir, "SKILL.md")).existsSync(), isTrue);
-    expect(File(p.join(dir, "references", "tone.md")).existsSync(), isTrue);
-    expect(File(p.join(dir, "SKILL.md")).readAsStringSync(), _letterboxMd);
+      final dir = p.join(
+        app!.config.promptsDir(CompletionKind.skill),
+        "letterbox",
+      );
+      expect(File(p.join(dir, "SKILL.md")).existsSync(), isTrue);
+      expect(File(p.join(dir, "references", "tone.md")).existsSync(), isTrue);
+      expect(File(p.join(dir, "SKILL.md")).readAsStringSync(), _letterboxMd);
 
-    // Back to the list once it has installed.
-    expect(find.text("Install skill"), findsNothing);
-    expect(find.text("letterbox"), findsOneWidget);
-  });
+      // Back to the list once it has installed.
+      expect(find.text("Install skill"), findsNothing);
+      expect(find.text("letterbox"), findsOneWidget);
+    },
+  );
 
   // Seeded before any install runs: on Linux the install path leaves the
   // skills directory read-only, so the file the replace drops has to be
   // written before the app lays the directory down.
-  testWidgets("installing over an existing skill asks first, and Replace replaces",
-      (tester) async {
-    await pumpList(tester);
-    await settleIo(tester);
+  testWidgets(
+    "installing over an existing skill asks first, and Replace replaces",
+    (tester) async {
+      await pumpList(tester);
+      await settleIo(tester);
 
-    // Seeded after the page pumps: on Linux an install lands its directory
-    // read-only again, so the file the replace drops must predate any install.
-    final dir = p.join(app!.config.promptsDir(CompletionKind.skill), "letterbox");
-    Directory(dir).createSync(recursive: true);
-    File(p.join(dir, "SKILL.md")).writeAsStringSync("old\n");
-    File(p.join(dir, "obsolete.sh")).writeAsStringSync("old\n");
+      // Seeded after the page pumps: on Linux an install lands its directory
+      // read-only again, so the file the replace drops must predate any install.
+      final dir = p.join(
+        app!.config.promptsDir(CompletionKind.skill),
+        "letterbox",
+      );
+      Directory(dir).createSync(recursive: true);
+      File(p.join(dir, "SKILL.md")).writeAsStringSync("old\n");
+      File(p.join(dir, "obsolete.sh")).writeAsStringSync("old\n");
 
-    await openEntry(tester, kind: CompletionKind.skill, slug: "letterbox");
+      await openEntry(tester, kind: CompletionKind.skill, slug: "letterbox");
 
-    await tester.tap(find.text("Install skill"));
-    await pumpUntil(tester, find.text("Replace"));
-    await tester.tap(find.text("Replace"));
-    await settleIo(tester, least: 20, tries: 80);
-
-    // The replace was wholesale: the dropped file is gone, the rest rewritten.
-    expect(File(p.join(dir, "obsolete.sh")).existsSync(), isFalse);
-    expect(File(p.join(dir, "SKILL.md")).readAsStringSync(), _letterboxMd);
-    expect(File(p.join(dir, "references", "tone.md")).existsSync(), isTrue);
-  });
-
-    testWidgets("an agent with no picture installs the prompt alone",
-        (tester) async {
-      await pumpList(tester, agentPicture: false);
-      await openEntry(tester, kind: CompletionKind.agent, slug: "diary");
-
-      expect(find.byType(Image), findsNothing);
-
-      await tester.tap(find.text("Install agent"));
+      await tester.tap(find.text("Install skill"));
+      await pumpUntil(tester, find.text("Replace"));
+      await tester.tap(find.text("Replace"));
       await settleIo(tester, least: 20, tries: 80);
 
-      final agentsDir = app!.config.promptsDir(CompletionKind.agent);
-      expect(File(p.join(agentsDir, "diary.md")).readAsStringSync(), _diaryPrompt);
-      // No picture served, none written.
-      expect(File(p.join(agentsDir, "diary.png")).existsSync(), isFalse);
-    });
+      // The replace was wholesale: the dropped file is gone, the rest rewritten.
+      expect(File(p.join(dir, "obsolete.sh")).existsSync(), isFalse);
+      expect(File(p.join(dir, "SKILL.md")).readAsStringSync(), _letterboxMd);
+      expect(File(p.join(dir, "references", "tone.md")).existsSync(), isTrue);
+    },
+  );
 
-  testWidgets("an agent's preview shows the picture and installs prompt and picture",
-      (tester) async {
-    await pumpList(tester);
+  testWidgets("an agent with no picture installs the prompt alone", (
+    tester,
+  ) async {
+    await pumpList(tester, agentPicture: false);
     await openEntry(tester, kind: CompletionKind.agent, slug: "diary");
 
-    expect(find.text("Diary"), findsOneWidget);
-    expect(find.text("Keeps a diary of what was done."), findsOneWidget);
-    // The picture served beside the prompt is the preview's face.
-    expect(find.byType(Image), findsOneWidget);
+    expect(find.byType(Image), findsNothing);
 
     await tester.tap(find.text("Install agent"));
     await settleIo(tester, least: 20, tries: 80);
 
     final agentsDir = app!.config.promptsDir(CompletionKind.agent);
-    expect(File(p.join(agentsDir, "diary.md")).readAsStringSync(), _diaryPrompt);
-    expect(File(p.join(agentsDir, "diary.png")).existsSync(), isTrue);
+    expect(
+      File(p.join(agentsDir, "diary.md")).readAsStringSync(),
+      _diaryPrompt,
+    );
+    // No picture served, none written.
+    expect(File(p.join(agentsDir, "diary.png")).existsSync(), isFalse);
   });
 
-  testWidgets("a remote skill previews out of its source and installs whole",
-      (tester) async {
+  testWidgets(
+    "an agent's preview shows the picture and installs prompt and picture",
+    (tester) async {
+      await pumpList(tester);
+      await openEntry(tester, kind: CompletionKind.agent, slug: "diary");
+
+      expect(find.text("Diary"), findsOneWidget);
+      expect(find.text("Keeps a diary of what was done."), findsOneWidget);
+      // The picture served beside the prompt is the preview's face.
+      expect(find.byType(Image), findsOneWidget);
+
+      await tester.tap(find.text("Install agent"));
+      await settleIo(tester, least: 20, tries: 80);
+
+      final agentsDir = app!.config.promptsDir(CompletionKind.agent);
+      expect(
+        File(p.join(agentsDir, "diary.md")).readAsStringSync(),
+        _diaryPrompt,
+      );
+      expect(File(p.join(agentsDir, "diary.png")).existsSync(), isTrue);
+    },
+  );
+
+  testWidgets("a remote skill previews out of its source and installs whole", (
+    tester,
+  ) async {
     await pumpList(tester);
     await settleIo(tester);
     // Its row is the ext record's join; the name the row shows is the entry's.
@@ -511,7 +548,10 @@ Frame it, from upstream.
     await settleIo(tester, least: 20, tries: 80);
 
     // The whole of the listed directory lands under the frontmatter's name.
-    final dir = p.join(app!.config.promptsDir(CompletionKind.skill), "red-letter");
+    final dir = p.join(
+      app!.config.promptsDir(CompletionKind.skill),
+      "red-letter",
+    );
     expect(File(p.join(dir, "SKILL.md")).existsSync(), isTrue);
     expect(File(p.join(dir, "README.md")).existsSync(), isTrue);
     expect(File(p.join(dir, "references", "tone.md")).existsSync(), isTrue);
@@ -530,13 +570,16 @@ Frame it, from upstream.
 
     // The file name is the remote directory's — the ext key's last segment.
     final agentsDir = app!.config.promptsDir(CompletionKind.agent);
-    expect(File(p.join(agentsDir, "letter-writer.md")).readAsStringSync(),
-        _upstreamPrompt);
+    expect(
+      File(p.join(agentsDir, "letter-writer.md")).readAsStringSync(),
+      _upstreamPrompt,
+    );
     expect(File(p.join(agentsDir, "letter-writer.png")).existsSync(), isTrue);
   });
 
-  testWidgets("a listing gone stale against its source refuses at the button",
-      (tester) async {
+  testWidgets("a listing gone stale against its source refuses at the button", (
+    tester,
+  ) async {
     // A file the ext record names, the repository does not answer with.
     final bodies = site()
       ..remove(rawPath(upstreamSkillDir, "references/tone.md"));
@@ -550,12 +593,16 @@ Frame it, from upstream.
 
     expect(find.text("Install skill"), findsNothing);
     expect(find.textContaining("stale against the source"), findsOneWidget);
-    final dir = p.join(app!.config.promptsDir(CompletionKind.skill), "red-letter");
+    final dir = p.join(
+      app!.config.promptsDir(CompletionKind.skill),
+      "red-letter",
+    );
     expect(Directory(dir).existsSync(), isFalse);
   });
 
-  testWidgets("a malformed ext index is an unreachable marketplace",
-      (tester) async {
+  testWidgets("a malformed ext index is an unreachable marketplace", (
+    tester,
+  ) async {
     await pumpMarket(
       tester,
       const MarketplacePage(),
@@ -565,7 +612,7 @@ Frame it, from upstream.
         extIndexPath(CompletionKind.skill): [
           utf8.encode("""{
   "upstream": {"repo": "$upstreamRepo"}
-}""")
+}"""),
         ],
         extIndexPath(CompletionKind.agent): [utf8.encode("{}")],
       },
@@ -574,8 +621,9 @@ Frame it, from upstream.
     expect(find.text("Could not reach the marketplace."), findsOneWidget);
   });
 
-  testWidgets("a package the intake refuses is said so, and nothing lands",
-      (tester) async {
+  testWidgets("a package the intake refuses is said so, and nothing lands", (
+    tester,
+  ) async {
     // Not a zip: the same bytes the .skill import refuses a picked file for.
     // The parse runs at load now, so the refusal is on the page — where the
     // install button would be dead — and the press never happens.
@@ -590,7 +638,10 @@ Frame it, from upstream.
     // No Install offered, the parser's reason where it would have been.
     expect(find.text("Install skill"), findsNothing);
     expect(find.textContaining("there is no SKILL.md in it"), findsOneWidget);
-    final dir = p.join(app!.config.promptsDir(CompletionKind.skill), "letterbox");
+    final dir = p.join(
+      app!.config.promptsDir(CompletionKind.skill),
+      "letterbox",
+    );
     expect(Directory(dir).existsSync(), isFalse);
   });
 

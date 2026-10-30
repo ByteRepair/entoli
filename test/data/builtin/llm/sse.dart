@@ -34,7 +34,8 @@ http.StreamedResponse anthropicSse(List<Map<String, Object?>> events) {
 }
 
 /// A response that is not an event stream at all, for the failure paths.
-http.StreamedResponse errorResponse(int status, Object body) => http.StreamedResponse(
+http.StreamedResponse errorResponse(int status, Object body) =>
+    http.StreamedResponse(
       Stream.value(utf8.encode(body is String ? body : jsonEncode(body))),
       status,
     );

@@ -23,7 +23,10 @@ void main() {
   // shell, so they all arrive past it.
   Future<void> pumpAt(WidgetTester tester, Size size) async {
     useWindow(tester, size);
-    await io(tester, () => app.seedSettings(AppSettings(licenceAccepted: true)));
+    await io(
+      tester,
+      () => app.seedSettings(AppSettings(licenceAccepted: true)),
+    );
     await app.pump(tester, const AppShell());
     await tester.pump();
   }
@@ -37,8 +40,9 @@ void main() {
 
   // One bar, not the shell's and the chat's. The app opens on the new-chat
   // screen, where there is no chat to name, so it wears the app's own mark.
-  testWidgets("narrow, there is one app bar and it opens the sidebar",
-      (tester) async {
+  testWidgets("narrow, there is one app bar and it opens the sidebar", (
+    tester,
+  ) async {
     await pumpAt(tester, const Size(500, 900));
 
     expect(find.byType(AppBar), findsOneWidget);
@@ -51,8 +55,9 @@ void main() {
     expect(find.byType(Sidebar), findsOneWidget);
   });
 
-  testWidgets("a chat picked in the drawer closes it and opens in the pane",
-      (tester) async {
+  testWidgets("a chat picked in the drawer closes it and opens in the pane", (
+    tester,
+  ) async {
     // Settings first: the chat's create reads the settings, which builds the
     // notifier against whatever is on disk at that moment.
     await io(tester, () async {
@@ -114,8 +119,12 @@ void main() {
   });
 
   group("the shortcuts", () {
-    Future<void> chord(WidgetTester tester, LogicalKeyboardKey key,
-        {bool shift = false, bool alt = false}) async {
+    Future<void> chord(
+      WidgetTester tester,
+      LogicalKeyboardKey key, {
+      bool shift = false,
+      bool alt = false,
+    }) async {
       await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
       if (shift) await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
       if (alt) await tester.sendKeyDownEvent(LogicalKeyboardKey.altLeft);
@@ -141,14 +150,17 @@ void main() {
       expect(app.container.read(selectedProjectProvider), localProject(null));
     });
 
-    testWidgets("Ctrl+Shift+N is a new chat in the anonymous project",
-        (tester) async {
+    testWidgets("Ctrl+Shift+N is a new chat in the anonymous project", (
+      tester,
+    ) async {
       await pumpAt(tester, const Size(1200, 800));
 
       await chord(tester, LogicalKeyboardKey.keyN, shift: true);
 
-      expect(app.container.read(selectedProjectProvider),
-          localProject(const AnonymousProject().dir));
+      expect(
+        app.container.read(selectedProjectProvider),
+        localProject(const AnonymousProject().dir),
+      );
     });
 
     testWidgets("Ctrl+Alt+N is a new chat in My Team", (tester) async {
@@ -156,25 +168,37 @@ void main() {
 
       await chord(tester, LogicalKeyboardKey.keyN, alt: true);
 
-      expect(app.container.read(selectedProjectProvider), localProject(omadaBaseProject));
+      expect(
+        app.container.read(selectedProjectProvider),
+        localProject(omadaBaseProject),
+      );
     });
 
-    testWidgets("Ctrl+P pins the open chat, and again unpins it",
-        (tester) async {
+    testWidgets("Ctrl+P pins the open chat, and again unpins it", (
+      tester,
+    ) async {
       await pumpAt(tester, const Size(1200, 800));
       final chat = await io(tester, () => app.openSomeChat());
       await settleIo(tester);
 
-      Future<bool> pinned() async =>
-          (await io(tester, () => app.repo.openChat(chat.state.id))).state.pinned;
+      Future<bool> pinned() async => (await io(
+        tester,
+        () => app.repo.openChat(chat.state.id),
+      )).state.pinned;
 
       await chord(tester, LogicalKeyboardKey.keyP);
       await pumpUntil(tester, find.text(pinnedHeading));
       expect(await pinned(), isTrue);
 
       await chord(tester, LogicalKeyboardKey.keyP);
-      for (var i = 0; i < 50 && find.text(pinnedHeading).evaluate().isNotEmpty; i++) {
-        await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 5)));
+      for (
+        var i = 0;
+        i < 50 && find.text(pinnedHeading).evaluate().isNotEmpty;
+        i++
+      ) {
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 5)),
+        );
         await tester.pump();
       }
       expect(await pinned(), isFalse);

@@ -31,24 +31,22 @@ class ForegroundService implements BackgroundWork {
 
   @override
   Future<void> downloading(DownloadNotice? notice) => _tell(
-        "downloading",
-        notice == null
-            ? null
-            : {
-                "label": notice.label,
-                "received": notice.received,
-                "total": notice.total,
-              },
-      );
+    "downloading",
+    notice == null
+        ? null
+        : {
+            "label": notice.label,
+            "received": notice.received,
+            "total": notice.total,
+          },
+  );
 
   @override
   Future<void> prefilling(String? model) => _tell("prefilling", model);
 
   @override
-  Future<void> syncing(SyncNotice? notice) => _tell(
-        "syncing",
-        notice == null ? null : {"names": notice.names},
-      );
+  Future<void> syncing(SyncNotice? notice) =>
+      _tell("syncing", notice == null ? null : {"names": notice.names});
 
   Future<void> _tell(String method, Object? argument) async {
     // Logged rather than raised: a platform that will not hold the process
@@ -63,7 +61,8 @@ class ForegroundService implements BackgroundWork {
 
   Future<void> _onCall(MethodCall call) async {
     if (call.method != "stopRequested") return;
-    final job = BackgroundJob.values.asNameMap()[call.arguments as String? ?? ""];
+    final job = BackgroundJob.values
+        .asNameMap()[call.arguments as String? ?? ""];
     if (job != null) _stops.add(job);
   }
 }

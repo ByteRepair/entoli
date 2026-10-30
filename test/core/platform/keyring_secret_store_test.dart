@@ -21,21 +21,27 @@ void main() {
     expect(store.encrypted, isTrue);
   });
 
-  test("encrypted is false where every write fell through to the file",
-      () async {
-    final file = _Memory();
-    final store =
-        KeyringSecretStore(file, service: () => _Keyring(locked: true));
+  test(
+    "encrypted is false where every write fell through to the file",
+    () async {
+      final file = _Memory();
+      final store = KeyringSecretStore(
+        file,
+        service: () => _Keyring(locked: true),
+      );
 
-    await store.write("k", bytes);
+      await store.write("k", bytes);
 
-    expect(file.items["k"], bytes);
-    expect(store.encrypted, isFalse);
-  });
+      expect(file.items["k"], bytes);
+      expect(store.encrypted, isFalse);
+    },
+  );
 
   test("encrypted is false with no service at all", () async {
-    final store = KeyringSecretStore(_Memory(),
-        service: () => _Keyring(absent: true));
+    final store = KeyringSecretStore(
+      _Memory(),
+      service: () => _Keyring(absent: true),
+    );
     expect(await store.read("k"), isNull);
     expect(store.encrypted, isFalse);
   });

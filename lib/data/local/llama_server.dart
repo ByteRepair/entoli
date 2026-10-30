@@ -32,15 +32,15 @@ class LlamaBinaries {
   /// serving path and not on the probe, and the device list would quietly go
   /// empty.
   Map<String, String> get environment => {
-        // The server is exec'd by path rather than loaded by the app, so the
-        // linker has nothing to go on: libllama and every `libggml-*.so` beside
-        // it are found through this and nothing else.
-        "LD_LIBRARY_PATH": libDir,
-        // Where fastRPC looks for the DSP-side half of the Hexagon backend.
-        // Set whether or not this build carried one, since the answer is the
-        // same directory either way.
-        "ADSP_LIBRARY_PATH": libDir,
-      };
+    // The server is exec'd by path rather than loaded by the app, so the
+    // linker has nothing to go on: libllama and every `libggml-*.so` beside
+    // it are found through this and nothing else.
+    "LD_LIBRARY_PATH": libDir,
+    // Where fastRPC looks for the DSP-side half of the Hexagon backend.
+    // Set whether or not this build carried one, since the answer is the
+    // same directory either way.
+    "ADSP_LIBRARY_PATH": libDir,
+  };
 }
 
 /// How the server is invoked, and the environment that finds everything it
@@ -59,63 +59,65 @@ class LlamaBinaries {
   int? threads,
   String? slotSavePath,
   bool fitLayers = false,
-}) =>
-    (
-      command: [
-        binaries.server,
-        "-m", modelFile,
-        // Loopback only. Anything else would put an unauthenticated model
-        // server on the phone's network, which is a thing to be asked for
-        // rather than a default.
-        "--host", "127.0.0.1",
-        "--port", "$port",
-        // Every app on the device can reach the loopback address, so the key is
-        // not ceremony: without one, any of them could spend this model's
-        // battery. It is generated per launch and never written down.
-        "--api-key", apiKey,
-        // What the picker offers and what a chat's `meta.json` pins, rather
-        // than the file name the weights happen to have arrived under.
-        "-a", model.id,
-        // Always passed, and that is deliberate: llama.cpp's own `--fit` would
-        // otherwise size this against the phone's whole RAM, since the CPU
-        // backend reports every physical page as free. See "How much context"
-        // in AGENTS.md.
-        "-c", "$contextLength",
-        // One slot, since the disk cache is `/slots/0`'s, and no 8 GiB RAM
-        // prompt cache beside it. See "That `/slots/0` is why the server has
-        // one slot" in AGENTS.md.
-        "-np", "1",
-        "--cache-ram", "0",
-        // The chat template as the publisher wrote it, which is what turns a
-        // small model's tool call into an OpenAI one. Without it the agent's
-        // tools reach a model that has never been told they exist.
-        "--jinja",
-        // Nobody is going to open this in a browser, and the assets are served
-        // from the binary either way.
-        "--no-webui",
-        // Null is llama.cpp's own answer, which is every physical core.
-        if (threads != null) ...["-t", "$threads"],
-        // Where the slot dumps go, and — with it — quantised KV so a saved
-        // conversation is half the bytes on disk. Both ride on the cache being
-        // on: q8_0 KV is near-lossless but still a change to generation, so a
-        // user who turned the cache off gets f16 and the behaviour they had.
-        // The quant is part of the cache's namespace, so f16 and q8_0 dumps are
-        // never mixed. See "Persisting the KV cache to disk" in AGENTS.md.
-        if (slotSavePath != null) ...[
-          "--slot-save-path", slotSavePath,
-          "-ctk", "q8_0",
-          "-ctv", "q8_0",
-        ],
-        // Always named, [noDevice] included. See "The CPU is a device to name"
-        // in AGENTS.md.
-        "-dev", device,
-        // Every layer on a phone, whose accelerators share the RAM the weights
-        // are in; `--fit`'s split on a laptop. See "How many layers go to the
-        // GPU" in AGENTS.md.
-        if (device != noDevice && !fitLayers) ...["-ngl", "999"],
-      ],
-      environment: binaries.environment,
-    );
+}) => (
+  command: [
+    binaries.server,
+    "-m", modelFile,
+    // Loopback only. Anything else would put an unauthenticated model
+    // server on the phone's network, which is a thing to be asked for
+    // rather than a default.
+    "--host", "127.0.0.1",
+    "--port", "$port",
+    // Every app on the device can reach the loopback address, so the key is
+    // not ceremony: without one, any of them could spend this model's
+    // battery. It is generated per launch and never written down.
+    "--api-key", apiKey,
+    // What the picker offers and what a chat's `meta.json` pins, rather
+    // than the file name the weights happen to have arrived under.
+    "-a", model.id,
+    // Always passed, and that is deliberate: llama.cpp's own `--fit` would
+    // otherwise size this against the phone's whole RAM, since the CPU
+    // backend reports every physical page as free. See "How much context"
+    // in AGENTS.md.
+    "-c", "$contextLength",
+    // One slot, since the disk cache is `/slots/0`'s, and no 8 GiB RAM
+    // prompt cache beside it. See "That `/slots/0` is why the server has
+    // one slot" in AGENTS.md.
+    "-np", "1",
+    "--cache-ram", "0",
+    // The chat template as the publisher wrote it, which is what turns a
+    // small model's tool call into an OpenAI one. Without it the agent's
+    // tools reach a model that has never been told they exist.
+    "--jinja",
+    // Nobody is going to open this in a browser, and the assets are served
+    // from the binary either way.
+    "--no-webui",
+    // Null is llama.cpp's own answer, which is every physical core.
+    if (threads != null) ...["-t", "$threads"],
+    // Where the slot dumps go, and — with it — quantised KV so a saved
+    // conversation is half the bytes on disk. Both ride on the cache being
+    // on: q8_0 KV is near-lossless but still a change to generation, so a
+    // user who turned the cache off gets f16 and the behaviour they had.
+    // The quant is part of the cache's namespace, so f16 and q8_0 dumps are
+    // never mixed. See "Persisting the KV cache to disk" in AGENTS.md.
+    if (slotSavePath != null) ...[
+      "--slot-save-path",
+      slotSavePath,
+      "-ctk",
+      "q8_0",
+      "-ctv",
+      "q8_0",
+    ],
+    // Always named, [noDevice] included. See "The CPU is a device to name"
+    // in AGENTS.md.
+    "-dev", device,
+    // Every layer on a phone, whose accelerators share the RAM the weights
+    // are in; `--fit`'s split on a laptop. See "How many layers go to the
+    // GPU" in AGENTS.md.
+    if (device != noDevice && !fitLayers) ...["-ngl", "999"],
+  ],
+  environment: binaries.environment,
+);
 
 /// llama.cpp's own name for offloading nothing, which is the CPU. It has to be
 /// passed rather than left out: no `-dev` at all is *auto* down there, and auto
@@ -199,7 +201,9 @@ List<int> cpuCeilings({String root = "/sys/devices/system/cpu", int? cpus}) {
   final ceilings = <int>[];
   for (var cpu = 0; cpu < (cpus ?? Platform.numberOfProcessors); cpu++) {
     final file = File("$root/cpu$cpu/cpufreq/cpuinfo_max_freq");
-    final value = file.existsSync() ? int.tryParse(file.readAsStringSync().trim()) : null;
+    final value = file.existsSync()
+        ? int.tryParse(file.readAsStringSync().trim())
+        : null;
     if (value == null) return const [];
     if (_firstSibling(root, cpu) == cpu) ceilings.add(value);
   }
@@ -220,7 +224,12 @@ final _listSeparator = RegExp("[,-]");
 /// llama.cpp's servers, running beside the app on the loopback address — one
 /// process per model, up to what the settings allow.
 class LlamaServerPool extends LocalLlm {
-  LlamaServerPool(this._binaries, this._store, {this._slotSaveDir, this._fitLayers = false});
+  LlamaServerPool(
+    this._binaries,
+    this._store, {
+    this._slotSaveDir,
+    this._fitLayers = false,
+  });
 
   /// Whether llama.cpp sizes the GPU layers itself — a laptop, whose GPU may
   /// have less memory than the model — rather than taking all of them, as a
@@ -261,11 +270,9 @@ class LlamaServerPool extends LocalLlm {
 
   Future<List<LocalDevice>> _probeDevices() async {
     try {
-      final result = await Process.run(
-        _binaries.server,
-        const ["--list-devices"],
-        environment: _binaries.environment,
-      );
+      final result = await Process.run(_binaries.server, const [
+        "--list-devices",
+      ], environment: _binaries.environment);
       return parseDevices("${result.stdout}");
     } on ProcessException catch (e) {
       logFailure("llama", "device probe failed", e.message);
@@ -297,8 +304,10 @@ class LlamaServerPool extends LocalLlm {
     // check compares the device actually used and not the word "auto", and two
     // auto turns arriving together still edit the list one after the other, each
     // resuming from this same await without yielding into it again.
-    final resolved =
-        resolveLocalDevice(device, device == null ? await devices() : const []);
+    final resolved = resolveLocalDevice(
+      device,
+      device == null ? await devices() : const [],
+    );
 
     final already = _serverFor(modelId);
     if (already != null &&
@@ -343,7 +352,12 @@ class LlamaServerPool extends LocalLlm {
     for (final old in stopping) {
       await old.stop();
     }
-    await server.spawn(_binaries, file, fitLayers: _fitLayers, onChange: _publish);
+    await server.spawn(
+      _binaries,
+      file,
+      fitLayers: _fitLayers,
+      onChange: _publish,
+    );
     await server.ready;
     return server.endpoint;
   }
@@ -371,7 +385,8 @@ class LlamaServerPool extends LocalLlm {
     _publish();
   }
 
-  void _publish() => running.value = [for (final server in _servers) server.state];
+  void _publish() =>
+      running.value = [for (final server in _servers) server.state];
 }
 
 /// One model, one process.
@@ -410,22 +425,22 @@ class _Server {
   Future<void> get ready => _ready.future;
 
   LocalLlmState get state => LocalLlmState(
-        modelId: model.id,
-        phase: _phase,
-        // In the picker's word rather than llama.cpp's: [noDevice] is a flag
-        // value, and what reads this is the settings page.
-        device: device == noDevice ? LocalDevice.cpu : device,
-        contextLength: contextLength,
-        failure: _failure,
-      );
+    modelId: model.id,
+    phase: _phase,
+    // In the picker's word rather than llama.cpp's: [noDevice] is a flag
+    // value, and what reads this is the settings page.
+    device: device == noDevice ? LocalDevice.cpu : device,
+    contextLength: contextLength,
+    failure: _failure,
+  );
 
   /// Only read after [ready] has completed, which is the only point at which
   /// there is something on the other end of it.
   LocalEndpoint get endpoint => LocalEndpoint(
-        baseUrl: "http://127.0.0.1:${_at!.port}/v1",
-        apiKey: _at!.key,
-        contextLength: contextLength,
-      );
+    baseUrl: "http://127.0.0.1:${_at!.port}/v1",
+    apiKey: _at!.key,
+    contextLength: contextLength,
+  );
 
   /// Whether this is still the server that would be started for these settings.
   /// A failed one never is: being asked again is the user asking for another
@@ -456,8 +471,12 @@ class _Server {
     return const <String>[];
   }();
 
-  Future<void> spawn(LlamaBinaries binaries, String modelFile,
-      {required bool fitLayers, required void Function() onChange}) async {
+  Future<void> spawn(
+    LlamaBinaries binaries,
+    String modelFile, {
+    required bool fitLayers,
+    required void Function() onChange,
+  }) async {
     // Asked of the OS rather than picked: a fixed port is one another app can
     // already be on, and the failure that gives is the server exiting a second
     // after it started for a reason nothing here would think to report.
@@ -491,12 +510,17 @@ class _Server {
       // its complaints to the other, and which is which has changed between
       // releases.
       for (final stream in [process.stdout, process.stderr]) {
-        stream.transform(utf8.decoder).transform(const LineSplitter()).listen(_say);
+        stream
+            .transform(utf8.decoder)
+            .transform(const LineSplitter())
+            .listen(_say);
       }
       // Named, rather than read off the field when it fires: by then the field
       // may hold nothing, and reporting this one's exit against it would fail a
       // model that is loading perfectly well.
-      unawaited(process.exitCode.then((code) => _exited(process, code, onChange)));
+      unawaited(
+        process.exitCode.then((code) => _exited(process, code, onChange)),
+      );
       unawaited(_waitForHealth(at, onChange));
     } on ProcessException catch (e) {
       _fail(e.message);
@@ -525,15 +549,20 @@ class _Server {
 
   /// Polled rather than watched for a line, since what the server prints when
   /// it is up is not part of any contract and its `/health` is.
-  Future<void> _waitForHealth(({int port, String key}) at, void Function() onChange) async {
+  Future<void> _waitForHealth(
+    ({int port, String key}) at,
+    void Function() onChange,
+  ) async {
     final client = http.Client();
     try {
       while (!_ready.isCompleted) {
         try {
-          final response = await client.get(
-            Uri.parse("http://127.0.0.1:${at.port}/health"),
-            headers: {"Authorization": "Bearer ${at.key}"},
-          ).timeout(const Duration(seconds: 5));
+          final response = await client
+              .get(
+                Uri.parse("http://127.0.0.1:${at.port}/health"),
+                headers: {"Authorization": "Bearer ${at.key}"},
+              )
+              .timeout(const Duration(seconds: 5));
           if (response.statusCode == 200) {
             _phase = LocalLlmPhase.ready;
             _ready.complete();
@@ -584,8 +613,10 @@ class _Server {
 
   static String _newKey() {
     final random = Random.secure();
-    return [for (var i = 0; i < 16; i++) random.nextInt(256).toRadixString(16).padLeft(2, "0")]
-        .join();
+    return [
+      for (var i = 0; i < 16; i++)
+        random.nextInt(256).toRadixString(16).padLeft(2, "0"),
+    ].join();
   }
 }
 
@@ -605,12 +636,14 @@ List<LocalDevice> parseDevices(String output) {
     if (match == null) continue;
     final name = match.group(1)!;
     final total = int.tryParse(match.group(3) ?? "");
-    devices.add(LocalDevice(
-      name: name,
-      description: match.group(2)!.trim(),
-      compute: LocalDevice.computeOf(name),
-      totalBytes: total == null ? null : total * 1024 * 1024,
-    ));
+    devices.add(
+      LocalDevice(
+        name: name,
+        description: match.group(2)!.trim(),
+        compute: LocalDevice.computeOf(name),
+        totalBytes: total == null ? null : total * 1024 * 1024,
+      ),
+    );
   }
   return devices;
 }

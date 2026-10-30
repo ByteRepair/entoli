@@ -5,7 +5,8 @@ import "../openai_client.dart";
 import "provider.dart";
 
 class GoogleProvider extends OpenAiCompatibleProvider {
-  const GoogleProvider([LlmProviderConfig config = preset]) : super(config, _terms);
+  const GoogleProvider([LlmProviderConfig config = preset])
+    : super(config, _terms);
 
   static const preset = LlmProviderConfig(
     catalogId: "google",
@@ -22,7 +23,8 @@ class GoogleProvider extends OpenAiCompatibleProvider {
   static const _terms = PresetTerms(
     blurb: "Gemini models, with a free tier.",
     prompts: PromptUse.trainedWhenFree,
-    freeTier: "On Google's free tier, your prompts and the replies are used "
+    freeTier:
+        "On Google's free tier, your prompts and the replies are used "
         "to improve Google's products, and people at Google may read them. "
         "Do not send anything private, confidential or personal. A key with "
         "billing turned on is not used this way.",
@@ -34,7 +36,8 @@ class GoogleProvider extends OpenAiCompatibleProvider {
   Set<String> get retiredModels => const {"gemini-2.5-flash"};
 
   @override
-  OpenAiClient client(String? apiKey) => GeminiClient(baseUrl: baseUrl, apiKey: apiKey);
+  OpenAiClient client(String? apiKey) =>
+      GeminiClient(baseUrl: baseUrl, apiKey: apiKey);
 
   /// What hears here is not what models.dev says transcribes. Its one Gemini
   /// that takes audio and writes text is a Live API model, which answers a

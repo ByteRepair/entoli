@@ -30,7 +30,8 @@ void main() {
       final app = TestApp.create(nativeVoice: bothEngines);
       addTearDown(app.dispose);
       await app.seedSettings(
-        AppSettings(voiceSpeechModelId: "piper-en_US-amy"));
+        AppSettings(voiceSpeechModelId: "piper-en_US-amy"),
+      );
       // Reloading the notifier re-runs `build`, which is where the default is
       // filled. The recognition half stays null (the settings file did not
       // name one), the speech half stays as seeded.
@@ -63,15 +64,20 @@ void main() {
       expect(settings.voiceRecognitionModelId, isNull);
     });
 
-    test("half an engine reads a message out but does not open voice mode",
-        () async {
-      final app = TestApp.create(
-        nativeVoice: const NativeVoiceEngines(recognition: false, speech: true),
-      );
-      addTearDown(app.dispose);
-      expect(app.container.read(speechReadyProvider), isTrue);
-      expect(app.container.read(voiceReadyProvider), isFalse);
-    });
+    test(
+      "half an engine reads a message out but does not open voice mode",
+      () async {
+        final app = TestApp.create(
+          nativeVoice: const NativeVoiceEngines(
+            recognition: false,
+            speech: true,
+          ),
+        );
+        addTearDown(app.dispose);
+        expect(app.container.read(speechReadyProvider), isTrue);
+        expect(app.container.read(voiceReadyProvider), isFalse);
+      },
+    );
 
     test("with neither, nothing is picked and nothing is offered", () async {
       final app = TestApp.create(nativeVoice: NativeVoiceEngines.none);
@@ -88,25 +94,33 @@ void main() {
       expect(plain.container.read(speechReadyProvider), isFalse);
     });
 
-    test("a sentinel already in the settings file is not honoured either",
-        () async {
-      final app = TestApp.create(
-        nativeVoice: const NativeVoiceEngines(recognition: true, speech: false),
-      );
-      addTearDown(app.dispose);
-      await app.seedSettings(AppSettings(voiceSpeechModelId: nativeSpeech.id));
-      app.container.invalidate(appSettingsProvider);
-      // Pinned by hand, or carried from a phone that had a synthesiser. Either
-      // way there is nothing here to say it with — which is also the desktop's
-      // answer to a phone-carried file: read-aloud stays unoffered.
-      expect(app.container.read(speechReadyProvider), isFalse);
+    test(
+      "a sentinel already in the settings file is not honoured either",
+      () async {
+        final app = TestApp.create(
+          nativeVoice: const NativeVoiceEngines(
+            recognition: true,
+            speech: false,
+          ),
+        );
+        addTearDown(app.dispose);
+        await app.seedSettings(
+          AppSettings(voiceSpeechModelId: nativeSpeech.id),
+        );
+        app.container.invalidate(appSettingsProvider);
+        // Pinned by hand, or carried from a phone that had a synthesiser. Either
+        // way there is nothing here to say it with — which is also the desktop's
+        // answer to a phone-carried file: read-aloud stays unoffered.
+        expect(app.container.read(speechReadyProvider), isFalse);
 
-      final desktop = TestApp.create();
-      addTearDown(desktop.dispose);
-      await desktop.seedSettings(
-          AppSettings(voiceSpeechModelId: nativeSpeech.id));
-      desktop.container.invalidate(appSettingsProvider);
-      expect(desktop.container.read(speechReadyProvider), isFalse);
-    });
+        final desktop = TestApp.create();
+        addTearDown(desktop.dispose);
+        await desktop.seedSettings(
+          AppSettings(voiceSpeechModelId: nativeSpeech.id),
+        );
+        desktop.container.invalidate(appSettingsProvider);
+        expect(desktop.container.read(speechReadyProvider), isFalse);
+      },
+    );
   });
 }

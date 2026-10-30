@@ -8,10 +8,11 @@ import "package:agent_chat/domain/local_model.dart";
 import "package:agent_chat/domain/model_registry.dart";
 
 const _openai = LlmProviderConfig(
-    id: "openai",
-    catalogId: "openai",
-    api: LlmApi.openai,
-    baseUrl: "https://api.openai.com/v1");
+  id: "openai",
+  catalogId: "openai",
+  api: LlmApi.openai,
+  baseUrl: "https://api.openai.com/v1",
+);
 
 /// A slice of models.dev as it is served: one provider keyed by our preset's
 /// models.dev id, one only reachable by its base URL.
@@ -22,17 +23,26 @@ final _source = jsonEncode({
         "name": "GPT X",
         "tool_call": true,
         "reasoning": true,
-        "modalities": {"input": ["text", "image"], "output": ["text"]},
+        "modalities": {
+          "input": ["text", "image"],
+          "output": ["text"],
+        },
         "limit": {"context": 400000, "output": 128000},
         "cost": {"input": 1.25, "output": 10},
         "release_date": "dropped by the trim",
       },
       "gpt-image-x": {
-        "modalities": {"input": ["text"], "output": ["image"]},
+        "modalities": {
+          "input": ["text"],
+          "output": ["image"],
+        },
         "limit": {"context": 0},
       },
       "whisper-x": {
-        "modalities": {"input": ["audio"], "output": ["text"]},
+        "modalities": {
+          "input": ["audio"],
+          "output": ["text"],
+        },
       },
     },
   },
@@ -49,7 +59,11 @@ void main() {
 
   group("on-device", () {
     test("the Apple system model answers its constant", () {
-      final apple = LlmProviderConfig(id: appleProviderId, api: LlmApi.openai, baseUrl: "");
+      final apple = LlmProviderConfig(
+        id: appleProviderId,
+        api: LlmApi.openai,
+        baseUrl: "",
+      );
       expect(modelInfoOf(apple, appleModelId)?.context, 8192);
       expect(modelInfoOf(apple, null)?.context, 8192);
       expect(modelInfoOf(apple, "another-model"), isNull);
@@ -90,7 +104,8 @@ void main() {
     });
 
     test("a speech model is told from a chat model that also hears", () {
-      ModelInfo info(List<String> input, List<String> output) => ModelInfo.fromJson("m", {
+      ModelInfo info(List<String> input, List<String> output) =>
+          ModelInfo.fromJson("m", {
             "modalities": {"input": input, "output": output},
           });
       expect(info(["audio"], ["text"]).transcribes, isTrue);
@@ -101,14 +116,28 @@ void main() {
     });
 
     test("the speech flags survive the trimmed cache", () {
-      final cached = ModelCatalog.parse(ModelCatalog.parse(jsonEncode({
-        "openai": {
-          "models": {
-            "stt": {"modalities": {"input": ["audio"], "output": ["text"]}},
-            "tts": {"modalities": {"input": ["text"], "output": ["audio"]}},
-          },
-        },
-      })).toJsonText());
+      final cached = ModelCatalog.parse(
+        ModelCatalog.parse(
+          jsonEncode({
+            "openai": {
+              "models": {
+                "stt": {
+                  "modalities": {
+                    "input": ["audio"],
+                    "output": ["text"],
+                  },
+                },
+                "tts": {
+                  "modalities": {
+                    "input": ["text"],
+                    "output": ["audio"],
+                  },
+                },
+              },
+            },
+          }),
+        ).toJsonText(),
+      );
       expect(cached.lookup(_openai, "stt")!.transcribes, isTrue);
       expect(cached.lookup(_openai, "tts")!.speaks, isTrue);
       expect(cached.lookup(_openai, "tts")!.talks, isFalse);
@@ -117,19 +146,29 @@ void main() {
     test("a turn wants tools and talk, nothing else", () {
       expect(const ModelInfo(id: "a", toolCall: true).answersTurns, isTrue);
       expect(const ModelInfo(id: "b").answersTurns, isFalse);
-      expect(const ModelInfo(id: "c", toolCall: true, talks: false).answersTurns, isFalse);
+      expect(
+        const ModelInfo(id: "c", toolCall: true, talks: false).answersTurns,
+        isFalse,
+      );
     });
 
     test("a provider of our own naming is found by its base URL", () {
       const mine = LlmProviderConfig(
-          id: "my-host", api: LlmApi.openai, baseUrl: "https://some.host/v1/");
+        id: "my-host",
+        api: LlmApi.openai,
+        baseUrl: "https://some.host/v1/",
+      );
       expect(modelInfoOf(mine, "text-only")?.readsImages, isFalse);
       expect(modelInfoOf(mine, "gpt-x"), isNull);
     });
 
     test("a provider is not matched by its name", () {
       const named = LlmProviderConfig(
-          id: "openai", name: "openai", api: LlmApi.openai, baseUrl: "https://gateway.test/v1");
+        id: "openai",
+        name: "openai",
+        api: LlmApi.openai,
+        baseUrl: "https://gateway.test/v1",
+      );
       expect(modelInfoOf(named, "gpt-x"), isNull);
     });
 
@@ -138,44 +177,65 @@ void main() {
     });
 
     test("a model added by hand comes before the catalog's", () {
-      final custom = _openai.copyWith(customModels: [
-        const ModelInfo(id: "gpt-x", name: "Mine"),
-        const ModelInfo(id: "ft:gpt-x:acme", toolCall: true),
-      ]);
+      final custom = _openai.copyWith(
+        customModels: [
+          const ModelInfo(id: "gpt-x", name: "Mine"),
+          const ModelInfo(id: "ft:gpt-x:acme", toolCall: true),
+        ],
+      );
       expect(modelInfoOf(custom, "gpt-x")?.name, "Mine");
-      expect(providerOf(custom).models(ModelCatalog.current).map((m) => m.id),
-          ["gpt-x", "ft:gpt-x:acme", "gpt-image-x", "whisper-x"]);
+      expect(providerOf(custom).models(ModelCatalog.current).map((m) => m.id), [
+        "gpt-x",
+        "ft:gpt-x:acme",
+        "gpt-image-x",
+        "whisper-x",
+      ]);
     });
 
     test("a model Google has retired is not offered", () {
-      ModelCatalog.notifier.value = ModelCatalog.parse(jsonEncode({
-        "google": {
-          "models": {"gemini-2.5-flash": {}, "gemini-3.8-flash": {}},
-        },
-      }));
+      ModelCatalog.notifier.value = ModelCatalog.parse(
+        jsonEncode({
+          "google": {
+            "models": {"gemini-2.5-flash": {}, "gemini-3.8-flash": {}},
+          },
+        }),
+      );
       const google = LlmProviderConfig(
-          id: "google",
-          catalogId: "google",
-          api: LlmApi.openai,
-          baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai");
-      expect(providerOf(google).models(ModelCatalog.current).map((m) => m.id),
-          ["gemini-3.8-flash"]);
+        id: "google",
+        catalogId: "google",
+        api: LlmApi.openai,
+        baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai",
+      );
+      expect(providerOf(google).models(ModelCatalog.current).map((m) => m.id), [
+        "gemini-3.8-flash",
+      ]);
     });
 
-    test("the trimmed copy reads back the same and carries when it was fetched", () {
-      final at = DateTime.utc(2026, 10, 19);
-      final text = ModelCatalog.current.fetchedAt(at).toJsonText();
-      expect(text, isNot(contains("release_date")));
-      ModelCatalog.notifier.value = ModelCatalog.parse(text);
-      expect(ModelCatalog.current.fetched, at);
-      expect(modelInfoOf(_openai, "gpt-x")?.toJson(),
-          ModelCatalog.parse(_source).lookup(_openai, "gpt-x")?.toJson());
-      expect(modelInfoOf(
-              const LlmProviderConfig(
-                  id: "x", api: LlmApi.openai, baseUrl: "https://some.host/v1"),
-              "text-only"),
-          isNotNull);
-    });
+    test(
+      "the trimmed copy reads back the same and carries when it was fetched",
+      () {
+        final at = DateTime.utc(2026, 10, 19);
+        final text = ModelCatalog.current.fetchedAt(at).toJsonText();
+        expect(text, isNot(contains("release_date")));
+        ModelCatalog.notifier.value = ModelCatalog.parse(text);
+        expect(ModelCatalog.current.fetched, at);
+        expect(
+          modelInfoOf(_openai, "gpt-x")?.toJson(),
+          ModelCatalog.parse(_source).lookup(_openai, "gpt-x")?.toJson(),
+        );
+        expect(
+          modelInfoOf(
+            const LlmProviderConfig(
+              id: "x",
+              api: LlmApi.openai,
+              baseUrl: "https://some.host/v1",
+            ),
+            "text-only",
+          ),
+          isNotNull,
+        );
+      },
+    );
 
     test("the built-in defaults have no fetch time", () {
       expect(ModelCatalog.current.fetched, isNull);
@@ -183,12 +243,23 @@ void main() {
   });
 
   test("a provider's own models survive its settings round trip", () {
-    final config = _openai.copyWith(customModels: [
-      const ModelInfo(id: "ft:1", context: 1000, toolCall: true, readsImages: true),
-    ]);
-    final back = LlmProviderConfig.fromJson(jsonDecode(jsonEncode(config.toJson())))!;
+    final config = _openai.copyWith(
+      customModels: [
+        const ModelInfo(
+          id: "ft:1",
+          context: 1000,
+          toolCall: true,
+          readsImages: true,
+        ),
+      ],
+    );
+    final back = LlmProviderConfig.fromJson(
+      jsonDecode(jsonEncode(config.toJson())),
+    )!;
     final model = back.customModels.single;
-    expect((model.id, model.context, model.toolCall, model.readsImages),
-        ("ft:1", 1000, true, true));
+    expect(
+      (model.id, model.context, model.toolCall, model.readsImages),
+      ("ft:1", 1000, true, true),
+    );
   });
 }

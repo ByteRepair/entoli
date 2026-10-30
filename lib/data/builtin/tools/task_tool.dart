@@ -3,7 +3,8 @@ import "dart:async";
 import "../../../domain/agent_backend.dart";
 import "../../../domain/tool_arg.dart";
 import "../llm/llm_client.dart";
-import "../templates.dart" show notStarted, substitute, systemProse, turnStopped;
+import "../templates.dart"
+    show notStarted, substitute, systemProse, turnStopped;
 import "agent_tool.dart";
 import "turn.dart";
 import "../tool_outcome.dart";
@@ -38,7 +39,8 @@ class TaskTool extends AgentTool {
       substitute(systemProse("task"), {"task_tool": taskToolName});
 
   @override
-  String get description => "Run a sub-agent on a delegated task. The "
+  String get description =>
+      "Run a sub-agent on a delegated task. The "
       "sub-agent has its own conversation, runs under the named agent's "
       "prompt, and returns its final output when it finishes. Use it to fan "
       "out work: each call runs independently, so several `task` calls in one "
@@ -48,21 +50,22 @@ class TaskTool extends AgentTool {
 
   @override
   Map<String, dynamic> get schema => const {
-        "type": "object",
-        "properties": {
-          "agent": {
-            "type": "string",
-            "description": "The @agent name to run under (e.g. \"general\").",
-          },
-          "prompt": {
-            "type": "string",
-            "description": "The task for the sub-agent. Write it as a complete "
-                "instruction — the sub-agent sees nothing else of this "
-                "conversation.",
-          },
-        },
-        "required": ["agent", "prompt"],
-      };
+    "type": "object",
+    "properties": {
+      "agent": {
+        "type": "string",
+        "description": "The @agent name to run under (e.g. \"general\").",
+      },
+      "prompt": {
+        "type": "string",
+        "description":
+            "The task for the sub-agent. Write it as a complete "
+            "instruction — the sub-agent sees nothing else of this "
+            "conversation.",
+      },
+    },
+    "required": ["agent", "prompt"],
+  };
 
   @override
   bool get batched => true;
@@ -92,8 +95,10 @@ class TaskTool extends AgentTool {
     // the log in finishing order, which is not an order the model ever chose.
     for (var i = 0; i < calls.length; i++) {
       final args = parsed[i];
-      yield toolCalled(calls[i],
-          args == null ? null : "@${args.agent}: ${_truncate(args.prompt, 200)}");
+      yield toolCalled(
+        calls[i],
+        args == null ? null : "@${args.agent}: ${_truncate(args.prompt, 200)}",
+      );
     }
 
     final controller = StreamController<AgentEvent>();
@@ -106,16 +111,26 @@ class TaskTool extends AgentTool {
         return;
       }
       if (args == null) {
-        controller.add(toolFailed(call,
-            'The $taskToolName tool takes {"agent": "...", "prompt": "..."}.'));
+        controller.add(
+          toolFailed(
+            call,
+            'The $taskToolName tool takes {"agent": "...", "prompt": "..."}.',
+          ),
+        );
         return;
       }
       final (:agent, :prompt) = args;
-      controller.add(SubAgentStartEvent(
-          id: call.id, agent: agent, prompt: _truncate(prompt, 80)));
-      final result =
-          await turn.subAgents!.run(agent, prompt, callId: call.id);
-      controller.add(SubAgentEndEvent(id: call.id, failed: result.returnCode != 0));
+      controller.add(
+        SubAgentStartEvent(
+          id: call.id,
+          agent: agent,
+          prompt: _truncate(prompt, 80),
+        ),
+      );
+      final result = await turn.subAgents!.run(agent, prompt, callId: call.id);
+      controller.add(
+        SubAgentEndEvent(id: call.id, failed: result.returnCode != 0),
+      );
       controller.add(ToolResultEvent(toolRan(call, result)));
     }
 
@@ -129,9 +144,11 @@ class TaskTool extends AgentTool {
     }
 
     final allDone = Future.wait([
-      for (var w = 0;
-          w < turn.options.maxConcurrentSubAgents && w < calls.length;
-          w++)
+      for (
+        var w = 0;
+        w < turn.options.maxConcurrentSubAgents && w < calls.length;
+        w++
+      )
         worker(),
     ]).whenComplete(controller.close);
     yield* controller.stream;

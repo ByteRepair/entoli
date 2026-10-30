@@ -47,17 +47,20 @@ class _LauncherState extends State<_Launcher> {
   Widget build(BuildContext context) => const Scaffold(body: SizedBox());
 }
 
-Uint8List stagedPackage() => packageSkillBytes(SkillPackage("letterbox", [
-      ("SKILL.md", Uint8List.fromList(utf8.encode(_skillMd))),
-      ("scripts/run.sh", Uint8List.fromList(utf8.encode("#!/bin/sh\necho\n"))),
-    ]));
+Uint8List stagedPackage() => packageSkillBytes(
+  SkillPackage("letterbox", [
+    ("SKILL.md", Uint8List.fromList(utf8.encode(_skillMd))),
+    ("scripts/run.sh", Uint8List.fromList(utf8.encode("#!/bin/sh\necho\n"))),
+  ]),
+);
 
 /// The page's Install button, as distinct from the AppBar's "Install skill" title.
 final _installButton = find.widgetWithText(FilledButton, "Install skill");
 
 void main() {
-  testWidgets("a staged skill is previewed, and installing lands it on disk",
-      (tester) async {
+  testWidgets("a staged skill is previewed, and installing lands it on disk", (
+    tester,
+  ) async {
     final store = FakeChatStore();
     final app = TestApp.create(store: store);
     addTearDown(app.dispose);
@@ -76,7 +79,10 @@ void main() {
     await settleIo(tester, least: 20, tries: 80);
 
     // The install reached the user's skills directory, files and all.
-    final dir = p.join(app.config.promptsDir(CompletionKind.skill), "letterbox");
+    final dir = p.join(
+      app.config.promptsDir(CompletionKind.skill),
+      "letterbox",
+    );
     expect(File(p.join(dir, "SKILL.md")).existsSync(), isTrue);
     expect(File(p.join(dir, "scripts", "run.sh")).existsSync(), isTrue);
 
@@ -84,35 +90,40 @@ void main() {
     expect(_installButton, findsNothing);
   });
 
-  testWidgets("installing over an existing skill asks first, and Replace replaces",
-      (tester) async {
-    final store = FakeChatStore();
-    final app = TestApp.create(store: store);
-    addTearDown(app.dispose);
+  testWidgets(
+    "installing over an existing skill asks first, and Replace replaces",
+    (tester) async {
+      final store = FakeChatStore();
+      final app = TestApp.create(store: store);
+      addTearDown(app.dispose);
 
-    // A skill already installed under the same name, with a file the new
-    // packaging would drop.
-    final dir = p.join(app.config.promptsDir(CompletionKind.skill), "letterbox");
-    Directory(dir).createSync(recursive: true);
-    File(p.join(dir, "SKILL.md")).writeAsStringSync("old\n");
-    File(p.join(dir, "obsolete.sh")).writeAsStringSync("old\n");
+      // A skill already installed under the same name, with a file the new
+      // packaging would drop.
+      final dir = p.join(
+        app.config.promptsDir(CompletionKind.skill),
+        "letterbox",
+      );
+      Directory(dir).createSync(recursive: true);
+      File(p.join(dir, "SKILL.md")).writeAsStringSync("old\n");
+      File(p.join(dir, "obsolete.sh")).writeAsStringSync("old\n");
 
-    store.stageSkillInstall("chat-1", "install-1", stagedPackage());
+      store.stageSkillInstall("chat-1", "install-1", stagedPackage());
 
-    await app.pump(tester, const _Launcher(), settle: false);
-    await pumpUntil(tester, _installButton);
+      await app.pump(tester, const _Launcher(), settle: false);
+      await pumpUntil(tester, _installButton);
 
-    await tester.tap(_installButton);
-    await pumpUntil(tester, find.text("Replace"));
+      await tester.tap(_installButton);
+      await pumpUntil(tester, find.text("Replace"));
 
-    await tester.tap(find.text("Replace"));
-    await settleIo(tester);
+      await tester.tap(find.text("Replace"));
+      await settleIo(tester);
 
-    // The replace was wholesale: the dropped file is gone, the rest rewritten.
-    expect(File(p.join(dir, "obsolete.sh")).existsSync(), isFalse);
-    expect(File(p.join(dir, "SKILL.md")).readAsStringSync(), _skillMd);
-    expect(File(p.join(dir, "scripts", "run.sh")).existsSync(), isTrue);
-  });
+      // The replace was wholesale: the dropped file is gone, the rest rewritten.
+      expect(File(p.join(dir, "obsolete.sh")).existsSync(), isFalse);
+      expect(File(p.join(dir, "SKILL.md")).readAsStringSync(), _skillMd);
+      expect(File(p.join(dir, "scripts", "run.sh")).existsSync(), isTrue);
+    },
+  );
 
   testWidgets("a package the store cannot hand over says so", (tester) async {
     final store = FakeChatStore();
@@ -125,5 +136,4 @@ void main() {
 
     expect(_installButton, findsNothing);
   });
-
 }

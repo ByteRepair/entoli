@@ -32,22 +32,30 @@ GgufFacts readGgufFacts(String path) {
     final arch = meta["general.architecture"];
     if (arch is! String) throw const FormatException("no architecture");
     int? number(String key) => switch (meta["$arch.$key"]) {
-          final int n => n,
-          _ => null,
-        };
+      final int n => n,
+      _ => null,
+    };
     final layers = number("block_count");
     final context = number("context_length");
     final heads = number("attention.head_count");
     final width = number("embedding_length");
-    final key = number("attention.key_length") ??
+    final key =
+        number("attention.key_length") ??
         (heads != null && width != null ? width ~/ heads : null);
     final value = number("attention.value_length") ?? key;
     final kvHeads = switch (meta["$arch.attention.head_count_kv"]) {
       final int n when layers != null => n * layers,
-      final List<Object?> perLayer => perLayer.whereType<int>().fold(0, (a, n) => a + n),
+      final List<Object?> perLayer => perLayer.whereType<int>().fold(
+        0,
+        (a, n) => a + n,
+      ),
       _ => heads != null && layers != null ? heads * layers : null,
     };
-    if (context == null || key == null || value == null || kvHeads == null || kvHeads == 0) {
+    if (context == null ||
+        key == null ||
+        value == null ||
+        kvHeads == null ||
+        kvHeads == 0) {
       throw FormatException("$arch does not say what its context costs");
     }
     final type = meta["general.file_type"];
@@ -107,21 +115,21 @@ class _Header {
   }
 
   Object? _value(int type) => switch (type) {
-        0 => _bytes(1)[0],
-        1 => _view(1).getInt8(0),
-        2 => _view(2).getUint16(0, Endian.little),
-        3 => _view(2).getInt16(0, Endian.little),
-        4 => _u32(),
-        5 => _view(4).getInt32(0, Endian.little),
-        6 => _view(4).getFloat32(0, Endian.little),
-        7 => _bytes(1)[0] != 0,
-        8 => _string(),
-        9 => _array(),
-        10 => _u64(),
-        11 => _view(8).getInt64(0, Endian.little),
-        12 => _view(8).getFloat64(0, Endian.little),
-        _ => throw FormatException("value type $type"),
-      };
+    0 => _bytes(1)[0],
+    1 => _view(1).getInt8(0),
+    2 => _view(2).getUint16(0, Endian.little),
+    3 => _view(2).getInt16(0, Endian.little),
+    4 => _u32(),
+    5 => _view(4).getInt32(0, Endian.little),
+    6 => _view(4).getFloat32(0, Endian.little),
+    7 => _bytes(1)[0] != 0,
+    8 => _string(),
+    9 => _array(),
+    10 => _u64(),
+    11 => _view(8).getInt64(0, Endian.little),
+    12 => _view(8).getFloat64(0, Endian.little),
+    _ => throw FormatException("value type $type"),
+  };
 
   /// Kept only where it is short enough to be a per-layer list.
   Object? _array() {
@@ -137,7 +145,19 @@ class _Header {
   }
 
   void _skip(int type) {
-    const widths = {0: 1, 1: 1, 2: 2, 3: 2, 4: 4, 5: 4, 6: 4, 7: 1, 10: 8, 11: 8, 12: 8};
+    const widths = {
+      0: 1,
+      1: 1,
+      2: 2,
+      3: 2,
+      4: 4,
+      5: 4,
+      6: 4,
+      7: 1,
+      10: 8,
+      11: 8,
+      12: 8,
+    };
     if (type == 8) {
       _bytes(_u64());
     } else if (widths[type] case final width?) {
@@ -156,7 +176,9 @@ class _Header {
     if (_at + n > _buffer.length) {
       final rest = _buffer.sublist(_at);
       final more = _file.readSync(n > _block ? n : _block);
-      if (rest.length + more.length < n) throw const FormatException("truncated");
+      if (rest.length + more.length < n) {
+        throw const FormatException("truncated");
+      }
       _buffer = Uint8List.fromList([...rest, ...more]);
       _at = 0;
     }

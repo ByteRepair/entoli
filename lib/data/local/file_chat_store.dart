@@ -22,8 +22,8 @@ import "../../domain/project.dart";
 /// The `ChatStore`, over the data directory's filesystem.
 class FileChatStore implements ChatStore {
   FileChatStore(this.config, {this.deleteTree, ReadOnlyDirs? readOnlyDirs})
-      : _write = RenameWriter(),
-        _readOnly = readOnlyDirs ?? ReadOnlyDirs.none();
+    : _write = RenameWriter(),
+      _readOnly = readOnlyDirs ?? ReadOnlyDirs.none();
 
   final AppConfig config;
 
@@ -35,7 +35,6 @@ class FileChatStore implements ChatStore {
   /// A chat's `resources/` is one of these: the agent reads its attachments
   /// and never writes them.
   final ReadOnlyDirs _readOnly;
-
 
   /// Which project each chat is in. A chat is addressed by its id alone, so
   /// this is how its directory is found: [list] fills it, and an id it has
@@ -108,10 +107,12 @@ class FileChatStore implements ChatStore {
   /// A chat nothing has been written for is answered as the default project,
   /// which is where a new one goes unless it says otherwise.
   @override
-  Future<String?> projectOf(String chatId) async => (await _locate(chatId))?.project;
+  Future<String?> projectOf(String chatId) async =>
+      (await _locate(chatId))?.project;
 
   @override
-  Future<void> createProject(String name) => config.ensureProjectDirs(project: name);
+  Future<void> createProject(String name) =>
+      config.ensureProjectDirs(project: name);
 
   @override
   Future<void> deleteProject(String name) async {
@@ -160,15 +161,20 @@ class FileChatStore implements ChatStore {
 
   @override
   Future<List<ChatRecord>> readRecords(String chatId) async {
-    final text =
-        await _readOrNull(config.convFile(chatId, project: await projectOf(chatId)));
+    final text = await _readOrNull(
+      config.convFile(chatId, project: await projectOf(chatId)),
+    );
     return text == null ? const [] : decodeLog(text);
   }
 
   @override
-  Future<List<ChatRecord>> readSubAgentRecords(String chatId, String callId) async {
+  Future<List<ChatRecord>> readSubAgentRecords(
+    String chatId,
+    String callId,
+  ) async {
     final text = await _readOrNull(
-        config.subAgentFile(chatId, callId, project: await projectOf(chatId)));
+      config.subAgentFile(chatId, callId, project: await projectOf(chatId)),
+    );
     return text == null ? const [] : decodeLog(text);
   }
 
@@ -181,8 +187,9 @@ class FileChatStore implements ChatStore {
     final project = await projectOf(chatId);
     // Straight onto the end of the file, not through [_write]: a rename would
     // have to write out everything already there to put one line on it.
-    await File(config.convFile(chatId, project: project))
-        .writeAsString(encodeLog(records), mode: FileMode.append);
+    await File(
+      config.convFile(chatId, project: project),
+    ).writeAsString(encodeLog(records), mode: FileMode.append);
   }
 
   @override
@@ -225,13 +232,18 @@ class FileChatStore implements ChatStore {
   }
 
   @override
-  Future<String> saveResource(String chatId, String filename, Uint8List bytes) async {
+  Future<String> saveResource(
+    String chatId,
+    String filename,
+    Uint8List bytes,
+  ) async {
     final project = await projectOf(chatId);
     await config.ensureChatDirs(chatId, project: project);
     final resource = resourceName(filename);
     final dir = config.resourcesDir(chatId, project: project);
-    await _readOnly.of(dir).write(
-        () => File(p.join(dir, resource)).writeAsBytes(bytes));
+    await _readOnly
+        .of(dir)
+        .write(() => File(p.join(dir, resource)).writeAsBytes(bytes));
     return resource;
   }
 
@@ -260,32 +272,48 @@ class FileChatStore implements ChatStore {
   }
 
   @override
-  Future<ChatMeta> loadMeta(String chatId) async =>
-      ChatMeta.parse(await _readOrNull(config.metaFile(chatId, project: await projectOf(chatId))));
+  Future<ChatMeta> loadMeta(String chatId) async => ChatMeta.parse(
+    await _readOrNull(
+      config.metaFile(chatId, project: await projectOf(chatId)),
+    ),
+  );
 
   @override
   Future<void> saveMeta(String chatId, ChatMeta meta) async {
     final project = await projectOf(chatId);
     await config.ensureChatDirs(chatId, project: project);
-    await _write.write(config.metaFile(chatId, project: project), meta.encode());
+    await _write.write(
+      config.metaFile(chatId, project: project),
+      meta.encode(),
+    );
   }
 
   @override
   Future<String> createArtifact(
-      String chatId, String sourceDir, String entryFile,
-      {String? project}) async {
+    String chatId,
+    String sourceDir,
+    String entryFile, {
+    String? project,
+  }) async {
     project = project ?? await projectOf(chatId);
     await config.ensureChatDirs(chatId, project: project);
     final artifactId = const Uuid().v4();
-    await _publish(config.artifactDir(chatId, artifactId, project: project),
-        sourceDir, entryFile);
+    await _publish(
+      config.artifactDir(chatId, artifactId, project: project),
+      sourceDir,
+      entryFile,
+    );
     return artifactId;
   }
 
   @override
-  Future<void> updateArtifact(String chatId, String artifactId,
-      String sourceDir, String entryFile,
-      {String? project}) async {
+  Future<void> updateArtifact(
+    String chatId,
+    String artifactId,
+    String sourceDir,
+    String entryFile, {
+    String? project,
+  }) async {
     project = project ?? await projectOf(chatId);
     final target = config.artifactDir(chatId, artifactId, project: project);
     final dir = Directory(target);
@@ -303,16 +331,22 @@ class FileChatStore implements ChatStore {
     await _copyDir(source, target);
     final file = File(p.join(target, entryFile));
     if (!file.existsSync()) {
-      logFailure("artifact", "Entry file missing from published artifact: "
-          "$target/$entryFile");
+      logFailure(
+        "artifact",
+        "Entry file missing from published artifact: "
+            "$target/$entryFile",
+      );
       return;
     }
     await file.writeAsString(injectBaseStyles(await file.readAsString()));
   }
 
   @override
-  Future<Uint8List?> readArtifactZip(String chatId, String artifactId,
-      {String? project}) async {
+  Future<Uint8List?> readArtifactZip(
+    String chatId,
+    String artifactId, {
+    String? project,
+  }) async {
     // On the far side of this call is a peer-named id (`_serveResource` strips
     // the prefix off the wire and hands the rest over), so the id is held to
     // what `createArtifact` hands out — one path segment, the way
@@ -331,12 +365,17 @@ class FileChatStore implements ChatStore {
   Future<String?> readPlan(String chatId) async {
     final project = await projectOf(chatId);
     final file = File(
-        p.join(config.workspaceDir(chatId, project: project), planFileName));
+      p.join(config.workspaceDir(chatId, project: project), planFileName),
+    );
     return file.existsSync() ? file.readAsString() : null;
   }
 
   @override
-  Future<String> artifactPath(String chatId, String artifactId, {String? project}) async {
+  Future<String> artifactPath(
+    String chatId,
+    String artifactId, {
+    String? project,
+  }) async {
     project = project ?? await projectOf(chatId);
     return config.artifactDir(chatId, artifactId, project: project);
   }

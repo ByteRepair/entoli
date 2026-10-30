@@ -206,13 +206,16 @@ class SpeechModel extends VoiceModel {
 }
 
 const _hf = "https://huggingface.co";
-const _release = "https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models";
+const _release =
+    "https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models";
 
 const _whisperTiny = "$_hf/csukuangfj/sherpa-onnx-whisper-tiny/resolve/main";
 const _whisperBase = "$_hf/csukuangfj/sherpa-onnx-whisper-base/resolve/main";
 const _whisperSmall = "$_hf/csukuangfj/sherpa-onnx-whisper-small/resolve/main";
-const _moonshineTiny = "$_hf/csukuangfj/sherpa-onnx-moonshine-tiny-en-int8/resolve/main";
-const _senseVoice = "$_hf/csukuangfj/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17/resolve/main";
+const _moonshineTiny =
+    "$_hf/csukuangfj/sherpa-onnx-moonshine-tiny-en-int8/resolve/main";
+const _senseVoice =
+    "$_hf/csukuangfj/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17/resolve/main";
 
 /// What listens, roughly smallest first. Whisper tiny is the default because
 /// it is the smallest thing that understands 99 languages.
@@ -241,7 +244,8 @@ const recognitionModels = <RecognitionModel>[
     engine: VoiceEngine.moonshine,
     languages: "English",
     multilingual: false,
-    note: "Lowest latency. Transcribes only the audio spoken, without "
+    note:
+        "Lowest latency. Transcribes only the audio spoken, without "
         "Whisper's 30-second padding.",
     parameters: "27M",
     licence: "MIT",
@@ -253,8 +257,14 @@ const recognitionModels = <RecognitionModel>[
     downloads: [
       VoiceFile(url: "$_moonshineTiny/preprocess.onnx", bytes: 6800738),
       VoiceFile(url: "$_moonshineTiny/encode.int8.onnx", bytes: 18249187),
-      VoiceFile(url: "$_moonshineTiny/uncached_decode.int8.onnx", bytes: 53216096),
-      VoiceFile(url: "$_moonshineTiny/cached_decode.int8.onnx", bytes: 45264830),
+      VoiceFile(
+        url: "$_moonshineTiny/uncached_decode.int8.onnx",
+        bytes: 53216096,
+      ),
+      VoiceFile(
+        url: "$_moonshineTiny/cached_decode.int8.onnx",
+        bytes: 45264830,
+      ),
       VoiceFile(url: "$_moonshineTiny/tokens.txt", bytes: 436688),
     ],
   ),
@@ -282,7 +292,8 @@ const recognitionModels = <RecognitionModel>[
     engine: VoiceEngine.senseVoice,
     languages: "Chinese, English, Japanese, Korean, Cantonese",
     multilingual: true,
-    note: "Several times faster than Whisper at similar accuracy, in its "
+    note:
+        "Several times faster than Whisper at similar accuracy, in its "
         "five languages.",
     model: "model.int8.onnx",
     tokens: "tokens.txt",
@@ -304,8 +315,14 @@ const recognitionModels = <RecognitionModel>[
     decoder: "small-decoder.int8.onnx",
     tokens: "small-tokens.txt",
     downloads: [
-      VoiceFile(url: "$_whisperSmall/small-encoder.int8.onnx", bytes: 112442483),
-      VoiceFile(url: "$_whisperSmall/small-decoder.int8.onnx", bytes: 262226114),
+      VoiceFile(
+        url: "$_whisperSmall/small-encoder.int8.onnx",
+        bytes: 112442483,
+      ),
+      VoiceFile(
+        url: "$_whisperSmall/small-decoder.int8.onnx",
+        bytes: 262226114,
+      ),
       VoiceFile(url: "$_whisperSmall/small-tokens.txt", bytes: 816730),
     ],
   ),
@@ -326,7 +343,10 @@ const speechModels = <SpeechModel>[
     tokens: "tokens.txt",
     dataDir: "espeak-ng-data",
     downloads: [
-      VoiceArchive(url: "$_release/vits-piper-en_US-amy-low-int8.tar.bz2", bytes: 21099246),
+      VoiceArchive(
+        url: "$_release/vits-piper-en_US-amy-low-int8.tar.bz2",
+        bytes: 21099246,
+      ),
     ],
   ),
   SpeechModel(
@@ -344,7 +364,10 @@ const speechModels = <SpeechModel>[
     dataDir: "espeak-ng-data",
     speakers: 8,
     downloads: [
-      VoiceArchive(url: "$_release/kitten-nano-en-v0_8-int8.tar.bz2", bytes: 31220690),
+      VoiceArchive(
+        url: "$_release/kitten-nano-en-v0_8-int8.tar.bz2",
+        bytes: 31220690,
+      ),
     ],
   ),
   SpeechModel(
@@ -353,7 +376,8 @@ const speechModels = <SpeechModel>[
     engine: VoiceEngine.kokoro,
     languages: "English, Chinese",
     multilingual: true,
-    note: "The highest quality, and the only multilingual voice. 103 voices, "
+    note:
+        "The highest quality, and the only multilingual voice. 103 voices, "
         "three of them English.",
     parameters: "82M",
     licence: "Apache-2.0",
@@ -365,7 +389,10 @@ const speechModels = <SpeechModel>[
     dictDir: "dict",
     speakers: 103,
     downloads: [
-      VoiceArchive(url: "$_release/kokoro-int8-multi-lang-v1_1.tar.bz2", bytes: 147031220),
+      VoiceArchive(
+        url: "$_release/kokoro-int8-multi-lang-v1_1.tar.bz2",
+        bytes: 147031220,
+      ),
     ],
   ),
 ];

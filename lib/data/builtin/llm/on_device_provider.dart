@@ -21,7 +21,7 @@ import "providers/provider.dart";
 /// provider is in no picker, so nothing has to keep it out of one.
 class OnDeviceProvider extends LlmProvider with KeyFree {
   const OnDeviceProvider(this._engine, this._settings, {required this.voices})
-      : super(onDeviceConfig);
+    : super(onDeviceConfig);
 
   final LocalEngine _engine;
   final AppSettings Function() _settings;
@@ -37,8 +37,10 @@ class OnDeviceProvider extends LlmProvider with KeyFree {
   /// on disk rather than by asking the engine, since asking would mean loading
   /// one.
   @override
-  Future<List<String>> listModels(String? apiKey, {http.Client? httpClient}) async =>
-      _engine.installed;
+  Future<List<String>> listModels(
+    String? apiKey, {
+    http.Client? httpClient,
+  }) async => _engine.installed;
 
   /// What it has is on the disk, not in models.dev, so [info] says nothing and
   /// an id it has not got is nothing at all.
@@ -55,8 +57,10 @@ class OnDeviceProvider extends LlmProvider with KeyFree {
   }
 
   @override
-  Iterable<Model> offered(ModelCatalog catalog, ModelHost host) =>
-      [for (final id in {..._engine.installed, ...voices()}) ...serve(id, null, host)];
+  Iterable<Model> offered(ModelCatalog catalog, ModelHost host) => [
+    for (final id in {..._engine.installed, ...voices()})
+      ...serve(id, null, host),
+  ];
 }
 
 /// A voice model on the device, as the platform's [Voice] runs it.
@@ -68,8 +72,12 @@ class OnDeviceTranscriptionModel implements TranscriptionModel {
   final RecognitionModel model;
 
   @override
-  ModelInfo get info =>
-      ModelInfo(id: model.id, name: model.name, talks: false, transcribes: true);
+  ModelInfo get info => ModelInfo(
+    id: model.id,
+    name: model.name,
+    talks: false,
+    transcribes: true,
+  );
 
   @override
   Hearing get hearing => HearOnDevice(model);
@@ -86,7 +94,8 @@ class OnDeviceSynthesisModel implements SynthesisModel {
   final SpeechModel model;
 
   @override
-  ModelInfo get info => ModelInfo(id: model.id, name: model.name, talks: false, speaks: true);
+  ModelInfo get info =>
+      ModelInfo(id: model.id, name: model.name, talks: false, speaks: true);
 
   /// A hosted provider's voice means nothing here: which of the model's
   /// speakers reads is its own setting.
@@ -102,4 +111,3 @@ class OnDeviceSynthesisModel implements SynthesisModel {
   @override
   int get speakers => model.isNative ? 0 : model.speakers;
 }
-

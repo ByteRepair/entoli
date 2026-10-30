@@ -26,29 +26,32 @@ class ImageGenerationTool extends AgentTool {
   String get runningLabel => "Generating an image";
 
   @override
-  String get description => "Generate an image from a text description. The "
+  String get description =>
+      "Generate an image from a text description. The "
       "image is shown to the user in the chat and attached to the result. "
       "Describe the subject, style and composition in full: the image model "
       "has no other context.";
 
   @override
   Map<String, dynamic> get schema => const {
-        "type": "object",
-        "properties": {
-          "prompt": {
-            "type": "string",
-            "description": "What the image should show.",
-          },
-        },
-        "required": ["prompt"],
-      };
+    "type": "object",
+    "properties": {
+      "prompt": {
+        "type": "string",
+        "description": "What the image should show.",
+      },
+    },
+    "required": ["prompt"],
+  };
 
   @override
   Stream<AgentEvent> run(LlmToolCall call, Turn turn) async* {
     final prompt = stringArg(call.argumentsJson, "prompt");
     if (prompt == null) {
       yield* toolRejected(
-          call, 'The $imageGenerationToolName tool takes {"prompt": "..."}.');
+        call,
+        'The $imageGenerationToolName tool takes {"prompt": "..."}.',
+      );
       return;
     }
     yield toolCalled(call, prompt);
@@ -65,7 +68,10 @@ class ImageGenerationTool extends AgentTool {
       return;
     }
     yield* Stream.fromIterable(saved);
-    yield toolOk(call, "Generated ${saved.length} image(s), attached below and "
-        "shown to the user in the chat.");
+    yield toolOk(
+      call,
+      "Generated ${saved.length} image(s), attached below and "
+      "shown to the user in the chat.",
+    );
   }
 }

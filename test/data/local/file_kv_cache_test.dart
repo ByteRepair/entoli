@@ -26,10 +26,13 @@ void main() {
 
   /// The cache under test. The client stands in for the running server, which
   /// is the only part of this that was ever a socket.
-  FileKvCache cache() => FileKvCache(dir.path, client: MockClient((request) {
-        actions.add(request.url.queryParameters["action"] ?? "");
-        return Future.value(http.Response("", status));
-      }));
+  FileKvCache cache() => FileKvCache(
+    dir.path,
+    client: MockClient((request) {
+      actions.add(request.url.queryParameters["action"] ?? "");
+      return Future.value(http.Response("", status));
+    }),
+  );
 
   setUp(() async {
     dir = await Directory.systemTemp.createTemp("kv_cache_test_");
@@ -57,8 +60,7 @@ void main() {
     final body = dump("ns", "body", daysAgo: 30);
     final before = body.lastModifiedSync();
 
-    expect(await cache().warm(at, namespace: "ns", keys: ["body"]),
-        isTrue);
+    expect(await cache().warm(at, namespace: "ns", keys: ["body"]), isTrue);
 
     // The whole of what replaced exempting this file from eviction by name: it
     // is written once by the prefill and read by every chat after, so on write
@@ -73,15 +75,13 @@ void main() {
     final body = dump("ns", "body", daysAgo: 30);
     final before = body.lastModifiedSync();
 
-    expect(await cache().warm(at, namespace: "ns", keys: ["body"]),
-        isFalse);
+    expect(await cache().warm(at, namespace: "ns", keys: ["body"]), isFalse);
 
     expect(body.lastModifiedSync(), before);
   });
 
   test("nothing on disk is a miss, and asks the server nothing", () async {
-    expect(await cache().warm(at, namespace: "ns", keys: ["gone"]),
-        isFalse);
+    expect(await cache().warm(at, namespace: "ns", keys: ["gone"]), isFalse);
     expect(actions, isEmpty);
   });
 
@@ -97,11 +97,14 @@ void main() {
     // behind a directory listing — so the eviction is polled until the oldest
     // dump is gone, not beaten at with a sleep.
     await waitFor(
-        () => !File(p.join(dir.path, kvFilename("ns", "old"))).existsSync(),
-        what: "the old dump's eviction");
+      () => !File(p.join(dir.path, kvFilename("ns", "old"))).existsSync(),
+      what: "the old dump's eviction",
+    );
 
     expect(actions, ["save"]);
     expect(
-        File(p.join(dir.path, kvFilename("ns", "recent"))).existsSync(), isTrue);
+      File(p.join(dir.path, kvFilename("ns", "recent"))).existsSync(),
+      isTrue,
+    );
   });
 }

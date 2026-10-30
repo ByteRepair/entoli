@@ -29,7 +29,8 @@ void main() {
   tearDown(() => app.dispose());
 
   DownloadNotice? lastNotice() => app.work.downloads.last;
-  Installable voice(VoiceModel model) => InstallableVoiceModel(model, app.voiceModels);
+  Installable voice(VoiceModel model) =>
+      InstallableVoiceModel(model, app.voiceModels);
 
   group("the notification", () {
     testWidgets("names the one thing being fetched", (tester) async {
@@ -53,8 +54,9 @@ void main() {
       expect(lastNotice()?.total, tiny.bytes + aVoice.bytes);
     });
 
-    testWidgets("says systems rather than models for the other catalog",
-        (tester) async {
+    testWidgets("says systems rather than models for the other catalog", (
+      tester,
+    ) async {
       app = TestApp.create(proot: true);
       app.rootfs.installing = Completer<void>();
       await app.pump(tester, const SizedBox());
@@ -65,32 +67,38 @@ void main() {
       expect(lastNotice()?.label, alpine.name);
     });
 
-    testWidgets("is taken away when the last one finishes, and by its own Stop",
-        (tester) async {
-      // Nothing held: the download settles at once and the notice is gone.
-      app = TestApp.create();
-      await app.pump(tester, const SizedBox());
+    testWidgets(
+      "is taken away when the last one finishes, and by its own Stop",
+      (tester) async {
+        // Nothing held: the download settles at once and the notice is gone.
+        app = TestApp.create();
+        await app.pump(tester, const SizedBox());
 
-      app.container.read(modelDownloadsProvider.notifier).install(voice(tiny));
-      await settleIo(tester);
+        app.container
+            .read(modelDownloadsProvider.notifier)
+            .install(voice(tiny));
+        await settleIo(tester);
 
-      expect(lastNotice(), isNull);
+        expect(lastNotice(), isNull);
 
-      // Held, then stopped from the notification: the button asks rather than
-      // acts — whoever owns the work stops it, and that is what takes the
-      // notification away.
-      app = TestApp.create();
-      app.voiceModels.installing = Completer<void>();
-      await app.pump(tester, const SizedBox());
-      app.container.read(modelDownloadsProvider.notifier).install(voice(tiny));
-      await settleIo(tester);
+        // Held, then stopped from the notification: the button asks rather than
+        // acts — whoever owns the work stops it, and that is what takes the
+        // notification away.
+        app = TestApp.create();
+        app.voiceModels.installing = Completer<void>();
+        await app.pump(tester, const SizedBox());
+        app.container
+            .read(modelDownloadsProvider.notifier)
+            .install(voice(tiny));
+        await settleIo(tester);
 
-      app.work.stop(BackgroundJob.download);
-      await settleIo(tester);
+        app.work.stop(BackgroundJob.download);
+        await settleIo(tester);
 
-      expect(lastNotice(), isNull);
-      expect(app.container.read(modelDownloadsProvider).active, isEmpty);
-    });
+        expect(lastNotice(), isNull);
+        expect(app.container.read(modelDownloadsProvider).active, isEmpty);
+      },
+    );
   });
 
   testWidgets("a run of events that would say the same thing is told to the "
@@ -110,18 +118,20 @@ void main() {
     expect(app.container.read(modelDownloadsProvider).active, hasLength(1));
   });
 
-  testWidgets("a download this device has nothing to fetch for starts nothing",
-      (tester) async {
-    app = TestApp.create(proot: true, abi: "riscv64");
-    await app.pump(tester, const SizedBox());
+  testWidgets(
+    "a download this device has nothing to fetch for starts nothing",
+    (tester) async {
+      app = TestApp.create(proot: true, abi: "riscv64");
+      await app.pump(tester, const SizedBox());
 
-    app.container.read(rootfsDownloadsProvider.notifier).install(alpine);
-    await settleIo(tester);
+      app.container.read(rootfsDownloadsProvider.notifier).install(alpine);
+      await settleIo(tester);
 
-    expect(app.container.read(rootfsDownloadsProvider).active, isEmpty);
-    expect(app.container.read(installedRootfsProvider), isEmpty);
-    expect(app.work.downloads, isEmpty);
-  });
+      expect(app.container.read(rootfsDownloadsProvider).active, isEmpty);
+      expect(app.container.read(installedRootfsProvider), isEmpty);
+      expect(app.work.downloads, isEmpty);
+    },
+  );
 
   testWidgets("a failure is remembered against the row, and cleared when it is "
       "tried again", (tester) async {
@@ -131,8 +141,10 @@ void main() {
 
     app.container.read(modelDownloadsProvider.notifier).install(voice(tiny));
     await settleIo(tester);
-    expect(app.container.read(modelDownloadsProvider).failures[tiny.id],
-        contains("the server said no"));
+    expect(
+      app.container.read(modelDownloadsProvider).failures[tiny.id],
+      contains("the server said no"),
+    );
 
     app.voiceModels.failWith = null;
     app.container.read(modelDownloadsProvider.notifier).install(voice(tiny));

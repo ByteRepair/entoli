@@ -51,28 +51,27 @@ void main() {
     bool running = false,
     List<ToolApproval> approvals = const [],
     List<AskRequest> questions = const [],
-  }) =>
-      TestApp.create(
-        remotes: [
-          RemoteChatEntry(
-            chatId: chatId,
-            deviceId: "device-1",
-            deviceName: "Desktop",
-            state: state,
-            online: online,
-            omada: omada,
-          ),
-        ],
-        mirrors: {
-          chatId: ChatViewState(
-            chat: chat,
-            isRunning: running,
-            approvals: {"r1": approvals},
-            questions: {"r1": questions},
-            status: online ? null : "offline — showing what this device last had",
-          ),
-        },
-      );
+  }) => TestApp.create(
+    remotes: [
+      RemoteChatEntry(
+        chatId: chatId,
+        deviceId: "device-1",
+        deviceName: "Desktop",
+        state: state,
+        online: online,
+        omada: omada,
+      ),
+    ],
+    mirrors: {
+      chatId: ChatViewState(
+        chat: chat,
+        isRunning: running,
+        approvals: {"r1": approvals},
+        questions: {"r1": questions},
+        status: online ? null : "offline — showing what this device last had",
+      ),
+    },
+  );
 
   late TestApp app;
   tearDown(() => app.dispose());
@@ -88,8 +87,9 @@ void main() {
   group("the page", () {
     // A paired device is the user's own: following its chat is all it takes
     // to type into it and change it.
-    testWidgets("online it is a chat like a local one, a composer and edits",
-        (tester) async {
+    testWidgets("online it is a chat like a local one, a composer and edits", (
+      tester,
+    ) async {
       app = appWith(online: true);
       await openMirror(tester);
 
@@ -108,8 +108,10 @@ void main() {
       expect(find.text("On Desktop"), findsOneWidget);
       expect(find.text("Desktop"), findsNothing);
       // A row of its own, under the title bar: nothing it covers.
-      expect(tester.getRect(find.byType(MirrorStrip)).bottom,
-          lessThanOrEqualTo(tester.getRect(find.byType(Scrollable).first).top));
+      expect(
+        tester.getRect(find.byType(MirrorStrip)).bottom,
+        lessThanOrEqualTo(tester.getRect(find.byType(Scrollable).first).top),
+      );
     });
 
     testWidgets("the title bar opens the chat's settings, less what is the "
@@ -122,11 +124,16 @@ void main() {
       expect(find.byType(ChatSettingsPage), findsOneWidget);
       expect(find.text("On Desktop"), findsOneWidget);
       expect(find.text("Context"), findsOneWidget);
-      await tester.scrollUntilVisible(find.text("Delete chat"), 200,
-          scrollable: find
-              .descendant(
-                  of: find.byType(ChatSettingsPage), matching: find.byType(Scrollable))
-              .first);
+      await tester.scrollUntilVisible(
+        find.text("Delete chat"),
+        200,
+        scrollable: find
+            .descendant(
+              of: find.byType(ChatSettingsPage),
+              matching: find.byType(Scrollable),
+            )
+            .first,
+      );
       expect(find.text("Delete chat"), findsOneWidget);
       // Its files and its providers are the home device's.
       expect(find.text("Chat workspace"), findsNothing);
@@ -140,7 +147,8 @@ void main() {
       await tester.tap(find.text("On the desktop"));
       await settleIo(tester);
       final save = tester.widget<IconButton>(
-          find.widgetWithIcon(IconButton, Icons.check));
+        find.widgetWithIcon(IconButton, Icons.check),
+      );
       expect(save.onPressed, isNull);
       expect(find.text("Delete chat"), findsNothing);
     });
@@ -151,34 +159,53 @@ void main() {
       await openMirror(tester);
 
       expect(find.text("Desktop is offline"), findsOneWidget);
-      expect(find.text("Offline — showing what this device last had"),
-          findsOneWidget);
+      expect(
+        find.text("Offline — showing what this device last had"),
+        findsOneWidget,
+      );
       expect(find.byType(Composer), findsNothing);
       expect(find.byTooltip("Edit"), findsNothing);
       // The point of keeping the snapshot: it is still readable.
       expect(find.text("answered at home"), findsOneWidget);
     });
 
-    testWidgets("a command waiting to be allowed is drawn here", (tester) async {
-      app = appWith(online: true, running: true, approvals: const [
-        ToolApproval(id: "a1", toolName: "bash", argumentsText: "rm -rf /"),
-      ]);
+    testWidgets("a command waiting to be allowed is drawn here", (
+      tester,
+    ) async {
+      app = appWith(
+        online: true,
+        running: true,
+        approvals: const [
+          ToolApproval(id: "a1", toolName: "bash", argumentsText: "rm -rf /"),
+        ],
+      );
       await openMirror(tester, running: true);
 
       await pumpUntil(tester, find.textContaining("rm -rf /"));
       expect(find.textContaining("rm -rf /"), findsOneWidget);
     });
 
-    testWidgets("a question takes the composer's place, as it does at home",
-        (tester) async {
-      app = appWith(online: true, running: true, questions: [
-        const AskRequest(id: "q1", questions: [
-          AskQuestion(question: "Which one?", options: [
-            AskOption(label: "This one"),
-            AskOption(label: "That one"),
-          ]),
-        ]),
-      ]);
+    testWidgets("a question takes the composer's place, as it does at home", (
+      tester,
+    ) async {
+      app = appWith(
+        online: true,
+        running: true,
+        questions: [
+          const AskRequest(
+            id: "q1",
+            questions: [
+              AskQuestion(
+                question: "Which one?",
+                options: [
+                  AskOption(label: "This one"),
+                  AskOption(label: "That one"),
+                ],
+              ),
+            ],
+          ),
+        ],
+      );
       await openMirror(tester, running: true);
 
       await pumpUntil(tester, find.text("Which one?"));
@@ -198,8 +225,9 @@ void main() {
       await settleIo(tester);
     }
 
-    testWidgets("the paired device's project is offered in the switcher",
-        (tester) async {
+    testWidgets("the paired device's project is offered in the switcher", (
+      tester,
+    ) async {
       app = appWith(online: true);
       await app.pump(tester, const Sidebar());
       await settleIo(tester);
@@ -212,11 +240,16 @@ void main() {
       expect(find.text("Desktop"), findsOneWidget);
     });
 
-    testWidgets("its name is styled by Omada on the device, not here",
-        (tester) async {
+    testWidgets("its name is styled by Omada on the device, not here", (
+      tester,
+    ) async {
       FontStyle? style() => tester
-          .widget<Text>(find.descendant(
-              of: find.byTooltip("Switch project"), matching: find.text("Desktop")))
+          .widget<Text>(
+            find.descendant(
+              of: find.byTooltip("Switch project"),
+              matching: find.text("Desktop"),
+            ),
+          )
           .style
           ?.fontStyle;
       for (final omada in [true, false]) {
@@ -243,8 +276,9 @@ void main() {
       expect(find.text("offline"), findsOneWidget);
     });
 
-    testWidgets("a remote row's menu is a local one's, less the move",
-        (tester) async {
+    testWidgets("a remote row's menu is a local one's, less the move", (
+      tester,
+    ) async {
       app = appWith(online: true);
       await pickRemote(tester);
 

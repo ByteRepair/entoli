@@ -11,16 +11,23 @@ import "package:flutter/material.dart";
 ///
 /// Each entry carries its action as its value, so it runs once the menu has
 /// closed rather than under it. Guard the result with `context.mounted`.
-Future<T?> showAnchoredMenu<T>(BuildContext context, List<PopupMenuEntry<T>> items) {
+Future<T?> showAnchoredMenu<T>(
+  BuildContext context,
+  List<PopupMenuEntry<T>> items,
+) {
   final button = context.findRenderObject()! as RenderBox;
-  final overlay = Navigator.of(context).overlay!.context.findRenderObject()! as RenderBox;
+  final overlay =
+      Navigator.of(context).overlay!.context.findRenderObject()! as RenderBox;
   final under = Offset(0, button.size.height);
   return showMenu<T>(
     context: context,
     position: RelativeRect.fromRect(
       Rect.fromPoints(
         button.localToGlobal(under, ancestor: overlay),
-        button.localToGlobal(button.size.bottomRight(Offset.zero) + under, ancestor: overlay),
+        button.localToGlobal(
+          button.size.bottomRight(Offset.zero) + under,
+          ancestor: overlay,
+        ),
       ),
       Offset.zero & overlay.size,
     ),

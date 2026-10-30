@@ -10,7 +10,9 @@ import "form_factor.dart";
 Future<int?> systemAccent() async {
   if (!isAndroid) return null;
   try {
-    return await const MethodChannel("agent_chat/palette").invokeMethod<int>("accent");
+    return await const MethodChannel(
+      "agent_chat/palette",
+    ).invokeMethod<int>("accent");
   } on PlatformException catch (e) {
     logFailure("palette", "system accent not read", e);
     return null;

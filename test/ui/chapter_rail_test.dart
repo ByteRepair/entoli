@@ -8,7 +8,11 @@ import "package:agent_chat/ui/chat/widgets/chapter_rail.dart";
 import "../harness.dart";
 
 Message _said(String id, MessageRole role, String text) => Message(
-    id: id, role: role, createdAt: DateTime(2026), parts: [TextPart(text: text)]);
+  id: id,
+  role: role,
+  createdAt: DateTime(2026),
+  parts: [TextPart(text: text)],
+);
 
 void main() {
   test("a chapter is a prompt, branched wherever its turn was", () {
@@ -35,35 +39,40 @@ void main() {
     expect(chapters.map((c) => c.threads), [2, 3, 1]);
   });
 
-  testWidgets("a branched chapter is marked, and says how many threads",
-      (tester) async {
+  testWidgets("a branched chapter is marked, and says how many threads", (
+    tester,
+  ) async {
     final current = ValueNotifier<int?>(0);
     addTearDown(current.dispose);
-    await tester.pumpWidget(MaterialApp(
-      home: Scaffold(
-        body: ChapterRail(
-          chapters: const [
-            (id: "u1", row: "u1", preview: "first", threads: 1),
-            (id: "u2", row: "u2", preview: "second", threads: 2),
-          ],
-          current: current,
-          onSelect: (_, {required scrubbing}) {},
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ChapterRail(
+            chapters: const [
+              (id: "u1", row: "u1", preview: "first", threads: 1),
+              (id: "u2", row: "u2", preview: "second", threads: 2),
+            ],
+            current: current,
+            onSelect: (_, {required scrubbing}) {},
+          ),
         ),
       ),
-    ));
+    );
 
     expect(find.byIcon(Icons.call_split), findsOneWidget);
     expect(find.byTooltip("second\n2 threads branch here"), findsOneWidget);
   });
 
   testWidgets("one prompt still has its tick", (tester) async {
-    await tester.pumpWidget(MaterialApp(
-      home: ChapterRail(
-        chapters: const [(id: "u1", row: "u1", preview: "first", threads: 1)],
-        current: ValueNotifier(null),
-        onSelect: (_, {required scrubbing}) {},
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ChapterRail(
+          chapters: const [(id: "u1", row: "u1", preview: "first", threads: 1)],
+          current: ValueNotifier(null),
+          onSelect: (_, {required scrubbing}) {},
+        ),
       ),
-    ));
+    );
 
     expect(find.byTooltip("first"), findsOneWidget);
   });
@@ -79,7 +88,9 @@ void main() {
           createdAt: DateTime(2026),
           parts: [
             const TextPart(text: "working"),
-            MessagePart.steer(message: _said("s1", MessageRole.user, "use the browser")),
+            MessagePart.steer(
+              message: _said("s1", MessageRole.user, "use the browser"),
+            ),
             const TextPart(text: "more"),
           ],
         ),
@@ -95,16 +106,23 @@ void main() {
 
     expect(chapters.map((c) => c.id), ["u1", "s1", "u2"]);
     expect(chapters.map((c) => c.row), ["u1", "a1", "u2"]);
-    expect(chapters.map((c) => c.preview), ["first", "use the browser", "second"]);
+    expect(chapters.map((c) => c.preview), [
+      "first",
+      "use the browser",
+      "second",
+    ]);
     expect(chapters.map((c) => c.threads), [1, 1, 2]);
   });
 
   test("a long prompt is cut to fifty characters", () {
     final long = "x" * 80;
-    final chat = Chat(state: makeState("c"), messages: [
-      _said("u1", MessageRole.user, long),
-      _said("u2", MessageRole.user, "y" * 50),
-    ]);
+    final chat = Chat(
+      state: makeState("c"),
+      messages: [
+        _said("u1", MessageRole.user, long),
+        _said("u2", MessageRole.user, "y" * 50),
+      ],
+    );
 
     final chapters = chaptersOf(chat);
 
@@ -113,50 +131,56 @@ void main() {
     expect(chapters[1].preview, "y" * 50);
   });
 
-  testWidgets("a press selects, and a drag while pressed scrubs through each tick",
-      (tester) async {
-    final picked = <(int, bool)>[];
-    final current = ValueNotifier<int?>(null);
-    addTearDown(current.dispose);
-    await tester.pumpWidget(MaterialApp(
-      home: Scaffold(
-        body: Center(
-          child: SizedBox(
-            height: 400,
-            child: ChapterRail(
-              chapters: [
-                for (var i = 0; i < 5; i++) (id: "u$i", row: "u$i", preview: "p$i", threads: 1),
-              ],
-              current: current,
-              onSelect: (i, {required scrubbing}) => picked.add((i, scrubbing)),
+  testWidgets(
+    "a press selects, and a drag while pressed scrubs through each tick",
+    (tester) async {
+      final picked = <(int, bool)>[];
+      final current = ValueNotifier<int?>(null);
+      addTearDown(current.dispose);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Center(
+              child: SizedBox(
+                height: 400,
+                child: ChapterRail(
+                  chapters: [
+                    for (var i = 0; i < 5; i++)
+                      (id: "u$i", row: "u$i", preview: "p$i", threads: 1),
+                  ],
+                  current: current,
+                  onSelect: (i, {required scrubbing}) =>
+                      picked.add((i, scrubbing)),
+                ),
+              ),
             ),
           ),
         ),
-      ),
-    ));
+      );
 
-    final first = tester.getCenter(find.byTooltip("p0"));
-    final pitch = tester.getCenter(find.byTooltip("p1")).dy - first.dy;
-    final press = await tester.startGesture(first);
-    // Selected on the way down, before anything is let go.
-    expect(picked, [(0, false)]);
+      final first = tester.getCenter(find.byTooltip("p0"));
+      final pitch = tester.getCenter(find.byTooltip("p1")).dy - first.dy;
+      final press = await tester.startGesture(first);
+      // Selected on the way down, before anything is let go.
+      expect(picked, [(0, false)]);
 
-    // Moving within the tick it is on selects nothing new.
-    await press.moveBy(Offset(0, pitch / 4));
-    for (var i = 0; i < 3; i++) {
-      await press.moveBy(Offset(0, pitch));
-    }
-    await press.up();
+      // Moving within the tick it is on selects nothing new.
+      await press.moveBy(Offset(0, pitch / 4));
+      for (var i = 0; i < 3; i++) {
+        await press.moveBy(Offset(0, pitch));
+      }
+      await press.up();
 
-    expect(picked, [(0, false), (1, true), (2, true), (3, true)]);
+      expect(picked, [(0, false), (1, true), (2, true), (3, true)]);
 
-    // A mouse passing over with no button down is a hover, not a scrub.
-    picked.clear();
-    final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
-    await mouse.addPointer(location: first);
-    await mouse.moveTo(tester.getCenter(find.byTooltip("p4")));
-    await mouse.removePointer();
+      // A mouse passing over with no button down is a hover, not a scrub.
+      picked.clear();
+      final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+      await mouse.addPointer(location: first);
+      await mouse.moveTo(tester.getCenter(find.byTooltip("p4")));
+      await mouse.removePointer();
 
-    expect(picked, isEmpty);
-  });
+      expect(picked, isEmpty);
+    },
+  );
 }

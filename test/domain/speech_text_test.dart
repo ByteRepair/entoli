@@ -23,7 +23,10 @@ void main() {
     });
 
     test("keeps a link's text and drops its target", () {
-      expect(speakable("See [the docs](https://example.com)."), "See the docs.");
+      expect(
+        speakable("See [the docs](https://example.com)."),
+        "See the docs.",
+      );
     });
 
     test("strips emphasis without eating the word", () {
@@ -31,10 +34,7 @@ void main() {
     });
 
     test("reads a table as its cells", () {
-      expect(
-        speakable("| a | b |\n| - | - |\n| 1 | 2 |"),
-        "a, b\n1, 2",
-      );
+      expect(speakable("| a | b |\n| - | - |\n| 1 | 2 |"), "a, b\n1, 2");
     });
   });
 
@@ -42,19 +42,25 @@ void main() {
     test("hands over a sentence once it is whole", () {
       final splitter = SentenceSplitter();
       expect(splitter.add("The first thing"), isEmpty);
-      expect(splitter.add("The first thing is done. And th"),
-          ["The first thing is done."]);
+      expect(splitter.add("The first thing is done. And th"), [
+        "The first thing is done.",
+      ]);
       expect(splitter.add("The first thing is done. And then"), isEmpty);
     });
 
     test("does not split a decimal or a file name", () {
       final splitter = SentenceSplitter();
-      expect(splitter.add("The version is 1.2.3 and the file is main.dart"), isEmpty);
+      expect(
+        splitter.add("The version is 1.2.3 and the file is main.dart"),
+        isEmpty,
+      );
     });
 
     test("ends a sentence at a line break", () {
       final splitter = SentenceSplitter();
-      expect(splitter.add("A heading of sorts\nand the rest"), ["A heading of sorts"]);
+      expect(splitter.add("A heading of sorts\nand the rest"), [
+        "A heading of sorts",
+      ]);
     });
 
     test("flushes the tail once nothing more is coming", () {
@@ -67,8 +73,9 @@ void main() {
     test("starts over when the text is a different one", () {
       final splitter = SentenceSplitter();
       splitter.add("The first reply is here. More");
-      expect(splitter.add("A second reply entirely. Yes"),
-          ["A second reply entirely."]);
+      expect(splitter.add("A second reply entirely. Yes"), [
+        "A second reply entirely.",
+      ]);
     });
 
     test("breaks a run-on rather than holding the first sound back", () {
@@ -90,9 +97,14 @@ void main() {
       }
     }
 
-    test("says what speakable says, at every length a reply passes through", () {
-      agreesGrowing("## What changed\n\n- one\n- two\n\nSee [the docs](x). Done.");
-    });
+    test(
+      "says what speakable says, at every length a reply passes through",
+      () {
+        agreesGrowing(
+          "## What changed\n\n- one\n- two\n\nSee [the docs](x). Done.",
+        );
+      },
+    );
 
     test("agrees while a fence is open, and once it has closed", () {
       agreesGrowing("Try this:\n```sh\nrm -rf /tmp/x\n```\nThen check it.");
@@ -116,12 +128,16 @@ void main() {
     // digit and a stop are each a marker somewhere and none of them here: what
     // makes a line plain is where they sit, not whether they are in it.
     test("agrees over a paragraph that runs on, settling nothing", () {
-      agreesGrowing("A well-known result, e.g. 3.14 or file.dart, is that 1. is "
-          "not a list mid-line - and a dash is not a bullet there either.");
+      agreesGrowing(
+        "A well-known result, e.g. 3.14 or file.dart, is that 1. is "
+        "not a list mid-line - and a dash is not a bullet there either.",
+      );
     });
 
     test("agrees where the markup arrives late in a line", () {
-      agreesGrowing("Prose for a while, and then **bold** turns up, then more.");
+      agreesGrowing(
+        "Prose for a while, and then **bold** turns up, then more.",
+      );
     });
 
     test("agrees where a line is still the whitespace before its bullet", () {

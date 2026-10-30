@@ -41,7 +41,8 @@ class RootfsDownloads extends Downloads<Rootfs> {
   }
 
   @override
-  Future<void> erase(Rootfs rootfs) => ref.read(rootfsStoreProvider).delete(rootfs);
+  Future<void> erase(Rootfs rootfs) =>
+      ref.read(rootfsStoreProvider).delete(rootfs);
 }
 
 final rootfsDownloadsProvider =

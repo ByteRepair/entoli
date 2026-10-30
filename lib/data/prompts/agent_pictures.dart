@@ -12,7 +12,10 @@ import "prompt_sources.dart";
 /// The name is the file's, as the `.md` is; the writer, the remover and the
 /// rename all have to agree on that, the way they do for [agentFilePath].
 String agentPicturePath(AppConfig config, String name, {String? project}) =>
-    p.join(config.promptsDir(CompletionKind.agent, project: project), "$name.png");
+    p.join(
+      config.promptsDir(CompletionKind.agent, project: project),
+      "$name.png",
+    );
 
 /// The bytes of the picture the library's tiers show for an agent called
 /// [name]: the first [tiers] rung that holds one, walked from the top —
@@ -26,7 +29,10 @@ String agentPicturePath(AppConfig config, String name, {String? project}) =>
 /// `.md` files by), handed in rather than resolved here so the caller
 /// resolves the Omada question where it already holds the config.
 Future<Uint8List?> readAgentPicture(
-    AppConfig config, String name, List<String> tiers) async {
+  AppConfig config,
+  String name,
+  List<String> tiers,
+) async {
   for (final tier in tiers.reversed) {
     final file = File(agentPicturePath(config, name, project: tier));
     if (!file.existsSync()) continue;

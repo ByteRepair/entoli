@@ -33,54 +33,58 @@ void main() {
         "references/notes.md": "notes\n",
       });
 
-      final package =
-          await packageSkillDirectory(dir.path, null);
+      final package = await packageSkillDirectory(dir.path, null);
 
       expect(package.name, "demo");
       final names = package.entries.map((e) => e.$1).toSet();
-      expect(names, containsAll(["SKILL.md", "scripts/run.sh", "references/notes.md"]));
+      expect(
+        names,
+        containsAll(["SKILL.md", "scripts/run.sh", "references/notes.md"]),
+      );
     });
 
     test("a name argument wins over the frontmatter and the folder", () async {
       write({
-        "SKILL.md": "---\nname: from-frontmatter\ndescription: d\n---\n\nDo it.\n",
+        "SKILL.md":
+            "---\nname: from-frontmatter\ndescription: d\n---\n\nDo it.\n",
       });
 
-      final package =
-          await packageSkillDirectory(dir.path, "from-arg");
+      final package = await packageSkillDirectory(dir.path, "from-arg");
 
       expect(package.name, "from-arg");
 
       // Without a name argument or frontmatter name, the folder is the name:
       // the folder is a temp dir whose name is not a spec name, so the
       // packager is handed the name the folder would be renamed to.
-      write({
-        "SKILL.md": "---\ndescription: d\n---\n\nDo it.\n",
-      });
-      final fromFolder =
-          await packageSkillDirectory(dir.path, "demo");
+      write({"SKILL.md": "---\ndescription: d\n---\n\nDo it.\n"});
+      final fromFolder = await packageSkillDirectory(dir.path, "demo");
 
       expect(fromFolder.name, "demo");
     });
 
-    test("a frontmatter that does not conform is refused with the reasons",
-        () async {
-      write({
-        "SKILL.md":
-            "---\nname: Demo\ndescription: d\nargument-hint: args\n---\n\nDo it.\n",
-      });
+    test(
+      "a frontmatter that does not conform is refused with the reasons",
+      () async {
+        write({
+          "SKILL.md":
+              "---\nname: Demo\ndescription: d\nargument-hint: args\n---\n\nDo it.\n",
+        });
 
-      await expectLater(
-        packageSkillDirectory(dir.path, null),
-        throwsA(isA<SkillImportException>().having(
-            (e) => e.message,
-            "message",
-            allOf(
-              contains("name \"Demo\""),
-              contains("unknown frontmatter key \"argument-hint\""),
-            ))),
-      );
-    });
+        await expectLater(
+          packageSkillDirectory(dir.path, null),
+          throwsA(
+            isA<SkillImportException>().having(
+              (e) => e.message,
+              "message",
+              allOf(
+                contains("name \"Demo\""),
+                contains("unknown frontmatter key \"argument-hint\""),
+              ),
+            ),
+          ),
+        );
+      },
+    );
   });
 
   group("round trip", () {
@@ -90,18 +94,18 @@ void main() {
         "scripts/run.sh": "#!/bin/sh\necho hi\n",
       });
 
-      final original =
-          await packageSkillDirectory(dir.path, null);
+      final original = await packageSkillDirectory(dir.path, null);
       final bytes = packageSkillBytes(original);
       expect(bytes.length, greaterThan(0));
 
       final reparsed = parseSkillPackage(Uint8List.fromList(bytes));
       expect(reparsed.name, "demo");
-      expect(reparsed.entries.map((e) => e.$1).toSet(),
-          {"SKILL.md", "scripts/run.sh"});
+      expect(reparsed.entries.map((e) => e.$1).toSet(), {
+        "SKILL.md",
+        "scripts/run.sh",
+      });
       // The bytes survived the trip intact.
-      final skillMd =
-          reparsed.entries.firstWhere((e) => e.$1 == "SKILL.md").$2;
+      final skillMd = reparsed.entries.firstWhere((e) => e.$1 == "SKILL.md").$2;
       expect(utf8(skillMd), contains("Do it."));
     });
   });

@@ -35,7 +35,8 @@ class MemorySaveTool extends _MemoryTool {
   String get name => memorySaveToolName;
 
   @override
-  String get description => "Save one memory: a short durable fact about the "
+  String get description =>
+      "Save one memory: a short durable fact about the "
       "user or the work that is still true after this conversation ends — a "
       "preference stated, a decision made, a fact learned about a codebase or "
       "an account. One fact per call, in one or two sentences, written so it "
@@ -45,22 +46,25 @@ class MemorySaveTool extends _MemoryTool {
 
   @override
   Map<String, dynamic> get schema => const {
-        "type": "object",
-        "properties": {
-          "text": {
-            "type": "string",
-            "description": "The fact, in one or two sentences.",
-          },
-        },
-        "required": ["text"],
-      };
+    "type": "object",
+    "properties": {
+      "text": {
+        "type": "string",
+        "description": "The fact, in one or two sentences.",
+      },
+    },
+    "required": ["text"],
+  };
 
   @override
   Stream<AgentEvent> run(LlmToolCall call, Turn turn) async* {
     final text = stringArg(call.argumentsJson, "text");
     if (text == null) {
-      yield* toolRejected(call, 'The $memorySaveToolName tool takes {"text": "..."}; '
-          "that argument was missing.");
+      yield* toolRejected(
+        call,
+        'The $memorySaveToolName tool takes {"text": "..."}; '
+        "that argument was missing.",
+      );
       return;
     }
     yield toolCalled(call, text);
@@ -70,8 +74,11 @@ class MemorySaveTool extends _MemoryTool {
       yield toolFailed(call, "The memory could not be saved: $e");
       return;
     }
-    yield toolOk(call, "Memory saved. Later conversations are offered it when "
-        "it looks relevant.");
+    yield toolOk(
+      call,
+      "Memory saved. Later conversations are offered it when "
+      "it looks relevant.",
+    );
   }
 }
 
@@ -85,7 +92,8 @@ class MemorySearchTool extends _MemoryTool {
   String get name => memorySearchToolName;
 
   @override
-  String get description => "Search this project's memories — the durable "
+  String get description =>
+      "Search this project's memories — the durable "
       "facts saved from earlier conversations — for the ones about what you "
       "are being asked. Use the words a fact would be written with; a few "
       "keywords is enough. Each hit is shown as [id] text; keep the id if the "
@@ -93,28 +101,33 @@ class MemorySearchTool extends _MemoryTool {
 
   @override
   Map<String, dynamic> get schema => const {
-        "type": "object",
-        "properties": {
-          "query": {
-            "type": "string",
-            "description": "What the memory is about, as a few keywords.",
-          },
-        },
-        "required": ["query"],
-      };
+    "type": "object",
+    "properties": {
+      "query": {
+        "type": "string",
+        "description": "What the memory is about, as a few keywords.",
+      },
+    },
+    "required": ["query"],
+  };
 
   @override
   Stream<AgentEvent> run(LlmToolCall call, Turn turn) async* {
     final query = stringArg(call.argumentsJson, "query");
     if (query == null) {
-      yield* toolRejected(call, 'The $memorySearchToolName tool takes {"query": "..."}; '
-          "that argument was missing.");
+      yield* toolRejected(
+        call,
+        'The $memorySearchToolName tool takes {"query": "..."}; '
+        "that argument was missing.",
+      );
       return;
     }
     yield toolCalled(call, query);
     final hits = await turn.memoryStore!.search(query);
-    yield toolOk(call,
-        hits.isEmpty ? "No memories match." : renderRecall(hits, withIds: true));
+    yield toolOk(
+      call,
+      hits.isEmpty ? "No memories match." : renderRecall(hits, withIds: true),
+    );
   }
 }
 
@@ -128,51 +141,62 @@ class MemoryUpdateTool extends _MemoryTool {
   String get name => memoryUpdateToolName;
 
   @override
-  String get description => "Correct a memory you found with memory_search: "
+  String get description =>
+      "Correct a memory you found with memory_search: "
       "the fact it held is wrong, outdated, or incomplete, and you have the "
       "better version. Use the id the search showed in square brackets. One "
       "fact per call, the same way memory_save writes one.";
 
   @override
   Map<String, dynamic> get schema => const {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "description": "The id of the memory to replace, as memory_search "
-                "showed it.",
-          },
-          "text": {
-            "type": "string",
-            "description": "The corrected fact, in one or two sentences.",
-          },
-        },
-        "required": ["id", "text"],
-      };
+    "type": "object",
+    "properties": {
+      "id": {
+        "type": "string",
+        "description":
+            "The id of the memory to replace, as memory_search "
+            "showed it.",
+      },
+      "text": {
+        "type": "string",
+        "description": "The corrected fact, in one or two sentences.",
+      },
+    },
+    "required": ["id", "text"],
+  };
 
   @override
   Stream<AgentEvent> run(LlmToolCall call, Turn turn) async* {
     final id = stringArg(call.argumentsJson, "id");
     final text = stringArg(call.argumentsJson, "text");
     if (id == null || text == null) {
-      yield* toolRejected(call,
-          'The $memoryUpdateToolName tool takes {"id": "...", "text": "..."}; '
-          "that argument was missing.");
+      yield* toolRejected(
+        call,
+        'The $memoryUpdateToolName tool takes {"id": "...", "text": "..."}; '
+        "that argument was missing.",
+      );
       return;
     }
     yield toolCalled(call, text);
     try {
-      if (await turn.memoryStore!.update(id, text, chat: turn.memoryChat) == null) {
-        yield toolFailed(call, "The memory could not be updated: no memory with "
-            "id $id. Search again for its current id.");
+      if (await turn.memoryStore!.update(id, text, chat: turn.memoryChat) ==
+          null) {
+        yield toolFailed(
+          call,
+          "The memory could not be updated: no memory with "
+          "id $id. Search again for its current id.",
+        );
         return;
       }
     } catch (e) {
       yield toolFailed(call, "The memory could not be updated: $e");
       return;
     }
-    yield toolOk(call, "Memory updated. The replacement stands where the old "
-        "fact was.");
+    yield toolOk(
+      call,
+      "Memory updated. The replacement stands where the old "
+      "fact was.",
+    );
   }
 }
 
@@ -185,7 +209,8 @@ class MemoryDeleteTool extends _MemoryTool {
   String get name => memoryDeleteToolName;
 
   @override
-  String get description => "Delete a memory you found with memory_search: "
+  String get description =>
+      "Delete a memory you found with memory_search: "
       "the fact it held is wrong or no longer true, and there is no "
       "replacement to save instead. Use the id the search showed in square "
       "brackets. Do not delete a memory just because it is not relevant to "
@@ -193,24 +218,27 @@ class MemoryDeleteTool extends _MemoryTool {
 
   @override
   Map<String, dynamic> get schema => const {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "description": "The id of the memory to delete, as memory_search "
-                "showed it.",
-          },
-        },
-        "required": ["id"],
-      };
+    "type": "object",
+    "properties": {
+      "id": {
+        "type": "string",
+        "description":
+            "The id of the memory to delete, as memory_search "
+            "showed it.",
+      },
+    },
+    "required": ["id"],
+  };
 
   @override
   Stream<AgentEvent> run(LlmToolCall call, Turn turn) async* {
     final id = stringArg(call.argumentsJson, "id");
     if (id == null) {
-      yield* toolRejected(call,
-          'The $memoryDeleteToolName tool takes {"id": "..."}; that argument '
-          "was missing.");
+      yield* toolRejected(
+        call,
+        'The $memoryDeleteToolName tool takes {"id": "..."}; that argument '
+        "was missing.",
+      );
       return;
     }
     yield toolCalled(call);

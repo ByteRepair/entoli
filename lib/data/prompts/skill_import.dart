@@ -62,7 +62,10 @@ String skillDirectory(AppConfig config, String name, {String? project}) =>
 /// name, which is what the writer, the remover, the importer and the exporter
 /// all have to agree on.
 String agentFilePath(AppConfig config, String name, {String? project}) =>
-    p.join(config.promptsDir(CompletionKind.agent, project: project), "$name.md");
+    p.join(
+      config.promptsDir(CompletionKind.agent, project: project),
+      "$name.md",
+    );
 
 /// Decode a `.skill` archive. Refused rather than repaired: not a zip, no
 /// `SKILL.md`, or a name that is not a single directory segment — the folder
@@ -86,7 +89,8 @@ SkillPackage parseSkillPackage(Uint8List bytes) {
   // one down, and a deeper one is a skill packaged beside something else.
   final files = [
     for (final member in archive)
-      if (!member.isDirectory) (member.name, member.readBytes() ?? Uint8List(0)),
+      if (!member.isDirectory)
+        (member.name, member.readBytes() ?? Uint8List(0)),
   ];
   final roots = [
     for (final (name, _) in files)
@@ -96,7 +100,9 @@ SkillPackage parseSkillPackage(Uint8List bytes) {
     throw const SkillImportException("there is no SKILL.md in it");
   }
   final root = roots.first;
-  final prefix = root == "SKILL.md" ? "" : root.substring(0, root.length - "SKILL.md".length);
+  final prefix = root == "SKILL.md"
+      ? ""
+      : root.substring(0, root.length - "SKILL.md".length);
   final entries = [
     for (final (name, data) in files)
       if (name.startsWith(prefix)) (name.substring(prefix.length), data),
@@ -124,8 +130,12 @@ SkillPackage parseSkillPackage(Uint8List bytes) {
   if (problems.isNotEmpty) {
     throw SkillImportException(problems.join("; "));
   }
-  return SkillPackage(name, entries,
-      description: document.description, body: document.body);
+  return SkillPackage(
+    name,
+    entries,
+    description: document.description,
+    body: document.body,
+  );
 }
 
 /// One directory under `skills/` and nothing else: a name holding a separator
@@ -134,7 +144,10 @@ SkillPackage parseSkillPackage(Uint8List bytes) {
 /// spec's name rule — that is [skillProblems]' — just the shape a folder name
 /// can have.
 bool isFolderName(String name) =>
-    name.isNotEmpty && !name.startsWith(".") && !name.contains("/") && !name.contains("\\");
+    name.isNotEmpty &&
+    !name.startsWith(".") &&
+    !name.contains("/") &&
+    !name.contains("\\");
 
 /// Whether [name] is a preset the binary embeds for [kind]: bundled skills for
 /// [CompletionKind.skill], bundled agents for [CompletionKind.agent]. A
@@ -151,20 +164,26 @@ bool isBundledPromptName(CompletionKind kind, String name, {String? project}) =>
       },
       project,
       name,
-    ) != null;
+    ) !=
+    null;
 
 /// What a snack bar says a skill landed as: the bare sentence for the default
 /// project, the destination named otherwise. Shared by the settings page's
 /// import flow and the install preview page, so the two doors word it alike.
 String installedSnack(String verb, String name, String? project) =>
-    project == null ? "$verb $name." : "$verb $name to ${projectLabel(project)}.";
+    project == null
+    ? "$verb $name."
+    : "$verb $name to ${projectLabel(project)}.";
 
 /// Write [package] into [project]'s skills directory — the default project's
 /// where it is null. A skill already there of the same name is replaced
 /// wholesale — delete first, so a re-imported skill does not keep the files
 /// its new packaging dropped.
-Future<void> installSkillPackage(AppConfig config, SkillPackage package,
-    {String? project}) async {
+Future<void> installSkillPackage(
+  AppConfig config,
+  SkillPackage package, {
+  String? project,
+}) async {
   final dir = skillDirectory(config, package.name, project: project);
   try {
     await Directory(dir).delete(recursive: true);

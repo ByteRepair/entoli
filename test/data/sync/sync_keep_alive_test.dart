@@ -35,7 +35,10 @@ void main() {
   void connected(String id, String name, PeerStatus status) {
     hub.peers.value = {
       "gone": PeerState(
-          deviceId: "gone", name: "Offline Device", status: PeerStatus.offline),
+        deviceId: "gone",
+        name: "Offline Device",
+        status: PeerStatus.offline,
+      ),
       id: PeerState(deviceId: id, name: name, status: status),
     };
   }
@@ -105,14 +108,16 @@ void main() {
 
       // Written only when on: a file that predates the switch says nothing
       // and gets the off default.
-      final json = jsonDecode(File(config.settingsFile).readAsStringSync())
-          as Map<String, dynamic>;
+      final json =
+          jsonDecode(File(config.settingsFile).readAsStringSync())
+              as Map<String, dynamic>;
       expect(json.containsKey("syncKeepAlive"), isTrue);
 
       await AppSettings().save(config);
       expect(AppSettings.load(config).syncKeepAlive, isFalse);
-      final quiet = jsonDecode(File(config.settingsFile).readAsStringSync())
-          as Map<String, dynamic>;
+      final quiet =
+          jsonDecode(File(config.settingsFile).readAsStringSync())
+              as Map<String, dynamic>;
       expect(quiet.containsKey("syncKeepAlive"), isFalse);
     });
   });

@@ -14,11 +14,11 @@ void main() {
   tearDown(() => app.dispose());
 
   Future<void> asking(WidgetTester tester, ToolApproval approval) => heldTurn(
-        tester,
-        app,
-        event: ApprovalRequestEvent(approval),
-        until: find.byType(ApprovalBanner),
-      );
+    tester,
+    app,
+    event: ApprovalRequestEvent(approval),
+    until: find.byType(ApprovalBanner),
+  );
 
   const bash = ToolApproval(
     id: "call-1",
@@ -38,8 +38,9 @@ void main() {
 
   // A tool that words nothing is still worth showing: the arguments as they
   // came beat a banner with only a name on it.
-  testWidgets("a call that words nothing falls back to its arguments",
-      (tester) async {
+  testWidgets("a call that words nothing falls back to its arguments", (
+    tester,
+  ) async {
     await asking(
       tester,
       const ToolApproval(
@@ -88,69 +89,81 @@ void main() {
 
   // A command of any length stays readable without the banner growing over the
   // conversation it is asking about.
-  testWidgets("a long command scrolls inside the banner rather than growing it",
-      (tester) async {
-    await asking(
-      tester,
-      ToolApproval(
-        id: "call-2",
-        toolName: "bash",
-        argumentsText: List.filled(60, "echo hello").join("\n"),
-      ),
-    );
+  testWidgets(
+    "a long command scrolls inside the banner rather than growing it",
+    (tester) async {
+      await asking(
+        tester,
+        ToolApproval(
+          id: "call-2",
+          toolName: "bash",
+          argumentsText: List.filled(60, "echo hello").join("\n"),
+        ),
+      );
 
-    final panel = find.descendant(
-      of: find.byType(ApprovalBanner),
-      matching: find.byType(SingleChildScrollView),
-    );
-    expect(tester.getRect(panel).height, lessThanOrEqualTo(ApprovalBanner.mostHeight));
-  });
+      final panel = find.descendant(
+        of: find.byType(ApprovalBanner),
+        matching: find.byType(SingleChildScrollView),
+      );
+      expect(
+        tester.getRect(panel).height,
+        lessThanOrEqualTo(ApprovalBanner.mostHeight),
+      );
+    },
+  );
 
   group("the two always answers", () {
     // Pumped directly: the callbacks are what these tests pin. The held-turn
     // page clips the banner's action row behind the composer's hit area at
     // the default viewport — the same row the Allow/Deny taps reach — so the
     // direct pump asks the banner alone.
-    testWidgets("always in chat answers with the approval attached",
-        (tester) async {
+    testWidgets("always in chat answers with the approval attached", (
+      tester,
+    ) async {
       ToolApproval? seen;
       var answer = ApprovalResponse.deny;
       await app.pump(
-          tester,
-          ApprovalBanner(
-            approval: bash,
-            onAllow: () {},
-            onDeny: () {},
-            onAlwaysAllowChat: () {
-              seen = bash;
-              answer = ApprovalResponse.alwaysAllowChat;
-            },
-            onAlwaysAllowProject: () {},
-          ));
+        tester,
+        ApprovalBanner(
+          approval: bash,
+          onAllow: () {},
+          onDeny: () {},
+          onAlwaysAllowChat: () {
+            seen = bash;
+            answer = ApprovalResponse.alwaysAllowChat;
+          },
+          onAlwaysAllowProject: () {},
+        ),
+      );
       await tester.tap(find.text("Always in chat"));
       await tester.pump();
 
       expect(answer, ApprovalResponse.alwaysAllowChat);
-      expect(seen?.id, "call-1",
-          reason: "the derivation reads the rule off the approval");
+      expect(
+        seen?.id,
+        "call-1",
+        reason: "the derivation reads the rule off the approval",
+      );
     });
 
-    testWidgets("always in project answers with the approval attached",
-        (tester) async {
+    testWidgets("always in project answers with the approval attached", (
+      tester,
+    ) async {
       ToolApproval? seen;
       var answer = ApprovalResponse.deny;
       await app.pump(
-          tester,
-          ApprovalBanner(
-            approval: bash,
-            onAllow: () {},
-            onDeny: () {},
-            onAlwaysAllowChat: () {},
-            onAlwaysAllowProject: () {
-              seen = bash;
-              answer = ApprovalResponse.alwaysAllowProject;
-            },
-          ));
+        tester,
+        ApprovalBanner(
+          approval: bash,
+          onAllow: () {},
+          onDeny: () {},
+          onAlwaysAllowChat: () {},
+          onAlwaysAllowProject: () {
+            seen = bash;
+            answer = ApprovalResponse.alwaysAllowProject;
+          },
+        ),
+      );
       await tester.tap(find.text("Always in project"));
       await tester.pump();
 
@@ -158,8 +171,9 @@ void main() {
       expect(seen?.argumentsText, bash.argumentsText);
     });
 
-    testWidgets("a re-prompt banner names the sandbox dirs it agrees to",
-        (tester) async {
+    testWidgets("a re-prompt banner names the sandbox dirs it agrees to", (
+      tester,
+    ) async {
       ToolApproval? seen;
       const reprompt = ToolApproval(
         id: "call-9-reprompt",
@@ -168,27 +182,30 @@ void main() {
         deniedDirs: ["/home/yiannis/Projects/x"],
       );
       await app.pump(
-          tester,
-          ApprovalBanner(
-            approval: reprompt,
-            onAllow: () {},
-            onDeny: () {},
-            onAlwaysAllowChat: () {},
-            onAlwaysAllowProject: () => seen = reprompt,
-          ));
+        tester,
+        ApprovalBanner(
+          approval: reprompt,
+          onAllow: () {},
+          onDeny: () {},
+          onAlwaysAllowChat: () {},
+          onAlwaysAllowProject: () => seen = reprompt,
+        ),
+      );
 
       expect(find.text("Run this command?"), findsOneWidget);
       expect(find.text("writing /home/yiannis/Projects/x"), findsOneWidget);
       await tester.tap(find.text("Always in project"));
       await tester.pump();
-      expect(seen?.deniedDirs, ["/home/yiannis/Projects/x"],
-          reason: "the dirs are what an always answer grants");
+      expect(seen?.deniedDirs, [
+        "/home/yiannis/Projects/x",
+      ], reason: "the dirs are what an always answer grants");
     });
   });
 
   group("where the rule would be written", () {
-    testWidgets("both always buttons are offered on a local chat",
-        (tester) async {
+    testWidgets("both always buttons are offered on a local chat", (
+      tester,
+    ) async {
       tester.view.physicalSize = const Size(1400, 1200);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.reset);
@@ -205,12 +222,9 @@ void main() {
       // The banner is answered from the other device: the rule is the home
       // device's to write, so this end offers only Allow and Deny.
       await app.pump(
-          tester,
-          ApprovalBanner(
-            approval: bash,
-            onAllow: () {},
-            onDeny: () {},
-          ));
+        tester,
+        ApprovalBanner(approval: bash, onAllow: () {}, onDeny: () {}),
+      );
 
       expect(find.text("Always in chat"), findsNothing);
       expect(find.text("Always in project"), findsNothing);
@@ -218,19 +232,21 @@ void main() {
       expect(find.text("Deny"), findsOneWidget);
     });
 
-    testWidgets("a directory grant offers no this-turn-only allow",
-        (tester) async {
+    testWidgets("a directory grant offers no this-turn-only allow", (
+      tester,
+    ) async {
       tester.view.physicalSize = const Size(1400, 1200);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.reset);
       await asking(
-          tester,
-          const ToolApproval(
-            id: "call-2",
-            toolName: "add_directory",
-            argumentsText: "/home/yiannis/Projects/x",
-            deniedDirs: ["/home/yiannis/Projects/x"],
-          ));
+        tester,
+        const ToolApproval(
+          id: "call-2",
+          toolName: "add_directory",
+          argumentsText: "/home/yiannis/Projects/x",
+          deniedDirs: ["/home/yiannis/Projects/x"],
+        ),
+      );
 
       expect(find.text("Allow"), findsNothing);
       expect(find.text("Always in chat"), findsOneWidget);
@@ -238,19 +254,21 @@ void main() {
       expect(find.text("Deny"), findsOneWidget);
     });
 
-    testWidgets("leaving the sandbox offers them, asking about the command",
-        (tester) async {
+    testWidgets("leaving the sandbox offers them, asking about the command", (
+      tester,
+    ) async {
       tester.view.physicalSize = const Size(1400, 1200);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.reset);
       await asking(
-          tester,
-          const ToolApproval(
-            id: "call-1-reprompt",
-            toolName: "bash",
-            argumentsText: "podman ps",
-            unsandboxed: true,
-          ));
+        tester,
+        const ToolApproval(
+          id: "call-1-reprompt",
+          toolName: "bash",
+          argumentsText: "podman ps",
+          unsandboxed: true,
+        ),
+      );
 
       // Always writes a no-sandbox rule for these words.
       expect(find.text("Run without the sandbox?"), findsOneWidget);
@@ -260,5 +278,4 @@ void main() {
       expect(find.text("Allow"), findsOneWidget);
     });
   });
-
 }

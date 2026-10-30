@@ -20,15 +20,16 @@ const preferredSignalingPort = 47921;
 // shortcut: assumes a /24, since NetworkInterface gives no prefix length;
 // a wider home network hears only the /24 this device is in.
 List<String> lanBroadcasts(List<String> own) => {
-      "255.255.255.255",
-      for (final address in own)
-        if (address.split(".").map(int.tryParse).toList()
-            case [final a?, final b?, final c?, _?]
-            when a == 10 ||
-                (a == 172 && b >= 16 && b < 32) ||
-                (a == 192 && b == 168))
-          "$a.$b.$c.255",
-    }.toList();
+  "255.255.255.255",
+  for (final address in own)
+    if (address.split(".").map(int.tryParse).toList() case [
+      final a?,
+      final b?,
+      final c?,
+      _?,
+    ] when a == 10 || (a == 172 && b >= 16 && b < 32) || (a == 192 && b == 168))
+      "$a.$b.$c.255",
+}.toList();
 
 /// The LAN rendezvous a desktop offers while pairing: where a joiner's offer
 /// waits for an answer, and the one-time code that gates it.

@@ -26,13 +26,20 @@ void main() {
   }
 
   Map<String, dynamic> sentBody() =>
-      jsonDecode((requests.single as http.Request).body) as Map<String, dynamic>;
+      jsonDecode((requests.single as http.Request).body)
+          as Map<String, dynamic>;
 
-  Map<String, Object?> blockStart(int index, Map<String, Object?> block) =>
-      {"type": "content_block_start", "index": index, "content_block": block};
+  Map<String, Object?> blockStart(int index, Map<String, Object?> block) => {
+    "type": "content_block_start",
+    "index": index,
+    "content_block": block,
+  };
 
-  Map<String, Object?> blockDelta(int index, Map<String, Object?> delta) =>
-      {"type": "content_block_delta", "index": index, "delta": delta};
+  Map<String, Object?> blockDelta(int index, Map<String, Object?> delta) => {
+    "type": "content_block_delta",
+    "index": index,
+    "delta": delta,
+  };
 
   group("streaming", () {
     test("text blocks arrive in pieces and assemble into the reply", () async {
@@ -49,7 +56,10 @@ void main() {
         {"type": "message_stop"},
       ]).stream(const [], model: "claude-test").toList();
 
-      expect(chunks.whereType<LlmTextChunk>().map((c) => c.text), ["Hel", "lo"]);
+      expect(chunks.whereType<LlmTextChunk>().map((c) => c.text), [
+        "Hel",
+        "lo",
+      ]);
       final completion = chunks.whereType<LlmCompletion>().single;
       expect(completion.message.text, "Hello");
       expect(completion.finishReason, "end_turn");
@@ -73,16 +83,27 @@ void main() {
 
       // Reported while the block is still the last thing that happened, so it
       // can be closed already holding it rather than written again later.
-      expect(chunks.whereType<LlmReasoningSignature>().single.signature, "sig-abc");
-      expect(chunks.indexWhere((c) => c is LlmReasoningSignature),
-          lessThan(chunks.indexWhere((c) => c is LlmTextChunk)));
+      expect(
+        chunks.whereType<LlmReasoningSignature>().single.signature,
+        "sig-abc",
+      );
+      expect(
+        chunks.indexWhere((c) => c is LlmReasoningSignature),
+        lessThan(chunks.indexWhere((c) => c is LlmTextChunk)),
+      );
     });
 
     test("a tool call's input is rebuilt from its partial JSON", () async {
       final chunks = await clientStreaming([
         blockStart(0, {"type": "tool_use", "id": "toolu_1", "name": "bash"}),
-        blockDelta(0, {"type": "input_json_delta", "partial_json": "{\"command\""}),
-        blockDelta(0, {"type": "input_json_delta", "partial_json": ": \"ls\"}"}),
+        blockDelta(0, {
+          "type": "input_json_delta",
+          "partial_json": "{\"command\"",
+        }),
+        blockDelta(0, {
+          "type": "input_json_delta",
+          "partial_json": ": \"ls\"}",
+        }),
         {"type": "content_block_stop", "index": 0},
         {
           "type": "message_delta",
@@ -90,7 +111,12 @@ void main() {
         },
       ]).stream(const [], model: "claude-test").toList();
 
-      final call = chunks.whereType<LlmCompletion>().single.message.toolCalls.single;
+      final call = chunks
+          .whereType<LlmCompletion>()
+          .single
+          .message
+          .toolCalls
+          .single;
       expect(call.id, "toolu_1");
       expect(call.name, "bash");
       expect(jsonDecode(call.argumentsJson), {"command": "ls"});
@@ -102,8 +128,16 @@ void main() {
         {"type": "content_block_stop", "index": 0},
       ]).stream(const [], model: "claude-test").toList();
 
-      expect(chunks.whereType<LlmCompletion>().single.message.toolCalls.single.argumentsJson,
-          "{}");
+      expect(
+        chunks
+            .whereType<LlmCompletion>()
+            .single
+            .message
+            .toolCalls
+            .single
+            .argumentsJson,
+        "{}",
+      );
     });
 
     test("being cut off is reported the way the other API words it", () async {
@@ -127,7 +161,9 @@ void main() {
 
       expect(
         client.stream(const [], model: "claude-test").toList(),
-        throwsA(isA<LlmException>().having((e) => e.message, "message", "overloaded")),
+        throwsA(
+          isA<LlmException>().having((e) => e.message, "message", "overloaded"),
+        ),
       );
     });
   });
@@ -146,35 +182,42 @@ void main() {
       expect(requests.single.headers["anthropic-version"], "2023-06-01");
     });
 
-    test("a tool result rides inside the user turn that answers the call", () async {
-      await clientStreaming([]).stream(const [
-        LlmMessage(role: LlmRole.user, text: "list it"),
-        LlmMessage(
-          role: LlmRole.assistant,
-          text: "on it",
-          toolCalls: [
-            LlmToolCall(id: "toolu_1", name: "bash", argumentsJson: '{"command":"ls"}'),
-          ],
-        ),
-        LlmMessage(role: LlmRole.tool, text: "a.txt", toolCallId: "toolu_1"),
-      ], model: "claude-test").toList();
+    test(
+      "a tool result rides inside the user turn that answers the call",
+      () async {
+        await clientStreaming([]).stream(const [
+          LlmMessage(role: LlmRole.user, text: "list it"),
+          LlmMessage(
+            role: LlmRole.assistant,
+            text: "on it",
+            toolCalls: [
+              LlmToolCall(
+                id: "toolu_1",
+                name: "bash",
+                argumentsJson: '{"command":"ls"}',
+              ),
+            ],
+          ),
+          LlmMessage(role: LlmRole.tool, text: "a.txt", toolCallId: "toolu_1"),
+        ], model: "claude-test").toList();
 
-      final messages = sentBody()["messages"] as List;
-      expect(messages.map((m) => m["role"]), ["user", "assistant", "user"]);
-      final assistant = messages[1]["content"] as List;
-      expect(assistant[0], {"type": "text", "text": "on it"});
-      expect(assistant[1], {
-        "type": "tool_use",
-        "id": "toolu_1",
-        "name": "bash",
-        "input": {"command": "ls"},
-      });
-      expect((messages[2]["content"] as List).single, {
-        "type": "tool_result",
-        "tool_use_id": "toolu_1",
-        "content": "a.txt",
-      });
-    });
+        final messages = sentBody()["messages"] as List;
+        expect(messages.map((m) => m["role"]), ["user", "assistant", "user"]);
+        final assistant = messages[1]["content"] as List;
+        expect(assistant[0], {"type": "text", "text": "on it"});
+        expect(assistant[1], {
+          "type": "tool_use",
+          "id": "toolu_1",
+          "name": "bash",
+          "input": {"command": "ls"},
+        });
+        expect((messages[2]["content"] as List).single, {
+          "type": "tool_result",
+          "tool_use_id": "toolu_1",
+          "content": "a.txt",
+        });
+      },
+    );
 
     test("two results for one turn are folded into a single answer", () async {
       await clientStreaming([]).stream(const [
@@ -192,60 +235,84 @@ void main() {
 
       final messages = sentBody()["messages"] as List;
       expect(messages.map((m) => m["role"]), ["user", "assistant", "user"]);
-      expect((messages[2]["content"] as List).map((b) => b["tool_use_id"]), ["a", "b"]);
+      expect((messages[2]["content"] as List).map((b) => b["tool_use_id"]), [
+        "a",
+        "b",
+      ]);
     });
 
-    test("thinking is handed back with its signature ahead of the reply", () async {
-      await clientStreaming([]).stream(const [
-        LlmMessage(role: LlmRole.user, text: "go"),
-        LlmMessage(
-          role: LlmRole.assistant,
-          text: "here",
-          reasoning: "thought about it",
-          reasoningSignature: "sig-1",
-        ),
-      ], model: "claude-test").toList();
+    test(
+      "thinking is handed back with its signature ahead of the reply",
+      () async {
+        await clientStreaming([]).stream(const [
+          LlmMessage(role: LlmRole.user, text: "go"),
+          LlmMessage(
+            role: LlmRole.assistant,
+            text: "here",
+            reasoning: "thought about it",
+            reasoningSignature: "sig-1",
+          ),
+        ], model: "claude-test").toList();
 
-      final blocks = (sentBody()["messages"] as List)[1]["content"] as List;
-      expect(blocks.first, {
-        "type": "thinking",
-        "thinking": "thought about it",
-        "signature": "sig-1",
-      });
-    });
+        final blocks = (sentBody()["messages"] as List)[1]["content"] as List;
+        expect(blocks.first, {
+          "type": "thinking",
+          "thinking": "thought about it",
+          "signature": "sig-1",
+        });
+      },
+    );
 
-    test("thinking with no signature is left out rather than rejected", () async {
-      await clientStreaming([]).stream(const [
-        LlmMessage(role: LlmRole.user, text: "go"),
-        LlmMessage(role: LlmRole.assistant, text: "here", reasoning: "unsigned"),
-      ], model: "claude-test").toList();
+    test(
+      "thinking with no signature is left out rather than rejected",
+      () async {
+        await clientStreaming([]).stream(const [
+          LlmMessage(role: LlmRole.user, text: "go"),
+          LlmMessage(
+            role: LlmRole.assistant,
+            text: "here",
+            reasoning: "unsigned",
+          ),
+        ], model: "claude-test").toList();
 
-      final blocks = (sentBody()["messages"] as List)[1]["content"] as List;
-      expect(blocks.map((b) => b["type"]), ["text"]);
-    });
+        final blocks = (sentBody()["messages"] as List)[1]["content"] as List;
+        expect(blocks.map((b) => b["type"]), ["text"]);
+      },
+    );
 
-    test("effort buys a thinking budget, and drops the temperature with it", () async {
-      await clientStreaming([])
-          .stream(const [], model: "claude-test", temperature: 0.7, reasoningEffort: "low")
-          .toList();
+    test(
+      "effort buys a thinking budget, and drops the temperature with it",
+      () async {
+        await clientStreaming([])
+            .stream(
+              const [],
+              model: "claude-test",
+              temperature: 0.7,
+              reasoningEffort: "low",
+            )
+            .toList();
 
-      final body = sentBody();
-      expect(body["thinking"], {"type": "enabled", "budget_tokens": 4096});
-      // Anthropic pins the temperature at 1 once thinking is on, so sending
-      // one alongside is a rejected request.
-      expect(body.containsKey("temperature"), isFalse);
-      expect(body["max_tokens"], greaterThan(4096));
-    });
+        final body = sentBody();
+        expect(body["thinking"], {"type": "enabled", "budget_tokens": 4096});
+        // Anthropic pins the temperature at 1 once thinking is on, so sending
+        // one alongside is a rejected request.
+        expect(body.containsKey("temperature"), isFalse);
+        expect(body["max_tokens"], greaterThan(4096));
+      },
+    );
 
-    test("without effort there is no thinking and the temperature stands", () async {
-      await clientStreaming([])
-          .stream(const [], model: "claude-test", temperature: 0.7)
-          .toList();
+    test(
+      "without effort there is no thinking and the temperature stands",
+      () async {
+        await clientStreaming(
+          [],
+        ).stream(const [], model: "claude-test", temperature: 0.7).toList();
 
-      final body = sentBody();
-      expect(body.containsKey("thinking"), isFalse);
-      expect(body["temperature"], 0.7);
-    });
+        final body = sentBody();
+        expect(body.containsKey("thinking"), isFalse);
+        expect(body["temperature"], 0.7);
+      },
+    );
 
     test("an image goes as base64 with the type it was saved under", () async {
       await clientStreaming([]).stream([
@@ -254,7 +321,10 @@ void main() {
           text: "what is this?",
           attachments: [
             LlmAttachment(
-                filename: "a.png", mimeType: "image/png", bytes: bytesOf([1, 2, 3])),
+              filename: "a.png",
+              mimeType: "image/png",
+              bytes: bytesOf([1, 2, 3]),
+            ),
           ],
         ),
       ], model: "claude-test").toList();
@@ -273,7 +343,10 @@ void main() {
           text: "summarise",
           attachments: [
             LlmAttachment(
-                filename: "a.pdf", mimeType: "application/pdf", bytes: bytesOf([1, 2])),
+              filename: "a.pdf",
+              mimeType: "application/pdf",
+              bytes: bytesOf([1, 2]),
+            ),
           ],
         ),
       ], model: "claude-test").toList();
@@ -292,33 +365,69 @@ void main() {
   });
 
   test("a tool result's images go inside it", () async {
-    await clientStreaming([{"type": "message_stop"}]).stream([
+    await clientStreaming([
+      {"type": "message_stop"},
+    ]).stream([
       const LlmMessage(role: LlmRole.user, text: "draw"),
-      const LlmMessage(role: LlmRole.assistant, toolCalls: [
-        LlmToolCall(id: "c1", name: "image_generation", argumentsJson: "{}"),
-      ]),
-      LlmMessage(role: LlmRole.tool, toolCallId: "c1", text: "made", attachments: [
-        LlmAttachment(filename: "a.png", mimeType: "image/png", bytes: Uint8List.fromList([1])),
-      ]),
+      const LlmMessage(
+        role: LlmRole.assistant,
+        toolCalls: [
+          LlmToolCall(id: "c1", name: "image_generation", argumentsJson: "{}"),
+        ],
+      ),
+      LlmMessage(
+        role: LlmRole.tool,
+        toolCallId: "c1",
+        text: "made",
+        attachments: [
+          LlmAttachment(
+            filename: "a.png",
+            mimeType: "image/png",
+            bytes: Uint8List.fromList([1]),
+          ),
+        ],
+      ),
     ], model: "claude-test").toList();
 
-    final result = ((sentBody()["messages"] as List).last["content"] as List).single as Map;
+    final result =
+        ((sentBody()["messages"] as List).last["content"] as List).single
+            as Map;
     expect(result["type"], "tool_result");
-    expect((result["content"] as List).map((b) => b["type"]), ["text", "image"]);
+    expect((result["content"] as List).map((b) => b["type"]), [
+      "text",
+      "image",
+    ]);
   });
 
   test("a tool result's PDF goes inside it as a document", () async {
-    await clientStreaming([{"type": "message_stop"}]).stream([
+    await clientStreaming([
+      {"type": "message_stop"},
+    ]).stream([
       const LlmMessage(role: LlmRole.user, text: "read it"),
-      const LlmMessage(role: LlmRole.assistant, toolCalls: [
-        LlmToolCall(id: "c1", name: "read", argumentsJson: "{}"),
-      ]),
-      LlmMessage(role: LlmRole.tool, toolCallId: "c1", text: "PDF a.pdf attached.", attachments: [
-        LlmAttachment(filename: "a.pdf", mimeType: "application/pdf", bytes: Uint8List.fromList([1])),
-      ]),
+      const LlmMessage(
+        role: LlmRole.assistant,
+        toolCalls: [LlmToolCall(id: "c1", name: "read", argumentsJson: "{}")],
+      ),
+      LlmMessage(
+        role: LlmRole.tool,
+        toolCallId: "c1",
+        text: "PDF a.pdf attached.",
+        attachments: [
+          LlmAttachment(
+            filename: "a.pdf",
+            mimeType: "application/pdf",
+            bytes: Uint8List.fromList([1]),
+          ),
+        ],
+      ),
     ], model: "claude-test").toList();
 
-    final result = ((sentBody()["messages"] as List).last["content"] as List).single as Map;
-    expect((result["content"] as List).map((b) => b["type"]), ["text", "document"]);
+    final result =
+        ((sentBody()["messages"] as List).last["content"] as List).single
+            as Map;
+    expect((result["content"] as List).map((b) => b["type"]), [
+      "text",
+      "document",
+    ]);
   });
 }

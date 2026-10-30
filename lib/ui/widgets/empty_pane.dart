@@ -33,7 +33,11 @@ class EmptyPane extends StatelessWidget {
             // takes its line's height and reads as a stray gap.
             if (detail.isNotEmpty) ...[
               const SizedBox(height: 4),
-              Text(detail, textAlign: TextAlign.center, style: theme.textTheme.bodySmall),
+              Text(
+                detail,
+                textAlign: TextAlign.center,
+                style: theme.textTheme.bodySmall,
+              ),
             ],
             if (action != null) ...[const SizedBox(height: 12), action!],
           ],

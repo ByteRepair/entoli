@@ -21,13 +21,20 @@ class ContextPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final contexts =
         ref.watch(chatViewProvider(chatId).select((s) => s.chat))?.contexts ??
-            const {};
+        const {};
     final settings = ref.watch(appSettingsProvider);
-    final window = ref.watch(contextWindowProvider(chatId)).value ?? settings.totalContext;
+    final window =
+        ref.watch(contextWindowProvider(chatId)).value ?? settings.totalContext;
     final threshold = settings.autoCompact ? settings.autoCompactPercent : null;
     // The house first, the members by name.
     final authors = contexts.keys.toList()
-      ..sort((a, b) => a == null ? -1 : b == null ? 1 : a.compareTo(b));
+      ..sort(
+        (a, b) => a == null
+            ? -1
+            : b == null
+            ? 1
+            : a.compareTo(b),
+      );
     return Scaffold(
       appBar: AppBar(title: const Text("Context")),
       body: contexts.isEmpty
@@ -51,7 +58,8 @@ class ContextPage extends ConsumerWidget {
                   "The split is estimated at four characters a token.",
                   textAlign: TextAlign.center,
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: Theme.of(context).colorScheme.onSurfaceVariant),
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
                 ),
               ],
             ),
@@ -59,22 +67,42 @@ class ContextPage extends ConsumerWidget {
   }
 }
 
-typedef _Segment = ({String label, Color colour, int Function(ContextUsage) of});
+typedef _Segment = ({
+  String label,
+  Color colour,
+  int Function(ContextUsage) of,
+});
 
 /// Each segment's share of the total, so they sum to the provider's count.
 final List<_Segment> _segments = [
-  (label: "System prompt", colour: Colors.grey.shade500, of: (u) => u.share(u.system)),
-  (label: "Tool definitions", colour: Colors.orange.shade400, of: (u) => u.share(u.tools)),
-  (label: "Profile", colour: Colors.green.shade500, of: (u) => u.share(u.profile)),
-  (label: "Instructions", colour: Colors.purple.shade300, of: (u) => u.share(u.instructions)),
+  (
+    label: "System prompt",
+    colour: Colors.grey.shade500,
+    of: (u) => u.share(u.system),
+  ),
+  (
+    label: "Tool definitions",
+    colour: Colors.orange.shade400,
+    of: (u) => u.share(u.tools),
+  ),
+  (
+    label: "Profile",
+    colour: Colors.green.shade500,
+    of: (u) => u.share(u.profile),
+  ),
+  (
+    label: "Instructions",
+    colour: Colors.purple.shade300,
+    of: (u) => u.share(u.instructions),
+  ),
   (label: "Chat", colour: Colors.blue.shade500, of: (u) => u.share(u.chat)),
 ];
 
 String _k(int tokens) => tokens < 1000
     ? "$tokens"
     : tokens < 10000
-        ? "${(tokens / 1000).toStringAsFixed(1)}k"
-        : "${(tokens / 1000).round()}k";
+    ? "${(tokens / 1000).toStringAsFixed(1)}k"
+    : "${(tokens / 1000).round()}k";
 
 class _ParticipantCard extends StatelessWidget {
   const _ParticipantCard({
@@ -111,22 +139,32 @@ class _ParticipantCard extends StatelessWidget {
                   CircleAvatar(
                     radius: 18,
                     backgroundColor: theme.colorScheme.primaryContainer,
-                    child: Icon(Icons.auto_awesome,
-                        size: 18, color: theme.colorScheme.onPrimaryContainer),
+                    child: Icon(
+                      Icons.auto_awesome,
+                      size: 18,
+                      color: theme.colorScheme.onPrimaryContainer,
+                    ),
                   )
                 else
-                  AgentPicture(name: nameOf(author) ?? author!, project: project),
+                  AgentPicture(
+                    name: nameOf(author) ?? author!,
+                    project: project,
+                  ),
                 const SizedBox(width: 12),
                 Expanded(
-                  child: Text(author ?? "Entoli Agent",
-                      style: theme.textTheme.titleMedium),
+                  child: Text(
+                    author ?? "Entoli Agent",
+                    style: theme.textTheme.titleMedium,
+                  ),
                 ),
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
                     Text("$percent%", style: theme.textTheme.titleLarge),
-                    Text("${_k(used)} / ${_k(window)}",
-                        style: theme.textTheme.bodySmall?.copyWith(color: muted)),
+                    Text(
+                      "${_k(used)} / ${_k(window)}",
+                      style: theme.textTheme.bodySmall?.copyWith(color: muted),
+                    ),
                   ],
                 ),
               ],
@@ -145,14 +183,20 @@ class _ParticipantCard extends StatelessWidget {
                       Container(
                         width: 8,
                         height: 8,
-                        decoration:
-                            BoxDecoration(color: s.colour, shape: BoxShape.circle),
+                        decoration: BoxDecoration(
+                          color: s.colour,
+                          shape: BoxShape.circle,
+                        ),
                       ),
                       const SizedBox(width: 6),
                       Text(s.label, style: theme.textTheme.bodySmall),
                       const SizedBox(width: 4),
-                      Text(_k(s.of(usage)),
-                          style: theme.textTheme.bodySmall?.copyWith(color: muted)),
+                      Text(
+                        _k(s.of(usage)),
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: muted,
+                        ),
+                      ),
                     ],
                   ),
               ],
@@ -166,7 +210,11 @@ class _ParticipantCard extends StatelessWidget {
 
 /// The segments laid end to end over the window, and the threshold's line.
 class _Bar extends StatelessWidget {
-  const _Bar({required this.usage, required this.window, required this.threshold});
+  const _Bar({
+    required this.usage,
+    required this.window,
+    required this.threshold,
+  });
 
   final ContextUsage usage;
   final int window;
@@ -180,68 +228,77 @@ class _Bar extends StatelessWidget {
     final used = _segments.fold(0, (sum, s) => sum + s.of(usage));
     // Over the window, the bar is full rather than overflowing.
     final scale = used > window ? used : window;
-    return LayoutBuilder(builder: (context, constraints) {
-      final width = constraints.maxWidth;
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if (threshold != null)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 4),
-              child: Align(
-                alignment: Alignment(threshold! / 50 - 1, 0),
-                child: Text("Auto-compact $threshold%",
-                    style: theme.textTheme.labelSmall
-                        ?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
-              ),
-            ),
-          SizedBox(
-            height: _height + 8,
-            child: Stack(
-              clipBehavior: Clip.none,
-              alignment: Alignment.centerLeft,
-              children: [
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(_height / 2),
-                  child: Container(
-                    height: _height,
-                    color: theme.colorScheme.surfaceContainerHighest,
-                    child: Row(
-                      children: [
-                        for (final s in _segments)
-                          if (s.of(usage) > 0)
-                            Expanded(
-                              flex: s.of(usage),
-                              child: Tooltip(
-                                message: "${s.label}: ${_k(s.of(usage))} tokens",
-                                child: Container(color: s.colour),
-                              ),
-                            ),
-                        if (scale > used)
-                          Expanded(flex: scale - used, child: const SizedBox()),
-                      ],
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final width = constraints.maxWidth;
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (threshold != null)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 4),
+                child: Align(
+                  alignment: Alignment(threshold! / 50 - 1, 0),
+                  child: Text(
+                    "Auto-compact $threshold%",
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
                     ),
                   ),
                 ),
-                if (threshold != null)
-                  Positioned(
-                    left: width * threshold! / 100 - 1,
-                    top: 0,
-                    bottom: 0,
+              ),
+            SizedBox(
+              height: _height + 8,
+              child: Stack(
+                clipBehavior: Clip.none,
+                alignment: Alignment.centerLeft,
+                children: [
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(_height / 2),
                     child: Container(
-                      width: 2,
-                      decoration: BoxDecoration(
-                        color: theme.colorScheme.onSurface,
-                        borderRadius: BorderRadius.circular(1),
+                      height: _height,
+                      color: theme.colorScheme.surfaceContainerHighest,
+                      child: Row(
+                        children: [
+                          for (final s in _segments)
+                            if (s.of(usage) > 0)
+                              Expanded(
+                                flex: s.of(usage),
+                                child: Tooltip(
+                                  message:
+                                      "${s.label}: ${_k(s.of(usage))} tokens",
+                                  child: Container(color: s.colour),
+                                ),
+                              ),
+                          if (scale > used)
+                            Expanded(
+                              flex: scale - used,
+                              child: const SizedBox(),
+                            ),
+                        ],
                       ),
                     ),
                   ),
-              ],
+                  if (threshold != null)
+                    Positioned(
+                      left: width * threshold! / 100 - 1,
+                      top: 0,
+                      bottom: 0,
+                      child: Container(
+                        width: 2,
+                        decoration: BoxDecoration(
+                          color: theme.colorScheme.onSurface,
+                          borderRadius: BorderRadius.circular(1),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
             ),
-          ),
-        ],
-      );
-    });
+          ],
+        );
+      },
+    );
   }
 }
 

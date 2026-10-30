@@ -67,10 +67,10 @@ class EntryPreview {
   /// either install's refusal — one predicate, so the button cannot be shown
   /// for an entry the press would then refuse on.
   bool installable(CompletionKind kind) => switch (kind) {
-        CompletionKind.skill => package != null,
-        CompletionKind.agent =>
-          promptSource != null && (prompt?.body.isNotEmpty ?? false),
-      };
+    CompletionKind.skill => package != null,
+    CompletionKind.agent =>
+      promptSource != null && (prompt?.body.isNotEmpty ?? false),
+  };
 }
 
 /// One entry of the marketplace, previewed and installed. Pushed from the
@@ -122,22 +122,30 @@ class _MarketplaceEntryPreviewPageState
       // The entry's files are independent round-trips to one host each, so
       // they go out together: serially this is one round-trip apiece on the
       // spinner the user is staring at.
-      final [readmeBytes, bodyBytes, picture] =
-          await Future.wait(<Future<Uint8List?>>[
-        fetchMarketplaceEntryFile(client, kind, entry, "README.md"),
-        // The skill's whole package or the agent's prompt, fetched under the
-        // name each path shape has of its own.
-        switch (kind) {
-          CompletionKind.skill =>
-            fetchMarketplaceSkillPackage(client, kind, entry),
-          CompletionKind.agent =>
-            fetchMarketplaceEntryFile(client, kind, entry, "PROMPT.md"),
-        },
-        // A skill has no third file; an agent's picture is there or not.
-        kind == CompletionKind.skill
-            ? Future<Uint8List?>.value()
-            : fetchMarketplaceEntryFile(client, kind, entry, "profile.png"),
-      ]);
+      final [readmeBytes, bodyBytes, picture] = await Future.wait(
+        <Future<Uint8List?>>[
+          fetchMarketplaceEntryFile(client, kind, entry, "README.md"),
+          // The skill's whole package or the agent's prompt, fetched under the
+          // name each path shape has of its own.
+          switch (kind) {
+            CompletionKind.skill => fetchMarketplaceSkillPackage(
+              client,
+              kind,
+              entry,
+            ),
+            CompletionKind.agent => fetchMarketplaceEntryFile(
+              client,
+              kind,
+              entry,
+              "PROMPT.md",
+            ),
+          },
+          // A skill has no third file; an agent's picture is there or not.
+          kind == CompletionKind.skill
+              ? Future<Uint8List?>.value()
+              : fetchMarketplaceEntryFile(client, kind, entry, "profile.png"),
+        ],
+      );
       // Only a skill parses an intake package out of the body, and only an
       // agent holds its prompt's source for the install to write.
       SkillPackage? package;
@@ -155,8 +163,9 @@ class _MarketplaceEntryPreviewPageState
           }
         }
       } else {
-        promptSource =
-            bodyBytes == null ? null : utf8.decode(bodyBytes, allowMalformed: true);
+        promptSource = bodyBytes == null
+            ? null
+            : utf8.decode(bodyBytes, allowMalformed: true);
         prompt = promptSource == null
             ? null
             : PromptDocument.parse(CompletionKind.agent, "", promptSource);
@@ -225,17 +234,23 @@ class _MarketplaceEntryPreviewPageState
     final pkg = preview?.package;
     if (pkg == null) {
       if (mounted) {
-        say(context,
-            preview?.packageProblem ?? "The marketplace has no package for this skill.");
+        say(
+          context,
+          preview?.packageProblem ??
+              "The marketplace has no package for this skill.",
+        );
       }
       return null;
     }
-    if (Directory(skillDirectory(config, pkg.name, project: target)).existsSync()) {
+    if (Directory(
+      skillDirectory(config, pkg.name, project: target),
+    ).existsSync()) {
       if (!mounted) return null;
       final confirmed = await confirm(
         context,
         title: "Replace ${pkg.name}?",
-        message: "A skill with that name is already installed there. Installing "
+        message:
+            "A skill with that name is already installed there. Installing "
             "this one replaces it, files included.",
         confirmLabel: "Replace",
       );
@@ -260,7 +275,10 @@ class _MarketplaceEntryPreviewPageState
     final document = preview?.prompt;
     if (source == null || document == null || document.body.isEmpty) {
       if (mounted) {
-        say(context, "This agent cannot be installed: there is no prompt in it.");
+        say(
+          context,
+          "This agent cannot be installed: there is no prompt in it.",
+        );
       }
       return null;
     }
@@ -269,17 +287,23 @@ class _MarketplaceEntryPreviewPageState
     final name = widget.entry.installName;
     if (!isFolderName(name)) {
       if (mounted) {
-        say(context, "This agent cannot be installed: its name cannot be a file name.");
+        say(
+          context,
+          "This agent cannot be installed: its name cannot be a file name.",
+        );
       }
       return null;
     }
-    final agentExists = File(agentFilePath(config, name, project: target)).existsSync();
+    final agentExists = File(
+      agentFilePath(config, name, project: target),
+    ).existsSync();
     if (agentExists) {
       if (!mounted) return null;
       final confirmed = await confirm(
         context,
         title: "Replace $name?",
-        message: "An agent with that name is already installed. Installing "
+        message:
+            "An agent with that name is already installed. Installing "
             "this one replaces it.",
         confirmLabel: "Replace",
       );
@@ -289,14 +313,15 @@ class _MarketplaceEntryPreviewPageState
     await platform.readOnlyDirs
         .of(config.promptsDir(CompletionKind.agent, project: target))
         .write(() async {
-        final file = File(agentFilePath(config, name, project: target));
-        await file.create(recursive: true);
-        await file.writeAsString(source);
-        if (picture != null) {
-          await File(agentPicturePath(config, name, project: target))
-              .writeAsBytes(picture);
-        }
-      });
+          final file = File(agentFilePath(config, name, project: target));
+          await file.create(recursive: true);
+          await file.writeAsString(source);
+          if (picture != null) {
+            await File(
+              agentPicturePath(config, name, project: target),
+            ).writeAsBytes(picture);
+          }
+        });
     // The picture the agent page draws is its own provider's read; the
     // null-destination case is the whole family, whose rule is written there.
     invalidateAgentPicture(ref, name, project: _destination);
@@ -316,14 +341,14 @@ class _MarketplaceEntryPreviewPageState
       body: _failed
           ? Unreachable(onRetry: _load, detail: _failureDetail)
           : preview == null
-              ? const Center(child: CircularProgressIndicator())
-              : _Body(
-                  entry: entry,
-                  preview: preview,
-                  destinationValue: _destination,
-                  destinationChanged: (value) =>
-                      setState(() => _destination = value),
-                ),
+          ? const Center(child: CircularProgressIndicator())
+          : _Body(
+              entry: entry,
+              preview: preview,
+              destinationValue: _destination,
+              destinationChanged: (value) =>
+                  setState(() => _destination = value),
+            ),
       bottomNavigationBar: installable
           ? InstallBar(
               installing: _installing,
@@ -375,14 +400,14 @@ class _BodyState extends State<_Body> {
     final preview = widget.preview;
     final entry = widget.entry;
     final meta = entry.metaLine;
-    final files = preview.package?.entries.where((e) => e.$1 != "SKILL.md").toList();
+    final files = preview.package?.entries
+        .where((e) => e.$1 != "SKILL.md")
+        .toList();
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
         if (preview.picture != null) ...[
-          Center(
-            child: AgentPictureImage(bytes: preview.picture, size: 72),
-          ),
+          Center(child: AgentPictureImage(bytes: preview.picture, size: 72)),
           const SizedBox(height: 12),
         ],
         Text(entry.name, style: theme.textTheme.headlineSmall),
@@ -401,10 +426,7 @@ class _BodyState extends State<_Body> {
         ],
         const SizedBox(height: 24),
         if (preview.readme != null)
-          MarkdownBody(
-            data: preview.readme!,
-            styleSheet: _styleSheet,
-          )
+          MarkdownBody(data: preview.readme!, styleSheet: _styleSheet)
         else
           const Nothing("This entry ships no README."),
         if (preview.packageProblem != null) ...[

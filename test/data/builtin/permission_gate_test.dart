@@ -59,8 +59,11 @@ void main() {
     Directory(chat).createSync(recursive: true);
     addTearDown(() => tempDir.deleteSync(recursive: true));
     workspaceDir = chat;
-    shell = FakeShell(respond ?? (_) => ok(""),
-        canRunCommands: true, home: "/home/u");
+    shell = FakeShell(
+      respond ?? (_) => ok(""),
+      canRunCommands: true,
+      home: "/home/u",
+    );
     final allowed = [...approvals];
     liveRules = [...permissions];
     return BuiltinAgent(
@@ -72,8 +75,9 @@ void main() {
       model: "fake-model",
       approveMode: approveMode,
       approve: (approval) async {
-        final answer =
-            allowed.isEmpty ? ApprovalResponse.allow : allowed.removeAt(0);
+        final answer = allowed.isEmpty
+            ? ApprovalResponse.allow
+            : allowed.removeAt(0);
         // What the repository does before an "always" answer reaches the
         // turn: the derived rule is written where the next read finds it.
         if (answer == ApprovalResponse.alwaysAllowChat ||
@@ -99,7 +103,8 @@ void main() {
   group("permission rules", () {
     test("a rule-allow runs the command without asking", () async {
       final client = FakeLlmClient([
-        [bashCall("git status --short")], [finish],
+        [bashCall("git status --short")],
+        [finish],
       ]);
       await agentOver(
         client,
@@ -107,9 +112,10 @@ void main() {
         approvals: [ApprovalResponse.allow],
         permissions: [
           const PermissionRule(
-              tool: "bash",
-              pattern: "git status *",
-              decision: PermissionDecision.allow),
+            tool: "bash",
+            pattern: "git status *",
+            decision: PermissionDecision.allow,
+          ),
         ],
       ).run(userMessage("go")).toList();
       expect(shell.ran, ["git status --short"]);
@@ -117,14 +123,18 @@ void main() {
 
     test("a rule-deny refuses without running or asking", () async {
       final client = FakeLlmClient([
-        [bashCall("git push")], [finish],
+        [bashCall("git push")],
+        [finish],
       ]);
       final events = await agentOver(
         client,
         approveMode: ApproveMode.ask,
         permissions: [
           const PermissionRule(
-              tool: "bash", pattern: "git push", decision: PermissionDecision.deny),
+            tool: "bash",
+            pattern: "git push",
+            decision: PermissionDecision.deny,
+          ),
         ],
       ).run(userMessage("go")).toList();
       final text = events
@@ -137,7 +147,8 @@ void main() {
 
     test("an uncovered command falls through to the mode: ask waits", () async {
       final client = FakeLlmClient([
-        [bashCall("curl example.com")], [finish],
+        [bashCall("curl example.com")],
+        [finish],
       ]);
       await agentOver(
         client,
@@ -145,7 +156,10 @@ void main() {
         approvals: [ApprovalResponse.deny],
         permissions: [
           const PermissionRule(
-              tool: "bash", pattern: "git *", decision: PermissionDecision.allow),
+            tool: "bash",
+            pattern: "git *",
+            decision: PermissionDecision.allow,
+          ),
         ],
       ).run(userMessage("go")).toList();
       // The banner answered deny: nothing ran.
@@ -154,7 +168,8 @@ void main() {
 
     test("a compound command needs an allow per segment", () async {
       final client = FakeLlmClient([
-        [bashCall("git status && curl example.com")], [finish],
+        [bashCall("git status && curl example.com")],
+        [finish],
       ]);
       await agentOver(
         client,
@@ -162,7 +177,10 @@ void main() {
         approvals: [ApprovalResponse.deny],
         permissions: [
           const PermissionRule(
-              tool: "bash", pattern: "git status", decision: PermissionDecision.allow),
+            tool: "bash",
+            pattern: "git status",
+            decision: PermissionDecision.allow,
+          ),
         ],
       ).run(userMessage("go")).toList();
       // `curl example.com` found no allow: the call went to the banner, which
@@ -172,48 +190,62 @@ void main() {
 
     test("a fully-covered compound runs", () async {
       final client = FakeLlmClient([
-        [bashCall("git status && git diff --stat")], [finish],
+        [bashCall("git status && git diff --stat")],
+        [finish],
       ]);
       await agentOver(
         client,
         approveMode: ApproveMode.ask,
         permissions: [
           const PermissionRule(
-              tool: "bash", pattern: "git *", decision: PermissionDecision.allow),
+            tool: "bash",
+            pattern: "git *",
+            decision: PermissionDecision.allow,
+          ),
         ],
       ).run(userMessage("go")).toList();
       expect(shell.ran, hasLength(1));
     });
 
-    test("a rule-allow command the parse cannot model is escalated, not run",
-        () async {
-      final client = FakeLlmClient([
-        [bashCall(r'echo "unclosed')], [finish],
-      ]);
-      final events = await agentOver(
-        client,
-        approveMode: ApproveMode.ask,
-        approvals: [ApprovalResponse.deny],
-        permissions: [
-          const PermissionRule(
-              tool: "bash", pattern: "echo *", decision: PermissionDecision.allow),
-        ],
-      ).run(userMessage("go")).toList();
-      // Escalated to the banner (the test answered deny), never run silently.
-      expect(shell.ran, isEmpty);
-      expect(events.whereType<ApprovalRequestEvent>(), isNotEmpty);
-    });
+    test(
+      "a rule-allow command the parse cannot model is escalated, not run",
+      () async {
+        final client = FakeLlmClient([
+          [bashCall(r'echo "unclosed')],
+          [finish],
+        ]);
+        final events = await agentOver(
+          client,
+          approveMode: ApproveMode.ask,
+          approvals: [ApprovalResponse.deny],
+          permissions: [
+            const PermissionRule(
+              tool: "bash",
+              pattern: "echo *",
+              decision: PermissionDecision.allow,
+            ),
+          ],
+        ).run(userMessage("go")).toList();
+        // Escalated to the banner (the test answered deny), never run silently.
+        expect(shell.ran, isEmpty);
+        expect(events.whereType<ApprovalRequestEvent>(), isNotEmpty);
+      },
+    );
 
     test("a rule-allow with findings in never mode is refused", () async {
       final client = FakeLlmClient([
-        [bashCall(r'echo "unclosed')], [finish],
+        [bashCall(r'echo "unclosed')],
+        [finish],
       ]);
       final events = await agentOver(
         client,
         approveMode: ApproveMode.never,
         permissions: [
           const PermissionRule(
-              tool: "bash", pattern: "echo *", decision: PermissionDecision.allow),
+            tool: "bash",
+            pattern: "echo *",
+            decision: PermissionDecision.allow,
+          ),
         ],
       ).run(userMessage("go")).toList();
       final text = events
@@ -224,34 +256,41 @@ void main() {
       expect(shell.ran, isEmpty);
     });
 
-    test("a bare command an Always answer covered is not asked again",
-        () async {
-      // The shape the live run tripped over: the rule an Always answer writes
-      // is `npm test *`, and the next call is the bare `npm test` — no
-      // arguments, nothing after the pattern's space. The banner must not
-      // return for what the user already said always to. `npm test` because
-      // the tier must not cover it first: the derivation is what is under
-      // test, not the parse's own read-only answer.
-      final client = FakeLlmClient([
-        [bashCall("npm test")],
-        [bashCall("npm test")],
-        [bashCall("npm test --watch")], [finish],
-      ]);
-      final events = await agentOver(
-        client,
-        approveMode: ApproveMode.ask,
-        approvals: [ApprovalResponse.alwaysAllowChat],
-      ).run(userMessage("go")).toList();
-      final requests = events.whereType<ApprovalRequestEvent>().toList();
-      expect(requests, hasLength(1),
-          reason: "the Always answer covers the bare command and its args");
-      expect(shell.ran, ["npm test", "npm test", "npm test --watch"]);
-    });
+    test(
+      "a bare command an Always answer covered is not asked again",
+      () async {
+        // The shape the live run tripped over: the rule an Always answer writes
+        // is `npm test *`, and the next call is the bare `npm test` — no
+        // arguments, nothing after the pattern's space. The banner must not
+        // return for what the user already said always to. `npm test` because
+        // the tier must not cover it first: the derivation is what is under
+        // test, not the parse's own read-only answer.
+        final client = FakeLlmClient([
+          [bashCall("npm test")],
+          [bashCall("npm test")],
+          [bashCall("npm test --watch")],
+          [finish],
+        ]);
+        final events = await agentOver(
+          client,
+          approveMode: ApproveMode.ask,
+          approvals: [ApprovalResponse.alwaysAllowChat],
+        ).run(userMessage("go")).toList();
+        final requests = events.whereType<ApprovalRequestEvent>().toList();
+        expect(
+          requests,
+          hasLength(1),
+          reason: "the Always answer covers the bare command and its args",
+        );
+        expect(shell.ran, ["npm test", "npm test", "npm test --watch"]);
+      },
+    );
 
     test("a plain allow is one-shot: the next call asks again", () async {
       final client = FakeLlmClient([
         [bashCall("npm test")],
-        [bashCall("npm test")], [finish],
+        [bashCall("npm test")],
+        [finish],
       ]);
       await agentOver(
         client,
@@ -265,7 +304,8 @@ void main() {
 
     test("a deny on any segment of a compound refuses the whole", () async {
       final client = FakeLlmClient([
-        [bashCall("git status && rm -rf build")], [finish],
+        [bashCall("git status && rm -rf build")],
+        [finish],
       ]);
       final events = await agentOver(
         client,
@@ -273,11 +313,15 @@ void main() {
         approvals: [ApprovalResponse.allow],
         permissions: [
           const PermissionRule(
-              tool: "bash",
-              pattern: "git status *",
-              decision: PermissionDecision.allow),
+            tool: "bash",
+            pattern: "git status *",
+            decision: PermissionDecision.allow,
+          ),
           const PermissionRule(
-              tool: "bash", pattern: "rm *", decision: PermissionDecision.deny),
+            tool: "bash",
+            pattern: "rm *",
+            decision: PermissionDecision.deny,
+          ),
         ],
       ).run(userMessage("go")).toList();
       final text = events
@@ -293,19 +337,22 @@ void main() {
 
   group("the recorded outcome", () {
     final allowGit = const PermissionRule(
-        tool: "bash",
-        pattern: "git status *",
-        decision: PermissionDecision.allow,
-        origin: PermissionTier.chat);
+      tool: "bash",
+      pattern: "git status *",
+      decision: PermissionDecision.allow,
+      origin: PermissionTier.chat,
+    );
     final denyRm = const PermissionRule(
-        tool: "bash",
-        pattern: "rm *",
-        decision: PermissionDecision.deny,
-        origin: PermissionTier.project);
+      tool: "bash",
+      pattern: "rm *",
+      decision: PermissionDecision.deny,
+      origin: PermissionTier.project,
+    );
 
     test("a rule-allow records the rule and its tier", () async {
       final client = FakeLlmClient([
-        [bashCall("git status")], [finish],
+        [bashCall("git status")],
+        [finish],
       ]);
       final events = await agentOver(
         client,
@@ -319,7 +366,8 @@ void main() {
 
     test("a rule-deny records the refusing tier", () async {
       final client = FakeLlmClient([
-        [bashCall("rm -rf build")], [finish],
+        [bashCall("rm -rf build")],
+        [finish],
       ]);
       final events = await agentOver(
         client,
@@ -333,7 +381,8 @@ void main() {
 
     test("a compound covered by two tiers records both", () async {
       final client = FakeLlmClient([
-        [bashCall("git status && git log --oneline")], [finish],
+        [bashCall("git status && git log --oneline")],
+        [finish],
       ]);
       final events = await agentOver(
         client,
@@ -341,10 +390,11 @@ void main() {
         permissions: [
           allowGit,
           const PermissionRule(
-              tool: "bash",
-              pattern: "git log *",
-              decision: PermissionDecision.allow,
-              origin: PermissionTier.project),
+            tool: "bash",
+            pattern: "git log *",
+            decision: PermissionDecision.allow,
+            origin: PermissionTier.project,
+          ),
         ],
       ).run(userMessage("go")).toList();
       final result = results(events);
@@ -355,7 +405,8 @@ void main() {
     test("a banner answer records you, once", () async {
       // A command the parse does not cover: the banner is what decided it.
       final client = FakeLlmClient([
-        [bashCall("python3 build.py")], [finish],
+        [bashCall("python3 build.py")],
+        [finish],
       ]);
       final events = await agentOver(
         client,
@@ -370,11 +421,13 @@ void main() {
     test("never mode records the mode", () async {
       // A command the parse does not cover: `never` is what decides it.
       final client = FakeLlmClient([
-        [bashCall("python3 build.py")], [finish],
+        [bashCall("python3 build.py")],
+        [finish],
       ]);
-      final events = await agentOver(client, approveMode: ApproveMode.never)
-          .run(userMessage("go"))
-          .toList();
+      final events = await agentOver(
+        client,
+        approveMode: ApproveMode.never,
+      ).run(userMessage("go")).toList();
       final result = results(events);
       expect(result.decidedBy, PermissionSource.mode);
       expect(result.decidedTier, isEmpty);
@@ -383,7 +436,8 @@ void main() {
     test("the classifier records itself", () async {
       // A command the parse does not cover: the classifier decides it.
       final client = FakeLlmClient([
-        [bashCall("python3 build.py")], [finish],
+        [bashCall("python3 build.py")],
+        [finish],
       ]);
       final events = await agentOver(
         client,
@@ -402,7 +456,8 @@ void main() {
       // parse rates `git status` non-modifying before any model is asked —
       // the command runs and neither classifier nor banner saw it.
       final client = FakeLlmClient([
-        [bashCall("git status")], [finish],
+        [bashCall("git status")],
+        [finish],
       ]);
       final classifier = FakeClassifier()
         ..decide = (_, _) => PermissionDecision.allow;
@@ -420,26 +475,32 @@ void main() {
     // A granted directory is the workspace's own permissions to the sandbox;
     // the classifier, not told, read a write there as one past the workspace
     // and asked.
-    test("the classifier is told the project workspace and the grants",
-        () async {
-      final client = FakeLlmClient([
-        [bashCall("make -C /home/u/repo")], [finish],
-      ]);
-      final classifier = FakeClassifier();
-      await agentOver(
-        client,
-        approveMode: ApproveMode.auto,
-        classifier: classifier,
-        writableDirs: ["/home/u/repo"],
-      ).run(userMessage("go")).toList();
+    test(
+      "the classifier is told the project workspace and the grants",
+      () async {
+        final client = FakeLlmClient([
+          [bashCall("make -C /home/u/repo")],
+          [finish],
+        ]);
+        final classifier = FakeClassifier();
+        await agentOver(
+          client,
+          approveMode: ApproveMode.auto,
+          classifier: classifier,
+          writableDirs: ["/home/u/repo"],
+        ).run(userMessage("go")).toList();
 
-      expect(classifier.alsoWritable.single,
-          [p.dirname(p.dirname(workspaceDir)), "/home/u/repo"]);
-    });
+        expect(classifier.alsoWritable.single, [
+          p.dirname(p.dirname(workspaceDir)),
+          "/home/u/repo",
+        ]);
+      },
+    );
 
     test("a denied command is refused, not run", () async {
       final client = FakeLlmClient([
-        [bashCall("rm -rf /")], [finish],
+        [bashCall("rm -rf /")],
+        [finish],
       ]);
       final events = await agentOver(
         client,
@@ -455,7 +516,8 @@ void main() {
 
     test("a write past the workspace the classifier asks escalates", () async {
       final client = FakeLlmClient([
-        [bashCall("cp notes.txt /etc/notes-backup")], [finish],
+        [bashCall("cp notes.txt /etc/notes-backup")],
+        [finish],
       ]);
       await agentOver(
         client,
@@ -468,7 +530,8 @@ void main() {
 
       // The answer rules: an allow runs it after the same banner.
       final allowedClient = FakeLlmClient([
-        [bashCall("cp notes.txt /etc/notes-backup")], [finish],
+        [bashCall("cp notes.txt /etc/notes-backup")],
+        [finish],
       ]);
       final allowedEvents = await agentOver(
         allowedClient,
@@ -480,66 +543,79 @@ void main() {
       expect(shell.ran.last, contains("cp notes.txt"));
     });
 
-    test("three consecutive asks pause auto mode for the rest of the turn", () async {
-      final client = FakeLlmClient([
-        [
-          LlmCompletion(
-            message: LlmMessage(
-              role: LlmRole.assistant,
-              toolCalls: [
-                for (final name in ["a", "b", "c", "d"])
-                  LlmToolCall(
-                      id: name, name: "bash", argumentsJson: '{"command":"$name"}'),
-              ],
+    test(
+      "three consecutive asks pause auto mode for the rest of the turn",
+      () async {
+        final client = FakeLlmClient([
+          [
+            LlmCompletion(
+              message: LlmMessage(
+                role: LlmRole.assistant,
+                toolCalls: [
+                  for (final name in ["a", "b", "c", "d"])
+                    LlmToolCall(
+                      id: name,
+                      name: "bash",
+                      argumentsJson: '{"command":"$name"}',
+                    ),
+                ],
+              ),
             ),
-          ),
-        ],
-        [finish],
-      ]);
-      final events = await agentOver(
-        client,
-        approveMode: ApproveMode.auto,
-        approvals: List.filled(4, ApprovalResponse.allow),
-        classifier: _StubClassifier(PermissionDecision.ask),
-      ).run(userMessage("test")).toList();
+          ],
+          [finish],
+        ]);
+        final events = await agentOver(
+          client,
+          approveMode: ApproveMode.auto,
+          approvals: List.filled(4, ApprovalResponse.allow),
+          classifier: _StubClassifier(PermissionDecision.ask),
+        ).run(userMessage("test")).toList();
 
-      expect(events.whereType<InfoEvent>().single.message, contains("Auto mode paused"));
-      // All four commands got approval banners; the finish is a text reply,
-      // so it is not classified.
-      expect(events.whereType<ApprovalRequestEvent>().length, 4);
+        expect(
+          events.whereType<InfoEvent>().single.message,
+          contains("Auto mode paused"),
+        );
+        // All four commands got approval banners; the finish is a text reply,
+        // so it is not classified.
+        expect(events.whereType<ApprovalRequestEvent>().length, 4);
 
-      // And all allowed instead: the pause has nothing to pause for.
-      final allowedClient = FakeLlmClient([
-        [
-          LlmCompletion(
-            message: LlmMessage(
-              role: LlmRole.assistant,
-              toolCalls: [
-                for (final name in ["a", "b", "c", "d"])
-                  LlmToolCall(
-                      id: name, name: "bash", argumentsJson: '{"command":"$name"}'),
-              ],
+        // And all allowed instead: the pause has nothing to pause for.
+        final allowedClient = FakeLlmClient([
+          [
+            LlmCompletion(
+              message: LlmMessage(
+                role: LlmRole.assistant,
+                toolCalls: [
+                  for (final name in ["a", "b", "c", "d"])
+                    LlmToolCall(
+                      id: name,
+                      name: "bash",
+                      argumentsJson: '{"command":"$name"}',
+                    ),
+                ],
+              ),
             ),
-          ),
-        ],
-        [finish],
-      ]);
-      final allowedEvents = await agentOver(
-        allowedClient,
-        approveMode: ApproveMode.auto,
-        classifier: _StubClassifier(PermissionDecision.allow),
-      ).run(userMessage("test")).toList();
+          ],
+          [finish],
+        ]);
+        final allowedEvents = await agentOver(
+          allowedClient,
+          approveMode: ApproveMode.auto,
+          classifier: _StubClassifier(PermissionDecision.allow),
+        ).run(userMessage("test")).toList();
 
-      expect(allowedEvents.whereType<InfoEvent>(), isEmpty);
-      expect(allowedEvents.whereType<ApprovalRequestEvent>(), isEmpty);
-    });
+        expect(allowedEvents.whereType<InfoEvent>(), isEmpty);
+        expect(allowedEvents.whereType<ApprovalRequestEvent>(), isEmpty);
+      },
+    );
 
     test("no classifier falls back to asking for every command", () async {
       // A command the parse does not cover: `auto` without a classifier is
       // the fallback that asks — the bare `ls` beside it would run from the
       // deterministic tier.
       final client = FakeLlmClient([
-        [bashCall("touch note.txt")], [finish],
+        [bashCall("touch note.txt")],
+        [finish],
       ]);
       final events = await agentOver(
         client,
@@ -555,8 +631,9 @@ void main() {
         [fetchCall("https://example.com")],
         [finish],
       ]);
-      final web = FakeWebSearch(fetchResult: (_) =>
-          const ShellResult(returnCode: 0, output: "page"));
+      final web = FakeWebSearch(
+        fetchResult: (_) => const ShellResult(returnCode: 0, output: "page"),
+      );
       final events = await agentOver(
         client,
         approveMode: ApproveMode.auto,
@@ -571,7 +648,8 @@ void main() {
 
     test("a rule decides ahead of the classifier", () async {
       final client = FakeLlmClient([
-        [bashCall("rm -rf build")], [finish],
+        [bashCall("rm -rf build")],
+        [finish],
       ]);
       await agentOver(
         client,
@@ -579,7 +657,10 @@ void main() {
         classifier: _StubClassifier(PermissionDecision.allow),
         permissions: [
           const PermissionRule(
-              tool: "bash", pattern: "rm *", decision: PermissionDecision.deny),
+            tool: "bash",
+            pattern: "rm *",
+            decision: PermissionDecision.deny,
+          ),
         ],
       ).run(userMessage("go")).toList();
       // The user's deny outranks whatever the classifier would have said.
@@ -590,34 +671,46 @@ void main() {
   group("the deterministic tiers", () {
     test("a read-only command runs without a banner in ask mode", () async {
       final client = FakeLlmClient([
-        [bashCall("ls -la")], [finish],
+        [bashCall("ls -la")],
+        [finish],
       ]);
-      final events = await agentOver(client, approveMode: ApproveMode.ask)
-          .run(userMessage("go"))
-          .toList();
+      final events = await agentOver(
+        client,
+        approveMode: ApproveMode.ask,
+      ).run(userMessage("go")).toList();
       expect(shell.ran, ["ls -la"]);
       expect(events.whereType<ApprovalRequestEvent>(), isEmpty);
     });
 
     test("an ask rule still shows the read-only command it names", () async {
       final client = FakeLlmClient([
-        [bashCall("ls -la")], [finish],
+        [bashCall("ls -la")],
+        [finish],
       ]);
       final events = await agentOver(
         client,
         approveMode: ApproveMode.ask,
         permissions: [
           const PermissionRule(
-              tool: "bash", pattern: "ls *", decision: PermissionDecision.ask),
+            tool: "bash",
+            pattern: "ls *",
+            decision: PermissionDecision.ask,
+          ),
         ],
       ).run(userMessage("go")).toList();
-      expect(events.whereType<ApprovalRequestEvent>(), hasLength(1),
-          reason: "the user's always-show-me outranks the parse's tier");
+      expect(
+        events.whereType<ApprovalRequestEvent>(),
+        hasLength(1),
+        reason: "the user's always-show-me outranks the parse's tier",
+      );
     });
 
     test("auto mode never sees the read-only command at all", () async {
       var asked = 0;
-      final client = FakeLlmClient([[bashCall("grep -rn x .")], [finish]]);
+      final client = FakeLlmClient([
+        [bashCall("grep -rn x .")],
+        [finish],
+      ]);
       final events = await agentOver(
         client,
         approveMode: ApproveMode.auto,
@@ -630,7 +723,8 @@ void main() {
 
     test("a push stays on the banner path", () async {
       final client = FakeLlmClient([
-        [bashCall("git push")], [finish],
+        [bashCall("git push")],
+        [finish],
       ]);
       final agent = agentOver(client, approveMode: ApproveMode.ask);
       final events = await agent.run(userMessage("go")).toList();
@@ -641,7 +735,10 @@ void main() {
     });
 
     test("a read-only git command runs without a banner", () async {
-      final client = FakeLlmClient([[bashCall("git status && git diff --stat")], [finish]]);
+      final client = FakeLlmClient([
+        [bashCall("git status && git diff --stat")],
+        [finish],
+      ]);
       final agent = agentOver(client, approveMode: ApproveMode.ask);
       final events = await agent.run(userMessage("go")).toList();
       expect(shell.ran, hasLength(1));
@@ -649,13 +746,19 @@ void main() {
     });
 
     test("a fetcher command rides the network rules", () async {
-      final client = FakeLlmClient([[bashCall("curl https://example.com")], [finish]]);
+      final client = FakeLlmClient([
+        [bashCall("curl https://example.com")],
+        [finish],
+      ]);
       final events = await agentOver(
         client,
         approveMode: ApproveMode.ask,
         permissions: [
           const PermissionRule(
-              tool: "webfetch", pattern: "*", decision: PermissionDecision.allow),
+            tool: "webfetch",
+            pattern: "*",
+            decision: PermissionDecision.allow,
+          ),
         ],
         webSearch: FakeWebSearch(),
       ).run(userMessage("go")).toList();
@@ -664,10 +767,14 @@ void main() {
     });
 
     test("a fetcher with no standing answer still asks", () async {
-      final client = FakeLlmClient([[bashCall("curl https://example.com")], [finish]]);
-      final events = await agentOver(client, approveMode: ApproveMode.ask)
-          .run(userMessage("go"))
-          .toList();
+      final client = FakeLlmClient([
+        [bashCall("curl https://example.com")],
+        [finish],
+      ]);
+      final events = await agentOver(
+        client,
+        approveMode: ApproveMode.ask,
+      ).run(userMessage("go")).toList();
       // The banner is where the standing answer comes from; the harness's
       // default allows it, and the command runs.
       expect(events.whereType<ApprovalRequestEvent>(), hasLength(1));
@@ -675,16 +782,19 @@ void main() {
     });
 
     test("a denied domain refuses the fetcher command outright", () async {
-      final client = FakeLlmClient(
-          [[bashCall("curl https://evil.example/steal")], [finish]]);
+      final client = FakeLlmClient([
+        [bashCall("curl https://evil.example/steal")],
+        [finish],
+      ]);
       final events = await agentOver(
         client,
         approveMode: ApproveMode.ask,
         permissions: [
           const PermissionRule(
-              tool: "webfetch",
-              pattern: "evil.example",
-              decision: PermissionDecision.deny),
+            tool: "webfetch",
+            pattern: "evil.example",
+            decision: PermissionDecision.deny,
+          ),
         ],
       ).run(userMessage("go")).toList();
       expect(shell.ran, isEmpty);
@@ -696,7 +806,8 @@ void main() {
 
   test("a turn with Landlock off runs nothing confined", () async {
     final client = FakeLlmClient([
-      [bashCall("touch /etc/x")], [finish],
+      [bashCall("touch /etc/x")],
+      [finish],
     ]);
     await agentOver(client, sandboxed: false).run(userMessage("go")).toList();
     expect(shell.ran, ["touch /etc/x"]);
@@ -705,78 +816,104 @@ void main() {
 
   group("a rule's sandbox", () {
     const unconfinedPodman = PermissionRule(
-        tool: "bash", pattern: "podman *", unconfined: true);
+      tool: "bash",
+      pattern: "podman *",
+      unconfined: true,
+    );
 
     test("an unconfined rule runs its command outside the sandbox", () async {
       final client = FakeLlmClient([
-        [bashCall("podman ps")], [finish],
+        [bashCall("podman ps")],
+        [finish],
       ]);
-      await agentOver(client, permissions: [unconfinedPodman])
-          .run(userMessage("go"))
-          .toList();
+      await agentOver(
+        client,
+        permissions: [unconfinedPodman],
+      ).run(userMessage("go")).toList();
       expect(shell.ran, ["podman ps"]);
       expect(shell.sandboxes, [isNull]);
     });
 
     test("with no decision of its own, the mode still asks", () async {
       final client = FakeLlmClient([
-        [bashCall("podman ps")], [finish],
+        [bashCall("podman ps")],
+        [finish],
       ]);
-      final events = await agentOver(client,
-              approveMode: ApproveMode.ask,
-              approvals: [ApprovalResponse.allow],
-              permissions: [unconfinedPodman])
-          .run(userMessage("go"))
-          .toList();
+      final events = await agentOver(
+        client,
+        approveMode: ApproveMode.ask,
+        approvals: [ApprovalResponse.allow],
+        permissions: [unconfinedPodman],
+      ).run(userMessage("go")).toList();
       expect(events.whereType<ApprovalRequestEvent>(), hasLength(1));
       expect(shell.sandboxes, [isNull]);
     });
 
-    test("a segment the rule does not match keeps the run confined",
-        () async {
+    test("a segment the rule does not match keeps the run confined", () async {
       final client = FakeLlmClient([
-        [bashCall("podman ps && touch x")], [finish],
+        [bashCall("podman ps && touch x")],
+        [finish],
       ]);
-      await agentOver(client, permissions: [unconfinedPodman])
-          .run(userMessage("go"))
-          .toList();
+      await agentOver(
+        client,
+        permissions: [unconfinedPodman],
+      ).run(userMessage("go")).toList();
       expect(shell.sandboxes.single, isA<CommandSandbox>());
     });
 
     test("a rule's writes reach only the commands it matches", () async {
       final client = FakeLlmClient([
-        [bashCall("make all")], [bashCall("touch x")], [finish],
+        [bashCall("make all")],
+        [bashCall("touch x")],
+        [finish],
       ]);
-      await agentOver(client, permissions: [
-        const PermissionRule(
+      await agentOver(
+        client,
+        permissions: [
+          const PermissionRule(
             tool: "bash",
             pattern: "make *",
-            writes: ["/opt/out"]),
-      ]).run(userMessage("go")).toList();
+            writes: ["/opt/out"],
+          ),
+        ],
+      ).run(userMessage("go")).toList();
       expect(shell.sandboxes[0]!.extraWrites, contains("/opt/out"));
       expect(shell.sandboxes[1]!.extraWrites, isNot(contains("/opt/out")));
     });
 
-    test("a ~ the user typed is their home by the time the sandbox reads it",
-        () async {
-      final client = FakeLlmClient([
-        [bashCall("podman ps")], [finish],
-      ]);
-      await agentOver(client, writableDirs: [
-        "~/.cache/x",
-      ], permissions: [
-        const PermissionRule(
-            tool: "bash", pattern: "podman *", writes: ["~/.local/share"]),
-      ]).run(userMessage("go")).toList();
-      expect(shell.sandboxes.single!.extraWrites,
-          containsAll(["/home/u/.cache/x", "/home/u/.local/share"]));
-      expect(shell.sandboxes.single!.extraWrites.where((w) => w.startsWith("~")),
-          isEmpty);
-    });
+    test(
+      "a ~ the user typed is their home by the time the sandbox reads it",
+      () async {
+        final client = FakeLlmClient([
+          [bashCall("podman ps")],
+          [finish],
+        ]);
+        await agentOver(
+          client,
+          writableDirs: ["~/.cache/x"],
+          permissions: [
+            const PermissionRule(
+              tool: "bash",
+              pattern: "podman *",
+              writes: ["~/.local/share"],
+            ),
+          ],
+        ).run(userMessage("go")).toList();
+        expect(
+          shell.sandboxes.single!.extraWrites,
+          containsAll(["/home/u/.cache/x", "/home/u/.local/share"]),
+        );
+        expect(
+          shell.sandboxes.single!.extraWrites.where((w) => w.startsWith("~")),
+          isEmpty,
+        );
+      },
+    );
 
     test("rules saved while a turn runs reach its next command", () async {
       final client = FakeLlmClient([
-        [bashCall("podman ps")], [bashCall("podman ps 2>&1 | head -3")],
+        [bashCall("podman ps")],
+        [bashCall("podman ps 2>&1 | head -3")],
         [finish],
       ]);
       final agent = agentOver(
@@ -789,22 +926,31 @@ void main() {
         events.add(event);
         // The user adds the rule from settings once the first banner is up.
         if (event is ApprovalRequestEvent) {
-          liveRules.add(const PermissionRule(
+          liveRules.add(
+            const PermissionRule(
               tool: "bash",
               pattern: "{podman,toolbox} *",
-              decision: PermissionDecision.allow));
+              decision: PermissionDecision.allow,
+            ),
+          );
         }
       }
-      expect(events.whereType<ApprovalRequestEvent>(), hasLength(1),
-          reason: "the second call reads the saved rule; its redirect and "
-              "read-only pipe change nothing");
+      expect(
+        events.whereType<ApprovalRequestEvent>(),
+        hasLength(1),
+        reason:
+            "the second call reads the saved rule; its redirect and "
+            "read-only pipe change nothing",
+      );
       expect(shell.ran, ["podman ps", "podman ps 2>&1 | head -3"]);
     });
   });
 
   test("a mode changed while a turn runs decides its next command", () async {
     final client = FakeLlmClient([
-      [bashCall("make")], [bashCall("make install")], [finish],
+      [bashCall("make")],
+      [bashCall("make install")],
+      [finish],
     ]);
     liveMode = ApproveMode.ask;
     // Pinned to nothing, as a top-level turn is: the chat's mode is read live.
@@ -820,11 +966,15 @@ void main() {
   });
 
   test("a turn that keeps its own mode is not moved by the chat's", () async {
-    final client = FakeLlmClient([[bashCall("make")], [finish]]);
+    final client = FakeLlmClient([
+      [bashCall("make")],
+      [finish],
+    ]);
     liveMode = ApproveMode.ask;
-    final events = await agentOver(client, approveMode: ApproveMode.never)
-        .run(userMessage("go"))
-        .toList();
+    final events = await agentOver(
+      client,
+      approveMode: ApproveMode.never,
+    ).run(userMessage("go")).toList();
     expect(events.whereType<ApprovalRequestEvent>(), isEmpty);
     expect(shell.ran, ["make"]);
   });
@@ -833,9 +983,11 @@ void main() {
     LlmCompletion unsandboxed(String command) =>
         bashCall(command, extra: {"unsandboxed": true});
 
-    test("is asked about, and runs outside the sandbox once allowed",
-        () async {
-      final client = FakeLlmClient([[unsandboxed("podman ps")], [finish]]);
+    test("is asked about, and runs outside the sandbox once allowed", () async {
+      final client = FakeLlmClient([
+        [unsandboxed("podman ps")],
+        [finish],
+      ]);
       final events = await agentOver(
         client,
         approveMode: ApproveMode.ask,
@@ -849,25 +1001,40 @@ void main() {
 
     test("an allow rule does not cover it; a no-sandbox rule does", () async {
       const allowPodman = PermissionRule(
-          tool: "bash", pattern: "podman *", decision: PermissionDecision.allow);
-      final client = FakeLlmClient([[unsandboxed("podman ps")], [finish]]);
+        tool: "bash",
+        pattern: "podman *",
+        decision: PermissionDecision.allow,
+      );
+      final client = FakeLlmClient([
+        [unsandboxed("podman ps")],
+        [finish],
+      ]);
       var events = await agentOver(
         client,
         approveMode: ApproveMode.ask,
         approvals: [ApprovalResponse.allow],
         permissions: [allowPodman],
       ).run(userMessage("go")).toList();
-      expect(events.whereType<ApprovalRequestEvent>(), hasLength(1),
-          reason: "allowing a command is not allowing it out of the sandbox");
+      expect(
+        events.whereType<ApprovalRequestEvent>(),
+        hasLength(1),
+        reason: "allowing a command is not allowing it out of the sandbox",
+      );
 
-      final again = FakeLlmClient([[unsandboxed("podman ps 2>&1 | head")], [finish]]);
+      final again = FakeLlmClient([
+        [unsandboxed("podman ps 2>&1 | head")],
+        [finish],
+      ]);
       events = await agentOver(
         again,
         approveMode: ApproveMode.ask,
         permissions: [
           allowPodman,
           const PermissionRule(
-              tool: "bash", pattern: "podman *", unconfined: true),
+            tool: "bash",
+            pattern: "podman *",
+            unconfined: true,
+          ),
         ],
       ).run(userMessage("go")).toList();
       expect(events.whereType<ApprovalRequestEvent>(), isEmpty);
@@ -876,32 +1043,46 @@ void main() {
 
     test("auto mode asks the classifier first", () async {
       var asked = 0;
-      final client = FakeLlmClient([[unsandboxed("podman ps")], [finish]]);
+      final client = FakeLlmClient([
+        [unsandboxed("podman ps")],
+        [finish],
+      ]);
       final events = await agentOver(
         client,
         approveMode: ApproveMode.auto,
         classifier: _SpyClassifier(() => asked++),
       ).run(userMessage("go")).toList();
       expect(asked, 1);
-      expect(events.whereType<ApprovalRequestEvent>(), isEmpty,
-          reason: "the classifier allowed it");
+      expect(
+        events.whereType<ApprovalRequestEvent>(),
+        isEmpty,
+        reason: "the classifier allowed it",
+      );
       expect(shell.sandboxes, [isNull]);
     });
 
     test("never mode refuses it without a rule", () async {
-      final client = FakeLlmClient([[unsandboxed("podman ps")], [finish]]);
-      final events = await agentOver(client, approveMode: ApproveMode.never)
-          .run(userMessage("go"))
-          .toList();
-      expect(shell.ran, isEmpty,
-          reason: "the sandbox is the one guard an unwatched turn has");
+      final client = FakeLlmClient([
+        [unsandboxed("podman ps")],
+        [finish],
+      ]);
+      final events = await agentOver(
+        client,
+        approveMode: ApproveMode.never,
+      ).run(userMessage("go")).toList();
+      expect(
+        shell.ran,
+        isEmpty,
+        reason: "the sandbox is the one guard an unwatched turn has",
+      );
       expect(results(events).exceptionInfo, contains("approval"));
     });
 
     test("Always writes a no-sandbox rule for the command's words", () async {
       final client = FakeLlmClient([
         [unsandboxed("podman ps")],
-        [unsandboxed("podman ps -a")], [finish],
+        [unsandboxed("podman ps -a")],
+        [finish],
       ]);
       final events = await agentOver(
         client,
@@ -910,8 +1091,11 @@ void main() {
       ).run(userMessage("go")).toList();
       expect(liveRules.single.pattern, "podman ps *");
       expect(liveRules.single.unconfined, isTrue);
-      expect(liveRules.single.decision, isNull,
-          reason: "the asking stays with whatever already decides it");
+      expect(
+        liveRules.single.decision,
+        isNull,
+        reason: "the asking stays with whatever already decides it",
+      );
       // The second call's way out is covered; the command itself is still
       // the mode's to ask about.
       final approvals = events.whereType<ApprovalRequestEvent>().toList();
@@ -923,16 +1107,18 @@ void main() {
     test("is offered only where a sandbox is enforced, and never to a "
         "sub-agent", () {
       bool offers(ToolOffer offer) =>
-          (BashTool(offer).schema["properties"] as Map).containsKey("unsandboxed");
+          (BashTool(offer).schema["properties"] as Map).containsKey(
+            "unsandboxed",
+          );
       expect(offers(const ToolOffer(sandboxed: true)), isTrue);
       expect(offers(const ToolOffer()), isFalse);
       expect(offers(const ToolOffer(sandboxed: true, oneShot: true)), isFalse);
     });
 
-    test("the turn's writableDirs reach the sandbox, files included",
-        () async {
+    test("the turn's writableDirs reach the sandbox, files included", () async {
       final client = FakeLlmClient([
-        [bashCall("python3 build.py")], [finish],
+        [bashCall("python3 build.py")],
+        [finish],
       ]);
       await agentOver(
         client,
@@ -951,31 +1137,42 @@ void main() {
   });
 
   group("the verbose veto note", () {
-    test("a command with a backtick substitution is refused verbosely",
-        () async {
-      final helper = _StubHelper();
-      final client = FakeLlmClient([
-        [bashCall("cd ~/Projects/x && echo `evil`")], [finish],
-      ]);
-      final events = await agentOver(client, sandboxHelper: helper)
-          .run(userMessage("go"))
-          .toList();
-      final text = events
-          .whereType<ToolResultEvent>()
-          .map((r) => [r.result.output, r.result.exceptionInfo ?? ""].join(" "))
-          .join();
-      expect(text, contains("a backtick substitution"));
-      expect(text, contains("separate bash calls"));
-      expect(shell.ran, isEmpty);
-    });
+    test(
+      "a command with a backtick substitution is refused verbosely",
+      () async {
+        final helper = _StubHelper();
+        final client = FakeLlmClient([
+          [bashCall("cd ~/Projects/x && echo `evil`")],
+          [finish],
+        ]);
+        final events = await agentOver(
+          client,
+          sandboxHelper: helper,
+        ).run(userMessage("go")).toList();
+        final text = events
+            .whereType<ToolResultEvent>()
+            .map(
+              (r) => [r.result.output, r.result.exceptionInfo ?? ""].join(" "),
+            )
+            .join();
+        expect(text, contains("a backtick substitution"));
+        expect(text, contains("separate bash calls"));
+        expect(shell.ran, isEmpty);
+      },
+    );
   });
 }
 
 /// A stub helper so the gate is on, without a kernel in the loop.
 class _StubHelper implements SandboxHelper {
   @override
-  Future<List<String>?> prefixFor(CommandSandbox sandbox) async =>
-      ["/bin/entoli-landlock", "exec", "--workspace", sandbox.workspace, "--"];
+  Future<List<String>?> prefixFor(CommandSandbox sandbox) async => [
+    "/bin/entoli-landlock",
+    "exec",
+    "--workspace",
+    sandbox.workspace,
+    "--",
+  ];
 }
 
 /// A classifier that has already made up its mind.
@@ -985,9 +1182,12 @@ class _StubClassifier implements PermissionClassifier {
   final PermissionDecision decision;
 
   @override
-  Future<PermissionDecision> classify(String toolName, String argumentsJson,
-          {required String workspace, List<String> alsoWritable = const []}) async =>
-      decision;
+  Future<PermissionDecision> classify(
+    String toolName,
+    String argumentsJson, {
+    required String workspace,
+    List<String> alsoWritable = const [],
+  }) async => decision;
 }
 
 /// A classifier that counts being consulted.
@@ -997,8 +1197,12 @@ class _SpyClassifier implements PermissionClassifier {
   final void Function() ask;
 
   @override
-  Future<PermissionDecision> classify(String toolName, String argumentsJson,
-          {required String workspace, List<String> alsoWritable = const []}) async {
+  Future<PermissionDecision> classify(
+    String toolName,
+    String argumentsJson, {
+    required String workspace,
+    List<String> alsoWritable = const [],
+  }) async {
     ask();
     return PermissionDecision.allow;
   }

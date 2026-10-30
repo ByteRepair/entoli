@@ -83,8 +83,10 @@ class RenderFloatingPosition extends RenderProxyBox {
   }
 
   void _onFrame(Duration elapsed) {
-    final progress =
-        (elapsed.inMicroseconds / duration.inMicroseconds).clamp(0.0, 1.0);
+    final progress = (elapsed.inMicroseconds / duration.inMicroseconds).clamp(
+      0.0,
+      1.0,
+    );
     final eased = curve.transform(progress);
     // Each frame closes the same eased share of the gap that remains, so a
     // target that moves mid-run is chased without the run resetting, and the

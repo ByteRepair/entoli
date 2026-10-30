@@ -7,16 +7,17 @@ import "temp_chat_ttl.dart";
 /// the chat settings page. Distinct from `state.json` (chat metadata) and
 /// `conv.jsonl` (message tree). Null everywhere means "inherit".
 class ChatMeta {
-  ChatMeta(
-      {this.model,
-      this.provider,
-      this.approveMode,
-      this.tempChatTtl,
-      this.permissions = const [],
-      this.writableDirs = const [],
-      this.memoryOff,
-      this.sandbox,
-      this.headless});
+  ChatMeta({
+    this.model,
+    this.provider,
+    this.approveMode,
+    this.tempChatTtl,
+    this.permissions = const [],
+    this.writableDirs = const [],
+    this.memoryOff,
+    this.sandbox,
+    this.headless,
+  });
 
   String? model;
   String? provider;
@@ -53,19 +54,19 @@ class ChatMeta {
   bool? headless;
 
   factory ChatMeta.fromJson(Map<String, dynamic> json) => ChatMeta(
-        model: json["model"] as String?,
-        provider: json["provider"] as String?,
-        approveMode: _approveMode(json),
-        permissions: permissionRulesFromJson(json["permissions"] as List<dynamic>?),
-        writableDirs: [
-          for (final w in (json["writableDirs"] as List<dynamic>? ?? const []))
-            if (w is String) w,
-        ],
-        tempChatTtl: TempChatTtl.values.asNameMap()[json["tempChatTtl"]],
-        memoryOff: json["memoryOff"] as bool?,
-        sandbox: json["sandbox"] as bool?,
-        headless: json["headless"] as bool?,
-      );
+    model: json["model"] as String?,
+    provider: json["provider"] as String?,
+    approveMode: _approveMode(json),
+    permissions: permissionRulesFromJson(json["permissions"] as List<dynamic>?),
+    writableDirs: [
+      for (final w in (json["writableDirs"] as List<dynamic>? ?? const []))
+        if (w is String) w,
+    ],
+    tempChatTtl: TempChatTtl.values.asNameMap()[json["tempChatTtl"]],
+    memoryOff: json["memoryOff"] as bool?,
+    sandbox: json["sandbox"] as bool?,
+    headless: json["headless"] as bool?,
+  );
 
   /// Null is a `meta.json` that was never written, which inherits everything —
   /// and so is one that cannot be parsed.
@@ -95,17 +96,17 @@ class ChatMeta {
   bool get isEmpty => toJson().isEmpty;
 
   Map<String, dynamic> toJson() => {
-        if (model != null) "model": model,
-        if (provider != null) "provider": provider,
-        if (approveMode != null) "approveMode": approveMode!.name,
-        if (permissions.isNotEmpty)
-          "permissions": permissionRulesToJson(permissions),
-        if (writableDirs.isNotEmpty) "writableDirs": writableDirs,
-        if (tempChatTtl != null) "tempChatTtl": tempChatTtl!.name,
-        if (memoryOff != null) "memoryOff": memoryOff,
-        if (sandbox != null) "sandbox": sandbox,
-        if (headless != null) "headless": headless,
-      };
+    if (model != null) "model": model,
+    if (provider != null) "provider": provider,
+    if (approveMode != null) "approveMode": approveMode!.name,
+    if (permissions.isNotEmpty)
+      "permissions": permissionRulesToJson(permissions),
+    if (writableDirs.isNotEmpty) "writableDirs": writableDirs,
+    if (tempChatTtl != null) "tempChatTtl": tempChatTtl!.name,
+    if (memoryOff != null) "memoryOff": memoryOff,
+    if (sandbox != null) "sandbox": sandbox,
+    if (headless != null) "headless": headless,
+  };
 
   String encode() => jsonEncode(toJson());
 }

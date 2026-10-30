@@ -69,7 +69,11 @@ final class SecureChannel implements ByteChannel {
     // is one the peer's first framed message falls into.
     final reader = ChannelReader(raw);
     try {
-      final keys = await handshake.run(raw, initiator: initiator, reader: reader);
+      final keys = await handshake.run(
+        raw,
+        initiator: initiator,
+        reader: reader,
+      );
       return SecureChannel._(raw, keys.send, keys.recv, reader);
     } catch (_) {
       await reader.cancel();
@@ -104,13 +108,11 @@ final class SecureChannel implements ByteChannel {
   }
 
   @override
-  Future<void> send(Uint8List bytes) =>
-      _dispatch(typeControl, bytes);
+  Future<void> send(Uint8List bytes) => _dispatch(typeControl, bytes);
 
   /// Binary payloads (resource chunks in phase 2) ride their own type so a
   /// control message can never be mistaken for one.
-  Future<void> sendBinary(Uint8List bytes) =>
-      _dispatch(typeBinary, bytes);
+  Future<void> sendBinary(Uint8List bytes) => _dispatch(typeBinary, bytes);
 
   /// Frames leave one at a time, in counter order.
   ///
@@ -128,10 +130,16 @@ final class SecureChannel implements ByteChannel {
     final sent = _sending.then((_) async {
       var at = 0;
       do {
-        final end = payload.length - at > pieceBytes ? at + pieceBytes : payload.length;
+        final end = payload.length - at > pieceBytes
+            ? at + pieceBytes
+            : payload.length;
         final more = end < payload.length;
-        await _raw.send(await _seal(
-            more ? type | continued : type, Uint8List.sublistView(payload, at, end)));
+        await _raw.send(
+          await _seal(
+            more ? type | continued : type,
+            Uint8List.sublistView(payload, at, end),
+          ),
+        );
         at = end;
       } while (at < payload.length);
     });
@@ -162,7 +170,9 @@ final class SecureChannel implements ByteChannel {
         try {
           final plain = await _open(frame);
           _pieces.add(plain);
-          if (frame[0] & continued == 0 && !_closed) _controller.add(_pieces.takeBytes());
+          if (frame[0] & continued == 0 && !_closed) {
+            _controller.add(_pieces.takeBytes());
+          }
         } on SecretBoxAuthenticationError {
           logFailure("sync", "a frame failed authentication");
           _fail(const FrameAuthenticationException());
@@ -254,6 +264,6 @@ extension SecureJson on SecureChannel {
       send(utf8.encode(jsonEncode(json)));
 
   Stream<Map<String, dynamic>> get jsonIncoming => incoming.map(
-        (bytes) => jsonDecode(utf8.decode(bytes)) as Map<String, dynamic>,
-      );
+    (bytes) => jsonDecode(utf8.decode(bytes)) as Map<String, dynamic>,
+  );
 }

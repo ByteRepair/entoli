@@ -25,16 +25,19 @@ void main() {
     });
 
     test("read the same from a YAML list, and an empty one is none", () {
-      expect(agentFrom("---\ntools:\n  - read\n  - grep\n---\nB").tools,
-          {"read", "grep"});
+      expect(agentFrom("---\ntools:\n  - read\n  - grep\n---\nB").tools, {
+        "read",
+        "grep",
+      });
       expect(agentFrom("---\ntools: [read]\n---\nB").tools, {"read"});
       expect(agentFrom("---\ntools: []\n---\nB").tools, isEmpty);
     });
 
     test("read from a file the strict parse refuses", () {
       // The `: ` in the description is not YAML, so the legacy parser reads it.
-      final agent =
-          agentFrom("---\ndescription: say it: plainly\ntools: read\n---\nB");
+      final agent = agentFrom(
+        "---\ndescription: say it: plainly\ntools: read\n---\nB",
+      );
       expect(agent.description, "say it: plainly");
       expect(agent.tools, {"read"});
     });
@@ -47,14 +50,16 @@ void main() {
 
   group("writing an agent back", () {
     test("reads back as what was edited, keys it does not edit kept", () {
-      final agent = agentFrom("---\ndescription: old\nmodel: big\n"
-              "metadata:\n  colour: red\n---\nOld body.")
-          .edited(
-        name: "a",
-        description: "new: with a colon",
-        instructions: "New body.",
-        tools: {"read", "bash(readonly)"},
-      );
+      final agent =
+          agentFrom(
+            "---\ndescription: old\nmodel: big\n"
+            "metadata:\n  colour: red\n---\nOld body.",
+          ).edited(
+            name: "a",
+            description: "new: with a colon",
+            instructions: "New body.",
+            tools: {"read", "bash(readonly)"},
+          );
       final back = agentFrom(agent.toSource());
       expect(back.description, "new: with a colon");
       expect(back.instructions, "New body.");
@@ -65,13 +70,18 @@ void main() {
 
     test("writes no list where the tools are left at their defaults, and "
         "an empty one as none", () {
-      final defaults = agentFrom("---\ntools: read\n---\nB").edited(
-          name: "a", description: "", instructions: "B", tools: null);
+      final defaults = agentFrom(
+        "---\ntools: read\n---\nB",
+      ).edited(name: "a", description: "", instructions: "B", tools: null);
       expect(defaults.toSource(), isNot(contains("tools")));
       expect(agentFrom(defaults.toSource()).tools, isNull);
 
       final none = defaults.edited(
-          name: "a", description: "", instructions: "B", tools: {});
+        name: "a",
+        description: "",
+        instructions: "B",
+        tools: {},
+      );
       expect(agentFrom(none.toSource()).tools, isEmpty);
     });
   });

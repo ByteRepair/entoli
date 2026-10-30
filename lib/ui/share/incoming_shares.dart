@@ -35,7 +35,10 @@ class _IncomingSharesState extends ConsumerState<IncomingShares> {
   @override
   void initState() {
     super.initState();
-    _arrivals = ref.read(fileHandoffProvider).shareArrived.listen((_) => _claim());
+    _arrivals = ref
+        .read(fileHandoffProvider)
+        .shareArrived
+        .listen((_) => _claim());
     WidgetsBinding.instance.addPostFrameCallback((_) => _claim());
   }
 
@@ -51,9 +54,9 @@ class _IncomingSharesState extends ConsumerState<IncomingShares> {
     try {
       final files = await ref.read(fileHandoffProvider).takeShare();
       if (files.isEmpty || !mounted) return;
-      await Navigator.of(context).push(
-        MaterialPageRoute(builder: (_) => ShareTargetPage(files: files)),
-      );
+      await Navigator.of(
+        context,
+      ).push(MaterialPageRoute(builder: (_) => ShareTargetPage(files: files)));
     } finally {
       _asking = false;
     }

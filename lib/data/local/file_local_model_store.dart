@@ -61,8 +61,10 @@ class FileLocalModelStore extends LocalModelStore {
     final dir = Directory(root);
     if (!dir.existsSync()) return const [];
     return [
-      for (final entry in dir.listSync()..sort((a, b) => a.path.compareTo(b.path)))
-        if (entry is Directory && File(p.join(entry.path, _marker)).existsSync())
+      for (final entry
+          in dir.listSync()..sort((a, b) => a.path.compareTo(b.path)))
+        if (entry is Directory &&
+            File(p.join(entry.path, _marker)).existsSync())
           ?_read(p.basename(entry.path)),
     ];
   }
@@ -74,8 +76,10 @@ class FileLocalModelStore extends LocalModelStore {
     final record = File(p.join(directory, _record));
     try {
       if (record.existsSync()) {
-        return DownloadedModel.fromJson(jsonDecode(record.readAsStringSync()),
-            file: format.entry(directory));
+        return DownloadedModel.fromJson(
+          jsonDecode(record.readAsStringSync()),
+          file: format.entry(directory),
+        );
       }
       final model = format.describe(id, directory);
       record.writeAsStringSync(jsonEncode(model.toJson()));
@@ -97,47 +101,57 @@ class FileLocalModelStore extends LocalModelStore {
   /// fetching and the giving up are [DownloadRun]'s.
   @override
   Stream<DownloadProgress> install(LocalModel model) => DownloadRun(
-        client: client,
-        discard: () => delete(model.id),
-        run: (run) async {
-          // Whatever an earlier attempt left: a partial file under a name we
-          // are about to write, which is worse than starting again.
-          await delete(model.id);
-          final directory = directoryFor(model.id);
-          Directory(directory).createSync(recursive: true);
+    client: client,
+    discard: () => delete(model.id),
+    run: (run) async {
+      // Whatever an earlier attempt left: a partial file under a name we
+      // are about to write, which is worse than starting again.
+      await delete(model.id);
+      final directory = directoryFor(model.id);
+      Directory(directory).createSync(recursive: true);
 
-          final total = model.bytes;
-          var done = 0;
-          for (final file in model.files) {
-            final to = p.join(directory, file.path);
-            Directory(p.dirname(to)).createSync(recursive: true);
-            final digest = await run.fetchSha256(
-                url: file.url, to: to, total: total, done: done);
-            if (run.cancelled) return;
-            // A gigabyte over somebody's mobile data, and the publisher already
-            // says what it should come to. Weights are not a program, so this
-            // is not the check a rootfs gets — it is the check that the download
-            // finished, and arrived from the model it claims to be.
-            final expected = file.sha256;
-            if (expected != null && digest != expected.toLowerCase()) {
-              throw StateError(
-                "The download did not match what ${model.name} was checked to "
-                "be, so nothing was kept.",
-              );
-            }
-            done += file.bytes ?? await File(to).length();
-          }
+      final total = model.bytes;
+      var done = 0;
+      for (final file in model.files) {
+        final to = p.join(directory, file.path);
+        Directory(p.dirname(to)).createSync(recursive: true);
+        final digest = await run.fetchSha256(
+          url: file.url,
+          to: to,
+          total: total,
+          done: done,
+        );
+        if (run.cancelled) return;
+        // A gigabyte over somebody's mobile data, and the publisher already
+        // says what it should come to. Weights are not a program, so this
+        // is not the check a rootfs gets — it is the check that the download
+        // finished, and arrived from the model it claims to be.
+        final expected = file.sha256;
+        if (expected != null && digest != expected.toLowerCase()) {
+          throw StateError(
+            "The download did not match what ${model.name} was checked to "
+            "be, so nothing was kept.",
+          );
+        }
+        done += file.bytes ?? await File(to).length();
+      }
 
-          final DownloadedModel downloaded;
-          try {
-            downloaded = format.describe(model.id, directory, model);
-          } on FormatException catch (e) {
-            throw StateError("${model.name} is not a model this app can run: ${e.message}.");
-          }
-          await File(p.join(directory, _record))
-              .writeAsString(jsonEncode(downloaded.toJson()));
-          await File(p.join(directory, _marker)).writeAsString("");
-          _downloaded = [...downloadedSync().where((m) => m.id != model.id), downloaded];
-        },
-      ).stream;
+      final DownloadedModel downloaded;
+      try {
+        downloaded = format.describe(model.id, directory, model);
+      } on FormatException catch (e) {
+        throw StateError(
+          "${model.name} is not a model this app can run: ${e.message}.",
+        );
+      }
+      await File(
+        p.join(directory, _record),
+      ).writeAsString(jsonEncode(downloaded.toJson()));
+      await File(p.join(directory, _marker)).writeAsString("");
+      _downloaded = [
+        ...downloadedSync().where((m) => m.id != model.id),
+        downloaded,
+      ];
+    },
+  ).stream;
 }

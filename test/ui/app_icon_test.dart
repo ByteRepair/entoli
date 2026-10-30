@@ -15,15 +15,19 @@ void main() {
   setUp(() => app = TestApp.create());
   tearDown(() => app.dispose());
 
-  Finder choice(AppIcon icon) => find.ancestor(
-        of: find.text(icon.label),
-        matching: find.byType(InkWell),
-      );
+  Finder choice(AppIcon icon) =>
+      find.ancestor(of: find.text(icon.label), matching: find.byType(InkWell));
 
   /// What the page is drawing as chosen, rather than what the file says: the
   /// point of the section is that those agree.
-  void expectSelected(WidgetTester tester, AppIcon icon, {required bool selected}) =>
-      expect(tester.getSemantics(choice(icon)), isSemantics(isSelected: selected));
+  void expectSelected(
+    WidgetTester tester,
+    AppIcon icon, {
+    required bool selected,
+  }) => expect(
+    tester.getSemantics(choice(icon)),
+    isSemantics(isSelected: selected),
+  );
 
   group("app icon", () {
     testWidgets("a fresh install wears Cookie", (tester) async {
@@ -44,7 +48,9 @@ void main() {
       );
     });
 
-    testWidgets("picking one persists it and tells the launcher", (tester) async {
+    testWidgets("picking one persists it and tells the launcher", (
+      tester,
+    ) async {
       final semantics = tester.ensureSemantics();
       await pumpAppearance(tester, app);
 
@@ -84,8 +90,9 @@ void main() {
   group("without a launcher to change", () {
     setUp(() => app = TestApp.create(launcherIcons: false));
 
-    testWidgets("the setting still applies, and says what it cannot do",
-        (tester) async {
+    testWidgets("the setting still applies, and says what it cannot do", (
+      tester,
+    ) async {
       await pumpAppearance(tester, app);
       expect(find.textContaining("does not follow this"), findsOneWidget);
 
@@ -109,14 +116,21 @@ void main() {
       );
     });
 
-    testWidgets("changing it redraws the mark without a restart", (tester) async {
+    testWidgets("changing it redraws the mark without a restart", (
+      tester,
+    ) async {
       await app.pump(tester, const Scaffold(body: AppMark()));
       expect(
         tester.widget<AppIconImage>(find.byType(AppIconImage)).icon,
         AppIcon.cookie,
       );
 
-      await io(tester, () => app.container.read(appSettingsProvider.notifier).setAppIcon(AppIcon.prompt));
+      await io(
+        tester,
+        () => app.container
+            .read(appSettingsProvider.notifier)
+            .setAppIcon(AppIcon.prompt),
+      );
       await settleIo(tester);
 
       expect(
@@ -132,7 +146,10 @@ void main() {
     testWidgets("every icon is an SVG the app can draw", (tester) async {
       for (final icon in AppIcon.values) {
         await tester.runAsync(() async {
-          final picture = await vg.loadPicture(SvgAssetLoader(icon.asset), null);
+          final picture = await vg.loadPicture(
+            SvgAssetLoader(icon.asset),
+            null,
+          );
           expect(picture.size, const Size(108, 108), reason: icon.asset);
           picture.picture.dispose();
         });
@@ -142,12 +159,18 @@ void main() {
 
   group("the stored name", () {
     test("a name this build does not know falls back to the default", () async {
-      await app.config.documents.write(app.config.settingsFile, '{"appIcon":"sawhorse"}');
+      await app.config.documents.write(
+        app.config.settingsFile,
+        '{"appIcon":"sawhorse"}',
+      );
       expect(AppSettings.load(app.config).appIcon, AppIcon.cookie);
     });
 
     test("an older file with no icon in it is the default", () async {
-      await app.config.documents.write(app.config.settingsFile, '{"approveMode":"ask"}');
+      await app.config.documents.write(
+        app.config.settingsFile,
+        '{"approveMode":"ask"}',
+      );
       expect(AppSettings.load(app.config).appIcon, AppIcon.cookie);
     });
   });

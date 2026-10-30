@@ -23,8 +23,9 @@ class TristateToggle extends StatelessWidget {
         selectedBackgroundColor: scheme.primary,
         selectedForegroundColor: scheme.onPrimary,
       ),
-      onSelectionChanged:
-          onChanged == null ? null : (picked) => onChanged!(picked.first),
+      onSelectionChanged: onChanged == null
+          ? null
+          : (picked) => onChanged!(picked.first),
     );
   }
 }

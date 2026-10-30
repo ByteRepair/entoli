@@ -12,7 +12,7 @@ import "../domain/download.dart";
 /// directory with it, and cancel's own future waits for that discard.
 class DownloadRun {
   DownloadRun({required this.run, required this.discard, http.Client? client})
-      : _client = client ?? tlsClient() {
+    : _client = client ?? tlsClient() {
     _out = StreamController<DownloadProgress>(
       onListen: () => run(this).then(
         (_) async {
@@ -99,18 +99,20 @@ class DownloadRun {
       // `addStream` rather than `add` per chunk: a device whose flash is slower
       // than its radio would otherwise queue the difference on the heap, for
       // the length of a 250 MB download.
-      await sink.addStream(response.stream.takeWhile((_) => !_cancelled).map((chunk) {
-        watch?.add(chunk);
-        at += chunk.length;
-        // Every chunk would be thousands of reports, and each one rebuilds a
-        // notification through five binder calls — for a bar with a hundred
-        // pixels to move.
-        if (at - told >= _reportEvery) {
-          told = at;
-          report(DownloadProgress(received: done + at, total: size));
-        }
-        return chunk;
-      }));
+      await sink.addStream(
+        response.stream.takeWhile((_) => !_cancelled).map((chunk) {
+          watch?.add(chunk);
+          at += chunk.length;
+          // Every chunk would be thousands of reports, and each one rebuilds a
+          // notification through five binder calls — for a bar with a hundred
+          // pixels to move.
+          if (at - told >= _reportEvery) {
+            told = at;
+            report(DownloadProgress(received: done + at, total: size));
+          }
+          return chunk;
+        }),
+      );
       report(DownloadProgress(received: done + at, total: size));
     } finally {
       await sink.close();
@@ -128,8 +130,11 @@ class DownloadRun {
 /// [repo]'s newest release tag, read off the redirect its `releases/latest`
 /// page answers with — no API call, no rate limit, and the tag in the one
 /// header GitHub has always put there.
-Future<String> latestReleaseTag(http.Client client, String repo,
-    {Duration timeout = const Duration(seconds: 30)}) async {
+Future<String> latestReleaseTag(
+  http.Client client,
+  String repo, {
+  Duration timeout = const Duration(seconds: 30),
+}) async {
   final request = http.Request("GET", latestReleaseUrl(repo))
     ..followRedirects = false
     ..maxRedirects = 0;
@@ -137,14 +142,16 @@ Future<String> latestReleaseTag(http.Client client, String repo,
   try {
     if (response.statusCode >= 400) {
       throw HttpException(
-          "${response.statusCode} for the latest release of $repo");
+        "${response.statusCode} for the latest release of $repo",
+      );
     }
     final location = response.headers["location"];
     final tag = location == null ? null : latestTagOf(Uri.parse(location));
     if (tag == null) {
       throw FormatException(
-          "the latest release of $repo points at $location, which names no "
-          "tag");
+        "the latest release of $repo points at $location, which names no "
+        "tag",
+      );
     }
     return tag;
   } finally {

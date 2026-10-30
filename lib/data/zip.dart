@@ -42,9 +42,11 @@ Future<Archive> archiveOf(
 }) async {
   final archive = Archive();
   await for (final entry in _entries(paths, base, skip, skipDir)) {
-    archive.add(entry.isDirectory
-        ? ArchiveFile.directory(entry.name)
-        : ArchiveFile.bytes(entry.name, await File(entry.path).readAsBytes()));
+    archive.add(
+      entry.isDirectory
+          ? ArchiveFile.directory(entry.name)
+          : ArchiveFile.bytes(entry.name, await File(entry.path).readAsBytes()),
+    );
   }
   return archive;
 }
@@ -52,13 +54,19 @@ Future<Archive> archiveOf(
 /// [path] into [encoder] as [name], read as it is compressed. One stat of the
 /// path for the time and the mode, where `ZipFileEncoder.addFile` takes two —
 /// beside the length the open reads off the handle either way.
-Future<void> _addStreamed(ZipFileEncoder encoder, String path, String name) async {
+Future<void> _addStreamed(
+  ZipFileEncoder encoder,
+  String path,
+  String name,
+) async {
   final stat = File(path).statSync();
   final input = InputFileStream(path);
   try {
-    encoder.addArchiveFile(ArchiveFile.stream(name, input)
-      ..lastModTime = stat.modified.millisecondsSinceEpoch ~/ 1000
-      ..mode = stat.mode);
+    encoder.addArchiveFile(
+      ArchiveFile.stream(name, input)
+        ..lastModTime = stat.modified.millisecondsSinceEpoch ~/ 1000
+        ..mode = stat.mode,
+    );
   } finally {
     await input.close();
   }
@@ -80,7 +88,10 @@ Stream<({String path, String name, bool isDirectory})> _entries(
   bool Function(String path)? skipDir,
 ) async* {
   Stream<({String path, String name, bool isDirectory})> walk(
-      String from, String path, bool isDirectory) async* {
+    String from,
+    String path,
+    bool isDirectory,
+  ) async* {
     if (!isDirectory) {
       if (skip == null || !skip(path)) {
         yield (path: path, name: _member(path, from), isDirectory: false);
@@ -101,8 +112,11 @@ Stream<({String path, String name, bool isDirectory})> _entries(
   }
 
   for (final path in paths) {
-    yield* walk(base ?? p.dirname(path), path,
-        FileSystemEntity.isDirectorySync(path));
+    yield* walk(
+      base ?? p.dirname(path),
+      path,
+      FileSystemEntity.isDirectorySync(path),
+    );
   }
 }
 
