@@ -6,25 +6,17 @@ import "dart:convert";
 
 import "package:markdown/markdown.dart" as md;
 
+import "math_syntax.dart";
+
 /// A message's markdown as it reads once rendered: the formatted text the copy
 /// button takes, where the selection's copy answers from what is on screen.
 /// Inline styles fall away, links by the words they carry, blocks as lines.
-///
-/// Parsed with the same document grammar the renderer reads, and with HTML
-/// encoding off the way the renderer has it — encoding on would rewrite the
-/// quotes and ampersands of what was said as `&quot;` and friends, entities
-/// that were never drawn.
+/// A formula is its TeX as it was written, delimiters and all, which is the
+/// one plain-text form every place it is pasted can read back.
 String formattedTextOf(String markdown) {
   final buffer = StringBuffer();
   final visitor = _FormattedTextVisitor(buffer);
-  final document = md.Document(
-    extensionSet: md.ExtensionSet.gitHubFlavored,
-    // The renderer's own answer (flutter_markdown_plus builds every document
-    // with `encodeHtml: false`): the entities are HTML machinery, and the
-    // rendered text is the words they encode.
-    encodeHtml: false,
-  );
-  for (final node in document.parseLines(markdown.split("\n"))) {
+  for (final node in parseReply(markdown)) {
     node.accept(visitor);
   }
   return buffer.toString().trimRight();
@@ -83,7 +75,7 @@ class _FormattedTextVisitor implements md.NodeVisitor {
 String formattedHtmlOf(String markdown) {
   final buffer = StringBuffer();
   final visitor = _HtmlVisitor(buffer);
-  for (final node in _parse(markdown)) {
+  for (final node in parseReply(markdown)) {
     node.accept(visitor);
   }
   return buffer.toString();
@@ -118,8 +110,21 @@ const htmlTagStyles = {
       "border-left: 3px solid #d0d7de; margin-left: 0; padding-left: 12px",
 };
 
-List<md.Node> _parse(String markdown) => md.Document(
-  extensionSet: md.ExtensionSet.gitHubFlavored,
+/// The grammar a reply is read with: GitHub's, and the maths ahead of it so
+/// that nothing inside a formula is read as markdown first. One value for the
+/// renderer and the copy alike, so the two cannot disagree about what a reply
+/// is.
+final replyExtensionSet = md.ExtensionSet(
+  [...mathBlockSyntaxes, ...md.ExtensionSet.gitHubFlavored.blockSyntaxes],
+  [...mathInlineSyntaxes, ...md.ExtensionSet.gitHubFlavored.inlineSyntaxes],
+);
+
+/// A reply's markdown as the renderer reads it, with HTML encoding off the way
+/// the renderer has it (flutter_markdown_plus builds every document with
+/// `encodeHtml: false`): encoding on would rewrite the quotes and ampersands of
+/// what was said as `&quot;` and friends, entities that were never drawn.
+List<md.Node> parseReply(String markdown) => md.Document(
+  extensionSet: replyExtensionSet,
   encodeHtml: false,
 ).parseLines(markdown.split("\n"));
 
@@ -130,6 +135,12 @@ class _HtmlVisitor implements md.NodeVisitor {
 
   @override
   bool visitElementBefore(md.Element element) {
+    // A formula pastes as the TeX it was written as: a word processor has no
+    // element that draws it, and an unknown one would be dropped with its text.
+    if (mathTags.contains(element.tag)) {
+      buffer.write(escapeHtml(element.textContent));
+      return false;
+    }
     buffer.write("<${element.tag}");
     final style = [
       ?htmlTagStyles[element.tag],
@@ -189,7 +200,7 @@ class RenderedBlock {
 /// first.
 class RenderedOutline {
   RenderedOutline.of(String markdown) {
-    for (final node in _parse(markdown)) {
+    for (final node in parseReply(markdown)) {
       _walk(node, quoted: false);
     }
   }

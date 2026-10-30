@@ -258,7 +258,17 @@ uncovering the icons does not rebuild the message's labels behind them.
 
 ### How a reply is set
 
-`replyStyleSheet` is the whole of it, and it starts from
+**Markdown anywhere is `MarkdownText`** — a reply, a skill, a README, a
+workspace file, a trigger's prompt, the privacy policy. It is the one place a
+`MarkdownBody` is built, and it carries everything that makes markdown look
+like the app's: the style sheet below, built once per theme rather than per
+build (a new sheet re-parses the whole document); the code-block and formula
+builders; `replyExtensionSet`, the grammar the copy reads; and the bullets,
+drawn as chrome a drag does not pick up, numbered on a numbered list. A page
+that built its own `MarkdownBody` got some of that and not the rest — the skill
+pages had no code-block bar, and every page but one re-parsed on each rebuild.
+
+`replyStyleSheet` is the whole of the look, and it starts from
 `MarkdownStyleSheet.fromTheme` because most of what that answers is right. What
 gets overridden is where the defaults were written for a document rather than a
 chat, or where they read a Material 2 field that M3 leaves null.
@@ -323,6 +333,35 @@ in the file, which is half of what the OFL asks for. The other half is
 reads that registry. Bold is bundled beside regular because inline code inherits
 the weight of what holds it, and a heading with a `` `name` `` in it is a shape
 this app's replies take constantly.
+
+### Formulas
+
+TeX is drawn wherever `MarkdownText` is, by `flutter_math_fork` — KaTeX's layout in pure Dart,
+its fonts bundled, nothing native. `$…$` and `\(…\)` set a formula in the
+sentence; `$$…$$` and `\[…\]` set it on a line of its own, centred and
+scrolling sideways when wider than the column, as a code block does.
+
+The delimiters are read in `domain/math_syntax.dart`, as markdown syntaxes
+rather than a pass over the finished text, so nothing inside a formula is
+taken for markdown first: `a_b_c` is not italics, and a line of a multi-line
+formula starting `- ` is not a list. The block rule is there for that last
+case. A `$` is maths only by Pandoc's rule — a non-space after the opening one,
+a non-space before the closing one, no digit after it — which is what keeps
+"$5 and $10" prose. The copy parses with the same syntaxes, so a formula
+copies as the TeX it was written as, delimiters and all.
+
+An inline formula is a `Text.rich` holding one `WidgetSpan`, because the
+builder merges a `Text`'s spans into the paragraph and lays any other widget
+beside it in a `Wrap`, which breaks the line around it. TeX the parser refuses
+is shown as it was written. A drag selection passes over a formula without
+picking it up; the copy button is what copies one.
+
+The renderer and the copy read one grammar, `replyExtensionSet`, beside
+`parseReply` in `domain/formatted_text.dart`. Parsed TeX is kept the way a code
+block's spans are, and for the same re-parse on every frame of a cross-fade —
+keyed on the TeX alone, since the tree carries no style, so a theme change
+keeps every entry. A wide display formula scrolls in `SidewaysScroll`, the
+code block's own scroller, scrollbar and all.
 
 ### Code blocks
 

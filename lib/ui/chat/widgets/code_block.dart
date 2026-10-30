@@ -313,7 +313,8 @@ class CodeBlock extends StatelessWidget {
       // so a drag across the reply must not put the language name on the
       // clipboard — the rule the labels above the bubble already keep.
       SelectionContainer.disabled(child: _bar(context)),
-      _CodeScroll(
+      SidewaysScroll(
+        padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
         child: Text.rich(
           span ??
               CodeBlockBuilder.cachedSpanOf(code, language, Theme.of(context)),
@@ -354,18 +355,24 @@ class CodeBlock extends StatelessWidget {
 }
 
 /// A long line scrolls rather than wrapping, since a wrapped one is no longer
-/// the code that was written. Stateful for the controller alone: a `Scrollbar`
-/// and the view it reports on have to be given the same one.
-class _CodeScroll extends StatefulWidget {
-  const _CodeScroll({required this.child});
+/// the code that was written — nor the formula, which is the other thing set
+/// in it. Stateful for the controller alone: a `Scrollbar` and the view it
+/// reports on have to be given the same one.
+class SidewaysScroll extends StatefulWidget {
+  const SidewaysScroll({
+    super.key,
+    this.padding = EdgeInsets.zero,
+    required this.child,
+  });
 
+  final EdgeInsets padding;
   final Widget child;
 
   @override
-  State<_CodeScroll> createState() => _CodeScrollState();
+  State<SidewaysScroll> createState() => _SidewaysScrollState();
 }
 
-class _CodeScrollState extends State<_CodeScroll> {
+class _SidewaysScrollState extends State<SidewaysScroll> {
   final _controller = ScrollController();
 
   @override
@@ -380,7 +387,7 @@ class _CodeScrollState extends State<_CodeScroll> {
     child: SingleChildScrollView(
       controller: _controller,
       scrollDirection: Axis.horizontal,
-      padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+      padding: widget.padding,
       child: widget.child,
     ),
   );

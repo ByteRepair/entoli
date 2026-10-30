@@ -2,18 +2,16 @@ import "dart:async";
 
 import "package:clock/clock.dart";
 import "package:flutter/material.dart";
-import "package:flutter_markdown_plus/flutter_markdown_plus.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:uuid/uuid.dart";
 
 import "../../domain/date_words.dart" show describeFire, shortDate, timeOfDay;
 import "../../domain/models.dart" show CompletionKind;
+import "../chat/widgets/markdown_text.dart";
 import "../../domain/project.dart";
 import "../../domain/trigger.dart";
 import "../../domain/temp_chat_ttl.dart";
 import "../../providers.dart";
-import "../chat/widgets/code_block.dart";
-import "../chat/widgets/reply_style.dart";
 import "../widgets/completion_field.dart";
 import "../widgets/dialogs.dart" show confirm, promptForText;
 import "../widgets/resettable_field.dart";
@@ -787,11 +785,7 @@ class _PromptPreview extends StatelessWidget {
                         color: theme.colorScheme.onSurfaceVariant,
                       ),
                     )
-                  : MarkdownBody(
-                      data: prompt,
-                      styleSheet: replyStyleSheet(theme),
-                      builders: codeBlockBuilders,
-                    ),
+                  : MarkdownText(prompt),
             ),
           ),
           if (editable) ...[

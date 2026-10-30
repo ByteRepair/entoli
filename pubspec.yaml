@@ -49,6 +49,9 @@ dependencies:
   # here because a `MarkdownElementBuilder` is handed the elements it produces.
   flutter_markdown_plus: ^1.0.12
   markdown: ^7.3.1
+  # TeX in a reply, `$…$` and `$$…$$`: KaTeX's layout in pure Dart, its fonts
+  # bundled. Which delimiters are read is `domain/math_syntax.dart`.
+  flutter_math_fork: ^0.7.4
   # Highlighting for fenced code blocks: highlight.js's grammars and themes in
   # pure Dart, so nothing native joins any of the three platforms. Which
   # grammars are registered is in `code_block.dart`.

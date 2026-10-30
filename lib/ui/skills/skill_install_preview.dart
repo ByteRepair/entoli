@@ -3,13 +3,12 @@ import "dart:typed_data";
 
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
-import "package:flutter_markdown_plus/flutter_markdown_plus.dart";
 
 import "../../core/platform/platform.dart" as platform;
+import "../chat/widgets/markdown_text.dart";
 import "../../data/prompts/skill_import.dart";
 import "../../domain/models.dart";
 import "../../providers.dart";
-import "../chat/widgets/reply_style.dart";
 import "../widgets/dialogs.dart";
 import "../widgets/install_bar.dart";
 import "../widgets/install_destination.dart";
@@ -160,10 +159,7 @@ class _SkillInstallPreviewPageState
             borderRadius: BorderRadius.circular(12),
           ),
           padding: const EdgeInsets.all(16),
-          child: MarkdownBody(
-            data: pkg.body,
-            styleSheet: replyStyleSheet(theme),
-          ),
+          child: MarkdownText(pkg.body),
         ),
         if (otherFiles.isNotEmpty) ...[
           const SizedBox(height: 24),

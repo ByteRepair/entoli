@@ -246,8 +246,8 @@ typed.
 What is typed in it is `CompletionField` — the composer's, so `/skills` and
 `@agents` complete there and the `+` offers them; a trigger's prompt is
 dispatched through the same library, and being offered them in a chat and not
-here was the tell. The preview is `MarkdownBody` under `replyStyleSheet`, which
-is the reply's own sheet rather than a second answer to how markdown is set.
+here was the tell. The preview is `MarkdownText`, the way a reply is set,
+rather than a second answer to how markdown is set.
 
 **Temporary chat is `TempChatTtlField`**, the chat settings page's combobox and
 nothing new: the new chat a trigger makes is a chat, and its TTL is written
