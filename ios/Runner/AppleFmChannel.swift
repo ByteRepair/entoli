@@ -6,9 +6,9 @@ import FlutterMacOS
 #if canImport(FoundationModels)
 import FoundationModels
 #endif
-// The MLX models ride the same `LanguageModelSession` the system model does,
-// through `EntoliMLX` — tool/apple/mlx, prebuilt into the XCFramework both
-// Runners link — which answers on any OS and gates on its own.
+// The MLX models are `EntoliMLX`'s — tool/apple/mlx, prebuilt into the
+// XCFramework both Runners link — which answers on any OS and gates on its
+// own. They share this channel, not the system model's framework.
 import EntoliMLX
 
 /// The Apple half of the `agent_chat/apple_fm` channel — `AppleFm` and its
@@ -16,8 +16,9 @@ import EntoliMLX
 /// is the OS's own: the availability the handshake reports, and one
 /// generation per ask, is the whole of what this class owns for it. An MLX
 /// model is loaded from the directory Dart downloaded it to and kept
-/// resident (`EntoliMLX`'s `Mlx`) until Dart evicts it; Dart decides
-/// residency.
+/// (`EntoliMLX`'s `Mlx`) until Dart evicts it, with the conversation its
+/// cache holds — `mlxGenerate`, `mlxSave` and `mlxRestore`; Dart decides
+/// which are loaded.
 ///
 /// **A tool call is reported and ended, not run.** The agent in Dart owns
 /// the loop the way it owns every other model's — approvals, the recorder
@@ -115,6 +116,25 @@ class AppleFmChannel: NSObject {
       let id = (call.arguments as? [String: Any])?["id"] as? String ?? ""
       finishGeneration(id)
       result(nil)
+    case "mlxGenerate":
+      let args = call.arguments as? [String: Any] ?? [:]
+      let id = args["id"] as? String ?? ""
+      let task = Task.detached(priority: .userInitiated) {
+        await self.mlxGenerate(id, args)
+      }
+      generations[id] = task
+      result(nil)
+    case "mlxSave", "mlxRestore":
+      let args = call.arguments as? [String: Any] ?? [:]
+      let model = args["model"] as? String ?? ""
+      let path = args["path"] as? String ?? ""
+      let saving = call.method == "mlxSave"
+      Task {
+        let ok =
+          saving
+          ? await Mlx.save(model, to: path) : await Mlx.restore(model, from: path)
+        DispatchQueue.main.async { result(ok) }
+      }
     case "load", "evict", "evictAll":
       residency(call, result)
     default:
@@ -213,8 +233,8 @@ class AppleFmChannel: NSObject {
           : .prompt(Transcript.Prompt(segments: [segment])))
     }
 
-    let session = try await sessionFor(
-      model, args["directory"] as? String, tools, Transcript(entries: entries))
+    let session = LanguageModelSession(
+      model: .default, tools: tools, transcript: Transcript(entries: entries))
     let stream = session.streamResponse(
       to: prompt,
       options: GenerationOptions(temperature: temperature))
@@ -223,18 +243,12 @@ class AppleFmChannel: NSObject {
     // the suffix past what was last said crosses the channel. A snapshot
     // that rewrote rather than extended cannot be said as a delta and is
     // skipped; the framework's content only grows.
-    let thinking = watchThinking(id, session)
     var sent = ""
     for try await part in stream {
       let text: String = part.content
       guard text.hasPrefix(sent), text != sent else { continue }
       send("text", ["id": id, "text": String(text.dropFirst(sent.count))])
       sent = text
-    }
-    // Whatever the last look missed, said before the end is.
-    thinking?.cancel()
-    if #available(iOS 27.0, macOS 27.0, *), let thinking {
-      sendThinking(id, session, after: await thinking.value)
     }
 
     // The session keeps the request's counts after it has streamed (iOS 27
@@ -259,57 +273,63 @@ class AppleFmChannel: NSObject {
     send("done", done)
   }
 
-  /// A generation with a `directory` is an MLX model's, built on the kept
-  /// instance — loaded first where Dart's load has not run or was evicted
-  /// under it. Without one it is the system model's.
-  @available(iOS 26.0, macOS 26.0, *)
-  private func sessionFor(
-    _ model: String, _ directory: String?, _ tools: [any Tool], _ transcript: Transcript
-  ) async throws -> LanguageModelSession {
-    guard let directory else {
-      return LanguageModelSession(
-        model: .default, tools: tools, transcript: transcript)
+  /// One MLX generation: the whole conversation in the OpenAI shape the
+  /// Dart client already has, of which `EntoliMLX` reads only what the
+  /// model's cache does not hold. Its events are the system model's frames —
+  /// `reasoning`, `text`, `toolCall`, `done`, `error` — so the client reads
+  /// both the same way.
+  private func mlxGenerate(_ id: String, _ args: [String: Any]) async {
+    defer { finishGeneration(id) }
+    let messages = (args["messages"] as? [[String: Any]] ?? []).map(Self.mlxMessage)
+    let tools = (args["tools"] as? [[String: Any]] ?? []).map {
+      MlxTool(
+        name: $0["name"] as? String ?? "",
+        description: $0["description"] as? String ?? "",
+        parameters: Self.jsonText($0["schema"] ?? [:]))
     }
-    return try await Mlx.session(model, directory, tools: tools, transcript: transcript)
+    do {
+      try await Mlx.generate(
+        args["model"] as? String ?? "", args["directory"] as? String ?? "",
+        messages: messages, tools: tools, temperature: args["temperature"] as? Double
+      ) { [weak self] event in
+        switch event {
+        case .reasoning(let text): self?.send("reasoning", ["id": id, "text": text])
+        case .text(let text): self?.send("text", ["id": id, "text": text])
+        case .toolCall(let call):
+          self?.send("toolCall", [
+            "id": id, "callId": call.id, "name": call.name, "arguments": call.arguments,
+          ])
+        case .done(let prompt, let generated):
+          self?.send("done", [
+            "id": id, "finish": "stop", "inputTokens": prompt, "outputTokens": generated,
+          ])
+        @unknown default: break
+        }
+      }
+    } catch is CancellationError {
+      // A stop: cancelled, not failed, so nothing is said.
+    } catch {
+      send("error", ["id": id, "code": "other", "message": "\(error)"])
+    }
   }
 
-  /// A thinking model's trace, sent as `reasoning` frames while it is
-  /// produced. It is never in a snapshot's `content`, and the stream itself
-  /// says nothing until the turn is over: measured, an MLX turn with a tool
-  /// offered — every agent turn — gave no snapshot in 31 seconds, its reply
-  /// held back until mlx-swift-lm could tell a tool call from an answer. The
-  /// session's own transcript fills with the thinking as it is generated, so
-  /// that is watched instead. Polled rather than observed: a poll ends the
-  /// moment it is cancelled, which is what lets the end of the turn wait for
-  /// it. Answers what it has sent.
-  @available(iOS 26.0, macOS 26.0, *)
-  private func watchThinking(_ id: String, _ session: LanguageModelSession) -> Task<String, Never>? {
-    guard #available(iOS 27.0, macOS 27.0, *) else { return nil }
-    return Task { [weak self] in
-      var thought = ""
-      while !Task.isCancelled {
-        thought = self?.sendThinking(id, session, after: thought) ?? thought
-        try? await Task.sleep(nanoseconds: 100_000_000)
-      }
-      return thought
-    }
+  private static func mlxMessage(_ map: [String: Any]) -> MlxMessage {
+    MlxMessage(
+      role: MlxMessage.Role(rawValue: map["role"] as? String ?? "") ?? .user,
+      content: map["content"] as? String ?? "",
+      toolCalls: (map["toolCalls"] as? [[String: Any]] ?? []).map {
+        MlxToolCall(
+          id: $0["id"] as? String ?? "", name: $0["name"] as? String ?? "",
+          arguments: $0["arguments"] as? String ?? "{}")
+      },
+      toolCallID: map["toolCallId"] as? String)
   }
 
-  /// The trace past [after], sent as one frame, and the trace as now said.
-  /// A trace that rewrote rather than extended cannot be said as a delta and
-  /// waits for one that does, the way the reply's text does.
-  @available(iOS 27.0, macOS 27.0, *)
-  @discardableResult
-  private func sendThinking(_ id: String, _ session: LanguageModelSession, after: String) -> String {
-    var thought = ""
-    for case .reasoning(let reasoning) in session.transcript {
-      for case .text(let segment) in reasoning.segments {
-        thought += segment.content
-      }
-    }
-    guard thought.hasPrefix(after), thought != after else { return after }
-    send("reasoning", ["id": id, "text": String(thought.dropFirst(after.count))])
-    return thought
+  private static func jsonText(_ value: Any) -> String {
+    guard JSONSerialization.isValidJSONObject(value),
+      let data = try? JSONSerialization.data(withJSONObject: value)
+    else { return "{}" }
+    return String(decoding: data, as: UTF8.self)
   }
 
   private func toolCall(_ id: String, _ name: String, _ arguments: String) {

@@ -310,6 +310,7 @@ Future<LocalEngine> createLocalEngine(String cacheDir) async {
               format: const MlxFormat(),
             ),
             _modelHost,
+            prompts: PromptCache(p.join(cacheDir, "kv-cache")),
           )
         : const NoLocalEngine();
   }

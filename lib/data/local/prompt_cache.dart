@@ -131,9 +131,12 @@ class PromptCache {
   /// that will not list is a pass that did not happen, said once.
   Future<void> _evict(String namespace, int count) async {
     final files = <PromptFile>[];
+    final names = <String>[];
     try {
       await for (final entry in Directory(dir).list()) {
-        if (entry is! File || !entry.path.endsWith(".bin")) continue;
+        if (entry is! File) continue;
+        names.add(p.basename(entry.path));
+        if (!entry.path.endsWith(".bin")) continue;
         final stat = entry.statSync();
         files.add((
           name: p.basename(entry.path),
@@ -151,9 +154,16 @@ class PromptCache {
       count: count,
       budgetBytes: _budgetBytes,
     )) {
-      try {
-        await File(p.join(dir, name)).delete();
-      } catch (_) {}
+      // A runtime may keep what a state file covers beside it, under the
+      // same name and more — MLX's `<file>.json` — which goes with it.
+      for (final file in [
+        name,
+        ...names.where((n) => n.startsWith("$name.")),
+      ]) {
+        try {
+          await File(p.join(dir, file)).delete();
+        } catch (_) {}
+      }
     }
   }
 }

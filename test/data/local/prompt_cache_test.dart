@@ -124,4 +124,22 @@ void main() {
       isTrue,
     );
   });
+
+  test("what a runtime kept beside an evicted file goes with it", () async {
+    final old = saved("ns", "old", daysAgo: 30);
+    final recent = saved("ns", "recent", daysAgo: 1);
+    final oldRecord = File("${old.path}.json")..writeAsStringSync("{}");
+    final recentRecord = File("${recent.path}.json")..writeAsStringSync("{}");
+
+    await PromptCache(
+      dir.path,
+    ).keep(instance(), namespace: "ns", key: "new", count: 1);
+
+    await waitFor(
+      () => !oldRecord.existsSync(),
+      what: "the old record's eviction",
+    );
+    expect(old.existsSync(), isFalse);
+    expect(recentRecord.existsSync(), isTrue);
+  });
 }

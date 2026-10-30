@@ -127,10 +127,6 @@ class AppleFmProvider extends LlmProvider with KeyFree {
 abstract class FoundationModelsClient implements LlmClient {
   FoundationModelsClient(this.channel);
 
-  /// One counter for the whole process, across every client the registry
-  /// ever built: a generation id must not mean two things to one channel.
-  static var _generations = 0;
-
   final ModelChannel channel;
 
   /// What the model is called in an error, after "the": "Apple on-device
@@ -153,25 +149,9 @@ abstract class FoundationModelsClient implements LlmClient {
     String? reasoningEffort,
   }) async* {
     final target = await route(model);
-    final generation = "fm${++_generations}";
-
-    // The state the completion's message is assembled from — locals, not
-    // fields: one client is the registry's one cache entry, and concurrent
-    // streams of its own would have been one buffer each.
-    final textSoFar = StringBuffer();
-    final thought = StringBuffer();
-    final calls = <LlmToolCall>[];
-
-    // Registered before the request goes out, so a frame the platform sent
-    // early cannot fall between the request and its listener.
-    final events = StreamController<MethodCall>();
-    final subscription = channel.calls
-        .where((call) => (call.arguments as Map?)?["id"] == generation)
-        .listen(events.add, onError: events.addError);
-    var finished = false;
-    try {
-      await channel.invokeMethod("generate", {
-        "id": generation,
+    yield* ChannelGeneration(channel, label: label, callEnds: true).run(
+      "generate",
+      {
         ...target,
         "instructions": joinedSystemText(messages),
         "history": _transcript(messages),
@@ -189,66 +169,107 @@ abstract class FoundationModelsClient implements LlmClient {
             },
         ],
         "temperature": ?temperature,
-      });
+      },
+    );
+  }
+}
+
+/// One generation over a channel whose native half answers in frames —
+/// `text`, `reasoning`, `toolCall`, `done`, `error`, each carrying the id it
+/// was asked under — as a stream of [LlmChunk]s. The Apple system model and
+/// the MLX models both answer this way.
+class ChannelGeneration {
+  ChannelGeneration(
+    this.channel, {
+    required this.label,
+    required this.callEnds,
+  });
+
+  /// One counter for the whole process: a generation id must not mean two
+  /// things to one channel.
+  static var _generations = 0;
+
+  final ModelChannel channel;
+
+  /// What the model is called in an error, after "the".
+  final String label;
+
+  /// Whether a tool call ends the reply. The Foundation Models framework
+  /// reports one call and stops, so for it the call is the end, and waiting
+  /// for a `done` that a cancelled framework never sends is how this became a
+  /// hang; MLX reports every call and then `done`.
+  final bool callEnds;
+
+  Stream<LlmChunk> run(String method, Map<String, Object?> arguments) async* {
+    final generation = "fm${++_generations}";
+
+    // The state the completion's message is assembled from.
+    final textSoFar = StringBuffer();
+    final thought = StringBuffer();
+    final calls = <LlmToolCall>[];
+
+    LlmCompletion completion(String finish, [LlmUsage? usage]) => LlmCompletion(
+      message: LlmMessage(
+        role: LlmRole.assistant,
+        text: textSoFar.toString(),
+        toolCalls: List.of(calls),
+        reasoning: thought.isEmpty ? null : thought.toString(),
+      ),
+      finishReason: finish,
+      usage: usage,
+    );
+
+    // Registered before the request goes out, so a frame the platform sent
+    // early cannot fall between the request and its listener.
+    final events = StreamController<MethodCall>();
+    final subscription = channel.calls
+        .where((call) => (call.arguments as Map?)?["id"] == generation)
+        .listen(events.add, onError: events.addError);
+    var finished = false;
+    try {
+      await channel.invokeMethod(method, {"id": generation, ...arguments});
 
       await for (final call in events.stream) {
+        final args = call.arguments as Map?;
         switch (call.method) {
           case "text":
-            final text = (call.arguments as Map?)?["text"] as String?;
+            final text = args?["text"] as String?;
             if (text != null && text.isNotEmpty) {
               textSoFar.write(text);
               yield LlmTextChunk(text);
             }
           case "reasoning":
-            // A thinking model's trace, apart from its reply: on an MLX turn
-            // with tools offered it is all that streams, the reply arriving
-            // whole at the end.
-            final text = (call.arguments as Map?)?["text"] as String?;
+            // A thinking model's trace, apart from its reply.
+            final text = args?["text"] as String?;
             if (text != null && text.isNotEmpty) {
               thought.write(text);
               yield LlmReasoningChunk(text);
             }
           case "toolCall":
-            final args = call.arguments as Map?;
             calls.add(
               LlmToolCall(
-                id: "c${calls.length}",
+                id: args?["callId"] as String? ?? "c${calls.length}",
                 name: args?["name"] as String? ?? "",
                 argumentsJson: args?["arguments"] as String? ?? "{}",
               ),
             );
-            // The handoff is the whole protocol here: the framework reports
-            // one call and stops, so the reply is complete now. Waiting for a
-            // `done` that may never come — a cancelled framework does not
-            // send one — is how this stream became a hang.
-            finished = true;
-            yield LlmCompletion(
-              message: LlmMessage(
-                role: LlmRole.assistant,
-                text: textSoFar.toString(),
-                toolCalls: List.of(calls),
-                reasoning: thought.isEmpty ? null : thought.toString(),
-              ),
-              finishReason: "tool_calls",
-            );
-            return;
+            if (callEnds) {
+              finished = true;
+              yield completion("tool_calls");
+              return;
+            }
           case "done":
             finished = true;
-            final args = call.arguments as Map?;
             final input = (args?["inputTokens"] as num?)?.toInt();
             final output = (args?["outputTokens"] as num?)?.toInt();
-            yield LlmCompletion(
-              message: LlmMessage(
-                role: LlmRole.assistant,
-                text: textSoFar.toString(),
-                reasoning: thought.isEmpty ? null : thought.toString(),
-              ),
-              finishReason: args?["finish"] as String? ?? "stop",
-              // Real counts where the session keeps them (iOS 27 and
-              // later); null where it does not, and the estimate path
-              // stands in — the same answer a provider that reports
-              // nothing gives.
-              usage: input == null && output == null
+            yield completion(
+              calls.isEmpty
+                  ? (args?["finish"] as String?) ?? "stop"
+                  : "tool_calls",
+              // Real counts where the native half keeps them; null where it
+              // does not, and the estimate path stands in — the same answer a
+              // provider that reports nothing gives.
+              input == null && output == null
                   ? null
                   : LlmUsage(
                       inputTokens: input ?? 0,
@@ -259,7 +280,6 @@ abstract class FoundationModelsClient implements LlmClient {
             );
             return;
           case "error":
-            final args = call.arguments as Map?;
             throw _errorOf(
               label,
               args?["code"] as String? ?? "other",
@@ -274,8 +294,8 @@ abstract class FoundationModelsClient implements LlmClient {
       finished = true;
       throw LlmException("The $label stopped.", retryable: true);
     } finally {
-      // Unsubscribe first: a cancel arriving at the Swift half cannot race a
-      // generation this client is still reading.
+      // Unsubscribe first: a cancel arriving at the native half cannot race a
+      // generation this is still reading.
       await subscription.cancel();
       await events.close();
       if (!finished) {
@@ -283,9 +303,7 @@ abstract class FoundationModelsClient implements LlmClient {
           await channel.invokeMethod("cancel", {"id": generation});
         } catch (_) {
           // Best-effort by construction: an engine mid-teardown, or a test
-          // host with nothing behind the channel. The Swift side's own
-          // handoff cancellation is the other half of stopping a generation,
-          // and the turn's stop has no second path to wait on.
+          // host with nothing behind the channel.
         }
       }
     }
