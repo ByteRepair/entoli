@@ -6,7 +6,8 @@
 // `ToolApproval.deniedDirs` there, so the tool carries its directory in that
 // field. Nothing persists or is granted without the banner: the description
 // is the only thing that tells the model the tool exists.
-import "package:fs_shim/fs.dart" show FileSystemEntityType;
+
+import "dart:io";
 
 import "../../../domain/agent_backend.dart";
 import "../../../domain/models.dart";
@@ -78,7 +79,7 @@ class AddDirectoryTool extends AgentTool {
     }
     yield toolCalled(call, path);
     final resolved = turn.resolvePath(path);
-    final type = await turn.fs.type(resolved);
+    final type = FileSystemEntity.typeSync(resolved);
     if (type == FileSystemEntityType.notFound) {
       yield toolFailed(call, "Directory not found: $resolved. "
           "Create it first, then ask again.");
@@ -90,20 +91,18 @@ class AddDirectoryTool extends AgentTool {
           "the work belongs in.");
       return;
     }
-    if (!outsideWorkspaces(
-        turn.fs, resolved, turn.workspace, turn.projectWorkspace)) {
+    if (!outsideWorkspaces(resolved, turn.workspace, turn.projectWorkspace)) {
       yield toolOk(call, "$resolved is inside the workspaces, and writes there "
           "are already allowed. Nothing was granted.");
       return;
     }
     // The tree either way — beneath it is the app's own data, containing it
     // hands those writes to the sandbox — answered after the workspaces,
-    // whose directories live beneath this tree and need no grant.
-    // shortcut: a symlink aliasing the data dir passes as its own name,
-    // until fs_shim grows link resolution to chase one with.
+    // whose directories live beneath this tree and need no grant. A symlink
+    // is chased to where it points, so one aliasing the data dir is the data
+    // dir.
     final dataDir = turn.dataDir;
-    if (dataDir != null &&
-        (pathInside(dataDir, resolved) || pathInside(resolved, dataDir))) {
+    if (dataDir != null && pathsOverlap(resolved, dataDir)) {
       yield toolFailed(call, "$resolved holds this app's own data, or lies "
           "inside it, which is not grantable. Choose a directory outside it.");
       return;
@@ -191,7 +190,7 @@ class WritableDirectoriesTool extends AgentTool {
     yield toolCalled(call);
     final dirs = [
       for (final dir in (await turn.gate.permissions()).writableDirs.toSet())
-        if (outsideWorkspaces(turn.fs, dir, turn.workspace, turn.projectWorkspace))
+        if (outsideWorkspaces(dir, turn.workspace, turn.projectWorkspace))
           dir,
     ]..sort();
     final home = turn.shell.homeFor(turn.projectWorkspace);

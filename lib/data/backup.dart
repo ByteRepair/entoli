@@ -1,13 +1,14 @@
 import "dart:convert";
-import "dart:typed_data";
+import "dart:io";
 
-import "package:archive/archive.dart";
-import "package:fs_shim/fs.dart";
+import "package:archive/archive_io.dart";
+import "package:path/path.dart" as p;
 
 import "../core/config.dart";
 import "../core/migrations.dart";
 import "../domain/documents.dart";
 import "../domain/file_handoff.dart";
+import "../domain/shell.dart" show pathsOverlap;
 import "../domain/workspace.dart";
 import "zip.dart";
 
@@ -41,12 +42,21 @@ class BackupFormatException implements Exception {
 }
 
 /// A backup that has been opened and agreed with, before anything has been done
-/// with it. Its members are still compressed: what it answers here it answers
-/// out of the archive's directory, so a size or a count reads no bytes.
+/// with it. Its members are still compressed, and still in the file: what it
+/// answers here it answers out of the archive's directory, so a size or a count
+/// reads no bytes, and a restore reads each member only as it writes it.
+///
+/// The file stays open until [close], which every opener owes whether or not
+/// the backup was restored.
 class Backup {
-  const Backup(this.archive, {this.createdAt});
+  Backup._(this.archive, this._input, {this.createdAt, this.staging});
 
   final Archive archive;
+  final InputFileStream _input;
+
+  /// The copy [openBackup] read from in place of a file under the data
+  /// directory, which the restore's first act would delete. Null otherwise.
+  final Directory? staging;
 
   /// Null where the manifest did not say, which a hand-made one may not.
   final DateTime? createdAt;
@@ -68,23 +78,23 @@ class Backup {
   /// What it comes to unpacked, which is the number worth saying — the file on
   /// disk is smaller and says nothing about what fits back.
   int get size => entries.fold(0, (total, file) => total + file.size);
+
+  Future<void> close() => _release(_input, staging);
+}
+
+Future<void> _release(InputFileStream input, Directory? staging) async {
+  await input.close();
+  await staging?.delete(recursive: true);
 }
 
 /// `projects/<name>/chats/<id>/state.json`, which is where `AppConfig` puts one
 /// and nowhere else.
 final _chatState = RegExp(r"^projects/[^/]+/chats/[^/]+/state\.json$");
 
-/// Every file under the data directory, as the zip a backup is.
-///
-/// The whole archive is built and encoded in memory, so an export is bounded by
-/// what the device can hold — `autoClose` frees each member as it is
-/// compressed, which is the half of that it is possible to give back here.
-/// Streaming the encode to a file would need `archive_io`, which a browser
-/// cannot have.
-Future<Uint8List> writeBackup(AppConfig config) async {
-  final archive = await archiveOf(
-    config.fs,
-    [config.dataDir],
+/// Every file under the data directory, as the zip a backup is, written to
+/// [to] a member at a time — a backup costs disk, not memory.
+Future<void> writeBackup(AppConfig config, String to) =>
+    zipTo(to, [config.dataDir],
     base: config.dataDir,
     // The half of a rename that a kill landed in. Nothing reads one, and a
     // restore that put it back would put back a torn write.
@@ -96,29 +106,49 @@ Future<Uint8List> writeBackup(AppConfig config) async {
     // position: a workspace folder with either name is the user's data.
     skipDir: (path) {
       final parts =
-          config.fs.path.split(config.fs.path.relative(path, from: config.dataDir));
+          p.split(p.relative(path, from: config.dataDir));
       return (parts.length == 1 && parts[0] == "sync") ||
           (parts.length == 3 && parts[0] == "projects" && parts[2] == "rootfs");
     },
+    extra: [
+      ArchiveFile.string(
+        manifestName,
+        jsonEncode({
+          "format": backupFormat,
+          "version": backupVersion,
+          "createdAt": DateTime.now().toUtc().toIso8601String(),
+        }),
+      ),
+    ],
   );
-  archive.add(ArchiveFile.string(
-    manifestName,
-    jsonEncode({
-      "format": backupFormat,
-      "version": backupVersion,
-      "createdAt": DateTime.now().toUtc().toIso8601String(),
-    }),
-  ));
-  return ZipEncoder().encodeBytes(archive, autoClose: true);
+
+/// Open the backup at [path] and check the manifest. Everything that can be
+/// refused is refused here, so [restoreBackup] is only ever reached by a file
+/// that will restore — nothing is deleted for a zip that turns out to be
+/// something else.
+///
+/// A file under [config]'s data directory — a backup saved into a workspace —
+/// is read from a copy, since the restore clears the directory before it reads
+/// a member.
+Future<Backup> openBackup(AppConfig config, String path) async {
+  Directory? staging;
+  if (pathsOverlap(path, config.dataDir)) {
+    staging = await Directory.systemTemp.createTemp("entoli-restore");
+    path = (await File(path).copy(p.join(staging.path, "backup.zip"))).path;
+  }
+  final input = InputFileStream(path);
+  try {
+    return _checked(input, staging);
+  } catch (_) {
+    await _release(input, staging);
+    rethrow;
+  }
 }
 
-/// Open a backup and check the manifest. Everything that can be refused is
-/// refused here, so [restoreBackup] is only ever reached by a file that will
-/// restore — nothing is deleted for a zip that turns out to be something else.
-Backup parseBackup(Uint8List bytes) {
+Backup _checked(InputFileStream input, Directory? staging) {
   final Archive archive;
   try {
-    archive = ZipDecoder().decodeBytes(bytes);
+    archive = ZipDecoder().decodeStream(input);
   } catch (_) {
     throw const BackupFormatException("it is not a zip file");
   }
@@ -139,14 +169,16 @@ Backup parseBackup(Uint8List bytes) {
   if (version is! int || version > backupVersion) {
     throw const BackupFormatException("it was made by a newer version of Entoli");
   }
-  return Backup(
+  return Backup._(
     archive,
+    input,
     createdAt: DateTime.tryParse(document["createdAt"] as String? ?? ""),
+    staging: staging,
   );
 }
 
 bool _isMachineLocal(AppConfig config, String path) =>
-    config.machineLocalFiles.any((f) => config.fs.path.equals(path, f));
+    config.machineLocalFiles.any((f) => p.equals(path, f));
 
 /// Put a backup back. What is in the data directory now goes: a restore is what
 /// was backed up, not that plus whatever has happened since, and a merge would
@@ -156,20 +188,19 @@ bool _isMachineLocal(AppConfig config, String path) =>
 /// Nothing of the app may be running over these files while they are replaced,
 /// which is `AppRestart`'s to arrange rather than this function's to check.
 ///
-/// [deleteTree] clears each top-level directory. The io side's gets past
+/// [deleteTree] clears each top-level directory. The platform's gets past
 /// proot's mode-0000 stubs under `projects/<project>/rootfs/`, which the plain
-/// recursive delete used by default (enough on the web) dies on.
+/// recursive delete used by default (enough for a test) dies on.
 Future<void> restoreBackup(
   AppConfig config,
   Backup backup, {
   Future<void> Function(String path)? deleteTree,
 }) async {
-  final fs = config.fs;
   Future<void> clear(String path) async =>
-      deleteTree != null ? deleteTree(path) : fs.directory(path).delete(recursive: true);
+      deleteTree != null ? deleteTree(path) : Directory(path).delete(recursive: true);
 
   // Listed whole first: deleting out of a stream deletes what it walks.
-  final top = await fs.directory(config.dataDir).list().toList();
+  final top = await Directory(config.dataDir).list().toList();
   await Future.wait([
     for (final entity in top)
       if (entity is Directory)
@@ -180,24 +211,24 @@ Future<void> restoreBackup(
 
   // A member's name was written by whoever made the zip, and `writeIncoming`
   // is where a path from outside is made safe to join onto a directory.
-  await writeIncoming(fs, config.dataDir, [
+  await writeIncoming(config.dataDir, [
     for (final member in backup.entries)
       if (!member.isDirectory) _RestoredFile(member),
   ]);
   for (final member in backup.entries) {
-    if (member.isDirectory) await createFolder(fs, config.dataDir, member.name);
+    if (member.isDirectory) await createFolder(config.dataDir, member.name);
   }
 
   // A backup holding none of them is still a working app afterwards, and one
   // made by an older build unpacks that build's layout — including the version
   // stamp that says which one it is.
-  await runMigrations(config.fs, config.dataDir,
+  await runMigrations(config.dataDir,
       fresh: await config.ensureDirs());
 }
 
 /// A member on its way out of the archive, which is what `IncomingFile` already
-/// describes: bytes that have not been read yet, read once, and consumed by the
-/// write. Being able to add a variant from outside `file_handoff.dart` is why
+/// describes: bytes that have not been read yet, read once, as they are
+/// written. Being able to add a variant from outside `file_handoff.dart` is why
 /// that class is abstract rather than sealed.
 class _RestoredFile extends IncomingFile {
   _RestoredFile(this.member) : super(member.name);
@@ -205,10 +236,15 @@ class _RestoredFile extends IncomingFile {
   final ArchiveFile member;
 
   @override
-  Future<void> writeTo(FileSystem fs, String target) async {
-    await fs.file(target).writeAsBytes(member.readBytes() ?? Uint8List(0));
-    // Landed, so the decompressed copy is no longer anybody's.
-    member.clear();
+  Future<void> writeTo(String target) async {
+    // Decompressed straight into the file, so the largest member costs a
+    // buffer rather than its whole size.
+    final output = OutputFileStream(target);
+    try {
+      member.writeContent(output);
+    } finally {
+      await output.close();
+    }
   }
 }
 

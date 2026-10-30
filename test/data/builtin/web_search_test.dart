@@ -2,8 +2,6 @@ import "dart:convert";
 
 import "package:flutter_test/flutter_test.dart";
 
-import "package:fs_shim/fs_io.dart" show fileSystemIo;
-
 import "package:agent_chat/data/builtin/builtin_agent.dart";
 import "package:agent_chat/data/builtin/llm/llm_client.dart";
 import "package:agent_chat/domain/agent_backend.dart";
@@ -36,7 +34,6 @@ void main() {
         session: session,
         client: client,
         shell: shell,
-        fs: fileSystemIo,
         workspace: "/tmp/workspace",
         projectWorkspace: "/tmp/project",
         model: "fake-model",
@@ -58,19 +55,10 @@ void main() {
       expect(tools, containsAll(["websearch", "webfetch", "bash"]));
     });
 
-    test("websearch/webfetch are not offered when absent or unavailable", () async {
-      // Nothing is wired at all.
-      var client = FakeLlmClient([[finish]]);
+    test("websearch/webfetch are not offered when nothing is wired", () async {
+      final client = FakeLlmClient([[finish]]);
       await agentWith(client, useDefaultWeb: false).run(userMessage("hi")).toList();
-      var tools = client.calls.first.tools.map((t) => t.name).toSet();
-      expect(tools, isNot(contains("websearch")));
-      expect(tools, isNot(contains("webfetch")));
-
-      // Something is wired, and it says itself unavailable.
-      client = FakeLlmClient([[finish]]);
-      web = FakeWebSearch(available: false);
-      await agentWith(client).run(userMessage("hi")).toList();
-      tools = client.calls.first.tools.map((t) => t.name).toSet();
+      final tools = client.calls.first.tools.map((t) => t.name).toSet();
       expect(tools, isNot(contains("websearch")));
       expect(tools, isNot(contains("webfetch")));
     });

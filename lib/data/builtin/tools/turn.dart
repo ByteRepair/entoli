@@ -1,5 +1,3 @@
-import "package:fs_shim/fs.dart";
-
 import "../../../domain/agent_backend.dart";
 import "../../../domain/agent_browser.dart";
 import "../../../domain/ask.dart";
@@ -23,9 +21,6 @@ import "../../../domain/app_settings.dart" show SettingsEditor;
 ///
 /// `BuiltinAgent` is the one implementation: a turn is an agent running.
 abstract interface class Turn {
-  /// The filesystem the file tools operate on: `fileSystemIo` on a disk,
-  /// IndexedDB in a browser, so the file tools work everywhere.
-  FileSystem get fs;
 
   /// The chat's own directory, where the shell starts.
   String get workspace;

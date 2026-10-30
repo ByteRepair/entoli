@@ -5,7 +5,7 @@ import "../../domain/models.dart";
 import "../mime.dart";
 
 /// The platform's own file chooser, through `file_selector` — one plugin
-/// covering Linux, Android and the web, the three the app runs on.
+/// covering every platform the app runs on.
 class FileSelectorPicker implements AttachmentPicker {
   const FileSelectorPicker();
 
@@ -14,7 +14,6 @@ class FileSelectorPicker implements AttachmentPicker {
     extensions: ["png", "jpg", "jpeg", "gif", "webp", "bmp", "heic", "avif"],
     mimeTypes: ["image/png", "image/jpeg", "image/gif", "image/webp", "image/bmp"],
     uniformTypeIdentifiers: ["public.image"],
-    webWildCards: ["image/*"],
   );
 
   @override

@@ -1,5 +1,8 @@
+import "dart:io";
+
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
+import "package:path/path.dart" as p;
 
 import "../../../domain/models.dart";
 import "../../../domain/room/room_state.dart" show ChatViewState;
@@ -173,35 +176,25 @@ class _OpenLog extends ConsumerStatefulWidget {
 }
 
 class _OpenLogState extends ConsumerState<_OpenLog> {
-  late final _fs = ref.read(appConfigProvider).fs;
-  late final String _path = _fs.path.join(
+  late final String _path = p.join(
       ref.read(appConfigProvider).workspaceDir(widget.chatId,
           project: ref.read(chatViewProvider(widget.chatId)).chat?.state.project),
       backgroundLog(widget.callId));
   // Once: the sheet rebuilds as the keyboard or the window moves.
-  late final Future<bool> _there = _fs.file(_path).exists();
+  late final bool _there = File(_path).existsSync();
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<bool>(
-      future: _there,
-      builder: (context, there) {
-        final has = there.data ?? false;
-        final button = TextButton(
-          onPressed: !has
-              ? null
-              : () => Navigator.of(context).push(MaterialPageRoute<void>(
-                  builder: (_) =>
-                      TextFilePage(
-                          path: _path,
-                          name: _fs.path.basename(_path),
-                          popsBinary: false))),
-          child: const Text("Open log"),
-        );
-        if (has || there.connectionState != ConnectionState.done) return button;
-        return Tooltip(
-            message: "The log is no longer in the workspace", child: button);
-      },
+    final button = TextButton(
+      onPressed: !_there
+          ? null
+          : () => Navigator.of(context).push(MaterialPageRoute<void>(
+              builder: (_) => TextFilePage(
+                  path: _path, name: p.basename(_path), popsBinary: false))),
+      child: const Text("Open log"),
     );
+    if (_there) return button;
+    return Tooltip(
+        message: "The log is no longer in the workspace", child: button);
   }
 }

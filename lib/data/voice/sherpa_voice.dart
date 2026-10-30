@@ -82,7 +82,7 @@ class SherpaVoice extends Voice {
   Future<String> _vadPath() async {
     final path = p.join(_cacheDir, "silero_vad.onnx");
     final file = File(path);
-    if (!await file.exists()) {
+    if (!file.existsSync()) {
       final data = await rootBundle.load(_vadAsset);
       await file.parent.create(recursive: true);
       await file.writeAsBytes(data.buffer.asUint8List(), flush: true);

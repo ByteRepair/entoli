@@ -483,9 +483,6 @@ class RecordingFileWatches implements FileWatches {
   final roots = <String>[];
 
   @override
-  bool get available => true;
-
-  @override
   Stream<FileWatchEvent> watch(String root) {
     roots.add(root);
     return events.stream;

@@ -2,7 +2,6 @@ import "dart:convert";
 import "dart:io";
 
 import "package:flutter_test/flutter_test.dart";
-import "package:fs_shim/fs_io.dart" show fileSystemIo;
 import "package:path/path.dart" as p;
 
 import "package:agent_chat/data/builtin/background_jobs.dart";
@@ -29,12 +28,11 @@ void main() {
     workspace = p.join(tempDir.path, "project", "chats", "chat-1");
     Directory(workspace).createSync(recursive: true);
     shell = FakeShell((_) => ok("output"), canRunInBackground: background);
-    jobs = BackgroundJobs(fileSystemIo);
+    jobs = BackgroundJobs();
     return BuiltinAgent(
       session: BuiltinSession(),
       client: client,
       shell: shell,
-      fs: fileSystemIo,
       workspace: workspace,
       projectWorkspace: p.dirname(p.dirname(workspace)),
       model: "fake-model",
@@ -118,7 +116,7 @@ void main() {
   });
 
   test("a job's id is not reused after it ends", () async {
-    jobs = BackgroundJobs(fileSystemIo);
+    jobs = BackgroundJobs();
     shell = FakeShell((_) => ok(""), canRunInBackground: true);
     final chat = jobs.forChat("chat-1");
     ShellRun spawn(String script) => shell.start(script,
@@ -151,7 +149,7 @@ void main() {
   });
 
   test("the log tail reads the end of the file", () async {
-    jobs = BackgroundJobs(fileSystemIo);
+    jobs = BackgroundJobs();
     final tempDir = Directory.systemTemp.createTempSync("background-log");
     addTearDown(() => tempDir.deleteSync(recursive: true));
     File(p.join(tempDir.path, backgroundLog("c1")))
@@ -170,7 +168,7 @@ void main() {
   });
 
   test("a job that ends says how, with the end of its log", () async {
-    jobs = BackgroundJobs(fileSystemIo);
+    jobs = BackgroundJobs();
     final tempDir = Directory.systemTemp.createTempSync("background-end");
     addTearDown(() => tempDir.deleteSync(recursive: true));
     File(p.join(tempDir.path, backgroundLog("c1")))

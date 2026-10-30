@@ -1,6 +1,6 @@
 # Entoli
 
-Flutter (Linux/Web/Android/iOS/macOS) ChatGPT-style UI over a coding agent. Client-side:
+Flutter (Linux/Android/iOS/macOS/Windows) ChatGPT-style UI over a coding agent. Client-side:
 it calls the user's own LLM endpoints and runs commands on their machine.
 
 The app is named Entoli, and so is everything a user can see of it: the data
@@ -185,32 +185,30 @@ being this machine's paths; see "Workspace instructions" in
 `lib/data/builtin/AGENTS.md`.
 `<dataDir>/models.json` is models.dev trimmed to what the app reads, a cache
 refetched daily — see "The model catalog" in `lib/ui/widgets/AGENTS.md`.
-Data dir: `$ENTOLI_CONFIG` if set, else `~/.config/entoli` (desktop),
-app-private storage (Android), and `/entoli` in a browser — where it is a
-name in IndexedDB rather than a path, and load-bearing all the same.
+Data dir: `$ENTOLI_CONFIG` if set, else `~/.config/entoli` (desktop), and
+app-private storage (Android).
 `AppConfig` is not the only thing that knows this layout: `WorkspaceProvider`
 reads the workspace half of it in Kotlin, because Android's Files app asks with
 no engine running. See "The workspaces in the Files app".
 
-The filesystem is a port, and it is `fs_shim`'s `FileSystem` rather than one of
-ours: `fileSystemIo` on desktop and Android, `fileSystemWeb` (IndexedDB) in a
-browser. Declaring an interface over it would have been the same members twice.
-`AppConfig` holds one and composes path names against it — `dataDir` and every
-helper are plain `String`s now, since the `dart:io` `File` and `Directory` they
-used to return were unusable on the platform that needed them most. The one
-question a `FileSystem` does not answer is where this platform keeps things,
-and that stays in `core/platform/`.
+The filesystem is `dart:io`'s, with no port over it: every platform the app
+runs on has a disk, and a test runs on a real temp directory (see
+`test/AGENTS.md`). `AppConfig` composes path names: `dataDir` and every helper
+are plain `String`s rather than `File` and `Directory`, joined with
+`package:path`. `exists`, `stat` and their kin are called sync — one metadata
+call each — which `avoid_slow_async_io` holds the code to; the one async
+exception is the profile page's check of linked files, which may sit on a
+stalled mount. Where this platform keeps things is the one question it does
+not answer, and that stays in `core/platform/`.
 
-The whole layout is in it, prefs included: `settings.json` on the web is
-`/entoli/settings.json` in IndexedDB, the same path it has on a disk. What
-that costs is the synchronous read — `fs_shim` has no sync methods anywhere,
-deliberately, because a browser cannot have them. `AppSettings.load` and
-`ProjectSettings.load` need one: the shell asks for the environment on every
-command and the registry for the providers on every model call. So `Documents`
-holds those two kinds of small JSON file in memory, hydrated in `main` before
-`runApp` and written through on save. Nothing else gets a copy; everything else
-reads through, async. The cost is that a file edited behind the app's back is
-not picked up until a restart, where it used to reach the next command.
+`AppSettings.load` and `ProjectSettings.load` are synchronous and hot — the
+shell asks for the environment on every command and the registry for the
+providers on every model call — so `Documents` holds those two kinds of small
+JSON file in memory, hydrated in `main` before `runApp` and written through on
+save, the copy first, so a read on the line after a save sees it while the
+rename is still landing. Nothing else gets a copy; everything else reads
+through, async. The cost is that a file edited behind the app's back is not
+picked up until a restart.
 
 Writes go through a rename. `writeAsString` truncates and only then writes, so a
 read landing between the two finds an empty file — and the title call renames a
@@ -219,20 +217,11 @@ and a worse one: it made a read wait on a write, which deadlocks a widget test
 where only pumping advances the fake clock. This is for the documents;
 `conv.jsonl` is appended to and has its own answer to the same hazard.
 
-The web filesystem is paged (`FileSystemIdbOptions.pageDefault`), which the
-`fs_shim` default is not. Unpaged, a file is one IndexedDB value and an append
-reads the whole thing back to rewrite it, which is the opposite of what a log is
-for. Page size is per file and converted on the first write, so nothing has to
-be migrated.
-
 Chats are a `ChatStore` — a whole store rather than four calls — and there is
 one implementation, `FileChatStore`, because the layout no longer varies.
 `DirectoryPrompts` is the same: it reads the config's filesystem, so the user's
 own commands and agents exist on every platform. Neither is chosen per platform
 any more; `core/platform/` builds both once.
-
-None of this is checked by loading a tab — see `test/AGENTS.md` for how the
-browser's filesystem is exercised on the VM instead.
 
 ### Read-only directories
 
@@ -302,23 +291,20 @@ base stylesheet (`lib/domain/artifact_style.dart`) injected into the entry file
 opener serves the directory itself over `file://`, so the entry file on disk
 must already be the whole page — the model's `read` tool and every future
 reader see the same styled file, and a temp copy at open time would break every
-relative reference to the files beside it. The phones and the web still layer
-their runtime paths (an HTTP server on loopback under an in-app webview, blob
-URLs) over the same injected copy,
-where the marker makes the second injection a no-op. Artifacts published before
+relative reference to the files beside it. The phones still layer their
+runtime path (an HTTP server on loopback under an in-app webview) over the same
+injected copy, where the marker makes the second injection a no-op. Artifacts published before
 the injection moved open unstyled on desktop until the model re-publishes them.
 
 An artifact of a mirrored chat has no local directory to open: the sync hub
 carries the whole artifact as one zip over the ordinary resource channel (see
 "Attachments" in `lib/data/sync/AGENTS.md`), `unzipRemoteArtifact` writes it
 to a temp directory, and the local paths above take it from there. That
-staging is a port (`RemoteArtifacts` under `core/platform/io/`, the hub
+staging is a port (`RemoteArtifacts` under `core/platform/`, the hub
 reached through a one-method interface), not a page: it owns the temp
 directories' lifecycle, where the previous one for the same chat and artifact
 goes only when the next one has checked out. A re-publish invalidates the
-fetched zip the moment its record lands. The web is the exception — it opens
-the local blob-URL path only, and a browser mirror says so rather than
-fetching.
+fetched zip the moment its record lands.
 
 ### Projects
 
@@ -413,7 +399,7 @@ comes from `https://github.com/ByteRepair/entoli/releases/latest` — the page's
 own URL, the tag read out of where its redirect lands, no API and no rate
 limit — and is compared against the running version by
 `versionIsNewer`. Everything is `lib/domain/app_update.dart` and
-`core/platform/io/update.dart`: the pure decisions (repo, the three asset
+`core/platform/update.dart`: the pure decisions (repo, the three asset
 names, the comparison) in the domain, the platform half — where a download is
 staged and what putting a build in place means here — behind
 `AppUpdateHost`.
@@ -498,9 +484,6 @@ is `logDetail`, which is debug-only.
 - Build/test Linux desktop inside the `flutter-dev` toolbox (host lacks
   cmake/ninja/clang++): `toolbox run --container flutter-dev flutter build linux --debug`.
 - UI runs forwarded to host: `toolbox run --container flutter-dev flutter run -d linux --debug`.
-- Web: `toolbox run --container flutter-dev flutter run -d web-server --web-port 8087 --web-hostname 127.0.0.1`.
-  Nothing runs the app in a browser here, so a web-only regression in the UI is
-  caught by reloading the page.
 - Voice mode on Linux needs `parecord` (`pulseaudio-utils`) or `pw-record`
   (`pipewire-utils`) on `PATH`; with neither, a session fails to start with a
   message saying so rather than hearing nothing.

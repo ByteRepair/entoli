@@ -1,4 +1,5 @@
 import "dart:convert";
+import "dart:io";
 
 import "package:agent_chat/core/config.dart";
 import "package:agent_chat/data/local/file_secret_store.dart";
@@ -6,16 +7,16 @@ import "package:agent_chat/domain/app_secrets.dart";
 import "package:agent_chat/domain/app_settings.dart";
 import "package:agent_chat/domain/secret_store.dart";
 import "package:flutter_test/flutter_test.dart";
-import "package:fs_shim/fs_memory.dart";
 
-/// The secrets the settings pages write, over the store Android and the web
-/// get, on a data directory `AppConfig.load` created — the same state the app
+import "../harness.dart";
+
+/// The secrets the settings pages write, over the store Android gets, on a data directory `AppConfig.load` created — the same state the app
 /// is in when the first key is stored.
 void main() {
   late AppConfig config;
 
   setUp(() async {
-    config = await AppConfig.load(newFileSystemMemory(), "/entoli");
+    config = await loadedTempConfig();
   });
 
   AppSecrets secretsOver() => AppSecrets(FileSecretStore(config));
@@ -44,8 +45,8 @@ void main() {
     final stored =
         utf8.decode((await FileSecretStore(config).read(providerKeysKey))!);
     expect(stored, contains("sk-1"));
-    final settings = await config.fs.file(config.settingsFile).exists()
-        ? await config.fs.file(config.settingsFile).readAsString()
+    final settings = File(config.settingsFile).existsSync()
+        ? await File(config.settingsFile).readAsString()
         : "";
     expect(settings, isNot(contains("sk-1")));
   });

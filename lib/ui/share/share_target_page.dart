@@ -1,6 +1,5 @@
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
-import "package:fs_shim/fs.dart";
 
 import "../../domain/file_handoff.dart";
 import "../../domain/models.dart" show ChatTitle;
@@ -38,7 +37,6 @@ class ShareTargetPage extends ConsumerWidget {
               subtitle: "Shared workspace",
               onTap: () => _save(
                 context,
-                config.fs,
                 config.projectWorkspaceDir(project: project),
                 projectLabel(project),
               ),
@@ -51,7 +49,6 @@ class ShareTargetPage extends ConsumerWidget {
               subtitle: projectLabel(chat.project),
               onTap: () => _save(
                 context,
-                config.fs,
                 config.workspaceDir(chat.id, project: chat.project),
                 chat.title.orUntitled,
               ),
@@ -61,11 +58,11 @@ class ShareTargetPage extends ConsumerWidget {
     );
   }
 
-  Future<void> _save(BuildContext context, FileSystem fs, String dir, String title) async {
+  Future<void> _save(BuildContext context, String dir, String title) async {
     final navigator = Navigator.of(context);
     final messenger = ScaffoldMessenger.of(context);
     try {
-      await writeIncoming(fs, dir, files);
+      await writeIncoming(dir, files);
     } catch (e) {
       // Left open so the failure is on screen, not so it can be tried again:
       // `writeTo` consumes what it wrote, so whatever landed before the failure

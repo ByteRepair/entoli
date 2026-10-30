@@ -1,4 +1,5 @@
 import "dart:convert";
+import "dart:io";
 import "dart:math";
 
 import "../../core/config.dart";
@@ -15,15 +16,15 @@ import "../../domain/trigger.dart";
 /// reads this file with no engine running, so a read landing mid-write must
 /// never find a half-written one.
 class FileTriggerStore {
-  FileTriggerStore(this._config) : _write = RenameWriter.fs(_config.fs);
+  FileTriggerStore(this._config) : _write = RenameWriter();
 
   final AppConfig _config;
   final RenameWriter _write;
 
   Future<List<Trigger>> load() async {
     try {
-      final file = _config.fs.file(_config.remindersFile);
-      if (!await file.exists()) return const [];
+      final file = File(_config.remindersFile);
+      if (!file.existsSync()) return const [];
       final text = await file.readAsString();
       final list = jsonDecode(text) as List<dynamic>;
       // Per record, not per file: one entry this build cannot read is one

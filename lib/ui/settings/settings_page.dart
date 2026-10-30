@@ -1,3 +1,5 @@
+import "dart:io";
+
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
@@ -1173,7 +1175,7 @@ class _DeleteAllChats extends ConsumerWidget {
 
 /// The app keeping itself current, where the platform it runs on is one this
 /// feature serves — the three desktops. Drawn nowhere else and saying nothing
-/// where it is not drawn: a phone and a browser already reach their newest
+/// where it is not drawn: a phone already reaches its newest
 /// build by means of their own, which a row here would only stand in front of.
 class _UpdatesSection extends ConsumerWidget {
   const _UpdatesSection();
@@ -1229,9 +1231,13 @@ class _BackupSectionState extends ConsumerState<_BackupSection> {
   }
 
   Future<void> _export() => _guard(() async {
-        final bytes = await writeBackup(ref.read(appConfigProvider));
-        await ref.read(backupHandoffProvider).save(backupFilename(DateTime.now()), bytes);
-        _say("Backup written — ${formatSize(bytes.length)}.");
+        var size = 0;
+        final saved = await ref.read(backupHandoffProvider).save(
+            backupFilename(DateTime.now()), (path) async {
+          await writeBackup(ref.read(appConfigProvider), path);
+          size = await File(path).length();
+        });
+        if (saved) _say("Backup written — ${formatSize(size)}.");
       });
 
   Future<void> _import() async {
@@ -1240,15 +1246,23 @@ class _BackupSectionState extends ConsumerState<_BackupSection> {
     if (ref.read(agentBackendProvider).runningTurns.value.isNotEmpty) {
       return _say("A turn is still running. Stop it first.");
     }
-    final bytes = await ref.read(backupHandoffProvider).pick();
-    if (bytes == null || !mounted) return;
+    final path = await ref.read(backupHandoffProvider).pick();
+    if (path == null || !mounted) return;
 
     final Backup backup;
     try {
-      backup = parseBackup(bytes);
+      backup = await openBackup(ref.read(appConfigProvider), path);
     } on BackupFormatException catch (e) {
       return _say("That file cannot be restored: $e.");
     }
+    try {
+      await _confirmAndRestore(backup);
+    } finally {
+      await backup.close();
+    }
+  }
+
+  Future<void> _confirmAndRestore(Backup backup) async {
     if (!mounted) return;
 
     final confirmed = await confirm(

@@ -1,4 +1,5 @@
-import "package:fs_shim/fs.dart";
+import "dart:io";
+
 
 /// What a document being written through a rename is called until the rename.
 /// Whoever writes one spells it, and a backup skips one — it is the half of a
@@ -9,8 +10,8 @@ const writingSuffix = ".writing";
 /// sibling, then a rename. The caller that owns the parent directory creates
 /// it. The temp name is fixed, which is safe only because a path has one
 /// writer — [RenameWriter] is that writer.
-Future<void> writeThroughRename(FileSystem fs, String path, String text) async {
-  final temp = fs.file("$path$writingSuffix");
+Future<void> writeThroughRename(String path, String text) async {
+  final temp = File("$path$writingSuffix");
   await temp.writeAsString(text);
   await temp.rename(path);
 }
@@ -27,16 +28,11 @@ Future<void> writeThroughRename(FileSystem fs, String path, String text) async {
 /// there is no lock here for them, and none wanted where the reads are the
 /// in-memory copy [Documents] serves.
 ///
-/// [writeOne] is the single write a queued entry runs; it is the seam a test
-/// stands a fake behind, so queue behavior needs no filesystem at all.
+/// [writeOne] is the single write a queued entry runs, [writeThroughRename]
+/// unless a test stands a fake behind it, so queue behavior needs no
+/// filesystem at all.
 class RenameWriter {
-  RenameWriter(Future<void> Function(String path, String text) writeOne)
-      : _writeOne = writeOne;
-
-  /// The default over the filesystem the caller holds — the same write every
-  /// writer was handing before this existed.
-  factory RenameWriter.fs(FileSystem fs) =>
-      RenameWriter((path, text) => writeThroughRename(fs, path, text));
+  RenameWriter([this._writeOne = writeThroughRename]);
 
   final Future<void> Function(String path, String text) _writeOne;
 
@@ -74,26 +70,23 @@ class RenameWriter {
 ///
 /// These are not, because they are read on every command (`LocalShell` asks for
 /// the environment per run) and on every model call (`LlmRegistry` asks for the
-/// providers per client). The filesystem is async — a browser's has to be — so
-/// they are read once at startup and served from memory after that.
+/// providers per client), so they are read once at startup and served from
+/// memory after that.
 ///
 /// The cost is that a file edited behind the app's back is not picked up until
 /// a restart. Everything the app itself writes goes through [write], which
 /// updates the copy before it touches the filesystem, so a read on the next
 /// line sees it.
 class Documents {
-  Documents(FileSystem fs)
-      : _fs = fs,
-        _writes = RenameWriter.fs(fs);
+  Documents() : _writes = RenameWriter();
 
-  final FileSystem _fs;
   final RenameWriter _writes;
   final Map<String, String> _texts = {};
 
   Future<void> hydrate(Iterable<String> paths) async {
     for (final path in paths) {
-      final file = _fs.file(path);
-      if (await file.exists()) _texts[path] = await file.readAsString();
+      final file = File(path);
+      if (file.existsSync()) _texts[path] = await file.readAsString();
     }
   }
 

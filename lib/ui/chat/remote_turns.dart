@@ -249,7 +249,7 @@ class RemoteTurnDriver implements RemoteTurns {
   @override
   Memories memories(String? project) {
     final config = _ref.read(appConfigProvider);
-    return MemoryStore(config.fs, config.memoryDir(project: project));
+    return MemoryStore(config.memoryDir(project: project));
   }
 
   void dispose() {

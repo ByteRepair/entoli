@@ -876,9 +876,7 @@ Flutter's clipboard reads text alone, and each runner ranks the same way: a
 file list over text, because a file manager's copy carries the names as text
 too; text over an image, because a spreadsheet's cells carry a picture of
 themselves. A file comes back as a path the Dart side reads, an image as PNG
-bytes. A browser is the exception: Ctrl+V never reaches Flutter's shortcuts
-there and a page cannot read the clipboard's files, so the document's paste
-event carries them and the focused composer takes them. Android's keyboards
+bytes. Android's keyboards
 hand an image over as inserted content rather than a clip, which the field's
 `contentInsertionConfiguration` takes. The long-press menu's Paste is still
 the field's own, and pastes text only.

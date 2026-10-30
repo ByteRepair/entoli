@@ -29,8 +29,8 @@ cp -r "$bundle/." "$appdir/usr/bin/"
 
 install -m755 "$here/AppRun" "$appdir/AppRun"
 install -Dm644 "$desktop" "$appdir/usr/share/applications/$(basename "$desktop")"
-# The PWA set is the default icon already rendered; see "The app icon".
-install -Dm644 "$root/web/icons/Icon-512.png" \
+# The default icon already rendered at 512; see "The app icon".
+install -Dm644 "$root/tool/icons/cookie-512.png" \
   "$appdir/usr/share/icons/hicolor/512x512/apps/$icon.png"
 
 # appimagetool reads both from the AppDir root, a desktop installs them from

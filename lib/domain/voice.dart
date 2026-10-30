@@ -66,19 +66,15 @@ class SpeakThrough extends Speaking {
   final Synthesize synthesize;
 }
 
-/// Listening and speaking, on whatever this platform can do it with. Like
-/// [Shell] for commands: desktop and Android have the models and the
-/// microphone, a browser has neither, and [available] is the whole of the
-/// difference — false takes the voice button off the composer rather than
-/// leaving one that fails when pressed.
+/// Listening and speaking, on whatever this platform can do it with: sherpa's
+/// models on the desktops and Android, the system's engines on the Apples and
+/// beside sherpa on Android.
 ///
 /// Nothing here knows about a conversation. A voice turn is an ordinary turn:
 /// what this port does is hand text up and take text down, and
 /// `ui/voice/voice_controller.dart` is what puts either into a chat.
 abstract class Voice {
   const Voice();
-
-  bool get available => true;
 
   /// Whether this platform has engine installs the settings page's
   /// missing-engine block can point at, which is what the block is drawn
@@ -96,13 +92,13 @@ abstract class Voice {
   ///
   /// It is also whether a provider's transcription model can listen here:
   /// both are sherpa, which cuts the microphone into utterances. Speaking
-  /// through a provider needs only a player, and is wherever [available] is.
+  /// through a provider needs only a player, and is everywhere.
   bool get hasModelCatalog => true;
 
   /// The native picks this platform's engines stand for — what a true answer
   /// from [systemEngines] puts in the installed set, and what a null setting
-  /// defaults to. Null where there are none: the browser, and the desktops
-  /// whose engines are all downloaded.
+  /// defaults to. Null where there are none: the desktops whose engines are
+  /// all downloaded.
   ({String recognition, String speech})? get nativePicks => null;
 
   /// Which of the device's own engines are there, for the platforms that have
@@ -234,26 +230,4 @@ class VoiceFailed extends VoiceEvent {
   const VoiceFailed(this.message);
 
   final String message;
-}
-
-/// The web's voice: there isn't one. See issue #58 — the browser's own speech
-/// APIs are the way this platform gets voice mode, and shipping sherpa's 14 MB
-/// of WebAssembly into a build that would run it single-threaded is not.
-class UnavailableVoice extends Voice {
-  const UnavailableVoice();
-
-  @override
-  bool get available => false;
-
-  @override
-  bool get hasModelCatalog => false;
-
-  @override
-  Future<VoiceSession> start({
-    Hearing? hearing,
-    required Speaking speaking,
-    int speaker = 0,
-    String? language,
-  }) async =>
-      throw UnsupportedError("Voice mode is not available in a browser.");
 }

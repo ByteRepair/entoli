@@ -95,10 +95,6 @@ abstract class ChatStore {
       String chatId, String artifactId, String sourceDir, String entryFile,
       {String? project});
 
-  /// Read a file out of an artifact's directory. Null once the file is gone.
-  Future<Uint8List?> readArtifactFile(
-    String chatId, String artifactId, String relativePath, {String? project});
-
   /// The whole artifact as one zip, entries named relative to the artifact's
   /// own root. Null where the artifact is not there. What a mirror fetches
   /// when its user opens an artifact whose files live on the home device.
@@ -106,8 +102,7 @@ abstract class ChatStore {
       {String? project});
 
   /// The artifact's directory, for building a `file://` URL or serving over
-  /// HTTP. Returns the path whether or not the directory exists — callers that
-  /// need to verify it exists should use [readArtifactFile] instead.
+  /// HTTP. Returns the path whether or not the directory exists.
   Future<String> artifactPath(String chatId, String artifactId, {String? project});
 
   /// The chat's `PLAN.md`, out of its workspace. Null where there is none.

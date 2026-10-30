@@ -4,7 +4,6 @@ import "dart:io";
 import "dart:typed_data";
 
 import "package:flutter_test/flutter_test.dart";
-import "package:fs_shim/fs_io.dart" show fileSystemIo;
 import "package:path/path.dart" as p;
 
 import "package:agent_chat/data/builtin/builtin_agent.dart";
@@ -75,7 +74,6 @@ void main() {
       session: session,
       client: client,
       shell: shell,
-      fs: fileSystemIo,
       workspace: testWorkspace,
       projectWorkspace: testProjectWorkspace,
       model: "fake-model",
@@ -1561,7 +1559,7 @@ void main() {
 
     setUp(() {
       tmp = Directory.systemTemp.createTempSync("agent_memory_test_");
-      store = MemoryStore(fileSystemIo, p.join(tmp.path, "memory"));
+      store = MemoryStore(p.join(tmp.path, "memory"));
     });
 
     tearDown(() => tmp.deleteSync(recursive: true));

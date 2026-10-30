@@ -45,10 +45,10 @@ String systemPrompt({
           ].join("\n\n"),
         })
       // No shell: the file tools still work on the workspace through the
-      // app's own filesystem, so a browser can still produce files and
-      // artifacts. The turn ends the same way, on a reply with no call.
+      // app's own filesystem, so a device without one can still produce files
+      // and artifacts. The turn ends the same way, on a reply with no call.
       : "You are a helpful assistant.\n\n"
-          "${substitute(systemProse("browser"), {"tools": calls})}\n\n"
+          "${substitute(systemProse("no-shell"), {"tools": calls})}\n\n"
           "${sections.join("\n\n")}\n";
   return body + profileSection(profile) + styleSection(tone, citations);
 }

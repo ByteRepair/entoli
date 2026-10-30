@@ -13,9 +13,7 @@ import "file_rootfs_store.dart" show DownloadRunSha256;
 import "model_format.dart";
 
 /// A downloaded model in a directory of its own, outside the data directory —
-/// see [LocalModelStore] for why that matters. `dart:io` rather than the
-/// config's `FileSystem` for the reason `FileRootfsStore` is: what reads these
-/// files is a runtime with a path, not the app.
+/// see [LocalModelStore] for why that matters.
 ///
 /// Each directory holds the model's files, a record of what they are and where
 /// they came from, and the marker, written last. The record is what lists it:
@@ -92,7 +90,7 @@ class FileLocalModelStore extends LocalModelStore {
   Future<void> delete(String id) async {
     _downloaded = downloadedSync().where((m) => m.id != id).toList();
     final dir = Directory(directoryFor(id));
-    if (await dir.exists()) await dir.delete(recursive: true);
+    if (dir.existsSync()) await dir.delete(recursive: true);
   }
 
   /// Every file, checked, then described and kept where it landed. The

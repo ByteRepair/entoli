@@ -72,7 +72,7 @@ stores it, as `licenceAccepted`, the flag both gates read. It replaced
 `welcomeSeen`, so an install from before walks the tour once more. Unticking on
 a replay confirms, clears it and restarts the app (`AppRestart`), which stops
 whatever the session was running and lands on the tour: a restart rather than a
-close, since iOS and the web cannot close themselves and Apple rejects apps
+close, since iOS cannot close itself and Apple rejects apps
 that try. Done, on
 the first run or a replay, opens a "Welcome to Entoli" chat in the default
 project and leaves settings for it: its log is seeded with a
@@ -88,8 +88,8 @@ model, which travel together because auto mode is unusable without one — the
 standing permission rules the agent consults before any of it, the environment,
 and deleting every chat. **Update** is the app keeping itself current: one
 switch, shown exactly where the platform half exists — Linux, Windows, macOS —
-and absent everywhere else without a word, since a phone and the web reach
-their newest build by means the row would only stand in front of. What the
+and absent everywhere else without a word, since a phone reaches its newest
+build by means the row would only stand in front of. What the
 check then does is the platform side's (see "The automatic update" in the root
 notes), so the row's own story is one line: newer release, downloaded and put
 in place of this build. **Terminal** is where commands run —
@@ -125,7 +125,7 @@ for a missing device would. The permission rows re-read on the way
 back to the app, since their answers can only change while it is behind in the
 system settings the rows open. The editor page is a route of its own;
 see "The trigger editor" below, and "Waking for a reminder" in
-`android/AGENTS.md`. **Skills** is the list of what the agent can be told to do by name — the bundled ones, which ship with the app, and the user's own, imported from a `.skill` file or removed with their files. The user's skills live in their own directory beside the extracted presets, so a bundled one is not deletable and a user's is; import and delete are the two things that change it, and they reload the library the moment they are done, the one way a change to it lands without a restart, where a skill dropped into the directory by hand still waits for one. **Every row opens the skill view page** (`lib/ui/skills/skill_view.dart`) — the description, the SKILL.md body rendered the way a reply is, the files, and the conformance problems where there are any, since the loader skips a skill that does not conform to the Agent Skills spec and this page is where the skip says why. The page's scan validates every folder in the project's own directory, so a skipped skill is a row of its own (`Not loaded`, warning badge, removable) rather than an absence with only a log line behind it, and a loaded row with a badged folder carries a warning icon ahead of its Export. **Export rides every row** — bundled and inherited included, since what the library serves is what the user is reading — through `prompt_export.dart`, which resolves the bytes the way the library does (the page's own directory, then a bundled preset, then the default project's) and zips a skill under its own folder, because that folder is what a `.skill` import names a skill by. The file leaves through `BackupHandoff`, the ungated port the backup rides, so a save dialog on the desktops, a download on the web and the share sheet on Android are all the same call. The import flow and the install-to combobox are the **footer**, fixed to the bottom of the page so they do not scroll with the list — the section owns its own scroll, and the hosts (`_categoryBody`'s second special case beside Welcome, the project settings page's prompts page) render it directly rather than under a `ListView` of their own. The same widget is a project settings page's too, under a `project` parameter: it then reads that project's library and scans that project's directory, so an entry it holds is editable there and everything else is a row that says where it came from — `Inherited` from the default project, or `Bundled`. A built-in's page is the read-only version of the same thing: no import, no remove, the badges and the export only, since what a turn in it may have is the spec's to say. A user project's page imports without the destination combobox — it is in that project — and the global page's import carries one, `Global` default, where a skill the user picks can land in any project. The skill-install preview page has the same combobox, so a model-drafted skill is aimed the same way; `InstallDestination` is the one widget both carry. A project's agents page is the same widget with `@name` prose: add, edit and delete against the project's directory, inherited rows badged. See "Skills and agents" in `lib/domain/AGENTS.md`.
+`android/AGENTS.md`. **Skills** is the list of what the agent can be told to do by name — the bundled ones, which ship with the app, and the user's own, imported from a `.skill` file or removed with their files. The user's skills live in their own directory beside the extracted presets, so a bundled one is not deletable and a user's is; import and delete are the two things that change it, and they reload the library the moment they are done, the one way a change to it lands without a restart, where a skill dropped into the directory by hand still waits for one. **Every row opens the skill view page** (`lib/ui/skills/skill_view.dart`) — the description, the SKILL.md body rendered the way a reply is, the files, and the conformance problems where there are any, since the loader skips a skill that does not conform to the Agent Skills spec and this page is where the skip says why. The page's scan validates every folder in the project's own directory, so a skipped skill is a row of its own (`Not loaded`, warning badge, removable) rather than an absence with only a log line behind it, and a loaded row with a badged folder carries a warning icon ahead of its Export. **Export rides every row** — bundled and inherited included, since what the library serves is what the user is reading — through `prompt_export.dart`, which resolves the bytes the way the library does (the page's own directory, then a bundled preset, then the default project's) and zips a skill under its own folder, because that folder is what a `.skill` import names a skill by. The file leaves through `BackupHandoff`, the ungated port the backup rides, so a save dialog on the desktops and the share sheet on Android are the same call. The import flow and the install-to combobox are the **footer**, fixed to the bottom of the page so they do not scroll with the list — the section owns its own scroll, and the hosts (`_categoryBody`'s second special case beside Welcome, the project settings page's prompts page) render it directly rather than under a `ListView` of their own. The same widget is a project settings page's too, under a `project` parameter: it then reads that project's library and scans that project's directory, so an entry it holds is editable there and everything else is a row that says where it came from — `Inherited` from the default project, or `Bundled`. A built-in's page is the read-only version of the same thing: no import, no remove, the badges and the export only, since what a turn in it may have is the spec's to say. A user project's page imports without the destination combobox — it is in that project — and the global page's import carries one, `Global` default, where a skill the user picks can land in any project. The skill-install preview page has the same combobox, so a model-drafted skill is aimed the same way; `InstallDestination` is the one widget both carry. A project's agents page is the same widget with `@name` prose: add, edit and delete against the project's directory, inherited rows badged. See "Skills and agents" in `lib/domain/AGENTS.md`.
 **Agents** is the list of what a message can address by name — the bundled ones, which ship with the app and are read-only, and the user's own, written in-app and editable or removable. An agent is one flat `.md` file (a system prompt with `description` frontmatter), so it is written through an editor page rather than imported the way a skill's directory is; the name is the file name, and editing it on an existing agent renames the file — the new `.md` is written before the old one is taken away, a rename onto a name another agent holds is refused in the editor, and the only thing a rename loses is a new mention of the old name, since a mention already written into a conversation keeps the meaning it was recorded with. **Import agent** is the one way an outside `.md` comes in: it lands under its file's own name, with a replace-confirm where the name is taken and a refusal for an empty body, rather than through the editor — an editor pass before the write would be a second way to make the name and the file name diverge. Add and Import agent are the fixed footer, the two-button row the backup section draws. Export rides every row, the same `BackupHandoff` route the skills page takes, the `.md` itself the file — the picture is the device's own convenience and stays. Every row leads with the agent's profile picture (`AgentPicture`) — a person mark until one is set, resolved over the library's tier walk by `agentPictureProvider` — which the editor takes as its picker face too: a tap opens the chooser (PNG only, a non-PNG pick refused with a line saying so), picked bytes live in the editor until Save, and a remove beside the circle takes them off; a save touching neither leaves what the agent already had. The picture is `<name>.png` beside the `.md`, written, replaced, moved on a rename and deleted by the same `ReadOnlyDir.write` block the `.md` rides, and deleted with the agent — every write here invalidates the provider the rows read. Add, edit, delete and import reload the library the moment they are done, the same one way a change to it lands without a restart — every project's where the page is the global one (the default directory is a rung of every project's tier walk, so an inherited agent and an inherited picture go stale everywhere if only `promptLibraryProvider(null)` is rebuilt; skills keep the same branch), the project's own where it is a project's page. See "Skills and agents" in `lib/domain/AGENTS.md`.
 **Byte Repair** is the tooling for the built-in project of the same name: a
 banner saying whether the configured terminal env can run it, a button that
@@ -159,8 +159,7 @@ own answer: a "Host" env on Android has no package manager, while iOS's has
 no shell at all — so both hide the rest until a rootfs is picked from
 Terminal, and a setup run by either guest installs through its own `apk`.
 The desktops'
-host shells are each given an install destination and so are capable; the
-web's unavailable store is the one never capable.
+host shells are each given an install destination and so are capable.
 The delete sits below the banner everywhere the
 category is drawn, since the workspace and the chats are data wherever the
 tooling is not: its confirm message's environment clause is worded by the
@@ -266,11 +265,9 @@ it are the ones with logic.
 The version is read out of the bundle rather than written into Dart, so
 pubspec's number stays the only one. `tool/prepare.sh` writes `version.json`
 from pubspec's `version:` and it is declared as an asset, so every platform's
-bundle carries it; Flutter writes its own `version.json` for Linux and Web,
-which overrides ours where one exists, and on every other platform ours is the
-only copy. `platform.appVersion` reads it, since where it lands varies — the
-assets on one, a file beside `index.html` on the other — and composing the
-string is shared. It is awaited into the container in `main` beside the ABI,
+bundle carries it; Flutter writes its own `version.json` for Linux, which
+overrides ours there, and on every other platform ours is the only copy.
+`platform.appVersion` reads it, and composing the string is shared. It is awaited into the container in `main` beside the ABI,
 so nothing in the UI waits on a future for a string; where it could not be
 read the line is simply not drawn, since a version nothing depends on is not
 worth failing a startup over.
@@ -284,8 +281,8 @@ than on the About page.
 
 `package_info_plus` answers the same question and was the first version of this.
 It drags `win32` into the build graph of every platform, forks `stat` on Linux
-for an install time nothing shows, and refetches on the web with a cache buster
-— for one field of a file this reads directly.
+for an install time nothing shows — for one field of a file this reads
+directly.
 
 The libraries are Flutter's own `showLicensePage`, not a list kept here. The
 registry already holds every package that ships, and the app adds its own
@@ -365,13 +362,19 @@ binary costs a third more as base64, and nothing compresses, where deflate takes
 `conv.jsonl` to a fraction of itself. The one thing JSON was better at, saying
 what the document is before anything is deleted for it, a member gives back.
 
-Neither format streams its export: `writeBackup` builds the whole archive and
-encodes it in memory, so an export is still bounded by what the device can hold
-— `autoClose` frees each member as it is compressed, which is as much of that as
-can be given back without `archive_io`, which a browser cannot have. The restore
-side does stream, a member at a time. If a workspace ever makes that bound bite,
-the fix is encoding into an `OutputFileStream` off web and `BackupHandoff.save`
-taking a path rather than bytes.
+Both directions stream, so a backup costs disk rather than memory.
+`writeBackup` walks the data directory into a `ZipFileEncoder` (`zipTo`, the
+walker the workspace share uses too), a member read and compressed at a time.
+`BackupHandoff.save` takes a name and a writer rather than a file: the desktop
+asks where first and the writer zips straight there, so nothing is written
+twice and nothing at all on a cancel, which `save` answers false and the page
+then says nothing; Android writes to a temporary directory and shares from it.
+`openBackup` decodes the picked file's directory alone and leaves the members in
+it; the restore decompresses each straight into its target file. The file
+stays open until `Backup.close`, which the settings page owes whether or not
+the user agreed. A backup picked from under the data directory — one saved into
+a workspace, or reached through a link into it (`pathsOverlap`) — is copied out
+first, since the restore clears the directory before it reads a member.
 
 That member is `backup-meta.json`, holding the format name, the version and when
 the backup was made — meta about the backup rather than a file of the data
@@ -436,8 +439,7 @@ who has just asked for their data to be replaced.
 capability flags are what the explorer's toolbar draws itself from — a backup
 asks none of those questions, because every platform has somewhere to put a file
 and a chooser to get one back. `FileSelectorBackup` is the whole of it on the
-desktops and the web, `getSaveLocation` being a dialog on one and a download on
-the other. Android is the exception and `SharedBackup` is why: `file_selector`
+desktops, `getSaveLocation` being a dialog there. Android is the exception and `SharedBackup` is why: `file_selector`
 implements no save dialog there, so a backup leaves through the share sheet,
 which is `FileHandoff`'s. An intent carries a file rather than bytes, so the zip
 is written to the cache and `FileHandoff` then stages a copy of its own under

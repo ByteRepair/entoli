@@ -1,3 +1,5 @@
+import "dart:io";
+
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
@@ -313,7 +315,7 @@ class _ProfileCardState extends ConsumerState<_ProfileCard> {
   Future<void> _check() async {
     final config = ref.read(appConfigProvider);
     final path = config.projectInstructionsFile(project: widget.project);
-    final there = await config.fs.file(path).exists();
+    final there = File(path).existsSync();
     if (mounted) setState(() => _set = there);
   }
 

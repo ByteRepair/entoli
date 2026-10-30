@@ -12,7 +12,7 @@ import "../widgets/section_header.dart";
 /// it. Both are the app's rather than a chat's — the gesture makes the chat.
 ///
 /// Android's only, and taken off the page by the port's own answer where the
-/// platform has no gesture to configure — iOS, the desktops, the web: the
+/// platform has no gesture to configure — iOS and the desktops: the
 /// settings are the app's whatever it is running on, but "which project does
 /// the gesture open" is a question only a platform that can be the assistant
 /// has an answer to.

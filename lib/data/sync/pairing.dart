@@ -130,8 +130,8 @@ class SyncPairing {
   final Future<void> Function(LivePeer peer) onReady;
 
   /// What the machine calls itself, where it has a name — the default device
-  /// name before the user picks one. Passed in rather than read here: it is
-  /// `dart:io`'s, and a browser has none.
+  /// name before the user picks one. Passed in rather than read here, so a
+  /// test can name the machine.
   final String? _hostname;
   final LanSignaling? Function() _lanFactory;
   final RelayDial _relayDial;
@@ -172,9 +172,8 @@ class SyncPairing {
             (deviceId: device.id, psk: secret);
       }
     }
-    // Before the early return below: a web build listens for nothing and a
-    // desktop with no pairings starts no server, and both still have a list
-    // of paired devices to draw.
+    // Before the early return below: a device with no pairings starts no
+    // server, and still has a list of paired devices to draw.
     _peers.publish(devices);
     final server = _server;
     if (server == null || devices.isEmpty) return;
@@ -197,21 +196,19 @@ class SyncPairing {
 
   /// Opens a pairing window: arms a code on the LAN server where this
   /// platform can listen, and joins the configured relay room when there is
-  /// one. Returns what the QR shows; null where neither route exists — a
-  /// browser pairs from the other side instead.
+  /// one. Throws where neither route exists.
   ///
   /// Exactly one window runs at a time; opening one closes the last.
   Future<PairingActivity> startPairingWindow() async {
     cancelPairingWindow();
     final server = _server;
-    final lanAvailable = server != null && !kIsWeb;
     final relayUrl = _settings().syncRelayUrl ?? "";
-    if (!lanAvailable && relayUrl.isEmpty) throw SignalingException(noRoute);
+    if (server == null && relayUrl.isEmpty) throw SignalingException(noRoute);
 
     final psk = generatePsk();
     String? qr;
     String? code;
-    if (lanAvailable) {
+    if (server != null) {
       final port = await server.start();
       code = generatePairingCode();
       server.arm(code);
@@ -241,15 +238,9 @@ class SyncPairing {
     return opened;
   }
 
-  /// Why there is no window to open. A browser has no socket to bind, so it
-  /// can only ever join — which makes the relay the one thing missing rather
-  /// than one of two.
-  static String get noRoute => kIsWeb
-      ? "A browser cannot listen for a pairing. Set a relay URL in Sync's "
-          "Internet relay settings, or use Manual invite and paste the "
-          "reply back."
-      : "No way to be found: this build has no local network signaling and "
-          "no relay URL is set.";
+  /// Why there is no window to open.
+  static const noRoute = "No way to be found: this build has no local "
+      "network signaling and no relay URL is set.";
 
   void cancelPairingWindow() {
     _windowPsk = null;
@@ -421,7 +412,7 @@ class SyncPairing {
                   ":$preferredSignalingPort",
             ],
           ],
-      if (server != null && !kIsWeb) () => server.discover(token),
+      if (server != null) () => server.discover(token),
     ]) {
       final addresses = await candidates();
       if (addresses.isEmpty) continue;
@@ -478,10 +469,10 @@ class SyncPairing {
       _hostname ?? "Entoli ${identity.digest.substring(0, 4)}";
 
   /// Every host:port a peer could dial this device back on, empty where it is
-  /// not listening — a browser never is.
+  /// not listening.
   Future<List<String>> _dialbackAddresses() async {
     final server = _server;
-    if (server == null || kIsWeb) return const [];
+    if (server == null) return const [];
     final port = server.port ?? await server.start();
     return [for (final host in await server.addresses()) "$host:$port"];
   }

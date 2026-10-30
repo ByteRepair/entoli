@@ -81,13 +81,13 @@ class BundledTools {
   }) async {
     final binary = File(p.join(libDir, "libproot.so"));
     final loader = File(p.join(libDir, "libproot-loader.so"));
-    if (!await binary.exists() || !await loader.exists()) return null;
+    if (!binary.existsSync() || !loader.existsSync()) return null;
     final loader32 = File(p.join(libDir, "libproot-loader32.so"));
     await tmp.create(recursive: true);
     return Proot(
       binary: binary.path,
       loader: loader.path,
-      loader32: await loader32.exists() ? loader32.path : null,
+      loader32: loader32.existsSync() ? loader32.path : null,
       tmpDir: tmp.path,
       resolvConf: await _writeResolvConf(root),
     );

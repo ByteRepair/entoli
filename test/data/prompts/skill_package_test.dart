@@ -3,8 +3,6 @@ import "dart:typed_data";
 
 import "package:flutter_test/flutter_test.dart";
 
-import "package:fs_shim/fs_io.dart" show fileSystemIo;
-
 import "package:agent_chat/data/prompts/skill_import.dart";
 import "package:agent_chat/data/prompts/skill_package.dart";
 
@@ -36,7 +34,7 @@ void main() {
       });
 
       final package =
-          await packageSkillDirectory(fileSystemIo, dir.path, null);
+          await packageSkillDirectory(dir.path, null);
 
       expect(package.name, "demo");
       final names = package.entries.map((e) => e.$1).toSet();
@@ -49,7 +47,7 @@ void main() {
       });
 
       final package =
-          await packageSkillDirectory(fileSystemIo, dir.path, "from-arg");
+          await packageSkillDirectory(dir.path, "from-arg");
 
       expect(package.name, "from-arg");
 
@@ -60,7 +58,7 @@ void main() {
         "SKILL.md": "---\ndescription: d\n---\n\nDo it.\n",
       });
       final fromFolder =
-          await packageSkillDirectory(fileSystemIo, dir.path, "demo");
+          await packageSkillDirectory(dir.path, "demo");
 
       expect(fromFolder.name, "demo");
     });
@@ -73,7 +71,7 @@ void main() {
       });
 
       await expectLater(
-        packageSkillDirectory(fileSystemIo, dir.path, null),
+        packageSkillDirectory(dir.path, null),
         throwsA(isA<SkillImportException>().having(
             (e) => e.message,
             "message",
@@ -93,7 +91,7 @@ void main() {
       });
 
       final original =
-          await packageSkillDirectory(fileSystemIo, dir.path, null);
+          await packageSkillDirectory(dir.path, null);
       final bytes = packageSkillBytes(original);
       expect(bytes.length, greaterThan(0));
 

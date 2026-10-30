@@ -140,16 +140,17 @@ agent stops — is pinned on `BuiltinBackend` instead, in
 `builtin_backend_test.dart`.
 
 `FakeFileHandoff` is which platform the workspace explorer thinks it is on, and
-its three named constructors are the three answers — `desktop()` has a file
-manager and nothing else, `android()` has the share sheet both ways, `web()` has
-a download and a chooser. `TestApp.create(handoff: …)` takes one. The explorer
-draws a different toolbar for each, so the platform is the fixture rather than
-something to guess at with `defaultTargetPlatform`, which would not change what
-`kIsWeb` answers anyway.
+its two named constructors are the two answers — `desktop()` has a file
+manager and nothing else, `android()` has the share sheet both ways.
+`TestApp.create(handoff: …)` takes one. The explorer draws a different toolbar
+for each, so the platform is the fixture rather than something to guess at
+with `defaultTargetPlatform`.
 
 `FakeBackupHandoff` is the save dialog and the chooser a backup leaves and
-arrives through. What was saved is kept rather than counted, since reading the
-zip back is the only witness there is that Export did anything.
+arrives through. A save is written into a directory of the fake's own, where a
+save dialog would have put it, and kept by name and path rather than counted,
+since reading the file back is the only witness there is that Export did
+anything. `scripted` is a path, staged by the test in a `tempDir()`.
 `settings_data_test.dart` raises `settleIo`'s `tries` rather than its `least`:
 reading and writing the whole data directory outlasts the default cap of real
 rounds, and the busy bar animates until it is done — so a run that gave up early
@@ -204,8 +205,9 @@ chunking actually run.
 
 ## The filesystem a test runs on
 
-`tempConfig` is a real temp directory over `fileSystemIo`, torn down when the
-test ends. That is what `TestApp` uses by default, and what the store and
+`tempConfig` is a real temp directory, torn down when the test ends;
+`loadedTempConfig` is one `AppConfig.load` made from nothing, a first launch's
+state, and `tempDir` an empty one for a file staged outside any data directory. That is what `TestApp` uses by default, and what the store and
 repository tests assert against with `dart:io` — the layout on a disk is the
 thing under test, so `File(config.stateFile(id)).existsSync()` is the honest way
 to check it.
@@ -223,13 +225,6 @@ avoid the pumping below.
 message is named after the call, since that is the only id a sub-agent
 transcript has. `builtin_backend_test.dart` does the same one level up, where
 the subject is the parent carrying it on.
-
-`web_filesystem_test.dart` is the other half. `newFileSystemMemory()` is the
-same `FileSystemIdb` the web build runs on, over an in-memory IndexedDB rather
-than the browser's, so the browser's chat store, its settings and its
-attachments are exercised here on the VM. Two `AppConfig`s over one filesystem
-is a reload, which is the property the web build exists for and the only way to
-check it without loading a tab.
 
 ## Widget tests and the fake clock
 

@@ -25,7 +25,6 @@ import "package:agent_chat/providers.dart" show syncHubProvider;
 import "package:agent_chat/ui/chat/mirror_controller.dart";
 import "package:archive/archive.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
-import "package:fs_shim/fs_io.dart" show fileSystemIo;
 import "package:flutter_test/flutter_test.dart";
 
 import "../../fakes.dart"
@@ -166,8 +165,7 @@ void main() {
   /// took until this one.
   test("a chat on a real store mirrors with its records", () async {
     final onDisk = await _Device.create("${tempDir.path}/disk",
-        store: FileChatStore(await AppConfig.load(
-            fileSystemIo, "${tempDir.path}/disk")));
+        store: FileChatStore(await AppConfig.load("${tempDir.path}/disk")));
     addTearDown(onDisk.hub.dispose);
 
     final chat = Chat(
@@ -464,8 +462,7 @@ void main() {
           updatedAt: now));
     }
     Future<void> omadaOn(AppConfig config, String project) async {
-      await config.fs
-          .directory(config.projectDir(project: project))
+      await Directory(config.projectDir(project: project))
           .create(recursive: true);
       await (ProjectSettings()..omada = true).save(config, project: project);
     }
@@ -1259,7 +1256,7 @@ class _Turns implements RemoteTurns {
 
   @override
   Memories memories(String? project) =>
-      MemoryStore(config.fs, config.memoryDir(project: project));
+      MemoryStore(config.memoryDir(project: project));
 }
 
 class _Device {
@@ -1267,7 +1264,7 @@ class _Device {
       this.config, this.backend);
 
   static Future<_Device> create(String dir, {ChatStore? store}) async {
-    final config = await AppConfig.load(fileSystemIo, dir);
+    final config = await AppConfig.load(dir);
     final registry = FakeDeviceRegistry();
     final chats = store ?? FakeChatStore();
     final backend = FakeBackend();

@@ -1,13 +1,13 @@
 import "dart:convert";
+import "dart:io";
 import "dart:typed_data";
 
-import "package:fs_shim/fs.dart";
+import "package:path/path.dart" as p;
 
 import "file_handoff.dart";
 
 /// Reading and writing a workspace folder, for the explorer and for whatever a
-/// share drops into one. Everything here goes through a `FileSystem`, so it is
-/// the same code over a disk and over IndexedDB.
+/// share drops into one.
 
 /// One entry of a workspace folder, as the explorer draws it.
 class WorkspaceEntry {
@@ -31,23 +31,18 @@ class WorkspaceEntry {
 /// not there yet is empty rather than an error — a workspace is created with
 /// the chat and may never be written to.
 ///
-/// The listing is drained before anything is stat-ed, and the stats then go out
-/// together: awaiting one inside the loop pauses the stream on each, which on
-/// the web is one IndexedDB transaction per file, serialised, in front of the
-/// spinner.
-Future<List<WorkspaceEntry>> listWorkspace(FileSystem fs, String dir) async {
-  final directory = fs.directory(dir);
-  if (!await directory.exists()) return const [];
-  final entities = await directory.list().toList();
-  final entries = await Future.wait(entities.map((entity) async {
-    final isDirectory = entity is Directory;
-    return WorkspaceEntry(
-      path: entity.path,
-      name: fs.path.basename(entity.path),
-      isDirectory: isDirectory,
-      size: isDirectory ? 0 : (await entity.stat()).size,
-    );
-  }));
+Future<List<WorkspaceEntry>> listWorkspace(String dir) async {
+  final directory = Directory(dir);
+  if (!directory.existsSync()) return const [];
+  final entries = [
+    for (final entity in await directory.list().toList())
+      WorkspaceEntry(
+        path: entity.path,
+        name: p.basename(entity.path),
+        isDirectory: entity is Directory,
+        size: entity is Directory ? 0 : entity.statSync().size,
+      ),
+  ];
   return entries
     ..sort((a, b) => a.isDirectory == b.isDirectory
         ? a.name.toLowerCase().compareTo(b.name.toLowerCase())
@@ -72,8 +67,8 @@ class WorkspaceText {
 /// No extension counts, since `README` and `Makefile` have none; a dotfile
 /// reaches that same branch because `package:path` reads a leading dot as a
 /// name rather than as an extension.
-bool looksTextual(FileSystem fs, String name) {
-  final extension = fs.path.extension(name).toLowerCase();
+bool looksTextual(String name) {
+  final extension = p.extension(name).toLowerCase();
   return extension.isEmpty || _textExtensions.contains(extension.substring(1));
 }
 
@@ -89,15 +84,15 @@ const _textExtensions = {
 /// Read at most [textViewLimit] bytes of [path] as UTF-8, or `null` if what
 /// came back is not text after all — a `.log` the agent wrote as a gzip is a
 /// hand-off rather than a page of mojibake.
-Future<WorkspaceText?> readTextHead(FileSystem fs, String path) async {
-  final stat = await fs.file(path).stat();
+Future<WorkspaceText?> readTextHead(String path) async {
+  final stat = File(path).statSync();
   if (stat.type != FileSystemEntityType.file) {
     throw Exception("$path is no longer there");
   }
   final truncated = stat.size > textViewLimit;
   final end = truncated ? textViewLimit : stat.size;
   final read = BytesBuilder(copy: false);
-  await for (final chunk in fs.file(path).openRead(0, end)) {
+  await for (final chunk in File(path).openRead(0, end)) {
     read.add(chunk);
   }
   var bytes = read.takeBytes();
@@ -129,36 +124,32 @@ Uint8List _withoutCutRune(Uint8List bytes) {
 /// onto a workspace — see [safeRelativePath].
 ///
 /// One at a time, and each one's bytes are the file's own business: this makes
-/// room and hands over the target, so a staged share is moved where a browser's
-/// buffer is written. See [IncomingFile].
+/// room and hands over the target, so a staged share is moved and a restored
+/// backup member written. See [IncomingFile].
 ///
 /// Sequential on purpose. Writing them at once would put every file's bytes in
 /// memory together, which is the thing [IncomingFile] exists to avoid, and buys
-/// nothing back — IndexedDB serialises writes to a store anyway, and a rename
-/// is too cheap to overlap.
+/// nothing back — a rename is too cheap to overlap.
 ///
-/// The folders are made first, once each. A folder upload names one directory
-/// hundreds of times, and `create` on the web opens a read-write transaction
-/// before it looks, so asking per file is hundreds of empty transactions in
-/// front of the spinner.
+/// The folders are made first, once each: a restored backup names one
+/// directory hundreds of times, and asking per file is hundreds of redundant
+/// creates in front of the spinner.
 Future<void> writeIncoming(
-  FileSystem fs,
   String dir,
   List<IncomingFile> files,
 ) async {
   final targets = [
-    for (final file in files) fs.path.join(dir, safeRelativePath(fs, file.path)),
+    for (final file in files) p.join(dir, safeRelativePath(file.path)),
   ];
-  for (final folder in {for (final target in targets) fs.path.dirname(target)}) {
-    await fs.directory(folder).create(recursive: true);
+  for (final folder in {for (final target in targets) p.dirname(target)}) {
+    await Directory(folder).create(recursive: true);
   }
   for (var i = 0; i < files.length; i++) {
-    await files[i].writeTo(fs, targets[i]);
+    await files[i].writeTo(targets[i]);
   }
 }
 
-Future<void> createFolder(FileSystem fs, String dir, String name) => fs
-    .directory(fs.path.join(dir, safeRelativePath(fs, name)))
+Future<void> createFolder(String dir, String name) => Directory(p.join(dir, safeRelativePath(name)))
     .create(recursive: true);
 
 /// Remove [paths], each with whatever is under it. One already gone is a
@@ -166,40 +157,36 @@ Future<void> createFolder(FileSystem fs, String dir, String name) => fs
 ///
 /// The lookups go out in one wave and the deletions in another, for the reason
 /// [listWorkspace] stats in one: a selection is a folder's siblings, so nothing
-/// here is ordered, and awaiting per path is one IndexedDB transaction at a
-/// time in front of the busy bar.
-Future<void> deleteEntries(FileSystem fs, List<String> paths) async {
-  final types = await Future.wait(paths.map(fs.type));
+/// here is ordered, and awaiting per path is one lookup at a time in front of
+/// the busy bar.
+Future<void> deleteEntries(List<String> paths) async {
+  final types = await Future.wait(paths.map(FileSystemEntity.type));
   await Future.wait([
     for (final (index, path) in paths.indexed)
       if (types[index] == FileSystemEntityType.directory)
-        fs.directory(path).delete(recursive: true)
+        Directory(path).delete(recursive: true)
       else if (types[index] != FileSystemEntityType.notFound)
-        fs.file(path).delete(),
+        File(path).delete(),
   ]);
 }
 
-/// A path from outside, made safe to join onto a workspace. `..` and a leading
-/// separator are what this exists for: a shared file names itself, and one
-/// naming `../../settings.json` would otherwise be written there. Everything
-/// left is kept, so a folder upload keeps its shape.
 /// Whether [path] is [root] itself or under it, for two resolved paths. The
 /// check is an exact prefix plus a separator, so a sibling that only shares
 /// the root's spelling — `/workspace` and `/workspace-two` — is not under it.
-bool isUnder(FileSystem fs, String path, String root) =>
-    path == root || path.startsWith("$root${fs.path.separator}");
+bool isUnder(String path, String root) =>
+    path == root || path.startsWith("$root${p.separator}");
 
 /// A path from outside, made safe to join onto a workspace. `..` and a leading
 /// separator are what this exists for: a shared file names itself, and one
 /// naming `../../settings.json` would otherwise be written there. Everything
-/// left is kept, so a folder upload keeps its shape.
-String safeRelativePath(FileSystem fs, String path) {
+/// left is kept, so a shared folder keeps its shape.
+String safeRelativePath(String path) {
   final segments = path
       .split(_separator)
       .where((s) => s.isNotEmpty && s != "." && s != "..")
       .map(_safeSegment)
       .toList();
-  return segments.isEmpty ? "file" : segments.join(fs.path.separator);
+  return segments.isEmpty ? "file" : segments.join(p.separator);
 }
 
 /// A drive letter or a colon is a path on Windows and a filename everywhere

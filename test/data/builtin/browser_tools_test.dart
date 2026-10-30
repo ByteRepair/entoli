@@ -5,7 +5,6 @@ import "dart:typed_data";
 
 import "package:flutter/foundation.dart" show ValueNotifier;
 import "package:flutter_test/flutter_test.dart";
-import "package:fs_shim/fs_io.dart" show fileSystemIo;
 import "package:path/path.dart" as p;
 
 import "package:agent_chat/data/browser/cdp_browser.dart"
@@ -275,7 +274,6 @@ void main() {
       session: BuiltinSession(),
       client: client,
       shell: FakeShell((_) => ok(""), canRunCommands: true),
-      fs: fileSystemIo,
       workspace: chat,
       projectWorkspace: tempDir.path,
       model: "fake-model",
@@ -287,7 +285,6 @@ void main() {
       answer: (request) => Future.value(request.unanswered),
       caps: AgentCapabilities.forTurn(
           commands: true,
-          webSearch: true,
           disabled: {if (noAsk) AgentCapability.ask},
           browser: browser),
       browser: tab,
@@ -335,7 +332,7 @@ void main() {
 
     test("the prompt says how to use it only where it is offered", () {
       AgentCapabilities caps(bool browser) => AgentCapabilities.forTurn(
-          commands: true, webSearch: true, disabled: const {}, browser: browser);
+          commands: true, disabled: const {}, browser: browser);
       expect(systemPrompt(platform: "linux", offer: ToolOffer(caps: caps(true))),
           contains("## Using the browser"));
       expect(systemPrompt(platform: "linux", offer: ToolOffer(caps: caps(false))),

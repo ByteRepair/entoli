@@ -1,7 +1,6 @@
 import "dart:io";
 
 import "package:flutter_test/flutter_test.dart";
-import "package:fs_shim/fs_io.dart" show fileSystemIo;
 import "package:path/path.dart" as p;
 
 import "package:agent_chat/data/builtin/builtin_agent.dart";
@@ -101,7 +100,6 @@ void main() {
       session: BuiltinSession(),
       client: client,
       shell: FakeShell((_) => ok("")),
-      fs: fileSystemIo,
       workspace: workspace,
       projectWorkspace: projectWorkspace,
       model: "fake-model",
@@ -282,7 +280,6 @@ void main() {
       session: BuiltinSession(),
       client: client,
       shell: FakeShell((_) => ok("")),
-      fs: fileSystemIo,
       workspace: tempDir.path,
       projectWorkspace: tempDir.path,
       model: "fake-model",

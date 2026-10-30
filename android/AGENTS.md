@@ -238,10 +238,9 @@ other thing.
 
 The settings are app-level, with no per-chat override, for the reason the icon
 and the theme are: the assistant is the app's, and the chat it opens does not
-exist yet to have an opinion. Their category is drawn on every platform, the way
-the voice one is where `Voice.available` is false — the settings are the app's
-whatever it is running on, and hiding them would make the file's contents depend
-on where it was last opened. `assistantProject` is `null` for the default
+exist yet to have an opinion. Their category is drawn on every platform — the
+settings are the app's whatever it is running on, and hiding them would make the
+file's contents depend on where it was last opened. `assistantProject` is `null` for the default
 project, which is the null `selectedProjectProvider` already uses.
 
 **It holds a name, so it is a weak reference**, and that is answered in two
@@ -266,8 +265,8 @@ several times over, because each platform wants its own form and they are
 checked in rather than built: `assets/icons/*.svg` is what the app draws,
 `drawable/ic_<name>_{foreground,monochrome}` over the shared
 `ic_icon_background` are the Android adaptive layers named by
-`mipmap-anydpi-v26/ic_<name>.xml`, and `web/icons/` is the PWA set. Android
-reads no SVG, so its copies are the same path data as a vector drawable, and
+`mipmap-anydpi-v26/ic_<name>.xml`, and `tool/icons/cookie-512.png` is the
+default rendered for the desktops that take a raster. Android reads no SVG, so its copies are the same path data as a vector drawable, and
 editing one means editing all of them — there is no generator. The Apples'
 copy is one file for both platforms and the default only: `entoli.icon` under
 `macos/Runner/`, the Liquid Glass layers, with `ios/Runner/entoli.icon/AGENTS.md`
@@ -280,14 +279,12 @@ vector drawable cannot carry is why they are rasters. The monochrome layer
 stays a flat silhouette, a themed icon being a tinted one; the debug build
 keeps its black vectors through its own `mipmap-anydpi-v26/ic_cookie.xml`.
 
-The PWA set is the default icon's SVG rendered at each size, and only the
-default's — a browser cannot be told to switch, so the other icon has no copy
-there. `Icon-*` is the file as it stands and `Icon-maskable-*` is the same file
-with the squircle `clip-path` dropped, which is what makes it the full-bleed
-square a maskable icon has to be. `favicon.png` is the clipped one at 32.
-`Icon-512.png` is load-bearing off the web as well: the AppImage takes its icon
-from it, a Linux desktop being no more switchable than a browser. See "The
-Linux AppImage".
+`tool/icons/cookie-512.png` is the default icon's SVG rendered at 512 as it
+stands, squircle `clip-path` and all, and only the default's: the AppImage
+installs it and `tool/windows/make-ico.py` renders the Windows ico from it,
+and neither a Linux desktop entry nor an exe's resources can be told to
+switch, so the other icon has no copy there. See "The Linux AppImage" and
+"The icon" in `windows/AGENTS.md`.
 
 `minSdk` is pinned to 26 rather than following `flutter.minSdkVersion`, which
 is 24. Adaptive icons start at 26; below it every icon needs a full set of
@@ -348,11 +345,10 @@ package half with the namespace makes `setComponentEnabledSetting` throw, and
 the Dart side swallows that, so the first version of this silently did nothing
 in every debug build.
 
-Not behind a conditional import the way `Shell` is: a `MethodChannel` compiles
+Not chosen per platform the way `Shell` is: a `MethodChannel` compiles
 everywhere and a platform with nothing answering it throws, which is the same
-no-op `available` being false gives. So the app still has exactly one
-conditional import — `ForegroundService` is the second channel to be built this
-way.
+no-op `available` being false gives — `ForegroundService` is the second channel
+to be built this way.
 
 Every channel — this one, `ForegroundService`, `FilesChannel` and
 `AssistantChannel` — is registered when the engine is created rather than on
@@ -390,8 +386,7 @@ label in Android's recents, so without it a debug build would name itself
 "Entoli" there whatever `@string/app_name` said. `_AppBrand` reads it too, so
 the bar over an empty pane is not the one place left saying "Entoli"; it is
 `Flexible` now because the name is no longer a fixed width and the slot is a
-phone's toolbar. It reads `kDebugMode` rather than the platform, so a debug web
-build's tab says it as well, which is honest and free. Linux is left alone:
+phone's toolbar. Linux is left alone:
 `my_application.cc` hardcodes the window title, `MaterialApp.title` does nothing
 on GTK, and there is no second install to tell apart. Profile builds have no
 `res/` of their own and so carry the release name and artwork.

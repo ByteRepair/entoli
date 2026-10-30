@@ -6,8 +6,9 @@ import "agent_tool.dart";
 import "turn.dart";
 
 /// The one tool that runs nothing: the agent puts questions to the user and
-/// waits. Offered whether or not there is a shell — a browser cannot run a
-/// command, but it can still ask — and never where nobody is there to answer.
+/// waits. Offered whether or not there is a shell — a device with none cannot
+/// run a command, but it can still ask — and never where nobody is there to
+/// answer.
 /// The call and its answers are a pair like any other, so a finished chat
 /// still shows what was asked and picked.
 class AskTool extends AgentTool {

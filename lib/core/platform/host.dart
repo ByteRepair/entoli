@@ -8,73 +8,68 @@ import "package:flutter/foundation.dart";
 import "package:flutter/services.dart" show MethodChannel, rootBundle;
 import "package:record_platform_interface/record_platform_interface.dart"
     show RecordPlatform;
-import "package:fs_shim/fs.dart" hide File, Directory;
-import "package:fs_shim/fs_io.dart" show fileSystemIo;
 import "package:path/path.dart" as p;
 import "package:path_provider/path_provider.dart";
 
-import "../../../data/backup_handoff.dart";
-import "../../../data/local/android_assistant_launch.dart";
-import "../../../data/local/android_device_name.dart";
-import "../../../data/local/android_file_handoff.dart";
-import "../../../data/local/android_reminder_alarms.dart";
-import "../../../data/local/bundled_tools.dart";
-import "../../../data/local/byte_repair_store.dart";
-import "../../../data/local/file_byte_repair_store.dart";
-import "../../../data/local/file_secret_store.dart";
-import "../../../data/local/ios_reminder_alarms.dart";
-import "../../../data/local/file_kv_cache.dart";
-import "../../../data/local/file_modes.dart";
-import "../../read_only_dirs.dart";
-import "../../../data/local/file_local_model_store.dart";
-import "../../../data/local/file_rootfs_store.dart";
-import "../../../data/local/ish_ffi.dart";
-import "../../../data/local/ish_shell.dart";
-import "../../../data/local/llama_engine.dart";
-import "../../../data/local/llama_server.dart";
-import "../../../data/local/local_engine.dart";
-import "../../../data/local/mlx_engine.dart";
-import "../../../data/local/model_format.dart";
-import "../../../data/local/proot.dart";
-import "../../../data/local/apple_fm.dart";
-import "../../../data/local/landlock.dart";
-import "../../../data/local/shared_backup.dart";
-import "../../../data/local/tree_ops.dart";
-import "../../../data/local/desktop_file_handoff.dart";
-import "../../../data/local/io_file_watches.dart";
-import "../../../data/local/linux_reminder_alarms.dart";
-import "../../../data/local/macos_reminder_alarms.dart";
-import "../../../data/browser/cdp_browser.dart";
-import "../../../data/browser/helium.dart";
-import "../../../data/builtin/duckduckgo_search.dart";
-import "../../tls/trust_io.dart" show tlsClient;
-import "../../../data/builtin/local_shell.dart";
-import "../../../data/voice/android_voice.dart";
-import "../../../data/voice/file_voice_model_store.dart";
-import "../../../data/voice/ios_voice.dart";
-import "../../../data/voice/macos_voice.dart";
-import "../../../data/voice/sherpa_voice.dart";
-import "../../../domain/app_settings.dart";
-import "../../../domain/agent_browser.dart";
-import "../../../domain/app_update.dart";
-import "../../../core/log.dart";
-import "../../../domain/assistant_launch.dart";
-import "../../../domain/confinement.dart";
-import "../../../domain/backup_handoff.dart";
-import "../../../domain/builtin_project.dart";
-import "../../../domain/file_handoff.dart";
-import "../../../domain/file_watches.dart";
-import "../../../domain/reminder_alarms.dart";
-import "../../../domain/rootfs.dart";
-import "../../../domain/rootfs_store.dart";
-import "../../../domain/secret_store.dart";
-import "../../../domain/shell.dart";
-import "../../../domain/sync/lan_signaling.dart";
-import "../../../domain/voice.dart";
-import "../../../domain/voice_model_store.dart";
-import "../../../domain/web_search.dart";
-import "../../config.dart";
-import "../form_factor.dart" show isPhone;
+import "../../data/backup_handoff.dart";
+import "../../data/local/android_assistant_launch.dart";
+import "../../data/local/android_device_name.dart";
+import "../../data/local/android_file_handoff.dart";
+import "../../data/local/android_reminder_alarms.dart";
+import "../../data/local/bundled_tools.dart";
+import "../../data/local/byte_repair_store.dart";
+import "../../data/local/file_secret_store.dart";
+import "../../data/local/ios_reminder_alarms.dart";
+import "../../data/local/file_kv_cache.dart";
+import "../../data/local/file_modes.dart";
+import "../read_only_dirs.dart";
+import "../../data/local/file_local_model_store.dart";
+import "../../data/local/file_rootfs_store.dart";
+import "../../data/local/ish_ffi.dart";
+import "../../data/local/ish_shell.dart";
+import "../../data/local/llama_engine.dart";
+import "../../data/local/llama_server.dart";
+import "../../data/local/local_engine.dart";
+import "../../data/local/mlx_engine.dart";
+import "../../data/local/model_format.dart";
+import "../../data/local/proot.dart";
+import "../../data/local/apple_fm.dart";
+import "../../data/local/landlock.dart";
+import "../../data/local/shared_backup.dart";
+import "../../data/local/tree_ops.dart";
+import "../../data/local/desktop_file_handoff.dart";
+import "../../data/local/io_file_watches.dart";
+import "../../data/local/linux_reminder_alarms.dart";
+import "../../data/local/macos_reminder_alarms.dart";
+import "../../data/browser/cdp_browser.dart";
+import "../../data/browser/helium.dart";
+import "../tls.dart" show tlsClient;
+import "../../data/builtin/local_shell.dart";
+import "../../data/voice/android_voice.dart";
+import "../../data/voice/file_voice_model_store.dart";
+import "../../data/voice/ios_voice.dart";
+import "../../data/voice/macos_voice.dart";
+import "../../data/voice/sherpa_voice.dart";
+import "../../domain/app_settings.dart";
+import "../../domain/agent_browser.dart";
+import "../../domain/app_update.dart";
+import "../log.dart";
+import "../../domain/assistant_launch.dart";
+import "../../domain/confinement.dart";
+import "../../domain/backup_handoff.dart";
+import "../../domain/builtin_project.dart";
+import "../../domain/file_handoff.dart";
+import "../../domain/file_watches.dart";
+import "../../domain/reminder_alarms.dart";
+import "../../domain/rootfs.dart";
+import "../../domain/rootfs_store.dart";
+import "../../domain/secret_store.dart";
+import "../../domain/shell.dart";
+import "../../domain/sync/lan_signaling.dart";
+import "../../domain/voice.dart";
+import "../../domain/voice_model_store.dart";
+import "../config.dart";
+import "form_factor.dart" show isPhone;
 import "keyring_secret_store.dart";
 import "linux_recorder.dart";
 import "signaling_server.dart";
@@ -235,15 +230,6 @@ AgentBrowser createAgentBrowser(AppConfig config, String cacheDir) {
   );
 }
 
-/// The `assets/` prefix is part of the asset key, not just the on-disk path.
-Future<String?> platformVersionJson() async {
-  try {
-    return await rootBundle.loadString("assets/version.json");
-  } catch (_) {
-    return null;
-  }
-}
-
 /// On iOS the unpack is iSH's fakefsify, not the system tar, which the exec
 /// ban denies.
 RootfsStore createRootfsStore(String cacheDir) =>
@@ -254,18 +240,14 @@ RootfsStore createRootfsStore(String cacheDir) =>
 /// Installs into the guest's `/usr/local/bin` on the phones (proot, iSH) and
 /// the app's own bin directory on the desktops. A guest's `apk` installs in
 /// minutes; a host install fetches a 240 MB ESBMC zip and wants the half hour.
-ByteRepairStore platformByteRepairStore(
-  AppConfig config,
-  String project,
-  String workspace,
-  String cacheDir,
-  RootfsStore? rootfs,
-) {
+ByteRepairStore createByteRepairStore(
+    AppConfig config, String cacheDir, RootfsStore? rootfs) {
   final guest = Platform.isAndroid || Platform.isIOS;
-  return FileByteRepairStore(
+  final project = ByteRepairProject().dir;
+  return ByteRepairStore(
     config: config,
     project: project,
-    workspace: workspace,
+    workspace: config.projectWorkspaceDir(project: project),
     installDir: guest ? guestEsbmcInstallDir : byteRepairBinDir(cacheDir),
     installTimeout: guest ? guestInstallTimeout : hostInstallTimeout,
     rootfsStore: rootfs,
@@ -308,8 +290,6 @@ Future<Toolset?> installBundledTools(String cacheDir) async {
   return BundledTools.install(root: p.join(cacheDir, "tools"), libDir: libDir);
 }
 
-WebSearch platformWebSearch() => DuckDuckGoSearch();
-
 /// What runs downloaded models here. Android and Linux run llama.cpp's server
 /// where this build carried one: Android's native library directory (the one
 /// place an app may exec from), or the Linux bundle's `lib/`. A machine's own
@@ -328,7 +308,7 @@ Future<LocalEngine> createLocalEngine(String cacheDir) async {
       : (bundledLinuxLibDir(), "llama-server");
   if (libDir == null) return const NoLocalEngine(missingFromBuild: true);
   final server = p.join(libDir, serverName);
-  if (!await File(server).exists()) {
+  if (!File(server).existsSync()) {
     return const NoLocalEngine(missingFromBuild: true);
   }
   final store = FileLocalModelStore(p.join(cacheDir, "llm"), format: const GgufFormat());
@@ -384,13 +364,13 @@ String bundledLinuxLibDir({String? executablePath}) {
 /// the two cannot disagree.
 String _kvCacheDir(String cacheDir) => p.join(cacheDir, "kv-cache");
 
-FileHandoff platformFileHandoff(FileSystem fs) =>
-    Platform.isAndroid ? AndroidFileHandoff(fs) : const DesktopFileHandoff();
+FileHandoff createFileHandoff() =>
+    Platform.isAndroid ? AndroidFileHandoff() : const DesktopFileHandoff();
 
 /// Android has no save dialog; a backup leaves through the share sheet.
-BackupHandoff platformBackupHandoff(FileSystem fs, FileHandoff handoff) =>
+BackupHandoff createBackupHandoff(FileHandoff handoff) =>
     Platform.isAndroid
-        ? SharedBackup(fs, handoff)
+        ? SharedBackup(handoff)
         : const FileSelectorBackup();
 
 AssistantLaunch createAssistantLaunch() => Platform.isAndroid
@@ -408,8 +388,6 @@ Future<ReminderAlarms> createReminderAlarms() async {
   if (Platform.isMacOS) return MacosReminderAlarms(await dataDir());
   return const UnavailableReminderAlarms();
 }
-
-FileSystem createFileSystem() => fileSystemIo;
 
 FileWatches createFileWatches() => IoFileWatches();
 
@@ -459,9 +437,7 @@ Future<String> cacheDir() async {
   return p.join((await getApplicationSupportDirectory()).path, "entoli");
 }
 
-/// Silero's detector ships inside the app, so its licence does too. Here
-/// rather than in `main` because the asset is filtered out of the web build,
-/// where reading it would take the licence page down.
+/// Silero's detector ships inside the app, so its licence does too.
 void registerVoiceLicences() {
   LicenseRegistry.addLicense(() async* {
     yield LicenseEntryWithLineBreaks(
@@ -489,8 +465,6 @@ Voice createVoice(VoiceModelStore store, String cacheDir) {
   if (Platform.isMacOS) return MacosVoice(store, cacheDir);
   return SherpaVoice(store, cacheDir);
 }
-
-Future<void> persist() async {}
 
 /// The process's environment. The Dart VM's iOS build leaves
 /// `Platform.environment` empty, so a launch variable never reached a

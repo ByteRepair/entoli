@@ -4,6 +4,8 @@
 /// of the model is here too, since it is the same shell it reaches.
 library;
 
+import "dart:io";
+
 import "package:flutter/foundation.dart" show ValueListenable;
 
 /// The command tool's name: the log records it, the chat draws it, and the
@@ -130,6 +132,20 @@ bool pathInside(String path, String root) {
   return p == r || p.startsWith("$r/");
 }
 
+/// Whether [a] and [b] overlap — one is the other or holds it — by the names
+/// given, then by where their links lead, so a symlink aliasing a directory is
+/// that directory. What keeps a grant or a restore off the app's own data.
+bool pathsOverlap(String a, String b) {
+  bool named(String x, String y) => pathInside(x, y) || pathInside(y, x);
+  if (named(a, b)) return true;
+  try {
+    return named(File(a).resolveSymbolicLinksSync(),
+        File(b).resolveSymbolicLinksSync());
+  } on FileSystemException {
+    return false;
+  }
+}
+
 String _trimSlash(String path) =>
     path.length > 1 && path.endsWith("/") ? path.substring(0, path.length - 1) : path;
 
@@ -246,9 +262,9 @@ class ShellDriver {
   /// The confinement a command can be run under, where this driver's OS
   /// offers one the process can reach. Null everywhere the answer is "no
   /// sandbox here" — a guest (its rootfs is the boundary), Android (the
-  /// per-app sandbox already bounds it), the web (no shell at all) — and
-  /// non-null on the desktops, where a command's text and its behaviour can
-  /// disagree and the kernel is what settles it.
+  /// per-app sandbox already bounds it) — and non-null on the desktops, where
+  /// a command's text and its behaviour can disagree and the kernel is what
+  /// settles it.
   final SandboxHelper? sandboxHelper;
 }
 
@@ -332,8 +348,8 @@ abstract class Shell {
   /// Whether there is anything to run at all. False turns the whole loop into
   /// a plain conversation: the agent stops offering the tool, and a reply with
   /// no command in it becomes the end of the turn rather than a format error.
-  /// Without that, a browser could never finish a turn — submitting is itself
-  /// a command.
+  /// Without that, a device with no Linux installed could never finish a
+  /// turn — submitting is itself a command.
   bool get canRunCommands => true;
 
   /// Whether a `oneShot` run may be left running past the call that started
@@ -383,8 +399,7 @@ abstract class Shell {
 
   /// The confinement a command can be run under, from the driver that would
   /// run it, or null where this shell's platforms offer none — a guest (its
-  /// rootfs is the boundary), Android (the per-app sandbox is the OS's), the
-  /// web (no shell at all).
+  /// rootfs is the boundary), Android (the per-app sandbox is the OS's).
   SandboxHelper? get driverSandboxHelper => null;
 
   /// The scratch directory a sandboxed command may write beside [workspace],
@@ -400,14 +415,14 @@ abstract class Shell {
   bool get platformIsWindows => false;
 }
 
-/// The web's shell: there isn't one. A command that reaches it anyway is
-/// reported as failed rather than thrown, so the model is told why instead of
-/// the turn dying.
+/// No shell at all: what a test runs a turn over when it wants the plain
+/// conversation. A command that reaches it anyway is reported as failed rather
+/// than thrown, so the model is told why instead of the turn dying.
 class UnavailableShell extends Shell {
   const UnavailableShell();
 
   @override
-  String get platformDescription => "a browser, with no shell to run commands in";
+  String get platformDescription => "a device with no shell to run commands in";
 
   @override
   bool get canRunCommands => false;

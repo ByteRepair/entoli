@@ -824,12 +824,14 @@ void main() {
       await settleIo(tester, least: 20);
 
       expect(await io(tester, () => app.repo.projectOf(chat.state.id)), "work");
-      // The list was invalidated by the move; it has to be read again to show
-      // it. The selection is set at the end of the same chain, so it is read
-      // once the rebuild has landed rather than on a round count.
+      // The selection is set at the end of the move's chain and the list is
+      // read again after it, so both are waited for rather than counted: the
+      // title alone was on screen before the move landed.
+      await settleUntil(
+          tester, () => app.container.read(selectedProjectProvider).project == "work",
+          what: "the sidebar following the chat into work");
       await pumpUntil(tester, find.text("at home"));
       expect(find.text("at home"), findsOneWidget);
-      expect(app.container.read(selectedProjectProvider).project, "work");
     });
 
     // The open controller held the chat as it was when it read it — project
@@ -894,10 +896,11 @@ void main() {
       expect(find.text("Unpin"), findsNothing);
       await tester.tap(find.text("Pin"));
       await pumpUntil(tester, find.text(pinnedHeading));
-      await settleIo(tester);
+      // The date group it was in goes when the list is read again, after the
+      // heading — waited for rather than counted.
+      await settleUntil(tester, () => find.text("Today").evaluate().isEmpty,
+          what: "the chat leaving its date group");
       expect(find.text("to pin"), findsOneWidget);
-      // The date group it was in is gone — the chat left it.
-      expect(find.text("Today"), findsNothing);
       expect((await io(tester, () => app.savedMeta(chat.state.id))).tempChatTtl,
           TempChatTtl.off);
 
@@ -905,8 +908,9 @@ void main() {
       expect(find.text("Pin"), findsNothing);
       await tester.tap(find.text("Unpin"));
       await pumpUntil(tester, find.text("Today"));
-      await settleIo(tester);
-      expect(find.text(pinnedHeading), findsNothing);
+      await settleUntil(
+          tester, () => find.text(pinnedHeading).evaluate().isEmpty,
+          what: "the pinned group going");
       expect(find.text("to pin"), findsOneWidget);
       expect((await io(tester, () => app.savedMeta(chat.state.id))).tempChatTtl,
           TempChatTtl.off);

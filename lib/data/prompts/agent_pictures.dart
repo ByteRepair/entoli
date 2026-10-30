@@ -1,4 +1,6 @@
 // Where an agent's profile picture lives: beside its `.md`, named after it.
+import "package:path/path.dart" as p;
+import "dart:io";
 import "dart:typed_data";
 
 import "../../core/config.dart";
@@ -10,8 +12,7 @@ import "prompt_sources.dart";
 /// The name is the file's, as the `.md` is; the writer, the remover and the
 /// rename all have to agree on that, the way they do for [agentFilePath].
 String agentPicturePath(AppConfig config, String name, {String? project}) =>
-    config.fs.path
-        .join(config.promptsDir(CompletionKind.agent, project: project), "$name.png");
+    p.join(config.promptsDir(CompletionKind.agent, project: project), "$name.png");
 
 /// The bytes of the picture the library's tiers show for an agent called
 /// [name]: the first [tiers] rung that holds one, walked from the top —
@@ -27,8 +28,8 @@ String agentPicturePath(AppConfig config, String name, {String? project}) =>
 Future<Uint8List?> readAgentPicture(
     AppConfig config, String name, List<String> tiers) async {
   for (final tier in tiers.reversed) {
-    final file = config.fs.file(agentPicturePath(config, name, project: tier));
-    if (!await file.exists()) continue;
+    final file = File(agentPicturePath(config, name, project: tier));
+    if (!file.existsSync()) continue;
     try {
       return await file.readAsBytes();
     } catch (_) {

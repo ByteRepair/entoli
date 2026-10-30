@@ -1,80 +1,92 @@
-import "dart:typed_data";
+import "dart:io";
 
-import "package:archive/archive.dart";
-import "package:fs_shim/fs.dart";
+import "package:archive/archive_io.dart";
+import "package:path/path.dart" as p;
 
-/// Zip [paths] — files and folders alike — reading through [fs]. Entries are
-/// named relative to their own parent, so unzipping a folder gives the folder
-/// back rather than its contents loose.
-///
-/// Over the `FileSystem` rather than `dart:io` so there is one of these, and
-/// beside neither `local/` nor `web/` for the same reason: a browser downloads
-/// a zip of files it only ever had in IndexedDB.
-Future<Uint8List> zipEntries(FileSystem fs, List<String> paths) async =>
-    ZipEncoder().encodeBytes(await archiveOf(fs, paths));
+/// Zip [paths] — files and folders alike — into a new file at [to]. Each
+/// member is read and compressed in turn, straight into the file, so a tree of
+/// any size costs one member's memory rather than the whole archive's. Entries
+/// are named relative to [base], defaulting to each path's own parent, so
+/// unzipping a folder gives the folder back rather than its contents loose.
+/// [skip] drops a file by its path, and is never asked about a directory;
+/// [skipDir] drops a directory by its path, and is asked before recursing into
+/// it. [extra] goes in last, for a member of the caller's own.
+Future<void> zipTo(
+  String to,
+  List<String> paths, {
+  String? base,
+  bool Function(String path)? skip,
+  bool Function(String path)? skipDir,
+  List<ArchiveFile> extra = const [],
+}) async {
+  final encoder = ZipFileEncoder()..create(to);
+  try {
+    await for (final entry in _entries(paths, base, skip, skipDir)) {
+      entry.isDirectory
+          ? encoder.addArchiveFile(ArchiveFile.directory(entry.name))
+          : await encoder.addFile(File(entry.path), entry.name);
+    }
+    extra.forEach(encoder.addArchiveFile);
+  } finally {
+    await encoder.close();
+  }
+}
 
-/// The archive [zipEntries] encodes, for a caller with something of its own to
-/// put in it. [base] is what entries are named relative to, defaulting to each
-/// path's own parent; [skip] drops a file by its path, and is never asked about
-/// a directory; [skipDir] drops a directory by its path, and is asked before
-/// recursing into it.
+/// The same walk as [zipTo], held in memory: for the small trees — a skill, an
+/// artifact — whose zip goes out as bytes.
 Future<Archive> archiveOf(
-  FileSystem fs,
   List<String> paths, {
   String? base,
   bool Function(String path)? skip,
   bool Function(String path)? skipDir,
 }) async {
   final archive = Archive();
-  for (final path in paths) {
-    final from = base ?? fs.path.dirname(path);
-    if (await fs.isDirectory(path)) {
-      if (skipDir == null || !skipDir(path)) {
-        await _addDirectory(fs, archive, from, path, skip, skipDir);
-      }
-    } else if (skip == null || !skip(path)) {
-      await _addFile(fs, archive, from, path);
-    }
+  await for (final entry in _entries(paths, base, skip, skipDir)) {
+    archive.add(entry.isDirectory
+        ? ArchiveFile.directory(entry.name)
+        : ArchiveFile.bytes(entry.name, await File(entry.path).readAsBytes()));
   }
   return archive;
 }
 
 /// What the archive is called: the folder that was picked, or the one
 /// everything selected sits in.
-String zipNameFor(FileSystem fs, List<String> paths) {
-  final named = paths.length == 1 ? paths.single : fs.path.dirname(paths.first);
-  return "${fs.path.basename(named)}.zip";
+String zipNameFor(List<String> paths) {
+  final named = paths.length == 1 ? paths.single : p.dirname(paths.first);
+  return "${p.basename(named)}.zip";
 }
 
-/// Recurses on the entity rather than its path: `list` has already answered
-/// which each one is, and asking again is a stat per file — a whole extra
-/// IndexedDB transaction each, on the platform that can least afford it.
-Future<void> _addDirectory(
-  FileSystem fs,
-  Archive archive,
-  String base,
-  String path,
+/// Every member [paths] make, in walk order: each folder before what is in
+/// it, named relative to [base] or the path's own parent.
+Stream<({String path, String name, bool isDirectory})> _entries(
+  List<String> paths,
+  String? base,
   bool Function(String path)? skip,
   bool Function(String path)? skipDir,
-) async {
-  // Its own entry as well as its contents': an empty folder is otherwise
-  // nothing at all, and a zip of one alone would come out empty. The base
-  // itself is not one of its own entries — `.` names nothing to unzip.
-  final name = fs.path.relative(path, from: base);
-  if (name != ".") archive.add(ArchiveFile.directory(name));
-  await for (final entity in fs.directory(path).list()) {
-    if (entity is Directory) {
-      if (skipDir == null || !skipDir(entity.path)) {
-        await _addDirectory(fs, archive, base, entity.path, skip, skipDir);
+) async* {
+  Stream<({String path, String name, bool isDirectory})> walk(
+      String from, String path, bool isDirectory) async* {
+    if (!isDirectory) {
+      if (skip == null || !skip(path)) {
+        yield (path: path, name: p.relative(path, from: from), isDirectory: false);
       }
-    } else if (skip == null || !skip(entity.path)) {
-      await _addFile(fs, archive, base, entity.path);
+      return;
+    }
+    if (skipDir != null && skipDir(path)) return;
+    // Its own entry as well as its contents': an empty folder is otherwise
+    // nothing at all, and a zip of one alone would come out empty. The base
+    // itself is not one of its own entries — `.` names nothing to unzip.
+    final name = p.relative(path, from: from);
+    if (name != ".") yield (path: path, name: name, isDirectory: true);
+    // On the entity rather than its path: `list` has already answered which
+    // each one is, and asking again is a stat per file.
+    await for (final entity in Directory(path).list()) {
+      yield* walk(from, entity.path, entity is Directory);
     }
   }
-}
 
-Future<void> _addFile(FileSystem fs, Archive archive, String base, String path) async =>
-    archive.add(ArchiveFile.bytes(
-      fs.path.relative(path, from: base),
-      await fs.file(path).readAsBytes(),
-    ));
+  for (final path in paths) {
+    yield* walk(base ?? p.dirname(path), path,
+        FileSystemEntity.isDirectorySync(path));
+  }
+}

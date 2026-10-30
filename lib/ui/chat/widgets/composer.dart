@@ -93,8 +93,7 @@ class Composer extends ConsumerStatefulWidget {
   /// The paired device [project] is on, null for this one.
   final String? device;
 
-  /// Opens voice mode. Null where the platform cannot listen at all, which is
-  /// the web — the same rule that takes `bash` off the agent there.
+  /// Opens voice mode. Null draws no voice button.
   final VoidCallback? onVoice;
 
   /// Where this chat's shell starts: its own workspace. Null where the chat
@@ -135,18 +134,10 @@ class ComposerState extends ConsumerState<Composer> {
   final ValueNotifier<bool> _queues = ValueNotifier(false);
   late final Listenable _sendState = Listenable.merge([_canSend, _queues]);
 
-  /// Whether the field has focus, so a browser's paste lands in the composer
-  /// it was made in and not in every one listening.
-  bool _focused = false;
-  late final StreamSubscription<List<Attachment>> _pasted;
-
   @override
   void initState() {
     super.initState();
     widget.controller.addListener(_sync);
-    _pasted = ref.read(clipboardFilesProvider).pasted.listen((files) {
-      if (_focused) _add(files);
-    });
   }
 
   @override
@@ -164,7 +155,6 @@ class ComposerState extends ConsumerState<Composer> {
   @override
   void dispose() {
     widget.controller.removeListener(_sync);
-    _pasted.cancel();
     _canSend.dispose();
     _queues.dispose();
     super.dispose();
@@ -324,14 +314,7 @@ class ComposerState extends ConsumerState<Composer> {
                       ...completionInsertItems(context, _field),
                     ],
                   ),
-                  Expanded(
-                    child: Focus(
-                      canRequestFocus: false,
-                      skipTraversal: true,
-                      onFocusChange: (focused) => _focused = focused,
-                      child: field,
-                    ),
-                  ),
+                  Expanded(child: field),
                   // The voice button and the field share the row, so the field
                   // gets the width back the moment there is a message in it:
                   // something typed is something to send rather than to say.

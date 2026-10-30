@@ -8,7 +8,7 @@ import "fonts.dart";
 import "../providers.dart";
 
 /// The indigo the icon sits on, which is `ThemeColour.indigo` as a `Color`. The
-/// copies in `assets/icons/`, the Android drawable and `web/manifest.json` are
+/// copies in `assets/icons/` and the Android drawable are
 /// this colour written again — there is no generator, so changing it here does
 /// not move them.
 const entoliIndigo = Color(entoliIndigoArgb);

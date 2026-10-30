@@ -1,6 +1,7 @@
 import "dart:convert";
+import "dart:io";
 
-import "package:fs_shim/fs.dart";
+import "package:path/path.dart" as p;
 import "package:uuid/uuid.dart";
 
 import "../../../domain/documents.dart" show RenameWriter;
@@ -115,18 +116,17 @@ abstract interface class Memories {
 }
 
 class MemoryStore implements Memories {
-  MemoryStore(this.fs, this.dir) : _writer = RenameWriter.fs(fs);
+  MemoryStore(this.dir) : _writer = RenameWriter();
 
-  final FileSystem fs;
   final String dir;
 
   /// The stamp and the index both — this store owns their paths, and one
   /// writer is what the fixed rename temp asks for.
   final RenameWriter _writer;
 
-  String get _logPath => fs.path.join(dir, _logName);
-  String get _indexPath => fs.path.join(dir, _indexName);
-  String get _consolidatedPath => fs.path.join(dir, _consolidatedName);
+  String get _logPath => p.join(dir, _logName);
+  String get _indexPath => p.join(dir, _indexName);
+  String get _consolidatedPath => p.join(dir, _consolidatedName);
 
   /// Every live memory, oldest first.
   @override
@@ -198,8 +198,8 @@ class MemoryStore implements Memories {
   /// between passes. Nothing stamped, and a stamp that will not parse — a torn
   /// write —, both read as never.
   Future<DateTime?> lastConsolidated() async {
-    final file = fs.file(_consolidatedPath);
-    if (!await file.exists()) return null;
+    final file = File(_consolidatedPath);
+    if (!file.existsSync()) return null;
     try {
       return DateTime.tryParse((await file.readAsString()).trim());
     } catch (_) {
@@ -210,8 +210,8 @@ class MemoryStore implements Memories {
   /// The stamp a finished consolidation pass leaves behind: the next one is an
   /// interval away. Written through a rename, the way the index is.
   Future<void> stampConsolidated(DateTime at) async {
-    final directory = fs.directory(dir);
-    if (!await directory.exists()) await directory.create(recursive: true);
+    final directory = Directory(dir);
+    if (!directory.existsSync()) await directory.create(recursive: true);
     await _writer.write(_consolidatedPath, at.toUtc().toIso8601String());
   }
 
@@ -304,14 +304,14 @@ class MemoryStore implements Memories {
   }
 
   Future<String> _readLog() async {
-    final file = fs.file(_logPath);
-    return await file.exists() ? file.readAsString() : "";
+    final file = File(_logPath);
+    return file.existsSync() ? file.readAsString() : "";
   }
 
   Future<void> _append(String line) async {
-    final directory = fs.directory(dir);
-    if (!await directory.exists()) await directory.create(recursive: true);
-    await fs.file(_logPath).writeAsString("$line\n", mode: FileMode.append);
+    final directory = Directory(dir);
+    if (!directory.existsSync()) await directory.create(recursive: true);
+    await File(_logPath).writeAsString("$line\n", mode: FileMode.append);
   }
 
   /// The replay: the last record for an id stands, a tombstone after a memory
@@ -383,10 +383,10 @@ class MemoryStore implements Memories {
   /// The index, rebuilt where it is missing or the log has moved on from the
   /// size it was built at.
   Future<Map<String, List<String>>> _index(List<MemoryEntry> entries) async {
-    final indexFile = fs.file(_indexPath);
-    final logFile = fs.file(_logPath);
-    final logSize = await logFile.exists() ? (await logFile.stat()).size : 0;
-    if (await indexFile.exists()) {
+    final indexFile = File(_indexPath);
+    final logFile = File(_logPath);
+    final logSize = logFile.existsSync() ? logFile.lengthSync() : 0;
+    if (indexFile.existsSync()) {
       try {
         final json = jsonDecode(await indexFile.readAsString());
         if (json is Map && json["size"] == logSize) {
@@ -411,8 +411,8 @@ class MemoryStore implements Memories {
 
   Future<void> _rebuildIndex() async {
     final all = await entries();
-    final logFile = fs.file(_logPath);
-    final size = await logFile.exists() ? (await logFile.stat()).size : 0;
+    final logFile = File(_logPath);
+    final size = logFile.existsSync() ? logFile.lengthSync() : 0;
     await _writeIndex(size, _indexFor(all));
   }
 

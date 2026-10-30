@@ -15,7 +15,7 @@ import "../widgets/settings_warning_banner.dart";
 /// installed from the catalog under it. The picker offers only what is on disk,
 /// for the reason the voice pickers do — a choice that fails when it is used
 /// rather than when it is made is worse than no choice at all. A platform with
-/// no shell at all, which is a browser, gets the header and nothing under it.
+/// no shell at all gets the header and nothing under it.
 class TerminalSection extends ConsumerWidget {
   const TerminalSection({super.key});
 
@@ -26,8 +26,7 @@ class TerminalSection extends ConsumerWidget {
     final available = ref.watch(prootAvailableProvider);
     // A Linux can run where this build carries proot (Android) or where the
     // in-process emulator does (iOS, whose ABI is the "ios" key its catalog
-    // is keyed on). The web answers null with no proot: nothing could ever
-    // run there. iOS with no Linux installed reads as "nothing to run" in
+    // is keyed on). iOS with no Linux installed reads as "nothing to run" in
     // [canRunCommands], but the catalog below is the way one gets installed,
     // so the section stays for it.
     final canHostALinux = available || abi == "ios";

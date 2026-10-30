@@ -1,3 +1,4 @@
+import "dart:io";
 import "dart:typed_data";
 
 import "package:flutter/material.dart";
@@ -77,7 +78,7 @@ class _SkillInstallPreviewPageState
     final config = ref.read(appConfigProvider);
     final skillsDir = config.promptsDir(CompletionKind.skill, project: target);
     final replacing =
-        await config.fs.directory(skillDirectory(config, pkg.name, project: target)).exists();
+        Directory(skillDirectory(config, pkg.name, project: target)).existsSync();
     if (mounted && replacing) {
       final confirmed = await confirm(
         context,

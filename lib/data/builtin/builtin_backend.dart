@@ -1,8 +1,10 @@
 import "dart:async";
 import "dart:convert";
+import "dart:io";
 
 import "package:collection/collection.dart";
 import "package:flutter/foundation.dart";
+import "package:path/path.dart" as p;
 import "package:uuid/uuid.dart";
 
 import "../../core/config.dart";
@@ -105,11 +107,7 @@ class BuiltinBackend implements AgentBackend {
   PromptLibrary? libraryFor(String? project) =>
       _libraries[project] ?? _libraries[null];
 
-  /// Web search and fetch, chosen by the platform like [shell] is:
-  /// `DuckDuckGoSearch` on desktop and Android, `UnavailableWebSearch` in a
-  /// browser. Named rather than defaulted because a default of the first would
-  /// ship its HTML parser to every browser that loads the app and could never
-  /// call it.
+  /// Web search and fetch: `DuckDuckGoSearch`, or a test's fake.
   final WebSearch webSearch;
 
   /// The browser the `browser_*` tools drive, one tab per chat. Its tools are
@@ -130,7 +128,7 @@ class BuiltinBackend implements AgentBackend {
   @override
   final SubAgentFeed subAgents = SubAgentFeed();
 
-  late final BackgroundJobs _jobs = BackgroundJobs(config.fs);
+  late final BackgroundJobs _jobs = BackgroundJobs();
 
   @override
   ChatShellJobs jobsOf(String chatId) => _jobs.forChat(chatId);
@@ -294,15 +292,13 @@ class BuiltinBackend implements AgentBackend {
           workspace: workspace,
           project: project,
           sharedWorkspace: settings.sharedWorkspace);
-      String resolvePath(String path) => resolveWorkspacePath(
-          config.fs, path, workspace, projectWorkspace,
+      String resolvePath(String path) => resolveWorkspacePath(path, workspace, projectWorkspace,
           guestRoot: shell.guestRoot, homePath: shell.homeFor(projectWorkspace));
       // What this turn is offered: the device's facts minus a headless turn's
       // takes and the project's. One value, so the prompt and the tool list
       // cannot disagree.
       final caps = AgentCapabilities.forTurn(
         commands: shell.canRunCommands,
-        webSearch: webSearch.available,
         disabled: settings.disabled,
         browser: browser.configured,
       );
@@ -319,7 +315,6 @@ class BuiltinBackend implements AgentBackend {
       final runner = SubAgentRunner(
         client: gatedClient,
         shell: shell,
-        fs: config.fs,
         workspace: workspace,
         projectWorkspace: projectWorkspace,
         environment: settings.environment,
@@ -352,9 +347,7 @@ class BuiltinBackend implements AgentBackend {
       final bundled = settings.bundledInstructions;
       final readFiles = bundled == null || settings.includesUserInstructions;
       final instructionsF = readFiles
-          ? _linkedInstructions.load().then((linked) => loadInstructions(
-                config.fs,
-                projectWorkspace: projectWorkspace,
+          ? _linkedInstructions.load().then((linked) => loadInstructions(projectWorkspace: projectWorkspace,
                 global: linked.filesFor(project, config.globalInstructionsFile),
                 imports: settings.memory.imports,
                 excludes: settings.memory.excludes,
@@ -365,7 +358,7 @@ class BuiltinBackend implements AgentBackend {
       // turn, so recall and the agent's tools share one.
       final memoryStore = settings.memory.autoMemory &&
               settings.memory.memoryDir != null
-          ? MemoryStore(config.fs, settings.memory.memoryDir!)
+          ? MemoryStore(settings.memory.memoryDir!)
           : null;
       // The memories this turn is about, rendered ready to read, and the
       // always-loaded half of the store: the pinned ones in full, and the
@@ -453,7 +446,6 @@ class BuiltinBackend implements AgentBackend {
         steers: steers,
         client: gatedClient,
         shell: shell,
-        fs: config.fs,
         workspace: workspace,
         projectWorkspace: projectWorkspace,
         environment: settings.environment,
@@ -481,7 +473,7 @@ class BuiltinBackend implements AgentBackend {
         webSearch: webSearch,
         browser: caps.browser
             ? (browser.tab(chatId)
-              ..downloadDir = config.fs.path.join(workspace, "downloads"))
+              ..downloadDir = p.join(workspace, "downloads"))
             : null,
         seesImages: target.images,
         seesPdfs: target.pdfs,
@@ -536,13 +528,12 @@ class BuiltinBackend implements AgentBackend {
         editSettings: editSettings,
         packageSkill: (path, name) async {
           final resolved = resolvePath(path);
-          final pkg = await packageSkillDirectory(config.fs, resolved, name);
+          final pkg = await packageSkillDirectory(resolved, name);
           final bytes = packageSkillBytes(pkg);
           final installId = const Uuid().v4();
           final stagingDir = config.skillStagingDir(chatId, installId, project: project);
-          await config.fs.directory(stagingDir).create(recursive: true);
-          await config.fs
-              .file(config.fs.path.join(stagingDir, "package.skill"))
+          await Directory(stagingDir).create(recursive: true);
+          await File(p.join(stagingDir, "package.skill"))
               .writeAsBytes(bytes);
           return (installId: installId, name: pkg.name);
         },
@@ -893,11 +884,9 @@ class BuiltinBackend implements AgentBackend {
       config.resourcesDir(chatId, project: project),
       for (final dir in promptDirsOf(config, project: project)) dir.path,
     ];
-    final there =
-        await Future.wait(dirs.map((dir) => config.fs.directory(dir).exists()));
     return [
-      for (final (i, dir) in dirs.indexed)
-        if (there[i]) dir,
+      for (final dir in dirs)
+        if (Directory(dir).existsSync()) dir,
     ];
   }
 

@@ -205,8 +205,7 @@ selection decides *what* is copied, but only `setRichClipboard`
 (`core/platform/rich_clipboard.dart`) can write it with an HTML entry beside
 it. That is a channel, `agent_chat/clipboard`, answered by a few lines in each
 runner (GTK targets, `NSPasteboard`, `UIPasteboard`, `ClipData.newHtmlText`,
-`CF_HTML`) and by `navigator.clipboard.write` in a browser; a runner that does
-not answer gets the plain text. The Apple halves sit in `MainFlutterWindow` and
+`CF_HTML`); a runner that does not answer gets the plain text. The Apple halves sit in `MainFlutterWindow` and
 `AppDelegate` rather than files of their own, which would want an Xcode
 project entry this host cannot make.
 
@@ -289,8 +288,8 @@ the same plain `bodyMedium`. A list is the shape a reply most often takes.
 
 **Code is set in a bundled face**, and `ui/fonts.dart` is the whole of what
 Dart knows about it. `monospace` is an alias the platform resolves, so the same
-reply was Roboto Mono on one Android, Droid Sans Mono on another, DejaVu on
-this desktop and whatever a browser prefers on the web — and the five things
+reply was Roboto Mono on one Android, Droid Sans Mono on another and DejaVu on
+this desktop — and the five things
 this app shows verbatim (code, a tool's command and its output, a chat id, a
 config value) are shown that way precisely because their characters line up.
 Roboto Mono is the mono companion to the face Material already uses.
@@ -304,9 +303,7 @@ proximity.
 
 **Both faces are subset to Latin.** Text fonts are not tree-shaken the way icon
 fonts are, so the full files shipped 876 codepoints of which nearly half were
-Cyrillic, Greek and Latin-Extended — and on the web the engine blocks the first
-frame on every font in the manifest, so that was 148 KB gzipped before anything
-painted. Subset it is 58 KB. Anything outside the subset falls back to a system
+Cyrillic, Greek and Latin-Extended, 148 KB gzipped. Subset it is 58 KB. Anything outside the subset falls back to a system
 face, which is what already happened to arrows and box-drawing: Roboto Mono has
 never had them. Regenerating, which nothing automates:
 
@@ -368,8 +365,8 @@ whole reason it is the one here: the alternative with the more recent commits,
 `syntax_highlight`, pulls `super_clipboard` and so a Rust toolchain into the
 build of an app whose claim is that there is nothing to install.
 **Thirty-one grammars are registered rather than all 197.** A grammar is data
-and nothing tree-shakes an unnamed one, so all of them cost 359 KB gzipped in
-the web bundle against 56 KB for these — measured, both. A fence naming
+and nothing tree-shakes an unnamed one, so all of them cost 359 KB gzipped
+against 56 KB for these — measured, both. A fence naming
 anything else is drawn plain, which is what every fence did before this
 existed, so the cost of an omission is the behaviour it replaces and nothing
 worse. That is also the answer for a grammar that throws or breaks off

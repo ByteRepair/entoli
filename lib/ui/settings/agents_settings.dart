@@ -1,12 +1,13 @@
 import "dart:async";
 import "dart:convert";
+import "dart:io";
 import "dart:typed_data";
 
 import "package:file_selector/file_selector.dart";
 import "package:flutter/foundation.dart" show setEquals;
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
-import "package:fs_shim/fs.dart";
+import "package:path/path.dart" as p;
 
 import "../../core/platform/platform.dart" as platform;
 import "../../data/builtin/tools/agent_tool.dart";
@@ -32,7 +33,6 @@ const _agentFiles = XTypeGroup(
   extensions: ["md"],
   mimeTypes: ["text/markdown"],
   uniformTypeIdentifiers: ["net.daringfireball.markdown"],
-  webWildCards: ["text/markdown", "text/plain"],
 );
 
 /// The agents a message can address by name. The list is the library's; the
@@ -92,12 +92,11 @@ class _AgentsSectionState extends ConsumerState<AgentsSection> {
   Future<void> _scan() async {
     final config = ref.read(appConfigProvider);
     final names = <String>{};
-    final dir = config.fs
-        .directory(config.promptsDir(CompletionKind.agent, project: widget.project));
-    if (await dir.exists()) {
+    final dir = Directory(config.promptsDir(CompletionKind.agent, project: widget.project));
+    if (dir.existsSync()) {
       await for (final entity in dir.list()) {
-        if (entity is File && config.fs.path.extension(entity.path) == ".md") {
-          names.add(config.fs.path.basenameWithoutExtension(entity.path));
+        if (entity is File && p.extension(entity.path) == ".md") {
+          names.add(p.basenameWithoutExtension(entity.path));
         }
       }
     }
@@ -122,8 +121,8 @@ class _AgentsSectionState extends ConsumerState<AgentsSection> {
     // project's, and a remove takes this project's away, where "removed on
     // save" would otherwise leave the inherited one on screen.
     final file =
-        config.fs.file(agentPicturePath(config, agent.name, project: widget.project));
-    final bytes = await file.exists() ? await file.readAsBytes() : null;
+        File(agentPicturePath(config, agent.name, project: widget.project));
+    final bytes = file.existsSync() ? await file.readAsBytes() : null;
     if (!mounted) return;
     final result = await Navigator.of(context).push<AgentEdit>(
       MaterialPageRoute(
@@ -186,26 +185,24 @@ class _AgentsSectionState extends ConsumerState<AgentsSection> {
             .of(config.promptsDir(CompletionKind.agent, project: widget.project))
             .write(() async {
             final file =
-                config.fs.file(agentFilePath(config, name, project: widget.project));
+                File(agentFilePath(config, name, project: widget.project));
             await file.create(recursive: true);
             await file.writeAsString(source);
             if (renames) {
-              await config.fs
-                  .file(agentFilePath(config, removes, project: widget.project))
+              await File(agentFilePath(config, removes, project: widget.project))
                   .delete();
             }
             final image =
-                config.fs.file(agentPicturePath(config, name, project: widget.project));
+                File(agentPicturePath(config, name, project: widget.project));
             if (removePicture) {
-              if (await image.exists()) await image.delete();
+              if (image.existsSync()) await image.delete();
             } else if (picture != null) {
               await image.writeAsBytes(picture);
             } else if (renames) {
               // A rename: the old picture moves with the agent, standing over
               // it where both were set — rename over an existing file is fine.
-              final oldImage = config.fs
-                  .file(agentPicturePath(config, removes, project: widget.project));
-              if (await oldImage.exists()) await oldImage.rename(image.path);
+              final oldImage = File(agentPicturePath(config, removes, project: widget.project));
+              if (oldImage.existsSync()) await oldImage.rename(image.path);
             }
           });
         await _reload(widget.project);
@@ -231,12 +228,11 @@ class _AgentsSectionState extends ConsumerState<AgentsSection> {
       await platform.readOnlyDirs
           .of(config.promptsDir(CompletionKind.agent, project: widget.project))
           .write(() async {
-          await config.fs
-              .file(agentFilePath(config, agent.name, project: widget.project))
+          await File(agentFilePath(config, agent.name, project: widget.project))
               .delete();
           final image =
-              config.fs.file(agentPicturePath(config, agent.name, project: widget.project));
-          if (await image.exists()) await image.delete();
+              File(agentPicturePath(config, agent.name, project: widget.project));
+          if (image.existsSync()) await image.delete();
         });
       await _reload(widget.project);
       await _scan();
@@ -263,7 +259,7 @@ class _AgentsSectionState extends ConsumerState<AgentsSection> {
       return;
     }
     final name =
-        ref.read(appConfigProvider).fs.path.basenameWithoutExtension(file.name);
+        p.basenameWithoutExtension(file.name);
     if (!isFolderName(name)) {
       _say("That file cannot be imported: its name cannot be a file name.");
       return;
@@ -276,9 +272,7 @@ class _AgentsSectionState extends ConsumerState<AgentsSection> {
   /// would rather keep it, or the page went away while asking.
   Future<bool> _mayReplace(String name, String doing) async {
     final config = ref.read(appConfigProvider);
-    final exists = await config.fs
-        .file(agentFilePath(config, name, project: widget.project))
-        .exists();
+    final exists = File(agentFilePath(config, name, project: widget.project)).existsSync();
     if (!mounted) return false;
     return !exists ||
         await confirm(
@@ -600,9 +594,7 @@ class _AgentEditorPageState extends ConsumerState<AgentEditorPage> {
     final renaming = !widget.isNew && name != widget.initial.name;
     if (renaming) {
       final config = ref.read(appConfigProvider);
-      final taken = await config.fs
-          .file(agentFilePath(config, name, project: widget.project))
-          .exists();
+      final taken = File(agentFilePath(config, name, project: widget.project)).existsSync();
       if (!mounted) return;
       if (taken) {
         setState(() => _nameError = "An agent with that name already exists.");

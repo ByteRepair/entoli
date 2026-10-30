@@ -54,7 +54,6 @@ void main() async {
   registerAppLicence();
   platform.registerVoiceLicences();
   platform.registerRecorder();
-  await platform.persist();
   // Built here rather than by the root, so the platform's splash covers the
   // first read of the data directory instead of a blank frame.
   final relaunch = AppRelaunch();
@@ -87,8 +86,8 @@ class AppSession {
     // A third round trip on the same channel, and the only thing that decides
     // which rootfs a download fetches.
     final abi = platform.deviceAbi();
-    // Started here and awaited below: an asset read off a disk, or a fetch
-    // in a browser, and nothing between wants it.
+    // Started here and awaited below: an asset read, and nothing between
+    // wants it.
     final version = platform.appVersion();
     // Started here and awaited below: the login shell's PATH, captured once
     // per app run. It is a shell round trip that sources the user's whole
@@ -98,7 +97,7 @@ class AppSession {
     // leaves the inherited PATH standing.
     final loginPath = platform.captureLoginPath();
     final accent = systemAccent();
-    final config = await AppConfig.load(platform.createFileSystem(), await platform.dataDir());
+    final config = await AppConfig.load(await platform.dataDir());
     // Started here and awaited before the identity load below: the keyring
     // probe is decided once, so the identity's own first read must not race
     // this one, and the mirror the registry reads keys through is filled by
@@ -133,7 +132,7 @@ class AppSession {
     final libraries = Map.fromEntries(await Future.wait(projects.map((project) async =>
         MapEntry(project,
             await PromptLibrary.from(platform.createPromptSources(config, project: project))))));
-    final handoff = platform.createFileHandoff(config);
+    final handoff = platform.createFileHandoff();
     final cache = await cacheDir;
     final rootfs = platform.createRootfsStore(cache);
     // Started here and awaited below, the way the three above are: it is a
@@ -250,7 +249,7 @@ class AppSession {
         triggerTurnDriverProvider
             .overrideWith((ref) => ChatControllerTriggerTurnDriver(ref)),
         backupHandoffProvider
-            .overrideWithValue(platform.createBackupHandoff(config, handoff)),
+            .overrideWithValue(platform.createBackupHandoff(handoff)),
         appRestartProvider.overrideWithValue(relaunch),
         voiceModelStoreProvider.overrideWithValue(voiceModels),
         voiceProvider.overrideWithValue(voice),

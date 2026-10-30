@@ -1,10 +1,11 @@
 // A `.skill` file is a zip of a skill directory — what skill-creator's
 // `package_skill.py` writes, and what the Skills settings page takes in.
 import "dart:convert";
+import "dart:io";
 import "dart:typed_data";
 
 import "package:archive/archive.dart";
-import "package:fs_shim/fs.dart";
+import "package:path/path.dart" as p;
 
 import "../../core/config.dart";
 import "../../data/prompts/bundled_skill_data.dart"
@@ -54,16 +55,14 @@ class SkillPackage {
 /// directory and is named by prompts, so the project it lands in is where its
 /// files are.
 String skillDirectory(AppConfig config, String name, {String? project}) =>
-    config.fs.path
-        .join(config.promptsDir(CompletionKind.skill, project: project), name);
+    p.join(config.promptsDir(CompletionKind.skill, project: project), name);
 
 /// Where an agent called [name] lives: the `.md` under [project]'s agents
 /// directory — the default project's where it is null. The name is the file
 /// name, which is what the writer, the remover, the importer and the exporter
 /// all have to agree on.
 String agentFilePath(AppConfig config, String name, {String? project}) =>
-    config.fs.path
-        .join(config.promptsDir(CompletionKind.agent, project: project), "$name.md");
+    p.join(config.promptsDir(CompletionKind.agent, project: project), "$name.md");
 
 /// Decode a `.skill` archive. Refused rather than repaired: not a zip, no
 /// `SKILL.md`, or a name that is not a single directory segment — the folder
@@ -166,16 +165,15 @@ String installedSnack(String verb, String name, String? project) =>
 /// its new packaging dropped.
 Future<void> installSkillPackage(AppConfig config, SkillPackage package,
     {String? project}) async {
-  final fs = config.fs;
   final dir = skillDirectory(config, package.name, project: project);
   try {
-    await fs.directory(dir).delete(recursive: true);
+    await Directory(dir).delete(recursive: true);
   } on FileSystemException {
     // Nothing there yet: that is the first import, not a failure.
   }
   for (final (name, data) in package.entries) {
-    final target = fs.path.join(dir, safeRelativePath(fs, name));
-    await fs.file(target).create(recursive: true);
-    await fs.file(target).writeAsBytes(data);
+    final target = p.join(dir, safeRelativePath(name));
+    await File(target).create(recursive: true);
+    await File(target).writeAsBytes(data);
   }
 }

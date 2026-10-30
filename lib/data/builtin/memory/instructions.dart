@@ -1,4 +1,6 @@
-import "package:fs_shim/fs.dart";
+import "dart:io";
+
+import "package:path/path.dart" as p;
 
 import "../../../core/config.dart"
     show instructionBlockHeader, instructionFileName;
@@ -57,7 +59,7 @@ class InstructionFile {
 /// into one project's workspace would be a word in the model's mouth about the
 /// other projects. A file whose path [excludes] names is skipped.
 Future<List<InstructionFile>> loadInstructions(
-  FileSystem fs, {
+  {
   required String projectWorkspace,
   List<String> global = const [],
   bool imports = false,
@@ -66,20 +68,18 @@ Future<List<InstructionFile>> loadInstructions(
   final files = <InstructionFile>[];
   final loaded = <String>{};
   for (final path in global) {
-    await _readInto(fs, _norm(fs, path), InstructionKind.global, 0, files,
+    await _readInto(_norm(path), InstructionKind.global, 0, files,
         loaded, excludes);
   }
   final before = files.length;
-  await _readInto(
-      fs,
-      fs.path.join(_norm(fs, projectWorkspace), instructionFileName),
+  await _readInto(p.join(_norm(projectWorkspace), instructionFileName),
       InstructionKind.project,
       0,
       files,
       loaded,
       excludes);
   if (imports && files.length > before) {
-    await _expandImports(fs, files[before], files, loaded,
+    await _expandImports(files[before], files, loaded,
         projectWorkspace: projectWorkspace, excludes: excludes);
   }
   return _withinBudget(files);
@@ -91,24 +91,21 @@ Future<List<InstructionFile>> loadInstructions(
 /// rules with the first file read in it. A file whose path [excludes] names
 /// is skipped.
 Future<List<InstructionFile>> findNestedInstructions(
-  FileSystem fs,
   String filePath, {
   required Set<String> alreadyLoaded,
   List<String> excludes = const [],
 }) async {
-  var dir = _norm(fs, fs.path.dirname(filePath));
+  var dir = _norm(p.dirname(filePath));
   final found = <InstructionFile>[];
   while (true) {
-    await _readInto(
-      fs,
-      fs.path.join(dir, instructionFileName),
+    await _readInto(p.join(dir, instructionFileName),
       InstructionKind.directory,
       0,
       found,
       alreadyLoaded,
       excludes,
     );
-    final parent = _norm(fs, fs.path.dirname(dir));
+    final parent = _norm(p.dirname(dir));
     if (parent == dir) break;
     dir = parent;
   }
@@ -120,12 +117,12 @@ Future<List<InstructionFile>> findNestedInstructions(
 /// directories, `*` and `?` do not, and the pattern is anchored to the whole
 /// path. A pattern with no slash in it names a file name rather than a path,
 /// the way `.gitignore` reads one.
-bool isExcludedPath(FileSystem fs, String path, List<String> patterns) {
+bool isExcludedPath(String path, List<String> patterns) {
   for (final raw in patterns) {
     final pattern = raw.trim();
     if (pattern.isEmpty) continue;
     final target =
-        pattern.contains("/") ? path : fs.path.basename(path);
+        pattern.contains("/") ? path : p.basename(path);
     if (_globToRegExp(pattern).hasMatch(target)) return true;
   }
   return false;
@@ -178,20 +175,20 @@ String _entry(InstructionFile file) =>
         : "Contents of ${file.path} (${instructionKindPhrase(file.kind)}):"
             "\n\n${file.content.trim()}";
 
-String _norm(FileSystem fs, String path) => fs.path.normalize(path);
+String _norm(String path) => p.normalize(path);
 
 bool _inside(String path, String root) =>
     path == root || path.startsWith("$root/");
 
-Future<void> _readInto(FileSystem fs, String path, InstructionKind kind,
+Future<void> _readInto(String path, InstructionKind kind,
     int depth, List<InstructionFile> out, Set<String> loaded,
     List<String> excludes) async {
   if (loaded.contains(path)) return;
-  if (isExcludedPath(fs, path, excludes)) return;
+  if (isExcludedPath(path, excludes)) return;
   try {
-    final file = fs.file(path);
-    if (!await file.exists()) return;
-    if ((await file.stat()).size > maxInstructionBytes) {
+    final file = File(path);
+    if (!file.existsSync()) return;
+    if (file.statSync().size > maxInstructionBytes) {
       logFailure("memory", "skipping $path: over $maxInstructionBytes bytes");
       return;
     }
@@ -205,7 +202,6 @@ Future<void> _readInto(FileSystem fs, String path, InstructionKind kind,
 }
 
 Future<void> _expandImports(
-  FileSystem fs,
   InstructionFile from,
   List<InstructionFile> out,
   Set<String> loaded, {
@@ -215,16 +211,15 @@ Future<void> _expandImports(
   if (from.depth >= maxImportDepth) return;
   for (final ref in importRefsIn(from.content)) {
     if (!ref.isImportable) continue;
-    final resolved = _norm(fs, fs.path.join(fs.path.dirname(from.path), ref.target));
+    final resolved = _norm(p.join(p.dirname(from.path), ref.target));
     // An import reaches only inside the project workspace: `~/` and absolute
     // paths name real places on this machine, and a workspace file the user
     // wrote should not be able to pull one in.
-    if (!_inside(resolved, _norm(fs, projectWorkspace))) continue;
+    if (!_inside(resolved, _norm(projectWorkspace))) continue;
     final before = out.length;
-    await _readInto(
-        fs, resolved, InstructionKind.imported, from.depth + 1, out, loaded, excludes);
+    await _readInto(resolved, InstructionKind.imported, from.depth + 1, out, loaded, excludes);
     if (out.length > before) {
-      await _expandImports(fs, out.last, out, loaded,
+      await _expandImports(out.last, out, loaded,
           projectWorkspace: projectWorkspace, excludes: excludes);
     }
   }

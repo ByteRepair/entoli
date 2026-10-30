@@ -1,6 +1,6 @@
 import "dart:io";
 
-import "package:agent_chat/core/platform/io/artifact_server.dart";
+import "package:agent_chat/core/platform/artifact_server.dart";
 import "package:flutter_test/flutter_test.dart";
 import "package:path/path.dart" as p;
 
@@ -31,7 +31,7 @@ void main() {
   }
 
   test("serves the index", () async {
-    final server = await IoArtifactServer.start(root);
+    final server = await ArtifactServer.start(root);
     addTearDown(server.stop);
     final (status, body) = await get(server.baseUrl, "/");
     expect(status, 200);
@@ -39,7 +39,7 @@ void main() {
   });
 
   test("an encoded dot segment cannot leave the root", () async {
-    final server = await IoArtifactServer.start(root);
+    final server = await ArtifactServer.start(root);
     addTearDown(server.stop);
     final (status, body) = await get(server.baseUrl, "/..%2Fsecret.txt");
     expect(status, 404);

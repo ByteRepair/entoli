@@ -72,21 +72,3 @@ abstract class VoiceModelStore {
 
   Future<void> delete(VoiceModel model);
 }
-
-/// The web's model store: nowhere to put one.
-class UnavailableVoiceModelStore extends VoiceModelStore {
-  const UnavailableVoiceModelStore();
-
-  @override
-  Future<Set<String>> installed() async => const {};
-
-  @override
-  Future<String?> directoryOf(VoiceModel model) async => null;
-
-  @override
-  Stream<DownloadProgress> install(VoiceModel model) =>
-      Stream.error(UnsupportedError("Voice models cannot be downloaded in a browser."));
-
-  @override
-  Future<void> delete(VoiceModel model) async {}
-}

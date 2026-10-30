@@ -46,7 +46,7 @@ void main() {
       final saved = app.backups.saved.single;
       expect(saved.name, "review.skill");
 
-      final package = parseSkillPackage(saved.bytes);
+      final package = parseSkillPackage(File(saved.path).readAsBytesSync());
       expect(package.name, "review");
       expect(package.body, contains("Do review."));
 
@@ -76,7 +76,7 @@ void main() {
 
       final saved = app.backups.saved.single;
       expect(saved.name, "artifact.skill");
-      final package = parseSkillPackage(saved.bytes);
+      final package = parseSkillPackage(File(saved.path).readAsBytesSync());
       expect(package.name, "artifact");
       expect(package.body, isNot(contains("Base directory")));
     });
@@ -97,7 +97,7 @@ void main() {
 
       final saved = app.backups.saved.single;
       expect(saved.name, "researcher.md");
-      expect(utf8.decode(saved.bytes), file.readAsStringSync());
+      expect(utf8.decode(File(saved.path).readAsBytesSync()), file.readAsStringSync());
     });
   });
 

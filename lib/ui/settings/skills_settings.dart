@@ -1,7 +1,9 @@
+import "dart:io";
+
 import "package:file_selector/file_selector.dart";
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
-import "package:fs_shim/fs.dart";
+import "package:path/path.dart" as p;
 
 import "../../core/platform/platform.dart" as platform;
 import "../../core/config.dart" show AppConfig;
@@ -25,7 +27,6 @@ const _skillFiles = XTypeGroup(
   extensions: ["skill", "zip"],
   mimeTypes: ["application/zip"],
   uniformTypeIdentifiers: ["public.zip-archive"],
-  webWildCards: ["application/zip"],
 );
 
 /// What the agent can be told to do by name. The list is the library's; the
@@ -94,17 +95,15 @@ class _SkillsSectionState extends ConsumerState<SkillsSection> {
   Future<void> _scan() async {
     final config = ref.read(appConfigProvider);
     final problems = <String, List<String>>{};
-    final dir = config.fs
-        .directory(config.promptsDir(CompletionKind.skill, project: widget.project));
-    if (await dir.exists()) {
+    final dir = Directory(config.promptsDir(CompletionKind.skill, project: widget.project));
+    if (dir.existsSync()) {
       final folders = <(String, String)>[];
       await for (final entity in dir.list()) {
         if (entity is! Directory) continue;
-        final folderName = config.fs.path.basename(entity.path);
+        final folderName = p.basename(entity.path);
         folders.add((folderName, entity.path));
       }
-      // The reads are independent; a browser's IndexedDB makes each one a
-      // round trip, so they go out together.
+      // The reads are independent, so they go out together.
       final answers = await Future.wait([
         for (final (folderName, path) in folders)
           _folderProblems(config, path, folderName),
@@ -122,9 +121,8 @@ class _SkillsSectionState extends ConsumerState<SkillsSection> {
   /// of its own; the loader skips it silently, this makes it a row.
   Future<List<String>> _folderProblems(
       AppConfig config, String path, String folderName) async {
-    final fs = config.fs;
-    final file = fs.file(fs.path.join(path, "SKILL.md"));
-    if (!await file.exists()) return ["no SKILL.md in it"];
+    final file = File(p.join(path, "SKILL.md"));
+    if (!file.existsSync()) return ["no SKILL.md in it"];
     try {
       return skillFrontmatterProblems(
           Frontmatter.parse(await file.readAsString()), folderName);
@@ -154,9 +152,7 @@ class _SkillsSectionState extends ConsumerState<SkillsSection> {
     // snack bar, not in the list.
     final target = widget.project ?? _destination;
     final config = ref.read(appConfigProvider);
-    final replacing = await config.fs
-        .directory(skillDirectory(config, package.name, project: target))
-        .exists();
+    final replacing = Directory(skillDirectory(config, package.name, project: target)).existsSync();
     if (!mounted) return;
     if (replacing) {
       final confirmed = await confirm(
@@ -199,8 +195,7 @@ class _SkillsSectionState extends ConsumerState<SkillsSection> {
       await platform.readOnlyDirs
           .skills(config.promptsDir(CompletionKind.skill, project: widget.project))
           .write(() async {
-        await config.fs
-            .directory(skillDirectory(config, name, project: widget.project))
+        await Directory(skillDirectory(config, name, project: widget.project))
             .delete(recursive: true);
       });
       await _reload(widget.project);

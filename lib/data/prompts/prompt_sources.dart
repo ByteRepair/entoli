@@ -1,6 +1,9 @@
 // Where prompt files come from: the presets embedded in code, and the user's
 // own directory beside them.
-import "package:fs_shim/fs.dart";
+
+import "dart:io";
+
+import "package:path/path.dart" as p;
 
 import "../../core/config.dart";
 import "../../core/log.dart";
@@ -131,7 +134,7 @@ class BundledPrompts implements PromptSource {
           final document = _skillDocument(
             skillName,
             skillMd.content,
-            config.fs.path.join(baseDir, skillName),
+            p.join(baseDir, skillName),
           );
           final problems = skillDocumentProblems(document, skillName);
           if (problems.isNotEmpty) {
@@ -156,9 +159,7 @@ class BundledPrompts implements PromptSource {
 /// Whatever the user has put in a project's `skills/` and `agents/`
 /// directories. The default project's entries are the base set every other
 /// project inherits; [project]'s own entries are layered on top, replacing a
-/// same-named default entry for that project alone. Over the config's
-/// filesystem, so a browser has the directories too — the prompts a user
-/// writes there are theirs on every platform.
+/// same-named default entry for that project alone.
 class DirectoryPrompts implements PromptSource {
   // Not const, for the same reason [BundledPrompts] is not.
   DirectoryPrompts(this.config, {this.project});
@@ -184,21 +185,20 @@ class DirectoryPrompts implements PromptSource {
 
   Future<List<PromptDocument>> _loadKind(CompletionKind kind, String project) async {
     if (kind == CompletionKind.skill) {
-      return loadSkillDirectories(config.fs, config.promptsDir(kind, project: project));
+      return loadSkillDirectories(config.promptsDir(kind, project: project));
     }
     return _loadFlat(kind, project);
   }
 
   Future<List<PromptDocument>> _loadFlat(CompletionKind kind, String project) async {
-    final path = config.fs.path;
-    final directory = config.fs.directory(config.promptsDir(kind, project: project));
-    if (!await directory.exists()) return const [];
+    final directory = Directory(config.promptsDir(kind, project: project));
+    if (!directory.existsSync()) return const [];
     final documents = <PromptDocument>[];
     await for (final entity in directory.list()) {
-      if (entity is! File || path.extension(entity.path) != ".md") continue;
+      if (entity is! File || p.extension(entity.path) != ".md") continue;
       documents.add(PromptDocument.parse(
         kind,
-        path.basenameWithoutExtension(entity.path),
+        p.basenameWithoutExtension(entity.path),
         await entity.readAsString(),
       ));
     }
@@ -215,17 +215,16 @@ class DirectoryPrompts implements PromptSource {
 /// A folder whose `SKILL.md` cannot be read, or whose frontmatter does not
 /// conform, is skipped with a line in the log — one broken skill does not take
 /// the menu with it, and the skills settings page shows the reason.
-Future<List<PromptDocument>> loadSkillDirectories(FileSystem fs, String directory) async {
-  final path = fs.path;
-  final root = fs.directory(directory);
-  if (!await root.exists()) return const [];
+Future<List<PromptDocument>> loadSkillDirectories(String directory) async {
+  final root = Directory(directory);
+  if (!root.existsSync()) return const [];
   final documents = <PromptDocument>[];
   await for (final entity in root.list()) {
     if (entity is! Directory) continue;
-    final folderName = path.basename(entity.path);
-    final file = fs.file(path.join(entity.path, "SKILL.md"));
+    final folderName = p.basename(entity.path);
+    final file = File(p.join(entity.path, "SKILL.md"));
     try {
-      if (!await file.exists()) continue;
+      if (!file.existsSync()) continue;
       final document =
           _skillDocument(folderName, await file.readAsString(), entity.path);
       final problems = skillDocumentProblems(document, folderName);
@@ -245,8 +244,7 @@ Future<List<PromptDocument>> loadSkillDirectories(FileSystem fs, String director
 /// disk or from the embedded const. The name is the frontmatter's where it has
 /// one, the folder's otherwise, and the body carries the base directory above
 /// the template — the one thing every reader (the composer's expansion, the
-/// `skill` tool, a replayed log) needs and none can work out. The directory is
-/// a path in the virtual filesystem on the web.
+/// `skill` tool, a replayed log) needs and none can work out.
 PromptDocument _skillDocument(String folderName, String skillMd, String baseDir) {
   final parsed = PromptDocument.parse(CompletionKind.skill, folderName, skillMd);
   return PromptDocument(

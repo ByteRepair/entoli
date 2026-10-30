@@ -1,7 +1,8 @@
 import "dart:async";
+import "dart:io";
 
 import "package:flutter/services.dart";
-import "package:fs_shim/fs.dart";
+import "package:path/path.dart" as p;
 import "package:path_provider/path_provider.dart";
 
 import "../../domain/file_handoff.dart";
@@ -19,13 +20,12 @@ import "../../core/log.dart";
 /// the paths it is configured with and one cache directory is the whole of that
 /// configuration. See AGENTS.md, "The workspace explorer".
 class AndroidFileHandoff implements FileHandoff {
-  AndroidFileHandoff(this._fs) {
+  AndroidFileHandoff() {
     _channel.setMethodCallHandler(_onCall);
   }
 
   static const _channel = MethodChannel("agent_chat/files");
 
-  final FileSystem _fs;
   final _arrived = StreamController<void>.broadcast();
 
   /// Asked once. `path_provider` sends a platform message per call, and this is
@@ -37,19 +37,13 @@ class AndroidFileHandoff implements FileHandoff {
   bool get canReveal => false;
 
   @override
-  ExportKind get exportKind => ExportKind.share;
-
-  @override
-  bool get canImport => false;
+  bool get canShare => true;
 
   @override
   Stream<void> get shareArrived => _arrived.stream;
 
   @override
   Future<void> reveal(String dir) async {}
-
-  @override
-  Future<List<IncomingFile>> import({required bool folders}) async => const [];
 
   @override
   Future<void> open(String path) async {
@@ -86,15 +80,15 @@ class AndroidFileHandoff implements FileHandoff {
   /// arrive here — a selection is one folder's, and siblings are unique.
   Future<List<String>> _stage(List<String> paths) async {
     final dir = await _emptyStagingDir();
-    final folders = await Future.wait(paths.map(_fs.isDirectory));
+    final folders = await Future.wait(paths.map(FileSystemEntity.isDirectory));
     if (folders.contains(true)) {
-      final zip = _fs.path.join(dir, zipNameFor(_fs, paths));
-      await _fs.file(zip).writeAsBytes(await zipEntries(_fs, paths));
+      final zip = p.join(dir, zipNameFor(paths));
+      await zipTo(zip, paths);
       return [zip];
     }
     return Future.wait(paths.map((path) async {
-      final copy = _fs.path.join(dir, _fs.path.basename(path));
-      await _fs.file(path).copy(copy);
+      final copy = p.join(dir, p.basename(path));
+      await File(path).copy(copy);
       return copy;
     }));
   }
@@ -102,9 +96,9 @@ class AndroidFileHandoff implements FileHandoff {
   /// Emptied rather than added to: what was staged last time has been read by
   /// whatever it was shared with, and nothing else would ever clear it.
   Future<String> _emptyStagingDir() async {
-    final dir = _fs.path.join(await _cache, "shared");
-    final directory = _fs.directory(dir);
-    if (await directory.exists()) await directory.delete(recursive: true);
+    final dir = p.join(await _cache, "shared");
+    final directory = Directory(dir);
+    if (directory.existsSync()) await directory.delete(recursive: true);
     await directory.create(recursive: true);
     return dir;
   }

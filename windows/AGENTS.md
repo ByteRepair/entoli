@@ -61,8 +61,8 @@ an open-source release's.
 ## The icon
 
 `tool/windows/make-ico.py` renders `windows/runner/resources/app_icon.ico`
-from `web/icons/Icon-512.png` — the default icon already rendered, the same
-PWA image the AppImage installs by — with the stdlib alone, no Pillow and no
+from `tool/icons/cookie-512.png` — the default icon already rendered, the same
+image the AppImage installs — with the stdlib alone, no Pillow and no
 package manager: it decodes the PNG, box-averages down to seven sizes, and
 writes the BMP layers an ICO has carried since forever. One file is both the
 exe's icon and the window's, `Runner.rc` binding the ico by name.

@@ -8,10 +8,11 @@
 // another project's holds its overrides. Self-heal runs over both, so an
 // edit or a stray in either is repaired on the next launch.
 import "dart:convert";
+import "dart:io";
 
+import "package:path/path.dart" as p;
 import "package:crypto/crypto.dart";
 import "package:flutter/foundation.dart";
-import "package:fs_shim/fs.dart";
 
 import "../../core/config.dart";
 import "../../core/read_only_dirs.dart";
@@ -42,19 +43,17 @@ Future<void> installBundledSkills(AppConfig config, ReadOnlyDirs dirs) async {
 }
 
 Future<void> _installFor(AppConfig config, String project) async {
-  final fs = config.fs;
-  final path = fs.path;
-  final root = fs.directory(config.bundledSkillsDir(project: project));
+  final root = Directory(config.bundledSkillsDir(project: project));
 
   final known = <String>{};
   for (final file in bundledSkillFiles) {
     if (file.project != project) continue;
-    final dest = path.join(
+    final dest = p.join(
         config.bundledSkillsDir(project: project), file.name, file.relativePath);
     known.add(dest);
     try {
-      final target = fs.file(dest);
-      if (await target.exists()) {
+      final target = File(dest);
+      if (target.existsSync()) {
         final onDisk = await target.readAsBytes();
         final diskHash = sha256.convert(onDisk).toString();
         if (diskHash == file.sha256) continue;
@@ -66,13 +65,13 @@ Future<void> _installFor(AppConfig config, String project) async {
     }
   }
 
-  if (await root.exists()) {
-    await _deleteStrays(fs, root, known);
+  if (root.existsSync()) {
+    await _deleteStrays(root, known);
   }
 }
 
 Future<void> _deleteStrays(
-    FileSystem fs, Directory dir, Set<String> known) async {
+    Directory dir, Set<String> known) async {
   final entities = await dir.list().toList();
   for (final entity in entities) {
     if (entity is File) {
@@ -84,7 +83,7 @@ Future<void> _deleteStrays(
         }
       }
     } else if (entity is Directory) {
-      await _deleteStrays(fs, entity, known);
+      await _deleteStrays(entity, known);
       try {
         final remaining = await entity.list().toList();
         if (remaining.isEmpty) await entity.delete();

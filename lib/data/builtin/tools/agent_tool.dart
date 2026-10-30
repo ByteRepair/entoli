@@ -54,12 +54,11 @@ class AgentCapabilities {
   /// project's takes, and a headless turn's.
   AgentCapabilities.forTurn({
     required bool commands,
-    required bool webSearch,
     required Set<AgentCapability> disabled,
     bool browser = false,
   }) : this(
           commands: commands,
-          webSearch: webSearch && !disabled.contains(AgentCapability.webSearch),
+          webSearch: !disabled.contains(AgentCapability.webSearch),
           ask: !disabled.contains(AgentCapability.ask),
           task: !disabled.contains(AgentCapability.task),
           artifact: !disabled.contains(AgentCapability.artifact),

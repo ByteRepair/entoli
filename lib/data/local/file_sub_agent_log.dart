@@ -1,4 +1,4 @@
-import "package:fs_shim/fs.dart";
+import "dart:io";
 
 import "../../core/config.dart";
 import "../../domain/chat_log.dart";
@@ -20,7 +20,6 @@ class FileSubAgentLog implements SubAgentLog {
   /// where nothing follows one.
   final SubAgentFeed? feed;
 
-  FileSystem get _fs => config.fs;
 
   String _path(String callId) =>
       config.subAgentFile(chatId, callId, project: project);
@@ -34,8 +33,8 @@ class FileSubAgentLog implements SubAgentLog {
     }
     // Unlike a chat's log, nothing has created this directory: a sub-agent's
     // first record is the first thing to name it.
-    await _fs.directory(config.subAgentsDir(chatId, project: project)).create(recursive: true);
-    await _fs.file(_path(callId)).writeAsString(encodeLog(records), mode: FileMode.append);
+    await Directory(config.subAgentsDir(chatId, project: project)).create(recursive: true);
+    await File(_path(callId)).writeAsString(encodeLog(records), mode: FileMode.append);
     feed?.add(chatId, callId, records);
   }
 
@@ -50,8 +49,8 @@ class FileSubAgentLog implements SubAgentLog {
   }
 
   Future<List<ChatRecord>> _records(String callId) async {
-    final file = _fs.file(_path(callId));
-    if (!await file.exists()) return const [];
+    final file = File(_path(callId));
+    if (!file.existsSync()) return const [];
     return decodeLog(await file.readAsString());
   }
 }

@@ -1,4 +1,5 @@
 import "dart:convert";
+import "dart:io";
 import "dart:typed_data";
 
 import "package:flutter/material.dart";
@@ -229,9 +230,7 @@ class _MarketplaceEntryPreviewPageState
       }
       return null;
     }
-    if (await config.fs
-        .directory(skillDirectory(config, pkg.name, project: target))
-        .exists()) {
+    if (Directory(skillDirectory(config, pkg.name, project: target)).existsSync()) {
       if (!mounted) return null;
       final confirmed = await confirm(
         context,
@@ -274,9 +273,7 @@ class _MarketplaceEntryPreviewPageState
       }
       return null;
     }
-    final agentExists = await config.fs
-        .file(agentFilePath(config, name, project: target))
-        .exists();
+    final agentExists = File(agentFilePath(config, name, project: target)).existsSync();
     if (agentExists) {
       if (!mounted) return null;
       final confirmed = await confirm(
@@ -292,12 +289,11 @@ class _MarketplaceEntryPreviewPageState
     await platform.readOnlyDirs
         .of(config.promptsDir(CompletionKind.agent, project: target))
         .write(() async {
-        final file = config.fs.file(agentFilePath(config, name, project: target));
+        final file = File(agentFilePath(config, name, project: target));
         await file.create(recursive: true);
         await file.writeAsString(source);
         if (picture != null) {
-          await config.fs
-              .file(agentPicturePath(config, name, project: target))
+          await File(agentPicturePath(config, name, project: target))
               .writeAsBytes(picture);
         }
       });

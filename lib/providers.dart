@@ -459,14 +459,14 @@ final pickedRecognitionProvider = Provider<TranscriptionModel?>((ref) =>
 final pickedSpeechProvider = Provider<SynthesisModel?>((ref) =>
     _resolved<SynthesisModel>(ref, ref.watch(appSettingsProvider.select(voiceSpeechChoice))));
 
-/// Whether a message can be read out: a platform that can speak, and a speech
-/// model picked that a provider serves. Half of [voiceReadyProvider], because
-/// reading a message out needs nothing to hear with.
-final speechReadyProvider = Provider<bool>((ref) =>
-    ref.watch(voiceProvider).available && ref.watch(pickedSpeechProvider) != null);
+/// Whether a message can be read out: a speech model picked that a provider
+/// serves. Half of [voiceReadyProvider], because reading a message out needs
+/// nothing to hear with.
+final speechReadyProvider =
+    Provider<bool>((ref) => ref.watch(pickedSpeechProvider) != null);
 
-/// Whether the composer draws its voice button: a platform that can listen, and
-/// two models picked and usable. Anything less and pressing it could only
+/// Whether the composer draws its voice button: two models picked and
+/// usable. Anything less and pressing it could only
 /// lead to an apology.
 final voiceReadyProvider = Provider<bool>((ref) =>
     ref.watch(speechReadyProvider) && ref.watch(pickedRecognitionProvider) != null);
@@ -1261,9 +1261,7 @@ String _resolveTriggerPath(
   final projectWorkspace = shared
       ? config.projectWorkspaceDir(project: project)
       : (chatWorkspace ?? config.projectWorkspaceDir(project: project));
-  return resolveWorkspacePath(
-    config.fs,
-    path,
+  return resolveWorkspacePath(path,
     chatWorkspace ?? projectWorkspace,
     projectWorkspace,
     guestRoot: shell.guestRoot,
@@ -1493,7 +1491,7 @@ ProviderListenable<PromptLibrary> promptLibraryOf(ProjectRef project) =>
 final memoriesProvider = Provider.family<Memories, ProjectRef>((ref, project) {
   if (project.device != null) return RemoteMemories(ref.watch(syncHubProvider), project);
   final config = ref.watch(appConfigProvider);
-  return MemoryStore(config.fs, config.memoryDir(project: project.project));
+  return MemoryStore(config.memoryDir(project: project.project));
 });
 
 /// Whether Omada runs in [project]: the one rule [omadaFor] resolves — a

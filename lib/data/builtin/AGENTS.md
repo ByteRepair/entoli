@@ -33,7 +33,7 @@ outlive a turn, resume, or the projection.
 
 Ported rather than embedded because none of the ways of running the real Python
 meet "no external setup": `flutter_python_bridge` shells out to the system
-`python3` on desktop, Chaquopy is Android-only, Pyodide is web-only, and
+`python3` on desktop, Chaquopy is Android-only, and
 litellm — how upstream reaches a provider at all — has native dependencies none
 of them can build. The loop is about a hundred lines of actual logic; the model
 clients are the large half of the work.
@@ -157,37 +157,21 @@ parity-honest.
 
 ## Running the commands
 
-What the app is given by the platform it runs on — a shell or none, the network
-or CORS, a directory on a disk or a database in a page — is resolved in
-`lib/core/platform/platform.dart`, which holds the app's single conditional
-import (`io/platform.dart` or `web/platform.dart`) and is otherwise plain
-wiring: `LocalShell`, `DuckDuckGoSearch` and `fileSystemIo` on desktop and
-Android; `UnavailableShell`, `UnavailableWebSearch` and `fileSystemWeb` in a
-browser. One import site is the point: an implementation a platform cannot use
-is not reachable from its program, so nothing further down has to test for it.
-(There is a second one, `lib/core/tls.dart`, for the TLS trust a network call
-verifies under — the io side reading the OS's store and falling back to the
-bundled Mozilla root set where a Windows machine's own has never been
-refreshed; a browser's TLS is the browser's own.)
+What the app is given by the machine it runs on — a shell or none, the
+filesystem and where its root is — is resolved in `lib/core/platform/`:
+`host.dart` answers each question for this machine (`LocalShell`,
+`DuckDuckGoSearch`, and the drivers, stores and channels each OS has), and `platform.dart` is plain wiring over it, re-exporting what the rest
+of the app asks for. The TLS trust a network call verifies under is
+`lib/core/tls.dart`, reading the OS's store and falling back to the bundled
+Mozilla root set where a Windows machine's own has never been refreshed.
 
-The chat store and the prompt sources used to be in that list and are not any
-more — one filesystem means one of each, built in `platform.dart` itself. What
-is left varying is the shell, the network, which `FileSystem`, where its root
-is, whether the process has an environment, `FileHandoff` (see "The workspace
-explorer" for why it is the one thing here with three implementations),
-`AssistantLaunch` (Android's assistant gesture, and a stub that never fires
-anywhere else — see "Being the assistant"), and `platformPersist`: on the web
-that is `navigator.storage.persist()`, without
-which IndexedDB is evictable and a chat can be gone on the next visit because
-something else wanted the space. A browser that refuses leaves the app working,
-just evictable again. Everywhere else it is a no-op, because a directory on a
-disk is already as durable as the app is.
+The chat store and the prompt sources used to vary and do not any more — one
+filesystem means one of each, built in `platform.dart` itself. What is left
+varying is the shell, where the filesystem's root is, `FileHandoff` (see "The
+workspace explorer"), and `AssistantLaunch` (Android's assistant gesture, and a
+stub that never fires anywhere else — see "Being the assistant").
 
-`BuiltinBackend.webSearch` is required rather than defaulted for that reason —
-a default of `DuckDuckGoSearch()` puts its HTML parser in the web bundle
-(~280 KB) where CORS means it can never be called.
-
-`Shell.canRunCommands` is what a browser actually changes, and it is not one
+`Shell.canRunCommands` is what a machine with no shell changes, and it is not one
 failing command — it is the whole loop. With no shell there is nothing to run,
 so `bashTool` is dropped from the request and a system prompt with no tool
 instructions is used; the turn ends when the model replies with text and no
@@ -200,7 +184,7 @@ shell sits that a `PATH` may not name, a stripped environment and Android, which
 has no `/bin` at all. It was `/bin/bash` or `/bin/sh`, which meant a phone was
 offered the `bash` tool and then failed every command it ran, one at a time.
 Nothing found is a null driver and `canRunCommands: false`, which is the
-browser's answer and the honest one: the loop stops offering a tool there is
+honest answer: the loop stops offering a tool there is
 nothing behind. The other driver is the guest — see "A whole Linux under proot"
 in `data/local/` — and `platformDriver` picks between the two per command.
 `LocalShell` runs whichever it is handed, since to it both are a command that
@@ -567,8 +551,8 @@ to live: it is not a message, and the turn is what is asking.
 ## Questions
 
 `ask_user` is the one tool that runs nothing: the model puts questions to the
-user and the turn waits. Offered with or without a shell — a browser cannot
-run a command, but it can still ask — which is why the tools are offered per turn and
+user and the turn waits. Offered with or without a shell — a turn with none
+cannot run a command, but it can still ask — which is why the tools are offered per turn and
 `unknownTool` is told what was on offer rather than assuming `bash`.
 
 The call and its answers are an ordinary call/result pair, so `conv.jsonl` keeps
@@ -768,10 +752,8 @@ classifier gates `webfetch` (it reaches a URL the model chose) but not
 `websearch` (it reads a search engine's answer to a query).
 
 `WebSearch` is the interface, like `Shell` for commands: `DuckDuckGoSearch`
-on desktop and Android, `UnavailableWebSearch` on the web platform (CORS
-blocks cross-origin requests from a browser). `Shell.canRunCommands` gates
-`bash`; `WebSearch.available` gates `websearch`/`webfetch` the same way —
-offered where there is something to reach, dropped where there is not. The
+wherever the app runs, a fake in a test. A turn with none wired is offered no
+`websearch`/`webfetch`, the way `Shell.canRunCommands` drops `bash`. The
 search page is HTML, not JSON, so results are parsed out of the table it
 renders. Both return a `ShellResult`, so the agent words a search's outcome
 the same way it words a command's — the model reads one shape, whatever ran.
@@ -787,9 +769,9 @@ browser off still read pages.
 A real browser window, with a profile of its own under `<cache>/browser/profile/`
 so a login the agent makes is kept, driven over the Chrome DevTools Protocol.
 `AgentBrowser` is the port (`lib/domain/agent_browser.dart`), `CdpBrowser` the
-implementation everywhere but the web (`lib/data/browser/`) — iOS's through a
-stand-in for the protocol, below — `UnavailableAgentBrowser` the web's, and
-the settings category is not drawn where `available` is false.
+implementation (`lib/data/browser/`) — iOS's through a stand-in for the
+protocol, below — `UnavailableAgentBrowser` where there is none, and the
+settings category is not drawn where `available` is false.
 Settings > Agent Browser
 writes `agentBrowser`: null off, `embedded` for the downloaded Helium, or a
 Chromium-family executable's path, detected or picked with a file picker and
@@ -1324,7 +1306,7 @@ first pending task in progress and answers its number and its details, so the
 work starts from what the user approved; `plan_done` ticks one, by number or
 by enough of its text to identify it (ambiguous is refused with the
 candidates, not guessed). The trio rides the floor beside the file tools — no
-shell needed, so a browser has them — and is dropped for a sub-agent through
+shell needed, so a turn without one has them — and is dropped for a sub-agent through
 the `oneShot` flag.
 
 `present_plan` is the end of planning, and it is the ask tool with a fixed

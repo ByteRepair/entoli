@@ -7,10 +7,10 @@ import "package:flutter/foundation.dart"
 import "package:http/http.dart" as http;
 import "package:path/path.dart" as p;
 
-import "../../tls.dart";
-import "../../log.dart";
-import "../../../data/download.dart" show latestReleaseTag;
-import "../../../domain/app_update.dart";
+import "../tls.dart";
+import "../log.dart";
+import "../../data/download.dart" show latestReleaseTag;
+import "../../domain/app_update.dart";
 
 const _tag = "update";
 
@@ -235,7 +235,7 @@ class DesktopUpdater implements AppUpdateHost {
         await for (final entry in Directory(dir).list()) {
           final name = p.basename(entry.path);
           if (!stale(name)) continue;
-          if ((await entry.stat()).modified.isAfter(cutoff)) continue;
+          if ((entry.statSync()).modified.isAfter(cutoff)) continue;
           if (entry is Directory) {
             await entry.delete(recursive: true);
           } else {
@@ -253,7 +253,7 @@ class DesktopUpdater implements AppUpdateHost {
       case UpdateFlavour.macos:
         // With the bundle missing, a swap's rollback failed and what is
         // beside it may be the only copy of the app left.
-        if (bundle != null && await Directory(bundle!).exists()) {
+        if (bundle != null && Directory(bundle!).existsSync()) {
           await sweep(p.dirname(bundle!), (name) => name.startsWith(_stagingPrefix));
         }
       case UpdateFlavour.windows:
@@ -317,7 +317,7 @@ class DesktopUpdater implements AppUpdateHost {
       // it the download is not an app, and swapping it in would take the
       // bundle the next start cannot run.
       final engine = Directory(p.join(staged, "Contents", "MacOS"));
-      if (!await engine.exists() || await engine.list().isEmpty) {
+      if (!engine.existsSync() || await engine.list().isEmpty) {
         throw StateError("the downloaded bundle has no executable in it");
       }
       final aside = p.join(parent, "${_stagingPrefix}old-$pid", name);
@@ -419,9 +419,9 @@ class DesktopUpdater implements AppUpdateHost {
       // Not with the bundle missing: the staged copy may be the only app.
       if (flavour == UpdateFlavour.macos &&
           bundle != null &&
-          await Directory(bundle!).exists())
+          Directory(bundle!).existsSync())
         p.join(p.dirname(bundle!), _stagingName),
-      if (await Directory(p.join(cacheDir, "updates", "mount-$pid")).exists())
+      if (Directory(p.join(cacheDir, "updates", "mount-$pid")).existsSync())
         p.join(cacheDir, "updates", "mount-$pid"),
     ];
     for (final root in roots) {

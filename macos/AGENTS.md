@@ -45,7 +45,7 @@ Debug and Release xcconfigs, since 14 and 15 do not carry it.
 
 The host, and that is all. No proot — W^X is Android's problem and the bundled
 tools are that platform's answer to it — and no rootfs: `deviceAbi` answers
-null here the way it does in a browser, which is what hides the Terminal
+null here, which is what hides the Terminal
 page's catalog. A macOS turn is a Linux-desktop-with-no-Linux-installed turn:
 `LocalShell`'s host driver, the machine's real `HOME`, the user's own tools on
 PATH. The login-PATH capture covers it the same way (`$SHELL` as a login
@@ -236,7 +236,7 @@ symlink), its layers generated from `assets/icons/cookie.svg` with the
 squircle mask and the shadows left for the system: square layers only, the
 glass look is composed by the OS on top. The format's rules, the wiring and
 what was verified from where live in a AGENTS.md inside the package itself.
-The `prompt` icon has no macOS copy, the way it has no PWA one.
+The `prompt` icon has no macOS copy, the way it has no Linux or Windows one.
 
 ## The DMG
 

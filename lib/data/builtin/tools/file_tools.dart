@@ -1,5 +1,8 @@
 import "dart:convert";
+import "dart:io";
 import "dart:typed_data";
+
+import "package:path/path.dart" as p;
 
 import "../../../core/formatting.dart";
 import "../../../domain/agent_backend.dart";
@@ -47,7 +50,7 @@ const _pathArg = {
 
 /// Whether [path] is under the chat's attachments, which nothing changes.
 bool _inAttachments(Turn turn, String path) =>
-    turn.attachmentsDir != null && isUnder(turn.fs, path, turn.attachmentsDir!);
+    turn.attachmentsDir != null && isUnder(path, turn.attachmentsDir!);
 
 String _readOnlyAttachment(String path) =>
     "$path is an attachment, and attachments are read-only. Copy it with "
@@ -56,13 +59,13 @@ String _readOnlyAttachment(String path) =>
 /// Why [path] may not be changed yet — never read, or changed since — or
 /// null where it may.
 Future<String?> _unread(Turn turn, String path, String shownPath, String tool) =>
-    unreadFileProblem(turn.fs, path,
+    unreadFileProblem(path,
         shownPath: shownPath, toolName: tool, readFiles: turn.readFiles);
 
 /// What the model wrote or read is what it has seen, so the next edit needs
 /// no read.
 Future<void> _stamp(Turn turn, String path) async {
-  final stamp = await fileStampOf(turn.fs, path);
+  final stamp = fileStampOf(path);
   if (stamp != null) turn.readFiles[path] = stamp;
 }
 
@@ -87,7 +90,7 @@ Stream<AgentEvent> gatedFileRun(Turn turn, LlmToolCall call, String path,
 /// comes with it.
 ///
 /// The file tools are the floor: offered on every turn, since they work on
-/// the `FileSystem`, which every platform has. This one carries their shared
+/// the app's own filesystem, which every platform has. This one carries their shared
 /// words in the prompt.
 class ReadTool extends AgentTool {
   ReadTool(super.offer);
@@ -141,7 +144,6 @@ class ReadTool extends AgentTool {
           'The $readToolName tool takes {"path": "..."}; that argument was missing.');
       return;
     }
-    final fs = turn.fs;
     final path = turn.resolvePath(args.path);
     yield toolCalled(call, args.path);
     // Held beside the run rather than in it, for the event below: what the
@@ -172,14 +174,14 @@ class ReadTool extends AgentTool {
             "${pdf ? "Split it" : "Downscale it"} with a command, then read the result.");
       }
       attached = await turn.saved(LlmAttachment(
-          filename: fs.path.basename(path), mimeType: type, bytes: bytes));
+          filename: p.basename(path), mimeType: type, bytes: bytes));
       return ShellResult(
           returnCode: 0, output: "${pdf ? "PDF" : "Image"} ${args.path} attached.");
     }
 
     Future<ShellResult> run() async {
-      final file = fs.file(path);
-      if (!await file.exists()) {
+      final file = File(path);
+      if (!file.existsSync()) {
         return ShellResult(
             returnCode: -1, output: "", exceptionInfo: "File not found: ${args.path}");
       }
@@ -209,9 +211,7 @@ class ReadTool extends AgentTool {
       nested = turn.memory.nested
           ? [
               // An AGENTS.md read on purpose is already in front of the model.
-              for (final file in await findNestedInstructions(
-                fs,
-                path,
+              for (final file in await findNestedInstructions(path,
                 alreadyLoaded: turn.loadedInstructions,
                 excludes: turn.memory.excludes,
               ))
@@ -297,14 +297,13 @@ class WriteTool extends AgentTool {
       return;
     }
     yield toolCalled(call, args.path);
-    final fs = turn.fs;
     yield* gatedFileRun(turn, call, path, writeToolName, ruleSubject: path,
         () async {
       if (await _unread(turn, path, args.path, writeToolName) case final problem?) {
         return ShellResult.failed(problem);
       }
-      await fs.directory(fs.path.dirname(path)).create(recursive: true);
-      await fs.file(path).writeAsString(args.content);
+      await Directory(p.dirname(path)).create(recursive: true);
+      await File(path).writeAsString(args.content);
       await _stamp(turn, path);
       return ShellResult(
           returnCode: 0, output: "Wrote ${args.content.length} bytes to ${args.path}");
@@ -375,8 +374,8 @@ class EditTool extends AgentTool {
     yield toolCalled(call, args.path);
     yield* gatedFileRun(turn, call, path, editToolName, ruleSubject: path,
         () async {
-      final file = turn.fs.file(path);
-      if (!await file.exists()) {
+      final file = File(path);
+      if (!file.existsSync()) {
         return ShellResult(
             returnCode: -1, output: "", exceptionInfo: "File not found: ${args.path}");
       }
@@ -457,7 +456,6 @@ class AttachmentSaveTool extends AgentTool {
           "argument was missing.");
       return;
     }
-    final fs = turn.fs;
     final from = turn.resolvePath(source);
     if (!_inAttachments(turn, from)) {
       yield* toolRejected(call,
@@ -466,9 +464,9 @@ class AttachmentSaveTool extends AgentTool {
           "command.");
       return;
     }
-    final name = attachmentFilename(fs.path.basename(from));
+    final name = attachmentFilename(p.basename(from));
     final dest = stringArg(call.argumentsJson, "dest") ??
-        fs.path.join("attachments", name);
+        p.join("attachments", name);
     final to = turn.resolvePath(dest);
     if (_inAttachments(turn, to)) {
       yield* toolRejected(call, _readOnlyAttachment(dest));
@@ -476,16 +474,16 @@ class AttachmentSaveTool extends AgentTool {
     }
     yield toolCalled(call, source);
     yield* gatedFileRun(turn, call, to, attachmentSaveToolName, () async {
-      final file = fs.file(from);
-      if (!await file.exists()) {
+      final file = File(from);
+      if (!file.existsSync()) {
         return ShellResult.failed("File not found: $source");
       }
-      if (await fs.file(to).exists()) {
+      if (File(to).existsSync()) {
         return ShellResult.failed(
             "$dest already exists. Pass another dest, or change that one.");
       }
-      await fs.directory(fs.path.dirname(to)).create(recursive: true);
-      await fs.file(to).writeAsBytes(await file.readAsBytes());
+      await Directory(p.dirname(to)).create(recursive: true);
+      await File(to).writeAsBytes(await file.readAsBytes());
       // Copied, so read as far as the edit tools are concerned: changing it
       // next needs no read of a file the model has not seen as text.
       await _stamp(turn, to);

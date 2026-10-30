@@ -46,7 +46,7 @@ const _bindStubExcludes = [
 /// message on failure.
 Future<String?> removeTree(String path) async {
   final dir = Directory(path);
-  if (!await dir.exists()) return null;
+  if (!dir.existsSync()) return null;
   try {
     await Process.run("chmod", ["-R", "u+rwX", path]);
   } catch (_) {}

@@ -39,9 +39,13 @@ void main() {
   Future<List<ChatState>> onDisk(WidgetTester tester) =>
       io(tester, () => FileChatStore(app.config).list());
 
-  /// A backup of everything on disk right now, made the way Export makes one.
-  Future<Uint8List> exported(WidgetTester tester) =>
-      io(tester, () => writeBackup(app.config));
+  /// A backup of everything on disk right now, made the way Export makes one,
+  /// somewhere outside the data directory.
+  Future<String> exported(WidgetTester tester) => io(tester, () async {
+        final path = "${tempDir().path}/backup.zip";
+        await writeBackup(app.config, path);
+        return path;
+      });
 
   /// A chat in the backup, another added since, and the confirmation up.
   Future<void> offerRestore(WidgetTester tester) async {
@@ -60,7 +64,9 @@ void main() {
 
     expect(app.backups.saved, hasLength(1));
     expect(app.backups.saved.single.name, endsWith(".zip"));
-    final backup = parseBackup(app.backups.saved.single.bytes);
+    final backup =
+        await io(tester, () => openBackup(app.config, app.backups.saved.single.path));
+    addTearDown(backup.close);
     expect(backup.chats, 1);
     expect(backup.entries.map((e) => e.name), contains(endsWith("state.json")));
   });
@@ -102,7 +108,9 @@ void main() {
   testWidgets("a file that is not a backup is refused, and nothing is lost",
       (tester) async {
     await io(tester, () => app.seedChat(title: "still here"));
-    app.backups.scripted = Uint8List.fromList("not a backup".codeUnits);
+    final notBackup = File("${tempDir().path}/backup.zip")
+      ..writeAsStringSync("not a backup");
+    app.backups.scripted = notBackup.path;
     await openData(tester);
 
     await press(tester, "Import");

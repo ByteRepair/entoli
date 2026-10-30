@@ -1,8 +1,10 @@
 import "dart:convert";
 
+import "package:flutter/services.dart" show rootBundle;
 
 import "../../data/builtin/builtin_agent.dart";
 import "../../data/builtin/builtin_backend.dart";
+import "../../data/builtin/duckduckgo_search.dart";
 import "../../data/builtin/tools/agent_tool.dart";
 import "../../data/builtin/tools/registry.dart";
 import "../../data/builtin/llm/llm_client.dart";
@@ -11,7 +13,6 @@ import "../../data/builtin/llm/local_pool_client.dart";
 import "../../data/builtin/llm/local_prefill.dart";
 import "../../data/builtin/llm/providers/presets.dart";
 import "../../data/local/file_chat_store.dart";
-import "../../data/local/byte_repair_store.dart" show ByteRepairStore;
 import "../../data/local/llama_engine.dart";
 import "../../data/local/local_engine.dart";
 import "../../data/prompts/prompt_sources.dart";
@@ -19,20 +20,17 @@ import "../../domain/agent_browser.dart";
 import "../../domain/app_settings.dart";
 import "../../domain/app_secrets.dart";
 import "../../domain/background_work.dart";
-import "../../domain/backup_handoff.dart";
-import "../../domain/builtin_project.dart";
 import "../../domain/chat_store.dart";
-import "../../domain/file_handoff.dart";
 import "../../domain/models.dart";
 import "../../domain/prompt_library.dart";
 import "../../domain/trigger_manager.dart" show TriggerRegistryFactory;
 import "../../domain/rootfs_store.dart";
 import "../../domain/shell.dart";
 import "../config.dart";
-import "io/platform.dart" if (dart.library.js_interop) "web/platform.dart";
+import "host.dart";
 import "../../data/builtin/builtin_options.dart";
 
-export "io/platform.dart" if (dart.library.js_interop) "web/platform.dart"
+export "host.dart"
     show
         processEnv,
         byteRepairBinDir,
@@ -41,8 +39,10 @@ export "io/platform.dart" if (dart.library.js_interop) "web/platform.dart"
         createAgentBrowser,
         createAppleFm,
         createAppUpdateHost,
+        createBackupHandoff,
+        createByteRepairStore,
         createAssistantLaunch,
-        createFileSystem,
+        createFileHandoff,
         createFileWatches,
         createLanSignaling,
         createLocalEngine,
@@ -57,14 +57,13 @@ export "io/platform.dart" if (dart.library.js_interop) "web/platform.dart"
         deviceHostname,
         hostConfinement,
         installBundledTools,
-        persist,
         registerRecorder,
         readOnlyDirs,
         registerVoiceLicences,
         setupComplete;
 
 // The app's platform seam: everything platform-varying is resolved here or
-// re-exported from the side that answers it.
+// re-exported from `host.dart`, which answers it.
 
 /// The agent, wired to what this platform can reach and to whatever the
 /// settings page last wrote. [libraries] is Entoli's commands and agents per
@@ -121,7 +120,7 @@ BuiltinBackend createBackend(
       rootfsStore: rootfs,
       rootfsId: () => settings().rootfsId,
     ),
-    webSearch: platformWebSearch(),
+    webSearch: DuckDuckGoSearch(),
     browser: browser,
     store: store,
     triggerRegistry: triggerRegistry,
@@ -185,7 +184,6 @@ LocalPrefill? createLocalPrefill(
       final offer = ToolOffer(
         caps: AgentCapabilities.forTurn(
           commands: shell.canRunCommands,
-          webSearch: backend.webSearch.available,
           disabled: const {},
         ),
         // The same skills a turn's prompt lists, off the same library the
@@ -217,25 +215,13 @@ LocalPrefill? createLocalPrefill(
   );
 }
 
-/// The Byte Repair tooling store. Which project it is for is decided here so
-/// both sides of the conditional import agree on it.
-ByteRepairStore createByteRepairStore(
-        AppConfig config, String cacheDir, RootfsStore? rootfs) =>
-    platformByteRepairStore(
-      config,
-      ByteRepairProject().dir,
-      config.projectWorkspaceDir(project: ByteRepairProject().dir),
-      cacheDir,
-      rootfs,
-    );
-
 /// The version this build was made from, out of the `version.json` asset that
 /// `tool/prepare.sh` writes from pubspec. Null if it could not be read, which
 /// About leaves the line out for.
 Future<String?> appVersion() async {
-  final source = await platformVersionJson();
-  if (source == null) return null;
   try {
+    // The `assets/` prefix is part of the asset key, not just the on-disk path.
+    final source = await rootBundle.loadString("assets/version.json");
     return (jsonDecode(source) as Map<String, dynamic>)["version"] as String?;
   } catch (_) {
     return null;
@@ -244,11 +230,6 @@ Future<String?> appVersion() async {
 
 ChatStore createChatStore(AppConfig config) =>
     FileChatStore(config, deleteTree: deleteTree, readOnlyDirs: readOnlyDirs);
-
-FileHandoff createFileHandoff(AppConfig config) => platformFileHandoff(config.fs);
-
-BackupHandoff createBackupHandoff(AppConfig config, FileHandoff handoff) =>
-    platformBackupHandoff(config.fs, handoff);
 
 /// The presets and the user's own beside them. [project]'s overrides are
 /// layered on the default set; `null` is the default project.

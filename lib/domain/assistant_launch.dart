@@ -27,9 +27,8 @@ abstract interface class AssistantLaunch {
 }
 
 /// The assistant gesture on a platform that has none. Nothing ever arrives,
-/// which is what leaves the launch handler inert everywhere but Android — the
-/// same answer `UnavailableShell` and `UnavailableWebSearch` give, kept beside
-/// its port the way those are.
+/// which is what leaves the launch handler inert everywhere but Android. Kept
+/// beside its port, the way `UnavailableShell` is.
 class UnavailableAssistantLaunch implements AssistantLaunch {
   const UnavailableAssistantLaunch();
 

@@ -7,9 +7,4 @@ abstract class ClipboardFiles {
   /// Asked when the user pastes. Empty when the clipboard holds text or
   /// nothing, and the field pastes as usual.
   Future<List<Attachment>> read();
-
-  /// Files a paste delivered with itself rather than on asking, which is the
-  /// browser: a page cannot read the clipboard's files, only a paste event's.
-  /// Empty everywhere else.
-  Stream<List<Attachment>> get pasted;
 }

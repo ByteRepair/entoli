@@ -12,9 +12,7 @@ import "../../domain/rootfs_store.dart";
 import "tree_ops.dart";
 
 /// A downloaded Linux in a directory of its own, outside the data directory —
-/// see [RootfsStore] for why that matters. `dart:io` rather than the config's
-/// `FileSystem` for the reason `LocalShell` is: this side of the conditional
-/// import is the only one that can run what is in there.
+/// see [RootfsStore] for why that matters.
 class FileRootfsStore extends RootfsStore {
   FileRootfsStore(this.root, {this.tar = _systemTar, this.client});
 
@@ -42,7 +40,7 @@ class FileRootfsStore extends RootfsStore {
   @override
   Future<String?> directoryOf(Rootfs rootfs) async {
     final dir = directoryFor(rootfs.id);
-    return File(p.join(dir, _marker)).exists().then((ok) => ok ? dir : null);
+    return File(p.join(dir, _marker)).existsSync() ? dir : null;
   }
 
   @override
@@ -121,10 +119,10 @@ class FileRootfsStore extends RootfsStore {
 /// shows as taking up the space it takes up.
 Future<Set<String>> markedDirs(String root, String marker) async {
   final dir = Directory(root);
-  if (!await dir.exists()) return const {};
+  if (!dir.existsSync()) return const {};
   final out = <String>{};
   await for (final entry in dir.list()) {
-    if (entry is Directory && await File(p.join(entry.path, marker)).exists()) {
+    if (entry is Directory && File(p.join(entry.path, marker)).existsSync()) {
       out.add(p.basename(entry.path));
     }
   }

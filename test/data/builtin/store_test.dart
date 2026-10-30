@@ -2,7 +2,6 @@ import "dart:convert";
 import "dart:io";
 
 import "package:flutter_test/flutter_test.dart";
-import "package:fs_shim/fs_io.dart" show fileSystemIo;
 import "package:path/path.dart" as p;
 
 import "package:agent_chat/data/builtin/memory/store.dart";
@@ -15,7 +14,7 @@ void main() {
   setUp(() {
     tmp = Directory.systemTemp.createTempSync("memory_store_test_");
     dir = p.join(tmp.path, "memory");
-    store = MemoryStore(fileSystemIo, dir);
+    store = MemoryStore(dir);
   });
 
   tearDown(() {

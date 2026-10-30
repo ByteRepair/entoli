@@ -3,7 +3,6 @@ import "dart:io";
 import "package:flutter_test/flutter_test.dart";
 
 import "package:agent_chat/core/config.dart";
-import "package:fs_shim/fs_io.dart" show fileSystemIo;
 import "package:agent_chat/data/local/file_chat_store.dart";
 import "package:agent_chat/domain/app_settings.dart";
 import "package:agent_chat/domain/chat_meta.dart";
@@ -22,7 +21,7 @@ void main() {
 
   setUp(() {
     tmp = Directory.systemTemp.createTempSync("trigger_runner_test_");
-    config = AppConfig.forDirectory(tmp.path, fileSystemIo);
+    config = AppConfig.forDirectory(tmp.path);
   });
 
   tearDown(() {

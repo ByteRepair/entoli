@@ -1,3 +1,7 @@
+import "dart:io";
+
+import "package:path/path.dart" as p;
+
 import "../../../domain/agent_backend.dart";
 import "../../../domain/shell.dart";
 import "../../../domain/tool_arg.dart";
@@ -70,19 +74,18 @@ class CreateSkillTool extends AgentTool {
       yield* toolRejected(call, createSkillFormatError);
       return;
     }
-    final fs = turn.fs;
     final path = turn.resolvePath(args.path);
     yield toolCalled(call, args.path);
     String? installId;
     String? skillName;
     final outcome = GateOutcome();
     yield* turn.gate.path(call, path, createSkillToolName, () async {
-      if (!await fs.directory(path).exists()) {
+      if (!Directory(path).existsSync()) {
         return ShellResult.failed(
             "The directory '$path' does not exist. Write the skill there first "
             "with write/edit, then call $createSkillToolName.");
       }
-      if (!await fs.file(fs.path.join(path, "SKILL.md")).exists()) {
+      if (!File(p.join(path, "SKILL.md")).existsSync()) {
         return ShellResult.failed(
             "The directory '$path' has no SKILL.md. A skill needs one.");
       }

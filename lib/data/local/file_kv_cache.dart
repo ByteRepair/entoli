@@ -95,7 +95,7 @@ class FileKvCache implements LocalKvCache {
   /// The longest of [keys] (already longest-first) with a dump on disk.
   Future<String?> _longestSaved(String namespace, List<String> keys) async {
     for (final key in keys) {
-      if (await File(p.join(_dir, kvFilename(namespace, key))).exists()) return key;
+      if (File(p.join(_dir, kvFilename(namespace, key))).existsSync()) return key;
     }
     return null;
   }
@@ -134,7 +134,7 @@ class FileKvCache implements LocalKvCache {
     final files = <KvFile>[];
     await for (final entry in Directory(_dir).list()) {
       if (entry is! File || !entry.path.endsWith(".bin")) continue;
-      final stat = await entry.stat();
+      final stat = entry.statSync();
       files.add((name: p.basename(entry.path), size: stat.size, modified: stat.modified));
     }
     for (final name in kvEvictions(files, namespace: namespace, count: count, budgetBytes: _budgetBytes)) {

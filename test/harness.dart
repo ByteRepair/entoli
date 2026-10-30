@@ -8,7 +8,6 @@ import "package:flutter/services.dart";
 import "package:flutter_test/flutter_test.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
-import "package:fs_shim/fs_io.dart" show fileSystemIo;
 import "package:http/http.dart" as http;
 
 import "package:agent_chat/core/config.dart";
@@ -17,9 +16,7 @@ import "package:agent_chat/data/builtin/local_shell.dart";
 import "package:agent_chat/data/local/file_chat_store.dart";
 import "package:agent_chat/data/local/llama_engine.dart";
 import "package:agent_chat/data/local/local_engine.dart";
-import "package:agent_chat/data/local/byte_repair_store.dart"
-    show guestEsbmcInstallDir;
-import "package:agent_chat/data/local/file_byte_repair_store.dart";
+import "package:agent_chat/data/local/byte_repair_store.dart";
 import "package:agent_chat/data/sync/peers.dart" show PeerState, PeerStatus;
 import "package:agent_chat/data/sync/sync_hub.dart"
     show RemoteChatEntry, RemoteProject, SyncHub;
@@ -67,8 +64,8 @@ import "fakes.dart";
 import "package:agent_chat/ui/settings/settings_category.dart";
 
 /// The shell a test gets by default: a real host shell where the test pretends
-/// to be Android — [proot] or [abi] set — and `UnavailableShell` otherwise,
-/// which is the web default. The terminal settings page gates on
+/// to be Android — [proot] or [abi] set — and `UnavailableShell` otherwise.
+/// The terminal settings page gates on
 /// `canRunCommands`, so a test pretending to be Android has to answer true the
 /// way the real one would. A test pretending to be a native desktop that the
 /// two knobs cannot distinguish passes [shell] explicitly.
@@ -208,6 +205,7 @@ class TestApp {
     final assist = FakeAssistantLaunch(hasGesture: assistantGesture);
     final alarms = reminderAlarms ?? FakeReminderAlarms(available: false);
     final backups = FakeBackupHandoff();
+    addTearDown(backups.dispose);
     final restart = FakeAppRestart();
     final chats = store ?? FileChatStore(config);
     final linkOpener = FakeLinkOpener();
@@ -298,7 +296,7 @@ class TestApp {
               () => InstalledVoiceModels({...voiceModels, ...system},
                   system: system)),
           rootfsStoreProvider.overrideWithValue(linux),
-          byteRepairStoreProvider.overrideWithValue(FileByteRepairStore(
+          byteRepairStoreProvider.overrideWithValue(ByteRepairStore(
               config: config,
               project: ByteRepairProject().dir,
               workspace: config.projectWorkspaceDir(project: ByteRepairProject().dir),
@@ -543,9 +541,19 @@ ChatState makeState(String id, {String? project, int day = 2}) => ChatState(
 /// animation itself advances.
 /// [least] rounds happen whatever the tree looks like: a store write started by
 /// a tap shows no spinner while it runs, so an empty frame is not evidence that
-/// it landed.
-Future<void> settleIo(WidgetTester tester, {int least = 6, int tries = 40}) async {
-  for (var i = 0; i < tries && (i < least || tester.binding.transientCallbackCount > 0); i++) {
+/// it landed. Past [tries], a round still follows while anything animates, up
+/// to [limit] of real time: a loaded machine's I/O outlasts any count, and a
+/// spinner handed to `pumpAndSettle` is a timeout, since it advances no I/O.
+Future<void> settleIo(WidgetTester tester,
+    {int least = 6,
+    int tries = 40,
+    Duration limit = const Duration(seconds: 20)}) async {
+  final end = DateTime.now().add(limit);
+  for (var i = 0;
+      i < least ||
+          (tester.binding.transientCallbackCount > 0 &&
+              (i < tries || DateTime.now().isBefore(end)));
+      i++) {
     await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 5)));
     await tester.pump(const Duration(milliseconds: 16));
   }
@@ -933,7 +941,7 @@ Future<void> waitFor(FutureOr<bool> Function() done,
 /// directories — made with `dart:io` so this stays synchronous.
 AppConfig tempConfig([String prefix = "agent_chat_test_"]) {
   final tmp = Directory.systemTemp.createTempSync(prefix);
-  final config = AppConfig.forDirectory(tmp.path, fileSystemIo);
+  final config = AppConfig.forDirectory(tmp.path);
   Directory(config.chatsDir()).createSync(recursive: true);
   Directory(config.projectWorkspaceDir()).createSync(recursive: true);
   addTearDown(() {
@@ -949,6 +957,18 @@ AppConfig tempConfig([String prefix = "agent_chat_test_"]) {
   });
   return config;
 }
+
+/// An empty temp directory, torn down when the test ends — for a file a test
+/// stages outside any data directory.
+Directory tempDir([String prefix = "agent_chat_test_"]) {
+  final dir = Directory.systemTemp.createTempSync(prefix);
+  addTearDown(() => dir.deleteSync(recursive: true));
+  return dir;
+}
+
+/// A data directory [AppConfig.load] made from nothing, the state a first
+/// launch is in — unlike [tempConfig], which builds the folders itself.
+Future<AppConfig> loadedTempConfig() => AppConfig.load(tempDir().path);
 
 /// Reload a project's prompt library and settle, so what a page draws reflects
 /// what is on disk rather than the test's seeded library. The reload is real

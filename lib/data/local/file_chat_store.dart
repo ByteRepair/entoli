@@ -1,8 +1,9 @@
 import "dart:convert";
+import "dart:io";
 import "dart:typed_data";
 
 import "package:archive/archive.dart" show ZipEncoder;
-import "package:fs_shim/fs.dart";
+import "package:path/path.dart" as p;
 import "package:uuid/uuid.dart";
 
 import "../../core/config.dart";
@@ -17,28 +18,24 @@ import "../../domain/models.dart";
 import "../../domain/plan.dart" show planFileName;
 import "../../domain/artifact_style.dart";
 import "../../domain/project.dart";
-import "../../domain/workspace.dart";
 
-/// The `ChatStore`, on whatever filesystem this platform was given: real
-/// directories on desktop and Android, IndexedDB in a browser. One
-/// implementation, because the layout is the same either way.
+/// The `ChatStore`, over the data directory's filesystem.
 class FileChatStore implements ChatStore {
   FileChatStore(this.config, {this.deleteTree, ReadOnlyDirs? readOnlyDirs})
-      : _write = RenameWriter.fs(config.fs),
+      : _write = RenameWriter(),
         _readOnly = readOnlyDirs ?? ReadOnlyDirs.none();
 
   final AppConfig config;
 
   /// The platform's tree delete, which gets past the read-only directories
   /// (`ReadOnlyDirs`) and proot's mode-0000 stubs a plain recursive delete
-  /// dies on. Null where there are neither, such as the web.
+  /// dies on. Null in a test that makes neither.
   final Future<void> Function(String path)? deleteTree;
 
   /// A chat's `resources/` is one of these: the agent reads its attachments
   /// and never writes them.
   final ReadOnlyDirs _readOnly;
 
-  FileSystem get _fs => config.fs;
 
   /// Which project each chat is in. A chat is addressed by its id alone, so
   /// this is how its directory is found: [list] fills it, and an id it has
@@ -50,8 +47,8 @@ class FileChatStore implements ChatStore {
   final RenameWriter _write;
 
   Future<String?> _readOrNull(String path) async {
-    final file = _fs.file(path);
-    return await file.exists() ? file.readAsString() : null;
+    final file = File(path);
+    return file.existsSync() ? file.readAsString() : null;
   }
 
   @override
@@ -67,12 +64,12 @@ class FileChatStore implements ChatStore {
   /// Where a chat was found wins over what its `state.json` says, so one moved
   /// by hand is in the project it was moved to.
   Future<List<ChatState>> _listIn(String? project) async {
-    final dir = _fs.directory(config.chatsDir(project: project));
-    if (!await dir.exists()) return const [];
+    final dir = Directory(config.chatsDir(project: project));
+    if (!dir.existsSync()) return const [];
     final chats = <ChatState>[];
     await for (final entity in dir.list()) {
       if (entity is! Directory) continue;
-      final state = await _readState(_fs.path.basename(entity.path), project);
+      final state = await _readState(p.basename(entity.path), project);
       if (state != null) chats.add(state);
     }
     return chats;
@@ -100,7 +97,7 @@ class FileChatStore implements ChatStore {
   Future<({String? project})?> _locate(String chatId) async {
     if (_projects.containsKey(chatId)) return (project: _projects[chatId]);
     for (final project in everyProject(await config.projectNames())) {
-      if (await _fs.file(config.stateFile(chatId, project: project)).exists()) {
+      if (File(config.stateFile(chatId, project: project)).existsSync()) {
         _projects[chatId] = project;
         return (project: project);
       }
@@ -119,8 +116,8 @@ class FileChatStore implements ChatStore {
   @override
   Future<void> deleteProject(String name) async {
     final path = config.projectDir(project: name);
-    final dir = _fs.directory(path);
-    if (await dir.exists()) {
+    final dir = Directory(path);
+    if (dir.existsSync()) {
       final delete = deleteTree;
       delete != null ? await delete(path) : await dir.delete(recursive: true);
     }
@@ -132,15 +129,15 @@ class FileChatStore implements ChatStore {
     final was = await projectOf(chatId);
     final to = config.chatDir(chatId, project: project);
     final from = config.chatDir(chatId, project: was);
-    if (!await _fs.directory(from).exists() || from == to) return;
+    if (!Directory(from).existsSync() || from == to) return;
     await config.ensureProjectDirs(project: project);
-    await _fs.directory(from).rename(to);
+    await Directory(from).rename(to);
     // The workspace is in the project's, not in the chat directory that just
     // moved, so it is a second move.
-    final workspace = _fs.directory(config.workspaceDir(chatId, project: was));
-    if (await workspace.exists()) {
+    final workspace = Directory(config.workspaceDir(chatId, project: was));
+    if (workspace.existsSync()) {
       final target = config.workspaceDir(chatId, project: project);
-      await _fs.directory(_fs.path.dirname(target)).create(recursive: true);
+      await Directory(p.dirname(target)).create(recursive: true);
       await workspace.rename(target);
     }
     _projects[chatId] = project;
@@ -179,13 +176,12 @@ class FileChatStore implements ChatStore {
   Future<void> append(String chatId, List<ChatRecord> records) async {
     if (records.isEmpty) return;
     // No `ensureChatDirs`: every append follows the `saveState` that created
-    // the chat's directory, and three directory checks per checkpoint is three
-    // IndexedDB transactions on the path a turn waits for.
+    // the chat's directory, and three directory checks per checkpoint are
+    // three stats on the path a turn waits for.
     final project = await projectOf(chatId);
     // Straight onto the end of the file, not through [_write]: a rename would
     // have to write out everything already there to put one line on it.
-    await _fs
-        .file(config.convFile(chatId, project: project))
+    await File(config.convFile(chatId, project: project))
         .writeAsString(encodeLog(records), mode: FileMode.append);
   }
 
@@ -219,8 +215,8 @@ class FileChatStore implements ChatStore {
       config.chatDir(id, project: project),
       config.workspaceDir(id, project: project),
     ]) {
-      final dir = _fs.directory(path);
-      if (!await dir.exists()) continue;
+      final dir = Directory(path);
+      if (!dir.existsSync()) continue;
       // The tree delete gets past the locked `resources/` inside.
       final delete = deleteTree;
       delete != null ? await delete(path) : await dir.delete(recursive: true);
@@ -234,35 +230,33 @@ class FileChatStore implements ChatStore {
     await config.ensureChatDirs(chatId, project: project);
     final resource = resourceName(filename);
     final dir = config.resourcesDir(chatId, project: project);
-    // Bytes, not text: a browser's filesystem stores them as bytes too, and
-    // base64 would cost a third of the quota that is actually scarce there.
     await _readOnly.of(dir).write(
-        () => _fs.file(_fs.path.join(dir, resource)).writeAsBytes(bytes));
+        () => File(p.join(dir, resource)).writeAsBytes(bytes));
     return resource;
   }
 
   @override
   Future<void> lockResources(String chatId) async {
     final dir = config.resourcesDir(chatId, project: await projectOf(chatId));
-    if (await _fs.directory(dir).exists()) await _readOnly.of(dir).lock();
+    if (Directory(dir).existsSync()) await _readOnly.of(dir).lock();
   }
 
   @override
   Future<Uint8List?> readResource(String chatId, String resource) async {
     final file = await _resourceFile(chatId, resource);
-    return await file.exists() ? file.readAsBytes() : null;
+    return file.existsSync() ? file.readAsBytes() : null;
   }
 
   @override
   Future<void> deleteResource(String chatId, String resource) async {
     final file = await _resourceFile(chatId, resource);
-    if (!await file.exists()) return;
-    await _readOnly.of(_fs.path.dirname(file.path)).write(file.delete);
+    if (!file.existsSync()) return;
+    await _readOnly.of(p.dirname(file.path)).write(file.delete);
   }
 
   Future<File> _resourceFile(String chatId, String resource) async {
     final dir = config.resourcesDir(chatId, project: await projectOf(chatId));
-    return _fs.file(_fs.path.join(dir, _fs.path.basename(resource)));
+    return File(p.join(dir, p.basename(resource)));
   }
 
   @override
@@ -294,8 +288,8 @@ class FileChatStore implements ChatStore {
       {String? project}) async {
     project = project ?? await projectOf(chatId);
     final target = config.artifactDir(chatId, artifactId, project: project);
-    final dir = _fs.directory(target);
-    if (await dir.exists()) await dir.delete(recursive: true);
+    final dir = Directory(target);
+    if (dir.existsSync()) await dir.delete(recursive: true);
     await _publish(target, sourceDir, entryFile);
   }
 
@@ -304,26 +298,16 @@ class FileChatStore implements ChatStore {
   /// time; see "Artifacts" in the root notes. A missing entry file is a line:
   /// nothing downstream would otherwise say why an artifact opened unstyled.
   Future<void> _publish(String target, String source, String entryFile) async {
-    if (await _fs.file(source).exists()) source = _fs.path.dirname(source);
-    await _fs.directory(target).create(recursive: true);
-    await _copyDir(_fs, source, target);
-    final file = _fs.file(_fs.path.join(target, entryFile));
-    if (!await file.exists()) {
+    if (File(source).existsSync()) source = p.dirname(source);
+    await Directory(target).create(recursive: true);
+    await _copyDir(source, target);
+    final file = File(p.join(target, entryFile));
+    if (!file.existsSync()) {
       logFailure("artifact", "Entry file missing from published artifact: "
           "$target/$entryFile");
       return;
     }
     await file.writeAsString(injectBaseStyles(await file.readAsString()));
-  }
-
-  @override
-  Future<Uint8List?> readArtifactFile(
-    String chatId, String artifactId, String relativePath, {String? project}) async {
-    project = project ?? await projectOf(chatId);
-    final dir = config.artifactDir(chatId, artifactId, project: project);
-    final safe = safeRelativePath(_fs, relativePath);
-    final file = _fs.file(_fs.path.join(dir, safe));
-    return await file.exists() ? file.readAsBytes() : null;
   }
 
   @override
@@ -333,22 +317,22 @@ class FileChatStore implements ChatStore {
     // the prefix off the wire and hands the rest over), so the id is held to
     // what `createArtifact` hands out — one path segment, the way
     // `readResource` basenames what it reads back.
-    final id = _fs.path.basename(artifactId);
+    final id = p.basename(artifactId);
     if (id != artifactId || id.isEmpty) return null;
     project = project ?? await projectOf(chatId);
     final dir = config.artifactDir(chatId, id, project: project);
-    if (!await _fs.isDirectory(dir)) return null;
+    if (!FileSystemEntity.isDirectorySync(dir)) return null;
     // `base` is the artifact root itself: the entries come out named relative
     // to it, the shape the unzip on the far side writes back.
-    return ZipEncoder().encodeBytes(await archiveOf(_fs, [dir], base: dir));
+    return ZipEncoder().encodeBytes(await archiveOf([dir], base: dir));
   }
 
   @override
   Future<String?> readPlan(String chatId) async {
     final project = await projectOf(chatId);
-    final file = _fs.file(
-        _fs.path.join(config.workspaceDir(chatId, project: project), planFileName));
-    return await file.exists() ? file.readAsString() : null;
+    final file = File(
+        p.join(config.workspaceDir(chatId, project: project), planFileName));
+    return file.existsSync() ? file.readAsString() : null;
   }
 
   @override
@@ -361,19 +345,19 @@ class FileChatStore implements ChatStore {
   Future<Uint8List?> readSkillInstall(String chatId, String installId) async {
     final project = await projectOf(chatId);
     final dir = config.skillStagingDir(chatId, installId, project: project);
-    final file = _fs.file(_fs.path.join(dir, "package.skill"));
-    return await file.exists() ? file.readAsBytes() : null;
+    final file = File(p.join(dir, "package.skill"));
+    return file.existsSync() ? file.readAsBytes() : null;
   }
 }
 
-Future<void> _copyDir(FileSystem fs, String source, String target) async {
-  await for (final entity in fs.directory(source).list()) {
-    final dest = fs.path.join(target, fs.path.basename(entity.path));
+Future<void> _copyDir(String source, String target) async {
+  await for (final entity in Directory(source).list()) {
+    final dest = p.join(target, p.basename(entity.path));
     if (entity is File) {
-      await fs.file(dest).writeAsBytes(await entity.readAsBytes());
+      await File(dest).writeAsBytes(await entity.readAsBytes());
     } else if (entity is Directory) {
-      await fs.directory(dest).create(recursive: true);
-      await _copyDir(fs, entity.path, dest);
+      await Directory(dest).create(recursive: true);
+      await _copyDir(entity.path, dest);
     }
   }
 }

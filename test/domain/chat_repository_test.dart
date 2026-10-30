@@ -5,7 +5,6 @@ import "dart:io";
 import "package:flutter_test/flutter_test.dart";
 
 import "package:agent_chat/core/config.dart";
-import "package:fs_shim/fs_io.dart" show fileSystemIo;
 import "package:agent_chat/data/local/file_chat_store.dart";
 import "package:agent_chat/domain/app_settings.dart";
 import "package:agent_chat/domain/chat_meta.dart";
@@ -19,6 +18,7 @@ import "package:agent_chat/domain/permission.dart";
 import "package:agent_chat/domain/prompt_library.dart";
 import "package:agent_chat/domain/project_settings.dart";
 import "package:agent_chat/domain/temp_chat_ttl.dart";
+import "package:path/path.dart" as p;
 
 import "../fakes.dart";
 import "../harness.dart";
@@ -51,7 +51,7 @@ void main() {
 
   setUp(() {
     tmp = Directory.systemTemp.createTempSync("chat_repo_test_");
-    config = AppConfig.forDirectory(tmp.path, fileSystemIo);
+    config = AppConfig.forDirectory(tmp.path);
     Directory(config.chatsDir()).createSync(recursive: true);
     backend = FakeBackend();
   });
@@ -287,8 +287,7 @@ void main() {
           .write(config.projectSettingsFile(project: "team"), '{"omada": true}');
       Directory(config.projectWorkspaceDir(project: "team"))
           .createSync(recursive: true);
-      File(config.fs.path
-              .join(config.projectWorkspaceDir(project: "team"), "AGENTS.md"))
+      File(p.join(config.projectWorkspaceDir(project: "team"), "AGENTS.md"))
           .writeAsStringSync("team rules");
       final repo = repoWith(AppSettings());
       final chat = await repo.createChat(project: "team");

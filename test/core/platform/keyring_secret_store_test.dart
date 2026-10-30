@@ -3,7 +3,7 @@ import "dart:typed_data";
 import "package:flutter_test/flutter_test.dart";
 import "package:freedesktop_secret/freedesktop_secret.dart";
 
-import "package:agent_chat/core/platform/io/keyring_secret_store.dart";
+import "package:agent_chat/core/platform/keyring_secret_store.dart";
 import "package:agent_chat/domain/secret_store.dart";
 
 void main() {

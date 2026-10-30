@@ -87,7 +87,7 @@ typedef ModelLink = ({
   String? sha256,
 });
 
-/// No engine: the web, and a build that carried none.
+/// No engine: a platform with none, and a build that carried none.
 class NoLocalEngine extends LocalEngine {
   const NoLocalEngine({this.missingFromBuild = false});
 

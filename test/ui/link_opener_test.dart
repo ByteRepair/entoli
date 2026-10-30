@@ -83,7 +83,7 @@ void main() {
     expect(copied, ["https://example.com/one"]);
   });
 
-  test("only web and mail links leave the app", () {
+  test("only web, mail and phone links leave the app", () {
     expect(isOpenableLink(Uri.parse("https://example.com/")), isTrue);
     expect(isOpenableLink(Uri.parse("HTTP://example.com/")), isTrue);
     expect(isOpenableLink(Uri.parse("mailto:a@b.c")), isTrue);

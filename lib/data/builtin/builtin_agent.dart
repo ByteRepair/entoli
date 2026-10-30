@@ -2,7 +2,6 @@ import "dart:async";
 import "dart:convert";
 import "dart:typed_data";
 
-import "package:fs_shim/fs.dart";
 import "package:flutter/foundation.dart" show visibleForTesting;
 import "package:uuid/uuid.dart";
 
@@ -180,7 +179,6 @@ class BuiltinAgent implements Turn {
     required this.client,
     required this.shell,
     this.oneShot = false,
-    required this.fs,
     required this.workspace,
     required this.projectWorkspace,
     this.environment = const {},
@@ -345,13 +343,6 @@ class BuiltinAgent implements Turn {
       };
   Set<String>? _loadedInstructionPaths;
 
-  /// The filesystem the file tools (`read`/`write`/`edit`) and the artifact
-  /// tool's path resolution operate on. The same one `AppConfig` holds, so it
-  /// is `fileSystemIo` on desktop and Android, `fileSystemWeb` (IndexedDB) in
-  /// a browser — and the file tools work everywhere, unlike `bash`.
-  @override
-  final FileSystem fs;
-
   /// The chat's own directory, and where the shell starts.
   @override
   final String workspace;
@@ -439,9 +430,8 @@ class BuiltinAgent implements Turn {
   /// do not address the room, and no omada turn fans out.
   final List<PromptDocument>? roomParticipants;
 
-  /// Web search and fetch. Null where neither is reachable — a browser sees
-  /// `UnavailableWebSearch` and the tools are dropped the way `bash` is when
-  /// there is no shell.
+  /// Web search and fetch. Null where none is wired, and the tools are dropped
+  /// the way `bash` is when there is no shell.
   @override
   final WebSearch? webSearch;
 
@@ -574,7 +564,7 @@ class BuiltinAgent implements Turn {
   /// and `artifact` the way [AgentCapabilities.unattended] does from the front.
   AgentCapabilities get _offered => AgentCapabilities(
         commands: caps.commands && shell.canRunCommands,
-        webSearch: caps.webSearch && (webSearch?.available ?? false),
+        webSearch: caps.webSearch && webSearch != null,
         ask: caps.ask,
         // A sub-agent's work is commands; with no shell it has none to do.
         task: caps.task && subAgents != null && shell.canRunCommands,
@@ -617,7 +607,6 @@ class BuiltinAgent implements Turn {
     approveMode: approveMode,
     classifier: classifier,
     approve: approve,
-    fs: fs,
     workspace: workspace,
     projectWorkspace: projectWorkspace,
     shell: shell,
@@ -631,8 +620,7 @@ class BuiltinAgent implements Turn {
   /// shell's home, so every call site carries the translation without
   /// spelling it out.
   @override
-  String resolvePath(String path) => resolveWorkspacePath(
-      fs, path, workspace, projectWorkspace,
+  String resolvePath(String path) => resolveWorkspacePath(path, workspace, projectWorkspace,
       guestRoot: shell.guestRoot, homePath: shell.homeFor(projectWorkspace));
 
   @override
