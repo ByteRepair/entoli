@@ -1051,7 +1051,8 @@ AppConfig tempConfig([String prefix = "agent_chat_test_"]) {
     if (!tmp.existsSync()) return;
     // The read-only guard leaves the skills directories `555`; a deletion
     // needs the parent writable, so give it back before tearing down.
-    if (Platform.isLinux || Platform.isAndroid) {
+    // Windows' read-only attribute does not stop a deletion this way.
+    if (!Platform.isWindows) {
       try {
         Process.runSync("chmod", ["-R", "u+w", tmp.path]);
       } catch (_) {}
