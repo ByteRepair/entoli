@@ -1,18 +1,14 @@
 import "package:flutter/material.dart";
-import "package:flutter_markdown_plus/flutter_markdown_plus.dart";
 
-import "../../../domain/formatted_text.dart";
-import "math_block.dart";
-import "reply_style.dart";
+import "markdown_text.dart";
 
 /// One line of a message bubble: raw text while the reply streams or when it is
-/// an error, `MarkdownBody` once finished. Owns the markdown style sheet so the
-/// parent's build does not rebuild it on every scroll frame.
+/// an error, `MarkdownText` once finished.
 ///
 /// Public because two homes render reply text now: the bubble's, and the
 /// compaction summary beneath its divider — the same encoding, the same
 /// rendering, whether the model wrote it as a reply or as a summary.
-class MessageText extends StatefulWidget {
+class MessageText extends StatelessWidget {
   const MessageText({
     super.key,
     required this.text,
@@ -31,38 +27,25 @@ class MessageText extends StatefulWidget {
 
   final ValueChanged<String>? onTapLink;
 
-  @override
-  State<MessageText> createState() => _MessageTextState();
-}
-
-class _MessageTextState extends State<MessageText> {
-  MarkdownStyleSheet? _styleSheet;
-
   /// Raw while the reply streams or when it is an error: there is no markdown
   /// to render yet, and an error is not the model's prose.
-  bool get _rendered => !widget.isWaiting && !widget.isError;
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    _styleSheet = replyStyleSheet(Theme.of(context));
-  }
+  bool get _rendered => !isWaiting && !isError;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     if (!_rendered) {
-      final style = widget.isError
+      final style = isError
           ? theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.error)
           : theme.textTheme.bodyMedium;
       // Rich only where there is a caret to put in it. Folding both into one
       // `Text.rich` reads tidier and costs the plain string: `Text.data` is
       // null for a span, so an error would stop being something `find.text`
       // and `.data` can reach, for no gain to anything on screen.
-      if (!widget.caret) return Text(widget.text, style: style);
+      if (!caret) return Text(text, style: style);
       return Text.rich(
         TextSpan(
-          text: widget.text,
+          text: text,
           children: [
             WidgetSpan(
               alignment: PlaceholderAlignment.middle,
@@ -78,35 +61,7 @@ class _MessageTextState extends State<MessageText> {
         style: style,
       );
     }
-    // No `selectable`, and no container of its own: the fragments register
-    // with the message's own container above, which is what makes a drag run
-    // from the first paragraph to the last — `selectable` builds a
-    // `SelectableText` per element, each a selection region to itself, which
-    // is what made a selection stop at the paragraph it started in. The
-    // bullets are chrome, like a code block's bar: on screen, but not part of
-    // what a drag picks up, so what a selection copies reads as the list's
-    // items rather than `•Item`.
-    return MarkdownBody(
-      data: widget.text,
-      styleSheet: _styleSheet,
-      builders: replyBuilders,
-      extensionSet: replyExtensionSet,
-      bulletBuilder: (parameters) => SelectionContainer.disabled(
-        child: Padding(
-          padding: const EdgeInsets.only(right: 4),
-          child: Text(
-            "•",
-            style:
-                _styleSheet?.listBullet ??
-                Theme.of(context).textTheme.bodyMedium,
-            textAlign: TextAlign.center,
-          ),
-        ),
-      ),
-      onTapLink: (text, href, title) {
-        if (href != null) widget.onTapLink?.call(href);
-      },
-    );
+    return MarkdownText(text, onTapLink: onTapLink);
   }
 }
 

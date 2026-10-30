@@ -10,10 +10,9 @@ import "code_block.dart";
 
 final _math = _MathBuilder();
 
-/// What a reply's `MarkdownBody` is given: the code blocks, and a formula for
-/// each of the elements `math_syntax.dart` reads out of the text.
-final replyBuilders = <String, MarkdownElementBuilder>{
-  ...codeBlockBuilders,
+/// A formula for each of the elements `math_syntax.dart` reads out of the
+/// text; `MarkdownText` is what hands these to a `MarkdownBody`.
+final mathBuilders = <String, MarkdownElementBuilder>{
   mathInlineTag: _math,
   mathDisplayTag: _math,
 };

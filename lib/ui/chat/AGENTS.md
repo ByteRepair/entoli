@@ -258,7 +258,17 @@ uncovering the icons does not rebuild the message's labels behind them.
 
 ### How a reply is set
 
-`replyStyleSheet` is the whole of it, and it starts from
+**Markdown anywhere is `MarkdownText`** — a reply, a skill, a README, a
+workspace file, a trigger's prompt, the privacy policy. It is the one place a
+`MarkdownBody` is built, and it carries everything that makes markdown look
+like the app's: the style sheet below, built once per theme rather than per
+build (a new sheet re-parses the whole document); the code-block and formula
+builders; `replyExtensionSet`, the grammar the copy reads; and the bullets,
+drawn as chrome a drag does not pick up, numbered on a numbered list. A page
+that built its own `MarkdownBody` got some of that and not the rest — the skill
+pages had no code-block bar, and every page but one re-parsed on each rebuild.
+
+`replyStyleSheet` is the whole of the look, and it starts from
 `MarkdownStyleSheet.fromTheme` because most of what that answers is right. What
 gets overridden is where the defaults were written for a document rather than a
 chat, or where they read a Material 2 field that M3 leaves null.
@@ -326,7 +336,7 @@ this app's replies take constantly.
 
 ### Formulas
 
-TeX in a reply is drawn, by `flutter_math_fork` — KaTeX's layout in pure Dart,
+TeX is drawn wherever `MarkdownText` is, by `flutter_math_fork` — KaTeX's layout in pure Dart,
 its fonts bundled, nothing native. `$…$` and `\(…\)` set a formula in the
 sentence; `$$…$$` and `\[…\]` set it on a line of its own, centred and
 scrolling sideways when wider than the column, as a code block does.

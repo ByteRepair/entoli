@@ -2,17 +2,16 @@ import "dart:io";
 
 import "package:flutter/material.dart";
 import "package:flutter/services.dart";
-import "package:flutter_markdown_plus/flutter_markdown_plus.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:re_editor/re_editor.dart";
 import "package:re_highlight/styles/github-dark.dart";
 import "package:re_highlight/styles/github.dart";
 
+import "../chat/widgets/markdown_text.dart";
 import "../../domain/workspace.dart";
 import "../fonts.dart";
 import "../../providers.dart";
 import "../chat/widgets/code_block.dart";
-import "../chat/widgets/reply_style.dart";
 import "busy.dart";
 import "dialogs.dart";
 import "empty_pane.dart";
@@ -380,7 +379,6 @@ class _TextFilePageState extends ConsumerState<TextFilePage> {
   }
 
   Widget _markdown(String text) {
-    final theme = Theme.of(context);
     return MediaQuery.withClampedTextScaling(
       minScaleFactor: _textScale,
       maxScaleFactor: _textScale,
@@ -389,12 +387,10 @@ class _TextFilePageState extends ConsumerState<TextFilePage> {
           child: SingleChildScrollView(
             primary: true,
             padding: const EdgeInsets.all(16),
-            child: MarkdownBody(
-              data: text,
-              styleSheet: replyStyleSheet(theme),
-              builders: codeBlockBuilders,
-              onTapLink: (_, href, _) {
-                final uri = href == null ? null : Uri.tryParse(href);
+            child: MarkdownText(
+              text,
+              onTapLink: (href) {
+                final uri = Uri.tryParse(href);
                 // A relative link names a workspace file, which is no URL.
                 if (uri != null && uri.hasScheme) {
                   ref.read(linkOpenerProvider).open(context, uri);
