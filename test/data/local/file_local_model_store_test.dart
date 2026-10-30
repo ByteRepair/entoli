@@ -2,6 +2,7 @@ import "dart:async";
 import "dart:io";
 
 import "package:agent_chat/data/local/file_local_model_store.dart";
+import "package:agent_chat/data/local/model_format.dart";
 import "package:agent_chat/domain/local_model.dart";
 import "package:crypto/crypto.dart";
 import "package:flutter_test/flutter_test.dart";
@@ -39,17 +40,18 @@ void main() {
   String url(String path) => net.url(path);
 
   LocalModel gguf({String path = "/model.gguf", String? sha, bool checked = true}) =>
-      LocalModel(
+      GgufModel(
         id: "test-model",
         name: "Test 1B",
         parameters: "1B",
         url: url(path),
-        bytes: checked ? weights.length : null,
+        size: checked ? weights.length : null,
         sha256: checked ? sha ?? "${sha256.convert(weights)}" : null,
         licence: "Apache-2.0",
       );
 
-  FileLocalModelStore store() => FileLocalModelStore(root.path, client: net);
+  FileLocalModelStore store() =>
+      FileLocalModelStore(root.path, format: const GgufFormat(), client: net);
 
   test("a finished download is the weights, its record and a marker", () async {
     await store().install(gguf()).drain<void>();
@@ -65,6 +67,32 @@ void main() {
     expect(model.kvBytesPerToken, 4 * 2 * 128 * 2);
     // Written last, and the whole of what "installed" means.
     expect(File(p.join(root.path, "test-model", ".complete")).existsSync(), isTrue);
+  });
+
+  test("a model of several files lands every one, on one bar", () async {
+    final side = List.filled(64, 7);
+    final model = _Files("test-model", [
+      ModelFile(
+          path: ggufWeights,
+          url: url("/model.gguf"),
+          bytes: weights.length,
+          sha256: "${sha256.convert(weights)}"),
+      ModelFile(
+          path: "tokenizer/vocab.bin",
+          url: url("/rubbish"),
+          bytes: side.length,
+          sha256: "${sha256.convert(side)}"),
+    ]);
+
+    final progress = await store().install(model).toList();
+
+    final dir = p.join(root.path, "test-model");
+    expect(File(p.join(dir, ggufWeights)).readAsBytesSync(), weights);
+    expect(File(p.join(dir, "tokenizer", "vocab.bin")).readAsBytesSync(), side);
+    // The second file's bar starts where the first's ended.
+    expect(progress.every((each) => each.total == weights.length + side.length), isTrue);
+    expect(progress.last.received, weights.length + side.length);
+    expect(await store().installed(), {"test-model"});
   });
 
   test("a link with nothing checked is kept, named by its own file", () async {
@@ -195,4 +223,14 @@ void main() {
     expect(seen.first, 0);
     expect(seen.last, weights.length);
   });
+}
+
+class _Files extends LocalModel {
+  const _Files(String id, this.files) : super(id: id, name: id);
+
+  @override
+  final List<ModelFile> files;
+
+  @override
+  String? get source => null;
 }

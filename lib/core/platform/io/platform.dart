@@ -23,7 +23,6 @@ import "../../../data/local/byte_repair_store.dart";
 import "../../../data/local/file_byte_repair_store.dart";
 import "../../../data/local/file_secret_store.dart";
 import "../../../data/local/ios_reminder_alarms.dart";
-import "../../../data/builtin/llm/local_kv_cache.dart";
 import "../../../data/local/file_kv_cache.dart";
 import "../../../data/local/file_modes.dart";
 import "../../read_only_dirs.dart";
@@ -31,7 +30,10 @@ import "../../../data/local/file_local_model_store.dart";
 import "../../../data/local/file_rootfs_store.dart";
 import "../../../data/local/ish_ffi.dart";
 import "../../../data/local/ish_shell.dart";
+import "../../../data/local/llama_engine.dart";
 import "../../../data/local/llama_server.dart";
+import "../../../data/local/local_engine.dart";
+import "../../../data/local/model_format.dart";
 import "../../../data/local/proot.dart";
 import "../../../data/local/apple_fm.dart";
 import "../../../data/local/landlock.dart";
@@ -60,8 +62,6 @@ import "../../../domain/confinement.dart";
 import "../../../domain/backup_handoff.dart";
 import "../../../domain/builtin_project.dart";
 import "../../../domain/file_handoff.dart";
-import "../../../domain/local_llm.dart";
-import "../../../domain/local_model_store.dart";
 import "../../../domain/file_watches.dart";
 import "../../../domain/reminder_alarms.dart";
 import "../../../domain/rootfs.dart";
@@ -309,27 +309,28 @@ Future<Toolset?> installBundledTools(String cacheDir) async {
 
 WebSearch platformWebSearch() => DuckDuckGoSearch();
 
-LocalModelStore createLocalModelStore(String cacheDir) =>
-    FileLocalModelStore(p.join(cacheDir, "llm"));
-
-/// llama.cpp's server, where this build carried one: Android's native library
-/// directory (the one place an app may exec from), or the Linux bundle's
-/// `lib/`. A machine's own llama.cpp is reached as a provider instead.
-Future<LocalLlm> createLocalLlm(LocalModelStore store, String cacheDir) async {
+/// What runs downloaded models here. Android and Linux run llama.cpp's server
+/// where this build carried one: Android's native library directory (the one
+/// place an app may exec from), or the Linux bundle's `lib/`. A machine's own
+/// llama.cpp is reached as a provider instead.
+Future<LocalEngine> createLocalEngine(String cacheDir) async {
+  if (!Platform.isAndroid && !Platform.isLinux) return const NoLocalEngine();
   final (String? libDir, String serverName) = Platform.isAndroid
       ? (await BundledTools.nativeLibraryDir(), "libllama-server.so")
-      : Platform.isLinux
-          ? (bundledLinuxLibDir(), "llama-server")
-          : (null, "");
-  if (libDir == null) return const UnavailableLocalLlm();
+      : (bundledLinuxLibDir(), "llama-server");
+  if (libDir == null) return const NoLocalEngine(missingFromBuild: true);
   final server = p.join(libDir, serverName);
-  if (!await File(server).exists()) return const UnavailableLocalLlm();
-  return LlamaServerPool(
+  if (!await File(server).exists()) {
+    return const NoLocalEngine(missingFromBuild: true);
+  }
+  final store = FileLocalModelStore(p.join(cacheDir, "llm"), format: const GgufFormat());
+  final pool = LlamaServerPool(
     LlamaBinaries(server: server, libDir: libDir),
     store,
     slotSaveDir: _kvCacheDir(cacheDir),
     fitLayers: !Platform.isAndroid,
   );
+  return LlamaEngine(pool, store, kvCache: FileKvCache(_kvCacheDir(cacheDir)));
 }
 
 /// [AppleFm] where the device could carry Apple's on-device model (iOS only).
@@ -366,9 +367,6 @@ String bundledLinuxLibDir({String? executablePath}) {
 /// The server's `--slot-save-path` and [FileKvCache]'s directory: one join so
 /// the two cannot disagree.
 String _kvCacheDir(String cacheDir) => p.join(cacheDir, "kv-cache");
-
-LocalKvCache? createLocalKvCache(String cacheDir, LocalLlm localLlm) =>
-    localLlm.available ? FileKvCache(_kvCacheDir(cacheDir)) : null;
 
 FileHandoff platformFileHandoff(FileSystem fs) =>
     Platform.isAndroid ? AndroidFileHandoff(fs) : const DesktopFileHandoff();

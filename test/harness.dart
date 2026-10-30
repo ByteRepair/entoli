@@ -15,6 +15,8 @@ import "package:agent_chat/core/config.dart";
 import "package:agent_chat/data/builtin/llm/local_prefill.dart";
 import "package:agent_chat/data/builtin/local_shell.dart";
 import "package:agent_chat/data/local/file_chat_store.dart";
+import "package:agent_chat/data/local/llama_engine.dart";
+import "package:agent_chat/data/local/local_engine.dart";
 import "package:agent_chat/data/local/byte_repair_store.dart"
     show guestEsbmcInstallDir;
 import "package:agent_chat/data/local/file_byte_repair_store.dart";
@@ -133,8 +135,9 @@ class TestApp {
   /// to be.
   /// [localModels] is which on-device models are downloaded, and [localLlm] the
   /// server that would run one — the two halves the On-device page turns on. The
-  /// default server is unavailable, which is every platform but Android and so
-  /// what most of the suite should be pretending to be.
+  /// default has no server, which is every platform but Android and Linux and so
+  /// what most of the suite should be pretending to be; [localEngineMissing] is
+  /// a build of one of those two that shipped without it.
   /// [linuxes] is which distributions are installed, and [proot] whether this
   /// build could run one at all — the two halves the Terminal page turns on.
   /// The default is a build with no proot in it, which is every platform but
@@ -182,6 +185,7 @@ class TestApp {
     List<String> byteRepairBrewPaths = const [],
     Set<String> localModels = const {},
     FakeLocalLlm? localLlm,
+    bool localEngineMissing = false,
     bool prefill = false,
     String? abi,
     int? systemAccent,
@@ -211,12 +215,16 @@ class TestApp {
     final models = FakeVoiceModelStore(installed: voiceModels);
     final linux = FakeRootfsStore(installed: linuxes);
     final onDevice = FakeLocalModelStore(installed: localModels);
-    final server = localLlm ?? FakeLocalLlm(available: false);
+    final server = localLlm ?? FakeLocalLlm();
+    final LocalEngine engine = localLlm != null
+        ? LlamaEngine(server, onDevice)
+        : NoLocalEngine(missingFromBuild: localEngineMissing);
     final work = FakeBackgroundWork();
     // The real one over the two fakes it sits between: what a page shows of a
     // warm-up, and what stopping one reaches, is all its own.
     final warmUp = prefill
-        ? LocalPrefill(llm: server, background: work, warmup: testWarmup())
+        ? LocalPrefill(
+            llm: server, background: work, warmup: testWarmup(), nameOf: engine.nameOf)
         : null;
     final system = {
       if (nativeVoice.recognition) speech.nativePicks.recognition,
@@ -298,8 +306,7 @@ class TestApp {
               rootfsStore: linux,
               brewPaths: byteRepairBrewPaths)),
           installedRootfsProvider.overrideWith(() => InstalledRootfs(linuxes)),
-          localModelStoreProvider.overrideWithValue(onDevice),
-          localLlmProvider.overrideWithValue(server),
+          localEngineProvider.overrideWithValue(engine),
           localPrefillProvider.overrideWithValue(warmUp),
           installedLocalModelsProvider
               .overrideWith(() => InstalledLocalModels(localModels)),

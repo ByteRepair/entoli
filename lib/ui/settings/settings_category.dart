@@ -52,7 +52,7 @@ enum SettingsCategory {
         voice => ref.watch(voiceProvider).available,
         triggers => ref.watch(reminderAlarmsProvider).available,
         onDevice =>
-          ref.watch(localLlmProvider).available || ref.watch(voiceProvider).hasModelCatalog,
+          ref.watch(localEngineProvider).available || ref.watch(voiceProvider).hasModelCatalog,
         _ => true,
       };
 }

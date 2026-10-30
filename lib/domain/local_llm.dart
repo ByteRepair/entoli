@@ -3,8 +3,8 @@ import "package:flutter/foundation.dart";
 import "llm_provider.dart";
 import "local_model.dart";
 
-/// A model answering from the device itself, with nothing on the other end of
-/// the network.
+/// llama.cpp's server pool: the runtime behind `LlamaEngine`, the engine
+/// Android and Linux run models with.
 ///
 /// **It is a provider like any other, and that is the whole design.** What runs
 /// on the phone is llama.cpp's own server, bound to the loopback address and
@@ -21,11 +21,6 @@ import "local_model.dart";
 /// in `lib/data/local/AGENTS.md`.
 abstract class LocalLlm {
   const LocalLlm();
-
-  /// Whether this build has a server to run at all. False in a browser and on
-  /// the desktops, where an already-installed Ollama or LM Studio is the better
-  /// answer and is two presets away — see `llmProviderPresets`.
-  bool get available;
 
   /// What is loaded and how far each one has got, least recently served first.
   /// A [ValueListenable] rather than a stream because the settings page draws
@@ -72,14 +67,6 @@ abstract class LocalLlm {
   /// Stop everything. What the settings page's own control reaches, and what a
   /// phone short of memory wants.
   Future<void> stopAll();
-
-  /// The ids of every model on disk. What is *on disk* rather than what is
-  /// loaded: asking for one is what causes it to load, so a list of the
-  /// already-running would never grow.
-  List<String> get installed;
-
-  /// What [modelId] is called, for a line that names it.
-  String nameOf(String modelId) => modelId;
 }
 
 /// The models on this device, text and voice, as one provider.
@@ -172,13 +159,9 @@ class LocalLlmFailure implements Exception {
 /// beside a large one answering them costs far less than the large one twice.
 const maxLocalModelsAllowed = 2;
 
-/// The web's, and the desktops': no server bundled, so nothing to load and
-/// nothing in the provider list.
+/// No server bundled, so nothing to load.
 class UnavailableLocalLlm extends LocalLlm {
   const UnavailableLocalLlm();
-
-  @override
-  bool get available => false;
 
   @override
   ValueListenable<List<LocalLlmState>> get running => _none;
@@ -204,7 +187,4 @@ class UnavailableLocalLlm extends LocalLlm {
 
   @override
   Future<void> stopAll() async {}
-
-  @override
-  List<String> get installed => const [];
 }

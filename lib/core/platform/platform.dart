@@ -7,12 +7,13 @@ import "../../data/builtin/tools/agent_tool.dart";
 import "../../data/builtin/tools/registry.dart";
 import "../../data/builtin/llm/llm_client.dart";
 import "../../data/builtin/llm/llm_registry.dart";
-import "../../data/builtin/llm/local_kv_cache.dart";
 import "../../data/builtin/llm/local_pool_client.dart";
 import "../../data/builtin/llm/local_prefill.dart";
 import "../../data/builtin/llm/providers/presets.dart";
 import "../../data/local/file_chat_store.dart";
 import "../../data/local/byte_repair_store.dart" show ByteRepairStore;
+import "../../data/local/llama_engine.dart";
+import "../../data/local/local_engine.dart";
 import "../../data/prompts/prompt_sources.dart";
 import "../../domain/agent_browser.dart";
 import "../../domain/app_settings.dart";
@@ -22,7 +23,6 @@ import "../../domain/backup_handoff.dart";
 import "../../domain/builtin_project.dart";
 import "../../domain/chat_store.dart";
 import "../../domain/file_handoff.dart";
-import "../../domain/local_llm.dart";
 import "../../domain/models.dart";
 import "../../domain/prompt_library.dart";
 import "../../domain/trigger_manager.dart" show TriggerRegistryFactory;
@@ -45,9 +45,7 @@ export "io/platform.dart" if (dart.library.js_interop) "web/platform.dart"
         createFileSystem,
         createFileWatches,
         createLanSignaling,
-        createLocalKvCache,
-        createLocalLlm,
-        createLocalModelStore,
+        createLocalEngine,
         createReminderAlarms,
         createRootfsStore,
         createSecretStore,
@@ -150,9 +148,9 @@ BuiltinBackend createBackend(
 }
 
 /// The on-device prompt warm-up, built where the shell that words the system
-/// prompt and the server it warms both are. Null where there is no server —
-/// every platform but Android. It reads the settings fresh on each run for the
-/// reason the pool's client does: they are edited between turns.
+/// prompt and the server it warms both are. Null where the engine is not
+/// llama.cpp's. It reads the settings fresh on each run for the reason the
+/// pool's client does: they are edited between turns.
 ///
 /// The warm-up prompt is `systemPrompt` and nothing else — the body a real turn
 /// sends as its first system message, with the per-chat `turnPrompt` that
@@ -162,17 +160,17 @@ BuiltinBackend createBackend(
 /// same reason.
 LocalPrefill? createLocalPrefill(
   BuiltinBackend backend,
-  LocalLlm localLlm,
+  LocalEngine engine,
   BackgroundWork background,
-  AppConfig config, {
-  LocalKvCache? kvCache,
-}) {
-  if (!localLlm.available) return null;
+  AppConfig config,
+) {
+  if (engine is! LlamaEngine) return null;
   final shell = backend.shell;
   return LocalPrefill(
-    llm: localLlm,
+    llm: engine.llm,
     background: background,
-    kvCache: kvCache,
+    nameOf: engine.nameOf,
+    kvCache: engine.kvCache,
     // One settings read per warm, feeding both the serve options and the
     // prompt, so the two cannot be built from different snapshots.
     warmup: () {

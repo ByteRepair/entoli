@@ -12,11 +12,11 @@ import "domain/file_tools.dart" show resolveWorkspacePath;
 import "../core/platform/platform.dart"
     show createFileWatches, createPromptSources, processEnv, setupComplete;
 import "data/builtin/llm/hosted_models.dart" show ModelHost;
-import "data/builtin/llm/local_pool_client.dart" show OnDeviceProvider, poolOptions;
+import "data/builtin/llm/on_device_provider.dart" show OnDeviceProvider;
 import "data/builtin/llm/providers/presets.dart" show providerOf;
-import "data/builtin/llm/local_kv_cache.dart" show LocalKvCache;
 import "data/builtin/llm/providers/provider.dart" show LlmProvider, resolveIn;
 import "data/local/apple_fm.dart" show AppleFm;
+import "data/local/local_engine.dart";
 import "data/builtin/builtin_backend.dart";
 import "data/local/file_trigger_store.dart";
 import "data/local/linked_instructions_store.dart";
@@ -49,7 +49,6 @@ import "data/builtin/llm/local_prefill.dart";
 import "data/local/byte_repair_store.dart";
 import "domain/local_llm.dart";
 import "domain/local_model.dart";
-import "domain/local_model_store.dart";
 import "domain/models.dart";
 import "data/prompts/prompt_sources.dart" show promptTiers;
 import "domain/permission.dart";
@@ -231,35 +230,31 @@ final setupCompleteProvider =
 /// once in `main` beside the cache directory; null where there is none.
 final byteRepairBinDirProvider = Provider<String?>((ref) => null);
 
-/// Where the pool saves and restores a turn's KV, and Apple's on-device model:
-/// null where this build has neither. Overridden in `main`.
-final localKvCacheProvider = Provider<LocalKvCache?>((ref) => null);
+/// Apple's on-device model: null where this device has none. Overridden in
+/// `main`.
 final appleFmProvider = Provider<AppleFm?>((ref) => null);
 
 /// This device's models as one provider, built once: it reads the settings
 /// and what is installed when asked, so the client the registry caches from
 /// it never holds a stale one.
 final onDeviceModelsProvider = Provider<OnDeviceProvider>((ref) => OnDeviceProvider(
-      ref.watch(localLlmProvider),
-      () => poolOptions(ref.read(appSettingsProvider)),
-      kvCache: ref.watch(localKvCacheProvider),
+      ref.watch(localEngineProvider),
+      () => ref.read(appSettingsProvider),
       voices: () => ref.read(installedVoiceModelsProvider),
     ));
 
-final localModelStoreProvider =
-    Provider<LocalModelStore>((ref) => const UnavailableLocalModelStore());
+/// What runs downloaded models here, and nothing where no build of one reached
+/// it. Overridden in `main`, since resolving it is a channel round trip and
+/// every reader of this is synchronous.
+final localEngineProvider = Provider<LocalEngine>((ref) => const NoLocalEngine());
 
-/// The server that answers from this device, and nothing where no build of one
-/// reached it. Overridden in `main`, since resolving the binary is a channel
-/// round trip and every reader of this is synchronous.
-final localLlmProvider = Provider<LocalLlm>((ref) => const UnavailableLocalLlm());
 
 /// Which on-device models are downloaded.
 class InstalledLocalModels extends InstalledIds {
   InstalledLocalModels(super.seed);
 
   @override
-  Future<Set<String>> scan() => ref.read(localModelStoreProvider).installed();
+  Future<Set<String>> scan() => ref.read(localEngineProvider).store.installed();
 }
 
 final installedLocalModelsProvider =
@@ -273,7 +268,7 @@ final installedLocalModelsProvider =
 class LocalLlmStatus extends Notifier<List<LocalLlmState>>
     with ListenableValue {
   @override
-  List<LocalLlmState> build() => bridge(ref.watch(localLlmProvider).running);
+  List<LocalLlmState> build() => bridge(ref.watch(localEngineProvider).running);
 }
 
 final localLlmStateProvider =

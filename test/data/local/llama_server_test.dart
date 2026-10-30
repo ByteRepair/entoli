@@ -3,7 +3,8 @@ import "dart:io";
 import "package:flutter_test/flutter_test.dart";
 
 import "package:agent_chat/data/builtin/llm/hosted_models.dart";
-import "package:agent_chat/data/builtin/llm/local_pool_client.dart";
+import "package:agent_chat/data/builtin/llm/on_device_provider.dart";
+import "package:agent_chat/data/local/llama_engine.dart";
 import "package:agent_chat/data/local/llama_server.dart";
 import "package:agent_chat/domain/app_settings.dart";
 import "package:agent_chat/domain/local_llm.dart";
@@ -22,9 +23,9 @@ void main() {
     server: "/data/app/pkg/lib/arm64/libllama-server.so",
     libDir: "/data/app/pkg/lib/arm64",
   );
-  final model = downloadedAs(localModelCatalog.first);
-  OnDeviceProvider onDevice(LocalLlm pool) =>
-      OnDeviceProvider(pool, () => poolOptions(AppSettings()), voices: () => const {});
+  final model = downloadedAs(ggufCatalog.first);
+  OnDeviceProvider onDevice(LocalLlm pool, LocalModelStore store) => OnDeviceProvider(
+      LlamaEngine(pool, store), () => AppSettings(), voices: () => const {});
 
   ({List<String> command, Map<String, String> environment}) launch({
     String device = noDevice,
@@ -320,27 +321,27 @@ something else entirely
       final pool = failing();
 
       await askFor(pool, model.id);
-      await ask(pool, localModelCatalog[1]);
+      await ask(pool, ggufCatalog[1]);
 
       expect(pool.running.value.map((each) => each.modelId),
-          [localModelCatalog[1].id]);
+          [ggufCatalog[1].id]);
     });
 
     test("raising the cap is what lets both stay", () async {
       final pool = failing();
 
       await askFor(pool, model.id, maxRunning: 2);
-      await ask(pool, localModelCatalog[1], maxRunning: 2);
+      await ask(pool, ggufCatalog[1], maxRunning: 2);
 
       expect(pool.running.value.map((each) => each.modelId),
-          [model.id, localModelCatalog[1].id]);
+          [model.id, ggufCatalog[1].id]);
     });
 
     test("the cap is never more than the app allows, whatever it is passed",
         () async {
       final pool = failing();
 
-      for (final each in localModelCatalog) {
+      for (final each in ggufCatalog) {
         await ask(pool, each, maxRunning: 99);
       }
 
@@ -363,14 +364,16 @@ something else entirely
       // full all the same. That is the whole change from the pick that used to
       // live on the settings page.
       expect(pool.running.value, isEmpty);
-      expect(pool.installed, localModelCatalog.map((m) => m.id));
+      expect(LlamaEngine(pool, const _AlwaysInstalled()).installed,
+          ggufCatalog.map((m) => m.id));
       expect(
-          [for (final m in onDevice(pool).offered(ModelCatalog.empty, ModelHost.resolving()))
+          [for (final m in onDevice(pool, const _AlwaysInstalled())
+                  .offered(ModelCatalog.empty, ModelHost.resolving()))
             m.ref],
-          [for (final m in localModelCatalog) (providerId: localProviderId, modelId: m.id)]);
+          [for (final m in ggufCatalog) (providerId: localProviderId, modelId: m.id)]);
       // No address of its own: each model is its own process on its own port,
       // and the endpoint's client is what routes between them.
-      expect(onDevice(pool).config.baseUrl, isEmpty);
+      expect(onDevice(pool, const _AlwaysInstalled()).config.baseUrl, isEmpty);
     });
 
     test("a model that is not downloaded is refused before anything is spawned",
@@ -385,7 +388,10 @@ something else entirely
       expect(pool.running.value, isEmpty);
       // Nothing on disk is nothing to offer, which is what keeps the entry out
       // of every picker until there is something to pick.
-      expect(onDevice(pool).offered(ModelCatalog.empty, ModelHost.resolving()), isEmpty);
+      expect(
+          onDevice(pool, const UnavailableLocalModelStore())
+              .offered(ModelCatalog.empty, ModelHost.resolving()),
+          isEmpty);
     });
 
     test("a model this build has never heard of is refused too", () async {
@@ -408,7 +414,7 @@ class _AlwaysInstalled extends LocalModelStore {
 
   @override
   List<DownloadedModel> downloadedSync() => [
-        for (final model in localModelCatalog)
+        for (final model in ggufCatalog)
           downloadedAs(model, file: "/nonexistent/${model.id}.gguf"),
       ];
 

@@ -181,8 +181,8 @@ nothing needs a hand.
 ## What is absent, and honestly so
 
 No on-device models: the bundled llama.cpp server is built for Android and
-Linux and never for this platform, so `platformLocalLlm` answers
-`UnavailableLocalLlm` here and the On-device page holds only the voice
+Linux and never for this platform, so `createLocalEngine` answers
+`NoLocalEngine` here and the On-device page holds only the voice
 downloads, with no model section to apologise from. The plan for this platform is
 not llama at all: Apple Intelligence's FoundationModels, reached through a
 Swift plugin of the app's own, on macOS 26 and later — a future version, at

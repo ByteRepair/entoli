@@ -227,8 +227,8 @@ class LlamaServerPool extends LocalLlm {
   /// phone's shared memory can. See [llamaLaunch].
   final bool _fitLayers;
 
-  /// Never null: `platformLocalLlm` answers with [UnavailableLocalLlm] where
-  /// this build shipped no server, so a pool that exists has one.
+  /// Never null: `createLocalEngine` answers with `NoLocalEngine` where this
+  /// build shipped no server, so a pool that exists has one.
   final LlamaBinaries _binaries;
 
   /// Where the server writes and reads its slot dumps, or null where this build
@@ -254,9 +254,6 @@ class LlamaServerPool extends LocalLlm {
   final ValueNotifier<List<LocalLlmState>> running = ValueNotifier(const []);
 
   @override
-  bool get available => true;
-
-  @override
   int? get maxThreads => _bigCores ?? Platform.numberOfProcessors;
 
   @override
@@ -275,12 +272,6 @@ class LlamaServerPool extends LocalLlm {
       return const [];
     }
   }
-
-  @override
-  List<String> get installed => [for (final model in _store.downloadedSync()) model.id];
-
-  @override
-  String nameOf(String modelId) => _store.downloadedOfSync(modelId)?.name ?? modelId;
 
   @override
   Future<LocalEndpoint> serve(

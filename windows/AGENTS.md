@@ -69,8 +69,8 @@ exe's icon and the window's, `Runner.rc` binding the ico by name.
 
 ## What is absent, and honestly so
 
-**No model server.** The build is like macOS's: `platformLocalLlm` answers
-`UnavailableLocalLlm` here, and the On-device page holds only the voice
+**No model server.** The build is like macOS's: `createLocalEngine` answers
+`NoLocalEngine` here, and the On-device page holds only the voice
 downloads; a
 `llama-server` for Windows is native work not started. **The shell is the
 machine's own.** No rootfs, no proot, no bundled git: commands run with what

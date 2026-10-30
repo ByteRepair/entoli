@@ -135,11 +135,11 @@ extension DownloadRunSha256 on DownloadRun {
   /// [fetch] one file and answer its SHA-256 in hex, hashed on the way past
   /// rather than by reading back what may be gigabytes.
   Future<String> fetchSha256(
-      {required String url, required String to, int? total}) async {
-    report(DownloadProgress(received: 0, total: total ?? 0));
+      {required String url, required String to, int? total, int done = 0}) async {
+    report(DownloadProgress(received: done, total: total ?? 0));
     final hash = _Sha256Sink();
     final hashing = sha256.startChunkedConversion(hash);
-    await fetch(url: url, to: to, total: total, watch: hashing);
+    await fetch(url: url, to: to, total: total, done: done, watch: hashing);
     hashing.close();
     return "${hash.digest}";
   }

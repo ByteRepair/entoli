@@ -1,6 +1,5 @@
 import "dart:async";
 
-import "package:flutter/foundation.dart";
 import "package:flutter/material.dart";
 import "package:flutter_test/flutter_test.dart";
 
@@ -16,7 +15,7 @@ import "package:agent_chat/ui/settings/settings_page.dart";
 void main() {
   late TestApp app;
 
-  final model = localModelCatalog.first;
+  final model = ggufCatalog.first;
 
   tearDown(() => app.dispose());
 
@@ -33,7 +32,7 @@ void main() {
 
   testWidgets("a build with no server in it says where the answer is instead, "
       "and offers nothing to download", (tester) async {
-    app = TestApp.create();
+    app = TestApp.create(localEngineMissing: true);
     await pumpOnDevice(tester);
 
     // Android and Linux build a server, so missing one is a fault to name.
@@ -44,13 +43,11 @@ void main() {
 
   testWidgets("a platform that never builds a server keeps only the voice "
       "downloads", (tester) async {
-    debugDefaultTargetPlatformOverride = TargetPlatform.macOS;
     app = TestApp.create();
     await pumpOnDevice(tester);
 
     expect(find.textContaining("Ollama or LM Studio"), findsNothing);
     expect(find.text("Answering on this device"), findsNothing);
-    debugDefaultTargetPlatformOverride = null;
   });
 
   testWidgets("with neither a server nor a voice catalog there is no On-device "
@@ -79,7 +76,7 @@ void main() {
   testWidgets("there is no model picker — every downloaded one is offered "
       "wherever a model is chosen", (tester) async {
     app = TestApp.create(
-      localLlm: FakeLocalLlm(installed: [model.id]),
+      localLlm: FakeLocalLlm(),
       localModels: {model.id},
     );
     await pumpLlmSettings(tester);
@@ -97,7 +94,7 @@ void main() {
 
   testWidgets("the cap on how many run at once is stored", (tester) async {
     app = TestApp.create(
-      localLlm: FakeLocalLlm(installed: [model.id]),
+      localLlm: FakeLocalLlm(),
       localModels: {model.id},
     );
     await pumpLlmSettings(tester);
@@ -117,7 +114,7 @@ void main() {
   testWidgets("an accelerator is offered by the name the server gave it",
       (tester) async {
     app = TestApp.create(
-      localLlm: FakeLocalLlm(installed: [model.id], devicesFound: const [
+      localLlm: FakeLocalLlm(devicesFound: const [
         LocalDevice(
           name: "HTP0",
           description: "Hexagon NPU",
@@ -143,7 +140,7 @@ void main() {
   testWidgets("a phone with no accelerator is told so rather than offered a "
       "dropdown of one", (tester) async {
     app = TestApp.create(
-      localLlm: FakeLocalLlm(installed: [model.id]),
+      localLlm: FakeLocalLlm(),
       localModels: {model.id},
     );
     await pumpLlmSettings(tester);
@@ -153,7 +150,7 @@ void main() {
 
   testWidgets("a loaded model says where it is actually running",
       (tester) async {
-    final llm = FakeLocalLlm(installed: [model.id]);
+    final llm = FakeLocalLlm();
     app = TestApp.create(localLlm: llm, localModels: {model.id});
     await io(tester, () => llm.serve(model.id, device: "Vulkan0"));
     await pumpLlmSettings(tester);
@@ -165,7 +162,7 @@ void main() {
 
   testWidgets("a model on the CPU says so rather than naming a device",
       (tester) async {
-    final llm = FakeLocalLlm(installed: [model.id]);
+    final llm = FakeLocalLlm();
     app = TestApp.create(localLlm: llm, localModels: {model.id});
     await io(tester, () => llm.serve(model.id, device: LocalDevice.cpu));
     await pumpLlmSettings(tester);
@@ -176,7 +173,6 @@ void main() {
   testWidgets("a model that will not load says why, beside the others",
       (tester) async {
     final llm = FakeLocalLlm(
-      installed: [model.id],
       ready: false,
       failure: "not enough memory",
     );
@@ -200,7 +196,7 @@ void main() {
   });
 
   testWidgets("unloading everything takes the warm-up with it", (tester) async {
-    final llm = FakeLocalLlm(installed: [model.id]);
+    final llm = FakeLocalLlm();
     app = TestApp.create(localLlm: llm, localModels: {model.id}, prefill: true);
     await io(tester, () => llm.serve(model.id));
     await pumpLlmSettings(tester);
@@ -227,7 +223,7 @@ void main() {
   });
 
   testWidgets("deleting one that is loaded unloads it first", (tester) async {
-    final llm = FakeLocalLlm(installed: [model.id]);
+    final llm = FakeLocalLlm();
     app = TestApp.create(localLlm: llm, localModels: {model.id});
     await io(tester, () => llm.serve(model.id));
     await pumpOnDevice(tester);
@@ -328,7 +324,7 @@ void main() {
 
   testWidgets("turning the KV cache off is stored", (tester) async {
     app = TestApp.create(
-      localLlm: FakeLocalLlm(installed: [model.id]),
+      localLlm: FakeLocalLlm(),
       localModels: {model.id},
     );
     await pumpLlmSettings(tester);
@@ -345,7 +341,7 @@ void main() {
 
   testWidgets("the KV cache is counted in prompts, not chats", (tester) async {
     app = TestApp.create(
-      localLlm: FakeLocalLlm(installed: [model.id]),
+      localLlm: FakeLocalLlm(),
       localModels: {model.id},
     );
     await pumpLlmSettings(tester);
@@ -366,7 +362,7 @@ void main() {
   testWidgets("the cores slider is drawn only where there is more than one core",
       (tester) async {
     app = TestApp.create(
-      localLlm: FakeLocalLlm(installed: [model.id], maxThreads: 8),
+      localLlm: FakeLocalLlm(maxThreads: 8),
       localModels: {model.id},
     );
     await pumpLlmSettings(tester);
@@ -379,7 +375,7 @@ void main() {
   testWidgets("a machine that answered with one core has no slider to draw",
       (tester) async {
     app = TestApp.create(
-      localLlm: FakeLocalLlm(installed: [model.id], maxThreads: 1),
+      localLlm: FakeLocalLlm(maxThreads: 1),
       localModels: {model.id},
     );
     await pumpLlmSettings(tester);
@@ -389,7 +385,7 @@ void main() {
 
   testWidgets("dragging the slider down stores fewer cores", (tester) async {
     app = TestApp.create(
-      localLlm: FakeLocalLlm(installed: [model.id], maxThreads: 8),
+      localLlm: FakeLocalLlm(maxThreads: 8),
       localModels: {model.id},
     );
     await pumpLlmSettings(tester);
